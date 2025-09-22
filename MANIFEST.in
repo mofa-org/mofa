@@ -1,0 +1,7 @@
+recursive-include mofa *.py
+include requirements.txt README.rst HISTORY.rst
+recursive-include mofa *.json
+recursive-include mofa *.toml
+recursive-include mofa *.md
+recursive-include mofa *.gitignore
+recursive-include mofa *.yml

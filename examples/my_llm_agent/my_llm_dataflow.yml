@@ -1,0 +1,19 @@
+nodes:
+  - id: terminal-input
+    build: pip install ../../node-hub/terminal-input
+    path: dynamic
+    outputs:
+      - data
+    inputs:
+      agent_response: my_llm_agent/llm_result
+
+  - id: my_llm_agent
+    build: pip install ../../agent-hub/my_llm_agent
+    path: my_llm_agent
+    outputs:
+      - llm_result
+    inputs:
+      query: terminal-input/data
+    env:
+      IS_DATAFLOW_END: true
+      WRITE_LOG: true

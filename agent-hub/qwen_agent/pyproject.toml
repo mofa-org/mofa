@@ -1,0 +1,23 @@
+[tool.poetry]
+name = "qwen_agent"
+version = "0.1.0"
+authors = [
+    "daiyn2002@outlook.com",
+]
+description = "A Qwen LLM agent for MoFA"
+license = "MIT"
+homepage = "https://github.com/your-org/qwen_agent"
+readme = "README.md"
+packages = [{ include = "qwen_agent" }]
+
+[tool.poetry.dependencies]
+python = ">=3.10,<3.12"
+dashscope = "1.20.0"
+python-dotenv = "*"
+
+[tool.poetry.scripts]
+qwen_agent = "qwen_agent.main:main"
+
+[build-system]
+requires = ["poetry-core>=1.8.0"]
+build-backend = "poetry.core.masonry.api"

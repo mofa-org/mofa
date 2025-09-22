@@ -1,0 +1,50 @@
+2025-09-17T05:44:06.214038Z  INFO dora_daemon::coordinator: Connected to dora-coordinator at 127.0.0.1:53290
+2025-09-17T05:44:06.219501Z  INFO zenoh::net::runtime: Using ZID: 3aceb8acfc3ec6f63a8e2b769b303f72
+2025-09-17T05:44:06.233586Z  INFO zenoh::net::runtime::orchestrator: Zenoh can be reached at: tcp/[fe80::215:5dff:fe5c:28c4]:5456
+2025-09-17T05:44:06.233634Z  INFO zenoh::net::runtime::orchestrator: Zenoh can be reached at: tcp/10.255.255.254:5456
+2025-09-17T05:44:06.233637Z  INFO zenoh::net::runtime::orchestrator: Zenoh can be reached at: tcp/172.28.125.175:5456
+2025-09-17T05:44:06.233739Z  INFO zenoh::net::runtime::orchestrator: zenohd listening scout messages on 224.0.0.224:7446
+2025-09-17T05:49:08.275173Z  WARN run_inner{self.daemon_id=DaemonId { machine_id: None, uuid: d1f4f236-39b5-464b-b713-262b456e4c62 }}: uhlc: incoming timestamp from 85003360BE2E4CD9916BDE67694D0F3B exceeding delta 500ms is rejected: 2025-09-17T05:49:09.027373209Z vs. now: 2025-09-17T05:49:08.275148920Z    
+2025-09-17T05:49:08.277017Z  WARN run_inner{self.daemon_id=DaemonId { machine_id: None, uuid: d1f4f236-39b5-464b-b713-262b456e4c62 }}: dora_daemon: failed to update HLC with incoming event timestamp: incoming timestamp from 85003360BE2E4CD9916BDE67694D0F3B exceeding delta 500ms is rejected: 2025-09-17T05:49:09.027373209Z vs. now: 2025-09-17T05:49:08.275148920Z
+2025-09-17T05:49:56.442215Z  INFO run_inner{self.daemon_id=DaemonId { machine_id: None, uuid: d1f4f236-39b5-464b-b713-262b456e4c62 }}: dora_daemon: received destroy command -> exiting
+2025-09-17T05:49:56.444412Z  INFO run_inner{self.daemon_id=DaemonId { machine_id: None, uuid: d1f4f236-39b5-464b-b713-262b456e4c62 }}: zenoh::api::session: close session zid=3aceb8acfc3ec6f63a8e2b769b303f72
+2025-09-17T05:54:18.342753Z  INFO dora_daemon::coordinator: Connected to dora-coordinator at 127.0.0.1:53290
+2025-09-17T05:54:18.343671Z  INFO zenoh::net::runtime: Using ZID: d233a6e11c84089675fa3845646d8037
+2025-09-17T05:54:18.344586Z  INFO zenoh::net::runtime::orchestrator: Zenoh can be reached at: tcp/[fe80::215:5dff:fe5c:28c4]:5456
+2025-09-17T05:54:18.344614Z  INFO zenoh::net::runtime::orchestrator: Zenoh can be reached at: tcp/10.255.255.254:5456
+2025-09-17T05:54:18.344618Z  INFO zenoh::net::runtime::orchestrator: Zenoh can be reached at: tcp/172.28.125.175:5456
+2025-09-17T05:54:18.344752Z  INFO zenoh::net::runtime::orchestrator: zenohd listening scout messages on 224.0.0.224:7446
+2025-09-17T05:55:50.226579Z  WARN run_inner{self.daemon_id=DaemonId { machine_id: None, uuid: eca88631-bde1-490f-b26d-a6c018530334 }}: uhlc: incoming timestamp from 6DB4C9CAB96A4F86945201BC17420498 exceeding delta 500ms is rejected: 2025-09-17T05:55:51.145965878Z vs. now: 2025-09-17T05:55:50.226427283Z    
+2025-09-17T05:55:50.226728Z  WARN run_inner{self.daemon_id=DaemonId { machine_id: None, uuid: eca88631-bde1-490f-b26d-a6c018530334 }}: dora_daemon: failed to update HLC with incoming event timestamp: incoming timestamp from 6DB4C9CAB96A4F86945201BC17420498 exceeding delta 500ms is rejected: 2025-09-17T05:55:51.145965878Z vs. now: 2025-09-17T05:55:50.226427283Z
+2025-09-17T05:57:54.406219Z  WARN run_inner{self.daemon_id=DaemonId { machine_id: None, uuid: eca88631-bde1-490f-b26d-a6c018530334 }}: uhlc: incoming timestamp from B53CAB9E573F473C9C5CFD5C41DC7E17 exceeding delta 500ms is rejected: 2025-09-17T05:57:55.174632348Z vs. now: 2025-09-17T05:57:54.406094390Z    
+2025-09-17T05:57:54.406407Z  WARN run_inner{self.daemon_id=DaemonId { machine_id: None, uuid: eca88631-bde1-490f-b26d-a6c018530334 }}: dora_daemon: failed to update HLC with incoming event timestamp: incoming timestamp from B53CAB9E573F473C9C5CFD5C41DC7E17 exceeding delta 500ms is rejected: 2025-09-17T05:57:55.174632348Z vs. now: 2025-09-17T05:57:54.406094390Z
+2025-09-17T06:02:32.702953Z  WARN run_inner{self.daemon_id=DaemonId { machine_id: None, uuid: eca88631-bde1-490f-b26d-a6c018530334 }}: uhlc: incoming timestamp from 6DB4C9CAB96A4F86945201BC17420498 exceeding delta 500ms is rejected: 2025-09-17T06:02:33.618668787Z vs. now: 2025-09-17T06:02:32.702922862Z    
+2025-09-17T06:02:32.705198Z  WARN run_inner{self.daemon_id=DaemonId { machine_id: None, uuid: eca88631-bde1-490f-b26d-a6c018530334 }}: dora_daemon: failed to update HLC with incoming event timestamp: incoming timestamp from 6DB4C9CAB96A4F86945201BC17420498 exceeding delta 500ms is rejected: 2025-09-17T06:02:33.618668787Z vs. now: 2025-09-17T06:02:32.702922862Z
+2025-09-17T06:09:28.103567Z  WARN dora_daemon: my_llm_agent was killed due to not stopping within the 15s grace period
+2025-09-17T06:09:28.129460Z  WARN dora_daemon::node_communication: failed to send NextFinishedDropTokens reply: NextDropEvents([])
+
+Caused by:
+   0: failed to send reply to node `my_llm_agent`
+   1: failed to send DaemonReply
+   2: Broken pipe (os error 32)
+
+Location:
+    binaries/daemon/src/node_communication/tcp.rs:91:14
+2025-09-17T06:12:50.691929Z  WARN run_inner{self.daemon_id=DaemonId { machine_id: None, uuid: eca88631-bde1-490f-b26d-a6c018530334 }}: uhlc: incoming timestamp from 6DB4C9CAB96A4F86945201BC17420498 exceeding delta 500ms is rejected: 2025-09-17T06:12:51.605789400Z vs. now: 2025-09-17T06:12:50.691782239Z    
+2025-09-17T06:12:50.692102Z  WARN run_inner{self.daemon_id=DaemonId { machine_id: None, uuid: eca88631-bde1-490f-b26d-a6c018530334 }}: dora_daemon: failed to update HLC with incoming event timestamp: incoming timestamp from 6DB4C9CAB96A4F86945201BC17420498 exceeding delta 500ms is rejected: 2025-09-17T06:12:51.605789400Z vs. now: 2025-09-17T06:12:50.691782239Z
+2025-09-17T06:18:00.008214Z  WARN uhlc: incoming timestamp from 12EC1603E8504E0B9EFA8E3B8CDD5A08 exceeding delta 500ms is rejected: 2025-09-17T06:18:00.674399033Z vs. now: 2025-09-17T06:18:00.008183624Z    
+2025-09-17T06:18:00.008291Z  WARN dora_daemon::node_communication: failed to update HLC: incoming timestamp from 12EC1603E8504E0B9EFA8E3B8CDD5A08 exceeding delta 500ms is rejected: 2025-09-17T06:18:00.674399033Z vs. now: 2025-09-17T06:18:00.008183624Z
+2025-09-17T06:18:00.008587Z  WARN run_inner{self.daemon_id=DaemonId { machine_id: None, uuid: eca88631-bde1-490f-b26d-a6c018530334 }}: uhlc: incoming timestamp from B53CAB9E573F473C9C5CFD5C41DC7E17 exceeding delta 500ms is rejected: 2025-09-17T06:18:00.675010059Z vs. now: 2025-09-17T06:18:00.008572801Z    
+2025-09-17T06:18:00.008684Z  WARN run_inner{self.daemon_id=DaemonId { machine_id: None, uuid: eca88631-bde1-490f-b26d-a6c018530334 }}: dora_daemon: failed to update HLC with incoming event timestamp: incoming timestamp from B53CAB9E573F473C9C5CFD5C41DC7E17 exceeding delta 500ms is rejected: 2025-09-17T06:18:00.675010059Z vs. now: 2025-09-17T06:18:00.008572801Z
+2025-09-17T06:18:02.516228Z  WARN dora_daemon: my_llm_agent_qwen was killed due to not stopping within the 15s grace period
+2025-09-17T06:18:02.537242Z  WARN dora_daemon::node_communication: failed to send NextFinishedDropTokens reply: NextDropEvents([])
+
+Caused by:
+   0: failed to send reply to node `my_llm_agent_qwen`
+   1: failed to send DaemonReply
+   2: Broken pipe (os error 32)
+
+Location:
+    binaries/daemon/src/node_communication/tcp.rs:91:14
+2025-09-17T06:20:52.155381Z  INFO run_inner{self.daemon_id=DaemonId { machine_id: None, uuid: eca88631-bde1-490f-b26d-a6c018530334 }}: dora_daemon: received destroy command -> exiting
+2025-09-17T06:20:52.160981Z  INFO run_inner{self.daemon_id=DaemonId { machine_id: None, uuid: eca88631-bde1-490f-b26d-a6c018530334 }}: zenoh::api::session: close session zid=d233a6e11c84089675fa3845646d8037

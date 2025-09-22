@@ -1,0 +1,389 @@
+2025-09-16T15:52:29.979656Z  INFO dora_daemon::coordinator: Connected to dora-coordinator at 127.0.0.1:53290
+2025-09-16T15:52:29.981641Z  INFO zenoh::net::runtime: Using ZID: 5ef82526b199a47b03083f92810cfdba
+2025-09-16T15:52:29.983362Z  INFO zenoh::net::runtime::orchestrator: Zenoh can be reached at: tcp/[fe80::215:5dff:fe5c:279d]:5456
+2025-09-16T15:52:29.983384Z  INFO zenoh::net::runtime::orchestrator: Zenoh can be reached at: tcp/10.255.255.254:5456
+2025-09-16T15:52:29.983386Z  INFO zenoh::net::runtime::orchestrator: Zenoh can be reached at: tcp/172.28.125.175:5456
+2025-09-16T15:52:29.983567Z  INFO zenoh::net::runtime::orchestrator: zenohd listening scout messages on 224.0.0.224:7446
+2025-09-16T15:53:41.240600Z  INFO run_inner{self.daemon_id=DaemonId { machine_id: None, uuid: 6d630a9b-ae47-4ca7-bb19-a0c70a073ec9 }}: dora_daemon: received destroy command -> exiting
+2025-09-16T15:53:41.241060Z  INFO run_inner{self.daemon_id=DaemonId { machine_id: None, uuid: 6d630a9b-ae47-4ca7-bb19-a0c70a073ec9 }}: zenoh::api::session: close session zid=5ef82526b199a47b03083f92810cfdba
+2025-09-16T15:53:41.243311Z  WARN dora_daemon: process 121135 was killed on drop because it was still running
+2025-09-16T15:53:49.646554Z  INFO dora_daemon::coordinator: Connected to dora-coordinator at 127.0.0.1:53290
+2025-09-16T15:53:49.647963Z  INFO zenoh::net::runtime: Using ZID: 8baa0c173100d980de683574c9ad49a3
+2025-09-16T15:53:49.654899Z  INFO zenoh::net::runtime::orchestrator: Zenoh can be reached at: tcp/[fe80::215:5dff:fe5c:279d]:5456
+2025-09-16T15:53:49.654941Z  INFO zenoh::net::runtime::orchestrator: Zenoh can be reached at: tcp/10.255.255.254:5456
+2025-09-16T15:53:49.654946Z  INFO zenoh::net::runtime::orchestrator: Zenoh can be reached at: tcp/172.28.125.175:5456
+2025-09-16T15:53:49.655235Z  INFO zenoh::net::runtime::orchestrator: zenohd listening scout messages on 224.0.0.224:7446
+2025-09-16T15:56:21.458959Z  WARN dora_daemon: my_llm_agent was killed due to not stopping within the 15s grace period
+2025-09-16T15:56:21.481475Z  WARN dora_daemon::node_communication: failed to send NextFinishedDropTokens reply: NextDropEvents([])
+
+Caused by:
+   0: failed to send reply to node `my_llm_agent`
+   1: failed to send DaemonReply
+   2: Broken pipe (os error 32)
+
+Location:
+    binaries/daemon/src/node_communication/tcp.rs:91:14
+2025-09-16T16:20:49.187825Z  INFO run_inner{self.daemon_id=DaemonId { machine_id: None, uuid: dca3962b-d2f5-41ab-886b-cf9cd0d7a8e2 }}: dora_daemon: received destroy command -> exiting
+2025-09-16T16:20:49.190885Z  INFO run_inner{self.daemon_id=DaemonId { machine_id: None, uuid: dca3962b-d2f5-41ab-886b-cf9cd0d7a8e2 }}: zenoh::api::session: close session zid=8baa0c173100d980de683574c9ad49a3
+2025-09-16T16:20:50.812058Z  INFO dora_daemon::coordinator: Connected to dora-coordinator at 127.0.0.1:53290
+2025-09-16T16:20:50.815213Z  INFO zenoh::net::runtime: Using ZID: 9573e8928055161ce06a9a2b2777ec90
+2025-09-16T16:20:50.820333Z  INFO zenoh::net::runtime::orchestrator: Zenoh can be reached at: tcp/[fe80::215:5dff:fe5c:279d]:5456
+2025-09-16T16:20:50.820412Z  INFO zenoh::net::runtime::orchestrator: Zenoh can be reached at: tcp/10.255.255.254:5456
+2025-09-16T16:20:50.820416Z  INFO zenoh::net::runtime::orchestrator: Zenoh can be reached at: tcp/172.28.125.175:5456
+2025-09-16T16:20:50.821288Z  INFO zenoh::net::runtime::orchestrator: zenohd listening scout messages on 224.0.0.224:7446
+2025-09-16T16:22:43.882053Z  WARN dora_daemon: my_llm_agent was killed due to not stopping within the 15s grace period
+2025-09-16T16:22:43.907932Z  WARN dora_daemon::node_communication: failed to send NextFinishedDropTokens reply: NextDropEvents([])
+
+Caused by:
+   0: failed to send reply to node `my_llm_agent`
+   1: failed to send DaemonReply
+   2: Broken pipe (os error 32)
+
+Location:
+    binaries/daemon/src/node_communication/tcp.rs:91:14
+2025-09-16T16:27:56.652121Z  INFO run_inner{self.daemon_id=DaemonId { machine_id: None, uuid: 4ebfa629-2e4d-46ae-9c1f-c931f3d8e066 }}: dora_daemon: received destroy command -> exiting
+2025-09-16T16:27:56.652761Z  INFO run_inner{self.daemon_id=DaemonId { machine_id: None, uuid: 4ebfa629-2e4d-46ae-9c1f-c931f3d8e066 }}: zenoh::api::session: close session zid=9573e8928055161ce06a9a2b2777ec90
+2025-09-16T16:28:02.599861Z  INFO dora_daemon::coordinator: Connected to dora-coordinator at 127.0.0.1:53290
+2025-09-16T16:28:02.602834Z  INFO zenoh::net::runtime: Using ZID: d3beb0c1fd964379a13810e6b66668f3
+2025-09-16T16:28:02.605457Z  INFO zenoh::net::runtime::orchestrator: Zenoh can be reached at: tcp/[fe80::215:5dff:fe5c:279d]:5456
+2025-09-16T16:28:02.605521Z  INFO zenoh::net::runtime::orchestrator: Zenoh can be reached at: tcp/10.255.255.254:5456
+2025-09-16T16:28:02.605524Z  INFO zenoh::net::runtime::orchestrator: Zenoh can be reached at: tcp/172.28.125.175:5456
+2025-09-16T16:28:02.605870Z  INFO zenoh::net::runtime::orchestrator: zenohd listening scout messages on 224.0.0.224:7446
+2025-09-16T16:36:44.891280Z  INFO run_inner{self.daemon_id=DaemonId { machine_id: None, uuid: ab1203d0-a920-44f0-a49a-2c5613b99a58 }}: dora_daemon: received destroy command -> exiting
+2025-09-16T16:36:44.895340Z  INFO run_inner{self.daemon_id=DaemonId { machine_id: None, uuid: ab1203d0-a920-44f0-a49a-2c5613b99a58 }}: zenoh::api::session: close session zid=d3beb0c1fd964379a13810e6b66668f3
+2025-09-16T16:36:44.898652Z  WARN dora_daemon: process 122132 was killed on drop because it was still running
+2025-09-16T16:36:50.108382Z  INFO dora_daemon::coordinator: Connected to dora-coordinator at 127.0.0.1:53290
+2025-09-16T16:36:50.109819Z  INFO zenoh::net::runtime: Using ZID: 9a64fb1d4fc9cd053425a4ee18be7f03
+2025-09-16T16:36:50.116702Z  INFO zenoh::net::runtime::orchestrator: Zenoh can be reached at: tcp/[fe80::215:5dff:fe5c:279d]:5456
+2025-09-16T16:36:50.116741Z  INFO zenoh::net::runtime::orchestrator: Zenoh can be reached at: tcp/10.255.255.254:5456
+2025-09-16T16:36:50.116747Z  INFO zenoh::net::runtime::orchestrator: Zenoh can be reached at: tcp/172.28.125.175:5456
+2025-09-16T16:36:50.117035Z  INFO zenoh::net::runtime::orchestrator: zenohd listening scout messages on 224.0.0.224:7446
+2025-09-16T16:41:21.831230Z  WARN dora_daemon: my_llm_agent was killed due to not stopping within the 15s grace period
+2025-09-16T16:41:21.855262Z  WARN dora_daemon::node_communication: failed to send NextFinishedDropTokens reply: NextDropEvents([])
+
+Caused by:
+   0: failed to send reply to node `my_llm_agent`
+   1: failed to send DaemonReply
+   2: Broken pipe (os error 32)
+
+Location:
+    binaries/daemon/src/node_communication/tcp.rs:91:14
+2025-09-16T16:47:17.521716Z  INFO run_inner{self.daemon_id=DaemonId { machine_id: None, uuid: 53e0fe33-85f9-49f5-b975-8092c4df49c5 }}: dora_daemon: received destroy command -> exiting
+2025-09-16T16:47:17.526552Z  INFO run_inner{self.daemon_id=DaemonId { machine_id: None, uuid: 53e0fe33-85f9-49f5-b975-8092c4df49c5 }}: zenoh::api::session: close session zid=9a64fb1d4fc9cd053425a4ee18be7f03
+2025-09-16T16:47:21.279542Z  INFO dora_daemon::coordinator: Connected to dora-coordinator at 127.0.0.1:53290
+2025-09-16T16:47:21.288247Z  INFO zenoh::net::runtime: Using ZID: b9866c1a6dec4977239d567024527205
+2025-09-16T16:47:21.294047Z  INFO zenoh::net::runtime::orchestrator: Zenoh can be reached at: tcp/[fe80::215:5dff:fe5c:279d]:5456
+2025-09-16T16:47:21.294126Z  INFO zenoh::net::runtime::orchestrator: Zenoh can be reached at: tcp/10.255.255.254:5456
+2025-09-16T16:47:21.294129Z  INFO zenoh::net::runtime::orchestrator: Zenoh can be reached at: tcp/172.28.125.175:5456
+2025-09-16T16:47:21.294632Z  INFO zenoh::net::runtime::orchestrator: zenohd listening scout messages on 224.0.0.224:7446
+2025-09-16T16:58:08.194816Z  INFO dora_daemon::coordinator: Connected to dora-coordinator at 127.0.0.1:53290
+2025-09-16T16:58:08.202877Z  INFO zenoh::net::runtime: Using ZID: 124dcfa65f4d25bbb34b79e816200d35
+2025-09-16T16:58:08.221148Z  INFO zenoh::net::runtime::orchestrator: Zenoh can be reached at: tcp/[fe80::215:5dff:fe5c:29d1]:5456
+2025-09-16T16:58:08.221191Z  INFO zenoh::net::runtime::orchestrator: Zenoh can be reached at: tcp/10.255.255.254:5456
+2025-09-16T16:58:08.221193Z  INFO zenoh::net::runtime::orchestrator: Zenoh can be reached at: tcp/172.28.125.175:5456
+2025-09-16T16:58:08.221308Z  INFO zenoh::net::runtime::orchestrator: zenohd listening scout messages on 224.0.0.224:7446
+2025-09-17T09:21:44.817389Z  INFO dora_daemon::coordinator: Connected to dora-coordinator at 127.0.0.1:53290
+2025-09-17T09:21:44.825605Z  INFO zenoh::net::runtime: Using ZID: 25dd67e5a50afffebfc6f040a7060e68
+2025-09-17T09:21:44.843541Z  INFO zenoh::net::runtime::orchestrator: Zenoh can be reached at: tcp/[fe80::215:5dff:fe5c:28c4]:5456
+2025-09-17T09:21:44.843643Z  INFO zenoh::net::runtime::orchestrator: Zenoh can be reached at: tcp/10.255.255.254:5456
+2025-09-17T09:21:44.843650Z  INFO zenoh::net::runtime::orchestrator: Zenoh can be reached at: tcp/172.28.125.175:5456
+2025-09-17T09:21:44.844129Z  INFO zenoh::net::runtime::orchestrator: zenohd listening scout messages on 224.0.0.224:7446
+2025-09-17T09:23:58.970895Z  WARN dora_daemon: my_llm_agent was killed due to not stopping within the 15s grace period
+2025-09-17T09:23:58.992781Z  WARN dora_daemon::node_communication: failed to send NextFinishedDropTokens reply: NextDropEvents([])
+
+Caused by:
+   0: failed to send reply to node `my_llm_agent`
+   1: failed to send DaemonReply
+   2: Broken pipe (os error 32)
+
+Location:
+    binaries/daemon/src/node_communication/tcp.rs:91:14
+2025-09-17T09:24:18.248031Z  INFO run_inner{self.daemon_id=DaemonId { machine_id: None, uuid: 4246fe55-eaba-49bf-aa30-bbfe23e57d8f }}: dora_daemon: received destroy command -> exiting
+2025-09-17T09:24:18.249742Z  INFO run_inner{self.daemon_id=DaemonId { machine_id: None, uuid: 4246fe55-eaba-49bf-aa30-bbfe23e57d8f }}: zenoh::api::session: close session zid=25dd67e5a50afffebfc6f040a7060e68
+2025-09-17T09:24:20.143833Z  INFO dora_daemon::coordinator: Connected to dora-coordinator at 127.0.0.1:53290
+2025-09-17T09:24:20.144983Z  INFO zenoh::net::runtime: Using ZID: feb391c51daad0cc63934477782f8932
+2025-09-17T09:24:20.148415Z  INFO zenoh::net::runtime::orchestrator: Zenoh can be reached at: tcp/[fe80::215:5dff:fe5c:28c4]:5456
+2025-09-17T09:24:20.148513Z  INFO zenoh::net::runtime::orchestrator: Zenoh can be reached at: tcp/10.255.255.254:5456
+2025-09-17T09:24:20.148524Z  INFO zenoh::net::runtime::orchestrator: Zenoh can be reached at: tcp/172.28.125.175:5456
+2025-09-17T09:24:20.148770Z  INFO zenoh::net::runtime::orchestrator: zenohd listening scout messages on 224.0.0.224:7446
+2025-09-17T09:25:13.025179Z  WARN dora_daemon: my_llm_agent was killed due to not stopping within the 15s grace period
+2025-09-17T09:25:13.044615Z  WARN dora_daemon::node_communication: failed to send NextFinishedDropTokens reply: NextDropEvents([])
+
+Caused by:
+   0: failed to send reply to node `my_llm_agent`
+   1: failed to send DaemonReply
+   2: Broken pipe (os error 32)
+
+Location:
+    binaries/daemon/src/node_communication/tcp.rs:91:14
+2025-09-17T09:34:34.343347Z  INFO run_inner{self.daemon_id=DaemonId { machine_id: None, uuid: 8b7fecc3-3879-48e0-8ad7-14dd1a008f8f }}: dora_daemon: received destroy command -> exiting
+2025-09-17T09:34:34.343884Z  INFO run_inner{self.daemon_id=DaemonId { machine_id: None, uuid: 8b7fecc3-3879-48e0-8ad7-14dd1a008f8f }}: zenoh::api::session: close session zid=feb391c51daad0cc63934477782f8932
+2025-09-17T10:17:34.022617Z  INFO dora_daemon::coordinator: Connected to dora-coordinator at 127.0.0.1:53290
+2025-09-17T10:17:34.024936Z  INFO zenoh::net::runtime: Using ZID: aca94e6f275089645a4d6ad16316777
+2025-09-17T10:17:34.025911Z  INFO zenoh::net::runtime::orchestrator: Zenoh can be reached at: tcp/[fe80::215:5dff:fe5c:28c4]:5456
+2025-09-17T10:17:34.025947Z  INFO zenoh::net::runtime::orchestrator: Zenoh can be reached at: tcp/10.255.255.254:5456
+2025-09-17T10:17:34.025951Z  INFO zenoh::net::runtime::orchestrator: Zenoh can be reached at: tcp/172.28.125.175:5456
+2025-09-17T10:17:34.026067Z  INFO zenoh::net::runtime::orchestrator: zenohd listening scout messages on 224.0.0.224:7446
+2025-09-17T10:36:34.758785Z  INFO run_inner{self.daemon_id=DaemonId { machine_id: None, uuid: 5b2af991-60b2-4b5f-80da-0b2e514f7f2d }}: dora_daemon: received destroy command -> exiting
+2025-09-17T10:36:34.763954Z  INFO run_inner{self.daemon_id=DaemonId { machine_id: None, uuid: 5b2af991-60b2-4b5f-80da-0b2e514f7f2d }}: zenoh::api::session: close session zid=aca94e6f275089645a4d6ad16316777
+2025-09-17T10:36:34.780110Z  WARN dora_daemon: process 112035 was killed on drop because it was still running
+2025-09-17T10:36:37.881112Z  INFO dora_daemon::coordinator: Connected to dora-coordinator at 127.0.0.1:53290
+2025-09-17T10:36:37.882353Z  INFO zenoh::net::runtime: Using ZID: da38df2f8e7c434a00a46182cc79ffea
+2025-09-17T10:36:37.883161Z  INFO zenoh::net::runtime::orchestrator: Zenoh can be reached at: tcp/[fe80::215:5dff:fe5c:28c4]:5456
+2025-09-17T10:36:37.883189Z  INFO zenoh::net::runtime::orchestrator: Zenoh can be reached at: tcp/10.255.255.254:5456
+2025-09-17T10:36:37.883193Z  INFO zenoh::net::runtime::orchestrator: Zenoh can be reached at: tcp/172.28.125.175:5456
+2025-09-17T10:36:37.884396Z  INFO zenoh::net::runtime::orchestrator: zenohd listening scout messages on 224.0.0.224:7446
+2025-09-17T10:41:30.970378Z  INFO run_inner{self.daemon_id=DaemonId { machine_id: None, uuid: ce7bcf34-5b7a-412b-943f-a98b67c7d013 }}: dora_daemon: received destroy command -> exiting
+2025-09-17T10:41:30.971027Z  INFO run_inner{self.daemon_id=DaemonId { machine_id: None, uuid: ce7bcf34-5b7a-412b-943f-a98b67c7d013 }}: zenoh::api::session: close session zid=da38df2f8e7c434a00a46182cc79ffea
+2025-09-17T10:41:30.974212Z  WARN dora_daemon: process 113231 was killed on drop because it was still running
+2025-09-17T10:41:32.850682Z  INFO dora_daemon::coordinator: Connected to dora-coordinator at 127.0.0.1:53290
+2025-09-17T10:41:32.851931Z  INFO zenoh::net::runtime: Using ZID: 3a75dd157a9ea1232be657abc7ba5843
+2025-09-17T10:41:32.853853Z  INFO zenoh::net::runtime::orchestrator: Zenoh can be reached at: tcp/[fe80::215:5dff:fe5c:28c4]:5456
+2025-09-17T10:41:32.853886Z  INFO zenoh::net::runtime::orchestrator: Zenoh can be reached at: tcp/10.255.255.254:5456
+2025-09-17T10:41:32.853891Z  INFO zenoh::net::runtime::orchestrator: Zenoh can be reached at: tcp/172.28.125.175:5456
+2025-09-17T10:41:32.854008Z  INFO zenoh::net::runtime::orchestrator: zenohd listening scout messages on 224.0.0.224:7446
+2025-09-17T10:43:10.021883Z  INFO run_inner{self.daemon_id=DaemonId { machine_id: None, uuid: eb7a430d-e84d-43fc-8d9a-d1a124692753 }}: dora_daemon: received destroy command -> exiting
+2025-09-17T10:43:10.023396Z  WARN dora_daemon::node_communication: failed to send event to daemon
+
+Location:
+    /home/runner/work/dora/dora/binaries/daemon/src/node_communication/mod.rs:504:26
+2025-09-17T10:43:10.023443Z  INFO run_inner{self.daemon_id=DaemonId { machine_id: None, uuid: eb7a430d-e84d-43fc-8d9a-d1a124692753 }}: zenoh::api::session: close session zid=3a75dd157a9ea1232be657abc7ba5843
+2025-09-17T10:43:10.025652Z  WARN dora_daemon: process 114640 was killed on drop because it was still running
+2025-09-17T10:43:11.763347Z  INFO dora_daemon::coordinator: Connected to dora-coordinator at 127.0.0.1:53290
+2025-09-17T10:43:11.764883Z  INFO zenoh::net::runtime: Using ZID: e8e64076975b39bcac5c687e19d07dad
+2025-09-17T10:43:11.765686Z  INFO zenoh::net::runtime::orchestrator: Zenoh can be reached at: tcp/[fe80::215:5dff:fe5c:28c4]:5456
+2025-09-17T10:43:11.765725Z  INFO zenoh::net::runtime::orchestrator: Zenoh can be reached at: tcp/10.255.255.254:5456
+2025-09-17T10:43:11.765730Z  INFO zenoh::net::runtime::orchestrator: Zenoh can be reached at: tcp/172.28.125.175:5456
+2025-09-17T10:43:11.765887Z  INFO zenoh::net::runtime::orchestrator: zenohd listening scout messages on 224.0.0.224:7446
+2025-09-17T10:44:02.865339Z  WARN dora_daemon: qwen_agent was killed due to not stopping within the 15s grace period
+2025-09-17T10:44:02.876075Z  WARN dora_daemon::node_communication: failed to send NextFinishedDropTokens reply: NextDropEvents([])
+
+Caused by:
+   0: failed to send reply to node `qwen_agent`
+   1: failed to send DaemonReply
+   2: Broken pipe (os error 32)
+
+Location:
+    binaries/daemon/src/node_communication/tcp.rs:91:14
+2025-09-17T10:46:22.530591Z  INFO run_inner{self.daemon_id=DaemonId { machine_id: None, uuid: 53a42d3c-4a23-4684-b36d-faed9eba5106 }}: dora_daemon: received destroy command -> exiting
+2025-09-17T10:46:22.530971Z  INFO run_inner{self.daemon_id=DaemonId { machine_id: None, uuid: 53a42d3c-4a23-4684-b36d-faed9eba5106 }}: zenoh::api::session: close session zid=e8e64076975b39bcac5c687e19d07dad
+2025-09-17T10:46:24.818202Z  INFO dora_daemon::coordinator: Connected to dora-coordinator at 127.0.0.1:53290
+2025-09-17T10:46:24.819510Z  INFO zenoh::net::runtime: Using ZID: 5339725afd2369aad92eea08b7cceabf
+2025-09-17T10:46:24.820536Z  INFO zenoh::net::runtime::orchestrator: Zenoh can be reached at: tcp/[fe80::215:5dff:fe5c:28c4]:5456
+2025-09-17T10:46:24.820575Z  INFO zenoh::net::runtime::orchestrator: Zenoh can be reached at: tcp/10.255.255.254:5456
+2025-09-17T10:46:24.820580Z  INFO zenoh::net::runtime::orchestrator: Zenoh can be reached at: tcp/172.28.125.175:5456
+2025-09-17T10:46:24.825074Z  INFO zenoh::net::runtime::orchestrator: zenohd listening scout messages on 224.0.0.224:7446
+2025-09-17T14:21:41.314089Z  INFO run_inner{self.daemon_id=DaemonId { machine_id: None, uuid: f10cd0e5-55b4-4a1d-a691-2863f5645d8b }}: dora_daemon: received destroy command -> exiting
+2025-09-17T14:21:41.329001Z  INFO run_inner{self.daemon_id=DaemonId { machine_id: None, uuid: f10cd0e5-55b4-4a1d-a691-2863f5645d8b }}: zenoh::api::session: close session zid=5339725afd2369aad92eea08b7cceabf
+2025-09-17T14:21:41.360278Z  WARN dora_daemon: process 116360 was killed on drop because it was still running
+2025-09-17T14:21:43.677313Z  INFO dora_daemon::coordinator: Connected to dora-coordinator at 127.0.0.1:53290
+2025-09-17T14:21:43.680070Z  INFO zenoh::net::runtime: Using ZID: b936fb17ca5720089ce069c6767d0c6a
+2025-09-17T14:21:43.685499Z  INFO zenoh::net::runtime::orchestrator: Zenoh can be reached at: tcp/[fe80::215:5dff:fe5c:28c4]:5456
+2025-09-17T14:21:43.685620Z  INFO zenoh::net::runtime::orchestrator: Zenoh can be reached at: tcp/10.255.255.254:5456
+2025-09-17T14:21:43.685626Z  INFO zenoh::net::runtime::orchestrator: Zenoh can be reached at: tcp/172.28.125.175:5456
+2025-09-17T14:21:43.685939Z  INFO zenoh::net::runtime::orchestrator: zenohd listening scout messages on 224.0.0.224:7446
+2025-09-17T14:23:03.827479Z  WARN dora_daemon: qwen_agent was killed due to not stopping within the 15s grace period
+2025-09-17T14:23:03.841162Z  WARN dora_daemon::node_communication: failed to send NextFinishedDropTokens reply: NextDropEvents([])
+
+Caused by:
+   0: failed to send reply to node `qwen_agent`
+   1: failed to send DaemonReply
+   2: Broken pipe (os error 32)
+
+Location:
+    binaries/daemon/src/node_communication/tcp.rs:91:14
+2025-09-17T14:25:57.083007Z  INFO run_inner{self.daemon_id=DaemonId { machine_id: None, uuid: 58265915-08dc-4c20-b251-fb49f29f00a1 }}: dora_daemon: received destroy command -> exiting
+2025-09-17T14:25:57.083655Z  INFO run_inner{self.daemon_id=DaemonId { machine_id: None, uuid: 58265915-08dc-4c20-b251-fb49f29f00a1 }}: zenoh::api::session: close session zid=b936fb17ca5720089ce069c6767d0c6a
+2025-09-17T14:25:58.516604Z  INFO dora_daemon::coordinator: Connected to dora-coordinator at 127.0.0.1:53290
+2025-09-17T14:25:58.517719Z  INFO zenoh::net::runtime: Using ZID: 34eea25f47b47607c7f8e2e5c9f8459f
+2025-09-17T14:25:58.518864Z  INFO zenoh::net::runtime::orchestrator: Zenoh can be reached at: tcp/[fe80::215:5dff:fe5c:28c4]:5456
+2025-09-17T14:25:58.518906Z  INFO zenoh::net::runtime::orchestrator: Zenoh can be reached at: tcp/10.255.255.254:5456
+2025-09-17T14:25:58.518912Z  INFO zenoh::net::runtime::orchestrator: Zenoh can be reached at: tcp/172.28.125.175:5456
+2025-09-17T14:25:58.519094Z  INFO zenoh::net::runtime::orchestrator: zenohd listening scout messages on 224.0.0.224:7446
+2025-09-17T14:27:51.543575Z  INFO run_inner{self.daemon_id=DaemonId { machine_id: None, uuid: 1f0895b1-d585-4739-824b-9e8e97ca213b }}: dora_daemon: received destroy command -> exiting
+2025-09-17T14:27:51.544367Z  INFO run_inner{self.daemon_id=DaemonId { machine_id: None, uuid: 1f0895b1-d585-4739-824b-9e8e97ca213b }}: zenoh::api::session: close session zid=34eea25f47b47607c7f8e2e5c9f8459f
+2025-09-17T14:27:51.544689Z  WARN dora_daemon::node_communication: failed to send event to daemon
+
+Location:
+    /home/runner/work/dora/dora/binaries/daemon/src/node_communication/mod.rs:504:26
+2025-09-17T14:27:51.547094Z  WARN dora_daemon: process 187387 was killed on drop because it was still running
+2025-09-17T14:27:53.264430Z  INFO dora_daemon::coordinator: Connected to dora-coordinator at 127.0.0.1:53290
+2025-09-17T14:27:53.265579Z  INFO zenoh::net::runtime: Using ZID: 68576f1e797e57507a8d110c9eb83e98
+2025-09-17T14:27:53.266472Z  INFO zenoh::net::runtime::orchestrator: Zenoh can be reached at: tcp/[fe80::215:5dff:fe5c:28c4]:5456
+2025-09-17T14:27:53.266512Z  INFO zenoh::net::runtime::orchestrator: Zenoh can be reached at: tcp/10.255.255.254:5456
+2025-09-17T14:27:53.266517Z  INFO zenoh::net::runtime::orchestrator: Zenoh can be reached at: tcp/172.28.125.175:5456
+2025-09-17T14:27:53.266648Z  INFO zenoh::net::runtime::orchestrator: zenohd listening scout messages on 224.0.0.224:7446
+2025-09-17T14:29:19.124012Z  WARN dora_daemon: qwen_agent was killed due to not stopping within the 15s grace period
+2025-09-17T14:29:19.139237Z  WARN dora_daemon::node_communication: failed to send NextFinishedDropTokens reply: NextDropEvents([])
+
+Caused by:
+   0: failed to send reply to node `qwen_agent`
+   1: failed to send DaemonReply
+   2: Broken pipe (os error 32)
+
+Location:
+    binaries/daemon/src/node_communication/tcp.rs:91:14
+2025-09-17T14:30:57.674224Z  INFO run_inner{self.daemon_id=DaemonId { machine_id: None, uuid: 44e41cb3-3eb2-44bd-90b6-eaf20b0ca81d }}: dora_daemon: received destroy command -> exiting
+2025-09-17T14:30:57.674513Z  INFO run_inner{self.daemon_id=DaemonId { machine_id: None, uuid: 44e41cb3-3eb2-44bd-90b6-eaf20b0ca81d }}: zenoh::api::session: close session zid=68576f1e797e57507a8d110c9eb83e98
+2025-09-17T14:30:59.691652Z  INFO dora_daemon::coordinator: Connected to dora-coordinator at 127.0.0.1:53290
+2025-09-17T14:30:59.692501Z  INFO zenoh::net::runtime: Using ZID: 4fb59eb5332ae639e5f689021b7ec034
+2025-09-17T14:30:59.697585Z  INFO zenoh::net::runtime::orchestrator: Zenoh can be reached at: tcp/[fe80::215:5dff:fe5c:28c4]:5456
+2025-09-17T14:30:59.697626Z  INFO zenoh::net::runtime::orchestrator: Zenoh can be reached at: tcp/10.255.255.254:5456
+2025-09-17T14:30:59.697630Z  INFO zenoh::net::runtime::orchestrator: Zenoh can be reached at: tcp/172.28.125.175:5456
+2025-09-17T14:30:59.697936Z  INFO zenoh::net::runtime::orchestrator: zenohd listening scout messages on 224.0.0.224:7446
+2025-09-17T14:40:27.555890Z  WARN dora_daemon: qwen_agent was killed due to not stopping within the 15s grace period
+2025-09-17T14:40:27.569344Z  WARN dora_daemon::node_communication: failed to send NextFinishedDropTokens reply: NextDropEvents([])
+
+Caused by:
+   0: failed to send reply to node `qwen_agent`
+   1: failed to send DaemonReply
+   2: Broken pipe (os error 32)
+
+Location:
+    binaries/daemon/src/node_communication/tcp.rs:91:14
+2025-09-17T14:50:30.156146Z  INFO run_inner{self.daemon_id=DaemonId { machine_id: None, uuid: 867a63fb-15ff-433e-aec4-a178c2a4ce64 }}: dora_daemon: received destroy command -> exiting
+2025-09-17T14:50:30.159314Z  INFO run_inner{self.daemon_id=DaemonId { machine_id: None, uuid: 867a63fb-15ff-433e-aec4-a178c2a4ce64 }}: zenoh::api::session: close session zid=4fb59eb5332ae639e5f689021b7ec034
+2025-09-17T15:01:17.643028Z  INFO dora_daemon::coordinator: Connected to dora-coordinator at 127.0.0.1:53290
+2025-09-17T15:01:17.645929Z  INFO zenoh::net::runtime: Using ZID: 807cb7261d0809e23b7dbdea8e97715b
+2025-09-17T15:01:17.650550Z  INFO zenoh::net::runtime::orchestrator: Zenoh can be reached at: tcp/[fe80::215:5dff:fe5c:28c4]:5456
+2025-09-17T15:01:17.650632Z  INFO zenoh::net::runtime::orchestrator: Zenoh can be reached at: tcp/10.255.255.254:5456
+2025-09-17T15:01:17.650637Z  INFO zenoh::net::runtime::orchestrator: Zenoh can be reached at: tcp/172.28.125.175:5456
+2025-09-17T15:01:17.651202Z  INFO zenoh::net::runtime::orchestrator: zenohd listening scout messages on 224.0.0.224:7446
+2025-09-17T15:03:12.729112Z  WARN dora_daemon: qwen_agent was killed due to not stopping within the 15s grace period
+2025-09-17T15:03:12.746151Z  WARN dora_daemon::node_communication: failed to send NextFinishedDropTokens reply: NextDropEvents([])
+
+Caused by:
+   0: failed to send reply to node `qwen_agent`
+   1: failed to send DaemonReply
+   2: Broken pipe (os error 32)
+
+Location:
+    binaries/daemon/src/node_communication/tcp.rs:91:14
+2025-09-17T15:04:49.189196Z  INFO run_inner{self.daemon_id=DaemonId { machine_id: None, uuid: 274c78dd-8054-42c7-af11-8576010ab00b }}: dora_daemon: received destroy command -> exiting
+2025-09-17T15:04:49.189578Z  INFO run_inner{self.daemon_id=DaemonId { machine_id: None, uuid: 274c78dd-8054-42c7-af11-8576010ab00b }}: zenoh::api::session: close session zid=807cb7261d0809e23b7dbdea8e97715b
+2025-09-17T15:04:52.492456Z  INFO dora_daemon::coordinator: Connected to dora-coordinator at 127.0.0.1:53290
+2025-09-17T15:04:52.493718Z  INFO zenoh::net::runtime: Using ZID: 175d7c05ac2e763b72d19f54458190cb
+2025-09-17T15:04:52.499836Z  INFO zenoh::net::runtime::orchestrator: Zenoh can be reached at: tcp/[fe80::215:5dff:fe5c:28c4]:5456
+2025-09-17T15:04:52.499900Z  INFO zenoh::net::runtime::orchestrator: Zenoh can be reached at: tcp/10.255.255.254:5456
+2025-09-17T15:04:52.499905Z  INFO zenoh::net::runtime::orchestrator: Zenoh can be reached at: tcp/172.28.125.175:5456
+2025-09-17T15:04:52.500370Z  INFO zenoh::net::runtime::orchestrator: zenohd listening scout messages on 224.0.0.224:7446
+2025-09-17T15:09:13.535012Z  WARN dora_daemon: qwen_agent was killed due to not stopping within the 15s grace period
+2025-09-17T15:09:13.546855Z  WARN dora_daemon::node_communication: failed to send NextFinishedDropTokens reply: NextDropEvents([])
+
+Caused by:
+   0: failed to send reply to node `qwen_agent`
+   1: failed to send DaemonReply
+   2: Broken pipe (os error 32)
+
+Location:
+    binaries/daemon/src/node_communication/tcp.rs:91:14
+2025-09-17T15:09:23.039731Z  INFO run_inner{self.daemon_id=DaemonId { machine_id: None, uuid: 50555a5f-bd0b-4880-9abf-dd0f3428ddd9 }}: dora_daemon: received destroy command -> exiting
+2025-09-17T15:09:23.040260Z  INFO run_inner{self.daemon_id=DaemonId { machine_id: None, uuid: 50555a5f-bd0b-4880-9abf-dd0f3428ddd9 }}: zenoh::api::session: close session zid=175d7c05ac2e763b72d19f54458190cb
+2025-09-17T15:09:23.087062Z  WARN dora_daemon: process 201315 was killed on drop because it was still running
+2025-09-17T15:09:25.402660Z  INFO dora_daemon::coordinator: Connected to dora-coordinator at 127.0.0.1:53290
+2025-09-17T15:09:25.404735Z  INFO zenoh::net::runtime: Using ZID: d5bfb427ff0e7157e28c090a401d4edd
+2025-09-17T15:09:25.405498Z  INFO zenoh::net::runtime::orchestrator: Zenoh can be reached at: tcp/[fe80::215:5dff:fe5c:28c4]:5456
+2025-09-17T15:09:25.405528Z  INFO zenoh::net::runtime::orchestrator: Zenoh can be reached at: tcp/10.255.255.254:5456
+2025-09-17T15:09:25.405532Z  INFO zenoh::net::runtime::orchestrator: Zenoh can be reached at: tcp/172.28.125.175:5456
+2025-09-17T15:09:25.405895Z  INFO zenoh::net::runtime::orchestrator: zenohd listening scout messages on 224.0.0.224:7446
+2025-09-17T15:10:10.195335Z  INFO run_inner{self.daemon_id=DaemonId { machine_id: None, uuid: 88a09d03-663e-4b1f-84f2-dba83dc356cc }}: dora_daemon: received destroy command -> exiting
+2025-09-17T15:10:10.195970Z  INFO run_inner{self.daemon_id=DaemonId { machine_id: None, uuid: 88a09d03-663e-4b1f-84f2-dba83dc356cc }}: zenoh::api::session: close session zid=d5bfb427ff0e7157e28c090a401d4edd
+2025-09-17T15:10:10.198441Z  WARN dora_daemon: process 201474 was killed on drop because it was still running
+2025-09-17T15:10:12.825412Z  INFO dora_daemon::coordinator: Connected to dora-coordinator at 127.0.0.1:53290
+2025-09-17T15:10:12.826411Z  INFO zenoh::net::runtime: Using ZID: 49aa790682cab473da28ddbcf365e696
+2025-09-17T15:10:12.828480Z  INFO zenoh::net::runtime::orchestrator: Zenoh can be reached at: tcp/[fe80::215:5dff:fe5c:28c4]:5456
+2025-09-17T15:10:12.828517Z  INFO zenoh::net::runtime::orchestrator: Zenoh can be reached at: tcp/10.255.255.254:5456
+2025-09-17T15:10:12.828531Z  INFO zenoh::net::runtime::orchestrator: Zenoh can be reached at: tcp/172.28.125.175:5456
+2025-09-17T15:10:12.828943Z  INFO zenoh::net::runtime::orchestrator: zenohd listening scout messages on 224.0.0.224:7446
+2025-09-17T15:10:20.076611Z  INFO run_inner{self.daemon_id=DaemonId { machine_id: None, uuid: a4236cad-7dda-4d30-b55b-f402e356f29c }}: dora_daemon: received destroy command -> exiting
+2025-09-17T15:10:20.076987Z  INFO run_inner{self.daemon_id=DaemonId { machine_id: None, uuid: a4236cad-7dda-4d30-b55b-f402e356f29c }}: zenoh::api::session: close session zid=49aa790682cab473da28ddbcf365e696
+2025-09-17T15:10:20.079591Z  WARN dora_daemon: process 201716 was killed on drop because it was still running
+2025-09-17T15:10:22.075494Z  INFO dora_daemon::coordinator: Connected to dora-coordinator at 127.0.0.1:53290
+2025-09-17T15:10:22.076345Z  INFO zenoh::net::runtime: Using ZID: 885eb91409ea27c06c4be31f48b84ac6
+2025-09-17T15:10:22.076999Z  INFO zenoh::net::runtime::orchestrator: Zenoh can be reached at: tcp/[fe80::215:5dff:fe5c:28c4]:5456
+2025-09-17T15:10:22.077024Z  INFO zenoh::net::runtime::orchestrator: Zenoh can be reached at: tcp/10.255.255.254:5456
+2025-09-17T15:10:22.077027Z  INFO zenoh::net::runtime::orchestrator: Zenoh can be reached at: tcp/172.28.125.175:5456
+2025-09-17T15:10:22.082296Z  INFO zenoh::net::runtime::orchestrator: zenohd listening scout messages on 224.0.0.224:7446
+2025-09-17T15:16:45.990597Z  INFO run_inner{self.daemon_id=DaemonId { machine_id: None, uuid: cdd42e0e-3613-4fc8-bb5e-d947c1e71f6f }}: dora_daemon: received destroy command -> exiting
+2025-09-17T15:16:45.991151Z  INFO run_inner{self.daemon_id=DaemonId { machine_id: None, uuid: cdd42e0e-3613-4fc8-bb5e-d947c1e71f6f }}: zenoh::api::session: close session zid=885eb91409ea27c06c4be31f48b84ac6
+2025-09-17T15:16:45.994326Z  WARN dora_daemon: process 202172 was killed on drop because it was still running
+2025-09-17T15:16:50.864280Z  INFO dora_daemon::coordinator: Connected to dora-coordinator at 127.0.0.1:53290
+2025-09-17T15:16:50.866445Z  INFO zenoh::net::runtime: Using ZID: 50e81ca63d57bdb7405bd19950fdedde
+2025-09-17T15:16:50.867942Z  INFO zenoh::net::runtime::orchestrator: Zenoh can be reached at: tcp/[fe80::215:5dff:fe5c:28c4]:5456
+2025-09-17T15:16:50.868015Z  INFO zenoh::net::runtime::orchestrator: Zenoh can be reached at: tcp/10.255.255.254:5456
+2025-09-17T15:16:50.868025Z  INFO zenoh::net::runtime::orchestrator: Zenoh can be reached at: tcp/172.28.125.175:5456
+2025-09-17T15:16:50.868256Z  INFO zenoh::net::runtime::orchestrator: zenohd listening scout messages on 224.0.0.224:7446
+2025-09-17T15:24:24.183421Z  INFO dora_daemon::coordinator: Connected to dora-coordinator at 127.0.0.1:53290
+2025-09-17T15:24:24.184297Z  INFO zenoh::net::runtime: Using ZID: 8ec761944960cff744990f74e47289bd
+2025-09-17T15:24:24.185109Z  INFO zenoh::net::runtime::orchestrator: Zenoh can be reached at: tcp/[fe80::215:5dff:fe5c:28c4]:5456
+2025-09-17T15:24:24.185145Z  INFO zenoh::net::runtime::orchestrator: Zenoh can be reached at: tcp/10.255.255.254:5456
+2025-09-17T15:24:24.185150Z  INFO zenoh::net::runtime::orchestrator: Zenoh can be reached at: tcp/172.28.125.175:5456
+2025-09-17T15:24:24.186291Z  INFO zenoh::net::runtime::orchestrator: zenohd listening scout messages on 224.0.0.224:7446
+2025-09-17T15:25:46.906843Z  WARN dora_daemon::node_communication: failed to send NextEvent reply: NextEvents([])
+
+Caused by:
+   0: failed to send reply to node `terminal-input`
+   1: failed to send DaemonReply
+   2: Broken pipe (os error 32)
+
+Location:
+    binaries/daemon/src/node_communication/tcp.rs:91:14
+2025-09-17T15:25:46.908373Z  WARN dora_daemon::node_communication: failed to send NextFinishedDropTokens reply: NextDropEvents([])
+
+Caused by:
+   0: failed to send reply to node `terminal-input`
+   1: failed to send DaemonReply
+   2: Broken pipe (os error 32)
+
+Location:
+    binaries/daemon/src/node_communication/tcp.rs:91:14
+2025-09-17T15:29:24.524771Z  INFO dora_daemon::coordinator: Connected to dora-coordinator at 127.0.0.1:53290
+2025-09-17T15:29:24.526297Z  INFO zenoh::net::runtime: Using ZID: 7acee5bb000214896c6f494df7ceb9e1
+2025-09-17T15:29:24.531820Z  INFO zenoh::net::runtime::orchestrator: Zenoh can be reached at: tcp/[fe80::215:5dff:fe5c:28c4]:5456
+2025-09-17T15:29:24.531902Z  INFO zenoh::net::runtime::orchestrator: Zenoh can be reached at: tcp/10.255.255.254:5456
+2025-09-17T15:29:24.531913Z  INFO zenoh::net::runtime::orchestrator: Zenoh can be reached at: tcp/172.28.125.175:5456
+2025-09-17T15:29:24.532464Z  INFO zenoh::net::runtime::orchestrator: zenohd listening scout messages on 224.0.0.224:7446
+2025-09-17T15:31:46.399856Z  WARN dora_daemon: qwen_agent was killed due to not stopping within the 15s grace period
+2025-09-17T15:31:46.415144Z  WARN dora_daemon::node_communication: failed to send NextFinishedDropTokens reply: NextDropEvents([])
+
+Caused by:
+   0: failed to send reply to node `qwen_agent`
+   1: failed to send DaemonReply
+   2: Broken pipe (os error 32)
+
+Location:
+    binaries/daemon/src/node_communication/tcp.rs:91:14
+2025-09-17T15:33:07.004387Z  INFO run_inner{self.daemon_id=DaemonId { machine_id: None, uuid: 14fa31bd-5fb7-4f0e-891d-2b4c3f3affa7 }}: dora_daemon: received destroy command -> exiting
+2025-09-17T15:33:07.005031Z  INFO run_inner{self.daemon_id=DaemonId { machine_id: None, uuid: 14fa31bd-5fb7-4f0e-891d-2b4c3f3affa7 }}: zenoh::api::session: close session zid=7acee5bb000214896c6f494df7ceb9e1
+2025-09-17T15:33:11.405905Z  INFO dora_daemon::coordinator: Connected to dora-coordinator at 127.0.0.1:53290
+2025-09-17T15:33:11.407401Z  INFO zenoh::net::runtime: Using ZID: 97e5aae31c0752279ba2d67d520dea87
+2025-09-17T15:33:11.408854Z  INFO zenoh::net::runtime::orchestrator: Zenoh can be reached at: tcp/[fe80::215:5dff:fe5c:28c4]:5456
+2025-09-17T15:33:11.408917Z  INFO zenoh::net::runtime::orchestrator: Zenoh can be reached at: tcp/10.255.255.254:5456
+2025-09-17T15:33:11.408924Z  INFO zenoh::net::runtime::orchestrator: Zenoh can be reached at: tcp/172.28.125.175:5456
+2025-09-17T15:33:11.413952Z  INFO zenoh::net::runtime::orchestrator: zenohd listening scout messages on 224.0.0.224:7446
+2025-09-17T15:35:26.048152Z  WARN dora_daemon: qwen_agent was killed due to not stopping within the 15s grace period
+2025-09-17T15:35:26.065646Z  WARN dora_daemon::node_communication: failed to send NextFinishedDropTokens reply: NextDropEvents([])
+
+Caused by:
+   0: failed to send reply to node `qwen_agent`
+   1: failed to send DaemonReply
+   2: Broken pipe (os error 32)
+
+Location:
+    binaries/daemon/src/node_communication/tcp.rs:91:14
+2025-09-17T15:38:29.676827Z  INFO dora_daemon::coordinator: Connected to dora-coordinator at 127.0.0.1:53290
+2025-09-17T15:38:29.677866Z  INFO zenoh::net::runtime: Using ZID: 7be3d755044bb716d9b1af6c830d6a83
+2025-09-17T15:38:29.683824Z  INFO zenoh::net::runtime::orchestrator: Zenoh can be reached at: tcp/[fe80::215:5dff:fe5c:28c4]:5456
+2025-09-17T15:38:29.683861Z  INFO zenoh::net::runtime::orchestrator: Zenoh can be reached at: tcp/10.255.255.254:5456
+2025-09-17T15:38:29.683865Z  INFO zenoh::net::runtime::orchestrator: Zenoh can be reached at: tcp/172.28.125.175:5456
+2025-09-17T15:38:29.684185Z  INFO zenoh::net::runtime::orchestrator: zenohd listening scout messages on 224.0.0.224:7446
+2025-09-17T15:54:46.008919Z  WARN dora_daemon: qwen_agent was killed due to not stopping within the 15s grace period
+2025-09-17T15:54:46.022149Z  WARN dora_daemon::node_communication: failed to send NextFinishedDropTokens reply: NextDropEvents([])
+
+Caused by:
+   0: failed to send reply to node `qwen_agent`
+   1: failed to send DaemonReply
+   2: Broken pipe (os error 32)
+
+Location:
+    binaries/daemon/src/node_communication/tcp.rs:91:14

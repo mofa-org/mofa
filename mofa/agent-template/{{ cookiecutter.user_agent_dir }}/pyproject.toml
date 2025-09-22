@@ -1,0 +1,25 @@
+[tool.poetry]
+name = "{{cookiecutter.agent_name}}"
+version = "{{cookiecutter.version}}"
+authors = [
+    {%- for author in cookiecutter.authors.split(',') %}
+    "{{ author.strip() }}"{%- if not loop.last %},{% endif -%}
+    {%- endfor %}
+]
+description = "{{cookiecutter.description}}"
+license = "MIT License"
+homepage = "https://github.com/moxin-org/mofa"
+documentation = "https://github.com/moxin-org/mofa/blob/main/README.md"
+readme = "README.md"
+packages = [{ include = "{{cookiecutter.agent_name}}" }]
+
+[tool.poetry.dependencies]
+pyarrow = ">= 5.0.0"
+
+[tool.poetry.scripts]
+{{cookiecutter.agent_name}} = "{{cookiecutter.agent_name}}.main:main"
+
+[build-system]
+requires = ["poetry-core>=1.8.0"]
+build-backend = "poetry.core.masonry.api"
+

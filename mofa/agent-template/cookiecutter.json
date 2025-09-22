@@ -1,0 +1,7 @@
+{
+    "user_agent_dir": "user-new-agent",
+    "agent_name": "new-node-name",
+    "description": "A user new node template",
+	"version": "0.0.2",
+    "authors": "Mofa Bot"
+}
