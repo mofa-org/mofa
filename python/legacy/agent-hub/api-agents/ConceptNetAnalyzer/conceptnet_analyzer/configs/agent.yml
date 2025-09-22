@@ -1,8 +1,0 @@
-# Configuration for ConceptNet API access
-api:
-  base_url: "http://api.conceptnet.io"
-  endpoints:
-    query: "/query"
-  default_params:
-    rel: "/r/RelatedTo"
-  max_relationships: 5  # Number of relationships to display by default

@@ -1,6 +1,0 @@
-# wildlife_sound_analyzer/config.yml
-# Configuration for Xeno-canto API
-api:
-  endpoint: "https://xeno-canto.org/api/3/recordings"
-  default_query: "sp:'troglodytes troglodytes' cnt:spain"
-  per_page: 5

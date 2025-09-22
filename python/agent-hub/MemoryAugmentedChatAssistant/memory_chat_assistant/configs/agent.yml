@@ -1,9 +1,0 @@
-# config.yml
-# Configuration for MemoryAugmentedChatAssistant
-openai:
-  # OpenAI model to use by default
-  model: gpt-4o-mini
-  temperature: 0.7   # Adjust model creativity/precision
-memory:
-  limit: 3           # Default number of memories retrieved
-  user_id_default: default_user

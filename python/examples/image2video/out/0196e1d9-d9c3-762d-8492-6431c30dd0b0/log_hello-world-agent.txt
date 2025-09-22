@@ -1,2 +1,0 @@
-/root/2025/q1/mofaenv/lib/python3.12/site-packages/pydantic/_internal/_config.py:295: PydanticDeprecatedSince20: Support for class-based `config` is deprecated, use ConfigDict instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.10/migration/
-  warnings.warn(DEPRECATION_MESSAGE, DeprecationWarning)

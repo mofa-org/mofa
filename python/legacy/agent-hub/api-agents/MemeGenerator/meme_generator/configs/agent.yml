@@ -1,4 +1,0 @@
-# meme_generator/config.yml
-# Non-sensitive configuration settings
-default_template_id: "61579"  # Default meme template ID
-search_query: "happy"  # Default search query for premium feature

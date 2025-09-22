@@ -1,4 +1,0 @@
-2025-04-29T12:05:56.036431Z  INFO dora_coordinator: Received destroy command
-2025-04-29T12:05:56.036797Z  INFO dora_coordinator: successfully destroyed daemon `990642cb-732c-4226-9144-aaf29621e0a7`
-2025-04-29T12:05:56.036822Z  INFO dora_coordinator: Daemon `990642cb-732c-4226-9144-aaf29621e0a7` exited
-2025-04-29T12:05:56.038469Z  INFO dora_coordinator: stopped

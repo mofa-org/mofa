@@ -1,8 +1,0 @@
-# Configuration for NumbersAPI integration
-base_url: "http://numbersapi.com"
-endpoints:
-  trivia: "/{number}/trivia"
-  math: "/{number}/math"
-  date: "/{month}/{day}/date"
-response_format: "text"  # Options: "text" or "json"
-default_timeout: 10  # Timeout in seconds for API requests

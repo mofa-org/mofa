@@ -1,9 +1,0 @@
-# YAML configuration for WaifuImageManager
-# Non-sensitive settings and parameters
-api:
-  base_url: "https://api.waifu.im"
-  default_params:
-    limit: 5
-  tags_endpoint: "/tags"
-  search_endpoint: "/search"
-  favorites_endpoint: "/favorites"

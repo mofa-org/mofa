@@ -1,7 +1,0 @@
-# config.yml for FOAASClient
-# Non-sensitive configuration settings
-api:
-  base_url: "https://www.foaas.com"
-  timeout: 30
-  default_headers:
-    Accept: "application/json"

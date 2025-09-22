@@ -1,6 +1,0 @@
-# Configuration for UrbanDictionaryAPI
-settings:
-  # Base URL for the Urban Dictionary API
-  base_url: "https://api.urbandictionary.com/v0"
-  # Maximum number of definitions to fetch (default: 3)
-  max_definitions: 3

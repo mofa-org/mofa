@@ -1,2 +1,0 @@
-recursive-include mofa *.py
-include requirements.txt README.rst HISTORY.rst

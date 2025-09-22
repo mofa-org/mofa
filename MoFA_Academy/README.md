@@ -1,7 +1,0 @@
-# **魔法师学院 （MoFA Academy）**
-
-一些给魔法师快速上手的（B站）MoFA视频教程 
-
-- [MoFA框架的工作环境和安装](https://www.bilibili.com/video/BV15fQPY6Epv?buvid=XX9EC0E958D196B90E2C7711555CC2AFED7BD&from_spmid=main.space-contribution.0.0&is_story_h5=false&mid=ar3kJYZrK2lEhJGWOa4PYA%3D%3D&plat_id=116&share_from=ugc&share_medium=android&share_plat=android&share_session_id=313723f9-0d62-4480-ba12-452d35e2aa76&share_source=WEIXIN&share_tag=s_i&spmid=united.player-video-detail.0.0&timestamp=1741872410&unique_k=cMGJ1u7&up_id=3546869825276182)
-- [Hello MoFA, 运行第一个MoFA Agent](https://www.bilibili.com/video/BV15fQPY6EnD/?buvid=XX9EC0E958D196B90E2C7711555CC2AFED7BD&from_spmid=main.space-contribution.0.0&is_story_h5=false&mid=ar3kJYZrK2lEhJGWOa4PYA%3D%3D&plat_id=116&share_from=ugc&share_medium=android&share_plat=android&share_session_id=b2871fd4-087a-4eb5-bad5-1230c2815a39&share_source=WEIXIN&share_tag=s_i&spmid=united.player-video-detail.0.0&timestamp=1741872425&unique_k=JlZ2DVM&up_id=3546869825276182)
-- [构建第一个MoFA Agent](https://www.bilibili.com/video/BV15fQPY6E1g/?buvid=XX9EC0E958D196B90E2C7711555CC2AFED7BD&from_spmid=main.space-contribution.0.0&is_story_h5=false&mid=ar3kJYZrK2lEhJGWOa4PYA%3D%3D&plat_id=116&share_from=ugc&share_medium=android&share_plat=android&share_session_id=684170a4-a9fe-44df-a3ce-57dd5ef834ea&share_source=WEIXIN&share_tag=s_i&spmid=united.player-video-detail.0.0&timestamp=1741872441&unique_k=yVo3XkA&up_id=3546869825276182)

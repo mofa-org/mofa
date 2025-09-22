@@ -1,9 +1,0 @@
-# YAML configuration for ScreenshotCaptureAgent
-# Non-sensitive settings and parameters
-api:
-  base_url: "http://api.screenshotlayer.com/api/capture"
-  default_params:
-    url: "https://example.com"
-    viewport: "1440x900"
-    fullpage: 1
-    format: "PNG"
