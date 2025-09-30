@@ -10,7 +10,7 @@ MoFA is a software framework for building AI agents in a composable manner. With
 
 MoFA's unique design philosophies are:
 
-- **Ordinary People, Extraordinary Things**: AI should not be the exclusive domain of elites and giants. MoFA enables everyone to harness and develop AI, turning the impossible into possible, allowing ordinary people to create extraordinary things.
+- **Enable Ordinary People to do Extraordinary Things**: AI should not be the exclusive domain of elites and giants. MoFA enables everyone to harness and develop AI, turning the impossible into possible, allowing ordinary people to create extraordinary things.
 - **Composition AI**: Inspired by Unix philosophy, MoFA takes "composition" as its core principle. You can build agents, connect agents, and integrate tools like building blocks, making AI simple, flexible, and powerful.
 - **Everything Agent**: Unlike most software, in the MoFA world, agents are the applications of the AI era. Not just large language models, they can be code, scripts, APIs, or even MoFA itself. MoFA is not just a framework, but an agent ecosystem.
 - **Data Flow**: Most agent frameworks rely on complex WorkFlows, while MoFA chooses a more intuitive and powerful Data Flow approach. This allows agents to be freely combined, disassembled, and reused.
