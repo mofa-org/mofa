@@ -100,10 +100,10 @@ def _collect_editable_packages(dataflow_path: str, working_dir: str):
 def _install_base_requirements(pip_executable: str, working_dir: str):
     # First install pip tools to avoid conflicts
     subprocess.run([pip_executable, 'install', '--upgrade', 'pip', 'setuptools', 'wheel'], capture_output=True)
-    
+
     # Remove pathlib if it exists (conflicts with Python 3.11 built-in pathlib)
     subprocess.run([pip_executable, 'uninstall', '-y', 'pathlib'], capture_output=True)
-    
+
     # Also remove any broken pathlib files manually
     venv_site_packages = os.path.dirname(os.path.dirname(pip_executable)) + '/lib/python3.11/site-packages'
     pathlib_files = [
@@ -114,11 +114,11 @@ def _install_base_requirements(pip_executable: str, working_dir: str):
     for pathlib_file in pathlib_files:
         if os.path.exists(pathlib_file):
             os.remove(pathlib_file)
-    
+
     # Install essential packages needed for dora-rs and basic functionality
     base_packages = [
         'numpy==1.26.4',
-        'pyarrow==17.0.0', 
+        'pyarrow==17.0.0',
         'dora-rs-cli',
         'python-dotenv',
         'pyyaml'
@@ -128,7 +128,7 @@ def _install_base_requirements(pip_executable: str, working_dir: str):
         proc = subprocess.run(install_cmd, capture_output=True, text=True)
         if proc.returncode != 0:
             raise RuntimeError(f"Failed to install base package {package}: {proc.stderr}")
-    
+
     # Install current development version of mofa from the project root
     # Find the mofa project root (where setup.py is located)
     current_dir = working_dir
@@ -140,7 +140,7 @@ def _install_base_requirements(pip_executable: str, working_dir: str):
                 mofa_root = current_dir
                 break
         current_dir = os.path.dirname(current_dir)
-    
+
     if mofa_root:
         # Use --no-build-isolation to avoid pathlib conflicts
         install_cmd = [pip_executable, 'install', '--no-build-isolation', '-e', mofa_root]
@@ -153,7 +153,7 @@ def _install_base_requirements(pip_executable: str, working_dir: str):
         proc = subprocess.run(install_cmd, capture_output=True, text=True)
         if proc.returncode != 0:
             raise RuntimeError(f"Failed to install mofa-ai: {proc.stderr}")
-    
+
     # Final cleanup: remove pathlib again in case any dependency reinstalled it
     subprocess.run([pip_executable, 'uninstall', '-y', 'pathlib'], capture_output=True)
     for pathlib_file in pathlib_files:
@@ -187,23 +187,24 @@ def _build_env(base_env: dict, venv_info: dict):
 @mofa_cli_group.command()
 @click.argument('dataflow_file', required=True)
 def run(dataflow_file: str):
+    """Use run <path-to-dataflow.yml> to run in venv."""
     dataflow_path = os.path.abspath(dataflow_file)
     if not os.path.exists(dataflow_path):
         click.echo(f"Error: Dataflow file not found: {dataflow_path}")
         return
-    
+
     if not dataflow_path.endswith('.yml') and not dataflow_path.endswith('.yaml'):
         click.echo(f"Error: File must be a YAML file (.yml or .yaml): {dataflow_path}")
         return
-    
+
     # Get the directory containing the dataflow file
     working_dir = os.path.dirname(dataflow_path)
-    
+
     # Clean up any existing dora processes to avoid conflicts
     click.echo("Cleaning up existing dora processes...")
     subprocess.run(['pkill', '-f', 'dora'], capture_output=True)
     time.sleep(1)  # Give processes time to die
-    
+
     env_info = None
     run_env = os.environ.copy()
     editable_packages = []
@@ -211,10 +212,10 @@ def run(dataflow_file: str):
     try:
         env_info = _create_venv(sys.executable, working_dir)
         run_env = _build_env(run_env, env_info)
-        
+
         click.echo("Installing base requirements...")
         _install_base_requirements(env_info['pip'], working_dir)
-        
+
         editable_packages = _collect_editable_packages(dataflow_path, working_dir)
         if editable_packages:
             click.echo("Installing node packages into isolated environment...")
@@ -275,7 +276,7 @@ def run(dataflow_file: str):
         )
 
         time.sleep(2)
-        
+
         # Check if dataflow started successfully
         if dora_dataflow_process.poll() is not None:
             stdout, stderr = dora_dataflow_process.communicate()
@@ -288,14 +289,14 @@ def run(dataflow_file: str):
 
         click.echo("Starting terminal-input process...")
         click.echo("You can now interact directly with the agents. Type 'exit' to quit.")
-        
+
         # Start terminal-input with direct stdin/stdout connection
         task_input_process = subprocess.Popen(
             ['terminal-input'],
             cwd=working_dir,
             env=run_env
         )
-        
+
         # Wait for terminal-input to finish (user interaction)
         try:
             task_input_process.wait()
@@ -317,7 +318,7 @@ def run(dataflow_file: str):
 @click.option('--output', default=os.getcwd()+"/", help='node output path')
 @click.option('--authors', default='Mofa Bot', help='authors')
 def new_agent(agent_name: str, version: str, output: str, authors: str):
-    """Create a new agent from the template with configuration options using Cookiecutter."""
+    """Create a new agent from template."""
 
     # Define the template directory
     # template_dir = os.path.join(os.path.dirname(agent_dir_path), 'agent-hub', 'agent-template')
