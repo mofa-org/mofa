@@ -387,3 +387,49 @@ Caused by:
 
 Location:
     binaries/daemon/src/node_communication/tcp.rs:91:14
+2025-10-04T18:59:55.664010Z  INFO dora_daemon::coordinator: Connected to dora-coordinator at 127.0.0.1:53290
+2025-10-04T18:59:55.664953Z  WARN dora_daemon: disabling multicast on macos systems. Enable it with the ZENOH_CONFIG env variable or file
+2025-10-04T18:59:55.665123Z  INFO zenoh::net::runtime: Using ZID: 3faae03d766781cc5af101ab6261e2f0
+2025-10-04T18:59:55.667353Z  INFO zenoh::net::runtime::orchestrator: Zenoh can be reached at: tcp/[240d:1a:85f:1f00:888:9605:6e7e:45d9]:5456
+2025-10-04T18:59:55.667404Z  INFO zenoh::net::runtime::orchestrator: Zenoh can be reached at: tcp/[240d:1a:85f:1f00:a4d2:fcf5:40ea:dd3c]:5456
+2025-10-04T18:59:55.667408Z  INFO zenoh::net::runtime::orchestrator: Zenoh can be reached at: tcp/[fd00:1234:ffff::10]:5456
+2025-10-04T18:59:55.667411Z  INFO zenoh::net::runtime::orchestrator: Zenoh can be reached at: tcp/198.18.0.1:5456
+2025-10-04T18:59:55.667413Z  INFO zenoh::net::runtime::orchestrator: Zenoh can be reached at: tcp/[fe80::1]:5456
+2025-10-04T18:59:55.667416Z  INFO zenoh::net::runtime::orchestrator: Zenoh can be reached at: tcp/[fe80::10e5:e5ba:84fa:7b14]:5456
+2025-10-04T18:59:55.667418Z  INFO zenoh::net::runtime::orchestrator: Zenoh can be reached at: tcp/[fe80::a8af:23ff:feff:ec10]:5456
+2025-10-04T18:59:55.667420Z  INFO zenoh::net::runtime::orchestrator: Zenoh can be reached at: tcp/[fe80::a8af:23ff:feff:ec10]:5456
+2025-10-04T18:59:55.667423Z  INFO zenoh::net::runtime::orchestrator: Zenoh can be reached at: tcp/[fe80::82c0:c9ba:8e1f:33e2]:5456
+2025-10-04T18:59:55.667425Z  INFO zenoh::net::runtime::orchestrator: Zenoh can be reached at: tcp/[fe80::c237:c4be:6f7e:6ee]:5456
+2025-10-04T18:59:55.667426Z  INFO zenoh::net::runtime::orchestrator: Zenoh can be reached at: tcp/[fe80::d4d4:88be:7a55:cc37]:5456
+2025-10-04T18:59:55.667428Z  INFO zenoh::net::runtime::orchestrator: Zenoh can be reached at: tcp/[fe80::ce81:b1c:bd2c:69e]:5456
+2025-10-04T18:59:55.667430Z  INFO zenoh::net::runtime::orchestrator: Zenoh can be reached at: tcp/[fe80::3b5f:519a:cedf:b878]:5456
+2025-10-04T18:59:55.667432Z  INFO zenoh::net::runtime::orchestrator: Zenoh can be reached at: tcp/[fe80::d47c:86f1:e3ac:8e06]:5456
+2025-10-04T18:59:55.667435Z  INFO zenoh::net::runtime::orchestrator: Zenoh can be reached at: tcp/[fe80::4827:e86b:d3a4:a325]:5456
+2025-10-04T18:59:55.667437Z  INFO zenoh::net::runtime::orchestrator: Zenoh can be reached at: tcp/192.168.150.120:5456
+2025-10-04T19:03:03.304491Z  INFO run_inner{self.daemon_id=DaemonId { machine_id: None, uuid: 5eda41c2-785f-491c-aa14-a2b99faebfa6 }}: dora_daemon: received ctrlc signal -> stopping all dataflows
+2025-10-04T19:03:03.306893Z  INFO run_inner{self.daemon_id=DaemonId { machine_id: None, uuid: 5eda41c2-785f-491c-aa14-a2b99faebfa6 }}: dora_daemon: received destroy command -> exiting
+2025-10-04T19:03:03.308842Z  INFO run_inner{self.daemon_id=DaemonId { machine_id: None, uuid: 5eda41c2-785f-491c-aa14-a2b99faebfa6 }}: zenoh::api::session: close session zid=3faae03d766781cc5af101ab6261e2f0
+2025-10-04T19:03:03.314641Z  WARN dora_daemon: process 97235 was killed on drop because it was still running
+2025-10-04T19:04:12.180287Z  INFO dora_daemon::coordinator: Connected to dora-coordinator at 127.0.0.1:53290
+2025-10-04T19:04:12.181447Z  WARN dora_daemon: disabling multicast on macos systems. Enable it with the ZENOH_CONFIG env variable or file
+2025-10-04T19:04:12.181612Z  INFO zenoh::net::runtime: Using ZID: b55a5e175274e80631c489cec89ffcb5
+2025-10-04T19:04:12.183619Z  INFO zenoh::net::runtime::orchestrator: Zenoh can be reached at: tcp/[240d:1a:85f:1f00:888:9605:6e7e:45d9]:5456
+2025-10-04T19:04:12.183652Z  INFO zenoh::net::runtime::orchestrator: Zenoh can be reached at: tcp/[240d:1a:85f:1f00:a4d2:fcf5:40ea:dd3c]:5456
+2025-10-04T19:04:12.183655Z  INFO zenoh::net::runtime::orchestrator: Zenoh can be reached at: tcp/[fd00:1234:ffff::10]:5456
+2025-10-04T19:04:12.183658Z  INFO zenoh::net::runtime::orchestrator: Zenoh can be reached at: tcp/198.18.0.1:5456
+2025-10-04T19:04:12.183662Z  INFO zenoh::net::runtime::orchestrator: Zenoh can be reached at: tcp/[fe80::1]:5456
+2025-10-04T19:04:12.183665Z  INFO zenoh::net::runtime::orchestrator: Zenoh can be reached at: tcp/[fe80::10e5:e5ba:84fa:7b14]:5456
+2025-10-04T19:04:12.183669Z  INFO zenoh::net::runtime::orchestrator: Zenoh can be reached at: tcp/[fe80::a8af:23ff:feff:ec10]:5456
+2025-10-04T19:04:12.183672Z  INFO zenoh::net::runtime::orchestrator: Zenoh can be reached at: tcp/[fe80::a8af:23ff:feff:ec10]:5456
+2025-10-04T19:04:12.183675Z  INFO zenoh::net::runtime::orchestrator: Zenoh can be reached at: tcp/[fe80::82c0:c9ba:8e1f:33e2]:5456
+2025-10-04T19:04:12.183694Z  INFO zenoh::net::runtime::orchestrator: Zenoh can be reached at: tcp/[fe80::c237:c4be:6f7e:6ee]:5456
+2025-10-04T19:04:12.183697Z  INFO zenoh::net::runtime::orchestrator: Zenoh can be reached at: tcp/[fe80::d4d4:88be:7a55:cc37]:5456
+2025-10-04T19:04:12.183699Z  INFO zenoh::net::runtime::orchestrator: Zenoh can be reached at: tcp/[fe80::ce81:b1c:bd2c:69e]:5456
+2025-10-04T19:04:12.183701Z  INFO zenoh::net::runtime::orchestrator: Zenoh can be reached at: tcp/[fe80::3b5f:519a:cedf:b878]:5456
+2025-10-04T19:04:12.183703Z  INFO zenoh::net::runtime::orchestrator: Zenoh can be reached at: tcp/[fe80::d47c:86f1:e3ac:8e06]:5456
+2025-10-04T19:04:12.183705Z  INFO zenoh::net::runtime::orchestrator: Zenoh can be reached at: tcp/[fe80::4827:e86b:d3a4:a325]:5456
+2025-10-04T19:04:12.183706Z  INFO zenoh::net::runtime::orchestrator: Zenoh can be reached at: tcp/192.168.150.120:5456
+2025-10-04T19:05:26.566291Z  INFO run_inner{self.daemon_id=DaemonId { machine_id: None, uuid: f7ca4b47-1942-4e95-b909-194048155f2f }}: dora_daemon: received ctrlc signal -> stopping all dataflows
+2025-10-04T19:05:26.567527Z  INFO run_inner{self.daemon_id=DaemonId { machine_id: None, uuid: f7ca4b47-1942-4e95-b909-194048155f2f }}: dora_daemon: received destroy command -> exiting
+2025-10-04T19:05:26.567825Z  INFO run_inner{self.daemon_id=DaemonId { machine_id: None, uuid: f7ca4b47-1942-4e95-b909-194048155f2f }}: zenoh::api::session: close session zid=b55a5e175274e80631c489cec89ffcb5
+2025-10-04T19:05:29.757412Z  WARN dora_daemon: process 98568 was killed on drop because it was still running

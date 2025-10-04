@@ -1,15 +1,15 @@
 #openai
 [tool.poetry]
-name = "my_llm_agent"
+name = "openai_chat_agent"
 version = "0.1.0"
 authors = [
     "daiyn2002@outlook.com",
 ]
-description = "An OpenAI LLM agent for MoFA"
+description = "An OpenAI Chat Agent for MoFA"
 license = "MIT"
-homepage = "https://github.com/your-org/my_llm_agent"
+homepage = "https://github.com/your-org/openai_chat_agent"
 readme = "README.md"
-packages = [{ include = "my_llm_agent" }]
+packages = [{ include = "openai_chat_agent" }]
 
 [tool.poetry.dependencies]
 python = ">=3.10,<3.12"
@@ -17,7 +17,7 @@ openai = "*"
 python-dotenv = "*"
 
 [tool.poetry.scripts]
-my_llm_agent = "my_llm_agent.main:main"
+openai_chat_agent = "openai_chat_agent.main:main"
 
 [build-system]
 requires = ["poetry-core>=1.8.0"]

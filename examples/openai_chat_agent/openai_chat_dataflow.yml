@@ -5,11 +5,11 @@ nodes:
     outputs:
       - data
     inputs:
-      agent_response: my_llm_agent/llm_result
+      agent_response: openai_chat_agent/llm_result
 
-  - id: my_llm_agent
-    build: pip install ../../agent-hub/my_llm_agent
-    path: my_llm_agent
+  - id: openai_chat_agent
+    build: pip install ../../agent-hub/openai_chat_agent
+    path: openai_chat_agent
     outputs:
       - llm_result
     inputs:

@@ -1,0 +1,115 @@
+2025-09-17T05:44:06.214038Z  INFO dora_daemon::coordinator: Connected to dora-coordinator at 127.0.0.1:53290
+2025-09-17T05:44:06.219501Z  INFO zenoh::net::runtime: Using ZID: 3aceb8acfc3ec6f63a8e2b769b303f72
+2025-09-17T05:44:06.233586Z  INFO zenoh::net::runtime::orchestrator: Zenoh can be reached at: tcp/[fe80::215:5dff:fe5c:28c4]:5456
+2025-09-17T05:44:06.233634Z  INFO zenoh::net::runtime::orchestrator: Zenoh can be reached at: tcp/10.255.255.254:5456
+2025-09-17T05:44:06.233637Z  INFO zenoh::net::runtime::orchestrator: Zenoh can be reached at: tcp/172.28.125.175:5456
+2025-09-17T05:44:06.233739Z  INFO zenoh::net::runtime::orchestrator: zenohd listening scout messages on 224.0.0.224:7446
+2025-09-17T05:49:08.275173Z  WARN run_inner{self.daemon_id=DaemonId { machine_id: None, uuid: d1f4f236-39b5-464b-b713-262b456e4c62 }}: uhlc: incoming timestamp from 85003360BE2E4CD9916BDE67694D0F3B exceeding delta 500ms is rejected: 2025-09-17T05:49:09.027373209Z vs. now: 2025-09-17T05:49:08.275148920Z    
+2025-09-17T05:49:08.277017Z  WARN run_inner{self.daemon_id=DaemonId { machine_id: None, uuid: d1f4f236-39b5-464b-b713-262b456e4c62 }}: dora_daemon: failed to update HLC with incoming event timestamp: incoming timestamp from 85003360BE2E4CD9916BDE67694D0F3B exceeding delta 500ms is rejected: 2025-09-17T05:49:09.027373209Z vs. now: 2025-09-17T05:49:08.275148920Z
+2025-09-17T05:49:56.442215Z  INFO run_inner{self.daemon_id=DaemonId { machine_id: None, uuid: d1f4f236-39b5-464b-b713-262b456e4c62 }}: dora_daemon: received destroy command -> exiting
+2025-09-17T05:49:56.444412Z  INFO run_inner{self.daemon_id=DaemonId { machine_id: None, uuid: d1f4f236-39b5-464b-b713-262b456e4c62 }}: zenoh::api::session: close session zid=3aceb8acfc3ec6f63a8e2b769b303f72
+2025-09-17T05:54:18.342753Z  INFO dora_daemon::coordinator: Connected to dora-coordinator at 127.0.0.1:53290
+2025-09-17T05:54:18.343671Z  INFO zenoh::net::runtime: Using ZID: d233a6e11c84089675fa3845646d8037
+2025-09-17T05:54:18.344586Z  INFO zenoh::net::runtime::orchestrator: Zenoh can be reached at: tcp/[fe80::215:5dff:fe5c:28c4]:5456
+2025-09-17T05:54:18.344614Z  INFO zenoh::net::runtime::orchestrator: Zenoh can be reached at: tcp/10.255.255.254:5456
+2025-09-17T05:54:18.344618Z  INFO zenoh::net::runtime::orchestrator: Zenoh can be reached at: tcp/172.28.125.175:5456
+2025-09-17T05:54:18.344752Z  INFO zenoh::net::runtime::orchestrator: zenohd listening scout messages on 224.0.0.224:7446
+2025-09-17T05:55:50.226579Z  WARN run_inner{self.daemon_id=DaemonId { machine_id: None, uuid: eca88631-bde1-490f-b26d-a6c018530334 }}: uhlc: incoming timestamp from 6DB4C9CAB96A4F86945201BC17420498 exceeding delta 500ms is rejected: 2025-09-17T05:55:51.145965878Z vs. now: 2025-09-17T05:55:50.226427283Z    
+2025-09-17T05:55:50.226728Z  WARN run_inner{self.daemon_id=DaemonId { machine_id: None, uuid: eca88631-bde1-490f-b26d-a6c018530334 }}: dora_daemon: failed to update HLC with incoming event timestamp: incoming timestamp from 6DB4C9CAB96A4F86945201BC17420498 exceeding delta 500ms is rejected: 2025-09-17T05:55:51.145965878Z vs. now: 2025-09-17T05:55:50.226427283Z
+2025-09-17T05:57:54.406219Z  WARN run_inner{self.daemon_id=DaemonId { machine_id: None, uuid: eca88631-bde1-490f-b26d-a6c018530334 }}: uhlc: incoming timestamp from B53CAB9E573F473C9C5CFD5C41DC7E17 exceeding delta 500ms is rejected: 2025-09-17T05:57:55.174632348Z vs. now: 2025-09-17T05:57:54.406094390Z    
+2025-09-17T05:57:54.406407Z  WARN run_inner{self.daemon_id=DaemonId { machine_id: None, uuid: eca88631-bde1-490f-b26d-a6c018530334 }}: dora_daemon: failed to update HLC with incoming event timestamp: incoming timestamp from B53CAB9E573F473C9C5CFD5C41DC7E17 exceeding delta 500ms is rejected: 2025-09-17T05:57:55.174632348Z vs. now: 2025-09-17T05:57:54.406094390Z
+2025-09-17T06:02:32.702953Z  WARN run_inner{self.daemon_id=DaemonId { machine_id: None, uuid: eca88631-bde1-490f-b26d-a6c018530334 }}: uhlc: incoming timestamp from 6DB4C9CAB96A4F86945201BC17420498 exceeding delta 500ms is rejected: 2025-09-17T06:02:33.618668787Z vs. now: 2025-09-17T06:02:32.702922862Z    
+2025-09-17T06:02:32.705198Z  WARN run_inner{self.daemon_id=DaemonId { machine_id: None, uuid: eca88631-bde1-490f-b26d-a6c018530334 }}: dora_daemon: failed to update HLC with incoming event timestamp: incoming timestamp from 6DB4C9CAB96A4F86945201BC17420498 exceeding delta 500ms is rejected: 2025-09-17T06:02:33.618668787Z vs. now: 2025-09-17T06:02:32.702922862Z
+2025-09-17T06:09:28.103567Z  WARN dora_daemon: my_llm_agent was killed due to not stopping within the 15s grace period
+2025-09-17T06:09:28.129460Z  WARN dora_daemon::node_communication: failed to send NextFinishedDropTokens reply: NextDropEvents([])
+
+Caused by:
+   0: failed to send reply to node `my_llm_agent`
+   1: failed to send DaemonReply
+   2: Broken pipe (os error 32)
+
+Location:
+    binaries/daemon/src/node_communication/tcp.rs:91:14
+2025-09-17T06:12:50.691929Z  WARN run_inner{self.daemon_id=DaemonId { machine_id: None, uuid: eca88631-bde1-490f-b26d-a6c018530334 }}: uhlc: incoming timestamp from 6DB4C9CAB96A4F86945201BC17420498 exceeding delta 500ms is rejected: 2025-09-17T06:12:51.605789400Z vs. now: 2025-09-17T06:12:50.691782239Z    
+2025-09-17T06:12:50.692102Z  WARN run_inner{self.daemon_id=DaemonId { machine_id: None, uuid: eca88631-bde1-490f-b26d-a6c018530334 }}: dora_daemon: failed to update HLC with incoming event timestamp: incoming timestamp from 6DB4C9CAB96A4F86945201BC17420498 exceeding delta 500ms is rejected: 2025-09-17T06:12:51.605789400Z vs. now: 2025-09-17T06:12:50.691782239Z
+2025-09-17T06:18:00.008214Z  WARN uhlc: incoming timestamp from 12EC1603E8504E0B9EFA8E3B8CDD5A08 exceeding delta 500ms is rejected: 2025-09-17T06:18:00.674399033Z vs. now: 2025-09-17T06:18:00.008183624Z    
+2025-09-17T06:18:00.008291Z  WARN dora_daemon::node_communication: failed to update HLC: incoming timestamp from 12EC1603E8504E0B9EFA8E3B8CDD5A08 exceeding delta 500ms is rejected: 2025-09-17T06:18:00.674399033Z vs. now: 2025-09-17T06:18:00.008183624Z
+2025-09-17T06:18:00.008587Z  WARN run_inner{self.daemon_id=DaemonId { machine_id: None, uuid: eca88631-bde1-490f-b26d-a6c018530334 }}: uhlc: incoming timestamp from B53CAB9E573F473C9C5CFD5C41DC7E17 exceeding delta 500ms is rejected: 2025-09-17T06:18:00.675010059Z vs. now: 2025-09-17T06:18:00.008572801Z    
+2025-09-17T06:18:00.008684Z  WARN run_inner{self.daemon_id=DaemonId { machine_id: None, uuid: eca88631-bde1-490f-b26d-a6c018530334 }}: dora_daemon: failed to update HLC with incoming event timestamp: incoming timestamp from B53CAB9E573F473C9C5CFD5C41DC7E17 exceeding delta 500ms is rejected: 2025-09-17T06:18:00.675010059Z vs. now: 2025-09-17T06:18:00.008572801Z
+2025-09-17T06:18:02.516228Z  WARN dora_daemon: my_llm_agent_qwen was killed due to not stopping within the 15s grace period
+2025-09-17T06:18:02.537242Z  WARN dora_daemon::node_communication: failed to send NextFinishedDropTokens reply: NextDropEvents([])
+
+Caused by:
+   0: failed to send reply to node `my_llm_agent_qwen`
+   1: failed to send DaemonReply
+   2: Broken pipe (os error 32)
+
+Location:
+    binaries/daemon/src/node_communication/tcp.rs:91:14
+2025-09-17T06:20:52.155381Z  INFO run_inner{self.daemon_id=DaemonId { machine_id: None, uuid: eca88631-bde1-490f-b26d-a6c018530334 }}: dora_daemon: received destroy command -> exiting
+2025-09-17T06:20:52.160981Z  INFO run_inner{self.daemon_id=DaemonId { machine_id: None, uuid: eca88631-bde1-490f-b26d-a6c018530334 }}: zenoh::api::session: close session zid=d233a6e11c84089675fa3845646d8037
+2025-10-04T19:08:28.801813Z  INFO dora_daemon::coordinator: Connected to dora-coordinator at 127.0.0.1:53290
+2025-10-04T19:08:28.802830Z  WARN dora_daemon: disabling multicast on macos systems. Enable it with the ZENOH_CONFIG env variable or file
+2025-10-04T19:08:28.803027Z  INFO zenoh::net::runtime: Using ZID: c3f95433120577b06c09141e1aa541bf
+2025-10-04T19:08:28.805373Z  INFO zenoh::net::runtime::orchestrator: Zenoh can be reached at: tcp/[240d:1a:85f:1f00:888:9605:6e7e:45d9]:5456
+2025-10-04T19:08:28.805418Z  INFO zenoh::net::runtime::orchestrator: Zenoh can be reached at: tcp/[240d:1a:85f:1f00:a4d2:fcf5:40ea:dd3c]:5456
+2025-10-04T19:08:28.805426Z  INFO zenoh::net::runtime::orchestrator: Zenoh can be reached at: tcp/[fd00:1234:ffff::10]:5456
+2025-10-04T19:08:28.805546Z  INFO zenoh::net::runtime::orchestrator: Zenoh can be reached at: tcp/198.18.0.1:5456
+2025-10-04T19:08:28.805553Z  INFO zenoh::net::runtime::orchestrator: Zenoh can be reached at: tcp/[fe80::1]:5456
+2025-10-04T19:08:28.805557Z  INFO zenoh::net::runtime::orchestrator: Zenoh can be reached at: tcp/[fe80::10e5:e5ba:84fa:7b14]:5456
+2025-10-04T19:08:28.805560Z  INFO zenoh::net::runtime::orchestrator: Zenoh can be reached at: tcp/[fe80::a8af:23ff:feff:ec10]:5456
+2025-10-04T19:08:28.805562Z  INFO zenoh::net::runtime::orchestrator: Zenoh can be reached at: tcp/[fe80::a8af:23ff:feff:ec10]:5456
+2025-10-04T19:08:28.805565Z  INFO zenoh::net::runtime::orchestrator: Zenoh can be reached at: tcp/[fe80::82c0:c9ba:8e1f:33e2]:5456
+2025-10-04T19:08:28.805568Z  INFO zenoh::net::runtime::orchestrator: Zenoh can be reached at: tcp/[fe80::c237:c4be:6f7e:6ee]:5456
+2025-10-04T19:08:28.805570Z  INFO zenoh::net::runtime::orchestrator: Zenoh can be reached at: tcp/[fe80::d4d4:88be:7a55:cc37]:5456
+2025-10-04T19:08:28.805573Z  INFO zenoh::net::runtime::orchestrator: Zenoh can be reached at: tcp/[fe80::ce81:b1c:bd2c:69e]:5456
+2025-10-04T19:08:28.805591Z  INFO zenoh::net::runtime::orchestrator: Zenoh can be reached at: tcp/[fe80::3b5f:519a:cedf:b878]:5456
+2025-10-04T19:08:28.805597Z  INFO zenoh::net::runtime::orchestrator: Zenoh can be reached at: tcp/[fe80::d47c:86f1:e3ac:8e06]:5456
+2025-10-04T19:08:28.805600Z  INFO zenoh::net::runtime::orchestrator: Zenoh can be reached at: tcp/[fe80::4827:e86b:d3a4:a325]:5456
+2025-10-04T19:08:28.805603Z  INFO zenoh::net::runtime::orchestrator: Zenoh can be reached at: tcp/192.168.150.120:5456
+2025-10-04T19:09:48.667726Z  INFO run_inner{self.daemon_id=DaemonId { machine_id: None, uuid: 5cb25f3c-8653-4fd0-b695-9e112f1e01a1 }}: dora_daemon: received ctrlc signal -> stopping all dataflows
+2025-10-04T19:09:48.670118Z  INFO run_inner{self.daemon_id=DaemonId { machine_id: None, uuid: 5cb25f3c-8653-4fd0-b695-9e112f1e01a1 }}: dora_daemon: received destroy command -> exiting
+2025-10-04T19:09:48.670631Z  INFO run_inner{self.daemon_id=DaemonId { machine_id: None, uuid: 5cb25f3c-8653-4fd0-b695-9e112f1e01a1 }}: zenoh::api::session: close session zid=c3f95433120577b06c09141e1aa541bf
+2025-10-04T19:09:48.671922Z  WARN dora_daemon: process 99888 was killed on drop because it was still running
+2025-10-04T19:13:46.890339Z  INFO dora_daemon::coordinator: Connected to dora-coordinator at 127.0.0.1:53290
+2025-10-04T19:13:46.891794Z  WARN dora_daemon: disabling multicast on macos systems. Enable it with the ZENOH_CONFIG env variable or file
+2025-10-04T19:13:46.892015Z  INFO zenoh::net::runtime: Using ZID: bdc5a6bb3afa9e04f3956209f9504adb
+2025-10-04T19:13:46.894727Z  INFO zenoh::net::runtime::orchestrator: Zenoh can be reached at: tcp/[240d:1a:85f:1f00:888:9605:6e7e:45d9]:5456
+2025-10-04T19:13:46.894770Z  INFO zenoh::net::runtime::orchestrator: Zenoh can be reached at: tcp/[240d:1a:85f:1f00:a4d2:fcf5:40ea:dd3c]:5456
+2025-10-04T19:13:46.894775Z  INFO zenoh::net::runtime::orchestrator: Zenoh can be reached at: tcp/[fd00:1234:ffff::10]:5456
+2025-10-04T19:13:46.894779Z  INFO zenoh::net::runtime::orchestrator: Zenoh can be reached at: tcp/198.18.0.1:5456
+2025-10-04T19:13:46.894783Z  INFO zenoh::net::runtime::orchestrator: Zenoh can be reached at: tcp/[fe80::1]:5456
+2025-10-04T19:13:46.894788Z  INFO zenoh::net::runtime::orchestrator: Zenoh can be reached at: tcp/[fe80::10e5:e5ba:84fa:7b14]:5456
+2025-10-04T19:13:46.894791Z  INFO zenoh::net::runtime::orchestrator: Zenoh can be reached at: tcp/[fe80::a8af:23ff:feff:ec10]:5456
+2025-10-04T19:13:46.894795Z  INFO zenoh::net::runtime::orchestrator: Zenoh can be reached at: tcp/[fe80::a8af:23ff:feff:ec10]:5456
+2025-10-04T19:13:46.894799Z  INFO zenoh::net::runtime::orchestrator: Zenoh can be reached at: tcp/[fe80::82c0:c9ba:8e1f:33e2]:5456
+2025-10-04T19:13:46.894803Z  INFO zenoh::net::runtime::orchestrator: Zenoh can be reached at: tcp/[fe80::c237:c4be:6f7e:6ee]:5456
+2025-10-04T19:13:46.894822Z  INFO zenoh::net::runtime::orchestrator: Zenoh can be reached at: tcp/[fe80::d4d4:88be:7a55:cc37]:5456
+2025-10-04T19:13:46.894825Z  INFO zenoh::net::runtime::orchestrator: Zenoh can be reached at: tcp/[fe80::ce81:b1c:bd2c:69e]:5456
+2025-10-04T19:13:46.894828Z  INFO zenoh::net::runtime::orchestrator: Zenoh can be reached at: tcp/[fe80::3b5f:519a:cedf:b878]:5456
+2025-10-04T19:13:46.894830Z  INFO zenoh::net::runtime::orchestrator: Zenoh can be reached at: tcp/[fe80::d47c:86f1:e3ac:8e06]:5456
+2025-10-04T19:13:46.894833Z  INFO zenoh::net::runtime::orchestrator: Zenoh can be reached at: tcp/[fe80::4827:e86b:d3a4:a325]:5456
+2025-10-04T19:13:46.894835Z  INFO zenoh::net::runtime::orchestrator: Zenoh can be reached at: tcp/192.168.150.120:5456
+2025-10-04T19:15:56.738895Z  INFO run_inner{self.daemon_id=DaemonId { machine_id: None, uuid: 319988da-ec0f-4f12-b89b-97eb2f7e6631 }}: dora_daemon: received ctrlc signal -> stopping all dataflows
+2025-10-04T19:15:56.740818Z  INFO run_inner{self.daemon_id=DaemonId { machine_id: None, uuid: 319988da-ec0f-4f12-b89b-97eb2f7e6631 }}: dora_daemon: received destroy command -> exiting
+2025-10-04T19:15:56.741140Z  INFO run_inner{self.daemon_id=DaemonId { machine_id: None, uuid: 319988da-ec0f-4f12-b89b-97eb2f7e6631 }}: zenoh::api::session: close session zid=bdc5a6bb3afa9e04f3956209f9504adb
+2025-10-04T19:15:56.742269Z  WARN dora_daemon: process 1811 was killed on drop because it was still running
+2025-10-04T19:23:03.763341Z  INFO dora_daemon::coordinator: Connected to dora-coordinator at 127.0.0.1:53290
+2025-10-04T19:23:03.764640Z  WARN dora_daemon: disabling multicast on macos systems. Enable it with the ZENOH_CONFIG env variable or file
+2025-10-04T19:23:03.764864Z  INFO zenoh::net::runtime: Using ZID: ce9d8628de69572ca6661085e8cec4be
+2025-10-04T19:23:03.767661Z  INFO zenoh::net::runtime::orchestrator: Zenoh can be reached at: tcp/[240d:1a:85f:1f00:888:9605:6e7e:45d9]:5456
+2025-10-04T19:23:03.767713Z  INFO zenoh::net::runtime::orchestrator: Zenoh can be reached at: tcp/[240d:1a:85f:1f00:a4d2:fcf5:40ea:dd3c]:5456
+2025-10-04T19:23:03.767723Z  INFO zenoh::net::runtime::orchestrator: Zenoh can be reached at: tcp/[fd00:1234:ffff::10]:5456
+2025-10-04T19:23:03.767729Z  INFO zenoh::net::runtime::orchestrator: Zenoh can be reached at: tcp/198.18.0.1:5456
+2025-10-04T19:23:03.767734Z  INFO zenoh::net::runtime::orchestrator: Zenoh can be reached at: tcp/[fe80::1]:5456
+2025-10-04T19:23:03.767738Z  INFO zenoh::net::runtime::orchestrator: Zenoh can be reached at: tcp/[fe80::10e5:e5ba:84fa:7b14]:5456
+2025-10-04T19:23:03.767742Z  INFO zenoh::net::runtime::orchestrator: Zenoh can be reached at: tcp/[fe80::a8af:23ff:feff:ec10]:5456
+2025-10-04T19:23:03.767745Z  INFO zenoh::net::runtime::orchestrator: Zenoh can be reached at: tcp/[fe80::a8af:23ff:feff:ec10]:5456
+2025-10-04T19:23:03.767749Z  INFO zenoh::net::runtime::orchestrator: Zenoh can be reached at: tcp/[fe80::82c0:c9ba:8e1f:33e2]:5456
+2025-10-04T19:23:03.767753Z  INFO zenoh::net::runtime::orchestrator: Zenoh can be reached at: tcp/[fe80::c237:c4be:6f7e:6ee]:5456
+2025-10-04T19:23:03.767757Z  INFO zenoh::net::runtime::orchestrator: Zenoh can be reached at: tcp/[fe80::d4d4:88be:7a55:cc37]:5456
+2025-10-04T19:23:03.767760Z  INFO zenoh::net::runtime::orchestrator: Zenoh can be reached at: tcp/[fe80::ce81:b1c:bd2c:69e]:5456
+2025-10-04T19:23:03.767764Z  INFO zenoh::net::runtime::orchestrator: Zenoh can be reached at: tcp/[fe80::3b5f:519a:cedf:b878]:5456
+2025-10-04T19:23:03.767767Z  INFO zenoh::net::runtime::orchestrator: Zenoh can be reached at: tcp/[fe80::d47c:86f1:e3ac:8e06]:5456
+2025-10-04T19:23:03.767771Z  INFO zenoh::net::runtime::orchestrator: Zenoh can be reached at: tcp/[fe80::4827:e86b:d3a4:a325]:5456
+2025-10-04T19:23:03.767774Z  INFO zenoh::net::runtime::orchestrator: Zenoh can be reached at: tcp/192.168.150.120:5456

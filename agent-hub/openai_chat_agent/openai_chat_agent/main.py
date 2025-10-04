@@ -11,7 +11,7 @@ def call_openai_directly(user_input: str) -> str:
     )
 
     response = client.chat.completions.create(
-        model=os.getenv('LLM_MODEL', 'gpt-3.5-turbo'),
+        model=os.getenv('LLM_MODEL', 'gpt-4o'),
         messages=[
             {"role": "system", "content": "You are a helpful AI assistant."},
             {"role": "user", "content": user_input}
@@ -49,7 +49,7 @@ def run(agent: MofaAgent):
         )
 
 def main():
-    agent = MofaAgent(agent_name='my_llm_agent')
+    agent = MofaAgent(agent_name='openai_chat_agent')
     run(agent=agent)
 
 if __name__ == "__main__":

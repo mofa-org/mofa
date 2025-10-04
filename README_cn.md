@@ -135,10 +135,10 @@ dora destroy
 .
 └── mofa/
     ├── examples/
-    │   └── my_llm_agent/
+    │   └── openai_chat_agent/
     │       ├── .env.secret
     │       ├── logs
-    │       ├── my_llm_dataflow.yml
+    │       ├── openai_chat_dataflow.yml
     │       └── out
     ├── node-hub/
     │   └── terminal-input/
@@ -150,11 +150,11 @@ dora destroy
     │       └── tests/
     │           └── test.py
     ├── agent-hub/
-    │   └── my_llm_agent/
+    │   └── openai_chat_agent/
     │       ├── .gitignore
     │       ├── README.md
     │       ├── pyproject.toml
-    │       ├── my_llm_agent
+    │       ├── openai_chat_agent
     │       │   ├── __init__.py
     │       │   ├── __pycache__
     │       │   │   ├── __init__.cpython-310.pyc
@@ -172,7 +172,7 @@ dora destroy
 ### 2.4.1. 配置环境变量 (1分钟)
 
 在example的本例文件夹下创建 `.env.secret` 文件
-（需在Dataflow.yml目录同级进行创建，本例中为mofa/examples/my_llm_agent）
+（需在Dataflow.yml目录同级进行创建，本例中为mofa/examples/openai_chat_agent）
 
 将以下内容写入`.env.secret`文件
 
@@ -180,35 +180,35 @@ dora destroy
 ```plaintext
 LLM_API_KEY=your_api_key_here
 LLM_API_BASE=https://api.openai.com/v1  # 或其他API地址
-LLM_MODEL=gpt-3.5-turbo  # 或其他模型名称
+LLM_MODEL=gpt-4o  # 或其他模型名称
 ```
 
 ### 2.4.2. 创建Agent项目 (1分钟)
 使用 MoFa CLI 创建新的 Agent：
 ```bash
 # 在agent_hub路径下创建新的 Agent 项目(本例中为mofa/agent_hub）
-mofa new-agent my_llm_agent
-cd my_llm_agent
+mofa new-agent openai_chat_agent
+cd openai_chat_agent
 ```
 
 ### 2.4.3. 配置agent基本信息 (1分钟)
 在agent-hub的本例文件夹下修改pyproject.toml
 
-（本例文件路径为mofa/agent-hub/my_llm_agent/pyproject.toml）：
+（本例文件路径为mofa/agent-hub/openai_chat_agent/pyproject.toml）：
 
 ```base
 #openai
 [tool.poetry]
-name = "my_llm_agent"
+name = "openai_chat_agent"
 version = "0.1.0"
 authors = [
     "youremail@outlook.com",
 ]
 description = "An OpenAI LLM agent for MoFA"
 license = "MIT"
-homepage = "https://github.com/your-org/my_llm_agent"
+homepage = "https://github.com/your-org/openai_chat_agent"
 readme = "README.md"
-packages = [{ include = "my_llm_agent" }]
+packages = [{ include = "openai_chat_agent" }]
 
 [tool.poetry.dependencies]
 python = ">=3.10,<3.12"
@@ -216,7 +216,7 @@ openai = "*"
 python-dotenv = "*"
 
 [tool.poetry.scripts]
-my_llm_agent = "my_llm_agent.main:main"
+openai_chat_agent = "openai_chat_agent.main:main"
 
 [build-system]
 requires = ["poetry-core>=1.8.0"]
@@ -226,7 +226,7 @@ build-backend = "poetry.core.masonry.api"
 ### 2.4.4. 实现Agent逻辑 (2分钟)
 在agent-hub的本例文件夹下创建main.py
 
-（本例文件路径为mofa/agent-hub/my_llm_agent/main.py）：
+（本例文件路径为mofa/agent-hub/openai_chat_agent/main.py）：
 
 ```python
 # 以openai为例
@@ -243,7 +243,7 @@ def call_openai_directly(user_input: str) -> str:
     )
 
     response = client.chat.completions.create(
-        model=os.getenv('LLM_MODEL', 'gpt-3.5-turbo'),
+        model=os.getenv('LLM_MODEL', 'gpt-4o'),
         messages=[
             {"role": "system", "content": "You are a helpful AI assistant."},
             {"role": "user", "content": user_input}
@@ -281,7 +281,7 @@ def run(agent: MofaAgent):
         )
 
 def main():
-    agent = MofaAgent(agent_name='my_llm_agent')
+    agent = MofaAgent(agent_name='openai_chat_agent')
     run(agent=agent)
 
 if __name__ == "__main__":
@@ -291,9 +291,9 @@ if __name__ == "__main__":
 
 ### 2.4.5. 创建数据流配置 (1分钟)
 
-在example的本例文件夹下创建 my_llm_dataflow.yml
+在example的本例文件夹下创建 openai_chat_dataflow.yml
 
-（在.env.secret 文件所在目录同级进行创建，本例文件路径为mofa/examples/my_llm_agent/my_llm_dataflow.yml）
+（在.env.secret 文件所在目录同级进行创建，本例文件路径为mofa/examples/openai_chat_agent/openai_chat_dataflow.yml）
 ```yaml
 nodes:
   - id: terminal-input
@@ -302,11 +302,11 @@ nodes:
     outputs:
       - data
     inputs:
-      agent_response: my_llm_agent/llm_result
+      agent_response: openai_chat_agent/llm_result
 
-  - id: my_llm_agent
-    build: pip install ../../agent-hub/my_llm_agent
-    path: my_llm_agent
+  - id: openai_chat_agent
+    build: pip install ../../agent-hub/openai_chat_agent
+    path: openai_chat_agent
     outputs:
       - llm_result
     inputs:
@@ -319,13 +319,13 @@ nodes:
 ### 2.4.6. 运行和测试
 
 确保在example文件夹的本例路径下，然后执行下列命令
-（本例文件路径为mofa/examples/my_llm_agent）
+（本例文件路径为mofa/examples/openai_chat_agent）
 
 ```bash
 # 启动数据流
 dora up
-dora build my_llm_dataflow.yml
-dora start my_llm_dataflow.yml
+dora build openai_chat_dataflow.yml
+dora start openai_chat_dataflow.yml
 
 # 新开终端测试
 terminal-input
@@ -340,10 +340,10 @@ terminal-input
         ```
         在主terminal中输出了很多次。就像这样：
         ```bash
-        (.mofa) root@danana:~/mofa-nana/examples/my_llm_agent# dora start my_llm_dataflow.yml
+        (.mofa) root@danana:~/mofa-nana/examples/openai_chat_agent# dora start openai_chat_dataflow.yml
         dataflow start triggered: 0199584b-c209-76a3-9886-12e7309ac3f0
         attaching to dataflow (use `--detach` to run in background)
-        my_llm_agent: INFO   daemon    node is ready
+        openai_chat_agent: INFO   daemon    node is ready
         INFO   daemon    all nodes are ready, starting dataflow
         terminal-input: INFO   daemon    node is ready
         INFO   daemon    all nodes are ready, starting dataflow
@@ -353,10 +353,10 @@ terminal-input
         可能是进程拥塞。请进行进程清理。
         正常情况下输出应该是这样的，如果不是，请自行清理进程。
         ```bash
-        (.mofa) root@danana:<del>/mofa-nana/examples/my_llm_agent# ps aux | grep my_llm_agent
+        (.mofa) root@danana:<del>/mofa-nana/examples/openai_chat_agent# ps aux | grep openai_chat_agent
         ps aux | grep dora
         ps aux | grep terminal-input
-        root 211077 0.0 0.0 4028 2304 pts/0 S+ 23:37 0:00 grep --color=auto my_llm_agent
+        root 211077 0.0 0.0 4028 2304 pts/0 S+ 23:37 0:00 grep --color=auto openai_chat_agent
         root 211079 0.0 0.0 4028 2304 pts/0 S+ 23:37 0:00 grep --color=auto dora
         root 211081 0.0 0.0 4028 2304 pts/0 S+ 23:37 0:00 grep --color=auto terminal-input
         ```
@@ -367,10 +367,10 @@ terminal-input
         ```bash
         pip install --force-reinstall --no-deps ../../node-hub/terminal-input
         ```
-    - ERROR: Could not install packages due to an OSError: [Errno 2] No such file or directory: '/root/mofa_last/.mofa_last/bin/my_llm_agent'
+    - ERROR: Could not install packages due to an OSError: [Errno 2] No such file or directory: '/root/mofa_last/.mofa_last/bin/openai_chat_agent'
     请执行
         ```bash
-        pip install --force-reinstall --no-deps ../../agent-hub/my_llm_agent
+        pip install --force-reinstall --no-deps ../../agent-hub/openai_chat_agent
         ```
     - [ERROR]
         failed to build node `terminal-input`
@@ -384,16 +384,16 @@ terminal-input
         ```bash
         pip install --force-reinstall --no-deps ../../node-hub/terminal-input
         ```
-    - [ERROR]failed to build node `my_llm_agent`
+    - [ERROR]failed to build node `openai_chat_agent`
 
         Caused by:
         0: build command failed
-        1: build command `pip install ../../agent-hub/my_llm_agent` returned exit status: 1
+        1: build command `pip install ../../agent-hub/openai_chat_agent` returned exit status: 1
 
         Location:
             libraries/core/src/build/build_command.rs:79:24
         ```bash
-        pip install --force-reinstall --no-deps ../../agent-hub/my_llm_agent
+        pip install --force-reinstall --no-deps ../../agent-hub/openai_chat_agent
         ```
 
 ### 2.4.8.代码说明
