@@ -30,29 +30,37 @@ def agent_list():
 
 
 @mofa_cli_group.command()
-@click.option('--agent-name', default='reasoner', help='agent name')
-def run(agent_name: str = 'reasoner'):
-    agent_path = agent_dir_path + f'/{agent_name}'
-    agent_dataflow_path = agent_path + f'/{agent_name}_dataflow.yml'
+@click.argument('dataflow_file', required=True)
+def run(dataflow_file: str):
+    dataflow_path = os.path.abspath(dataflow_file)
+    if not os.path.exists(dataflow_path):
+        click.echo(f"Error: Dataflow file not found: {dataflow_path}")
+        return
+    
+    if not dataflow_path.endswith('.yml') and not dataflow_path.endswith('.yaml'):
+        click.echo(f"Error: File must be a YAML file (.yml or .yaml): {dataflow_path}")
+        return
+    
+    # Get the directory containing the dataflow file
+    working_dir = os.path.dirname(dataflow_path)
 
     dora_up_process = subprocess.Popen(
-        # conda_cmd_list + ['dora', 'up'] if is_conda_run else ['dora', 'up'],
         ['dora', 'up'],
         stdin=subprocess.PIPE,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         text=True,
-        cwd=agent_path,
+        cwd=working_dir,
     )
     time.sleep(1)
 
     dora_build_node = subprocess.Popen(
-        ['dora', 'build', agent_dataflow_path],
+        ['dora', 'build', dataflow_path],
         stdin=subprocess.PIPE,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         text=True,
-        cwd=agent_path
+        cwd=working_dir
     )
 
     time.sleep(3)
@@ -61,12 +69,12 @@ def run(agent_name: str = 'reasoner'):
     if dora_build_node.returncode == 0:
         # 启动 dora_dataflow_process 进程并等待其启动
         dora_dataflow_process = subprocess.Popen(
-            ['dora', 'start', agent_dataflow_path,'--name',dataflow_name],
+            ['dora', 'start', dataflow_path,'--name',dataflow_name],
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,
-            cwd=agent_path
+            cwd=working_dir
         )
 
         time.sleep(2)
@@ -76,7 +84,7 @@ def run(agent_name: str = 'reasoner'):
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
-            cwd=agent_path,
+            cwd=working_dir,
             bufsize=0,
             universal_newlines=True
         )
