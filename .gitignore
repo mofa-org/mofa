@@ -75,7 +75,8 @@ yarn-error.log*
 
 # Logs
 *.log
-logs/
+logs/*.log
+logs/*.txt
 
 # Runtime data
 pids
@@ -86,3 +87,14 @@ pids
 # Temporary files
 *.tmp
 *.temp
+
+# MoFA specific files
+.mofa/
+mofa_run_*/
+out/*
+*.dora-session.yaml
+.env.secret
+
+# Dora runtime files
+dora-coordinator.txt
+dora-daemon.txt

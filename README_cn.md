@@ -70,7 +70,7 @@ git clone git@github.com:mofa-org/mofa.git
 
 ### 2.3.1 启动数据流
 ```bash
-cd mofa/examples/hello_world
+cd mofa/dataflows/hello_world
 # 启动 Dora 服务
 dora up
 
@@ -134,7 +134,7 @@ dora destroy
 ```tree
 .
 └── mofa/
-    ├── examples/
+    ├── dataflows/
     │   └── openai_chat_agent/
     │       ├── .env.secret
     │       ├── logs
@@ -171,8 +171,8 @@ dora destroy
 
 ### 2.4.1. 配置环境变量 (1分钟)
 
-在example的本例文件夹下创建 `.env.secret` 文件
-（需在Dataflow.yml目录同级进行创建，本例中为mofa/examples/openai_chat_agent）
+在dataflow的本例文件夹下创建 `.env.secret` 文件
+（需在Dataflow.yml目录同级进行创建，本例中为mofa/dataflows/openai_chat_agent）
 
 将以下内容写入`.env.secret`文件
 
@@ -291,9 +291,9 @@ if __name__ == "__main__":
 
 ### 2.4.5. 创建数据流配置 (1分钟)
 
-在example的本例文件夹下创建 openai_chat_dataflow.yml
+在dataflow的本例文件夹下创建 openai_chat_dataflow.yml
 
-（在.env.secret 文件所在目录同级进行创建，本例文件路径为mofa/examples/openai_chat_agent/openai_chat_dataflow.yml）
+（在.env.secret 文件所在目录同级进行创建，本例文件路径为mofa/dataflows/openai_chat_agent/openai_chat_dataflow.yml）
 ```yaml
 nodes:
   - id: terminal-input
@@ -318,8 +318,8 @@ nodes:
 
 ### 2.4.6. 运行和测试
 
-确保在example文件夹的本例路径下，然后执行下列命令
-（本例文件路径为mofa/examples/openai_chat_agent）
+确保在dataflow文件夹的本例路径下，然后执行下列命令
+（本例文件路径为mofa/dataflows/openai_chat_agent）
 
 ```bash
 # 启动数据流
@@ -340,7 +340,7 @@ terminal-input
         ```
         在主terminal中输出了很多次。就像这样：
         ```bash
-        (.mofa) root@danana:~/mofa-nana/examples/openai_chat_agent# dora start openai_chat_dataflow.yml
+        (.mofa) root@danana:~/mofa-nana/dataflows/openai_chat_agent# dora start openai_chat_dataflow.yml
         dataflow start triggered: 0199584b-c209-76a3-9886-12e7309ac3f0
         attaching to dataflow (use `--detach` to run in background)
         openai_chat_agent: INFO   daemon    node is ready
@@ -353,7 +353,7 @@ terminal-input
         可能是进程拥塞。请进行进程清理。
         正常情况下输出应该是这样的，如果不是，请自行清理进程。
         ```bash
-        (.mofa) root@danana:<del>/mofa-nana/examples/openai_chat_agent# ps aux | grep openai_chat_agent
+        (.mofa) root@danana:<del>/mofa-nana/dataflows/openai_chat_agent# ps aux | grep openai_chat_agent
         ps aux | grep dora
         ps aux | grep terminal-input
         root 211077 0.0 0.0 4028 2304 pts/0 S+ 23:37 0:00 grep --color=auto openai_chat_agent

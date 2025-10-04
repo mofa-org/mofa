@@ -73,7 +73,7 @@ def run(agent: MofaAgent):
         return
 
 def main():
-    agent = MofaAgent(agent_name='my_llm_agent') # agent 名称可以根据需要修改
+    agent = MofaAgent(agent_name='qwen_agent')
     run(agent=agent)
 
 if __name__ == "__main__":
