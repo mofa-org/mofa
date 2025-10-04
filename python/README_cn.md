@@ -41,7 +41,7 @@ pip install uv
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 
 # 安装 Dora 运行时
-cargo install dora-cli
+cargo install dora-cli # In case of issues, try: `--locked`
 
 # 验证安装
 rustc --version
@@ -64,6 +64,8 @@ uv pip install -e . && pip install -e .
 
 ### 2.2.2 Docker 方式
 ```bash
+# 克隆仓库
+git clone https://github.com/moxin-org/mofa.git
 # 进入docker目录
 cd /mofa/python/docker
 # 构建镜像
@@ -140,7 +142,7 @@ LLM_MODEL=gpt-3.5-turbo  # 或其他模型名称
 
 ### 2.4.3. 实现Agent逻辑 (2分钟)
 
-编辑 `my_llm_agent/main.py`：
+编辑 `agent/main.py`：
 ```python
 from mofa.agent_build.base.base_agent import MofaAgent, run_agent
 from openai import OpenAI
@@ -194,20 +196,20 @@ if __name__ == "__main__":
 
 ### 2.4.4. 创建数据流配置 (1分钟)
 
-创建 `my_llm_dataflow.yml`：
+在`python/examples/my-llm-agent`创建 `my_llm_dataflow.yml`：
 ```yaml
 nodes:
   - id: terminal-input
     build: pip install -e ../../node-hub/terminal-input
     path: dynamic
-    outputs: data
+    outputs: [data]
     inputs:
       agent_response: my-llm-agent/llm_result
 
   - id: my-llm-agent
-    build: pip install -e . ../../agent-hub/my-llm-agent
+    build: pip install -e ../../agent-hub/my-llm-agent
     path: my-llm-agent
-    outputs: llm_result
+    outputs: [llm_result]
     inputs:
       query: terminal-input/data
     env:
@@ -216,7 +218,8 @@ nodes:
 ```
 **提示**:
 - 切记案例不要和dataflow放到同一个文件夹下,一定保持在不同的文件夹中
-- 
+- 更改Pyproject.toml 将其中的'include = 'my-llm-agent''改为'include = 'agent''
+- 更改Pyproject.toml 将其中的'my-llm-agent.main'改为'agent.main'
 ### 2.4.5. 运行和测试
 
 ```bash
