@@ -30,7 +30,39 @@ def agent_list():
     click.echo(agent_names)
     return agent_names
 
+@mofa_cli_group.command()
+@click.argument('node_folder_path', type=click.Path(exists=True))
+@click.argument('test_case_yml', type=click.Path(exists=True))
+def debug(node_folder_path, test_case_yml):
+    """Run unit tests for a single node/agent"""
+    print("Debug command is not yet implemented.")
+    # 1. dynamically load the node module
+    # node_module = load_node_module(node_folder_path)
+    
+    # 2. parse the test cases from the YAML file
+    # with open(test_case_yml, 'r') as f:
+    #     test_cases = yaml.safe_load(f)['test_cases']
 
+    # 3. execute tests and generate report
+    # pass_count = 0
+    # fail_count = 0
+    # for case in test_cases:
+    #     try:
+    #         # Call the node's processing function (assuming the core logic is the process() method)
+    #         actual_output = node_module.process(case['input'])
+    #         assert actual_output == case['expected_output'], \
+    #             f"Test {case['name']} failed: expected {case['expected_output']}, got {actual_output}"
+    #         pass_count += 1
+    #         print(f"✅ {case['name']} passed")
+    #     except Exception as e:
+    #         fail_count += 1
+    #         print(f"❌ {case['name']} failed: {str(e)}")
+
+    
+    # 4. summarize results
+    # print(f"\nTest Summary: {pass_count} passed, {fail_count} failed")
+    # if fail_count > 0:
+    #     sys.exit(1)
 
 def _create_venv(base_python: str, working_dir: str):
     temp_root = tempfile.mkdtemp(prefix="mofa_run_", dir=working_dir)
