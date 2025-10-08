@@ -120,7 +120,7 @@ def run(agent: MofaAgent):
     
 
 
-def load_node_module(node_folder_path: str):
+def load_node_module(node_folder_path: str, execute: bool = False):
     """
     Dynamically load a Python module for a node/agent located in a folder.
 
@@ -161,6 +161,39 @@ def load_node_module(node_folder_path: str):
     if candidate is None:
         raise ImportError(f"No python module found in {node_folder_path}")
 
+    # Read source to allow analysis (check for main and extract agent info)
+    try:
+        with open(candidate, 'r', encoding='utf-8') as _f:
+            source_code = _f.read()
+    except Exception as e:
+        raise ImportError(f"Failed to read source file {candidate}: {e}") from e
+
+    # If the source defines a function named `main`, call extract_agent_info on the source
+    agent_info = None
+    try:
+        parsed = ast.parse(source_code)
+        has_main = any(isinstance(n, ast.FunctionDef) and n.name == 'main' for n in parsed.body)
+        if has_main:
+            try:
+                agent_info = extract_agent_info(source_code)
+            except Exception:
+                # don't block module import if extraction fails; keep agent_info as None
+                agent_info = None
+    except Exception:
+        # If parsing fails, continue to attempt importing the module
+        agent_info = None
+    # If execute is False, do not import/execute the module — return a descriptor for later testing.
+    descriptor = {
+        'path': candidate,
+        'source': source_code,
+        'agent_info': agent_info,
+    }
+
+    if not execute:
+        print(f"Loaded node module descriptor ：{descriptor} \n \n \n")
+        return descriptor
+
+    # If execution is requested, perform dynamic import as before and attach agent_info
     module_name = f"mofa_debug_loaded_{uuid.uuid4().hex}"
     spec = importlib.util.spec_from_file_location(module_name, candidate)
     if spec is None or spec.loader is None:
@@ -176,6 +209,14 @@ def load_node_module(node_folder_path: str):
         if module_name in sys.modules:
             del sys.modules[module_name]
         raise ImportError(f"Failed to import node module from {candidate}: {e}") from e
+
+    # attach agent_info if extraction was successful
+    if agent_info is not None:
+        try:
+            setattr(module, 'agent_info', agent_info)
+        except Exception:
+            # ignore failures to attach
+            pass
 
     return module
 
