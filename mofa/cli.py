@@ -9,12 +9,15 @@ from mofa import agent_dir_path, cli_dir_path
 
 import click
 import sys
+from mofa.debug.load_node import load_node_module
+from mofa.debug.parse_test_case import parse_test_cases
 from mofa.utils.files.dir import get_subdirectories
 from mofa.utils.files.read import read_yaml
 from mofa.utils.process.util import stop_process, stop_dora_dataflow, destroy_dora_daemon
 
 import cookiecutter
 from cookiecutter.main import cookiecutter
+
 
 @click.group()
 def mofa_cli_group():
@@ -37,11 +40,13 @@ def debug(node_folder_path, test_case_yml):
     """Run unit tests for a single node/agent"""
     print("Debug command is not yet implemented.")
     # 1. dynamically load the node module
-    # node_module = load_node_module(node_folder_path)
+    node_module = load_node_module(node_folder_path)
     
     # 2. parse the test cases from the YAML file
-    # with open(test_case_yml, 'r') as f:
-    #     test_cases = yaml.safe_load(f)['test_cases']
+    test_cases = parse_test_cases(test_case_yml)
+
+    print("Node module loaded:", node_module)
+    print("Test cases loaded:", test_cases)
 
     # 3. execute tests and generate report
     # pass_count = 0

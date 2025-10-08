@@ -1,4 +1,8 @@
 import ast
+import os
+import sys
+import uuid
+import importlib.util
 from typing import Dict, List, Tuple, Optional
 
 def extract_agent_info(code: str) -> Dict:
@@ -114,3 +118,66 @@ def run(agent: MofaAgent):
     print("send_output参数:", result["send_params"])
     print("中间代码内容:\n", result["between_code"])
     
+
+
+def load_node_module(node_folder_path: str):
+    """
+    Dynamically load a Python module for a node/agent located in a folder.
+
+    Strategy:
+    - Walk the folder and prefer a file named `main.py` if present.
+    - Otherwise pick the first .py file at the top level.
+    - Import it as a unique module name and return the module object.
+
+    Raises ImportError on failure.
+    """
+    node_folder_path = os.path.abspath(node_folder_path)
+
+    if not os.path.exists(node_folder_path):
+        raise ImportError(f"Node folder not found: {node_folder_path}")
+
+    candidate = None
+    for root, dirs, files in os.walk(node_folder_path):
+        # prefer main.py
+        if 'main.py' in files:
+            candidate = os.path.join(root, 'main.py')
+            break
+        # otherwise, continue walking but prefer shallow files
+        for f in files:
+            if f.endswith('.py'):
+                candidate = os.path.join(root, f)
+                # don't break here: prefer main.py if found in later iteration
+
+    if candidate is None:
+        # fallback: check top-level .py files
+        try:
+            for f in os.listdir(node_folder_path):
+                if f.endswith('.py'):
+                    candidate = os.path.join(node_folder_path, f)
+                    break
+        except Exception:
+            pass
+
+    if candidate is None:
+        raise ImportError(f"No python module found in {node_folder_path}")
+
+    module_name = f"mofa_debug_loaded_{uuid.uuid4().hex}"
+    spec = importlib.util.spec_from_file_location(module_name, candidate)
+    if spec is None or spec.loader is None:
+        raise ImportError(f"Unable to create import spec for {candidate}")
+
+    module = importlib.util.module_from_spec(spec)
+    try:
+        # register and execute module
+        sys.modules[module_name] = module
+        spec.loader.exec_module(module)
+    except Exception as e:
+        # ensure we don't leave a broken module in sys.modules
+        if module_name in sys.modules:
+            del sys.modules[module_name]
+        raise ImportError(f"Failed to import node module from {candidate}: {e}") from e
+
+    return module
+
+
+__all__ = ["extract_agent_info", "load_node_module"]
