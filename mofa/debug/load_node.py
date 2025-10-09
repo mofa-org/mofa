@@ -67,6 +67,33 @@ def extract_agent_info(code: str) -> Dict:
     if receive_nodes:
         receive_params = get_call_args(receive_nodes[0][1])
     
+    # extract variable name assigned from agent.receive_parameter, e.g. `user_query` in
+    # `user_query = agent.receive_parameter('query')`
+    receive_target = None
+    if receive_nodes:
+        parent = receive_nodes[0][0]
+        try:
+            # common case: ast.Assign with targets list
+            if isinstance(parent, ast.Assign):
+                targets = parent.targets
+                if targets:
+                    t = targets[0]
+                    if isinstance(t, ast.Name):
+                        receive_target = t.id
+                    elif isinstance(t, ast.Tuple):
+                        # take first name in tuple
+                        for elt in t.elts:
+                            if isinstance(elt, ast.Name):
+                                receive_target = elt.id
+                                break
+            # annotated assign
+            elif isinstance(parent, ast.AnnAssign):
+                t = parent.target
+                if isinstance(t, ast.Name):
+                    receive_target = t.id
+        except Exception:
+            receive_target = None
+    
     send_params = []
     if send_nodes:
         send_params = get_call_args(send_nodes[0][1])
@@ -96,6 +123,7 @@ def extract_agent_info(code: str) -> Dict:
     
     return {
         "receive_params": receive_params,
+        "receive_target": receive_target,
         "send_params": send_params,
         "between_code": between_code
     }
