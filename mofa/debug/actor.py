@@ -26,12 +26,14 @@ def execute_unit_tests(node_module, test_cases):
         agent_info = node_module.get('agent_info') or {}
         between = agent_info.get('between_code', '')
         receive_params = agent_info.get('receive_params', [])
+        receive_target = agent_info.get('receive_target', None)
         send_params = agent_info.get('send_params', [])
     else:
         # assume module-like
         agent_info = getattr(node_module, 'agent_info', {}) or {}
         between = agent_info.get('between_code', '')
         receive_params = agent_info.get('receive_params', [])
+        receive_target = agent_info.get('receive_target', None)
         send_params = agent_info.get('send_params', [])
 
     format_code = clean_code(between or '')
@@ -39,8 +41,8 @@ def execute_unit_tests(node_module, test_cases):
     results = []
     for case in test_cases:
         # Prepare the test environment
-        user_query = "test query"
-        local_vars = {"user_query": user_query}
+        input_query = "test query ～"
+        local_vars = {receive_target: input_query}
         # Execute the test case
         try:
             exec(format_code, {}, local_vars)
