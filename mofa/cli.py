@@ -38,15 +38,17 @@ def agent_list():
 @click.argument('test_case_yml', type=click.Path(exists=True))
 def debug(node_folder_path, test_case_yml):
     """Run unit tests for a single node/agent"""
-    print("Debug command is not yet implemented.")
     # 1. dynamically load the node module
     node_module = load_node_module(node_folder_path)
     
     # 2. parse the test cases from the YAML file
     test_cases = parse_test_cases(test_case_yml)
-
+ 
+    print("==================================")
     print("Node module loaded:", node_module)
+    print("==================================")
     print("Test cases loaded:", test_cases)
+    print("==================================")
 
     # 3. execute tests and generate report
     # pass_count = 0

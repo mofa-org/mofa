@@ -190,35 +190,7 @@ def load_node_module(node_folder_path: str, execute: bool = False):
     }
 
     if not execute:
-        print(f"Loaded node module descriptor ：{descriptor} \n \n \n")
         return descriptor
-
-    # If execution is requested, perform dynamic import as before and attach agent_info
-    module_name = f"mofa_debug_loaded_{uuid.uuid4().hex}"
-    spec = importlib.util.spec_from_file_location(module_name, candidate)
-    if spec is None or spec.loader is None:
-        raise ImportError(f"Unable to create import spec for {candidate}")
-
-    module = importlib.util.module_from_spec(spec)
-    try:
-        # register and execute module
-        sys.modules[module_name] = module
-        spec.loader.exec_module(module)
-    except Exception as e:
-        # ensure we don't leave a broken module in sys.modules
-        if module_name in sys.modules:
-            del sys.modules[module_name]
-        raise ImportError(f"Failed to import node module from {candidate}: {e}") from e
-
-    # attach agent_info if extraction was successful
-    if agent_info is not None:
-        try:
-            setattr(module, 'agent_info', agent_info)
-        except Exception:
-            # ignore failures to attach
-            pass
-
-    return module
-
+    
 
 __all__ = ["extract_agent_info", "load_node_module"]
