@@ -9,6 +9,7 @@ from mofa import agent_dir_path, cli_dir_path
 
 import click
 import sys
+from mofa.debug.actor import execute_unit_tests
 from mofa.debug.load_node import load_node_module
 from mofa.debug.parse_test_case import parse_test_cases
 from mofa.utils.files.dir import get_subdirectories
@@ -51,21 +52,14 @@ def debug(node_folder_path, test_case_yml):
     print("==================================")
 
     # 3. execute tests and generate report
-    # pass_count = 0
-    # fail_count = 0
-    # for case in test_cases:
-    #     try:
-    #         # Call the node's processing function (assuming the core logic is the process() method)
-    #         actual_output = node_module.process(case['input'])
-    #         assert actual_output == case['expected_output'], \
-    #             f"Test {case['name']} failed: expected {case['expected_output']}, got {actual_output}"
-    #         pass_count += 1
-    #         print(f"✅ {case['name']} passed")
-    #     except Exception as e:
-    #         fail_count += 1
-    #         print(f"❌ {case['name']} failed: {str(e)}")
+    results = execute_unit_tests(node_module, test_cases)
 
-    
+    # for name, passed, message in results:
+    #     if passed:
+    #         print(f"✅ {name} passed")
+    #     else:
+    #         print(f"❌ {name} failed: {message}")
+
     # 4. summarize results
     # print(f"\nTest Summary: {pass_count} passed, {fail_count} failed")
     # if fail_count > 0:

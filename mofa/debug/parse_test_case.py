@@ -29,7 +29,7 @@ def parse_test_cases(yaml_file_path):
         return None
 
 def main():
-    # Assume the YAML file is named test_cases.yml
+    # Assume the YAML file is named test_hello_world.yml
     test_cases = parse_test_cases('./tests/test_hello_world.yml')
     
     if test_cases:
