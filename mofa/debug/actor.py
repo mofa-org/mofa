@@ -37,17 +37,22 @@ def execute_unit_tests(node_module, test_cases):
         send_params = agent_info.get('send_params', [])
 
     format_code = clean_code(between or '')
+ 
+    send_params_dict = {}
+    for param in send_params:
+      key, value = param.split('=', 1) 
+      send_params_dict[key.strip()] = value.strip()
 
     results = []
     for case in test_cases:
         # Prepare the test environment
-        input_query = case['input'][receive_params[0]] if receive_params else None
+        input_query = case['input'][receive_params[0].strip("'")] if receive_params else None
         local_vars = {receive_target: input_query}
         # Execute the test case
         try:
             exec(format_code, {}, local_vars)
-            output_value = local_vars.get(send_params['agent_result']) if len(send_params) > 1 else None
-            expected_output = case['expected_output']
+            output_value = local_vars.get(send_params_dict.get('agent_result', '').strip("'"))
+            expected_output = case['expected_output']['hello_world_result']
             print(f"Test case '{case['name']}': input={input_query}, expected_output={expected_output}, actual_output={output_value}")
             if output_value == expected_output: # Compare actual output with expected output
                 results.append((case['name'], True, "Passed"))

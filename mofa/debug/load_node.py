@@ -51,7 +51,7 @@ def extract_agent_info(code: str) -> Dict:
         for arg in call_node.args:
             if isinstance(arg, ast.Str):
                 # add quotes for string literals
-                args.append(f"{arg.s}")
+                args.append(f"'{arg.s}'")
             else:
                 args.append(ast.unparse(arg))
         # dealing with keyword arguments
@@ -59,7 +59,7 @@ def extract_agent_info(code: str) -> Dict:
             value_str = ast.unparse(kw.value)
             # add quotes for string literals
             if isinstance(kw.value, ast.Str):
-                value_str = f"{kw.value.s}"
+                value_str = f"'{kw.value.s}'"
             args.append(f"{kw.arg}={value_str}")
         return args
     
