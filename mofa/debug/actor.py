@@ -41,11 +41,19 @@ def execute_unit_tests(node_module, test_cases):
     results = []
     for case in test_cases:
         # Prepare the test environment
-        input_query = "test query ～"
+        input_query = case['input'][receive_params[0]] if receive_params else None
         local_vars = {receive_target: input_query}
         # Execute the test case
         try:
             exec(format_code, {}, local_vars)
+            output_value = local_vars.get(send_params['agent_result']) if len(send_params) > 1 else None
+            expected_output = case['expected_output']
+            print(f"Test case '{case['name']}': input={input_query}, expected_output={expected_output}, actual_output={output_value}")
+            if output_value == expected_output: # Compare actual output with expected output
+                results.append((case['name'], True, "Passed"))
+            else:
+                results.append((case['name'], False, f"Failed: expected {expected_output}, got {output_value}"))
+
         except Exception as e:
             results.append((case['name'], False, str(e)))
     return results

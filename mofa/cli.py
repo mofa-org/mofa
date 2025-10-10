@@ -54,11 +54,11 @@ def debug(node_folder_path, test_case_yml):
     # 3. execute tests and generate report
     results = execute_unit_tests(node_module, test_cases)
 
-    # for name, passed, message in results:
-    #     if passed:
-    #         print(f"✅ {name} passed")
-    #     else:
-    #         print(f"❌ {name} failed: {message}")
+    for name, passed, message in results:
+        if passed:
+            print(f"✅ {name} passed")
+        else:
+            print(f"❌ {name} failed: {message}")
 
     # 4. summarize results
     # print(f"\nTest Summary: {pass_count} passed, {fail_count} failed")
