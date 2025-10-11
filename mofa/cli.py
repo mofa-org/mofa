@@ -10,6 +10,7 @@ from mofa import agent_dir_path, cli_dir_path
 import click
 import sys
 from mofa.debug.actor import execute_unit_tests
+from mofa.debug.gen_reporter import generate_test_report
 from mofa.debug.load_node import load_node_module
 from mofa.debug.parse_test_case import parse_test_cases
 from mofa.utils.files.dir import get_subdirectories
@@ -54,16 +55,8 @@ def debug(node_folder_path, test_case_yml):
     # 3. execute tests and generate report
     results = execute_unit_tests(node_module, test_cases)
 
-    for name, passed, message in results:
-        if passed:
-            print(f"✅ {name} passed")
-        else:
-            print(f"❌ {name} failed: {message}")
-
-    # 4. summarize results
-    # print(f"\nTest Summary: {pass_count} passed, {fail_count} failed")
-    # if fail_count > 0:
-    #     sys.exit(1)
+    # 4. generate and print the test report
+    generate_test_report(results)
 
 def _create_venv(base_python: str, working_dir: str):
     temp_root = tempfile.mkdtemp(prefix="mofa_run_", dir=working_dir)
