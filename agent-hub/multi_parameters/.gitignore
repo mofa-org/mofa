@@ -1,0 +1,8 @@
+out/**
+local_cache/**
+data/**
+.env.secret
+./**/.env.secret
+./**/.db
+./**/.env
+logs/
