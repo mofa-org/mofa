@@ -25,6 +25,8 @@ def execute_unit_tests(node_module, test_cases):
     """
     SEND_OUTPUT_FUNC_ARG = "agent_result"
 
+    MULTI_RECV_PARAM_FUNC_ARG = "parameter_names"
+
     YAML_NAME= "name"
     YAML_OUTPUT= "expected_output"
     YAML_INPUT= "input"
@@ -66,7 +68,7 @@ def execute_unit_tests(node_module, test_cases):
     for case in test_cases:
         # Prepare the test environment
         if IS_MULTI_PARAM:
-            input_query = [case[YAML_INPUT][param.strip("'")] for param in receive_params if param.strip("'") in case[YAML_INPUT]]
+            input_query = case[YAML_INPUT][MULTI_RECV_PARAM_FUNC_ARG] if receive_params else None
         else:
             input_query = case[YAML_INPUT][receive_params[0].strip("'")] if receive_params else None
         local_vars = {receive_target: input_query}
