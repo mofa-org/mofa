@@ -204,7 +204,8 @@ def extract_agent_info(code: str) -> Dict:
                 call_node.func.value.id == 'agent'):
                 
                 func_name = call_node.func.attr
-                if func_name == 'receive_parameter':
+                # Accept common variants: singular, plural and short names
+                if func_name in ('receive_parameter', 'receive_parameters', 'receive_params', 'receive'):
                     receive_nodes.append((parent_node, call_node))
                 elif func_name == 'send_output':
                     send_nodes.append((parent_node, call_node))
@@ -215,6 +216,18 @@ def extract_agent_info(code: str) -> Dict:
     def get_call_args(call_node: ast.Call) -> List[str]:
         args = []
         for arg in call_node.args:
+            # If the argument is a list/tuple literal of string constants, expand it
+            if isinstance(arg, (ast.List, ast.Tuple)):
+                all_consts = True
+                for elt in arg.elts:
+                    if not isinstance(elt, ast.Constant) or not isinstance(elt.value, str):
+                        all_consts = False
+                        break
+                if all_consts:
+                    for elt in arg.elts:
+                        args.append(f"'{elt.value}'")
+                    continue
+
             if isinstance(arg, ast.Constant) and isinstance(arg.value, str):
                 args.append(f"'{arg.value}'")
             else:
