@@ -52,6 +52,11 @@ def execute_unit_tests(node_module, test_cases):
 
     format_code = clean_code(between or '')
  
+
+    IS_MULTI_PARAM = False
+    if isinstance(receive_params, list) and len(receive_params) >= 1:
+        IS_MULTI_PARAM = True
+ 
     send_params_dict = {}
     for param in send_params:
       key, value = param.split('=', 1) 
@@ -60,7 +65,10 @@ def execute_unit_tests(node_module, test_cases):
     results = []
     for case in test_cases:
         # Prepare the test environment
-        input_query = case[YAML_INPUT][receive_params[0].strip("'")] if receive_params else None
+        if IS_MULTI_PARAM:
+            input_query = [case[YAML_INPUT][param.strip("'")] for param in receive_params if param.strip("'") in case[YAML_INPUT]]
+        else:
+            input_query = case[YAML_INPUT][receive_params[0].strip("'")] if receive_params else None
         local_vars = {receive_target: input_query}
         # Execute the test case
         try:
