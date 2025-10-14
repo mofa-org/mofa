@@ -56,7 +56,7 @@ def execute_unit_tests(node_module, test_cases):
  
 
     IS_MULTI_PARAM = False
-    if isinstance(receive_params, list) and len(receive_params) >= 1:
+    if isinstance(receive_params, list) and len(receive_params) > 1:
         IS_MULTI_PARAM = True
  
     send_params_dict = {}
