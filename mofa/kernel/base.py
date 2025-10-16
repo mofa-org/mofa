@@ -23,7 +23,7 @@ class MemoryAgent:
         self._setup_environment()
         self._load_user_id()
         self._create_llm_client()
-        self._load_proxy
+        self._load_proxy()
 
     @property
     def _load_proxy(self):
