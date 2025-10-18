@@ -1,4 +1,5 @@
 """Module to execute unit tests for dynamically loaded node/agent modules."""
+from .load_node import analyze_dependencies, build_execution_globals, remove_main_guard
 
 def clean_code(code: str) -> str:
     """"make sure the code is properly indented and formatted"""
@@ -53,7 +54,14 @@ def execute_unit_tests(node_module, test_cases):
         send_params = agent_info.get('send_params', [])
 
     format_code = clean_code(between or '')
- 
+    
+    source_code = node_module['source'] if isinstance(node_module, dict) else getattr(node_module, 'source', '')
+    print("Source code:", type(source_code))
+    code = remove_main_guard(source_code)
+    print("!!Cleaned code for testing:\n", code)
+    exec_globals = build_execution_globals(code)
+    print("!!Execution globals prepared:", exec_globals.keys())
+    temp_globals = {**exec_globals}
 
     IS_MULTI_PARAM = False
     if isinstance(receive_params, list) and len(receive_params) > 1:
@@ -74,7 +82,7 @@ def execute_unit_tests(node_module, test_cases):
         local_vars = {receive_target: input_query}
         # Execute the test case
         try:
-            exec(format_code, {}, local_vars)
+            exec(format_code, temp_globals, local_vars)
             output_value = local_vars.get(send_params_dict.get(SEND_OUTPUT_FUNC_ARG, '').strip("'"))
             expected_output = get_adaptive_result(case)
             # print(f"Test case '{case[YAML_NAME]}': input={input_query}, expected_output={expected_output}, actual_output={output_value}")

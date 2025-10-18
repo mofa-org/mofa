@@ -4,6 +4,38 @@ import sys
 import importlib
 from typing import Dict, List, Set, Any
 
+
+def remove_main_guard(raw_code):
+    """Fixed code by removing the if __name__ == "__main__" guard and its main() call."""
+    lines = raw_code.split('\n')
+    new_lines = []
+    skip = False
+    # Support both spaced and unspaced versions
+    target_patterns = [
+        'if __name__=="__main__":',
+        'if __name__ == "__main__":'
+    ]
+    
+    for line in lines:
+        stripped_line = line.strip()
+        # Check for the main guard line
+        if stripped_line in target_patterns:
+            skip = True
+            continue
+        # If we are in a skip state, check for the main() call
+        if skip:
+            # Skip the main() call line and end the skip state afterwards
+            if stripped_line == 'main()':
+                skip = False
+                continue
+            # Skip empty lines or other indented lines (adjust based on actual code formatting)
+            if not stripped_line:
+                continue
+        # If not skipping, keep the line
+        new_lines.append(line)
+    
+    return '\n'.join(new_lines)
+
 class DependencyAnalyzer(ast.NodeVisitor):
     def __init__(self):
         self.imported_modules = set()
