@@ -1,0 +1,7 @@
+test_cases:
+  - name: test_hello
+    input: {"query": "hello"}  # 模拟节点输入
+    expected_output: {"hello_world_result": "hello"}  # 预期输出
+  - name: test_empty
+    input: {"query": ""}
+    expected_output: {"hello_world_result": ""}

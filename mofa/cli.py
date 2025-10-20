@@ -9,12 +9,17 @@ from mofa import agent_dir_path, cli_dir_path
 
 import click
 import sys
+from mofa.debug.actor import execute_unit_tests
+from mofa.debug.gen_reporter import generate_test_report
+from mofa.debug.load_node import load_node_module
+from mofa.debug.parse_test_case import parse_test_cases
 from mofa.utils.files.dir import get_subdirectories
 from mofa.utils.files.read import read_yaml
 from mofa.utils.process.util import stop_process, stop_dora_dataflow, destroy_dora_daemon
 
 import cookiecutter
 from cookiecutter.main import cookiecutter
+
 
 @click.group()
 def mofa_cli_group():
@@ -30,7 +35,28 @@ def agent_list():
     click.echo(agent_names)
     return agent_names
 
+@mofa_cli_group.command()
+@click.argument('node_folder_path', type=click.Path(exists=True))
+@click.argument('test_case_yml', type=click.Path(exists=True))
+def debug(node_folder_path, test_case_yml):
+    """Run unit tests for a single node/agent"""
+    # 1. dynamically load the node module
+    node_module = load_node_module(node_folder_path)
+    
+    # 2. parse the test cases from the YAML file
+    test_cases = parse_test_cases(test_case_yml)
+ 
+    # print("==================================")
+    # print("Node module loaded:", node_module)
+    # print("==================================")
+    # print("Test cases loaded:", test_cases)
+    # print("==================================")
 
+    # 3. execute tests and generate report
+    results = execute_unit_tests(node_module, test_cases)
+
+    # 4. generate and print the test report
+    generate_test_report(results)
 
 def _create_venv(base_python: str, working_dir: str):
     temp_root = tempfile.mkdtemp(prefix="mofa_run_", dir=working_dir)

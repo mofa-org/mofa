@@ -1,0 +1,97 @@
+"""Module to execute unit tests for dynamically loaded node/agent modules."""
+from .load_node import normalize_relative_imports, build_execution_globals, remove_main_guard
+
+def clean_code(code: str) -> str:
+    """"make sure the code is properly indented and formatted"""
+    lines = code.split('\n')
+    processed_lines = []
+    for line in lines:
+        # Check if the line starts with 4 spaces (a common indentation level)
+        if line.startswith('    '):
+            processed_lines.append(line[4:])
+        else:
+            processed_lines.append(line)
+    return '\n'.join(processed_lines)
+
+def execute_unit_tests(node_module, test_cases):
+    """
+    Execute unit tests for the given node module and test cases.
+    
+    Parameters:
+        node_module: The dynamically loaded node/agent module
+        test_cases: List of test case dictionaries
+
+    Returns:
+        List of test results
+    """
+    SEND_OUTPUT_FUNC_ARG = "agent_result"
+
+    MULTI_RECV_PARAM_FUNC_ARG = "parameter_names"
+
+    YAML_NAME= "name"
+    YAML_OUTPUT= "expected_output"
+    YAML_INPUT= "input"
+
+    def get_adaptive_result(test_case):
+        """Get the expected output value from the test case"""
+        expected_output = test_case[YAML_OUTPUT]
+        # assume there's only one key-value pair
+        return next(iter(expected_output.values()))
+    
+    # node_module may be a module object with attribute agent_info, or a descriptor dict
+    if isinstance(node_module, dict):
+        agent_info = node_module.get('agent_info') or {}
+        between = agent_info.get('between_code', '')
+        receive_params = agent_info.get('receive_params', [])
+        receive_target = agent_info.get('receive_target', None)
+        send_params = agent_info.get('send_params', [])
+    else:
+        # assume module-like
+        agent_info = getattr(node_module, 'agent_info', {}) or {}
+        between = agent_info.get('between_code', '')
+        receive_params = agent_info.get('receive_params', [])
+        receive_target = agent_info.get('receive_target', None)
+        send_params = agent_info.get('send_params', [])
+
+    format_code = clean_code(between or '')
+    
+    source_code = node_module['source'] if isinstance(node_module, dict) else getattr(node_module, 'source', '')
+    # print("Source code:", type(source_code))
+    code = remove_main_guard(source_code)
+    # print("!!Cleaned code for testing:\n", code)
+    exec_globals = build_execution_globals(code, node_module['path'])
+    # print("!!Execution globals prepared:", exec_globals.keys())
+    temp_globals = {**exec_globals}
+
+    IS_MULTI_PARAM = False
+    if isinstance(receive_params, list) and len(receive_params) > 1:
+        IS_MULTI_PARAM = True
+ 
+    send_params_dict = {}
+    for param in send_params:
+      key, value = param.split('=', 1) 
+      send_params_dict[key.strip()] = value.strip()
+
+    results = []
+    for case in test_cases:
+        # Prepare the test environment
+        if IS_MULTI_PARAM:
+            input_query = case[YAML_INPUT][MULTI_RECV_PARAM_FUNC_ARG] if receive_params else None
+        else:
+            input_query = case[YAML_INPUT][receive_params[0].strip("'")] if receive_params else None
+        local_vars = {receive_target: input_query}
+        # Execute the test case
+        try:
+            exec_code = normalize_relative_imports(format_code)
+            exec(exec_code, temp_globals, local_vars)
+            output_value = local_vars.get(send_params_dict.get(SEND_OUTPUT_FUNC_ARG, '').strip("'"))
+            expected_output = get_adaptive_result(case)
+            # print(f"Test case '{case[YAML_NAME]}': input={input_query}, expected_output={expected_output}, actual_output={output_value}")
+            if output_value == expected_output: # Compare actual output with expected output
+                results.append((case[YAML_NAME], True, "Passed"))
+            else:
+                results.append((case[YAML_NAME], False, f"Failed: expected {expected_output}, got {output_value}"))
+
+        except Exception as e:
+            results.append((case[YAML_NAME], False, str(e)))
+    return results
