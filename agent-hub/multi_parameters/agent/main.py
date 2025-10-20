@@ -1,7 +1,7 @@
 import os
 
 from mofa.agent_build.base.base_agent import MofaAgent, run_agent
-# from .call_sth import choice_and_run_llm_model
+from .call_sth import choice_and_run_llm_model
 
 @run_agent
 def run(agent:MofaAgent):
@@ -14,9 +14,9 @@ def run(agent:MofaAgent):
     print("当前工作目录:", current_directory)
     #示例：调用一个函数处理接收到的数据
     model_name = 'gpt-3.5-turbo'  # 你可以根据需要更改模型名称
-    # prompt = f"Process the following data: {receive_data}"
-    # llm_response = choice_and_run_llm_model(model_name, prompt)
-    # print("LLM Response:", llm_response)
+    prompt = f"Process the following data: {receive_data}"
+    llm_response = choice_and_run_llm_model(model_name, prompt)
+    print("LLM Response:", llm_response)
 
     agent_output_name = 'agent_result'
     agent.send_output(agent_output_name=agent_output_name,agent_result=receive_data)

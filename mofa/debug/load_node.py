@@ -90,7 +90,7 @@ def analyze_dependencies(code: str) -> Dict:
         "relative_imports": analyzer.relative_imports
     }
 
-def _normalize_relative_imports(source_code: str) -> str:
+def normalize_relative_imports(source_code: str) -> str:
     """
     Normalize relative imports (from .xxx / from ..xxx) by setting level to 0
     while keeping module name unchanged. This makes code exec-able when there is
@@ -200,7 +200,7 @@ def build_execution_globals(source_code: str, module_path: str = None) -> Dict[s
         # If module_path is not provided, normalize relative imports to avoid
         # "no known parent package"
         if not module_path and deps["relative_imports"]:
-            code_to_exec = _normalize_relative_imports(source_code)
+            code_to_exec = normalize_relative_imports(source_code)
         exec(code_to_exec, temp_globals)
         for func_name in deps["global_functions"]:
             if func_name in temp_globals:
@@ -440,7 +440,7 @@ def run(agent: MofaAgent):
                 print("Warning: identify_info_types not loaded, trying reload...")
                 temp_globals = {**exec_globals}
                 # Normalize relative imports for demo code
-                demo_code = _normalize_relative_imports(sample_code)
+                demo_code = normalize_relative_imports(sample_code)
                 exec(demo_code, temp_globals)
                 exec_globals["identify_info_types"] = temp_globals.get("identify_info_types")
             

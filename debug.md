@@ -69,3 +69,38 @@ Passed: 2
 Failed: 0
 Pass rate: 100.00%
 ```
+
+## 支持全局libray和客制化库导入
+```bash
+ mofa debug ./agent-hub/multi_parameters ./tests/test_multi_param.yml
+ ```
+ 
+ 运行结果
+
+```
+(.venv) ➜  mofa git:(feature/debug-cli) ✗ mofa debug ./agent-hub/multi_parameters ./tests/test_multi_param.yml
+Received data: ['a', 'b', 'c']
+Sending data back: ['a', 'b', 'c']
+当前工作目录: /Users/eva/workspace/mofa
+Using GPT-3.5 Turbo model
+LLM Response: Simulated response from gpt-3.5-turbo for prompt: Process the following data: ['a', 'b', 'c']
+Received data: ['D', 'E', 'F']
+Sending data back: ['D', 'E', 'F']
+当前工作目录: /Users/eva/workspace/mofa
+Using GPT-3.5 Turbo model
+LLM Response: Simulated response from gpt-3.5-turbo for prompt: Process the following data: ['D', 'E', 'F']
+Test case 1/2: test_parms_1
+Status: ✅ Passed
+----------------------------------
+Test case 2/2: test_params_2
+Status: ✅ Passed
+----------------------------------
+
+========================================
+Test Summary:
+Total test cases: 2
+Passed: 2
+Failed: 0
+Pass rate: 100.00%
+========================================
+```
