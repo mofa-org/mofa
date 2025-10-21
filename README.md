@@ -40,7 +40,6 @@
 
 ## 支持矩阵
 
-<div align="center">
 | 特性 | 支持程度 |
 |------|----------|
 | **API 支持** | Python 3.10+ ✅ <br> Rust 扩展 📐 |
@@ -50,7 +49,6 @@
 | **LLM 集成** | OpenAI 系列 ✅ <br> Qwen 系列 ✅ <br> 本地模型（llama.cpp）📐 |
 | **配置方式** | YAML 数据流定义 ✅ <br> Python 代码生成 📐 <br> MoFA Stage 图形化配置 ✅ |
 | **包管理** | pip（Python 节点）✅ <br> cargo（Rust 节点）📐 |
-</div>
 
 > - ✅ = 完全支持
 > - 📐 = 实验性支持（需贡献）
@@ -197,4 +195,5 @@ MoFA Stage 是 MoFA 生态的图形化控制中心，支持在可视化界面中
 
 
 [![Star History Chart](https://api.star-history.com/svg?repos=mofa-org/mofa&type=Date)](https://www.star-history.com/#mofa-org/mofa&Date)
+
 
