@@ -189,8 +189,9 @@ MoFA Stage 是 MoFA 生态的图形化控制中心，支持在可视化界面中
 
 ## 相关资源 📚
 
-- [Dora-rs 文档](https://dora-rs.ai/docs/)
+- [Dora-rs 文档](https://dora-rs.ai/docs/guides/)
 
 ## 星标历史
+
 
 [![Star History Chart](https://api.star-history.com/svg?repos=mofa-org/mofa&type=Date)](https://www.star-history.com/#mofa-org/mofa&Date)
