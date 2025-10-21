@@ -159,7 +159,7 @@ MoFA Stage 是 MoFA 生态的图形化控制中心，支持在可视化界面中
 
 ### 6 分钟开发首个应用
 
-参考 [6分钟开发指南](getting-started/your-first-application)，快速构建基于大语言模型的智能体，包含环境变量配置、项目初始化、逻辑实现、数据流定义全流程。
+参考 [6分钟开发指南](https://github.com/nanana2002/mofa-org.github.io/blob/main/mofa-website/src/content/docs/2.%20getting-started/your-first-application.md)，快速构建基于大语言模型的智能体，包含环境变量配置、项目初始化、逻辑实现、数据流定义全流程。
 
 ## 示例与文档
 
