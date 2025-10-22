@@ -17,12 +17,12 @@ Options:
 
 ## 单个输入参数示例
 ```bash
-mofa debug ./agent-hub/hello-world ./tests/test_hello_world.yml
+mofa debug ./agent-hub/hello-world ./agent-hub/hello-world/tests/test_hello_world.yml
 ```
 
 运行结果
 ```bash
-(.venv) ➜  mofa git:(feature/debug-cli) ✗ mofa debug ./agent-hub/hello-world ./tests/test_hello_world.yml     
+(.venv) ➜  mofa git:(enhance/mofa-debug) ✗ mofa debug ./agent-hub/hello-world ./agent-hub/hello-world/tests/test_hello_world.yml
 Hello, World! Received query: hello
 Hello, World! agent_result: hello
 Hello, World! Received query: 
@@ -45,40 +45,12 @@ Pass rate: 100.00%
 
 ## 多个输入参数示例
 ```bash
- mofa debug ./agent-hub/multi_parameters ./tests/test_multi_param.yml
+ mofa debug ./agent-hub/multi_parameters ./agent-hub/multi_parameters/tests/test_multi_param.yml
  ```
  
  运行结果
 ```bash
-(.venv) ➜  mofa git:(feature/debug-cli) ✗ mofa debug ./agent-hub/multi_parameters ./tests/test_multi_param.yml
-Received data: ['a', 'b', 'c']
-Sending data back: ['a', 'b', 'c']
-Received data: ['D', 'E', 'F']
-Sending data back: ['D', 'E', 'F']
-Test case 1/2: test_parms_1
-Status: ✅ Passed
-----------------------------------
-Test case 2/2: test_params_2
-Status: ✅ Passed
-----------------------------------
-
-========================================
-Test Summary:
-Total test cases: 2
-Passed: 2
-Failed: 0
-Pass rate: 100.00%
-```
-
-## 支持全局libray和客制化库导入
-```bash
- mofa debug ./agent-hub/multi_parameters ./tests/test_multi_param.yml
- ```
- 
- 运行结果
-
-```
-(.venv) ➜  mofa git:(feature/debug-cli) ✗ mofa debug ./agent-hub/multi_parameters ./tests/test_multi_param.yml
+(.venv) ➜  mofa git:(enhance/mofa-debug) ✗ mofa debug ./agent-hub/multi_parameters ./agent-hub/multi_parameters/tests/test_multi_param.yml
 Received data: ['a', 'b', 'c']
 Sending data back: ['a', 'b', 'c']
 当前工作目录: /Users/eva/workspace/mofa
@@ -103,4 +75,55 @@ Passed: 2
 Failed: 0
 Pass rate: 100.00%
 ========================================
+```
+
+## 支持全局libray和客制化库导入
+```bash
+ mofa debug ./agent-hub/multi_parameters ./agent-hub/multi_parameters/tests/test_multi_param.yml
+ ```
+ 
+ 运行结果
+
+```
+(.venv) ➜  mofa git:(enhance/mofa-debug) ✗ mofa debug ./agent-hub/multi_parameters ./agent-hub/multi_parameters/tests/test_multi_param.yml
+Received data: ['a', 'b', 'c']
+Sending data back: ['a', 'b', 'c']
+当前工作目录: /Users/eva/workspace/mofa
+Using GPT-3.5 Turbo model
+LLM Response: Simulated response from gpt-3.5-turbo for prompt: Process the following data: ['a', 'b', 'c']
+Received data: ['D', 'E', 'F']
+Sending data back: ['D', 'E', 'F']
+当前工作目录: /Users/eva/workspace/mofa
+Using GPT-3.5 Turbo model
+LLM Response: Simulated response from gpt-3.5-turbo for prompt: Process the following data: ['D', 'E', 'F']
+Test case 1/2: test_parms_1
+Status: ✅ Passed
+----------------------------------
+Test case 2/2: test_params_2
+Status: ✅ Passed
+----------------------------------
+
+========================================
+Test Summary:
+Total test cases: 2
+Passed: 2
+Failed: 0
+Pass rate: 100.00%
+========================================
+```
+
+## Q&A
+
+未给出正确的agent 文件夹目录，或yml文件不存在, 输出如下：
+```bash
+(.venv) ➜  mofa git:(enhance/mofa-debug) ✗ mofa debug ./agent-hub/multi_parameters ./test_no_yml.yml
+Usage: mofa debug [OPTIONS] NODE_FOLDER_PATH TEST_CASE_YML
+Try 'mofa debug --help' for help.
+
+Error: Invalid value for 'TEST_CASE_YML': Path './test_no_yml.yml' does not exist.
+(.venv) ➜  mofa git:(enhance/mofa-debug) ✗ mofa debug ./agent-hub/multi_parameters_no ./test_no_yml.yml
+Usage: mofa debug [OPTIONS] NODE_FOLDER_PATH TEST_CASE_YML
+Try 'mofa debug --help' for help.
+
+Error: Invalid value for 'NODE_FOLDER_PATH': Path './agent-hub/multi_parameters_no' does not exist.
 ```
