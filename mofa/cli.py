@@ -11,6 +11,7 @@ import click
 import sys
 from mofa.debug.actor import execute_unit_tests
 from mofa.debug.gen_reporter import generate_test_report
+from mofa.debug.iteractive import collect_interactive_input
 from mofa.debug.load_node import load_node_module
 from mofa.debug.parse_test_case import parse_test_cases
 from mofa.utils.files.dir import get_subdirectories
@@ -37,14 +38,24 @@ def agent_list():
 
 @mofa_cli_group.command()
 @click.argument('node_folder_path', type=click.Path(exists=True))
-@click.argument('test_case_yml', type=click.Path(exists=True))
-def debug(node_folder_path, test_case_yml):
+@click.argument('test_case_yml', type=click.Path(exists=True), required=False)  # YAML可选
+@click.option('--interactive', is_flag=True, help='启用交互式输入（无需YAML文件）')
+def debug(node_folder_path, test_case_yml, interactive):
     """Run unit tests for a single node/agent"""
     # 1. dynamically load the node module
     node_module = load_node_module(node_folder_path)
     
     # 2. parse the test cases from the YAML file
-    test_cases = parse_test_cases(test_case_yml)
+    if interactive:
+        # 检查是否同时传入了YAML文件（冲突提示）
+        if test_case_yml:
+            raise click.BadParameter("交互式模式下不需要传入YAML文件，请移除test_case_yml参数")
+        test_cases = collect_interactive_input()  # 交互式收集用例
+    else:
+        # 传统模式：必须传入YAML文件
+        if not test_case_yml:
+            raise click.BadParameter("非交互式模式下必须传入YAML文件路径")
+        test_cases = parse_test_cases(test_case_yml)  # 从YAML解析用例
  
     # print("==================================")
     # print("Node module loaded:", node_module)
