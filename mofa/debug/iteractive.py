@@ -1,11 +1,22 @@
 import click
+import ast
 from typing import List, Dict
 
+def parse_value(value_str: str):
+    """解析值为Python原生类型（支持字符串、列表、字典等）"""
+    try:
+        # 尝试解析为Python字面量（处理列表、字典等）
+        return ast.literal_eval(value_str)
+    except (SyntaxError, ValueError):
+        # 解析失败则作为原始字符串返回
+        return value_str
+
 def collect_interactive_input() -> List[Dict]:
-    """交互式收集测试用例，格式与YAML保持一致（包含name、input、expected_output）"""
+    """交互式收集测试用例，支持单项和列表形式的输入输出"""
     test_cases = []
     click.echo("===== 交互式测试用例输入 =====")
-    click.echo("请按提示输入用例信息（格式与YAML保持一致）\n")
+    click.echo("请按提示输入用例信息（格式与YAML保持一致）")
+    click.echo("支持普通键值对（如 query:hello）和列表（如 parameter_names: [\"a\", \"b\", \"c\"]）\n")
     
     case_index = 1  # 用例序号，用于默认名称
     while True:
@@ -21,34 +32,41 @@ def collect_interactive_input() -> List[Dict]:
         )
         case["name"] = case_name
         
-        # 2. 输入参数（input）：解析为 {"query": ...} 格式
-        click.echo("\n请输入input参数（格式：key:value，键值对形式，例如 query:hello ）")
+        # 2. 输入参数（input）：支持key:value或key:[...]格式
+        click.echo("\n请输入input参数（格式：key:value，例如：")
+        click.echo("  普通值：query:hello")
+        click.echo("  列表：parameter_names: [\"a\", \"b\", \"c\"]")
         input_str = click.prompt("input参数")
         input_dict = {}
-        for item in input_str.split(","):
-            item = item.strip()
-            if not item:
-                continue
-            # 分割为key和value（只按第一个":"分割）
-            if ":" not in item:
-                raise click.BadParameter(f"输入格式错误：'{item}'，请使用 'key:value' 格式")
-            key, value = item.split(":", 1)
-            input_dict[key.strip()] = value.strip()
-        case["input"] = input_dict  # 与YAML的input结构一致
         
-        # 3. 预期输出（expected_output）：同样解析为字典格式
-        click.echo("\n请输入预期输出（格式：key:value， 例如 hello_world_result:hello ）")
+        item = input_str.strip()
+        if not item:
+            continue
+        if ":" not in item:
+            raise click.BadParameter(f"输入格式错误：'{item}'，请使用 'key:value' 格式")
+        key, value_str = item.split(":", 1)
+        key = key.strip()
+        value = parse_value(value_str.strip())  # 解析值为对应类型
+        input_dict[key] = value
+        case["input"] = input_dict
+        
+        # 3. 预期输出（expected_output）：同上支持多种类型
+        click.echo("\n请输入预期输出（格式：key:value，例如：")
+        click.echo("  普通值：hello_world_result:hello ")
+        click.echo("  列表：receive_data: [\"a\", \"b\", \"c\"]")
         expected_output_str = click.prompt("expected_output参数")
         expected_output_dict = {}
-        for item in expected_output_str.split(","):
-            item = item.strip()
-            if not item:
-                continue
-            if ":" not in item:
-                raise click.BadParameter(f"输入格式错误：'{item}'，请使用 'key:value' 格式")
-            key, value = item.split(":", 1)
-            expected_output_dict[key.strip()] = value.strip()
-        case["expected_output"] = expected_output_dict  # 与YAML的expected_output结构一致
+        
+        item = expected_output_str.strip()
+        if not item:
+            continue
+        if ":" not in item:
+            raise click.BadParameter(f"输入格式错误：'{item}'，请使用 'key:value' 格式")
+        key, value_str = item.split(":", 1)
+        key = key.strip()
+        value = parse_value(value_str.strip())  # 解析值为对应类型
+        expected_output_dict[key] = value
+        case["expected_output"] = expected_output_dict
         
         # 添加到用例列表
         test_cases.append(case)
