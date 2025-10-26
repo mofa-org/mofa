@@ -44,7 +44,7 @@ def debug(node_folder_path, test_case_yml, interactive):
     """Run unit tests for a single node/agent"""
     # 1. dynamically load the node module
     node_module = load_node_module(node_folder_path)
-    
+
     # 2. parse the test cases from the YAML file
     if interactive:
         # 检查是否同时传入了YAML文件（冲突提示）
@@ -56,7 +56,6 @@ def debug(node_folder_path, test_case_yml, interactive):
         if not test_case_yml:
             raise click.BadParameter("非交互式模式下必须传入YAML文件路径")
         test_cases = parse_test_cases(test_case_yml)  # 从YAML解析用例
- 
     # print("==================================")
     # print("Node module loaded:", node_module)
     # print("==================================")
@@ -68,6 +67,106 @@ def debug(node_folder_path, test_case_yml, interactive):
 
     # 4. generate and print the test report
     generate_test_report(results)
+
+
+@mofa_cli_group.command()
+@click.option('--llm', default='gpt-4', help='LLM model to use (default: gpt-4)')
+@click.option('--max-rounds', default=5, help='Maximum optimization rounds (default: 5)')
+@click.option('--output', '-o', default='./agent-hub', help='Output directory (default: ./agent-hub)')
+def vibe(llm, max_rounds, output):
+    """AI-powered agent generator with automatic testing and optimization
+
+    Vibe generates MoFA agents from natural language descriptions,
+    automatically creates test cases, and iteratively optimizes the code
+    until all tests pass.
+
+    Usage:
+        mofa vibe
+        mofa vibe --llm gpt-4 --max-rounds 3
+    """
+    try:
+        from mofa.vibe.engine import VibeEngine
+        from mofa.vibe.models import VibeConfig
+    except ImportError as e:
+        click.echo(f"❌ Error: Failed to import vibe module: {e}")
+        click.echo("Make sure all dependencies are installed:")
+        click.echo("  pip install openai rich pyyaml")
+        return
+
+    # Check for API key and prompt user if not found
+    api_key = os.getenv('OPENAI_API_KEY')
+    if not api_key:
+        click.echo("\n🔑 OpenAI API Key Required")
+        click.echo("─" * 50)
+        click.echo("Vibe needs an OpenAI API key to generate agents.")
+        click.echo("You can get one at: https://platform.openai.com/api-keys")
+        click.echo()
+
+        api_key = click.prompt(
+            "Please enter your OpenAI API key",
+            type=str,
+            hide_input=True
+        )
+
+        if not api_key or not api_key.startswith('sk-'):
+            click.echo("❌ Invalid API key format. Should start with 'sk-'")
+            sys.exit(1)
+
+        # Set for current session
+        os.environ['OPENAI_API_KEY'] = api_key
+
+        # Ask if user wants to save it
+        click.echo()
+        save_key = click.confirm(
+            "Would you like to save this API key to .env file for future use?",
+            default=True
+        )
+
+        if save_key:
+            env_file = os.path.join(os.getcwd(), '.env')
+            try:
+                # Append to .env file
+                with open(env_file, 'a') as f:
+                    f.write(f"\n# Added by mofa vibe on {subprocess.check_output(['date'], text=True).strip()}\n")
+                    f.write(f"OPENAI_API_KEY={api_key}\n")
+                click.echo(f"✓ API key saved to {env_file}")
+                click.echo("  (Make sure to add .env to .gitignore!)")
+            except Exception as e:
+                click.echo(f"⚠ Could not save to .env file: {e}")
+        click.echo()
+
+    # Create config
+    config = VibeConfig(
+        llm_model=llm,
+        max_optimization_rounds=max_rounds,
+        output_dir=output,
+        llm_api_key=api_key
+    )
+
+    # Run vibe engine
+    try:
+        engine = VibeEngine(config=config)
+        result = engine.run_interactive()
+
+        if result and result.success:
+            sys.exit(0)
+        else:
+            sys.exit(1)
+
+    except KeyboardInterrupt:
+        click.echo("\n\n👋 Vibe 已退出")
+        sys.exit(0)
+    except ValueError as e:
+        if "API key" in str(e):
+            click.echo(f"\n❌ {e}")
+            click.echo("Please set OPENAI_API_KEY environment variable or re-run mofa vibe")
+            sys.exit(1)
+        raise
+    except Exception as e:
+        click.echo(f"\n❌ 错误: {e}")
+        import traceback
+        traceback.print_exc()
+        sys.exit(1)
 
 def _create_venv(base_python: str, working_dir: str):
     temp_root = tempfile.mkdtemp(prefix="mofa_run_", dir=working_dir)
@@ -135,11 +234,34 @@ def _collect_editable_packages(dataflow_path: str, working_dir: str):
 
 
 def _install_base_requirements(pip_executable: str, working_dir: str):
-    # First install pip tools to avoid conflicts
-    subprocess.run([pip_executable, 'install', '--upgrade', 'pip', 'setuptools', 'wheel'], capture_output=True)
+    # First install uv in the venv for faster package installation
+    click.echo("Installing uv in virtual environment...")
+    subprocess.run([pip_executable, 'install', '--upgrade', 'pip'], capture_output=True)
+    uv_install = subprocess.run([pip_executable, 'install', 'uv'], capture_output=True, text=True)
+
+    # Determine the uv and python executable paths in the venv
+    bin_dir = os.path.dirname(pip_executable)
+    uv_executable = os.path.join(bin_dir, 'uv.exe' if os.name == 'nt' else 'uv')
+    python_executable = os.path.join(bin_dir, 'python.exe' if os.name == 'nt' else 'python')
+
+    # Check if uv was installed successfully
+    use_uv = uv_install.returncode == 0 and os.path.exists(uv_executable)
+
+    if use_uv:
+        click.echo("✓ Using uv for fast package installation")
+        # Use --python to ensure uv installs into the correct venv
+        installer = [uv_executable, 'pip', 'install', '--python', python_executable]
+    else:
+        click.echo("⚠ Using pip (uv installation failed)")
+        installer = [pip_executable, 'install']
+        # Upgrade pip tools if using pip
+        subprocess.run([pip_executable, 'install', '--upgrade', 'setuptools', 'wheel'], capture_output=True)
 
     # Remove pathlib if it exists (conflicts with Python 3.11 built-in pathlib)
-    subprocess.run([pip_executable, 'uninstall', '-y', 'pathlib'], capture_output=True)
+    if use_uv:
+        subprocess.run([uv_executable, 'pip', 'uninstall', '--python', python_executable, '-y', 'pathlib'], capture_output=True)
+    else:
+        subprocess.run([pip_executable, 'uninstall', '-y', 'pathlib'], capture_output=True)
 
     # Also remove any broken pathlib files manually
     venv_site_packages = os.path.dirname(os.path.dirname(pip_executable)) + '/lib/python3.11/site-packages'
@@ -153,6 +275,7 @@ def _install_base_requirements(pip_executable: str, working_dir: str):
             os.remove(pathlib_file)
 
     # Install essential packages needed for dora-rs and basic functionality
+    click.echo("Installing base packages...")
     base_packages = [
         'numpy==1.26.4',
         'pyarrow==17.0.0',
@@ -161,7 +284,7 @@ def _install_base_requirements(pip_executable: str, working_dir: str):
         'pyyaml'
     ]
     for package in base_packages:
-        install_cmd = [pip_executable, 'install', package]
+        install_cmd = installer + [package]
         proc = subprocess.run(install_cmd, capture_output=True, text=True)
         if proc.returncode != 0:
             raise RuntimeError(f"Failed to install base package {package}: {proc.stderr}")
@@ -179,30 +302,50 @@ def _install_base_requirements(pip_executable: str, working_dir: str):
         current_dir = os.path.dirname(current_dir)
 
     if mofa_root:
+        click.echo("Installing mofa development version...")
         # Use --no-build-isolation to avoid pathlib conflicts
-        install_cmd = [pip_executable, 'install', '--no-build-isolation', '-e', mofa_root]
+        install_cmd = installer + ['--no-build-isolation', '-e', mofa_root]
         proc = subprocess.run(install_cmd, capture_output=True, text=True)
         if proc.returncode != 0:
-            raise RuntimeError(f"Failed to install development mofa: {proc.stderr}")
+            # If development install fails (e.g., permission issues), fall back to PyPI
+            if 'Permission denied' in proc.stderr:
+                click.echo("⚠ Permission error installing dev version, using PyPI version...")
+                install_cmd = installer + ['mofa-ai']
+                proc = subprocess.run(install_cmd, capture_output=True, text=True)
+                if proc.returncode != 0:
+                    raise RuntimeError(f"Failed to install mofa-ai: {proc.stderr}")
+            else:
+                raise RuntimeError(f"Failed to install development mofa: {proc.stderr}")
     else:
         # Fallback to PyPI version if we can't find the development version
-        install_cmd = [pip_executable, 'install', 'mofa-ai']
+        install_cmd = installer + ['mofa-ai']
         proc = subprocess.run(install_cmd, capture_output=True, text=True)
         if proc.returncode != 0:
             raise RuntimeError(f"Failed to install mofa-ai: {proc.stderr}")
 
     # Final cleanup: remove pathlib again in case any dependency reinstalled it
-    subprocess.run([pip_executable, 'uninstall', '-y', 'pathlib'], capture_output=True)
+    if use_uv:
+        subprocess.run([uv_executable, 'pip', 'uninstall', '--python', python_executable, '-y', 'pathlib'], capture_output=True)
+    else:
+        subprocess.run([pip_executable, 'uninstall', '-y', 'pathlib'], capture_output=True)
     for pathlib_file in pathlib_files:
         if os.path.exists(pathlib_file):
             os.remove(pathlib_file)
 
-def _install_packages(pip_executable: str, package_paths: list[str]):
+    # Return the installer command for use in other functions
+    return installer if use_uv else None
+
+def _install_packages(pip_executable: str, package_paths: list[str], installer=None):
+    """Install packages using uv (if available) or pip."""
+    # Use provided installer or fallback to pip
+    if installer is None:
+        installer = [pip_executable, 'install']
+
     for package_path in package_paths:
         if not os.path.exists(package_path):
             click.echo(f"Warning: package path not found: {package_path}")
             continue
-        install_cmd = [pip_executable, 'install', '--no-build-isolation', '--editable', package_path]
+        install_cmd = installer + ['--no-build-isolation', '--editable', package_path]
         proc = subprocess.run(install_cmd, text=True)
         if proc.returncode != 0:
             raise RuntimeError(f"Failed to install package from {package_path}")
@@ -245,18 +388,19 @@ def run(dataflow_file: str):
     env_info = None
     run_env = os.environ.copy()
     editable_packages = []
+    installer = None
 
     try:
         env_info = _create_venv(sys.executable, working_dir)
         run_env = _build_env(run_env, env_info)
 
         click.echo("Installing base requirements...")
-        _install_base_requirements(env_info['pip'], working_dir)
+        installer = _install_base_requirements(env_info['pip'], working_dir)
 
         editable_packages = _collect_editable_packages(dataflow_path, working_dir)
         if editable_packages:
             click.echo("Installing node packages into isolated environment...")
-            _install_packages(env_info['pip'], editable_packages)
+            _install_packages(env_info['pip'], editable_packages, installer=installer)
     except RuntimeError as runtime_error:
         click.echo(f"Failed to prepare run environment: {runtime_error}")
         if env_info:
