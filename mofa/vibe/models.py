@@ -11,7 +11,8 @@ class TestCase:
     """Single test case"""
     name: str
     input: Dict[str, Any]
-    expected_output: Dict[str, Any]
+    expected_output: Optional[Dict[str, Any]] = None
+    validation: Optional[Dict[str, Any]] = None
 
 
 @dataclass
@@ -21,16 +22,19 @@ class TestSuite:
 
     def to_yaml(self) -> str:
         """Convert to YAML format for mofa debug"""
-        data = {
-            'test_cases': [
-                {
-                    'name': case.name,
-                    'input': case.input,
-                    'expected_output': case.expected_output
-                }
-                for case in self.cases
-            ]
-        }
+        test_cases = []
+        for case in self.cases:
+            case_dict = {
+                'name': case.name,
+                'input': case.input,
+            }
+            if case.expected_output:
+                case_dict['expected_output'] = case.expected_output
+            if case.validation:
+                case_dict['validation'] = case.validation
+            test_cases.append(case_dict)
+
+        data = {'test_cases': test_cases}
         return yaml.dump(data, allow_unicode=True, default_flow_style=False)
 
     @classmethod
@@ -41,7 +45,8 @@ class TestSuite:
             TestCase(
                 name=case['name'],
                 input=case['input'],
-                expected_output=case['expected_output']
+                expected_output=case.get('expected_output'),
+                validation=case.get('validation')
             )
             for case in data['test_cases']
         ]

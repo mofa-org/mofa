@@ -34,9 +34,60 @@ def execute_unit_tests(node_module, test_cases):
 
     def get_adaptive_result(test_case):
         """Get the expected output value from the test case"""
-        expected_output = test_case[YAML_OUTPUT]
-        # assume there's only one key-value pair
-        return next(iter(expected_output.values()))
+        expected_output = test_case.get(YAML_OUTPUT)
+        if expected_output:
+            # assume there's only one key-value pair
+            return next(iter(expected_output.values()))
+        return None
+
+    def validate_output(test_case, output_value):
+        """
+        Validate output against test case expectations.
+        Supports both exact matching and validation rules.
+        """
+        # Check if test case has validation rules (for non-deterministic outputs)
+        if 'validation' in test_case:
+            validation = test_case['validation']
+
+            # Type check
+            expected_type = validation.get('type')
+            if expected_type:
+                type_map = {'str': str, 'int': int, 'float': float, 'list': list, 'dict': dict, 'bool': bool}
+                if expected_type in type_map and not isinstance(output_value, type_map[expected_type]):
+                    return False, f"Expected type {expected_type}, got {type(output_value).__name__}"
+
+            # Not empty check
+            if validation.get('not_empty') and not output_value:
+                return False, "Output is empty"
+
+            # Min length check
+            min_length = validation.get('min_length')
+            if min_length and hasattr(output_value, '__len__') and len(output_value) < min_length:
+                return False, f"Output length {len(output_value)} < min_length {min_length}"
+
+            # Max length check
+            max_length = validation.get('max_length')
+            if max_length and hasattr(output_value, '__len__') and len(output_value) > max_length:
+                return False, f"Output length {len(output_value)} > max_length {max_length}"
+
+            # Contains check
+            contains = validation.get('contains', [])
+            if contains and isinstance(output_value, str):
+                for keyword in contains:
+                    if keyword not in output_value:
+                        return False, f"Output does not contain '{keyword}'"
+
+            return True, "Validation passed"
+
+        # Traditional exact match for deterministic outputs
+        expected_output = get_adaptive_result(test_case)
+        if expected_output is None:
+            return False, "No expected_output or validation defined"
+
+        if output_value == expected_output:
+            return True, "Passed"
+        else:
+            return False, f"Expected {expected_output}, got {output_value}"
     
     # node_module may be a module object with attribute agent_info, or a descriptor dict
     if isinstance(node_module, dict):
@@ -85,12 +136,10 @@ def execute_unit_tests(node_module, test_cases):
             exec_code = normalize_relative_imports(format_code)
             exec(exec_code, temp_globals, local_vars)
             output_value = local_vars.get(send_params_dict.get(SEND_OUTPUT_FUNC_ARG, '').strip("'"))
-            expected_output = get_adaptive_result(case)
-            # print(f"Test case '{case[YAML_NAME]}': input={input_query}, expected_output={expected_output}, actual_output={output_value}")
-            if output_value == expected_output: # Compare actual output with expected output
-                results.append((case[YAML_NAME], True, "Passed"))
-            else:
-                results.append((case[YAML_NAME], False, f"Failed: expected {expected_output}, got {output_value}"))
+
+            # Use new validation logic
+            passed, message = validate_output(case, output_value)
+            results.append((case[YAML_NAME], passed, message))
 
         except Exception as e:
             results.append((case[YAML_NAME], False, str(e)))

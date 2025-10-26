@@ -1,6 +1,7 @@
 """LLM client for code and test generation"""
 
 import os
+import re
 from typing import Optional
 import time
 
@@ -63,8 +64,14 @@ Generate comprehensive test cases for a MoFA agent based on this requirement:
 
 {requirement}
 
+IMPORTANT:
+- Carefully analyze the requirement to understand inputs and outputs
+- If the requirement is ambiguous, choose the SIMPLEST interpretation
+- Focus on what the agent DOES, not what it processes
+
 Output ONLY a valid YAML format with this structure:
 
+For DETERMINISTIC outputs (calculations, transformations):
 ```yaml
 test_cases:
   - name: descriptive_test_name
@@ -74,14 +81,34 @@ test_cases:
       output_name: expected_value
 ```
 
+For NON-DETERMINISTIC outputs (LLM calls, random generation):
+```yaml
+test_cases:
+  - name: descriptive_test_name
+    input:
+      parameter_name: value
+    validation:
+      type: str  # Expected output type
+      not_empty: true  # Output should not be empty
+      min_length: 10  # Optional: minimum length
+      max_length: 1000  # Optional: maximum length
+      contains: ["keyword"]  # Optional: must contain these keywords
+```
+
 Guidelines:
-1. Include at least 3 test cases covering:
+1. IMPORTANT: If the agent calls LLM APIs (OpenAI, Claude, etc.) or generates random content, use the validation format!
+2. Include at least 3 test cases covering:
    - Normal/happy path cases
    - Edge cases (empty input, special characters, etc.)
    - Boundary conditions
-2. Use clear, descriptive test names
-3. Ensure input/output parameter names are consistent
-4. Output ONLY the YAML, no explanations or markdown code blocks
+3. Use clear, descriptive test names
+4. Ensure input/output parameter names are consistent
+5. CRITICAL: Use ONLY literal values in YAML. DO NOT use Python expressions like "a"*1000 or any code.
+   - WRONG: dog_name: "a"*1000
+   - WRONG: contains: ["a"*1000]
+   - RIGHT: dog_name: "aaaaaaa..." (write out actual string)
+   - RIGHT: Use reasonable test values (short strings are fine)
+6. Output ONLY the YAML, no explanations or markdown code blocks
 """
         return self.generate(prompt)
 
@@ -162,3 +189,28 @@ Keep the same structure but fix the logic errors.
 Output ONLY the complete corrected Python code, no explanations:
 """
         return self.generate(prompt)
+
+    def generate_agent_name(self, requirement: str) -> str:
+        """Generate a descriptive agent name from requirement"""
+        prompt = f"""
+Generate a concise, descriptive agent name for this requirement:
+
+{requirement}
+
+Guidelines:
+1. Use lowercase letters, numbers, and hyphens only
+2. 2-4 words maximum
+3. Focus on the CORE FUNCTIONALITY (what it does)
+4. Use simple, clear English words
+5. Examples:
+   - "将文本转换为ASCII艺术" → "text-to-ascii"
+   - "调用OpenAI API生成回复" → "openai-chat"
+   - "读取CSV文件并统计" → "csv-analyzer"
+   - "把图片转成黑白" → "image-grayscale"
+
+Output ONLY the agent name (e.g., "text-analyzer"), no explanations or quotes:
+"""
+        name = self.generate(prompt).strip().strip('"').strip("'")
+        # Ensure it's valid (only lowercase, numbers, hyphens)
+        name = re.sub(r'[^a-z0-9-]', '', name.lower())
+        return name or "custom-agent"

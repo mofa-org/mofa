@@ -71,7 +71,7 @@ def debug(node_folder_path, test_case_yml, interactive):
 
 @mofa_cli_group.command()
 @click.option('--llm', default='gpt-4', help='LLM model to use (default: gpt-4)')
-@click.option('--max-rounds', default=5, help='Maximum optimization rounds (default: 5)')
+@click.option('--max-rounds', default=100, help='Maximum optimization rounds (default: 100, use 0 for unlimited)')
 @click.option('--output', '-o', default='./agent-hub', help='Output directory (default: ./agent-hub)')
 def vibe(llm, max_rounds, output):
     """AI-powered agent generator with automatic testing and optimization
@@ -87,17 +87,23 @@ def vibe(llm, max_rounds, output):
     try:
         from mofa.vibe.engine import VibeEngine
         from mofa.vibe.models import VibeConfig
+        from dotenv import load_dotenv
     except ImportError as e:
-        click.echo(f"❌ Error: Failed to import vibe module: {e}")
+        click.echo(f"ERROR: Failed to import vibe module: {e}")
         click.echo("Make sure all dependencies are installed:")
-        click.echo("  pip install openai rich pyyaml")
+        click.echo("  pip install openai rich pyyaml python-dotenv")
         return
+
+    # Load .env file if it exists
+    env_file = os.path.join(os.getcwd(), '.env')
+    if os.path.exists(env_file):
+        load_dotenv(env_file)
 
     # Check for API key and prompt user if not found
     api_key = os.getenv('OPENAI_API_KEY')
     if not api_key:
-        click.echo("\n🔑 OpenAI API Key Required")
-        click.echo("─" * 50)
+        click.echo("\nOpenAI API Key Required")
+        click.echo("-" * 50)
         click.echo("Vibe needs an OpenAI API key to generate agents.")
         click.echo("You can get one at: https://platform.openai.com/api-keys")
         click.echo()
@@ -109,7 +115,7 @@ def vibe(llm, max_rounds, output):
         )
 
         if not api_key or not api_key.startswith('sk-'):
-            click.echo("❌ Invalid API key format. Should start with 'sk-'")
+            click.echo("ERROR: Invalid API key format. Should start with 'sk-'")
             sys.exit(1)
 
         # Set for current session
@@ -129,10 +135,10 @@ def vibe(llm, max_rounds, output):
                 with open(env_file, 'a') as f:
                     f.write(f"\n# Added by mofa vibe on {subprocess.check_output(['date'], text=True).strip()}\n")
                     f.write(f"OPENAI_API_KEY={api_key}\n")
-                click.echo(f"✓ API key saved to {env_file}")
+                click.echo(f"API key saved to {env_file}")
                 click.echo("  (Make sure to add .env to .gitignore!)")
             except Exception as e:
-                click.echo(f"⚠ Could not save to .env file: {e}")
+                click.echo(f"WARNING: Could not save to .env file: {e}")
         click.echo()
 
     # Create config
@@ -154,16 +160,16 @@ def vibe(llm, max_rounds, output):
             sys.exit(1)
 
     except KeyboardInterrupt:
-        click.echo("\n\n👋 Vibe 已退出")
+        click.echo("\n\nVibe exited")
         sys.exit(0)
     except ValueError as e:
         if "API key" in str(e):
-            click.echo(f"\n❌ {e}")
+            click.echo(f"\nERROR: {e}")
             click.echo("Please set OPENAI_API_KEY environment variable or re-run mofa vibe")
             sys.exit(1)
         raise
     except Exception as e:
-        click.echo(f"\n❌ 错误: {e}")
+        click.echo(f"\nERROR: {e}")
         import traceback
         traceback.print_exc()
         sys.exit(1)

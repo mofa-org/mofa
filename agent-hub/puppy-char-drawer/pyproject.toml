@@ -1,0 +1,17 @@
+[build-system]
+requires = ["setuptools>=65", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "puppy-char-drawer"
+version = "0.1.0"
+description = "Auto-generated MoFA agent"
+dependencies = [
+    "pyarrow>=5.0.0",
+]
+
+[project.scripts]
+puppy-char-drawer = "agent.main:main"
+
+[tool.setuptools.packages.find]
+include = ["agent*"]

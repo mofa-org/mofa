@@ -170,12 +170,61 @@ agent-hub/
     └── README.md
 ```
 
+## 测试用例格式
+
+Vibe 自动生成的测试用例支持两种格式，根据Agent的输出特性选择：
+
+### 1. 精确匹配 (expected_output)
+
+用于**确定性输出**（如计算、转换）：
+
+```yaml
+test_cases:
+  - name: test_addition
+    input:
+      a: 5
+      b: 3
+    expected_output:
+      result: 8  # 必须精确等于8
+```
+
+### 2. 规则验证 (validation)
+
+用于**非确定性输出**（如LLM生成、ASCII艺术）：
+
+```yaml
+test_cases:
+  - name: test_ascii_art
+    input:
+      text: "Hello"
+    validation:
+      type: str              # 类型必须是字符串
+      not_empty: true        # 不能为空
+      min_length: 10         # 至少10个字符
+      max_length: 1000       # 最多1000个字符
+      contains: ["Hello"]    # 必须包含"Hello"
+```
+
+**Vibe何时使用哪种格式？**
+
+- LLM调用 (OpenAI, Claude等) → **validation**
+- 随机生成 (随机数、ID等) → **validation**
+- ASCII艺术、图像生成 → **validation**
+- 数学计算、文本转换 → **expected_output**
+- 数据提取（确定规则）→ **expected_output**
+
+**手动编辑测试用例：**
+
+如果自动生成的测试用例不理想，可以在确认时选择 `n` 重新生成，或直接修改生成的YAML文件。
+
 ## 测试生成的Agent
 
 ```bash
 # 使用mofa debug测试
 mofa debug ./agent-hub/<agent-name> ./agent-hub/<agent-name>/tests/test_<agent_name>.yml
 ```
+
+了解更多测试模式详情，参考 [debug.md](../../debug.md#测试模式)
 
 ## 环境变量
 
