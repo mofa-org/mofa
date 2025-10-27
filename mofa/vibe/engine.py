@@ -2,6 +2,7 @@
 
 import os
 import re
+import shutil
 from pathlib import Path
 from typing import Optional
 from datetime import datetime
@@ -40,6 +41,7 @@ class VibeEngine:
         )
         self.scaffolder = ProjectScaffolder(output_dir=self.config.output_dir)
         self.debug_runner = DebugRunner()
+        self.output_dir = Path(self.config.output_dir)
 
         # State
         self.requirement = ""
@@ -76,15 +78,15 @@ class VibeEngine:
 
     def _ask_requirement(self):
         """Ask user for agent requirement"""
-        self.requirement = Prompt.ask("[bold]Agent功能描述[/bold]", console=self.console)
+        self.requirement = Prompt.ask("[bold]Describe what the agent should do[/bold]", console=self.console)
 
         # Generate agent name from requirement using LLM
-        self.console.print("[dim]生成agent名称中...[/dim]")
+        self.console.print("[dim]Generating agent name...[/dim]")
         self.agent_name = self.llm.generate_agent_name(self.requirement)
 
         # Ask if user wants to customize name
         suggested_name = Prompt.ask(
-            f"[bold]Agent名称[/bold] [dim](建议: {self.agent_name})[/dim]",
+            f"[bold]Agent name[/bold] [dim](suggested: {self.agent_name})[/dim]",
             default=self.agent_name,
             console=self.console
         )
@@ -98,7 +100,7 @@ class VibeEngine:
             console=self.console,
             transient=True
         ) as progress:
-            task = progress.add_task("生成测试用例中...", total=None)
+            task = progress.add_task("Generating test cases...", total=None)
 
             # Generate test cases using LLM
             test_yaml = self.llm.generate_test_cases(self.requirement)
@@ -110,7 +112,7 @@ class VibeEngine:
 
         # Display generated tests
         self.console.print()
-        self.console.print("[bold]生成的测试用例[/bold]")
+        self.console.print("[bold]Generated Test Cases[/bold]")
         self.console.print()
 
         syntax = Syntax(test_yaml, "yaml", theme="monokai", line_numbers=False)
@@ -119,9 +121,9 @@ class VibeEngine:
 
         # Ask for confirmation
         while True:
-            self.console.print("[dim]选项: y=使用 / n=重新生成 / skip=跳过测试[/dim]")
+            self.console.print("[dim]Options: y=use / n=regenerate / skip=skip testing[/dim]")
             response = Prompt.ask(
-                "确认",
+                "Confirm",
                 choices=["y", "n", "skip"],
                 default="y",
                 console=self.console,
@@ -132,7 +134,7 @@ class VibeEngine:
                 self.test_suite = TestSuite.from_yaml(test_yaml)
                 break
             elif response == "skip":
-                self.console.print("[dim]跳过测试，仅生成代码[/dim]")
+                self.console.print("[dim]Skipping tests, generating code only[/dim]")
                 # Create a minimal dummy test suite for code generation
                 dummy_yaml = """test_cases:
   - name: basic_functionality
@@ -147,12 +149,12 @@ class VibeEngine:
                 break
             else:  # n
                 additional_req = Prompt.ask(
-                    "[yellow]补充测试要求[/yellow]",
+                    "[yellow]Additional test requirements[/yellow]",
                     default="",
                     console=self.console
                 )
                 if additional_req:
-                    self.requirement += f"\n\n测试要求: {additional_req}"
+                    self.requirement += f"\n\nTest requirements: {additional_req}"
                 # Regenerate
                 return self._generate_and_confirm_tests()
 
@@ -182,7 +184,7 @@ class VibeEngine:
         try:
             yaml.safe_load(yaml_str)
         except yaml.YAMLError as e:
-            self.console.print(f"[yellow]警告: YAML解析错误，尝试修复...[/yellow]")
+            self.console.print(f"[yellow]Warning: YAML parsing error, attempting to fix...[/yellow]")
             # Additional cleanup attempts
             # Remove any remaining * expressions in lists
             yaml_str = re.sub(r'\[\s*["\'](\w+)["\']\s*\*\s*\d+\s*\]', r'["\1"]', yaml_str)
@@ -192,19 +194,19 @@ class VibeEngine:
                 yaml.safe_load(yaml_str)
             except yaml.YAMLError:
                 # If still fails, we'll let it fail naturally and user can regenerate
-                self.console.print("[yellow]自动修复失败，可能需要重新生成[/yellow]")
+                self.console.print("[yellow]Auto-fix failed, may need to regenerate[/yellow]")
 
         return yaml_str
 
     def _auto_optimize_loop(self) -> GenerationResult:
         """Automatic generation and optimization loop"""
         self.console.print()
-        self.console.print("[bold]开始生成[/bold]")
+        self.console.print("[bold]Starting generation[/bold]")
 
         if self.skip_testing:
-            self.console.print("[dim]测试已跳过[/dim]")
+            self.console.print("[dim]Testing skipped[/dim]")
         else:
-            self.console.print("[dim]Ctrl+C 可中断[/dim]")
+            self.console.print("[dim]Press Ctrl+C to interrupt[/dim]")
 
         self.console.print()
 
@@ -231,11 +233,11 @@ class VibeEngine:
                     round_number=1,
                     code=current_code,
                     test_result=test_result,
-                    optimization_note="跳过测试"
+                    optimization_note="Testing skipped"
                 )
                 self.rounds.append(round_data)
 
-                self.console.print("[green]完成[/green]")
+                self.console.print("[green]Complete[/green]")
             else:
                 # Normal testing loop
                 round_num = 0
@@ -247,7 +249,7 @@ class VibeEngine:
 
                     # Check if we've exceeded max rounds (only if max_rounds > 0)
                     if max_rounds > 0 and round_num > max_rounds:
-                        self.console.print(f"[yellow]已达到最大轮次 ({max_rounds})[/yellow]")
+                        self.console.print(f"[yellow]Reached maximum rounds ({max_rounds})[/yellow]")
                         break
 
                     self.console.print(f"[cyan]Round {round_num}[/cyan]")
@@ -269,7 +271,7 @@ class VibeEngine:
                         round_number=round_num,
                         code=current_code,
                         test_result=test_result,
-                        optimization_note="" if round_num == 1 else "自动优化"
+                        optimization_note="" if round_num == 1 else "Auto-optimization"
                     )
                     self.rounds.append(round_data)
 
@@ -278,12 +280,47 @@ class VibeEngine:
 
                     # Check if all tests passed
                     if test_result.all_passed:
-                        self.console.print("[green]测试通过[/green]")
+                        self.console.print("[green]Tests passed[/green]")
                         break
 
+                    # If tests failed, ask user if they want to modify tests
+                    if not test_result.all_passed:
+                        self.console.print("\n[yellow]Tests failed. What would you like to do?[/yellow]")
+                        self.console.print("  1. Continue optimization")
+                        self.console.print("  2. Modify tests")
+                        self.console.print("  3. Stop and select version")
+
+                        modify_choice = Prompt.ask(
+                            "Choice",
+                            choices=["1", "2", "3"],
+                            default="1",
+                            console=self.console
+                        )
+
+                        if modify_choice == "2":
+                            if self._modify_tests_interactive():
+                                # Tests were modified, regenerate code with new tests
+                                self.console.print("[cyan]Regenerating code with updated tests...[/cyan]")
+                                continue
+                        elif modify_choice == "3":
+                            self.console.print("[yellow]Stopping optimization[/yellow]")
+                            break
+
         except KeyboardInterrupt:
-            self.console.print("\n[yellow]已中断[/yellow]")
+            self.console.print("\n[yellow]Interrupted[/yellow]")
             return self._handle_pause()
+
+        # If user stopped early or tests didn't pass, let them select a version
+        if not test_result or not test_result.all_passed:
+            if len(self.rounds) > 1:
+                # Multiple rounds exist, let user choose
+                select_version = Confirm.ask(
+                    "\nWould you like to select a specific version?",
+                    default=True,
+                    console=self.console
+                )
+                if select_version:
+                    return self._handle_pause()
 
         # Create final result
         return GenerationResult(
@@ -304,7 +341,7 @@ class VibeEngine:
             console=self.console,
             transient=True
         ) as progress:
-            task = progress.add_task("生成代码中", total=None)
+            task = progress.add_task("Generating code...", total=None)
 
             code_str = self.llm.generate_code(
                 requirement=self.requirement,
@@ -325,7 +362,7 @@ class VibeEngine:
             console=self.console,
             transient=True
         ) as progress:
-            task = progress.add_task("优化代码中", total=None)
+            task = progress.add_task("Optimizing code...", total=None)
 
             failure_info = self.debug_runner.format_failures(test_result)
 
@@ -383,7 +420,7 @@ class VibeEngine:
             console=self.console,
             transient=True
         ) as progress:
-            task = progress.add_task("测试中", total=None)
+            task = progress.add_task("Testing...", total=None)
 
             result = self.debug_runner.run_tests(self.project_path, test_yaml_path)
 
@@ -407,15 +444,15 @@ class VibeEngine:
     def _handle_pause(self) -> GenerationResult:
         """Handle user pause - allow selecting version"""
         if not self.rounds:
-            self.console.print("[red]还没有生成任何版本[/red]")
+            self.console.print("[red]No versions generated yet[/red]")
             return None
 
         # Show version history
-        self.console.print("\n[bold]版本历史:[/bold]")
+        self.console.print("\n[bold]Version History:[/bold]")
         table = Table()
-        table.add_column("版本", style="cyan")
-        table.add_column("通过率", style="white")
-        table.add_column("状态", style="white")
+        table.add_column("Version", style="cyan")
+        table.add_column("Pass Rate", style="white")
+        table.add_column("Status", style="white")
 
         for round_data in self.rounds:
             status = "PASS" if round_data.test_result.all_passed else "FAIL"
@@ -429,7 +466,7 @@ class VibeEngine:
 
         # Ask which version to use
         version_num = Prompt.ask(
-            "\n选择要使用的版本 (输入round number)",
+            "\nSelect version to use (enter round number)",
             default=str(len(self.rounds)),
             console=self.console
         )
@@ -439,6 +476,9 @@ class VibeEngine:
 
             # Update project with selected version
             self.project_path = self._create_project(selected_round.code)
+
+            # Clean up backup files after selection
+            self._cleanup_backups()
 
             return GenerationResult(
                 success=selected_round.test_result.all_passed,
@@ -451,31 +491,235 @@ class VibeEngine:
             )
 
         except (ValueError, IndexError):
-            self.console.print("[red]无效的版本号[/red]")
+            self.console.print("[red]Invalid version number[/red]")
             return self._handle_pause()
+
+    def _modify_tests_interactive(self) -> bool:
+        """
+        Allow user to interactively modify test cases
+        Returns True if tests were modified, False otherwise
+        """
+        self.console.print("\n[bold]Current Test Cases:[/bold]")
+
+        # Display current tests
+        current_yaml = self.test_suite.to_yaml()
+        syntax = Syntax(current_yaml, "yaml", theme="monokai", line_numbers=True)
+        self.console.print(syntax)
+        self.console.print()
+
+        # Ask what to do
+        self.console.print("What would you like to do?")
+        self.console.print("  1. Chat with AI to modify tests")
+        self.console.print("  2. Manually edit YAML")
+        self.console.print("  3. Regenerate with additional requirements")
+        self.console.print("  4. Cancel")
+
+        action = Prompt.ask(
+            "Choice",
+            choices=["1", "2", "3", "4"],
+            default="1",
+            console=self.console
+        )
+
+        if action == "4":
+            return False
+
+        if action == "1":
+            # Conversational editing with LLM
+            return self._modify_tests_conversational()
+
+        if action == "3":
+            # Regenerate tests with additional requirements
+            additional_req = Prompt.ask(
+                "[yellow]Additional test requirements (or press Enter to skip)[/yellow]",
+                default="",
+                console=self.console
+            )
+
+            if additional_req:
+                self.requirement += f"\n\nAdditional test requirements: {additional_req}"
+
+            # Regenerate test cases
+            self.console.print("[dim]Regenerating test cases...[/dim]")
+            test_yaml = self.llm.generate_test_cases(self.requirement)
+            test_yaml = self._clean_yaml_response(test_yaml)
+
+            # Show new tests
+            self.console.print("\n[bold]New Test Cases:[/bold]")
+            syntax = Syntax(test_yaml, "yaml", theme="monokai", line_numbers=False)
+            self.console.print(syntax)
+            self.console.print()
+
+            if Confirm.ask("Use these new tests?", default=True, console=self.console):
+                self.test_suite = TestSuite.from_yaml(test_yaml)
+                return True
+            else:
+                return False
+
+        elif action == "2":
+            # Manual editing
+            self.console.print("\n[yellow]Enter new YAML content (type 'END' on a new line to finish):[/yellow]")
+            self.console.print("[dim]Tip: Copy current YAML above and modify it[/dim]\n")
+
+            lines = []
+            while True:
+                try:
+                    line = input()
+                    if line.strip() == "END":
+                        break
+                    lines.append(line)
+                except EOFError:
+                    break
+
+            if not lines:
+                self.console.print("[yellow]No changes made[/yellow]")
+                return False
+
+            new_yaml = "\n".join(lines)
+
+            # Try to parse new YAML
+            try:
+                new_test_suite = TestSuite.from_yaml(new_yaml)
+                self.test_suite = new_test_suite
+                self.console.print("[green]Tests updated successfully[/green]")
+                return True
+            except Exception as e:
+                self.console.print(f"[red]Error parsing YAML: {e}[/red]")
+                return False
+
+        return False
+
+    def _modify_tests_conversational(self) -> bool:
+        """
+        Modify tests through conversational interaction with LLM
+        Returns True if tests were modified, False otherwise
+        """
+        self.console.print("\n[bold cyan]Conversational Test Editor[/bold cyan]")
+        self.console.print("[dim]Chat with AI to modify your tests. Type 'done' when finished, 'cancel' to abort.[/dim]\n")
+
+        conversation_history = []
+        current_yaml = self.test_suite.to_yaml()
+
+        while True:
+            # Get user instruction
+            user_input = Prompt.ask("[bold]You[/bold]", console=self.console)
+
+            if user_input.lower() in ['done', 'finish', 'ok']:
+                self.console.print("[green]Conversation complete[/green]")
+                break
+            elif user_input.lower() in ['cancel', 'abort', 'quit']:
+                self.console.print("[yellow]Cancelled, keeping original tests[/yellow]")
+                return False
+
+            # Add user message to history
+            conversation_history.append({"role": "user", "content": user_input})
+
+            # Call LLM to modify tests
+            with Progress(
+                SpinnerColumn(),
+                TextColumn("[progress.description]{task.description}"),
+                console=self.console,
+                transient=True
+            ) as progress:
+                task = progress.add_task("AI is thinking...", total=None)
+
+                try:
+                    modified_yaml = self.llm.modify_test_cases_conversational(
+                        current_yaml=current_yaml,
+                        user_instruction=user_input,
+                        requirement=self.requirement,
+                        conversation_history=conversation_history[:-1]  # Exclude the current message
+                    )
+
+                    # Clean up response
+                    modified_yaml = self._clean_yaml_response(modified_yaml)
+
+                except Exception as e:
+                    self.console.print(f"[red]Error: {e}[/red]")
+                    conversation_history.pop()  # Remove failed message
+                    continue
+
+            # Add assistant response to history
+            conversation_history.append({"role": "assistant", "content": modified_yaml})
+
+            # Show modified tests
+            self.console.print("\n[bold]Modified Test Cases:[/bold]")
+            syntax = Syntax(modified_yaml, "yaml", theme="monokai", line_numbers=False)
+            self.console.print(syntax)
+            self.console.print()
+
+            # Validate YAML
+            try:
+                test_suite = TestSuite.from_yaml(modified_yaml)
+                current_yaml = modified_yaml  # Update for next iteration
+                self.console.print("[dim green]Valid YAML ✓[/dim green]\n")
+            except Exception as e:
+                self.console.print(f"[yellow]Warning: YAML validation failed: {e}[/yellow]")
+                self.console.print("[dim]You can continue chatting to fix this[/dim]\n")
+                conversation_history.pop()  # Remove invalid response
+                continue
+
+        # Ask for final confirmation
+        self.console.print("\n[bold]Final Test Cases:[/bold]")
+        syntax = Syntax(current_yaml, "yaml", theme="monokai", line_numbers=False)
+        self.console.print(syntax)
+        self.console.print()
+
+        if Confirm.ask("Apply these changes?", default=True, console=self.console):
+            try:
+                self.test_suite = TestSuite.from_yaml(current_yaml)
+                self.console.print("[green]Tests updated successfully[/green]")
+                return True
+            except Exception as e:
+                self.console.print(f"[red]Error applying changes: {e}[/red]")
+                return False
+        else:
+            self.console.print("[yellow]Changes discarded[/yellow]")
+            return False
+
+    def _cleanup_backups(self):
+        """Clean up backup directories for current agent"""
+        if not self.agent_name:
+            return
+
+        # Find all backup directories for this agent
+        agent_dir = self.output_dir / self.agent_name
+        backup_pattern = f"{self.agent_name}_backup_*"
+
+        backups_removed = 0
+        for backup_dir in self.output_dir.glob(backup_pattern):
+            if backup_dir.is_dir():
+                shutil.rmtree(backup_dir, ignore_errors=True)
+                backups_removed += 1
+
+        if backups_removed > 0:
+            self.console.print(f"[dim]Cleaned up {backups_removed} backup(s)[/dim]")
 
     def _show_final_summary(self, result: GenerationResult):
         """Display final summary"""
         if not result:
             return
 
+        # Clean up backup files
+        self._cleanup_backups()
+
         self.console.print()
         if result.success:
-            self.console.print("[bold green]生成成功[/bold green]")
+            self.console.print("[bold green]Generation successful[/bold green]")
         else:
-            self.console.print("[yellow]生成完成（部分测试未通过）[/yellow]")
+            self.console.print("[yellow]Generation complete (some tests failed)[/yellow]")
 
         self.console.print()
 
         # Summary info - simpler format
         self.console.print(f"[cyan]Agent:[/cyan] {result.agent_name}")
-        self.console.print(f"[cyan]路径:[/cyan] {result.agent_path}")
+        self.console.print(f"[cyan]Path:[/cyan] {result.agent_path}")
 
         if not self.skip_testing:
             self.console.print(
-                f"[cyan]测试:[/cyan] {result.final_test_result.passed}/{result.final_test_result.total} 通过"
+                f"[cyan]Tests:[/cyan] {result.final_test_result.passed}/{result.final_test_result.total} passed"
             )
             if result.total_rounds > 1:
-                self.console.print(f"[cyan]迭代:[/cyan] {result.total_rounds} 轮")
+                self.console.print(f"[cyan]Iterations:[/cyan] {result.total_rounds} rounds")
 
         self.console.print()

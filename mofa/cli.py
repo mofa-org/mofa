@@ -5,6 +5,7 @@ import uuid
 import shlex
 import subprocess
 import tempfile
+from pathlib import Path
 from typing import List, Optional
 from mofa import agents_dir_path, flows_dir_path, cli_dir_path
 
@@ -41,11 +42,115 @@ class OrderedGroup(click.Group):
             "config",
         ]
 
+    def format_help(self, ctx, formatter):
+        """Custom help formatter with usage hints"""
+        # Call parent to get standard formatting
+        super().format_help(ctx, formatter)
 
-@click.group(cls=OrderedGroup)
-def mofa_cli_group():
+        # Check if full mode is requested
+        show_full = ctx.obj.get("show_full", False) if ctx.obj else False
+
+        if show_full:
+            # Add full command reference
+            formatter.write_paragraph()
+            formatter.write_text("Command Reference (All Available Commands):")
+            with formatter.indentation():
+                formatter.write_text("\nCore Commands:")
+                formatter.write_text(
+                    "  mofa run-flow <dataflow.yml>                Run a dataflow"
+                )
+                formatter.write_text(
+                    "  mofa create-agent                           Create agent (TUI)"
+                )
+                formatter.write_text(
+                    "  mofa debug-agent <path> [test.yml]          Debug an agent"
+                )
+                formatter.write_text(
+                    "  mofa debug-agent <path> --interactive       Debug interactively"
+                )
+
+                formatter.write_text("\nAI Generation:")
+                formatter.write_text(
+                    "  mofa vibe                                   AI generator (TUI)"
+                )
+                formatter.write_text(
+                    "  mofa vibe agent [--llm MODEL] [--max-rounds N] [-o DIR]"
+                )
+                formatter.write_text("  mofa vibe flow [--llm MODEL] [-o DIR]")
+
+                formatter.write_text("\nList & Browse:")
+                formatter.write_text(
+                    "  mofa list                                   List all (TUI)"
+                )
+                formatter.write_text(
+                    "  mofa list agents [--remote|--all]           List agents"
+                )
+                formatter.write_text(
+                    "  mofa list flows [--remote|--all]            List flows"
+                )
+
+                formatter.write_text("\nSearch:")
+                formatter.write_text(
+                    "  mofa search                                 Search + download (TUI)"
+                )
+                formatter.write_text("  mofa search agent <keyword> [--local|--remote]")
+                formatter.write_text("  mofa search flow <keyword> [--local|--remote]")
+
+                formatter.write_text("\nDownload:")
+                formatter.write_text(
+                    "  mofa download                               Download with search (TUI)"
+                )
+                formatter.write_text(
+                    "  mofa download agent <name> [-o DIR]         Download agent"
+                )
+                formatter.write_text(
+                    "  mofa download flow <name> [-o DIR]          Download flow"
+                )
+
+                formatter.write_text("\nConfiguration:")
+                formatter.write_text(
+                    "  mofa config                                 Config manager (TUI)"
+                )
+                formatter.write_text(
+                    "  mofa config show                            Show current config"
+                )
+                formatter.write_text(
+                    "  mofa config set <KEY> <VALUE>               Set config value"
+                )
+                formatter.write_text(
+                    "  mofa config reset                           Reset to defaults"
+                )
+
+        # Add usage tips
+        formatter.write_paragraph()
+        formatter.write_text("Tips:")
+        with formatter.indentation():
+            formatter.write_text("* Most commands support both TUI and CLI modes")
+            formatter.write_text(
+                "* Run without args for interactive mode (e.g., 'mofa list')"
+            )
+            if not show_full:
+                formatter.write_text(
+                    "* Use 'mofa --full' or 'mofa -v' to see all available commands"
+                )
+            formatter.write_text(
+                "* Use --help on any command for details (e.g., 'mofa search --help')"
+            )
+
+
+@click.group(cls=OrderedGroup, invoke_without_command=True)
+@click.option("--full", "-v", is_flag=True, help="Show full command reference")
+@click.pass_context
+def mofa_cli_group(ctx, full):
     """Main CLI for MAE"""
-    pass
+    # Store full flag in context for help formatting
+    ctx.ensure_object(dict)
+    ctx.obj["show_full"] = full
+
+    # If no subcommand is provided, show help
+    if ctx.invoked_subcommand is None:
+        click.echo(ctx.get_help())
+        ctx.exit()
 
 
 # ============ Run Flow Command ============
@@ -77,7 +182,9 @@ def _list_all():
     try:
         hub = HubClient()
         remote_agents = hub.list_agents()
-        remote_only_agents = [a for a in remote_agents if a.get("name") not in local_agents]
+        remote_only_agents = [
+            a for a in remote_agents if a.get("name") not in local_agents
+        ]
         if remote_only_agents:
             click.echo(f"\nRemote agents ({len(remote_only_agents)}):")
             for agent in remote_only_agents:
@@ -96,7 +203,9 @@ def _list_all():
     try:
         hub = HubClient()
         remote_flows = hub.list_flows()
-        remote_only_flows = [f for f in remote_flows if f.get("name") not in local_flows]
+        remote_only_flows = [
+            f for f in remote_flows if f.get("name") not in local_flows
+        ]
         if remote_only_flows:
             click.echo(f"\nRemote flows ({len(remote_only_flows)}):")
             for flow in remote_only_flows:
@@ -245,17 +354,17 @@ def debug_agent(node_folder_path, test_case_yml, interactive):
 
     # 2. parse the test cases from the YAML file
     if interactive:
-        # 检查是否同时传入了YAML文件（冲突提示）
+        # Check for conflicting parameters
         if test_case_yml:
             raise click.BadParameter(
-                "交互式模式下不需要传入YAML文件，请移除test_case_yml参数"
+                "Interactive mode does not require YAML file, please remove test_case_yml parameter"
             )
-        test_cases = collect_interactive_input()  # 交互式收集用例
+        test_cases = collect_interactive_input()  # Interactively collect test cases
     else:
-        # 传统模式：必须传入YAML文件
+        # Traditional mode: YAML file required
         if not test_case_yml:
-            raise click.BadParameter("非交互式模式下必须传入YAML文件路径")
-        test_cases = parse_test_cases(test_case_yml)  # 从YAML解析用例
+            raise click.BadParameter("Non-interactive mode requires YAML file path")
+        test_cases = parse_test_cases(test_case_yml)  # Parse test cases from YAML
     # print("==================================")
     # print("Node module loaded:", node_module)
     # print("==================================")
@@ -305,6 +414,8 @@ def _run_search_tui():
 
     click.echo()
 
+    remote_results = []
+
     if search_type == "1":
         # Search agents
         local_agents = get_subdirectories(agents_dir_path)
@@ -329,12 +440,35 @@ def _run_search_tui():
                     click.echo(
                         f"Remote agents matching '{keyword}' ({len(remote_matches)}):"
                     )
-                    for agent in remote_matches:
+                    for idx, agent in enumerate(remote_matches, 1):
                         name = agent.get("name", "unknown")
                         desc = agent.get("description", "")
-                        click.echo(f"  [hub] {name}")
+                        click.echo(f"  {idx}. [hub] {name}")
                         if desc:
-                            click.echo(f"       {desc}")
+                            click.echo(f"          {desc}")
+                    remote_results = remote_matches
+
+                    # Ask if user wants to download
+                    if click.confirm("\nDownload any of these agents?", default=False):
+                        choice = click.prompt("Select agent number", type=str)
+                        try:
+                            agent_idx = int(choice) - 1
+                            if 0 <= agent_idx < len(remote_matches):
+                                selected_agent = remote_matches[agent_idx]["name"]
+                                output_dir = click.prompt(
+                                    "Output directory", default=agents_dir_path
+                                )
+                                click.echo(f"\nDownloading '{selected_agent}'...")
+                                hub.download_agent(selected_agent, output_dir)
+                                click.echo(
+                                    f"Successfully downloaded to {output_dir}/{selected_agent}"
+                                )
+                            else:
+                                click.echo("Invalid selection")
+                        except ValueError:
+                            click.echo("Invalid input")
+                        except Exception as e:
+                            click.echo(f"Error: {e}", err=True)
             except Exception as e:
                 click.echo(f"Error searching remote: {e}", err=True)
 
@@ -362,12 +496,35 @@ def _run_search_tui():
                     click.echo(
                         f"Remote flows matching '{keyword}' ({len(remote_matches)}):"
                     )
-                    for flow in remote_matches:
+                    for idx, flow in enumerate(remote_matches, 1):
                         name = flow.get("name", "unknown")
                         desc = flow.get("description", "")
-                        click.echo(f"  [hub] {name}")
+                        click.echo(f"  {idx}. [hub] {name}")
                         if desc:
-                            click.echo(f"       {desc}")
+                            click.echo(f"          {desc}")
+                    remote_results = remote_matches
+
+                    # Ask if user wants to download
+                    if click.confirm("\nDownload any of these flows?", default=False):
+                        choice = click.prompt("Select flow number", type=str)
+                        try:
+                            flow_idx = int(choice) - 1
+                            if 0 <= flow_idx < len(remote_matches):
+                                selected_flow = remote_matches[flow_idx]["name"]
+                                output_dir = click.prompt(
+                                    "Output directory", default=flows_dir_path
+                                )
+                                click.echo(f"\nDownloading '{selected_flow}'...")
+                                hub.download_flow(selected_flow, output_dir)
+                                click.echo(
+                                    f"Successfully downloaded to {output_dir}/{selected_flow}"
+                                )
+                            else:
+                                click.echo("Invalid selection")
+                        except ValueError:
+                            click.echo("Invalid input")
+                        except Exception as e:
+                            click.echo(f"Error: {e}", err=True)
             except Exception as e:
                 click.echo(f"Error searching remote: {e}", err=True)
 
@@ -537,28 +694,165 @@ def flow(keyword, local, remote):
 
 
 # ============ Download Command Group ============
-@mofa_cli_group.group()
-def download():
+@mofa_cli_group.group(invoke_without_command=True)
+@click.pass_context
+def download(ctx):
     """Download agents and flows from hub"""
-    pass
+    if ctx.invoked_subcommand is None:
+        # No subcommand, run download TUI
+        _run_download_tui()
+
+
+def _run_download_tui():
+    """Run interactive download TUI"""
+    click.echo("\n" + "=" * 50)
+    click.echo("           MoFA Download")
+    click.echo("=" * 50 + "\n")
+
+    # Ask what to download
+    download_type = click.prompt(
+        "What to download? (1=agent, 2=flow, q=quit)", type=str, default="1"
+    )
+
+    if download_type.lower() == "q":
+        return
+
+    # Search first
+    keyword = click.prompt(
+        "Search keyword (or press Enter to list all)", type=str, default=""
+    )
+
+    hub = HubClient()
+
+    try:
+        if download_type == "1":
+            # Download agent
+            if keyword:
+                agents = hub.search_agents(keyword)
+                click.echo(f"\nFound {len(agents)} agent(s) matching '{keyword}':")
+            else:
+                agents = hub.list_agents()
+                click.echo(f"\nAvailable agents ({len(agents)}):")
+
+            if not agents:
+                click.echo("No agents found")
+                return
+
+            for idx, agent in enumerate(agents, 1):
+                name = agent.get("name", "unknown")
+                desc = agent.get("description", "")
+                click.echo(f"  {idx}. {name}")
+                if desc:
+                    click.echo(f"     {desc}")
+
+            choice = click.prompt("\nSelect agent number (or 'q' to quit)", type=str)
+            if choice.lower() == "q":
+                return
+
+            try:
+                agent_idx = int(choice) - 1
+                if 0 <= agent_idx < len(agents):
+                    selected_agent = agents[agent_idx]["name"]
+                    output_dir = click.prompt(
+                        "Output directory", default=agents_dir_path
+                    )
+
+                    click.echo(f"\nDownloading '{selected_agent}'...")
+                    hub.download_agent(selected_agent, output_dir)
+                    click.echo(
+                        f"Successfully downloaded to {output_dir}/{selected_agent}"
+                    )
+                else:
+                    click.echo("Invalid selection")
+            except ValueError:
+                click.echo("Invalid input")
+            except Exception as e:
+                click.echo(f"Error: {e}", err=True)
+
+        elif download_type == "2":
+            # Download flow
+            if keyword:
+                flows = hub.search_flows(keyword)
+                click.echo(f"\nFound {len(flows)} flow(s) matching '{keyword}':")
+            else:
+                flows = hub.list_flows()
+                click.echo(f"\nAvailable flows ({len(flows)}):")
+
+            if not flows:
+                click.echo("No flows found")
+                return
+
+            for idx, flow in enumerate(flows, 1):
+                name = flow.get("name", "unknown")
+                desc = flow.get("description", "")
+                click.echo(f"  {idx}. {name}")
+                if desc:
+                    click.echo(f"     {desc}")
+
+            choice = click.prompt("\nSelect flow number (or 'q' to quit)", type=str)
+            if choice.lower() == "q":
+                return
+
+            try:
+                flow_idx = int(choice) - 1
+                if 0 <= flow_idx < len(flows):
+                    selected_flow = flows[flow_idx]["name"]
+                    output_dir = click.prompt(
+                        "Output directory", default=flows_dir_path
+                    )
+
+                    click.echo(f"\nDownloading '{selected_flow}'...")
+                    hub.download_flow(selected_flow, output_dir)
+                    click.echo(
+                        f"Successfully downloaded to {output_dir}/{selected_flow}"
+                    )
+                else:
+                    click.echo("Invalid selection")
+            except ValueError:
+                click.echo("Invalid input")
+            except Exception as e:
+                click.echo(f"Error: {e}", err=True)
+
+    except Exception as e:
+        click.echo(f"Error: {e}", err=True)
 
 
 @download.command()
 @click.argument("name", required=True)
-def agent(name):
+@click.option(
+    "--output", "-o", default=None, help="Output directory (default: ./agents)"
+)
+def agent(name, output):
     """Download an agent from remote hub"""
+    output_dir = output or agents_dir_path
+
     click.echo(f"Downloading agent '{name}' from hub...")
-    click.echo("(Not implemented yet)")
-    # TODO: Implement agent download
+    try:
+        hub = HubClient()
+        hub.download_agent(name, output_dir)
+        click.echo(f"Successfully downloaded to {output_dir}/{name}")
+    except Exception as e:
+        click.echo(f"Error: {e}", err=True)
+        sys.exit(1)
 
 
 @download.command()
 @click.argument("name", required=True)
-def flow(name):
+@click.option(
+    "--output", "-o", default=None, help="Output directory (default: ./flows)"
+)
+def flow(name, output):
     """Download a flow from remote hub"""
+    output_dir = output or flows_dir_path
+
     click.echo(f"Downloading flow '{name}' from hub...")
-    click.echo("(Not implemented yet)")
-    # TODO: Implement flow download
+    try:
+        hub = HubClient()
+        hub.download_flow(name, output_dir)
+        click.echo(f"Successfully downloaded to {output_dir}/{name}")
+    except Exception as e:
+        click.echo(f"Error: {e}", err=True)
+        sys.exit(1)
 
 
 # ============ Config Command Group ============
@@ -575,12 +869,12 @@ def config(ctx):
 def show():
     """Display current configuration"""
     click.echo("Current configuration:")
+    click.echo(f"  OPENAI_API_KEY: {'***' if os.getenv('OPENAI_API_KEY') else '(not set)'}")
+    click.echo(f"  OPENAI_API_BASE: {os.getenv('OPENAI_API_BASE', '(default)')}")
+    click.echo(f"  MOFA_VIBE_MODEL: {os.getenv('MOFA_VIBE_MODEL', 'gpt-4o-mini (default)')}")
     click.echo(f"  MOFA_AGENTS_DIR: {agents_dir_path}")
     click.echo(f"  MOFA_FLOWS_DIR: {flows_dir_path}")
-    click.echo(
-        f"  OPENAI_API_KEY: {'***' if os.getenv('OPENAI_API_KEY') else '(not set)'}"
-    )
-    # TODO: Show more config
+    click.echo(f"  MOFA_HUB_URL: {os.getenv('MOFA_HUB_URL', '(default)')}")
 
 
 @config.command(name="set")
@@ -615,7 +909,7 @@ def set_config(key, value):
     with open(env_file, "w") as f:
         f.writelines(lines)
 
-    click.echo(f"✓ Set {key}={value}")
+    click.echo(f"Set {key}={value}")
     click.echo(f"Updated {env_file}")
 
 
@@ -644,6 +938,8 @@ def tui():
 
         config_items = [
             ("OPENAI_API_KEY", "OpenAI API Key"),
+            ("OPENAI_API_BASE", "API Endpoint (Base URL)"),
+            ("MOFA_VIBE_MODEL", "Default Vibe Model"),
             ("MOFA_AGENTS_DIR", "Agents Directory"),
             ("MOFA_FLOWS_DIR", "Flows Directory"),
             ("MOFA_HUB_URL", "Hub URL"),
@@ -684,7 +980,7 @@ def tui():
                     with open(env_file, "w") as f:
                         f.writelines(lines)
 
-                    click.echo("✓ Reset mofa configuration")
+                    click.echo("Reset mofa configuration")
 
         elif choice.isdigit() and 1 <= int(choice) <= len(config_items):
             key, label = config_items[int(choice) - 1]
@@ -714,7 +1010,7 @@ def tui():
                 with open(env_file, "w") as f:
                     f.writelines(lines)
 
-                click.echo(f"✓ Updated {key}")
+                click.echo(f"Updated {key}")
         else:
             click.echo("Invalid option")
 
@@ -745,27 +1041,201 @@ def reset():
             with open(env_file, "w") as f:
                 f.writelines(lines)
 
-            click.echo("✓ Reset mofa configuration to defaults")
+            click.echo("Reset mofa configuration to defaults")
         else:
             click.echo("No .env file found")
 
 
+# ============ Helper: Check API Key ============
+def _check_and_setup_api_key() -> Optional[str]:
+    """Check if API key exists, prompt user to configure if not"""
+    api_key = os.getenv("OPENAI_API_KEY")
+
+    if api_key:
+        return api_key
+
+    # No API key found
+    click.echo("\nWarning: OpenAI API Key Not Found")
+    click.echo("=" * 50)
+    click.echo("The 'vibe' command requires an OpenAI API key.")
+    click.echo("You can get one at: https://platform.openai.com/api-keys\n")
+
+    if click.confirm("Would you like to configure it now?", default=True):
+        # Jump to config
+        click.echo("\nOpening configuration...\n")
+        from mofa import project_root
+
+        env_file = os.path.join(project_root, ".env")
+
+        api_key = click.prompt("Enter your OpenAI API key", type=str, hide_input=True)
+
+        if not api_key or not api_key.startswith("sk-"):
+            click.echo("ERROR: Invalid API key format. Should start with 'sk-'")
+            return None
+
+        # Save to .env
+        lines = []
+        key_found = False
+
+        if os.path.exists(env_file):
+            with open(env_file, "r") as f:
+                lines = f.readlines()
+
+            for i, line in enumerate(lines):
+                if line.strip().startswith("OPENAI_API_KEY="):
+                    lines[i] = f"OPENAI_API_KEY={api_key}\n"
+                    key_found = True
+                    break
+
+        if not key_found:
+            lines.append(f"\n# Added by mofa vibe\n")
+            lines.append(f"OPENAI_API_KEY={api_key}\n")
+
+        with open(env_file, "w") as f:
+            f.writelines(lines)
+
+        os.environ["OPENAI_API_KEY"] = api_key
+        click.echo(f"\nAPI key saved to {env_file}")
+        click.echo("  (Make sure to add .env to .gitignore!)\n")
+
+        return api_key
+    else:
+        click.echo("\nYou can configure it later using: mofa config")
+        return None
+
+
 # ============ Vibe Command Group ============
-@mofa_cli_group.group()
-def vibe():
+@mofa_cli_group.group(invoke_without_command=True)
+@click.pass_context
+def vibe(ctx):
     """Generate agents and flows using AI"""
-    pass
+    if ctx.invoked_subcommand is None:
+        # No subcommand, run vibe TUI
+        _run_vibe_tui()
+
+
+def _run_vibe_tui():
+    """Run interactive vibe TUI"""
+    click.echo("\n" + "=" * 50)
+    click.echo("           MoFA Vibe - Agent & Flow Generator")
+    click.echo("=" * 50 + "\n")
+
+    # Check API key first
+    api_key = _check_and_setup_api_key()
+    if not api_key:
+        click.echo("Cannot proceed without API key. Exiting...")
+        return
+
+    # Ask what to generate
+    vibe_type = click.prompt(
+        "What to generate? (1=agent, 2=flow, q=quit)", type=str, default="1"
+    )
+
+    if vibe_type.lower() == "q":
+        return
+
+    try:
+        from mofa.vibe.engine import VibeEngine
+        from mofa.vibe.models import VibeConfig
+        from dotenv import load_dotenv
+    except ImportError as e:
+        click.echo(f"ERROR: Failed to import vibe module: {e}")
+        click.echo("Make sure all dependencies are installed:")
+        click.echo("  pip install openai rich pyyaml python-dotenv")
+        return
+
+    # Load .env file if it exists
+    env_file = os.path.join(os.getcwd(), ".env")
+    if os.path.exists(env_file):
+        load_dotenv(env_file)
+
+    if vibe_type == "1":
+        # Generate agent
+        click.echo("\nGenerating agent...")
+
+        # Get saved config
+        saved_model = os.getenv('MOFA_VIBE_MODEL', 'gpt-4o-mini')
+
+        llm = click.prompt("LLM model", default=saved_model)
+        max_rounds = click.prompt(
+            "Maximum optimization rounds (0 for unlimited)", default=100, type=int
+        )
+        output = click.prompt("Output directory", default=agents_dir_path)
+
+        config = VibeConfig(
+            llm_model=llm,
+            max_optimization_rounds=max_rounds,
+            output_dir=output,
+            llm_api_key=api_key,
+        )
+
+        try:
+            engine = VibeEngine(config=config)
+            result = engine.run_interactive()
+
+            if result and result.success:
+                sys.exit(0)
+            else:
+                sys.exit(1)
+        except KeyboardInterrupt:
+            click.echo("\n\nVibe exited")
+            sys.exit(0)
+        except Exception as e:
+            click.echo(f"\nERROR: {e}")
+            import traceback
+
+            traceback.print_exc()
+            sys.exit(1)
+
+    elif vibe_type == "2":
+        # Generate flow
+        click.echo("\nGenerating flow...")
+
+        # Get saved config
+        saved_model = os.getenv('MOFA_VIBE_MODEL', 'gpt-4o-mini')
+
+        llm = click.prompt("LLM model", default=saved_model)
+        output = click.prompt("Output directory", default=flows_dir_path)
+
+        # Get flow requirement
+        requirement = click.prompt("\nDescribe the flow (what it should do)")
+
+        try:
+            from mofa.vibe.flow_generator import FlowGenerator
+
+            # Initialize flow generator
+            generator = FlowGenerator(
+                agents_dir=agents_dir_path,
+                flows_dir=output,
+                llm_model=llm,
+                api_key=api_key
+            )
+
+            # Generate flow
+            click.echo("\nScanning agents and generating flow...")
+            flow_path = generator.generate_flow(requirement)
+
+            click.echo(f"\n[SUCCESS] Flow created at: {flow_path}")
+            click.echo(f"\nNext steps:")
+            click.echo(f"  1. Review the flow: {flow_path}")
+            click.echo(f"  2. Run: mofa run-flow {flow_path}/*_dataflow.yml")
+
+        except Exception as e:
+            click.echo(f"\n[ERROR] Flow generation failed: {e}")
+            import traceback
+            traceback.print_exc()
+            sys.exit(1)
 
 
 @vibe.command()
-@click.option("--llm", default="gpt-4", help="LLM model to use (default: gpt-4)")
+@click.option("--llm", default=None, help="LLM model to use (default: from config)")
 @click.option(
     "--max-rounds",
     default=100,
     help="Maximum optimization rounds (default: 100, use 0 for unlimited)",
 )
 @click.option(
-    "--output", "-o", default="./agents", help="Output directory (default: ./agents)"
+    "--output", "-o", default=None, help="Output directory (default: from config)"
 )
 def agent(llm, max_rounds, output):
     """Generate an agent from natural language description
@@ -794,46 +1264,16 @@ def agent(llm, max_rounds, output):
         load_dotenv(env_file)
 
     # Check for API key and prompt user if not found
-    api_key = os.getenv("OPENAI_API_KEY")
+    api_key = _check_and_setup_api_key()
     if not api_key:
-        click.echo("\nOpenAI API Key Required")
-        click.echo("-" * 50)
-        click.echo("Vibe needs an OpenAI API key to generate agents.")
-        click.echo("You can get one at: https://platform.openai.com/api-keys")
-        click.echo()
+        click.echo("Cannot proceed without API key. Exiting...")
+        sys.exit(1)
 
-        api_key = click.prompt(
-            "Please enter your OpenAI API key", type=str, hide_input=True
-        )
-
-        if not api_key or not api_key.startswith("sk-"):
-            click.echo("ERROR: Invalid API key format. Should start with 'sk-'")
-            sys.exit(1)
-
-        # Set for current session
-        os.environ["OPENAI_API_KEY"] = api_key
-
-        # Ask if user wants to save it
-        click.echo()
-        save_key = click.confirm(
-            "Would you like to save this API key to .env file for future use?",
-            default=True,
-        )
-
-        if save_key:
-            env_file = os.path.join(os.getcwd(), ".env")
-            try:
-                # Append to .env file
-                with open(env_file, "a") as f:
-                    f.write(
-                        f"\n# Added by mofa vibe on {subprocess.check_output(['date'], text=True).strip()}\n"
-                    )
-                    f.write(f"OPENAI_API_KEY={api_key}\n")
-                click.echo(f"API key saved to {env_file}")
-                click.echo("  (Make sure to add .env to .gitignore!)")
-            except Exception as e:
-                click.echo(f"WARNING: Could not save to .env file: {e}")
-        click.echo()
+    # Use config defaults if not provided
+    if llm is None:
+        llm = os.getenv('MOFA_VIBE_MODEL', 'gpt-4o-mini')
+    if output is None:
+        output = agents_dir_path
 
     # Create config
     config = VibeConfig(
@@ -986,11 +1426,11 @@ def _install_base_requirements(pip_executable: str, working_dir: str):
     use_uv = uv_install.returncode == 0 and os.path.exists(uv_executable)
 
     if use_uv:
-        click.echo("✓ Using uv for fast package installation")
+        click.echo("Using uv for fast package installation")
         # Use --python to ensure uv installs into the correct venv
         installer = [uv_executable, "pip", "install", "--python", python_executable]
     else:
-        click.echo("⚠ Using pip (uv installation failed)")
+        click.echo("Warning: Using pip (uv installation failed)")
         installer = [pip_executable, "install"]
         # Upgrade pip tools if using pip
         subprocess.run(
@@ -1069,7 +1509,7 @@ def _install_base_requirements(pip_executable: str, working_dir: str):
             # If development install fails (e.g., permission issues), fall back to PyPI
             if "Permission denied" in proc.stderr:
                 click.echo(
-                    "⚠ Permission error installing dev version, using PyPI version..."
+                    "Warning: Permission error installing dev version, using PyPI version..."
                 )
                 install_cmd = installer + ["mofa-core"]
                 proc = subprocess.run(install_cmd, capture_output=True, text=True)
@@ -1345,7 +1785,7 @@ def create_agent(name, version, output, authors, description):
                 "authors": agent_authors,
             },
         )
-        click.echo(f"\n✓ Successfully created agent: {result_path}")
+        click.echo(f"\nSuccessfully created agent: {result_path}")
         click.echo(f"\nNext steps:")
         click.echo(f"  1. cd {result_path}")
         click.echo(f"  2. Edit {agent_name}/main.py to implement your agent logic")
@@ -1361,7 +1801,7 @@ def create_agent(name, version, output, authors, description):
 @mofa_cli_group.command(hidden=True)
 @click.argument("node_folder_path", type=click.Path(exists=True))
 @click.argument("test_case_yml", type=click.Path(exists=True), required=False)
-@click.option("--interactive", is_flag=True, help="启用交互式输入（无需YAML文件）")
+@click.option("--interactive", is_flag=True, help="Enable interactive input (no YAML file required)")
 def debug(node_folder_path, test_case_yml, interactive):
     """[Deprecated] Use 'mofa debug-agent' instead"""
     click.echo("Warning: 'debug' is deprecated, use 'mofa debug-agent' instead")

@@ -17,7 +17,7 @@ def generate_test_report(results: List[Tuple[str, bool, str]]) -> None:
 
     # Print detailed results
     for i, (name, passed_flag, message) in enumerate(results, 1):
-        status = "✅ Passed" if passed_flag else "❌ Failed"
+        status = "[PASS] Passed" if passed_flag else "[FAIL] Failed"
         print(f"Test case {i}/{total}: {name}")
         print(f"Status: {status}")
         

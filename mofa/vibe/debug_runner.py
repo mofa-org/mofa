@@ -56,7 +56,7 @@ class DebugRunner:
 
         Expected output format:
         Test case 1/3: test_name
-        Status: ✅ Passed
+        Status: [PASS] Passed
         ----------------------------------
         ...
         Total test cases: 3
@@ -71,11 +71,11 @@ class DebugRunner:
         pass_rate = 0.0
 
         # Parse individual test results
-        test_pattern = r'Test case \d+/\d+: (.+?)\nStatus: (✅|❌) (Passed|Failed)'
+        test_pattern = r'Test case \d+/\d+: (.+?)\nStatus: \[(PASS|FAIL)\] (Passed|Failed)'
         for match in re.finditer(test_pattern, stdout):
             test_name = match.group(1).strip()
             status = match.group(2)
-            is_passed = status == '✅'
+            is_passed = status == 'PASS'
 
             tests.append(SingleTestResult(
                 name=test_name,

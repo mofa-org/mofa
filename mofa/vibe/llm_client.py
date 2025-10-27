@@ -33,29 +33,85 @@ class LLMClient:
         except ImportError:
             raise ImportError("openai package not installed. Run: pip install openai")
 
-        client = OpenAI(api_key=self.api_key)
+        # Get custom base URL from environment if set
+        base_url = os.getenv('OPENAI_API_BASE')
+        client = OpenAI(api_key=self.api_key, base_url=base_url) if base_url else OpenAI(api_key=self.api_key)
+
+        # Check if this is a GPT-5/reasoning model (uses responses API)
+        is_reasoning_model = 'gpt-5' in self.model.lower() or 'o1' in self.model.lower() or 'o3' in self.model.lower()
 
         for attempt in range(max_retries):
             try:
-                response = client.chat.completions.create(
-                    model=self.model,
-                    messages=[
-                        {"role": "system", "content": "You are an expert Python developer specializing in MoFA agent development."},
-                        {"role": "user", "content": prompt}
-                    ],
-                    temperature=self.temperature,
-                    max_tokens=2000
-                )
+                if is_reasoning_model:
+                    # GPT-5 and reasoning models use the new responses API
+                    response = client.responses.create(
+                        model=self.model,
+                        input=prompt
+                    )
+                    return response.output_text.strip()
 
-                return response.choices[0].message.content.strip()
+                elif 'gpt-4o' in self.model.lower():
+                    # GPT-4o uses max_completion_tokens
+                    response = client.chat.completions.create(
+                        model=self.model,
+                        messages=[
+                            {"role": "system", "content": "You are an expert Python developer specializing in MoFA agent development."},
+                            {"role": "user", "content": prompt}
+                        ],
+                        temperature=self.temperature,
+                        max_completion_tokens=2000
+                    )
+                    return response.choices[0].message.content.strip()
+
+                else:
+                    # Standard models (GPT-4, GPT-3.5, Kimi, etc.)
+                    # Build parameters dynamically to support different providers
+                    params = {
+                        "model": self.model,
+                        "messages": [
+                            {"role": "system", "content": "You are an expert Python developer specializing in MoFA agent development."},
+                            {"role": "user", "content": prompt}
+                        ],
+                        "temperature": self.temperature
+                    }
+
+                    # Only add max_tokens for OpenAI models
+                    # Some providers like Kimi don't need it or handle it automatically
+                    if 'gpt' in self.model.lower():
+                        params["max_tokens"] = 2000
+
+                    response = client.chat.completions.create(**params)
+                    return response.choices[0].message.content.strip()
 
             except Exception as e:
-                if attempt < max_retries - 1:
-                    wait_time = 2 ** attempt  # Exponential backoff
-                    print(f"⚠️  LLM API error: {e}. Retrying in {wait_time}s...")
+                error_msg = str(e)
+
+                # Provide friendly error messages
+                if "temperature" in error_msg.lower() and "not support" in error_msg.lower():
+                    print(f"\nError: Model '{self.model}' does not support custom temperature.")
+                    print("Tip: Try using 'gpt-4o-mini' or 'gpt-4o' instead, or check the model documentation.")
+                    raise RuntimeError(f"Model '{self.model}' does not support temperature parameter. Use a standard chat model instead.")
+
+                elif "max_tokens" in error_msg.lower() or "max_completion_tokens" in error_msg.lower():
+                    print(f"\nError: Parameter mismatch for model '{self.model}'.")
+                    print("Tip: The model API may have changed. Try updating your openai package: pip install --upgrade openai")
+                    raise RuntimeError(f"Token parameter error for model '{self.model}'. Try updating openai package.")
+
+                elif attempt < max_retries - 1:
+                    wait_time = 2 ** attempt
+                    print(f"Warning: API error (attempt {attempt + 1}/{max_retries}): {error_msg[:100]}...")
+                    print(f"Retrying in {wait_time}s...")
                     time.sleep(wait_time)
                 else:
-                    raise Exception(f"LLM API failed after {max_retries} attempts: {e}")
+                    print(f"\nError: API request failed after {max_retries} attempts.")
+                    print(f"Model: {self.model}")
+                    print(f"Error: {error_msg}")
+                    print("\nTroubleshooting:")
+                    print("  1. Check your API key is valid")
+                    print("  2. Verify the model name is correct")
+                    print("  3. Check your API endpoint (if using custom endpoint)")
+                    print("  4. Try a different model (e.g., 'gpt-4o-mini')")
+                    raise RuntimeError(f"LLM API failed: {error_msg}")
 
     def generate_test_cases(self, requirement: str) -> str:
         """Generate test cases YAML from requirement description"""
@@ -214,3 +270,180 @@ Output ONLY the agent name (e.g., "text-analyzer"), no explanations or quotes:
         # Ensure it's valid (only lowercase, numbers, hyphens)
         name = re.sub(r'[^a-z0-9-]', '', name.lower())
         return name or "custom-agent"
+
+    def modify_test_cases_conversational(self, current_yaml: str, user_instruction: str, requirement: str, conversation_history: list = None) -> str:
+        """
+        Modify test cases based on conversational instruction
+
+        Args:
+            current_yaml: Current test cases YAML
+            user_instruction: User's instruction for modification
+            requirement: Original requirement
+            conversation_history: List of previous messages for context
+
+        Returns:
+            Modified test cases YAML
+        """
+        # Build conversation context
+        messages = [
+            {"role": "system", "content": "You are an expert in creating and modifying test cases for MoFA agents. You help users refine their test cases through conversation."}
+        ]
+
+        # Add conversation history if exists
+        if conversation_history:
+            messages.extend(conversation_history)
+
+        # Add current request
+        prompt = f"""Current test cases YAML:
+```yaml
+{current_yaml}
+```
+
+Original requirement:
+{requirement}
+
+User instruction:
+{user_instruction}
+
+Please modify the test cases according to the user's instruction. Follow these guidelines:
+1. Keep the same YAML structure (test_cases list with name, input, expected_output/validation)
+2. If the user mentions specific test cases by name, modify those
+3. If the user wants to add tests, append them to the list
+4. If the user wants to remove tests, remove the specified ones
+5. Ensure all modifications maintain valid YAML syntax
+6. For deterministic outputs, use expected_output; for non-deterministic (LLM calls), use validation
+
+Output ONLY the complete modified YAML, no explanations or markdown code blocks.
+"""
+
+        messages.append({"role": "user", "content": prompt})
+
+        # Call LLM with conversation
+        try:
+            from openai import OpenAI
+        except ImportError:
+            raise ImportError("openai package not installed. Run: pip install openai")
+
+        base_url = os.getenv('OPENAI_API_BASE')
+        client = OpenAI(api_key=self.api_key, base_url=base_url) if base_url else OpenAI(api_key=self.api_key)
+
+        # Use chat completion for conversation
+        is_reasoning_model = 'gpt-5' in self.model.lower() or 'o1' in self.model.lower() or 'o3' in self.model.lower()
+
+        if is_reasoning_model:
+            # Reasoning models don't support multi-turn conversations yet, use simple prompt
+            response = client.responses.create(
+                model=self.model,
+                input=prompt
+            )
+            return response.output_text.strip()
+        else:
+            # Standard chat models
+            params = {
+                "model": self.model,
+                "messages": messages,
+                "temperature": self.temperature
+            }
+
+            if 'gpt-4o' in self.model.lower():
+                params["max_completion_tokens"] = 2000
+            elif 'gpt' in self.model.lower():
+                params["max_tokens"] = 2000
+
+            response = client.chat.completions.create(**params)
+            return response.choices[0].message.content.strip()
+
+    def generate_flow_yaml(self, requirement: str, flow_name: str, available_agents: list = None, agent_details: dict = None) -> str:
+        """Generate MoFA flow dataflow YAML from requirement"""
+
+        agents_info = ""
+        if available_agents:
+            if agent_details:
+                # Detailed agent info with inputs/outputs
+                agents_list = []
+                for agent in available_agents:
+                    detail = agent_details.get(agent, {})
+                    inputs = detail.get('inputs', [])
+                    outputs = detail.get('outputs', [])
+                    desc = detail.get('description', '')
+
+                    agent_info = f"- {agent}"
+                    if inputs:
+                        agent_info += f"\n  Inputs: {', '.join(inputs)}"
+                    if outputs:
+                        agent_info += f"\n  Outputs: {', '.join(outputs)}"
+                    if desc:
+                        agent_info += f"\n  Description: {desc}"
+                    agents_list.append(agent_info)
+
+                agents_info = f"""
+
+## Available Local Agents
+You MUST use agents from this list only. Each agent has specific inputs and outputs that you MUST respect:
+
+{chr(10).join(agents_list)}
+
+IMPORTANT:
+1. Only use agents that exist in the list above
+2. Connect outputs to inputs correctly based on the parameter names
+3. Do not invent new agent names or input/output parameters
+"""
+            else:
+                # Simple list
+                agents_info = f"""
+
+## Available Agents
+You MUST use agents from this list only:
+{chr(10).join([f"- {agent}" for agent in available_agents])}
+
+IMPORTANT: Only use agents that exist in the list above. Do not invent new agent names.
+"""
+
+        prompt = f"""
+Generate a complete MoFA flow dataflow YAML based on this requirement:
+
+{requirement}
+
+## Flow Name
+{flow_name}
+{agents_info}
+
+## MoFA Flow Structure
+A flow is a YAML file that defines nodes (agents) and their connections.
+
+Example structure:
+```yaml
+nodes:
+  - id: terminal-input
+    build: pip install -e ../../node-hub/terminal-input
+    path: dynamic
+    outputs:
+      - data
+    inputs:
+      result: my-agent/output
+
+  - id: my-agent
+    build: pip install -e ../../agents/my-agent
+    path: my-agent
+    outputs:
+      - output
+    inputs:
+      query: terminal-input/data
+    env:
+      IS_DATAFLOW_END: true
+      WRITE_LOG: true
+```
+
+## Guidelines
+1. Use `terminal-input` as the first node (for user input)
+2. ONLY use agents from the available agents list
+3. Define clear input/output connections between nodes
+4. Use descriptive node IDs (lowercase-with-hyphens)
+5. The last node should have `IS_DATAFLOW_END: true` in env
+6. Input/output format: `node-id/output-name`
+7. Keep it simple - 2-4 nodes maximum
+8. Output ONLY valid YAML, no explanations or markdown
+
+Generate the flow dataflow YAML now:
+"""
+        return self.generate(prompt)

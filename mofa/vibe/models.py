@@ -108,8 +108,8 @@ class GenerationRound:
 
     @property
     def summary(self) -> str:
-        status = "✓" if self.test_result.all_passed else "✗"
-        return f"Round {self.round_number} - {self.test_result.pass_rate:.1f}% passed {status}"
+        status = "PASS" if self.test_result.all_passed else "FAIL"
+        return f"Round {self.round_number} - {self.test_result.pass_rate:.1f}% passed [{status}]"
 
 
 @dataclass
