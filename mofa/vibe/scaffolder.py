@@ -9,7 +9,7 @@ from typing import List
 class ProjectScaffolder:
     """Creates agent project structure"""
 
-    def __init__(self, output_dir: str = "./agent-hub"):
+    def __init__(self, output_dir: str = "./agents"):
         self.output_dir = Path(output_dir)
 
     def create_project(self, agent_name: str, code: str, test_yaml: str, dependencies: List[str] = None) -> str:
