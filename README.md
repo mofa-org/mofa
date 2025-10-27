@@ -1,7 +1,7 @@
 # MoFA 开发框架
 
 <p align="center">
-    <img src="fig/mofa-logo.png" width="30%"/>
+    <img src="documents/images/mofa-logo.png" width="30%"/>
 </p>
 
 <h2 align="center">
@@ -134,7 +134,7 @@ MoFA 是一个用于构建可组合 AI 智能体的软件框架。通过 MoFA，
 ### 技术架构图
 
 <p align="center">
-  <img src="fig/Organizational_Chart_cn.png" width="60%">
+  <img src="documents/images/Organizational_Chart_cn.png" width="60%">
 </p>
 
 ## MoFA Stage 可视化工具
@@ -149,13 +149,13 @@ MoFA Stage 是 MoFA 生态的图形化控制中心，支持在可视化界面中
 
 ### 界面预览
 <p align="center">
-  <img src="fig/mofastage-hub.png" alt="MoFA Hub 界面" width="80%"/>
+  <img src="documents/images/mofastage-hub.png" alt="MoFA Hub 界面" width="80%"/>
   <br/>
   <i>Node Hub 界面</i>
 </p>
 
 <p align="center">
-  <img src="fig/mofastage-dataflow.png" alt="创建 Agent 界面" width="80%"/>
+  <img src="documents/images/mofastage-dataflow.png" alt="创建 Agent 界面" width="80%"/>
   <br/>
   <i>Dataflow界面</i>
 </p>
