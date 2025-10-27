@@ -55,21 +55,19 @@ jobs:
 
           # Update HISTORY.rst
           TODAY=$(date +%Y-%m-%d)
-          TEMP_FILE=$(mktemp)
+          COMMIT_MSG=$(git log -1 --pretty=%B | head -1)
 
-          cat > "$TEMP_FILE" << EOF
-=======
-History
-=======
-
-${NEW_VERSION} (${TODAY})
-------------------
-
-* Auto-release: $(git log -1 --pretty=%B | head -1)
-
-EOF
-          tail -n +5 HISTORY.rst >> "$TEMP_FILE"
-          mv "$TEMP_FILE" HISTORY.rst
+          echo "=======" > HISTORY.rst.new
+          echo "History" >> HISTORY.rst.new
+          echo "=======" >> HISTORY.rst.new
+          echo "" >> HISTORY.rst.new
+          echo "${NEW_VERSION} (${TODAY})" >> HISTORY.rst.new
+          echo "------------------" >> HISTORY.rst.new
+          echo "" >> HISTORY.rst.new
+          echo "* Auto-release: ${COMMIT_MSG}" >> HISTORY.rst.new
+          echo "" >> HISTORY.rst.new
+          tail -n +5 HISTORY.rst >> HISTORY.rst.new
+          mv HISTORY.rst.new HISTORY.rst
 
       - name: Commit version bump
         run: |
