@@ -99,5 +99,17 @@ def copy_directories(source_directory: str, subdirectories: list, destination_di
         else:
             print(f"Subdirectory {subdirectory} does not exist in {source_directory}")
 
-def get_subdirectories(directory:str):
-    return [p.name for p in Path(directory).iterdir() if p.is_dir()]
+def get_subdirectories(directory: str):
+    """
+    Get list of subdirectory names in a directory
+
+    Args:
+        directory: Path to directory
+
+    Returns:
+        List of subdirectory names (empty list if directory doesn't exist)
+    """
+    try:
+        return [p.name for p in Path(directory).iterdir() if p.is_dir()]
+    except (FileNotFoundError, NotADirectoryError):
+        return []

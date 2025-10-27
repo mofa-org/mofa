@@ -174,10 +174,17 @@ def list(ctx):
 def _list_all():
     """List all agents and flows (local and remote)"""
     # List agents
-    local_agents = set(get_subdirectories(agents_dir_path))
-    click.echo(f"Local agents ({len(local_agents)}):")
-    for name in sorted(local_agents):
-        click.echo(f"  - {name}")
+    local_agents = set()
+    if os.path.exists(agents_dir_path):
+        local_agents = set(get_subdirectories(agents_dir_path))
+
+    if local_agents:
+        click.echo(f"Local agents ({len(local_agents)}):")
+        for name in sorted(local_agents):
+            click.echo(f"  - {name}")
+    else:
+        click.echo(f"Local agents (0):")
+        click.echo(f"  No agents found in: {agents_dir_path}")
 
     try:
         hub = HubClient()
@@ -195,10 +202,17 @@ def _list_all():
 
     # List flows
     click.echo()
-    local_flows = set(get_subdirectories(flows_dir_path))
-    click.echo(f"Local flows ({len(local_flows)}):")
-    for name in sorted(local_flows):
-        click.echo(f"  - {name}")
+    local_flows = set()
+    if os.path.exists(flows_dir_path):
+        local_flows = set(get_subdirectories(flows_dir_path))
+
+    if local_flows:
+        click.echo(f"Local flows ({len(local_flows)}):")
+        for name in sorted(local_flows):
+            click.echo(f"  - {name}")
+    else:
+        click.echo(f"Local flows (0):")
+        click.echo(f"  No flows found in: {flows_dir_path}")
 
     try:
         hub = HubClient()
