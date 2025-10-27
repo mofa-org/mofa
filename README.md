@@ -17,8 +17,8 @@
 </h2>
 
 <div align="center">
-  <a href="https://pypi.org/project/mofa-ai/">
-    <img src="https://img.shields.io/pypi/v/mofa-ai.svg" alt="PyPI 最新版本"/>
+  <a href="https://pypi.org/project/mofa-core/">
+    <img src="https://img.shields.io/pypi/v/mofa-core.svg" alt="PyPI 最新版本"/>
   </a>
   <a href="https://github.com/mofa-org/mofa/blob/main/LICENSE">
     <img src="https://img.shields.io/github/license/mofa-org/mofa" alt="许可证"/>
@@ -91,9 +91,15 @@ dora --version
 
 ### 2. 安装 MoFA 框架
 ```bash
+# 从 PyPI 安装（推荐）
+pip install mofa-core
+
+# 或从源码安装最新开发版
 pip install git+https://github.com/mofa-org/mofa.git
+
 # 验证安装
-pip show mofa-ai
+pip show mofa-core
+mofa --help
 ```
 
 ### 3. 运行 Hello World 示例

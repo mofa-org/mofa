@@ -316,18 +316,18 @@ def _install_base_requirements(pip_executable: str, working_dir: str):
             # If development install fails (e.g., permission issues), fall back to PyPI
             if 'Permission denied' in proc.stderr:
                 click.echo("⚠ Permission error installing dev version, using PyPI version...")
-                install_cmd = installer + ['mofa-ai']
+                install_cmd = installer + ['mofa-core']
                 proc = subprocess.run(install_cmd, capture_output=True, text=True)
                 if proc.returncode != 0:
-                    raise RuntimeError(f"Failed to install mofa-ai: {proc.stderr}")
+                    raise RuntimeError(f"Failed to install mofa-core: {proc.stderr}")
             else:
                 raise RuntimeError(f"Failed to install development mofa: {proc.stderr}")
     else:
         # Fallback to PyPI version if we can't find the development version
-        install_cmd = installer + ['mofa-ai']
+        install_cmd = installer + ['mofa-core']
         proc = subprocess.run(install_cmd, capture_output=True, text=True)
         if proc.returncode != 0:
-            raise RuntimeError(f"Failed to install mofa-ai: {proc.stderr}")
+            raise RuntimeError(f"Failed to install mofa-core: {proc.stderr}")
 
     # Final cleanup: remove pathlib again in case any dependency reinstalled it
     if use_uv:
