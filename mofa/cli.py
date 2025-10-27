@@ -24,6 +24,7 @@ from mofa.utils.process.util import (
     destroy_dora_daemon,
 )
 from mofa.registry import HubClient
+from mofa.commands.init import init_command
 
 import cookiecutter
 from cookiecutter.main import cookiecutter
@@ -32,6 +33,7 @@ from cookiecutter.main import cookiecutter
 class OrderedGroup(click.Group):
     def list_commands(self, ctx):
         return [
+            "init",
             "run-flow",
             "create-agent",
             "debug-agent",
@@ -55,6 +57,14 @@ class OrderedGroup(click.Group):
             formatter.write_paragraph()
             formatter.write_text("Command Reference (All Available Commands):")
             with formatter.indentation():
+                formatter.write_text("\nSetup:")
+                formatter.write_text(
+                    "  mofa init [DIR]                             Initialize workspace"
+                )
+                formatter.write_text(
+                    "  mofa init --skip-rust                       Skip Rust installation"
+                )
+
                 formatter.write_text("\nCore Commands:")
                 formatter.write_text(
                     "  mofa run-flow <dataflow.yml>                Run a dataflow"
@@ -151,6 +161,10 @@ def mofa_cli_group(ctx, full):
     if ctx.invoked_subcommand is None:
         click.echo(ctx.get_help())
         ctx.exit()
+
+
+# ============ Init Command ============
+mofa_cli_group.add_command(init_command)
 
 
 # ============ Run Flow Command ============

@@ -1,0 +1,1 @@
+"""MoFA CLI commands module"""
