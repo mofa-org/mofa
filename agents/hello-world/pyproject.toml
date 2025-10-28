@@ -13,6 +13,7 @@ authors = [
 ]
 dependencies = [
     "pyarrow>=5.0.0",
+    "mofa-core",
 ]
 
 [project.scripts]
