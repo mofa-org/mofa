@@ -389,9 +389,34 @@ def run_flow(dataflow_file: str):
     # Get the directory containing the dataflow file
     working_dir = os.path.dirname(dataflow_path)
 
+    # Check if dora is available
+    try:
+        dora_check = subprocess.run(
+            ["dora", "--version"],
+            capture_output=True,
+            text=True,
+            timeout=5
+        )
+        if dora_check.returncode != 0:
+            click.echo("Error: dora command not found or not working properly.")
+            click.echo("Please ensure dora-rs is installed correctly.")
+            return
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        click.echo("Error: dora command not found or timed out.")
+        click.echo("Please ensure dora-rs is installed correctly.")
+        return
+
     # Clean up any existing dora processes to avoid conflicts
     click.echo("Cleaning up existing dora processes...")
-    subprocess.run(["pkill", "-f", "dora"], capture_output=True)
+    try:
+        subprocess.run(["pkill", "-f", "dora"], capture_output=True, check=False)
+    except FileNotFoundError:
+        # pkill might not be available on all systems, try alternative
+        try:
+            subprocess.run(["killall", "dora"], capture_output=True, check=False)
+        except FileNotFoundError:
+            # If neither pkill nor killall is available, skip cleanup
+            pass
     time.sleep(1)
 
     env_info = None
@@ -430,58 +455,68 @@ def run_flow(dataflow_file: str):
     dataflow_name = None
 
     try:
+        click.echo("Starting dora daemon...")
         dora_up_process = subprocess.Popen(
             ["dora", "up"],
             stdin=subprocess.PIPE,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
             text=True,
             cwd=working_dir,
             env=run_env,
         )
-        time.sleep(1)
+        time.sleep(2)
 
+        # Check if dora up started successfully
+        if dora_up_process.poll() is not None:
+            click.echo("Error: Failed to start dora daemon!")
+            return
+
+        click.echo("Building dataflow...")
         dora_build_node = subprocess.Popen(
             ["dora", "build", dataflow_path],
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
             text=True,
             cwd=working_dir,
             env=run_env,
         )
 
-        time.sleep(3)
-        stdout, stderr = dora_build_node.communicate()
+        # Wait for build to complete with timeout
+        try:
+            stdout, _ = dora_build_node.communicate(timeout=30)
+        except subprocess.TimeoutExpired:
+            click.echo("Error: Dataflow build timed out!")
+            dora_build_node.kill()
+            return
+
         if dora_build_node.returncode != 0:
-            build_error = stderr.strip() if stderr else stdout.strip()
-            if build_error:
-                click.echo(build_error)
+            if stdout and stdout.strip():
+                click.echo("Build output:")
+                click.echo(stdout.strip())
             click.echo("Failed to build dataflow. Aborting run.")
             return
+
+        click.echo("Build completed successfully.")
 
         dataflow_name = str(uuid.uuid4()).replace("-", "")
         click.echo(f"Starting dataflow with name: {dataflow_name}")
         dora_dataflow_process = subprocess.Popen(
             ["dora", "start", dataflow_path, "--name", dataflow_name],
             stdin=subprocess.PIPE,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
             text=True,
             cwd=working_dir,
             env=run_env,
         )
 
-        time.sleep(2)
+        time.sleep(3)
 
         # Check if dataflow started successfully
         if dora_dataflow_process.poll() is not None:
-            stdout, stderr = dora_dataflow_process.communicate()
-            click.echo(f"Dataflow process terminated early!")
-            if stderr:
-                click.echo(f"Stderr: {stderr}")
-            if stdout:
-                click.echo(f"Stdout: {stdout}")
+            click.echo("Error: Dataflow process terminated early!")
             return
 
         click.echo("Starting terminal-input process...")
