@@ -146,7 +146,7 @@ class VibeConfig:
     llm_model: str = "gpt-4"
     llm_api_key: Optional[str] = None
     max_optimization_rounds: int = 5
-    output_dir: str = "./agent-hub"
+    output_dir: str = "./agents"
     temperature: float = 0.3
     verbose: bool = True
     auto_save_rounds: bool = True

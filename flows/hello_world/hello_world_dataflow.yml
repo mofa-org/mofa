@@ -1,13 +1,13 @@
 nodes:
   - id: terminal-input
-    build: pip install -e ../../node-hub/terminal-input
+    build: pip install -e ../../agents/terminal-input
     path: dynamic
     outputs:
       - data
     inputs:
       agent_response: hello-world-agent/hello_world_result
   - id: hello-world-agent
-    build: pip install -e ../../agent-hub/hello-world
+    build: pip install -e ../../agents/hello-world
     path: hello-world
     outputs:
       - hello_world_result

@@ -350,7 +350,7 @@ Example:
 ```yaml
 nodes:
   - id: terminal-input
-    build: pip install -e ../../node-hub/terminal-input
+    build: pip install -e ../../agents/terminal-input
     path: dynamic
     outputs:
       - data

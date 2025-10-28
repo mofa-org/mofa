@@ -1,6 +1,6 @@
 nodes:
   - id: terminal-input
-    build: pip install ../../node-hub/terminal-input
+    build: pip install -e ../../agents/terminal-input
     path: dynamic
     outputs:
       - data
@@ -8,7 +8,7 @@ nodes:
       agent_response: qwen_agent/llm_result
 
   - id: qwen_agent
-    build: pip install ../../agent-hub/qwen_agent
+    build: pip install -e ../../agents/qwen_agent
     path: qwen_agent
     outputs:
       - llm_result
