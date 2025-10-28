@@ -65,6 +65,71 @@ def install_rust() -> bool:
         return False
 
 
+def download_examples_from_github(target_dir: Path) -> bool:
+    """Download examples from GitHub using sparse checkout"""
+    import tempfile
+
+    try:
+        console.print("[yellow]Trying to download examples from GitHub...[/yellow]")
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_path = Path(temp_dir)
+
+            # Initialize sparse checkout
+            commands = [
+                ["git", "init"],
+                ["git", "remote", "add", "origin", "https://github.com/mofa-org/mofa.git"],
+                ["git", "config", "core.sparseCheckout", "true"],
+            ]
+
+            for cmd in commands:
+                result = subprocess.run(
+                    cmd,
+                    cwd=temp_path,
+                    capture_output=True,
+                    text=True,
+                    timeout=30
+                )
+                if result.returncode != 0:
+                    console.print(f"[red]Git command failed: {' '.join(cmd)}[/red]")
+                    return False
+
+            # Configure sparse checkout patterns
+            sparse_checkout_file = temp_path / ".git" / "info" / "sparse-checkout"
+            sparse_checkout_file.parent.mkdir(parents=True, exist_ok=True)
+            sparse_checkout_file.write_text("agents/\nflows/\n")
+
+            # Pull the specified directories
+            result = subprocess.run(
+                ["git", "pull", "origin", "main"],
+                cwd=temp_path,
+                capture_output=True,
+                text=True,
+                timeout=120
+            )
+
+            if result.returncode != 0:
+                console.print(f"[red]Failed to pull from GitHub: {result.stderr}[/red]")
+                return False
+
+            # Copy the downloaded directories
+            source_agents = temp_path / "agents"
+            source_flows = temp_path / "flows"
+
+            if not source_agents.exists() or not source_flows.exists():
+                console.print("[red]Downloaded content missing agents or flows[/red]")
+                return False
+
+            return copy_examples(target_dir, source_agents, source_flows)
+
+    except subprocess.TimeoutExpired:
+        console.print("[red]GitHub download timed out[/red]")
+        return False
+    except Exception as e:
+        console.print(f"[red]Error downloading from GitHub: {e}[/red]")
+        return False
+
+
 def copy_examples(target_dir: Path, source_agents: Path, source_flows: Path) -> bool:
     """Copy agents and flows directories to target directory"""
     try:
@@ -186,10 +251,8 @@ def init_command(skip_rust: bool, skip_examples: bool, directory: str):
 
     console.print(f"\n[bold]Target directory:[/bold] {target_dir}\n")
 
-    # Step 1: Check/Install Rust
+    # Check/Install Rust
     if not skip_rust:
-        console.print("[bold cyan]Step 1: Checking Rust installation[/bold cyan]")
-
         if check_rust_installed():
             console.print("[green]✓[/green] Rust/Cargo is already installed")
         else:
@@ -202,29 +265,33 @@ def init_command(skip_rust: bool, skip_examples: bool, directory: str):
     else:
         console.print("[dim]Skipped Rust installation check[/dim]")
 
-    # Step 2: Copy examples
+    # Copy examples
     if not skip_examples:
-        console.print("\n[bold cyan]Step 2: Copying example agents and flows[/bold cyan]")
+        examples_copied = False
 
-        # Find source directories from installed package
+        # Try local package first
         try:
             import mofa
             package_root = Path(mofa.__file__).parent.parent
             source_agents = package_root / "agents"
             source_flows = package_root / "flows"
 
-            if not source_agents.exists() or not source_flows.exists():
-                console.print("[yellow]⚠[/yellow]  Example agents/flows not found in package")
-                console.print("[dim]This is normal if you're in development mode[/dim]")
+            if source_agents.exists() and source_flows.exists():
+                examples_copied = copy_examples(target_dir, source_agents, source_flows)
             else:
-                copy_examples(target_dir, source_agents, source_flows)
+                console.print("[yellow]⚠[/yellow]  Example agents/flows not found in installed package")
         except Exception as e:
-            console.print(f"[red]Error locating examples: {e}[/red]")
-    else:
-        console.print("\n[dim]Skipped copying examples[/dim]")
+            console.print(f"[yellow]Warning: Error locating local examples: {e}[/yellow]")
 
-    # Step 3: Create .env file
-    console.print("\n[bold cyan]Step 3: Configuring environment[/bold cyan]")
+        # Fallback to GitHub if needed
+        if not examples_copied:
+            examples_copied = download_examples_from_github(target_dir)
+
+        if not examples_copied:
+            console.print("[red]Failed to copy examples from both local package and GitHub[/red]")
+            console.print("[dim]You can manually download examples from: https://github.com/mofa-org/mofa[/dim]")
+
+    # Create .env file
     create_env_file(target_dir)
 
     # Final message
