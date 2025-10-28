@@ -1,6 +1,8 @@
 
 
 from setuptools import setup, find_packages
+from pathlib import Path
+import os
 
 with open('README.md') as readme_file:
     readme = readme_file.read()
@@ -13,6 +15,23 @@ with open('requirements.txt',encoding='utf-8') as requirements_file:
 
 requirements = [pkg.replace('\n', '') for pkg in all_pkgs if "#" not in pkg]
 test_requirements = []
+
+# Collect all files from agents and flows directories
+def get_data_files(directory):
+    """Recursively collect all files from a directory"""
+    data_files = []
+    for root, dirs, files in os.walk(directory):
+        if files:
+            rel_dir = os.path.relpath(root, '.')
+            file_paths = [os.path.join(root, f) for f in files]
+            data_files.append((rel_dir, file_paths))
+    return data_files
+
+data_files = []
+if os.path.exists('agents'):
+    data_files.extend(get_data_files('agents'))
+if os.path.exists('flows'):
+    data_files.extend(get_data_files('flows'))
 
 setup(
     name='mofa-core',
@@ -40,6 +59,7 @@ setup(
     packages=find_packages(include=['mofa', 'mofa.*']),
     long_description_content_type="text/markdown",
     package_dir={'mofa': 'mofa'},
+    data_files=data_files,
     test_suite='tests',
     tests_require=test_requirements,
     version='0.1.8',
