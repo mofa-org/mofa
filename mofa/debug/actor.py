@@ -33,12 +33,7 @@ def execute_unit_tests(node_module, test_cases):
     YAML_INPUT= "input"
 
     def get_adaptive_result(test_case):
-        """Get the expected output value from the test case"""
-        expected_output = test_case.get(YAML_OUTPUT)
-        if expected_output:
-            # assume there's only one key-value pair
-            return next(iter(expected_output.values()))
-        return None
+        return test_case.get(YAML_OUTPUT)
 
     def validate_output(test_case, output_value):
         """
@@ -127,9 +122,9 @@ def execute_unit_tests(node_module, test_cases):
     for case in test_cases:
         # Prepare the test environment
         if IS_MULTI_PARAM:
-            input_query = case[YAML_INPUT][MULTI_RECV_PARAM_FUNC_ARG] if receive_params else None
+            input_query = case[YAML_INPUT]
         else:
-            input_query = case[YAML_INPUT][receive_params[0].strip("'")] if receive_params else None
+            input_query = case[YAML_INPUT]
         local_vars = {receive_target: input_query}
         # Execute the test case
         try:

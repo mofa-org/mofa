@@ -40,7 +40,7 @@ class OrderedGroup(click.Group):
             "init",
             "run-flow",
             "create-agent",
-            "debug-agent",
+            "unit-test",
             "vibe",
             "list",
             "search",
@@ -77,10 +77,10 @@ class OrderedGroup(click.Group):
                     "  mofa create-agent                           Create agent (TUI)"
                 )
                 formatter.write_text(
-                    "  mofa debug-agent <path> [test.yml]          Debug an agent"
+                    "  mofa unit-test <path> [test.yml]          Debug an agent"
                 )
                 formatter.write_text(
-                    "  mofa debug-agent <path> --interactive       Debug interactively"
+                    "  mofa unit-test <path> --interactive       Debug interactively"
                 )
 
                 formatter.write_text("\nAI Generation:")
@@ -375,7 +375,7 @@ def agent_list():
         click.echo(f"  - {name}")
 
 
-@mofa_cli_group.command(name="debug-agent")
+@mofa_cli_group.command(name="unit-test")
 @click.argument("node_folder_path", type=click.Path(exists=True))
 @click.argument("test_case_yml", type=click.Path(exists=True), required=False)
 @click.option("--interactive", is_flag=True, help="Enable interactive input mode")
@@ -397,11 +397,11 @@ def debug_agent(node_folder_path, test_case_yml, interactive):
         if not test_case_yml:
             raise click.BadParameter("Non-interactive mode requires YAML file path")
         test_cases = parse_test_cases(test_case_yml)  # Parse test cases from YAML
-    # print("==================================")
-    # print("Node module loaded:", node_module)
-    # print("==================================")
-    # print("Test cases loaded:", test_cases)
-    # print("==================================")
+    print("==================================")
+    print("Node module loaded:", node_module)
+    print("==================================")
+    print("Test cases loaded:", test_cases)
+    print("==================================")
 
     # 3. execute tests and generate report
     results = execute_unit_tests(node_module, test_cases)
@@ -646,7 +646,7 @@ def create_agent(name, version, output, authors, description):
         click.echo(f"\nNext steps:")
         click.echo(f"  1. cd {result_path}")
         click.echo(f"  2. Edit {agent_name}/main.py to implement your agent logic")
-        click.echo(f"  3. Test with: mofa debug-agent {result_path} tests/test_main.py")
+        click.echo(f"  3. Test with: mofa unit-test {result_path} tests/test_main.py")
     except Exception as e:
         click.echo(f"\nError: Failed to create agent: {e}", err=True)
         import traceback
@@ -664,8 +664,8 @@ def create_agent(name, version, output, authors, description):
     help="Enable interactive input (no YAML file required)",
 )
 def debug(node_folder_path, test_case_yml, interactive):
-    """[Deprecated] Use 'mofa debug-agent' instead"""
-    click.echo("Warning: 'debug' is deprecated, use 'mofa debug-agent' instead")
+    """[Deprecated] Use 'mofa unit-test' instead"""
+    click.echo("Warning: 'debug' is deprecated, use 'mofa unit-test' instead")
     from click import Context
 
     ctx = Context(debug_agent)
