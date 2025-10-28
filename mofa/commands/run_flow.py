@@ -368,9 +368,13 @@ def run_flow(dataflow_file: str):
         env_info = create_venv(sys.executable, working_dir)
         run_env = build_env(run_env, env_info)
 
-        # Install base requirements if this is a new venv
-        # (if reusing, base requirements are already installed)
-        if not os.path.exists(os.path.join(env_info["venv"], "lib")):
+        # Check if base requirements are already installed (for reused venv)
+        # Try importing dora_rs to check if base requirements are installed
+        check_cmd = [env_info["python"], "-c", "import dora_rs"]
+        check_result = subprocess.run(check_cmd, capture_output=True)
+
+        if check_result.returncode != 0:
+            # Base requirements not installed, install them
             install_base_requirements(env_info["pip"], working_dir)
 
         editable_packages = collect_editable_packages(dataflow_path, working_dir)
