@@ -199,52 +199,12 @@ def install_base_requirements_to_base_venv(base_venv_info: dict, working_dir: st
     pip_executable = base_venv_info["pip"]
 
     click.echo("Installing base requirements into base venv (first time setup)...")
-    subprocess.run([pip_executable, "install", "--upgrade", "pip"], capture_output=True)
-    uv_install = subprocess.run(
-        [pip_executable, "install", "uv"], capture_output=True, text=True
-    )
 
-    # Determine the uv and python executable paths in the venv
-    bin_dir = os.path.dirname(pip_executable)
-    uv_executable = os.path.join(bin_dir, "uv.exe" if os.name == "nt" else "uv")
-    python_executable = os.path.join(
-        bin_dir, "python.exe" if os.name == "nt" else "python"
-    )
-
-    # Check if uv was installed successfully
-    use_uv = uv_install.returncode == 0 and os.path.exists(uv_executable)
-
-    # Always ensure setuptools and wheel are installed (needed for dora build)
-    subprocess.run(
-        [pip_executable, "install", "--upgrade", "setuptools", "wheel"],
-        capture_output=True,
-    )
-
-    if use_uv:
-        click.echo("Using uv for fast package installation")
-        installer = [uv_executable, "pip", "install", "--python", python_executable]
-    else:
-        click.echo("Warning: Using pip (uv installation failed)")
-        installer = [pip_executable, "install"]
+    # First install pip tools to avoid conflicts
+    subprocess.run([pip_executable, "install", "--upgrade", "pip", "setuptools", "wheel"], capture_output=True)
 
     # Remove pathlib if it exists (conflicts with Python 3.11 built-in pathlib)
-    if use_uv:
-        subprocess.run(
-            [
-                uv_executable,
-                "pip",
-                "uninstall",
-                "--python",
-                python_executable,
-                "-y",
-                "pathlib",
-            ],
-            capture_output=True,
-        )
-    else:
-        subprocess.run(
-            [pip_executable, "uninstall", "-y", "pathlib"], capture_output=True
-        )
+    subprocess.run([pip_executable, "uninstall", "-y", "pathlib"], capture_output=True)
 
     # Also remove any broken pathlib files manually
     venv_site_packages = (
@@ -270,7 +230,7 @@ def install_base_requirements_to_base_venv(base_venv_info: dict, working_dir: st
         "pyyaml",
     ]
     for package in base_packages:
-        install_cmd = installer + [package]
+        install_cmd = [pip_executable, "install", package]
         proc = subprocess.run(install_cmd, capture_output=True, text=True)
         if proc.returncode != 0:
             raise RuntimeError(
@@ -278,12 +238,12 @@ def install_base_requirements_to_base_venv(base_venv_info: dict, working_dir: st
             )
 
     # Install current development version of mofa from the project root
+    # Find the mofa project root (where setup.py is located)
     current_dir = working_dir
     mofa_root = None
     while current_dir != "/":
         if os.path.exists(os.path.join(current_dir, "setup.py")):
             setup_content = open(os.path.join(current_dir, "setup.py")).read()
-            # Check for mofa-core
             if "mofa-core" in setup_content:
                 mofa_root = current_dir
                 break
@@ -291,61 +251,32 @@ def install_base_requirements_to_base_venv(base_venv_info: dict, working_dir: st
 
     if mofa_root:
         click.echo("Installing mofa development version...")
-        install_cmd = installer + ["--no-build-isolation", "-e", mofa_root]
+        # Use --no-build-isolation to avoid pathlib conflicts
+        install_cmd = [pip_executable, "install", "--no-build-isolation", "-e", mofa_root]
         proc = subprocess.run(install_cmd, capture_output=True, text=True)
         if proc.returncode != 0:
-            if "Permission denied" in proc.stderr:
-                click.echo(
-                    "Warning: Permission error installing dev version, using PyPI version..."
-                )
-                install_cmd = installer + ["mofa-core"]
-                proc = subprocess.run(install_cmd, capture_output=True, text=True)
-                if proc.returncode != 0:
-                    raise RuntimeError(f"Failed to install mofa-core: {proc.stderr}")
-            else:
-                raise RuntimeError(f"Failed to install development mofa: {proc.stderr}")
+            raise RuntimeError(f"Failed to install development mofa: {proc.stderr}")
     else:
         # Fallback to PyPI version if we can't find the development version
-        install_cmd = installer + ["mofa-core"]
+        install_cmd = [pip_executable, "install", "mofa-core"]
         proc = subprocess.run(install_cmd, capture_output=True, text=True)
         if proc.returncode != 0:
             raise RuntimeError(f"Failed to install mofa-core: {proc.stderr}")
 
     # Final cleanup: remove pathlib again in case any dependency reinstalled it
-    if use_uv:
-        subprocess.run(
-            [
-                uv_executable,
-                "pip",
-                "uninstall",
-                "--python",
-                python_executable,
-                "-y",
-                "pathlib",
-            ],
-            capture_output=True,
-        )
-    else:
-        subprocess.run(
-            [pip_executable, "uninstall", "-y", "pathlib"], capture_output=True
-        )
+    subprocess.run([pip_executable, "uninstall", "-y", "pathlib"], capture_output=True)
     for pathlib_file in pathlib_files:
         if os.path.exists(pathlib_file):
             os.remove(pathlib_file)
 
-    return installer if use_uv else None
 
-
-def install_packages(pip_executable: str, package_paths: List[str], installer=None):
-    """Install editable packages using uv (if available) or pip."""
-    if installer is None:
-        installer = [pip_executable, "install"]
-
+def install_packages(pip_executable: str, package_paths: List[str]):
+    """Install editable packages using pip."""
     for package_path in package_paths:
         if not os.path.exists(package_path):
             click.echo(f"Warning: package path not found: {package_path}")
             continue
-        install_cmd = installer + ["--no-build-isolation", "--editable", package_path]
+        install_cmd = [pip_executable, "install", "--no-build-isolation", "--editable", package_path]
         proc = subprocess.run(install_cmd, text=True)
         if proc.returncode != 0:
             raise RuntimeError(f"Failed to install package from {package_path}")
@@ -367,8 +298,7 @@ def build_env(base_env: dict, venv_info: dict):
             else site_packages + os.pathsep + existing_pythonpath
         )
         env["PYTHONPATH"] = combined
-    # Don't set PIP_NO_BUILD_ISOLATION to allow pip to use build isolation
-    # This ensures build dependencies (setuptools, wheel) are available during dora build
+    env["PIP_NO_BUILD_ISOLATION"] = "1"
     return env
 
 
@@ -422,26 +352,15 @@ def run_flow(dataflow_file: str):
     env_info = None
     run_env = os.environ.copy()
     editable_packages = []
-    installer = None
 
     try:
         env_info = create_venv(sys.executable, working_dir)
         run_env = build_env(run_env, env_info)
 
-        # Get uv/pip installer for agent packages
-        bin_dir = env_info["bin"]
-        uv_executable = os.path.join(bin_dir, "uv.exe" if os.name == "nt" else "uv")
-        python_executable = env_info["python"]
-
-        if os.path.exists(uv_executable):
-            installer = [uv_executable, "pip", "install", "--python", python_executable]
-        else:
-            installer = [env_info["pip"], "install"]
-
         editable_packages = collect_editable_packages(dataflow_path, working_dir)
         if editable_packages:
             click.echo("Installing agent packages...")
-            install_packages(env_info["pip"], editable_packages, installer=installer)
+            install_packages(env_info["pip"], editable_packages)
     except RuntimeError as runtime_error:
         click.echo(f"Failed to prepare run environment: {runtime_error}")
         if env_info:
@@ -455,74 +374,62 @@ def run_flow(dataflow_file: str):
     dataflow_name = None
 
     try:
-        click.echo("Starting dora daemon...")
         dora_up_process = subprocess.Popen(
             ["dora", "up"],
             stdin=subprocess.PIPE,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
             text=True,
             cwd=working_dir,
             env=run_env,
         )
-        time.sleep(2)
+        time.sleep(1)
 
-        # Check if dora up started successfully
-        if dora_up_process.poll() is not None:
-            click.echo("Error: Failed to start dora daemon!")
-            return
-
-        click.echo("Building dataflow...")
         dora_build_node = subprocess.Popen(
             ["dora", "build", dataflow_path],
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            text=True,
-            cwd=working_dir,
-            env=run_env,
-        )
-
-        # Wait for build to complete with timeout
-        try:
-            stdout, _ = dora_build_node.communicate(timeout=30)
-        except subprocess.TimeoutExpired:
-            click.echo("Error: Dataflow build timed out!")
-            dora_build_node.kill()
-            return
-
-        if dora_build_node.returncode != 0:
-            if stdout and stdout.strip():
-                click.echo("Build output:")
-                click.echo(stdout.strip())
-            click.echo("Failed to build dataflow. Aborting run.")
-            return
-
-        click.echo("Build completed successfully.")
-
-        dataflow_name = str(uuid.uuid4()).replace("-", "")
-        click.echo(f"Starting dataflow with name: {dataflow_name}")
-        dora_dataflow_process = subprocess.Popen(
-            ["dora", "start", dataflow_path, "--name", dataflow_name],
-            stdin=subprocess.PIPE,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
+            stderr=subprocess.PIPE,
             text=True,
             cwd=working_dir,
             env=run_env,
         )
 
         time.sleep(3)
+        stdout, stderr = dora_build_node.communicate()
+        if dora_build_node.returncode != 0:
+            build_error = stderr.strip() if stderr else stdout.strip()
+            if build_error:
+                click.echo(build_error)
+            click.echo("Failed to build dataflow. Aborting run.")
+            return
+
+        dataflow_name = str(uuid.uuid4()).replace("-", "")
+        click.echo(f"Starting dataflow with name: {dataflow_name}")
+        dora_dataflow_process = subprocess.Popen(
+            ["dora", "start", dataflow_path, "--name", dataflow_name],
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            cwd=working_dir,
+            env=run_env,
+        )
+
+        time.sleep(2)
 
         # Check if dataflow started successfully
         if dora_dataflow_process.poll() is not None:
-            click.echo("Error: Dataflow process terminated early!")
+            stdout, stderr = dora_dataflow_process.communicate()
+            click.echo(f"Dataflow process terminated early!")
+            if stderr:
+                click.echo(f"Stderr: {stderr}")
+            if stdout:
+                click.echo(f"Stdout: {stdout}")
             return
 
         click.echo("Starting terminal-input process...")
-        click.echo(
-            "You can now interact directly with the agents. Type 'exit' to quit."
-        )
+        click.echo("You can now interact directly with the agents. Type 'exit' to quit.")
 
         # Start terminal-input with direct stdin/stdout connection
         task_input_process = subprocess.Popen(
