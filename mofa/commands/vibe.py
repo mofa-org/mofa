@@ -4,7 +4,102 @@ MoFA vibe command - Generate agents and flows using AI
 import os
 import sys
 import click
-from mofa import agents_dir_path, flows_dir_path
+from mofa import agents_dir_path, flows_dir_path, project_root
+
+
+def _get_env_file_path():
+    """Get the path to the .env file"""
+    return os.path.join(project_root, ".env")
+
+
+def _load_vibe_config():
+    """Load vibe configuration from .env file"""
+    env_file = _get_env_file_path()
+    config = {
+        "model": "gpt-4o-mini",
+        "max_rounds": 100,
+        "agents_output": agents_dir_path,
+        "flows_output": flows_dir_path,
+    }
+
+    if os.path.exists(env_file):
+        try:
+            from dotenv import dotenv_values
+            env_values = dotenv_values(env_file)
+
+            if "MOFA_VIBE_MODEL" in env_values:
+                config["model"] = env_values["MOFA_VIBE_MODEL"]
+            if "MOFA_VIBE_MAX_ROUNDS" in env_values:
+                try:
+                    config["max_rounds"] = int(env_values["MOFA_VIBE_MAX_ROUNDS"])
+                except ValueError:
+                    pass
+            if "MOFA_VIBE_AGENTS_OUTPUT" in env_values:
+                config["agents_output"] = env_values["MOFA_VIBE_AGENTS_OUTPUT"]
+            if "MOFA_VIBE_FLOWS_OUTPUT" in env_values:
+                config["flows_output"] = env_values["MOFA_VIBE_FLOWS_OUTPUT"]
+        except Exception:
+            pass
+
+    return config
+
+
+def _save_vibe_config(model=None, max_rounds=None, agents_output=None, flows_output=None):
+    """Save vibe configuration to .env file"""
+    env_file = _get_env_file_path()
+
+    # Read existing .env content
+    lines = []
+    if os.path.exists(env_file):
+        with open(env_file, 'r') as f:
+            lines = f.readlines()
+
+    # Track which configs were updated
+    updated = {
+        "MOFA_VIBE_MODEL": False,
+        "MOFA_VIBE_MAX_ROUNDS": False,
+        "MOFA_VIBE_AGENTS_OUTPUT": False,
+        "MOFA_VIBE_FLOWS_OUTPUT": False,
+    }
+
+    # Update existing lines
+    for i, line in enumerate(lines):
+        stripped = line.strip()
+        if model and stripped.startswith("MOFA_VIBE_MODEL="):
+            lines[i] = f"MOFA_VIBE_MODEL={model}\n"
+            updated["MOFA_VIBE_MODEL"] = True
+        elif max_rounds is not None and stripped.startswith("MOFA_VIBE_MAX_ROUNDS="):
+            lines[i] = f"MOFA_VIBE_MAX_ROUNDS={max_rounds}\n"
+            updated["MOFA_VIBE_MAX_ROUNDS"] = True
+        elif agents_output and stripped.startswith("MOFA_VIBE_AGENTS_OUTPUT="):
+            lines[i] = f"MOFA_VIBE_AGENTS_OUTPUT={agents_output}\n"
+            updated["MOFA_VIBE_AGENTS_OUTPUT"] = True
+        elif flows_output and stripped.startswith("MOFA_VIBE_FLOWS_OUTPUT="):
+            lines[i] = f"MOFA_VIBE_FLOWS_OUTPUT={flows_output}\n"
+            updated["MOFA_VIBE_FLOWS_OUTPUT"] = True
+
+    # Add new configs that weren't found
+    new_configs = []
+    if model and not updated["MOFA_VIBE_MODEL"]:
+        new_configs.append(f"MOFA_VIBE_MODEL={model}\n")
+    if max_rounds is not None and not updated["MOFA_VIBE_MAX_ROUNDS"]:
+        new_configs.append(f"MOFA_VIBE_MAX_ROUNDS={max_rounds}\n")
+    if agents_output and not updated["MOFA_VIBE_AGENTS_OUTPUT"]:
+        new_configs.append(f"MOFA_VIBE_AGENTS_OUTPUT={agents_output}\n")
+    if flows_output and not updated["MOFA_VIBE_FLOWS_OUTPUT"]:
+        new_configs.append(f"MOFA_VIBE_FLOWS_OUTPUT={flows_output}\n")
+
+    if new_configs:
+        # Add a section header if adding new configs
+        if lines and not lines[-1].endswith('\n'):
+            lines.append('\n')
+        if not any('# MoFA Vibe Configuration' in line for line in lines):
+            lines.append('\n# MoFA Vibe Configuration\n')
+        lines.extend(new_configs)
+
+    # Write back to file
+    with open(env_file, 'w') as f:
+        f.writelines(lines)
 
 
 def _check_and_setup_api_key():
@@ -85,7 +180,7 @@ def register_vibe_commands(cli_group):
             return
 
         # Load .env file if it exists
-        env_file = os.path.join(os.getcwd(), ".env")
+        env_file = os.path.join(project_root, ".env")
         if os.path.exists(env_file):
             load_dotenv(env_file)
 
@@ -93,14 +188,17 @@ def register_vibe_commands(cli_group):
             # Generate agent
             click.echo("\nGenerating agent...")
 
-            # Get saved config
-            saved_model = os.getenv("MOFA_VIBE_MODEL", "gpt-4o-mini")
+            # Load saved config
+            saved_config = _load_vibe_config()
 
-            llm = click.prompt("LLM model", default=saved_model)
+            llm = click.prompt("LLM model", default=saved_config["model"])
             max_rounds = click.prompt(
-                "Maximum optimization rounds (0 for unlimited)", default=100, type=int
+                "Maximum optimization rounds (0 for unlimited)", default=saved_config["max_rounds"], type=int
             )
-            output = click.prompt("Output directory", default=agents_dir_path)
+            output = click.prompt("Output directory", default=saved_config["agents_output"])
+
+            # Save the config for next time
+            _save_vibe_config(model=llm, max_rounds=max_rounds, agents_output=output)
 
             config = VibeConfig(
                 llm_model=llm,
@@ -131,11 +229,14 @@ def register_vibe_commands(cli_group):
             # Generate flow
             click.echo("\nGenerating flow...")
 
-            # Get saved config
-            saved_model = os.getenv("MOFA_VIBE_MODEL", "gpt-4o-mini")
+            # Load saved config
+            saved_config = _load_vibe_config()
 
-            llm = click.prompt("LLM model", default=saved_model)
-            output = click.prompt("Output directory", default=flows_dir_path)
+            llm = click.prompt("LLM model", default=saved_config["model"])
+            output = click.prompt("Output directory", default=saved_config["flows_output"])
+
+            # Save the config for next time
+            _save_vibe_config(model=llm, flows_output=output)
 
             # Get flow requirement
             requirement = click.prompt("\nDescribe the flow (what it should do)")
@@ -171,8 +272,9 @@ def register_vibe_commands(cli_group):
     @click.option("--llm", default=None, help="LLM model to use (default: from config)")
     @click.option(
         "--max-rounds",
-        default=100,
-        help="Maximum optimization rounds (default: 100, use 0 for unlimited)",
+        default=None,
+        type=int,
+        help="Maximum optimization rounds (default: from config, use 0 for unlimited)",
     )
     @click.option(
         "--output", "-o", default=None, help="Output directory (default: from config)"
@@ -199,7 +301,7 @@ def register_vibe_commands(cli_group):
             return
 
         # Load .env file if it exists
-        env_file = os.path.join(os.getcwd(), ".env")
+        env_file = os.path.join(project_root, ".env")
         if os.path.exists(env_file):
             load_dotenv(env_file)
 
@@ -209,11 +311,19 @@ def register_vibe_commands(cli_group):
             click.echo("Cannot proceed without API key. Exiting...")
             sys.exit(1)
 
+        # Load saved config for defaults
+        saved_config = _load_vibe_config()
+
         # Use config defaults if not provided
         if llm is None:
-            llm = os.getenv("MOFA_VIBE_MODEL", "gpt-4o-mini")
+            llm = saved_config["model"]
+        if max_rounds is None:
+            max_rounds = saved_config["max_rounds"]
         if output is None:
-            output = agents_dir_path
+            output = saved_config["agents_output"]
+
+        # Save the config for next time
+        _save_vibe_config(model=llm, max_rounds=max_rounds, agents_output=output)
 
         # Create config
         config = VibeConfig(

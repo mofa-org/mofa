@@ -214,16 +214,18 @@ def install_base_requirements_to_base_venv(base_venv_info: dict, working_dir: st
     # Check if uv was installed successfully
     use_uv = uv_install.returncode == 0 and os.path.exists(uv_executable)
 
+    # Always ensure setuptools and wheel are installed (needed for dora build)
+    subprocess.run(
+        [pip_executable, "install", "--upgrade", "setuptools", "wheel"],
+        capture_output=True,
+    )
+
     if use_uv:
         click.echo("Using uv for fast package installation")
         installer = [uv_executable, "pip", "install", "--python", python_executable]
     else:
         click.echo("Warning: Using pip (uv installation failed)")
         installer = [pip_executable, "install"]
-        subprocess.run(
-            [pip_executable, "install", "--upgrade", "setuptools", "wheel"],
-            capture_output=True,
-        )
 
     # Remove pathlib if it exists (conflicts with Python 3.11 built-in pathlib)
     if use_uv:
@@ -365,7 +367,8 @@ def build_env(base_env: dict, venv_info: dict):
             else site_packages + os.pathsep + existing_pythonpath
         )
         env["PYTHONPATH"] = combined
-    env["PIP_NO_BUILD_ISOLATION"] = "1"
+    # Don't set PIP_NO_BUILD_ISOLATION to allow pip to use build isolation
+    # This ensures build dependencies (setuptools, wheel) are available during dora build
     return env
 
 
