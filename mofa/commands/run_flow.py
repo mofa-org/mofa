@@ -77,8 +77,13 @@ def create_or_reuse_base_venv(base_python: str) -> tuple[dict, bool]:
     if base_venv_path.exists():
         bin_dir = base_venv_path / ("Scripts" if os.name == "nt" else "bin")
         python_bin = bin_dir / ("python.exe" if os.name == "nt" else "python")
+        uv_bin = bin_dir / ("uv.exe" if os.name == "nt" else "uv")
 
-        if python_bin.exists():
+        # If old venv with uv exists, delete it and recreate
+        if uv_bin.exists():
+            click.echo(f"Detected old base venv with uv, recreating without uv...")
+            shutil.rmtree(base_venv_path)
+        elif python_bin.exists():
             click.echo(f"Reusing cached base venv at {base_venv_path}")
             return {
                 "venv": str(base_venv_path),
