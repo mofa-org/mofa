@@ -25,114 +25,114 @@ from mofa.utils.process.util import (
     destroy_dora_daemon,
 )
 
-# Global variable to track temp directories for cleanup
-_temp_dirs_to_cleanup = []
+# Global variable to track venv for cleanup
+_venv_root_path = None
+
+
+def _cleanup_venv():
+    """Ask user if they want to keep the venv and clean up if needed."""
+    global _venv_root_path
+
+    if _venv_root_path and os.path.exists(_venv_root_path):
+        try:
+            keep_venv = click.confirm("\nDo you want to keep the virtual environment for next run?", default=True)
+            if not keep_venv:
+                click.echo(f"Removing venv at {_venv_root_path}...")
+                shutil.rmtree(_venv_root_path, ignore_errors=True)
+            else:
+                click.echo(f"Venv preserved at {_venv_root_path}")
+        except:
+            # If we can't ask (non-interactive), keep it by default
+            click.echo(f"Venv preserved at {_venv_root_path}")
 
 
 def _register_cleanup_handler():
     """Register signal handlers for cleanup on exit."""
     def cleanup_handler(signum=None, frame=None):
-        """Clean up temporary directories on exit."""
-        for temp_dir in _temp_dirs_to_cleanup:
-            if os.path.exists(temp_dir):
-                try:
-                    shutil.rmtree(temp_dir, ignore_errors=True)
-                except Exception:
-                    pass
-        if signum is not None:
+        """Clean up venv on interrupt."""
+        if signum in (signal.SIGINT, signal.SIGTERM):
+            click.echo("\n\nInterrupted by user.")
+            _cleanup_venv()
             sys.exit(0)
-
-    # Register cleanup on normal exit
-    atexit.register(cleanup_handler)
 
     # Register cleanup on Ctrl+C
     signal.signal(signal.SIGINT, cleanup_handler)
     signal.signal(signal.SIGTERM, cleanup_handler)
 
 
-def get_base_venv_path():
-    """Get the path to the shared base venv."""
-    # Use user's cache directory for the base venv
-    if sys.platform == "darwin":
-        cache_dir = Path.home() / "Library" / "Caches" / "mofa"
-    elif sys.platform == "win32":
-        cache_dir = Path(os.environ.get("LOCALAPPDATA", Path.home())) / "mofa" / "cache"
-    else:  # Linux
-        cache_dir = Path.home() / ".cache" / "mofa"
-
-    cache_dir.mkdir(parents=True, exist_ok=True)
-    return cache_dir / "base_venv"
-
-
-def create_or_reuse_base_venv(base_python: str) -> tuple[dict, bool]:
-    """Create or reuse a shared base venv with common dependencies.
-
-    Returns:
-        tuple: (venv_info dict, is_first_time bool)
-    """
-    base_venv_path = get_base_venv_path()
-    is_first_time = False
-
-    # Check if base venv exists and is valid
-    if base_venv_path.exists():
-        bin_dir = base_venv_path / ("Scripts" if os.name == "nt" else "bin")
-        python_bin = bin_dir / ("python.exe" if os.name == "nt" else "python")
-        uv_bin = bin_dir / ("uv.exe" if os.name == "nt" else "uv")
-
-        # If old venv with uv exists, delete it and recreate
-        if uv_bin.exists():
-            click.echo(f"Detected old base venv with uv, recreating without uv...")
-            shutil.rmtree(base_venv_path)
-        elif python_bin.exists():
-            click.echo(f"Reusing cached base venv at {base_venv_path}")
-            return {
-                "venv": str(base_venv_path),
-                "bin": str(bin_dir),
-                "python": str(python_bin),
-                "pip": str(bin_dir / ("pip.exe" if os.name == "nt" else "pip")),
-            }, False
-
-    # Create new base venv
-    click.echo(f"Creating base venv at {base_venv_path} (first time only)...")
-    if base_venv_path.exists():
-        shutil.rmtree(base_venv_path)
-
-    create_cmd = [base_python, "-m", "venv", str(base_venv_path)]
-    create_proc = subprocess.run(create_cmd, capture_output=True, text=True)
-    if create_proc.returncode != 0:
-        raise RuntimeError(f"Failed to create base venv: {create_proc.stderr}")
-
-    bin_dir = base_venv_path / ("Scripts" if os.name == "nt" else "bin")
-    return {
-        "venv": str(base_venv_path),
-        "bin": str(bin_dir),
-        "python": str(bin_dir / ("python.exe" if os.name == "nt" else "python")),
-        "pip": str(bin_dir / ("pip.exe" if os.name == "nt" else "pip")),
-    }, True
+def find_existing_venv(working_dir: str):
+    """Find existing mofa_run_* directories in working_dir."""
+    existing_venvs = []
+    for item in os.listdir(working_dir):
+        if item.startswith("mofa_run_") and os.path.isdir(os.path.join(working_dir, item)):
+            venv_path = os.path.join(working_dir, item, "venv")
+            if os.path.exists(venv_path):
+                existing_venvs.append(os.path.join(working_dir, item))
+    return existing_venvs
 
 
 def create_venv(base_python: str, working_dir: str):
-    """Create a virtual environment for running the dataflow by copying base venv."""
-    # First ensure we have a base venv
-    base_venv_info, is_first_time = create_or_reuse_base_venv(base_python)
+    """Create a virtual environment for running the dataflow."""
+    global _venv_root_path
 
-    # If this is the first time, install base requirements
-    if is_first_time:
-        install_base_requirements_to_base_venv(base_venv_info, working_dir)
+    # Check for existing venvs
+    existing_venvs = find_existing_venv(working_dir)
+    if existing_venvs:
+        # Found existing venv(s), ask user if they want to reuse
+        click.echo(f"Found existing virtual environment: {existing_venvs[0]}")
+        try:
+            reuse = click.confirm("Do you want to reuse it?", default=True)
+            if reuse:
+                temp_root = existing_venvs[0]
+                venv_dir = os.path.join(temp_root, "venv")
+                bin_dir = os.path.join(venv_dir, "Scripts" if os.name == "nt" else "bin")
+                python_bin = os.path.join(bin_dir, "python.exe" if os.name == "nt" else "python")
+                pip_bin = os.path.join(bin_dir, "pip.exe" if os.name == "nt" else "pip")
 
-    # Create temp directory for this run
+                try:
+                    site_packages = subprocess.check_output(
+                        [
+                            python_bin,
+                            "-c",
+                            'import site,sys; paths = getattr(site, "getsitepackages", lambda: [])(); '
+                            "print((paths[-1] if paths else site.getusersitepackages()).strip())",
+                        ],
+                        text=True,
+                    ).strip()
+                except subprocess.CalledProcessError as exc:
+                    click.echo("Warning: Existing venv seems corrupted, creating new one...")
+                    shutil.rmtree(temp_root, ignore_errors=True)
+                else:
+                    _venv_root_path = temp_root
+                    click.echo(f"Reusing venv at {temp_root}")
+                    return {
+                        "root": temp_root,
+                        "venv": venv_dir,
+                        "bin": bin_dir,
+                        "python": python_bin,
+                        "pip": pip_bin,
+                        "site_packages": site_packages,
+                    }
+            else:
+                # User chose not to reuse, delete old ones
+                for old_venv in existing_venvs:
+                    click.echo(f"Removing old venv at {old_venv}...")
+                    shutil.rmtree(old_venv, ignore_errors=True)
+        except:
+            pass
+
+    # Create new venv
     temp_root = tempfile.mkdtemp(prefix="mofa_run_", dir=working_dir)
-    _temp_dirs_to_cleanup.append(temp_root)
-
+    _venv_root_path = temp_root
     venv_dir = os.path.join(temp_root, "venv")
 
-    # Copy base venv to temp location (much faster than creating from scratch)
-    click.echo("Copying base venv...")
-    try:
-        shutil.copytree(base_venv_info["venv"], venv_dir, symlinks=True)
-    except Exception as e:
+    create_cmd = [base_python, "-m", "venv", venv_dir]
+    create_proc = subprocess.run(create_cmd, capture_output=True, text=True)
+    if create_proc.returncode != 0:
         shutil.rmtree(temp_root, ignore_errors=True)
-        raise RuntimeError(f"Failed to copy base venv: {e}")
+        raise RuntimeError(
+            create_proc.stderr.strip() or create_proc.stdout.strip() or "Failed to create virtual environment"
+        )
 
     bin_dir = os.path.join(venv_dir, "Scripts" if os.name == "nt" else "bin")
     python_bin = os.path.join(bin_dir, "python.exe" if os.name == "nt" else "python")
@@ -199,34 +199,34 @@ def collect_editable_packages(dataflow_path: str, working_dir: str):
     return list(dict.fromkeys(editable_paths))
 
 
-def install_base_requirements_to_base_venv(base_venv_info: dict, working_dir: str):
-    """Install base requirements into the shared base venv (first time only)."""
-    pip_executable = base_venv_info["pip"]
-
-    click.echo("Installing base requirements into base venv (first time setup)...")
+def install_base_requirements(pip_executable: str, working_dir: str):
+    """Install base requirements into the venv."""
+    click.echo("Installing base requirements...")
 
     # First install pip tools to avoid conflicts
     subprocess.run([pip_executable, "install", "--upgrade", "pip", "setuptools", "wheel"], capture_output=True)
 
-    # Remove pathlib if it exists (conflicts with Python 3.11 built-in pathlib)
+    # Remove pathlib if it exists (conflicts with Python 3.11+ built-in pathlib)
     subprocess.run([pip_executable, "uninstall", "-y", "pathlib"], capture_output=True)
 
     # Also remove any broken pathlib files manually
     venv_site_packages = (
         os.path.dirname(os.path.dirname(pip_executable))
-        + "/lib/python3.11/site-packages"
+        + "/lib/python3.*/site-packages"
     )
-    pathlib_files = [
-        os.path.join(venv_site_packages, "pathlib.py"),
-        os.path.join(venv_site_packages, "pathlib.pyc"),
-        os.path.join(venv_site_packages, "__pycache__", "pathlib.cpython-311.pyc"),
-    ]
-    for pathlib_file in pathlib_files:
-        if os.path.exists(pathlib_file):
-            os.remove(pathlib_file)
+    import glob
+    for site_pkg_dir in glob.glob(venv_site_packages):
+        pathlib_files = [
+            os.path.join(site_pkg_dir, "pathlib.py"),
+            os.path.join(site_pkg_dir, "pathlib.pyc"),
+            os.path.join(site_pkg_dir, "__pycache__", "pathlib.cpython-*.pyc"),
+        ]
+        for pathlib_pattern in pathlib_files:
+            for pathlib_file in glob.glob(pathlib_pattern):
+                if os.path.exists(pathlib_file):
+                    os.remove(pathlib_file)
 
     # Install essential packages needed for dora-rs and basic functionality
-    click.echo("Installing base packages...")
     base_packages = [
         "numpy==1.26.4",
         "pyarrow==17.0.0",
@@ -255,7 +255,6 @@ def install_base_requirements_to_base_venv(base_venv_info: dict, working_dir: st
         current_dir = os.path.dirname(current_dir)
 
     if mofa_root:
-        click.echo("Installing mofa development version...")
         # Use --no-build-isolation to avoid pathlib conflicts
         install_cmd = [pip_executable, "install", "--no-build-isolation", "-e", mofa_root]
         proc = subprocess.run(install_cmd, capture_output=True, text=True)
@@ -270,9 +269,16 @@ def install_base_requirements_to_base_venv(base_venv_info: dict, working_dir: st
 
     # Final cleanup: remove pathlib again in case any dependency reinstalled it
     subprocess.run([pip_executable, "uninstall", "-y", "pathlib"], capture_output=True)
-    for pathlib_file in pathlib_files:
-        if os.path.exists(pathlib_file):
-            os.remove(pathlib_file)
+    for site_pkg_dir in glob.glob(venv_site_packages):
+        pathlib_files = [
+            os.path.join(site_pkg_dir, "pathlib.py"),
+            os.path.join(site_pkg_dir, "pathlib.pyc"),
+            os.path.join(site_pkg_dir, "__pycache__", "pathlib.cpython-*.pyc"),
+        ]
+        for pathlib_pattern in pathlib_files:
+            for pathlib_file in glob.glob(pathlib_pattern):
+                if os.path.exists(pathlib_file):
+                    os.remove(pathlib_file)
 
 
 def install_packages(pip_executable: str, package_paths: List[str]):
@@ -362,14 +368,18 @@ def run_flow(dataflow_file: str):
         env_info = create_venv(sys.executable, working_dir)
         run_env = build_env(run_env, env_info)
 
+        # Install base requirements if this is a new venv
+        # (if reusing, base requirements are already installed)
+        if not os.path.exists(os.path.join(env_info["venv"], "lib")):
+            install_base_requirements(env_info["pip"], working_dir)
+
         editable_packages = collect_editable_packages(dataflow_path, working_dir)
         if editable_packages:
             click.echo("Installing agent packages...")
             install_packages(env_info["pip"], editable_packages)
     except RuntimeError as runtime_error:
         click.echo(f"Failed to prepare run environment: {runtime_error}")
-        if env_info:
-            shutil.rmtree(env_info["root"], ignore_errors=True)
+        _cleanup_venv()
         return
 
     dora_up_process = None
@@ -459,6 +469,7 @@ def run_flow(dataflow_file: str):
         if dataflow_name:
             stop_dora_dataflow(dataflow_name=dataflow_name)
         destroy_dora_daemon()
-        if env_info:
-            shutil.rmtree(env_info["root"], ignore_errors=True)
         click.echo("Main process terminated.")
+
+        # Ask user if they want to keep the venv
+        _cleanup_venv()
