@@ -130,9 +130,21 @@ def create_venv(base_python: str, working_dir: str):
     create_proc = subprocess.run(create_cmd, capture_output=True, text=True)
     if create_proc.returncode != 0:
         shutil.rmtree(temp_root, ignore_errors=True)
-        raise RuntimeError(
-            create_proc.stderr.strip() or create_proc.stdout.strip() or "Failed to create virtual environment"
-        )
+        error_msg = create_proc.stderr.strip() or create_proc.stdout.strip() or "Failed to create virtual environment"
+
+        # Check if it's the ensurepip issue on Ubuntu/Debian
+        if "ensurepip is not available" in error_msg or "python3-venv" in error_msg:
+            python_version = sys.version_info
+            raise RuntimeError(
+                f"Python venv module is not available.\n\n"
+                f"On Ubuntu/Debian systems, please install:\n"
+                f"  sudo apt install python3.{python_version.minor}-venv\n"
+                f"or\n"
+                f"  sudo apt install python3-venv\n\n"
+                f"Then run the command again."
+            )
+        else:
+            raise RuntimeError(error_msg)
 
     bin_dir = os.path.join(venv_dir, "Scripts" if os.name == "nt" else "bin")
     python_bin = os.path.join(bin_dir, "python.exe" if os.name == "nt" else "python")
