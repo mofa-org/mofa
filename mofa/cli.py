@@ -375,6 +375,19 @@ def agent_list():
         click.echo(f"  - {name}")
 
 
+@mofa_cli_group.command(name="run-node")
+@click.argument("node_folder_path", type=click.Path(exists=True))
+def run_agent(node_folder_path):
+    """With mofa run-node, user just need to provide values for input parameters, 
+    no need to provide output parameters as in the "mofa unit-test" required."""
+    # 1. dynamically load the node module
+    node_module = load_node_module(node_folder_path)
+    # 2. interactively collect user input
+    test_cases = collect_interactive_input(unit_test=False)
+    # 3. execute tests and print outputs
+    execute_unit_tests(node_module, test_cases, unit_test=False)
+
+
 @mofa_cli_group.command(name="unit-test")
 @click.argument("node_folder_path", type=click.Path(exists=True))
 @click.argument("test_case_yml", type=click.Path(exists=True), required=False)
