@@ -410,11 +410,11 @@ def debug_agent(node_folder_path, test_case_yml, interactive):
         if not test_case_yml:
             raise click.BadParameter("Non-interactive mode requires YAML file path")
         test_cases = parse_test_cases(test_case_yml)  # Parse test cases from YAML
-    print("==================================")
-    print("Node module loaded:", node_module)
-    print("==================================")
-    print("Test cases loaded:", test_cases)
-    print("==================================")
+    # print("==================================")
+    # print("Node module loaded:", node_module)
+    # print("==================================")
+    # print("Test cases loaded:", test_cases)
+    # print("==================================")
 
     # 3. execute tests and generate report
     results = execute_unit_tests(node_module, test_cases)
