@@ -13,7 +13,7 @@ def clean_code(code: str) -> str:
             processed_lines.append(line)
     return '\n'.join(processed_lines)
 
-def execute_unit_tests(node_module, test_cases):
+def execute_unit_tests(node_module, test_cases, unit_test=True):
     """
     Execute unit tests for the given node module and test cases.
     
@@ -33,12 +33,7 @@ def execute_unit_tests(node_module, test_cases):
     YAML_INPUT= "input"
 
     def get_adaptive_result(test_case):
-        """Get the expected output value from the test case"""
-        expected_output = test_case.get(YAML_OUTPUT)
-        if expected_output:
-            # assume there's only one key-value pair
-            return next(iter(expected_output.values()))
-        return None
+        return test_case.get(YAML_OUTPUT)
 
     def validate_output(test_case, output_value):
         """
@@ -123,24 +118,41 @@ def execute_unit_tests(node_module, test_cases):
       key, value = param.split('=', 1) 
       send_params_dict[key.strip()] = value.strip()
 
-    results = []
-    for case in test_cases:
-        # Prepare the test environment
-        if IS_MULTI_PARAM:
-            input_query = case[YAML_INPUT][MULTI_RECV_PARAM_FUNC_ARG] if receive_params else None
-        else:
-            input_query = case[YAML_INPUT][receive_params[0].strip("'")] if receive_params else None
-        local_vars = {receive_target: input_query}
-        # Execute the test case
-        try:
-            exec_code = normalize_relative_imports(format_code)
-            exec(exec_code, temp_globals, local_vars)
-            output_value = local_vars.get(send_params_dict.get(SEND_OUTPUT_FUNC_ARG, '').strip("'"))
+    if unit_test:
+        results = []
+        for case in test_cases:
+            # Prepare the test environment
+            if IS_MULTI_PARAM:
+                input_query = case[YAML_INPUT]
+            else:
+                input_query = case[YAML_INPUT]
+            local_vars = {receive_target: input_query}
+            # Execute the test case
+            try:
+                exec_code = normalize_relative_imports(format_code)
+                exec(exec_code, temp_globals, local_vars)
+                output_value = local_vars.get(send_params_dict.get(SEND_OUTPUT_FUNC_ARG, '').strip("'"))
 
-            # Use new validation logic
-            passed, message = validate_output(case, output_value)
-            results.append((case[YAML_NAME], passed, message))
+                # Use new validation logic
+                passed, message = validate_output(case, output_value)
+                results.append((case[YAML_NAME], passed, message))
 
-        except Exception as e:
-            results.append((case[YAML_NAME], False, str(e)))
-    return results
+            except Exception as e:
+                results.append((case[YAML_NAME], False, str(e)))
+        return results
+    else:
+        for case in test_cases:
+            # Prepare the test environment
+            if IS_MULTI_PARAM:
+                input_query = case[YAML_INPUT]
+            else:
+                input_query = case[YAML_INPUT]
+            local_vars = {receive_target: input_query}
+            # Execute the test case
+            try:
+                exec_code = normalize_relative_imports(format_code)
+                exec(exec_code, temp_globals, local_vars)
+                output_value = local_vars.get(send_params_dict.get(SEND_OUTPUT_FUNC_ARG, '').strip("'"))
+                print(f"节点运行结果, Output: {output_value}")
+            except Exception as e:
+                print(f"节点运行错误, Error: {str(e)}")

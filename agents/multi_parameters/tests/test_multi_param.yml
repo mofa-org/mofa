@@ -1,7 +1,7 @@
 test_cases:
   - name: test_parms_1
-    input: {"parameter_names": ["a", "b", "c"]}
-    expected_output: {"receive_data": ["a", "b", "c"]}
+    input: ["a", "b", "c"]  # 直接使用列表值，去掉parameter_names键
+    expected_output: ["a", "b", "c"]  # 直接使用列表值，去掉receive_data键
   - name: test_params_2
-    input: {"parameter_names": ["D", "E", "F"]}
-    expected_output: {"receive_data": ["D", "E", "F"]}
+    input: ["D", "E", "F"]
+    expected_output: ["D", "E", "F"]
