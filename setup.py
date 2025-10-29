@@ -62,7 +62,7 @@ setup(
     data_files=data_files,
     test_suite='tests',
     tests_require=test_requirements,
-    version='0.1.17',
+    version='0.1.18',
     zip_safe=False,
     dependency_links=[]
 )

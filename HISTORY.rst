@@ -2,6 +2,11 @@
 History
 =======
 
+0.1.18 (2025-10-29)
+------------------
+
+* Auto-release: Merge pull request #93 from yangrudan/enhance/mofa-unit-test
+
 0.1.17 (2025-10-28)
 ------------------
 
