@@ -1,6 +1,7 @@
 """
 MoFA config command - Manage configuration
 """
+
 import os
 import click
 from mofa import agents_dir_path, flows_dir_path, project_root
@@ -12,7 +13,7 @@ def register_config_commands(cli_group):
     @cli_group.group(invoke_without_command=True)
     @click.pass_context
     def config(ctx):
-        """Manage mofa configuration"""
+        """Manage MoFA configuration"""
         if ctx.invoked_subcommand is None:
             # No subcommand, run TUI
             ctx.invoke(tui)

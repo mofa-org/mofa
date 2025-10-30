@@ -1,0 +1,95 @@
+Error occurred: failed to send output
+
+Caused by:
+    event stream was closed before sending all expected drop tokens
+
+Location:
+    apis/rust/node/src/node/mod.rs:509:21
+Traceback (most recent call last):
+  File "/Users/yao/Desktop/code/mofa-org/mofa/agents/fibonacci-generator/agent/main.py", line 10, in run
+    n = int(n_input)
+        ^^^^^^^^^^^^
+TypeError: int() argument must be a string, a bytes-like object or a real number, not 'NoneType'
+Error occurred: failed to send output
+
+
+During handling of the above exception, another exception occurred:
+Caused by:
+
+    event stream was closed before sending all expected drop tokens
+Traceback (most recent call last):
+
+  File "/Users/yao/Desktop/code/mofa-org/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+Location:
+    func(*args, **kwargs)
+    apis/rust/node/src/node/mod.rs:509:21
+  File "/Users/yao/Desktop/code/mofa-org/mofa/agents/fibonacci-generator/agent/main.py", line 16, in run
+Error occurred: failed to send output
+    agent.send_output(agent_output_name='sequence',
+
+  File "/Users/yao/Desktop/code/mofa-org/mofa/mofa/agent_build/base/base_agent.py", line 174, in send_output
+Caused by:
+    self.node.send_output(
+    event stream was closed before sending all expected drop tokens
+RuntimeError: failed to send output
+
+
+Location:
+Caused by:
+    apis/rust/node/src/node/mod.rs:509:21
+    event stream was closed before sending all expected drop tokens
+Error occurred: failed to send output
+
+
+Location:
+Caused by:
+    apis/rust/node/src/node/mod.rs:509:21
+    event stream was closed before sending all expected drop tokens
+Traceback (most recent call last):
+
+  File "/Users/yao/Desktop/code/mofa-org/mofa/agents/fibonacci-generator/agent/main.py", line 10, in run
+Location:
+    n = int(n_input)
+    apis/rust/node/src/node/mod.rs:509:21
+        ^^^^^^^^^^^^
+Error occurred: failed to send output
+TypeError: int() argument must be a string, a bytes-like object or a real number, not 'NoneType'
+
+
+Caused by:
+During handling of the above exception, another exception occurred:
+    event stream was closed before sending all expected drop tokens
+
+
+Traceback (most recent call last):
+Location:
+  File "/Users/yao/Desktop/code/mofa-org/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    apis/rust/node/src/node/mod.rs:509:21
+    func(*args, **kwargs)
+Error occurred: failed to send output
+  File "/Users/yao/Desktop/code/mofa-org/mofa/agents/fibonacci-generator/agent/main.py", line 16, in run
+
+    agent.send_output(agent_output_name='sequence',
+Caused by:
+  File "/Users/yao/Desktop/code/mofa-org/mofa/mofa/agent_build/base/base_agent.py", line 174, in send_output
+    event stream was closed before sending all expected drop tokens
+    self.node.send_output(
+
+RuntimeError: failed to send output
+Location:
+
+    apis/rust/node/src/node/mod.rs:509:21
+Caused by:
+Error occurred: failed to send output
+    event stream was closed before sending all expected drop tokens
+
+
+Caused by:
+Location:
+    event stream was closed before sending all expected drop tokens
+    apis/rust/node/src/node/mod.rs:509:21
+
+Traceback (most recent call last):
+Location:
+  File "/Users/yao/Desktop/code/mofa-org/mofa/agents/fibonacci-generator/agent/main.py", line 10, in run
+    apis/rust/node/src/node/mod.rs:509:21

@@ -1,6 +1,7 @@
 """
-MoFA search command - Search for agents and flows
+MoFA search command - Search for nodes and flows
 """
+
 import os
 import click
 from mofa import agents_dir_path, flows_dir_path
@@ -14,7 +15,7 @@ def register_search_commands(cli_group):
     @cli_group.group(invoke_without_command=True)
     @click.pass_context
     def search(ctx):
-        """Search for agents and flows"""
+        """Search for nodes and flows"""
         if ctx.invoked_subcommand is None:
             # No subcommand, run search TUI
             _run_search_tui()
@@ -53,7 +54,9 @@ def register_search_commands(cli_group):
             keyword_lower = keyword.lower()
 
             if not remote_only:
-                matches = [name for name in local_agents if keyword_lower in name.lower()]
+                matches = [
+                    name for name in local_agents if keyword_lower in name.lower()
+                ]
                 if matches:
                     click.echo(f"Local agents matching '{keyword}' ({len(matches)}):")
                     for name in sorted(matches):
@@ -80,7 +83,9 @@ def register_search_commands(cli_group):
                         remote_results = remote_matches
 
                         # Ask if user wants to download
-                        if click.confirm("\nDownload any of these agents?", default=False):
+                        if click.confirm(
+                            "\nDownload any of these agents?", default=False
+                        ):
                             choice = click.prompt("Select agent number", type=str)
                             try:
                                 agent_idx = int(choice) - 1
@@ -109,7 +114,9 @@ def register_search_commands(cli_group):
             keyword_lower = keyword.lower()
 
             if not remote_only:
-                matches = [name for name in local_flows if keyword_lower in name.lower()]
+                matches = [
+                    name for name in local_flows if keyword_lower in name.lower()
+                ]
                 if matches:
                     click.echo(f"Local flows matching '{keyword}' ({len(matches)}):")
                     for name in sorted(matches):
@@ -136,7 +143,9 @@ def register_search_commands(cli_group):
                         remote_results = remote_matches
 
                         # Ask if user wants to download
-                        if click.confirm("\nDownload any of these flows?", default=False):
+                        if click.confirm(
+                            "\nDownload any of these flows?", default=False
+                        ):
                             choice = click.prompt("Select flow number", type=str)
                             try:
                                 flow_idx = int(choice) - 1
@@ -221,7 +230,9 @@ def register_search_commands(cli_group):
             if remote_matches:
                 if local_matches:
                     click.echo()
-                click.echo(f"Remote agents matching '{keyword}' ({len(remote_matches)}):")
+                click.echo(
+                    f"Remote agents matching '{keyword}' ({len(remote_matches)}):"
+                )
                 for agent in remote_matches:
                     name = agent.get("name", "unknown")
                     desc = agent.get("description", "")
@@ -302,7 +313,9 @@ def register_search_commands(cli_group):
             if remote_matches:
                 if local_matches:
                     click.echo()
-                click.echo(f"Remote flows matching '{keyword}' ({len(remote_matches)}):")
+                click.echo(
+                    f"Remote flows matching '{keyword}' ({len(remote_matches)}):"
+                )
                 for flow in remote_matches:
                     name = flow.get("name", "unknown")
                     desc = flow.get("description", "")

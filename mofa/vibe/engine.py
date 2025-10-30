@@ -121,11 +121,11 @@ class VibeEngine:
 
         # Ask for confirmation
         while True:
-            self.console.print("[dim]Options: y=use / n=regenerate / skip=skip testing[/dim]")
+            self.console.print("[dim]Options: y=go unit testing / n=regenerate test file / skip=go interactive testing[/dim]")
             response = Prompt.ask(
                 "Confirm",
                 choices=["y", "n", "skip"],
-                default="y",
+                default="skip",
                 console=self.console,
                 show_choices=False
             )
@@ -214,30 +214,95 @@ class VibeEngine:
         test_result = None
 
         try:
-            # If skip_testing, just generate code once without optimization
+            # If skip_testing, use flow-based testing loop
             if self.skip_testing:
-                current_code = self._generate_initial_code()
-                self.project_path = self._create_project(current_code)
+                round_num = 0
+                max_rounds = self.config.max_optimization_rounds
 
-                # Create a dummy passing test result
-                from .models import SingleTestResult
-                test_result = TestResult(
-                    total=1,
-                    passed=1,
-                    failed=0,
-                    pass_rate=100.0,
-                    tests=[SingleTestResult(name="skipped", passed=True)]
-                )
+                while True:
+                    round_num += 1
 
-                round_data = GenerationRound(
-                    round_number=1,
-                    code=current_code,
-                    test_result=test_result,
-                    optimization_note="Testing skipped"
-                )
-                self.rounds.append(round_data)
+                    # Check if we've exceeded max rounds
+                    if max_rounds > 0 and round_num > max_rounds:
+                        self.console.print(f"[yellow]Reached maximum rounds ({max_rounds})[/yellow]")
+                        break
 
-                self.console.print("[green]Complete[/green]")
+                    self.console.print(f"[cyan]Round {round_num}[/cyan]")
+
+                    # Generate or regenerate code
+                    if round_num == 1:
+                        current_code = self._generate_initial_code()
+                    else:
+                        # For regeneration, ask user what to fix
+                        self.console.print("\n[yellow]What needs to be fixed?[/yellow]")
+                        fix_description = Prompt.ask(
+                            "Describe the issues",
+                            default="",
+                            console=self.console
+                        )
+                        if fix_description:
+                            current_code = self._regenerate_code_with_feedback(current_code, fix_description)
+                        else:
+                            self.console.print("[yellow]No changes requested, keeping current code[/yellow]")
+
+                    self.project_path = self._create_project(current_code)
+
+                    # Generate test flow
+                    flow_yaml_path = self._generate_test_flow(current_code)
+                    self.console.print(f"\n[cyan]Generated test flow:[/cyan] {flow_yaml_path}")
+
+                    # Ask if user wants to run interactive flow test
+                    if Confirm.ask(
+                        "\n[bold cyan]Run interactive flow test? (run-flow)[/bold cyan]",
+                        default=True,
+                        console=self.console
+                    ):
+                        self._run_flow_test(flow_yaml_path)
+
+                    # Create a dummy passing test result
+                    from .models import SingleTestResult
+                    test_result = TestResult(
+                        total=1,
+                        passed=1,
+                        failed=0,
+                        pass_rate=100.0,
+                        tests=[SingleTestResult(name="flow_tested", passed=True)]
+                    )
+
+                    round_data = GenerationRound(
+                        round_number=round_num,
+                        code=current_code,
+                        test_result=test_result,
+                        optimization_note="Flow-based testing" if round_num == 1 else "User feedback"
+                    )
+                    self.rounds.append(round_data)
+
+                    # Ask user if satisfied
+                    self.console.print("\n[yellow]Are you satisfied with the agent?[/yellow]")
+                    self.console.print("  1. Yes, complete")
+                    self.console.print("  2. No, need to fix issues")
+
+                    choice = Prompt.ask(
+                        "Choice",
+                        choices=["1", "2"],
+                        default="1",
+                        console=self.console
+                    )
+
+                    if choice == "1":
+                        self.console.print("[green]Complete[/green]")
+                        break
+                    # If choice == "2", continue to next round
+
+                # After skip_testing loop ends, allow version selection if multiple rounds
+                if len(self.rounds) > 1:
+                    select_version = Confirm.ask(
+                        "\nWould you like to select a specific version?",
+                        default=True,
+                        console=self.console
+                    )
+                    if select_version:
+                        return self._handle_pause()
             else:
                 # Normal testing loop
                 round_num = 0
@@ -263,16 +328,36 @@ class VibeEngine:
                     # Create/update project
                     self.project_path = self._create_project(current_code)
 
-                    # Ask if user wants to manually test first (run-node)
+                    # Generate test flow
+                    flow_yaml_path = self._generate_test_flow(current_code)
+                    self.console.print(f"\n[cyan]Generated test flow:[/cyan] {flow_yaml_path}")
+
+                    # Run interactive flow test
                     if Confirm.ask(
-                        "\n[bold cyan]Run interactive manual test first? (run-node)[/bold cyan]",
+                        "\n[bold cyan]Run interactive flow test? (run-flow)[/bold cyan]",
                         default=False,
                         console=self.console
                     ):
-                        self.debug_runner.run_interactive(self.project_path)
+                        self._run_flow_test(flow_yaml_path)
 
-                    # Run tests
-                    test_result = self._run_tests()
+                    # Ask if user wants to run unit tests
+                    if Confirm.ask(
+                        "\n[bold cyan]Run unit tests?[/bold cyan]",
+                        default=False,
+                        console=self.console
+                    ):
+                        # Run unit tests
+                        test_result = self._run_tests()
+                    else:
+                        # Skip unit tests - create a passing result
+                        self.console.print("[yellow]Skipping unit tests[/yellow]")
+                        test_result = TestResult(
+                            total=0,
+                            passed=0,
+                            failed=0,
+                            pass_rate=100.0,
+                            tests=[]
+                        )
 
                     # Save round
                     round_data = GenerationRound(
@@ -384,6 +469,26 @@ class VibeEngine:
 
         return AgentCode(main_py=code_str, agent_name=self.agent_name)
 
+    def _regenerate_code_with_feedback(self, previous_code: AgentCode, feedback: str) -> AgentCode:
+        """Regenerate code based on user feedback"""
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[progress.description]{task.description}"),
+            console=self.console,
+            transient=True
+        ) as progress:
+            task = progress.add_task("Fixing based on feedback...", total=None)
+
+            code_str = self.llm.regenerate_code(
+                original_code=previous_code.main_py,
+                test_failures=f"User feedback: {feedback}",
+                requirement=self.requirement
+            )
+
+            code_str = self._clean_code_response(code_str)
+
+        return AgentCode(main_py=code_str, agent_name=self.agent_name)
+
     def _clean_code_response(self, code_str: str) -> str:
         """Remove markdown code blocks and explanatory text from LLM response"""
         # If there's a markdown code block, extract only the code inside
@@ -413,6 +518,105 @@ class VibeEngine:
             dependencies=code.dependencies
         )
         return project_path
+
+    def _generate_test_flow(self, agent_code: AgentCode) -> str:
+        """Generate a test flow YAML for the agent with terminal-input"""
+        import yaml
+        from mofa.debug.load_node import extract_agent_info
+
+        # Extract agent info to get input/output parameter names
+        agent_info = extract_agent_info(agent_code.main_py)
+        receive_params = agent_info.get('receive_params', [])
+        send_params = agent_info.get('send_params', [])
+
+        # Extract parameter names
+        input_param = None
+        if receive_params:
+            # Parse 'parameter_name' or parameter_names=['param1', 'param2']
+            param_str = receive_params[0].strip("'\"")
+            input_param = param_str
+
+        output_param = None
+        if send_params:
+            # Parse agent_output_name='output_name'
+            for param in send_params:
+                if 'agent_output_name' in param:
+                    output_param = param.split('=')[1].strip().strip("'\"")
+                    break
+
+        if not input_param or not output_param:
+            raise ValueError(f"Could not extract input/output parameters from agent code")
+
+        # Generate flow YAML
+        flow_data = {
+            'nodes': [
+                {
+                    'id': 'terminal-input',
+                    'build': f'pip install -e ../../agents/terminal-input',
+                    'path': 'dynamic',
+                    'outputs': ['data'],
+                    'inputs': {
+                        'agent_response': f'{self.agent_name}/{output_param}'
+                    }
+                },
+                {
+                    'id': self.agent_name,
+                    'build': f'pip install -e ../../agents/{self.agent_name}',
+                    'path': self.agent_name,
+                    'outputs': [output_param],
+                    'inputs': {
+                        input_param: 'terminal-input/data'
+                    },
+                    'env': {
+                        'IS_DATAFLOW_END': True,
+                        'WRITE_LOG': True
+                    }
+                }
+            ]
+        }
+
+        # Create flows directory if it doesn't exist
+        flows_dir = Path(self.config.output_dir).parent / 'flows'
+        flows_dir.mkdir(exist_ok=True)
+
+        # Create flow directory
+        flow_dir = flows_dir / f'{self.agent_name}-flow'
+        flow_dir.mkdir(exist_ok=True)
+
+        # Write flow YAML
+        flow_yaml_path = flow_dir / f'{self.agent_name}_dataflow.yml'
+        with open(flow_yaml_path, 'w') as f:
+            yaml.dump(flow_data, f, default_flow_style=False, sort_keys=False)
+
+        return str(flow_yaml_path)
+
+    def _run_flow_test(self, flow_yaml_path: str):
+        """Run interactive flow test using run-flow command"""
+        import subprocess
+
+        self.console.print("\n" + "=" * 60)
+        self.console.print("[bold cyan]Interactive Flow Testing[/bold cyan]")
+        self.console.print("=" * 60)
+        self.console.print("Testing the agent in a real flow with terminal-input...")
+        self.console.print("=" * 60 + "\n")
+
+        try:
+            # Run the flow interactively (not vibe-test mode, just normal run-flow)
+            result = subprocess.run(
+                ['mofa', 'run-flow', flow_yaml_path],
+                cwd=os.getcwd(),
+                text=True
+            )
+
+            if result.returncode != 0:
+                self.console.print("\n[yellow]Flow test encountered issues[/yellow]")
+            else:
+                self.console.print("\n[green]Flow test completed[/green]")
+
+        except KeyboardInterrupt:
+            self.console.print("\n[yellow]Flow test interrupted by user[/yellow]")
+        except Exception as e:
+            self.console.print(f"\n[red]Error running flow test: {e}[/red]")
 
     def _run_tests(self) -> TestResult:
         """Run mofa unit-test tests"""

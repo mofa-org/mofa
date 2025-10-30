@@ -1,0 +1,53 @@
+Error occurred: failed to send output
+
+Caused by:
+    event stream was closed before sending all expected drop tokens
+
+Location:
+    apis/rust/node/src/node/mod.rs:509:21
+Traceback (most recent call last):
+  File "/Users/yao/Desktop/code/mofa-org/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/yao/Desktop/code/mofa-org/mofa/agents/random-five-six/agent/main.py", line 13, in run
+    agent.send_output(agent_output_name='output', agent_result=result)
+Error occurred: failed to send output
+  File "/Users/yao/Desktop/code/mofa-org/mofa/mofa/agent_build/base/base_agent.py", line 174, in send_output
+
+    self.node.send_output(
+Caused by:
+RuntimeError: failed to send output
+    event stream was closed before sending all expected drop tokens
+
+
+Caused by:
+Location:
+    event stream was closed before sending all expected drop tokens
+    apis/rust/node/src/node/mod.rs:509:21
+
+Error occurred: failed to send output
+Location:
+
+    apis/rust/node/src/node/mod.rs:509:21
+Caused by:
+Traceback (most recent call last):
+    event stream was closed before sending all expected drop tokens
+  File "/Users/yao/Desktop/code/mofa-org/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+
+    func(*args, **kwargs)
+Location:
+  File "/Users/yao/Desktop/code/mofa-org/mofa/agents/random-five-six/agent/main.py", line 13, in run
+    apis/rust/node/src/node/mod.rs:509:21
+    agent.send_output(agent_output_name='output', agent_result=result)
+Error occurred: failed to send output
+  File "/Users/yao/Desktop/code/mofa-org/mofa/mofa/agent_build/base/base_agent.py", line 174, in send_output
+
+    self.node.send_output(
+Caused by:
+RuntimeError: failed to send output
+    event stream was closed before sending all expected drop tokens
+
+
+Caused by:
+Location:
+    event stream was closed before sending all expected drop tokens
+    apis/rust/node/src/node/mod.rs:509:21

@@ -41,7 +41,7 @@ class OrderedGroup(click.Group):
             "run-flow",
             "run-node",
             "unit-test",
-            "create-agent",
+            "create-node",
             "vibe",
             "list",
             "search",
@@ -75,7 +75,7 @@ class OrderedGroup(click.Group):
                     "  mofa run-flow <dataflow.yml>                Run a dataflow"
                 )
                 formatter.write_text(
-                    "  mofa create-agent                           Create agent (TUI)"
+                    "  mofa create-node                            Create node (TUI)"
                 )
                 formatter.write_text(
                     "  mofa unit-test <path> [test.yml]          Debug an agent"
@@ -175,23 +175,24 @@ mofa_cli_group.add_command(init_command)
 # ============ Run Flow Command ============
 @mofa_cli_group.command(name="run-flow")
 @click.argument("dataflow_file", required=True)
-def run_flow_command(dataflow_file: str):
-    """Use run <path-to-dataflow.yml> to run in venv."""
-    run_flow(dataflow_file)
+@click.option("--vibe-test", is_flag=True, hidden=True, help="Vibe test mode with automated decisions")
+def run_flow_command(dataflow_file: str, vibe_test: bool):
+    """Use run <path-to-dataflow.yml> to run in venv"""
+    run_flow(dataflow_file, vibe_test_mode=vibe_test)
 
 
 # ============ List Command Group ============
 @mofa_cli_group.group(invoke_without_command=True)
 @click.pass_context
 def list(ctx):
-    """List all agents and flow (local and remote)"""
+    """List all nodes and flows (local and remote)"""
     if ctx.invoked_subcommand is None:
         # No subcommand, show everything
         _list_all()
 
 
 def _list_all():
-    """List all agents and flows (local and remote)"""
+    """List all nodes and flows (local and remote)"""
     # List agents
     local_agents = set()
     if os.path.exists(agents_dir_path):
@@ -379,8 +380,7 @@ def agent_list():
 @mofa_cli_group.command(name="run-node")
 @click.argument("node_folder_path", type=click.Path(exists=True))
 def run_agent(node_folder_path):
-    """With mofa run-node, user just need to provide values for input parameters, 
-    no need to provide output parameters as in the "mofa unit-test" required."""
+    """Provide values for input parameters to run a node"""
     # 1. dynamically load the node module
     node_module = load_node_module(node_folder_path)
     # 2. interactively collect user input
@@ -394,7 +394,7 @@ def run_agent(node_folder_path):
 @click.argument("test_case_yml", type=click.Path(exists=True), required=False)
 @click.option("--interactive", is_flag=True, help="Enable interactive input mode")
 def debug_agent(node_folder_path, test_case_yml, interactive):
-    """Run unit tests for a single agent"""
+    """Run unit tests for a single node"""
     # 1. dynamically load the node module
     node_module = load_node_module(node_folder_path)
 
@@ -428,7 +428,7 @@ def debug_agent(node_folder_path, test_case_yml, interactive):
 @mofa_cli_group.group(invoke_without_command=True)
 @click.pass_context
 def download(ctx):
-    """Download agents and flows from hub"""
+    """Download nodes and flows from hub"""
     if ctx.invoked_subcommand is None:
         # No subcommand, run download TUI
         _run_download_tui()
@@ -586,46 +586,44 @@ def flow(name, output):
         sys.exit(1)
 
 
-
-
 # ============ Helper: Check API Key ============
 
 
-# ============ Create Agent Command ============
-@mofa_cli_group.command(name="create-agent")
-@click.option("--name", default=None, help="Agent name")
-@click.option("--version", default=None, help="Version of the new agent")
+# ============ Create Node Command ============
+@mofa_cli_group.command(name="create-node")
+@click.option("--name", default=None, help="Node name")
+@click.option("--version", default=None, help="Version of the new node")
 @click.option("--output", default=None, help="Output directory (default: ./agents)")
 @click.option("--authors", default=None, help="Authors")
-@click.option("--description", default=None, help="Agent description")
-def create_agent(name, version, output, authors, description):
-    """Create a new agent from template"""
+@click.option("--description", default=None, help="Node description")
+def create_node(name, version, output, authors, description):
+    """Create a new node from template"""
 
     # Interactive TUI mode
     click.echo("\n" + "=" * 50)
-    click.echo("         Create New MoFA Agent")
+    click.echo("         Create New MoFA Node")
     click.echo("=" * 50 + "\n")
 
     # Collect inputs
-    agent_name = name or click.prompt("Agent name", type=str)
-    agent_version = version or click.prompt("Version", default="0.0.1")
-    agent_description = description or click.prompt(
-        "Description", default=f"A {agent_name} agent"
+    node_name = name or click.prompt("Node name", type=str)
+    node_version = version or click.prompt("Version", default="0.0.1")
+    node_description = description or click.prompt(
+        "Description", default=f"A {node_name} node"
     )
-    agent_authors = authors or click.prompt("Authors", default="MoFA Team")
-    agent_output = output or click.prompt("Output directory", default=agents_dir_path)
+    node_authors = authors or click.prompt("Authors", default="MoFA Team")
+    node_output = output or click.prompt("Output directory", default=agents_dir_path)
 
     # Confirm
     click.echo("\n" + "-" * 50)
-    click.echo("Agent Configuration:")
-    click.echo(f"  Name: {agent_name}")
-    click.echo(f"  Version: {agent_version}")
-    click.echo(f"  Description: {agent_description}")
-    click.echo(f"  Authors: {agent_authors}")
-    click.echo(f"  Output: {agent_output}")
+    click.echo("Node Configuration:")
+    click.echo(f"  Name: {node_name}")
+    click.echo(f"  Version: {node_version}")
+    click.echo(f"  Description: {node_description}")
+    click.echo(f"  Authors: {node_authors}")
+    click.echo(f"  Output: {node_output}")
     click.echo("-" * 50 + "\n")
 
-    if not click.confirm("Create agent?", default=True):
+    if not click.confirm("Create node?", default=True):
         click.echo("Cancelled")
         return
 
@@ -642,27 +640,27 @@ def create_agent(name, version, output, authors, description):
         )
         return
 
-    # Use Cookiecutter to generate the new agent from the template
+    # Use Cookiecutter to generate the new node from the template
     try:
         result_path = cookiecutter(
             template=template_dir,
-            output_dir=agent_output,
+            output_dir=node_output,
             no_input=True,
             extra_context={
-                "user_agent_dir": agent_name,
-                "agent_name": agent_name,
-                "version": agent_version,
-                "description": agent_description,
-                "authors": agent_authors,
+                "user_agent_dir": node_name,
+                "agent_name": node_name,
+                "version": node_version,
+                "description": node_description,
+                "authors": node_authors,
             },
         )
-        click.echo(f"\nSuccessfully created agent: {result_path}")
+        click.echo(f"\nSuccessfully created node: {result_path}")
         click.echo(f"\nNext steps:")
         click.echo(f"  1. cd {result_path}")
-        click.echo(f"  2. Edit {agent_name}/main.py to implement your agent logic")
+        click.echo(f"  2. Edit {node_name}/main.py to implement your node logic")
         click.echo(f"  3. Test with: mofa unit-test {result_path} tests/test_main.py")
     except Exception as e:
-        click.echo(f"\nError: Failed to create agent: {e}", err=True)
+        click.echo(f"\nError: Failed to create node: {e}", err=True)
         import traceback
 
         traceback.print_exc()
@@ -697,8 +695,8 @@ def debug(node_folder_path, test_case_yml, interactive):
 @click.option("--output", default=None, help="Output directory")
 @click.option("--authors", default="Mofa Bot", help="Authors")
 def new_agent(agent_name: str, version: str, output: str, authors: str):
-    """[Deprecated] Use 'mofa create agent' instead"""
-    click.echo("Warning: 'new-agent' is deprecated, use 'mofa create agent' instead")
+    """[Deprecated] Use 'mofa create-node' instead"""
+    click.echo("Warning: 'new-agent' is deprecated, use 'mofa create-node' instead")
     if output is None:
         output = agents_dir_path
 

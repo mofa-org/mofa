@@ -1,0 +1,18 @@
+nodes:
+- id: terminal-input
+  build: pip install -e ../../agents/terminal-input
+  path: dynamic
+  outputs:
+  - data
+  inputs:
+    agent_response: random-praise-bot/output
+- id: random-praise-bot
+  build: pip install -e ../../agents/random-praise-bot
+  path: random-praise-bot
+  outputs:
+  - output
+  inputs:
+    user_input: terminal-input/data
+  env:
+    IS_DATAFLOW_END: true
+    WRITE_LOG: true

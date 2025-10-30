@@ -56,6 +56,45 @@ def _cleanup_venv():
             click.echo(f"Venv preserved at {_venv_root_path}")
 
 
+def _collect_vibe_feedback():
+    """
+    Collect feedback from user after vibe test run.
+    Returns dict with action and optional issues description.
+    """
+    click.echo("\n" + "=" * 60)
+    click.echo("Flow Test Complete - Please provide feedback")
+    click.echo("=" * 60)
+
+    choices = {
+        "1": "proceed",
+        "2": "fix",
+        "3": "regenerate",
+        "4": "abort"
+    }
+
+    click.echo("\nOptions:")
+    click.echo("  1. Perfect! Proceed to next step")
+    click.echo("  2. Has issues, let LLM fix it")
+    click.echo("  3. Regenerate from scratch")
+    click.echo("  4. Abort")
+
+    while True:
+        choice = click.prompt("\nYour choice", type=str, default="1")
+
+        if choice in choices:
+            action = choices[choice]
+
+            # If user wants to fix issues, prompt for description
+            if action == "fix":
+                click.echo("\nPlease describe the issues you encountered:")
+                issues = click.prompt("Issues", type=str, default="")
+                return {"action": action, "issues": issues}
+            else:
+                return {"action": action, "issues": ""}
+        else:
+            click.echo("Invalid choice. Please enter 1, 2, 3, or 4.")
+
+
 def _register_cleanup_handler():
     """Register signal handlers for cleanup on exit."""
 
@@ -84,7 +123,7 @@ def find_existing_venv(working_dir: str):
     return existing_venvs
 
 
-def create_venv(base_python: str, working_dir: str):
+def create_venv(base_python: str, working_dir: str, vibe_test_mode: bool = False):
     """Create a virtual environment for running the dataflow."""
     global _venv_root_path
 
@@ -93,53 +132,60 @@ def create_venv(base_python: str, working_dir: str):
     if existing_venvs:
         # Found existing venv(s), ask user if they want to reuse
         click.echo(f"Found existing virtual environment: {existing_venvs[0]}")
-        try:
-            reuse = click.confirm("Do you want to reuse it?", default=True)
-            if reuse:
-                temp_root = existing_venvs[0]
-                venv_dir = os.path.join(temp_root, "venv")
-                bin_dir = os.path.join(
-                    venv_dir, "Scripts" if os.name == "nt" else "bin"
-                )
-                python_bin = os.path.join(
-                    bin_dir, "python.exe" if os.name == "nt" else "python"
-                )
-                pip_bin = os.path.join(bin_dir, "pip.exe" if os.name == "nt" else "pip")
 
-                try:
-                    site_packages = subprocess.check_output(
-                        [
-                            python_bin,
-                            "-c",
-                            'import site,sys; paths = getattr(site, "getsitepackages", lambda: [])(); '
-                            "print((paths[-1] if paths else site.getusersitepackages()).strip())",
-                        ],
-                        text=True,
-                    ).strip()
-                except subprocess.CalledProcessError as exc:
-                    click.echo(
-                        "Warning: Existing venv seems corrupted, creating new one..."
-                    )
-                    shutil.rmtree(temp_root, ignore_errors=True)
-                else:
-                    _venv_root_path = temp_root
-                    click.echo(f"Reusing venv at {temp_root}")
-                    return {
-                        "root": temp_root,
-                        "venv": venv_dir,
-                        "bin": bin_dir,
-                        "python": python_bin,
-                        "pip": pip_bin,
-                        "site_packages": site_packages,
-                        "reused": True,
-                    }
+        # Vibe test mode: automatically reuse
+        if vibe_test_mode:
+            reuse = True
+            click.echo("Vibe mode: Automatically reusing venv")
+        else:
+            try:
+                reuse = click.confirm("Do you want to reuse it?", default=True)
+            except:
+                reuse = True
+
+        if reuse:
+            temp_root = existing_venvs[0]
+            venv_dir = os.path.join(temp_root, "venv")
+            bin_dir = os.path.join(
+                venv_dir, "Scripts" if os.name == "nt" else "bin"
+            )
+            python_bin = os.path.join(
+                bin_dir, "python.exe" if os.name == "nt" else "python"
+            )
+            pip_bin = os.path.join(bin_dir, "pip.exe" if os.name == "nt" else "pip")
+
+            try:
+                site_packages = subprocess.check_output(
+                    [
+                        python_bin,
+                        "-c",
+                        'import site,sys; paths = getattr(site, "getsitepackages", lambda: [])(); '
+                        "print((paths[-1] if paths else site.getusersitepackages()).strip())",
+                    ],
+                    text=True,
+                ).strip()
+            except subprocess.CalledProcessError as exc:
+                click.echo(
+                    "Warning: Existing venv seems corrupted, creating new one..."
+                )
+                shutil.rmtree(temp_root, ignore_errors=True)
             else:
-                # User chose not to reuse, delete old ones
-                for old_venv in existing_venvs:
-                    click.echo(f"Removing old venv at {old_venv}...")
-                    shutil.rmtree(old_venv, ignore_errors=True)
-        except:
-            pass
+                _venv_root_path = temp_root
+                click.echo(f"Reusing venv at {temp_root}")
+                return {
+                    "root": temp_root,
+                    "venv": venv_dir,
+                    "bin": bin_dir,
+                    "python": python_bin,
+                    "pip": pip_bin,
+                    "site_packages": site_packages,
+                    "reused": True,
+                }
+        else:
+            # User chose not to reuse, delete old ones
+            for old_venv in existing_venvs:
+                click.echo(f"Removing old venv at {old_venv}...")
+                shutil.rmtree(old_venv, ignore_errors=True)
 
     # Create new venv
     temp_root = tempfile.mkdtemp(prefix="mofa_run_", dir=working_dir)
@@ -366,7 +412,7 @@ def build_env(base_env: dict, venv_info: dict):
     return env
 
 
-def run_flow(dataflow_file: str):
+def run_flow(dataflow_file: str, vibe_test_mode: bool = False):
     """Execute a dataflow from the given YAML file."""
     global _cleanup_done
 
@@ -420,36 +466,43 @@ def run_flow(dataflow_file: str):
     editable_packages = []
 
     try:
-        env_info = create_venv(sys.executable, working_dir)
+        env_info = create_venv(sys.executable, working_dir, vibe_test_mode)
         run_env = build_env(run_env, env_info)
 
         # Check if this is a reused venv
         venv_is_reused = env_info.get("reused", False)
 
         if venv_is_reused:
-            # Venv was reused, ask user if they want to reinstall packages
-            try:
-                should_install_packages = click.confirm(
-                    "Do you want to reinstall packages in this environment?",
-                    default=False,
-                )
-            except:
-                # If we can't ask (non-interactive), don't reinstall by default
-                should_install_packages = False
-                click.echo("Skipping package reinstallation (using existing packages)")
-
-            # If user chose to reinstall, also reinstall base requirements
-            if should_install_packages:
-                install_base_requirements(env_info["pip"], working_dir)
-
-            # Ask if user wants to skip dora build (which also reinstalls packages)
-            try:
-                skip_build = not should_install_packages and click.confirm(
-                    "Skip dora build step? (faster but won't pick up code changes)",
-                    default=False,
-                )
-            except:
+            # Vibe test mode: always reinstall packages for clean environment
+            if vibe_test_mode:
+                should_install_packages = True
                 skip_build = False
+                click.echo("Vibe mode: Reinstalling packages for clean environment")
+                install_base_requirements(env_info["pip"], working_dir)
+            else:
+                # Venv was reused, ask user if they want to reinstall packages
+                try:
+                    should_install_packages = click.confirm(
+                        "Do you want to reinstall packages in this environment?",
+                        default=False,
+                    )
+                except:
+                    # If we can't ask (non-interactive), don't reinstall by default
+                    should_install_packages = False
+                    click.echo("Skipping package reinstallation (using existing packages)")
+
+                # If user chose to reinstall, also reinstall base requirements
+                if should_install_packages:
+                    install_base_requirements(env_info["pip"], working_dir)
+
+                # Ask if user wants to skip dora build (which also reinstalls packages)
+                try:
+                    skip_build = not should_install_packages and click.confirm(
+                        "Skip dora build step? (faster but won't pick up code changes)",
+                        default=False,
+                    )
+                except:
+                    skip_build = False
         else:
             # New venv, check if base requirements are installed
             check_cmd = [env_info["python"], "-c", "import dora_rs"]
@@ -564,5 +617,20 @@ def run_flow(dataflow_file: str):
         destroy_dora_daemon()
         click.echo("Main process terminated.")
 
-        # Ask user if they want to keep the venv
-        _cleanup_venv()
+        # Vibe test mode: auto keep venv and collect feedback
+        if vibe_test_mode:
+            click.echo(f"Vibe mode: Automatically keeping venv at {_venv_root_path}")
+            feedback = _collect_vibe_feedback()
+
+            # Save feedback to file
+            import json
+            feedback_file = os.path.join(working_dir, "vibe_feedback.json")
+            with open(feedback_file, 'w') as f:
+                json.dump(feedback, f, indent=2)
+
+            return feedback
+        else:
+            # Ask user if they want to keep the venv
+            _cleanup_venv()
+
+    return None

@@ -120,7 +120,13 @@ def execute_unit_tests(node_module, test_cases, unit_test=True):
             if IS_MULTI_PARAM:
                 input_query = case[YAML_INPUT]
             else:
-                input_query = case[YAML_INPUT]
+                # Single parameter: extract the value from the input dict
+                input_dict = case[YAML_INPUT]
+                if isinstance(input_dict, dict) and len(input_dict) == 1:
+                    # Extract the single value from the dict
+                    input_query = list(input_dict.values())[0]
+                else:
+                    input_query = input_dict
             local_vars = {receive_target: input_query}
             # Execute the test case
             try:
@@ -141,7 +147,13 @@ def execute_unit_tests(node_module, test_cases, unit_test=True):
             if IS_MULTI_PARAM:
                 input_query = case[YAML_INPUT]
             else:
-                input_query = case[YAML_INPUT]
+                # Single parameter: extract the value from the input dict
+                input_dict = case[YAML_INPUT]
+                if isinstance(input_dict, dict) and len(input_dict) == 1:
+                    # Extract the single value from the dict
+                    input_query = list(input_dict.values())[0]
+                else:
+                    input_query = input_dict
             local_vars = {receive_target: input_query}
             # Execute the test case
             try:

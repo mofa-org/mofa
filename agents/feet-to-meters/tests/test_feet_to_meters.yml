@@ -1,0 +1,16 @@
+test_cases:
+- expected_output:
+    meters: 3.048
+  input:
+    feet: 10
+  name: convert_positive_feet_to_meters
+- expected_output:
+    meters: 0.0
+  input:
+    feet: 0
+  name: convert_zero_feet_to_meters
+- expected_output:
+    meters: -1.524
+  input:
+    feet: -5
+  name: convert_negative_feet_to_meters
