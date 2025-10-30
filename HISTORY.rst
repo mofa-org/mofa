@@ -2,6 +2,11 @@
 History
 =======
 
+0.1.20 (2025-10-30)
+------------------
+
+* Auto-release: feat: huge improvements on mofa vibe
+
 0.1.19 (2025-10-30)
 ------------------
 
