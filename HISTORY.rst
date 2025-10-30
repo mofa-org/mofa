@@ -2,6 +2,11 @@
 History
 =======
 
+0.1.19 (2025-10-30)
+------------------
+
+* Auto-release: enhance: optimize mofa-run command, allow user to run without install
+
 0.1.18 (2025-10-29)
 ------------------
 
