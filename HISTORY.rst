@@ -2,6 +2,11 @@
 History
 =======
 
+0.1.22 (2025-10-30)
+------------------
+
+* Auto-release: enhancement: optimize prompt to mention llm api
+
 0.1.21 (2025-10-30)
 ------------------
 
