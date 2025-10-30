@@ -1,17 +1,12 @@
 """Module to execute unit tests for dynamically loaded node/agent modules."""
 from .load_node import normalize_relative_imports, build_execution_globals, remove_main_guard
+import textwrap
 
 def clean_code(code: str) -> str:
-    """"make sure the code is properly indented and formatted"""
-    lines = code.split('\n')
-    processed_lines = []
-    for line in lines:
-        # Check if the line starts with 4 spaces (a common indentation level)
-        if line.startswith('    '):
-            processed_lines.append(line[4:])
-        else:
-            processed_lines.append(line)
-    return '\n'.join(processed_lines)
+    """"Remove common leading whitespace from all lines, preserving relative indentation"""
+    # Use textwrap.dedent for proper deindentation
+    # This removes the minimum common leading whitespace from all lines
+    return textwrap.dedent(code)
 
 def execute_unit_tests(node_module, test_cases, unit_test=True):
     """

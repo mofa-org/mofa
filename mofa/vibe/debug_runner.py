@@ -1,4 +1,4 @@
-"""Debug runner that wraps mofa debug command"""
+"""Debug runner that wraps mofa unit-test command"""
 
 import subprocess
 import re
@@ -7,11 +7,11 @@ from .models import TestResult, SingleTestResult
 
 
 class DebugRunner:
-    """Runs mofa debug and parses results"""
+    """Runs mofa unit-test and parses results"""
 
     def run_tests(self, agent_path: str, test_yaml: str) -> TestResult:
         """
-        Run mofa debug command and parse output
+        Run mofa unit-test command and parse output
 
         Args:
             agent_path: Path to agent directory
@@ -21,18 +21,19 @@ class DebugRunner:
             TestResult with parsed test outcomes
         """
         try:
-            # Run mofa debug command
+            # Run mofa unit-test command
             result = subprocess.run(
-                ['mofa', 'debug', agent_path, test_yaml],
+                ['mofa', 'unit-test', agent_path, test_yaml],
                 capture_output=True,
                 text=True,
                 timeout=60
             )
 
             # Parse the output
-            return self._parse_output(result.stdout, result.stderr)
+            return self._parse_output(result.stdout, result.stderr, result.returncode)
 
         except subprocess.TimeoutExpired:
+            print("[ERROR] Test execution timeout (>60s)")
             return TestResult(
                 total=0,
                 passed=0,
@@ -41,7 +42,7 @@ class DebugRunner:
                 tests=[]
             )
         except Exception as e:
-            print(f"Error running debug: {e}")
+            print(f"[ERROR] Failed to run unit-test: {e}")
             return TestResult(
                 total=0,
                 passed=0,
@@ -50,19 +51,22 @@ class DebugRunner:
                 tests=[]
             )
 
-    def _parse_output(self, stdout: str, stderr: str) -> TestResult:
+    def _parse_output(self, stdout: str, stderr: str, returncode: int) -> TestResult:
         """
-        Parse mofa debug output to extract test results
+        Parse mofa unit-test output to extract test results
 
         Expected output format:
         Test case 1/3: test_name
         Status: [PASS] Passed
         ----------------------------------
         ...
+        ========================================
+        Test Summary:
         Total test cases: 3
         Passed: 2
         Failed: 1
         Pass rate: 66.67%
+        ========================================
         """
         tests = []
         total = 0
@@ -106,6 +110,14 @@ class DebugRunner:
             failed = total - passed
             pass_rate = (passed / total * 100) if total > 0 else 0.0
 
+        # Debug output when no results parsed
+        if total == 0:
+            print("\n[DEBUG] Failed to parse test results")
+            print(f"[DEBUG] Return code: {returncode}")
+            if stderr:
+                print(f"[DEBUG] Stderr:\n{stderr}")
+            print(f"[DEBUG] Stdout (first 500 chars):\n{stdout[:500]}")
+
         return TestResult(
             total=total,
             passed=passed,
@@ -113,6 +125,43 @@ class DebugRunner:
             pass_rate=pass_rate,
             tests=tests
         )
+
+    def run_interactive(self, agent_path: str) -> bool:
+        """
+        Run mofa run-node command for interactive manual testing
+
+        Args:
+            agent_path: Path to agent directory
+
+        Returns:
+            True if user wants to continue, False to skip
+        """
+        try:
+            print("\n" + "=" * 60)
+            print("Interactive Manual Testing (run-node)")
+            print("=" * 60)
+            print("You can now manually test the agent with your own inputs.")
+            print("The agent will execute and show you the output.")
+            print("=" * 60 + "\n")
+
+            # Run mofa run-node in interactive mode
+            # Note: This will inherit stdin/stdout for user interaction
+            result = subprocess.run(
+                ['mofa', 'run-node', agent_path],
+                timeout=120  # 2 minutes timeout
+            )
+
+            return True  # Continue after manual testing
+
+        except subprocess.TimeoutExpired:
+            print("\n[ERROR] Interactive testing timeout")
+            return True
+        except KeyboardInterrupt:
+            print("\n[INFO] Interactive testing interrupted by user")
+            return True
+        except Exception as e:
+            print(f"\n[ERROR] Failed to run interactive test: {e}")
+            return True
 
     def format_failures(self, test_result: TestResult) -> str:
         """Format failed tests for LLM consumption"""

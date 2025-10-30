@@ -21,7 +21,7 @@ class TestSuite:
     cases: List[TestCase]
 
     def to_yaml(self) -> str:
-        """Convert to YAML format for mofa debug"""
+        """Convert to YAML format for mofa unit-test"""
         test_cases = []
         for case in self.cases:
             case_dict = {

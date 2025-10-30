@@ -122,7 +122,7 @@ main()
 ## Testing
 
 ```bash
-mofa debug . ./tests/test_{agent_name.replace('-', '_')}.yml
+mofa unit-test . ./tests/test_{agent_name.replace('-', '_')}.yml
 ```
 
 ---

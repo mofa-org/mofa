@@ -39,8 +39,9 @@ class OrderedGroup(click.Group):
         return [
             "init",
             "run-flow",
-            "create-agent",
+            "run-node",
             "unit-test",
+            "create-agent",
             "vibe",
             "list",
             "search",

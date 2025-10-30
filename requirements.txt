@@ -22,7 +22,7 @@ openpyxl==3.1.5
 attrs>=25.1.0,<26
 
 # --------- path --------- #
-pathlib
+# pathlib is built-in since Python 3.4, no need to install
 
 
 # --------- cli --------- #

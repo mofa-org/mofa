@@ -27,15 +27,25 @@ from mofa.utils.process.util import (
 
 # Global variable to track venv for cleanup
 _venv_root_path = None
+_cleanup_done = False
 
 
 def _cleanup_venv():
     """Ask user if they want to keep the venv and clean up if needed."""
-    global _venv_root_path
+    global _venv_root_path, _cleanup_done
+
+    # Only cleanup once
+    if _cleanup_done:
+        return
+
+    _cleanup_done = True
 
     if _venv_root_path and os.path.exists(_venv_root_path):
         try:
-            keep_venv = click.confirm("\nDo you want to keep the virtual environment for next run?", default=True)
+            keep_venv = click.confirm(
+                "\nDo you want to keep the virtual environment for next run?",
+                default=True,
+            )
             if not keep_venv:
                 click.echo(f"Removing venv at {_venv_root_path}...")
                 shutil.rmtree(_venv_root_path, ignore_errors=True)
@@ -48,6 +58,7 @@ def _cleanup_venv():
 
 def _register_cleanup_handler():
     """Register signal handlers for cleanup on exit."""
+
     def cleanup_handler(signum=None, frame=None):
         """Clean up venv on interrupt."""
         if signum in (signal.SIGINT, signal.SIGTERM):
@@ -64,7 +75,9 @@ def find_existing_venv(working_dir: str):
     """Find existing mofa_run_* directories in working_dir."""
     existing_venvs = []
     for item in os.listdir(working_dir):
-        if item.startswith("mofa_run_") and os.path.isdir(os.path.join(working_dir, item)):
+        if item.startswith("mofa_run_") and os.path.isdir(
+            os.path.join(working_dir, item)
+        ):
             venv_path = os.path.join(working_dir, item, "venv")
             if os.path.exists(venv_path):
                 existing_venvs.append(os.path.join(working_dir, item))
@@ -85,8 +98,12 @@ def create_venv(base_python: str, working_dir: str):
             if reuse:
                 temp_root = existing_venvs[0]
                 venv_dir = os.path.join(temp_root, "venv")
-                bin_dir = os.path.join(venv_dir, "Scripts" if os.name == "nt" else "bin")
-                python_bin = os.path.join(bin_dir, "python.exe" if os.name == "nt" else "python")
+                bin_dir = os.path.join(
+                    venv_dir, "Scripts" if os.name == "nt" else "bin"
+                )
+                python_bin = os.path.join(
+                    bin_dir, "python.exe" if os.name == "nt" else "python"
+                )
                 pip_bin = os.path.join(bin_dir, "pip.exe" if os.name == "nt" else "pip")
 
                 try:
@@ -100,7 +117,9 @@ def create_venv(base_python: str, working_dir: str):
                         text=True,
                     ).strip()
                 except subprocess.CalledProcessError as exc:
-                    click.echo("Warning: Existing venv seems corrupted, creating new one...")
+                    click.echo(
+                        "Warning: Existing venv seems corrupted, creating new one..."
+                    )
                     shutil.rmtree(temp_root, ignore_errors=True)
                 else:
                     _venv_root_path = temp_root
@@ -112,6 +131,7 @@ def create_venv(base_python: str, working_dir: str):
                         "python": python_bin,
                         "pip": pip_bin,
                         "site_packages": site_packages,
+                        "reused": True,
                     }
             else:
                 # User chose not to reuse, delete old ones
@@ -130,7 +150,11 @@ def create_venv(base_python: str, working_dir: str):
     create_proc = subprocess.run(create_cmd, capture_output=True, text=True)
     if create_proc.returncode != 0:
         shutil.rmtree(temp_root, ignore_errors=True)
-        error_msg = create_proc.stderr.strip() or create_proc.stdout.strip() or "Failed to create virtual environment"
+        error_msg = (
+            create_proc.stderr.strip()
+            or create_proc.stdout.strip()
+            or "Failed to create virtual environment"
+        )
 
         # Check if it's the ensurepip issue on Ubuntu/Debian
         if "ensurepip is not available" in error_msg or "python3-venv" in error_msg:
@@ -175,6 +199,7 @@ def create_venv(base_python: str, working_dir: str):
         "python": python_bin,
         "pip": pip_bin,
         "site_packages": site_packages,
+        "reused": False,
     }
 
 
@@ -216,7 +241,10 @@ def install_base_requirements(pip_executable: str, working_dir: str):
     click.echo("Installing base requirements...")
 
     # First install pip tools to avoid conflicts
-    subprocess.run([pip_executable, "install", "--upgrade", "pip", "setuptools", "wheel"], capture_output=True)
+    subprocess.run(
+        [pip_executable, "install", "--upgrade", "pip", "setuptools", "wheel"],
+        capture_output=True,
+    )
 
     # Remove pathlib if it exists (conflicts with Python 3.11+ built-in pathlib)
     subprocess.run([pip_executable, "uninstall", "-y", "pathlib"], capture_output=True)
@@ -227,6 +255,7 @@ def install_base_requirements(pip_executable: str, working_dir: str):
         + "/lib/python3.*/site-packages"
     )
     import glob
+
     for site_pkg_dir in glob.glob(venv_site_packages):
         pathlib_files = [
             os.path.join(site_pkg_dir, "pathlib.py"),
@@ -268,7 +297,13 @@ def install_base_requirements(pip_executable: str, working_dir: str):
 
     if mofa_root:
         # Use --no-build-isolation to avoid pathlib conflicts
-        install_cmd = [pip_executable, "install", "--no-build-isolation", "-e", mofa_root]
+        install_cmd = [
+            pip_executable,
+            "install",
+            "--no-build-isolation",
+            "-e",
+            mofa_root,
+        ]
         proc = subprocess.run(install_cmd, capture_output=True, text=True)
         if proc.returncode != 0:
             raise RuntimeError(f"Failed to install development mofa: {proc.stderr}")
@@ -299,7 +334,13 @@ def install_packages(pip_executable: str, package_paths: List[str]):
         if not os.path.exists(package_path):
             click.echo(f"Warning: package path not found: {package_path}")
             continue
-        install_cmd = [pip_executable, "install", "--no-build-isolation", "--editable", package_path]
+        install_cmd = [
+            pip_executable,
+            "install",
+            "--no-build-isolation",
+            "--editable",
+            package_path,
+        ]
         proc = subprocess.run(install_cmd, text=True)
         if proc.returncode != 0:
             raise RuntimeError(f"Failed to install package from {package_path}")
@@ -327,6 +368,11 @@ def build_env(base_env: dict, venv_info: dict):
 
 def run_flow(dataflow_file: str):
     """Execute a dataflow from the given YAML file."""
+    global _cleanup_done
+
+    # Reset cleanup flag for this run
+    _cleanup_done = False
+
     # Register cleanup handlers for Ctrl+C and normal exit
     _register_cleanup_handler()
 
@@ -345,10 +391,7 @@ def run_flow(dataflow_file: str):
     # Check if dora is available
     try:
         dora_check = subprocess.run(
-            ["dora", "--version"],
-            capture_output=True,
-            text=True,
-            timeout=5
+            ["dora", "--version"], capture_output=True, text=True, timeout=5
         )
         if dora_check.returncode != 0:
             click.echo("Error: dora command not found or not working properly.")
@@ -380,17 +423,48 @@ def run_flow(dataflow_file: str):
         env_info = create_venv(sys.executable, working_dir)
         run_env = build_env(run_env, env_info)
 
-        # Check if base requirements are already installed (for reused venv)
-        # Try importing dora_rs to check if base requirements are installed
-        check_cmd = [env_info["python"], "-c", "import dora_rs"]
-        check_result = subprocess.run(check_cmd, capture_output=True)
+        # Check if this is a reused venv
+        venv_is_reused = env_info.get("reused", False)
 
-        if check_result.returncode != 0:
-            # Base requirements not installed, install them
-            install_base_requirements(env_info["pip"], working_dir)
+        if venv_is_reused:
+            # Venv was reused, ask user if they want to reinstall packages
+            try:
+                should_install_packages = click.confirm(
+                    "Do you want to reinstall packages in this environment?",
+                    default=False,
+                )
+            except:
+                # If we can't ask (non-interactive), don't reinstall by default
+                should_install_packages = False
+                click.echo("Skipping package reinstallation (using existing packages)")
+
+            # If user chose to reinstall, also reinstall base requirements
+            if should_install_packages:
+                install_base_requirements(env_info["pip"], working_dir)
+
+            # Ask if user wants to skip dora build (which also reinstalls packages)
+            try:
+                skip_build = not should_install_packages and click.confirm(
+                    "Skip dora build step? (faster but won't pick up code changes)",
+                    default=False,
+                )
+            except:
+                skip_build = False
+        else:
+            # New venv, check if base requirements are installed
+            check_cmd = [env_info["python"], "-c", "import dora_rs"]
+            check_result = subprocess.run(check_cmd, capture_output=True)
+
+            if check_result.returncode != 0:
+                # Base requirements not installed, install them
+                install_base_requirements(env_info["pip"], working_dir)
+
+            # Always install packages for new venv
+            should_install_packages = True
+            skip_build = False
 
         editable_packages = collect_editable_packages(dataflow_path, working_dir)
-        if editable_packages:
+        if editable_packages and should_install_packages:
             click.echo("Installing agent packages...")
             install_packages(env_info["pip"], editable_packages)
     except RuntimeError as runtime_error:
@@ -416,24 +490,27 @@ def run_flow(dataflow_file: str):
         )
         time.sleep(1)
 
-        dora_build_node = subprocess.Popen(
-            ["dora", "build", dataflow_path],
-            stdin=subprocess.PIPE,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True,
-            cwd=working_dir,
-            env=run_env,
-        )
+        if not skip_build:
+            dora_build_node = subprocess.Popen(
+                ["dora", "build", dataflow_path],
+                stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                cwd=working_dir,
+                env=run_env,
+            )
 
-        time.sleep(3)
-        stdout, stderr = dora_build_node.communicate()
-        if dora_build_node.returncode != 0:
-            build_error = stderr.strip() if stderr else stdout.strip()
-            if build_error:
-                click.echo(build_error)
-            click.echo("Failed to build dataflow. Aborting run.")
-            return
+            time.sleep(3)
+            stdout, stderr = dora_build_node.communicate()
+            if dora_build_node.returncode != 0:
+                build_error = stderr.strip() if stderr else stdout.strip()
+                if build_error:
+                    click.echo(build_error)
+                click.echo("Failed to build dataflow. Aborting run.")
+                return
+        else:
+            click.echo("Skipping dora build step...")
 
         dataflow_name = str(uuid.uuid4()).replace("-", "")
         click.echo(f"Starting dataflow with name: {dataflow_name}")
@@ -460,7 +537,7 @@ def run_flow(dataflow_file: str):
             return
 
         click.echo("Starting terminal-input process...")
-        click.echo("You can now interact directly with the agents. Type 'exit' to quit.")
+        click.echo("You can now interact directly with the agent. Type 'exit' to quit.")
 
         # Start terminal-input with direct stdin/stdout connection
         task_input_process = subprocess.Popen(

@@ -263,6 +263,14 @@ class VibeEngine:
                     # Create/update project
                     self.project_path = self._create_project(current_code)
 
+                    # Ask if user wants to manually test first (run-node)
+                    if Confirm.ask(
+                        "\n[bold cyan]Run interactive manual test first? (run-node)[/bold cyan]",
+                        default=False,
+                        console=self.console
+                    ):
+                        self.debug_runner.run_interactive(self.project_path)
+
                     # Run tests
                     test_result = self._run_tests()
 
@@ -407,7 +415,7 @@ class VibeEngine:
         return project_path
 
     def _run_tests(self) -> TestResult:
-        """Run mofa debug tests"""
+        """Run mofa unit-test tests"""
         test_yaml_path = os.path.join(
             self.project_path,
             "tests",
