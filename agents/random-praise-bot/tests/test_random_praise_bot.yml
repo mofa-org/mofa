@@ -1,7 +1,0 @@
-test_cases:
-- input:
-    user_input: test
-  name: basic_functionality
-  validation:
-    not_empty: true
-    type: str

@@ -163,7 +163,7 @@ def register_vibe_commands(cli_group):
 
         # Ask what to generate
         vibe_type = click.prompt(
-            "What to generate? (1=agent, 2=flow, q=quit)", type=str, default="1"
+            "What to generate? (1=agent, 2=flow, 3=yolo, q=quit)", type=str, default="1"
         )
 
         if vibe_type.lower() == "q":
@@ -263,6 +263,45 @@ def register_vibe_commands(cli_group):
 
             except Exception as e:
                 click.echo(f"\n[ERROR] Flow generation failed: {e}")
+                import traceback
+
+                traceback.print_exc()
+                sys.exit(1)
+
+        elif vibe_type == "3":
+            # YOLO mode - fast multi-node generation
+            click.echo("\nYOLO Mode - Fast multi-node generation\n")
+
+            # Only ask for requirement
+            requirement = click.prompt("Describe what the flow should do")
+
+            # Load saved config
+            saved_config = _load_vibe_config()
+
+            try:
+                from mofa.vibe.yolo_engine import YoloEngine
+
+                # Initialize YOLO engine with minimal config
+                engine = YoloEngine(
+                    requirement=requirement,
+                    llm_model=saved_config["model"],
+                    api_key=api_key,
+                    agents_output=saved_config["agents_output"],
+                    flows_output=saved_config["flows_output"],
+                )
+
+                # Run YOLO generation
+                result = engine.run()
+
+                if result:
+                    click.echo(f"\n[SUCCESS] Generated at: {result['flow_path']}")
+                    click.echo(f"Agents: {', '.join(result['agents'])}")
+                    sys.exit(0)
+                else:
+                    sys.exit(1)
+
+            except Exception as e:
+                click.echo(f"\n[ERROR] YOLO generation failed: {e}")
                 import traceback
 
                 traceback.print_exc()
