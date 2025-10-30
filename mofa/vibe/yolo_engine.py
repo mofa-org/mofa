@@ -242,45 +242,95 @@ Example connection patterns:
 
     def _generate_agent_code_yolo(self, agent_name: str, description: str, input_param: str, output_param: str) -> str:
         """Generate agent code in YOLO mode (without test cases)"""
+
+        # Read LLM config from .env
+        import os
+        from dotenv import load_dotenv
+        load_dotenv()
+
+        api_key = os.getenv('OPENAI_API_KEY', '')
+        base_url = os.getenv('OPENAI_API_BASE', 'https://api.openai.com/v1')
+        model = os.getenv('MOFA_VIBE_MODEL', 'gpt-4o-mini')
+
+        # Build LLM integration example with actual values
+        llm_example = ""
+        if api_key:
+            llm_example = f"""
+
+## LLM Integration (if needed)
+If the description involves LLM/AI calls, you can use this pre-configured OpenAI client:
+
+```python
+from openai import OpenAI
+
+# Pre-configured with your .env settings
+client = OpenAI(
+    api_key="{api_key}",
+    base_url="{base_url}"
+)
+
+response = client.chat.completions.create(
+    model="{model}",
+    messages=[
+        {{"role": "system", "content": "You are a helpful assistant."}},
+        {{"role": "user", "content": user_input}}
+    ],
+    temperature=0.7
+)
+
+result = response.choices[0].message.content
+```
+
+Note: The API key, base URL, and model are from your .env configuration.
+"""
+
         prompt = f"""
 Generate a complete MoFA agent implementation for the following requirement.
 
-Agent Name: {agent_name}
-Description: {description}
-Input Parameter: {input_param}
-Output Parameter: {output_param}
+## Agent Name
+{agent_name}
 
-Requirements:
-1. Use Dora-rs event system
-2. Input: Receive from previous node via event.get("{input_param}")
-3. Output: Send to next node via event.send_output("{output_param}", value)
-4. Include proper error handling
-5. Use Python 3.11+ syntax
-6. Keep it simple and focused
+## Description
+{description}
 
-Template structure:
+## Input/Output Parameters
+- Input Parameter: {input_param}
+- Output Parameter: {output_param}
+
+## MoFA Agent Template
+You MUST follow this exact structure:
+
 ```python
-from dora import Node
+from mofa.agent_build.base.base_agent import MofaAgent, run_agent
+
+@run_agent
+def run(agent: MofaAgent):
+    # Step 1: Receive input parameter
+    {input_param} = agent.receive_parameter('{input_param}')
+
+    # Step 2: Implement the business logic based on the description
+    # Your code here to process the input
+
+    # Step 3: Send output
+    agent.send_output(agent_output_name='{output_param}', agent_result=result)
 
 def main():
-    node = Node()
-
-    for event in node:
-        if event["type"] == "INPUT":
-            # Your implementation here
-            {input_param} = event.get("{input_param}")
-
-            # Process the data
-            {output_param} = ...  # Your logic
-
-            # Send output
-            event.send_output("{output_param}", {output_param})
+    agent = MofaAgent(agent_name='{agent_name}')
+    run(agent=agent)
 
 if __name__ == "__main__":
     main()
 ```
 
-Return ONLY the Python code, no explanations.
+## Guidelines
+1. Import necessary libraries at the top
+2. Follow Python best practices
+3. Add error handling if necessary
+4. Keep it simple and focused on the description
+5. The input parameter name is '{input_param}', output parameter name is '{output_param}'
+6. Output ONLY the complete Python code, no explanations or markdown
+{llm_example}
+Generate the complete main.py code now:
 """
 
         with Progress(
@@ -300,6 +350,42 @@ Return ONLY the Python code, no explanations.
                 code_str = code_str.split("```")[1].split("```")[0].strip()
 
         return code_str
+
+    def _generate_flow_name(self, agent_names):
+        """Generate a meaningful flow name based on agent names"""
+        agents_str = ", ".join(agent_names)
+
+        prompt = f"""Generate a concise, descriptive flow name for a dataflow with these agents:
+
+Agents: {agents_str}
+Original requirement: {self.requirement}
+
+Guidelines:
+1. Use lowercase letters, numbers, and hyphens only
+2. 2-4 words maximum
+3. Focus on what the FLOW does (not individual agents)
+4. Use simple, clear English words
+5. Examples:
+   - agents: [text-processor, sentiment-analyzer] → "text-sentiment-analysis"
+   - agents: [image-loader, face-detector, age-estimator] → "face-age-detection"
+   - agents: [data-fetcher, csv-parser, stats-calculator] → "data-statistics-pipeline"
+
+Output ONLY the flow name (e.g., "text-analyzer-flow"), no explanations or quotes:
+"""
+
+        name = self.llm.generate(prompt).strip().strip('"').strip("'")
+
+        # Ensure it's valid (only lowercase, numbers, hyphens)
+        import re
+        name = re.sub(r'[^a-z0-9-]', '-', name.lower())
+        name = re.sub(r'-+', '-', name)  # Remove duplicate hyphens
+        name = name.strip('-')  # Remove leading/trailing hyphens
+
+        # Fallback if empty or too short
+        if len(name) < 3:
+            name = f"flow-{len(agent_names)}-agents"
+
+        return name
 
     def _generate_agents(self, plan):
         """Generate new agents and collect paths of reused agents"""
@@ -396,9 +482,8 @@ Return ONLY the Python code, no explanations.
             last_agent_output = all_agents[last_agent_name]['output_param']
             terminal_input_source = f"{last_agent_name}/{last_agent_output}"
 
-        # Build flow structure
-        total_agents = len(all_agents)
-        flow_name = f"yolo-flow-{total_agents + 1}-agents"
+        # Generate meaningful flow name using LLM
+        flow_name = self._generate_flow_name(list(all_agents.keys()))
         flow_dir = Path(self.flows_output) / flow_name
         flow_dir.mkdir(parents=True, exist_ok=True)
 

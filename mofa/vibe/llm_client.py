@@ -170,6 +170,48 @@ Guidelines:
 
     def generate_code(self, requirement: str, test_cases_yaml: str, agent_name: str) -> str:
         """Generate MoFA agent code from requirement and test cases"""
+
+        # Read LLM config from .env
+        import os
+        from dotenv import load_dotenv
+        load_dotenv()
+
+        api_key = os.getenv('OPENAI_API_KEY', '')
+        base_url = os.getenv('OPENAI_API_BASE', 'https://api.openai.com/v1')
+        model = os.getenv('MOFA_VIBE_MODEL', 'gpt-4o-mini')
+
+        # Build LLM integration example with actual values
+        llm_example = ""
+        if api_key:
+            llm_example = f"""
+
+## LLM Integration (if needed)
+If the requirement involves LLM/AI calls, you can use this pre-configured OpenAI client:
+
+```python
+from openai import OpenAI
+
+# Pre-configured with your .env settings
+client = OpenAI(
+    api_key="{api_key}",
+    base_url="{base_url}"
+)
+
+response = client.chat.completions.create(
+    model="{model}",
+    messages=[
+        {{"role": "system", "content": "You are a helpful assistant."}},
+        {{"role": "user", "content": user_input}}
+    ],
+    temperature=0.7
+)
+
+result = response.choices[0].message.content
+```
+
+Note: The API key, base URL, and model are from your .env configuration.
+"""
+
         prompt = f"""
 Generate a complete MoFA agent implementation that passes all the test cases.
 
@@ -217,7 +259,7 @@ if __name__ == "__main__":
 4. Keep it simple and focused
 5. The code MUST pass all test cases
 6. Output ONLY the complete Python code, no explanations or markdown
-
+{llm_example}
 Generate the complete main.py code now:
 """
         return self.generate(prompt)
