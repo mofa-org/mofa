@@ -13,6 +13,7 @@ import time
 import uuid
 import atexit
 import signal
+import re
 from pathlib import Path
 from typing import List, Optional
 
@@ -282,6 +283,25 @@ def collect_editable_packages(dataflow_path: str, working_dir: str):
     return list(dict.fromkeys(editable_paths))
 
 
+def collect_placeholder_env_vars(descriptor: dict):
+    """Collect environment variables referenced via $PLACEHOLDER strings."""
+    nodes = descriptor.get("nodes", []) if isinstance(descriptor, dict) else []
+    pattern = re.compile(r"^\$(?P<name>[A-Za-z_][A-Za-z0-9_]*)$")
+    found = set()
+    for node in nodes:
+        if not isinstance(node, dict):
+            continue
+        env_cfg = node.get("env")
+        if not isinstance(env_cfg, dict):
+            continue
+        for value in env_cfg.values():
+            if isinstance(value, str):
+                match = pattern.match(value.strip())
+                if match:
+                    found.add(match.group("name"))
+    return found
+
+
 def ensure_terminal_input_available(env_info: dict, working_dir: str, pip_executable: str):
     """Ensure terminal-input CLI exists inside the virtual environment."""
     terminal_binary = os.path.join(env_info["bin"], "terminal-input")
@@ -453,6 +473,35 @@ def run_flow(dataflow_file: str, vibe_test_mode: bool = False):
     if not dataflow_path.endswith(".yml") and not dataflow_path.endswith(".yaml"):
         click.echo(f"Error: File must be a YAML file (.yml or .yaml): {dataflow_path}")
         return
+
+    try:
+        dataflow_descriptor = read_yaml(dataflow_path)
+    except Exception as exc:
+        click.echo(f"Error: Failed to read dataflow descriptor: {exc}")
+        return
+
+    placeholder_env_vars = collect_placeholder_env_vars(dataflow_descriptor)
+    missing_env_vars = [var for var in sorted(placeholder_env_vars) if var not in os.environ]
+    collected_env_values = {}
+
+    for env_var in missing_env_vars:
+        if click.confirm(
+            f"Environment variable '{env_var}' is required but not set. Provide it now?",
+            default=True,
+        ):
+            hide_input = any(keyword in env_var.upper() for keyword in ["KEY", "PASSWORD", "SECRET", "TOKEN"])
+            value = click.prompt(
+                f"Enter value for {env_var}",
+                type=str,
+                hide_input=hide_input,
+            )
+            collected_env_values[env_var] = value
+        else:
+            click.echo(f"Skipping {env_var}. Ensure it is set before running Dora.")
+
+    # Inject user-provided values into the current process environment
+    for env_var, value in collected_env_values.items():
+        os.environ[env_var] = value
 
     # Get the directory containing the dataflow file
     working_dir = os.path.dirname(dataflow_path)

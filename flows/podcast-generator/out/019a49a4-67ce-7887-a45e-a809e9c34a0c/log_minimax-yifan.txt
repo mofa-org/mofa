@@ -1,6 +1,0 @@
-[INFO] MiniMax T2A Node initialized
-[INFO] Model: speech-2.5-hd-preview
-[INFO] Voice ID: moss_audio_aaa1346a-7ce7-11f0-8e61-2e6e3c7ee85d
-[INFO] Sample Rate: 32000 Hz
-[INFO] Speed: 1.0x, Volume: 1.0, Pitch: 0
-[INFO] Batch Duration: 2000ms (reduces shared memory usage)

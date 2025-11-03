@@ -1,7 +1,0 @@
-[INFO] MiniMax T2A Node initialized
-[INFO] Model: speech-2.5-hd-preview
-[INFO] Voice ID: ttv-voice-2025103011222725-sg8dZxUP
-[INFO] Sample Rate: 32000 Hz
-[INFO] Speed: 1.0x, Volume: 1.0, Pitch: -1
-[INFO] Batch Duration: 2000ms (reduces shared memory usage)
-[INFO] MiniMax T2A node stopped

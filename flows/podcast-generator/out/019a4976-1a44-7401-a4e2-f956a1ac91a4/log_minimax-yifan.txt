@@ -1,1 +1,0 @@
-[INFO] MiniMax T2A Node initialized
