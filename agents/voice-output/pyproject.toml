@@ -1,0 +1,9 @@
+[project]
+name = "voice-output"
+version = "0.1.0"
+description = "MOFA Podcast Voice Output"
+requires-python = ">=3.9"
+dependencies = ["pyarrow>=5.0.0", "mofa-core", "numpy", "scipy"]
+
+[project.scripts]
+voice-output = "voice_output.main:main"

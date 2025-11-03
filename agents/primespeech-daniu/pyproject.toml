@@ -1,0 +1,9 @@
+[project]
+name = "primespeech-daniu"
+version = "0.1.0"
+description = "MOFA PrimeSpeech TTS for Daniu"
+requires-python = ">=3.9"
+dependencies = ["pyarrow>=5.0.0", "mofa-core", "numpy", "scipy"]
+
+[project.scripts]
+primespeech-daniu = "primespeech_daniu.main:main"

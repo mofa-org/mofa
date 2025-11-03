@@ -1,0 +1,16 @@
+[project]
+name = "viewer"
+version = "0.1.0"
+description = "MOFA Podcast Viewer"
+requires-python = ">=3.9"
+dependencies = [
+    "pyarrow>=5.0.0",
+    "mofa-core",
+]
+
+[project.scripts]
+viewer = "viewer.main:main"
+
+[build-system]
+requires = ["setuptools>=42", "wheel"]
+build-backend = "setuptools.build_meta"

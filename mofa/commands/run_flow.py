@@ -282,6 +282,29 @@ def collect_editable_packages(dataflow_path: str, working_dir: str):
     return list(dict.fromkeys(editable_paths))
 
 
+def ensure_terminal_input_available(env_info: dict, working_dir: str, pip_executable: str):
+    """Ensure terminal-input CLI exists inside the virtual environment."""
+    terminal_binary = os.path.join(env_info["bin"], "terminal-input")
+    if os.path.exists(terminal_binary):
+        return
+
+    candidate_path = os.path.abspath(os.path.join(working_dir, "../../agents/terminal-input"))
+    if not os.path.isdir(candidate_path):
+        return
+
+    click.echo("Installing terminal-input agent for interactive mode...")
+    install_cmd = [
+        pip_executable,
+        "install",
+        "--no-build-isolation",
+        "--editable",
+        candidate_path,
+    ]
+    proc = subprocess.run(install_cmd, text=True)
+    if proc.returncode != 0:
+        click.echo("Warning: Failed to install terminal-input agent automatically. Interactive console may be unavailable.")
+
+
 def install_base_requirements(pip_executable: str, working_dir: str):
     """Install base requirements into the venv."""
     click.echo("Installing base requirements...")
@@ -517,9 +540,13 @@ def run_flow(dataflow_file: str, vibe_test_mode: bool = False):
             skip_build = False
 
         editable_packages = collect_editable_packages(dataflow_path, working_dir)
+        terminal_agent_path = os.path.abspath(os.path.join(working_dir, "../../agents/terminal-input"))
+        if os.path.isdir(terminal_agent_path) and terminal_agent_path not in editable_packages:
+            editable_packages.append(terminal_agent_path)
         if editable_packages and should_install_packages:
             click.echo("Installing agent packages...")
             install_packages(env_info["pip"], editable_packages)
+        ensure_terminal_input_available(env_info, working_dir, env_info["pip"])
     except RuntimeError as runtime_error:
         click.echo(f"Failed to prepare run environment: {runtime_error}")
         _cleanup_venv()
@@ -587,6 +614,34 @@ def run_flow(dataflow_file: str, vibe_test_mode: bool = False):
                 click.echo(f"Stderr: {stderr}")
             if stdout:
                 click.echo(f"Stdout: {stdout}")
+            return
+
+        terminal_path = shutil.which("terminal-input", path=run_env.get("PATH", ""))
+        if not terminal_path:
+            click.echo("terminal-input command not found in the virtual environment.")
+            if click.confirm(
+                "Skip launching terminal-input and keep the dataflow running?",
+                default=True,
+            ):
+                click.echo("Dataflow is running without terminal-input. Press Ctrl+C to stop.")
+                try:
+                    dora_dataflow_process.wait()
+                except KeyboardInterrupt:
+                    click.echo("\nReceived interrupt signal, shutting down...")
+                return
+            else:
+                click.echo("Aborting run. Please install terminal-input agent and retry.")
+                return
+
+        if not click.confirm(
+            "Launch terminal-input for interactive console?",
+            default=True,
+        ):
+            click.echo("Skipping terminal-input. Dataflow is running; press Ctrl+C to stop.")
+            try:
+                dora_dataflow_process.wait()
+            except KeyboardInterrupt:
+                click.echo("\nReceived interrupt signal, shutting down...")
             return
 
         click.echo("Starting terminal-input process...")

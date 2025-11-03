@@ -1,0 +1,117 @@
+nodes:
+  # Script segmenter (DYNAMIC - launched separately)
+  - id: script-segmenter
+    build: pip install -e ../../agents/script-segmenter
+    path: dynamic
+    outputs:
+      - daniu_text
+      - yifan_text
+      - boyu_text
+      - script_complete
+      - log
+    inputs:
+      daniu_segment_complete: minimax-daniu/segment_complete
+      yifan_segment_complete: minimax-yifan/segment_complete
+      boyu_segment_complete: minimax-boyu/segment_complete
+
+  # MiniMax T2A TTS for 大牛 (Liu Xiang voice)
+  - id: minimax-daniu
+    build: pip install -e ../../../mofa-voice/dora/node-hub/dora-minimax-t2a
+    path: dora-minimax-t2a
+    inputs:
+      text: script-segmenter/daniu_text
+    outputs:
+      - audio
+      - segment_complete
+      - log
+    env:
+      MINIMAX_API_KEY: "xxx"
+      MINIMAX_VOICE_ID: "ttv-voice-2025103011222725-sg8dZxUP"
+      MINIMAX_SPEED: "1.0"
+      MINIMAX_VOL: "1"
+      MINIMAX_PITCH: "-1"
+      ENABLE_ENGLISH_NORMALIZATION: "true"
+      SAMPLE_RATE: "32000"
+      BATCH_DURATION_MS: "2000"
+      TEXT_LANG: "zh"
+      LOG_LEVEL: "INFO"
+
+  # MiniMax T2A TTS for 一帆 (Doubao voice)
+  - id: minimax-yifan
+    build: pip install -e ../../../mofa-voice/dora/node-hub/dora-minimax-t2a
+    path: dora-minimax-t2a
+    inputs:
+      text: script-segmenter/yifan_text
+    outputs:
+      - audio
+      - segment_complete
+      - log
+    env:
+      MINIMAX_API_KEY: "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJHcm91cE5hbWUiOiJZdWUgQ2hlbiIsIlVzZXJOYW1lIjoiWXVlIENoZW4iLCJBY2NvdW50IjoiIiwiU3ViamVjdElEIjoiMTk4Mjk5MjQ5ODg3MTUwOTc3NSIsIlBob25lIjoiIiwiR3JvdXBJRCI6IjE5ODI5OTI0OTg4NjczMTEzNzUiLCJQYWdlTmFtZSI6IiIsIk1haWwiOiJkc3BmYWNAZ21haWwuY29tIiwiQ3JlYXRlVGltZSI6IjIwMjUtMTAtMjggMTE6Mzc6NTQiLCJUb2tlblR5cGUiOjEsImlzcyI6Im1pbmltYXgifQ.Osud6oVJoPRzZaV2azTOP-LBCJBHvxdscmKcHRaUxv-BjbskcT42-JnghGpjPkYpba6haln-L-Qd5Ba7EefFAVPiRubFjZdHAzRal7Ao1pcnAX7C4mSMjjl4PuLUfMNbBGLis5u6Ua43cOGf30mA5wGpAYHGMA9ZTrndEdZL3tOA_KDiGg7nfEaUw3K4XUP4G5dz-rJkts9NJ6FDkPc-IGjPJ3UVjf3fRj9-wjnG4e-4xjhXO4Mj1C-ZyR5MkO59OWLl_oZoFjq96XGcCfBvEnJkSabBRlbwNhTM8HckWSUgzNBGNbD4kd7yEKm8bDFNw8Fs7EUb-0okzhvlbgQcAQ"
+      MINIMAX_VOICE_ID: "moss_audio_aaa1346a-7ce7-11f0-8e61-2e6e3c7ee85d"
+      MINIMAX_SPEED: "1.0"
+      MINIMAX_VOL: "1.0"
+      MINIMAX_PITCH: "0"
+      ENABLE_ENGLISH_NORMALIZATION: "true"
+      SAMPLE_RATE: "32000"
+      BATCH_DURATION_MS: "2000"
+      TEXT_LANG: "zh"
+      LOG_LEVEL: "INFO"
+
+  # MiniMax T2A TTS for 博宇 (configure voice ID via env)
+  - id: minimax-boyu
+    build: pip install -e ../../../mofa-voice/dora/node-hub/dora-minimax-t2a
+    path: dora-minimax-t2a
+    inputs:
+      text: script-segmenter/boyu_text
+    outputs:
+      - audio
+      - segment_complete
+      - log
+    env:
+      MINIMAX_API_KEY: "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJHcm91cE5hbWUiOiJZdWUgQ2hlbiIsIlVzZXJOYW1lIjoiWXVlIENoZW4iLCJBY2NvdW50IjoiIiwiU3ViamVjdElEIjoiMTk4Mjk5MjQ5ODg3MTUwOTc3NSIsIlBob25lIjoiIiwiR3JvdXBJRCI6IjE5ODI5OTI0OTg4NjczMTEzNzUiLCJQYWdlTmFtZSI6IiIsIk1haWwiOiJkc3BmYWNAZ21haWwuY29tIiwiQ3JlYXRlVGltZSI6IjIwMjUtMTAtMjggMTE6Mzc6NTQiLCJUb2tlblR5cGUiOjEsImlzcyI6Im1pbmltYXgifQ.Osud6oVJoPRzZaV2azTOP-LBCJBHvxdscmKcHRaUxv-BjbskcT42-JnghGpjPkYpba6haln-L-Qd5Ba7EefFAVPiRubFjZdHAzRal7Ao1pcnAX7C4mSMjjl4PuLUfMNbBGLis5u6Ua43cOGf30mA5wGpAYHGMA9ZTrndEdZL3tOA_KDiGg7nfEaUw3K4XUP4G5dz-rJkts9NJ6FDkPc-IGjPJ3UVjf3fRj9-wjnG4e-4xjhXO4Mj1C-ZyR5MkO59OWLl_oZoFjq96XGcCfBvEnJkSabBRlbwNhTM8HckWSUgzNBGNbD4kd7yEKm8bDFNw8Fs7EUb-0okzhvlbgQcAQ"
+      MINIMAX_VOICE_ID: "moss_audio_9c223de9-7ce1-11f0-9b9f-463feaa3106a"
+      MINIMAX_SPEED: "1"
+      MINIMAX_VOL: "1.1"
+      MINIMAX_PITCH: "1"
+      ENABLE_ENGLISH_NORMALIZATION: "true"
+      SAMPLE_RATE: "32000"
+      BATCH_DURATION_MS: "2000"
+      TEXT_LANG: "zh"
+      LOG_LEVEL: "INFO"
+
+  # Voice output (DYNAMIC - launched separately)
+  - id: voice-output
+    build: pip install -e ../../agents/voice-output
+    path: dynamic
+    outputs:
+      - log
+    inputs:
+      daniu_audio:
+        source: minimax-daniu/audio
+        queue_size: 1000
+      yifan_audio:
+        source: minimax-yifan/audio
+        queue_size: 1000
+      boyu_audio:
+        source: minimax-boyu/audio
+        queue_size: 1000
+      daniu_segment_complete: minimax-daniu/segment_complete
+      yifan_segment_complete: minimax-yifan/segment_complete
+      boyu_segment_complete: minimax-boyu/segment_complete
+      script_complete: script-segmenter/script_complete
+
+  # Viewer (DYNAMIC - launched separately, optional)
+  - id: viewer
+    build: pip install -e ../../agents/viewer
+    path: dynamic
+    inputs:
+      segmenter_log: script-segmenter/log
+      daniu_log: minimax-daniu/log
+      yifan_log: minimax-yifan/log
+      boyu_log: minimax-boyu/log
+      output_log: voice-output/log
+      daniu_text: script-segmenter/daniu_text
+      yifan_text: script-segmenter/yifan_text
+      boyu_text: script-segmenter/boyu_text
+      script_complete: script-segmenter/script_complete

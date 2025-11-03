@@ -1,0 +1,77 @@
+nodes:
+  # Script segmenter (DYNAMIC - launched separately)
+  - id: script-segmenter
+    build: pip install -e ../../agents/script-segmenter
+    path: dynamic
+    outputs:
+      - daniu_text
+      - yifan_text
+      - script_complete
+      - log
+    inputs:
+      daniu_segment_complete: primespeech-daniu/segment_complete
+      yifan_segment_complete: primespeech-yifan/segment_complete
+
+  # PrimeSpeech TTS for 大牛 (Luo Xiang voice)
+  - id: primespeech-daniu
+    build: pip install -e ../../../mofa-voice/dora/node-hub/dora-primespeech -e ../../agents/primespeech-daniu
+    path: primespeech-daniu
+    inputs:
+      text: script-segmenter/daniu_text
+    outputs:
+      - audio
+      - segment_complete
+      - log
+    env:
+      VOICE_NAME: "Zhao Daniu"
+      TEXT_LANG: "zh"
+      SPEED_FACTOR: "1.0"
+      PRIMESPEECH_MODEL_DIR: "$HOME/.dora/models/primespeech"
+      LOG_LEVEL: "INFO"
+
+  # PrimeSpeech TTS for 一帆 (Doubao voice)
+  - id: primespeech-yifan
+    build: pip install -e ../../../mofa-voice/dora/node-hub/dora-primespeech -e ../../agents/primespeech-yifan
+    path: primespeech-yifan
+    inputs:
+      text: script-segmenter/yifan_text
+    outputs:
+      - audio
+      - segment_complete
+      - log
+    env:
+      VOICE_NAME: "Doubao"
+      TEXT_LANG: "zh"
+      SPEED_FACTOR: "0.5"
+      PRIMESPEECH_MODEL_DIR: "$HOME/.dora/models/primespeech"
+      LOG_LEVEL: "INFO"
+
+  # Voice output (DYNAMIC - launched separately)
+  - id: voice-output
+    build: pip install -e ../../agents/voice-output
+    path: dynamic
+    outputs:
+      - log
+    inputs:
+      daniu_audio:
+        source: primespeech-daniu/audio
+        queue_size: 1000
+      yifan_audio:
+        source: primespeech-yifan/audio
+        queue_size: 1000
+      daniu_segment_complete: primespeech-daniu/segment_complete
+      yifan_segment_complete: primespeech-yifan/segment_complete
+      script_complete: script-segmenter/script_complete
+
+  # Viewer (DYNAMIC - launched separately, optional)
+  - id: viewer
+    build: pip install -e ../../agents/viewer
+    path: dynamic
+    inputs:
+      segmenter_log: script-segmenter/log
+      daniu_log: primespeech-daniu/log
+      yifan_log: primespeech-yifan/log
+      output_log: voice-output/log
+      daniu_text: script-segmenter/daniu_text
+      yifan_text: script-segmenter/yifan_text
+      script_complete: script-segmenter/script_complete

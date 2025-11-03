@@ -1,0 +1,9 @@
+[project]
+name = "script-segmenter"
+version = "0.1.0"
+description = "MOFA Podcast Script Segmenter"
+requires-python = ">=3.9"
+dependencies = ["pyarrow>=5.0.0", "mofa-core"]
+
+[project.scripts]
+script-segmenter = "script_segmenter.main:main"
