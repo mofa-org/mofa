@@ -1,0 +1,229 @@
+[INFO] MiniMax T2A Node initialized
+[INFO] Model: speech-2.5-hd-preview
+[INFO] Voice ID: ttv-voice-2025103011222725-sg8dZxUP
+[INFO] Sample Rate: 32000 Hz
+[INFO] Speed: 1.0x, Volume: 1.0, Pitch: -1
+[INFO] Batch Duration: 2000ms (reduces shared memory usage)
+[INFO] Processing segment 0 (len=44)
+[INFO] Streamed 5 batches, 9.47s audio in 9.236s
+[INFO] Sent segment_complete for segment 0
+[INFO] Processing segment 0 (len=25)
+[INFO] Streamed 2 batches, 3.63s audio in 5.473s
+[INFO] Sent segment_complete for segment 0
+[INFO] Processing segment 0 (len=29)
+[INFO] Streamed 3 batches, 5.36s audio in 7.032s
+[INFO] Sent segment_complete for segment 0
+[INFO] Processing segment 0 (len=14)
+[INFO] Streamed 2 batches, 3.33s audio in 6.578s
+[INFO] Sent segment_complete for segment 0
+[INFO] Processing segment 0 (len=33)
+[INFO] Streamed 3 batches, 4.88s audio in 5.637s
+[INFO] Sent segment_complete for segment 0
+[INFO] Processing segment 0 (len=42)
+[INFO] Streamed 5 batches, 8.49s audio in 8.200s
+[INFO] Sent segment_complete for segment 0
+[INFO] Processing segment 0 (len=34)
+[INFO] Streamed 4 batches, 7.11s audio in 8.823s
+[INFO] Sent segment_complete for segment 0
+[INFO] Processing segment 0 (len=21)
+[INFO] Streamed 3 batches, 5.04s audio in 7.210s
+[INFO] Sent segment_complete for segment 0
+[INFO] Processing segment 0 (len=27)
+[INFO] Streamed 2 batches, 3.76s audio in 5.478s
+[INFO] Sent segment_complete for segment 0
+[INFO] Processing segment 0 (len=21)
+[INFO] Streamed 3 batches, 4.24s audio in 6.894s
+[INFO] Sent segment_complete for segment 0
+[INFO] Processing segment 0 (len=42)
+[INFO] Streamed 4 batches, 6.94s audio in 7.567s
+[INFO] Sent segment_complete for segment 0
+[INFO] Processing segment 0 (len=41)
+[INFO] Streamed 5 batches, 9.26s audio in 8.691s
+[INFO] Sent segment_complete for segment 0
+[INFO] Processing segment 0 (len=21)
+[INFO] Streamed 3 batches, 4.32s audio in 5.809s
+[INFO] Sent segment_complete for segment 0
+[INFO] Processing segment 0 (len=43)
+[INFO] Streamed 3 batches, 5.83s audio in 6.101s
+[INFO] Sent segment_complete for segment 0
+[INFO] Processing segment 0 (len=25)
+[INFO] Streamed 3 batches, 5.49s audio in 6.516s
+[INFO] Sent segment_complete for segment 0
+[INFO] Processing segment 0 (len=30)
+[INFO] Streamed 3 batches, 5.19s audio in 6.969s
+[INFO] Sent segment_complete for segment 0
+[INFO] Processing segment 0 (len=32)
+[INFO] Streamed 3 batches, 4.83s audio in 5.605s
+[INFO] Sent segment_complete for segment 0
+[INFO] Processing segment 0 (len=13)
+[INFO] Streamed 1 batches, 1.92s audio in 4.376s
+[INFO] Sent segment_complete for segment 0
+[INFO] Processing segment 0 (len=45)
+[INFO] Streamed 4 batches, 7.77s audio in 7.518s
+[INFO] Sent segment_complete for segment 0
+[INFO] Processing segment 0 (len=28)
+[INFO] Streamed 4 batches, 6.34s audio in 6.533s
+[INFO] Sent segment_complete for segment 0
+[INFO] Processing segment 0 (len=43)
+[INFO] Streamed 4 batches, 6.64s audio in 6.482s
+[INFO] Sent segment_complete for segment 0
+[INFO] Processing segment 0 (len=31)
+[INFO] Streamed 3 batches, 4.88s audio in 5.983s
+[INFO] Sent segment_complete for segment 0
+[INFO] Processing segment 0 (len=39)
+[INFO] Streamed 4 batches, 7.15s audio in 7.309s
+[INFO] Sent segment_complete for segment 0
+[INFO] Processing segment 0 (len=29)
+[INFO] Streamed 3 batches, 5.91s audio in 6.323s
+[INFO] Sent segment_complete for segment 0
+[INFO] Processing segment 0 (len=28)
+[INFO] Streamed 2 batches, 3.08s audio in 6.989s
+[INFO] Sent segment_complete for segment 0
+[INFO] Processing segment 0 (len=44)
+[INFO] Streamed 5 batches, 9.14s audio in 7.690s
+[INFO] Sent segment_complete for segment 0
+[INFO] Processing segment 0 (len=38)
+[INFO] Streamed 5 batches, 8.96s audio in 7.511s
+[INFO] Sent segment_complete for segment 0
+[INFO] Processing segment 0 (len=23)
+[INFO] Streamed 2 batches, 3.00s audio in 5.036s
+[INFO] Sent segment_complete for segment 0
+[INFO] Processing segment 0 (len=34)
+[INFO] Streamed 3 batches, 4.49s audio in 6.093s
+[INFO] Sent segment_complete for segment 0
+[INFO] Processing segment 0 (len=14)
+[INFO] Streamed 2 batches, 2.51s audio in 5.303s
+[INFO] Sent segment_complete for segment 0
+[INFO] Processing segment 0 (len=40)
+[INFO] Streamed 3 batches, 5.62s audio in 5.997s
+[INFO] Sent segment_complete for segment 0
+[INFO] Processing segment 0 (len=31)
+[INFO] Streamed 4 batches, 6.82s audio in 6.359s
+[INFO] Sent segment_complete for segment 0
+[INFO] Processing segment 0 (len=44)
+[INFO] Streamed 4 batches, 7.15s audio in 6.548s
+[INFO] Sent segment_complete for segment 0
+[INFO] Processing segment 0 (len=30)
+[INFO] Streamed 3 batches, 4.83s audio in 7.498s
+[INFO] Sent segment_complete for segment 0
+[INFO] Processing segment 0 (len=45)
+[INFO] Streamed 4 batches, 7.36s audio in 6.528s
+[INFO] Sent segment_complete for segment 0
+[INFO] Processing segment 0 (len=41)
+[INFO] Streamed 4 batches, 7.11s audio in 7.204s
+[INFO] Sent segment_complete for segment 0
+[INFO] Processing segment 0 (len=28)
+[INFO] Streamed 2 batches, 2.55s audio in 4.395s
+[INFO] Sent segment_complete for segment 0
+[INFO] Processing segment 0 (len=26)
+[INFO] Streamed 2 batches, 3.29s audio in 6.452s
+[INFO] Sent segment_complete for segment 0
+[INFO] Processing segment 0 (len=43)
+[INFO] Streamed 3 batches, 4.66s audio in 5.486s
+[INFO] Sent segment_complete for segment 0
+[INFO] Processing segment 0 (len=24)
+[INFO] Streamed 2 batches, 3.68s audio in 5.055s
+[INFO] Sent segment_complete for segment 0
+[INFO] Processing segment 0 (len=25)
+[INFO] Streamed 3 batches, 5.36s audio in 6.272s
+[INFO] Sent segment_complete for segment 0
+[INFO] Processing segment 0 (len=20)
+[INFO] Streamed 2 batches, 2.90s audio in 4.759s
+[INFO] Sent segment_complete for segment 0
+[INFO] Processing segment 0 (len=34)
+[INFO] Streamed 3 batches, 5.45s audio in 6.481s
+[INFO] Sent segment_complete for segment 0
+[INFO] Processing segment 0 (len=20)
+[INFO] Streamed 2 batches, 3.84s audio in 5.422s
+[INFO] Sent segment_complete for segment 0
+[INFO] Processing segment 0 (len=43)
+[INFO] Streamed 4 batches, 7.11s audio in 6.937s
+[INFO] Sent segment_complete for segment 0
+[INFO] Processing segment 0 (len=31)
+[INFO] Streamed 4 batches, 7.02s audio in 6.557s
+[INFO] Sent segment_complete for segment 0
+[INFO] Processing segment 0 (len=31)
+[INFO] Streamed 3 batches, 4.70s audio in 7.158s
+[INFO] Sent segment_complete for segment 0
+[INFO] Processing segment 0 (len=32)
+[INFO] Streamed 4 batches, 6.47s audio in 6.980s
+[INFO] Sent segment_complete for segment 0
+[INFO] Processing segment 0 (len=29)
+[INFO] Streamed 4 batches, 6.29s audio in 6.373s
+[INFO] Sent segment_complete for segment 0
+[INFO] Processing segment 0 (len=33)
+[INFO] Streamed 3 batches, 5.19s audio in 6.761s
+[INFO] Sent segment_complete for segment 0
+[INFO] Processing segment 0 (len=43)
+[INFO] Streamed 4 batches, 6.85s audio in 6.782s
+[INFO] Sent segment_complete for segment 0
+[INFO] Processing segment 0 (len=29)
+[INFO] Streamed 3 batches, 5.96s audio in 6.163s
+[INFO] Sent segment_complete for segment 0
+[INFO] Processing segment 0 (len=28)
+[INFO] Streamed 3 batches, 4.19s audio in 5.288s
+[INFO] Sent segment_complete for segment 0
+[INFO] Processing segment 0 (len=21)
+[INFO] Streamed 3 batches, 5.27s audio in 5.838s
+[INFO] Sent segment_complete for segment 0
+[INFO] Processing segment 0 (len=35)
+[INFO] Streamed 4 batches, 6.51s audio in 6.305s
+[INFO] Sent segment_complete for segment 0
+[INFO] Processing segment 0 (len=35)
+[INFO] Streamed 4 batches, 6.85s audio in 6.303s
+[INFO] Sent segment_complete for segment 0
+[INFO] Processing segment 0 (len=29)
+[INFO] Streamed 3 batches, 4.27s audio in 6.149s
+[INFO] Sent segment_complete for segment 0
+[INFO] Processing segment 0 (len=39)
+[INFO] Streamed 4 batches, 7.45s audio in 6.896s
+[INFO] Sent segment_complete for segment 0
+[INFO] Processing segment 0 (len=39)
+[INFO] Streamed 4 batches, 6.85s audio in 6.379s
+[INFO] Sent segment_complete for segment 0
+[INFO] Processing segment 0 (len=39)
+[INFO] Streamed 4 batches, 6.82s audio in 7.029s
+[INFO] Sent segment_complete for segment 0
+[INFO] Processing segment 0 (len=27)
+[INFO] Streamed 3 batches, 4.83s audio in 5.573s
+[INFO] Sent segment_complete for segment 0
+[INFO] Processing segment 0 (len=44)
+[INFO] Streamed 4 batches, 8.02s audio in 6.721s
+[INFO] Sent segment_complete for segment 0
+[INFO] Processing segment 0 (len=25)
+[INFO] Streamed 2 batches, 3.03s audio in 4.580s
+[INFO] Sent segment_complete for segment 0
+[INFO] Processing segment 0 (len=29)
+[INFO] Streamed 3 batches, 5.49s audio in 6.570s
+[INFO] Sent segment_complete for segment 0
+[INFO] Processing segment 0 (len=14)
+[INFO] Streamed 2 batches, 2.82s audio in 4.364s
+[INFO] Sent segment_complete for segment 0
+[INFO] Processing segment 0 (len=33)
+[INFO] Streamed 3 batches, 5.13s audio in 6.640s
+[INFO] Sent segment_complete for segment 0
+[INFO] Processing segment 0 (len=42)
+[INFO] Streamed 4 batches, 8.02s audio in 7.112s
+[INFO] Sent segment_complete for segment 0
+[INFO] Processing segment 0 (len=34)
+[INFO] Streamed 4 batches, 6.94s audio in 7.033s
+[INFO] Sent segment_complete for segment 0
+[INFO] Processing segment 0 (len=21)
+[INFO] Streamed 3 batches, 4.37s audio in 5.161s
+[INFO] Sent segment_complete for segment 0
+[INFO] Processing segment 0 (len=27)
+[INFO] Streamed 3 batches, 4.24s audio in 5.534s
+[INFO] Sent segment_complete for segment 0
+[INFO] Processing segment 0 (len=21)
+[INFO] Streamed 3 batches, 4.40s audio in 6.000s
+[INFO] Sent segment_complete for segment 0
+[INFO] Processing segment 0 (len=42)
+[INFO] Streamed 4 batches, 6.90s audio in 7.010s
+[INFO] Sent segment_complete for segment 0
+[INFO] Processing segment 0 (len=41)
+[INFO] Streamed 5 batches, 8.20s audio in 7.263s
+[INFO] Sent segment_complete for segment 0
+[INFO] Processing segment 0 (len=21)
+[INFO] Streamed 3 batches, 4.37s audio in 5.501s
+[INFO] Sent segment_complete for segment 0
+[INFO] Processing segment 0 (len=43)

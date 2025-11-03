@@ -1,0 +1,31 @@
+[INFO] MiniMax T2A Node initialized
+[INFO] Model: speech-2.5-hd-preview
+[INFO] Voice ID: moss_audio_aaa1346a-7ce7-11f0-8e61-2e6e3c7ee85d
+[INFO] Sample Rate: 32000 Hz
+[INFO] Speed: 1.0x, Volume: 1.0, Pitch: 0
+[INFO] Batch Duration: 2000ms (reduces shared memory usage)
+[INFO] Processing segment 0 (len=25)
+[INFO] Streamed 3 batches, 4.06s audio in 6.887s
+[INFO] Sent segment_complete for segment 0
+[INFO] Processing segment 0 (len=41)
+[INFO] Streamed 4 batches, 7.71s audio in 9.794s
+[INFO] Sent segment_complete for segment 0
+[INFO] Processing segment 0 (len=22)
+[INFO] Streamed 2 batches, 3.51s audio in 6.272s
+[INFO] Sent segment_complete for segment 0
+[INFO] Processing segment 0 (len=25)
+[INFO] Streamed 3 batches, 4.66s audio in 6.256s
+[INFO] Sent segment_complete for segment 0
+[INFO] Processing segment 0 (len=41)
+[INFO] Streamed 5 batches, 8.07s audio in 6.477s
+[INFO] Sent segment_complete for segment 0
+[INFO] Processing segment 0 (len=22)
+[INFO] Streamed 3 batches, 4.57s audio in 7.214s
+[INFO] Sent segment_complete for segment 0
+[INFO] Processing segment 0 (len=25)
+[INFO] Streamed 3 batches, 4.66s audio in 9.041s
+[INFO] Sent segment_complete for segment 0
+[INFO] Processing segment 0 (len=41)
+[INFO] Streamed 4 batches, 7.41s audio in 7.085s
+[INFO] Sent segment_complete for segment 0
+[INFO] MiniMax T2A node stopped

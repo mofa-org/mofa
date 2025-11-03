@@ -1,0 +1,43 @@
+[INFO] MiniMax T2A Node initialized
+[INFO] Model: speech-2.5-hd-preview
+[INFO] Voice ID: ttv-voice-2025103011222725-sg8dZxUP
+[INFO] Sample Rate: 32000 Hz
+[INFO] Speed: 1.0x, Volume: 1.0, Pitch: -1
+[INFO] Batch Duration: 2000ms (reduces shared memory usage)
+[INFO] Processing segment 0 (len=45)
+[INFO] Streamed 5 batches, 8.28s audio in 7.702s
+[INFO] Sent segment_complete for segment 0
+[INFO] Processing segment 0 (len=13)
+[INFO] Streamed 2 batches, 3.03s audio in 7.568s
+[INFO] Sent segment_complete for segment 0
+[INFO] Processing segment 0 (len=23)
+[INFO] Streamed 3 batches, 4.57s audio in 6.120s
+[INFO] Sent segment_complete for segment 0
+[INFO] Processing segment 0 (len=41)
+[INFO] Streamed 5 batches, 8.07s audio in 7.562s
+[INFO] Sent segment_complete for segment 0
+[INFO] Processing segment 0 (len=43)
+[INFO] Streamed 5 batches, 9.22s audio in 7.752s
+[INFO] Sent segment_complete for segment 0
+[INFO] Processing segment 0 (len=12)
+[INFO] Streamed 2 batches, 2.25s audio in 6.061s
+[INFO] Sent segment_complete for segment 0
+[INFO] Processing segment 0 (len=43)
+[INFO] Streamed 5 batches, 9.30s audio in 7.865s
+[INFO] Sent segment_complete for segment 0
+[INFO] Processing segment 0 (len=7)
+[INFO] Streamed 1 batches, 1.53s audio in 4.349s
+[INFO] Sent segment_complete for segment 0
+[INFO] Processing segment 0 (len=45)
+[INFO] Streamed 5 batches, 8.49s audio in 7.136s
+[INFO] Sent segment_complete for segment 0
+[INFO] Processing segment 0 (len=13)
+[INFO] Streamed 2 batches, 3.12s audio in 4.996s
+[INFO] Sent segment_complete for segment 0
+[INFO] Processing segment 0 (len=23)
+[INFO] Streamed 3 batches, 4.40s audio in 6.167s
+[INFO] Sent segment_complete for segment 0
+[INFO] Processing segment 0 (len=41)
+[INFO] Streamed 4 batches, 7.77s audio in 7.155s
+[INFO] Sent segment_complete for segment 0
+[INFO] MiniMax T2A node stopped
