@@ -63,8 +63,11 @@ class PostInstallCommand(install):
             else:
                 print(f"    export PATH=\"$HOME/.local/bin:$PATH\"\n")
 
-            print("Or use the full path directly:")
-            print(f"    {local_bin}/mofa --help\n")
+            print("Alternative solutions:")
+            print(f"  1. Use full path: {local_bin}/mofa --help")
+            print(f"  2. Install in virtual environment (recommended):")
+            print(f"     python3 -m venv .mofa && source .mofa/bin/activate && pip install mofa-core")
+            print(f"  3. Use uv: uv venv .mofa && source .mofa/bin/activate && uv pip install mofa-core\n")
             print("="*70 + "\n")
 
 setup(
