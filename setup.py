@@ -1,8 +1,10 @@
 
 
 from setuptools import setup, find_packages
+from setuptools.command.install import install
 from pathlib import Path
 import os
+import sys
 
 with open('README.md') as readme_file:
     readme = readme_file.read()
@@ -33,6 +35,38 @@ if os.path.exists('agents'):
 if os.path.exists('flows'):
     data_files.extend(get_data_files('flows'))
 
+
+class PostInstallCommand(install):
+    """Post-installation for installation mode."""
+    def run(self):
+        install.run(self)
+
+        # Check if ~/.local/bin is in PATH
+        local_bin = os.path.expanduser('~/.local/bin')
+        path_env = os.environ.get('PATH', '')
+
+        if local_bin not in path_env and os.path.exists(local_bin):
+            print("\n" + "="*70)
+            print("IMPORTANT: MoFA CLI Setup Required")
+            print("="*70)
+            print(f"\nThe 'mofa' command was installed to: {local_bin}")
+            print("This directory is NOT in your PATH.\n")
+            print("To use 'mofa' command, please run:\n")
+
+            shell = os.environ.get('SHELL', '')
+            if 'bash' in shell:
+                print(f"    echo 'export PATH=\"$HOME/.local/bin:$PATH\"' >> ~/.bashrc")
+                print(f"    source ~/.bashrc\n")
+            elif 'zsh' in shell:
+                print(f"    echo 'export PATH=\"$HOME/.local/bin:$PATH\"' >> ~/.zshrc")
+                print(f"    source ~/.zshrc\n")
+            else:
+                print(f"    export PATH=\"$HOME/.local/bin:$PATH\"\n")
+
+            print("Or use the full path directly:")
+            print(f"    {local_bin}/mofa --help\n")
+            print("="*70 + "\n")
+
 setup(
     name='mofa-core',
     author='Cheng Chen, ZongHuan Wu',
@@ -62,9 +96,12 @@ setup(
     data_files=data_files,
     test_suite='tests',
     tests_require=test_requirements,
-    version='0.1.25',
+    version='0.1.26',
     zip_safe=False,
-    dependency_links=[]
+    dependency_links=[],
+    cmdclass={
+        'install': PostInstallCommand,
+    }
 )
 
 

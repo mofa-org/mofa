@@ -178,6 +178,78 @@ MoFA Stage 是 MoFA 生态的图形化控制中心，支持在可视化界面中
 更多文档请参考 [MoFA 官方文档](https://docs.mofa-org.com)。
 
 
+## 常见问题
+
+### mofa 命令找不到
+
+**问题描述**：安装 mofa-core 后，运行 `mofa` 命令提示找不到命令。
+
+```bash
+$ mofa --help
+Command 'mofa' not found
+```
+
+**原因分析**：当使用 `pip install --user` 或系统 Python 进行用户级安装时，可执行文件会被安装到 `~/.local/bin` 目录，但该目录可能不在系统的 PATH 环境变量中。
+
+**解决方法**：
+
+#### 方案 1：添加 ~/.local/bin 到 PATH（推荐）
+
+对于 Bash 用户：
+```bash
+echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc
+source ~/.bashrc
+```
+
+对于 Zsh 用户：
+```bash
+echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.zshrc
+source ~/.zshrc
+```
+
+#### 方案 2：使用完整路径运行
+```bash
+~/.local/bin/mofa --help
+```
+
+#### 方案 3：在虚拟环境中安装（推荐用于开发）
+```bash
+python3 -m venv .mofa
+source .mofa/bin/activate
+pip install mofa-core
+mofa --help  # 虚拟环境会自动处理 PATH
+```
+
+#### 验证 PATH 配置
+```bash
+# 检查 ~/.local/bin 是否在 PATH 中
+echo $PATH | grep -o ".local/bin"
+
+# 确认 mofa 安装位置
+which mofa
+```
+
+### 依赖安装缓慢
+
+**问题描述**：`pip install mofa-core` 下载速度很慢或超时。
+
+**解决方法**：
+
+使用国内镜像源加速安装：
+```bash
+# 使用清华镜像源
+pip install -i https://pypi.tuna.tsinghua.edu.cn/simple mofa-core
+
+# 或使用阿里云镜像源
+pip install -i https://mirrors.aliyun.com/pypi/simple/ mofa-core
+```
+
+永久配置镜像源：
+```bash
+pip config set global.index-url https://pypi.tuna.tsinghua.edu.cn/simple
+```
+
+
 ## 贡献指南
 
 我们欢迎所有开发者参与贡献，无论您的经验水平如何。请参考[贡献指南](https://github.com/mofa-org/mofa/tree/main/documents)了解如何参与项目开发。

@@ -34,6 +34,46 @@ import cookiecutter
 from cookiecutter.main import cookiecutter
 
 
+def check_path_setup():
+    """Check if mofa is being run from PATH or full path, warn if needed."""
+    # Get the directory where mofa is installed
+    mofa_bin = os.path.dirname(os.path.abspath(sys.argv[0]))
+    local_bin = os.path.expanduser('~/.local/bin')
+    path_env = os.environ.get('PATH', '')
+
+    # Check if we're running from ~/.local/bin and it's not in PATH
+    if mofa_bin == local_bin and local_bin not in path_env:
+        # Create a flag file to track if we've shown this warning
+        config_dir = os.path.expanduser('~/.mofa')
+        flag_file = os.path.join(config_dir, '.path_warning_shown')
+
+        # Only show warning once
+        if not os.path.exists(flag_file):
+            print("\n" + "="*70)
+            print("NOTICE: MoFA PATH Configuration")
+            print("="*70)
+            print(f"\nYou're running MoFA from: {mofa_bin}")
+            print("This directory is not in your PATH environment variable.\n")
+            print("For easier use, add it to your PATH by running:\n")
+
+            shell = os.environ.get('SHELL', '')
+            if 'bash' in shell:
+                print(f"    echo 'export PATH=\"$HOME/.local/bin:$PATH\"' >> ~/.bashrc")
+                print(f"    source ~/.bashrc")
+            elif 'zsh' in shell:
+                print(f"    echo 'export PATH=\"$HOME/.local/bin:$PATH\"' >> ~/.zshrc")
+                print(f"    source ~/.zshrc")
+            else:
+                print(f"    export PATH=\"$HOME/.local/bin:$PATH\"")
+
+            print("\nAfter that, you can simply run 'mofa' instead of the full path.")
+            print("="*70 + "\n")
+
+            # Create flag file
+            os.makedirs(config_dir, exist_ok=True)
+            Path(flag_file).touch()
+
+
 class OrderedGroup(click.Group):
     def list_commands(self, ctx):
         return [
@@ -158,6 +198,9 @@ class OrderedGroup(click.Group):
 @click.pass_context
 def mofa_cli_group(ctx, full):
     """Main CLI for MoFA"""
+    # Check PATH setup on first run
+    check_path_setup()
+
     # Store full flag in context for help formatting
     ctx.ensure_object(dict)
     ctx.obj["show_full"] = full
