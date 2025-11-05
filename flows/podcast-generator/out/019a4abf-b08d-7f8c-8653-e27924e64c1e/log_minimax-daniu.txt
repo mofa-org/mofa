@@ -1,0 +1,85 @@
+[INFO] MiniMax T2A Node initialized
+[INFO] Model: speech-2.5-hd-preview
+[INFO] Voice ID: ttv-voice-2025103011222725-sg8dZxUP
+[INFO] Sample Rate: 32000 Hz
+[INFO] Speed: 1.0x, Volume: 1.0, Pitch: -1
+[INFO] Batch Duration: 2000ms (reduces shared memory usage)
+[INFO] Processing segment 0 (len=30)
+[INFO] Streamed 4 batches, 6.51s audio in 6.723s
+[INFO] Sent segment_complete for segment 0
+[INFO] Processing segment 0 (len=19)
+[INFO] Streamed 2 batches, 4.02s audio in 5.139s
+[INFO] Sent segment_complete for segment 0
+[INFO] Processing segment 0 (len=36)
+[INFO] Streamed 4 batches, 7.15s audio in 6.803s
+[INFO] Sent segment_complete for segment 0
+[INFO] Processing segment 0 (len=14)
+[INFO] Streamed 2 batches, 2.74s audio in 5.066s
+[INFO] Sent segment_complete for segment 0
+[INFO] Processing segment 0 (len=45)
+[INFO] Streamed 5 batches, 8.74s audio in 8.289s
+[INFO] Sent segment_complete for segment 0
+[INFO] Processing segment 0 (len=44)
+[INFO] Streamed 5 batches, 9.43s audio in 8.726s
+[INFO] Sent segment_complete for segment 0
+[INFO] Processing segment 0 (len=30)
+[INFO] Streamed 4 batches, 6.47s audio in 6.244s
+[INFO] Sent segment_complete for segment 0
+[INFO] Processing segment 0 (len=30)
+[INFO] Streamed 3 batches, 5.96s audio in 8.955s
+[INFO] Sent segment_complete for segment 0
+[INFO] Processing segment 0 (len=19)
+[INFO] Streamed 3 batches, 4.45s audio in 7.611s
+[INFO] Sent segment_complete for segment 0
+[INFO] Processing segment 0 (len=36)
+[INFO] Streamed 4 batches, 7.28s audio in 7.141s
+[INFO] Sent segment_complete for segment 0
+[INFO] Processing segment 0 (len=14)
+[INFO] Streamed 2 batches, 2.87s audio in 5.829s
+[INFO] Sent segment_complete for segment 0
+[INFO] Processing segment 0 (len=45)
+[INFO] Streamed 5 batches, 8.53s audio in 7.449s
+[INFO] Sent segment_complete for segment 0
+[INFO] Processing segment 0 (len=44)
+[INFO] Streamed 5 batches, 9.22s audio in 7.771s
+[INFO] Sent segment_complete for segment 0
+[INFO] Processing segment 0 (len=30)
+[INFO] Streamed 4 batches, 6.85s audio in 7.721s
+[INFO] Sent segment_complete for segment 0
+[INFO] Processing segment 0 (len=30)
+[INFO] Streamed 3 batches, 5.96s audio in 6.695s
+[INFO] Sent segment_complete for segment 0
+[INFO] Processing segment 0 (len=19)
+[INFO] Streamed 2 batches, 3.94s audio in 5.145s
+[INFO] Sent segment_complete for segment 0
+[INFO] Processing segment 0 (len=36)
+[INFO] Streamed 4 batches, 7.49s audio in 8.740s
+[INFO] Sent segment_complete for segment 0
+[INFO] Processing segment 0 (len=14)
+[INFO] Streamed 2 batches, 3.25s audio in 5.621s
+[INFO] Sent segment_complete for segment 0
+[INFO] Processing segment 0 (len=45)
+[INFO] Streamed 5 batches, 9.78s audio in 8.350s
+[INFO] Sent segment_complete for segment 0
+[INFO] Processing segment 0 (len=44)
+[INFO] Streamed 5 batches, 9.56s audio in 7.781s
+[INFO] Sent segment_complete for segment 0
+[INFO] Processing segment 0 (len=30)
+[INFO] Streamed 4 batches, 6.39s audio in 7.417s
+[INFO] Sent segment_complete for segment 0
+[INFO] Processing segment 0 (len=30)
+[INFO] Streamed 3 batches, 5.75s audio in 6.222s
+[INFO] Sent segment_complete for segment 0
+[INFO] Processing segment 0 (len=19)
+[INFO] Streamed 2 batches, 4.02s audio in 5.589s
+[INFO] Sent segment_complete for segment 0
+[INFO] Processing segment 0 (len=36)
+[INFO] Streamed 4 batches, 7.71s audio in 7.760s
+[INFO] Sent segment_complete for segment 0
+[INFO] Processing segment 0 (len=14)
+[INFO] Streamed 2 batches, 3.16s audio in 5.106s
+[INFO] Sent segment_complete for segment 0
+[INFO] Processing segment 0 (len=45)
+[INFO] Streamed 5 batches, 9.14s audio in 7.488s
+[INFO] Sent segment_complete for segment 0
+[INFO] Processing segment 0 (len=44)

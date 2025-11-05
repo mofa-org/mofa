@@ -16,7 +16,7 @@ nodes:
 
   # MiniMax T2A TTS for 大牛 (Liu Xiang voice)
   - id: minimax-daniu
-    build: pip install -e ../../../mofa-voice/dora/node-hub/dora-minimax-t2a
+    build: pip install -e ../../agents/minimax-t2a
     path: dora-minimax-t2a
     inputs:
       text: script-segmenter/daniu_text
@@ -38,7 +38,7 @@ nodes:
 
   # MiniMax T2A TTS for 一帆 (Doubao voice)
   - id: minimax-yifan
-    build: pip install -e ../../../mofa-voice/dora/node-hub/dora-minimax-t2a
+    build: pip install -e ../../agents/minimax-t2a
     path: dora-minimax-t2a
     inputs:
       text: script-segmenter/yifan_text
@@ -60,7 +60,7 @@ nodes:
 
   # MiniMax T2A TTS for 博宇 (configure voice ID via env)
   - id: minimax-boyu
-    build: pip install -e ../../../mofa-voice/dora/node-hub/dora-minimax-t2a
+    build: pip install -e ../../agents/minimax-t2a
     path: dora-minimax-t2a
     inputs:
       text: script-segmenter/boyu_text
