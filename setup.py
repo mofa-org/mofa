@@ -99,7 +99,7 @@ setup(
     data_files=data_files,
     test_suite='tests',
     tests_require=test_requirements,
-    version='0.1.29',
+    version='0.1.30',
     zip_safe=False,
     dependency_links=[],
     cmdclass={
