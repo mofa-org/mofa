@@ -13,24 +13,7 @@ with open('HISTORY.rst') as history_file:
 with open('requirements.txt',encoding='utf-8') as requirements_file:
     all_pkgs = requirements_file.readlines()
 
-# Filter out comments and empty lines
-requirements = [
-    pkg.strip()
-    for pkg in all_pkgs
-    if pkg.strip() and not pkg.strip().startswith('#')
-]
-
-# Development requirements (optional)
-dev_requirements = []
-if os.path.exists('requirements-dev.txt'):
-    with open('requirements-dev.txt',encoding='utf-8') as dev_file:
-        dev_pkgs = dev_file.readlines()
-        dev_requirements = [
-            pkg.strip()
-            for pkg in dev_pkgs
-            if pkg.strip() and not pkg.strip().startswith('#')
-        ]
-
+requirements = [pkg.replace('\n', '') for pkg in all_pkgs if "#" not in pkg]
 test_requirements = []
 
 # Collect all files from agents and flows directories
@@ -79,10 +62,7 @@ setup(
     data_files=data_files,
     test_suite='tests',
     tests_require=test_requirements,
-    extras_require={
-        'dev': dev_requirements,
-    },
-    version='0.1.23',
+    version='0.1.24',
     zip_safe=False,
     dependency_links=[]
 )
