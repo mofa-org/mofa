@@ -150,3 +150,4 @@ class VibeConfig:
     temperature: float = 0.3
     verbose: bool = True
     auto_save_rounds: bool = True
+    base_agent_path: Optional[str] = None  # Path to base agent to build upon

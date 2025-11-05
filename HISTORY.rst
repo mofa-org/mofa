@@ -2,6 +2,11 @@
 History
 =======
 
+0.1.29 (2025-11-05)
+------------------
+
+* Auto-release: feat: allow user to vibe based on existing agents
+
 0.1.28 (2025-11-05)
 ------------------
 
