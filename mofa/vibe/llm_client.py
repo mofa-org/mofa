@@ -168,8 +168,15 @@ Guidelines:
 """
         return self.generate(prompt)
 
-    def generate_code(self, requirement: str, test_cases_yaml: str, agent_name: str) -> str:
-        """Generate MoFA agent code from requirement and test cases"""
+    def generate_code(self, requirement: str, test_cases_yaml: str, agent_name: str, reference_code: str = None) -> str:
+        """Generate MoFA agent code from requirement and test cases
+
+        Args:
+            requirement: What the agent should do
+            test_cases_yaml: Test cases in YAML format
+            agent_name: Name of the agent
+            reference_code: Optional reference code from base agent to learn from
+        """
 
         # Read LLM config from .env
         import os
@@ -212,7 +219,35 @@ result = response.choices[0].message.content
 Note: The API key, base URL, and model are from your .env configuration.
 """
 
+        # Build reference section if base code provided
+        reference_section = ""
+        if reference_code:
+            reference_section = f"""
+## Reference Implementation
+
+Below is an existing agent implementation to use as a reference.
+You should:
+1. **Learn from its structure and coding style** - Use similar patterns and conventions
+2. **Build upon its functionality** - Enhance or modify it based on the requirement
+3. **Reuse useful code** - Keep working parts that are still relevant
+4. **Maintain or improve quality** - Match or exceed the code quality
+
+**IMPORTANT**: This is a REFERENCE, not a strict template. You should:
+- Adapt the code to meet the new requirements
+- Add, modify, or remove functionality as needed
+- Ensure all new test cases pass
+- Feel free to refactor or restructure if it improves the code
+
+```python
+{reference_code}
+```
+
+---
+
+"""
+
         prompt = f"""
+{reference_section}
 Generate a complete MoFA agent implementation that passes all the test cases.
 
 ## Requirement

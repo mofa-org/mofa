@@ -51,6 +51,15 @@ class VibeEngine:
         self.project_path = ""
         self.skip_testing = False  # Flag to skip testing for open-ended outputs
 
+        # Base agent state
+        self.base_agent_code: Optional[str] = None
+        self.base_agent_name: Optional[str] = None
+        self.base_agent_description: Optional[str] = None
+
+        # Load base agent if specified
+        if self.config.base_agent_path:
+            self._load_base_agent()
+
     def run_interactive(self) -> GenerationResult:
         """Run in interactive mode"""
         self._show_header()
@@ -69,6 +78,77 @@ class VibeEngine:
 
         return result
 
+    def _load_base_agent(self):
+        """Load base agent code and metadata"""
+        if not self.config.base_agent_path:
+            return
+
+        base_path = Path(self.config.base_agent_path)
+
+        if not base_path.exists():
+            raise ValueError(f"Base agent path not found: {base_path}")
+
+        # Support multiple path formats:
+        # 1. Direct main.py file
+        # 2. Agent directory with 'agent/' subdirectory (vibe-generated)
+        # 3. Agent directory with package name subdirectory (manual agents)
+        # 4. Agent directory with 'dora_*' subdirectory
+
+        main_py = None
+        agent_dir = base_path
+
+        if base_path.is_file() and base_path.name == 'main.py':
+            # Case 1: Direct path to main.py
+            main_py = base_path
+            agent_dir = base_path.parent.parent
+        elif base_path.is_dir():
+            # Try different directory structures
+
+            # Case 2: vibe-generated structure (agent/main.py)
+            candidate = base_path / 'agent' / 'main.py'
+            if candidate.exists():
+                main_py = candidate
+            else:
+                # Case 3 & 4: Find any Python package directory
+                # Look for subdirectories that might contain main.py
+                for subdir in base_path.iterdir():
+                    if subdir.is_dir() and not subdir.name.startswith('.'):
+                        candidate = subdir / 'main.py'
+                        if candidate.exists():
+                            main_py = candidate
+                            break
+
+        if not main_py or not main_py.exists():
+            # Provide helpful error message
+            raise ValueError(
+                f"Could not find main.py in agent directory: {base_path}\n"
+                f"Expected structures:\n"
+                f"  - {base_path}/agent/main.py (vibe-generated)\n"
+                f"  - {base_path}/<package_name>/main.py (manual agents)\n"
+                f"  - {base_path}/dora_<name>/main.py (dora agents)"
+            )
+
+        # Read code
+        self.base_agent_code = main_py.read_text(encoding='utf-8')
+        self.base_agent_name = agent_dir.name
+
+        # Try to read description from README
+        readme = agent_dir / 'README.md'
+        if readme.exists():
+            readme_content = readme.read_text(encoding='utf-8')
+            # Extract first meaningful line
+            lines = [l.strip() for l in readme_content.split('\n') if l.strip() and not l.startswith('#')]
+            if lines and not lines[0].startswith('Auto-generated'):
+                self.base_agent_description = lines[0][:200]
+
+        # Display loaded info
+        self.console.print()
+        self.console.print(f"[green]✓[/green] Loaded base agent: [cyan]{self.base_agent_name}[/cyan]")
+        self.console.print(f"[dim]Found main.py at: {main_py.relative_to(agent_dir)}[/dim]")
+        if self.base_agent_description:
+            self.console.print(f"[dim]{self.base_agent_description}[/dim]")
+        self.console.print()
+
     def _show_header(self):
         """Display welcome header"""
         self.console.print()
@@ -78,11 +158,24 @@ class VibeEngine:
 
     def _ask_requirement(self):
         """Ask user for agent requirement"""
-        self.requirement = Prompt.ask("[bold]Describe what the agent should do[/bold]", console=self.console)
+        if self.base_agent_code:
+            # Building upon an existing agent
+            self.console.print(f"[bold]Base agent:[/bold] [cyan]{self.base_agent_name}[/cyan]")
+            self.console.print("[dim]Describe the changes, enhancements, or new functionality you want[/dim]")
+            self.console.print()
+            self.requirement = Prompt.ask("[bold]What changes do you want to make?[/bold]", console=self.console)
+        else:
+            # Creating from scratch
+            self.requirement = Prompt.ask("[bold]Describe what the agent should do[/bold]", console=self.console)
 
         # Generate agent name from requirement using LLM
         self.console.print("[dim]Generating agent name...[/dim]")
-        self.agent_name = self.llm.generate_agent_name(self.requirement)
+        if self.base_agent_code:
+            # Generate name based on base agent + changes
+            name_prompt = f"Enhanced version of '{self.base_agent_name}' with these changes: {self.requirement}"
+            self.agent_name = self.llm.generate_agent_name(name_prompt)
+        else:
+            self.agent_name = self.llm.generate_agent_name(self.requirement)
 
         # Ask if user wants to customize name
         suggested_name = Prompt.ask(
@@ -439,7 +532,8 @@ class VibeEngine:
             code_str = self.llm.generate_code(
                 requirement=self.requirement,
                 test_cases_yaml=self.test_suite.to_yaml(),
-                agent_name=self.agent_name
+                agent_name=self.agent_name,
+                reference_code=self.base_agent_code  # Pass base agent code if available
             )
 
             # Clean up code (remove markdown)

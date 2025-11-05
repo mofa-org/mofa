@@ -191,6 +191,48 @@ def register_vibe_commands(cli_group):
             # Load saved config
             saved_config = _load_vibe_config()
 
+            # Ask if they want to use a base agent
+            use_base = click.confirm("\nDo you want to base it on an existing agent?", default=False)
+
+            base_agent_path = None
+            if use_base:
+                from pathlib import Path
+                agents_dir = Path(saved_config["agents_output"])
+
+                # Scan for available agents
+                available_agents = []
+                if agents_dir.exists():
+                    available_agents = [
+                        d.name for d in agents_dir.iterdir()
+                        if d.is_dir() and not d.name.startswith('.') and d.name != 'terminal-input'
+                    ]
+
+                if available_agents:
+                    click.echo("\nAvailable agents:")
+                    for i, name in enumerate(available_agents, 1):
+                        click.echo(f"  {i}. {name}")
+                    click.echo(f"  {len(available_agents) + 1}. Enter custom path")
+
+                    choice = click.prompt(
+                        "\nSelect base agent",
+                        type=click.IntRange(1, len(available_agents) + 1),
+                        default=1
+                    )
+
+                    if choice <= len(available_agents):
+                        base_agent_path = str(agents_dir / available_agents[choice - 1])
+                    else:
+                        base_agent_path = click.prompt("Enter path to base agent")
+                else:
+                    click.echo("\nNo agents found in output directory.")
+                    base_agent_path = click.prompt("Enter path to base agent")
+
+                # Validate path
+                if base_agent_path and not Path(base_agent_path).exists():
+                    click.echo(f"ERROR: Path not found: {base_agent_path}")
+                    click.echo("Continuing without base agent...")
+                    base_agent_path = None
+
             llm = click.prompt("LLM model", default=saved_config["model"])
             max_rounds = click.prompt(
                 "Maximum optimization rounds (0 for unlimited)", default=saved_config["max_rounds"], type=int
@@ -205,6 +247,7 @@ def register_vibe_commands(cli_group):
                 max_optimization_rounds=max_rounds,
                 output_dir=output,
                 llm_api_key=api_key,
+                base_agent_path=base_agent_path,
             )
 
             try:
@@ -318,7 +361,10 @@ def register_vibe_commands(cli_group):
     @click.option(
         "--output", "-o", default=None, help="Output directory (default: from config)"
     )
-    def agent(llm, max_rounds, output):
+    @click.option(
+        "--base", "-b", default=None, help="Path to base agent to build upon (optional)"
+    )
+    def agent(llm, max_rounds, output, base):
         """Generate an agent from natural language description
 
         Generates MoFA agents from natural language descriptions,
@@ -328,6 +374,7 @@ def register_vibe_commands(cli_group):
         Usage:
             mofa vibe agent
             mofa vibe agent --llm gpt-4 --max-rounds 3
+            mofa vibe agent --base ./agents/text-summarizer
         """
         try:
             from mofa.vibe.engine import VibeEngine
@@ -361,6 +408,14 @@ def register_vibe_commands(cli_group):
         if output is None:
             output = saved_config["agents_output"]
 
+        # Validate base agent path if provided
+        if base:
+            from pathlib import Path
+            base_path = Path(base)
+            if not base_path.exists():
+                click.echo(f"ERROR: Base agent path not found: {base}")
+                sys.exit(1)
+
         # Save the config for next time
         _save_vibe_config(model=llm, max_rounds=max_rounds, agents_output=output)
 
@@ -370,6 +425,7 @@ def register_vibe_commands(cli_group):
             max_optimization_rounds=max_rounds,
             output_dir=output,
             llm_api_key=api_key,
+            base_agent_path=base,
         )
 
         # Run vibe engine
