@@ -79,6 +79,7 @@ class OrderedGroup(click.Group):
         return [
             "init",
             "run-flow",
+            "stop-flow",
             "run-node",
             "unit-test",
             "create-node",
@@ -113,6 +114,15 @@ class OrderedGroup(click.Group):
                 formatter.write_text("\nCore Commands:")
                 formatter.write_text(
                     "  mofa run-flow <dataflow.yml>                Run a dataflow"
+                )
+                formatter.write_text(
+                    "  mofa run-flow <dataflow.yml> --detach       Run in background"
+                )
+                formatter.write_text(
+                    "  mofa stop-flow <name>                       Stop background dataflow"
+                )
+                formatter.write_text(
+                    "  mofa stop-flow --all                        Stop all dataflows"
                 )
                 formatter.write_text(
                     "  mofa create-node                            Create node (TUI)"
@@ -219,9 +229,104 @@ mofa_cli_group.add_command(init_command)
 @mofa_cli_group.command(name="run-flow")
 @click.argument("dataflow_file", required=True)
 @click.option("--vibe-test", is_flag=True, hidden=True, help="Vibe test mode with automated decisions")
-def run_flow_command(dataflow_file: str, vibe_test: bool):
-    """Use run <path-to-dataflow.yml> to run in venv"""
-    run_flow(dataflow_file, vibe_test_mode=vibe_test)
+@click.option("--detach", "-d", is_flag=True, help="Run dataflow in background (daemon mode)")
+@click.option("--no-terminal", is_flag=True, help="Skip terminal-input (non-interactive mode)")
+def run_flow_command(dataflow_file: str, vibe_test: bool, detach: bool, no_terminal: bool):
+    """Run a dataflow from YAML file
+
+    Examples:
+      mofa run-flow dataflow.yml              # Run in foreground with terminal
+      mofa run-flow dataflow.yml --detach     # Run in background
+      mofa run-flow dataflow.yml --no-terminal # Run without terminal-input
+    """
+    run_flow(dataflow_file, vibe_test_mode=vibe_test, detach=detach, no_terminal=no_terminal)
+
+
+# ============ Stop Flow Command ============
+@mofa_cli_group.command(name="stop-flow")
+@click.argument("dataflow_name", required=False)
+@click.option("--all", is_flag=True, help="Stop all running dataflows")
+def stop_flow_command(dataflow_name: str, all: bool):
+    """Stop a running dataflow
+
+    Examples:
+      mofa stop-flow <dataflow-name>    # Stop specific dataflow
+      mofa stop-flow --all              # Stop all running dataflows
+    """
+    import glob
+    import json
+
+    if all:
+        # Find all PID files in current directory
+        pid_files = glob.glob(".mofa_flow_*.pid")
+        if not pid_files:
+            click.echo("No running dataflows found.")
+            return
+
+        click.echo(f"Found {len(pid_files)} running dataflow(s):")
+        for pid_file in pid_files:
+            try:
+                with open(pid_file, 'r') as f:
+                    pid_info = json.load(f)
+                click.echo(f"  - {pid_info['dataflow_name']} (started at {pid_info.get('started_at', 'unknown')})")
+            except Exception as e:
+                click.echo(f"  - {pid_file} (error reading: {e})")
+
+        if not click.confirm("\nStop all these dataflows?", default=True):
+            return
+
+        for pid_file in pid_files:
+            try:
+                with open(pid_file, 'r') as f:
+                    pid_info = json.load(f)
+                name = pid_info['dataflow_name']
+                click.echo(f"\nStopping {name}...")
+                stop_dora_dataflow(dataflow_name=name)
+                os.remove(pid_file)
+                click.echo(f"  Stopped and removed PID file: {pid_file}")
+            except Exception as e:
+                click.echo(f"  Error stopping dataflow: {e}")
+
+        # Clean up dora daemon
+        destroy_dora_daemon()
+        click.echo("\nAll dataflows stopped.")
+        return
+
+    # Stop specific dataflow
+    if not dataflow_name:
+        click.echo("Error: Please provide a dataflow name or use --all")
+        click.echo("Usage: mofa stop-flow <dataflow-name>")
+        return
+
+    # Find PID file
+    pid_file = f".mofa_flow_{dataflow_name}.pid"
+    if not os.path.exists(pid_file):
+        click.echo(f"Warning: PID file not found: {pid_file}")
+        click.echo("Attempting to stop dataflow anyway...")
+    else:
+        try:
+            with open(pid_file, 'r') as f:
+                pid_info = json.load(f)
+            click.echo(f"Found dataflow: {dataflow_name}")
+            click.echo(f"  Started at: {pid_info.get('started_at', 'unknown')}")
+            click.echo(f"  Venv: {pid_info.get('venv_root', 'unknown')}")
+        except Exception as e:
+            click.echo(f"Warning: Error reading PID file: {e}")
+
+    # Stop the dataflow
+    try:
+        click.echo(f"\nStopping dataflow '{dataflow_name}'...")
+        stop_dora_dataflow(dataflow_name=dataflow_name)
+        click.echo("Dataflow stopped successfully.")
+
+        # Remove PID file
+        if os.path.exists(pid_file):
+            os.remove(pid_file)
+            click.echo(f"Removed PID file: {pid_file}")
+
+    except Exception as e:
+        click.echo(f"Error stopping dataflow: {e}", err=True)
+        sys.exit(1)
 
 
 # ============ List Command Group ============
