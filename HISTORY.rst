@@ -2,6 +2,11 @@
 History
 =======
 
+0.1.33 (2025-11-06)
+------------------
+
+* Auto-release: Merge pull request #100 from mofa-org/codex/create-test-plan-for-project
+
 0.1.32 (2025-11-06)
 ------------------
 
