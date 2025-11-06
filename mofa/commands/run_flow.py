@@ -455,15 +455,23 @@ def build_env(base_env: dict, venv_info: dict):
     return env
 
 
-def run_flow(dataflow_file: str, vibe_test_mode: bool = False):
-    """Execute a dataflow from the given YAML file."""
+def run_flow(dataflow_file: str, vibe_test_mode: bool = False, detach: bool = False, no_terminal: bool = False):
+    """Execute a dataflow from the given YAML file.
+
+    Args:
+        dataflow_file: Path to the dataflow YAML file
+        vibe_test_mode: Enable vibe test mode with automated decisions
+        detach: Run in background (daemon mode)
+        no_terminal: Skip terminal-input (non-interactive mode)
+    """
     global _cleanup_done
 
     # Reset cleanup flag for this run
     _cleanup_done = False
 
-    # Register cleanup handlers for Ctrl+C and normal exit
-    _register_cleanup_handler()
+    # Register cleanup handlers for Ctrl+C and normal exit (not in detach mode)
+    if not detach:
+        _register_cleanup_handler()
 
     dataflow_path = os.path.abspath(dataflow_file)
     if not os.path.exists(dataflow_path):
@@ -483,6 +491,12 @@ def run_flow(dataflow_file: str, vibe_test_mode: bool = False):
     placeholder_env_vars = collect_placeholder_env_vars(dataflow_descriptor)
     missing_env_vars = [var for var in sorted(placeholder_env_vars) if var not in os.environ]
     collected_env_values = {}
+
+    # In detach mode, we cannot prompt for missing env vars
+    if detach and missing_env_vars:
+        click.echo(f"Error: In detach mode, all environment variables must be set before running.")
+        click.echo(f"Missing variables: {', '.join(missing_env_vars)}")
+        return
 
     for env_var in missing_env_vars:
         if click.confirm(
@@ -538,7 +552,8 @@ def run_flow(dataflow_file: str, vibe_test_mode: bool = False):
     editable_packages = []
 
     try:
-        env_info = create_venv(sys.executable, working_dir, vibe_test_mode)
+        # In detach mode, treat similar to vibe_test_mode (auto-reuse)
+        env_info = create_venv(sys.executable, working_dir, vibe_test_mode or detach)
         run_env = build_env(run_env, env_info)
 
         # Check if this is a reused venv
@@ -551,6 +566,11 @@ def run_flow(dataflow_file: str, vibe_test_mode: bool = False):
                 skip_build = False
                 click.echo("Vibe mode: Reinstalling packages for clean environment")
                 install_base_requirements(env_info["pip"], working_dir)
+            # Detach mode: skip reinstall, reuse everything for fast startup
+            elif detach:
+                should_install_packages = False
+                skip_build = True
+                click.echo("Detach mode: Reusing existing packages for fast startup")
             else:
                 # Venv was reused, ask user if they want to reinstall packages
                 try:
@@ -665,6 +685,47 @@ def run_flow(dataflow_file: str, vibe_test_mode: bool = False):
                 click.echo(f"Stdout: {stdout}")
             return
 
+        # Detach mode: save PID and exit immediately
+        if detach:
+            # Save dataflow info to a PID file
+            pid_file_path = os.path.join(working_dir, f".mofa_flow_{dataflow_name}.pid")
+            pid_info = {
+                "dataflow_name": dataflow_name,
+                "dataflow_path": dataflow_path,
+                "dora_daemon_pid": dora_up_process.pid,
+                "dora_dataflow_pid": dora_dataflow_process.pid,
+                "venv_root": env_info["root"],
+                "started_at": time.strftime("%Y-%m-%d %H:%M:%S"),
+            }
+
+            import json
+            with open(pid_file_path, 'w') as f:
+                json.dump(pid_info, f, indent=2)
+
+            click.echo(f"\n{'='*60}")
+            click.echo("Dataflow started in background!")
+            click.echo(f"{'='*60}")
+            click.echo(f"  Dataflow name: {dataflow_name}")
+            click.echo(f"  PID file: {pid_file_path}")
+            click.echo(f"  Venv: {env_info['root']}")
+            click.echo(f"\nTo stop this dataflow, run:")
+            click.echo(f"  mofa stop-flow {dataflow_name}")
+            click.echo(f"  or: dora stop {dataflow_name}")
+            click.echo(f"{'='*60}\n")
+
+            # Don't cleanup, let it run in background
+            return
+
+        # No-terminal mode: run without terminal-input
+        if no_terminal:
+            click.echo("Running in no-terminal mode. Dataflow is running; press Ctrl+C to stop.")
+            try:
+                dora_dataflow_process.wait()
+            except KeyboardInterrupt:
+                click.echo("\nReceived interrupt signal, shutting down...")
+            return
+
+        # Interactive mode: check for terminal-input
         terminal_path = shutil.which("terminal-input", path=run_env.get("PATH", ""))
         if not terminal_path:
             click.echo("terminal-input command not found in the virtual environment.")
