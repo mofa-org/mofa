@@ -2,6 +2,11 @@
 History
 =======
 
+0.1.35 (2025-11-07)
+------------------
+
+* Auto-release: Merge pull request #102 from BH3GEI/main
+
 0.1.34 (2025-11-07)
 ------------------
 
