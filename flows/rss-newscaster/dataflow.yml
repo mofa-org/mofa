@@ -1,0 +1,40 @@
+nodes:
+  # Terminal input node - accepts RSS URL from user
+  - id: terminal-input
+    build: pip install -e ../../agents/terminal-input
+    path: dynamic
+    outputs:
+      - data
+    inputs:
+      agent_response: anchor-assigner/anchor_pairs
+
+  # RSS Fetcher - fetches and parses RSS feed from URL
+  - id: rss-fetcher
+    build: pip install -e ../../agents/rss-fetcher
+    path: rss-fetcher
+    inputs:
+      rss_url: terminal-input/data
+    outputs:
+      - rss_feed
+
+  # Link Content Scripter - fetches content from links and generates scripts
+  - id: link-content-scripter
+    build: pip install -e ../../agents/link-content-scripter
+    path: link-content-scripter
+    inputs:
+      rss_feed: rss-fetcher/rss_feed
+    outputs:
+      - news_scripts
+  # Anchor Assigner - assigns scripts to male/female anchors
+  - id: anchor-assigner
+    build: pip install -e ../../agents/anchor-assigner
+    path: anchor-assigner
+    inputs:
+      news_scripts: link-content-scripter/news_scripts
+    outputs:
+      - anchor_pairs
+    env:
+      IS_DATAFLOW_END: true
+      WRITE_LOG: true
+      MALE_ANCHOR_NAME: 张明
+      FEMALE_ANCHOR_NAME: 李华
