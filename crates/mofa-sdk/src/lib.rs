@@ -1,0 +1,649 @@
+//! MoFA API - Unified SDK for MoFA framework
+//!
+//! This crate provides a unified API for the MoFA (Model-based Framework for Agents) framework.
+//!
+//! # Architecture Layers
+//!
+//! The SDK is organized into clear layers following microkernel architecture principles:
+//!
+//! ```text
+//! ┌─────────────────────────────────────────┐
+//! │            User Code                    │
+//! └─────────────────┬───────────────────────┘
+//!                   ↓
+//! ┌─────────────────────────────────────────┐
+//! │     SDK (Unified API Surface)           │
+//! │  - kernel: Core abstractions            │
+//! │  - runtime: Lifecycle management        │
+//! │  - foundation: Business functionality   │
+//! └─────────────────┬───────────────────────┘
+//! ```
+//!
+//! # Features
+//!
+//! - `uniffi` - Enable UniFFI cross-language bindings (Python, Kotlin, Swift, Java)
+//! - `python` - Enable PyO3 Python bindings (native Python extension)
+//! - `dora` - Enable dora-rs runtime support for distributed dataflow
+//!
+//! # Quick Start
+//!
+//! ```toml
+//! mofa-sdk = "0.1"
+//! ```
+//!
+//! ```rust,ignore
+//! use mofa_sdk::{AgentBuilder, MoFAAgent, run_agent};
+//!
+//! struct MyAgent;
+//!
+//! #[async_trait::async_trait]
+//! impl MoFAAgent for MyAgent {
+//!     // implementation...
+//! }
+//!
+//! #[tokio::main]
+//! async fn main() -> anyhow::Result<()> {
+//!     run_agent(MyAgent).await
+//! }
+//! ```
+
+// =============================================================================
+// Kernel Layer - Core Abstractions
+// =============================================================================
+
+/// Core agent abstractions and extensions
+///
+/// This module provides the minimal core interfaces that all agents implement.
+/// Following microkernel principles, the core is kept minimal with optional
+/// extensions for additional capabilities.
+///
+/// # Core Trait
+///
+/// - `MoFAAgent`: The unified agent interface (id, name, capabilities, execute, etc.)
+///
+/// # Extension Traits
+///
+/// - `AgentLifecycle`: pause, resume, interrupt
+/// - `AgentMessaging`: handle_message, handle_event
+/// - `AgentPluginSupport`: plugin management
+///
+/// # Example
+///
+/// ```rust,ignore
+/// use mofa_sdk::kernel::MoFAAgent;
+///
+/// #[async_trait::async_trait]
+/// impl MoFAAgent for MyAgent {
+///     fn id(&self) -> &str { "my-agent" }
+///     fn name(&self) -> &str { "My Agent" }
+///     // ... other methods
+/// }
+/// ```
+pub mod kernel {
+    // Core agent trait and extensions
+    pub use mofa_kernel::agent::{
+        AgentLifecycle,
+        AgentMessaging, AgentPlugin, AgentPluginSupport, MoFAAgent,
+    };
+
+    // Core types
+    pub use mofa_kernel::agent::{
+        AgentCapabilities, AgentContext, AgentError, AgentInput,
+        AgentOutput, AgentResult,
+    };
+
+    // Agent metadata and state
+    pub use mofa_kernel::agent::{
+        AgentMetadata, AgentState,
+    };
+
+    // Agent runner
+    pub use mofa_kernel::agent::{
+        run_agent, AgentRunner,
+    };
+
+    // Core configuration
+    pub use mofa_kernel::core::AgentConfig;
+
+    // Message types
+    pub use mofa_kernel::message::{
+        AgentEvent, AgentMessage,
+    };
+
+    // Bus
+    pub use mofa_kernel::bus::AgentBus;
+
+    // MessageContent is available via kernel::MessageContent to avoid conflict with llm::MessageContent
+    pub use mofa_kernel::agent::MessageContent;
+    // Event type constants (aliased to avoid conflicts with existing modules)
+    pub use mofa_kernel::agent::{
+        execution_events,
+        lifecycle,
+        message_events,
+        plugin_events,
+        state_events,
+    };
+    // Unified types (new)
+    pub use mofa_kernel::agent::{
+        ErrorCategory, ErrorContext,
+        EventBuilder, MessageMetadata,
+        UnifiedError, UnifiedEvent, UnifiedMessage, UnifiedResult,
+    };
+
+    pub use mofa_foundation::collaboration::{
+        CollaborationContent, CollaborationMessage, CollaborationMode,
+        CollaborationProtocol, CollaborationResult, CollaborationStats,
+        DecisionContext, LLMDrivenCollaborationManager, ProtocolRegistry,
+    };
+    // Coordination and collaboration (moved to foundation)
+    pub use mofa_foundation::coordination::{
+        AgentCoordinator, CoordinationStrategy,
+    };
+}
+
+// =============================================================================
+// Runtime Layer - Lifecycle and Execution
+// =============================================================================
+
+/// Agent lifecycle and execution management
+///
+/// This module provides runtime infrastructure for managing agent execution.
+///
+/// # Main Components
+///
+/// - `AgentBuilder`: Builder pattern for constructing agents
+/// - `SimpleRuntime`: Multi-agent coordination (non-dora)
+/// - `AgentRuntime`: Dora-rs integration (with `dora` feature)
+///
+/// # Example
+///
+/// ```rust,ignore
+/// use mofa_sdk::runtime::{AgentBuilder, SimpleRuntime};
+///
+/// let runtime = SimpleRuntime::new();
+/// runtime.register_agent(metadata, config, "worker").await?;
+/// ```
+pub mod runtime {
+    // Agent builder
+    pub use mofa_runtime::AgentBuilder;
+
+    // Simple runtime (non-dora)
+    pub use mofa_runtime::SimpleRuntime;
+
+    // Run agent helper
+    pub use mofa_runtime::run_agent;
+
+    pub use mofa_runtime::config::FrameworkConfig;
+
+    // Dora runtime (only available with dora feature)
+    #[cfg(feature = "dora")]
+    pub use mofa_runtime::{AgentRuntime, MoFARuntime};
+}
+
+// =============================================================================
+// Foundation Layer - Business Functionality
+// =============================================================================
+
+/// Business functionality and concrete implementations
+///
+/// This module provides production-ready agent implementations and business logic.
+///
+/// # Modules
+///
+/// - `llm`: LLM integration (OpenAI, etc.)
+/// - `secretary`: Secretary agent pattern
+/// - `react`: ReAct (Reasoning + Acting) framework
+/// - `collaboration`: Multi-agent collaboration protocols
+/// - `persistence`: Database persistence
+pub mod foundation {
+    pub use super::collaboration;
+    pub use super::llm;
+    pub use super::persistence;
+    pub use super::react;
+    pub use super::secretary;
+}
+
+// =============================================================================
+// Convenience Re-exports (Backward Compatibility)
+// =============================================================================
+
+// Top-level re-exports for convenience and backward compatibility
+pub use kernel::{
+    AgentCapabilities,
+    AgentContext, AgentError,
+    AgentEvent, AgentInput, AgentLifecycle, AgentMessage, AgentMessaging,
+    AgentMetadata, AgentOutput,
+    AgentPluginSupport, AgentResult,
+    AgentState, ErrorCategory,
+    // Unified types (new) - MessageContent excluded due to naming conflict with LLM module
+    ErrorContext, EventBuilder,
+    MessageMetadata, MoFAAgent,
+    UnifiedError, UnifiedEvent, UnifiedMessage, UnifiedResult,
+};
+// Note: For MessageContent, use kernel::MessageContent explicitly to avoid conflict with llm::MessageContent
+
+pub use runtime::{
+    run_agent, AgentBuilder, SimpleRuntime,
+};
+
+// Re-export plugin types
+pub use mofa_plugins::{
+    tools, AgentPlugin, LLMPlugin, LLMPluginConfig, MemoryPlugin, MemoryStorage,
+    PluginManager, RhaiPlugin, RhaiPluginConfig, RhaiPluginState, StoragePlugin, ToolCall,
+    ToolDefinition, ToolExecutor, ToolPlugin, ToolResult,
+};
+
+// Re-export rhai_runtime module for runtime plugin creation
+pub use mofa_plugins::rhai_runtime;
+
+// Re-export wasm_runtime module
+pub use mofa_plugins::wasm_runtime;
+
+// Re-export workflow types from mofa-foundation
+// Note: workflow module has been moved from kernel to foundation
+pub use mofa_foundation::workflow::{
+    ExecutionEvent, ExecutorConfig,
+    WorkflowBuilder, WorkflowExecutor,
+    WorkflowGraph, WorkflowNode, WorkflowValue
+};
+
+// Re-export dashboard module
+pub mod dashboard {
+    pub use mofa_monitoring::*;
+}
+
+// Re-export plugin module
+pub use mofa_plugins::PluginContext;
+
+// Re-export hot_reload types
+pub use mofa_plugins::hot_reload;
+pub use mofa_plugins::hot_reload::*;
+
+pub use mofa_kernel::message::{TaskPriority, TaskRequest, TaskStatus};
+// Re-export additional kernel types needed by plugins
+pub use mofa_kernel::{PluginMetadata, PluginPriority, PluginResult, PluginState, PluginType};
+
+// Re-export rhai module from mofa-extra
+pub use mofa_extra::rhai;
+pub use mofa_extra::rhai::*;
+
+// Re-export LLM module from mofa-foundation (always available)
+pub mod llm {
+    //! LLM (Large Language Model) integration module
+    //!
+    //! Provides LLM interaction capabilities for agents.
+    //!
+    //! # Quick Start
+    //!
+    //! ```rust,ignore
+    //! use mofa_sdk::llm::{LLMProvider, LLMClient, ChatMessage, ChatCompletionRequest};
+    //!
+    //! // Implement your LLM provider
+    //! struct MyProvider { /* ... */ }
+    //!
+    //! #[async_trait::async_trait]
+    //! impl LLMProvider for MyProvider {
+    //!     fn name(&self) -> &str { "my-llm" }
+    //!     async fn chat(&self, request: ChatCompletionRequest) -> LLMResult<ChatCompletionResponse> {
+    //!         // Your implementation
+    //!     }
+    //! }
+    //!
+    //! // Use the client
+    //! let client = LLMClient::new(Arc::new(MyProvider::new()));
+    //! let answer = client.ask("What is Rust?").await?;
+    //! ```
+
+    pub use mofa_foundation::llm::openai::{OpenAIConfig, OpenAIProvider};
+    pub use mofa_foundation::llm::*;
+
+    /// 从环境变量创建 OpenAI 提供器
+    ///
+    /// 自动读取以下环境变量:
+    /// - OPENAI_API_KEY: API 密钥
+    /// - OPENAI_BASE_URL: 可选的 API 基础 URL
+    /// - OPENAI_MODEL: 可选的默认模型
+    ///
+    /// # 示例
+    ///
+    /// ```rust,ignore
+    /// use mofa_sdk::llm::openai_from_env;
+    ///
+    /// let provider = openai_from_env().unwrap();
+    /// ```
+    #[cfg(feature = "openai")]
+    pub fn openai_from_env() -> Result<OpenAIProvider, crate::llm::LLMError> {
+        let api_key = std::env::var("OPENAI_API_KEY")
+            .map_err(|_| crate::llm::LLMError::ConfigError("OpenAI API key not found in environment variable OPENAI_API_KEY".to_string()))?;
+
+        let mut config = OpenAIConfig::new(api_key);
+
+        if let Ok(base_url) = std::env::var("OPENAI_BASE_URL") {
+            config = config.with_base_url(&base_url);
+        }
+
+        if let Ok(model) = std::env::var("OPENAI_MODEL") {
+            config = config.with_model(&model);
+        }
+
+        Ok(OpenAIProvider::with_config(config))
+    }
+}
+
+// Re-export Secretary module from mofa-foundation (always available)
+pub mod secretary {
+    //! 秘书Agent模式 - 基于事件循环的智能助手
+    //!
+    //! 秘书Agent是一个面向用户的智能助手，通过与LLM交互完成个人助理工作。
+    //! 设计为与长连接配合使用，实现持续的交互式服务。
+    //!
+    //! ## 工作循环（5阶段事件循环）
+    //!
+    //! 1. **接收想法** → 记录并生成TODO
+    //! 2. **澄清需求** → 与用户交互，转换为项目文档
+    //! 3. **调度分配** → 调用对应的执行Agent
+    //! 4. **监控反馈** → 推送关键决策给人类
+    //! 5. **验收汇报** → 更新TODO，生成报告
+    //!
+    //! # Quick Start
+    //!
+    //! ```rust,ignore
+    //! use mofa_sdk::secretary::{
+    //!     SecretaryAgentBuilder, ChannelConnection, UserInput,
+    //!     SecretaryOutput, ExecutorCapability, TodoPriority,
+    //! };
+    //! use std::sync::Arc;
+    //!
+    //! #[tokio::main]
+    //! async fn main() -> anyhow::Result<()> {
+    //!     // 1. 创建秘书Agent
+    //!     let secretary = SecretaryAgentBuilder::new()
+    //!         .with_id("my_secretary")
+    //!         .with_name("项目秘书")
+    //!         .with_auto_clarify(true)
+    //!         .with_executor(ExecutorCapability {
+    //!             agent_id: "backend_agent".to_string(),
+    //!             name: "后端Agent".to_string(),
+    //!             capabilities: vec!["backend".to_string()],
+    //!             current_load: 0,
+    //!             available: true,
+    //!             performance_score: 0.9,
+    //!         })
+    //!         .build()
+    //!         .await;
+    //!
+    //!     // 2. 创建通道连接
+    //!     let (conn, input_tx, mut output_rx) = ChannelConnection::new_pair(32);
+    //!
+    //!     // 3. 启动事件循环
+    //!     let handle = secretary.start(conn).await;
+    //!
+    //!     // 4. 发送用户输入
+    //!     input_tx.send(UserInput::Idea {
+    //!         content: "开发一个REST API".to_string(),
+    //!         priority: Some(TodoPriority::High),
+    //!         metadata: None,
+    //!     }).await?;
+    //!
+    //!     // 5. 处理秘书输出
+    //!     while let Some(output) = output_rx.recv().await {
+    //!         match output {
+    //!             SecretaryOutput::Acknowledgment { message } => {
+    //!                 info!("秘书: {}", message);
+    //!             }
+    //!             SecretaryOutput::DecisionRequired { decision } => {
+    //!                 info!("需要决策: {}", decision.description);
+    //!                 // 处理决策...
+    //!             }
+    //!             SecretaryOutput::Report { report } => {
+    //!                 info!("汇报: {}", report.content);
+    //!             }
+    //!             _ => {}
+    //!         }
+    //!     }
+    //!
+    //!     handle.await??;
+    //!     Ok(())
+    //! }
+    //! ```
+    //!
+    //! # 自定义LLM Provider
+    //!
+    //! ```rust,ignore
+    //! use mofa_sdk::secretary::{LLMProvider, ChatMessage};
+    //! use std::sync::Arc;
+    //!
+    //! struct MyLLMProvider {
+    //!     api_key: String,
+    //! }
+    //!
+    //! #[async_trait::async_trait]
+    //! impl LLMProvider for MyLLMProvider {
+    //!     fn name(&self) -> &str { "my-llm" }
+    //!
+    //!     async fn chat(&self, messages: Vec<ChatMessage>) -> anyhow::Result<String> {
+    //!         // 调用你的LLM API
+    //!         Ok("LLM响应".to_string())
+    //!     }
+    //! }
+    //!
+    //! // 使用自定义LLM
+    //! let llm = Arc::new(MyLLMProvider { api_key: "...".to_string() });
+    //! let secretary = SecretaryAgentBuilder::new()
+    //!     .with_llm(llm)
+    //!     .build()
+    //!     .await;
+    //! ```
+
+    pub use mofa_foundation::secretary::*;
+}
+
+// Re-export React module from mofa-foundation (always available)
+pub mod react {
+    //! ReAct (Reasoning + Acting) 框架
+    //!
+    //! ReAct 是一种将推理和行动相结合的智能代理架构。
+    //! 代理通过"思考-行动-观察"循环来解决问题。
+
+    pub use mofa_foundation::react::*;
+}
+
+// Re-export collaboration module from mofa-foundation (always available)
+pub mod collaboration {
+    //! 自适应协作协议模块
+    //!
+    //! 提供多 Agent 自适应协作的标准协议实现，支持根据任务描述动态切换协作模式。
+    //!
+    //! # 标准协议
+    //!
+    //! - `RequestResponseProtocol`: 请求-响应模式，适合数据处理任务
+    //! - `PublishSubscribeProtocol`: 发布-订阅模式，适合创意生成任务
+    //! - `ConsensusProtocol`: 共识机制模式，适合决策制定任务
+    //! - `DebateProtocol`: 辩论模式，适合审查任务
+    //! - `ParallelProtocol`: 并行模式，适合分析任务
+    //!
+    //! # 快速开始
+    //!
+    //! ```rust,ignore
+    //! use mofa_sdk::{
+    //!     collaboration::{
+    //!         RequestResponseProtocol, PublishSubscribeProtocol, ConsensusProtocol,
+    //!     },
+    //!     AdaptiveCollaborationManager,
+    //! };
+    //! use std::sync::Arc;
+    //!
+    //! #[tokio::main]
+    //! async fn main() -> anyhow::Result<()> {
+    //!     let manager = AdaptiveCollaborationManager::new("agent_001");
+    //!
+    //!     // 注册标准协议
+    //!     manager.register_protocol(Arc::new(RequestResponseProtocol::new("agent_001"))).await?;
+    //!     manager.register_protocol(Arc::new(PublishSubscribeProtocol::new("agent_001"))).await?;
+    //!     manager.register_protocol(Arc::new(ConsensusProtocol::new("agent_001"))).await?;
+    //!
+    //!     // 执行任务（使用自然语言描述，系统自动选择合适的协议）
+    //!     let result = manager.execute_task(
+    //!         "处理数据: [1, 2, 3]",  // 任务描述
+    //!         serde_json::json!({"data": [1, 2, 3]})
+    //!     ).await?;
+    //!
+    //!     println!("Result: {:?}", result);
+    //!     Ok(())
+    //! }
+    //! ```
+
+    pub use mofa_foundation::collaboration::*;
+}
+
+// =============================================================================
+// Persistence module (re-export from mofa-foundation)
+// =============================================================================
+
+// Re-export Persistence module from mofa-foundation
+pub mod persistence {
+    pub use mofa_foundation::persistence::*;
+}
+
+// =============================================================================
+// UniFFI bindings (enabled with `uniffi` feature)
+// =============================================================================
+
+#[cfg(feature = "uniffi")]
+mod uniffi_impl;
+
+#[cfg(feature = "uniffi")]
+pub use uniffi_impl::*;
+
+// Include generated UniFFI scaffolding
+#[cfg(feature = "uniffi")]
+uniffi::include_scaffolding!("mofa");
+
+// =============================================================================
+// PyO3 Python bindings (enabled with `python` feature)
+// =============================================================================
+
+// Note: Python bindings are being refactored to use MoFAAgent directly.
+// The PyAgentWrapper will be reimplemented to wrap MoFAAgent instead of RuntimeAgent.
+
+#[cfg(feature = "python")]
+mod python_bindings {
+    use pyo3::prelude::*;
+
+    /// Python module initialization
+    #[pymodule]
+    pub fn mofa(m: &Bound<'_, PyModule>) -> PyResult<()> {
+        m.add_function(wrap_pyfunction!(run_agent, m)?)?;
+        Ok(())
+    }
+
+    /// Run a Python agent
+    #[pyfunction]
+    fn run_agent(py: Python<'_>, agent: PyObject) -> PyResult<Bound<'_, PyAny>> {
+        let py_config = agent.getattr(py, "config")?;
+        let agent_id: String = py_config.getattr(py, "agent_id")?.extract(py)?;
+        let name: String = py_config.getattr(py, "name")?.extract(py)?;
+
+        let wrapper = PyAgentWrapper {
+            py_agent: agent,
+            config: AgentConfig {
+                agent_id,
+                name,
+                node_config: HashMap::new(),
+            },
+        };
+
+        pyo3_async_runtimes::tokio::future_into_py(py, async move {
+            if let Err(e) = mofa_runtime::run_agent(wrapper).await {
+                return Err(PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(format!(
+                    "Agent failed: {}",
+                    e
+                )));
+            }
+            Ok(Python::with_gil(|py| py.None()))
+        })
+    }
+}
+
+#[cfg(feature = "python")]
+pub use python_bindings::mofa;
+
+// =============================================================================
+// Dora-rs runtime support (enabled with `dora` feature)
+// =============================================================================
+
+#[cfg(feature = "dora")]
+pub mod dora {
+    //! Dora-rs adapter for distributed dataflow runtime
+    //!
+    //! This module provides MoFA framework integration with dora-rs, including:
+    //! - DoraNode wrapper: Agent lifecycle management
+    //! - DoraOperator wrapper: Plugin capability abstraction
+    //! - DoraDataflow wrapper: Multi-agent collaborative dataflow
+    //! - DoraChannel wrapper: Cross-agent communication channel
+    //! - DoraRuntime wrapper: Complete runtime support (embedded/distributed)
+    //!
+    //! # Example
+    //!
+    //! ```rust,ignore
+    //! use mofa_sdk::dora::{DoraRuntime, RuntimeConfig, run_dataflow};
+    //!
+    //! #[tokio::main]
+    //! async fn main() -> eyre::Result<()> {
+    //!     // Quick run with helper function
+    //!     let result = run_dataflow("dataflow.yml").await?;
+    //!     info!("Dataflow {} completed", result.uuid);
+    //!
+    //!     // Or use the builder pattern
+    //!     let mut runtime = DoraRuntime::embedded("dataflow.yml");
+    //!     let result = runtime.run().await?;
+    //!     Ok(())
+    //! }
+    //! ```
+
+    // Re-export dora adapter types
+    pub use mofa_runtime::dora_adapter::*;
+
+    // Re-export dora-specific runtime types from mofa_runtime root
+    pub use mofa_runtime::{AgentBuilder, AgentRuntime, MoFARuntime};
+}
+
+// =============================================================================
+// Agent Skills - Progressive Disclosure Skills System
+// =============================================================================
+
+// Module declaration for skills
+mod skills;
+
+// Public skills module with re-exports
+pub mod skill_api {
+    //! Agent Skills 管理 API
+    //!
+    //! 提供 Skills 的统一管理接口，支持：
+    //! - 渐进式披露（Progressive Disclosure）
+    //! - 热更新支持
+    //! - 搜索和加载
+    //!
+    //! # Example
+    //!
+    //! ```no_run
+    //! use mofa_sdk::SkillsManager;
+    //!
+    //! let manager = SkillsManager::new("./skills").unwrap();
+    //! let prompt = manager.build_system_prompt();
+    //! println!("{}", prompt);
+    //!
+    //! // Load a specific skill
+    //! if let Some(content) = manager.load_skill("pdf_processing") {
+    //!     println!("Skill content: {}", content);
+    //! }
+    //! ```
+
+    pub use crate::skills::*;
+}
+
+// =============================================================================
+// Top-level skills re-exports for convenience
+// =============================================================================
+
+pub use skills::{from_dir, SkillsManager, SkillsManagerBuilder};

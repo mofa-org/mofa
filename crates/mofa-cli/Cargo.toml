@@ -1,0 +1,43 @@
+[package]
+name = "mofa-cli"
+version.workspace = true
+edition.workspace = true
+description = "MoFA CLI - Command-line tool for building and managing AI agents"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/mofa-org/mofa"
+homepage = "https://github.com/mofa-org/mofa"
+documentation = "https://docs.rs/mofa-cli"
+readme = "README.md"
+keywords = ["ai", "agents", "cli", "dora", "framework"]
+categories = ["command-line-utilities", "development-tools"]
+
+[[bin]]
+name = "mofa"
+path = "src/main.rs"
+
+[dependencies]
+# Core
+mofa-sdk = { path = "../mofa-sdk" }
+tokio = { workspace = true }
+anyhow = { workspace = true }
+
+# CLI
+clap = { version = "4", features = ["derive", "env"] }
+colored = "2"
+
+# Serialization
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+
+# Utilities
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+
+# Database (optional, for db init command)
+sqlx = { version = "0.8", features = ["runtime-tokio", "postgres", "mysql", "sqlite"], optional = true }
+
+[features]
+default = []
+dora = ["mofa-sdk/dora"]
+db = ["dep:sqlx"]

@@ -1,7 +1,0 @@
-test_cases:
-  - name: test_parms_1
-    input: ["a", "b", "c"]  # 直接使用列表值，去掉parameter_names键
-    expected_output: ["a", "b", "c"]  # 直接使用列表值，去掉receive_data键
-  - name: test_params_2
-    input: ["D", "E", "F"]
-    expected_output: ["D", "E", "F"]

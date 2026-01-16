@@ -1,0 +1,31 @@
+[package]
+name = "mofa-kernel"
+version.workspace = true
+edition.workspace = true
+description = "MoFA Kernel - Core runtime and microkernel implementation"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/mofa-org/mofa"
+homepage = "https://github.com/mofa-org/mofa"
+documentation = "https://docs.rs/mofa-kernel"
+
+[dependencies]
+# Workspace dependencies
+async-trait.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+serde_yaml.workspace = true
+tokio.workspace = true
+bincode.workspace = true
+anyhow.workspace = true
+thiserror.workspace = true
+futures.workspace = true
+uuid = {workspace = true,features = ["serde", "v4"]}
+tracing.workspace = true
+rand.workspace = true
+chrono.workspace = true
+lazy_static.workspace = true
+hex.workspace = true
+
+# Config parsing
+toml = "0.8"
+

@@ -1,0 +1,36 @@
+[package]
+name = "mofa-monitoring"
+version.workspace = true
+edition.workspace = true
+description = "MoFA Monitoring - Web-based dashboard and metrics collection"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/mofa-org/mofa"
+homepage = "https://github.com/mofa-org/mofa"
+documentation = "https://docs.rs/mofa-monitoring"
+
+[dependencies]
+# Workspace dependencies
+async-trait.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tokio.workspace = true
+anyhow.workspace = true
+tracing.workspace = true
+uuid = {workspace = true, features = ["serde", "v4"]}
+chrono.workspace = true
+thiserror.workspace = true
+rand.workspace = true
+hex.workspace = true
+lazy_static.workspace = true
+# HTTP server dependencies
+axum = {workspace = true, features = ["macros","ws"]}
+tower = { version = "0.4", features = ["util", "timeout"] }
+tower-http = { version = "0.5", features = ["fs", "cors", "trace"] }
+
+# Static file embedding
+rust-embed = { version = "8.0", features = ["compression"] }
+mime_guess = "2.0"
+
+# Local dependencies
+mofa-kernel = { path = "../mofa-kernel" }
+futures = "0.3.31"

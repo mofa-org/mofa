@@ -1,0 +1,306 @@
+
+//! LLM 模块
+//!
+//! 提供 LLM (Large Language Model) 集成支持
+//!
+//! # 架构
+//!
+//! ```text
+//! ┌─────────────────────────────────────────────────────────────────────┐
+//! │                           LLM 模块架构                               │
+//! ├─────────────────────────────────────────────────────────────────────┤
+//! │                                                                     │
+//! │  ┌─────────────┐    ┌─────────────┐    ┌─────────────────────────┐ │
+//! │  │  LLMClient  │───▶│  Provider   │───▶│  具体实现               │ │
+//! │  │  (高级API)   │    │  (trait)    │    │  - OpenAI              │ │
+//! │  └─────────────┘    └─────────────┘    │  - Anthropic           │ │
+//! │         │                              │  - Ollama              │ │
+//! │         ▼                              │  - 自定义...            │ │
+//! │  ┌─────────────┐                       └─────────────────────────┘ │
+//! │  │ ChatSession │                                                   │
+//! │  │ (会话管理)   │                                                   │
+//! │  └─────────────┘                                                   │
+//! │         │                                                          │
+//! │         ▼                                                          │
+//! │  ┌─────────────┐    ┌─────────────┐                               │
+//! │  │  LLMPlugin  │───▶│ AgentPlugin │  ← 集成到 MoFA Agent         │
+//! │  │  (插件封装)  │    │  (trait)    │                               │
+//! │  └─────────────┘    └─────────────┘                               │
+//! │         │                                                          │
+//! │         ▼                                                          │
+//! │  ┌─────────────────────────────────────────────────────────────┐  │
+//! │  │                    高级 API                                   │  │
+//! │  ├─────────────────────────────────────────────────────────────┤  │
+//! │  │  AgentWorkflow  │  多 Agent 工作流编排                        │  │
+//! │  │  AgentTeam      │  团队协作模式 (链式/并行/辩论/监督)          │  │
+//! │  │  Pipeline       │  函数式流水线 API                           │  │
+//! │  └─────────────────────────────────────────────────────────────┘  │
+//! │                                                                     │
+//! └─────────────────────────────────────────────────────────────────────┘
+//! ```
+//!
+//! # 快速开始
+//!
+//! ## 1. 实现自定义 LLM Provider
+//!
+//! ```rust,ignore
+//! use mofa_foundation::llm::{LLMProvider, ChatCompletionRequest, ChatCompletionResponse, LLMResult};
+//!
+//! struct MyLLMProvider {
+//!     api_key: String,
+//! }
+//!
+//! #[async_trait::async_trait]
+//! impl LLMProvider for MyLLMProvider {
+//!     fn name(&self) -> &str {
+//!         "my-llm"
+//!     }
+//!
+//!     fn default_model(&self) -> &str {
+//!         "my-model-v1"
+//!     }
+//!
+//!     async fn chat(&self, request: ChatCompletionRequest) -> LLMResult<ChatCompletionResponse> {
+//!         // 实现具体的 API 调用逻辑
+//!         todo!()
+//!     }
+//! }
+//! ```
+//!
+//! ## 2. 使用 LLMClient 进行对话
+//!
+//! ```rust,ignore
+//! use mofa_foundation::llm::{LLMClient, ChatMessage};
+//! use std::sync::Arc;
+//!
+//! let provider = Arc::new(MyLLMProvider::new("api-key"));
+//! let client = LLMClient::new(provider);
+//!
+//! // 简单问答
+//! let answer = client.ask("What is Rust?").await?;
+//!
+//! // 带系统提示的对话
+//! let response = client
+//!     .chat()
+//!     .system("You are a helpful coding assistant.")
+//!     .user("How do I read a file in Rust?")
+//!     .temperature(0.7)
+//!     .max_tokens(1000)
+//!     .send()
+//!     .await?;
+//!
+//! info!("{}", response.content().unwrap());
+//! ```
+//!
+//! ## 3. 使用工具调用
+//!
+//! ```rust,ignore
+//! use mofa_foundation::llm::{LLMClient, Tool, ToolExecutor};
+//! use serde_json::json;
+//!
+//! // 定义工具
+//! let weather_tool = Tool::function(
+//!     "get_weather",
+//!     "Get weather for a location",
+//!     json!({
+//!         "type": "object",
+//!         "properties": {
+//!             "location": { "type": "string" }
+//!         },
+//!         "required": ["location"]
+//!     })
+//! );
+//!
+//! // 实现工具执行器
+//! struct MyToolExecutor;
+//!
+//! #[async_trait::async_trait]
+//! impl ToolExecutor for MyToolExecutor {
+//!     async fn execute(&self, name: &str, arguments: &str) -> LLMResult<String> {
+//!         match name {
+//!             "get_weather" => Ok(r#"{"temp": 22, "condition": "sunny"}"#.to_string()),
+//!             _ => Err(LLMError::Other("Unknown tool".to_string()))
+//!         }
+//!     }
+//!
+//!     fn available_tools(&self) -> Vec<Tool> {
+//!         vec![weather_tool.clone()]
+//!     }
+//! }
+//!
+//! // 使用自动工具调用
+//! let response = client
+//!     .chat()
+//!     .system("You can use tools to help answer questions.")
+//!     .user("What's the weather in Tokyo?")
+//!     .tool(weather_tool)
+//!     .with_tool_executor(Arc::new(MyToolExecutor))
+//!     .send_with_tools()
+//!     .await?;
+//! ```
+//!
+//! ## 4. 作为插件集成到 Agent
+//!
+//! ```rust,ignore
+//! use mofa_foundation::llm::{LLMPlugin, LLMConfig};
+//! use mofa_sdk::{MoFAAgent, AgentBuilder};
+//!
+//! // 创建 LLM 插件
+//! let llm_plugin = LLMPlugin::new("openai-llm", provider);
+//!
+//! // 添加到 Agent
+//! let runtime = AgentBuilder::new("my-agent", "My Agent")
+//!     .with_plugin(Box::new(llm_plugin))
+//!     .with_agent(agent)
+//!     .await?;
+//! ```
+//!
+//! ## 5. 使用会话管理
+//!
+//! ```rust,ignore
+//! use mofa_foundation::llm::{LLMClient, ChatSession};
+//!
+//! let client = LLMClient::new(provider);
+//! let mut session = ChatSession::new(client)
+//!     .with_system("You are a helpful assistant.");
+//!
+//! // 多轮对话
+//! let r1 = session.send("Hello!").await?;
+//! let r2 = session.send("What did I just say?").await?;  // 会记住上下文
+//!
+//! // 清空历史
+//! session.clear();
+//! ```
+//!
+//! # 高级 API
+//!
+//! ## 6. Agent 工作流编排 (AgentWorkflow)
+//!
+//! 创建复杂的多 Agent 工作流，支持条件分支、并行执行、聚合等。
+//!
+//! ```rust,ignore
+//! use mofa_foundation::llm::{AgentWorkflow, LLMAgent};
+//! use std::sync::Arc;
+//!
+//! // 创建简单的 Agent 链
+//! let workflow = agent_chain("content-pipeline", vec![
+//!     ("researcher", researcher_agent.clone()),
+//!     ("writer", writer_agent.clone()),
+//!     ("editor", editor_agent.clone()),
+//! ]);
+//!
+//! let result = workflow.run("Write an article about Rust").await?;
+//!
+//! // 使用构建器创建更复杂的工作流
+//! let workflow = AgentWorkflow::new("complex-pipeline")
+//!     .add_agent("analyzer", analyzer_agent)
+//!     .add_agent("writer", writer_agent)
+//!     .add_llm_router("router", router_agent, vec!["technical", "creative"])
+//!     .connect("start", "analyzer")
+//!     .connect("analyzer", "router")
+//!     .connect_on("router", "technical", "technical")
+//!     .connect_on("router", "creative", "creative")
+//!     .build();
+//! ```
+//!
+//! ## 7. Agent 团队协作 (AgentTeam)
+//!
+//! 支持多种协作模式：链式、并行、辩论、监督、MapReduce。
+//!
+//! ```rust,ignore
+//! use mofa_foundation::llm::{AgentTeam, TeamPattern, AgentRole};
+//!
+//! // 使用预定义的团队模式
+//! let team = content_creation_team(researcher, writer, editor);
+//! let article = team.run("Write about AI safety").await?;
+//!
+//! // 自定义团队
+//! let team = AgentTeam::new("analysis-team")
+//!     .add_member("expert1", expert1_agent)
+//!     .add_member("expert2", expert2_agent)
+//!     .add_member("synthesizer", synthesizer_agent)
+//!     .with_pattern(TeamPattern::MapReduce)
+//!     .with_aggregate_prompt("Synthesize: {results}")
+//!     .build();
+//!
+//! // 辩论模式
+//! let debate = debate_team(agent1, agent2, 3);  // 3 轮辩论
+//! let conclusion = debate.run("Is Rust better than Go?").await?;
+//! ```
+//!
+//! ## 8. 函数式流水线 (Pipeline)
+//!
+//! 提供简洁的函数式 API 构建 Agent 处理流程。
+//!
+//! ```rust,ignore
+//! use mofa_foundation::llm::Pipeline;
+//!
+//! // 简单流水线
+//! let result = Pipeline::new()
+//!     .with_agent(translator)
+//!     .map(|s| s.to_uppercase())
+//!     .with_agent(summarizer)
+//!     .run("Translate and summarize this text")
+//!     .await?;
+//!
+//! // 带模板的流水线
+//! let result = Pipeline::new()
+//!     .with_agent_template(agent, "Please analyze: {input}")
+//!     .map(|s| format!("Analysis: {}", s))
+//!     .run("Some data to analyze")
+//!     .await?;
+//!
+//! // 流式流水线
+//! let stream = StreamPipeline::new(agent)
+//!     .with_template("Tell me about {input}")
+//!     .run_stream("Rust programming")
+//!     .await?;
+//! ```
+
+pub mod agent;
+pub mod client;
+pub mod plugin;
+pub mod provider;
+pub mod types;
+
+// 高级 API
+pub mod agent_workflow;
+pub mod multi_agent;
+pub mod pipeline;
+pub mod openai;
+
+// Re-export 核心类型
+pub use client::{function_tool, ChatRequestBuilder, ChatSession, LLMClient, ToolExecutor};
+pub use plugin::{LLMCapability, LLMPlugin, MockLLMProvider};
+pub use provider::{
+    global_registry, ChatStream, LLMConfig, LLMProvider, LLMRegistry, ModelCapabilities, ModelInfo,
+};
+pub use types::*;
+
+// Re-export 标准 LLM Agent
+pub use agent::{
+    simple_llm_agent, LLMAgent, LLMAgentBuilder, LLMAgentConfig, LLMAgentEventHandler, StreamEvent,
+    TextStream,
+};
+
+// Re-export agent_from_config (when openai feature is enabled)
+pub use agent::agent_from_config;
+
+// Re-export OpenAI Provider (when enabled)
+pub use openai::{
+    OpenAIConfig, OpenAIProvider,
+};
+
+// Re-export 高级 API
+pub use agent_workflow::{
+    agent_chain, agent_parallel, agent_router, AgentEdge, AgentNode, AgentNodeType,
+    AgentValue, AgentWorkflow, AgentWorkflowBuilder, AgentWorkflowContext,
+};
+pub use multi_agent::{
+    analysis_team, code_review_team, content_creation_team, debate_team, AgentMember, AgentRole,
+    AgentTeam, AgentTeamBuilder, TeamPattern,
+};
+pub use pipeline::{
+    agent_pipe, agent_pipe_with_templates, ask_with_template, batch_ask, quick_ask, Pipeline,
+    StreamPipeline,
+};

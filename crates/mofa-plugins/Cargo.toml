@@ -1,0 +1,33 @@
+[package]
+name = "mofa-plugins"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+# Workspace dependencies
+async-trait.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+serde_yaml.workspace = true
+tokio.workspace = true
+anyhow.workspace = true
+thiserror.workspace = true
+parking_lot.workspace = true
+notify.workspace = true
+libloading.workspace = true
+tempfile.workspace = true
+sha2.workspace = true
+tracing.workspace = true
+uuid = {workspace = true,features = ["v7"]}
+rand.workspace = true
+# WASM plugin runtime
+wasmtime = { version = "40", features = ["component-model", "async"] }
+# Local dependencies
+mofa-kernel = { path = "../mofa-kernel" }
+reqwest = { version = "0.12.28", features = ["json", "rustls-tls"] }
+chrono = { workspace = true, features = ["serde"] }
+mofa-extra = { version = "0.1.0", path = "../mofa-extra" }
+rhai = { version = "1.20", features = ["sync", "serde"] }
+url = "2.5.7"
+regex = "1.12.2"
+walkdir = "2.4"

@@ -1,0 +1,37 @@
+[package]
+name = "mofa-runtime"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+# Workspace dependencies
+async-trait.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+bincode.workspace = true
+tokio.workspace = true
+anyhow.workspace = true
+tracing.workspace = true
+flume.workspace = true
+uuid.workspace = true
+thiserror.workspace = true
+eyre.workspace = true
+
+# Local dependencies
+mofa-kernel = { path = "../mofa-kernel" }
+mofa-plugins = { path = "../mofa-plugins" }
+mofa-monitoring = { path = "../mofa-monitoring", optional = true }
+# Dora-rs dependencies
+dora-node-api = { version = "0", default-features = false, optional = true }
+dora-operator-api = { version = "0", default-features = false, optional = true }
+dora-daemon = { version = "0", default-features = false, optional = true }
+dora-core = { version = "0", features = ["build"], optional = true }
+dora-message = { version = "0", optional = true }
+
+serde_yaml = { workspace = true }
+toml = "0"
+
+[features]
+
+dora = ["dora-node-api", "dora-operator-api", "dora-daemon", "dora-core", "dora-message"]
+monitoring = ["dep:mofa-monitoring"]

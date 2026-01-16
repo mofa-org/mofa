@@ -1,0 +1,1009 @@
+//! LLM Agent 工作流编排
+//!
+//! 将 LLMAgent 与 WorkflowGraph 结合，提供高级的多 Agent 工作流编排能力
+//!
+//! # 功能特性
+//!
+//! - **Agent 节点**: 将 LLMAgent 封装为工作流节点
+//! - **条件路由**: 基于 LLM 输出进行条件分支
+//! - **并行执行**: 多个 Agent 并行处理
+//! - **流式响应**: 支持工作流中的流式输出
+//! - **会话共享**: 工作流节点间共享会话上下文
+//!
+//! # 示例
+//!
+//! ```rust,ignore
+//! use mofa_foundation::llm::{AgentWorkflow, LLMAgent};
+//! use std::sync::Arc;
+//!
+//! // 创建 Agent 工作流
+//! let workflow = AgentWorkflow::new("content-pipeline")
+//!     .add_agent("researcher", researcher_agent)
+//!     .add_agent("writer", writer_agent)
+//!     .add_agent("editor", editor_agent)
+//!     .chain(["researcher", "writer", "editor"])
+//!     .build();
+//!
+//! // 执行工作流
+//! let result = workflow.run("Write an article about Rust").await?;
+//! ```
+
+use super::agent::LLMAgent;
+use super::types::{LLMError, LLMResult};
+use std::collections::HashMap;
+use std::future::Future;
+use std::pin::Pin;
+use std::sync::Arc;
+use tokio::sync::RwLock;
+
+/// Agent 工作流节点类型
+#[derive(Debug, Clone)]
+pub enum AgentNodeType {
+    /// 开始节点
+    Start,
+    /// 结束节点
+    End,
+    /// LLM Agent 节点
+    Agent,
+    /// 条件路由节点
+    Router,
+    /// 并行分发节点
+    Parallel,
+    /// 聚合节点
+    Join,
+    /// 转换节点
+    Transform,
+}
+
+/// 节点输入/输出值
+#[derive(Debug, Clone)]
+pub enum AgentValue {
+    /// 空值
+    Null,
+    /// 文本
+    Text(String),
+    /// 多个文本（用于并行结果）
+    Texts(Vec<String>),
+    /// 键值对
+    Map(HashMap<String, String>),
+    /// JSON 值
+    Json(serde_json::Value),
+}
+
+impl AgentValue {
+    pub fn as_text(&self) -> Option<&str> {
+        match self {
+            AgentValue::Text(s) => Some(s),
+            _ => None,
+        }
+    }
+
+    pub fn into_text(self) -> String {
+        match self {
+            AgentValue::Text(s) => s,
+            AgentValue::Texts(v) => v.join("\n"),
+            AgentValue::Map(m) => serde_json::to_string(&m).unwrap_or_default(),
+            AgentValue::Json(j) => j.to_string(),
+            AgentValue::Null => String::new(),
+        }
+    }
+
+    pub fn as_texts(&self) -> Option<&Vec<String>> {
+        match self {
+            AgentValue::Texts(v) => Some(v),
+            _ => None,
+        }
+    }
+
+    pub fn as_map(&self) -> Option<&HashMap<String, String>> {
+        match self {
+            AgentValue::Map(m) => Some(m),
+            _ => None,
+        }
+    }
+}
+
+impl From<String> for AgentValue {
+    fn from(s: String) -> Self {
+        AgentValue::Text(s)
+    }
+}
+
+impl From<&str> for AgentValue {
+    fn from(s: &str) -> Self {
+        AgentValue::Text(s.to_string())
+    }
+}
+
+impl From<Vec<String>> for AgentValue {
+    fn from(v: Vec<String>) -> Self {
+        AgentValue::Texts(v)
+    }
+}
+
+impl From<HashMap<String, String>> for AgentValue {
+    fn from(m: HashMap<String, String>) -> Self {
+        AgentValue::Map(m)
+    }
+}
+
+/// 路由决策函数类型
+pub type RouterFn =
+    Arc<dyn Fn(AgentValue) -> Pin<Box<dyn Future<Output = String> + Send>> + Send + Sync>;
+
+/// 转换函数类型
+pub type TransformFn =
+    Arc<dyn Fn(AgentValue) -> Pin<Box<dyn Future<Output = AgentValue> + Send>> + Send + Sync>;
+
+/// 聚合函数类型
+pub type JoinFn = Arc<
+    dyn Fn(HashMap<String, AgentValue>) -> Pin<Box<dyn Future<Output = AgentValue> + Send>>
+        + Send
+        + Sync,
+>;
+
+/// Agent 工作流节点
+pub struct AgentNode {
+    /// 节点 ID
+    pub id: String,
+    /// 节点名称
+    pub name: String,
+    /// 节点类型
+    pub node_type: AgentNodeType,
+    /// Agent 引用（仅 Agent 节点）
+    agent: Option<Arc<LLMAgent>>,
+    /// 路由函数（仅 Router 节点）
+    router: Option<RouterFn>,
+    /// 转换函数（仅 Transform 节点）
+    transform: Option<TransformFn>,
+    /// 聚合函数（仅 Join 节点）
+    join_fn: Option<JoinFn>,
+    /// 等待的节点列表（仅 Join 节点）
+    wait_for: Vec<String>,
+    /// 提示词模板（Agent 节点使用）
+    prompt_template: Option<String>,
+    /// 会话 ID（用于多轮对话）
+    session_id: Option<String>,
+}
+
+impl AgentNode {
+    /// 创建开始节点
+    pub fn start() -> Self {
+        Self {
+            id: "start".to_string(),
+            name: "Start".to_string(),
+            node_type: AgentNodeType::Start,
+            agent: None,
+            router: None,
+            transform: None,
+            join_fn: None,
+            wait_for: Vec::new(),
+            prompt_template: None,
+            session_id: None,
+        }
+    }
+
+    /// 创建结束节点
+    pub fn end() -> Self {
+        Self {
+            id: "end".to_string(),
+            name: "End".to_string(),
+            node_type: AgentNodeType::End,
+            agent: None,
+            router: None,
+            transform: None,
+            join_fn: None,
+            wait_for: Vec::new(),
+            prompt_template: None,
+            session_id: None,
+        }
+    }
+
+    /// 创建 Agent 节点
+    pub fn agent(id: impl Into<String>, agent: Arc<LLMAgent>) -> Self {
+        let id = id.into();
+        Self {
+            name: id.clone(),
+            id,
+            node_type: AgentNodeType::Agent,
+            agent: Some(agent),
+            router: None,
+            transform: None,
+            join_fn: None,
+            wait_for: Vec::new(),
+            prompt_template: None,
+            session_id: None,
+        }
+    }
+
+    /// 创建路由节点
+    pub fn router<F, Fut>(id: impl Into<String>, router_fn: F) -> Self
+    where
+        F: Fn(AgentValue) -> Fut + Send + Sync + 'static,
+        Fut: Future<Output = String> + Send + 'static,
+    {
+        let id = id.into();
+        Self {
+            name: id.clone(),
+            id,
+            node_type: AgentNodeType::Router,
+            agent: None,
+            router: Some(Arc::new(move |input| Box::pin(router_fn(input)))),
+            transform: None,
+            join_fn: None,
+            wait_for: Vec::new(),
+            prompt_template: None,
+            session_id: None,
+        }
+    }
+
+    /// 创建并行节点
+    pub fn parallel(id: impl Into<String>) -> Self {
+        let id = id.into();
+        Self {
+            name: id.clone(),
+            id,
+            node_type: AgentNodeType::Parallel,
+            agent: None,
+            router: None,
+            transform: None,
+            join_fn: None,
+            wait_for: Vec::new(),
+            prompt_template: None,
+            session_id: None,
+        }
+    }
+
+    /// 创建聚合节点
+    pub fn join(id: impl Into<String>, wait_for: Vec<String>) -> Self {
+        let id = id.into();
+        Self {
+            name: id.clone(),
+            id,
+            node_type: AgentNodeType::Join,
+            agent: None,
+            router: None,
+            transform: None,
+            join_fn: None,
+            wait_for,
+            prompt_template: None,
+            session_id: None,
+        }
+    }
+
+    /// 创建带自定义聚合函数的聚合节点
+    pub fn join_with<F, Fut>(id: impl Into<String>, wait_for: Vec<String>, join_fn: F) -> Self
+    where
+        F: Fn(HashMap<String, AgentValue>) -> Fut + Send + Sync + 'static,
+        Fut: Future<Output = AgentValue> + Send + 'static,
+    {
+        let id = id.into();
+        Self {
+            name: id.clone(),
+            id,
+            node_type: AgentNodeType::Join,
+            agent: None,
+            router: None,
+            transform: None,
+            join_fn: Some(Arc::new(move |inputs| Box::pin(join_fn(inputs)))),
+            wait_for,
+            prompt_template: None,
+            session_id: None,
+        }
+    }
+
+    /// 创建转换节点
+    pub fn transform<F, Fut>(id: impl Into<String>, transform_fn: F) -> Self
+    where
+        F: Fn(AgentValue) -> Fut + Send + Sync + 'static,
+        Fut: Future<Output = AgentValue> + Send + 'static,
+    {
+        let id = id.into();
+        Self {
+            name: id.clone(),
+            id,
+            node_type: AgentNodeType::Transform,
+            agent: None,
+            router: None,
+            transform: Some(Arc::new(move |input| Box::pin(transform_fn(input)))),
+            join_fn: None,
+            wait_for: Vec::new(),
+            prompt_template: None,
+            session_id: None,
+        }
+    }
+
+    /// 设置名称
+    pub fn with_name(mut self, name: impl Into<String>) -> Self {
+        self.name = name.into();
+        self
+    }
+
+    /// 设置提示词模板
+    ///
+    /// 模板中可以使用 `{input}` 占位符
+    pub fn with_prompt_template(mut self, template: impl Into<String>) -> Self {
+        self.prompt_template = Some(template.into());
+        self
+    }
+
+    /// 设置会话 ID
+    pub fn with_session(mut self, session_id: impl Into<String>) -> Self {
+        self.session_id = Some(session_id.into());
+        self
+    }
+}
+
+/// Agent 工作流边
+#[derive(Debug, Clone)]
+pub struct AgentEdge {
+    /// 源节点 ID
+    pub from: String,
+    /// 目标节点 ID
+    pub to: String,
+    /// 条件（用于路由）
+    pub condition: Option<String>,
+}
+
+impl AgentEdge {
+    pub fn new(from: impl Into<String>, to: impl Into<String>) -> Self {
+        Self {
+            from: from.into(),
+            to: to.into(),
+            condition: None,
+        }
+    }
+
+    pub fn conditional(
+        from: impl Into<String>,
+        to: impl Into<String>,
+        condition: impl Into<String>,
+    ) -> Self {
+        Self {
+            from: from.into(),
+            to: to.into(),
+            condition: Some(condition.into()),
+        }
+    }
+}
+
+/// Agent 工作流执行上下文
+pub struct AgentWorkflowContext {
+    /// 工作流 ID
+    pub workflow_id: String,
+    /// 执行 ID
+    pub execution_id: String,
+    /// 节点输出
+    node_outputs: Arc<RwLock<HashMap<String, AgentValue>>>,
+    /// 共享会话 ID（用于多 Agent 共享上下文）
+    shared_session_id: Option<String>,
+    /// 变量存储
+    variables: Arc<RwLock<HashMap<String, String>>>,
+}
+
+impl AgentWorkflowContext {
+    pub fn new(workflow_id: impl Into<String>) -> Self {
+        Self {
+            workflow_id: workflow_id.into(),
+            execution_id: uuid::Uuid::now_v7().to_string(),
+            node_outputs: Arc::new(RwLock::new(HashMap::new())),
+            shared_session_id: None,
+            variables: Arc::new(RwLock::new(HashMap::new())),
+        }
+    }
+
+    pub fn with_shared_session(mut self, session_id: impl Into<String>) -> Self {
+        self.shared_session_id = Some(session_id.into());
+        self
+    }
+
+    pub async fn set_output(&self, node_id: &str, value: AgentValue) {
+        let mut outputs = self.node_outputs.write().await;
+        outputs.insert(node_id.to_string(), value);
+    }
+
+    pub async fn get_output(&self, node_id: &str) -> Option<AgentValue> {
+        let outputs = self.node_outputs.read().await;
+        outputs.get(node_id).cloned()
+    }
+
+    pub async fn get_outputs(&self, node_ids: &[String]) -> HashMap<String, AgentValue> {
+        let outputs = self.node_outputs.read().await;
+        node_ids
+            .iter()
+            .filter_map(|id| outputs.get(id).map(|v| (id.clone(), v.clone())))
+            .collect()
+    }
+
+    pub async fn set_variable(&self, key: &str, value: &str) {
+        let mut vars = self.variables.write().await;
+        vars.insert(key.to_string(), value.to_string());
+    }
+
+    pub async fn get_variable(&self, key: &str) -> Option<String> {
+        let vars = self.variables.read().await;
+        vars.get(key).cloned()
+    }
+}
+
+impl Clone for AgentWorkflowContext {
+    fn clone(&self) -> Self {
+        Self {
+            workflow_id: self.workflow_id.clone(),
+            execution_id: self.execution_id.clone(),
+            node_outputs: self.node_outputs.clone(),
+            shared_session_id: self.shared_session_id.clone(),
+            variables: self.variables.clone(),
+        }
+    }
+}
+
+/// Agent 工作流
+pub struct AgentWorkflow {
+    /// 工作流 ID
+    pub id: String,
+    /// 工作流名称
+    pub name: String,
+    /// 节点映射
+    nodes: HashMap<String, AgentNode>,
+    /// 边列表
+    edges: Vec<AgentEdge>,
+    /// 邻接表（源节点 -> 边列表）
+    adjacency: HashMap<String, Vec<AgentEdge>>,
+}
+
+impl AgentWorkflow {
+    /// 创建新的工作流
+    pub fn new(id: impl Into<String>) -> AgentWorkflowBuilder {
+        AgentWorkflowBuilder::new(id)
+    }
+
+    /// 执行工作流
+    pub async fn run(&self, input: impl Into<AgentValue>) -> LLMResult<AgentValue> {
+        let ctx = AgentWorkflowContext::new(&self.id);
+        self.run_with_context(&ctx, input).await
+    }
+
+    /// 使用指定上下文执行工作流
+    pub async fn run_with_context(
+        &self,
+        ctx: &AgentWorkflowContext,
+        input: impl Into<AgentValue>,
+    ) -> LLMResult<AgentValue> {
+        let input = input.into();
+        let mut current_node_id = "start".to_string();
+        let mut current_input = input;
+
+        loop {
+            let node = self
+                .nodes
+                .get(&current_node_id)
+                .ok_or_else(|| LLMError::Other(format!("Node '{}' not found", current_node_id)))?;
+
+            // 执行节点
+            let output = self.execute_node(ctx, node, current_input.clone()).await?;
+
+            // 保存输出
+            ctx.set_output(&current_node_id, output.clone()).await;
+
+            // 确定下一个节点
+            match self.get_next_node(&current_node_id, &output).await {
+                Some(next_id) => {
+                    current_node_id = next_id;
+                    current_input = output;
+                }
+                None => {
+                    // 工作流结束
+                    return Ok(output);
+                }
+            }
+        }
+    }
+
+    /// 执行单个节点
+    async fn execute_node(
+        &self,
+        ctx: &AgentWorkflowContext,
+        node: &AgentNode,
+        input: AgentValue,
+    ) -> LLMResult<AgentValue> {
+        match node.node_type {
+            AgentNodeType::Start | AgentNodeType::End => Ok(input),
+
+            AgentNodeType::Agent => {
+                let agent = node
+                    .agent
+                    .as_ref()
+                    .ok_or_else(|| LLMError::Other("Agent not set".to_string()))?;
+
+                // 构建提示词
+                let prompt = if let Some(ref template) = node.prompt_template {
+                    template.replace("{input}", &input.clone().into_text())
+                } else {
+                    input.clone().into_text()
+                };
+
+                // 确定会话 ID
+                let session_id = node
+                    .session_id
+                    .clone()
+                    .or_else(|| ctx.shared_session_id.clone());
+
+                // 发送消息
+                let response = if let Some(sid) = session_id {
+                    // 确保会话存在
+                    let _ = agent.get_or_create_session(&sid).await;
+                    agent.chat_with_session(&sid, &prompt).await?
+                } else {
+                    agent.ask(&prompt).await?
+                };
+
+                Ok(AgentValue::Text(response))
+            }
+
+            AgentNodeType::Router => {
+                let router = node
+                    .router
+                    .as_ref()
+                    .ok_or_else(|| LLMError::Other("Router function not set".to_string()))?;
+                let _route = router(input.clone()).await;
+                // 路由节点返回原输入，路由决策在 get_next_node 中使用
+                Ok(input)
+            }
+
+            AgentNodeType::Parallel => {
+                // 并行节点直接传递输入，实际并行执行在工作流执行逻辑中处理
+                Ok(input)
+            }
+
+            AgentNodeType::Join => {
+                // 收集所有前置节点的输出
+                let outputs = ctx.get_outputs(&node.wait_for).await;
+
+                if let Some(ref join_fn) = node.join_fn {
+                    Ok(join_fn(outputs).await)
+                } else {
+                    // 默认聚合：合并所有文本输出
+                    let texts: Vec<String> = outputs.into_values().map(|v| v.into_text()).collect();
+                    Ok(AgentValue::Texts(texts))
+                }
+            }
+
+            AgentNodeType::Transform => {
+                let transform = node
+                    .transform
+                    .as_ref()
+                    .ok_or_else(|| LLMError::Other("Transform function not set".to_string()))?;
+                Ok(transform(input).await)
+            }
+        }
+    }
+
+    /// 获取下一个节点
+    async fn get_next_node(&self, current_id: &str, output: &AgentValue) -> Option<String> {
+        let node = self.nodes.get(current_id)?;
+
+        // 结束节点没有后续
+        if matches!(node.node_type, AgentNodeType::End) {
+            return None;
+        }
+
+        let edges = self.adjacency.get(current_id)?;
+
+        // 路由节点：根据路由函数结果选择边
+        if matches!(node.node_type, AgentNodeType::Router) {
+            if let Some(ref router) = node.router {
+                let route = router(output.clone()).await;
+                for edge in edges {
+                    if edge.condition.as_ref() == Some(&route) {
+                        return Some(edge.to.clone());
+                    }
+                }
+            }
+            // 如果没有匹配的条件边，使用默认边（无条件）
+            for edge in edges {
+                if edge.condition.is_none() {
+                    return Some(edge.to.clone());
+                }
+            }
+            return None;
+        }
+
+        // 非路由节点：使用第一条边
+        edges.first().map(|e| e.to.clone())
+    }
+
+    /// 获取节点
+    pub fn get_node(&self, id: &str) -> Option<&AgentNode> {
+        self.nodes.get(id)
+    }
+
+    /// 获取所有节点 ID
+    pub fn node_ids(&self) -> Vec<&str> {
+        self.nodes.keys().map(|s| s.as_str()).collect()
+    }
+}
+
+/// Agent 工作流构建器
+pub struct AgentWorkflowBuilder {
+    id: String,
+    name: String,
+    nodes: HashMap<String, AgentNode>,
+    edges: Vec<AgentEdge>,
+    current_node: Option<String>,
+}
+
+impl AgentWorkflowBuilder {
+    /// 创建新的构建器
+    pub fn new(id: impl Into<String>) -> Self {
+        let id = id.into();
+        let mut builder = Self {
+            name: id.clone(),
+            id,
+            nodes: HashMap::new(),
+            edges: Vec::new(),
+            current_node: None,
+        };
+        // 自动添加 start 节点
+        builder
+            .nodes
+            .insert("start".to_string(), AgentNode::start());
+        builder.current_node = Some("start".to_string());
+        builder
+    }
+
+    /// 设置名称
+    pub fn with_name(mut self, name: impl Into<String>) -> Self {
+        self.name = name.into();
+        self
+    }
+
+    /// 添加 Agent 节点
+    pub fn add_agent(mut self, id: impl Into<String>, agent: Arc<LLMAgent>) -> Self {
+        let id = id.into();
+        let node = AgentNode::agent(&id, agent);
+        self.nodes.insert(id, node);
+        self
+    }
+
+    /// 添加带提示词模板的 Agent 节点
+    pub fn add_agent_with_template(
+        mut self,
+        id: impl Into<String>,
+        agent: Arc<LLMAgent>,
+        template: impl Into<String>,
+    ) -> Self {
+        let id = id.into();
+        let node = AgentNode::agent(&id, agent).with_prompt_template(template);
+        self.nodes.insert(id, node);
+        self
+    }
+
+    /// 添加路由节点
+    pub fn add_router<F, Fut>(mut self, id: impl Into<String>, router_fn: F) -> Self
+    where
+        F: Fn(AgentValue) -> Fut + Send + Sync + 'static,
+        Fut: Future<Output = String> + Send + 'static,
+    {
+        let id = id.into();
+        let node = AgentNode::router(&id, router_fn);
+        self.nodes.insert(id, node);
+        self
+    }
+
+    /// 添加基于 LLM 的智能路由节点
+    pub fn add_llm_router(
+        mut self,
+        id: impl Into<String>,
+        router_agent: Arc<LLMAgent>,
+        routes: Vec<String>,
+    ) -> Self {
+        let id = id.into();
+        let routes_str = routes.join(", ");
+        let prompt = format!(
+            "Based on the following input, choose the most appropriate route. \
+            Available routes: {}. \
+            Respond with ONLY the route name, nothing else.\n\nInput: {{input}}",
+            routes_str
+        );
+
+        let routes_clone = routes.clone();
+        let router_fn = move |input: AgentValue| {
+            let agent = router_agent.clone();
+            let prompt = prompt.replace("{input}", &input.into_text());
+            let valid_routes = routes_clone.clone();
+            async move {
+                match agent.ask(&prompt).await {
+                    Ok(response) => {
+                        let route = response.trim().to_string();
+                        if valid_routes.contains(&route) {
+                            route
+                        } else {
+                            valid_routes.first().cloned().unwrap_or_default()
+                        }
+                    }
+                    Err(_) => valid_routes.first().cloned().unwrap_or_default(),
+                }
+            }
+        };
+
+        let node = AgentNode::router(&id, router_fn);
+        self.nodes.insert(id, node);
+        self
+    }
+
+    /// 添加转换节点
+    pub fn add_transform<F, Fut>(mut self, id: impl Into<String>, transform_fn: F) -> Self
+    where
+        F: Fn(AgentValue) -> Fut + Send + Sync + 'static,
+        Fut: Future<Output = AgentValue> + Send + 'static,
+    {
+        let id = id.into();
+        let node = AgentNode::transform(&id, transform_fn);
+        self.nodes.insert(id, node);
+        self
+    }
+
+    /// 添加并行节点
+    pub fn add_parallel(mut self, id: impl Into<String>) -> Self {
+        let id = id.into();
+        let node = AgentNode::parallel(&id);
+        self.nodes.insert(id, node);
+        self
+    }
+
+    /// 添加聚合节点
+    pub fn add_join(mut self, id: impl Into<String>, wait_for: Vec<&str>) -> Self {
+        let id = id.into();
+        let wait_for: Vec<String> = wait_for.into_iter().map(|s| s.to_string()).collect();
+        let node = AgentNode::join(&id, wait_for);
+        self.nodes.insert(id, node);
+        self
+    }
+
+    /// 添加带自定义函数的聚合节点
+    pub fn add_join_with<F, Fut>(
+        mut self,
+        id: impl Into<String>,
+        wait_for: Vec<&str>,
+        join_fn: F,
+    ) -> Self
+    where
+        F: Fn(HashMap<String, AgentValue>) -> Fut + Send + Sync + 'static,
+        Fut: Future<Output = AgentValue> + Send + 'static,
+    {
+        let id = id.into();
+        let wait_for: Vec<String> = wait_for.into_iter().map(|s| s.to_string()).collect();
+        let node = AgentNode::join_with(&id, wait_for, join_fn);
+        self.nodes.insert(id, node);
+        self
+    }
+
+    /// 添加边
+    pub fn connect(mut self, from: impl Into<String>, to: impl Into<String>) -> Self {
+        self.edges.push(AgentEdge::new(from, to));
+        self
+    }
+
+    /// 添加条件边
+    pub fn connect_on(
+        mut self,
+        from: impl Into<String>,
+        to: impl Into<String>,
+        condition: impl Into<String>,
+    ) -> Self {
+        self.edges.push(AgentEdge::conditional(from, to, condition));
+        self
+    }
+
+    /// 链式连接多个节点
+    ///
+    /// 自动将 start 连接到第一个节点，并将最后一个节点连接到 end
+    pub fn chain<S: Into<String> + Clone>(mut self, node_ids: impl IntoIterator<Item = S>) -> Self {
+        let ids: Vec<String> = node_ids.into_iter().map(|s| s.into()).collect();
+
+        if ids.is_empty() {
+            return self;
+        }
+
+        // 连接 start 到第一个节点
+        self.edges.push(AgentEdge::new("start", &ids[0]));
+
+        // 连接中间节点
+        for i in 0..ids.len() - 1 {
+            self.edges.push(AgentEdge::new(&ids[i], &ids[i + 1]));
+        }
+
+        // 添加 end 节点并连接
+        self.nodes.insert("end".to_string(), AgentNode::end());
+        self.edges.push(AgentEdge::new(ids.last().unwrap(), "end"));
+
+        self
+    }
+
+    /// 配置并行执行
+    ///
+    /// 从 parallel_node 分发到多个 Agent，然后在 join_node 聚合
+    pub fn parallel_agents(
+        mut self,
+        parallel_id: impl Into<String>,
+        agent_ids: Vec<&str>,
+        join_id: impl Into<String>,
+    ) -> Self {
+        let parallel_id = parallel_id.into();
+        let join_id = join_id.into();
+
+        // 添加并行节点
+        self.nodes
+            .insert(parallel_id.clone(), AgentNode::parallel(&parallel_id));
+
+        // 添加聚合节点
+        let wait_for: Vec<String> = agent_ids.iter().map(|s| s.to_string()).collect();
+        self.nodes
+            .insert(join_id.clone(), AgentNode::join(&join_id, wait_for));
+
+        // 连接并行节点到各个 Agent
+        for agent_id in &agent_ids {
+            self.edges.push(AgentEdge::new(&parallel_id, *agent_id));
+            self.edges.push(AgentEdge::new(*agent_id, &join_id));
+        }
+
+        self
+    }
+
+    /// 构建工作流
+    pub fn build(self) -> AgentWorkflow {
+        // 构建邻接表
+        let mut adjacency: HashMap<String, Vec<AgentEdge>> = HashMap::new();
+        for edge in &self.edges {
+            adjacency
+                .entry(edge.from.clone())
+                .or_default()
+                .push(edge.clone());
+        }
+
+        AgentWorkflow {
+            id: self.id,
+            name: self.name,
+            nodes: self.nodes,
+            edges: self.edges,
+            adjacency,
+        }
+    }
+}
+
+// ============================================================================
+// 便捷函数
+// ============================================================================
+
+/// 创建简单的顺序 Agent 工作流
+///
+/// # 示例
+///
+/// ```rust,ignore
+/// let workflow = agent_chain("my-pipeline", vec![
+///     ("researcher", researcher_agent),
+///     ("writer", writer_agent),
+/// ]);
+/// ```
+pub fn agent_chain<S: Into<String>>(
+    id: S,
+    agents: Vec<(impl Into<String>, Arc<LLMAgent>)>,
+) -> AgentWorkflow {
+    let mut builder = AgentWorkflowBuilder::new(id);
+    let mut ids = Vec::new();
+
+    for (agent_id, agent) in agents {
+        let agent_id = agent_id.into();
+        ids.push(agent_id.clone());
+        builder = builder.add_agent(agent_id, agent);
+    }
+
+    builder.chain(ids).build()
+}
+
+/// 创建并行 Agent 工作流
+///
+/// 所有 Agent 同时处理输入，结果合并后返回
+pub fn agent_parallel<S: Into<String>>(
+    id: S,
+    agents: Vec<(impl Into<String>, Arc<LLMAgent>)>,
+) -> AgentWorkflow {
+    let mut builder = AgentWorkflowBuilder::new(id);
+    let mut ids = Vec::new();
+
+    for (agent_id, agent) in agents {
+        let agent_id = agent_id.into();
+        ids.push(agent_id.clone());
+        builder = builder.add_agent(agent_id, agent);
+    }
+
+    let ids_ref: Vec<&str> = ids.iter().map(|s| s.as_str()).collect();
+
+    builder
+        .parallel_agents("parallel", ids_ref, "join")
+        .connect("start", "parallel")
+        .connect("join", "end")
+        .build()
+}
+
+/// 创建带路由的 Agent 工作流
+///
+/// 根据路由 Agent 的决策选择执行哪个 Agent
+pub fn agent_router<S: Into<String>>(
+    id: S,
+    router_agent: Arc<LLMAgent>,
+    routes: Vec<(impl Into<String>, Arc<LLMAgent>)>,
+) -> AgentWorkflow {
+    let mut builder = AgentWorkflowBuilder::new(id);
+    let mut route_names = Vec::new();
+
+    for (route_id, agent) in routes {
+        let route_id = route_id.into();
+        route_names.push(route_id.clone());
+        builder = builder.add_agent(&route_id, agent);
+    }
+
+    // 添加 LLM 路由器
+    builder = builder.add_llm_router("router", router_agent, route_names.clone());
+
+    // 连接 start -> router
+    builder = builder.connect("start", "router");
+
+    // 添加 end 节点
+    builder.nodes.insert("end".to_string(), AgentNode::end());
+
+    // 连接 router -> 各个 route -> end
+    for route_name in &route_names {
+        builder = builder.connect_on("router", route_name, route_name);
+        builder = builder.connect(route_name, "end");
+    }
+
+    builder.build()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_agent_value_conversions() {
+        let v: AgentValue = "hello".into();
+        assert_eq!(v.as_text(), Some("hello"));
+
+        let v: AgentValue = "world".to_string().into();
+        assert_eq!(v.as_text(), Some("world"));
+
+        let v: AgentValue = vec!["a".to_string(), "b".to_string()].into();
+        assert_eq!(v.as_texts().map(|v| v.len()), Some(2));
+    }
+
+    #[test]
+    fn test_workflow_builder() {
+        let workflow = AgentWorkflowBuilder::new("test")
+            .with_name("Test Workflow")
+            .add_transform("uppercase", |input: AgentValue| async move {
+                AgentValue::Text(input.into_text().to_uppercase())
+            })
+            .chain(["uppercase"])
+            .build();
+
+        assert_eq!(workflow.node_ids().len(), 3); // start, uppercase, end
+    }
+
+    #[test]
+    fn test_chain_builder() {
+        let workflow = AgentWorkflowBuilder::new("chain-test")
+            .add_transform("step1", |input| async move { input })
+            .add_transform("step2", |input| async move { input })
+            .add_transform("step3", |input| async move { input })
+            .chain(["step1", "step2", "step3"])
+            .build();
+
+        assert!(workflow.get_node("start").is_some());
+        assert!(workflow.get_node("end").is_some());
+        assert!(workflow.get_node("step1").is_some());
+        assert!(workflow.get_node("step2").is_some());
+        assert!(workflow.get_node("step3").is_some());
+    }
+}

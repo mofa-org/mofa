@@ -1,17 +1,24 @@
-# MoFA 开发框架
+# MoFA Agent框架
 
-[English](README_en.md) | [简体中文](README.md)
+[English](README_en.md) | [简体中文](README_en.md)
 
 <p align="center">
-    <img src="documents/images/mofa-logo.png" width="30%"/>
+    <img src="docs/images/mofa-logo.png" width="30%"/>
 </p>
 
+
 <div align="center">
+  <a href="https://crates.io/crates/mofa-sdk">
+    <img src="https://img.shields.io/crates/v/mofa.svg" alt="crates.io"/>
+  </a>
   <a href="https://pypi.org/project/mofa-core/">
     <img src="https://img.shields.io/pypi/v/mofa-core.svg" alt="PyPI 最新版本"/>
   </a>
   <a href="https://github.com/mofa-org/mofa/blob/main/LICENSE">
     <img src="https://img.shields.io/github/license/mofa-org/mofa" alt="许可证"/>
+  </a>
+  <a href="https://docs.rs/mofa-sdk">
+    <img src="https://img.shields.io/badge/built_with-Rust-dca282.svg?logo=rust"  alt="docs"/>
   </a>
   <a href="https://github.com/mofa-org/mofa/stargazers">
     <img src="https://img.shields.io/github/stars/mofa-org/mofa" alt="GitHub 星标数"/>
@@ -30,297 +37,326 @@
   <a href="https://discord.com/invite/hKJZzDMMm9">社区</a>
 </h2>
 
----
-
-## 1. 设计理念
-
-MoFA 是一个用于构建可组合 AI 智能体的软件框架。通过 MoFA，开发者可以通过模板创建智能体（Agent），并以堆叠方式组合形成更强大的超级智能体（Super Agent）。
-
-### 1.1 核心设计哲学
-
-- **让普通人做非凡事**：AI 不应是精英专属，MoFA 让每个人都能开发和应用 AI，将不可能变为可能。
-- **组合式 AI**：受 Unix 哲学启发，以"组合"为核心，像搭积木一样构建、连接智能体与工具，让 AI 简单、灵活且强大。
-- **万物皆智能体**：在 MoFA 生态中，智能体是 AI 时代的应用载体——不仅是大语言模型，还可以是代码、脚本、API 甚至 MoFA 本身。
-- **数据流驱动**：摒弃复杂工作流，采用更直观的数据流模式，使智能体可自由组合、拆解与复用。
-
-### 1.2 技术架构图
-
 <p align="center">
-  <img src="documents/images/Organizational_Chart_cn.png" width="60%">
+ <img src="https://img.shields.io/badge/性能-极致-red?style=for-the-badge" />
+ <img src="https://img.shields.io/badge/扩展-无限-orange?style=for-the-badge" />
+ <img src="https://img.shields.io/badge/语言-多端-yellow?style=for-the-badge" />
+ <img src="https://img.shields.io/badge/运行时-可编程-green?style=for-the-badge" />
 </p>
 
----
+## 概述
+MoFA (Modular Framework for Agents) 不是又一个智能体框架。
+它是第一个实现"一次编写，多语言共享"的生产级智能体框架，专注于**极致性能、无限扩展性和运行时可编程性**。
+通过革命性的架构设计，独创**双层插件系统**（编译时插件 + 运行时插件），实现了业界罕见的"性能与灵活性"完美平衡。
 
-## 2. 核心特性
+MoFA的突破：</br>
+✅ Rust内核 + UniFFI：极致性能 + 多语言原生调用 </br>
+✅ 双层插件：编译时高性能 + 运行时零部署修改 </br>
+✅ 微内核架构：模块化，易扩展</br>
+✅ 云原生：天生支持分布式和边缘计算</br>
 
-- **composable AI 架构**：通过模块化 Agent 堆叠组合，快速构建复杂智能体系统，支持多模型、多工具协同工作。
-- **数据流驱动**：采用直观的数据流（DataFlow）模式替代传统工作流（Workflow），实现 Agent 间灵活解耦与动态重组。
-- **全栈 Python 支持**：从 Agent 开发到数据流配置均提供 Python 友好接口，同时兼容 Rust 高性能节点扩展。
-- **丰富的节点生态**：内置终端交互、LLM 调用、工具集成等基础节点，支持自定义节点快速接入。
-- **多框架兼容**：基于 Dora-rs runtime 构建，支持与 ROS2、OpenTelemetry 等系统无缝集成。
-- **MoFA Stage 可视化工具**：提供图形化界面，支持 Dataflow 和 Node 的可视化创建、管理与调试。
+## 为什么选择MoFA？
+### **性能优势**
 
----
+- 基于Rust 零成本抽象
+- 内存安全
+- 比Python生态框架性能提升显著
 
-## 3. 支持矩阵
+### **多语言支持**
 
-| 特性 | 支持程度 |
-|------|----------|
-| **API 支持** | Python 3.10+ [完全支持] <br> Rust 扩展 [实验性] |
-| **操作系统** | Linux (Ubuntu 22.04) [完全支持] <br> macOS (ARM/x86) [完全支持] <br> WSL2 [完全支持] <br> Windows [暂不支持] |
-| **通信方式** | 共享内存（本地）[完全支持] <br> TCP 网络（分布式）[实验性] |
-| **消息格式** | JSON [完全支持] <br> Apache Arrow [实验性] |
-| **LLM 集成** | OpenAI 系列 [完全支持] <br> Qwen 系列 [完全支持] <br> 本地模型（llama.cpp）[实验性] |
-| **配置方式** | YAML 数据流定义 [完全支持] <br> Python 代码生成 [实验性] <br> MoFA Stage 图形化配置 [完全支持] |
-| **包管理** | pip（Python 节点）[完全支持] <br> cargo（Rust 节点）[实验性] |
+- 通过UniFFI生成Python、Java、Go、Kotlin、Swift绑定
+- 支持多种语言调用Rust核心逻辑
+- 跨语言调用性能优于传统FFI方案
 
-> 说明：
-> - [完全支持] = 稳定可用的功能
-> - [实验性] = 实验性支持（欢迎贡献）
-> - [暂不支持] = 尚未支持
+### **运行时可编程**
 
----
+- 集成Rhai脚本引擎
+- 支持热重载业务逻辑
+- 支持运行时配置和规则调整
+- 用户自定义扩展
 
-## 4. 快速开始
 
-### 4.1 环境要求
+### **双层插件架构**
 
-**必需环境**：
-- Python 3.10 或 3.11
-- 操作系统：WSL（Ubuntu 22.04）、macOS、Linux
-- 暂不支持 Windows 系统
+- **编译时插件**: 极致性能，原生集成
+- **运行时插件**: 动态加载，即时生效
+- 支持插件热加载和版本管理
 
-**可选环境**（用于 Rust 节点开发）：
-- Rust 工具链（rustc、cargo）
+### **分布式数据流 (Dora)**
 
-### 4.2 安装 MoFA
+- 支持Dora-rs分布式运行时
+- 跨进程/跨机器Agent通信
+- 适合边缘计算场景
 
-#### 方式 1：使用 pip 安装
+### **Actor并发模型 (Ractor)**
 
-```bash
-# 创建虚拟环境（推荐）
-python3 -m venv .mofa
-source .mofa/bin/activate
+- Agent间隔离性好
+- 消息驱动架构
+- 支持高并发场景
 
-# 从 PyPI 安装
-pip install mofa-core
+## 核心架构
 
-# 验证安装
-mofa --help
+### 微内核 + 双层插件系统
+
+MoFA采用**分层微内核架构**，通过**双层插件系统**实现极致的扩展性：
+
+```
+┌─────────────────────────────────────────────────────────┐
+│                    业务层                                │
+│  (用户自定义Agent、工作流、规则)                            │
+└─────────────────────────────────────────────────────────┘
+                          ↓
+┌─────────────────────────────────────────────────────────┐
+│              运行时插件层 (Rhai脚本)                       │
+│  • 动态工具注册  • 规则引擎  • 脚本化工作流                  │
+│  • 热加载逻辑    • 表达式求值                              │
+└─────────────────────────────────────────────────────────┘
+                          ↓
+┌─────────────────────────────────────────────────────────┐
+│            编译时插件层 (Rust/WASM)                       │
+│  • LLM插件  • 工具插件  • 存储插件  • 协议插件               │
+│  • 高性能模块  • 原生系统集成                               │
+└─────────────────────────────────────────────────────────┘
+                          ↓
+┌─────────────────────────────────────────────────────────┐
+│                  微内核 (mofa-kernel)                    │
+│  • 生命周期管理  • 元数据系统  • 通信总线                    │
+│  • 任务调度       • 内存管理                               │
+└─────────────────────────────────────────────────────────┘
 ```
 
-#### 方式 2：使用 uv 安装（更快）
+#### 双层插件系统的优势
 
-```bash
-# 在虚拟环境中安装
-uv venv .mofa
-source .mofa/bin/activate
-uv pip install mofa-core
+**编译时插件 (Rust/WASM)**
 
-# 或全局安装为独立工具
-uv tool install mofa-core
+- 极致性能，零运行时开销
+- 类型安全，编译期错误检查
+- 支持复杂系统调用和原生集成
+- WASM沙箱提供安全隔离
 
-# 验证安装
-mofa --help
+**运行时插件 (Rhai脚本)**
+
+- 无需重编译，即时生效
+- 业务逻辑热更新
+- 用户自定义扩展
+- 安全沙箱执行，可配置资源限制
+
+**组合威力**
+
+- 性能关键路径使用Rust插件（如LLM推理、数据处理）
+- 业务逻辑使用Rhai脚本（如规则引擎、工作流编排）
+- 两者无缝互操作，覆盖99%的扩展场景
+
+
+## 核心特性
+
+### 1. 微内核架构
+MoFA采用**分层微内核架构**，以 `mofa-kernel` 为核心，所有其他功能（包括插件系统、LLM能力、多智能体协作等）均以模块化组件形式构建在微内核之上。
+
+#### 核心设计理念
+- **核心简洁性**: 微内核仅包含智能体生命周期管理、元数据系统和动态管理等最基础功能
+- **高扩展性**: 所有高级功能通过模块化组件和插件形式扩展，保持内核稳定
+- **松耦合**: 组件之间通过标准化接口通信，易于替换和升级
+
+#### 与插件系统的融合
+- 插件系统基于微内核的 `Plugin` 接口开发，所有插件（包括LLM插件、工具插件等）均通过 `AgentPlugin` 标准接口集成
+- 微内核提供插件注册中心和生命周期管理，支持插件的热加载和版本控制
+- LLM能力通过 `LLMPlugin` 实现，将LLM提供者封装为符合微内核规范的插件
+
+#### 与LLM的融合
+- LLM作为微内核的插件组件存在，通过 `LLMCapability` 接口提供统一的LLM访问能力
+- 所有智能体协作模式（链式、并行、辩论等）均构建在微内核的工作流引擎之上，并通过标准化的LLM插件接口与LLM交互
+- 秘书模式同样基于微内核的A2A通信协议和任务调度系统实现
+
+### 2. 双层插件
+- **编译时插件**: 极致性能，原生集成
+- **运行时插件**: 动态加载，即时生效
+- 两者无缝协作，覆盖所有场景
+
+### 3. 智能体协调
+- **优先级调度**: 基于优先级的任务调度系统
+- **通信总线**: 内置的智能体间通信总线
+- **工作流引擎**: 可视化工作流构建器和执行器
+
+### 4. LLM和AI能力
+- **LLM抽象层**: 统一的LLM集成接口
+- **OpenAI支持**: 内置的OpenAI API集成
+- **ReAct模式**: 基于推理和行动的智能体框架
+- **多智能体协作**: 基于团队的智能体协调，支持多种协作模式：
+  - **链式模式**: 多Agent按顺序执行的工作流，前一个Agent的输出作为后一个Agent的输入，适用于流水线处理场景
+  - **并行模式**: 多Agent同时执行并自动聚合结果，显著提高处理效率
+  - **辩论模式**: 多个Agent交替发言，通过辩论机制优化结果质量
+  - **监督模式**: 由一个监督Agent评估和筛选结果
+  - **MapReduce模式**: 并行处理后归约结果，适合大规模任务
+  - **路由模式**: 基于条件动态选择下一个执行的Agent
+  - **聚合模式**: 收集多个Agent的结果并合并
+- **秘书模式**: 提供端到端的任务闭环管理，包括5个核心阶段：接收想法→记录Todo、澄清需求→转换为项目文档、调度分配→调用执行Agent、监控反馈→推送关键决策给人类、验收汇报→更新Todo
+  </br>**特点**：
+    - 🧠 自主任务规划与分解
+    - 🔄 智能Agent调度编排
+    - 👤 关键节点人类介入
+    - 📊 全流程可观测追溯
+    - 🔁 闭环反馈持续优化
+
+### 5. 持久化层
+- **多种后端**: 支持PostgreSQL、MySQL和SQLite
+- **会话管理**: 持久化的智能体会话存储
+- **记忆系统**: 状态化智能体记忆管理
+
+### 6. 监控与可观察性
+- **仪表盘**: 内置的Web仪表盘，支持实时指标
+- **指标系统**: Prometheus兼容的指标系统
+- **追踪框架**: 分布式追踪系统
+
+### 7. Rhai 脚本引擎
+
+MoFA 集成了 [Rhai](https://github.com/rhaiscript/rhai) 嵌入式脚本语言，提供**运行时可编程能力**，无需重新编译即可修改业务逻辑。
+
+#### 脚本引擎核心
+- **安全沙箱执行**: 可配置的操作数限制、调用栈深度、循环控制
+- **脚本编译缓存**: 预编译脚本，提升重复执行性能
+- **丰富的内置函数**: 字符串操作、数学函数、JSON处理、时间工具
+- **双向JSON转换**: JSON与Rhai Dynamic类型无缝转换
+
+#### 脚本化工作流节点
+- **脚本任务节点**: 通过脚本执行业务逻辑
+- **脚本条件节点**: 动态分支判断
+- **脚本转换节点**: 数据格式转换
+- **YAML/JSON工作流加载**: 通过配置文件定义工作流
+
+#### 动态工具系统
+- **脚本化工具定义**: 运行时注册工具
+- **参数验证**: 类型检查、范围验证、枚举约束
+- **自动JSON Schema生成**: 兼容LLM Function Calling
+- **热加载**: 从目录动态加载工具
+
+#### 规则引擎
+- **优先级规则**: Critical > High > Normal > Low
+- **多种匹配模式**: 首次匹配、全部匹配、有序匹配
+- **复合动作**: 设置变量、触发事件、跳转规则
+- **规则组管理**: 支持默认回退动作
+
+#### 典型应用场景
+| 场景 | 说明 |
+|------|------|
+| **动态业务规则** | 折扣策略、内容审核规则，无需重新部署 |
+| **可配置工作流** | 用户自定义数据处理管道 |
+| **LLM工具扩展** | 运行时注册新工具供LLM调用 |
+| **A/B测试** | 通过脚本控制实验逻辑 |
+| **表达式求值** | 动态条件判断、公式计算 |
+
+## 路线图
+
+### 短期目标
+- [ ] Dora-rs运行时支持，用于分布式数据流
+- [ ] 完整的分布式追踪实现
+- [ ] Python绑定生成
+- [ ] 更多LLM提供商集成
+
+### 长期目标
+- [ ] 可视化工作流设计器UI
+- [ ] 云原生部署支持
+- [ ] 高级智能体协调算法
+- [ ] 智能体平台
+- [ ] 跨进程/跨机器分布式Agent协作
+- [ ] 多智能体协作标准协议
+- [ ] 跨平台移动端支持
+- [ ] 向智能体操作系统演进
+
+## 快速开始
+
+### 安装
+
+将MoFA添加到您的Cargo.toml：
+
+```toml
+[dependencies]
+mofa-sdk = "0.1.0"
 ```
+运行时模式最适合需要构建完整智能体工作流的场景，具体包括：
 
-> **提示**：uv 是更快的 Python 包管理器。安装方法：[github.com/astral-sh/uv](https://github.com/astral-sh/uv)
+  ---
+1. 多智能体协同工作场景
 
-#### 方式 3：从源码安装
+运行时提供消息总线（SimpleMessageBus/DoraChannel）和智能体注册系统，支持智能体之间的：
+- 点对点通信（send_to_agent）
+- 广播消息（broadcast）
+- 主题订阅发布（publish_to_topic/subscribe_topic）
+- 角色管理（get_agents_by_role）
 
-```bash
-pip install git+https://github.com/mofa-org/mofa.git
-```
+当需要多个智能体协作完成复杂任务（如主从架构、分工协作）时，运行时的通信机制可以显著简化开发。
 
-### 4.3 运行 Hello World 示例
+  ---
+2. 事件驱动的智能体应用
 
-```bash
-# 克隆代码仓库
-git clone https://github.com/mofa-org/mofa.git
-cd mofa/dataflows/hello_world
+运行时内置事件循环（run_with_receiver/run_event_loop）和中断处理系统，自动管理：
+- 事件接收与分发
+- 智能体状态生命周期
+- 超时与中断处理
 
-# 运行数据流
-mofa run-flow hello_world_dataflow.yml
-```
+适合构建需要响应外部事件或定时器的应用（如实时对话系统、事件响应机器人）。
 
-**示例输出**：
-```
-Send Your Task: 你好
--------------hello_world_result---------------
-你好
-```
+  ---
+3. 分布式智能体系统
 
-### 4.4 可选：安装 Rust 环境
+当启用 dora 特性时，运行时提供Dora 适配器（DoraAgentNode/DoraDataflow），支持：
+- 分布式节点部署
+- 跨节点智能体通信
+- 数据流管理
 
-如果需要开发或使用 Rust 节点：
+适合需要大规模部署、低延迟通信的生产级场景。
 
-```bash
-# 安装 Rust 工具链
-curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
-# 安装过程中保持默认配置（直接按 Enter）
+  ---
+4. 结构化智能体构建
 
-# 验证安装
-rustc --version
-cargo --version
-```
+运行时提供AgentBuilder 流式 API，简化智能体的：
+- 配置管理
+- 插件集成
+- 能力声明
+- 端口配置
 
----
+适合需要快速构建标准化智能体的场景，尤其是需要统一管理多个智能体配置时。
 
-## 5. MoFA Stage 可视化工具
+  ---
+5. 生产级应用
 
-MoFA Stage 是 MoFA 生态的图形化控制中心，支持在可视化界面中快速创建、管理和调试 Dataflow 与 Node。
+运行时提供完善的：
+- 健康检查与状态管理
+- 日志与监控集成
+- 错误处理机制
 
-### 5.1 核心功能
+适合构建需要稳定运行的生产级应用，而不是简单的插件测试或原型开发。
+## 文档
 
-- **node/dataflow 模板库**：提供丰富的智能体模板，一键生成 node 项目
-- **Dataflow 可视化创建**：通过拖拽式界面定义数据流，直观配置节点间的消息传递关系
-- **Node 管理**：统一管理自定义节点与官方节点，支持快速接入新功能
-- **智能体生命周期管理**：在图形化界面中启动、停止、监控智能体运行状态
+- [API 文档](https://docs.rs/mofa)
+- [GitHub 仓库](https://github.com/mofa-org/mofa)
+- [示例](examples/)
 
-### 5.2 界面预览
+## 贡献
 
-<p align="center">
-  <img src="documents/images/mofastage-hub.png" alt="MoFA Hub 界面" width="80%"/>
-  <br/>
-  <i>Node Hub 界面</i>
-</p>
+我们欢迎贡献！请查看我们的[贡献指南](CONTRIBUTING.md)了解更多详情。
 
-<p align="center">
-  <img src="documents/images/mofastage-dataflow.png" alt="创建 Agent 界面" width="80%"/>
-  <br/>
-  <i>Dataflow 界面</i>
-</p>
+## 社区
 
----
+- GitHub Issues: [https://github.com/mofa-org/mofa/discussions](https://github.com/mofa-org/mofa/discussions)
+- Discord: [https://discord.com/invite/hKJZzDMMm9](https://discord.com/invite/hKJZzDMMm9)
 
-## 6. 开发指南
-
-### 6.1 快速开发指南
-
-参考 [6分钟开发指南](https://mofa.ai/docs/2-getting-started/your-first-application/)，快速构建基于大语言模型的智能体，包含环境变量配置、项目初始化、逻辑实现、数据流定义全流程。
-
-### 6.2 示例与文档
-
-| 类型 | 名称 | 描述 | 最后更新 |
-|------|------|------|----------|
-| 入门 | [Hello World](https://github.com/mofa-org/mofa/tree/main/dataflows/hello_world) | 基础数据流交互示例 | ![更新时间](https://img.shields.io/github/last-commit/mofa-org/mofa?path=dataflows%2Fhello_world&label=Last%20Commit) |
-| LLM | [Qwen 智能体](https://github.com/nanana2002/mofa-node-hub/tree/main/node-hub/QwenAgent) | 调用 Qwen API 的对话智能体 | ![更新时间](https://img.shields.io/github/last-commit/nanana2002/mofa-node-hub?path=node-hub%2FQwenAgent&label=Last%20Commit) |
-| 工具集成 | [天气查询](https://github.com/nanana2002/mofa-node-hub/tree/main/node-hub/WeatherForecastNode) | 查询 IP 所在地天气的智能体 | ![更新时间](https://img.shields.io/github/last-commit/nanana2002/mofa-node-hub?path=node-hub%2FWeatherForecastNode&label=Last%20Commit) |
-
-更多文档请参考 [MoFA 官方文档](https://docs.mofa-org.com)。
-
----
-
-## 7. 常见问题
-
-### 7.1 mofa 命令找不到
-
-**问题描述**：安装 mofa-core 后，运行 `mofa` 命令提示找不到命令。
-
-```bash
-$ mofa --help
-Command 'mofa' not found
-```
-
-**原因分析**：当使用 `pip install --user` 或系统 Python 进行用户级安装时，可执行文件会被安装到 `~/.local/bin` 目录，但该目录可能不在系统的 PATH 环境变量中。
-
-**解决方法**：
-
-#### 方案 1：添加 ~/.local/bin 到 PATH（推荐）
-
-Bash 用户：
-```bash
-echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc
-source ~/.bashrc
-```
-
-Zsh 用户：
-```bash
-echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.zshrc
-source ~/.zshrc
-```
-
-#### 方案 2：使用完整路径运行
-
-```bash
-~/.local/bin/mofa --help
-```
-
-#### 方案 3：在虚拟环境中安装（推荐）
-
-使用 venv：
-```bash
-python3 -m venv .mofa
-source .mofa/bin/activate
-pip install mofa-core
-mofa --help
-```
-
-使用 uv（更快）：
-```bash
-uv venv .mofa
-source .mofa/bin/activate
-uv pip install mofa-core
-mofa --help
-```
-
-#### 验证 PATH 配置
-
-```bash
-# 检查 ~/.local/bin 是否在 PATH 中
-echo $PATH | grep ".local/bin"
-
-# 确认 mofa 安装位置
-which mofa
-```
-
-### 7.2 依赖安装缓慢
-
-**问题描述**：`pip install mofa-core` 下载速度很慢或超时。
-
-**解决方法**：
-
-使用国内镜像源加速安装：
-```bash
-# 使用清华镜像源
-pip install -i https://pypi.tuna.tsinghua.edu.cn/simple mofa-core
-
-# 或使用阿里云镜像源
-pip install -i https://mirrors.aliyun.com/pypi/simple/ mofa-core
-```
-
-永久配置镜像源：
-```bash
-pip config set global.index-url https://pypi.tuna.tsinghua.edu.cn/simple
-```
-
----
-
-## 8. 贡献指南
-
-我们欢迎所有开发者参与贡献，无论您的经验水平如何。请参考[贡献指南](https://github.com/mofa-org/mofa/tree/main/documents)了解如何参与项目开发。
-
----
-
-## 9. 社区交流
-
-- [GitHub Discussions](https://github.com/mofa-org/mofa/discussions)
-- [Discord 服务器](https://discord.com/invite/hKJZzDMMm9)
-
----
-
-## 10. 许可证
-
-本项目采用 Apache-2.0 许可证，详情参见 [LICENSE](LICENSE)。
-
----
-
-## 11. 相关资源
-
-- [Dora-rs 文档](https://dora-rs.ai/docs/guides/)
-
----
-
-## 12. 星标历史
+## 星标历史
 
 [![Star History Chart](https://api.star-history.com/svg?repos=mofa-org/mofa&type=Date)](https://www.star-history.com/#mofa-org/mofa&Date)
+
+## 🙏 致谢
+
+MoFA站在巨人的肩膀上：
+
+- [Rust](https://www.rust-lang.org/) - 性能与安全的完美结合
+- [UniFFI](https://mozilla.github.io/uniffi-rs/) - Mozilla的多语言绑定魔法
+- [Rhai](https://rhai.rs/) - 强大的嵌入式脚本引擎
+- [Tokio](https://tokio.rs/) - 异步运行时基石
+- [Ractor](https://github.com/slawlor/ractor) - Actor模型并发框架
+- [Dora](https://github.com/dora-rs/dora) - 分布式数据流运行时
+- [Wasmtime](https://wasmtime.dev/) - WebAssembly运行时
+
+## 许可证
+
+[Apache License 2.0](./LICENSE)

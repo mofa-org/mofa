@@ -1,0 +1,94 @@
+// MoFA UniFFI Interface Definition
+//
+// Clean, minimal API for cross-language bindings (Python, Kotlin, Swift, Java)
+// This file defines only the core interfaces that have actual Rust implementations.
+
+namespace mofa {
+    // Get MoFA version
+    string get_version();
+};
+
+// ============================================================================
+// Error Types
+// ============================================================================
+
+[Error]
+enum MoFaError {
+    "ConfigError",
+    "RuntimeError",
+    "LLMError",
+    "IoError",
+    "InvalidArgument",
+};
+
+// ============================================================================
+// LLM Types
+// ============================================================================
+
+// LLM provider type
+enum LLMProviderType {
+    "OpenAI",
+    "Ollama",
+    "Azure",
+    "Compatible",
+};
+
+// Chat message role
+enum ChatRole {
+    "System",
+    "User",
+    "Assistant",
+};
+
+// LLM configuration
+dictionary LLMConfig {
+    LLMProviderType provider;
+    string? model;
+    string? api_key;
+    string? base_url;
+    string? deployment;
+    f32? temperature;
+    u32? max_tokens;
+    string? system_prompt;
+};
+
+// Chat message
+dictionary ChatMessage {
+    ChatRole role;
+    string content;
+};
+
+// ============================================================================
+// LLM Agent Interface
+// ============================================================================
+
+// LLM Agent - the main interface for LLM interactions
+interface LLMAgent {
+    // Create from configuration file (agent.yml)
+    [Name=from_config_file, Throws=MoFaError]
+    constructor(string config_path);
+
+    // Create from configuration dictionary
+    [Name=from_config, Throws=MoFaError]
+    constructor(LLMConfig config, string agent_id, string name);
+
+    // Get agent ID
+    string agent_id();
+
+    // Get agent name
+    string name();
+
+    // Simple Q&A (no context retention)
+    [Throws=MoFaError]
+    string ask(string question);
+
+    // Multi-turn chat (with context retention)
+    [Throws=MoFaError]
+    string chat(string message);
+
+    // Clear conversation history
+    void clear_history();
+
+    // Get conversation history
+    sequence<ChatMessage> get_history();
+};

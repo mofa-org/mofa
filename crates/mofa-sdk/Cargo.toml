@@ -1,0 +1,81 @@
+[package]
+name = "mofa-sdk"
+version.workspace = true
+edition.workspace = true
+description = "MoFA (Model-based Framework for Agents) - A unified SDK for building AI agents with Rust"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/mofa-org/mofa"
+homepage = "https://github.com/mofa-org/mofa"
+documentation = "https://docs.rs/mofa-sdk"
+readme = "README.md"
+keywords = ["ai", "agents", "llm", "dora", "framework"]
+categories = ["development-tools", "asynchronous"]
+
+[features]
+default = []
+# Enable UniFFI cross-language bindings (Python, Kotlin, Swift, Java)
+uniffi = ["dep:uniffi", "dep:thiserror"]
+# Enable OpenAI provider support (required for LLM functionality)
+openai = ["mofa-foundation/openai"]
+# Enable PyO3 Python bindings (native Python extension)
+python = ["dep:pyo3", "dep:pyo3-async-runtimes"]
+# Enable dora-rs runtime support (distributed dataflow)
+dora = ["mofa-runtime/dora"]
+# Enable persistence support
+persistence-postgres = ["mofa-foundation/persistence-postgres", "sqlx"]
+persistence-mysql = ["mofa-foundation/persistence-mysql", "sqlx"]
+persistence-sqlite = ["mofa-foundation/persistence-sqlite", "sqlx"]
+persistence-all = ["mofa-foundation/persistence-all", "sqlx"]
+
+[dependencies]
+# Core dependencies
+mofa-runtime = { path = "../mofa-runtime" }
+mofa-foundation = { path = "../mofa-foundation" }
+mofa-kernel = { path = "../mofa-kernel" }
+mofa-plugins = { path = "../mofa-plugins" }
+mofa-extra = { path = "../mofa-extra", features = ["rhai-scripting"] }
+mofa-monitoring = {path = "../mofa-monitoring"}
+sqlx = { version = "0.8", features = ["runtime-tokio", "postgres", "mysql", "sqlite", "uuid", "chrono", "json"], optional = true }
+async-trait = "0.1"
+tokio = { version = "1", features = ["full"] }
+anyhow.workspace = true
+
+# UniFFI dependencies (optional)
+uniffi = { version = "0.29", features = ["bindgen"], optional = true }
+thiserror = { version = "1.0", optional = true }
+tracing.workspace = true
+# PyO3 dependencies (optional)
+pyo3 = { version = "0.23", features = ["auto-initialize", "extension-module"], optional = true }
+pyo3-async-runtimes = { version = "0.23", features = ["tokio-runtime"], optional = true }
+uniffi-bindgen-java = { version = "0.2.1",optional = true }
+
+[build-dependencies]
+uniffi = { version = "0.29", features = ["build"] }
+uniffi-bindgen-java = { version = "0.2.1"}
+[dev-dependencies]
+# For generating bindings
+uniffi = { version = "0.29", features = ["bindgen-tests"] }
+# For tests
+tempfile.workspace = true
+
+[lib]
+crate-type = ["lib", "cdylib"]
+
+[package.metadata.maturin]
+name = "mofa"
+module-name = "mofa"
+
+# UniFFI bindgen configuration
+[package.metadata.uniffi.bindings]
+# Python bindings output
+[package.metadata.uniffi.bindings.python]
+cdylib_name = "mofa"
+
+# Kotlin bindings output
+[package.metadata.uniffi.bindings.kotlin]
+package_name = "org.mofa"
+
+# Swift bindings output
+[package.metadata.uniffi.bindings.swift]
+module_name = "MoFA"
+monitoring = ["mofa-runtime/monitoring", "dep:mofa-monitoring"]
