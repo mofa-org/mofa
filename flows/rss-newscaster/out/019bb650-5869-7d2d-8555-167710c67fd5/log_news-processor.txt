@@ -1,0 +1,2238 @@
+{"timestamp":"2026-01-13T07:44:42.351763Z","level":"INFO","fields":{"message":"","name":"MeterProvider.GlobalSet","message":"Global meter provider is set. Meters can now be created using global::meter() or global::meter_with_scope()."},"target":"opentelemetry"}
+Error occurred: 'metadata'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 320, in run
+    agent.write_log(f"Received RSS request for {len(rss_request.get('urls', []))} URL(s)")
+                                                    ^^^^^^^^^^^^^^^
+AttributeError: 'NoneType' object has no attribute 'get'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+Error occurred: 'metadata'
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 350, in run
+Error occurred: 'metadata'
+    agent.send_output(agent_output_name='processed_feed', agent_result=json.dumps(error_response))
+Error occurred: 'metadata'
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+Error occurred: 'metadata'
+    self.event['metadata']
+Error occurred: 'metadata'
+    ~~~~~~~~~~^^^^^^^^^^^^
+Error occurred: 'metadata'
+KeyError: 'metadata'
+Error occurred: 'metadata'
+Traceback (most recent call last):
+Error occurred: 'metadata'
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 320, in run
+Error occurred: 'metadata'
+    agent.write_log(f"Received RSS request for {len(rss_request.get('urls', []))} URL(s)")
+Error occurred: 'metadata'
+                                                    ^^^^^^^^^^^^^^^
+Error occurred: 'metadata'
+AttributeError: 'NoneType' object has no attribute 'get'
+Error occurred: 'metadata'
+
+Error occurred: 'metadata'
+During handling of the above exception, another exception occurred:
+Error occurred: 'metadata'
+
+Error occurred: 'metadata'
+Traceback (most recent call last):
+Error occurred: 'metadata'
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+Error occurred: 'metadata'
+    func(*args, **kwargs)
+Error occurred: 'metadata'
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 350, in run
+Error occurred: 'metadata'
+    agent.send_output(agent_output_name='processed_feed', agent_result=json.dumps(error_response))
+Error occurred: 'metadata'
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+Error occurred: 'metadata'
+    self.event['metadata']
+Error occurred: 'metadata'
+    ~~~~~~~~~~^^^^^^^^^^^^
+Error occurred: 'metadata'
+KeyError: 'metadata'
+Error occurred: 'metadata'
+Traceback (most recent call last):
+Error occurred: 'metadata'
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 320, in run
+Error occurred: 'metadata'
+    agent.write_log(f"Received RSS request for {len(rss_request.get('urls', []))} URL(s)")
+Error occurred: 'metadata'
+                                                    ^^^^^^^^^^^^^^^
+Error occurred: 'metadata'
+AttributeError: 'NoneType' object has no attribute 'get'
+Error occurred: 'metadata'
+
+Error occurred: 'metadata'
+During handling of the above exception, another exception occurred:
+Error occurred: 'metadata'
+
+Error occurred: 'metadata'
+Traceback (most recent call last):
+Error occurred: 'metadata'
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+Error occurred: 'metadata'
+    func(*args, **kwargs)
+Error occurred: 'metadata'
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 350, in run
+Error occurred: 'metadata'
+    agent.send_output(agent_output_name='processed_feed', agent_result=json.dumps(error_response))
+Error occurred: 'metadata'
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+Error occurred: 'metadata'
+    self.event['metadata']
+Error occurred: 'metadata'
+    ~~~~~~~~~~^^^^^^^^^^^^
+Error occurred: 'metadata'
+KeyError: 'metadata'
+Error occurred: 'metadata'
+Traceback (most recent call last):
+Error occurred: 'metadata'
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 320, in run
+Error occurred: 'metadata'
+    agent.write_log(f"Received RSS request for {len(rss_request.get('urls', []))} URL(s)")
+Error occurred: 'metadata'
+                                                    ^^^^^^^^^^^^^^^
+Error occurred: 'metadata'
+AttributeError: 'NoneType' object has no attribute 'get'
+Error occurred: 'metadata'
+
+Error occurred: 'metadata'
+During handling of the above exception, another exception occurred:
+Error occurred: 'metadata'
+
+Error occurred: 'metadata'
+Traceback (most recent call last):
+Error occurred: 'metadata'
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+Error occurred: 'metadata'
+    func(*args, **kwargs)
+Error occurred: 'metadata'
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 350, in run
+Error occurred: 'metadata'
+    agent.send_output(agent_output_name='processed_feed', agent_result=json.dumps(error_response))
+Error occurred: 'metadata'
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+Error occurred: 'metadata'
+    self.event['metadata']
+Error occurred: 'metadata'
+    ~~~~~~~~~~^^^^^^^^^^^^
+Error occurred: 'metadata'
+KeyError: 'metadata'
+Error occurred: 'metadata'
+Traceback (most recent call last):
+Error occurred: 'metadata'
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 320, in run
+Error occurred: 'metadata'
+    agent.write_log(f"Received RSS request for {len(rss_request.get('urls', []))} URL(s)")
+Error occurred: 'metadata'
+                                                    ^^^^^^^^^^^^^^^
+Error occurred: 'metadata'
+AttributeError: 'NoneType' object has no attribute 'get'
+Error occurred: 'metadata'
+
+Error occurred: 'metadata'
+During handling of the above exception, another exception occurred:
+Error occurred: 'metadata'
+
+Error occurred: 'metadata'
+Traceback (most recent call last):
+Error occurred: 'metadata'
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+Error occurred: 'metadata'
+    func(*args, **kwargs)
+Error occurred: 'metadata'
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 350, in run
+Error occurred: 'metadata'
+    agent.send_output(agent_output_name='processed_feed', agent_result=json.dumps(error_response))
+Error occurred: 'metadata'
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+Error occurred: 'metadata'
+    self.event['metadata']
+Error occurred: 'metadata'
+    ~~~~~~~~~~^^^^^^^^^^^^
+Error occurred: 'metadata'
+KeyError: 'metadata'
+Error occurred: 'metadata'
+Traceback (most recent call last):
+Error occurred: 'metadata'
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 320, in run
+Error occurred: 'metadata'
+    agent.write_log(f"Received RSS request for {len(rss_request.get('urls', []))} URL(s)")
+Error occurred: 'metadata'
+                                                    ^^^^^^^^^^^^^^^
+Error occurred: 'metadata'
+AttributeError: 'NoneType' object has no attribute 'get'
+Error occurred: 'metadata'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 350, in run
+    agent.send_output(agent_output_name='processed_feed', agent_result=json.dumps(error_response))
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+    self.event['metadata']
+    ~~~~~~~~~~^^^^^^^^^^^^
+KeyError: 'metadata'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 320, in run
+    agent.write_log(f"Received RSS request for {len(rss_request.get('urls', []))} URL(s)")
+                                                    ^^^^^^^^^^^^^^^
+AttributeError: 'NoneType' object has no attribute 'get'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 350, in run
+    agent.send_output(agent_output_name='processed_feed', agent_result=json.dumps(error_response))
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+    self.event['metadata']
+    ~~~~~~~~~~^^^^^^^^^^^^
+KeyError: 'metadata'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 320, in run
+    agent.write_log(f"Received RSS request for {len(rss_request.get('urls', []))} URL(s)")
+                                                    ^^^^^^^^^^^^^^^
+AttributeError: 'NoneType' object has no attribute 'get'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 350, in run
+    agent.send_output(agent_output_name='processed_feed', agent_result=json.dumps(error_response))
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+    self.event['metadata']
+    ~~~~~~~~~~^^^^^^^^^^^^
+KeyError: 'metadata'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 320, in run
+    agent.write_log(f"Received RSS request for {len(rss_request.get('urls', []))} URL(s)")
+                                                    ^^^^^^^^^^^^^^^
+AttributeError: 'NoneType' object has no attribute 'get'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 350, in run
+    agent.send_output(agent_output_name='processed_feed', agent_result=json.dumps(error_response))
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+    self.event['metadata']
+    ~~~~~~~~~~^^^^^^^^^^^^
+KeyError: 'metadata'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 320, in run
+    agent.write_log(f"Received RSS request for {len(rss_request.get('urls', []))} URL(s)")
+                                                    ^^^^^^^^^^^^^^^
+AttributeError: 'NoneType' object has no attribute 'get'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 350, in run
+    agent.send_output(agent_output_name='processed_feed', agent_result=json.dumps(error_response))
+Error occurred: 'metadata'
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+Error occurred: 'metadata'
+    self.event['metadata']
+Error occurred: 'metadata'
+    ~~~~~~~~~~^^^^^^^^^^^^
+Error occurred: 'metadata'
+KeyError: 'metadata'
+Error occurred: 'metadata'
+Traceback (most recent call last):
+Error occurred: 'metadata'
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 320, in run
+Error occurred: 'metadata'
+    agent.write_log(f"Received RSS request for {len(rss_request.get('urls', []))} URL(s)")
+Error occurred: 'metadata'
+                                                    ^^^^^^^^^^^^^^^
+Error occurred: 'metadata'
+AttributeError: 'NoneType' object has no attribute 'get'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 350, in run
+    agent.send_output(agent_output_name='processed_feed', agent_result=json.dumps(error_response))
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+    self.event['metadata']
+    ~~~~~~~~~~^^^^^^^^^^^^
+KeyError: 'metadata'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 320, in run
+    agent.write_log(f"Received RSS request for {len(rss_request.get('urls', []))} URL(s)")
+                                                    ^^^^^^^^^^^^^^^
+AttributeError: 'NoneType' object has no attribute 'get'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 350, in run
+    agent.send_output(agent_output_name='processed_feed', agent_result=json.dumps(error_response))
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+    self.event['metadata']
+    ~~~~~~~~~~^^^^^^^^^^^^
+KeyError: 'metadata'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 320, in run
+    agent.write_log(f"Received RSS request for {len(rss_request.get('urls', []))} URL(s)")
+                                                    ^^^^^^^^^^^^^^^
+AttributeError: 'NoneType' object has no attribute 'get'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 350, in run
+    agent.send_output(agent_output_name='processed_feed', agent_result=json.dumps(error_response))
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+    self.event['metadata']
+    ~~~~~~~~~~^^^^^^^^^^^^
+KeyError: 'metadata'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 320, in run
+    agent.write_log(f"Received RSS request for {len(rss_request.get('urls', []))} URL(s)")
+                                                    ^^^^^^^^^^^^^^^
+AttributeError: 'NoneType' object has no attribute 'get'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 350, in run
+    agent.send_output(agent_output_name='processed_feed', agent_result=json.dumps(error_response))
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+    self.event['metadata']
+    ~~~~~~~~~~^^^^^^^^^^^^
+KeyError: 'metadata'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 320, in run
+    agent.write_log(f"Received RSS request for {len(rss_request.get('urls', []))} URL(s)")
+                                                    ^^^^^^^^^^^^^^^
+AttributeError: 'NoneType' object has no attribute 'get'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 350, in run
+    agent.send_output(agent_output_name='processed_feed', agent_result=json.dumps(error_response))
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+    self.event['metadata']
+    ~~~~~~~~~~^^^^^^^^^^^^
+KeyError: 'metadata'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 320, in run
+    agent.write_log(f"Received RSS request for {len(rss_request.get('urls', []))} URL(s)")
+                                                    ^^^^^^^^^^^^^^^
+AttributeError: 'NoneType' object has no attribute 'get'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 350, in run
+    agent.send_output(agent_output_name='processed_feed', agent_result=json.dumps(error_response))
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+    self.event['metadata']
+    ~~~~~~~~~~^^^^^^^^^^^^
+KeyError: 'metadata'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 320, in run
+    agent.write_log(f"Received RSS request for {len(rss_request.get('urls', []))} URL(s)")
+                                                    ^^^^^^^^^^^^^^^
+AttributeError: 'NoneType' object has no attribute 'get'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 350, in run
+    agent.send_output(agent_output_name='processed_feed', agent_result=json.dumps(error_response))
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+    self.event['metadata']
+    ~~~~~~~~~~^^^^^^^^^^^^
+KeyError: 'metadata'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 320, in run
+    agent.write_log(f"Received RSS request for {len(rss_request.get('urls', []))} URL(s)")
+                                                    ^^^^^^^^^^^^^^^
+AttributeError: 'NoneType' object has no attribute 'get'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 350, in run
+    agent.send_output(agent_output_name='processed_feed', agent_result=json.dumps(error_response))
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+    self.event['metadata']
+    ~~~~~~~~~~^^^^^^^^^^^^
+KeyError: 'metadata'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 320, in run
+    agent.write_log(f"Received RSS request for {len(rss_request.get('urls', []))} URL(s)")
+                                                    ^^^^^^^^^^^^^^^
+AttributeError: 'NoneType' object has no attribute 'get'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 350, in run
+Error occurred: 'metadata'
+    agent.send_output(agent_output_name='processed_feed', agent_result=json.dumps(error_response))
+Error occurred: 'metadata'
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+Error occurred: 'metadata'
+    self.event['metadata']
+Error occurred: 'metadata'
+    ~~~~~~~~~~^^^^^^^^^^^^
+Error occurred: 'metadata'
+KeyError: 'metadata'
+Error occurred: 'metadata'
+Traceback (most recent call last):
+Error occurred: 'metadata'
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 320, in run
+Error occurred: 'metadata'
+    agent.write_log(f"Received RSS request for {len(rss_request.get('urls', []))} URL(s)")
+                                                    ^^^^^^^^^^^^^^^
+AttributeError: 'NoneType' object has no attribute 'get'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 350, in run
+    agent.send_output(agent_output_name='processed_feed', agent_result=json.dumps(error_response))
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+    self.event['metadata']
+    ~~~~~~~~~~^^^^^^^^^^^^
+KeyError: 'metadata'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 320, in run
+    agent.write_log(f"Received RSS request for {len(rss_request.get('urls', []))} URL(s)")
+                                                    ^^^^^^^^^^^^^^^
+AttributeError: 'NoneType' object has no attribute 'get'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 350, in run
+    agent.send_output(agent_output_name='processed_feed', agent_result=json.dumps(error_response))
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+    self.event['metadata']
+    ~~~~~~~~~~^^^^^^^^^^^^
+KeyError: 'metadata'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 320, in run
+    agent.write_log(f"Received RSS request for {len(rss_request.get('urls', []))} URL(s)")
+                                                    ^^^^^^^^^^^^^^^
+AttributeError: 'NoneType' object has no attribute 'get'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 350, in run
+    agent.send_output(agent_output_name='processed_feed', agent_result=json.dumps(error_response))
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+    self.event['metadata']
+    ~~~~~~~~~~^^^^^^^^^^^^
+KeyError: 'metadata'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 320, in run
+    agent.write_log(f"Received RSS request for {len(rss_request.get('urls', []))} URL(s)")
+                                                    ^^^^^^^^^^^^^^^
+AttributeError: 'NoneType' object has no attribute 'get'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 350, in run
+    agent.send_output(agent_output_name='processed_feed', agent_result=json.dumps(error_response))
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+    self.event['metadata']
+    ~~~~~~~~~~^^^^^^^^^^^^
+KeyError: 'metadata'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 320, in run
+    agent.write_log(f"Received RSS request for {len(rss_request.get('urls', []))} URL(s)")
+                                                    ^^^^^^^^^^^^^^^
+AttributeError: 'NoneType' object has no attribute 'get'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 350, in run
+    agent.send_output(agent_output_name='processed_feed', agent_result=json.dumps(error_response))
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+    self.event['metadata']
+    ~~~~~~~~~~^^^^^^^^^^^^
+KeyError: 'metadata'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 320, in run
+    agent.write_log(f"Received RSS request for {len(rss_request.get('urls', []))} URL(s)")
+                                                    ^^^^^^^^^^^^^^^
+AttributeError: 'NoneType' object has no attribute 'get'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 350, in run
+    agent.send_output(agent_output_name='processed_feed', agent_result=json.dumps(error_response))
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+    self.event['metadata']
+    ~~~~~~~~~~^^^^^^^^^^^^
+KeyError: 'metadata'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 320, in run
+    agent.write_log(f"Received RSS request for {len(rss_request.get('urls', []))} URL(s)")
+                                                    ^^^^^^^^^^^^^^^
+AttributeError: 'NoneType' object has no attribute 'get'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 350, in run
+    agent.send_output(agent_output_name='processed_feed', agent_result=json.dumps(error_response))
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+    self.event['metadata']
+    ~~~~~~~~~~^^^^^^^^^^^^
+KeyError: 'metadata'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 320, in run
+    agent.write_log(f"Received RSS request for {len(rss_request.get('urls', []))} URL(s)")
+                                                    ^^^^^^^^^^^^^^^
+AttributeError: 'NoneType' object has no attribute 'get'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 350, in run
+    agent.send_output(agent_output_name='processed_feed', agent_result=json.dumps(error_response))
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+    self.event['metadata']
+    ~~~~~~~~~~^^^^^^^^^^^^
+KeyError: 'metadata'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 320, in run
+    agent.write_log(f"Received RSS request for {len(rss_request.get('urls', []))} URL(s)")
+                                                    ^^^^^^^^^^^^^^^
+AttributeError: 'NoneType' object has no attribute 'get'
+
+During handling of the above exception, another exception occurred:
+Error occurred: 'metadata'
+
+Error occurred: 'metadata'
+Traceback (most recent call last):
+Error occurred: 'metadata'
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+Error occurred: 'metadata'
+    func(*args, **kwargs)
+Error occurred: 'metadata'
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 350, in run
+Error occurred: 'metadata'
+    agent.send_output(agent_output_name='processed_feed', agent_result=json.dumps(error_response))
+Error occurred: 'metadata'
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+Error occurred: 'metadata'
+    self.event['metadata']
+Error occurred: 'metadata'
+    ~~~~~~~~~~^^^^^^^^^^^^
+KeyError: 'metadata'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 320, in run
+    agent.write_log(f"Received RSS request for {len(rss_request.get('urls', []))} URL(s)")
+                                                    ^^^^^^^^^^^^^^^
+AttributeError: 'NoneType' object has no attribute 'get'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 350, in run
+    agent.send_output(agent_output_name='processed_feed', agent_result=json.dumps(error_response))
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+    self.event['metadata']
+    ~~~~~~~~~~^^^^^^^^^^^^
+KeyError: 'metadata'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 320, in run
+    agent.write_log(f"Received RSS request for {len(rss_request.get('urls', []))} URL(s)")
+                                                    ^^^^^^^^^^^^^^^
+AttributeError: 'NoneType' object has no attribute 'get'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 350, in run
+    agent.send_output(agent_output_name='processed_feed', agent_result=json.dumps(error_response))
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+    self.event['metadata']
+    ~~~~~~~~~~^^^^^^^^^^^^
+KeyError: 'metadata'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 320, in run
+    agent.write_log(f"Received RSS request for {len(rss_request.get('urls', []))} URL(s)")
+                                                    ^^^^^^^^^^^^^^^
+AttributeError: 'NoneType' object has no attribute 'get'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 350, in run
+    agent.send_output(agent_output_name='processed_feed', agent_result=json.dumps(error_response))
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+    self.event['metadata']
+    ~~~~~~~~~~^^^^^^^^^^^^
+KeyError: 'metadata'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 320, in run
+    agent.write_log(f"Received RSS request for {len(rss_request.get('urls', []))} URL(s)")
+                                                    ^^^^^^^^^^^^^^^
+AttributeError: 'NoneType' object has no attribute 'get'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 350, in run
+    agent.send_output(agent_output_name='processed_feed', agent_result=json.dumps(error_response))
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+    self.event['metadata']
+    ~~~~~~~~~~^^^^^^^^^^^^
+KeyError: 'metadata'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 320, in run
+    agent.write_log(f"Received RSS request for {len(rss_request.get('urls', []))} URL(s)")
+                                                    ^^^^^^^^^^^^^^^
+AttributeError: 'NoneType' object has no attribute 'get'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 350, in run
+    agent.send_output(agent_output_name='processed_feed', agent_result=json.dumps(error_response))
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+    self.event['metadata']
+    ~~~~~~~~~~^^^^^^^^^^^^
+KeyError: 'metadata'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 320, in run
+    agent.write_log(f"Received RSS request for {len(rss_request.get('urls', []))} URL(s)")
+                                                    ^^^^^^^^^^^^^^^
+AttributeError: 'NoneType' object has no attribute 'get'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 350, in run
+    agent.send_output(agent_output_name='processed_feed', agent_result=json.dumps(error_response))
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+    self.event['metadata']
+    ~~~~~~~~~~^^^^^^^^^^^^
+KeyError: 'metadata'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 320, in run
+    agent.write_log(f"Received RSS request for {len(rss_request.get('urls', []))} URL(s)")
+                                                    ^^^^^^^^^^^^^^^
+AttributeError: 'NoneType' object has no attribute 'get'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 350, in run
+    agent.send_output(agent_output_name='processed_feed', agent_result=json.dumps(error_response))
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+    self.event['metadata']
+    ~~~~~~~~~~^^^^^^^^^^^^
+KeyError: 'metadata'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 320, in run
+    agent.write_log(f"Received RSS request for {len(rss_request.get('urls', []))} URL(s)")
+                                                    ^^^^^^^^^^^^^^^
+AttributeError: 'NoneType' object has no attribute 'get'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 350, in run
+    agent.send_output(agent_output_name='processed_feed', agent_result=json.dumps(error_response))
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+    self.event['metadata']
+    ~~~~~~~~~~^^^^^^^^^^^^
+KeyError: 'metadata'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 320, in run
+    agent.write_log(f"Received RSS request for {len(rss_request.get('urls', []))} URL(s)")
+Error occurred: 'metadata'
+                                                    ^^^^^^^^^^^^^^^
+Error occurred: 'metadata'
+AttributeError: 'NoneType' object has no attribute 'get'
+Error occurred: 'metadata'
+
+Error occurred: 'metadata'
+During handling of the above exception, another exception occurred:
+Error occurred: 'metadata'
+
+Error occurred: 'metadata'
+Traceback (most recent call last):
+Error occurred: 'metadata'
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+Error occurred: 'metadata'
+    func(*args, **kwargs)
+Error occurred: 'metadata'
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 350, in run
+    agent.send_output(agent_output_name='processed_feed', agent_result=json.dumps(error_response))
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+    self.event['metadata']
+    ~~~~~~~~~~^^^^^^^^^^^^
+KeyError: 'metadata'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 320, in run
+    agent.write_log(f"Received RSS request for {len(rss_request.get('urls', []))} URL(s)")
+                                                    ^^^^^^^^^^^^^^^
+AttributeError: 'NoneType' object has no attribute 'get'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 350, in run
+    agent.send_output(agent_output_name='processed_feed', agent_result=json.dumps(error_response))
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+    self.event['metadata']
+    ~~~~~~~~~~^^^^^^^^^^^^
+KeyError: 'metadata'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 320, in run
+    agent.write_log(f"Received RSS request for {len(rss_request.get('urls', []))} URL(s)")
+                                                    ^^^^^^^^^^^^^^^
+AttributeError: 'NoneType' object has no attribute 'get'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 350, in run
+    agent.send_output(agent_output_name='processed_feed', agent_result=json.dumps(error_response))
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+    self.event['metadata']
+    ~~~~~~~~~~^^^^^^^^^^^^
+KeyError: 'metadata'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 320, in run
+    agent.write_log(f"Received RSS request for {len(rss_request.get('urls', []))} URL(s)")
+                                                    ^^^^^^^^^^^^^^^
+AttributeError: 'NoneType' object has no attribute 'get'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 350, in run
+    agent.send_output(agent_output_name='processed_feed', agent_result=json.dumps(error_response))
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+    self.event['metadata']
+    ~~~~~~~~~~^^^^^^^^^^^^
+KeyError: 'metadata'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 320, in run
+    agent.write_log(f"Received RSS request for {len(rss_request.get('urls', []))} URL(s)")
+                                                    ^^^^^^^^^^^^^^^
+AttributeError: 'NoneType' object has no attribute 'get'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 350, in run
+    agent.send_output(agent_output_name='processed_feed', agent_result=json.dumps(error_response))
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+    self.event['metadata']
+    ~~~~~~~~~~^^^^^^^^^^^^
+KeyError: 'metadata'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 320, in run
+    agent.write_log(f"Received RSS request for {len(rss_request.get('urls', []))} URL(s)")
+                                                    ^^^^^^^^^^^^^^^
+AttributeError: 'NoneType' object has no attribute 'get'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 350, in run
+    agent.send_output(agent_output_name='processed_feed', agent_result=json.dumps(error_response))
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+    self.event['metadata']
+    ~~~~~~~~~~^^^^^^^^^^^^
+KeyError: 'metadata'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 320, in run
+    agent.write_log(f"Received RSS request for {len(rss_request.get('urls', []))} URL(s)")
+                                                    ^^^^^^^^^^^^^^^
+AttributeError: 'NoneType' object has no attribute 'get'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 350, in run
+    agent.send_output(agent_output_name='processed_feed', agent_result=json.dumps(error_response))
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+    self.event['metadata']
+    ~~~~~~~~~~^^^^^^^^^^^^
+KeyError: 'metadata'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 320, in run
+    agent.write_log(f"Received RSS request for {len(rss_request.get('urls', []))} URL(s)")
+                                                    ^^^^^^^^^^^^^^^
+AttributeError: 'NoneType' object has no attribute 'get'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 350, in run
+    agent.send_output(agent_output_name='processed_feed', agent_result=json.dumps(error_response))
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+    self.event['metadata']
+    ~~~~~~~~~~^^^^^^^^^^^^
+KeyError: 'metadata'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 320, in run
+    agent.write_log(f"Received RSS request for {len(rss_request.get('urls', []))} URL(s)")
+                                                    ^^^^^^^^^^^^^^^
+AttributeError: 'NoneType' object has no attribute 'get'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 350, in run
+    agent.send_output(agent_output_name='processed_feed', agent_result=json.dumps(error_response))
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+    self.event['metadata']
+    ~~~~~~~~~~^^^^^^^^^^^^
+KeyError: 'metadata'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 320, in run
+Error occurred: 'metadata'
+    agent.write_log(f"Received RSS request for {len(rss_request.get('urls', []))} URL(s)")
+Error occurred: 'metadata'
+                                                    ^^^^^^^^^^^^^^^
+Error occurred: 'metadata'
+AttributeError: 'NoneType' object has no attribute 'get'
+Error occurred: 'metadata'
+
+Error occurred: 'metadata'
+During handling of the above exception, another exception occurred:
+Error occurred: 'metadata'
+
+Error occurred: 'metadata'
+Traceback (most recent call last):
+Error occurred: 'metadata'
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+Error occurred: 'metadata'
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 350, in run
+    agent.send_output(agent_output_name='processed_feed', agent_result=json.dumps(error_response))
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+    self.event['metadata']
+    ~~~~~~~~~~^^^^^^^^^^^^
+KeyError: 'metadata'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 320, in run
+    agent.write_log(f"Received RSS request for {len(rss_request.get('urls', []))} URL(s)")
+                                                    ^^^^^^^^^^^^^^^
+AttributeError: 'NoneType' object has no attribute 'get'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 350, in run
+    agent.send_output(agent_output_name='processed_feed', agent_result=json.dumps(error_response))
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+    self.event['metadata']
+    ~~~~~~~~~~^^^^^^^^^^^^
+KeyError: 'metadata'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 320, in run
+    agent.write_log(f"Received RSS request for {len(rss_request.get('urls', []))} URL(s)")
+                                                    ^^^^^^^^^^^^^^^
+AttributeError: 'NoneType' object has no attribute 'get'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 350, in run
+    agent.send_output(agent_output_name='processed_feed', agent_result=json.dumps(error_response))
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+    self.event['metadata']
+    ~~~~~~~~~~^^^^^^^^^^^^
+KeyError: 'metadata'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 320, in run
+    agent.write_log(f"Received RSS request for {len(rss_request.get('urls', []))} URL(s)")
+                                                    ^^^^^^^^^^^^^^^
+AttributeError: 'NoneType' object has no attribute 'get'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 350, in run
+    agent.send_output(agent_output_name='processed_feed', agent_result=json.dumps(error_response))
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+    self.event['metadata']
+    ~~~~~~~~~~^^^^^^^^^^^^
+KeyError: 'metadata'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 320, in run
+    agent.write_log(f"Received RSS request for {len(rss_request.get('urls', []))} URL(s)")
+                                                    ^^^^^^^^^^^^^^^
+AttributeError: 'NoneType' object has no attribute 'get'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 350, in run
+    agent.send_output(agent_output_name='processed_feed', agent_result=json.dumps(error_response))
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+    self.event['metadata']
+    ~~~~~~~~~~^^^^^^^^^^^^
+KeyError: 'metadata'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 320, in run
+    agent.write_log(f"Received RSS request for {len(rss_request.get('urls', []))} URL(s)")
+                                                    ^^^^^^^^^^^^^^^
+AttributeError: 'NoneType' object has no attribute 'get'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 350, in run
+    agent.send_output(agent_output_name='processed_feed', agent_result=json.dumps(error_response))
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+    self.event['metadata']
+    ~~~~~~~~~~^^^^^^^^^^^^
+KeyError: 'metadata'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 320, in run
+    agent.write_log(f"Received RSS request for {len(rss_request.get('urls', []))} URL(s)")
+                                                    ^^^^^^^^^^^^^^^
+AttributeError: 'NoneType' object has no attribute 'get'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 350, in run
+    agent.send_output(agent_output_name='processed_feed', agent_result=json.dumps(error_response))
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+    self.event['metadata']
+    ~~~~~~~~~~^^^^^^^^^^^^
+KeyError: 'metadata'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 320, in run
+    agent.write_log(f"Received RSS request for {len(rss_request.get('urls', []))} URL(s)")
+                                                    ^^^^^^^^^^^^^^^
+AttributeError: 'NoneType' object has no attribute 'get'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 350, in run
+    agent.send_output(agent_output_name='processed_feed', agent_result=json.dumps(error_response))
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+    self.event['metadata']
+    ~~~~~~~~~~^^^^^^^^^^^^
+KeyError: 'metadata'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 320, in run
+    agent.write_log(f"Received RSS request for {len(rss_request.get('urls', []))} URL(s)")
+                                                    ^^^^^^^^^^^^^^^
+AttributeError: 'NoneType' object has no attribute 'get'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 350, in run
+    agent.send_output(agent_output_name='processed_feed', agent_result=json.dumps(error_response))
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+    self.event['metadata']
+    ~~~~~~~~~~^^^^^^^^^^^^
+KeyError: 'metadata'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 320, in run
+    agent.write_log(f"Received RSS request for {len(rss_request.get('urls', []))} URL(s)")
+                                                    ^^^^^^^^^^^^^^^
+AttributeError: 'NoneType' object has no attribute 'get'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 350, in run
+    agent.send_output(agent_output_name='processed_feed', agent_result=json.dumps(error_response))
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+    self.event['metadata']
+    ~~~~~~~~~~^^^^^^^^^^^^
+KeyError: 'metadata'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 320, in run
+    agent.write_log(f"Received RSS request for {len(rss_request.get('urls', []))} URL(s)")
+                                                    ^^^^^^^^^^^^^^^
+AttributeError: 'NoneType' object has no attribute 'get'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 350, in run
+    agent.send_output(agent_output_name='processed_feed', agent_result=json.dumps(error_response))
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+    self.event['metadata']
+    ~~~~~~~~~~^^^^^^^^^^^^
+KeyError: 'metadata'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 320, in run
+    agent.write_log(f"Received RSS request for {len(rss_request.get('urls', []))} URL(s)")
+                                                    ^^^^^^^^^^^^^^^
+AttributeError: 'NoneType' object has no attribute 'get'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 350, in run
+    agent.send_output(agent_output_name='processed_feed', agent_result=json.dumps(error_response))
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+    self.event['metadata']
+    ~~~~~~~~~~^^^^^^^^^^^^
+KeyError: 'metadata'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 320, in run
+    agent.write_log(f"Received RSS request for {len(rss_request.get('urls', []))} URL(s)")
+                                                    ^^^^^^^^^^^^^^^
+AttributeError: 'NoneType' object has no attribute 'get'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 350, in run
+    agent.send_output(agent_output_name='processed_feed', agent_result=json.dumps(error_response))
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+    self.event['metadata']
+    ~~~~~~~~~~^^^^^^^^^^^^
+KeyError: 'metadata'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 320, in run
+    agent.write_log(f"Received RSS request for {len(rss_request.get('urls', []))} URL(s)")
+                                                    ^^^^^^^^^^^^^^^
+AttributeError: 'NoneType' object has no attribute 'get'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 350, in run
+    agent.send_output(agent_output_name='processed_feed', agent_result=json.dumps(error_response))
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+    self.event['metadata']
+    ~~~~~~~~~~^^^^^^^^^^^^
+KeyError: 'metadata'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 320, in run
+    agent.write_log(f"Received RSS request for {len(rss_request.get('urls', []))} URL(s)")
+                                                    ^^^^^^^^^^^^^^^
+AttributeError: 'NoneType' object has no attribute 'get'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 350, in run
+    agent.send_output(agent_output_name='processed_feed', agent_result=json.dumps(error_response))
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+    self.event['metadata']
+    ~~~~~~~~~~^^^^^^^^^^^^
+KeyError: 'metadata'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 320, in run
+    agent.write_log(f"Received RSS request for {len(rss_request.get('urls', []))} URL(s)")
+                                                    ^^^^^^^^^^^^^^^
+AttributeError: 'NoneType' object has no attribute 'get'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 350, in run
+    agent.send_output(agent_output_name='processed_feed', agent_result=json.dumps(error_response))
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+    self.event['metadata']
+    ~~~~~~~~~~^^^^^^^^^^^^
+KeyError: 'metadata'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 320, in run
+    agent.write_log(f"Received RSS request for {len(rss_request.get('urls', []))} URL(s)")
+                                                    ^^^^^^^^^^^^^^^
+AttributeError: 'NoneType' object has no attribute 'get'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 350, in run
+    agent.send_output(agent_output_name='processed_feed', agent_result=json.dumps(error_response))
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+    self.event['metadata']
+    ~~~~~~~~~~^^^^^^^^^^^^
+KeyError: 'metadata'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 320, in run
+    agent.write_log(f"Received RSS request for {len(rss_request.get('urls', []))} URL(s)")
+                                                    ^^^^^^^^^^^^^^^
+AttributeError: 'NoneType' object has no attribute 'get'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 350, in run
+    agent.send_output(agent_output_name='processed_feed', agent_result=json.dumps(error_response))
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+    self.event['metadata']
+    ~~~~~~~~~~^^^^^^^^^^^^
+KeyError: 'metadata'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 320, in run
+    agent.write_log(f"Received RSS request for {len(rss_request.get('urls', []))} URL(s)")
+                                                    ^^^^^^^^^^^^^^^
+AttributeError: 'NoneType' object has no attribute 'get'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 350, in run
+    agent.send_output(agent_output_name='processed_feed', agent_result=json.dumps(error_response))
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+    self.event['metadata']
+    ~~~~~~~~~~^^^^^^^^^^^^
+KeyError: 'metadata'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 320, in run
+    agent.write_log(f"Received RSS request for {len(rss_request.get('urls', []))} URL(s)")
+                                                    ^^^^^^^^^^^^^^^
+AttributeError: 'NoneType' object has no attribute 'get'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 350, in run
+    agent.send_output(agent_output_name='processed_feed', agent_result=json.dumps(error_response))
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+    self.event['metadata']
+    ~~~~~~~~~~^^^^^^^^^^^^
+KeyError: 'metadata'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 320, in run
+    agent.write_log(f"Received RSS request for {len(rss_request.get('urls', []))} URL(s)")
+                                                    ^^^^^^^^^^^^^^^
+AttributeError: 'NoneType' object has no attribute 'get'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 350, in run
+    agent.send_output(agent_output_name='processed_feed', agent_result=json.dumps(error_response))
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+    self.event['metadata']
+    ~~~~~~~~~~^^^^^^^^^^^^
+KeyError: 'metadata'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 320, in run
+    agent.write_log(f"Received RSS request for {len(rss_request.get('urls', []))} URL(s)")
+                                                    ^^^^^^^^^^^^^^^
+AttributeError: 'NoneType' object has no attribute 'get'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 350, in run
+    agent.send_output(agent_output_name='processed_feed', agent_result=json.dumps(error_response))
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+    self.event['metadata']
+    ~~~~~~~~~~^^^^^^^^^^^^
+KeyError: 'metadata'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 320, in run
+    agent.write_log(f"Received RSS request for {len(rss_request.get('urls', []))} URL(s)")
+                                                    ^^^^^^^^^^^^^^^
+AttributeError: 'NoneType' object has no attribute 'get'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 350, in run
+    agent.send_output(agent_output_name='processed_feed', agent_result=json.dumps(error_response))
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+    self.event['metadata']
+    ~~~~~~~~~~^^^^^^^^^^^^
+KeyError: 'metadata'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 320, in run
+    agent.write_log(f"Received RSS request for {len(rss_request.get('urls', []))} URL(s)")
+                                                    ^^^^^^^^^^^^^^^
+AttributeError: 'NoneType' object has no attribute 'get'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 350, in run
+    agent.send_output(agent_output_name='processed_feed', agent_result=json.dumps(error_response))
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+    self.event['metadata']
+    ~~~~~~~~~~^^^^^^^^^^^^
+KeyError: 'metadata'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 320, in run
+    agent.write_log(f"Received RSS request for {len(rss_request.get('urls', []))} URL(s)")
+                                                    ^^^^^^^^^^^^^^^
+AttributeError: 'NoneType' object has no attribute 'get'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 350, in run
+    agent.send_output(agent_output_name='processed_feed', agent_result=json.dumps(error_response))
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+    self.event['metadata']
+    ~~~~~~~~~~^^^^^^^^^^^^
+KeyError: 'metadata'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 320, in run
+    agent.write_log(f"Received RSS request for {len(rss_request.get('urls', []))} URL(s)")
+                                                    ^^^^^^^^^^^^^^^
+AttributeError: 'NoneType' object has no attribute 'get'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 350, in run
+    agent.send_output(agent_output_name='processed_feed', agent_result=json.dumps(error_response))
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+    self.event['metadata']
+    ~~~~~~~~~~^^^^^^^^^^^^
+KeyError: 'metadata'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 320, in run
+    agent.write_log(f"Received RSS request for {len(rss_request.get('urls', []))} URL(s)")
+                                                    ^^^^^^^^^^^^^^^
+AttributeError: 'NoneType' object has no attribute 'get'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 350, in run
+    agent.send_output(agent_output_name='processed_feed', agent_result=json.dumps(error_response))
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+    self.event['metadata']
+    ~~~~~~~~~~^^^^^^^^^^^^
+KeyError: 'metadata'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 320, in run
+    agent.write_log(f"Received RSS request for {len(rss_request.get('urls', []))} URL(s)")
+                                                    ^^^^^^^^^^^^^^^
+AttributeError: 'NoneType' object has no attribute 'get'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 350, in run
+    agent.send_output(agent_output_name='processed_feed', agent_result=json.dumps(error_response))
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+    self.event['metadata']
+    ~~~~~~~~~~^^^^^^^^^^^^
+KeyError: 'metadata'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 320, in run
+    agent.write_log(f"Received RSS request for {len(rss_request.get('urls', []))} URL(s)")
+                                                    ^^^^^^^^^^^^^^^
+AttributeError: 'NoneType' object has no attribute 'get'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 350, in run
+    agent.send_output(agent_output_name='processed_feed', agent_result=json.dumps(error_response))
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+    self.event['metadata']
+    ~~~~~~~~~~^^^^^^^^^^^^
+KeyError: 'metadata'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 320, in run
+    agent.write_log(f"Received RSS request for {len(rss_request.get('urls', []))} URL(s)")
+                                                    ^^^^^^^^^^^^^^^
+AttributeError: 'NoneType' object has no attribute 'get'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 350, in run
+    agent.send_output(agent_output_name='processed_feed', agent_result=json.dumps(error_response))
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+    self.event['metadata']
+    ~~~~~~~~~~^^^^^^^^^^^^
+KeyError: 'metadata'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 320, in run
+    agent.write_log(f"Received RSS request for {len(rss_request.get('urls', []))} URL(s)")
+                                                    ^^^^^^^^^^^^^^^
+AttributeError: 'NoneType' object has no attribute 'get'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 350, in run
+    agent.send_output(agent_output_name='processed_feed', agent_result=json.dumps(error_response))
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+    self.event['metadata']
+    ~~~~~~~~~~^^^^^^^^^^^^
+KeyError: 'metadata'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 320, in run
+    agent.write_log(f"Received RSS request for {len(rss_request.get('urls', []))} URL(s)")
+                                                    ^^^^^^^^^^^^^^^
+AttributeError: 'NoneType' object has no attribute 'get'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 350, in run
+    agent.send_output(agent_output_name='processed_feed', agent_result=json.dumps(error_response))
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+    self.event['metadata']
+    ~~~~~~~~~~^^^^^^^^^^^^
+KeyError: 'metadata'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 320, in run
+    agent.write_log(f"Received RSS request for {len(rss_request.get('urls', []))} URL(s)")
+                                                    ^^^^^^^^^^^^^^^
+AttributeError: 'NoneType' object has no attribute 'get'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 350, in run
+    agent.send_output(agent_output_name='processed_feed', agent_result=json.dumps(error_response))
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+    self.event['metadata']
+    ~~~~~~~~~~^^^^^^^^^^^^
+KeyError: 'metadata'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 320, in run
+    agent.write_log(f"Received RSS request for {len(rss_request.get('urls', []))} URL(s)")
+                                                    ^^^^^^^^^^^^^^^
+AttributeError: 'NoneType' object has no attribute 'get'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 350, in run
+    agent.send_output(agent_output_name='processed_feed', agent_result=json.dumps(error_response))
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+    self.event['metadata']
+    ~~~~~~~~~~^^^^^^^^^^^^
+KeyError: 'metadata'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 320, in run
+    agent.write_log(f"Received RSS request for {len(rss_request.get('urls', []))} URL(s)")
+                                                    ^^^^^^^^^^^^^^^
+AttributeError: 'NoneType' object has no attribute 'get'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 350, in run
+    agent.send_output(agent_output_name='processed_feed', agent_result=json.dumps(error_response))
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+    self.event['metadata']
+    ~~~~~~~~~~^^^^^^^^^^^^
+KeyError: 'metadata'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 320, in run
+    agent.write_log(f"Received RSS request for {len(rss_request.get('urls', []))} URL(s)")
+                                                    ^^^^^^^^^^^^^^^
+AttributeError: 'NoneType' object has no attribute 'get'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 350, in run
+    agent.send_output(agent_output_name='processed_feed', agent_result=json.dumps(error_response))
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+    self.event['metadata']
+    ~~~~~~~~~~^^^^^^^^^^^^
+KeyError: 'metadata'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 320, in run
+    agent.write_log(f"Received RSS request for {len(rss_request.get('urls', []))} URL(s)")
+                                                    ^^^^^^^^^^^^^^^
+AttributeError: 'NoneType' object has no attribute 'get'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 350, in run
+    agent.send_output(agent_output_name='processed_feed', agent_result=json.dumps(error_response))
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+    self.event['metadata']
+    ~~~~~~~~~~^^^^^^^^^^^^
+KeyError: 'metadata'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 320, in run
+    agent.write_log(f"Received RSS request for {len(rss_request.get('urls', []))} URL(s)")
+                                                    ^^^^^^^^^^^^^^^
+AttributeError: 'NoneType' object has no attribute 'get'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 350, in run
+    agent.send_output(agent_output_name='processed_feed', agent_result=json.dumps(error_response))
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+    self.event['metadata']
+    ~~~~~~~~~~^^^^^^^^^^^^
+KeyError: 'metadata'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 320, in run
+    agent.write_log(f"Received RSS request for {len(rss_request.get('urls', []))} URL(s)")
+                                                    ^^^^^^^^^^^^^^^
+AttributeError: 'NoneType' object has no attribute 'get'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 350, in run
+    agent.send_output(agent_output_name='processed_feed', agent_result=json.dumps(error_response))
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+    self.event['metadata']
+    ~~~~~~~~~~^^^^^^^^^^^^
+KeyError: 'metadata'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 320, in run
+    agent.write_log(f"Received RSS request for {len(rss_request.get('urls', []))} URL(s)")
+                                                    ^^^^^^^^^^^^^^^
+AttributeError: 'NoneType' object has no attribute 'get'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 350, in run
+    agent.send_output(agent_output_name='processed_feed', agent_result=json.dumps(error_response))
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+    self.event['metadata']
+    ~~~~~~~~~~^^^^^^^^^^^^
+KeyError: 'metadata'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 320, in run
+    agent.write_log(f"Received RSS request for {len(rss_request.get('urls', []))} URL(s)")
+                                                    ^^^^^^^^^^^^^^^
+AttributeError: 'NoneType' object has no attribute 'get'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 350, in run
+    agent.send_output(agent_output_name='processed_feed', agent_result=json.dumps(error_response))
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+    self.event['metadata']
+    ~~~~~~~~~~^^^^^^^^^^^^
+KeyError: 'metadata'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 320, in run
+    agent.write_log(f"Received RSS request for {len(rss_request.get('urls', []))} URL(s)")
+                                                    ^^^^^^^^^^^^^^^
+AttributeError: 'NoneType' object has no attribute 'get'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 350, in run
+    agent.send_output(agent_output_name='processed_feed', agent_result=json.dumps(error_response))
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+    self.event['metadata']
+    ~~~~~~~~~~^^^^^^^^^^^^
+KeyError: 'metadata'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 320, in run
+    agent.write_log(f"Received RSS request for {len(rss_request.get('urls', []))} URL(s)")
+                                                    ^^^^^^^^^^^^^^^
+AttributeError: 'NoneType' object has no attribute 'get'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 350, in run
+    agent.send_output(agent_output_name='processed_feed', agent_result=json.dumps(error_response))
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+    self.event['metadata']
+    ~~~~~~~~~~^^^^^^^^^^^^
+KeyError: 'metadata'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 320, in run
+    agent.write_log(f"Received RSS request for {len(rss_request.get('urls', []))} URL(s)")
+                                                    ^^^^^^^^^^^^^^^
+AttributeError: 'NoneType' object has no attribute 'get'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 350, in run
+    agent.send_output(agent_output_name='processed_feed', agent_result=json.dumps(error_response))
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+    self.event['metadata']
+    ~~~~~~~~~~^^^^^^^^^^^^
+KeyError: 'metadata'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 320, in run
+    agent.write_log(f"Received RSS request for {len(rss_request.get('urls', []))} URL(s)")
+                                                    ^^^^^^^^^^^^^^^
+AttributeError: 'NoneType' object has no attribute 'get'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 350, in run
+    agent.send_output(agent_output_name='processed_feed', agent_result=json.dumps(error_response))
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+    self.event['metadata']
+    ~~~~~~~~~~^^^^^^^^^^^^
+KeyError: 'metadata'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 320, in run
+    agent.write_log(f"Received RSS request for {len(rss_request.get('urls', []))} URL(s)")
+                                                    ^^^^^^^^^^^^^^^
+AttributeError: 'NoneType' object has no attribute 'get'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 350, in run
+    agent.send_output(agent_output_name='processed_feed', agent_result=json.dumps(error_response))
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+    self.event['metadata']
+    ~~~~~~~~~~^^^^^^^^^^^^
+KeyError: 'metadata'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 320, in run
+    agent.write_log(f"Received RSS request for {len(rss_request.get('urls', []))} URL(s)")
+                                                    ^^^^^^^^^^^^^^^
+AttributeError: 'NoneType' object has no attribute 'get'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 350, in run
+    agent.send_output(agent_output_name='processed_feed', agent_result=json.dumps(error_response))
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+    self.event['metadata']
+    ~~~~~~~~~~^^^^^^^^^^^^
+KeyError: 'metadata'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 320, in run
+    agent.write_log(f"Received RSS request for {len(rss_request.get('urls', []))} URL(s)")
+                                                    ^^^^^^^^^^^^^^^
+AttributeError: 'NoneType' object has no attribute 'get'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 350, in run
+    agent.send_output(agent_output_name='processed_feed', agent_result=json.dumps(error_response))
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+    self.event['metadata']
+    ~~~~~~~~~~^^^^^^^^^^^^
+KeyError: 'metadata'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 320, in run
+    agent.write_log(f"Received RSS request for {len(rss_request.get('urls', []))} URL(s)")
+                                                    ^^^^^^^^^^^^^^^
+AttributeError: 'NoneType' object has no attribute 'get'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 350, in run
+    agent.send_output(agent_output_name='processed_feed', agent_result=json.dumps(error_response))
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+    self.event['metadata']
+    ~~~~~~~~~~^^^^^^^^^^^^
+KeyError: 'metadata'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 320, in run
+    agent.write_log(f"Received RSS request for {len(rss_request.get('urls', []))} URL(s)")
+                                                    ^^^^^^^^^^^^^^^
+AttributeError: 'NoneType' object has no attribute 'get'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 350, in run
+    agent.send_output(agent_output_name='processed_feed', agent_result=json.dumps(error_response))
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+    self.event['metadata']
+    ~~~~~~~~~~^^^^^^^^^^^^
+KeyError: 'metadata'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 320, in run
+    agent.write_log(f"Received RSS request for {len(rss_request.get('urls', []))} URL(s)")
+                                                    ^^^^^^^^^^^^^^^
+AttributeError: 'NoneType' object has no attribute 'get'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 350, in run
+    agent.send_output(agent_output_name='processed_feed', agent_result=json.dumps(error_response))
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+    self.event['metadata']
+    ~~~~~~~~~~^^^^^^^^^^^^
+KeyError: 'metadata'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 320, in run
+    agent.write_log(f"Received RSS request for {len(rss_request.get('urls', []))} URL(s)")
+                                                    ^^^^^^^^^^^^^^^
+AttributeError: 'NoneType' object has no attribute 'get'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 350, in run
+    agent.send_output(agent_output_name='processed_feed', agent_result=json.dumps(error_response))
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+    self.event['metadata']
+    ~~~~~~~~~~^^^^^^^^^^^^
+KeyError: 'metadata'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 320, in run
+    agent.write_log(f"Received RSS request for {len(rss_request.get('urls', []))} URL(s)")
+                                                    ^^^^^^^^^^^^^^^
+AttributeError: 'NoneType' object has no attribute 'get'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 350, in run
+    agent.send_output(agent_output_name='processed_feed', agent_result=json.dumps(error_response))
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+    self.event['metadata']
+    ~~~~~~~~~~^^^^^^^^^^^^
+KeyError: 'metadata'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 320, in run
+    agent.write_log(f"Received RSS request for {len(rss_request.get('urls', []))} URL(s)")
+                                                    ^^^^^^^^^^^^^^^
+AttributeError: 'NoneType' object has no attribute 'get'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 350, in run
+    agent.send_output(agent_output_name='processed_feed', agent_result=json.dumps(error_response))
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+    self.event['metadata']
+    ~~~~~~~~~~^^^^^^^^^^^^
+KeyError: 'metadata'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 320, in run
+    agent.write_log(f"Received RSS request for {len(rss_request.get('urls', []))} URL(s)")
+                                                    ^^^^^^^^^^^^^^^
+AttributeError: 'NoneType' object has no attribute 'get'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 350, in run
+    agent.send_output(agent_output_name='processed_feed', agent_result=json.dumps(error_response))
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+    self.event['metadata']
+    ~~~~~~~~~~^^^^^^^^^^^^
+KeyError: 'metadata'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 320, in run
+    agent.write_log(f"Received RSS request for {len(rss_request.get('urls', []))} URL(s)")
+                                                    ^^^^^^^^^^^^^^^
+AttributeError: 'NoneType' object has no attribute 'get'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 350, in run
+    agent.send_output(agent_output_name='processed_feed', agent_result=json.dumps(error_response))
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+    self.event['metadata']
+    ~~~~~~~~~~^^^^^^^^^^^^
+KeyError: 'metadata'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 320, in run
+    agent.write_log(f"Received RSS request for {len(rss_request.get('urls', []))} URL(s)")
+                                                    ^^^^^^^^^^^^^^^
+AttributeError: 'NoneType' object has no attribute 'get'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 350, in run
+    agent.send_output(agent_output_name='processed_feed', agent_result=json.dumps(error_response))
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+    self.event['metadata']
+    ~~~~~~~~~~^^^^^^^^^^^^
+KeyError: 'metadata'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 320, in run
+    agent.write_log(f"Received RSS request for {len(rss_request.get('urls', []))} URL(s)")
+                                                    ^^^^^^^^^^^^^^^
+AttributeError: 'NoneType' object has no attribute 'get'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 350, in run
+    agent.send_output(agent_output_name='processed_feed', agent_result=json.dumps(error_response))
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+    self.event['metadata']
+    ~~~~~~~~~~^^^^^^^^^^^^
+KeyError: 'metadata'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 320, in run
+    agent.write_log(f"Received RSS request for {len(rss_request.get('urls', []))} URL(s)")
+                                                    ^^^^^^^^^^^^^^^
+AttributeError: 'NoneType' object has no attribute 'get'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 350, in run
+    agent.send_output(agent_output_name='processed_feed', agent_result=json.dumps(error_response))
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+    self.event['metadata']
+    ~~~~~~~~~~^^^^^^^^^^^^
+KeyError: 'metadata'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 320, in run
+    agent.write_log(f"Received RSS request for {len(rss_request.get('urls', []))} URL(s)")
+                                                    ^^^^^^^^^^^^^^^
+AttributeError: 'NoneType' object has no attribute 'get'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 350, in run
+    agent.send_output(agent_output_name='processed_feed', agent_result=json.dumps(error_response))
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+    self.event['metadata']
+    ~~~~~~~~~~^^^^^^^^^^^^
+KeyError: 'metadata'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 320, in run
+    agent.write_log(f"Received RSS request for {len(rss_request.get('urls', []))} URL(s)")
+                                                    ^^^^^^^^^^^^^^^
+AttributeError: 'NoneType' object has no attribute 'get'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 350, in run
+    agent.send_output(agent_output_name='processed_feed', agent_result=json.dumps(error_response))
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+    self.event['metadata']
+    ~~~~~~~~~~^^^^^^^^^^^^
+KeyError: 'metadata'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 320, in run
+    agent.write_log(f"Received RSS request for {len(rss_request.get('urls', []))} URL(s)")
+                                                    ^^^^^^^^^^^^^^^
+AttributeError: 'NoneType' object has no attribute 'get'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 350, in run
+    agent.send_output(agent_output_name='processed_feed', agent_result=json.dumps(error_response))
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+    self.event['metadata']
+    ~~~~~~~~~~^^^^^^^^^^^^
+KeyError: 'metadata'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 320, in run
+    agent.write_log(f"Received RSS request for {len(rss_request.get('urls', []))} URL(s)")
+                                                    ^^^^^^^^^^^^^^^
+AttributeError: 'NoneType' object has no attribute 'get'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 350, in run
+    agent.send_output(agent_output_name='processed_feed', agent_result=json.dumps(error_response))
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+    self.event['metadata']
+    ~~~~~~~~~~^^^^^^^^^^^^
+KeyError: 'metadata'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 320, in run
+    agent.write_log(f"Received RSS request for {len(rss_request.get('urls', []))} URL(s)")
+                                                    ^^^^^^^^^^^^^^^
+AttributeError: 'NoneType' object has no attribute 'get'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 350, in run
+    agent.send_output(agent_output_name='processed_feed', agent_result=json.dumps(error_response))
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+    self.event['metadata']
+    ~~~~~~~~~~^^^^^^^^^^^^
+KeyError: 'metadata'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 320, in run
+    agent.write_log(f"Received RSS request for {len(rss_request.get('urls', []))} URL(s)")
+                                                    ^^^^^^^^^^^^^^^
+AttributeError: 'NoneType' object has no attribute 'get'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 350, in run
+    agent.send_output(agent_output_name='processed_feed', agent_result=json.dumps(error_response))
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+    self.event['metadata']
+    ~~~~~~~~~~^^^^^^^^^^^^
+KeyError: 'metadata'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 320, in run
+    agent.write_log(f"Received RSS request for {len(rss_request.get('urls', []))} URL(s)")
+                                                    ^^^^^^^^^^^^^^^
+AttributeError: 'NoneType' object has no attribute 'get'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 350, in run
+    agent.send_output(agent_output_name='processed_feed', agent_result=json.dumps(error_response))
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+    self.event['metadata']
+    ~~~~~~~~~~^^^^^^^^^^^^
+KeyError: 'metadata'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 320, in run
+    agent.write_log(f"Received RSS request for {len(rss_request.get('urls', []))} URL(s)")
+                                                    ^^^^^^^^^^^^^^^
+AttributeError: 'NoneType' object has no attribute 'get'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 350, in run
+    agent.send_output(agent_output_name='processed_feed', agent_result=json.dumps(error_response))
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+    self.event['metadata']
+    ~~~~~~~~~~^^^^^^^^^^^^
+KeyError: 'metadata'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 320, in run
+    agent.write_log(f"Received RSS request for {len(rss_request.get('urls', []))} URL(s)")
+                                                    ^^^^^^^^^^^^^^^
+AttributeError: 'NoneType' object has no attribute 'get'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 350, in run
+    agent.send_output(agent_output_name='processed_feed', agent_result=json.dumps(error_response))
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+    self.event['metadata']
+    ~~~~~~~~~~^^^^^^^^^^^^
+KeyError: 'metadata'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 320, in run
+    agent.write_log(f"Received RSS request for {len(rss_request.get('urls', []))} URL(s)")
+                                                    ^^^^^^^^^^^^^^^
+AttributeError: 'NoneType' object has no attribute 'get'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 350, in run
+    agent.send_output(agent_output_name='processed_feed', agent_result=json.dumps(error_response))
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+    self.event['metadata']
+    ~~~~~~~~~~^^^^^^^^^^^^
+KeyError: 'metadata'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 320, in run
+    agent.write_log(f"Received RSS request for {len(rss_request.get('urls', []))} URL(s)")
+                                                    ^^^^^^^^^^^^^^^
+AttributeError: 'NoneType' object has no attribute 'get'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 350, in run
+    agent.send_output(agent_output_name='processed_feed', agent_result=json.dumps(error_response))
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+    self.event['metadata']
+    ~~~~~~~~~~^^^^^^^^^^^^
+KeyError: 'metadata'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 320, in run
+    agent.write_log(f"Received RSS request for {len(rss_request.get('urls', []))} URL(s)")
+                                                    ^^^^^^^^^^^^^^^
+AttributeError: 'NoneType' object has no attribute 'get'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 350, in run
+    agent.send_output(agent_output_name='processed_feed', agent_result=json.dumps(error_response))
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+    self.event['metadata']
+    ~~~~~~~~~~^^^^^^^^^^^^
+KeyError: 'metadata'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 320, in run
+    agent.write_log(f"Received RSS request for {len(rss_request.get('urls', []))} URL(s)")
+                                                    ^^^^^^^^^^^^^^^
+AttributeError: 'NoneType' object has no attribute 'get'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 350, in run
+    agent.send_output(agent_output_name='processed_feed', agent_result=json.dumps(error_response))
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+    self.event['metadata']
+    ~~~~~~~~~~^^^^^^^^^^^^
+KeyError: 'metadata'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 320, in run
+    agent.write_log(f"Received RSS request for {len(rss_request.get('urls', []))} URL(s)")
+                                                    ^^^^^^^^^^^^^^^
+AttributeError: 'NoneType' object has no attribute 'get'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 350, in run
+    agent.send_output(agent_output_name='processed_feed', agent_result=json.dumps(error_response))
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+    self.event['metadata']
+    ~~~~~~~~~~^^^^^^^^^^^^
+KeyError: 'metadata'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 320, in run
+    agent.write_log(f"Received RSS request for {len(rss_request.get('urls', []))} URL(s)")
+                                                    ^^^^^^^^^^^^^^^
+AttributeError: 'NoneType' object has no attribute 'get'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 350, in run
+    agent.send_output(agent_output_name='processed_feed', agent_result=json.dumps(error_response))
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+    self.event['metadata']
+    ~~~~~~~~~~^^^^^^^^^^^^
+KeyError: 'metadata'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 320, in run
+    agent.write_log(f"Received RSS request for {len(rss_request.get('urls', []))} URL(s)")
+                                                    ^^^^^^^^^^^^^^^
+AttributeError: 'NoneType' object has no attribute 'get'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 350, in run
+    agent.send_output(agent_output_name='processed_feed', agent_result=json.dumps(error_response))
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+    self.event['metadata']
+    ~~~~~~~~~~^^^^^^^^^^^^
+KeyError: 'metadata'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 320, in run
+    agent.write_log(f"Received RSS request for {len(rss_request.get('urls', []))} URL(s)")
+                                                    ^^^^^^^^^^^^^^^
+AttributeError: 'NoneType' object has no attribute 'get'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 350, in run
+    agent.send_output(agent_output_name='processed_feed', agent_result=json.dumps(error_response))
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+    self.event['metadata']
+    ~~~~~~~~~~^^^^^^^^^^^^
+KeyError: 'metadata'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 320, in run
+    agent.write_log(f"Received RSS request for {len(rss_request.get('urls', []))} URL(s)")
+                                                    ^^^^^^^^^^^^^^^
+AttributeError: 'NoneType' object has no attribute 'get'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 350, in run
+    agent.send_output(agent_output_name='processed_feed', agent_result=json.dumps(error_response))
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+    self.event['metadata']
+    ~~~~~~~~~~^^^^^^^^^^^^
+KeyError: 'metadata'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 320, in run
+    agent.write_log(f"Received RSS request for {len(rss_request.get('urls', []))} URL(s)")
+                                                    ^^^^^^^^^^^^^^^
+AttributeError: 'NoneType' object has no attribute 'get'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 350, in run
+    agent.send_output(agent_output_name='processed_feed', agent_result=json.dumps(error_response))
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+    self.event['metadata']
+    ~~~~~~~~~~^^^^^^^^^^^^
+KeyError: 'metadata'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 320, in run
+    agent.write_log(f"Received RSS request for {len(rss_request.get('urls', []))} URL(s)")
+                                                    ^^^^^^^^^^^^^^^
+AttributeError: 'NoneType' object has no attribute 'get'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 350, in run
+    agent.send_output(agent_output_name='processed_feed', agent_result=json.dumps(error_response))
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+    self.event['metadata']
+    ~~~~~~~~~~^^^^^^^^^^^^
+KeyError: 'metadata'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/agents/news-processor/news_processor/main.py", line 320, in run
+    agent.write_log(f"Received RSS request for {len(rss_request.get('urls', []))} URL(s)")
+                                                    ^^^^^^^^^^^^^^^

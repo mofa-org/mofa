@@ -1,0 +1,2 @@
+{"timestamp":"2026-01-13T11:42:25.318020Z","level":"INFO","fields":{"message":"","name":"MeterProvider.GlobalSet","message":"Global meter provider is set. Meters can now be created using global::meter() or global::meter_with_scope()."},"target":"opentelemetry"}
+{"timestamp":"2026-01-13T11:50:14.248216Z","level":"WARN","fields":{"message":"timeout: token DropToken(019bb72a-99fc-78f3-bf1f-3966e1bfa098) was not dropped after 60s"},"target":"dora_node_api::event_stream::thread"}

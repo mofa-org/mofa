@@ -1,0 +1,260 @@
+# Dataflow Contract: RSS to Multi-Newscaster Script
+# Defines the node interfaces and data flow between agents
+#
+# Feature: 001-rss-newscaster-script
+# Date: 2026-01-09
+
+nodes:
+  # Node 1: RSS Input (Dynamic - accepts user input)
+  - id: rss-input
+    type: dynamic
+    description: Accepts RSS feed URL(s) from user or environment
+
+    inputs: []  # No inputs - this is the entry point
+
+    outputs:
+      - name: rss_request
+        type: json
+        schema:
+          type: object
+          required: [urls]
+          properties:
+            urls:
+              type: array
+              items:
+                type: string
+                format: uri
+              minItems: 1
+              maxItems: 10
+            config:
+              type: object
+              properties:
+                male_anchor:
+                  $ref: "#/definitions/PersonaOverride"
+                female_anchor:
+                  $ref: "#/definitions/PersonaOverride"
+                commentator:
+                  $ref: "#/definitions/PersonaOverride"
+                tone:
+                  type: string
+                  enum: [formal, casual, neutral]
+                language:
+                  type: string
+
+  # Node 2: News Processor
+  - id: news-processor
+    type: standard
+    description: Fetches and parses RSS feeds, extracts structured news items
+
+    inputs:
+      - name: rss_request
+        source: rss-input/rss_request
+        type: json
+
+    outputs:
+      - name: processed_feed
+        type: json
+        schema:
+          type: object
+          required: [feed_title, feed_url, items, item_count, processed_at]
+          properties:
+            feed_title:
+              type: string
+            feed_url:
+              type: string
+              format: uri
+            items:
+              type: array
+              items:
+                $ref: "#/definitions/NewsItem"
+            item_count:
+              type: integer
+              minimum: 0
+            processed_at:
+              type: string
+              format: date-time
+            errors:
+              type: array
+              items:
+                type: string
+
+      - name: error
+        type: json
+        schema:
+          $ref: "#/definitions/ErrorResponse"
+
+  # Node 3: Script Generator
+  - id: script-generator
+    type: standard
+    description: Uses LLM to generate multi-persona broadcast script
+
+    inputs:
+      - name: processed_feed
+        source: news-processor/processed_feed
+        type: json
+
+    outputs:
+      - name: broadcast_script
+        type: json
+        schema:
+          type: object
+          required: [id, title, generated_at, segments, segment_count, source_feeds, news_item_count, personas]
+          properties:
+            id:
+              type: string
+            title:
+              type: string
+            generated_at:
+              type: string
+              format: date-time
+            segments:
+              type: array
+              items:
+                $ref: "#/definitions/ScriptSegment"
+            segment_count:
+              type: integer
+              minimum: 1
+            source_feeds:
+              type: array
+              items:
+                type: string
+            news_item_count:
+              type: integer
+            personas:
+              type: array
+              items:
+                $ref: "#/definitions/Persona"
+            metadata:
+              type: object
+
+      - name: error
+        type: json
+        schema:
+          $ref: "#/definitions/ErrorResponse"
+
+# Shared definitions
+definitions:
+  NewsItem:
+    type: object
+    required: [id, title, feed_url]
+    properties:
+      id:
+        type: string
+      title:
+        type: string
+      description:
+        type: string
+      published_date:
+        type: string
+        format: date-time
+      source:
+        type: string
+      link:
+        type: string
+        format: uri
+      feed_url:
+        type: string
+        format: uri
+
+  Persona:
+    type: object
+    required: [id, name, role, style]
+    properties:
+      id:
+        type: string
+        enum: [male_anchor, female_anchor, commentator]
+      name:
+        type: string
+      role:
+        type: string
+      style:
+        type: string
+      focus:
+        type: string
+
+  PersonaOverride:
+    type: object
+    properties:
+      name:
+        type: string
+      style:
+        type: string
+      focus:
+        type: string
+
+  ScriptSegment:
+    type: object
+    required: [position, speaker, speaker_label, content, segment_type]
+    properties:
+      position:
+        type: integer
+        minimum: 1
+      speaker:
+        type: string
+        enum: [male_anchor, female_anchor, commentator]
+      speaker_label:
+        type: string
+      content:
+        type: string
+      news_item_id:
+        type: string
+      segment_type:
+        type: string
+        enum: [intro, news, transition, analysis, outro]
+
+  ErrorResponse:
+    type: object
+    required: [error, error_type, message]
+    properties:
+      error:
+        type: boolean
+        const: true
+      error_type:
+        type: string
+        enum: [feed_fetch_error, feed_parse_error, empty_feed_error, llm_error, config_error]
+      message:
+        type: string
+      details:
+        type: object
+      partial_result:
+        type: object
+
+# Environment variables
+environment:
+  # LLM configuration
+  LLM_API_KEY:
+    required: true
+    description: API key for LLM provider
+  LLM_API_BASE:
+    required: false
+    description: Base URL for LLM API (for non-OpenAI providers)
+  LLM_MODEL:
+    required: false
+    default: gpt-4o
+    description: LLM model to use for script generation
+
+  # Persona configuration (optional)
+  MALE_ANCHOR_NAME:
+    required: false
+    default: "张明"
+    description: Name for male anchor persona
+  MALE_ANCHOR_STYLE:
+    required: false
+    default: "清晰、权威的新闻播报"
+    description: Speaking style for male anchor
+  FEMALE_ANCHOR_NAME:
+    required: false
+    default: "李华"
+    description: Name for female anchor persona
+  FEMALE_ANCHOR_STYLE:
+    required: false
+    default: "亲和、引人入胜的新闻播报"
+    description: Speaking style for female anchor
+  COMMENTATOR_NAME:
+    required: false
+    default: "王教授"
+    description: Name for commentator persona
+  COMMENTATOR_STYLE:
+    required: false
+    default: "分析性、提供背景和专家视角"
+    description: Speaking style for commentator

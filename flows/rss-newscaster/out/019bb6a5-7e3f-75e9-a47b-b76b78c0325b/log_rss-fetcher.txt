@@ -1,0 +1,1534 @@
+Error occurred: 'metadata'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/rss-fetcher/rss_fetcher/main.py", line 191, in run
+    agent.send_output(agent_output_name='rss_feed', agent_result=result_json)
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+    self.event['metadata']
+    ~~~~~~~~~~^^^^^^^^^^^^
+KeyError: 'metadata'
+Error occurred: 'metadata'
+Traceback (most recent call last):
+Error occurred: 'metadata'
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+Error occurred: 'metadata'
+    func(*args, **kwargs)
+Error occurred: 'metadata'
+  File "/Users/zwu/项目/mofa/agents/rss-fetcher/rss_fetcher/main.py", line 191, in run
+Error occurred: 'metadata'
+    agent.send_output(agent_output_name='rss_feed', agent_result=result_json)
+Error occurred: 'metadata'
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+Error occurred: 'metadata'
+    self.event['metadata']
+Error occurred: 'metadata'
+    ~~~~~~~~~~^^^^^^^^^^^^
+Error occurred: 'metadata'
+KeyError: 'metadata'
+Error occurred: 'metadata'
+Traceback (most recent call last):
+Error occurred: 'metadata'
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+Error occurred: 'metadata'
+    func(*args, **kwargs)
+Error occurred: 'metadata'
+  File "/Users/zwu/项目/mofa/agents/rss-fetcher/rss_fetcher/main.py", line 191, in run
+Error occurred: 'metadata'
+    agent.send_output(agent_output_name='rss_feed', agent_result=result_json)
+Error occurred: 'metadata'
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+Error occurred: 'metadata'
+    self.event['metadata']
+Error occurred: 'metadata'
+    ~~~~~~~~~~^^^^^^^^^^^^
+Error occurred: 'metadata'
+KeyError: 'metadata'
+Error occurred: 'metadata'
+Traceback (most recent call last):
+Error occurred: 'metadata'
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+Error occurred: 'metadata'
+    func(*args, **kwargs)
+Error occurred: 'metadata'
+  File "/Users/zwu/项目/mofa/agents/rss-fetcher/rss_fetcher/main.py", line 191, in run
+Error occurred: 'metadata'
+    agent.send_output(agent_output_name='rss_feed', agent_result=result_json)
+Error occurred: 'metadata'
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+Error occurred: 'metadata'
+    self.event['metadata']
+Error occurred: 'metadata'
+    ~~~~~~~~~~^^^^^^^^^^^^
+Error occurred: 'metadata'
+KeyError: 'metadata'
+Error occurred: 'metadata'
+Traceback (most recent call last):
+Error occurred: 'metadata'
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+Error occurred: 'metadata'
+    func(*args, **kwargs)
+Error occurred: 'metadata'
+  File "/Users/zwu/项目/mofa/agents/rss-fetcher/rss_fetcher/main.py", line 191, in run
+Error occurred: 'metadata'
+    agent.send_output(agent_output_name='rss_feed', agent_result=result_json)
+Error occurred: 'metadata'
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+Error occurred: 'metadata'
+    self.event['metadata']
+Error occurred: 'metadata'
+    ~~~~~~~~~~^^^^^^^^^^^^
+Error occurred: 'metadata'
+KeyError: 'metadata'
+Error occurred: 'metadata'
+Traceback (most recent call last):
+Error occurred: 'metadata'
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+Error occurred: 'metadata'
+    func(*args, **kwargs)
+Error occurred: 'metadata'
+  File "/Users/zwu/项目/mofa/agents/rss-fetcher/rss_fetcher/main.py", line 191, in run
+Error occurred: 'metadata'
+    agent.send_output(agent_output_name='rss_feed', agent_result=result_json)
+Error occurred: 'metadata'
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+Error occurred: 'metadata'
+    self.event['metadata']
+Error occurred: 'metadata'
+    ~~~~~~~~~~^^^^^^^^^^^^
+Error occurred: 'metadata'
+KeyError: 'metadata'
+Error occurred: 'metadata'
+Traceback (most recent call last):
+Error occurred: 'metadata'
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+Error occurred: 'metadata'
+    func(*args, **kwargs)
+Error occurred: 'metadata'
+  File "/Users/zwu/项目/mofa/agents/rss-fetcher/rss_fetcher/main.py", line 191, in run
+Error occurred: 'metadata'
+    agent.send_output(agent_output_name='rss_feed', agent_result=result_json)
+Error occurred: 'metadata'
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+Error occurred: 'metadata'
+    self.event['metadata']
+Error occurred: 'metadata'
+    ~~~~~~~~~~^^^^^^^^^^^^
+Error occurred: 'metadata'
+KeyError: 'metadata'
+Error occurred: 'metadata'
+Traceback (most recent call last):
+Error occurred: 'metadata'
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+Error occurred: 'metadata'
+    func(*args, **kwargs)
+Error occurred: 'metadata'
+  File "/Users/zwu/项目/mofa/agents/rss-fetcher/rss_fetcher/main.py", line 191, in run
+Error occurred: 'metadata'
+    agent.send_output(agent_output_name='rss_feed', agent_result=result_json)
+Error occurred: 'metadata'
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+Error occurred: 'metadata'
+    self.event['metadata']
+Error occurred: 'metadata'
+    ~~~~~~~~~~^^^^^^^^^^^^
+Error occurred: 'metadata'
+KeyError: 'metadata'
+Error occurred: 'metadata'
+Traceback (most recent call last):
+Error occurred: 'metadata'
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+Error occurred: 'metadata'
+    func(*args, **kwargs)
+Error occurred: 'metadata'
+  File "/Users/zwu/项目/mofa/agents/rss-fetcher/rss_fetcher/main.py", line 191, in run
+Error occurred: 'metadata'
+    agent.send_output(agent_output_name='rss_feed', agent_result=result_json)
+Error occurred: 'metadata'
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+Error occurred: 'metadata'
+    self.event['metadata']
+Error occurred: 'metadata'
+    ~~~~~~~~~~^^^^^^^^^^^^
+Error occurred: 'metadata'
+KeyError: 'metadata'
+Error occurred: 'metadata'
+Traceback (most recent call last):
+Error occurred: 'metadata'
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+Error occurred: 'metadata'
+    func(*args, **kwargs)
+Error occurred: 'metadata'
+  File "/Users/zwu/项目/mofa/agents/rss-fetcher/rss_fetcher/main.py", line 191, in run
+Error occurred: 'metadata'
+    agent.send_output(agent_output_name='rss_feed', agent_result=result_json)
+Error occurred: 'metadata'
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+Error occurred: 'metadata'
+    self.event['metadata']
+Error occurred: 'metadata'
+    ~~~~~~~~~~^^^^^^^^^^^^
+Error occurred: 'metadata'
+KeyError: 'metadata'
+Error occurred: 'metadata'
+Traceback (most recent call last):
+Error occurred: 'metadata'
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+Error occurred: 'metadata'
+    func(*args, **kwargs)
+Error occurred: 'metadata'
+  File "/Users/zwu/项目/mofa/agents/rss-fetcher/rss_fetcher/main.py", line 191, in run
+Error occurred: 'metadata'
+    agent.send_output(agent_output_name='rss_feed', agent_result=result_json)
+Error occurred: 'metadata'
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+Error occurred: 'metadata'
+    self.event['metadata']
+Error occurred: 'metadata'
+    ~~~~~~~~~~^^^^^^^^^^^^
+Error occurred: 'metadata'
+KeyError: 'metadata'
+Error occurred: 'metadata'
+Traceback (most recent call last):
+Error occurred: 'metadata'
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+Error occurred: 'metadata'
+    func(*args, **kwargs)
+Error occurred: 'metadata'
+  File "/Users/zwu/项目/mofa/agents/rss-fetcher/rss_fetcher/main.py", line 191, in run
+Error occurred: 'metadata'
+    agent.send_output(agent_output_name='rss_feed', agent_result=result_json)
+Error occurred: 'metadata'
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+Error occurred: 'metadata'
+    self.event['metadata']
+Error occurred: 'metadata'
+    ~~~~~~~~~~^^^^^^^^^^^^
+Error occurred: 'metadata'
+KeyError: 'metadata'
+Error occurred: 'metadata'
+Traceback (most recent call last):
+Error occurred: 'metadata'
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+Error occurred: 'metadata'
+    func(*args, **kwargs)
+Error occurred: 'metadata'
+  File "/Users/zwu/项目/mofa/agents/rss-fetcher/rss_fetcher/main.py", line 191, in run
+Error occurred: 'metadata'
+    agent.send_output(agent_output_name='rss_feed', agent_result=result_json)
+Error occurred: 'metadata'
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+Error occurred: 'metadata'
+    self.event['metadata']
+Error occurred: 'metadata'
+    ~~~~~~~~~~^^^^^^^^^^^^
+Error occurred: 'metadata'
+KeyError: 'metadata'
+Error occurred: 'metadata'
+Traceback (most recent call last):
+Error occurred: 'metadata'
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+Error occurred: 'metadata'
+    func(*args, **kwargs)
+Error occurred: 'metadata'
+  File "/Users/zwu/项目/mofa/agents/rss-fetcher/rss_fetcher/main.py", line 191, in run
+Error occurred: 'metadata'
+    agent.send_output(agent_output_name='rss_feed', agent_result=result_json)
+Error occurred: 'metadata'
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+Error occurred: 'metadata'
+    self.event['metadata']
+Error occurred: 'metadata'
+    ~~~~~~~~~~^^^^^^^^^^^^
+Error occurred: 'metadata'
+KeyError: 'metadata'
+Error occurred: 'metadata'
+Traceback (most recent call last):
+Error occurred: 'metadata'
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+Error occurred: 'metadata'
+    func(*args, **kwargs)
+Error occurred: 'metadata'
+  File "/Users/zwu/项目/mofa/agents/rss-fetcher/rss_fetcher/main.py", line 191, in run
+Error occurred: 'metadata'
+    agent.send_output(agent_output_name='rss_feed', agent_result=result_json)
+Error occurred: 'metadata'
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+Error occurred: 'metadata'
+    self.event['metadata']
+Error occurred: 'metadata'
+    ~~~~~~~~~~^^^^^^^^^^^^
+Error occurred: 'metadata'
+KeyError: 'metadata'
+Error occurred: 'metadata'
+Traceback (most recent call last):
+Error occurred: 'metadata'
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+Error occurred: 'metadata'
+    func(*args, **kwargs)
+Error occurred: 'metadata'
+  File "/Users/zwu/项目/mofa/agents/rss-fetcher/rss_fetcher/main.py", line 191, in run
+Error occurred: 'metadata'
+    agent.send_output(agent_output_name='rss_feed', agent_result=result_json)
+Error occurred: 'metadata'
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+Error occurred: 'metadata'
+    self.event['metadata']
+Error occurred: 'metadata'
+    ~~~~~~~~~~^^^^^^^^^^^^
+Error occurred: 'metadata'
+KeyError: 'metadata'
+Error occurred: 'metadata'
+Traceback (most recent call last):
+Error occurred: 'metadata'
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+Error occurred: 'metadata'
+    func(*args, **kwargs)
+Error occurred: 'metadata'
+  File "/Users/zwu/项目/mofa/agents/rss-fetcher/rss_fetcher/main.py", line 191, in run
+Error occurred: 'metadata'
+    agent.send_output(agent_output_name='rss_feed', agent_result=result_json)
+Error occurred: 'metadata'
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+Error occurred: 'metadata'
+    self.event['metadata']
+Error occurred: 'metadata'
+    ~~~~~~~~~~^^^^^^^^^^^^
+Error occurred: 'metadata'
+KeyError: 'metadata'
+Error occurred: 'metadata'
+Traceback (most recent call last):
+Error occurred: 'metadata'
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+Error occurred: 'metadata'
+    func(*args, **kwargs)
+Error occurred: 'metadata'
+  File "/Users/zwu/项目/mofa/agents/rss-fetcher/rss_fetcher/main.py", line 191, in run
+Error occurred: 'metadata'
+    agent.send_output(agent_output_name='rss_feed', agent_result=result_json)
+Error occurred: 'metadata'
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+Error occurred: 'metadata'
+    self.event['metadata']
+Error occurred: 'metadata'
+    ~~~~~~~~~~^^^^^^^^^^^^
+Error occurred: 'metadata'
+KeyError: 'metadata'
+Error occurred: 'metadata'
+Traceback (most recent call last):
+Error occurred: 'metadata'
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+Error occurred: 'metadata'
+    func(*args, **kwargs)
+Error occurred: 'metadata'
+  File "/Users/zwu/项目/mofa/agents/rss-fetcher/rss_fetcher/main.py", line 191, in run
+Error occurred: 'metadata'
+    agent.send_output(agent_output_name='rss_feed', agent_result=result_json)
+Error occurred: 'metadata'
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+Error occurred: 'metadata'
+    self.event['metadata']
+Error occurred: 'metadata'
+    ~~~~~~~~~~^^^^^^^^^^^^
+Error occurred: 'metadata'
+KeyError: 'metadata'
+Error occurred: 'metadata'
+Traceback (most recent call last):
+Error occurred: 'metadata'
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+Error occurred: 'metadata'
+    func(*args, **kwargs)
+Error occurred: 'metadata'
+  File "/Users/zwu/项目/mofa/agents/rss-fetcher/rss_fetcher/main.py", line 191, in run
+Error occurred: 'metadata'
+    agent.send_output(agent_output_name='rss_feed', agent_result=result_json)
+Error occurred: 'metadata'
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+Error occurred: 'metadata'
+    self.event['metadata']
+    ~~~~~~~~~~^^^^^^^^^^^^
+KeyError: 'metadata'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/rss-fetcher/rss_fetcher/main.py", line 191, in run
+    agent.send_output(agent_output_name='rss_feed', agent_result=result_json)
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+    self.event['metadata']
+    ~~~~~~~~~~^^^^^^^^^^^^
+KeyError: 'metadata'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/rss-fetcher/rss_fetcher/main.py", line 191, in run
+    agent.send_output(agent_output_name='rss_feed', agent_result=result_json)
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+    self.event['metadata']
+    ~~~~~~~~~~^^^^^^^^^^^^
+KeyError: 'metadata'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/rss-fetcher/rss_fetcher/main.py", line 191, in run
+    agent.send_output(agent_output_name='rss_feed', agent_result=result_json)
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+    self.event['metadata']
+    ~~~~~~~~~~^^^^^^^^^^^^
+KeyError: 'metadata'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/rss-fetcher/rss_fetcher/main.py", line 191, in run
+    agent.send_output(agent_output_name='rss_feed', agent_result=result_json)
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+    self.event['metadata']
+    ~~~~~~~~~~^^^^^^^^^^^^
+KeyError: 'metadata'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/rss-fetcher/rss_fetcher/main.py", line 191, in run
+    agent.send_output(agent_output_name='rss_feed', agent_result=result_json)
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+    self.event['metadata']
+    ~~~~~~~~~~^^^^^^^^^^^^
+KeyError: 'metadata'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/rss-fetcher/rss_fetcher/main.py", line 191, in run
+    agent.send_output(agent_output_name='rss_feed', agent_result=result_json)
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+    self.event['metadata']
+    ~~~~~~~~~~^^^^^^^^^^^^
+KeyError: 'metadata'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/rss-fetcher/rss_fetcher/main.py", line 191, in run
+    agent.send_output(agent_output_name='rss_feed', agent_result=result_json)
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+    self.event['metadata']
+    ~~~~~~~~~~^^^^^^^^^^^^
+KeyError: 'metadata'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/rss-fetcher/rss_fetcher/main.py", line 191, in run
+    agent.send_output(agent_output_name='rss_feed', agent_result=result_json)
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+    self.event['metadata']
+    ~~~~~~~~~~^^^^^^^^^^^^
+KeyError: 'metadata'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/rss-fetcher/rss_fetcher/main.py", line 191, in run
+    agent.send_output(agent_output_name='rss_feed', agent_result=result_json)
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+    self.event['metadata']
+    ~~~~~~~~~~^^^^^^^^^^^^
+KeyError: 'metadata'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/rss-fetcher/rss_fetcher/main.py", line 191, in run
+    agent.send_output(agent_output_name='rss_feed', agent_result=result_json)
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+    self.event['metadata']
+    ~~~~~~~~~~^^^^^^^^^^^^
+KeyError: 'metadata'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/rss-fetcher/rss_fetcher/main.py", line 191, in run
+    agent.send_output(agent_output_name='rss_feed', agent_result=result_json)
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+    self.event['metadata']
+    ~~~~~~~~~~^^^^^^^^^^^^
+KeyError: 'metadata'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/rss-fetcher/rss_fetcher/main.py", line 191, in run
+    agent.send_output(agent_output_name='rss_feed', agent_result=result_json)
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+    self.event['metadata']
+    ~~~~~~~~~~^^^^^^^^^^^^
+KeyError: 'metadata'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/rss-fetcher/rss_fetcher/main.py", line 191, in run
+    agent.send_output(agent_output_name='rss_feed', agent_result=result_json)
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+    self.event['metadata']
+    ~~~~~~~~~~^^^^^^^^^^^^
+KeyError: 'metadata'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/rss-fetcher/rss_fetcher/main.py", line 191, in run
+    agent.send_output(agent_output_name='rss_feed', agent_result=result_json)
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+    self.event['metadata']
+    ~~~~~~~~~~^^^^^^^^^^^^
+KeyError: 'metadata'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/rss-fetcher/rss_fetcher/main.py", line 191, in run
+    agent.send_output(agent_output_name='rss_feed', agent_result=result_json)
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+Error occurred: 'metadata'
+    self.event['metadata']
+Error occurred: 'metadata'
+    ~~~~~~~~~~^^^^^^^^^^^^
+Error occurred: 'metadata'
+KeyError: 'metadata'
+Error occurred: 'metadata'
+Traceback (most recent call last):
+Error occurred: 'metadata'
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+Error occurred: 'metadata'
+    func(*args, **kwargs)
+Error occurred: 'metadata'
+  File "/Users/zwu/项目/mofa/agents/rss-fetcher/rss_fetcher/main.py", line 191, in run
+Error occurred: 'metadata'
+    agent.send_output(agent_output_name='rss_feed', agent_result=result_json)
+Error occurred: 'metadata'
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+Error occurred: 'metadata'
+    self.event['metadata']
+Error occurred: 'metadata'
+    ~~~~~~~~~~^^^^^^^^^^^^
+Error occurred: 'metadata'
+KeyError: 'metadata'
+Error occurred: 'metadata'
+Traceback (most recent call last):
+Error occurred: 'metadata'
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+Error occurred: 'metadata'
+    func(*args, **kwargs)
+Error occurred: 'metadata'
+  File "/Users/zwu/项目/mofa/agents/rss-fetcher/rss_fetcher/main.py", line 191, in run
+Error occurred: 'metadata'
+    agent.send_output(agent_output_name='rss_feed', agent_result=result_json)
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+    self.event['metadata']
+    ~~~~~~~~~~^^^^^^^^^^^^
+KeyError: 'metadata'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/rss-fetcher/rss_fetcher/main.py", line 191, in run
+    agent.send_output(agent_output_name='rss_feed', agent_result=result_json)
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+    self.event['metadata']
+    ~~~~~~~~~~^^^^^^^^^^^^
+KeyError: 'metadata'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/rss-fetcher/rss_fetcher/main.py", line 191, in run
+    agent.send_output(agent_output_name='rss_feed', agent_result=result_json)
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+    self.event['metadata']
+    ~~~~~~~~~~^^^^^^^^^^^^
+KeyError: 'metadata'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/rss-fetcher/rss_fetcher/main.py", line 191, in run
+    agent.send_output(agent_output_name='rss_feed', agent_result=result_json)
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+    self.event['metadata']
+    ~~~~~~~~~~^^^^^^^^^^^^
+KeyError: 'metadata'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/rss-fetcher/rss_fetcher/main.py", line 191, in run
+    agent.send_output(agent_output_name='rss_feed', agent_result=result_json)
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+    self.event['metadata']
+    ~~~~~~~~~~^^^^^^^^^^^^
+KeyError: 'metadata'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/rss-fetcher/rss_fetcher/main.py", line 191, in run
+    agent.send_output(agent_output_name='rss_feed', agent_result=result_json)
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+    self.event['metadata']
+    ~~~~~~~~~~^^^^^^^^^^^^
+KeyError: 'metadata'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/rss-fetcher/rss_fetcher/main.py", line 191, in run
+    agent.send_output(agent_output_name='rss_feed', agent_result=result_json)
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+    self.event['metadata']
+    ~~~~~~~~~~^^^^^^^^^^^^
+KeyError: 'metadata'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/rss-fetcher/rss_fetcher/main.py", line 191, in run
+    agent.send_output(agent_output_name='rss_feed', agent_result=result_json)
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+    self.event['metadata']
+    ~~~~~~~~~~^^^^^^^^^^^^
+KeyError: 'metadata'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/rss-fetcher/rss_fetcher/main.py", line 191, in run
+    agent.send_output(agent_output_name='rss_feed', agent_result=result_json)
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+    self.event['metadata']
+    ~~~~~~~~~~^^^^^^^^^^^^
+KeyError: 'metadata'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/rss-fetcher/rss_fetcher/main.py", line 191, in run
+    agent.send_output(agent_output_name='rss_feed', agent_result=result_json)
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+    self.event['metadata']
+    ~~~~~~~~~~^^^^^^^^^^^^
+KeyError: 'metadata'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/rss-fetcher/rss_fetcher/main.py", line 191, in run
+    agent.send_output(agent_output_name='rss_feed', agent_result=result_json)
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+    self.event['metadata']
+    ~~~~~~~~~~^^^^^^^^^^^^
+KeyError: 'metadata'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/rss-fetcher/rss_fetcher/main.py", line 191, in run
+    agent.send_output(agent_output_name='rss_feed', agent_result=result_json)
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+    self.event['metadata']
+    ~~~~~~~~~~^^^^^^^^^^^^
+KeyError: 'metadata'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/rss-fetcher/rss_fetcher/main.py", line 191, in run
+    agent.send_output(agent_output_name='rss_feed', agent_result=result_json)
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+    self.event['metadata']
+    ~~~~~~~~~~^^^^^^^^^^^^
+KeyError: 'metadata'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/rss-fetcher/rss_fetcher/main.py", line 191, in run
+    agent.send_output(agent_output_name='rss_feed', agent_result=result_json)
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+    self.event['metadata']
+    ~~~~~~~~~~^^^^^^^^^^^^
+KeyError: 'metadata'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/rss-fetcher/rss_fetcher/main.py", line 191, in run
+    agent.send_output(agent_output_name='rss_feed', agent_result=result_json)
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+    self.event['metadata']
+    ~~~~~~~~~~^^^^^^^^^^^^
+KeyError: 'metadata'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/rss-fetcher/rss_fetcher/main.py", line 191, in run
+    agent.send_output(agent_output_name='rss_feed', agent_result=result_json)
+Error occurred: 'metadata'
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+Error occurred: 'metadata'
+    self.event['metadata']
+Error occurred: 'metadata'
+    ~~~~~~~~~~^^^^^^^^^^^^
+Error occurred: 'metadata'
+KeyError: 'metadata'
+Error occurred: 'metadata'
+Traceback (most recent call last):
+Error occurred: 'metadata'
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+Error occurred: 'metadata'
+    func(*args, **kwargs)
+Error occurred: 'metadata'
+  File "/Users/zwu/项目/mofa/agents/rss-fetcher/rss_fetcher/main.py", line 191, in run
+Error occurred: 'metadata'
+    agent.send_output(agent_output_name='rss_feed', agent_result=result_json)
+Error occurred: 'metadata'
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+Error occurred: 'metadata'
+    self.event['metadata']
+Error occurred: 'metadata'
+    ~~~~~~~~~~^^^^^^^^^^^^
+Error occurred: 'metadata'
+KeyError: 'metadata'
+Error occurred: 'metadata'
+Traceback (most recent call last):
+Error occurred: 'metadata'
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+Error occurred: 'metadata'
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/rss-fetcher/rss_fetcher/main.py", line 191, in run
+    agent.send_output(agent_output_name='rss_feed', agent_result=result_json)
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+    self.event['metadata']
+    ~~~~~~~~~~^^^^^^^^^^^^
+KeyError: 'metadata'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/rss-fetcher/rss_fetcher/main.py", line 191, in run
+    agent.send_output(agent_output_name='rss_feed', agent_result=result_json)
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+    self.event['metadata']
+    ~~~~~~~~~~^^^^^^^^^^^^
+KeyError: 'metadata'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/rss-fetcher/rss_fetcher/main.py", line 191, in run
+    agent.send_output(agent_output_name='rss_feed', agent_result=result_json)
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+    self.event['metadata']
+    ~~~~~~~~~~^^^^^^^^^^^^
+KeyError: 'metadata'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/rss-fetcher/rss_fetcher/main.py", line 191, in run
+    agent.send_output(agent_output_name='rss_feed', agent_result=result_json)
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+    self.event['metadata']
+    ~~~~~~~~~~^^^^^^^^^^^^
+KeyError: 'metadata'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/rss-fetcher/rss_fetcher/main.py", line 191, in run
+    agent.send_output(agent_output_name='rss_feed', agent_result=result_json)
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+    self.event['metadata']
+    ~~~~~~~~~~^^^^^^^^^^^^
+KeyError: 'metadata'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/rss-fetcher/rss_fetcher/main.py", line 191, in run
+    agent.send_output(agent_output_name='rss_feed', agent_result=result_json)
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+    self.event['metadata']
+    ~~~~~~~~~~^^^^^^^^^^^^
+KeyError: 'metadata'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/rss-fetcher/rss_fetcher/main.py", line 191, in run
+    agent.send_output(agent_output_name='rss_feed', agent_result=result_json)
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+    self.event['metadata']
+    ~~~~~~~~~~^^^^^^^^^^^^
+KeyError: 'metadata'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/rss-fetcher/rss_fetcher/main.py", line 191, in run
+    agent.send_output(agent_output_name='rss_feed', agent_result=result_json)
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+    self.event['metadata']
+    ~~~~~~~~~~^^^^^^^^^^^^
+KeyError: 'metadata'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/rss-fetcher/rss_fetcher/main.py", line 191, in run
+    agent.send_output(agent_output_name='rss_feed', agent_result=result_json)
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+    self.event['metadata']
+    ~~~~~~~~~~^^^^^^^^^^^^
+KeyError: 'metadata'
+Traceback (most recent call last):
+{"timestamp":"2026-01-13T09:17:43.652957Z","level":"WARN","fields":{"message":"dropping event because event `tx` was already closed: `Stop`"},"target":"dora_node_api::event_stream::thread"}
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/rss-fetcher/rss_fetcher/main.py", line 191, in run
+    agent.send_output(agent_output_name='rss_feed', agent_result=result_json)
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+    self.event['metadata']
+    ~~~~~~~~~~^^^^^^^^^^^^
+KeyError: 'metadata'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/rss-fetcher/rss_fetcher/main.py", line 191, in run
+    agent.send_output(agent_output_name='rss_feed', agent_result=result_json)
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+    self.event['metadata']
+    ~~~~~~~~~~^^^^^^^^^^^^
+KeyError: 'metadata'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/rss-fetcher/rss_fetcher/main.py", line 191, in run
+    agent.send_output(agent_output_name='rss_feed', agent_result=result_json)
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+    self.event['metadata']
+    ~~~~~~~~~~^^^^^^^^^^^^
+KeyError: 'metadata'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/rss-fetcher/rss_fetcher/main.py", line 191, in run
+    agent.send_output(agent_output_name='rss_feed', agent_result=result_json)
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+    self.event['metadata']
+    ~~~~~~~~~~^^^^^^^^^^^^
+KeyError: 'metadata'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/rss-fetcher/rss_fetcher/main.py", line 191, in run
+    agent.send_output(agent_output_name='rss_feed', agent_result=result_json)
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+    self.event['metadata']
+    ~~~~~~~~~~^^^^^^^^^^^^
+KeyError: 'metadata'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/rss-fetcher/rss_fetcher/main.py", line 191, in run
+    agent.send_output(agent_output_name='rss_feed', agent_result=result_json)
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+    self.event['metadata']
+    ~~~~~~~~~~^^^^^^^^^^^^
+KeyError: 'metadata'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/rss-fetcher/rss_fetcher/main.py", line 191, in run
+Error occurred: 'metadata'
+    agent.send_output(agent_output_name='rss_feed', agent_result=result_json)
+Error occurred: 'metadata'
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+Error occurred: 'metadata'
+    self.event['metadata']
+Error occurred: 'metadata'
+    ~~~~~~~~~~^^^^^^^^^^^^
+Error occurred: 'metadata'
+KeyError: 'metadata'
+Error occurred: 'metadata'
+Traceback (most recent call last):
+Error occurred: 'metadata'
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+Error occurred: 'metadata'
+    func(*args, **kwargs)
+Error occurred: 'metadata'
+  File "/Users/zwu/项目/mofa/agents/rss-fetcher/rss_fetcher/main.py", line 191, in run
+Error occurred: 'metadata'
+    agent.send_output(agent_output_name='rss_feed', agent_result=result_json)
+Error occurred: 'metadata'
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+Error occurred: 'metadata'
+    self.event['metadata']
+Error occurred: 'metadata'
+    ~~~~~~~~~~^^^^^^^^^^^^
+Error occurred: 'metadata'
+KeyError: 'metadata'
+Error occurred: 'metadata'
+Traceback (most recent call last):
+Error occurred: 'metadata'
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+Error occurred: 'metadata'
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/rss-fetcher/rss_fetcher/main.py", line 191, in run
+    agent.send_output(agent_output_name='rss_feed', agent_result=result_json)
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+    self.event['metadata']
+    ~~~~~~~~~~^^^^^^^^^^^^
+KeyError: 'metadata'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/rss-fetcher/rss_fetcher/main.py", line 191, in run
+    agent.send_output(agent_output_name='rss_feed', agent_result=result_json)
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+    self.event['metadata']
+    ~~~~~~~~~~^^^^^^^^^^^^
+KeyError: 'metadata'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/rss-fetcher/rss_fetcher/main.py", line 191, in run
+    agent.send_output(agent_output_name='rss_feed', agent_result=result_json)
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+    self.event['metadata']
+    ~~~~~~~~~~^^^^^^^^^^^^
+KeyError: 'metadata'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/rss-fetcher/rss_fetcher/main.py", line 191, in run
+    agent.send_output(agent_output_name='rss_feed', agent_result=result_json)
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+    self.event['metadata']
+    ~~~~~~~~~~^^^^^^^^^^^^
+KeyError: 'metadata'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/rss-fetcher/rss_fetcher/main.py", line 191, in run
+    agent.send_output(agent_output_name='rss_feed', agent_result=result_json)
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+    self.event['metadata']
+    ~~~~~~~~~~^^^^^^^^^^^^
+KeyError: 'metadata'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/rss-fetcher/rss_fetcher/main.py", line 191, in run
+    agent.send_output(agent_output_name='rss_feed', agent_result=result_json)
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+    self.event['metadata']
+    ~~~~~~~~~~^^^^^^^^^^^^
+KeyError: 'metadata'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/rss-fetcher/rss_fetcher/main.py", line 191, in run
+    agent.send_output(agent_output_name='rss_feed', agent_result=result_json)
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+    self.event['metadata']
+    ~~~~~~~~~~^^^^^^^^^^^^
+KeyError: 'metadata'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/rss-fetcher/rss_fetcher/main.py", line 191, in run
+    agent.send_output(agent_output_name='rss_feed', agent_result=result_json)
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+    self.event['metadata']
+    ~~~~~~~~~~^^^^^^^^^^^^
+KeyError: 'metadata'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/rss-fetcher/rss_fetcher/main.py", line 191, in run
+    agent.send_output(agent_output_name='rss_feed', agent_result=result_json)
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+    self.event['metadata']
+    ~~~~~~~~~~^^^^^^^^^^^^
+KeyError: 'metadata'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/rss-fetcher/rss_fetcher/main.py", line 191, in run
+    agent.send_output(agent_output_name='rss_feed', agent_result=result_json)
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+    self.event['metadata']
+    ~~~~~~~~~~^^^^^^^^^^^^
+KeyError: 'metadata'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/rss-fetcher/rss_fetcher/main.py", line 191, in run
+    agent.send_output(agent_output_name='rss_feed', agent_result=result_json)
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+    self.event['metadata']
+    ~~~~~~~~~~^^^^^^^^^^^^
+KeyError: 'metadata'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/rss-fetcher/rss_fetcher/main.py", line 191, in run
+    agent.send_output(agent_output_name='rss_feed', agent_result=result_json)
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+    self.event['metadata']
+    ~~~~~~~~~~^^^^^^^^^^^^
+KeyError: 'metadata'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/rss-fetcher/rss_fetcher/main.py", line 191, in run
+    agent.send_output(agent_output_name='rss_feed', agent_result=result_json)
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+    self.event['metadata']
+    ~~~~~~~~~~^^^^^^^^^^^^
+KeyError: 'metadata'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/rss-fetcher/rss_fetcher/main.py", line 191, in run
+    agent.send_output(agent_output_name='rss_feed', agent_result=result_json)
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+    self.event['metadata']
+    ~~~~~~~~~~^^^^^^^^^^^^
+KeyError: 'metadata'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/rss-fetcher/rss_fetcher/main.py", line 191, in run
+    agent.send_output(agent_output_name='rss_feed', agent_result=result_json)
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+    self.event['metadata']
+    ~~~~~~~~~~^^^^^^^^^^^^
+KeyError: 'metadata'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+Error occurred: 'metadata'
+    func(*args, **kwargs)
+Error occurred: 'metadata'
+  File "/Users/zwu/项目/mofa/agents/rss-fetcher/rss_fetcher/main.py", line 191, in run
+Error occurred: 'metadata'
+    agent.send_output(agent_output_name='rss_feed', agent_result=result_json)
+Error occurred: 'metadata'
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+Error occurred: 'metadata'
+    self.event['metadata']
+Error occurred: 'metadata'
+    ~~~~~~~~~~^^^^^^^^^^^^
+Error occurred: 'metadata'
+KeyError: 'metadata'
+Error occurred: 'metadata'
+Traceback (most recent call last):
+Error occurred: 'metadata'
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+Error occurred: 'metadata'
+    func(*args, **kwargs)
+Error occurred: 'metadata'
+  File "/Users/zwu/项目/mofa/agents/rss-fetcher/rss_fetcher/main.py", line 191, in run
+Error occurred: 'metadata'
+    agent.send_output(agent_output_name='rss_feed', agent_result=result_json)
+Error occurred: 'metadata'
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+Error occurred: 'metadata'
+    self.event['metadata']
+Error occurred: 'metadata'
+    ~~~~~~~~~~^^^^^^^^^^^^
+Error occurred: 'metadata'
+KeyError: 'metadata'
+Error occurred: 'metadata'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/rss-fetcher/rss_fetcher/main.py", line 191, in run
+    agent.send_output(agent_output_name='rss_feed', agent_result=result_json)
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+    self.event['metadata']
+    ~~~~~~~~~~^^^^^^^^^^^^
+KeyError: 'metadata'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/rss-fetcher/rss_fetcher/main.py", line 191, in run
+    agent.send_output(agent_output_name='rss_feed', agent_result=result_json)
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+    self.event['metadata']
+    ~~~~~~~~~~^^^^^^^^^^^^
+KeyError: 'metadata'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/rss-fetcher/rss_fetcher/main.py", line 191, in run
+    agent.send_output(agent_output_name='rss_feed', agent_result=result_json)
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+    self.event['metadata']
+    ~~~~~~~~~~^^^^^^^^^^^^
+KeyError: 'metadata'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/rss-fetcher/rss_fetcher/main.py", line 191, in run
+    agent.send_output(agent_output_name='rss_feed', agent_result=result_json)
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+    self.event['metadata']
+    ~~~~~~~~~~^^^^^^^^^^^^
+KeyError: 'metadata'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/rss-fetcher/rss_fetcher/main.py", line 191, in run
+    agent.send_output(agent_output_name='rss_feed', agent_result=result_json)
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+    self.event['metadata']
+    ~~~~~~~~~~^^^^^^^^^^^^
+KeyError: 'metadata'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/rss-fetcher/rss_fetcher/main.py", line 191, in run
+    agent.send_output(agent_output_name='rss_feed', agent_result=result_json)
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+    self.event['metadata']
+    ~~~~~~~~~~^^^^^^^^^^^^
+KeyError: 'metadata'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/rss-fetcher/rss_fetcher/main.py", line 191, in run
+    agent.send_output(agent_output_name='rss_feed', agent_result=result_json)
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+    self.event['metadata']
+    ~~~~~~~~~~^^^^^^^^^^^^
+KeyError: 'metadata'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/rss-fetcher/rss_fetcher/main.py", line 191, in run
+    agent.send_output(agent_output_name='rss_feed', agent_result=result_json)
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+    self.event['metadata']
+    ~~~~~~~~~~^^^^^^^^^^^^
+KeyError: 'metadata'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/rss-fetcher/rss_fetcher/main.py", line 191, in run
+    agent.send_output(agent_output_name='rss_feed', agent_result=result_json)
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+    self.event['metadata']
+    ~~~~~~~~~~^^^^^^^^^^^^
+KeyError: 'metadata'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/rss-fetcher/rss_fetcher/main.py", line 191, in run
+    agent.send_output(agent_output_name='rss_feed', agent_result=result_json)
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+    self.event['metadata']
+    ~~~~~~~~~~^^^^^^^^^^^^
+KeyError: 'metadata'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/rss-fetcher/rss_fetcher/main.py", line 191, in run
+    agent.send_output(agent_output_name='rss_feed', agent_result=result_json)
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+    self.event['metadata']
+    ~~~~~~~~~~^^^^^^^^^^^^
+KeyError: 'metadata'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/rss-fetcher/rss_fetcher/main.py", line 191, in run
+    agent.send_output(agent_output_name='rss_feed', agent_result=result_json)
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+    self.event['metadata']
+    ~~~~~~~~~~^^^^^^^^^^^^
+KeyError: 'metadata'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/rss-fetcher/rss_fetcher/main.py", line 191, in run
+    agent.send_output(agent_output_name='rss_feed', agent_result=result_json)
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+    self.event['metadata']
+    ~~~~~~~~~~^^^^^^^^^^^^
+KeyError: 'metadata'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/rss-fetcher/rss_fetcher/main.py", line 191, in run
+    agent.send_output(agent_output_name='rss_feed', agent_result=result_json)
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+    self.event['metadata']
+    ~~~~~~~~~~^^^^^^^^^^^^
+KeyError: 'metadata'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/rss-fetcher/rss_fetcher/main.py", line 191, in run
+    agent.send_output(agent_output_name='rss_feed', agent_result=result_json)
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+    self.event['metadata']
+    ~~~~~~~~~~^^^^^^^^^^^^
+KeyError: 'metadata'
+Traceback (most recent call last):
+Error occurred: 'metadata'
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+Error occurred: 'metadata'
+    func(*args, **kwargs)
+Error occurred: 'metadata'
+  File "/Users/zwu/项目/mofa/agents/rss-fetcher/rss_fetcher/main.py", line 191, in run
+Error occurred: 'metadata'
+    agent.send_output(agent_output_name='rss_feed', agent_result=result_json)
+Error occurred: 'metadata'
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+Error occurred: 'metadata'
+    self.event['metadata']
+Error occurred: 'metadata'
+    ~~~~~~~~~~^^^^^^^^^^^^
+Error occurred: 'metadata'
+KeyError: 'metadata'
+Error occurred: 'metadata'
+Traceback (most recent call last):
+Error occurred: 'metadata'
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+Error occurred: 'metadata'
+    func(*args, **kwargs)
+Error occurred: 'metadata'
+  File "/Users/zwu/项目/mofa/agents/rss-fetcher/rss_fetcher/main.py", line 191, in run
+Error occurred: 'metadata'
+    agent.send_output(agent_output_name='rss_feed', agent_result=result_json)
+Error occurred: 'metadata'
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+Error occurred: 'metadata'
+    self.event['metadata']
+Error occurred: 'metadata'
+    ~~~~~~~~~~^^^^^^^^^^^^
+Error occurred: 'metadata'
+KeyError: 'metadata'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/rss-fetcher/rss_fetcher/main.py", line 191, in run
+    agent.send_output(agent_output_name='rss_feed', agent_result=result_json)
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+    self.event['metadata']
+    ~~~~~~~~~~^^^^^^^^^^^^
+KeyError: 'metadata'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/rss-fetcher/rss_fetcher/main.py", line 191, in run
+    agent.send_output(agent_output_name='rss_feed', agent_result=result_json)
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+    self.event['metadata']
+    ~~~~~~~~~~^^^^^^^^^^^^
+KeyError: 'metadata'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/rss-fetcher/rss_fetcher/main.py", line 191, in run
+    agent.send_output(agent_output_name='rss_feed', agent_result=result_json)
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+    self.event['metadata']
+    ~~~~~~~~~~^^^^^^^^^^^^
+KeyError: 'metadata'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/rss-fetcher/rss_fetcher/main.py", line 191, in run
+    agent.send_output(agent_output_name='rss_feed', agent_result=result_json)
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+    self.event['metadata']
+    ~~~~~~~~~~^^^^^^^^^^^^
+KeyError: 'metadata'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/rss-fetcher/rss_fetcher/main.py", line 191, in run
+    agent.send_output(agent_output_name='rss_feed', agent_result=result_json)
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+    self.event['metadata']
+    ~~~~~~~~~~^^^^^^^^^^^^
+KeyError: 'metadata'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/rss-fetcher/rss_fetcher/main.py", line 191, in run
+    agent.send_output(agent_output_name='rss_feed', agent_result=result_json)
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+    self.event['metadata']
+    ~~~~~~~~~~^^^^^^^^^^^^
+KeyError: 'metadata'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/rss-fetcher/rss_fetcher/main.py", line 191, in run
+    agent.send_output(agent_output_name='rss_feed', agent_result=result_json)
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+    self.event['metadata']
+    ~~~~~~~~~~^^^^^^^^^^^^
+KeyError: 'metadata'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/rss-fetcher/rss_fetcher/main.py", line 191, in run
+    agent.send_output(agent_output_name='rss_feed', agent_result=result_json)
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+    self.event['metadata']
+    ~~~~~~~~~~^^^^^^^^^^^^
+KeyError: 'metadata'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/rss-fetcher/rss_fetcher/main.py", line 191, in run
+    agent.send_output(agent_output_name='rss_feed', agent_result=result_json)
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+    self.event['metadata']
+    ~~~~~~~~~~^^^^^^^^^^^^
+KeyError: 'metadata'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/rss-fetcher/rss_fetcher/main.py", line 191, in run
+    agent.send_output(agent_output_name='rss_feed', agent_result=result_json)
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+    self.event['metadata']
+    ~~~~~~~~~~^^^^^^^^^^^^
+KeyError: 'metadata'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/rss-fetcher/rss_fetcher/main.py", line 191, in run
+    agent.send_output(agent_output_name='rss_feed', agent_result=result_json)
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+    self.event['metadata']
+    ~~~~~~~~~~^^^^^^^^^^^^
+KeyError: 'metadata'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/rss-fetcher/rss_fetcher/main.py", line 191, in run
+    agent.send_output(agent_output_name='rss_feed', agent_result=result_json)
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+    self.event['metadata']
+    ~~~~~~~~~~^^^^^^^^^^^^
+KeyError: 'metadata'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/rss-fetcher/rss_fetcher/main.py", line 191, in run
+    agent.send_output(agent_output_name='rss_feed', agent_result=result_json)
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+    self.event['metadata']
+    ~~~~~~~~~~^^^^^^^^^^^^
+KeyError: 'metadata'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/rss-fetcher/rss_fetcher/main.py", line 191, in run
+    agent.send_output(agent_output_name='rss_feed', agent_result=result_json)
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+    self.event['metadata']
+    ~~~~~~~~~~^^^^^^^^^^^^
+KeyError: 'metadata'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/rss-fetcher/rss_fetcher/main.py", line 191, in run
+    agent.send_output(agent_output_name='rss_feed', agent_result=result_json)
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+    self.event['metadata']
+    ~~~~~~~~~~^^^^^^^^^^^^
+KeyError: 'metadata'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/rss-fetcher/rss_fetcher/main.py", line 191, in run
+    agent.send_output(agent_output_name='rss_feed', agent_result=result_json)
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+    self.event['metadata']
+    ~~~~~~~~~~^^^^^^^^^^^^
+KeyError: 'metadata'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/rss-fetcher/rss_fetcher/main.py", line 191, in run
+    agent.send_output(agent_output_name='rss_feed', agent_result=result_json)
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+    self.event['metadata']
+    ~~~~~~~~~~^^^^^^^^^^^^
+KeyError: 'metadata'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/rss-fetcher/rss_fetcher/main.py", line 191, in run
+    agent.send_output(agent_output_name='rss_feed', agent_result=result_json)
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+    self.event['metadata']
+    ~~~~~~~~~~^^^^^^^^^^^^
+KeyError: 'metadata'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/rss-fetcher/rss_fetcher/main.py", line 191, in run
+    agent.send_output(agent_output_name='rss_feed', agent_result=result_json)
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+    self.event['metadata']
+    ~~~~~~~~~~^^^^^^^^^^^^
+KeyError: 'metadata'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/rss-fetcher/rss_fetcher/main.py", line 191, in run
+    agent.send_output(agent_output_name='rss_feed', agent_result=result_json)
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+    self.event['metadata']
+    ~~~~~~~~~~^^^^^^^^^^^^
+KeyError: 'metadata'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/rss-fetcher/rss_fetcher/main.py", line 191, in run
+    agent.send_output(agent_output_name='rss_feed', agent_result=result_json)
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+    self.event['metadata']
+    ~~~~~~~~~~^^^^^^^^^^^^
+KeyError: 'metadata'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/rss-fetcher/rss_fetcher/main.py", line 191, in run
+    agent.send_output(agent_output_name='rss_feed', agent_result=result_json)
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+    self.event['metadata']
+    ~~~~~~~~~~^^^^^^^^^^^^
+KeyError: 'metadata'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/rss-fetcher/rss_fetcher/main.py", line 191, in run
+    agent.send_output(agent_output_name='rss_feed', agent_result=result_json)
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+    self.event['metadata']
+    ~~~~~~~~~~^^^^^^^^^^^^
+KeyError: 'metadata'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/rss-fetcher/rss_fetcher/main.py", line 191, in run
+    agent.send_output(agent_output_name='rss_feed', agent_result=result_json)
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+    self.event['metadata']
+    ~~~~~~~~~~^^^^^^^^^^^^
+KeyError: 'metadata'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/rss-fetcher/rss_fetcher/main.py", line 191, in run
+    agent.send_output(agent_output_name='rss_feed', agent_result=result_json)
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+    self.event['metadata']
+    ~~~~~~~~~~^^^^^^^^^^^^
+KeyError: 'metadata'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/rss-fetcher/rss_fetcher/main.py", line 191, in run
+    agent.send_output(agent_output_name='rss_feed', agent_result=result_json)
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+    self.event['metadata']
+    ~~~~~~~~~~^^^^^^^^^^^^
+KeyError: 'metadata'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/rss-fetcher/rss_fetcher/main.py", line 191, in run
+    agent.send_output(agent_output_name='rss_feed', agent_result=result_json)
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+    self.event['metadata']
+    ~~~~~~~~~~^^^^^^^^^^^^
+KeyError: 'metadata'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/rss-fetcher/rss_fetcher/main.py", line 191, in run
+    agent.send_output(agent_output_name='rss_feed', agent_result=result_json)
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+    self.event['metadata']
+    ~~~~~~~~~~^^^^^^^^^^^^
+KeyError: 'metadata'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/rss-fetcher/rss_fetcher/main.py", line 191, in run
+    agent.send_output(agent_output_name='rss_feed', agent_result=result_json)
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+    self.event['metadata']
+    ~~~~~~~~~~^^^^^^^^^^^^
+KeyError: 'metadata'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/rss-fetcher/rss_fetcher/main.py", line 191, in run
+    agent.send_output(agent_output_name='rss_feed', agent_result=result_json)
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+    self.event['metadata']
+    ~~~~~~~~~~^^^^^^^^^^^^
+KeyError: 'metadata'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/rss-fetcher/rss_fetcher/main.py", line 191, in run
+    agent.send_output(agent_output_name='rss_feed', agent_result=result_json)
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+    self.event['metadata']
+    ~~~~~~~~~~^^^^^^^^^^^^
+KeyError: 'metadata'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/rss-fetcher/rss_fetcher/main.py", line 191, in run
+    agent.send_output(agent_output_name='rss_feed', agent_result=result_json)
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+    self.event['metadata']
+    ~~~~~~~~~~^^^^^^^^^^^^
+KeyError: 'metadata'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/rss-fetcher/rss_fetcher/main.py", line 191, in run
+    agent.send_output(agent_output_name='rss_feed', agent_result=result_json)
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+    self.event['metadata']
+    ~~~~~~~~~~^^^^^^^^^^^^
+KeyError: 'metadata'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/rss-fetcher/rss_fetcher/main.py", line 191, in run
+    agent.send_output(agent_output_name='rss_feed', agent_result=result_json)
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+    self.event['metadata']
+    ~~~~~~~~~~^^^^^^^^^^^^
+KeyError: 'metadata'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/rss-fetcher/rss_fetcher/main.py", line 191, in run
+    agent.send_output(agent_output_name='rss_feed', agent_result=result_json)
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+    self.event['metadata']
+    ~~~~~~~~~~^^^^^^^^^^^^
+KeyError: 'metadata'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/rss-fetcher/rss_fetcher/main.py", line 191, in run
+    agent.send_output(agent_output_name='rss_feed', agent_result=result_json)
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+    self.event['metadata']
+    ~~~~~~~~~~^^^^^^^^^^^^
+KeyError: 'metadata'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/rss-fetcher/rss_fetcher/main.py", line 191, in run
+    agent.send_output(agent_output_name='rss_feed', agent_result=result_json)
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+    self.event['metadata']
+    ~~~~~~~~~~^^^^^^^^^^^^
+KeyError: 'metadata'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/rss-fetcher/rss_fetcher/main.py", line 191, in run
+    agent.send_output(agent_output_name='rss_feed', agent_result=result_json)
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 181, in send_output
+    self.event['metadata']
+    ~~~~~~~~~~^^^^^^^^^^^^
+KeyError: 'metadata'
+Traceback (most recent call last):

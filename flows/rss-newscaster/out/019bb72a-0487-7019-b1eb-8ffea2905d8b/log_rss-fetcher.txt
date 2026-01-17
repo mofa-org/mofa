@@ -1,0 +1,4 @@
+{"timestamp":"2026-01-13T11:42:25.318025Z","level":"INFO","fields":{"message":"","name":"MeterProvider.GlobalSet","message":"Global meter provider is set. Meters can now be created using global::meter() or global::meter_with_scope()."},"target":"opentelemetry"}
+Error occurred: failed to send output
+
+Caused by:

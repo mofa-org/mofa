@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools>=65", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "anchor-assigner"
+version = "0.1.0"
+description = "MoFA agent that assigns news scripts to male and female anchors"
+readme = "README.md"
+license = {text = "MIT License"}
+dependencies = [
+    "numpy<2.0.0",
+    "pyarrow>=5.0.0",
+    "mofa-core",
+    "dora-rs",
+]
+
+[project.scripts]
+anchor-assigner = "anchor_assigner.main:main"
+
+[tool.setuptools.packages.find]
+include = ["anchor_assigner*"]

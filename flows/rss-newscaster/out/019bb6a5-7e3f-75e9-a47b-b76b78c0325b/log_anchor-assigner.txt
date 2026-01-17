@@ -1,0 +1,768 @@
+{"timestamp":"2026-01-13T09:17:39.499501Z","level":"INFO","fields":{"message":"","name":"MeterProvider.GlobalSet","message":"Global meter provider is set. Meters can now be created using global::meter() or global::meter_with_scope()."},"target":"opentelemetry"}
+Error occurred: 'NoneType' object has no attribute 'get'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/anchor-assigner/anchor_assigner/main.py", line 167, in run
+    result_json = process_request(input_data)
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/zwu/项目/mofa/agents/anchor-assigner/anchor_assigner/main.py", line 153, in process_request
+    if scripts_data.get("error"):
+       ^^^^^^^^^^^^^^^^
+AttributeError: 'NoneType' object has no attribute 'get'
+Error occurred: 'NoneType' object has no attribute 'get'
+Traceback (most recent call last):
+Error occurred: 'NoneType' object has no attribute 'get'
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+Error occurred: 'NoneType' object has no attribute 'get'
+    func(*args, **kwargs)
+Error occurred: 'NoneType' object has no attribute 'get'
+  File "/Users/zwu/项目/mofa/agents/anchor-assigner/anchor_assigner/main.py", line 167, in run
+Error occurred: 'NoneType' object has no attribute 'get'
+    result_json = process_request(input_data)
+Error occurred: 'NoneType' object has no attribute 'get'
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Error occurred: 'NoneType' object has no attribute 'get'
+  File "/Users/zwu/项目/mofa/agents/anchor-assigner/anchor_assigner/main.py", line 153, in process_request
+Error occurred: 'NoneType' object has no attribute 'get'
+    if scripts_data.get("error"):
+Error occurred: 'NoneType' object has no attribute 'get'
+       ^^^^^^^^^^^^^^^^
+Error occurred: 'NoneType' object has no attribute 'get'
+AttributeError: 'NoneType' object has no attribute 'get'
+Error occurred: 'NoneType' object has no attribute 'get'
+Traceback (most recent call last):
+Error occurred: 'NoneType' object has no attribute 'get'
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+Error occurred: 'NoneType' object has no attribute 'get'
+    func(*args, **kwargs)
+Error occurred: 'NoneType' object has no attribute 'get'
+  File "/Users/zwu/项目/mofa/agents/anchor-assigner/anchor_assigner/main.py", line 167, in run
+Error occurred: 'NoneType' object has no attribute 'get'
+    result_json = process_request(input_data)
+Error occurred: 'NoneType' object has no attribute 'get'
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Error occurred: 'NoneType' object has no attribute 'get'
+  File "/Users/zwu/项目/mofa/agents/anchor-assigner/anchor_assigner/main.py", line 153, in process_request
+Error occurred: 'NoneType' object has no attribute 'get'
+    if scripts_data.get("error"):
+Error occurred: 'NoneType' object has no attribute 'get'
+       ^^^^^^^^^^^^^^^^
+Error occurred: 'NoneType' object has no attribute 'get'
+AttributeError: 'NoneType' object has no attribute 'get'
+Error occurred: 'NoneType' object has no attribute 'get'
+Traceback (most recent call last):
+Error occurred: 'NoneType' object has no attribute 'get'
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+Error occurred: 'NoneType' object has no attribute 'get'
+    func(*args, **kwargs)
+Error occurred: 'NoneType' object has no attribute 'get'
+  File "/Users/zwu/项目/mofa/agents/anchor-assigner/anchor_assigner/main.py", line 167, in run
+Error occurred: 'NoneType' object has no attribute 'get'
+    result_json = process_request(input_data)
+Error occurred: 'NoneType' object has no attribute 'get'
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Error occurred: 'NoneType' object has no attribute 'get'
+  File "/Users/zwu/项目/mofa/agents/anchor-assigner/anchor_assigner/main.py", line 153, in process_request
+Error occurred: 'NoneType' object has no attribute 'get'
+    if scripts_data.get("error"):
+Error occurred: 'NoneType' object has no attribute 'get'
+       ^^^^^^^^^^^^^^^^
+Error occurred: 'NoneType' object has no attribute 'get'
+AttributeError: 'NoneType' object has no attribute 'get'
+Error occurred: 'NoneType' object has no attribute 'get'
+Traceback (most recent call last):
+Error occurred: 'NoneType' object has no attribute 'get'
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+Error occurred: 'NoneType' object has no attribute 'get'
+    func(*args, **kwargs)
+Error occurred: 'NoneType' object has no attribute 'get'
+  File "/Users/zwu/项目/mofa/agents/anchor-assigner/anchor_assigner/main.py", line 167, in run
+Error occurred: 'NoneType' object has no attribute 'get'
+    result_json = process_request(input_data)
+Error occurred: 'NoneType' object has no attribute 'get'
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Error occurred: 'NoneType' object has no attribute 'get'
+  File "/Users/zwu/项目/mofa/agents/anchor-assigner/anchor_assigner/main.py", line 153, in process_request
+Error occurred: 'NoneType' object has no attribute 'get'
+    if scripts_data.get("error"):
+Error occurred: 'NoneType' object has no attribute 'get'
+       ^^^^^^^^^^^^^^^^
+Error occurred: 'NoneType' object has no attribute 'get'
+AttributeError: 'NoneType' object has no attribute 'get'
+Error occurred: 'NoneType' object has no attribute 'get'
+Traceback (most recent call last):
+Error occurred: 'NoneType' object has no attribute 'get'
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+Error occurred: 'NoneType' object has no attribute 'get'
+    func(*args, **kwargs)
+Error occurred: 'NoneType' object has no attribute 'get'
+  File "/Users/zwu/项目/mofa/agents/anchor-assigner/anchor_assigner/main.py", line 167, in run
+Error occurred: 'NoneType' object has no attribute 'get'
+    result_json = process_request(input_data)
+Error occurred: 'NoneType' object has no attribute 'get'
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Error occurred: 'NoneType' object has no attribute 'get'
+  File "/Users/zwu/项目/mofa/agents/anchor-assigner/anchor_assigner/main.py", line 153, in process_request
+Error occurred: 'NoneType' object has no attribute 'get'
+    if scripts_data.get("error"):
+Error occurred: 'NoneType' object has no attribute 'get'
+       ^^^^^^^^^^^^^^^^
+Error occurred: 'NoneType' object has no attribute 'get'
+AttributeError: 'NoneType' object has no attribute 'get'
+Error occurred: 'NoneType' object has no attribute 'get'
+Traceback (most recent call last):
+Error occurred: 'NoneType' object has no attribute 'get'
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+Error occurred: 'NoneType' object has no attribute 'get'
+    func(*args, **kwargs)
+Error occurred: 'NoneType' object has no attribute 'get'
+  File "/Users/zwu/项目/mofa/agents/anchor-assigner/anchor_assigner/main.py", line 167, in run
+Error occurred: 'NoneType' object has no attribute 'get'
+    result_json = process_request(input_data)
+Error occurred: 'NoneType' object has no attribute 'get'
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Error occurred: 'NoneType' object has no attribute 'get'
+  File "/Users/zwu/项目/mofa/agents/anchor-assigner/anchor_assigner/main.py", line 153, in process_request
+Error occurred: 'NoneType' object has no attribute 'get'
+    if scripts_data.get("error"):
+Error occurred: 'NoneType' object has no attribute 'get'
+       ^^^^^^^^^^^^^^^^
+Error occurred: 'NoneType' object has no attribute 'get'
+AttributeError: 'NoneType' object has no attribute 'get'
+Error occurred: 'NoneType' object has no attribute 'get'
+Traceback (most recent call last):
+Error occurred: 'NoneType' object has no attribute 'get'
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+Error occurred: 'NoneType' object has no attribute 'get'
+    func(*args, **kwargs)
+Error occurred: 'NoneType' object has no attribute 'get'
+  File "/Users/zwu/项目/mofa/agents/anchor-assigner/anchor_assigner/main.py", line 167, in run
+Error occurred: 'NoneType' object has no attribute 'get'
+    result_json = process_request(input_data)
+Error occurred: 'NoneType' object has no attribute 'get'
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Error occurred: 'NoneType' object has no attribute 'get'
+  File "/Users/zwu/项目/mofa/agents/anchor-assigner/anchor_assigner/main.py", line 153, in process_request
+Error occurred: 'NoneType' object has no attribute 'get'
+    if scripts_data.get("error"):
+Error occurred: 'NoneType' object has no attribute 'get'
+       ^^^^^^^^^^^^^^^^
+Error occurred: 'NoneType' object has no attribute 'get'
+AttributeError: 'NoneType' object has no attribute 'get'
+Error occurred: 'NoneType' object has no attribute 'get'
+Traceback (most recent call last):
+Error occurred: 'NoneType' object has no attribute 'get'
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+Error occurred: 'NoneType' object has no attribute 'get'
+    func(*args, **kwargs)
+Error occurred: 'NoneType' object has no attribute 'get'
+  File "/Users/zwu/项目/mofa/agents/anchor-assigner/anchor_assigner/main.py", line 167, in run
+Error occurred: 'NoneType' object has no attribute 'get'
+    result_json = process_request(input_data)
+Error occurred: 'NoneType' object has no attribute 'get'
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Error occurred: 'NoneType' object has no attribute 'get'
+  File "/Users/zwu/项目/mofa/agents/anchor-assigner/anchor_assigner/main.py", line 153, in process_request
+Error occurred: 'NoneType' object has no attribute 'get'
+    if scripts_data.get("error"):
+Error occurred: 'NoneType' object has no attribute 'get'
+       ^^^^^^^^^^^^^^^^
+Error occurred: 'NoneType' object has no attribute 'get'
+AttributeError: 'NoneType' object has no attribute 'get'
+Error occurred: 'NoneType' object has no attribute 'get'
+Traceback (most recent call last):
+Error occurred: 'NoneType' object has no attribute 'get'
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+Error occurred: 'NoneType' object has no attribute 'get'
+    func(*args, **kwargs)
+Error occurred: 'NoneType' object has no attribute 'get'
+  File "/Users/zwu/项目/mofa/agents/anchor-assigner/anchor_assigner/main.py", line 167, in run
+Error occurred: 'NoneType' object has no attribute 'get'
+    result_json = process_request(input_data)
+Error occurred: 'NoneType' object has no attribute 'get'
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Error occurred: 'NoneType' object has no attribute 'get'
+  File "/Users/zwu/项目/mofa/agents/anchor-assigner/anchor_assigner/main.py", line 153, in process_request
+Error occurred: 'NoneType' object has no attribute 'get'
+    if scripts_data.get("error"):
+Error occurred: 'NoneType' object has no attribute 'get'
+       ^^^^^^^^^^^^^^^^
+Error occurred: 'NoneType' object has no attribute 'get'
+AttributeError: 'NoneType' object has no attribute 'get'
+Error occurred: 'NoneType' object has no attribute 'get'
+Traceback (most recent call last):
+Error occurred: 'NoneType' object has no attribute 'get'
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+Error occurred: 'NoneType' object has no attribute 'get'
+    func(*args, **kwargs)
+Error occurred: 'NoneType' object has no attribute 'get'
+  File "/Users/zwu/项目/mofa/agents/anchor-assigner/anchor_assigner/main.py", line 167, in run
+Error occurred: 'NoneType' object has no attribute 'get'
+    result_json = process_request(input_data)
+Error occurred: 'NoneType' object has no attribute 'get'
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Error occurred: 'NoneType' object has no attribute 'get'
+  File "/Users/zwu/项目/mofa/agents/anchor-assigner/anchor_assigner/main.py", line 153, in process_request
+Error occurred: 'NoneType' object has no attribute 'get'
+    if scripts_data.get("error"):
+Error occurred: 'NoneType' object has no attribute 'get'
+       ^^^^^^^^^^^^^^^^
+Error occurred: 'NoneType' object has no attribute 'get'
+AttributeError: 'NoneType' object has no attribute 'get'
+Error occurred: 'NoneType' object has no attribute 'get'
+Traceback (most recent call last):
+Error occurred: 'NoneType' object has no attribute 'get'
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+Error occurred: 'NoneType' object has no attribute 'get'
+    func(*args, **kwargs)
+Error occurred: 'NoneType' object has no attribute 'get'
+  File "/Users/zwu/项目/mofa/agents/anchor-assigner/anchor_assigner/main.py", line 167, in run
+Error occurred: 'NoneType' object has no attribute 'get'
+    result_json = process_request(input_data)
+Error occurred: 'NoneType' object has no attribute 'get'
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Error occurred: 'NoneType' object has no attribute 'get'
+  File "/Users/zwu/项目/mofa/agents/anchor-assigner/anchor_assigner/main.py", line 153, in process_request
+Error occurred: 'NoneType' object has no attribute 'get'
+    if scripts_data.get("error"):
+Error occurred: 'NoneType' object has no attribute 'get'
+       ^^^^^^^^^^^^^^^^
+Error occurred: 'NoneType' object has no attribute 'get'
+AttributeError: 'NoneType' object has no attribute 'get'
+Error occurred: 'NoneType' object has no attribute 'get'
+Traceback (most recent call last):
+Error occurred: 'NoneType' object has no attribute 'get'
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+Error occurred: 'NoneType' object has no attribute 'get'
+    func(*args, **kwargs)
+Error occurred: 'NoneType' object has no attribute 'get'
+  File "/Users/zwu/项目/mofa/agents/anchor-assigner/anchor_assigner/main.py", line 167, in run
+Error occurred: 'NoneType' object has no attribute 'get'
+    result_json = process_request(input_data)
+Error occurred: 'NoneType' object has no attribute 'get'
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Error occurred: 'NoneType' object has no attribute 'get'
+  File "/Users/zwu/项目/mofa/agents/anchor-assigner/anchor_assigner/main.py", line 153, in process_request
+Error occurred: 'NoneType' object has no attribute 'get'
+    if scripts_data.get("error"):
+Error occurred: 'NoneType' object has no attribute 'get'
+       ^^^^^^^^^^^^^^^^
+Error occurred: 'NoneType' object has no attribute 'get'
+AttributeError: 'NoneType' object has no attribute 'get'
+Error occurred: 'NoneType' object has no attribute 'get'
+Traceback (most recent call last):
+Error occurred: 'NoneType' object has no attribute 'get'
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+Error occurred: 'NoneType' object has no attribute 'get'
+    func(*args, **kwargs)
+Error occurred: 'NoneType' object has no attribute 'get'
+  File "/Users/zwu/项目/mofa/agents/anchor-assigner/anchor_assigner/main.py", line 167, in run
+Error occurred: 'NoneType' object has no attribute 'get'
+    result_json = process_request(input_data)
+Error occurred: 'NoneType' object has no attribute 'get'
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Error occurred: 'NoneType' object has no attribute 'get'
+  File "/Users/zwu/项目/mofa/agents/anchor-assigner/anchor_assigner/main.py", line 153, in process_request
+Error occurred: 'NoneType' object has no attribute 'get'
+    if scripts_data.get("error"):
+Error occurred: 'NoneType' object has no attribute 'get'
+       ^^^^^^^^^^^^^^^^
+Error occurred: 'NoneType' object has no attribute 'get'
+AttributeError: 'NoneType' object has no attribute 'get'
+Error occurred: 'NoneType' object has no attribute 'get'
+Traceback (most recent call last):
+Error occurred: 'NoneType' object has no attribute 'get'
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+Error occurred: 'NoneType' object has no attribute 'get'
+    func(*args, **kwargs)
+Error occurred: 'NoneType' object has no attribute 'get'
+  File "/Users/zwu/项目/mofa/agents/anchor-assigner/anchor_assigner/main.py", line 167, in run
+    result_json = process_request(input_data)
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/zwu/项目/mofa/agents/anchor-assigner/anchor_assigner/main.py", line 153, in process_request
+    if scripts_data.get("error"):
+       ^^^^^^^^^^^^^^^^
+AttributeError: 'NoneType' object has no attribute 'get'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/anchor-assigner/anchor_assigner/main.py", line 167, in run
+    result_json = process_request(input_data)
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/zwu/项目/mofa/agents/anchor-assigner/anchor_assigner/main.py", line 153, in process_request
+    if scripts_data.get("error"):
+       ^^^^^^^^^^^^^^^^
+AttributeError: 'NoneType' object has no attribute 'get'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/anchor-assigner/anchor_assigner/main.py", line 167, in run
+    result_json = process_request(input_data)
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/zwu/项目/mofa/agents/anchor-assigner/anchor_assigner/main.py", line 153, in process_request
+    if scripts_data.get("error"):
+       ^^^^^^^^^^^^^^^^
+AttributeError: 'NoneType' object has no attribute 'get'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/anchor-assigner/anchor_assigner/main.py", line 167, in run
+    result_json = process_request(input_data)
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/zwu/项目/mofa/agents/anchor-assigner/anchor_assigner/main.py", line 153, in process_request
+    if scripts_data.get("error"):
+       ^^^^^^^^^^^^^^^^
+AttributeError: 'NoneType' object has no attribute 'get'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/anchor-assigner/anchor_assigner/main.py", line 167, in run
+    result_json = process_request(input_data)
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Error occurred: 'NoneType' object has no attribute 'get'
+  File "/Users/zwu/项目/mofa/agents/anchor-assigner/anchor_assigner/main.py", line 153, in process_request
+Error occurred: 'NoneType' object has no attribute 'get'
+    if scripts_data.get("error"):
+Error occurred: 'NoneType' object has no attribute 'get'
+       ^^^^^^^^^^^^^^^^
+Error occurred: 'NoneType' object has no attribute 'get'
+AttributeError: 'NoneType' object has no attribute 'get'
+Error occurred: 'NoneType' object has no attribute 'get'
+Traceback (most recent call last):
+Error occurred: 'NoneType' object has no attribute 'get'
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+Error occurred: 'NoneType' object has no attribute 'get'
+    func(*args, **kwargs)
+Error occurred: 'NoneType' object has no attribute 'get'
+  File "/Users/zwu/项目/mofa/agents/anchor-assigner/anchor_assigner/main.py", line 167, in run
+Error occurred: 'NoneType' object has no attribute 'get'
+    result_json = process_request(input_data)
+Error occurred: 'NoneType' object has no attribute 'get'
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Error occurred: 'NoneType' object has no attribute 'get'
+  File "/Users/zwu/项目/mofa/agents/anchor-assigner/anchor_assigner/main.py", line 153, in process_request
+Error occurred: 'NoneType' object has no attribute 'get'
+    if scripts_data.get("error"):
+Error occurred: 'NoneType' object has no attribute 'get'
+       ^^^^^^^^^^^^^^^^
+Error occurred: 'NoneType' object has no attribute 'get'
+AttributeError: 'NoneType' object has no attribute 'get'
+Error occurred: 'NoneType' object has no attribute 'get'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/anchor-assigner/anchor_assigner/main.py", line 167, in run
+    result_json = process_request(input_data)
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/zwu/项目/mofa/agents/anchor-assigner/anchor_assigner/main.py", line 153, in process_request
+    if scripts_data.get("error"):
+       ^^^^^^^^^^^^^^^^
+AttributeError: 'NoneType' object has no attribute 'get'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/anchor-assigner/anchor_assigner/main.py", line 167, in run
+    result_json = process_request(input_data)
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/zwu/项目/mofa/agents/anchor-assigner/anchor_assigner/main.py", line 153, in process_request
+    if scripts_data.get("error"):
+       ^^^^^^^^^^^^^^^^
+AttributeError: 'NoneType' object has no attribute 'get'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/anchor-assigner/anchor_assigner/main.py", line 167, in run
+    result_json = process_request(input_data)
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/zwu/项目/mofa/agents/anchor-assigner/anchor_assigner/main.py", line 153, in process_request
+    if scripts_data.get("error"):
+       ^^^^^^^^^^^^^^^^
+AttributeError: 'NoneType' object has no attribute 'get'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/anchor-assigner/anchor_assigner/main.py", line 167, in run
+    result_json = process_request(input_data)
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/zwu/项目/mofa/agents/anchor-assigner/anchor_assigner/main.py", line 153, in process_request
+    if scripts_data.get("error"):
+       ^^^^^^^^^^^^^^^^
+AttributeError: 'NoneType' object has no attribute 'get'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/anchor-assigner/anchor_assigner/main.py", line 167, in run
+    result_json = process_request(input_data)
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/zwu/项目/mofa/agents/anchor-assigner/anchor_assigner/main.py", line 153, in process_request
+    if scripts_data.get("error"):
+       ^^^^^^^^^^^^^^^^
+AttributeError: 'NoneType' object has no attribute 'get'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/anchor-assigner/anchor_assigner/main.py", line 167, in run
+    result_json = process_request(input_data)
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/zwu/项目/mofa/agents/anchor-assigner/anchor_assigner/main.py", line 153, in process_request
+    if scripts_data.get("error"):
+       ^^^^^^^^^^^^^^^^
+AttributeError: 'NoneType' object has no attribute 'get'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/anchor-assigner/anchor_assigner/main.py", line 167, in run
+    result_json = process_request(input_data)
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/zwu/项目/mofa/agents/anchor-assigner/anchor_assigner/main.py", line 153, in process_request
+    if scripts_data.get("error"):
+       ^^^^^^^^^^^^^^^^
+AttributeError: 'NoneType' object has no attribute 'get'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/anchor-assigner/anchor_assigner/main.py", line 167, in run
+    result_json = process_request(input_data)
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/zwu/项目/mofa/agents/anchor-assigner/anchor_assigner/main.py", line 153, in process_request
+    if scripts_data.get("error"):
+       ^^^^^^^^^^^^^^^^
+AttributeError: 'NoneType' object has no attribute 'get'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/anchor-assigner/anchor_assigner/main.py", line 167, in run
+    result_json = process_request(input_data)
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/zwu/项目/mofa/agents/anchor-assigner/anchor_assigner/main.py", line 153, in process_request
+    if scripts_data.get("error"):
+       ^^^^^^^^^^^^^^^^
+AttributeError: 'NoneType' object has no attribute 'get'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/anchor-assigner/anchor_assigner/main.py", line 167, in run
+    result_json = process_request(input_data)
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/zwu/项目/mofa/agents/anchor-assigner/anchor_assigner/main.py", line 153, in process_request
+    if scripts_data.get("error"):
+       ^^^^^^^^^^^^^^^^
+AttributeError: 'NoneType' object has no attribute 'get'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/anchor-assigner/anchor_assigner/main.py", line 167, in run
+    result_json = process_request(input_data)
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/zwu/项目/mofa/agents/anchor-assigner/anchor_assigner/main.py", line 153, in process_request
+    if scripts_data.get("error"):
+       ^^^^^^^^^^^^^^^^
+AttributeError: 'NoneType' object has no attribute 'get'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/anchor-assigner/anchor_assigner/main.py", line 167, in run
+    result_json = process_request(input_data)
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/zwu/项目/mofa/agents/anchor-assigner/anchor_assigner/main.py", line 153, in process_request
+    if scripts_data.get("error"):
+       ^^^^^^^^^^^^^^^^
+AttributeError: 'NoneType' object has no attribute 'get'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/anchor-assigner/anchor_assigner/main.py", line 167, in run
+    result_json = process_request(input_data)
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/zwu/项目/mofa/agents/anchor-assigner/anchor_assigner/main.py", line 153, in process_request
+    if scripts_data.get("error"):
+       ^^^^^^^^^^^^^^^^
+AttributeError: 'NoneType' object has no attribute 'get'
+Traceback (most recent call last):
+Error occurred: 'NoneType' object has no attribute 'get'
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+Error occurred: 'NoneType' object has no attribute 'get'
+    func(*args, **kwargs)
+Error occurred: 'NoneType' object has no attribute 'get'
+  File "/Users/zwu/项目/mofa/agents/anchor-assigner/anchor_assigner/main.py", line 167, in run
+Error occurred: 'NoneType' object has no attribute 'get'
+    result_json = process_request(input_data)
+Error occurred: 'NoneType' object has no attribute 'get'
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Error occurred: 'NoneType' object has no attribute 'get'
+  File "/Users/zwu/项目/mofa/agents/anchor-assigner/anchor_assigner/main.py", line 153, in process_request
+Error occurred: 'NoneType' object has no attribute 'get'
+    if scripts_data.get("error"):
+Error occurred: 'NoneType' object has no attribute 'get'
+       ^^^^^^^^^^^^^^^^
+Error occurred: 'NoneType' object has no attribute 'get'
+AttributeError: 'NoneType' object has no attribute 'get'
+Error occurred: 'NoneType' object has no attribute 'get'
+Traceback (most recent call last):
+Error occurred: 'NoneType' object has no attribute 'get'
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+Error occurred: 'NoneType' object has no attribute 'get'
+    func(*args, **kwargs)
+Error occurred: 'NoneType' object has no attribute 'get'
+  File "/Users/zwu/项目/mofa/agents/anchor-assigner/anchor_assigner/main.py", line 167, in run
+Error occurred: 'NoneType' object has no attribute 'get'
+    result_json = process_request(input_data)
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/zwu/项目/mofa/agents/anchor-assigner/anchor_assigner/main.py", line 153, in process_request
+    if scripts_data.get("error"):
+       ^^^^^^^^^^^^^^^^
+AttributeError: 'NoneType' object has no attribute 'get'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/anchor-assigner/anchor_assigner/main.py", line 167, in run
+    result_json = process_request(input_data)
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/zwu/项目/mofa/agents/anchor-assigner/anchor_assigner/main.py", line 153, in process_request
+    if scripts_data.get("error"):
+       ^^^^^^^^^^^^^^^^
+AttributeError: 'NoneType' object has no attribute 'get'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/anchor-assigner/anchor_assigner/main.py", line 167, in run
+    result_json = process_request(input_data)
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/zwu/项目/mofa/agents/anchor-assigner/anchor_assigner/main.py", line 153, in process_request
+    if scripts_data.get("error"):
+       ^^^^^^^^^^^^^^^^
+AttributeError: 'NoneType' object has no attribute 'get'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/anchor-assigner/anchor_assigner/main.py", line 167, in run
+    result_json = process_request(input_data)
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/zwu/项目/mofa/agents/anchor-assigner/anchor_assigner/main.py", line 153, in process_request
+    if scripts_data.get("error"):
+       ^^^^^^^^^^^^^^^^
+AttributeError: 'NoneType' object has no attribute 'get'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/anchor-assigner/anchor_assigner/main.py", line 167, in run
+    result_json = process_request(input_data)
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/zwu/项目/mofa/agents/anchor-assigner/anchor_assigner/main.py", line 153, in process_request
+    if scripts_data.get("error"):
+       ^^^^^^^^^^^^^^^^
+AttributeError: 'NoneType' object has no attribute 'get'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/anchor-assigner/anchor_assigner/main.py", line 167, in run
+    result_json = process_request(input_data)
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/zwu/项目/mofa/agents/anchor-assigner/anchor_assigner/main.py", line 153, in process_request
+    if scripts_data.get("error"):
+       ^^^^^^^^^^^^^^^^
+AttributeError: 'NoneType' object has no attribute 'get'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/anchor-assigner/anchor_assigner/main.py", line 167, in run
+    result_json = process_request(input_data)
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/zwu/项目/mofa/agents/anchor-assigner/anchor_assigner/main.py", line 153, in process_request
+    if scripts_data.get("error"):
+       ^^^^^^^^^^^^^^^^
+AttributeError: 'NoneType' object has no attribute 'get'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/anchor-assigner/anchor_assigner/main.py", line 167, in run
+    result_json = process_request(input_data)
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/zwu/项目/mofa/agents/anchor-assigner/anchor_assigner/main.py", line 153, in process_request
+    if scripts_data.get("error"):
+       ^^^^^^^^^^^^^^^^
+AttributeError: 'NoneType' object has no attribute 'get'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/anchor-assigner/anchor_assigner/main.py", line 167, in run
+    result_json = process_request(input_data)
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/zwu/项目/mofa/agents/anchor-assigner/anchor_assigner/main.py", line 153, in process_request
+    if scripts_data.get("error"):
+       ^^^^^^^^^^^^^^^^
+AttributeError: 'NoneType' object has no attribute 'get'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/anchor-assigner/anchor_assigner/main.py", line 167, in run
+    result_json = process_request(input_data)
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/zwu/项目/mofa/agents/anchor-assigner/anchor_assigner/main.py", line 153, in process_request
+    if scripts_data.get("error"):
+       ^^^^^^^^^^^^^^^^
+AttributeError: 'NoneType' object has no attribute 'get'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/anchor-assigner/anchor_assigner/main.py", line 167, in run
+    result_json = process_request(input_data)
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/zwu/项目/mofa/agents/anchor-assigner/anchor_assigner/main.py", line 153, in process_request
+    if scripts_data.get("error"):
+       ^^^^^^^^^^^^^^^^
+AttributeError: 'NoneType' object has no attribute 'get'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/anchor-assigner/anchor_assigner/main.py", line 167, in run
+    result_json = process_request(input_data)
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/zwu/项目/mofa/agents/anchor-assigner/anchor_assigner/main.py", line 153, in process_request
+    if scripts_data.get("error"):
+       ^^^^^^^^^^^^^^^^
+AttributeError: 'NoneType' object has no attribute 'get'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/anchor-assigner/anchor_assigner/main.py", line 167, in run
+    result_json = process_request(input_data)
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/zwu/项目/mofa/agents/anchor-assigner/anchor_assigner/main.py", line 153, in process_request
+    if scripts_data.get("error"):
+       ^^^^^^^^^^^^^^^^
+AttributeError: 'NoneType' object has no attribute 'get'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/anchor-assigner/anchor_assigner/main.py", line 167, in run
+    result_json = process_request(input_data)
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/zwu/项目/mofa/agents/anchor-assigner/anchor_assigner/main.py", line 153, in process_request
+    if scripts_data.get("error"):
+       ^^^^^^^^^^^^^^^^
+AttributeError: 'NoneType' object has no attribute 'get'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/anchor-assigner/anchor_assigner/main.py", line 167, in run
+    result_json = process_request(input_data)
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/zwu/项目/mofa/agents/anchor-assigner/anchor_assigner/main.py", line 153, in process_request
+    if scripts_data.get("error"):
+       ^^^^^^^^^^^^^^^^
+AttributeError: 'NoneType' object has no attribute 'get'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/anchor-assigner/anchor_assigner/main.py", line 167, in run
+    result_json = process_request(input_data)
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/zwu/项目/mofa/agents/anchor-assigner/anchor_assigner/main.py", line 153, in process_request
+    if scripts_data.get("error"):
+       ^^^^^^^^^^^^^^^^
+AttributeError: 'NoneType' object has no attribute 'get'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/anchor-assigner/anchor_assigner/main.py", line 167, in run
+    result_json = process_request(input_data)
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/zwu/项目/mofa/agents/anchor-assigner/anchor_assigner/main.py", line 153, in process_request
+    if scripts_data.get("error"):
+       ^^^^^^^^^^^^^^^^
+AttributeError: 'NoneType' object has no attribute 'get'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/anchor-assigner/anchor_assigner/main.py", line 167, in run
+    result_json = process_request(input_data)
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/zwu/项目/mofa/agents/anchor-assigner/anchor_assigner/main.py", line 153, in process_request
+    if scripts_data.get("error"):
+       ^^^^^^^^^^^^^^^^
+AttributeError: 'NoneType' object has no attribute 'get'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/anchor-assigner/anchor_assigner/main.py", line 167, in run
+    result_json = process_request(input_data)
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/zwu/项目/mofa/agents/anchor-assigner/anchor_assigner/main.py", line 153, in process_request
+    if scripts_data.get("error"):
+       ^^^^^^^^^^^^^^^^
+AttributeError: 'NoneType' object has no attribute 'get'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/anchor-assigner/anchor_assigner/main.py", line 167, in run
+    result_json = process_request(input_data)
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/zwu/项目/mofa/agents/anchor-assigner/anchor_assigner/main.py", line 153, in process_request
+    if scripts_data.get("error"):
+       ^^^^^^^^^^^^^^^^
+AttributeError: 'NoneType' object has no attribute 'get'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/anchor-assigner/anchor_assigner/main.py", line 167, in run
+    result_json = process_request(input_data)
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/zwu/项目/mofa/agents/anchor-assigner/anchor_assigner/main.py", line 153, in process_request
+    if scripts_data.get("error"):
+       ^^^^^^^^^^^^^^^^
+AttributeError: 'NoneType' object has no attribute 'get'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/anchor-assigner/anchor_assigner/main.py", line 167, in run
+    result_json = process_request(input_data)
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/zwu/项目/mofa/agents/anchor-assigner/anchor_assigner/main.py", line 153, in process_request
+    if scripts_data.get("error"):
+       ^^^^^^^^^^^^^^^^
+AttributeError: 'NoneType' object has no attribute 'get'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/anchor-assigner/anchor_assigner/main.py", line 167, in run
+    result_json = process_request(input_data)
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/zwu/项目/mofa/agents/anchor-assigner/anchor_assigner/main.py", line 153, in process_request
+    if scripts_data.get("error"):
+       ^^^^^^^^^^^^^^^^
+AttributeError: 'NoneType' object has no attribute 'get'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/anchor-assigner/anchor_assigner/main.py", line 167, in run
+    result_json = process_request(input_data)
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/zwu/项目/mofa/agents/anchor-assigner/anchor_assigner/main.py", line 153, in process_request
+    if scripts_data.get("error"):
+       ^^^^^^^^^^^^^^^^
+AttributeError: 'NoneType' object has no attribute 'get'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/anchor-assigner/anchor_assigner/main.py", line 167, in run
+    result_json = process_request(input_data)
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/zwu/项目/mofa/agents/anchor-assigner/anchor_assigner/main.py", line 153, in process_request
+    if scripts_data.get("error"):
+       ^^^^^^^^^^^^^^^^
+AttributeError: 'NoneType' object has no attribute 'get'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)
+  File "/Users/zwu/项目/mofa/agents/anchor-assigner/anchor_assigner/main.py", line 167, in run
+    result_json = process_request(input_data)
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/zwu/项目/mofa/agents/anchor-assigner/anchor_assigner/main.py", line 153, in process_request
+    if scripts_data.get("error"):
+       ^^^^^^^^^^^^^^^^
+AttributeError: 'NoneType' object has no attribute 'get'
+Traceback (most recent call last):
+  File "/Users/zwu/项目/mofa/mofa/agent_build/base/base_agent.py", line 260, in wrapper
+    func(*args, **kwargs)

@@ -1,0 +1,23 @@
+[build-system]
+requires = ["setuptools>=65", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "news-processor"
+version = "0.1.0"
+description = "RSS feed processor agent for MoFA dataflow - fetches and parses RSS feeds"
+readme = "README.md"
+license = {text = "MIT License"}
+dependencies = [
+    "numpy<2.0.0",
+    "pyarrow>=5.0.0",
+    "mofa-core",
+    "dora-rs",
+    "feedparser>=6.0.0",
+]
+
+[project.scripts]
+news-processor = "news_processor.main:main"
+
+[tool.setuptools.packages.find]
+include = ["news_processor*"]

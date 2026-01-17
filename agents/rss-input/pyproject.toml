@@ -1,0 +1,23 @@
+[build-system]
+requires = ["setuptools>=65", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "rss-input"
+version = "0.1.0"
+description = "RSS URL input agent for MoFA dataflow - accepts RSS feed URLs for processing"
+readme = "README.md"
+license = {text = "MIT License"}
+dependencies = [
+    "numpy<2.0.0",
+    "pyarrow>=5.0.0",
+    "mofa-core",
+    "click",
+    "dora-rs",
+]
+
+[project.scripts]
+rss-input = "rss_input.main:main"
+
+[tool.setuptools.packages.find]
+include = ["rss_input*"]
