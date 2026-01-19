@@ -12,6 +12,7 @@ pub mod hot_reload;
 pub mod wasm_runtime;
 pub mod tools;
 pub mod skill;
+pub mod tts;
 
 pub use mofa_kernel::{
     AgentPlugin, PluginConfig, PluginContext, PluginEvent, PluginMetadata, PluginResult,
@@ -311,6 +312,10 @@ impl AgentPlugin for LLMPlugin {
     fn as_any_mut(&mut self) -> &mut dyn Any {
         self
     }
+
+    fn into_any(self: Box<Self>) -> Box<dyn Any> {
+        self
+    }
 }
 
 // ============================================================================
@@ -321,6 +326,16 @@ pub mod rhai_runtime;
 
 pub use rhai_runtime::*;
 pub use tools::*;
+pub use tts::{
+    TTSEngine, TTSPlugin, TTSPluginConfig, MockTTSEngine, VoiceInfo, TTSCommand, TextToSpeechTool, AudioPlaybackConfig,
+    play_audio, play_audio_async,
+    cache::ModelCache,
+    model_downloader::HFHubClient,
+};
+
+// Re-export KokoroTTSWrapper when kokoro feature is enabled
+#[cfg(feature = "kokoro")]
+pub use tts::kokoro_wrapper::KokoroTTS;
 
 /// 工具定义
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -516,6 +531,10 @@ impl AgentPlugin for ToolPlugin {
     }
 
     fn as_any_mut(&mut self) -> &mut dyn Any {
+        self
+    }
+
+    fn into_any(self: Box<Self>) -> Box<dyn Any> {
         self
     }
 }
@@ -749,6 +768,10 @@ impl AgentPlugin for StoragePlugin {
     fn as_any_mut(&mut self) -> &mut dyn Any {
         self
     }
+
+    fn into_any(self: Box<Self>) -> Box<dyn Any> {
+        self
+    }
 }
 
 // ============================================================================
@@ -945,6 +968,10 @@ impl AgentPlugin for MemoryPlugin {
     }
 
     fn as_any_mut(&mut self) -> &mut dyn Any {
+        self
+    }
+
+    fn into_any(self: Box<Self>) -> Box<dyn Any> {
         self
     }
 }

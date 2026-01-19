@@ -26,6 +26,10 @@ persistence-postgres = ["mofa-foundation/persistence-postgres", "sqlx"]
 persistence-mysql = ["mofa-foundation/persistence-mysql", "sqlx"]
 persistence-sqlite = ["mofa-foundation/persistence-sqlite", "sqlx"]
 persistence-all = ["mofa-foundation/persistence-all", "sqlx"]
+# Enable TTS audio playback support (via rodio)
+rodio = ["mofa-plugins/rodio"]
+# Enable Kokoro TTS engine support
+kokoro = ["mofa-foundation/kokoro", "mofa-plugins/kokoro"]
 
 [dependencies]
 # Core dependencies

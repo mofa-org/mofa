@@ -231,7 +231,15 @@ pub use mofa_plugins::{
     tools, AgentPlugin, LLMPlugin, LLMPluginConfig, MemoryPlugin, MemoryStorage,
     PluginManager, RhaiPlugin, RhaiPluginConfig, RhaiPluginState, StoragePlugin, ToolCall,
     ToolDefinition, ToolExecutor, ToolPlugin, ToolResult,
+    // TTS plugin types
+    TTSPlugin, TTSPluginConfig, TTSEngine, MockTTSEngine, VoiceInfo, TTSCommand, TextToSpeechTool, AudioPlaybackConfig,
+    // TTS audio playback function
+    play_audio, play_audio_async,
 };
+
+// Re-export KokoroTTSWrapper when kokoro feature is enabled
+#[cfg(feature = "kokoro")]
+pub use mofa_plugins::KokoroTTS;
 
 // Re-export rhai_runtime module for runtime plugin creation
 pub use mofa_plugins::rhai_runtime;

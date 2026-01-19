@@ -18,7 +18,8 @@ members = [
     "agent_with_plugins_and_rhai",
     "financial_compliance_agent",
     "rhai_hot_reload",
-    "adaptive_collaboration_agent"]
+    "adaptive_collaboration_agent",
+    "llm_tts_streaming"]
 
 [workspace.package]
 version = "0.1.0"

@@ -10,6 +10,7 @@ serde.workspace = true
 serde_json.workspace = true
 serde_yaml.workspace = true
 tokio.workspace = true
+tokio-stream = { workspace = true }
 anyhow.workspace = true
 thiserror.workspace = true
 parking_lot.workspace = true
@@ -31,3 +32,18 @@ rhai = { version = "1.20", features = ["sync", "serde"] }
 url = "2.5.7"
 regex = "1.12.2"
 walkdir = "2.4"
+# TTS support (optional - using kokoros for real TTS)
+rodio = { version = "0.17", optional = true }
+kokoro-tts = { git = "https://github.com/aios-rs/kokoro.git", branch = "master", optional = true }
+# Model download support
+hf-hub = "0.4"
+tokio-util = { version = "0.7", features = ["io"] }
+dirs = "5.0"
+md-5 = "0.10"
+backoff = { version = "0.4", features = ["tokio"] }
+futures = "0.3"
+
+[features]
+default = []
+rodio = ["dep:rodio"]
+kokoro = ["dep:kokoro-tts"]  # Feature flag for Kokoro TTS support

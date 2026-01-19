@@ -578,9 +578,25 @@ impl LLMProvider for OpenAIProvider {
             .await
             .map_err(Self::convert_error)?;
 
-        // 转换流
-        let converted_stream =
-            stream.map(|result| result.map(Self::convert_chunk).map_err(Self::convert_error));
+        use futures::stream::{self, StreamExt};
+
+        // 转换流，过滤掉 UTF-8 错误（某些 OpenAI 兼容 API 可能返回无效的 UTF-8 数据）
+        let converted_stream = stream
+            .filter_map(|result| async move {
+                match result {
+                    Ok(chunk) => Some(Ok(Self::convert_chunk(chunk))),
+                    Err(e) => {
+                        let err_str = e.to_string();
+                        // 过滤掉 UTF-8 错误，记录日志但继续处理流
+                        if err_str.contains("stream did not contain valid UTF-8") || err_str.contains("utf8") {
+                            tracing::warn!("Skipping invalid UTF-8 chunk from stream (may happen with some OpenAI-compatible APIs)");
+                            None
+                        } else {
+                            Some(Err(Self::convert_error(e)))
+                        }
+                    }
+                }
+            });
 
         Ok(Box::pin(converted_stream))
     }

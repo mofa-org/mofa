@@ -264,4 +264,8 @@ impl mofa_kernel::plugin::AgentPlugin for RhaiScriptPromptPlugin {
     fn as_any_mut(&mut self) -> &mut dyn std::any::Any {
         self
     }
+
+    fn into_any(self: Box<Self>) -> Box<dyn std::any::Any> {
+        self
+    }
 }

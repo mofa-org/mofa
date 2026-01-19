@@ -182,6 +182,10 @@ impl mofa_kernel::plugin::AgentPlugin for ServerFaultResponsePlugin {
     fn as_any_mut(&mut self) -> &mut dyn std::any::Any {
         self
     }
+
+    fn into_any(self: Box<Self>) -> Box<dyn std::any::Any> {
+        self
+    }
 }
 
 impl From<ServerFaultResponsePlugin> for Box<dyn EventResponsePlugin> {
@@ -380,6 +384,10 @@ impl mofa_kernel::plugin::AgentPlugin for NetworkAttackResponsePlugin {
     }
 
     fn as_any_mut(&mut self) -> &mut dyn std::any::Any {
+        self
+    }
+
+    fn into_any(self: Box<Self>) -> Box<dyn std::any::Any> {
         self
     }
 }

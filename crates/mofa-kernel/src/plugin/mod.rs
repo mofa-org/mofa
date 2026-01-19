@@ -207,6 +207,9 @@ pub trait AgentPlugin: Send + Sync {
 
     /// 转换为可变 Any
     fn as_any_mut(&mut self) -> &mut dyn Any;
+
+    /// 消费并转换为 Any（用于提取具体的插件类型）
+    fn into_any(self: Box<Self>) -> Box<dyn Any>;
 }
 
 // ============================================================================

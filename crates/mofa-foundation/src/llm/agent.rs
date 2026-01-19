@@ -23,14 +23,19 @@ use super::client::{ChatSession, LLMClient, ToolExecutor};
 use super::provider::{ChatStream, LLMProvider};
 use super::types::{ChatMessage, LLMError, LLMResult, Tool};
 use crate::prompt;
-use futures::Stream;
+use mofa_plugins::tts::{TTSPlugin, TTSPluginConfig, TTSEngine};
+use futures::{Stream, StreamExt};
 use mofa_kernel::agent::AgentMetadata;
 use mofa_kernel::agent::AgentState;
 use mofa_kernel::plugin::AgentPlugin;
 use std::collections::HashMap;
 use std::pin::Pin;
 use std::sync::Arc;
-use tokio::sync::RwLock;
+use std::time::Duration;
+use tokio::sync::{Mutex, RwLock};
+
+/// Type alias for TTS audio stream - boxed to avoid exposing kokoro-tts types
+pub type TtsAudioStream = Pin<Box<dyn Stream<Item = (Vec<f32>, Duration)> + Send>>;
 
 /// 流式文本响应类型
 ///
@@ -101,6 +106,32 @@ impl Default for LLMAgentConfig {
 /// // 获取所有会话ID
 /// let sessions = agent.list_sessions().await;
 /// ```
+///
+/// # TTS 支持
+///
+/// LLMAgent 支持通过统一的插件系统配置 TTS：
+///
+/// ```rust,ignore
+/// // 创建 TTS 插件（引擎 + 可选音色）
+/// let tts_plugin = TTSPlugin::with_engine("tts", kokoro_engine, Some("zf_090"));
+///
+/// // 通过插件系统添加
+/// let agent = LLMAgentBuilder::new()
+///     .with_id("my-agent")
+///     .with_provider(Arc::new(openai_from_env()?))
+///     .with_plugin(tts_plugin)
+///     .build();
+///
+/// // 直接使用 TTS
+/// agent.tts_speak("Hello world").await?;
+///
+/// // 高级用法：自定义配置
+/// let tts_plugin = TTSPlugin::with_engine("tts", kokoro_engine, Some("zf_090"))
+///     .with_config(TTSPluginConfig {
+///         streaming_chunk_size: 8192,
+///         ..Default::default()
+///     });
+/// ```
 pub struct LLMAgent {
     config: LLMAgentConfig,
     /// 智能体元数据
@@ -121,6 +152,11 @@ pub struct LLMAgent {
     provider: Arc<dyn LLMProvider>,
     /// Prompt 模板插件
     prompt_plugin: Option<Box<dyn prompt::PromptTemplatePlugin>>,
+    /// TTS 插件（通过 builder 配置）
+    tts_plugin: Option<Arc<Mutex<TTSPlugin>>>,
+    /// 缓存的 Kokoro TTS 引擎（只需初始化一次，后续可复用）
+    #[cfg(feature = "kokoro")]
+    cached_kokoro_engine: Arc<Mutex<Option<Arc<mofa_plugins::tts::kokoro_wrapper::KokoroTTS>>>>,
 }
 
 /// LLM Agent 事件处理器
@@ -163,8 +199,37 @@ impl Clone for Box<dyn LLMAgentEventHandler> {
 impl LLMAgent {
     /// 创建新的 LLM Agent
     pub fn new(config: LLMAgentConfig, provider: Arc<dyn LLMProvider>) -> Self {
+        Self::with_initial_session(config, provider, None)
+    }
+
+    /// 创建新的 LLM Agent，并指定初始会话 ID
+    ///
+    /// # 参数
+    /// - `config`: Agent 配置
+    /// - `provider`: LLM Provider
+    /// - `initial_session_id`: 初始会话 ID，如果为 None 则使用自动生成的 ID
+    ///
+    /// # 示例
+    ///
+    /// ```rust,ignore
+    /// let agent = LLMAgent::with_initial_session(
+    ///     config,
+    ///     provider,
+    ///     Some("user-session-001".to_string())
+    /// );
+    /// ```
+    pub fn with_initial_session(
+        config: LLMAgentConfig,
+        provider: Arc<dyn LLMProvider>,
+        initial_session_id: Option<String>,
+    ) -> Self {
         let client = LLMClient::new(provider.clone());
-        let mut session = ChatSession::new(LLMClient::new(provider.clone()));
+
+        let mut session = if let Some(sid) = initial_session_id {
+            ChatSession::with_id_str(&sid, LLMClient::new(provider.clone()))
+        } else {
+            ChatSession::new(LLMClient::new(provider.clone()))
+        };
 
         if let Some(ref prompt) = config.system_prompt {
             session = session.with_system(prompt.clone());
@@ -211,6 +276,9 @@ impl LLMAgent {
             state: AgentState::Created,
             provider,
             prompt_plugin: None,
+            tts_plugin: None,
+            #[cfg(feature = "kokoro")]
+            cached_kokoro_engine: Arc::new(Mutex::new(None)),
         }
     }
 
@@ -395,6 +463,240 @@ impl LLMAgent {
     pub async fn has_session(&self, session_id: &str) -> bool {
         let sessions = self.sessions.read().await;
         sessions.contains_key(session_id)
+    }
+
+    // ========================================================================
+    // TTS 便捷方法
+    // ========================================================================
+
+    /// 使用 TTS 合成并播放文本
+    ///
+    /// # 示例
+    ///
+    /// ```rust,ignore
+    /// agent.tts_speak("Hello world").await?;
+    /// ```
+    pub async fn tts_speak(&self, text: &str) -> LLMResult<()> {
+        let tts = self.tts_plugin.as_ref()
+            .ok_or_else(|| LLMError::Other("TTS plugin not configured".to_string()))?;
+
+        let mut tts_guard = tts.lock().await;
+        tts_guard.synthesize_and_play(text).await
+            .map_err(|e| LLMError::Other(format!("TTS synthesis failed: {}", e)))
+    }
+
+    /// 使用 TTS 流式合成文本
+    ///
+    /// # 示例
+    ///
+    /// ```rust,ignore
+    /// agent.tts_speak_streaming("Hello world", Box::new(|audio| {
+    ///     println!("Got {} bytes of audio", audio.len());
+    /// })).await?;
+    /// ```
+    pub async fn tts_speak_streaming(
+        &self,
+        text: &str,
+        callback: Box<dyn Fn(Vec<u8>) + Send + Sync>,
+    ) -> LLMResult<()> {
+        let tts = self.tts_plugin.as_ref()
+            .ok_or_else(|| LLMError::Other("TTS plugin not configured".to_string()))?;
+
+        let mut tts_guard = tts.lock().await;
+        tts_guard.synthesize_streaming(text, callback).await
+            .map_err(|e| LLMError::Other(format!("TTS streaming failed: {}", e)))
+    }
+
+    /// 使用 TTS 流式合成文本（f32 native format，更高效）
+    ///
+    /// This method is more efficient for KokoroTTS as it uses the native f32 format
+    /// without the overhead of f32 -> i16 -> u8 conversion.
+    ///
+    /// # 示例
+    ///
+    /// ```rust,ignore
+    /// use rodio::buffer::SamplesBuffer;
+    ///
+    /// agent.tts_speak_f32_stream("Hello world", Box::new(|audio_f32| {
+    ///     // audio_f32 is Vec<f32> with values in [-1.0, 1.0]
+    ///     sink.append(SamplesBuffer::new(1, 24000, audio_f32));
+    /// })).await?;
+    /// ```
+    pub async fn tts_speak_f32_stream(
+        &self,
+        text: &str,
+        callback: Box<dyn Fn(Vec<f32>) + Send + Sync>,
+    ) -> LLMResult<()> {
+        let tts = self.tts_plugin.as_ref()
+            .ok_or_else(|| LLMError::Other("TTS plugin not configured".to_string()))?;
+
+        let mut tts_guard = tts.lock().await;
+        tts_guard.synthesize_streaming_f32(text, callback).await
+            .map_err(|e| LLMError::Other(format!("TTS f32 streaming failed: {}", e)))
+    }
+
+    /// 获取 TTS 音频流（仅支持 Kokoro TTS）
+    ///
+    /// Returns a direct stream of (audio_f32, duration) tuples from KokoroTTS.
+    ///
+    /// # 示例
+    ///
+    /// ```rust,ignore
+    /// use futures::StreamExt;
+    /// use rodio::buffer::SamplesBuffer;
+    ///
+    /// if let Ok(mut stream) = agent.tts_create_stream("Hello world").await {
+    ///     while let Some((audio, took)) = stream.next().await {
+    ///         // audio is Vec<f32> with values in [-1.0, 1.0]
+    ///         sink.append(SamplesBuffer::new(1, 24000, audio));
+    ///     }
+    /// }
+    /// ```
+    pub async fn tts_create_stream(
+        &self,
+        text: &str,
+    ) -> LLMResult<TtsAudioStream> {
+        #[cfg(feature = "kokoro")]
+        {
+            use mofa_plugins::tts::kokoro_wrapper::KokoroTTS;
+
+            // 首先检查是否有缓存的引擎（只需初始化一次）
+            let cached_engine = {
+                let cache_guard = self.cached_kokoro_engine.lock().await;
+                cache_guard.clone()
+            };
+
+            let kokoro = if let Some(engine) = cached_engine {
+                // 使用缓存的引擎（无需再次获取 tts_plugin 的锁）
+                engine
+            } else {
+                // 首次调用：获取 tts_plugin 的锁，downcast 并缓存
+                let tts = self.tts_plugin.as_ref()
+                    .ok_or_else(|| LLMError::Other("TTS plugin not configured".to_string()))?;
+
+                let tts_guard = tts.lock().await;
+
+                let engine = tts_guard.engine()
+                    .ok_or_else(|| LLMError::Other("TTS engine not initialized".to_string()))?;
+
+                if let Some(kokoro_ref) = engine.as_any().downcast_ref::<KokoroTTS>() {
+                    // 克隆 KokoroTTS（内部使用 Arc，克隆只是增加引用计数）
+                    let cloned = kokoro_ref.clone();
+                    let cloned_arc = Arc::new(cloned);
+
+                    // 获取 voice 配置
+                    let voice = tts_guard.stats().get("default_voice")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("default");
+
+                    // 缓存克隆的引擎
+                    {
+                        let mut cache_guard = self.cached_kokoro_engine.lock().await;
+                        *cache_guard = Some(cloned_arc.clone());
+                    }
+
+                    cloned_arc
+                } else {
+                    return Err(LLMError::Other("TTS engine is not KokoroTTS".to_string()));
+                }
+            };
+
+            // 使用缓存的引擎创建 stream（无需再次获取 tts_plugin 的锁）
+            let voice = "default"; // 可以从配置中获取
+            let (mut sink, stream) = kokoro.create_stream(voice).await
+                .map_err(|e| LLMError::Other(format!("Failed to create TTS stream: {}", e)))?;
+
+            // Submit text for synthesis
+            sink.synth(text.to_string()).await
+                .map_err(|e| LLMError::Other(format!("Failed to submit text for synthesis: {}", e)))?;
+
+            // Box the stream to hide the concrete type
+            return Ok(Box::pin(stream));
+        }
+
+        #[cfg(not(feature = "kokoro"))]
+        {
+            Err(LLMError::Other("Kokoro feature not enabled".to_string()))
+        }
+    }
+
+    /// Stream multiple sentences through a single TTS stream
+    ///
+    /// This is more efficient than calling tts_speak_f32_stream multiple times
+    /// because it reuses the same stream for all sentences, following the kokoro-tts
+    /// streaming pattern: ONE stream, multiple synth calls, continuous audio output.
+    ///
+    /// # Arguments
+    /// - `sentences`: Vector of text sentences to synthesize
+    /// - `callback`: Function to call with each audio chunk (Vec<f32>)
+    ///
+    /// # Example
+    /// ```rust,ignore
+    /// use rodio::buffer::SamplesBuffer;
+    ///
+    /// let sentences = vec!["Hello".to_string(), "World".to_string()];
+    /// agent.tts_speak_f32_stream_batch(
+    ///     sentences,
+    ///     Box::new(|audio_f32| {
+    ///         sink.append(SamplesBuffer::new(1, 24000, audio_f32));
+    ///     }),
+    /// ).await?;
+    /// ```
+    pub async fn tts_speak_f32_stream_batch(
+        &self,
+        sentences: Vec<String>,
+        callback: Box<dyn Fn(Vec<f32>) + Send + Sync>,
+    ) -> LLMResult<()> {
+        let tts = self.tts_plugin.as_ref()
+            .ok_or_else(|| LLMError::Other("TTS plugin not configured".to_string()))?;
+
+        let tts_guard = tts.lock().await;
+
+        #[cfg(feature = "kokoro")]
+        {
+            use mofa_plugins::tts::kokoro_wrapper::KokoroTTS;
+
+            let engine = tts_guard.engine()
+                .ok_or_else(|| LLMError::Other("TTS engine not initialized".to_string()))?;
+
+            if let Some(kokoro) = engine.as_any().downcast_ref::<KokoroTTS>() {
+                let voice = tts_guard.stats().get("default_voice")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("default")
+                    .to_string();
+
+                // Create ONE stream for all sentences
+                let (mut sink, mut stream) = kokoro.create_stream(&voice).await
+                    .map_err(|e| LLMError::Other(format!("Failed to create TTS stream: {}", e)))?;
+
+                // Spawn a task to consume the stream continuously
+                tokio::spawn(async move {
+                    while let Some((audio, _took)) = stream.next().await {
+                        callback(audio);
+                    }
+                });
+
+                // Submit all sentences to the same sink
+                for sentence in sentences {
+                    sink.synth(sentence).await
+                        .map_err(|e| LLMError::Other(format!("Failed to submit text: {}", e)))?;
+                }
+
+                return Ok(());
+            }
+
+            return Err(LLMError::Other("TTS engine is not KokoroTTS".to_string()));
+        }
+
+        #[cfg(not(feature = "kokoro"))]
+        {
+            Err(LLMError::Other("Kokoro feature not enabled".to_string()))
+        }
+    }
+
+    /// 检查是否配置了 TTS 插件
+    pub fn has_tts(&self) -> bool {
+        self.tts_plugin.is_some()
     }
 
     /// 内部方法：获取会话 Arc
@@ -1058,6 +1360,7 @@ pub struct LLMAgentBuilder {
     plugins: Vec<Box<dyn AgentPlugin>>,
     custom_config: HashMap<String, String>,
     prompt_plugin: Option<Box<dyn prompt::PromptTemplatePlugin>>,
+    session_id: Option<String>,
 }
 
 impl LLMAgentBuilder {
@@ -1076,6 +1379,7 @@ impl LLMAgentBuilder {
             plugins: Vec::new(),
             custom_config: HashMap::new(),
             prompt_plugin: None,
+            session_id: None,
         }
     }
 
@@ -1169,6 +1473,21 @@ impl LLMAgentBuilder {
         self
     }
 
+    /// 设置初始会话 ID
+    ///
+    /// # 示例
+    ///
+    /// ```rust,ignore
+    /// let agent = LLMAgentBuilder::new()
+    ///     .with_id("my-agent")
+    ///     .with_initial_session_id("user-session-001")
+    ///     .build();
+    /// ```
+    pub fn with_session_id(mut self, session_id: impl Into<String>) -> Self {
+        self.session_id = Some(session_id.into());
+        self
+    }
+
     /// 构建 LLM Agent
     ///
     /// # Panics
@@ -1187,7 +1506,7 @@ impl LLMAgentBuilder {
             custom_config: self.custom_config,
         };
 
-        let mut agent = LLMAgent::new(config, provider);
+        let mut agent = LLMAgent::with_initial_session(config, provider, self.session_id);
 
         // 设置Prompt模板插件
         agent.prompt_plugin = self.prompt_plugin;
@@ -1202,8 +1521,28 @@ impl LLMAgentBuilder {
             agent.set_event_handler(handler);
         }
 
-        // 添加插件
-        agent.add_plugins(self.plugins);
+        // 处理插件列表：提取 TTS 插件
+        let mut plugins = self.plugins;
+        let mut tts_plugin = None;
+
+        // 查找并提取 TTS 插件
+        for i in (0..plugins.len()).rev() {
+            if plugins[i].as_any().is::<mofa_plugins::tts::TTSPlugin>() {
+                // 使用 Any::downcast_ref 检查类型
+                // 由于我们需要获取所有权，这里使用 is 检查后移除
+                let plugin = plugins.remove(i);
+                // 尝试 downcast
+                if let Ok(tts) = plugin.into_any().downcast::<mofa_plugins::tts::TTSPlugin>() {
+                    tts_plugin = Some(Arc::new(Mutex::new(*tts)));
+                }
+            }
+        }
+
+        // 添加剩余插件
+        agent.add_plugins(plugins);
+
+        // 设置 TTS 插件
+        agent.tts_plugin = tts_plugin;
 
         agent
     }
@@ -1225,7 +1564,7 @@ impl LLMAgentBuilder {
             custom_config: self.custom_config,
         };
 
-        let mut agent = LLMAgent::new(config, provider);
+        let mut agent = LLMAgent::with_initial_session(config, provider, self.session_id);
 
         if !self.tools.is_empty()
             && let Some(executor) = self.tool_executor
@@ -1237,8 +1576,28 @@ impl LLMAgentBuilder {
             agent.set_event_handler(handler);
         }
 
-        // 添加插件
-        agent.add_plugins(self.plugins);
+        // 处理插件列表：提取 TTS 插件
+        let mut plugins = self.plugins;
+        let mut tts_plugin = None;
+
+        // 查找并提取 TTS 插件
+        for i in (0..plugins.len()).rev() {
+            if plugins[i].as_any().is::<mofa_plugins::tts::TTSPlugin>() {
+                // 使用 Any::downcast_ref 检查类型
+                // 由于我们需要获取所有权，这里使用 is 检查后移除
+                let plugin = plugins.remove(i);
+                // 尝试 downcast
+                if let Ok(tts) = plugin.into_any().downcast::<mofa_plugins::tts::TTSPlugin>() {
+                    tts_plugin = Some(Arc::new(Mutex::new(*tts)));
+                }
+            }
+        }
+
+        // 添加剩余插件
+        agent.add_plugins(plugins);
+
+        // 设置 TTS 插件
+        agent.tts_plugin = tts_plugin;
 
         Ok(agent)
     }
