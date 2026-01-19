@@ -167,6 +167,12 @@ pub struct LLMAgentConfig {
     pub max_tokens: Option<u32>,
     /// 自定义配置
     pub custom_config: HashMap<String, String>,
+    /// 用户 ID，用于数据库持久化和多用户场景
+    pub user_id: Option<String>,
+    /// 租户 ID，用于多租户支持
+    pub tenant_id: Option<String>,
+    /// 上下文窗口大小，用于滑动窗口消息管理（单位：token）
+    pub context_window_size: Option<usize>,
 }
 
 impl Default for LLMAgentConfig {
@@ -178,6 +184,9 @@ impl Default for LLMAgentConfig {
             temperature: Some(0.7),
             max_tokens: Some(4096),
             custom_config: HashMap::new(),
+            user_id: None,
+            tenant_id: None,
+            context_window_size: None,
         }
     }
 }
@@ -1741,6 +1750,9 @@ pub struct LLMAgentBuilder {
     custom_config: HashMap<String, String>,
     prompt_plugin: Option<Box<dyn prompt::PromptTemplatePlugin>>,
     session_id: Option<String>,
+    user_id: Option<String>,
+    tenant_id: Option<String>,
+    context_window_size: Option<usize>,
 }
 
 impl LLMAgentBuilder {
@@ -1760,6 +1772,9 @@ impl LLMAgentBuilder {
             custom_config: HashMap::new(),
             prompt_plugin: None,
             session_id: None,
+            user_id: None,
+            tenant_id: None,
+            context_window_size: None,
         }
     }
 
@@ -1868,6 +1883,61 @@ impl LLMAgentBuilder {
         self
     }
 
+    /// 设置用户 ID
+    ///
+    /// 用于数据库持久化和多用户场景的消息隔离。
+    ///
+    /// # 示例
+    ///
+    /// ```rust,ignore
+    /// let agent = LLMAgentBuilder::new()
+    ///     .with_id("my-agent")
+    ///     .with_user("user-123")
+    ///     .build();
+    /// ```
+    pub fn with_user(mut self, user_id: impl Into<String>) -> Self {
+        self.user_id = Some(user_id.into());
+        self
+    }
+
+    /// 设置租户 ID
+    ///
+    /// 用于多租户支持，实现不同租户的数据隔离。
+    ///
+    /// # 示例
+    ///
+    /// ```rust,ignore
+    /// let agent = LLMAgentBuilder::new()
+    ///     .with_id("my-agent")
+    ///     .with_tenant("tenant-abc")
+    ///     .build();
+    /// ```
+    pub fn with_tenant(mut self, tenant_id: impl Into<String>) -> Self {
+        self.tenant_id = Some(tenant_id.into());
+        self
+    }
+
+    /// 设置上下文窗口大小（滑动窗口）
+    ///
+    /// 用于滑动窗口消息管理，指定保留的最大上下文 token 数量。
+    /// 当消息历史超过此大小时，会自动裁剪较早的消息。
+    ///
+    /// # 参数
+    /// - `size`: 上下文窗口大小（单位：token）
+    ///
+    /// # 示例
+    ///
+    /// ```rust,ignore
+    /// let agent = LLMAgentBuilder::new()
+    ///     .with_id("my-agent")
+    ///     .with_sliding_window(8000)
+    ///     .build();
+    /// ```
+    pub fn with_sliding_window(mut self, size: usize) -> Self {
+        self.context_window_size = Some(size);
+        self
+    }
+
     /// 构建 LLM Agent
     ///
     /// # Panics
@@ -1884,6 +1954,9 @@ impl LLMAgentBuilder {
             temperature: self.temperature,
             max_tokens: self.max_tokens,
             custom_config: self.custom_config,
+            user_id: self.user_id,
+            tenant_id: self.tenant_id,
+            context_window_size: self.context_window_size,
         };
 
         let mut agent = LLMAgent::with_initial_session(config, provider, self.session_id);
@@ -1942,6 +2015,9 @@ impl LLMAgentBuilder {
             temperature: self.temperature,
             max_tokens: self.max_tokens,
             custom_config: self.custom_config,
+            user_id: self.user_id,
+            tenant_id: self.tenant_id,
+            context_window_size: self.context_window_size,
         };
 
         let mut agent = LLMAgent::with_initial_session(config, provider, self.session_id);
