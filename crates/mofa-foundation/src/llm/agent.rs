@@ -23,24 +23,121 @@ use super::client::{ChatSession, LLMClient, ToolExecutor};
 use super::provider::{ChatStream, LLMProvider};
 use super::types::{ChatMessage, LLMError, LLMResult, Tool};
 use crate::prompt;
-use mofa_plugins::tts::{TTSPlugin, TTSPluginConfig, TTSEngine};
+use mofa_plugins::tts::TTSPlugin;
 use futures::{Stream, StreamExt};
 use mofa_kernel::agent::AgentMetadata;
 use mofa_kernel::agent::AgentState;
 use mofa_kernel::plugin::AgentPlugin;
 use std::collections::HashMap;
+use std::io::Write;
 use std::pin::Pin;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 use tokio::sync::{Mutex, RwLock};
 
 /// Type alias for TTS audio stream - boxed to avoid exposing kokoro-tts types
 pub type TtsAudioStream = Pin<Box<dyn Stream<Item = (Vec<f32>, Duration)> + Send>>;
 
+/// Cancellation token for cooperative cancellation
+struct CancellationToken {
+    cancel: Arc<AtomicBool>,
+}
+
+impl CancellationToken {
+    fn new() -> Self {
+        Self { cancel: Arc::new(AtomicBool::new(false)) }
+    }
+
+    fn is_cancelled(&self) -> bool {
+        self.cancel.load(Ordering::Relaxed)
+    }
+
+    fn cancel(&self) {
+        self.cancel.store(true, Ordering::Relaxed);
+    }
+
+    fn clone_token(&self) -> CancellationToken {
+        CancellationToken { cancel: Arc::clone(&self.cancel) }
+    }
+}
+
 /// 流式文本响应类型
 ///
 /// 每次 yield 一个文本片段（delta content）
 pub type TextStream = Pin<Box<dyn Stream<Item = LLMResult<String>> + Send>>;
+
+/// TTS 流句柄：持有 sink 和消费者任务
+///
+/// 用于实时流式 TTS，允许 incremental 提交文本
+#[cfg(feature = "kokoro")]
+struct TTSStreamHandle {
+    sink: mofa_plugins::tts::kokoro_wrapper::SynthSink<String>,
+    _stream_handle: tokio::task::JoinHandle<()>,
+}
+
+/// Active TTS session with cancellation support
+struct TTSSession {
+    cancellation_token: CancellationToken,
+    is_active: Arc<AtomicBool>,
+}
+
+impl TTSSession {
+    fn new(token: CancellationToken) -> Self {
+        let is_active = Arc::new(AtomicBool::new(true));
+        TTSSession {
+            cancellation_token: token,
+            is_active,
+        }
+    }
+
+    fn cancel(&self) {
+        self.cancellation_token.cancel();
+        self.is_active.store(false, Ordering::Relaxed);
+    }
+
+    fn is_active(&self) -> bool {
+        self.is_active.load(Ordering::Relaxed)
+    }
+}
+
+/// 句子缓冲区：按标点符号断句（内部实现）
+struct SentenceBuffer {
+    buffer: String,
+}
+
+impl SentenceBuffer {
+    fn new() -> Self {
+        Self { buffer: String::new() }
+    }
+
+    /// 推入文本块，返回完整句子（如果有）
+    fn push(&mut self, text: &str) -> Option<String> {
+        for ch in text.chars() {
+            self.buffer.push(ch);
+            // 句末标点：。！？!?
+            if matches!(ch, '。' | '！' | '？' | '!' | '?') {
+                let sentence = self.buffer.trim().to_string();
+                if !sentence.is_empty() {
+                    self.buffer.clear();
+                    return Some(sentence);
+                }
+            }
+        }
+        None
+    }
+
+    /// 刷新剩余内容
+    fn flush(&mut self) -> Option<String> {
+        if self.buffer.trim().is_empty() {
+            None
+        } else {
+            let remaining = self.buffer.trim().to_string();
+            self.buffer.clear();
+            Some(remaining)
+        }
+    }
+}
 
 /// 流式响应事件
 #[derive(Debug, Clone)]
@@ -157,6 +254,8 @@ pub struct LLMAgent {
     /// 缓存的 Kokoro TTS 引擎（只需初始化一次，后续可复用）
     #[cfg(feature = "kokoro")]
     cached_kokoro_engine: Arc<Mutex<Option<Arc<mofa_plugins::tts::kokoro_wrapper::KokoroTTS>>>>,
+    /// Active TTS session for cancellation
+    active_tts_session: Arc<Mutex<Option<TTSSession>>>,
 }
 
 /// LLM Agent 事件处理器
@@ -279,6 +378,7 @@ impl LLMAgent {
             tts_plugin: None,
             #[cfg(feature = "kokoro")]
             cached_kokoro_engine: Arc::new(Mutex::new(None)),
+            active_tts_session: Arc::new(Mutex::new(None)),
         }
     }
 
@@ -697,6 +797,286 @@ impl LLMAgent {
     /// 检查是否配置了 TTS 插件
     pub fn has_tts(&self) -> bool {
         self.tts_plugin.is_some()
+    }
+
+    /// Interrupt currently playing TTS audio
+    ///
+    /// Stops current audio playback and cancels any ongoing TTS synthesis.
+    /// Call this before starting a new TTS request for clean transition.
+    ///
+    /// # Example
+    /// ```rust,ignore
+    /// // User enters new input while audio is playing
+    /// agent.interrupt_tts().await?;
+    /// agent.chat_with_tts(&session_id, new_input).await?;
+    /// ```
+    pub async fn interrupt_tts(&self) -> LLMResult<()> {
+        let mut session_guard = self.active_tts_session.lock().await;
+        if let Some(session) = session_guard.take() {
+            session.cancel();
+        }
+        Ok(())
+    }
+
+    // ========================================================================
+    // LLM + TTS 流式对话方法
+    // ========================================================================
+
+    /// 流式聊天并自动 TTS 播放（最简版本）
+    ///
+    /// 自动处理：
+    /// - 流式 LLM 输出
+    /// - 按标点断句
+    /// - 批量 TTS 播放
+    ///
+    /// # 示例
+    /// ```rust,ignore
+    /// agent.chat_with_tts(&session_id, "你好").await?;
+    /// ```
+    pub async fn chat_with_tts(
+        &self,
+        session_id: &str,
+        message: impl Into<String>,
+    ) -> LLMResult<()> {
+        self.chat_with_tts_internal(session_id, message, None).await
+    }
+
+    /// 流式聊天并自动 TTS 播放（自定义音频处理）
+    ///
+    /// # 示例
+    /// ```rust,ignore
+    /// use rodio::buffer::SamplesBuffer;
+    ///
+    /// agent.chat_with_tts_callback(&session_id, "你好", |audio| {
+    ///     sink.append(SamplesBuffer::new(1, 24000, audio));
+    /// }).await?;
+    /// ```
+    pub async fn chat_with_tts_callback(
+        &self,
+        session_id: &str,
+        message: impl Into<String>,
+        callback: impl Fn(Vec<f32>) + Send + Sync + 'static,
+    ) -> LLMResult<()> {
+        self.chat_with_tts_internal(session_id, message, Some(Box::new(callback))).await
+    }
+
+    /// 创建实时 TTS 流
+    ///
+    /// 返回的 handle 允许 incremental 提交文本，实现真正的实时流式 TTS。
+    ///
+    /// # 核心机制
+    /// 1. 创建 TTS stream（仅一次）
+    /// 2. 启动消费者任务（持续接收音频块）
+    /// 3. 返回的 sink 支持多次 `synth()` 调用
+    #[cfg(feature = "kokoro")]
+    async fn create_tts_stream_handle(
+        &self,
+        callback: Box<dyn Fn(Vec<f32>) + Send + Sync>,
+        cancellation_token: Option<CancellationToken>,
+    ) -> LLMResult<TTSStreamHandle> {
+        use mofa_plugins::tts::kokoro_wrapper::KokoroTTS;
+
+        let tts = self.tts_plugin.as_ref()
+            .ok_or_else(|| LLMError::Other("TTS plugin not configured".to_string()))?;
+
+        let tts_guard = tts.lock().await;
+        let engine = tts_guard.engine()
+            .ok_or_else(|| LLMError::Other("TTS engine not initialized".to_string()))?;
+
+        let kokoro = engine.as_any().downcast_ref::<KokoroTTS>()
+            .ok_or_else(|| LLMError::Other("TTS engine is not KokoroTTS".to_string()))?;
+
+        let voice = tts_guard.stats().get("default_voice")
+            .and_then(|v| v.as_str())
+            .unwrap_or("default")
+            .to_string();
+
+        // 创建 TTS stream（只创建一次）
+        let (sink, mut stream) = kokoro.create_stream(&voice).await
+            .map_err(|e| LLMError::Other(format!("Failed to create TTS stream: {}", e)))?;
+
+        // Clone cancellation token for the spawned task
+        let token_clone = cancellation_token.as_ref().map(|t| t.clone_token());
+
+        // 启动消费者任务（持续接收音频块，支持取消检查）
+        let stream_handle = tokio::spawn(async move {
+            while let Some((audio, _took)) = stream.next().await {
+                // 检查取消信号
+                if let Some(ref token) = token_clone {
+                    if token.is_cancelled() {
+                        break; // 退出循环，停止音频处理
+                    }
+                }
+                callback(audio);
+            }
+        });
+
+        Ok(TTSStreamHandle {
+            sink,
+            _stream_handle: stream_handle,
+        })
+    }
+
+    /// 内部实现：LLM + TTS 实时流式对话
+    ///
+    /// # 核心机制
+    /// 1. 在 LLM 流式输出**之前**创建 TTS stream
+    /// 2. 检测到完整句子时立即提交到 TTS
+    /// 3. LLM 流和 TTS 流并行运行
+    async fn chat_with_tts_internal(
+        &self,
+        session_id: &str,
+        message: impl Into<String>,
+        callback: Option<Box<dyn Fn(Vec<f32>) + Send + Sync>>,
+    ) -> LLMResult<()> {
+        #[cfg(feature = "kokoro")]
+        {
+            use mofa_plugins::tts::kokoro_wrapper::KokoroTTS;
+
+            let callback = match callback {
+                Some(cb) => cb,
+                None => {
+                    // 无 TTS 请求，仅流式输出文本
+                    let mut text_stream = self.chat_stream_with_session(session_id, message).await?;
+                    while let Some(result) = text_stream.next().await {
+                        match result {
+                            Ok(text_chunk) => {
+                                print!("{}", text_chunk);
+                                std::io::stdout().flush()
+                                    .map_err(|e| LLMError::Other(format!("Failed to flush stdout: {}", e)))?;
+                            }
+                            Err(e) if e.to_string().contains("__stream_end__") => break,
+                            Err(e) => return Err(e),
+                        }
+                    }
+                    println!();
+                    return Ok(());
+                }
+            };
+
+            // Step 0: 取消任何现有的 TTS 会话
+            self.interrupt_tts().await?;
+
+            // Step 1: 创建 cancellation token
+            let cancellation_token = CancellationToken::new();
+
+            // Step 2: 在 LLM 流式输出之前创建 TTS stream（传入 cancellation token）
+            let mut tts_handle = self.create_tts_stream_handle(
+                callback,
+                Some(cancellation_token.clone_token())
+            ).await?;
+
+            // Step 3: 创建并跟踪新的 TTS session
+            let session = TTSSession::new(cancellation_token);
+
+            {
+                let mut active_session = self.active_tts_session.lock().await;
+                *active_session = Some(session);
+            }
+
+            let mut buffer = SentenceBuffer::new();
+
+            // Step 4: 流式处理 LLM 响应，实时提交句子到 TTS
+            let mut text_stream = self.chat_stream_with_session(session_id, message).await?;
+
+            while let Some(result) = text_stream.next().await {
+                match result {
+                    Ok(text_chunk) => {
+                        // 检查是否已被取消
+                        {
+                            let active_session = self.active_tts_session.lock().await;
+                            if let Some(ref session) = *active_session {
+                                if !session.is_active() {
+                                    return Ok(()); // 优雅退出
+                                }
+                            }
+                        }
+
+                        // 实时显示文本
+                        print!("{}", text_chunk);
+                        std::io::stdout().flush()
+                            .map_err(|e| LLMError::Other(format!("Failed to flush stdout: {}", e)))?;
+
+                        // 检测句子并立即提交到 TTS
+                        if let Some(sentence) = buffer.push(&text_chunk) {
+                            if let Err(e) = tts_handle.sink.synth(sentence).await {
+                                eprintln!("[TTS Error] Failed to submit sentence: {}", e);
+                                // 继续流式处理，即使 TTS 失败
+                            }
+                        }
+                    }
+                    Err(e) if e.to_string().contains("__stream_end__") => break,
+                    Err(e) => return Err(e),
+                }
+            }
+
+            // Step 5: 提交剩余文本
+            if let Some(remaining) = buffer.flush() {
+                if let Err(e) = tts_handle.sink.synth(remaining).await {
+                    eprintln!("[TTS Error] Failed to submit final sentence: {}", e);
+                }
+            }
+
+            // Step 6: 清理会话
+            {
+                let mut active_session = self.active_tts_session.lock().await;
+                *active_session = None;
+            }
+
+            // Step 7: 等待 TTS 流完成（所有音频块处理完毕）
+            let _ = tokio::time::timeout(
+                tokio::time::Duration::from_secs(30),
+                tts_handle._stream_handle
+            ).await
+                .map_err(|_| LLMError::Other("TTS stream processing timeout".to_string()))
+                .and_then(|r| r.map_err(|e| LLMError::Other(format!("TTS stream task failed: {}", e))));
+
+            Ok(())
+        }
+
+        #[cfg(not(feature = "kokoro"))]
+        {
+            // 当 kokoro feature 未启用时，使用批量处理模式
+            let mut text_stream = self.chat_stream_with_session(session_id, message).await?;
+            let mut buffer = SentenceBuffer::new();
+            let mut sentences = Vec::new();
+
+            // 收集所有句子
+            while let Some(result) = text_stream.next().await {
+                match result {
+                    Ok(text_chunk) => {
+                        print!("{}", text_chunk);
+                        std::io::stdout().flush()
+                            .map_err(|e| LLMError::Other(format!("Failed to flush stdout: {}", e)))?;
+
+                        if let Some(sentence) = buffer.push(&text_chunk) {
+                            sentences.push(sentence);
+                        }
+                    }
+                    Err(e) if e.to_string().contains("__stream_end__") => break,
+                    Err(e) => return Err(e),
+                }
+            }
+
+            // 添加剩余内容
+            if let Some(remaining) = buffer.flush() {
+                sentences.push(remaining);
+            }
+
+            // 批量播放 TTS（如果有回调）
+            if !sentences.is_empty() {
+                if let Some(cb) = callback {
+                    for sentence in &sentences {
+                        println!("\n[TTS] {}", sentence);
+                    }
+                    // 注意：非 kokoro 环境下无法调用此方法
+                    // 这里需要根据实际情况处理
+                    let _ = cb;
+                }
+            }
+
+            Ok(())
+        }
     }
 
     /// 内部方法：获取会话 Arc

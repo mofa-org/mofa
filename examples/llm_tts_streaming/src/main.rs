@@ -1,55 +1,17 @@
 //! LLM + TTS Streaming Conversation Example (Simplified)
 //!
-//! 1. LLM 流式输出
-//! 2. 遇到标点符号立即断句播放
-//! 3. 逐句播放 TTS (using native f32 format for efficiency)
+//! Demonstrates the new `chat_with_tts_callback` API that simplifies
+//! LLM streaming with automatic sentence segmentation and TTS playback.
+//!
+//! Before: ~40 lines of boilerplate code
+//! After: 1 line with the new API!
 
-use futures::StreamExt;
 use mofa_sdk::llm::{LLMAgentBuilder, openai_from_env};
 use mofa_sdk::{KokoroTTS, TTSPlugin};
 use rodio::{OutputStream, Sink, buffer::SamplesBuffer};
 use std::env;
-use std::io::Write;
 use std::sync::Arc;
 use uuid::Uuid;
-
-/// 句子缓冲区：流式收集文本，遇到标点符号返回完整句子
-struct SentenceBuffer {
-    buffer: String,
-}
-
-impl SentenceBuffer {
-    fn new() -> Self {
-        Self { buffer: String::new() }
-    }
-
-    /// 推入文本块，返回完整句子（如果有）
-    fn push(&mut self, text: &str) -> Option<String> {
-        for ch in text.chars() {
-            self.buffer.push(ch);
-            // 句末标点：。！？!?
-            if matches!(ch, '。' | '！' | '？' | '!' | '?') {
-                let sentence = self.buffer.trim().to_string();
-                if !sentence.is_empty() {
-                    self.buffer.clear();
-                    return Some(sentence);
-                }
-            }
-        }
-        None
-    }
-
-    /// 刷新剩余内容
-    fn flush(&mut self) -> Option<String> {
-        if self.buffer.trim().is_empty() {
-            None
-        } else {
-            let remaining = self.buffer.trim().to_string();
-            self.buffer.clear();
-            Some(remaining)
-        }
-    }
-}
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -110,59 +72,23 @@ async fn main() -> anyhow::Result<()> {
         }
 
         print!("AI: ");
-        let mut text_stream = agent.chat_stream_with_session(&session_id, input).await?;
-        let mut buffer = SentenceBuffer::new();
-        let audio_sink_clone = audio_sink.clone();
 
-        // Collect all sentences first (流式收集所有句子)
-        let mut sentences = Vec::new();
+        // 中断现有播放并清空音频队列
+        agent.interrupt_tts().await?;
+        audio_sink.stop();  // 停止当前播放并清空队列
 
-        while let Some(result) = text_stream.next().await {
-            match result {
-                Ok(text_chunk) => {
-                    print!("{}", text_chunk);
-                    std::io::stdout().flush()?;
-
-                    // Check if we have a complete sentence
-                    if let Some(sentence) = buffer.push(&text_chunk) {
-                        println!("\n[TTS] {}", sentence);
-                        sentences.push(sentence);
-                    }
-                }
-                Err(e) => {
-                    let err_msg = e.to_string();
-                    if err_msg.contains("__stream_end__") {
-                        break;
-                    } else {
-                        eprintln!("\nError: {}", e);
-                        break;
-                    }
-                }
+        let sink_clone = audio_sink.clone();
+        agent.chat_with_tts_callback(
+            &session_id,
+            input,
+            move |audio_f32| {
+                sink_clone.append(SamplesBuffer::new(1, 24000, audio_f32));
             }
-        }
+        ).await?;
 
-        // Add remaining content
-        if let Some(remaining) = buffer.flush() {
-            println!("\n[TTS] {}", remaining);
-            sentences.push(remaining);
-        }
-
-        // Play all sentences through ONE stream using batch API
-        if !sentences.is_empty() {
-            println!("\n[Playing {} sentences through single stream...]", sentences.len());
-
-            let sink_clone = audio_sink_clone.clone();
-            agent.tts_speak_f32_stream_batch(
-                sentences,
-                Box::new(move |audio_f32| {
-                    sink_clone.append(SamplesBuffer::new(1, 24000, audio_f32));
-                }),
-            ).await?;
-
-            // Start playback and wait for completion
-            audio_sink_clone.play();
-            audio_sink_clone.sleep_until_end();
-        }
+        // 启动播放（非阻塞）
+        audio_sink.play();
+        // 不再使用 sleep_until_end()，让音频在后台播放
     }
     agent.remove_session(&session_id).await?;
     Ok(())

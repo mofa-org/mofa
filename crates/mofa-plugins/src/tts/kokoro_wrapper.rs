@@ -6,29 +6,34 @@
 use super::{TTSEngine, VoiceInfo};
 use async_trait::async_trait;
 use futures::{Stream, StreamExt};
-use kokoro_tts::{KokoroTts, Voice, SynthStream, SynthSink};
+pub use kokoro_tts::{KokoroTts, Voice, SynthStream, SynthSink};
 use std::collections::HashMap;
 use std::path::Path;
 use std::pin::Pin;
 use std::sync::Arc;
 use std::time::Duration;
-use tokio::sync::Mutex;
 use tracing::{debug, info};
 
 /// Kokoro TTS engine implementation
 ///
 /// Wraps the kokoro-tts library to provide text-to-speech capabilities
 /// with support for multiple voices and streaming output.
+///
+/// # Concurrency
+///
+/// KokoroTTS is thread-safe and supports concurrent access. The underlying
+/// kokoro-tts library (KokoroTts) is Send + Sync, and each call to stream()
+/// returns independent sink/stream pairs that can be used concurrently.
 pub struct KokoroTTS {
-    /// The underlying Kokoro TTS instance
-    tts: Arc<Mutex<KokoroTts>>,
+    /// The underlying Kokoro TTS instance (thread-safe, no additional locking needed)
+    tts: Arc<KokoroTts>,
     /// Default voice to use for synthesis
     default_voice: Voice,
 }
 
 /// Clone implementation for KokoroTTS
 ///
-/// Since KokoroTTS internally uses Arc<Mutex<KokoroTts>>,
+/// Since KokoroTTS internally uses Arc<KokoroTts>,
 /// cloning is cheap (just increments the Arc reference count).
 impl Clone for KokoroTTS {
     fn clone(&self) -> Self {
@@ -77,7 +82,7 @@ impl KokoroTTS {
         let default_voice = Voice::AfMaple(1);
 
         Ok(Self {
-            tts: Arc::new(Mutex::new(tts)),
+            tts: Arc::new(tts),
             default_voice,
         })
     }
@@ -112,8 +117,7 @@ impl KokoroTTS {
         voice: &str,
     ) -> Result<(SynthSink<String>,SynthStream), anyhow::Error> {
         let voice_enum = Voice::from_name(voice);
-        let tts = self.tts.lock().await;
-        let (sink, stream) = tts.stream::<String>(voice_enum);
+        let (sink, stream) = self.tts.stream::<String>(voice_enum);
         Ok((sink,stream))
     }
 
@@ -149,8 +153,7 @@ impl KokoroTTS {
         let voice_enum = Voice::from_name(voice);
 
         // Create a new stream for this synthesis
-        let tts = self.tts.lock().await;
-        let (mut sink, mut stream) = tts.stream::<String>(voice_enum);
+        let (mut sink, mut stream) = self.tts.stream::<String>(voice_enum);
 
         // Submit text for synthesis
         sink.synth(text.to_string()).await.map_err(|e| {
@@ -178,26 +181,22 @@ impl TTSEngine for KokoroTTS {
 
         let voice = Voice::from_name(voice);
 
-        // Collect all audio chunks - we need to keep the tts lock alive while iterating
-        let all_audio_f32 = {
-            let tts = self.tts.lock().await;
-            let (mut sink, mut stream) = tts.stream::<String>(voice);
+        // Create a stream for this synthesis
+        let (mut sink, mut stream) = self.tts.stream::<String>(voice);
 
-            // Submit text for synthesis using the synth method
-            sink.synth(text.to_string()).await.map_err(|e| {
-                anyhow::anyhow!("Failed to submit text for synthesis: {:?}", e)
-            })?;
+        // Submit text for synthesis using the synth method
+        sink.synth(text.to_string()).await.map_err(|e| {
+            anyhow::anyhow!("Failed to submit text for synthesis: {:?}", e)
+        })?;
 
-            // Collect all audio chunks while tts is still locked
-            let mut audio = Vec::new();
-            while let Some((chunk, _took)) = stream.next().await {
-                audio.extend_from_slice(&chunk);
-            }
-            audio
-        };
+        // Collect all audio chunks
+        let mut audio = Vec::new();
+        while let Some((chunk, _took)) = stream.next().await {
+            audio.extend_from_slice(&chunk);
+        }
 
         // Convert f32 samples (-1.0 to 1.0) to i16 samples
-        let audio_i16: Vec<i16> = all_audio_f32
+        let audio_i16: Vec<i16> = audio
             .iter()
             .map(|&sample| {
                 // Clamp to [-1.0, 1.0] and convert to i16
@@ -231,8 +230,7 @@ impl TTSEngine for KokoroTTS {
         let voice_enum = Voice::from_name(voice);
 
         // Create a new stream for this synthesis
-        let tts = self.tts.lock().await;
-        let (mut sink, mut stream) = tts.stream::<String>(voice_enum);
+        let (mut sink, mut stream) = self.tts.stream::<String>(voice_enum);
 
         // Submit text for synthesis
         sink.synth(text.to_string()).await.map_err(|e| {
