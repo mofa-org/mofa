@@ -171,7 +171,10 @@ pub struct LLMAgentConfig {
     pub user_id: Option<String>,
     /// 租户 ID，用于多租户支持
     pub tenant_id: Option<String>,
-    /// 上下文窗口大小，用于滑动窗口消息管理（单位：token）
+    /// 上下文窗口大小，用于滑动窗口消息管理（单位：轮数/rounds）
+    ///
+    /// 注意：单位是**轮数**（rounds），不是 token 数量
+    /// 每轮对话 ≈ 1 个用户消息 + 1 个助手响应
     pub context_window_size: Option<usize>,
 }
 
@@ -339,9 +342,13 @@ impl LLMAgent {
             ChatSession::new(LLMClient::new(provider.clone()))
         };
 
+        // 设置系统提示
         if let Some(ref prompt) = config.system_prompt {
             session = session.with_system(prompt.clone());
         }
+
+        // 设置上下文窗口大小
+        session = session.with_context_window_size(config.context_window_size);
 
         let session_id = session.session_id().to_string();
         let session_arc = Arc::new(RwLock::new(session));
@@ -439,6 +446,9 @@ impl LLMAgent {
             session = session.with_system(prompt.clone());
         }
 
+        // 设置上下文窗口大小
+        session = session.with_context_window_size(self.config.context_window_size);
+
         let session_id = session.session_id().to_string();
         let session_arc = Arc::new(RwLock::new(session));
 
@@ -487,6 +497,9 @@ impl LLMAgent {
         if let Some(ref prompt) = system_prompt {
             session = session.with_system(prompt.clone());
         }
+
+        // 设置上下文窗口大小
+        session = session.with_context_window_size(self.config.context_window_size);
 
         let session_arc = Arc::new(RwLock::new(session));
 
@@ -1919,18 +1932,24 @@ impl LLMAgentBuilder {
 
     /// 设置上下文窗口大小（滑动窗口）
     ///
-    /// 用于滑动窗口消息管理，指定保留的最大上下文 token 数量。
+    /// 用于滑动窗口消息管理，指定保留的最大对话轮数。
     /// 当消息历史超过此大小时，会自动裁剪较早的消息。
     ///
     /// # 参数
-    /// - `size`: 上下文窗口大小（单位：token）
+    /// - `size`: 上下文窗口大小（单位：轮数，rounds）
+    ///
+    /// # 注意
+    /// - 单位是**轮数**（rounds），不是 token 数量
+    /// - 每轮对话 ≈ 1 个用户消息 + 1 个助手响应
+    /// - 系统消息始终保留，不计入轮数限制
+    /// - 从数据库加载消息时也会应用此限制
     ///
     /// # 示例
     ///
     /// ```rust,ignore
     /// let agent = LLMAgentBuilder::new()
     ///     .with_id("my-agent")
-    ///     .with_sliding_window(8000)
+    ///     .with_sliding_window(10)  // 只保留最近 10 轮对话
     ///     .build();
     /// ```
     pub fn with_sliding_window(mut self, size: usize) -> Self {

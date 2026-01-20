@@ -362,6 +362,8 @@ pub struct ChatSession {
     message_store: Arc<dyn crate::persistence::MessageStore>,
     /// 会话存储
     session_store: Arc<dyn crate::persistence::SessionStore>,
+    /// 上下文窗口大小（滑动窗口，限制对话轮数）
+    context_window_size: Option<usize>,
 }
 
 impl ChatSession {
@@ -378,6 +380,7 @@ impl ChatSession {
             uuid::Uuid::now_v7(), // 自动生成 agent_id
             store.clone(),
             store.clone(),
+            None, // 默认无上下文窗口限制
         )
     }
 
@@ -396,6 +399,7 @@ impl ChatSession {
             agent_id,
             message_store,
             session_store,
+            None, // 默认无上下文窗口限制
         )
     }
 
@@ -419,6 +423,7 @@ impl ChatSession {
             metadata: std::collections::HashMap::new(),
             message_store: store.clone(),
             session_store: store.clone(),
+            context_window_size: None,
         }
     }
 
@@ -441,6 +446,7 @@ impl ChatSession {
         agent_id: uuid::Uuid,
         message_store: Arc<dyn crate::persistence::MessageStore>,
         session_store: Arc<dyn crate::persistence::SessionStore>,
+        context_window_size: Option<usize>,
     ) -> Self {
         Self {
             session_id,
@@ -455,6 +461,7 @@ impl ChatSession {
             metadata: std::collections::HashMap::new(),
             message_store,
             session_store,
+            context_window_size,
         }
     }
 
@@ -480,7 +487,20 @@ impl ChatSession {
 
     /// 从数据库加载会话
     ///
-    /// 创建一个新的 ChatSession 实例，加载指定 ID 的会话和消息
+    /// 创建一个新的 ChatSession 实例，加载指定 ID 的会话和消息。
+    ///
+    /// # 参数
+    /// - `session_id`: 会话 ID
+    /// - `client`: LLM 客户端
+    /// - `user_id`: 用户 ID
+    /// - `agent_id`: Agent ID
+    /// - `message_store`: 消息存储
+    /// - `session_store`: 会话存储
+    /// - `context_window_size`: 可选的上下文窗口大小（轮数），如果指定则只加载最近的 N 轮对话
+    ///
+    /// # 注意
+    /// 当指定 `context_window_size` 时，只会加载最近的 N 轮对话到内存中。
+    /// 这对于长期对话很有用，可以避免加载大量历史消息。
     pub async fn load(
         session_id: uuid::Uuid,
         client: LLMClient,
@@ -488,6 +508,7 @@ impl ChatSession {
         agent_id: uuid::Uuid,
         message_store: Arc<dyn crate::persistence::MessageStore>,
         session_store: Arc<dyn crate::persistence::SessionStore>,
+        context_window_size: Option<usize>,
     ) -> crate::persistence::PersistenceResult<Self> {
         // Load session from database
         let _db_session = session_store
@@ -496,7 +517,25 @@ impl ChatSession {
             .ok_or_else(|| crate::persistence::PersistenceError::NotFound("Session not found".to_string()))?;
 
         // Load messages from database
-        let db_messages = message_store.get_session_messages(session_id).await?;
+        // Use pagination when context_window_size is set to avoid loading all messages
+        let db_messages = if context_window_size.is_some() {
+            // Use pagination to avoid loading all messages for long-running sessions
+            let total_count = message_store.count_session_messages(session_id).await?;
+
+            // Calculate fetch limit: rounds * 2 (user+assistant per round) + buffer for system messages
+            let rounds = context_window_size.unwrap_or(0);
+            let limit = (rounds * 2 + 20) as i64; // 20 message buffer for system messages at beginning
+
+            // Calculate offset to get the most recent messages
+            let offset = std::cmp::max(0, total_count - limit);
+
+            message_store
+                .get_session_messages_paginated(session_id, offset, limit)
+                .await?
+        } else {
+            // No window size specified, fetch all messages (current behavior)
+            message_store.get_session_messages(session_id).await?
+        };
 
         // Convert messages to domain format
         let mut messages = Vec::new();
@@ -513,18 +552,18 @@ impl ChatSession {
             let domain_content = db_msg.content.text.map(crate::llm::types::MessageContent::Text);
 
             // Create domain message
-            let domain_msg = crate::llm::types::ChatMessage {
+            let domain_msg = ChatMessage {
                 role: domain_role,
                 content: domain_content,
                 name: None,
                 tool_calls: None,
                 tool_call_id: None,
             };
-
-            // TODO: Handle tool_calls and tool_result from db_msg.content
-
             messages.push(domain_msg);
         }
+
+        // 应用滑动窗口逻辑（如果指定了 context_window_size）
+        let messages = Self::apply_sliding_window_static(&messages, context_window_size);
 
         // Create and return ChatSession
         Ok(Self {
@@ -540,6 +579,7 @@ impl ChatSession {
             metadata: std::collections::HashMap::new(), // TODO: Convert from db_session.metadata
             message_store,
             session_store,
+            context_window_size,
         })
     }
 
@@ -569,6 +609,27 @@ impl ChatSession {
         self
     }
 
+    /// 设置上下文窗口大小（滑动窗口）
+    ///
+    /// # 参数
+    /// - `size`: 保留的最大对话轮数（None 表示不限制）
+    ///
+    /// # 注意
+    /// - 单位是**轮数**（rounds），不是 token 数量
+    /// - 每轮对话 ≈ 1 个用户消息 + 1 个助手响应
+    /// - 系统消息始终保留，不计入轮数限制
+    ///
+    /// # 示例
+    ///
+    /// ```rust,ignore
+    /// let session = ChatSession::new(client)
+    ///     .with_context_window_size(Some(10)); // 只保留最近 10 轮对话
+    /// ```
+    pub fn with_context_window_size(mut self, size: Option<usize>) -> Self {
+        self.context_window_size = size;
+        self
+    }
+
     /// 设置工具
     pub fn with_tools(mut self, tools: Vec<Tool>, executor: Arc<dyn ToolExecutor>) -> Self {
         self.tools = tools;
@@ -589,8 +650,9 @@ impl ChatSession {
             builder = builder.system(system.clone());
         }
 
-        // 添加历史消息
-        builder = builder.messages(self.messages.clone());
+        // 添加历史消息（应用滑动窗口）
+        let messages_for_context = self.apply_sliding_window();
+        builder = builder.messages(messages_for_context);
 
         // 添加工具
         if !self.tools.is_empty() {
@@ -642,6 +704,108 @@ impl ChatSession {
     /// 是否为空
     pub fn is_empty(&self) -> bool {
         self.messages.is_empty()
+    }
+
+    /// 设置上下文窗口大小（滑动窗口）
+    ///
+    /// # 参数
+    /// - `size`: 保留的最大对话轮数（None 表示不限制）
+    ///
+    /// # 注意
+    /// - 单位是**轮数**（rounds），不是 token 数量
+    /// - 每轮对话 ≈ 1 个用户消息 + 1 个助手响应（可能包含工具调用）
+    /// - 系统消息始终保留，不计入轮数限制
+    ///
+    /// # 示例
+    ///
+    /// ```rust,ignore
+    /// session.set_context_window_size(Some(10)); // 只保留最近 10 轮对话
+    /// session.set_context_window_size(None);     // 不限制对话轮数
+    /// ```
+    pub fn set_context_window_size(&mut self, size: Option<usize>) {
+        self.context_window_size = size;
+    }
+
+    /// 获取上下文窗口大小（轮数）
+    pub fn context_window_size(&self) -> Option<usize> {
+        self.context_window_size
+    }
+
+    /// 应用滑动窗口，返回限定后的消息列表
+    ///
+    /// 保留最近的 N 轮对话（每轮包括用户消息和助手响应）。
+    /// 系统消息始终保留。
+    ///
+    /// # 参数
+    /// - `messages`: 要过滤的消息列表
+    /// - `window_size`: 保留的最大对话轮数（None 表示不限制）
+    ///
+    /// # 算法说明
+    /// - 1. 分离系统消息和对话消息
+    /// - 2. 从对话消息中保留最近的 N 轮
+    /// - 3. 合并系统消息和裁剪后的对话消息
+    ///
+    /// # 示例
+    ///
+    /// ```rust,ignore
+    /// // 假设有 20 条消息（约 10 轮对话）
+    /// // 设置 window_size = Some(3)
+    /// // 结果：保留最近 3 轮对话（约 6 条消息）+ 所有系统消息
+    /// let limited = ChatSession::apply_sliding_window_static(messages, Some(3));
+    /// ```
+    fn apply_sliding_window(&self) -> Vec<ChatMessage> {
+        Self::apply_sliding_window_static(&self.messages, self.context_window_size)
+    }
+
+    /// 静态方法：应用滑动窗口到消息列表
+    ///
+    /// 这个方法可以在不拥有 ChatSession 实例的情况下使用，
+    /// 例如在从数据库加载消息时。
+    ///
+    /// # 参数
+    /// - `messages`: 要过滤的消息列表
+    /// - `window_size`: 保留的最大对话轮数（None 表示不限制）
+    pub fn apply_sliding_window_static(
+        messages: &[ChatMessage],
+        window_size: Option<usize>,
+    ) -> Vec<ChatMessage> {
+        let max_rounds = match window_size {
+            Some(size) if size > 0 => size,
+            _ => return messages.to_vec(), // 无限制，返回所有消息
+        };
+
+        // 分离系统消息和对话消息
+        let mut system_messages = Vec::new();
+        let mut conversation_messages = Vec::new();
+
+        for msg in messages {
+            if msg.role == Role::System {
+                system_messages.push(msg.clone());
+            } else {
+                conversation_messages.push(msg.clone());
+            }
+        }
+
+        // 计算需要保留的最大消息数（每轮大约2条：用户+助手）
+        let max_messages = max_rounds * 2;
+
+        if conversation_messages.len() <= max_messages {
+            // 对话消息数量在限制内，返回所有消息
+            return messages.to_vec();
+        }
+
+        // 保留最后的 N 条对话消息
+        let start_index = conversation_messages.len() - max_messages;
+        let limited_conversation: Vec<ChatMessage> = conversation_messages
+            .into_iter()
+            .skip(start_index)
+            .collect();
+
+        // 合并系统消息和裁剪后的对话消息
+        let mut result = system_messages;
+        result.extend(limited_conversation);
+
+        result
     }
 
     /// 保存会话和消息到数据库
