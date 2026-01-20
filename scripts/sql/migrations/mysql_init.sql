@@ -2,28 +2,75 @@
 -- Version: 1.0.0
 -- Description: Initialize persistence tables for LLM messages and API call tracking
 
+-- ============================================================================
+-- UUID v7 Generator Function
+-- ============================================================================
+-- UUID v7 format: timestamp (48 bits) + version (4 bits) + variant (2 bits) + random (62 bits)
+DELIMITER $$
+CREATE FUNCTION IF NOT EXISTS gen_uuid_v7() RETURNS CHAR(36)
+DETERMINISTIC
+SQL SECURITY INVOKER
+BEGIN
+    DECLARE unix_ts_ms BIGINT;
+    DECLARE uuid_hex CHAR(32);
+
+    -- Get current Unix timestamp in milliseconds
+    SET unix_ts_ms = UNIX_TIMESTAMP(NOW(6)) * 1000;
+
+    -- Build UUID v7 hex string:
+    -- Format: XXXXXXXX-XXXX-7XXX-YXXX-XXXXXXXXXXXX
+    -- where X is random/hex data, 7 is version, Y is variant (8, 9, A, or B)
+
+    -- timestamp: 12 hex chars (48 bits) - most significant first
+    -- version+rand_a: 4 hex chars, first is 7
+    -- variant+rand_b: 4 hex chars, first is 8/9/A/B
+    -- rand_c: 12 hex chars
+
+    SET uuid_hex = CONCAT(
+        -- timestamp (12 hex chars)
+        LPAD(CONV(unix_ts_ms >> 20, 10, 16), 12, '0'),
+        -- version and random bits (4 hex chars)
+        CONV((unix_ts_ms & 0xFFFF0) | 0x7000, 10, 16),
+        -- variant and random bits (4 hex chars)
+        CONV(FLOOR(RAND() * 0x4000) | 0x8000, 10, 16),
+        -- random data (12 hex chars)
+        LPAD(CONV(FLOOR(RAND() * 281474976710656), 10, 16), 12, '0')
+    );
+
+    RETURN CONCAT(
+        SUBSTR(uuid_hex, 1, 8), '-',
+        SUBSTR(uuid_hex, 9, 4), '-',
+        SUBSTR(uuid_hex, 13, 4), '-',
+        SUBSTR(uuid_hex, 17, 4), '-',
+        SUBSTR(uuid_hex, 21, 12)
+    );
+END$$
+DELIMITER ;
+
 -- Create chat session table
 CREATE TABLE IF NOT EXISTS entity_chat_session (
-    id CHAR(36) PRIMARY KEY,
+    id CHAR(36) PRIMARY KEY DEFAULT (gen_uuid_v7()),
     user_id CHAR(36) NOT NULL,
     agent_id CHAR(36) NOT NULL,
+    tenant_id CHAR(36) NOT NULL DEFAULT (gen_uuid_v7()),
     title VARCHAR(255),
     metadata JSON,
     create_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
     update_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP NOT NULL,
     INDEX idx_chat_session_user (user_id),
     INDEX idx_chat_session_agent (agent_id),
+    INDEX idx_chat_session_tenant (tenant_id),
     INDEX idx_chat_session_update_time (update_time DESC)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- Create LLM message table
 CREATE TABLE IF NOT EXISTS entity_llm_message (
-    id CHAR(36) PRIMARY KEY,
+    id CHAR(36) PRIMARY KEY DEFAULT (gen_uuid_v7()),
     parent_message_id CHAR(36),
     chat_session_id CHAR(36) NOT NULL,
     agent_id CHAR(36) NOT NULL,
     user_id CHAR(36) NOT NULL,
-    tenant_id CHAR(36) NOT NULL,
+    tenant_id CHAR(36) NOT NULL DEFAULT (gen_uuid_v7()),
     role VARCHAR(20) NOT NULL,
     content JSON NOT NULL,
     create_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
@@ -38,7 +85,7 @@ CREATE TABLE IF NOT EXISTS entity_llm_message (
 
 -- Create LLM API call table
 CREATE TABLE IF NOT EXISTS entity_llm_api_call (
-    id CHAR(36) PRIMARY KEY,
+    id CHAR(36) PRIMARY KEY DEFAULT (gen_uuid_v7()),
     chat_session_id CHAR(36) NOT NULL,
     agent_id CHAR(36) NOT NULL,
     user_id CHAR(36) NOT NULL,
@@ -81,7 +128,7 @@ SELECT 'MoFA persistence tables initialized successfully!' AS message;
 
 -- Create prompt template table
 CREATE TABLE IF NOT EXISTS prompt_template (
-    id BINARY(16) PRIMARY KEY,
+    id BINARY(16) PRIMARY KEY DEFAULT (UUID_TO_BIN(gen_uuid_v7())),
     template_id VARCHAR(255) NOT NULL,
     name VARCHAR(255),
     description TEXT,
@@ -94,8 +141,8 @@ CREATE TABLE IF NOT EXISTS prompt_template (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP NOT NULL,
     created_by BINARY(16),
-    tenant_id BINARY(16),
-    UNIQUE KEY uk_prompt_template_tenant (template_id, tenant_id),
+    tenant_id BINARY(16) DEFAULT (UUID_TO_BIN(gen_uuid_v7())),
+    UNIQUE KEY uk_prompt_template_tenant (template_id, COALESCE(tenant_id, UUID_TO_BIN(gen_uuid_v7()))),
     INDEX idx_prompt_template_id (template_id),
     INDEX idx_prompt_template_enabled (enabled),
     INDEX idx_prompt_template_tenant (tenant_id),
@@ -104,7 +151,7 @@ CREATE TABLE IF NOT EXISTS prompt_template (
 
 -- Create prompt composition table
 CREATE TABLE IF NOT EXISTS prompt_composition (
-    id BINARY(16) PRIMARY KEY,
+    id BINARY(16) PRIMARY KEY DEFAULT (UUID_TO_BIN(gen_uuid_v7())),
     composition_id VARCHAR(255) NOT NULL UNIQUE,
     description TEXT,
     template_ids JSON,
@@ -112,7 +159,7 @@ CREATE TABLE IF NOT EXISTS prompt_composition (
     enabled BOOLEAN DEFAULT TRUE NOT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP NOT NULL,
-    tenant_id BINARY(16),
+    tenant_id BINARY(16) DEFAULT (UUID_TO_BIN(gen_uuid_v7())),
     INDEX idx_prompt_composition_id (composition_id),
     INDEX idx_prompt_composition_enabled (enabled)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

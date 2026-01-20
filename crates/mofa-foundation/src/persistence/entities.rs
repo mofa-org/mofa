@@ -441,6 +441,8 @@ pub struct ChatSession {
     pub user_id: Uuid,
     /// Agent ID
     pub agent_id: Uuid,
+    /// 租户 ID
+    pub tenant_id: Uuid,
     /// 会话标题
     pub title: Option<String>,
     /// 会话元数据
@@ -459,6 +461,7 @@ impl ChatSession {
             id: Uuid::now_v7(),
             user_id,
             agent_id,
+            tenant_id: Uuid::nil(), // 默认为 nil UUID，可以通过 with_tenant_id 设置
             title: None,
             metadata: HashMap::new(),
             create_time: now,
@@ -475,6 +478,12 @@ impl ChatSession {
     /// 设置 ID
     pub fn with_id(mut self, id: Uuid) -> Self {
         self.id = id;
+        self
+    }
+
+    /// 设置租户 ID
+    pub fn with_tenant_id(mut self, tenant_id: Uuid) -> Self {
+        self.tenant_id = tenant_id;
         self
     }
 

@@ -511,6 +511,93 @@ pub mod collaboration {
 // Re-export Persistence module from mofa-foundation
 pub mod persistence {
     pub use mofa_foundation::persistence::*;
+
+    /// 快速创建带 PostgreSQL 持久化的 LLM Agent
+    ///
+    /// 自动处理：
+    /// - 数据库连接（从 DATABASE_URL）
+    /// - OpenAI Provider（从 OPENAI_API_KEY）
+    /// - 持久化事件处理器
+    /// - 自动生成 user_id 和 agent_id
+    ///
+    /// # 环境变量
+    /// - DATABASE_URL: PostgreSQL 连接字符串
+    /// - OPENAI_API_KEY: OpenAI API 密钥
+    /// - USER_ID: 用户 ID（可选）
+    /// - AGENT_ID: Agent ID（可选）
+    ///
+    /// # 示例
+    ///
+    /// ```rust,ignore
+    /// use mofa_sdk::persistence::quick_agent_with_postgres;
+    ///
+    /// #[tokio::main]
+    /// async fn main() -> mofa_sdk::llm::LLMResult<()> {
+    ///     let agent = quick_agent_with_postgres("你是一个有用的助手")
+    ///         .await?
+    ///         .with_name("聊天助手")
+    ///         .build();
+    ///     Ok(())
+    /// }
+    /// ```
+    #[cfg(all(feature = "persistence-postgres"))]
+    pub async fn quick_agent_with_postgres(
+        system_prompt: &str
+    ) -> Result<crate::llm::LLMAgentBuilder, crate::llm::LLMError> {
+        use std::sync::Arc;
+
+        // 1. 初始化数据库
+        let store = PostgresStore::from_env().await
+            .map_err(|e| crate::llm::LLMError::Other(format!("数据库连接失败: {}", e)))?;
+
+        // 2. 创建持久化处理器
+        let persistence = Arc::new(PersistenceHandler::from_env(store.clone()));
+
+        // 3. 获取 user_id 和 agent_id 用于后续加载
+        let user_id = persistence.user_id();
+        let agent_id = persistence.agent_id();
+
+        // 4. 返回预配置的 builder（已包含 stores）
+        Ok(crate::llm::LLMAgentBuilder::from_env()?
+            .with_system_prompt(system_prompt)
+            .with_persistence_handler(persistence)
+            .with_persistence_stores(store.clone(), store, user_id, agent_id))
+    }
+
+    /// 快速创建带内存持久化的 LLM Agent
+    ///
+    /// 使用内存存储，适合测试和开发环境。
+    ///
+    /// # 环境变量
+    /// - OPENAI_API_KEY: OpenAI API 密钥
+    ///
+    /// # 示例
+    ///
+    /// ```rust,ignore
+    /// use mofa_sdk::persistence::quick_agent_with_memory;
+    ///
+    /// #[tokio::main]
+    /// async fn main() -> mofa_sdk::llm::LLMResult<()> {
+    ///     let agent = quick_agent_with_memory("你是一个有用的助手")
+    ///         .await?
+    ///         .with_name("聊天助手")
+    ///         .build();
+    ///     Ok(())
+    /// }
+    /// ```
+    #[cfg(feature = "openai")]
+    pub async fn quick_agent_with_memory(
+        system_prompt: &str
+    ) -> Result<crate::llm::LLMAgentBuilder, crate::llm::LLMError> {
+        use std::sync::Arc;
+
+        let store = Arc::new(InMemoryStore::new());
+        let persistence = Arc::new(PersistenceHandler::auto(store));
+
+        Ok(crate::llm::LLMAgentBuilder::from_env()?
+            .with_system_prompt(system_prompt)
+            .with_persistence_handler(persistence))
+    }
 }
 
 // =============================================================================

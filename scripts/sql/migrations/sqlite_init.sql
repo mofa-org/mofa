@@ -2,11 +2,31 @@
 -- Version: 1.0.0
 -- Description: Initialize persistence tables for LLM messages and API call tracking
 
+-- ============================================================================
+-- UUID v7 Note
+-- ============================================================================
+-- SQLite does not support custom SQL functions. UUID v7 values must be
+-- generated in the application layer using a UUID v7 library.
+--
+-- For Rust applications using this schema, use the `uuid` crate with feature
+-- "v7" to generate UUID v7 values:
+--
+--   use uuid::Uuid;
+--   let id = Uuid::now_v7();  // Generate UUID v7
+--
+-- When inserting records, always provide a UUID v7 value for id columns:
+--
+--   INSERT INTO entity_chat_session (id, user_id, agent_id, tenant_id, ...)
+--   VALUES (?, ?, ?, ?, ...);
+--
+-- Where the UUID values are generated application-side.
+
 -- Create chat session table
 CREATE TABLE IF NOT EXISTS entity_chat_session (
     id TEXT PRIMARY KEY,
     user_id TEXT NOT NULL,
     agent_id TEXT NOT NULL,
+    tenant_id TEXT,
     title TEXT,
     metadata TEXT,
     create_time TEXT NOT NULL,
@@ -15,6 +35,7 @@ CREATE TABLE IF NOT EXISTS entity_chat_session (
 
 CREATE INDEX IF NOT EXISTS idx_chat_session_user ON entity_chat_session(user_id);
 CREATE INDEX IF NOT EXISTS idx_chat_session_agent ON entity_chat_session(agent_id);
+CREATE INDEX IF NOT EXISTS idx_chat_session_tenant ON entity_chat_session(tenant_id);
 CREATE INDEX IF NOT EXISTS idx_chat_session_update_time ON entity_chat_session(update_time DESC);
 
 -- Create LLM message table

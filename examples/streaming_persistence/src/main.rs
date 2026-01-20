@@ -1,5 +1,4 @@
-
-//! 流式对话结合 PostgreSQL 持久化示例
+//! 流式对话结合 PostgreSQL 持久化示例（简化版）
 //!
 //! 本示例展示了如何在 MoFA 框架中使用流式对话功能，
 //! 并将会话、消息和 API 调用持久化到 PostgreSQL 数据库。
@@ -18,14 +17,13 @@
 //! cargo run --release
 //! ```
 
+use std::io::Write;
 use futures::StreamExt;
 use mofa_sdk::{
-    llm::agent::LLMAgentBuilder,
-    llm::{openai_from_env, LLMError, LLMResult},
-    persistence::{AgentPersistenceHandler, PersistenceHandler, PostgresStore},
+    llm::{LLMResult, Role},
+    persistence::quick_agent_with_postgres,
 };
 use tracing::{info, Level};
-use uuid::Uuid;
 
 #[tokio::main]
 async fn main() -> LLMResult<()> {
@@ -33,51 +31,22 @@ async fn main() -> LLMResult<()> {
         .with_max_level(Level::INFO)
         .init();
     info!("=============================================");
-    info!("MoFA 流式对话 PostgreSQL 持久化示例");
+    info!("MoFA 流式对话 PostgreSQL 持久化示例（简化版）");
     info!("=============================================");
 
-    // 1. 配置参数
-    let database_url = std::env::var("DATABASE_URL")
-        .expect("请设置 DATABASE_URL 环境变量");
+    let agent = quick_agent_with_postgres(
+        "你是一个专业的 AI 助手，回答问题要清晰、准确、有帮助。"
+    ).await?
+    .with_session_id("019bda9f-9ffd-7a80-a9e5-88b05e81a7d4")
+    .with_name("流式持久化 Agent")
+    .with_sliding_window(2)
+    .build_async()
+    .await;
 
-    // 2. 初始化数据库连接
-    info!("\n1. 连接 PostgreSQL 数据库...");
-    let store: Arc<PostgresStore> = PostgresStore::shared(&database_url).await
-        .map_err(|e| LLMError::Other(format!("数据库连接失败: {}", e)))?;
-    info!("✅ 数据库连接成功!");
+    info!("Agent 已创建，开始流式对话 (输入 'quit' 退出):");
+    info!("滑动窗口大小: 2 轮（每轮 = 1个用户消息 + 1个助手响应）");
 
-    // 3. 初始化持久化处理器
-    info!("\n2. 初始化持久化系统...");
-    let user_id = Uuid::now_v7();  // 替换为实际业务中的用户 ID
-    let agent_id = Uuid::parse_str("9c1377d7-4c7f-49cf-b72f-66b24916a404").unwrap();  // Agent 固定 ID
-
-    let persistence = Arc::new(PersistenceHandler::new(
-        store.clone(),
-        user_id,
-        agent_id
-    ));
-    info!("✅ 持久化系统初始化完成!");
-    info!("   - 用户 ID: {}", user_id);
-    info!("   - Agent ID: {}", agent_id);
-
-    // 4. 创建 LLM Agent
-    info!("\n3. 创建 LLM Agent...");
-    let provider = Arc::new(openai_from_env()?);
-    // 设置事件处理器
-    let event_handler = Box::new(AgentPersistenceHandler::new(persistence.clone()));
-    // 配置流式 Agent
-    let agent = LLMAgentBuilder::new()
-        .with_id("streaming-persistence-agent")
-        .with_name("流式持久化 Agent")
-        .with_provider(provider)
-        .with_system_prompt("你是一个专业的 AI 助手，回答问题要清晰、准确、有帮助。")
-        .with_event_handler(event_handler)
-        .build();
-
-    info!("✅ LLM Agent 创建完成!");
-
-    // 5. 开始交互
-    info!("\n4. 开始流式对话 (输入 'quit' 退出):");
+    let mut round = 0;
 
     loop {
         // 获取用户输入
@@ -92,34 +61,93 @@ async fn main() -> LLMResult<()> {
             break;
         }
 
+        round += 1;
+
         // 使用当前活动会话进行流式对话
         print!("助手: ");
         std::io::stdout().flush().unwrap();
 
         // 开始流式对话
         let mut stream = agent.chat_stream(&user_input).await?;
-        let mut _full_response = String::new();
-
         while let Some(result) = stream.next().await {
             match result {
                 Ok(text) => {
                     print!("{}", text);
                     std::io::stdout().flush().unwrap();
-                    _full_response.push_str(&text);
                 }
                 Err(e) => {
-                    info!("\n❌ 对话错误: {}", e);
+                    info!("\n错误: {}", e);
                     break;
                 }
             }
         }
 
-        info!("\n");
+        println!();
+
+        // 打印上下文信息
+        print_context(&agent, round).await;
     }
 
-    info!("\n=============================================");
+    info!("=============================================");
     info!("对话结束。所有会话和消息已持久化到数据库。");
     info!("=============================================");
 
     Ok(())
+}
+
+/// 打印当前上下文信息
+async fn print_context(agent: &mofa_sdk::llm::LLMAgent, round: usize) {
+    use mofa_sdk::llm::Role;
+
+    info!("");
+    info!("------------ 第 {} 轮对话后上下文状态 ------------", round);
+
+    let history = agent.history().await;
+
+    // 统计消息数量
+    let user_count = history.iter()
+        .filter(|m| matches!(m.role, Role::User))
+        .count();
+    let assistant_count = history.iter()
+        .filter(|m| matches!(m.role, Role::Assistant))
+        .count();
+    let system_count = history.iter()
+        .filter(|m| matches!(m.role, Role::System))
+        .count();
+
+    info!("当前上下文消息总数: {} 条", history.len());
+    info!("  - 系统消息: {} 条 (始终保留)", system_count);
+    info!("  - 用户消息: {} 条", user_count);
+    info!("  - 助手消息: {} 条", assistant_count);
+    info!("  - 对话轮数: {} 轮", user_count);
+
+    // 打印详细消息列表
+    info!("当前上下文消息列表:");
+    for (i, msg) in history.iter().enumerate() {
+        let content = msg.content.as_ref()
+            .and_then(|c| {
+                if let mofa_sdk::llm::MessageContent::Text(text) = c {
+                    Some(text.as_str())
+                } else {
+                    None
+                }
+            })
+            .unwrap_or("");
+
+        match msg.role {
+            Role::System => {
+                info!("  [{}] System: {:.50}...", i, content);
+            }
+            Role::User => {
+                info!("  [{}] User: {:.50}...", i, content);
+            }
+            Role::Assistant => {
+                info!("  [{}] Assistant: {:.50}...", i, content);
+            }
+            _ => {}
+        }
+    }
+
+    info!("---------------------------------------------------");
+    info!("");
 }

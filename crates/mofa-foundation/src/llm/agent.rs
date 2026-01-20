@@ -268,6 +268,13 @@ pub struct LLMAgent {
     cached_kokoro_engine: Arc<Mutex<Option<Arc<mofa_plugins::tts::kokoro_wrapper::KokoroTTS>>>>,
     /// Active TTS session for cancellation
     active_tts_session: Arc<Mutex<Option<TTSSession>>>,
+    /// 持久化存储（可选，用于从数据库加载历史会话）
+    message_store: Option<Arc<dyn crate::persistence::MessageStore + Send + Sync>>,
+    session_store: Option<Arc<dyn crate::persistence::SessionStore + Send + Sync>>,
+    /// 用户 ID（用于从数据库加载会话）
+    persistence_user_id: Option<uuid::Uuid>,
+    /// Agent ID（用于从数据库加载会话）
+    persistence_agent_id: Option<uuid::Uuid>,
 }
 
 /// LLM Agent 事件处理器
@@ -277,6 +284,9 @@ pub struct LLMAgent {
 pub trait LLMAgentEventHandler: Send + Sync {
     /// Clone this handler trait object
     fn clone_box(&self) -> Box<dyn LLMAgentEventHandler>;
+
+    /// 获取 Any 类型用于 downcasting
+    fn as_any(&self) -> &dyn std::any::Any;
 
     /// 处理用户消息前的钩子
     async fn before_chat(&self, message: &str) -> LLMResult<Option<String>> {
@@ -395,6 +405,188 @@ impl LLMAgent {
             #[cfg(feature = "kokoro")]
             cached_kokoro_engine: Arc::new(Mutex::new(None)),
             active_tts_session: Arc::new(Mutex::new(None)),
+            message_store: None,
+            session_store: None,
+            persistence_user_id: None,
+            persistence_agent_id: None,
+        }
+    }
+
+    /// 创建新的 LLM Agent，并尝试从数据库加载初始会话（异步版本）
+    ///
+    /// 如果提供了 persistence stores 且 session_id 存在于数据库中，
+    /// 会自动加载历史消息并应用滑动窗口。
+    ///
+    /// # 参数
+    /// - `config`: Agent 配置
+    /// - `provider`: LLM Provider
+    /// - `initial_session_id`: 初始会话 ID，如果为 None 则使用自动生成的 ID
+    /// - `message_store`: 消息存储（可选，用于从数据库加载历史）
+    /// - `session_store`: 会话存储（可选，用于从数据库加载历史）
+    /// - `persistence_user_id`: 用户 ID（用于从数据库加载会话）
+    /// - `persistence_agent_id`: Agent ID（用于从数据库加载会话）
+    ///
+    /// # 示例
+    ///
+    /// ```rust,ignore
+    /// let agent = LLMAgent::with_initial_session_async(
+    ///     config,
+    ///     provider,
+    ///     Some("user-session-001".to_string()),
+    ///     Some(message_store),
+    ///     Some(session_store),
+    ///     Some(user_id),
+    ///     Some(agent_id),
+    /// ).await?;
+    /// ```
+    pub async fn with_initial_session_async(
+        config: LLMAgentConfig,
+        provider: Arc<dyn LLMProvider>,
+        initial_session_id: Option<String>,
+        message_store: Option<Arc<dyn crate::persistence::MessageStore + Send + Sync>>,
+        session_store: Option<Arc<dyn crate::persistence::SessionStore + Send + Sync>>,
+        persistence_user_id: Option<uuid::Uuid>,
+        persistence_agent_id: Option<uuid::Uuid>,
+    ) -> Self {
+        let client = LLMClient::new(provider.clone());
+
+        // Clone initial_session_id to avoid move issues
+        let initial_session_id_clone = initial_session_id.clone();
+
+        // 1. 尝试从数据库加载会话（如果有 stores 且指定了 session_id）
+        let session = if let (Some(sid), Some(msg_store), Some(sess_store), Some(user_id), Some(agent_id)) =
+            (initial_session_id_clone, message_store.clone(), session_store.clone(), persistence_user_id, persistence_agent_id)
+        {
+            // Clone stores before moving them into ChatSession::load
+            let msg_store_clone = msg_store.clone();
+            let sess_store_clone = sess_store.clone();
+
+            let session_uuid = uuid::Uuid::parse_str(&sid).unwrap_or_else(|_| {
+                tracing::warn!("⚠️ 无效的 session_id 格式 '{}', 将生成新的 UUID", sid);
+                uuid::Uuid::now_v7()
+            });
+
+            // 尝试从数据库加载
+            match ChatSession::load(
+                session_uuid,
+                LLMClient::new(provider.clone()),
+                user_id,
+                agent_id,
+                msg_store,
+                sess_store,
+                config.context_window_size,
+            ).await {
+                Ok(loaded_session) => {
+                    tracing::info!("✅ 从数据库加载会话: {} ({} 条消息)", sid, loaded_session.messages().len());
+                    loaded_session
+                }
+                Err(e) => {
+                    // 会话不存在，创建新会话（使用用户指定的ID和从persistence获取的user_id/agent_id）
+                    tracing::info!("📝 创建新会话并持久化: {} (数据库中不存在: {})", sid, e);
+
+                    // Clone stores again for the fallback case
+                    let msg_store_clone2 = msg_store_clone.clone();
+                    let sess_store_clone2 = sess_store_clone.clone();
+
+                    // 使用正确的 user_id 和 agent_id 创建会话，并持久化到数据库
+                    match ChatSession::with_id_and_stores_and_persist(
+                        session_uuid,
+                        LLMClient::new(provider.clone()),
+                        user_id,
+                        agent_id,
+                        msg_store_clone,
+                        sess_store_clone,
+                        config.context_window_size,
+                    ).await {
+                        Ok(mut new_session) => {
+                            if let Some(ref prompt) = config.system_prompt {
+                                new_session = new_session.with_system(prompt.clone());
+                            }
+                            new_session
+                        }
+                        Err(persist_err) => {
+                            tracing::error!("❌ 持久化会话失败: {}, 降级为内存会话", persist_err);
+                            // 降级：如果持久化失败，创建内存会话
+                            let new_session = ChatSession::with_id_and_stores(
+                                session_uuid,
+                                LLMClient::new(provider.clone()),
+                                user_id,
+                                agent_id,
+                                msg_store_clone2,
+                                sess_store_clone2,
+                                config.context_window_size,
+                            );
+                            if let Some(ref prompt) = config.system_prompt {
+                                new_session.with_system(prompt.clone())
+                            } else {
+                                new_session
+                            }
+                        }
+                    }
+                }
+            }
+        } else {
+            // 没有 persistence stores，创建普通会话
+            let mut session = if let Some(sid) = initial_session_id {
+                ChatSession::with_id_str(&sid, LLMClient::new(provider.clone()))
+            } else {
+                ChatSession::new(LLMClient::new(provider.clone()))
+            };
+            if let Some(ref prompt) = config.system_prompt {
+                session = session.with_system(prompt.clone());
+            }
+            session.with_context_window_size(config.context_window_size)
+        };
+
+        let session_id = session.session_id().to_string();
+        let session_arc = Arc::new(RwLock::new(session));
+
+        // 初始化会话存储
+        let mut sessions = HashMap::new();
+        sessions.insert(session_id.clone(), session_arc);
+
+        // Clone fields needed for metadata before moving config
+        let agent_id = config.agent_id.clone();
+        let name = config.name.clone();
+
+        // 创建 AgentCapabilities
+        let capabilities = mofa_kernel::agent::AgentCapabilities::builder()
+            .tags(vec![
+                "llm".to_string(),
+                "chat".to_string(),
+                "text-generation".to_string(),
+                "multi-session".to_string(),
+            ])
+            .build();
+
+        Self {
+            config,
+            metadata: AgentMetadata {
+                id: agent_id,
+                name,
+                description: None,
+                version: None,
+                capabilities,
+                state: AgentState::Created,
+            },
+            client,
+            sessions: Arc::new(RwLock::new(sessions)),
+            active_session_id: Arc::new(RwLock::new(session_id)),
+            tools: Vec::new(),
+            tool_executor: None,
+            event_handler: None,
+            plugins: Vec::new(),
+            state: AgentState::Created,
+            provider,
+            prompt_plugin: None,
+            tts_plugin: None,
+            #[cfg(feature = "kokoro")]
+            cached_kokoro_engine: Arc::new(Mutex::new(None)),
+            active_tts_session: Arc::new(Mutex::new(None)),
+            message_store,
+            session_store,
+            persistence_user_id,
+            persistence_agent_id,
         }
     }
 
@@ -1766,6 +1958,11 @@ pub struct LLMAgentBuilder {
     user_id: Option<String>,
     tenant_id: Option<String>,
     context_window_size: Option<usize>,
+    /// 持久化存储（用于从数据库加载历史会话）
+    message_store: Option<Arc<dyn crate::persistence::MessageStore + Send + Sync>>,
+    session_store: Option<Arc<dyn crate::persistence::SessionStore + Send + Sync>>,
+    persistence_user_id: Option<uuid::Uuid>,
+    persistence_agent_id: Option<uuid::Uuid>,
 }
 
 impl LLMAgentBuilder {
@@ -1788,6 +1985,10 @@ impl LLMAgentBuilder {
             user_id: None,
             tenant_id: None,
             context_window_size: None,
+            message_store: None,
+            session_store: None,
+            persistence_user_id: None,
+            persistence_agent_id: None,
         }
     }
 
@@ -1957,6 +2158,121 @@ impl LLMAgentBuilder {
         self
     }
 
+    /// 设置持久化存储（用于从数据库加载历史会话）
+    ///
+    /// 设置后，当使用 `with_session_id()` 创建 Agent 时，
+    /// 如果数据库中存在该 session_id，会自动加载历史消息。
+    ///
+    /// # 参数
+    /// - `message_store`: 消息存储
+    /// - `session_store`: 会话存储
+    /// - `user_id`: 用户 ID（用于从数据库加载会话）
+    /// - `agent_id`: Agent ID（用于从数据库加载会话）
+    ///
+    /// # 示例
+    ///
+    /// ```rust,ignore
+    /// use mofa_sdk::persistence::PostgresStore;
+    ///
+    /// let store = PostgresStore::from_env().await?;
+    /// let user_id = Uuid::now_v7();
+    /// let agent_id = Uuid::now_v7();
+    ///
+    /// let agent = LLMAgentBuilder::from_env()?
+    ///     .with_system_prompt("You are helpful.")
+    ///     .with_persistence_stores(store.clone(), store, user_id, agent_id)
+    ///     .with_session_id("my-session")
+    ///     .build_async()
+    ///     .await?;
+    /// ```
+    pub fn with_persistence_stores(
+        mut self,
+        message_store: Arc<dyn crate::persistence::MessageStore + Send + Sync>,
+        session_store: Arc<dyn crate::persistence::SessionStore + Send + Sync>,
+        user_id: uuid::Uuid,
+        agent_id: uuid::Uuid,
+    ) -> Self {
+        self.message_store = Some(message_store);
+        self.session_store = Some(session_store);
+        self.persistence_user_id = Some(user_id);
+        self.persistence_agent_id = Some(agent_id);
+        self
+    }
+
+    /// 从环境变量创建基础配置
+    ///
+    /// 自动配置：
+    /// - OpenAI Provider（从 OPENAI_API_KEY）
+    /// - 默认 temperature (0.7) 和 max_tokens (4096)
+    ///
+    /// # 环境变量
+    /// - OPENAI_API_KEY: OpenAI API 密钥（必需）
+    /// - OPENAI_BASE_URL: 可选的 API 基础 URL
+    /// - OPENAI_MODEL: 可选的默认模型
+    ///
+    /// # 示例
+    ///
+    /// ```rust,ignore
+    /// use mofa_sdk::llm::LLMAgentBuilder;
+    ///
+    /// let agent = LLMAgentBuilder::from_env()?
+    ///     .with_system_prompt("You are a helpful assistant.")
+    ///     .build();
+    /// ```
+    #[cfg(feature = "openai")]
+    pub fn from_env() -> LLMResult<Self> {
+        use super::openai::{OpenAIConfig, OpenAIProvider};
+
+        let api_key = std::env::var("OPENAI_API_KEY")
+            .map_err(|_| LLMError::ConfigError(
+                "OPENAI_API_KEY environment variable not set".to_string()
+            ))?;
+
+        let mut config = OpenAIConfig::new(api_key);
+
+        if let Ok(base_url) = std::env::var("OPENAI_BASE_URL") {
+            config = config.with_base_url(&base_url);
+        }
+
+        if let Ok(model) = std::env::var("OPENAI_MODEL") {
+            config = config.with_model(&model);
+        }
+
+        Ok(Self::new()
+            .with_provider(Arc::new(OpenAIProvider::with_config(config)))
+            .with_temperature(0.7)
+            .with_max_tokens(4096))
+    }
+
+    /// 添加持久化事件处理器（便捷方法）
+    ///
+    /// 自动包装 PersistenceCallback 为 AgentPersistenceHandler。
+    ///
+    /// # 示例
+    ///
+    /// ```rust,ignore
+    /// use mofa_sdk::{
+    ///     llm::LLMAgentBuilder,
+    ///     persistence::{PersistenceHandler, AgentPersistenceHandler},
+    /// };
+    /// use std::sync::Arc;
+    ///
+    /// let store = Arc::new(PostgresStore::from_env().await?);
+    /// let persistence = Arc::new(PersistenceHandler::auto(store));
+    ///
+    /// let agent = LLMAgentBuilder::from_env()?
+    ///     .with_system_prompt("You are helpful.")
+    ///     .with_persistence_handler(persistence)
+    ///     .build();
+    /// ```
+    pub fn with_persistence_handler(
+        mut self,
+        persistence: std::sync::Arc<dyn crate::persistence::PersistenceCallback>
+    ) -> Self {
+        self.event_handler = Some(Box::new(crate::persistence::AgentPersistenceHandler::new(persistence)));
+        self
+    }
+
     /// 构建 LLM Agent
     ///
     /// # Panics
@@ -2075,6 +2391,110 @@ impl LLMAgentBuilder {
         agent.tts_plugin = tts_plugin;
 
         Ok(agent)
+    }
+
+    /// 异步构建 LLM Agent（支持从数据库加载会话）
+    ///
+    /// 如果设置了 `with_persistence_stores()` 且 `with_session_id()`，
+    /// 会尝试从数据库加载现有会话。
+    ///
+    /// # 示例
+    ///
+    /// ```rust,ignore
+    /// use mofa_sdk::persistence::PostgresStore;
+    ///
+    /// let store = PostgresStore::from_env().await?;
+    /// let user_id = Uuid::now_v7();
+    /// let agent_id = Uuid::now_v7();
+    ///
+    /// let agent = LLMAgentBuilder::from_env()?
+    ///     .with_system_prompt("You are helpful.")
+    ///     .with_persistence_stores(store.clone(), store, user_id, agent_id)
+    ///     .with_session_id("my-session")
+    ///     .build_async()
+    ///     .await?;
+    /// ```
+    pub async fn build_async(self) -> LLMAgent {
+        let provider = self
+            .provider
+            .expect("LLM provider must be set before building");
+
+        let config = LLMAgentConfig {
+            agent_id: self.agent_id.clone(),
+            name: self.name.unwrap_or_else(|| self.agent_id.clone()),
+            system_prompt: self.system_prompt,
+            temperature: self.temperature,
+            max_tokens: self.max_tokens,
+            custom_config: self.custom_config,
+            user_id: self.user_id,
+            tenant_id: self.tenant_id,
+            context_window_size: self.context_window_size,
+        };
+
+        // Clone session_id before moving it (needed for PersistenceHandler sync)
+        let session_id_clone = self.session_id.clone();
+
+        // 使用异步方法，支持从数据库加载
+        let mut agent = LLMAgent::with_initial_session_async(
+            config,
+            provider,
+            self.session_id,
+            self.message_store,
+            self.session_store,
+            self.persistence_user_id,
+            self.persistence_agent_id,
+        ).await;
+
+        // 设置Prompt模板插件
+        agent.prompt_plugin = self.prompt_plugin;
+
+        if !self.tools.is_empty()
+            && let Some(executor) = self.tool_executor
+        {
+            agent.set_tools(self.tools, executor);
+        }
+
+        // CRITICAL FIX: 同步 PersistenceHandler 的 session_id
+        // 确保 PersistenceHandler 使用与 ChatSession 相同的 session_id
+        if let (Some(session_id_str), Some(handler)) = (session_id_clone.as_deref(), self.event_handler.as_ref()) {
+            if let Ok(session_uuid) = uuid::Uuid::parse_str(session_id_str) {
+                // 尝试将 handler 转换为 AgentPersistenceHandler 并设置 session_id
+                use crate::persistence::AgentPersistenceHandler;
+                if let Some(persist_handler) = handler.as_any().downcast_ref::<AgentPersistenceHandler>() {
+                    persist_handler.set_session_id(session_uuid).await;
+                    tracing::info!("🔗 PersistenceHandler session_id 已同步: {}", session_uuid);
+                }
+            }
+        }
+
+        if let Some(handler) = self.event_handler {
+            agent.set_event_handler(handler);
+        }
+
+        // 处理插件列表：提取 TTS 插件
+        let mut plugins = self.plugins;
+        let mut tts_plugin = None;
+
+        // 查找并提取 TTS 插件
+        for i in (0..plugins.len()).rev() {
+            if plugins[i].as_any().is::<mofa_plugins::tts::TTSPlugin>() {
+                // 使用 Any::downcast_ref 检查类型
+                // 由于我们需要获取所有权，这里使用 is 检查后移除
+                let plugin = plugins.remove(i);
+                // 尝试 downcast
+                if let Ok(tts) = plugin.into_any().downcast::<mofa_plugins::tts::TTSPlugin>() {
+                    tts_plugin = Some(Arc::new(Mutex::new(*tts)));
+                }
+            }
+        }
+
+        // 添加剩余插件
+        agent.add_plugins(plugins);
+
+        // 设置 TTS 插件
+        agent.tts_plugin = tts_plugin;
+
+        agent
     }
 }
 

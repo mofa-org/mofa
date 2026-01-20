@@ -78,6 +78,46 @@ impl PostgresStore {
         Ok(Arc::new(Self::connect(database_url).await?))
     }
 
+    /// 从环境变量 DATABASE_URL 创建共享实例
+    ///
+    /// 环境变量：
+    /// - DATABASE_URL: PostgreSQL 连接字符串（必需）
+    ///
+    /// # 示例
+    ///
+    /// ```rust,ignore
+    /// use mofa_foundation::persistence::PostgresStore;
+    ///
+    /// let store = PostgresStore::from_env().await?;
+    /// ```
+    pub async fn from_env() -> PersistenceResult<Arc<Self>> {
+        let database_url = std::env::var("DATABASE_URL")
+            .map_err(|_| PersistenceError::Other(
+                "DATABASE_URL environment variable not set".to_string()
+            ))?;
+        Self::shared(&database_url).await
+    }
+
+    /// 从环境变量创建，支持自定义连接池大小
+    ///
+    /// 环境变量：
+    /// - DATABASE_URL: PostgreSQL 连接字符串（必需）
+    ///
+    /// # 示例
+    ///
+    /// ```rust,ignore
+    /// use mofa_foundation::persistence::PostgresStore;
+    ///
+    /// let store = PostgresStore::from_env_with_options(20).await?;
+    /// ```
+    pub async fn from_env_with_options(max_connections: u32) -> PersistenceResult<Arc<Self>> {
+        let database_url = std::env::var("DATABASE_URL")
+            .map_err(|_| PersistenceError::Other(
+                "DATABASE_URL environment variable not set".to_string()
+            ))?;
+        Ok(Arc::new(Self::connect_with_options(&database_url, max_connections).await?))
+    }
+
     /// 获取连接池引用
     pub fn pool(&self) -> &PgPool {
         &self.pool
@@ -223,6 +263,7 @@ impl PostgresStore {
             agent_id: row
                 .try_get("agent_id")
                 .map_err(|e| PersistenceError::Query(e.to_string()))?,
+            tenant_id: row.try_get("tenant_id").unwrap_or_else(|_| Uuid::nil()),
             title: row.try_get("title").ok(),
             metadata,
             create_time: row
@@ -613,13 +654,18 @@ impl SessionStore for PostgresStore {
 
         sqlx::query(
             r#"
-            INSERT INTO entity_chat_session (id, user_id, agent_id, title, metadata, create_time, update_time)
-            VALUES ($1, $2, $3, $4, $5, $6, $7)
+            INSERT INTO entity_chat_session (id, user_id, agent_id, tenant_id, title, metadata, create_time, update_time)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+            ON CONFLICT (id) DO UPDATE SET
+                title = EXCLUDED.title,
+                metadata = EXCLUDED.metadata,
+                update_time = EXCLUDED.update_time
             "#,
         )
         .bind(session.id)
         .bind(session.user_id)
         .bind(session.agent_id)
+        .bind(session.tenant_id)
         .bind(&session.title)
         .bind(metadata)
         .bind(session.create_time)

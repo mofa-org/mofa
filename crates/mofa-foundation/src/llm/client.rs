@@ -465,6 +465,53 @@ impl ChatSession {
         }
     }
 
+    /// 使用指定 ID 和存储实现创建会话，并立即持久化到数据库
+    ///
+    /// 这个方法会将会话记录保存到数据库，确保会话在创建时就被持久化。
+    /// 这对于需要将会话 ID 用作外键的场景很重要（例如保存消息时）。
+    ///
+    /// # 参数
+    /// - `session_id`: 会话 ID
+    /// - `client`: LLM 客户端
+    /// - `user_id`: 用户 ID
+    /// - `agent_id`: Agent ID
+    /// - `message_store`: 消息存储
+    /// - `session_store`: 会话存储
+    /// - `context_window_size`: 可选的上下文窗口大小
+    ///
+    /// # 返回
+    /// 返回创建并持久化后的会话
+    ///
+    /// # 错误
+    /// 如果数据库操作失败，返回错误
+    pub async fn with_id_and_stores_and_persist(
+        session_id: uuid::Uuid,
+        client: LLMClient,
+        user_id: uuid::Uuid,
+        agent_id: uuid::Uuid,
+        message_store: Arc<dyn crate::persistence::MessageStore>,
+        session_store: Arc<dyn crate::persistence::SessionStore>,
+        context_window_size: Option<usize>,
+    ) -> crate::persistence::PersistenceResult<Self> {
+        // 创建内存会话
+        let session = Self::with_id_and_stores(
+            session_id,
+            client,
+            user_id,
+            agent_id,
+            message_store,
+            session_store.clone(),
+            context_window_size,
+        );
+
+        // 持久化会话记录到数据库
+        let db_session = crate::persistence::ChatSession::new(user_id, agent_id)
+            .with_id(session_id);
+        session_store.create_session(&db_session).await?;
+
+        Ok(session)
+    }
+
     /// 生成唯一会话 ID
     fn generate_session_id() -> uuid::Uuid {
         uuid::Uuid::now_v7()

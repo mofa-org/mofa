@@ -40,6 +40,9 @@ pub trait PersistenceCallback: Send + Sync {
         request_message_id: Uuid,
         error_message: &str,
     ) -> LLMResult<Uuid>;
+
+    /// 设置会话 ID（用于持久化处理器同步）
+    async fn set_session_id(&self, session_id: Uuid);
 }
 
 /// LLMAgent 事件处理器的默认持久化实现
@@ -61,12 +64,21 @@ impl AgentPersistenceHandler {
             request_start_time: Arc::new(tokio::sync::RwLock::new(None)),
         }
     }
+
+    /// 设置会话 ID（转发到内部的 PersistenceHandler）
+    pub async fn set_session_id(&self, session_id: Uuid) {
+        self.persistence.set_session_id(session_id).await;
+    }
 }
 
 #[async_trait::async_trait]
 impl crate::llm::agent::LLMAgentEventHandler for AgentPersistenceHandler {
     fn clone_box(&self) -> Box<dyn crate::llm::agent::LLMAgentEventHandler> {
         Box::new(self.clone())
+    }
+
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
     }
 
     /// 在发送用户消息前调用 - 记录用户消息
@@ -184,6 +196,52 @@ where
         }
     }
 
+    /// 为简单场景创建持久化处理器（自动生成 ID）
+    ///
+    /// 自动生成 user_id 和 agent_id，适用于单用户、单 Agent 场景。
+    ///
+    /// # 示例
+    ///
+    /// ```rust,ignore
+    /// use mofa_foundation::persistence::{InMemoryStore, PersistenceHandler};
+    ///
+    /// let store = InMemoryStore::shared();
+    /// let handler = PersistenceHandler::auto(store);
+    /// ```
+    pub fn auto(store: Arc<S>) -> Self {
+        Self::new(store, Uuid::now_v7(), Uuid::now_v7())
+    }
+
+    /// 从环境变量创建持久化处理器
+    ///
+    /// 自动从环境变量读取 user_id 和 agent_id，如果未设置则自动生成。
+    ///
+    /// 环境变量：
+    /// - USER_ID: 用户 ID（可选，默认自动生成）
+    /// - AGENT_ID: Agent ID（可选，默认自动生成）
+    ///
+    /// # 示例
+    ///
+    /// ```rust,ignore
+    /// use mofa_foundation::persistence::{InMemoryStore, PersistenceHandler};
+    ///
+    /// let store = InMemoryStore::shared();
+    /// let handler = PersistenceHandler::from_env(store);
+    /// ```
+    pub fn from_env(store: Arc<S>) -> Self {
+        let user_id = std::env::var("USER_ID")
+            .ok()
+            .and_then(|s| Uuid::parse_str(&s).ok())
+            .unwrap_or_else(Uuid::now_v7);
+
+        let agent_id = std::env::var("AGENT_ID")
+            .ok()
+            .and_then(|s| Uuid::parse_str(&s).ok())
+            .unwrap_or_else(Uuid::now_v7);
+
+        Self::new(store, user_id, agent_id)
+    }
+
     /// 设置会话 ID
     pub async fn set_session_id(&self, session_id: Uuid) {
         *self.session_id.write().await = session_id;
@@ -209,6 +267,16 @@ where
     /// 获取存储后端引用
     pub fn store(&self) -> Arc<S> {
         self.store.clone()
+    }
+
+    /// 获取用户 ID
+    pub fn user_id(&self) -> Uuid {
+        self.user_id
+    }
+
+    /// 获取 Agent ID
+    pub fn agent_id(&self) -> Uuid {
+        self.agent_id
     }
 
     /// 保存消息
@@ -309,6 +377,11 @@ where
             .map_err(|e| LLMError::Other(e.to_string()))?;
 
         Ok(id)
+    }
+
+    async fn set_session_id(&self, session_id: Uuid) {
+        *self.session_id.write().await = session_id;
+        info!("✅ PersistenceHandler session_id 已同步: {}", session_id);
     }
 }
 
