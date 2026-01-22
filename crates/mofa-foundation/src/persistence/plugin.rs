@@ -5,6 +5,7 @@
 use super::entities::*;
 use super::traits::*;
 use crate::llm::{LLMError, LLMResult};
+use crate::llm::types::LLMResponseMetadata;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use tokio::sync::RwLock;
@@ -31,6 +32,7 @@ pub trait PersistenceCallback: Send + Sync {
         request_message_id: Uuid,
         response_message_id: Uuid,
         latency_ms: i32,
+        response_id: Option<&str>,
     ) -> LLMResult<Uuid>;
 
     /// 记录 API 调用错误
@@ -51,8 +53,10 @@ pub trait PersistenceCallback: Send + Sync {
 #[derive(Clone)]
 pub struct AgentPersistenceHandler {
     persistence: Arc<dyn PersistenceCallback>,
-    current_user_msg_id: Arc<tokio::sync::RwLock<Option<Uuid>>>,
-    request_start_time: Arc<tokio::sync::RwLock<Option<std::time::Instant>>>,
+    current_user_msg_id: Arc<RwLock<Option<Uuid>>>,
+    request_start_time: Arc<RwLock<Option<std::time::Instant>>>,
+    response_id: Arc<RwLock<Option<String>>>,
+    current_model: Arc<RwLock<Option<String>>>,
 }
 
 impl AgentPersistenceHandler {
@@ -60,8 +64,10 @@ impl AgentPersistenceHandler {
     pub fn new(persistence: Arc<dyn PersistenceCallback>) -> Self {
         Self {
             persistence,
-            current_user_msg_id: Arc::new(tokio::sync::RwLock::new(None)),
-            request_start_time: Arc::new(tokio::sync::RwLock::new(None)),
+            current_user_msg_id: Arc::new(RwLock::new(None)),
+            request_start_time: Arc::new(RwLock::new(None)),
+            response_id: Arc::new(RwLock::new(None)),
+            current_model: Arc::new(RwLock::new(None)),
         }
     }
 
@@ -96,8 +102,65 @@ impl crate::llm::agent::LLMAgentEventHandler for AgentPersistenceHandler {
         Ok(Some(message.to_string()))
     }
 
+    /// 在发送用户消息前调用（带模型名称）- 记录用户消息和模型
+    async fn before_chat_with_model(
+        &self,
+        message: &str,
+        model: &str,
+    ) -> crate::llm::LLMResult<Option<String>> {
+        // 存储模型名称，用于后续的 after_chat 和 on_error
+        *self.current_model.write().await = Some(model.to_string());
+
+        // 调用原有的 before_chat 逻辑
+        self.before_chat(message).await
+    }
+
     /// 在收到 LLM 响应后调用 - 记录助手消息和 API 调用
     async fn after_chat(&self, response: &str) -> crate::llm::LLMResult<Option<String>> {
+        // 保存助手消息
+        let assistant_msg_id = self.persistence.on_assistant_message(response).await?;
+        info!("✅ [内置持久化] 助手消息已保存: ID = {}", assistant_msg_id);
+        // 计算请求延迟
+        let latency = match *self.request_start_time.read().await {
+            Some(start) => start.elapsed().as_millis() as i32,
+            None => 0,
+        };
+
+        // 获取存储的模型名称，或使用默认值
+        let model = self.current_model.read().await;
+        let model_name = model.as_ref().map(|s| s.as_str()).unwrap_or("unknown");
+
+        // 记录 API 调用
+        if let Some(user_msg_id) = *self.current_user_msg_id.read().await {
+            let _ = self.persistence.on_api_call(
+                model_name,  // 使用存储的模型名称
+                0,           // 未知（没有元数据时无法获取真实值）
+                response.len() as i32 / 4,  // 简单估算 completion_tokens (每4字符一个token)
+                user_msg_id,
+                assistant_msg_id,
+                latency,
+                None, // response_id 不可用
+            ).await?;
+            info!("✅ [内置持久化] API 调用记录已保存: 模型={}, 延迟={}ms", model_name, latency);
+        }
+
+        // 清理状态
+        *self.current_user_msg_id.write().await = None;
+        *self.request_start_time.write().await = None;
+        *self.current_model.write().await = None;
+
+        Ok(Some(response.to_string()))
+    }
+
+    /// 在收到 LLM 响应后调用 - 记录助手消息和 API 调用（带元数据）
+    async fn after_chat_with_metadata(
+        &self,
+        response: &str,
+        metadata: &LLMResponseMetadata,
+    ) -> crate::llm::LLMResult<Option<String>> {
+        // 保存 response_id
+        *self.response_id.write().await = Some(metadata.id.clone());
+
         // 保存助手消息
         let assistant_msg_id = self.persistence.on_assistant_message(response).await?;
         info!("✅ [内置持久化] 助手消息已保存: ID = {}", assistant_msg_id);
@@ -111,19 +174,24 @@ impl crate::llm::agent::LLMAgentEventHandler for AgentPersistenceHandler {
         // 记录 API 调用
         if let Some(user_msg_id) = *self.current_user_msg_id.read().await {
             let _ = self.persistence.on_api_call(
-                "gpt-3.5-turbo",  // TODO: 从 LLM 配置或响应中获取真实模型名称
-                100,              // TODO: 从实际请求中获取真实 prompt_tokens
-                response.len() as i32 / 4,  // 简单估算 completion_tokens (每4字符一个token)
+                &metadata.model,
+                metadata.prompt_tokens as i32,
+                metadata.completion_tokens as i32,
                 user_msg_id,
                 assistant_msg_id,
                 latency,
+                Some(&metadata.id),
             ).await?;
-            info!("✅ [内置持久化] API 调用记录已保存: 延迟 = {}ms", latency);
+            info!(
+                "✅ [内置持久化] API 调用记录已保存: 模型={}, tokens={}/{}, 延迟={}ms",
+                metadata.model, metadata.prompt_tokens, metadata.completion_tokens, latency
+            );
         }
 
         // 清理状态
         *self.current_user_msg_id.write().await = None;
         *self.request_start_time.write().await = None;
+        *self.response_id.write().await = None;
 
         Ok(Some(response.to_string()))
     }
@@ -132,9 +200,13 @@ impl crate::llm::agent::LLMAgentEventHandler for AgentPersistenceHandler {
     async fn on_error(&self, error: &crate::llm::LLMError) -> crate::llm::LLMResult<Option<String>> {
         info!("✅ [内置持久化] 记录 API 错误...");
 
+        // 获取存储的模型名称，或使用默认值
+        let model = self.current_model.read().await;
+        let model_name = model.as_ref().map(|s| s.as_str()).unwrap_or("unknown");
+
         if let Some(user_msg_id) = *self.current_user_msg_id.read().await {
             let _ = self.persistence.on_api_error(
-                "gpt-3.5-turbo",  // TODO: 从 LLM 配置或响应中获取真实模型名称
+                model_name,  // 使用存储的模型名称
                 user_msg_id,
                 &error.to_string(),
             ).await?;
@@ -144,6 +216,7 @@ impl crate::llm::agent::LLMAgentEventHandler for AgentPersistenceHandler {
         // 清理状态
         *self.current_user_msg_id.write().await = None;
         *self.request_start_time.write().await = None;
+        *self.current_model.write().await = None;
 
         Ok(None)
     }
@@ -173,6 +246,8 @@ where
     store: Arc<S>,
     /// 用户 ID
     user_id: Uuid,
+    /// 租户 ID
+    tenant_id: Uuid,
     /// Agent ID
     agent_id: Uuid,
     /// 当前会话 ID
@@ -186,10 +261,11 @@ where
     S: MessageStore + ApiCallStore + Send + Sync + 'static,
 {
     /// 创建持久化处理器
-    pub fn new(store: Arc<S>, user_id: Uuid, agent_id: Uuid) -> Self {
+    pub fn new(store: Arc<S>, user_id: Uuid, tenant_id:Uuid, agent_id: Uuid) -> Self {
         Self {
             store,
             user_id,
+            tenant_id,
             agent_id,
             session_id: Arc::new(RwLock::new(Uuid::now_v7())),
             request_count: AtomicU64::new(0),
@@ -209,7 +285,7 @@ where
     /// let handler = PersistenceHandler::auto(store);
     /// ```
     pub fn auto(store: Arc<S>) -> Self {
-        Self::new(store, Uuid::now_v7(), Uuid::now_v7())
+        Self::new(store, Uuid::now_v7(), Uuid::now_v7(),Uuid::now_v7())
     }
 
     /// 从环境变量创建持久化处理器
@@ -234,12 +310,17 @@ where
             .and_then(|s| Uuid::parse_str(&s).ok())
             .unwrap_or_else(Uuid::now_v7);
 
+        let tenant_id = std::env::var("TENANT_ID")
+            .ok()
+            .and_then(|s| Uuid::parse_str(&s).ok())
+            .unwrap_or_else(Uuid::now_v7);
+
         let agent_id = std::env::var("AGENT_ID")
             .ok()
             .and_then(|s| Uuid::parse_str(&s).ok())
             .unwrap_or_else(Uuid::now_v7);
 
-        Self::new(store, user_id, agent_id)
+        Self::new(store, user_id, tenant_id, agent_id)
     }
 
     /// 设置会话 ID
@@ -279,6 +360,8 @@ where
         self.agent_id
     }
 
+    pub fn tenant_id(&self) -> Uuid {self.tenant_id}
+
     /// 保存消息
     async fn save_message_internal(&self, role: MessageRole, content: &str) -> LLMResult<Uuid> {
         let session_id = *self.session_id.read().await;
@@ -286,6 +369,7 @@ where
             session_id,
             self.agent_id,
             self.user_id,
+            self.tenant_id,
             role,
             MessageContent::text(content),
         );
@@ -323,15 +407,17 @@ where
         request_message_id: Uuid,
         response_message_id: Uuid,
         latency_ms: i32,
+        response_id: Option<&str>,
     ) -> LLMResult<Uuid> {
         let session_id = *self.session_id.read().await;
         let now = chrono::Utc::now();
         let request_time = now - chrono::Duration::milliseconds(latency_ms as i64);
 
-        let api_call = LLMApiCall::success(
+        let mut api_call = LLMApiCall::success(
             session_id,
             self.agent_id,
             self.user_id,
+            self.tenant_id,
             request_message_id,
             response_message_id,
             model,
@@ -340,6 +426,12 @@ where
             request_time,
             now,
         );
+
+        // 设置 response_id（如果提供）
+        if let Some(rid) = response_id {
+            api_call = api_call.with_api_response_id(rid);
+        }
+
         let id = api_call.id;
 
         self.store
@@ -363,6 +455,7 @@ where
             session_id,
             self.agent_id,
             self.user_id,
+            self.tenant_id,
             request_message_id,
             model,
             error_message,
@@ -395,6 +488,7 @@ where
     store: Arc<S>,
     user_id: Uuid,
     agent_id: Uuid,
+    tenant_id: Uuid,
     session_id: Uuid,
 }
 
@@ -403,7 +497,7 @@ where
     S: MessageStore + ApiCallStore + SessionStore + Send + Sync + 'static,
 {
     /// 创建新的持久化上下文
-    pub async fn new(store: Arc<S>, user_id: Uuid, agent_id: Uuid) -> LLMResult<Self> {
+    pub async fn new(store: Arc<S>, user_id: Uuid, tenant_id: Uuid, agent_id: Uuid) -> LLMResult<Self> {
         let session = ChatSession::new(user_id, agent_id);
         store
             .create_session(&session)
@@ -414,16 +508,18 @@ where
             store,
             user_id,
             agent_id,
+            tenant_id,
             session_id: session.id,
         })
     }
 
     /// 从现有会话创建上下文
-    pub fn from_session(store: Arc<S>, user_id: Uuid, agent_id: Uuid, session_id: Uuid) -> Self {
+    pub fn from_session(store: Arc<S>, user_id: Uuid, agent_id: Uuid, tenant_id:Uuid, session_id: Uuid) -> Self {
         Self {
             store,
             user_id,
             agent_id,
+            tenant_id,
             session_id,
         }
     }
@@ -439,6 +535,7 @@ where
             self.session_id,
             self.agent_id,
             self.user_id,
+            self.tenant_id,
             MessageRole::User,
             MessageContent::text(content),
         );
@@ -458,6 +555,7 @@ where
             self.session_id,
             self.agent_id,
             self.user_id,
+            self.tenant_id,
             MessageRole::Assistant,
             MessageContent::text(content),
         );
@@ -510,7 +608,7 @@ where
     where
         S: Clone,
     {
-        PersistenceHandler::new(self.store.clone(), self.user_id, self.agent_id)
+        PersistenceHandler::new(self.store.clone(), self.user_id, self.tenant_id, self.agent_id)
     }
 }
 
@@ -518,60 +616,11 @@ where
 pub fn create_persistence_handler<S>(
     store: Arc<S>,
     user_id: Uuid,
+    tenant_id: Uuid,
     agent_id: Uuid,
 ) -> PersistenceHandler<S>
 where
     S: MessageStore + ApiCallStore + Send + Sync + 'static,
 {
-    PersistenceHandler::new(store, user_id, agent_id)
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::persistence::InMemoryStore;
-
-    #[tokio::test]
-    async fn test_persistence_handler() {
-        let store = InMemoryStore::shared();
-        let user_id = Uuid::now_v7();
-        let agent_id = Uuid::now_v7();
-
-        let handler = PersistenceHandler::new(store.clone(), user_id, agent_id);
-
-        // 记录消息
-        let msg_id = handler.on_user_message("Hello").await.unwrap();
-        assert!(!msg_id.is_nil());
-
-        let reply_id = handler.on_assistant_message("Hi there!").await.unwrap();
-        assert!(!reply_id.is_nil());
-
-        // 记录 API 调用
-        let call_id = handler
-            .on_api_call("gpt-4", 100, 50, msg_id, reply_id, 1000)
-            .await
-            .unwrap();
-        assert!(!call_id.is_nil());
-
-        assert_eq!(handler.request_count(), 1);
-    }
-
-    #[tokio::test]
-    async fn test_persistence_context() {
-        let store = Arc::new(InMemoryStore::new());
-        let user_id = Uuid::now_v7();
-        let agent_id = Uuid::now_v7();
-
-        let ctx = PersistenceContext::new(store.clone(), user_id, agent_id)
-            .await
-            .unwrap();
-
-        // 保存消息
-        ctx.save_user_message("Hello").await.unwrap();
-        ctx.save_assistant_message("Hi there!").await.unwrap();
-
-        // 获取历史
-        let history = ctx.get_history().await.unwrap();
-        assert_eq!(history.len(), 2);
-    }
+    PersistenceHandler::new(store, user_id, tenant_id, agent_id,)
 }

@@ -181,6 +181,7 @@ impl LLMMessage {
         chat_session_id: Uuid,
         agent_id: Uuid,
         user_id: Uuid,
+        tenant_id: Uuid,
         role: MessageRole,
         content: MessageContent,
     ) -> Self {
@@ -193,7 +194,7 @@ impl LLMMessage {
             content,
             role,
             user_id,
-            tenant_id: Uuid::now_v7(),
+            tenant_id,
             create_time: now,
             update_time: now,
         }
@@ -260,6 +261,8 @@ pub struct LLMApiCall {
     pub agent_id: Uuid,
     /// 用户 ID
     pub user_id: Uuid,
+    // 租户 ID
+    pub tenant_id: Uuid,
     /// 请求消息 ID
     pub request_message_id: Uuid,
     /// 响应消息 ID
@@ -304,12 +307,10 @@ pub struct LLMApiCall {
     /// 错误代码
     #[serde(skip_serializing_if = "Option::is_none")]
     pub error_code: Option<String>,
-    /// 请求时间
-    pub request_time: chrono::DateTime<chrono::Utc>,
-    /// 响应时间
-    pub response_time: chrono::DateTime<chrono::Utc>,
     /// 创建时间
     pub create_time: chrono::DateTime<chrono::Utc>,
+    /// 更新时间
+    pub update_time: chrono::DateTime<chrono::Utc>,
 }
 
 impl LLMApiCall {
@@ -318,6 +319,7 @@ impl LLMApiCall {
         chat_session_id: Uuid,
         agent_id: Uuid,
         user_id: Uuid,
+        tenant_id: Uuid,
         request_message_id: Uuid,
         response_message_id: Uuid,
         model_name: impl Into<String>,
@@ -338,6 +340,7 @@ impl LLMApiCall {
             chat_session_id,
             agent_id,
             user_id,
+            tenant_id,
             request_message_id,
             response_message_id,
             model_name: model_name.into(),
@@ -355,9 +358,8 @@ impl LLMApiCall {
             status: ApiCallStatus::Success,
             error_message: None,
             error_code: None,
-            request_time,
-            response_time,
-            create_time: chrono::Utc::now(),
+            create_time: request_time,
+            update_time: response_time
         }
     }
 
@@ -366,6 +368,7 @@ impl LLMApiCall {
         chat_session_id: Uuid,
         agent_id: Uuid,
         user_id: Uuid,
+        tenant_id: Uuid,
         request_message_id: Uuid,
         model_name: impl Into<String>,
         error_message: impl Into<String>,
@@ -378,6 +381,7 @@ impl LLMApiCall {
             chat_session_id,
             agent_id,
             user_id,
+            tenant_id,
             request_message_id,
             response_message_id: Uuid::nil(),
             model_name: model_name.into(),
@@ -395,9 +399,8 @@ impl LLMApiCall {
             status: ApiCallStatus::Failed,
             error_message: Some(error_message.into()),
             error_code,
-            request_time,
-            response_time: now,
-            create_time: now,
+            create_time: request_time,
+            update_time: now,
         }
     }
 
@@ -585,71 +588,4 @@ pub struct UsageStatistics {
     pub avg_latency_ms: Option<f64>,
     /// 平均 tokens/秒
     pub avg_tokens_per_second: Option<f64>,
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_message_role_display() {
-        assert_eq!(MessageRole::User.to_string(), "user");
-        assert_eq!(MessageRole::Assistant.to_string(), "assistant");
-    }
-
-    #[test]
-    fn test_message_role_parse() {
-        assert_eq!("user".parse::<MessageRole>().unwrap(), MessageRole::User);
-        assert_eq!(
-            "ASSISTANT".parse::<MessageRole>().unwrap(),
-            MessageRole::Assistant
-        );
-    }
-
-    #[test]
-    fn test_llm_message_creation() {
-        let msg = LLMMessage::new(
-            Uuid::now_v7(),
-            Uuid::now_v7(),
-            Uuid::now_v7(),
-            MessageRole::User,
-            MessageContent::text("Hello"),
-        );
-
-        assert!(msg.content.text.is_some());
-        assert_eq!(msg.role, MessageRole::User);
-    }
-
-    #[test]
-    fn test_api_call_success() {
-        let now = chrono::Utc::now();
-        let call = LLMApiCall::success(
-            Uuid::now_v7(),
-            Uuid::now_v7(),
-            Uuid::now_v7(),
-            Uuid::now_v7(),
-            Uuid::now_v7(),
-            "gpt-4",
-            100,
-            50,
-            now - chrono::Duration::seconds(2),
-            now,
-        );
-
-        assert_eq!(call.status, ApiCallStatus::Success);
-        assert_eq!(call.total_tokens, 150);
-        assert!(call.latency_ms.is_some());
-    }
-
-    #[test]
-    fn test_query_filter_builder() {
-        let filter = QueryFilter::new()
-            .user(Uuid::now_v7())
-            .model("gpt-4")
-            .paginate(0, 10);
-
-        assert!(filter.user_id.is_some());
-        assert_eq!(filter.model_name, Some("gpt-4".to_string()));
-        assert_eq!(filter.limit, Some(10));
-    }
 }

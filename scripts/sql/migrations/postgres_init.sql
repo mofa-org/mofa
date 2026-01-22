@@ -78,6 +78,7 @@ CREATE TABLE IF NOT EXISTS entity_llm_api_call (
     chat_session_id UUID NOT NULL,
     agent_id UUID NOT NULL,
     user_id UUID NOT NULL,
+    tenant_id UUID NOT NULL DEFAULT gen_uuid_v7(),
     request_message_id UUID NOT NULL,
     response_message_id UUID NOT NULL,
     model_name VARCHAR(100) NOT NULL,
@@ -95,11 +96,10 @@ CREATE TABLE IF NOT EXISTS entity_llm_api_call (
     time_to_first_token_ms INTEGER,
     tokens_per_second DOUBLE PRECISION,
     api_response_id VARCHAR(255),
-    request_time TIMESTAMP WITH TIME ZONE NOT NULL,
-    response_time TIMESTAMP WITH TIME ZONE NOT NULL,
     create_time TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    update_time TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL,
     CONSTRAINT check_tokens_positive CHECK (prompt_tokens >= 0 AND completion_tokens >= 0 AND total_tokens >= 0),
-    CONSTRAINT check_time_order CHECK (response_time >= request_time)
+    CONSTRAINT check_time_order CHECK (update_time >= create_time)
 );
 
 CREATE INDEX IF NOT EXISTS idx_api_call_session ON entity_llm_api_call(chat_session_id, create_time DESC);
@@ -133,69 +133,68 @@ CREATE TRIGGER trigger_update_llm_message_time
     BEFORE UPDATE ON entity_llm_message
     FOR EACH ROW EXECUTE FUNCTION update_modified_column();
 
--- ============================================================================
--- Prompt Management Tables
--- ============================================================================
-
--- Create prompt template table
-CREATE TABLE IF NOT EXISTS prompt_template (
-    id UUID PRIMARY KEY DEFAULT gen_uuid_v7(),
-    template_id VARCHAR(255) NOT NULL,
-    name VARCHAR(255),
-    description TEXT,
-    content TEXT NOT NULL,
-    variables JSONB DEFAULT '[]',
-    tags JSONB DEFAULT '[]',
-    version VARCHAR(50),
-    metadata JSONB DEFAULT '{}',
-    enabled BOOLEAN DEFAULT true NOT NULL,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL,
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL,
-    created_by UUID,
-    tenant_id UUID,
-    CONSTRAINT uk_prompt_template_id UNIQUE (template_id, tenant_id)
+-- crate provider table
+CREATE TABLE public.entity_provider (
+  id uuid DEFAULT uuidv7() NOT NULL,
+  api_base text NOT NULL,
+  api_key text NOT NULL,
+  enabled bool DEFAULT true NOT NULL,
+  provider_name varchar(255) DEFAULT 'default'::character varying NOT NULL,
+  provider_type varchar(100) NOT NULL,
+  tenant_id uuid NOT NULL,
+  create_time TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL,
+  update_time TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL,
+  CONSTRAINT entity_provider_pkey PRIMARY KEY (id),
+  CONSTRAINT uk_entity_provider_tenant UNIQUE (provider_name, tenant_id)
 );
+CREATE INDEX idx_entity_provider_create_time ON public.entity_provider USING btree (create_time);
+CREATE INDEX idx_entity_provider_enabled ON public.entity_provider USING btree (enabled);
+CREATE INDEX idx_entity_provider_tenant ON public.entity_provider USING btree (tenant_id);
+CREATE INDEX idx_entity_provider_type ON public.entity_provider USING btree (provider_type);
+CREATE INDEX idx_entity_provider_update_time ON public.entity_provider USING btree (update_time);
 
-CREATE INDEX IF NOT EXISTS idx_prompt_template_id ON prompt_template(template_id);
-CREATE INDEX IF NOT EXISTS idx_prompt_template_enabled ON prompt_template(enabled);
-CREATE INDEX IF NOT EXISTS idx_prompt_template_tenant ON prompt_template(tenant_id);
-CREATE INDEX IF NOT EXISTS idx_prompt_template_tags ON prompt_template USING GIN (tags);
-CREATE INDEX IF NOT EXISTS idx_prompt_template_updated ON prompt_template(updated_at DESC);
+-- Table Triggers
 
--- Create prompt composition table
-CREATE TABLE IF NOT EXISTS prompt_composition (
-    id UUID PRIMARY KEY DEFAULT gen_uuid_v7(),
-    composition_id VARCHAR(255) NOT NULL UNIQUE,
-    description TEXT,
-    template_ids JSONB DEFAULT '[]',
-    separator VARCHAR(50) DEFAULT E'\n\n',
-    enabled BOOLEAN DEFAULT true NOT NULL,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL,
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL,
-    tenant_id UUID
+create trigger trigger_update_entity_provider_update_time before
+update
+    on
+    public.entity_provider for each row execute function moddatetime('update_time');
+
+-- crate agent table
+CREATE TABLE public.entity_agent (
+  id uuid DEFAULT uuidv7() NOT NULL,
+  tenant_id uuid NOT NULL,
+  agent_code varchar(255) NOT NULL,
+  agent_name varchar(255) NOT NULL,
+  agent_order int4 DEFAULT 0 NOT NULL,
+  agent_status bool DEFAULT true NOT NULL,
+  context_limit int4 DEFAULT 1 NULL,
+  custom_params jsonb NULL,
+  max_completion_tokens int4 DEFAULT 16384 NULL,
+  model_name varchar(255) NOT NULL,
+  provider_id uuid NOT NULL,
+  response_format varchar(50) DEFAULT 'text'::character varying NULL,
+  system_prompt text NOT NULL,
+  temperature float4 DEFAULT 0.7 NULL,
+  stream bool DEFAULT true NULL,
+  thinking custom_params jsonb NULL,
+  create_time TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL,
+  update_time TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL,
+  CONSTRAINT entity_agent_pkey PRIMARY KEY (id),
+  CONSTRAINT uk_entity_agent_code UNIQUE (agent_code),
+  CONSTRAINT entity_provider_id_fkey FOREIGN KEY (provider_id) REFERENCES public.entity_provider(id) ON DELETE CASCADE
 );
+CREATE INDEX idx_entity_agent_create_time ON public.entity_agent USING btree (create_time);
+CREATE INDEX idx_entity_agent_order ON public.entity_agent USING btree (agent_order);
+CREATE INDEX idx_entity_agent_update_time ON public.entity_agent USING btree (update_time);
 
-CREATE INDEX IF NOT EXISTS idx_prompt_composition_id ON prompt_composition(composition_id);
-CREATE INDEX IF NOT EXISTS idx_prompt_composition_enabled ON prompt_composition(enabled);
+-- Table Triggers
 
--- 为prompt表创建触发器
-DROP TRIGGER IF EXISTS trigger_update_prompt_template_time ON prompt_template;
-CREATE TRIGGER trigger_update_prompt_template_time
-    BEFORE UPDATE ON prompt_template
-    FOR EACH ROW EXECUTE FUNCTION update_modified_column();
+create trigger trigger_update_entity_agent_update_time before
+update
+    on
+    public.entity_agent for each row execute function moddatetime('update_time');
 
-DROP TRIGGER IF EXISTS trigger_update_prompt_composition_time ON prompt_composition;
-CREATE TRIGGER trigger_update_prompt_composition_time
-    BEFORE UPDATE ON prompt_composition
-    FOR EACH ROW EXECUTE FUNCTION update_modified_column();
-
--- 更新函数以处理prompt表的updated_at字段
-CREATE OR REPLACE FUNCTION update_prompt_modified_column()
-RETURNS TRIGGER AS $$
-BEGIN
-    NEW.updated_at = CURRENT_TIMESTAMP;
-    RETURN NEW;
-END;
 $$ LANGUAGE plpgsql;
 
 -- ============================================================================

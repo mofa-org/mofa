@@ -578,7 +578,7 @@ impl LLMProvider for OpenAIProvider {
             .await
             .map_err(Self::convert_error)?;
 
-        use futures::stream::{self, StreamExt};
+
 
         // 转换流，过滤掉 UTF-8 错误（某些 OpenAI 兼容 API 可能返回无效的 UTF-8 数据）
         let converted_stream = stream

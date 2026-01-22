@@ -344,6 +344,8 @@ pub struct ChatSession {
     user_id: uuid::Uuid,
     /// Agent ID
     agent_id: uuid::Uuid,
+    /// 租户 ID
+    tenant_id: uuid::Uuid,
     /// LLM 客户端
     client: LLMClient,
     /// 消息历史
@@ -364,6 +366,8 @@ pub struct ChatSession {
     session_store: Arc<dyn crate::persistence::SessionStore>,
     /// 上下文窗口大小（滑动窗口，限制对话轮数）
     context_window_size: Option<usize>,
+    /// 最后一次 LLM 响应的元数据
+    last_response_metadata: Option<super::types::LLMResponseMetadata>,
 }
 
 impl ChatSession {
@@ -376,11 +380,12 @@ impl ChatSession {
         Self::with_id_and_stores(
             Self::generate_session_id(),
             client,
-            uuid::Uuid::now_v7(), // 自动生成 user_id
-            uuid::Uuid::now_v7(), // 自动生成 agent_id
+            uuid::Uuid::now_v7(),
+            uuid::Uuid::now_v7(),
+            uuid::Uuid::now_v7(),
             store.clone(),
             store.clone(),
-            None, // 默认无上下文窗口限制
+            None,
         )
     }
 
@@ -388,6 +393,7 @@ impl ChatSession {
     pub fn new_with_stores(
         client: LLMClient,
         user_id: uuid::Uuid,
+        tenant_id: uuid::Uuid,
         agent_id: uuid::Uuid,
         message_store: Arc<dyn crate::persistence::MessageStore>,
         session_store: Arc<dyn crate::persistence::SessionStore>,
@@ -396,10 +402,11 @@ impl ChatSession {
             Self::generate_session_id(),
             client,
             user_id,
+            tenant_id,
             agent_id,
             message_store,
             session_store,
-            None, // 默认无上下文窗口限制
+            None,
         )
     }
 
@@ -412,8 +419,9 @@ impl ChatSession {
         let store = Arc::new(crate::persistence::InMemoryStore::new());
         Self {
             session_id,
-            user_id: uuid::Uuid::now_v7(), // 自动生成 user_id
-            agent_id: uuid::Uuid::now_v7(), // 自动生成 agent_id
+            user_id: uuid::Uuid::now_v7(),
+            agent_id: uuid::Uuid::now_v7(),
+            tenant_id: uuid::Uuid::now_v7(),
             client,
             messages: Vec::new(),
             system_prompt: None,
@@ -424,6 +432,7 @@ impl ChatSession {
             message_store: store.clone(),
             session_store: store.clone(),
             context_window_size: None,
+            last_response_metadata: None,
         }
     }
 
@@ -443,6 +452,7 @@ impl ChatSession {
         session_id: uuid::Uuid,
         client: LLMClient,
         user_id: uuid::Uuid,
+        tenant_id: uuid::Uuid,
         agent_id: uuid::Uuid,
         message_store: Arc<dyn crate::persistence::MessageStore>,
         session_store: Arc<dyn crate::persistence::SessionStore>,
@@ -451,6 +461,7 @@ impl ChatSession {
         Self {
             session_id,
             user_id,
+            tenant_id,
             agent_id,
             client,
             messages: Vec::new(),
@@ -462,6 +473,7 @@ impl ChatSession {
             message_store,
             session_store,
             context_window_size,
+            last_response_metadata: None,
         }
     }
 
@@ -488,6 +500,7 @@ impl ChatSession {
         session_id: uuid::Uuid,
         client: LLMClient,
         user_id: uuid::Uuid,
+        tenant_id: uuid::Uuid,
         agent_id: uuid::Uuid,
         message_store: Arc<dyn crate::persistence::MessageStore>,
         session_store: Arc<dyn crate::persistence::SessionStore>,
@@ -498,6 +511,7 @@ impl ChatSession {
             session_id,
             client,
             user_id,
+            tenant_id,
             agent_id,
             message_store,
             session_store.clone(),
@@ -552,6 +566,7 @@ impl ChatSession {
         session_id: uuid::Uuid,
         client: LLMClient,
         user_id: uuid::Uuid,
+        tenant_id: uuid::Uuid,
         agent_id: uuid::Uuid,
         message_store: Arc<dyn crate::persistence::MessageStore>,
         session_store: Arc<dyn crate::persistence::SessionStore>,
@@ -616,6 +631,7 @@ impl ChatSession {
         Ok(Self {
             session_id,
             user_id,
+            tenant_id,
             agent_id,
             client,
             messages,
@@ -627,6 +643,7 @@ impl ChatSession {
             message_store,
             session_store,
             context_window_size,
+            last_response_metadata: None,
         })
     }
 
@@ -716,6 +733,9 @@ impl ChatSession {
             builder.send().await?
         };
 
+        // 存储响应元数据
+        self.last_response_metadata = Some(super::types::LLMResponseMetadata::from(&response));
+
         // 提取响应内容
         let content = response
             .content()
@@ -776,6 +796,11 @@ impl ChatSession {
     /// 获取上下文窗口大小（轮数）
     pub fn context_window_size(&self) -> Option<usize> {
         self.context_window_size
+    }
+
+    /// 获取最后一次 LLM 响应的元数据
+    pub fn last_response_metadata(&self) -> Option<&super::types::LLMResponseMetadata> {
+        self.last_response_metadata.as_ref()
     }
 
     /// 应用滑动窗口，返回限定后的消息列表
@@ -905,6 +930,7 @@ impl ChatSession {
                 self.session_id,
                 self.agent_id,
                 self.user_id,
+                self.tenant_id,
                 persistence_role,
                 persistence_content,
             );

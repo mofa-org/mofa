@@ -10,6 +10,7 @@ use sqlx::Row;
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use tracing::error;
 use uuid::Uuid;
 
 /// PostgreSQL 存储
@@ -209,6 +210,9 @@ impl PostgresStore {
             user_id: row
                 .try_get("user_id")
                 .map_err(|e| PersistenceError::Query(e.to_string()))?,
+            tenant_id: row
+                .try_get("tenant_id")
+                .map_err(|e| PersistenceError::Query(e.to_string()))?,
             request_message_id: row
                 .try_get("request_message_id")
                 .map_err(|e| PersistenceError::Query(e.to_string()))?,
@@ -232,14 +236,11 @@ impl PostgresStore {
             time_to_first_token_ms: row.try_get("time_to_first_token_ms").ok(),
             tokens_per_second: row.try_get("tokens_per_second").ok(),
             api_response_id: row.try_get("api_response_id").ok(),
-            request_time: row
-                .try_get("request_time")
-                .map_err(|e| PersistenceError::Query(e.to_string()))?,
-            response_time: row
-                .try_get("response_time")
-                .map_err(|e| PersistenceError::Query(e.to_string()))?,
             create_time: row
                 .try_get("create_time")
+                .map_err(|e| PersistenceError::Query(e.to_string()))?,
+            update_time: row
+                .try_get("update_time")
                 .map_err(|e| PersistenceError::Query(e.to_string()))?,
         })
     }
@@ -408,11 +409,10 @@ impl ApiCallStore for PostgresStore {
         sqlx::query(
             r#"
             INSERT INTO entity_llm_api_call
-            (id, chat_session_id, agent_id, user_id, request_message_id, response_message_id,
+            (id, chat_session_id, agent_id, user_id, tenant_id, request_message_id, response_message_id,
              model_name, status, error_message, error_code, prompt_tokens, completion_tokens, total_tokens,
              prompt_tokens_details, completion_tokens_details, total_price, price_details,
-             latency_ms, time_to_first_token_ms, tokens_per_second, api_response_id,
-             request_time, response_time, create_time)
+             latency_ms, time_to_first_token_ms, tokens_per_second, api_response_id, create_time, update_time)
             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24)
             ON CONFLICT (id) DO UPDATE SET
                 status = EXCLUDED.status,
@@ -429,6 +429,7 @@ impl ApiCallStore for PostgresStore {
         .bind(call.chat_session_id)
         .bind(call.agent_id)
         .bind(call.user_id)
+        .bind(call.tenant_id)
         .bind(call.request_message_id)
         .bind(call.response_message_id)
         .bind(&call.model_name)
@@ -446,12 +447,13 @@ impl ApiCallStore for PostgresStore {
         .bind(call.time_to_first_token_ms)
         .bind(call.tokens_per_second)
         .bind(&call.api_response_id)
-        .bind(call.request_time)
-        .bind(call.response_time)
         .bind(call.create_time)
+        .bind(call.update_time)
         .execute(&self.pool)
         .await
-        .map_err(|e| PersistenceError::Query(e.to_string()))?;
+        .map_err(|e|{
+            error!("save_api_call failed: {}", e.to_string());
+            PersistenceError::Query(e.to_string())})?;
 
         Ok(())
     }

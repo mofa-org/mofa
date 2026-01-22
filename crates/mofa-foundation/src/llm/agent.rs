@@ -293,9 +293,33 @@ pub trait LLMAgentEventHandler: Send + Sync {
         Ok(Some(message.to_string()))
     }
 
+    /// 处理用户消息前的钩子（带模型名称）
+    ///
+    /// 默认实现调用 `before_chat`，保持向后兼容。
+    /// 如果需要知道使用的模型名称（例如用于持久化），请实现此方法。
+    async fn before_chat_with_model(
+        &self,
+        message: &str,
+        model: &str,
+    ) -> LLMResult<Option<String>> {
+        self.before_chat(message).await
+    }
+
     /// 处理 LLM 响应后的钩子
     async fn after_chat(&self, response: &str) -> LLMResult<Option<String>> {
         Ok(Some(response.to_string()))
+    }
+
+    /// 处理 LLM 响应后的钩子（带元数据）
+    ///
+    /// 默认实现调用 after_chat，保持向后兼容。
+    /// 如果需要访问响应元数据（如 response_id, model, token counts），请实现此方法。
+    async fn after_chat_with_metadata(
+        &self,
+        response: &str,
+        metadata: &super::types::LLMResponseMetadata,
+    ) -> LLMResult<Option<String>> {
+        self.after_chat(response).await
     }
 
     /// 处理工具调用
@@ -446,6 +470,7 @@ impl LLMAgent {
         message_store: Option<Arc<dyn crate::persistence::MessageStore + Send + Sync>>,
         session_store: Option<Arc<dyn crate::persistence::SessionStore + Send + Sync>>,
         persistence_user_id: Option<uuid::Uuid>,
+        persistence_tenant_id: Option<uuid::Uuid>,
         persistence_agent_id: Option<uuid::Uuid>,
     ) -> Self {
         let client = LLMClient::new(provider.clone());
@@ -454,8 +479,8 @@ impl LLMAgent {
         let initial_session_id_clone = initial_session_id.clone();
 
         // 1. 尝试从数据库加载会话（如果有 stores 且指定了 session_id）
-        let session = if let (Some(sid), Some(msg_store), Some(sess_store), Some(user_id), Some(agent_id)) =
-            (initial_session_id_clone, message_store.clone(), session_store.clone(), persistence_user_id, persistence_agent_id)
+        let session = if let (Some(sid), Some(msg_store), Some(sess_store), Some(user_id),Some(tenant_id), Some(agent_id)) =
+            (initial_session_id_clone, message_store.clone(), session_store.clone(), persistence_user_id,persistence_tenant_id, persistence_agent_id)
         {
             // Clone stores before moving them into ChatSession::load
             let msg_store_clone = msg_store.clone();
@@ -472,6 +497,7 @@ impl LLMAgent {
                 LLMClient::new(provider.clone()),
                 user_id,
                 agent_id,
+                tenant_id,
                 msg_store,
                 sess_store,
                 config.context_window_size,
@@ -494,6 +520,7 @@ impl LLMAgent {
                         LLMClient::new(provider.clone()),
                         user_id,
                         agent_id,
+                        tenant_id,
                         msg_store_clone,
                         sess_store_clone,
                         config.context_window_size,
@@ -512,6 +539,7 @@ impl LLMAgent {
                                 LLMClient::new(provider.clone()),
                                 user_id,
                                 agent_id,
+                                tenant_id,
                                 msg_store_clone2,
                                 sess_store_clone2,
                                 config.context_window_size,
@@ -1331,9 +1359,12 @@ impl LLMAgent {
     ) -> LLMResult<String> {
         let message = message.into();
 
-        // 调用 before_chat 钩子
+        // 获取模型名称
+        let model = self.provider.default_model();
+
+        // 调用 before_chat 钩子（带模型名称）
         let processed_message = if let Some(ref handler) = self.event_handler {
-            match handler.before_chat(&message).await? {
+            match handler.before_chat_with_model(&message, model).await? {
                 Some(msg) => msg,
                 None => return Ok(String::new()),
             }
@@ -1358,11 +1389,21 @@ impl LLMAgent {
             }
         };
 
-        // 调用 after_chat 钩子
+        // 调用 after_chat 钩子（带元数据）
         let final_response = if let Some(ref handler) = self.event_handler {
-            match handler.after_chat(&response).await? {
-                Some(resp) => resp,
-                None => response,
+            // 从会话中获取响应元数据
+            let metadata = session_guard.last_response_metadata();
+            if let Some(meta) = metadata {
+                match handler.after_chat_with_metadata(&response, meta).await? {
+                    Some(resp) => resp,
+                    None => response,
+                }
+            } else {
+                // 回退到旧方法（没有元数据）
+                match handler.after_chat(&response).await? {
+                    Some(resp) => resp,
+                    None => response,
+                }
             }
         } else {
             response
@@ -1575,9 +1616,12 @@ impl LLMAgent {
     ) -> LLMResult<TextStream> {
         let message = message.into();
 
-        // 调用 before_chat 钩子
+        // 获取模型名称
+        let model = self.provider.default_model();
+
+        // 调用 before_chat 钩子（带模型名称）
         let processed_message = if let Some(ref handler) = self.event_handler {
-            match handler.before_chat(&message).await? {
+            match handler.before_chat_with_model(&message, model).await? {
                 Some(msg) => msg,
                 None => return Ok(Box::pin(futures::stream::empty())),
             }
@@ -1697,9 +1741,12 @@ impl LLMAgent {
     ) -> LLMResult<(TextStream, tokio::sync::oneshot::Receiver<String>)> {
         let message = message.into();
 
-        // 调用 before_chat 钩子
+        // 获取模型名称
+        let model = self.provider.default_model();
+
+        // 调用 before_chat 钩子（带模型名称）
         let processed_message = if let Some(ref handler) = self.event_handler {
-            match handler.before_chat(&message).await? {
+            match handler.before_chat_with_model(&message, model).await? {
                 Some(msg) => msg,
                 None => {
                     let (tx, rx) = tokio::sync::oneshot::channel();
@@ -1791,21 +1838,26 @@ impl LLMAgent {
         session: Arc<RwLock<ChatSession>>,
         event_handler: Option<Arc<Box<dyn LLMAgentEventHandler>>>,
     ) -> TextStream {
-        use futures::StreamExt;
+        use super::types::LLMResponseMetadata;
 
         let collected = Arc::new(tokio::sync::Mutex::new(String::new()));
         let collected_clone = collected.clone();
         let event_handler_clone = event_handler.clone();
+        let metadata_collected = Arc::new(tokio::sync::Mutex::new(None::<LLMResponseMetadata>));
+        let metadata_collected_clone = metadata_collected.clone();
 
         let stream = chunk_stream.filter_map(move |result| {
             let collected = collected.clone();
             let event_handler = event_handler.clone();
+            let metadata_collected = metadata_collected.clone();
             async move {
                 match result {
                     Ok(chunk) => {
                         if let Some(choice) = chunk.choices.first() {
-                            // 检查是否完成
                             if choice.finish_reason.is_some() {
+                                // 最后一个块包含 usage 数据，保存元数据
+                                let metadata = LLMResponseMetadata::from(&chunk);
+                                *metadata_collected.lock().await = Some(metadata);
                                 return None;
                             }
                             if let Some(ref content) = choice.delta.content
@@ -1819,7 +1871,6 @@ impl LLMAgent {
                         None
                     }
                     Err(e) => {
-                        // 调用 on_error 钩子
                         if let Some(handler) = event_handler {
                             let _ = handler.on_error(&e).await;
                         }
@@ -1829,24 +1880,24 @@ impl LLMAgent {
             }
         });
 
-        // 在流结束后更新历史并调用 after_chat 钩子
         let stream = stream
             .chain(futures::stream::once(async move {
                 let full_response = collected_clone.lock().await.clone();
+                let metadata = metadata_collected_clone.lock().await.clone();
                 if !full_response.is_empty() {
                     let mut session = session.write().await;
                     session
                         .messages_mut()
                         .push(ChatMessage::assistant(&full_response));
 
-                    // 调用 after_chat 钩子
-                    if let Some(handler) = event_handler_clone
-                        && let Ok(Some(_processed_response)) = handler.after_chat(&full_response).await {
-                            // 如果 after_chat 处理了响应，使用处理后的响应
-                            // 由于流已经结束，我们无法再输出内容，所以只能忽略
+                    if let Some(handler) = event_handler_clone {
+                        if let Some(meta) = &metadata {
+                            let _ = handler.after_chat_with_metadata(&full_response, meta).await;
+                        } else {
+                            let _ = handler.after_chat(&full_response).await;
                         }
+                    }
                 }
-                // 返回一个空的 Ok 来结束流，但不输出
                 Err(LLMError::Other("__stream_end__".to_string()))
             }))
             .filter_map(|result| async move {
@@ -1868,19 +1919,26 @@ impl LLMAgent {
         event_handler: Option<Arc<Box<dyn LLMAgentEventHandler>>>,
     ) -> TextStream {
         use futures::StreamExt;
+        use super::types::LLMResponseMetadata;
 
         let collected = Arc::new(tokio::sync::Mutex::new(String::new()));
         let collected_clone = collected.clone();
         let event_handler_clone = event_handler.clone();
+        let metadata_collected = Arc::new(tokio::sync::Mutex::new(None::<LLMResponseMetadata>));
+        let metadata_collected_clone = metadata_collected.clone();
 
         let stream = chunk_stream.filter_map(move |result| {
             let collected = collected.clone();
             let event_handler = event_handler.clone();
+            let metadata_collected = metadata_collected.clone();
             async move {
                 match result {
                     Ok(chunk) => {
                         if let Some(choice) = chunk.choices.first() {
                             if choice.finish_reason.is_some() {
+                                // 最后一个块包含 usage 数据，保存元数据
+                                let metadata = LLMResponseMetadata::from(&chunk);
+                                *metadata_collected.lock().await = Some(metadata);
                                 return None;
                             }
                             if let Some(ref content) = choice.delta.content
@@ -1894,7 +1952,6 @@ impl LLMAgent {
                         None
                     }
                     Err(e) => {
-                        // 调用 on_error 钩子
                         if let Some(handler) = event_handler {
                             let _ = handler.on_error(&e).await;
                         }
@@ -1909,6 +1966,7 @@ impl LLMAgent {
             .chain(futures::stream::once(async move {
                 let full_response = collected_clone.lock().await.clone();
                 let mut processed_response = full_response.clone();
+                let metadata = metadata_collected_clone.lock().await.clone();
 
                 if !full_response.is_empty() {
                     let mut session = session.write().await;
@@ -1916,16 +1974,20 @@ impl LLMAgent {
                         .messages_mut()
                         .push(ChatMessage::assistant(&processed_response));
 
-                    // 调用 after_chat 钩子
-                    if let Some(handler) = event_handler_clone
-                        && let Ok(Some(resp)) = handler.after_chat(&processed_response).await {
+                    // 调用 after_chat 钩子（带元数据）
+                    if let Some(handler) = event_handler_clone {
+                        if let Some(meta) = &metadata {
+                            if let Ok(Some(resp)) = handler.after_chat_with_metadata(&processed_response, meta).await {
+                                processed_response = resp;
+                            }
+                        } else if let Ok(Some(resp)) = handler.after_chat(&processed_response).await {
                             processed_response = resp;
                         }
+                    }
                 }
 
                 let _ = tx.send(processed_response);
 
-                // 返回一个空的 Ok 来结束流，但不输出
                 Err(LLMError::Other("__stream_end__".to_string()))
             }))
             .filter_map(|result| async move {
@@ -1962,6 +2024,7 @@ pub struct LLMAgentBuilder {
     message_store: Option<Arc<dyn crate::persistence::MessageStore + Send + Sync>>,
     session_store: Option<Arc<dyn crate::persistence::SessionStore + Send + Sync>>,
     persistence_user_id: Option<uuid::Uuid>,
+    persistence_tenant_id: Option<uuid::Uuid>,
     persistence_agent_id: Option<uuid::Uuid>,
 }
 
@@ -1988,6 +2051,7 @@ impl LLMAgentBuilder {
             message_store: None,
             session_store: None,
             persistence_user_id: None,
+            persistence_tenant_id: None,
             persistence_agent_id: None,
         }
     }
@@ -2442,6 +2506,7 @@ impl LLMAgentBuilder {
             self.message_store,
             self.session_store,
             self.persistence_user_id,
+            self.persistence_tenant_id,
             self.persistence_agent_id,
         ).await;
 
@@ -2454,8 +2519,6 @@ impl LLMAgentBuilder {
             agent.set_tools(self.tools, executor);
         }
 
-        // CRITICAL FIX: 同步 PersistenceHandler 的 session_id
-        // 确保 PersistenceHandler 使用与 ChatSession 相同的 session_id
         if let (Some(session_id_str), Some(handler)) = (session_id_clone.as_deref(), self.event_handler.as_ref()) {
             if let Ok(session_uuid) = uuid::Uuid::parse_str(session_id_str) {
                 // 尝试将 handler 转换为 AgentPersistenceHandler 并设置 session_id

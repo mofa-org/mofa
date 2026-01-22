@@ -59,8 +59,9 @@ async fn main() -> LLMResult<()> {
     info!("✅ LLM Agent 初始化完成!");
 
     // 4. 处理会话选择
-    let user_id = Uuid::now_v7();  // 业务用户 ID
-    let agent_id = Uuid::new_v4();  // Agent ID
+    let user_id = Uuid::now_v7();
+    let agent_id = Uuid::new_v4();
+    let tenant_id = Uuid::now_v7();
 
     info!("\n3. 会话管理:");
     info!("   1) 创建新会话");
@@ -69,7 +70,7 @@ async fn main() -> LLMResult<()> {
     let persistence_ctx = match get_user_choice().await {
         1 => {
             info!("创建新会话...");
-            let ctx = PersistenceContext::new(store, user_id, agent_id).await?;
+            let ctx = PersistenceContext::new(store, user_id, tenant_id, agent_id).await?;
             info!("✅ 新会话创建成功: ID = {}", ctx.session_id());
             ctx
         }
@@ -88,6 +89,7 @@ async fn main() -> LLMResult<()> {
                 store.clone(),
                 user_id,
                 agent_id,
+                tenant_id,
                 session_id
             )
         }

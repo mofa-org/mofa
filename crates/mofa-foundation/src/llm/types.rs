@@ -511,6 +511,49 @@ pub struct Usage {
     pub total_tokens: u32,
 }
 
+/// LLM 响应元数据（用于事件处理器）
+///
+/// 从 ChatCompletionResponse 或 ChatCompletionChunk 提取的关键元数据
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LLMResponseMetadata {
+    /// 响应 ID
+    pub id: String,
+    /// 模型名称
+    pub model: String,
+    /// 提示 token 数
+    pub prompt_tokens: u32,
+    /// 完成 token 数
+    pub completion_tokens: u32,
+    /// 总 token 数
+    pub total_tokens: u32,
+}
+
+impl From<&ChatCompletionResponse> for LLMResponseMetadata {
+    fn from(resp: &ChatCompletionResponse) -> Self {
+        let usage = resp.usage.as_ref();
+        Self {
+            id: resp.id.clone(),
+            model: resp.model.clone(),
+            prompt_tokens: usage.map(|u| u.prompt_tokens).unwrap_or(0),
+            completion_tokens: usage.map(|u| u.completion_tokens).unwrap_or(0),
+            total_tokens: usage.map(|u| u.total_tokens).unwrap_or(0),
+        }
+    }
+}
+
+impl From<&ChatCompletionChunk> for LLMResponseMetadata {
+    fn from(chunk: &ChatCompletionChunk) -> Self {
+        let usage = chunk.usage.as_ref();
+        Self {
+            id: chunk.id.clone(),
+            model: chunk.model.clone(),
+            prompt_tokens: usage.map(|u| u.prompt_tokens).unwrap_or(0),
+            completion_tokens: usage.map(|u| u.completion_tokens).unwrap_or(0),
+            total_tokens: usage.map(|u| u.total_tokens).unwrap_or(0),
+        }
+    }
+}
+
 // ============================================================================
 // 流式响应
 // ============================================================================
