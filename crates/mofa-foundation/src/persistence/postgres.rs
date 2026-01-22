@@ -417,12 +417,20 @@ impl ApiCallStore for PostgresStore {
             ON CONFLICT (id) DO UPDATE SET
                 status = EXCLUDED.status,
                 error_message = EXCLUDED.error_message,
+                error_code = EXCLUDED.error_code,
                 response_message_id = EXCLUDED.response_message_id,
+                prompt_tokens = EXCLUDED.prompt_tokens,
                 completion_tokens = EXCLUDED.completion_tokens,
                 total_tokens = EXCLUDED.total_tokens,
-                response_time = EXCLUDED.response_time,
+                prompt_tokens_details = EXCLUDED.prompt_tokens_details,
+                completion_tokens_details = EXCLUDED.completion_tokens_details,
+                total_price = EXCLUDED.total_price,
+                price_details = EXCLUDED.price_details,
                 latency_ms = EXCLUDED.latency_ms,
-                tokens_per_second = EXCLUDED.tokens_per_second
+                time_to_first_token_ms = EXCLUDED.time_to_first_token_ms,
+                tokens_per_second = EXCLUDED.tokens_per_second,
+                api_response_id = EXCLUDED.api_response_id,
+                update_time = EXCLUDED.update_time
             "#,
         )
         .bind(call.id)
