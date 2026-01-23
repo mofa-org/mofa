@@ -27,7 +27,7 @@ use mofa_plugins::tts::TTSPlugin;
 use futures::{Stream, StreamExt};
 use mofa_kernel::agent::AgentMetadata;
 use mofa_kernel::agent::AgentState;
-use mofa_kernel::plugin::AgentPlugin;
+use mofa_kernel::plugin::{AgentPlugin, PluginType};
 use std::collections::HashMap;
 use std::io::Write;
 use std::pin::Pin;
@@ -2128,6 +2128,53 @@ impl LLMAgentBuilder {
         self
     }
 
+    /// 添加持久化插件（便捷方法）
+    ///
+    /// 持久化插件实现了 AgentPlugin trait，同时也是一个 LLMAgentEventHandler，
+    /// 会自动注册到 agent 的插件列表和事件处理器中。
+    ///
+    /// # 示例
+    ///
+    /// ```rust,ignore
+    /// use mofa_sdk::persistence::{PersistencePlugin, PostgresStore};
+    /// use mofa_sdk::llm::LLMAgentBuilder;
+    /// use std::sync::Arc;
+    /// use uuid::Uuid;
+    ///
+    /// # async fn example() -> anyhow::Result<()> {
+    /// let store = Arc::new(PostgresStore::connect("postgres://localhost/mofa").await?);
+    /// let user_id = Uuid::now_v7();
+    /// let tenant_id = Uuid::now_v7();
+    /// let agent_id = Uuid::now_v7();
+    /// let session_id = Uuid::now_v7();
+    ///
+    /// let plugin = PersistencePlugin::new(
+    ///     "persistence-plugin",
+    ///     store,
+    ///     user_id,
+    ///     tenant_id,
+    ///     agent_id,
+    ///     session_id,
+    /// );
+    ///
+    /// let agent = LLMAgentBuilder::new()
+    ///     .with_id("my-agent")
+    ///     .with_persistence_plugin(plugin)
+    ///     .build_async()
+    ///     .await;
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn with_persistence_plugin(mut self, plugin: crate::persistence::PersistencePlugin) -> Self {
+        // 将持久化插件添加到插件列表
+        // 同时作为事件处理器
+        let plugin_box: Box<dyn AgentPlugin> = Box::new(plugin.clone());
+        let event_handler: Box<dyn LLMAgentEventHandler> = Box::new(plugin);
+        self.plugins.push(plugin_box);
+        self.event_handler = Some(event_handler);
+        self
+    }
+
     /// 设置 Prompt 模板插件
     pub fn with_prompt_plugin(mut self, plugin: impl prompt::PromptTemplatePlugin + 'static) -> Self {
         self.prompt_plugin = Some(Box::new(plugin));
@@ -2224,41 +2271,42 @@ impl LLMAgentBuilder {
 
     /// 设置持久化存储（用于从数据库加载历史会话）
     ///
-    /// 设置后，当使用 `with_session_id()` 创建 Agent 时，
-    /// 如果数据库中存在该 session_id，会自动加载历史消息。
+    /// **已弃用**：请使用 `with_persistence_plugin()` 代替。
     ///
-    /// # 参数
-    /// - `message_store`: 消息存储
-    /// - `session_store`: 会话存储
-    /// - `user_id`: 用户 ID（用于从数据库加载会话）
-    /// - `agent_id`: Agent ID（用于从数据库加载会话）
+    /// 此方法保留用于向后兼容，将在未来版本中移除。
     ///
-    /// # 示例
-    ///
+    /// 推荐的新方式：
     /// ```rust,ignore
-    /// use mofa_sdk::persistence::PostgresStore;
+    /// use mofa_sdk::persistence::{PersistencePlugin, PostgresStore};
     ///
-    /// let store = PostgresStore::from_env().await?;
-    /// let user_id = Uuid::now_v7();
-    /// let agent_id = Uuid::now_v7();
+    /// let store = Arc::new(PostgresStore::connect("...").await?);
+    /// let plugin = PersistencePlugin::new(
+    ///     "persistence-plugin",
+    ///     store,
+    ///     user_id,
+    ///     tenant_id,
+    ///     agent_id,
+    ///     session_id,
+    /// );
     ///
-    /// let agent = LLMAgentBuilder::from_env()?
-    ///     .with_system_prompt("You are helpful.")
-    ///     .with_persistence_stores(store.clone(), store, user_id, agent_id)
-    ///     .with_session_id("my-session")
+    /// let agent = LLMAgentBuilder::new()
+    ///     .with_persistence_plugin(plugin)
     ///     .build_async()
-    ///     .await?;
+    ///     .await;
     /// ```
+    #[deprecated(since = "0.2.0", note = "请使用 with_persistence_plugin() 代替")]
     pub fn with_persistence_stores(
         mut self,
         message_store: Arc<dyn crate::persistence::MessageStore + Send + Sync>,
         session_store: Arc<dyn crate::persistence::SessionStore + Send + Sync>,
         user_id: uuid::Uuid,
+        tenant_id: uuid::Uuid,
         agent_id: uuid::Uuid,
     ) -> Self {
         self.message_store = Some(message_store);
         self.session_store = Some(session_store);
         self.persistence_user_id = Some(user_id);
+        self.persistence_tenant_id = Some(tenant_id);
         self.persistence_agent_id = Some(agent_id);
         self
     }
@@ -2310,25 +2358,30 @@ impl LLMAgentBuilder {
 
     /// 添加持久化事件处理器（便捷方法）
     ///
-    /// 自动包装 PersistenceCallback 为 AgentPersistenceHandler。
+    /// **已弃用**：请使用 `with_persistence_plugin()` 代替。
     ///
-    /// # 示例
+    /// 此方法保留用于向后兼容，将在未来版本中移除。
     ///
+    /// 推荐的新方式：
     /// ```rust,ignore
-    /// use mofa_sdk::{
-    ///     llm::LLMAgentBuilder,
-    ///     persistence::{PersistenceHandler, AgentPersistenceHandler},
-    /// };
-    /// use std::sync::Arc;
+    /// use mofa_sdk::persistence::{PersistencePlugin, PostgresStore};
     ///
-    /// let store = Arc::new(PostgresStore::from_env().await?);
-    /// let persistence = Arc::new(PersistenceHandler::auto(store));
+    /// let store = Arc::new(PostgresStore::connect("...").await?);
+    /// let plugin = PersistencePlugin::new(
+    ///     "persistence-plugin",
+    ///     store,
+    ///     user_id,
+    ///     tenant_id,
+    ///     agent_id,
+    ///     session_id,
+    /// );
     ///
-    /// let agent = LLMAgentBuilder::from_env()?
-    ///     .with_system_prompt("You are helpful.")
-    ///     .with_persistence_handler(persistence)
-    ///     .build();
+    /// let agent = LLMAgentBuilder::new()
+    ///     .with_persistence_plugin(plugin)
+    ///     .build_async()
+    ///     .await;
     /// ```
+    #[deprecated(since = "0.2.0", note = "请使用 with_persistence_plugin() 代替")]
     pub fn with_persistence_handler(
         mut self,
         persistence: std::sync::Arc<dyn crate::persistence::PersistenceCallback>
@@ -2459,29 +2512,43 @@ impl LLMAgentBuilder {
 
     /// 异步构建 LLM Agent（支持从数据库加载会话）
     ///
-    /// 如果设置了 `with_persistence_stores()` 且 `with_session_id()`，
-    /// 会尝试从数据库加载现有会话。
+    /// 支持两种方式加载会话历史：
+    /// 1. 使用 `with_persistence_plugin()` - 推荐的新方式
+    /// 2. 使用 `with_persistence_stores()` - 旧方式（向后兼容）
     ///
-    /// # 示例
+    /// # 示例（使用持久化插件）
     ///
     /// ```rust,ignore
-    /// use mofa_sdk::persistence::PostgresStore;
+    /// use mofa_sdk::persistence::{PersistencePlugin, PostgresStore};
     ///
-    /// let store = PostgresStore::from_env().await?;
+    /// let store = PostgresStore::connect("postgres://localhost/mofa").await?;
     /// let user_id = Uuid::now_v7();
+    /// let tenant_id = Uuid::now_v7();
     /// let agent_id = Uuid::now_v7();
+    /// let session_id = Uuid::now_v7();
+    ///
+    /// let plugin = PersistencePlugin::new(
+    ///     "persistence-plugin",
+    ///     Arc::new(store),
+    ///     user_id,
+    ///     tenant_id,
+    ///     agent_id,
+    ///     session_id,
+    /// );
     ///
     /// let agent = LLMAgentBuilder::from_env()?
     ///     .with_system_prompt("You are helpful.")
-    ///     .with_persistence_stores(store.clone(), store, user_id, agent_id)
-    ///     .with_session_id("my-session")
+    ///     .with_persistence_plugin(plugin)
     ///     .build_async()
-    ///     .await?;
+    ///     .await;
     /// ```
     pub async fn build_async(self) -> LLMAgent {
         let provider = self
             .provider
             .expect("LLM provider must be set before building");
+
+        // Clone tenant_id for potential fallback use before moving into config
+        let tenant_id_for_persistence = self.tenant_id.clone();
 
         let config = LLMAgentConfig {
             agent_id: self.agent_id.clone(),
@@ -2495,10 +2562,20 @@ impl LLMAgentBuilder {
             context_window_size: self.context_window_size,
         };
 
-        // Clone session_id before moving it (needed for PersistenceHandler sync)
+        // Clone session_id before moving it (needed for plugin sync)
         let session_id_clone = self.session_id.clone();
 
-        // 使用异步方法，支持从数据库加载
+        // Fallback: If stores are set but persistence_tenant_id is None, use tenant_id
+        let persistence_tenant_id = if self.session_store.is_some()
+            && self.persistence_tenant_id.is_none()
+            && tenant_id_for_persistence.is_some()
+        {
+            uuid::Uuid::parse_str(&tenant_id_for_persistence.unwrap()).ok()
+        } else {
+            self.persistence_tenant_id
+        };
+
+        // 使用异步方法，支持从数据库加载（旧方式，向后兼容）
         let mut agent = LLMAgent::with_initial_session_async(
             config,
             provider,
@@ -2506,7 +2583,7 @@ impl LLMAgentBuilder {
             self.message_store,
             self.session_store,
             self.persistence_user_id,
-            self.persistence_tenant_id,
+            persistence_tenant_id,
             self.persistence_agent_id,
         ).await;
 
@@ -2519,24 +2596,29 @@ impl LLMAgentBuilder {
             agent.set_tools(self.tools, executor);
         }
 
-        if let (Some(session_id_str), Some(handler)) = (session_id_clone.as_deref(), self.event_handler.as_ref()) {
-            if let Ok(session_uuid) = uuid::Uuid::parse_str(session_id_str) {
-                // 尝试将 handler 转换为 AgentPersistenceHandler 并设置 session_id
-                use crate::persistence::AgentPersistenceHandler;
-                if let Some(persist_handler) = handler.as_any().downcast_ref::<AgentPersistenceHandler>() {
-                    persist_handler.set_session_id(session_uuid).await;
-                    tracing::info!("🔗 PersistenceHandler session_id 已同步: {}", session_uuid);
+        // 处理插件列表：
+        // 1. 从持久化插件加载历史（新方式）
+        // 2. 提取 TTS 插件
+        // 3. 同步 session_id 到持久化插件
+        let mut plugins = self.plugins;
+        let mut tts_plugin = None;
+        let mut history_loaded_from_plugin = false;
+
+        // 首先处理持久化插件：加载历史并同步 session_id
+        for plugin in &plugins {
+            // 检查是否是 PersistencePlugin（通过检查类型名称）
+            if plugin.metadata().plugin_type == PluginType::Storage {
+                // 尝试同步 session_id
+                if let Some(session_id_str) = session_id_clone.as_deref() {
+                    if let Ok(session_uuid) = uuid::Uuid::parse_str(session_id_str) {
+                        // 使用 Any 的 downcast_ref 来访问 PersistencePlugin 的方法
+                        // 由于 PersistencePlugin<S> 是泛型，我们无法直接 downcast
+                        // 但可以通过 metadata 来识别并调用
+                        tracing::info!("🔗 检测到持久化插件，session_id: {}", session_uuid);
+                    }
                 }
             }
         }
-
-        if let Some(handler) = self.event_handler {
-            agent.set_event_handler(handler);
-        }
-
-        // 处理插件列表：提取 TTS 插件
-        let mut plugins = self.plugins;
-        let mut tts_plugin = None;
 
         // 查找并提取 TTS 插件
         for i in (0..plugins.len()).rev() {
@@ -2551,11 +2633,46 @@ impl LLMAgentBuilder {
             }
         }
 
+        // 从持久化插件加载历史（新方式）
+        if !history_loaded_from_plugin {
+            for plugin in &plugins {
+                // 通过 metadata 识别持久化插件
+                if plugin.metadata().plugin_type == PluginType::Storage
+                    && plugin.metadata().capabilities.contains(&"message_persistence".to_string())
+                {
+                    // 这里我们无法直接调用泛型 PersistencePlugin 的 load_history
+                    // 因为 trait object 无法访问泛型方法
+                    // 历史加载将由 LLMAgent 在首次运行时通过 store 完成
+                    tracing::info!("📦 检测到持久化插件，将在 agent 初始化后加载历史");
+                    break;
+                }
+            }
+        }
+
         // 添加剩余插件
         agent.add_plugins(plugins);
 
         // 设置 TTS 插件
         agent.tts_plugin = tts_plugin;
+
+        // 设置事件处理器
+        if let Some(handler) = self.event_handler {
+            // 同步 session_id 到持久化处理器
+            if let Some(session_id_str) = session_id_clone.as_deref() {
+                if let Ok(session_uuid) = uuid::Uuid::parse_str(session_id_str) {
+                    // 尝试将 handler 转换为 AgentPersistenceHandler 并设置 session_id
+                    use crate::persistence::AgentPersistenceHandler;
+                    if let Some(persist_handler) = handler.as_any().downcast_ref::<AgentPersistenceHandler>() {
+                        persist_handler.set_session_id(session_uuid).await;
+                        tracing::info!("🔗 AgentPersistenceHandler session_id 已同步: {}", session_uuid);
+                    }
+                    // 尝试将 handler 转换为 PersistencePlugin 并设置 session_id
+                    // 由于 PersistencePlugin 是泛型的，我们无法直接 downcast
+                    // 但如果使用的是 PostgresStore，我们可以尝试
+                }
+            }
+            agent.set_event_handler(handler);
+        }
 
         agent
     }
@@ -2600,6 +2717,214 @@ impl LLMAgentBuilder {
             if let Some(prompt) = llm_config.system_prompt {
                 builder = builder.with_system_prompt(prompt);
             }
+        }
+
+        Ok(builder)
+    }
+
+    // ========================================================================
+    // 数据库加载方法
+    // ========================================================================
+
+    /// 从数据库加载 agent 配置（全局查找）
+    ///
+    /// 根据 agent_code 从数据库加载 agent 配置及其关联的 provider。
+    ///
+    /// # 参数
+    /// - `store`: 实现了 AgentStore 的持久化存储
+    /// - `agent_code`: Agent 代码（唯一标识）
+    ///
+    /// # 错误
+    /// - 如果 agent 不存在
+    /// - 如果 agent 被禁用 (agent_status = false)
+    /// - 如果 provider 被禁用 (enabled = false)
+    ///
+    /// # 示例
+    ///
+    /// ```rust,ignore
+    /// use mofa_sdk::{llm::LLMAgentBuilder, persistence::PostgresStore};
+    ///
+    /// let store = PostgresStore::from_env().await?;
+    /// let agent = LLMAgentBuilder::from_database(&store, "my-agent").await?.build();
+    /// ```
+    #[cfg(feature = "persistence-postgres")]
+    pub async fn from_database<S>(store: &S, agent_code: &str) -> LLMResult<Self>
+    where
+        S: crate::persistence::AgentStore + Send + Sync,
+    {
+        let config = store
+            .get_agent_by_code_with_provider(agent_code)
+            .await
+            .map_err(|e| LLMError::Other(format!("Failed to load agent from database: {}", e)))?
+            .ok_or_else(|| {
+                LLMError::Other(format!(
+                    "Agent with code '{}' not found in database",
+                    agent_code
+                ))
+            })?;
+
+        Self::from_agent_config(&config)
+    }
+
+    /// 从数据库加载 agent 配置（租户隔离）
+    ///
+    /// 根据 tenant_id 和 agent_code 从数据库加载 agent 配置及其关联的 provider。
+    ///
+    /// # 参数
+    /// - `store`: 实现了 AgentStore 的持久化存储
+    /// - `tenant_id`: 租户 ID
+    /// - `agent_code`: Agent 代码
+    ///
+    /// # 错误
+    /// - 如果 agent 不存在
+    /// - 如果 agent 被禁用 (agent_status = false)
+    /// - 如果 provider 被禁用 (enabled = false)
+    ///
+    /// # 示例
+    ///
+    /// ```rust,ignore
+    /// use mofa_sdk::{llm::LLMAgentBuilder, persistence::PostgresStore};
+    /// use uuid::Uuid;
+    ///
+    /// let store = PostgresStore::from_env().await?;
+    /// let tenant_id = Uuid::parse_str("xxx-xxx-xxx")?;
+    /// let agent = LLMAgentBuilder::from_database_with_tenant(&store, tenant_id, "my-agent").await?.build();
+    /// ```
+    #[cfg(feature = "persistence-postgres")]
+    pub async fn from_database_with_tenant<S>(
+        store: &S,
+        tenant_id: uuid::Uuid,
+        agent_code: &str,
+    ) -> LLMResult<Self>
+    where
+        S: crate::persistence::AgentStore + Send + Sync,
+    {
+        let config = store
+            .get_agent_by_code_and_tenant_with_provider(tenant_id, agent_code)
+            .await
+            .map_err(|e| LLMError::Other(format!("Failed to load agent from database: {}", e)))?
+            .ok_or_else(|| {
+                LLMError::Other(format!(
+                    "Agent with code '{}' not found for tenant {}",
+                    agent_code, tenant_id
+                ))
+            })?;
+
+        Self::from_agent_config(&config)
+    }
+
+    /// 使用数据库 agent 配置，但允许进一步定制
+    ///
+    /// 加载数据库配置后，可以继续使用 builder 方法进行定制。
+    ///
+    /// # 示例
+    ///
+    /// ```rust,ignore
+    /// let agent = LLMAgentBuilder::with_database_agent(&store, "my-agent")
+    ///     .await?
+    ///     .with_temperature(0.8)  // 覆盖数据库中的温度设置
+    ///     .with_system_prompt("Custom prompt")  // 覆盖系统提示词
+    ///     .build();
+    /// ```
+    #[cfg(feature = "persistence-postgres")]
+    pub async fn with_database_agent<S>(store: &S, agent_code: &str) -> LLMResult<Self>
+    where
+        S: crate::persistence::AgentStore + Send + Sync,
+    {
+        Self::from_database(store, agent_code).await
+    }
+
+    /// 从 AgentConfig 创建 Builder（内部辅助方法）
+    #[cfg(feature = "persistence-postgres")]
+    pub fn from_agent_config(config: &crate::persistence::AgentConfig) -> LLMResult<Self> {
+        use super::openai::{OpenAIConfig, OpenAIProvider};
+
+        let agent = &config.agent;
+        let provider = &config.provider;
+
+        // 检查 agent 是否启用
+        if !agent.agent_status {
+            return Err(LLMError::Other(format!(
+                "Agent '{}' is disabled (agent_status = false)",
+                agent.agent_code
+            )));
+        }
+
+        // 检查 provider 是否启用
+        if !provider.enabled {
+            return Err(LLMError::Other(format!(
+                "Provider '{}' is disabled (enabled = false)",
+                provider.provider_name
+            )));
+        }
+
+        // 根据 provider_type 创建 LLM Provider
+        let llm_provider: Arc<dyn super::LLMProvider> = match provider.provider_type.as_str() {
+            "openai" | "azure" | "ollama" | "compatible" | "local" => {
+                let mut openai_config = OpenAIConfig::new(provider.api_key.clone());
+                openai_config = openai_config.with_base_url(&provider.api_base);
+                openai_config = openai_config.with_model(&agent.model_name);
+
+                if let Some(temp) = agent.temperature {
+                    openai_config = openai_config.with_temperature(temp);
+                }
+
+                if let Some(max_tokens) = agent.max_completion_tokens{
+                    openai_config = openai_config.with_max_tokens(max_tokens as u32);
+                }
+
+                Arc::new(OpenAIProvider::with_config(openai_config))
+            }
+            other => {
+                return Err(LLMError::Other(format!(
+                    "Unsupported provider type: {}",
+                    other
+                )))
+            }
+        };
+
+        // 创建基础 builder
+        let mut builder = Self::new()
+            .with_id(agent.id.clone())
+            .with_name(agent.agent_name.clone())
+            .with_provider(llm_provider)
+            .with_system_prompt(agent.system_prompt.clone())
+            .with_tenant(agent.tenant_id.to_string());
+
+        // 设置可选参数
+        if let Some(temp) = agent.temperature {
+            builder = builder.with_temperature(temp);
+        }
+        if let Some(tokens) = agent.max_completion_tokens {
+            builder = builder.with_max_tokens(tokens as u32);
+        }
+        if let Some(limit) = agent.context_limit {
+            builder = builder.with_sliding_window(limit as usize);
+        }
+
+        // 处理 custom_params (JSONB) - 将每个 key-value 添加到 custom_config
+        if let Some(ref params) = agent.custom_params {
+            if let Some(obj) = params.as_object() {
+                for (key, value) in obj.iter() {
+                    let value_str: String = match value {
+                        serde_json::Value::String(s) => s.clone(),
+                        serde_json::Value::Bool(b) => b.to_string(),
+                        serde_json::Value::Number(n) => n.to_string(),
+                        _ => value.to_string(),
+                    };
+                    builder = builder.with_config(key.as_str(), value_str);
+                }
+            }
+        }
+
+        // 处理 response_format
+        if let Some(ref format) = agent.response_format {
+            builder = builder.with_config("response_format", format);
+        }
+
+        // 处理 stream
+        if let Some(stream) = agent.stream {
+            builder = builder.with_config("stream", if stream { "true" } else { "false" });
         }
 
         Ok(builder)

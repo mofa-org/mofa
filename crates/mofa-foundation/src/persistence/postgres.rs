@@ -275,6 +275,91 @@ impl PostgresStore {
                 .map_err(|e| PersistenceError::Query(e.to_string()))?,
         })
     }
+
+    /// 从行解析 provider
+    fn parse_provider_row(row: &PgRow) -> PersistenceResult<crate::persistence::entities::Provider> {
+        Ok(crate::persistence::entities::Provider {
+            id: row
+                .try_get("id")
+                .map_err(|e| PersistenceError::Query(e.to_string()))?,
+            tenant_id: row
+                .try_get("tenant_id")
+                .map_err(|e| PersistenceError::Query(e.to_string()))?,
+            provider_name: row
+                .try_get("provider_name")
+                .map_err(|e| PersistenceError::Query(e.to_string()))?,
+            provider_type: row
+                .try_get("provider_type")
+                .map_err(|e| PersistenceError::Query(e.to_string()))?,
+            api_base: row
+                .try_get("api_base")
+                .map_err(|e| PersistenceError::Query(e.to_string()))?,
+            api_key: row
+                .try_get("api_key")
+                .map_err(|e| PersistenceError::Query(e.to_string()))?,
+            enabled: row
+                .try_get("enabled")
+                .map_err(|e| PersistenceError::Query(e.to_string()))?,
+            create_time: row
+                .try_get("create_time")
+                .map_err(|e| PersistenceError::Query(e.to_string()))?,
+            update_time: row
+                .try_get("update_time")
+                .map_err(|e| PersistenceError::Query(e.to_string()))?,
+        })
+    }
+
+    /// 从行解析 agent
+    fn parse_agent_row(row: &PgRow) -> PersistenceResult<crate::persistence::entities::Agent> {
+        Ok(crate::persistence::entities::Agent {
+            id: row
+                .try_get("id")
+                .map_err(|e| PersistenceError::Query(e.to_string()))?,
+            tenant_id: row
+                .try_get("tenant_id")
+                .map_err(|e| PersistenceError::Query(e.to_string()))?,
+            agent_code: row
+                .try_get("agent_code")
+                .map_err(|e| PersistenceError::Query(e.to_string()))?,
+            agent_name: row
+                .try_get("agent_name")
+                .map_err(|e| PersistenceError::Query(e.to_string()))?,
+            agent_order: row
+                .try_get("agent_order")
+                .map_err(|e| PersistenceError::Query(e.to_string()))?,
+            agent_status: row
+                .try_get("agent_status")
+                .map_err(|e| PersistenceError::Query(e.to_string()))?,
+            context_limit: row.try_get("context_limit").ok(),
+            custom_params: row
+                .try_get::<Option<serde_json::Value>, _>("custom_params")
+                .ok()
+                .flatten(),
+            max_completion_tokens: row.try_get("max_completion_tokens").ok(),
+            model_name: row
+                .try_get("model_name")
+                .map_err(|e| PersistenceError::Query(e.to_string()))?,
+            provider_id: row
+                .try_get("provider_id")
+                .map_err(|e| PersistenceError::Query(e.to_string()))?,
+            response_format: row.try_get("response_format").ok(),
+            system_prompt: row
+                .try_get("system_prompt")
+                .map_err(|e| PersistenceError::Query(e.to_string()))?,
+            temperature: row.try_get("temperature").ok(),
+            stream: row.try_get("stream").ok(),
+            thinking: row
+                .try_get::<Option<serde_json::Value>, _>("thinking")
+                .ok()
+                .flatten(),
+            create_time: row
+                .try_get("create_time")
+                .map_err(|e| PersistenceError::Query(e.to_string()))?,
+            update_time: row
+                .try_get("update_time")
+                .map_err(|e| PersistenceError::Query(e.to_string()))?,
+        })
+    }
 }
 
 #[async_trait]
@@ -749,6 +834,361 @@ impl SessionStore for PostgresStore {
             .map_err(|e| PersistenceError::Query(e.to_string()))?;
 
         Ok(result.rows_affected() > 0)
+    }
+}
+
+#[async_trait]
+impl crate::persistence::traits::ProviderStore for PostgresStore {
+    async fn get_provider(
+        &self,
+        id: Uuid,
+    ) -> PersistenceResult<Option<crate::persistence::entities::Provider>> {
+        let row = sqlx::query("SELECT * FROM entity_provider WHERE id = $1")
+            .bind(id)
+            .fetch_optional(&self.pool)
+            .await
+            .map_err(|e| PersistenceError::Query(e.to_string()))?;
+
+        match row {
+            Some(row) => Ok(Some(Self::parse_provider_row(&row)?)),
+            None => Ok(None),
+        }
+    }
+
+    async fn get_provider_by_name(
+        &self,
+        tenant_id: Uuid,
+        name: &str,
+    ) -> PersistenceResult<Option<crate::persistence::entities::Provider>> {
+        let row = sqlx::query(
+            "SELECT * FROM entity_provider WHERE tenant_id = $1 AND provider_name = $2",
+        )
+        .bind(tenant_id)
+        .bind(name)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(|e| PersistenceError::Query(e.to_string()))?;
+
+        match row {
+            Some(row) => Ok(Some(Self::parse_provider_row(&row)?)),
+            None => Ok(None),
+        }
+    }
+
+    async fn list_providers(
+        &self,
+        tenant_id: Uuid,
+    ) -> PersistenceResult<Vec<crate::persistence::entities::Provider>> {
+        let rows = sqlx::query("SELECT * FROM entity_provider WHERE tenant_id = $1")
+            .bind(tenant_id)
+            .fetch_all(&self.pool)
+            .await
+            .map_err(|e| PersistenceError::Query(e.to_string()))?;
+
+        rows.iter().map(Self::parse_provider_row).collect()
+    }
+
+    async fn get_enabled_providers(
+        &self,
+        tenant_id: Uuid,
+    ) -> PersistenceResult<Vec<crate::persistence::entities::Provider>> {
+        let rows =
+            sqlx::query("SELECT * FROM entity_provider WHERE tenant_id = $1 AND enabled = true")
+                .bind(tenant_id)
+                .fetch_all(&self.pool)
+                .await
+                .map_err(|e| PersistenceError::Query(e.to_string()))?;
+
+        rows.iter().map(Self::parse_provider_row).collect()
+    }
+}
+
+#[async_trait]
+impl crate::persistence::traits::AgentStore for PostgresStore {
+    async fn get_agent(
+        &self,
+        id: Uuid,
+    ) -> PersistenceResult<Option<crate::persistence::entities::Agent>> {
+        let row = sqlx::query("SELECT * FROM entity_agent WHERE id = $1")
+            .bind(id)
+            .fetch_optional(&self.pool)
+            .await
+            .map_err(|e| PersistenceError::Query(e.to_string()))?;
+
+        match row {
+            Some(row) => Ok(Some(Self::parse_agent_row(&row)?)),
+            None => Ok(None),
+        }
+    }
+
+    async fn get_agent_by_code(
+        &self,
+        code: &str,
+    ) -> PersistenceResult<Option<crate::persistence::entities::Agent>> {
+        let row = sqlx::query("SELECT * FROM entity_agent WHERE agent_code = $1")
+            .bind(code)
+            .fetch_optional(&self.pool)
+            .await
+            .map_err(|e| PersistenceError::Query(e.to_string()))?;
+
+        match row {
+            Some(row) => Ok(Some(Self::parse_agent_row(&row)?)),
+            None => Ok(None),
+        }
+    }
+
+    async fn get_agent_by_code_and_tenant(
+        &self,
+        tenant_id: Uuid,
+        code: &str,
+    ) -> PersistenceResult<Option<crate::persistence::entities::Agent>> {
+        let row = sqlx::query(
+            "SELECT * FROM entity_agent WHERE tenant_id = $1 AND agent_code = $2",
+        )
+        .bind(tenant_id)
+        .bind(code)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(|e| PersistenceError::Query(e.to_string()))?;
+
+        match row {
+            Some(row) => Ok(Some(Self::parse_agent_row(&row)?)),
+            None => Ok(None),
+        }
+    }
+
+    async fn list_agents(
+        &self,
+        tenant_id: Uuid,
+    ) -> PersistenceResult<Vec<crate::persistence::entities::Agent>> {
+        let rows = sqlx::query("SELECT * FROM entity_agent WHERE tenant_id = $1")
+            .bind(tenant_id)
+            .fetch_all(&self.pool)
+            .await
+            .map_err(|e| PersistenceError::Query(e.to_string()))?;
+
+        rows.iter().map(Self::parse_agent_row).collect()
+    }
+
+    async fn get_active_agents(
+        &self,
+        tenant_id: Uuid,
+    ) -> PersistenceResult<Vec<crate::persistence::entities::Agent>> {
+        let rows = sqlx::query(
+            "SELECT * FROM entity_agent WHERE tenant_id = $1 AND agent_status = true",
+        )
+        .bind(tenant_id)
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|e| PersistenceError::Query(e.to_string()))?;
+
+        rows.iter().map(Self::parse_agent_row).collect()
+    }
+
+    async fn get_agent_with_provider(
+        &self,
+        id: Uuid,
+    ) -> PersistenceResult<Option<crate::persistence::entities::AgentConfig>> {
+        let row = sqlx::query(
+            r#"
+            SELECT
+                a.*,
+                p.id as provider_id,
+                p.tenant_id as provider_tenant_id,
+                p.provider_name,
+                p.provider_type,
+                p.api_base,
+                p.api_key,
+                p.enabled as provider_enabled,
+                p.create_time as provider_create_time,
+                p.update_time as provider_update_time
+            FROM entity_agent a
+            INNER JOIN entity_provider p ON a.provider_id = p.id
+            WHERE a.id = $1
+            "#,
+        )
+        .bind(id)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(|e| PersistenceError::Query(e.to_string()))?;
+
+        match row {
+            Some(row) => {
+                let provider = crate::persistence::entities::Provider {
+                    id: row
+                        .try_get("provider_id")
+                        .map_err(|e| PersistenceError::Query(e.to_string()))?,
+                    tenant_id: row
+                        .try_get("provider_tenant_id")
+                        .map_err(|e| PersistenceError::Query(e.to_string()))?,
+                    provider_name: row
+                        .try_get("provider_name")
+                        .map_err(|e| PersistenceError::Query(e.to_string()))?,
+                    provider_type: row
+                        .try_get("provider_type")
+                        .map_err(|e| PersistenceError::Query(e.to_string()))?,
+                    api_base: row
+                        .try_get("api_base")
+                        .map_err(|e| PersistenceError::Query(e.to_string()))?,
+                    api_key: row
+                        .try_get("api_key")
+                        .map_err(|e| PersistenceError::Query(e.to_string()))?,
+                    enabled: row
+                        .try_get("provider_enabled")
+                        .map_err(|e| PersistenceError::Query(e.to_string()))?,
+                    create_time: row
+                        .try_get("provider_create_time")
+                        .map_err(|e| PersistenceError::Query(e.to_string()))?,
+                    update_time: row
+                        .try_get("provider_update_time")
+                        .map_err(|e| PersistenceError::Query(e.to_string()))?,
+                };
+                let agent = Self::parse_agent_row(&row)?;
+                Ok(Some(crate::persistence::entities::AgentConfig {
+                    provider,
+                    agent,
+                }))
+            }
+            None => Ok(None),
+        }
+    }
+
+    async fn get_agent_by_code_with_provider(
+        &self,
+        code: &str,
+    ) -> PersistenceResult<Option<crate::persistence::entities::AgentConfig>> {
+        let row = sqlx::query(
+            r#"
+            SELECT
+                a.*,
+                p.id as provider_id,
+                p.tenant_id as provider_tenant_id,
+                p.provider_name,
+                p.provider_type,
+                p.api_base,
+                p.api_key,
+                p.enabled as provider_enabled,
+                p.create_time as provider_create_time,
+                p.update_time as provider_update_time
+            FROM entity_agent a
+            INNER JOIN entity_provider p ON a.provider_id = p.id
+            WHERE a.agent_code = $1
+            "#,
+        )
+        .bind(code)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(|e| PersistenceError::Query(e.to_string()))?;
+
+        match row {
+            Some(row) => {
+                let provider = crate::persistence::entities::Provider {
+                    id: row
+                        .try_get("provider_id")
+                        .map_err(|e| PersistenceError::Query(e.to_string()))?,
+                    tenant_id: row
+                        .try_get("provider_tenant_id")
+                        .map_err(|e| PersistenceError::Query(e.to_string()))?,
+                    provider_name: row
+                        .try_get("provider_name")
+                        .map_err(|e| PersistenceError::Query(e.to_string()))?,
+                    provider_type: row
+                        .try_get("provider_type")
+                        .map_err(|e| PersistenceError::Query(e.to_string()))?,
+                    api_base: row
+                        .try_get("api_base")
+                        .map_err(|e| PersistenceError::Query(e.to_string()))?,
+                    api_key: row
+                        .try_get("api_key")
+                        .map_err(|e| PersistenceError::Query(e.to_string()))?,
+                    enabled: row
+                        .try_get("provider_enabled")
+                        .map_err(|e| PersistenceError::Query(e.to_string()))?,
+                    create_time: row
+                        .try_get("provider_create_time")
+                        .map_err(|e| PersistenceError::Query(e.to_string()))?,
+                    update_time: row
+                        .try_get("provider_update_time")
+                        .map_err(|e| PersistenceError::Query(e.to_string()))?,
+                };
+                let agent = Self::parse_agent_row(&row)?;
+                Ok(Some(crate::persistence::entities::AgentConfig {
+                    provider,
+                    agent,
+                }))
+            }
+            None => Ok(None),
+        }
+    }
+
+    async fn get_agent_by_code_and_tenant_with_provider(
+        &self,
+        tenant_id: Uuid,
+        code: &str,
+    ) -> PersistenceResult<Option<crate::persistence::entities::AgentConfig>> {
+        let row = sqlx::query(
+            r#"
+            SELECT
+                a.*,
+                p.id as provider_id,
+                p.tenant_id as provider_tenant_id,
+                p.provider_name,
+                p.provider_type,
+                p.api_base,
+                p.api_key,
+                p.enabled as provider_enabled,
+                p.create_time as provider_create_time,
+                p.update_time as provider_update_time
+            FROM entity_agent a
+            INNER JOIN entity_provider p ON a.provider_id = p.id
+            WHERE a.tenant_id = $1 AND a.agent_code = $2
+            "#,
+        )
+        .bind(tenant_id)
+        .bind(code)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(|e| PersistenceError::Query(e.to_string()))?;
+
+        match row {
+            Some(row) => {
+                let provider = crate::persistence::entities::Provider {
+                    id: row
+                        .try_get("provider_id")
+                        .map_err(|e| PersistenceError::Query(e.to_string()))?,
+                    tenant_id: row
+                        .try_get("provider_tenant_id")
+                        .map_err(|e| PersistenceError::Query(e.to_string()))?,
+                    provider_name: row
+                        .try_get("provider_name")
+                        .map_err(|e| PersistenceError::Query(e.to_string()))?,
+                    provider_type: row
+                        .try_get("provider_type")
+                        .map_err(|e| PersistenceError::Query(e.to_string()))?,
+                    api_base: row
+                        .try_get("api_base")
+                        .map_err(|e| PersistenceError::Query(e.to_string()))?,
+                    api_key: row
+                        .try_get("api_key")
+                        .map_err(|e| PersistenceError::Query(e.to_string()))?,
+                    enabled: row
+                        .try_get("provider_enabled")
+                        .map_err(|e| PersistenceError::Query(e.to_string()))?,
+                    create_time: row
+                        .try_get("provider_create_time")
+                        .map_err(|e| PersistenceError::Query(e.to_string()))?,
+                    update_time: row
+                        .try_get("provider_update_time")
+                        .map_err(|e| PersistenceError::Query(e.to_string()))?,
+                };
+                let agent = Self::parse_agent_row(&row)?;
+                Ok(Some(crate::persistence::entities::AgentConfig {
+                    provider,
+                    agent,
+                }))
+            }
+            None => Ok(None),
+        }
     }
 }
 

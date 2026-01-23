@@ -129,10 +129,87 @@ pub trait SessionStore: Send + Sync {
     async fn delete_session(&self, id: Uuid) -> PersistenceResult<bool>;
 }
 
+/// Provider 存储 trait
+///
+/// 提供 LLM Provider 的数据库操作
+#[async_trait]
+pub trait ProviderStore: Send + Sync {
+    /// 根据 ID 获取 provider
+    async fn get_provider(&self, id: Uuid) -> PersistenceResult<Option<super::entities::Provider>>;
+
+    /// 根据名称和租户 ID 获取 provider
+    async fn get_provider_by_name(
+        &self,
+        tenant_id: Uuid,
+        name: &str,
+    ) -> PersistenceResult<Option<super::entities::Provider>>;
+
+    /// 列出租户的所有 providers
+    async fn list_providers(&self, tenant_id: Uuid) -> PersistenceResult<Vec<super::entities::Provider>>;
+
+    /// 获取租户所有启用的 providers
+    async fn get_enabled_providers(
+        &self,
+        tenant_id: Uuid,
+    ) -> PersistenceResult<Vec<super::entities::Provider>>;
+}
+
+/// Agent 存储 trait
+///
+/// 提供 LLM Agent 配置的数据库操作
+#[async_trait]
+pub trait AgentStore: Send + Sync {
+    /// 根据 ID 获取 agent
+    async fn get_agent(&self, id: Uuid) -> PersistenceResult<Option<super::entities::Agent>>;
+
+    /// 根据 code 获取 agent（全局查找）
+    async fn get_agent_by_code(
+        &self,
+        code: &str,
+    ) -> PersistenceResult<Option<super::entities::Agent>>;
+
+    /// 根据 code 和租户 ID 获取 agent
+    async fn get_agent_by_code_and_tenant(
+        &self,
+        tenant_id: Uuid,
+        code: &str,
+    ) -> PersistenceResult<Option<super::entities::Agent>>;
+
+    /// 列出租户的所有 agents
+    async fn list_agents(&self, tenant_id: Uuid) -> PersistenceResult<Vec<super::entities::Agent>>;
+
+    /// 获取租户所有启用的 agents
+    async fn get_active_agents(
+        &self,
+        tenant_id: Uuid,
+    ) -> PersistenceResult<Vec<super::entities::Agent>>;
+
+    /// 根据 ID 获取 agent 及其 provider 配置
+    async fn get_agent_with_provider(
+        &self,
+        id: Uuid,
+    ) -> PersistenceResult<Option<super::entities::AgentConfig>>;
+
+    /// 根据 code 获取 agent 及其 provider 配置（全局查找）
+    async fn get_agent_by_code_with_provider(
+        &self,
+        code: &str,
+    ) -> PersistenceResult<Option<super::entities::AgentConfig>>;
+
+    /// 根据 code 和租户 ID 获取 agent 及其 provider 配置
+    async fn get_agent_by_code_and_tenant_with_provider(
+        &self,
+        tenant_id: Uuid,
+        code: &str,
+    ) -> PersistenceResult<Option<super::entities::AgentConfig>>;
+}
+
 /// 完整的持久化存储 trait
 ///
 /// 组合所有存储能力
-pub trait PersistenceStore: MessageStore + ApiCallStore + SessionStore {
+pub trait PersistenceStore:
+    MessageStore + ApiCallStore + SessionStore + ProviderStore + AgentStore
+{
     /// 获取存储后端名称
     fn backend_name(&self) -> &str;
 

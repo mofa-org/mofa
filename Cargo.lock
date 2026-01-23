@@ -3954,6 +3954,7 @@ dependencies = [
  "tracing",
  "uniffi",
  "uniffi-bindgen-java",
+ "uuid",
 ]
 
 [[package]]

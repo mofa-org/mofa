@@ -19,7 +19,8 @@ members = [
     "financial_compliance_agent",
     "rhai_hot_reload",
     "adaptive_collaboration_agent",
-    "llm_tts_streaming"]
+    "llm_tts_streaming",
+    "agent_from_database_streaming"]
 
 [workspace.package]
 version = "0.1.0"

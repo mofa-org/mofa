@@ -420,6 +420,105 @@ impl SessionStore for InMemoryStore {
     }
 }
 
+#[async_trait]
+impl ProviderStore for InMemoryStore {
+    async fn get_provider(&self, id: Uuid) -> PersistenceResult<Option<crate::persistence::entities::Provider>> {
+        // Memory store doesn't support providers - return not found
+        Ok(None)
+    }
+
+    async fn get_provider_by_name(
+        &self,
+        _tenant_id: Uuid,
+        _name: &str,
+    ) -> PersistenceResult<Option<crate::persistence::entities::Provider>> {
+        // Memory store doesn't support providers - return not found
+        Ok(None)
+    }
+
+    async fn list_providers(
+        &self,
+        _tenant_id: Uuid,
+    ) -> PersistenceResult<Vec<crate::persistence::entities::Provider>> {
+        // Memory store doesn't support providers - return empty list
+        Ok(Vec::new())
+    }
+
+    async fn get_enabled_providers(
+        &self,
+        _tenant_id: Uuid,
+    ) -> PersistenceResult<Vec<crate::persistence::entities::Provider>> {
+        // Memory store doesn't support providers - return empty list
+        Ok(Vec::new())
+    }
+}
+
+#[async_trait]
+impl AgentStore for InMemoryStore {
+    async fn get_agent(&self, id: Uuid) -> PersistenceResult<Option<crate::persistence::entities::Agent>> {
+        // Memory store doesn't support agents - return not found
+        Ok(None)
+    }
+
+    async fn get_agent_by_code(
+        &self,
+        _code: &str,
+    ) -> PersistenceResult<Option<crate::persistence::entities::Agent>> {
+        // Memory store doesn't support agents - return not found
+        Ok(None)
+    }
+
+    async fn get_agent_by_code_and_tenant(
+        &self,
+        _tenant_id: Uuid,
+        _code: &str,
+    ) -> PersistenceResult<Option<crate::persistence::entities::Agent>> {
+        // Memory store doesn't support agents - return not found
+        Ok(None)
+    }
+
+    async fn list_agents(
+        &self,
+        _tenant_id: Uuid,
+    ) -> PersistenceResult<Vec<crate::persistence::entities::Agent>> {
+        // Memory store doesn't support agents - return empty list
+        Ok(Vec::new())
+    }
+
+    async fn get_active_agents(
+        &self,
+        _tenant_id: Uuid,
+    ) -> PersistenceResult<Vec<crate::persistence::entities::Agent>> {
+        // Memory store doesn't support agents - return empty list
+        Ok(Vec::new())
+    }
+
+    async fn get_agent_with_provider(
+        &self,
+        _id: Uuid,
+    ) -> PersistenceResult<Option<crate::persistence::entities::AgentConfig>> {
+        // Memory store doesn't support agents - return not found
+        Ok(None)
+    }
+
+    async fn get_agent_by_code_with_provider(
+        &self,
+        _code: &str,
+    ) -> PersistenceResult<Option<crate::persistence::entities::AgentConfig>> {
+        // Memory store doesn't support agents - return not found
+        Ok(None)
+    }
+
+    async fn get_agent_by_code_and_tenant_with_provider(
+        &self,
+        _tenant_id: Uuid,
+        _code: &str,
+    ) -> PersistenceResult<Option<crate::persistence::entities::AgentConfig>> {
+        // Memory store doesn't support agents - return not found
+        Ok(None)
+    }
+}
+
 impl PersistenceStore for InMemoryStore {
     fn backend_name(&self) -> &str {
         "memory"
@@ -603,6 +702,93 @@ impl SessionStore for BoundedInMemoryStore {
 
     async fn delete_session(&self, id: Uuid) -> PersistenceResult<bool> {
         self.inner.delete_session(id).await
+    }
+}
+
+#[async_trait]
+impl ProviderStore for BoundedInMemoryStore {
+    async fn get_provider(&self, id: Uuid) -> PersistenceResult<Option<crate::persistence::entities::Provider>> {
+        self.inner.get_provider(id).await
+    }
+
+    async fn get_provider_by_name(
+        &self,
+        tenant_id: Uuid,
+        name: &str,
+    ) -> PersistenceResult<Option<crate::persistence::entities::Provider>> {
+        self.inner.get_provider_by_name(tenant_id, name).await
+    }
+
+    async fn list_providers(
+        &self,
+        tenant_id: Uuid,
+    ) -> PersistenceResult<Vec<crate::persistence::entities::Provider>> {
+        self.inner.list_providers(tenant_id).await
+    }
+
+    async fn get_enabled_providers(
+        &self,
+        tenant_id: Uuid,
+    ) -> PersistenceResult<Vec<crate::persistence::entities::Provider>> {
+        self.inner.get_enabled_providers(tenant_id).await
+    }
+}
+
+#[async_trait]
+impl AgentStore for BoundedInMemoryStore {
+    async fn get_agent(&self, id: Uuid) -> PersistenceResult<Option<crate::persistence::entities::Agent>> {
+        self.inner.get_agent(id).await
+    }
+
+    async fn get_agent_by_code(
+        &self,
+        code: &str,
+    ) -> PersistenceResult<Option<crate::persistence::entities::Agent>> {
+        self.inner.get_agent_by_code(code).await
+    }
+
+    async fn get_agent_by_code_and_tenant(
+        &self,
+        tenant_id: Uuid,
+        code: &str,
+    ) -> PersistenceResult<Option<crate::persistence::entities::Agent>> {
+        self.inner.get_agent_by_code_and_tenant(tenant_id, code).await
+    }
+
+    async fn list_agents(
+        &self,
+        tenant_id: Uuid,
+    ) -> PersistenceResult<Vec<crate::persistence::entities::Agent>> {
+        self.inner.list_agents(tenant_id).await
+    }
+
+    async fn get_active_agents(
+        &self,
+        tenant_id: Uuid,
+    ) -> PersistenceResult<Vec<crate::persistence::entities::Agent>> {
+        self.inner.get_active_agents(tenant_id).await
+    }
+
+    async fn get_agent_with_provider(
+        &self,
+        id: Uuid,
+    ) -> PersistenceResult<Option<crate::persistence::entities::AgentConfig>> {
+        self.inner.get_agent_with_provider(id).await
+    }
+
+    async fn get_agent_by_code_with_provider(
+        &self,
+        code: &str,
+    ) -> PersistenceResult<Option<crate::persistence::entities::AgentConfig>> {
+        self.inner.get_agent_by_code_with_provider(code).await
+    }
+
+    async fn get_agent_by_code_and_tenant_with_provider(
+        &self,
+        tenant_id: Uuid,
+        code: &str,
+    ) -> PersistenceResult<Option<crate::persistence::entities::AgentConfig>> {
+        self.inner.get_agent_by_code_and_tenant_with_provider(tenant_id, code).await
     }
 }
 

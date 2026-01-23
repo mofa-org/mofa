@@ -517,14 +517,16 @@ pub mod persistence {
     /// 自动处理：
     /// - 数据库连接（从 DATABASE_URL）
     /// - OpenAI Provider（从 OPENAI_API_KEY）
-    /// - 持久化事件处理器
-    /// - 自动生成 user_id 和 agent_id
+    /// - 持久化插件
+    /// - 自动生成 user_id、tenant_id、agent_id 和 session_id
     ///
     /// # 环境变量
     /// - DATABASE_URL: PostgreSQL 连接字符串
     /// - OPENAI_API_KEY: OpenAI API 密钥
     /// - USER_ID: 用户 ID（可选）
+    /// - TENANT_ID: 租户 ID（可选）
     /// - AGENT_ID: Agent ID（可选）
+    /// - SESSION_ID: 会话 ID（可选）
     ///
     /// # 示例
     ///
@@ -536,7 +538,8 @@ pub mod persistence {
     ///     let agent = quick_agent_with_postgres("你是一个有用的助手")
     ///         .await?
     ///         .with_name("聊天助手")
-    ///         .build();
+    ///         .build_async()
+    ///         .await;
     ///     Ok(())
     /// }
     /// ```
@@ -547,21 +550,45 @@ pub mod persistence {
         use std::sync::Arc;
 
         // 1. 初始化数据库
-        let store = PostgresStore::from_env().await
-            .map_err(|e| crate::llm::LLMError::Other(format!("数据库连接失败: {}", e)))?;
+        let store_arc = PostgresStore::from_env().await
+            .map_err(|e| crate::llm::LLMError::Other(format!("数据库连接失败: {}", e.to_string())))?;
 
-        // 2. 创建持久化处理器
-        let persistence = Arc::new(PersistenceHandler::from_env(store.clone()));
+        // 2. 从环境变量获取或生成 IDs
+        let user_id = std::env::var("USER_ID")
+            .ok()
+            .and_then(|s| uuid::Uuid::parse_str(&s).ok())
+            .unwrap_or_else(uuid::Uuid::now_v7);
 
-        // 3. 获取 user_id 和 agent_id 用于后续加载
-        let user_id = persistence.user_id();
-        let agent_id = persistence.agent_id();
+        let tenant_id = std::env::var("TENANT_ID")
+            .ok()
+            .and_then(|s| uuid::Uuid::parse_str(&s).ok())
+            .unwrap_or_else(uuid::Uuid::now_v7);
 
-        // 4. 返回预配置的 builder（已包含 stores）
+        let agent_id = std::env::var("AGENT_ID")
+            .ok()
+            .and_then(|s| uuid::Uuid::parse_str(&s).ok())
+            .unwrap_or_else(uuid::Uuid::now_v7);
+
+        let session_id = std::env::var("SESSION_ID")
+            .ok()
+            .and_then(|s| uuid::Uuid::parse_str(&s).ok())
+            .unwrap_or_else(uuid::Uuid::now_v7);
+
+        // 3. 创建持久化插件（直接使用 Arc<PostgresStore> 作为存储）
+        let plugin = PersistencePlugin::new(
+            "persistence-plugin",
+            store_arc.clone(),
+            store_arc,
+            user_id,
+            tenant_id,
+            agent_id,
+            session_id,
+        );
+
+        // 4. 返回预配置的 builder
         Ok(crate::llm::LLMAgentBuilder::from_env()?
             .with_system_prompt(system_prompt)
-            .with_persistence_handler(persistence)
-            .with_persistence_stores(store.clone(), store, user_id, agent_id))
+            .with_plugin(plugin))
     }
 
     /// 快速创建带内存持久化的 LLM Agent
@@ -581,7 +608,8 @@ pub mod persistence {
     ///     let agent = quick_agent_with_memory("你是一个有用的助手")
     ///         .await?
     ///         .with_name("聊天助手")
-    ///         .build();
+    ///         .build_async()
+    ///         .await;
     ///     Ok(())
     /// }
     /// ```
@@ -591,12 +619,26 @@ pub mod persistence {
     ) -> Result<crate::llm::LLMAgentBuilder, crate::llm::LLMError> {
         use std::sync::Arc;
 
-        let store = Arc::new(InMemoryStore::new());
-        let persistence = Arc::new(PersistenceHandler::auto(store));
+        let store = InMemoryStore::new();
+
+        // 生成 IDs
+        let user_id = uuid::Uuid::now_v7();
+        let tenant_id = uuid::Uuid::now_v7();
+        let agent_id = uuid::Uuid::now_v7();
+        let session_id = uuid::Uuid::now_v7();
+
+        let plugin = PersistencePlugin::from_store(
+            "persistence-plugin",
+            store,
+            user_id,
+            tenant_id,
+            agent_id,
+            session_id,
+        );
 
         Ok(crate::llm::LLMAgentBuilder::from_env()?
             .with_system_prompt(system_prompt)
-            .with_persistence_handler(persistence))
+            .with_plugin(plugin))
     }
 }
 

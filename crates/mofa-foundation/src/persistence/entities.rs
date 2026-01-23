@@ -589,3 +589,47 @@ pub struct UsageStatistics {
     /// 平均 tokens/秒
     pub avg_tokens_per_second: Option<f64>,
 }
+
+/// Provider Entity - maps to entity_provider table
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Provider {
+    pub id: Uuid,
+    pub tenant_id: Uuid,
+    pub provider_name: String,
+    pub provider_type: String,
+    pub api_base: String,
+    pub api_key: String,
+    pub enabled: bool,
+    pub create_time: chrono::DateTime<chrono::Utc>,
+    pub update_time: chrono::DateTime<chrono::Utc>,
+}
+
+/// Agent Entity - maps to entity_agent table
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Agent {
+    pub id: Uuid,
+    pub tenant_id: Uuid,
+    pub agent_code: String,
+    pub agent_name: String,
+    pub agent_order: i32,
+    pub agent_status: bool,
+    pub context_limit: Option<i32>,
+    pub custom_params: Option<serde_json::Value>,
+    pub max_completion_tokens: Option<i32>,
+    pub model_name: String,
+    pub provider_id: Uuid,
+    pub response_format: Option<String>,
+    pub system_prompt: String,
+    pub temperature: Option<f32>,
+    pub stream: Option<bool>,
+    pub thinking: Option<serde_json::Value>,
+    pub create_time: chrono::DateTime<chrono::Utc>,
+    pub update_time: chrono::DateTime<chrono::Utc>,
+}
+
+/// Agent Configuration with Provider
+#[derive(Debug, Clone)]
+pub struct AgentConfig {
+    pub provider: Provider,
+    pub agent: Agent,
+}

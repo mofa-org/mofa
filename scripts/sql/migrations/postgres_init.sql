@@ -177,7 +177,7 @@ CREATE TABLE public.entity_agent (
   system_prompt text NOT NULL,
   temperature float4 DEFAULT 0.7 NULL,
   stream bool DEFAULT true NULL,
-  thinking custom_params jsonb NULL,
+  thinking jsonb NULL,
   create_time TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL,
   update_time TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL,
   CONSTRAINT entity_agent_pkey PRIMARY KEY (id),
