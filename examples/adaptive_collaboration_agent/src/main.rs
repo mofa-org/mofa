@@ -15,6 +15,7 @@
 //! - **mofa-sdk**: 导出统一的 API
 
 use anyhow::Result;
+use std::sync::Arc;
 use mofa_sdk::collaboration::LLMDrivenCollaborationManager;
 use mofa_sdk::collaboration::{
     ConsensusProtocol, DebateProtocol, ParallelProtocol, PublishSubscribeProtocol,
