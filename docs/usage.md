@@ -269,4 +269,7 @@ let agent = LLMAgentBuilder::new()
 
 ---
 
-# 使用插件
+# uniffi
+生成python绑定
+cd crates/mofa-sdk                                                                                                                                                   
+./generate-bindings.sh python 

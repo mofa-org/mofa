@@ -2,8 +2,9 @@
 //!
 //! This module provides clean implementations for the types defined in mofa.udl
 
-use std::sync::Arc;
+use std::sync::{Arc, Mutex as StdMutex};
 use tokio::sync::RwLock;
+use tokio::runtime::Runtime;
 
 // =============================================================================
 // Error Types
@@ -86,13 +87,14 @@ pub struct LLMAgent {
     name: String,
     inner: Arc<RwLock<mofa_foundation::llm::LLMAgent>>,
     _inner: std::marker::PhantomData<()>,
-    runtime: tokio::runtime::Runtime,
+    runtime: Arc<Runtime>,
     _runtime: std::marker::PhantomData<()>,
 }
 
 impl LLMAgent {
     /// Create from configuration file (agent.yml)
     pub fn from_config_file(config_path: String) -> Result<Self, MoFaError> {
+        #[cfg(feature = "openai")]
         {
             let runtime = tokio::runtime::Runtime::new()
                 .map_err(|e| MoFaError::RuntimeError(e.to_string()))?;
@@ -107,9 +109,12 @@ impl LLMAgent {
                 agent_id,
                 name,
                 inner: Arc::new(RwLock::new(agent)),
-                runtime,
+                _inner: std::marker::PhantomData,
+                runtime: Arc::new(runtime),
+                _runtime: std::marker::PhantomData,
             })
         }
+        #[cfg(not(feature = "openai"))]
         {
             let _ = config_path;
             Err(MoFaError::ConfigError(
@@ -124,14 +129,14 @@ impl LLMAgent {
         agent_id: String,
         name: String,
     ) -> Result<Self, MoFaError> {
-
+        #[cfg(feature = "openai")]
         {
             use mofa_foundation::llm::{LLMAgentBuilder, OpenAIConfig, OpenAIProvider};
 
             let runtime = tokio::runtime::Runtime::new()
                 .map_err(|e| MoFaError::RuntimeError(e.to_string()))?;
 
-            let mut builder = LLMAgentBuilder::new(&agent_id).with_name(&name);
+            let mut builder = LLMAgentBuilder::new().with_id(&agent_id).with_name(&name);
 
             // Create provider based on config
             let provider: Arc<dyn mofa_foundation::llm::LLMProvider> = match config.provider {
@@ -212,7 +217,9 @@ impl LLMAgent {
                 agent_id,
                 name,
                 inner: Arc::new(RwLock::new(inner_agent)),
-                runtime,
+                _inner: std::marker::PhantomData,
+                runtime: Arc::new(runtime),
+                _runtime: std::marker::PhantomData,
             })
         }
         #[cfg(not(feature = "openai"))]
@@ -225,13 +232,13 @@ impl LLMAgent {
     }
 
     /// Get agent ID
-    pub fn agent_id(&self) -> String {
-        self.agent_id.clone()
+    pub fn agent_id(&self) -> Result<String, MoFaError> {
+        Ok(self.agent_id.clone())
     }
 
     /// Get agent name
-    pub fn name(&self) -> String {
-        self.name.clone()
+    pub fn name(&self) -> Result<String, MoFaError> {
+        Ok(self.name.clone())
     }
 
     /// Simple Q&A (no context retention)
@@ -320,6 +327,250 @@ impl LLMAgent {
         #[cfg(not(feature = "openai"))]
         {
             Vec::new()
+        }
+    }
+}
+
+// =============================================================================
+// LLM Agent Builder Implementation
+// ============================================================================
+
+/// Builder state for storing configuration
+#[derive(Debug, Clone)]
+struct BuilderState {
+    agent_id: Option<String>,
+    name: Option<String>,
+    system_prompt: Option<String>,
+    temperature: Option<f32>,
+    max_tokens: Option<u32>,
+    session_id: Option<String>,
+    user_id: Option<String>,
+    tenant_id: Option<String>,
+    context_window_size: Option<usize>,
+    openai_api_key: Option<String>,
+    openai_base_url: Option<String>,
+    openai_model: Option<String>,
+}
+
+impl Default for BuilderState {
+    fn default() -> Self {
+        Self {
+            agent_id: None,
+            name: None,
+            system_prompt: None,
+            temperature: None,
+            max_tokens: None,
+            session_id: None,
+            user_id: None,
+            tenant_id: None,
+            context_window_size: None,
+            openai_api_key: None,
+            openai_base_url: None,
+            openai_model: None,
+        }
+    }
+}
+
+/// LLM Agent Builder - fluent builder for creating LLMAgent instances
+///
+/// This is the primary interface for building LLMAgent instances from Python,
+/// Kotlin, Swift, and Java.
+pub struct LLMAgentBuilder {
+    state: Arc<StdMutex<BuilderState>>,
+    runtime: Arc<Runtime>,
+}
+
+impl LLMAgentBuilder {
+    /// Create a new builder
+    pub fn create() -> Arc<Self> {
+        let runtime = tokio::runtime::Runtime::new()
+            .map_err(|e| MoFaError::RuntimeError(e.to_string()))
+            .unwrap();
+
+        Arc::new(Self {
+            state: Arc::new(StdMutex::new(BuilderState::default())),
+            runtime: Arc::new(runtime),
+        })
+    }
+
+    /// Set agent ID
+    pub fn set_id(self: Arc<Self>, id: String) -> Arc<Self> {
+        let mut state = self.state.lock().unwrap();
+        state.agent_id = Some(id);
+        drop(state);
+        self
+    }
+
+    /// Set agent name
+    pub fn set_name(self: Arc<Self>, name: String) -> Arc<Self> {
+        let mut state = self.state.lock().unwrap();
+        state.name = Some(name);
+        drop(state);
+        self
+    }
+
+    /// Set system prompt
+    pub fn set_system_prompt(self: Arc<Self>, prompt: String) -> Arc<Self> {
+        let mut state = self.state.lock().unwrap();
+        state.system_prompt = Some(prompt);
+        drop(state);
+        self
+    }
+
+    /// Set temperature
+    pub fn set_temperature(self: Arc<Self>, temperature: f32) -> Arc<Self> {
+        let mut state = self.state.lock().unwrap();
+        state.temperature = Some(temperature);
+        drop(state);
+        self
+    }
+
+    /// Set max tokens
+    pub fn set_max_tokens(self: Arc<Self>, max_tokens: u32) -> Arc<Self> {
+        let mut state = self.state.lock().unwrap();
+        state.max_tokens = Some(max_tokens);
+        drop(state);
+        self
+    }
+
+    /// Set initial session ID
+    pub fn set_session_id(self: Arc<Self>, session_id: String) -> Arc<Self> {
+        let mut state = self.state.lock().unwrap();
+        state.session_id = Some(session_id);
+        drop(state);
+        self
+    }
+
+    /// Set user ID
+    pub fn set_user_id(self: Arc<Self>, user_id: String) -> Arc<Self> {
+        let mut state = self.state.lock().unwrap();
+        state.user_id = Some(user_id);
+        drop(state);
+        self
+    }
+
+    /// Set tenant ID
+    pub fn set_tenant_id(self: Arc<Self>, tenant_id: String) -> Arc<Self> {
+        let mut state = self.state.lock().unwrap();
+        state.tenant_id = Some(tenant_id);
+        drop(state);
+        self
+    }
+
+    /// Set context window size (in rounds)
+    pub fn set_context_window_size(self: Arc<Self>, size: u32) -> Arc<Self> {
+        let mut state = self.state.lock().unwrap();
+        state.context_window_size = Some(size as usize);
+        drop(state);
+        self
+    }
+
+    /// Set OpenAI provider
+    pub fn set_openai_provider(
+        self: Arc<Self>,
+        api_key: String,
+        base_url: Option<String>,
+        model: Option<String>,
+    ) -> Result<Arc<Self>, MoFaError> {
+        let mut state = self.state.lock().unwrap();
+        state.openai_api_key = Some(api_key);
+        state.openai_base_url = base_url;
+        state.openai_model = model;
+        drop(state);
+        Ok(self)
+    }
+
+    /// Build the LLMAgent synchronously
+    pub fn build(self: Arc<Self>) -> Result<Arc<LLMAgent>, MoFaError> {
+        #[cfg(feature = "openai")]
+        {
+            use mofa_foundation::llm::{LLMAgentBuilder, OpenAIConfig, OpenAIProvider};
+            use std::sync::Arc as StdArc;
+
+            let state = self.state.lock().unwrap();
+
+            // Get or generate agent_id
+            let agent_id = state.agent_id.clone().unwrap_or_else(|| uuid::Uuid::now_v7().to_string());
+
+            let mut builder = LLMAgentBuilder::new()
+                .with_id(&agent_id);
+
+            // Set name if provided
+            if let Some(ref name) = state.name {
+                builder = builder.with_name(name);
+            }
+
+            // Set system prompt if provided
+            if let Some(ref prompt) = state.system_prompt {
+                builder = builder.with_system_prompt(prompt);
+            }
+
+            // Set temperature if provided
+            if let Some(temp) = state.temperature {
+                builder = builder.with_temperature(temp);
+            }
+
+            // Set max tokens if provided
+            if let Some(tokens) = state.max_tokens {
+                builder = builder.with_max_tokens(tokens);
+            }
+
+            // Set session ID if provided
+            if let Some(ref session_id) = state.session_id {
+                builder = builder.with_session_id(session_id);
+            }
+
+            // Set user ID if provided
+            if let Some(ref user_id) = state.user_id {
+                builder = builder.with_user(user_id);
+            }
+
+            // Set tenant ID if provided
+            if let Some(ref tenant_id) = state.tenant_id {
+                builder = builder.with_tenant(tenant_id);
+            }
+
+            // Set context window size if provided
+            if let Some(size) = state.context_window_size {
+                builder = builder.with_sliding_window(size);
+            }
+
+            // Set OpenAI provider if API key is provided
+            if let Some(ref api_key) = state.openai_api_key {
+                let mut config = OpenAIConfig::new(api_key.clone());
+                if let Some(ref base_url) = state.openai_base_url {
+                    config = config.with_base_url(base_url);
+                }
+                if let Some(ref model) = state.openai_model {
+                    config = config.with_model(model);
+                }
+                let provider = StdArc::new(OpenAIProvider::with_config(config));
+                builder = builder.with_provider(provider);
+            }
+
+            drop(state);
+
+            let inner_agent = builder.try_build()
+                .map_err(|e| MoFaError::ConfigError(e.to_string()))?;
+
+            let agent_id = inner_agent.config().agent_id.clone();
+            let name = inner_agent.config().name.clone();
+
+            Ok(Arc::new(LLMAgent {
+                agent_id,
+                name,
+                inner: Arc::new(RwLock::new(inner_agent)),
+                _inner: std::marker::PhantomData,
+                runtime: self.runtime.clone(),
+                _runtime: std::marker::PhantomData,
+            }))
+        }
+
+        #[cfg(not(feature = "openai"))]
+        {
+            Err(MoFaError::ConfigError(
+                "OpenAI feature not enabled. Rebuild with --features openai".to_string(),
+            ))
         }
     }
 }
