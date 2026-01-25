@@ -6,9 +6,8 @@ mod json;
 mod progress;
 mod table;
 
-pub use json::{JsonOutput, JsonValue};
-pub use progress::{ProgressBar, ProgressStyle};
-pub use table::{Table, TableBuilder, TableCell, TableRow};
+pub use json::JsonOutput;
+pub use table::Table;
 
 /// Output format for CLI commands
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, clap::ValueEnum)]
@@ -83,11 +82,10 @@ fn format_json<T: JsonOutput>(result: &T) -> String {
 fn format_table<T: JsonOutput>(result: &T) -> String {
     // Try to convert to table format
     let json = result.to_json();
-    if let Some(arr) = json.as_array() {
-        if !arr.is_empty() {
+    if let Some(arr) = json.as_array()
+        && !arr.is_empty() {
             return Table::from_json_array(arr).to_string();
         }
-    }
     // Fallback to JSON
     json.to_string()
 }

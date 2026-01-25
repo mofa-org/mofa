@@ -422,7 +422,7 @@ impl SessionStore for InMemoryStore {
 
 #[async_trait]
 impl ProviderStore for InMemoryStore {
-    async fn get_provider(&self, id: Uuid) -> PersistenceResult<Option<crate::persistence::entities::Provider>> {
+    async fn get_provider(&self, _id: Uuid) -> PersistenceResult<Option<crate::persistence::entities::Provider>> {
         // Memory store doesn't support providers - return not found
         Ok(None)
     }
@@ -455,7 +455,7 @@ impl ProviderStore for InMemoryStore {
 
 #[async_trait]
 impl AgentStore for InMemoryStore {
-    async fn get_agent(&self, id: Uuid) -> PersistenceResult<Option<crate::persistence::entities::Agent>> {
+    async fn get_agent(&self, _id: Uuid) -> PersistenceResult<Option<crate::persistence::entities::Agent>> {
         // Memory store doesn't support agents - return not found
         Ok(None)
     }

@@ -5,5 +5,3 @@
 pub mod command_palette;
 pub mod confirm_dialog;
 
-pub use command_palette::{CommandPalette, CommandPaletteResult, CommandToExecute};
-pub use confirm_dialog::{ConfirmDialog, ConfirmDialogResult};

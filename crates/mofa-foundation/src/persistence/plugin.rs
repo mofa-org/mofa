@@ -1071,7 +1071,7 @@ impl crate::llm::agent::LLMAgentEventHandler for PersistencePlugin
                 self.tenant_id,
                 user_msg_id,
                 model_name,
-                &error.to_string(),
+                error.to_string(),
                 None,
                 now,
             );

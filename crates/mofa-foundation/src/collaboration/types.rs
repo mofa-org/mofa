@@ -76,9 +76,11 @@ use uuid::Uuid;
 /// 定义 Agent 之间的协作通信模式，供 LLM 选择使用
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[derive(Default)]
 pub enum CollaborationMode {
     /// 请求-响应模式：适合一对一的确定性任务
     /// 特点：同步等待、明确返回结果
+    #[default]
     RequestResponse,
     /// 发布-订阅模式：适合一对多的发散性任务
     /// 特点：异步广播、多个接收者
@@ -99,11 +101,6 @@ pub enum CollaborationMode {
     Custom(String),
 }
 
-impl Default for CollaborationMode {
-    fn default() -> Self {
-        CollaborationMode::RequestResponse
-    }
-}
 
 impl std::fmt::Display for CollaborationMode {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {

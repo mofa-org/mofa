@@ -43,11 +43,10 @@ pub fn find_project_root() -> Option<PathBuf> {
     let markers = ["Cargo.toml", "package.json", ".git"];
 
     for marker in markers {
-        if let Some(path) = find_file_upward(Path::new(marker)) {
-            if let Some(parent) = path.parent() {
+        if let Some(path) = find_file_upward(Path::new(marker))
+            && let Some(parent) = path.parent() {
                 return Some(parent.to_path_buf());
             }
-        }
     }
 
     None
@@ -105,11 +104,10 @@ pub fn ensure_mofa_data_dir() -> anyhow::Result<PathBuf> {
 /// Normalize a path for display
 pub fn normalize_path<P: AsRef<Path>>(path: P) -> String {
     let path = path.as_ref();
-    if let Ok(cwd) = std::env::current_dir() {
-        if let Ok(rel) = path.strip_prefix(&cwd) {
+    if let Ok(cwd) = std::env::current_dir()
+        && let Ok(rel) = path.strip_prefix(&cwd) {
             return rel.display().to_string();
         }
-    }
     path.display().to_string()
 }
 

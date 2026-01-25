@@ -61,7 +61,6 @@ pub use mofa_kernel::plugin::AgentPlugin;
 use mofa_plugins::AgentPlugin as PluginAgent;
 
 // External dependencies
-use async_trait::async_trait;
 use std::collections::HashMap;
 use std::time::Duration;
 
@@ -569,7 +568,7 @@ impl<A: MoFAAgent> SimpleAgentRuntime<A> {
 
         // 将事件转换为输入并使用 execute
         use mofa_kernel::agent::types::AgentInput;
-        use mofa_kernel::message::TaskRequest;
+        
 
         let context = mofa_kernel::agent::AgentContext::new(self.metadata.id.clone());
 
@@ -602,7 +601,7 @@ impl<A: MoFAAgent> SimpleAgentRuntime<A> {
         &mut self,
         mut event_rx: tokio::sync::mpsc::Receiver<AgentEvent>,
     ) -> anyhow::Result<()> {
-        use mofa_kernel::agent::types::AgentInput;
+        
 
         loop {
             // 检查中断

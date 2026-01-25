@@ -153,12 +153,11 @@ impl ModelCache {
         }
 
         // Verify checksum if provided
-        if let Some(expected) = expected_checksum {
-            if metadata.checksum != expected {
+        if let Some(expected) = expected_checksum
+            && metadata.checksum != expected {
                 warn!("Model checksum mismatch for {}", model_id);
                 return Ok(false);
             }
-        }
 
         debug!("Model validation passed: {}", model_id);
         Ok(true)
@@ -194,7 +193,7 @@ impl ModelCache {
             let path = entry.path();
 
             // Skip metadata files and directories
-            if path.is_dir() || path.extension().map_or(false, |e| e == "json") {
+            if path.is_dir() || path.extension().is_some_and(|e| e == "json") {
                 continue;
             }
 

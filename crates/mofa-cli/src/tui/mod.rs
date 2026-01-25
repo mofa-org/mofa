@@ -10,8 +10,5 @@ mod run;
 mod terminal;
 
 pub use run::run;
-pub use app::{App, AppExitInfo};
 
 // Re-export common types
-pub use app_event::{AppEvent, ExitMode, View};
-pub use app_event_sender::AppEventSender;

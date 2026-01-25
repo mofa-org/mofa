@@ -1,7 +1,6 @@
 //! Configuration merging utilities
 
 use super::AgentConfig;
-use std::collections::HashMap;
 
 /// Configuration merge strategy
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -71,7 +70,7 @@ pub fn merge_configs(
 
     // Merge runtime config
     if let Some(override_runtime) = overrides.runtime {
-        let base_runtime = base.runtime.get_or_insert_with(|| super::RuntimeConfig {
+        let base_runtime = base.runtime.get_or_insert(super::RuntimeConfig {
             max_concurrent_tasks: None,
             default_timeout_secs: None,
             dora_enabled: None,

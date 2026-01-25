@@ -17,11 +17,9 @@ mod websocket;
 
 pub use api::{
     AgentStatus, ApiError, ApiResponse, PluginStatus, SystemStatus,
-    WorkflowStatus as ApiWorkflowStatus,
 };
-pub use assets::DashboardAssets;
 pub use metrics::{
-    AgentMetrics, Counter, Gauge, Histogram, MetricType, MetricValue, MetricsCollector,
+    AgentMetrics, Gauge, Histogram, MetricType, MetricValue, MetricsCollector,
     MetricsConfig, MetricsRegistry, MetricsSnapshot, PluginMetrics, SystemMetrics, WorkflowMetrics,
 };
 pub use server::{DashboardConfig, DashboardServer, ServerState};

@@ -255,7 +255,7 @@ fn run_interactive_wizard() -> anyhow::Result<AgentConfigBuilder> {
 }
 
 fn config_from_file_or_defaults(config_path: Option<PathBuf>) -> anyhow::Result<AgentConfigBuilder> {
-    if let Some(path) = config_path {
+    if let Some(_path) = config_path {
         // Load from file (would parse the file here)
         anyhow::bail!("Config file loading not yet implemented for non-interactive mode");
     } else {

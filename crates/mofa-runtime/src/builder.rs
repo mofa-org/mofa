@@ -455,7 +455,7 @@ impl<A: MoFAAgent> SimpleAgentRuntime<A> {
 
         // 将事件转换为输入并执行
         use mofa_kernel::agent::types::AgentInput;
-        use mofa_kernel::message::TaskRequest;
+        
 
         let context = mofa_kernel::agent::AgentContext::new(self.metadata.id.clone());
         let input = match event {

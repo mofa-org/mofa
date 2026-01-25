@@ -33,12 +33,11 @@ impl DisclosureController {
         {
             if entry.file_type().is_dir() {
                 let skill_md = entry.path().join("SKILL.md");
-                if skill_md.exists() {
-                    if let Ok((metadata, _)) = SkillParser::parse_from_file(&skill_md) {
+                if skill_md.exists()
+                    && let Ok((metadata, _)) = SkillParser::parse_from_file(&skill_md) {
                         self.metadata_cache.insert(metadata.name.clone(), metadata);
                         count += 1;
                     }
-                }
             }
         }
 

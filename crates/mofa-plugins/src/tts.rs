@@ -690,11 +690,10 @@ impl TTSPlugin {
             serde_json::json!(self.config.auto_download),
         );
         // Add cache info if available
-        if let Some(cache) = &self.model_cache {
-            if let Some(cache_dir) = cache.cache_dir().to_str() {
+        if let Some(cache) = &self.model_cache
+            && let Some(cache_dir) = cache.cache_dir().to_str() {
                 stats.insert("cache_dir".to_string(), serde_json::json!(cache_dir));
             }
-        }
         if let Some(engine) = &self.engine {
             stats.insert("engine".to_string(), serde_json::json!(engine.name()));
         }
@@ -809,8 +808,8 @@ impl AgentPlugin for TTSPlugin {
         }
 
         // Validate cached model
-        if let Some(expected_checksum) = &self.config.model_checksum {
-            if !cache
+        if let Some(expected_checksum) = &self.config.model_checksum
+            && !cache
                 .validate(&self.config.model_url, Some(expected_checksum))
                 .await
                 .map_err(|e| anyhow::anyhow!("Failed to validate model: {}", e))?
@@ -820,7 +819,6 @@ impl AgentPlugin for TTSPlugin {
                     Try deleting the cache and re-downloading."
                 ));
             }
-        }
 
         // Initialize engine with downloaded/cached model
         if self.engine.is_none() {
@@ -1060,10 +1058,9 @@ impl ToolExecutor for TextToSpeechTool {
         if !arguments.is_object() {
             return Err(anyhow::anyhow!("Arguments must be an object"));
         }
-        if !arguments
+        if arguments
             .get("text")
-            .and_then(|v| v.as_str())
-            .is_some()
+            .and_then(|v| v.as_str()).is_none()
         {
             return Err(anyhow::anyhow!("Missing required parameter: text"));
         }

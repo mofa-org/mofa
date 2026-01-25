@@ -120,17 +120,15 @@ impl HFHubClient {
         );
 
         // Check if model already exists and is valid
-        if cache.exists(&config.model_id).await {
-            if let Some(expected_checksum) = &config.checksum {
-                if cache
+        if cache.exists(&config.model_id).await
+            && let Some(expected_checksum) = &config.checksum
+                && cache
                     .validate(&config.model_id, Some(expected_checksum))
                     .await?
                 {
                     info!("Model already cached and valid: {}", config.model_id);
                     return Ok(cache.model_path(&config.model_id));
                 }
-            }
-        }
 
         // Get download URL
         let download_url = self.get_download_url(&config.model_id, &config.filename);
@@ -148,8 +146,8 @@ impl HFHubClient {
         let actual_checksum = self.calculate_checksum(&output_path)?;
 
         // Validate checksum if provided
-        if let Some(expected) = &config.checksum {
-            if actual_checksum != *expected {
+        if let Some(expected) = &config.checksum
+            && actual_checksum != *expected {
                 error!("Checksum validation failed");
                 fs::remove_file(&output_path)?;
                 bail!(
@@ -157,7 +155,6 @@ impl HFHubClient {
                     expected, actual_checksum
                 );
             }
-        }
 
         // Save metadata
         let metadata = ModelMetadata {
@@ -255,7 +252,7 @@ impl HFHubClient {
             // Log progress every 10%
             if total_size > 0 {
                 let progress = (downloaded as f64 / total_size as f64) * 100.0;
-                if progress as u64 % 10 == 0 {
+                if (progress as u64).is_multiple_of(10) {
                     debug!("Download progress: {:.1}%", progress);
                 }
             }

@@ -6,10 +6,10 @@ use crate::tui::app::App;
 use crate::tui::app_event::{AppEvent, ExitMode, View};
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use ratatui::{
-    layout::{Alignment, Constraint, Direction, Layout, Rect},
+    layout::{Constraint, Direction, Layout, Rect},
     style::{Color, Style},
     text::{Line, Span},
-    widgets::{Block, Borders, Clear, List, ListItem, Paragraph},
+    widgets::{Block, Clear, List, ListItem, Paragraph},
     Frame,
 };
 
@@ -37,11 +37,8 @@ impl CommandToExecute {
             app.app_event_tx.send(AppEvent::SwitchView(view));
         }
         if let Some(feature) = self.feature {
-            match feature {
-                "create_agent" => {
-                    app.app_event_tx.send(AppEvent::CreateAgent);
-                }
-                _ => {}
+            if feature == "create_agent" {
+                app.app_event_tx.send(AppEvent::CreateAgent);
             }
         }
         if self.quit {

@@ -4,7 +4,7 @@
 //! into a single async stream.
 
 use anyhow::Result;
-use crossterm::event::{Event, KeyCode, KeyEvent, MouseEvent};
+use crossterm::event::{Event, KeyEvent, MouseEvent};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
@@ -92,7 +92,7 @@ impl Default for EventBroker {
 impl TuiEventStream {
     /// Create a new event stream
     pub fn new() -> Result<Self> {
-        use crossterm::execute;
+        
 
         // Enable focus change events
         #[cfg(feature = "bracketed-paste")]

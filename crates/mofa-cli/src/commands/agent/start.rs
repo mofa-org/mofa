@@ -3,7 +3,7 @@
 use colored::Colorize;
 
 /// Execute the `mofa agent start` command
-pub fn run(agent_id: &str, config: Option<&std::path::Path>, daemon: bool) -> anyhow::Result<()> {
+pub fn run(agent_id: &str, _config: Option<&std::path::Path>, daemon: bool) -> anyhow::Result<()> {
     println!("{} Starting agent: {}", "→".green(), agent_id.cyan());
 
     if daemon {

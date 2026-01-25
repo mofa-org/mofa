@@ -3,7 +3,7 @@
 use colored::Colorize;
 
 /// Execute the `mofa agent restart` command
-pub fn run(agent_id: &str, config: Option<&std::path::Path>) -> anyhow::Result<()> {
+pub fn run(agent_id: &str, _config: Option<&std::path::Path>) -> anyhow::Result<()> {
     println!("{} Restarting agent: {}", "→".green(), agent_id.cyan());
 
     // TODO: Implement actual agent restart logic

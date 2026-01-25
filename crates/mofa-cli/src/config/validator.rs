@@ -241,18 +241,17 @@ impl ConfigValidator {
         }
 
         // Validate API key for providers that require it
-        if llm.provider != "ollama" {
-            if llm.api_key.is_none() || llm.api_key.as_ref().map_or(true, |k| k.is_empty()) {
+        if llm.provider != "ollama"
+            && (llm.api_key.is_none() || llm.api_key.as_ref().is_none_or(|k| k.is_empty())) {
                 result.add_warning(ValidationWarning::new(
                     "llm.api_key",
                     format!("API key not set for {} provider (may be in environment variable)", llm.provider),
                 ));
             }
-        }
 
         // Validate temperature
-        if let Some(temp) = llm.temperature {
-            if temp < 0.0 || temp > 2.0 {
+        if let Some(temp) = llm.temperature
+            && (!(0.0..=2.0).contains(&temp)) {
                 result.add_error(
                     ValidationError::new(
                         "llm.temperature",
@@ -261,11 +260,10 @@ impl ConfigValidator {
                     .with_suggestion("Temperature must be between 0.0 and 2.0")
                 );
             }
-        }
 
         // Validate max_tokens
-        if let Some(max_tokens) = llm.max_tokens {
-            if max_tokens == 0 {
+        if let Some(max_tokens) = llm.max_tokens
+            && max_tokens == 0 {
                 result.add_error(
                     ValidationError::new(
                         "llm.max_tokens",
@@ -274,7 +272,6 @@ impl ConfigValidator {
                     .with_suggestion("Set a positive value or remove to use default")
                 );
             }
-        }
     }
 
     fn validate_runtime_config(
@@ -283,8 +280,8 @@ impl ConfigValidator {
         result: &mut ConfigValidationResult,
     ) {
         // Validate max_concurrent_tasks
-        if let Some(max_tasks) = runtime.max_concurrent_tasks {
-            if max_tasks == 0 {
+        if let Some(max_tasks) = runtime.max_concurrent_tasks
+            && max_tasks == 0 {
                 result.add_error(
                     ValidationError::new(
                         "runtime.max_concurrent_tasks",
@@ -293,29 +290,25 @@ impl ConfigValidator {
                     .with_suggestion("Set a positive value or remove to use default")
                 );
             }
-        }
 
         // Validate default_timeout_secs
-        if let Some(timeout) = runtime.default_timeout_secs {
-            if timeout == 0 {
+        if let Some(timeout) = runtime.default_timeout_secs
+            && timeout == 0 {
                 result.add_warning(ValidationWarning::new(
                     "runtime.default_timeout_secs",
                     "Zero timeout may cause operations to hang",
                 ));
             }
-        }
 
         // Validate persistence
-        if let Some(ref persistence) = runtime.persistence {
-            if persistence.enabled == Some(true) {
-                if persistence.database_url.is_none() || persistence.database_url.as_ref().map_or(true, |u| u.is_empty()) {
+        if let Some(ref persistence) = runtime.persistence
+            && persistence.enabled == Some(true)
+                && (persistence.database_url.is_none() || persistence.database_url.as_ref().is_none_or(|u| u.is_empty())) {
                     result.add_warning(ValidationWarning::new(
                         "runtime.persistence.database_url",
                         "Persistence enabled but no database URL configured",
                     ));
                 }
-            }
-        }
     }
 }
 

@@ -300,7 +300,7 @@ pub trait LLMAgentEventHandler: Send + Sync {
     async fn before_chat_with_model(
         &self,
         message: &str,
-        model: &str,
+        _model: &str,
     ) -> LLMResult<Option<String>> {
         self.before_chat(message).await
     }
@@ -317,7 +317,7 @@ pub trait LLMAgentEventHandler: Send + Sync {
     async fn after_chat_with_metadata(
         &self,
         response: &str,
-        metadata: &super::types::LLMResponseMetadata,
+        _metadata: &super::types::LLMResponseMetadata,
     ) -> LLMResult<Option<String>> {
         self.after_chat(response).await
     }
@@ -896,7 +896,7 @@ impl LLMAgent {
     /// ```
     pub async fn tts_create_stream(
         &self,
-        text: &str,
+        _text: &str,
     ) -> LLMResult<TtsAudioStream> {
         #[cfg(feature = "kokoro")]
         {
@@ -986,13 +986,13 @@ impl LLMAgent {
     /// ```
     pub async fn tts_speak_f32_stream_batch(
         &self,
-        sentences: Vec<String>,
-        callback: Box<dyn Fn(Vec<f32>) + Send + Sync>,
+        _sentences: Vec<String>,
+        _callback: Box<dyn Fn(Vec<f32>) + Send + Sync>,
     ) -> LLMResult<()> {
         let tts = self.tts_plugin.as_ref()
             .ok_or_else(|| LLMError::Other("TTS plugin not configured".to_string()))?;
 
-        let tts_guard = tts.lock().await;
+        let _tts_guard = tts.lock().await;
 
         #[cfg(feature = "kokoro")]
         {
@@ -1306,8 +1306,8 @@ impl LLMAgent {
             }
 
             // 批量播放 TTS（如果有回调）
-            if !sentences.is_empty() {
-                if let Some(cb) = callback {
+            if !sentences.is_empty()
+                && let Some(cb) = callback {
                     for sentence in &sentences {
                         println!("\n[TTS] {}", sentence);
                     }
@@ -1315,7 +1315,6 @@ impl LLMAgent {
                     // 这里需要根据实际情况处理
                     let _ = cb;
                 }
-            }
 
             Ok(())
         }
@@ -2602,21 +2601,20 @@ impl LLMAgentBuilder {
         // 3. 同步 session_id 到持久化插件
         let mut plugins = self.plugins;
         let mut tts_plugin = None;
-        let mut history_loaded_from_plugin = false;
+        let history_loaded_from_plugin = false;
 
         // 首先处理持久化插件：加载历史并同步 session_id
         for plugin in &plugins {
             // 检查是否是 PersistencePlugin（通过检查类型名称）
             if plugin.metadata().plugin_type == PluginType::Storage {
                 // 尝试同步 session_id
-                if let Some(session_id_str) = session_id_clone.as_deref() {
-                    if let Ok(session_uuid) = uuid::Uuid::parse_str(session_id_str) {
+                if let Some(session_id_str) = session_id_clone.as_deref()
+                    && let Ok(session_uuid) = uuid::Uuid::parse_str(session_id_str) {
                         // 使用 Any 的 downcast_ref 来访问 PersistencePlugin 的方法
                         // 由于 PersistencePlugin<S> 是泛型，我们无法直接 downcast
                         // 但可以通过 metadata 来识别并调用
                         tracing::info!("🔗 检测到持久化插件，session_id: {}", session_uuid);
                     }
-                }
             }
         }
 
@@ -2658,8 +2656,8 @@ impl LLMAgentBuilder {
         // 设置事件处理器
         if let Some(handler) = self.event_handler {
             // 同步 session_id 到持久化处理器
-            if let Some(session_id_str) = session_id_clone.as_deref() {
-                if let Ok(session_uuid) = uuid::Uuid::parse_str(session_id_str) {
+            if let Some(session_id_str) = session_id_clone.as_deref()
+                && let Ok(session_uuid) = uuid::Uuid::parse_str(session_id_str) {
                     // 尝试将 handler 转换为 AgentPersistenceHandler 并设置 session_id
                     use crate::persistence::AgentPersistenceHandler;
                     if let Some(persist_handler) = handler.as_any().downcast_ref::<AgentPersistenceHandler>() {
@@ -2670,7 +2668,6 @@ impl LLMAgentBuilder {
                     // 由于 PersistencePlugin 是泛型的，我们无法直接 downcast
                     // 但如果使用的是 PostgresStore，我们可以尝试
                 }
-            }
             agent.set_event_handler(handler);
         }
 

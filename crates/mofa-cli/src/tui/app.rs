@@ -13,16 +13,15 @@ use crate::widgets::{
 use anyhow::{Context, Result};
 use crossterm::event::{KeyCode, KeyModifiers};
 use ratatui::{
-    backend::CrosstermBackend,
     layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span, Text},
-    widgets::{Block, Borders, Paragraph, Wrap},
-    Frame, Terminal,
+    widgets::{Block, Paragraph, Wrap},
+    Frame,
 };
 use std::time::Duration;
 use tokio::sync::mpsc;
-use tracing::{debug, error, info, warn};
+use tracing::{debug, info};
 
 /// Information about an agent
 #[derive(Debug, Clone)]
@@ -221,7 +220,7 @@ impl App {
             // Wait for next event (with timeout for periodic redraws)
             match tokio::time::timeout(self.tick_rate, event_stream.next()).await {
                 Ok(Some(event)) => {
-                    self.handle_tui_event(event, &mut event_stream);
+                    self.handle_tui_event(event, &event_stream);
                     terminal.draw(|f| self.render(f))?;
                 }
                 Ok(None) => {

@@ -3,7 +3,7 @@
 use colored::Colorize;
 
 /// Execute the `mofa plugin uninstall` command
-pub fn run(name: &str, force: bool) -> anyhow::Result<()> {
+pub fn run(name: &str, _force: bool) -> anyhow::Result<()> {
     println!("{} Uninstalling plugin: {}", "→".green(), name.cyan());
 
     // TODO: Implement actual plugin uninstallation
