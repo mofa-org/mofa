@@ -36,11 +36,10 @@ impl CommandToExecute {
         if let Some(view) = self.view {
             app.app_event_tx.send(AppEvent::SwitchView(view));
         }
-        if let Some(feature) = self.feature {
-            if feature == "create_agent" {
+        if let Some(feature) = self.feature
+            && feature == "create_agent" {
                 app.app_event_tx.send(AppEvent::CreateAgent);
             }
-        }
         if self.quit {
             app.app_event_tx.send(AppEvent::Exit(ExitMode::Clean));
         }
