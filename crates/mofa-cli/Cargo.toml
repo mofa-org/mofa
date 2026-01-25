@@ -28,14 +28,36 @@ colored = "2"
 # Serialization
 serde = { workspace = true }
 serde_json = { workspace = true }
+serde_yaml = "0.9"
 
 
 # Utilities
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
 
+# CLI enhancements
+dialoguer = "0.11"
+indicatif = "0.17"
+comfy-table = "7"
+dirs-next = "2"
+
 # Database (optional, for db init command)
 sqlx = { version = "0.8", features = ["runtime-tokio", "postgres", "mysql", "sqlite"], optional = true }
+
+# TUI (Terminal User Interface)
+ratatui = { version = "0.30", features = [
+    "scrolling-regions",
+    "unstable-backend-writer",
+    "unstable-rendered-line-info",
+    "unstable-widget-ref",
+]}
+crossterm = { version = "0.29", features = ["bracketed-paste", "event-stream"] }
+tokio-stream = "0.1"
+
+[dev-dependencies]
+assert_cmd = "2"
+predicates = "3"
+tempfile = "3"
 
 [features]
 default = []

@@ -4,14 +4,37 @@ Command-line tool for building and managing AI agents with the MoFA framework.
 
 ## Installation
 
+### Install from crates.io
+
 ```bash
 cargo install mofa-cli
 ```
 
-With dora-rs runtime support:
+### Local Installation (from source)
+
+From the workspace root:
 
 ```bash
-cargo install mofa-cli --features dora
+# From workspace root
+cargo install --path crates/mofa-cli
+
+# With features
+cargo install --path crates/mofa-cli --features dora
+```
+
+Or from the crate directory:
+
+```bash
+cd crates/mofa-cli
+cargo install --path .
+```
+
+### Development Installation
+
+For development, you can also run directly without installing:
+
+```bash
+cargo run -p mofa-cli -- --help
 ```
 
 ## Usage
