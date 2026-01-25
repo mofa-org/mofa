@@ -2,7 +2,7 @@
 name = "mofa-sdk"
 version.workspace = true
 edition.workspace = true
-description = "MoFA (Model-based Framework for Agents) - A unified SDK for building AI agents with Rust"
+description = "MoFA SDK - Modular Framework for Agents. A unified development toolkit for building AI agents with Rust"
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/mofa-org/mofa"
 homepage = "https://github.com/mofa-org/mofa"

@@ -65,6 +65,7 @@ CREATE TABLE IF NOT EXISTS entity_llm_api_call (
     chat_session_id TEXT NOT NULL,
     agent_id TEXT NOT NULL,
     user_id TEXT NOT NULL,
+    tenant_id TEXT NOT NULL,
     request_message_id TEXT NOT NULL,
     response_message_id TEXT NOT NULL,
     model_name TEXT NOT NULL,
@@ -82,9 +83,8 @@ CREATE TABLE IF NOT EXISTS entity_llm_api_call (
     time_to_first_token_ms INTEGER,
     tokens_per_second REAL,
     api_response_id TEXT,
-    request_time TEXT NOT NULL,
-    response_time TEXT NOT NULL,
     create_time TEXT NOT NULL,
+    update_time TEXT NOT NULL,
     CHECK (prompt_tokens >= 0 AND completion_tokens >= 0 AND total_tokens >= 0)
 );
 
@@ -94,6 +94,7 @@ CREATE INDEX IF NOT EXISTS idx_api_call_agent ON entity_llm_api_call(agent_id, c
 CREATE INDEX IF NOT EXISTS idx_api_call_status ON entity_llm_api_call(status, create_time DESC);
 CREATE INDEX IF NOT EXISTS idx_api_call_model ON entity_llm_api_call(model_name, create_time DESC);
 CREATE INDEX IF NOT EXISTS idx_api_call_time ON entity_llm_api_call(create_time DESC);
+CREATE INDEX IF NOT EXISTS idx_api_call_tenant ON entity_llm_api_call(tenant_id, create_time DESC);
 
 -- SQLite doesn't support procedures, print is just a comment
 -- MoFA persistence tables initialized successfully!
@@ -140,5 +141,49 @@ CREATE TABLE IF NOT EXISTS prompt_composition (
 
 CREATE INDEX IF NOT EXISTS idx_prompt_composition_id ON prompt_composition(composition_id);
 CREATE INDEX IF NOT EXISTS idx_prompt_composition_enabled ON prompt_composition(enabled);
+
+-- Create provider table
+CREATE TABLE IF NOT EXISTS entity_provider (
+    id TEXT PRIMARY KEY,
+    tenant_id TEXT NOT NULL,
+    provider_name TEXT NOT NULL,
+    provider_type TEXT NOT NULL,
+    api_base TEXT NOT NULL,
+    api_key TEXT NOT NULL,
+    enabled INTEGER DEFAULT 1 NOT NULL,
+    create_time TEXT NOT NULL,
+    update_time TEXT NOT NULL,
+    CONSTRAINT uk_entity_provider_tenant UNIQUE (tenant_id, provider_name)
+);
+
+CREATE INDEX IF NOT EXISTS idx_entity_provider_tenant ON entity_provider(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_entity_provider_enabled ON entity_provider(enabled);
+CREATE INDEX IF NOT EXISTS idx_entity_provider_type ON entity_provider(provider_type);
+
+-- Create agent table
+CREATE TABLE IF NOT EXISTS entity_agent (
+    id TEXT PRIMARY KEY,
+    tenant_id TEXT NOT NULL,
+    agent_code TEXT NOT NULL UNIQUE,
+    agent_name TEXT NOT NULL,
+    agent_order INTEGER NOT NULL DEFAULT 0,
+    agent_status INTEGER NOT NULL DEFAULT 1,
+    context_limit INTEGER,
+    custom_params TEXT,
+    max_completion_tokens INTEGER,
+    model_name TEXT NOT NULL,
+    provider_id TEXT NOT NULL,
+    response_format TEXT,
+    system_prompt TEXT NOT NULL,
+    temperature REAL,
+    stream INTEGER,
+    thinking TEXT,
+    create_time TEXT NOT NULL,
+    update_time TEXT NOT NULL,
+    FOREIGN KEY (provider_id) REFERENCES entity_provider(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_entity_agent_tenant ON entity_agent(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_entity_agent_order ON entity_agent(agent_order);
 
 -- MoFA prompt management tables initialized successfully!

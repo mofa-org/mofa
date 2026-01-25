@@ -109,3 +109,17 @@ interface LLMAgent {
     // Get conversation history
     sequence<ChatMessage> get_history();
 };
+
+// ============================================================================
+// Utility Functions
+// ============================================================================
+
+// Get MoFA SDK version
+string get_version();
+
+// Check if Dora runtime support is available
+boolean is_dora_available();
+
+// Create a new LLM Agent Builder
+[Throws=MoFaError]
+LLMAgentBuilder new_llm_agent_builder();

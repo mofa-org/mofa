@@ -1,6 +1,17 @@
-# MoFA API
+# MoFA SDK
 
-MoFA (Model-based Framework for Agents) - A unified SDK for building AI agents with Rust.
+MoFA (Modular Framework for Agents) SDK - A unified development toolkit for building AI agents with Rust.
+
+## Architecture
+
+```
+mofa-sdk (统一 API 层 - SDK)
+    ↓
+├── mofa-kernel (微内核核心)
+├── mofa-runtime (运行时)
+├── mofa-foundation (业务逻辑)
+└── mofa-plugins (插件系统)
+```
 
 ## Installation
 
@@ -150,7 +161,7 @@ async fn main() -> eyre::Result<()> {
 
 ## Cross-Language Bindings (UniFFI)
 
-MoFA provides cross-language bindings via UniFFI for Python, Kotlin, Swift, and Java.
+MoFA provides cross-language bindings via UniFFI for Python, Kotlin, Swift, Java, and Go.
 
 ### Building with UniFFI
 
@@ -166,7 +177,7 @@ Use the provided script:
 ```bash
 cd crates/mofa-sdk
 
-# Generate all bindings
+# Generate all bindings (Python, Kotlin, Swift, Java)
 ./generate-bindings.sh all
 
 # Generate specific language
@@ -176,85 +187,227 @@ cd crates/mofa-sdk
 ./generate-bindings.sh java
 ```
 
-Or manually with uniffi-bindgen:
+For Go bindings (requires separate tool):
 
 ```bash
-# Install uniffi-bindgen
-cargo install uniffi-bindgen-cli
+cd crates/mofa-sdk/bindings/go
 
-# Generate Python bindings
-uniffi-bindgen generate \
-    --library target/release/libmofa_api.dylib \
-    --language python \
-    --out-dir bindings/python
+# Install uniffi-bindgen-go first
+cargo install uniffi-bindgen-go --git https://github.com/NordSecurity/uniffi-bindgen-go
 
-# Generate Kotlin bindings
-uniffi-bindgen generate \
-    --library target/release/libmofa_api.dylib \
-    --language kotlin \
-    --out-dir bindings/kotlin
+# Generate Go bindings
+./generate-go.sh
 ```
 
-### Using in Python
+### Python Quick Start
+
+```bash
+cd examples/python_bindings
+export OPENAI_API_KEY=your-key-here
+python 01_llm_agent.py
+```
 
 ```python
-from mofa import LLMAgent, LLMConfig, LLMProviderType
+from mofa import LLMAgentBuilder, MoFaError
+import os
 
-# From config file
-agent = LLMAgent.from_config_file("agent.yml")
-
-# Or from config dict
-config = LLMConfig(
-    provider=LLMProviderType.OPEN_AI,
-    model="gpt-4o",
-    api_key="sk-...",  # Or use OPENAI_API_KEY env var
+# Create an agent using the builder pattern
+builder = LLMAgentBuilder.create()
+builder = builder.set_id("my-agent")
+builder = builder.set_name("Python Agent")
+builder = builder.set_system_prompt("You are a helpful assistant.")
+builder = builder.set_openai_provider(
+    os.environ["OPENAI_API_KEY"],
+    base_url=os.environ.get("OPENAI_BASE_URL"),
+    model=os.environ.get("OPENAI_MODEL", "gpt-3.5-turbo")
 )
-agent = LLMAgent.from_config(config, "my-agent", "My Agent")
 
-# Use the agent
+agent = builder.build()
+
+# Simple Q&A
 response = agent.ask("What is Python?")
 print(response)
 
 # Multi-turn chat
-r1 = agent.chat("Hello!")
-r2 = agent.chat("What did I just say?")  # Remembers context
+r1 = agent.chat("My name is Alice.")
+r2 = agent.chat("What's my name?")  # Remembers context
 
 # Get history
 history = agent.get_history()
 agent.clear_history()
 ```
 
-### Using in Kotlin
+### Java Quick Start
+
+```bash
+cd examples/java_bindings
+export OPENAI_API_KEY=your-key-here
+mvn compile exec:java
+```
+
+```java
+import com.mofa.*;
+
+// Create an agent using the builder pattern
+LLMAgentBuilder builder = UniFFI.INSTANCE.newLlmAgentBuilder();
+builder = builder.setId("my-agent");
+builder = builder.setName("Java Agent");
+builder = builder.setSystemPrompt("You are a helpful assistant.");
+builder = builder.setOpenaiProvider(
+    System.getenv("OPENAI_API_KEY"),
+    System.getenv("OPENAI_BASE_URL"),
+    System.getenv().getOrDefault("OPENAI_MODEL", "gpt-3.5-turbo")
+);
+
+LLMAgent agent = builder.build();
+
+// Simple Q&A
+String response = agent.ask("What is Java?");
+System.out.println(response);
+
+// Multi-turn chat
+String r1 = agent.chat("My name is Bob.");
+String r2 = agent.chat("What's my name?");
+
+// Get history
+List<ChatMessage> history = agent.getHistory();
+agent.clearHistory();
+```
+
+### Go Quick Start
+
+```bash
+cd examples/go_bindings
+../crates/mofa-sdk/bindings/go/generate-go.sh
+export OPENAI_API_KEY=your-key-here
+go run 01_llm_agent.go
+```
+
+```go
+package main
+
+import (
+    "fmt"
+    "os"
+    mofa "mofa-sdk/bindings/go"
+)
+
+func main() {
+    // Create an agent using the builder pattern
+    builder := mofa.NewLlmAgentBuilder()
+    builder.SetId("my-agent")
+    builder.SetName("Go Agent")
+    builder.SetSystemPrompt("You are a helpful assistant.")
+    builder.SetOpenaiProvider(
+        os.Getenv("OPENAI_API_KEY"),
+        os.Getenv("OPENAI_BASE_URL"),
+        os.Getenv("OPENAI_MODEL"),
+    )
+
+    agent, _ := builder.Build()
+
+    // Simple Q&A
+    answer, _ := agent.Ask("What is Go?")
+    fmt.Println(answer)
+
+    // Multi-turn chat
+    agent.Chat("My name is Charlie.")
+    agent.Chat("What's my name?")
+
+    // Get history
+    history := agent.GetHistory()
+    agent.ClearHistory()
+}
+```
+
+### Kotlin Quick Start
 
 ```kotlin
-import org.mofa.LLMAgent
-import org.mofa.LLMConfig
-import org.mofa.LLMProviderType
+import org.mofa.*
 
-// From config file
-val agent = LLMAgent.fromConfigFile("agent.yml")
+// Create an agent using the builder pattern
+val builder = UniFFI.newLlmAgentBuilder()
+builder.setId("my-agent")
+builder.setName("Kotlin Agent")
+builder.setSystemPrompt("You are a helpful assistant.")
+builder.setOpenaiProvider(
+    apiKey = System.getenv("OPENAI_API_KEY"),
+    baseUrl = System.getenv("OPENAI_BASE_URL"),
+    model = System.getenv("OPENAI_MODEL") ?: "gpt-3.5-turbo"
+)
 
-// Use the agent
+val agent = builder.build()
+
+// Simple Q&A
 val response = agent.ask("What is Kotlin?")
 println(response)
 
 // Multi-turn chat
-val r1 = agent.chat("Hello!")
-val r2 = agent.chat("What did I just say?")
+val r1 = agent.chat("My name is Diana.")
+val r2 = agent.chat("What's my name?")
 ```
 
-### Using in Swift
+### Swift Quick Start
 
 ```swift
 import MoFA
 
-// From config file
-let agent = try LLMAgent.fromConfigFile(configPath: "agent.yml")
+// Create an agent using the builder pattern
+let builder = try UniFFI.newLlmAgentBuilder()
+try builder.setId("my-agent")
+try builder.setName("Swift Agent")
+try builder.setSystemPrompt("You are a helpful assistant.")
+try builder.setOpenaiProvider(
+    apiKey: ProcessInfo.processInfo.environment["OPENAI_API_KEY"]!,
+    baseUrl: ProcessInfo.processInfo.environment["OPENAI_BASE_URL"],
+    model: ProcessInfo.processInfo.environment["OPENAI_MODEL"]
+)
 
-// Use the agent
+let agent = try builder.build()
+
+// Simple Q&A
 let response = try agent.ask(question: "What is Swift?")
 print(response)
+
+// Multi-turn chat
+let r1 = try agent.chat(message: "My name is Eve.")
+let r2 = try agent.chat(message: "What's my name?")
 ```
+
+### Available Functions (All Languages)
+
+| Function | Description |
+|----------|-------------|
+| `get_version()` | Get SDK version string |
+| `is_dora_available()` | Check if Dora runtime support is enabled |
+| `new_llm_agent_builder()` | Create a new LLMAgentBuilder instance |
+
+### LLMAgentBuilder Methods
+
+| Method | Description |
+|--------|-------------|
+| `set_id(id)` | Set agent ID |
+| `set_name(name)` | Set agent name |
+| `set_system_prompt(prompt)` | Set system prompt |
+| `set_temperature(temp)` | Set temperature (0.0-1.0) |
+| `set_max_tokens(tokens)` | Set max tokens for response |
+| `set_session_id(id)` | Set session ID |
+| `set_user_id(id)` | Set user ID |
+| `set_tenant_id(id)` | Set tenant ID |
+| `set_context_window_size(size)` | Set context window size in rounds |
+| `set_openai_provider(key, url, model)` | Configure OpenAI provider |
+| `build()` | Build the LLMAgent instance |
+
+### LLMAgent Methods
+
+| Method | Description |
+|--------|-------------|
+| `agent_id()` | Get agent ID |
+| `name()` | Get agent name |
+| `ask(question)` | Simple Q&A (no context retention) |
+| `chat(message)` | Multi-turn chat (with context retention) |
+| `clear_history()` | Clear conversation history |
+| `get_history()` | Get conversation history |
 
 ## Features
 

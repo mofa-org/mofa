@@ -80,6 +80,7 @@ impl SqliteStore {
                 id TEXT PRIMARY KEY,
                 user_id TEXT NOT NULL,
                 agent_id TEXT NOT NULL,
+                tenant_id TEXT,
                 title TEXT,
                 metadata TEXT,
                 create_time TEXT NOT NULL,
@@ -118,6 +119,7 @@ impl SqliteStore {
                 chat_session_id TEXT NOT NULL,
                 agent_id TEXT NOT NULL,
                 user_id TEXT NOT NULL,
+                tenant_id TEXT NOT NULL,
                 request_message_id TEXT NOT NULL,
                 response_message_id TEXT NOT NULL,
                 model_name TEXT NOT NULL,
@@ -135,9 +137,8 @@ impl SqliteStore {
                 time_to_first_token_ms INTEGER,
                 tokens_per_second REAL,
                 api_response_id TEXT,
-                request_time TEXT NOT NULL,
-                response_time TEXT NOT NULL,
-                create_time TEXT NOT NULL
+                create_time TEXT NOT NULL,
+                update_time TEXT NOT NULL
             )
         "#,
         )
@@ -154,6 +155,75 @@ impl SqliteStore {
         sqlx::query("CREATE INDEX IF NOT EXISTS idx_api_call_session ON entity_llm_api_call(chat_session_id)")
             .execute(&self.pool).await.map_err(|e| PersistenceError::Query(e.to_string()))?;
         sqlx::query("CREATE INDEX IF NOT EXISTS idx_session_user ON entity_chat_session(user_id)")
+            .execute(&self.pool)
+            .await
+            .map_err(|e| PersistenceError::Query(e.to_string()))?;
+
+        // Create provider table
+        sqlx::query(
+            r#"
+            CREATE TABLE IF NOT EXISTS entity_provider (
+                id TEXT PRIMARY KEY,
+                tenant_id TEXT NOT NULL,
+                provider_name TEXT NOT NULL,
+                provider_type TEXT NOT NULL,
+                api_base TEXT NOT NULL,
+                api_key TEXT NOT NULL,
+                enabled INTEGER DEFAULT 1 NOT NULL,
+                create_time TEXT NOT NULL,
+                update_time TEXT NOT NULL,
+                CONSTRAINT uk_entity_provider_tenant UNIQUE (tenant_id, provider_name)
+            )
+        "#,
+        )
+        .execute(&self.pool)
+        .await
+        .map_err(|e| PersistenceError::Query(e.to_string()))?;
+
+        sqlx::query("CREATE INDEX IF NOT EXISTS idx_provider_tenant ON entity_provider(tenant_id)")
+            .execute(&self.pool)
+            .await
+            .map_err(|e| PersistenceError::Query(e.to_string()))?;
+        sqlx::query("CREATE INDEX IF NOT EXISTS idx_provider_enabled ON entity_provider(enabled)")
+            .execute(&self.pool)
+            .await
+            .map_err(|e| PersistenceError::Query(e.to_string()))?;
+
+        // Create agent table
+        sqlx::query(
+            r#"
+            CREATE TABLE IF NOT EXISTS entity_agent (
+                id TEXT PRIMARY KEY,
+                tenant_id TEXT NOT NULL,
+                agent_code TEXT NOT NULL UNIQUE,
+                agent_name TEXT NOT NULL,
+                agent_order INTEGER NOT NULL DEFAULT 0,
+                agent_status INTEGER NOT NULL DEFAULT 1,
+                context_limit INTEGER,
+                custom_params TEXT,
+                max_completion_tokens INTEGER,
+                model_name TEXT NOT NULL,
+                provider_id TEXT NOT NULL,
+                response_format TEXT,
+                system_prompt TEXT NOT NULL,
+                temperature REAL,
+                stream INTEGER,
+                thinking TEXT,
+                create_time TEXT NOT NULL,
+                update_time TEXT NOT NULL,
+                FOREIGN KEY (provider_id) REFERENCES entity_provider(id) ON DELETE CASCADE
+            )
+        "#,
+        )
+        .execute(&self.pool)
+        .await
+        .map_err(|e| PersistenceError::Query(e.to_string()))?;
+
+        sqlx::query("CREATE INDEX IF NOT EXISTS idx_agent_tenant ON entity_agent(tenant_id)")
+            .execute(&self.pool)
+            .await
+            .map_err(|e| PersistenceError::Query(e.to_string()))?;
+        sqlx::query("CREATE INDEX IF NOT EXISTS idx_agent_order ON entity_agent(agent_order)")
             .execute(&self.pool)
             .await
             .map_err(|e| PersistenceError::Query(e.to_string()))?;
@@ -277,6 +347,13 @@ impl SqliteStore {
         let user_id = Uuid::parse_str(&user_id_str)
             .map_err(|e| PersistenceError::Serialization(e.to_string()))?;
 
+        let tenant_id: Uuid = row
+            .try_get::<Option<String>, _>("tenant_id")
+            .ok()
+            .flatten()
+            .and_then(|s| Uuid::parse_str(&s).ok())
+            .unwrap_or(Uuid::nil());
+
         let request_message_id_str: String = row
             .try_get("request_message_id")
             .map_err(|e| PersistenceError::Query(e.to_string()))?;
@@ -307,24 +384,17 @@ impl SqliteStore {
             .flatten()
             .and_then(|s| serde_json::from_str(&s).ok());
 
-        let request_time_str: String = row
-            .try_get("request_time")
-            .map_err(|e| PersistenceError::Query(e.to_string()))?;
-        let request_time = chrono::DateTime::parse_from_rfc3339(&request_time_str)
-            .map_err(|e| PersistenceError::Serialization(e.to_string()))?
-            .with_timezone(&chrono::Utc);
-
-        let response_time_str: String = row
-            .try_get("response_time")
-            .map_err(|e| PersistenceError::Query(e.to_string()))?;
-        let response_time = chrono::DateTime::parse_from_rfc3339(&response_time_str)
-            .map_err(|e| PersistenceError::Serialization(e.to_string()))?
-            .with_timezone(&chrono::Utc);
-
         let create_time_str: String = row
             .try_get("create_time")
             .map_err(|e| PersistenceError::Query(e.to_string()))?;
         let create_time = chrono::DateTime::parse_from_rfc3339(&create_time_str)
+            .map_err(|e| PersistenceError::Serialization(e.to_string()))?
+            .with_timezone(&chrono::Utc);
+
+        let update_time_str: String = row
+            .try_get("update_time")
+            .map_err(|e| PersistenceError::Query(e.to_string()))?;
+        let update_time = chrono::DateTime::parse_from_rfc3339(&update_time_str)
             .map_err(|e| PersistenceError::Serialization(e.to_string()))?
             .with_timezone(&chrono::Utc);
 
@@ -333,6 +403,7 @@ impl SqliteStore {
             chat_session_id,
             agent_id,
             user_id,
+            tenant_id,
             request_message_id,
             response_message_id,
             model_name: row
@@ -352,9 +423,8 @@ impl SqliteStore {
             time_to_first_token_ms: row.try_get("time_to_first_token_ms").ok(),
             tokens_per_second: row.try_get("tokens_per_second").ok(),
             api_response_id: row.try_get("api_response_id").ok(),
-            request_time,
-            response_time,
             create_time,
+            update_time,
         })
     }
 
@@ -376,6 +446,13 @@ impl SqliteStore {
             .map_err(|e| PersistenceError::Query(e.to_string()))?;
         let agent_id = Uuid::parse_str(&agent_id_str)
             .map_err(|e| PersistenceError::Serialization(e.to_string()))?;
+
+        let tenant_id: Uuid = row
+            .try_get::<Option<String>, _>("tenant_id")
+            .ok()
+            .flatten()
+            .and_then(|s| Uuid::parse_str(&s).ok())
+            .unwrap_or(Uuid::nil());
 
         let metadata: HashMap<String, serde_json::Value> = row
             .try_get::<Option<String>, _>("metadata")
@@ -402,6 +479,7 @@ impl SqliteStore {
             id,
             user_id,
             agent_id,
+            tenant_id,
             title: row.try_get("title").ok(),
             metadata,
             create_time,
@@ -534,17 +612,18 @@ impl ApiCallStore for SqliteStore {
 
         sqlx::query(r#"
             INSERT OR REPLACE INTO entity_llm_api_call
-            (id, chat_session_id, agent_id, user_id, request_message_id, response_message_id,
+            (id, chat_session_id, agent_id, user_id, tenant_id, request_message_id, response_message_id,
              model_name, status, error_message, error_code, prompt_tokens, completion_tokens, total_tokens,
              prompt_tokens_details, completion_tokens_details, total_price, price_details,
              latency_ms, time_to_first_token_ms, tokens_per_second, api_response_id,
-             request_time, response_time, create_time)
+             create_time, update_time)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         "#)
         .bind(call.id.to_string())
         .bind(call.chat_session_id.to_string())
         .bind(call.agent_id.to_string())
         .bind(call.user_id.to_string())
+        .bind(call.tenant_id.to_string())
         .bind(call.request_message_id.to_string())
         .bind(call.response_message_id.to_string())
         .bind(&call.model_name)
@@ -562,9 +641,8 @@ impl ApiCallStore for SqliteStore {
         .bind(call.time_to_first_token_ms)
         .bind(call.tokens_per_second)
         .bind(&call.api_response_id)
-        .bind(call.request_time.to_rfc3339())
-        .bind(call.response_time.to_rfc3339())
         .bind(call.create_time.to_rfc3339())
+        .bind(call.update_time.to_rfc3339())
         .execute(&self.pool)
         .await
         .map_err(|e| PersistenceError::Query(e.to_string()))?;
@@ -715,12 +793,13 @@ impl SessionStore for SqliteStore {
             .map_err(|e| PersistenceError::Serialization(e.to_string()))?;
 
         sqlx::query(r#"
-            INSERT INTO entity_chat_session (id, user_id, agent_id, title, metadata, create_time, update_time)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO entity_chat_session (id, user_id, agent_id, tenant_id, title, metadata, create_time, update_time)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         "#)
         .bind(session.id.to_string())
         .bind(session.user_id.to_string())
         .bind(session.agent_id.to_string())
+        .bind(session.tenant_id.to_string())
         .bind(&session.title)
         .bind(metadata)
         .bind(session.create_time.to_rfc3339())
@@ -793,6 +872,437 @@ impl SessionStore for SqliteStore {
     }
 }
 
+#[async_trait]
+impl ProviderStore for SqliteStore {
+    async fn get_provider(&self, id: Uuid) -> PersistenceResult<Option<super::entities::Provider>> {
+        let row = sqlx::query("SELECT * FROM entity_provider WHERE id = ?")
+            .bind(id.to_string())
+            .fetch_optional(&self.pool)
+            .await
+            .map_err(|e| PersistenceError::Query(e.to_string()))?;
+
+        match row {
+            Some(row) => Ok(Some(Self::parse_provider_row(&row)?)),
+            None => Ok(None),
+        }
+    }
+
+    async fn get_provider_by_name(
+        &self,
+        tenant_id: Uuid,
+        name: &str,
+    ) -> PersistenceResult<Option<super::entities::Provider>> {
+        let row = sqlx::query("SELECT * FROM entity_provider WHERE tenant_id = ? AND provider_name = ?")
+            .bind(tenant_id.to_string())
+            .bind(name)
+            .fetch_optional(&self.pool)
+            .await
+            .map_err(|e| PersistenceError::Query(e.to_string()))?;
+
+        match row {
+            Some(row) => Ok(Some(Self::parse_provider_row(&row)?)),
+            None => Ok(None),
+        }
+    }
+
+    async fn list_providers(&self, tenant_id: Uuid) -> PersistenceResult<Vec<super::entities::Provider>> {
+        let rows = sqlx::query("SELECT * FROM entity_provider WHERE tenant_id = ? ORDER BY create_time DESC")
+            .bind(tenant_id.to_string())
+            .fetch_all(&self.pool)
+            .await
+            .map_err(|e| PersistenceError::Query(e.to_string()))?;
+
+        rows.iter().map(Self::parse_provider_row).collect()
+    }
+
+    async fn get_enabled_providers(
+        &self,
+        tenant_id: Uuid,
+    ) -> PersistenceResult<Vec<super::entities::Provider>> {
+        let rows = sqlx::query("SELECT * FROM entity_provider WHERE tenant_id = ? AND enabled = 1 ORDER BY create_time DESC")
+            .bind(tenant_id.to_string())
+            .fetch_all(&self.pool)
+            .await
+            .map_err(|e| PersistenceError::Query(e.to_string()))?;
+
+        rows.iter().map(Self::parse_provider_row).collect()
+    }
+}
+
+#[async_trait]
+impl AgentStore for SqliteStore {
+    async fn get_agent(&self, id: Uuid) -> PersistenceResult<Option<super::entities::Agent>> {
+        let row = sqlx::query("SELECT * FROM entity_agent WHERE id = ?")
+            .bind(id.to_string())
+            .fetch_optional(&self.pool)
+            .await
+            .map_err(|e| PersistenceError::Query(e.to_string()))?;
+
+        match row {
+            Some(row) => Ok(Some(Self::parse_agent_row(&row)?)),
+            None => Ok(None),
+        }
+    }
+
+    async fn get_agent_by_code(&self, code: &str) -> PersistenceResult<Option<super::entities::Agent>> {
+        let row = sqlx::query("SELECT * FROM entity_agent WHERE agent_code = ?")
+            .bind(code)
+            .fetch_optional(&self.pool)
+            .await
+            .map_err(|e| PersistenceError::Query(e.to_string()))?;
+
+        match row {
+            Some(row) => Ok(Some(Self::parse_agent_row(&row)?)),
+            None => Ok(None),
+        }
+    }
+
+    async fn get_agent_by_code_and_tenant(
+        &self,
+        tenant_id: Uuid,
+        code: &str,
+    ) -> PersistenceResult<Option<super::entities::Agent>> {
+        let row = sqlx::query("SELECT * FROM entity_agent WHERE tenant_id = ? AND agent_code = ?")
+            .bind(tenant_id.to_string())
+            .bind(code)
+            .fetch_optional(&self.pool)
+            .await
+            .map_err(|e| PersistenceError::Query(e.to_string()))?;
+
+        match row {
+            Some(row) => Ok(Some(Self::parse_agent_row(&row)?)),
+            None => Ok(None),
+        }
+    }
+
+    async fn list_agents(&self, tenant_id: Uuid) -> PersistenceResult<Vec<super::entities::Agent>> {
+        let rows = sqlx::query("SELECT * FROM entity_agent WHERE tenant_id = ? ORDER BY agent_order")
+            .bind(tenant_id.to_string())
+            .fetch_all(&self.pool)
+            .await
+            .map_err(|e| PersistenceError::Query(e.to_string()))?;
+
+        rows.iter().map(Self::parse_agent_row).collect()
+    }
+
+    async fn get_active_agents(&self, tenant_id: Uuid) -> PersistenceResult<Vec<super::entities::Agent>> {
+        let rows = sqlx::query("SELECT * FROM entity_agent WHERE tenant_id = ? AND agent_status = 1 ORDER BY agent_order")
+            .bind(tenant_id.to_string())
+            .fetch_all(&self.pool)
+            .await
+            .map_err(|e| PersistenceError::Query(e.to_string()))?;
+
+        rows.iter().map(Self::parse_agent_row).collect()
+    }
+
+    async fn get_agent_with_provider(
+        &self,
+        id: Uuid,
+    ) -> PersistenceResult<Option<super::entities::AgentConfig>> {
+        let row = sqlx::query(
+            r#"
+            SELECT
+                a.*,
+                p.id as provider_id, p.tenant_id as provider_tenant_id, p.provider_name, p.provider_type,
+                p.api_base, p.api_key, p.enabled as provider_enabled,
+                p.create_time as provider_create_time, p.update_time as provider_update_time
+            FROM entity_agent a
+            INNER JOIN entity_provider p ON a.provider_id = p.id
+            WHERE a.id = ?
+            "#
+        )
+        .bind(id.to_string())
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(|e| PersistenceError::Query(e.to_string()))?;
+
+        match row {
+            Some(row) => {
+                let agent = Self::parse_agent_row_from_join(&row)?;
+                let provider = Self::parse_provider_row_from_join(&row)?;
+                Ok(Some(super::entities::AgentConfig { provider, agent }))
+            }
+            None => Ok(None),
+        }
+    }
+
+    async fn get_agent_by_code_with_provider(
+        &self,
+        code: &str,
+    ) -> PersistenceResult<Option<super::entities::AgentConfig>> {
+        let row = sqlx::query(
+            r#"
+            SELECT
+                a.*,
+                p.id as provider_id, p.tenant_id as provider_tenant_id, p.provider_name, p.provider_type,
+                p.api_base, p.api_key, p.enabled as provider_enabled,
+                p.create_time as provider_create_time, p.update_time as provider_update_time
+            FROM entity_agent a
+            INNER JOIN entity_provider p ON a.provider_id = p.id
+            WHERE a.agent_code = ?
+            "#
+        )
+        .bind(code)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(|e| PersistenceError::Query(e.to_string()))?;
+
+        match row {
+            Some(row) => {
+                let agent = Self::parse_agent_row_from_join(&row)?;
+                let provider = Self::parse_provider_row_from_join(&row)?;
+                Ok(Some(super::entities::AgentConfig { provider, agent }))
+            }
+            None => Ok(None),
+        }
+    }
+
+    async fn get_agent_by_code_and_tenant_with_provider(
+        &self,
+        tenant_id: Uuid,
+        code: &str,
+    ) -> PersistenceResult<Option<super::entities::AgentConfig>> {
+        let row = sqlx::query(
+            r#"
+            SELECT
+                a.*,
+                p.id as provider_id, p.tenant_id as provider_tenant_id, p.provider_name, p.provider_type,
+                p.api_base, p.api_key, p.enabled as provider_enabled,
+                p.create_time as provider_create_time, p.update_time as provider_update_time
+            FROM entity_agent a
+            INNER JOIN entity_provider p ON a.provider_id = p.id
+            WHERE a.tenant_id = ? AND a.agent_code = ?
+            "#
+        )
+        .bind(tenant_id.to_string())
+        .bind(code)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(|e| PersistenceError::Query(e.to_string()))?;
+
+        match row {
+            Some(row) => {
+                let agent = Self::parse_agent_row_from_join(&row)?;
+                let provider = Self::parse_provider_row_from_join(&row)?;
+                Ok(Some(super::entities::AgentConfig { provider, agent }))
+            }
+            None => Ok(None),
+        }
+    }
+}
+
+impl SqliteStore {
+    fn parse_provider_row(row: &SqliteRow) -> PersistenceResult<super::entities::Provider> {
+        let id_str: String = row
+            .try_get("id")
+            .map_err(|e| PersistenceError::Query(e.to_string()))?;
+        let id =
+            Uuid::parse_str(&id_str).map_err(|e| PersistenceError::Serialization(e.to_string()))?;
+
+        let tenant_id_str: String = row
+            .try_get("tenant_id")
+            .map_err(|e| PersistenceError::Query(e.to_string()))?;
+        let tenant_id = Uuid::parse_str(&tenant_id_str)
+            .map_err(|e| PersistenceError::Serialization(e.to_string()))?;
+
+        Ok(super::entities::Provider {
+            id,
+            tenant_id,
+            provider_name: row
+                .try_get("provider_name")
+                .map_err(|e| PersistenceError::Query(e.to_string()))?,
+            provider_type: row
+                .try_get("provider_type")
+                .map_err(|e| PersistenceError::Query(e.to_string()))?,
+            api_base: row
+                .try_get("api_base")
+                .map_err(|e| PersistenceError::Query(e.to_string()))?,
+            api_key: row
+                .try_get("api_key")
+                .map_err(|e| PersistenceError::Query(e.to_string()))?,
+            enabled: row.try_get("enabled").unwrap_or(1) == 1,
+            create_time: row
+                .try_get("create_time")
+                .map_err(|e: chrono::format::ParseError| PersistenceError::Serialization(e.to_string()))?,
+            update_time: row
+                .try_get("update_time")
+                .map_err(|e: chrono::format::ParseError| PersistenceError::Serialization(e.to_string()))?,
+        })
+    }
+
+    fn parse_agent_row(row: &SqliteRow) -> PersistenceResult<super::entities::Agent> {
+        let id_str: String = row
+            .try_get("id")
+            .map_err(|e| PersistenceError::Query(e.to_string()))?;
+        let id =
+            Uuid::parse_str(&id_str).map_err(|e| PersistenceError::Serialization(e.to_string()))?;
+
+        let tenant_id_str: String = row
+            .try_get("tenant_id")
+            .map_err(|e| PersistenceError::Query(e.to_string()))?;
+        let tenant_id = Uuid::parse_str(&tenant_id_str)
+            .map_err(|e| PersistenceError::Serialization(e.to_string()))?;
+
+        let provider_id_str: String = row
+            .try_get("provider_id")
+            .map_err(|e| PersistenceError::Query(e.to_string()))?;
+        let provider_id = Uuid::parse_str(&provider_id_str)
+            .map_err(|e| PersistenceError::Serialization(e.to_string()))?;
+
+        let custom_params: Option<serde_json::Value> = row
+            .try_get::<Option<String>, _>("custom_params")
+            .ok()
+            .flatten()
+            .and_then(|s| serde_json::from_str(&s).ok());
+
+        let thinking: Option<serde_json::Value> = row
+            .try_get::<Option<String>, _>("thinking")
+            .ok()
+            .flatten()
+            .and_then(|s| serde_json::from_str(&s).ok());
+
+        Ok(super::entities::Agent {
+            id,
+            tenant_id,
+            agent_code: row
+                .try_get("agent_code")
+                .map_err(|e| PersistenceError::Query(e.to_string()))?,
+            agent_name: row
+                .try_get("agent_name")
+                .map_err(|e| PersistenceError::Query(e.to_string()))?,
+            agent_order: row
+                .try_get("agent_order")
+                .map_err(|e| PersistenceError::Query(e.to_string()))?,
+            agent_status: row.try_get("agent_status").unwrap_or(1) == 1,
+            context_limit: row.try_get("context_limit").ok(),
+            custom_params,
+            max_completion_tokens: row.try_get("max_completion_tokens").ok(),
+            model_name: row
+                .try_get("model_name")
+                .map_err(|e| PersistenceError::Query(e.to_string()))?,
+            provider_id,
+            response_format: row.try_get("response_format").ok(),
+            system_prompt: row
+                .try_get("system_prompt")
+                .map_err(|e| PersistenceError::Query(e.to_string()))?,
+            temperature: row.try_get("temperature").ok(),
+            stream: row.try_get("stream").ok(),
+            thinking,
+            create_time: row
+                .try_get("create_time")
+                .map_err(|e: chrono::format::ParseError| PersistenceError::Serialization(e.to_string()))?,
+            update_time: row
+                .try_get("update_time")
+                .map_err(|e: chrono::format::ParseError| PersistenceError::Serialization(e.to_string()))?,
+        })
+    }
+
+    fn parse_provider_row_from_join(row: &SqliteRow) -> PersistenceResult<super::entities::Provider> {
+        let id_str: String = row
+            .try_get("provider_id")
+            .map_err(|e| PersistenceError::Query(e.to_string()))?;
+        let id =
+            Uuid::parse_str(&id_str).map_err(|e| PersistenceError::Serialization(e.to_string()))?;
+
+        let tenant_id_str: String = row
+            .try_get("provider_tenant_id")
+            .map_err(|e| PersistenceError::Query(e.to_string()))?;
+        let tenant_id = Uuid::parse_str(&tenant_id_str)
+            .map_err(|e| PersistenceError::Serialization(e.to_string()))?;
+
+        Ok(super::entities::Provider {
+            id,
+            tenant_id,
+            provider_name: row
+                .try_get("provider_name")
+                .map_err(|e| PersistenceError::Query(e.to_string()))?,
+            provider_type: row
+                .try_get("provider_type")
+                .map_err(|e| PersistenceError::Query(e.to_string()))?,
+            api_base: row
+                .try_get("api_base")
+                .map_err(|e| PersistenceError::Query(e.to_string()))?,
+            api_key: row
+                .try_get("api_key")
+                .map_err(|e| PersistenceError::Query(e.to_string()))?,
+            enabled: row.try_get("provider_enabled").unwrap_or(1) == 1,
+            create_time: row
+                .try_get("provider_create_time")
+                .map_err(|e: chrono::format::ParseError| PersistenceError::Serialization(e.to_string()))?,
+            update_time: row
+                .try_get("provider_update_time")
+                .map_err(|e: chrono::format::ParseError| PersistenceError::Serialization(e.to_string()))?,
+        })
+    }
+
+    fn parse_agent_row_from_join(row: &SqliteRow) -> PersistenceResult<super::entities::Agent> {
+        let id_str: String = row
+            .try_get("id")
+            .map_err(|e| PersistenceError::Query(e.to_string()))?;
+        let id =
+            Uuid::parse_str(&id_str).map_err(|e| PersistenceError::Serialization(e.to_string()))?;
+
+        let tenant_id_str: String = row
+            .try_get("tenant_id")
+            .map_err(|e| PersistenceError::Query(e.to_string()))?;
+        let tenant_id = Uuid::parse_str(&tenant_id_str)
+            .map_err(|e| PersistenceError::Serialization(e.to_string()))?;
+
+        let provider_id_str: String = row
+            .try_get("provider_id")
+            .map_err(|e| PersistenceError::Query(e.to_string()))?;
+        let provider_id = Uuid::parse_str(&provider_id_str)
+            .map_err(|e| PersistenceError::Serialization(e.to_string()))?;
+
+        let custom_params: Option<serde_json::Value> = row
+            .try_get::<Option<String>, _>("custom_params")
+            .ok()
+            .flatten()
+            .and_then(|s| serde_json::from_str(&s).ok());
+
+        let thinking: Option<serde_json::Value> = row
+            .try_get::<Option<String>, _>("thinking")
+            .ok()
+            .flatten()
+            .and_then(|s| serde_json::from_str(&s).ok());
+
+        Ok(super::entities::Agent {
+            id,
+            tenant_id,
+            agent_code: row
+                .try_get("agent_code")
+                .map_err(|e| PersistenceError::Query(e.to_string()))?,
+            agent_name: row
+                .try_get("agent_name")
+                .map_err(|e| PersistenceError::Query(e.to_string()))?,
+            agent_order: row
+                .try_get("agent_order")
+                .map_err(|e| PersistenceError::Query(e.to_string()))?,
+            agent_status: row.try_get("agent_status").unwrap_or(1) == 1,
+            context_limit: row.try_get("context_limit").ok(),
+            custom_params,
+            max_completion_tokens: row.try_get("max_completion_tokens").ok(),
+            model_name: row
+                .try_get("model_name")
+                .map_err(|e| PersistenceError::Query(e.to_string()))?,
+            provider_id,
+            response_format: row.try_get("response_format").ok(),
+            system_prompt: row
+                .try_get("system_prompt")
+                .map_err(|e| PersistenceError::Query(e.to_string()))?,
+            temperature: row.try_get("temperature").ok(),
+            stream: row.try_get("stream").ok(),
+            thinking,
+            create_time: row
+                .try_get("create_time")
+                .map_err(|e: chrono::format::ParseError| PersistenceError::Serialization(e.to_string()))?,
+            update_time: row
+                .try_get("update_time")
+                .map_err(|e: chrono::format::ParseError| PersistenceError::Serialization(e.to_string()))?,
+        })
+    }
+}
+
 impl PersistenceStore for SqliteStore {
     fn backend_name(&self) -> &str {
         "sqlite"
@@ -817,15 +1327,17 @@ mod tests {
     async fn test_sqlite_store_messages() {
         let store = SqliteStore::in_memory().await.unwrap();
         let user_id = Uuid::now_v7();
+        let tenant_id = Uuid::now_v7();
         let agent_id = Uuid::now_v7();
 
-        let session = ChatSession::new(user_id, agent_id);
+        let session = ChatSession::new(user_id, agent_id).with_tenant_id(tenant_id);
         store.create_session(&session).await.unwrap();
 
         let msg1 = LLMMessage::new(
             session.id,
             agent_id,
             user_id,
+            tenant_id,
             MessageRole::User,
             MessageContent::text("Hello"),
         );
@@ -835,6 +1347,7 @@ mod tests {
             session.id,
             agent_id,
             user_id,
+            tenant_id,
             MessageRole::Assistant,
             MessageContent::text("Hi!"),
         );
@@ -851,6 +1364,7 @@ mod tests {
     async fn test_sqlite_store_api_calls() {
         let store = SqliteStore::in_memory().await.unwrap();
         let user_id = Uuid::now_v7();
+        let tenant_id = Uuid::now_v7();
         let agent_id = Uuid::now_v7();
         let session_id = Uuid::now_v7();
 
@@ -859,6 +1373,7 @@ mod tests {
             session_id,
             agent_id,
             user_id,
+            tenant_id,
             Uuid::now_v7(),
             Uuid::now_v7(),
             "gpt-4",

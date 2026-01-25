@@ -5,16 +5,21 @@
 # Usage: ./scripts/release.sh [version] [options]
 #
 # Options:
-#   --dry-run       Show what would be done without making changes
-#   --skip-tests    Skip running tests
-#   --skip-build    Skip building release binaries
-#   --publish       Publish crates to crates.io
-#   --git-tag       Create and push git tag
-#   --help          Show this help message
+#   --dry-run         Show what would be done without making changes
+#   --skip-tests      Skip running tests
+#   --skip-build      Skip building release binaries
+#   --publish         Publish Rust crates to crates.io
+#   --publish-pypi    Publish Python package to PyPI
+#   --publish-maven   Publish Java package to Maven Central
+#   --publish-go      Publish Go module (create and push git tag)
+#   --publish-all     Publish to all registries (crates.io + PyPI + Maven + Go)
+#   --git-tag         Create and push git tag
+#   --help            Show this help message
 #
 # Examples:
 #   ./scripts/release.sh 1.0.0 --dry-run
-#   ./scripts/release.sh 1.0.0 --publish --git-tag
+#   ./scripts/release.sh 1.0.0 --publish-all --git-tag
+#   ./scripts/release.sh 1.0.0 --publish-pypi --publish-maven
 
 set -e
 
@@ -34,6 +39,9 @@ DRY_RUN=false
 SKIP_TESTS=false
 SKIP_BUILD=false
 PUBLISH_TO_CRATES_IO=false
+PUBLISH_TO_PYPI=false
+PUBLISH_TO_MAVEN=false
+PUBLISH_TO_GO=false
 CREATE_GIT_TAG=false
 VERSION=""
 
@@ -54,6 +62,25 @@ while [[ $# -gt 0 ]]; do
             ;;
         --publish)
             PUBLISH_TO_CRATES_IO=true
+            shift
+            ;;
+        --publish-pypi)
+            PUBLISH_TO_PYPI=true
+            shift
+            ;;
+        --publish-maven)
+            PUBLISH_TO_MAVEN=true
+            shift
+            ;;
+        --publish-go)
+            PUBLISH_TO_GO=true
+            shift
+            ;;
+        --publish-all)
+            PUBLISH_TO_CRATES_IO=true
+            PUBLISH_TO_PYPI=true
+            PUBLISH_TO_MAVEN=true
+            PUBLISH_TO_GO=true
             shift
             ;;
         --git-tag)
@@ -158,6 +185,20 @@ main() {
 
     if [[ "$PUBLISH_TO_CRATES_IO" == true ]]; then
         check_command "cargo-publish-workspace"
+    fi
+
+    if [[ "$PUBLISH_TO_PYPI" == true ]]; then
+        check_command "maturin"
+        check_command "twine"
+    fi
+
+    if [[ "$PUBLISH_TO_MAVEN" == true ]]; then
+        check_command "mvn"
+        check_command "gpg"
+    fi
+
+    if [[ "$PUBLISH_TO_GO" == true ]]; then
+        check_command "git"
     fi
 
     check_clean_git
@@ -297,6 +338,96 @@ main() {
         echo ""
     fi
 
+    # Step 7.5: Generate bindings for all languages
+    if [[ "$PUBLISH_TO_PYPI" == true || "$PUBLISH_TO_MAVEN" == true || "$PUBLISH_TO_GO" == true ]]; then
+        log_info "Step 7.5: Generating language bindings..."
+        SDK_DIR="$PROJECT_ROOT/crates/mofa-sdk"
+
+        # Generate Python, Kotlin, Swift, Java bindings
+        run_cmd "cd '$SDK_DIR' && ./generate-bindings.sh all"
+
+        # Generate Go bindings separately (different toolchain)
+        if [[ -f "$SDK_DIR/bindings/go/generate-go.sh" ]]; then
+            run_cmd "cd '$SDK_DIR/bindings/go' && ./generate-go.sh"
+        fi
+
+        log_success "Language bindings generated"
+        echo ""
+    fi
+
+    # Step 8: Publish to PyPI
+    if [[ "$PUBLISH_TO_PYPI" == true ]]; then
+        log_info "Step 8: Publishing to PyPI..."
+        PYTHON_DIR="$PROJECT_ROOT/crates/mofa-sdk/bindings/python"
+
+        # Update version in pyproject.toml
+        run_cmd "sed -i '' 's/^version = \"[^\"]*\"/version = \"$VERSION\"/' '$PYTHON_DIR/pyproject.toml'"
+
+        # Build Python wheel with maturin
+        run_cmd "cd '$PYTHON_DIR' && maturin build --release --strip --out dist/"
+
+        # Check if we should publish or just show what would be done
+        if [[ "$DRY_RUN" == false ]]; then
+            # Publish to PyPI
+            log_info "Uploading to PyPI..."
+            run_cmd "cd '$PYTHON_DIR' && twine upload dist/*"
+        else
+            log_warning "Skipping actual PyPI upload (dry-run mode)"
+        fi
+
+        log_success "Python package published to PyPI"
+        echo ""
+    else
+        log_warning "Skipping PyPI publishing (--publish-pypi not specified)"
+        echo ""
+    fi
+
+    # Step 9: Publish to Maven Central
+    if [[ "$PUBLISH_TO_MAVEN" == true ]]; then
+        log_info "Step 9: Publishing to Maven Central..."
+        JAVA_DIR="$PROJECT_ROOT/crates/mofa-sdk/bindings/java"
+
+        # Update version in pom.xml
+        run_cmd "sed -i '' 's/<version>[^<]*<\\/version>/<version>$VERSION<\\/version>/g' '$JAVA_DIR/pom.xml'"
+
+        # Build and deploy with Maven
+        if [[ "$DRY_RUN" == false ]]; then
+            run_cmd "cd '$JAVA_DIR' && mvn clean deploy -P release"
+        else
+            log_warning "Skipping actual Maven deployment (dry-run mode)"
+        fi
+
+        log_success "Java package published to Maven Central"
+        echo ""
+    else
+        log_warning "Skipping Maven Central publishing (--publish-maven not specified)"
+        echo ""
+    fi
+
+    # Step 10: Publish Go module
+    if [[ "$PUBLISH_TO_GO" == true ]]; then
+        log_info "Step 10: Publishing Go module..."
+        GO_DIR="$PROJECT_ROOT/crates/mofa-sdk/bindings/go"
+
+        # Update version in go.mod
+        run_cmd "sed -i '' 's/mofa-go v[^\"]*/mofa-go v$VERSION/g' '$GO_DIR/go.mod'"
+
+        # Go modules are auto-discovered via git tags
+        if [[ "$DRY_RUN" == false ]]; then
+            # Create a Go-specific version tag
+            run_cmd "cd '$PROJECT_ROOT' && git tag -a 'go/v$VERSION' -m 'Go release v$VERSION'"
+            run_cmd "cd '$PROJECT_ROOT' && git push origin 'go/v$VERSION'"
+        else
+            log_warning "Skipping actual Go tag creation (dry-run mode)"
+        fi
+
+        log_success "Go module published (tag: go/v$VERSION)"
+        echo ""
+    else
+        log_warning "Skipping Go module publishing (--publish-go not specified)"
+        echo ""
+    fi
+
     # Summary
     echo ""
     log_success "Release v$VERSION completed successfully!"
@@ -306,6 +437,9 @@ main() {
     echo "  - Binaries: $RELEASE_DIR"
     echo "  - Git tag: ${CREATE_GIT_TAG:-Not created}"
     echo "  - Crates.io: ${PUBLISH_TO_CRATES_IO:-Not published}"
+    echo "  - PyPI: ${PUBLISH_TO_PYPI:-Not published}"
+    echo "  - Maven Central: ${PUBLISH_TO_MAVEN:-Not published}"
+    echo "  - Go module: ${PUBLISH_TO_GO:-Not published}"
     echo ""
     echo "Next steps:"
     if [[ "$CREATE_GIT_TAG" == false ]]; then
@@ -315,6 +449,15 @@ main() {
     fi
     if [[ "$PUBLISH_TO_CRATES_IO" == false ]]; then
         echo "  1. Publish to crates.io: cargo publish"
+    fi
+    if [[ "$PUBLISH_TO_PYPI" == false ]]; then
+        echo "  1. Publish to PyPI: cd crates/mofa-sdk/bindings/python && maturin publish"
+    fi
+    if [[ "$PUBLISH_TO_MAVEN" == false ]]; then
+        echo "  1. Publish to Maven Central: cd crates/mofa-sdk/bindings/java && mvn deploy"
+    fi
+    if [[ "$PUBLISH_TO_GO" == false ]]; then
+        echo "  1. Tag Go module: git tag -a go/v$VERSION -m 'Go release v$VERSION' && git push origin go/v$VERSION"
     fi
     echo "  2. Create GitHub release with binaries from: $RELEASE_DIR"
 }

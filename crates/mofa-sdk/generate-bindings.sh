@@ -65,7 +65,7 @@ build_library() {
 
 # Find the compiled library
 find_library() {
-    LIB_PATH="$PROJECT_ROOT/target/release/libmofa_api.$LIB_EXT"
+    LIB_PATH="$PROJECT_ROOT/target/release/libmofa_sdk.$LIB_EXT"
     if [ ! -f "$LIB_PATH" ]; then
         print_error "Library not found at $LIB_PATH"
         print_info "Building library first..."

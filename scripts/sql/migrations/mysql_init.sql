@@ -89,6 +89,7 @@ CREATE TABLE IF NOT EXISTS entity_llm_api_call (
     chat_session_id CHAR(36) NOT NULL,
     agent_id CHAR(36) NOT NULL,
     user_id CHAR(36) NOT NULL,
+    tenant_id CHAR(36) NOT NULL DEFAULT (gen_uuid_v7()),
     request_message_id CHAR(36) NOT NULL,
     response_message_id CHAR(36) NOT NULL,
     model_name VARCHAR(100) NOT NULL,
@@ -106,17 +107,59 @@ CREATE TABLE IF NOT EXISTS entity_llm_api_call (
     time_to_first_token_ms INT,
     tokens_per_second DOUBLE,
     api_response_id VARCHAR(255),
-    request_time TIMESTAMP NOT NULL,
-    response_time TIMESTAMP NOT NULL,
     create_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    update_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP NOT NULL,
     INDEX idx_api_call_session (chat_session_id, create_time DESC),
     INDEX idx_api_call_user (user_id, create_time DESC),
     INDEX idx_api_call_agent (agent_id, create_time DESC),
     INDEX idx_api_call_status (status, create_time DESC),
     INDEX idx_api_call_model (model_name, create_time DESC),
     INDEX idx_api_call_time (create_time DESC),
+    INDEX idx_api_call_tenant (tenant_id, create_time DESC),
     CONSTRAINT check_tokens_positive CHECK (prompt_tokens >= 0 AND completion_tokens >= 0 AND total_tokens >= 0),
-    CONSTRAINT check_time_order CHECK (response_time >= request_time)
+    CONSTRAINT check_time_order CHECK (update_time >= create_time)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Create provider table
+CREATE TABLE IF NOT EXISTS entity_provider (
+    id CHAR(36) PRIMARY KEY DEFAULT (gen_uuid_v7()),
+    tenant_id CHAR(36) NOT NULL DEFAULT (gen_uuid_v7()),
+    provider_name VARCHAR(255) NOT NULL,
+    provider_type VARCHAR(100) NOT NULL,
+    api_base TEXT NOT NULL,
+    api_key TEXT NOT NULL,
+    enabled BOOLEAN DEFAULT TRUE NOT NULL,
+    create_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    update_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP NOT NULL,
+    CONSTRAINT uk_entity_provider_tenant UNIQUE (provider_name, tenant_id),
+    INDEX idx_entity_provider_tenant (tenant_id),
+    INDEX idx_entity_provider_enabled (enabled),
+    INDEX idx_entity_provider_type (provider_type)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Create agent table
+CREATE TABLE IF NOT EXISTS entity_agent (
+    id CHAR(36) PRIMARY KEY DEFAULT (gen_uuid_v7()),
+    tenant_id CHAR(36) NOT NULL DEFAULT (gen_uuid_v7()),
+    agent_code VARCHAR(255) NOT NULL UNIQUE,
+    agent_name VARCHAR(255) NOT NULL,
+    agent_order INT DEFAULT 0 NOT NULL,
+    agent_status BOOLEAN DEFAULT TRUE NOT NULL,
+    context_limit INT,
+    custom_params JSON,
+    max_completion_tokens INT,
+    model_name VARCHAR(255) NOT NULL,
+    provider_id CHAR(36) NOT NULL,
+    response_format VARCHAR(50),
+    system_prompt TEXT NOT NULL,
+    temperature FLOAT,
+    stream BOOLEAN,
+    thinking JSON,
+    create_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    update_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP NOT NULL,
+    CONSTRAINT entity_agent_provider_fkey FOREIGN KEY (provider_id) REFERENCES entity_provider(id) ON DELETE CASCADE,
+    INDEX idx_entity_agent_tenant (tenant_id),
+    INDEX idx_entity_agent_order (agent_order)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- Print success message (MySQL doesn't support RAISE NOTICE, use SELECT instead)
