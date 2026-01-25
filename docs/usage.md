@@ -114,16 +114,18 @@ let agent = LLMAgentBuilder::new()
 use mofa_sdk::llm::{LLMAgentBuilder, OpenAIProvider, TTSPlugin};
 use uuid::Uuid;
 
-// 创建 TTS 插件
-let mut tts_plugin = TTSPlugin::new("tts_engine")?;
-tts_plugin.init_plugin().await?;
-
-let agent = LLMAgentBuilder::new()
-    .with_id(Uuid::new_v4().to_string())  // 生成新的 UUID
-    .with_name("TTS Agent".to_string())
-    .with_provider(Arc::new(OpenAIProvider::from_env()))
-    .with_tts_engine(tts_plugin)
-    .build();
+// 使用 TTS 插件（客户端）
+let agent = Arc::new(
+LLMAgentBuilder::new()
+.with_id(Uuid::new_v4().to_string())
+.with_name("Chat TTS Agent")
+.with_session_id(Uuid::new_v4().to_string())
+.with_provider(Arc::new(openai_from_env()?))
+.with_system_prompt("你是一个友好的AI助手。")
+.with_temperature(0.7)
+.with_plugin(TTSPlugin::with_engine("tts", kokoro_engine, Some("zf_088")))
+.build();
+);
 ```
 
 ### 6. 带 Rhai 运行时插件的 Agent
