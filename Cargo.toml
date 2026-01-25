@@ -59,3 +59,7 @@ lazy_static = "1.4"
 
 # Actor framework for ReAct agents
 ractor = "0"
+
+# Configuration file support (multi-format)
+config = { version = "0.14", features = ["toml", "json", "yaml", "ini", "ron", "json5"] }
+regex = "1"

@@ -132,7 +132,7 @@ fn run_command(cli: Cli) -> anyhow::Result<()> {
                 commands::config_cmd::run_list()?;
             }
             cli::ConfigCommands::Validate => {
-                commands::config_cmd::run_validate()?;
+                commands::config_cmd::run_validate(None)?;
             }
             cli::ConfigCommands::Path => {
                 commands::config_cmd::run_path()?;

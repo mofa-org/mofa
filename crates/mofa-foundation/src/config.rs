@@ -1,8 +1,8 @@
 //! Agent 配置文件解析
 //!
-//! 支持从 agent.yml 文件读取配置
+//! 支持多种配置格式: YAML, TOML, JSON, INI, RON, JSON5
 //!
-//! # 示例配置 (agent.yml)
+//! # 示例配置 (agent.yml, agent.toml, agent.json, etc.)
 //!
 //! ```yaml
 //! agent:
@@ -29,6 +29,7 @@
 //!   default_timeout_secs: 30
 //! ```
 
+use mofa_kernel::config::{from_str, load_config, substitute_env_vars};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::Path;
@@ -164,49 +165,33 @@ impl Default for RuntimeConfig {
 }
 
 impl AgentYamlConfig {
-    /// 从文件加载配置
+    /// 从文件加载配置 (自动检测格式)
     pub fn from_file(path: impl AsRef<Path>) -> anyhow::Result<Self> {
-        let content = std::fs::read_to_string(path.as_ref())?;
-        Self::from_str(&content)
+        let path_str = path.as_ref().to_string_lossy().to_string();
+        load_config(&path_str).map_err(|e| anyhow::anyhow!("Failed to load config: {}", e))
     }
 
-    /// 从字符串解析配置
+    /// 从字符串解析配置 (指定格式)
+    pub fn from_str_with_format(content: &str, format: &str) -> anyhow::Result<Self> {
+        use config::FileFormat;
+
+        let file_format = match format.to_lowercase().as_str() {
+            "yaml" | "yml" => FileFormat::Yaml,
+            "toml" => FileFormat::Toml,
+            "json" => FileFormat::Json,
+            "ini" => FileFormat::Ini,
+            "ron" => FileFormat::Ron,
+            "json5" => FileFormat::Json5,
+            _ => return Err(anyhow::anyhow!("Unsupported config format: {}", format)),
+        };
+
+        from_str(content, file_format).map_err(|e| anyhow::anyhow!("Failed to parse config: {}", e))
+    }
+
+    /// 从字符串解析配置 (自动检测为 YAML，保持向后兼容)
     pub fn from_str(content: &str) -> anyhow::Result<Self> {
-        let mut config: Self = serde_yaml::from_str(content)?;
-        config.resolve_env_vars();
-        Ok(config)
+        Self::from_str_with_format(content, "yaml")
     }
-
-    /// 解析环境变量
-    fn resolve_env_vars(&mut self) {
-        if let Some(ref mut llm) = self.llm {
-            if let Some(ref mut api_key) = llm.api_key {
-                *api_key = resolve_env_var(api_key);
-            }
-            if let Some(ref mut base_url) = llm.base_url {
-                *base_url = resolve_env_var(base_url);
-            }
-        }
-    }
-}
-
-/// 解析环境变量语法 ${VAR_NAME} 或 $VAR_NAME
-fn resolve_env_var(value: &str) -> String {
-    let value = value.trim();
-
-    // ${VAR_NAME} 格式
-    if value.starts_with("${") && value.ends_with('}') {
-        let var_name = &value[2..value.len() - 1];
-        return std::env::var(var_name).unwrap_or_default();
-    }
-
-    // $VAR_NAME 格式
-    if value.starts_with('$') && !value.contains('{') {
-        let var_name = &value[1..];
-        return std::env::var(var_name).unwrap_or_default();
-    }
-
-    value.to_string()
 }
 
 #[cfg(test)]
@@ -214,7 +199,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_parse_config() {
+    fn test_parse_yaml_config() {
         let yaml = r#"
 agent:
   id: "test-agent"
@@ -248,5 +233,95 @@ runtime:
         let runtime = config.runtime.unwrap();
         assert_eq!(runtime.max_concurrent_tasks, 5);
         assert_eq!(runtime.default_timeout_secs, 60);
+    }
+
+    #[test]
+    fn test_parse_json_config() {
+        let json = r#"{
+    "agent": {
+        "id": "test-agent",
+        "name": "Test Agent",
+        "capabilities": ["llm", "tools"]
+    },
+    "llm": {
+        "provider": "openai",
+        "model": "gpt-4o",
+        "temperature": 0.8
+    }
+}"#;
+
+        let config = AgentYamlConfig::from_str_with_format(json, "json").unwrap();
+
+        assert_eq!(config.agent.id, "test-agent");
+        assert_eq!(config.agent.name, "Test Agent");
+        assert_eq!(config.agent.capabilities.len(), 2);
+
+        let llm = config.llm.unwrap();
+        assert_eq!(llm.provider, "openai");
+        assert_eq!(llm.model, Some("gpt-4o".to_string()));
+    }
+
+    #[test]
+    fn test_parse_toml_config() {
+        let toml = r#"
+[agent]
+id = "test-agent"
+name = "Test Agent"
+capabilities = ["llm", "tools"]
+
+[llm]
+provider = "openai"
+model = "gpt-4o"
+temperature = 0.8
+"#;
+
+        let config = AgentYamlConfig::from_str_with_format(toml, "toml").unwrap();
+
+        assert_eq!(config.agent.id, "test-agent");
+        assert_eq!(config.agent.name, "Test Agent");
+        assert_eq!(config.agent.capabilities.len(), 2);
+
+        let llm = config.llm.unwrap();
+        assert_eq!(llm.provider, "openai");
+        assert_eq!(llm.model, Some("gpt-4o".to_string()));
+    }
+
+    #[test]
+    fn test_substitute_env_vars() {
+        std::env::set_var("TEST_API_KEY", "sk-test-key-12345");
+
+        let result = substitute_env_vars("api_key: ${TEST_API_KEY}");
+        assert_eq!(result, "api_key: sk-test-key-12345");
+
+        let result = substitute_env_vars("url: $TEST_API_KEY");
+        assert_eq!(result, "url: sk-test-key-12345");
+
+        std::env::remove_var("TEST_API_KEY");
+    }
+
+    #[test]
+    fn test_env_vars_in_config() {
+        std::env::set_var("OPENAI_API_KEY", "sk-test-key-12345");
+        std::env::set_var("OPENAI_BASE_URL", "https://api.test.com");
+
+        let yaml = r#"
+agent:
+  id: "test-agent"
+  name: "Test Agent"
+
+llm:
+  provider: openai
+  api_key: ${OPENAI_API_KEY}
+  base_url: ${OPENAI_BASE_URL}
+"#;
+
+        let config = AgentYamlConfig::from_str(yaml).unwrap();
+        let llm = config.llm.unwrap();
+
+        assert_eq!(llm.api_key, Some("sk-test-key-12345".to_string()));
+        assert_eq!(llm.base_url, Some("https://api.test.com".to_string()));
+
+        std::env::remove_var("OPENAI_API_KEY");
+        std::env::remove_var("OPENAI_BASE_URL");
     }
 }

@@ -1,9 +1,12 @@
 //! 配置加载器
 //!
-//! 支持 YAML, TOML, JSON 格式的配置加载
+//! 支持多种配置格式: YAML, TOML, JSON, INI, RON, JSON5
+//!
+//! 使用统一的 config crate 提供一致的 API 接口
 
 use super::schema::AgentConfig;
-use crate::agent::error::{AgentError, AgentResult};
+use mofa_kernel::config::{detect_format, from_str, load_config, load_merged, ConfigError};
+use config::FileFormat;
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 
@@ -16,21 +19,59 @@ pub enum ConfigFormat {
     Toml,
     /// JSON 格式
     Json,
+    /// INI 格式
+    Ini,
+    /// RON 格式
+    Ron,
+    /// JSON5 格式
+    Json5,
 }
+
+/// 配置错误类型
+#[derive(Debug, thiserror::Error)]
+pub enum AgentConfigError {
+    #[error("IO error: {0}")]
+    Io(#[from] std::io::Error),
+
+    #[error("Config parse error: {0}")]
+    Parse(String),
+
+    #[error("Config serialization error: {0}")]
+    Serialization(String),
+
+    #[error("Unsupported config format: {0}")]
+    UnsupportedFormat(String),
+
+    #[error("Config validation failed: {0}")]
+    Validation(String),
+}
+
+/// 配置结果类型
+pub type AgentResult<T> = Result<T, AgentConfigError>;
 
 impl ConfigFormat {
     /// 从文件扩展名推断格式
     pub fn from_extension(path: &str) -> Option<Self> {
-        let ext = Path::new(path)
-            .extension()
-            .and_then(|e| e.to_str())
-            .map(|e| e.to_lowercase());
-
-        match ext.as_deref() {
-            Some("yaml") | Some("yml") => Some(Self::Yaml),
-            Some("toml") => Some(Self::Toml),
-            Some("json") => Some(Self::Json),
+        match detect_format(path) {
+            Ok(FileFormat::Yaml) => Some(Self::Yaml),
+            Ok(FileFormat::Toml) => Some(Self::Toml),
+            Ok(FileFormat::Json) => Some(Self::Json),
+            Ok(FileFormat::Ini) => Some(Self::Ini),
+            Ok(FileFormat::Ron) => Some(Self::Ron),
+            Ok(FileFormat::Json5) => Some(Self::Json5),
             _ => None,
+        }
+    }
+
+    /// 转换为 config crate 的 FileFormat
+    pub fn to_file_format(self) -> FileFormat {
+        match self {
+            Self::Yaml => FileFormat::Yaml,
+            Self::Toml => FileFormat::Toml,
+            Self::Json => FileFormat::Json,
+            Self::Ini => FileFormat::Ini,
+            Self::Ron => FileFormat::Ron,
+            Self::Json5 => FileFormat::Json5,
         }
     }
 
@@ -40,13 +81,28 @@ impl ConfigFormat {
             Self::Yaml => "yaml",
             Self::Toml => "toml",
             Self::Json => "json",
+            Self::Ini => "ini",
+            Self::Ron => "ron",
+            Self::Json5 => "json5",
+        }
+    }
+
+    /// 获取默认文件扩展名
+    pub fn default_extension(&self) -> &str {
+        match self {
+            Self::Yaml => "yml",
+            Self::Toml => "toml",
+            Self::Json => "json",
+            Self::Ini => "ini",
+            Self::Ron => "ron",
+            Self::Json5 => "json5",
         }
     }
 }
 
 /// 配置加载器
 ///
-/// 支持从文件或字符串加载配置
+/// 支持从文件或字符串加载配置，支持多种格式
 ///
 /// # 示例
 ///
@@ -65,25 +121,29 @@ impl ConfigFormat {
 ///
 /// // 从文件加载 (自动检测格式)
 /// let config = ConfigLoader::load_file("agent.yaml")?;
+///
+/// // 从 TOML 字符串加载
+/// let toml = r#"
+/// id = "my-agent"
+/// name = "My Agent"
+/// type = "llm"
+/// "#;
+/// let config = ConfigLoader::from_toml(toml)?;
+///
+/// // 从 INI 文件加载
+/// let config = ConfigLoader::load_ini("agent.ini")?;
 /// ```
 pub struct ConfigLoader;
 
 impl ConfigLoader {
     /// 从字符串加载配置
     pub fn from_str(content: &str, format: ConfigFormat) -> AgentResult<AgentConfig> {
-        let config = match format {
-            ConfigFormat::Yaml => serde_yaml::from_str(content).map_err(|e| {
-                AgentError::ConfigError(format!("Failed to parse YAML: {}", e))
-            })?,
-            ConfigFormat::Toml => toml::from_str(content).map_err(|e| {
-                AgentError::ConfigError(format!("Failed to parse TOML: {}", e))
-            })?,
-            ConfigFormat::Json => serde_json::from_str(content).map_err(|e| {
-                AgentError::ConfigError(format!("Failed to parse JSON: {}", e))
-            })?,
-        };
-
-        Ok(config)
+        from_str(content, format.to_file_format()).map_err(|e| match e {
+            ConfigError::Parse(e) => AgentConfigError::Parse(e.to_string()),
+            ConfigError::Serialization(e) => AgentConfigError::Serialization(e),
+            ConfigError::UnsupportedFormat(e) => AgentConfigError::UnsupportedFormat(e),
+            _ => AgentConfigError::Parse(e.to_string()),
+        })
     }
 
     /// 从 YAML 字符串加载
@@ -101,24 +161,33 @@ impl ConfigLoader {
         Self::from_str(content, ConfigFormat::Json)
     }
 
+    /// 从 INI 字符串加载
+    pub fn from_ini(content: &str) -> AgentResult<AgentConfig> {
+        Self::from_str(content, ConfigFormat::Ini)
+    }
+
+    /// 从 RON 字符串加载
+    pub fn from_ron(content: &str) -> AgentResult<AgentConfig> {
+        Self::from_str(content, ConfigFormat::Ron)
+    }
+
+    /// 从 JSON5 字符串加载
+    pub fn from_json5(content: &str) -> AgentResult<AgentConfig> {
+        Self::from_str(content, ConfigFormat::Json5)
+    }
+
     /// 从文件加载配置 (自动检测格式)
     pub fn load_file(path: &str) -> AgentResult<AgentConfig> {
-        let format = ConfigFormat::from_extension(path).ok_or_else(|| {
-            AgentError::ConfigError(format!(
-                "Unable to determine config format from file extension: {}",
-                path
-            ))
+        let config: AgentConfig = load_config(path).map_err(|e| match e {
+            ConfigError::Io(e) => AgentConfigError::Io(e),
+            ConfigError::Parse(e) => AgentConfigError::Parse(e),
+            ConfigError::Serialization(e) => AgentConfigError::Serialization(e),
+            ConfigError::UnsupportedFormat(e) => AgentConfigError::UnsupportedFormat(e),
         })?;
-
-        let content = std::fs::read_to_string(path).map_err(|e| {
-            AgentError::ConfigError(format!("Failed to read config file '{}': {}", path, e))
-        })?;
-
-        let config = Self::from_str(&content, format)?;
 
         // 验证配置
         config.validate().map_err(|errors| {
-            AgentError::ConfigError(format!("Config validation failed: {}", errors.join(", ")))
+            AgentConfigError::Validation(errors.join(", "))
         })?;
 
         Ok(config)
@@ -126,40 +195,58 @@ impl ConfigLoader {
 
     /// 从文件加载 YAML 配置
     pub fn load_yaml(path: &str) -> AgentResult<AgentConfig> {
-        let content = std::fs::read_to_string(path).map_err(|e| {
-            AgentError::ConfigError(format!("Failed to read YAML file '{}': {}", path, e))
-        })?;
-        Self::from_yaml(&content)
+        Self::load_file(path)
     }
 
     /// 从文件加载 TOML 配置
     pub fn load_toml(path: &str) -> AgentResult<AgentConfig> {
-        let content = std::fs::read_to_string(path).map_err(|e| {
-            AgentError::ConfigError(format!("Failed to read TOML file '{}': {}", path, e))
-        })?;
-        Self::from_toml(&content)
+        Self::load_file(path)
     }
 
     /// 从文件加载 JSON 配置
     pub fn load_json(path: &str) -> AgentResult<AgentConfig> {
-        let content = std::fs::read_to_string(path).map_err(|e| {
-            AgentError::ConfigError(format!("Failed to read JSON file '{}': {}", path, e))
-        })?;
-        Self::from_json(&content)
+        Self::load_file(path)
+    }
+
+    /// 从文件加载 INI 配置
+    pub fn load_ini(path: &str) -> AgentResult<AgentConfig> {
+        Self::load_file(path)
+    }
+
+    /// 从文件加载 RON 配置
+    pub fn load_ron(path: &str) -> AgentResult<AgentConfig> {
+        Self::load_file(path)
+    }
+
+    /// 从文件加载 JSON5 配置
+    pub fn load_json5(path: &str) -> AgentResult<AgentConfig> {
+        Self::load_file(path)
     }
 
     /// 将配置序列化为字符串
     pub fn to_string(config: &AgentConfig, format: ConfigFormat) -> AgentResult<String> {
         let content = match format {
             ConfigFormat::Yaml => serde_yaml::to_string(config).map_err(|e| {
-                AgentError::ConfigError(format!("Failed to serialize to YAML: {}", e))
+                AgentConfigError::Serialization(format!("Failed to serialize to YAML: {}", e))
             })?,
             ConfigFormat::Toml => toml::to_string_pretty(config).map_err(|e| {
-                AgentError::ConfigError(format!("Failed to serialize to TOML: {}", e))
+                AgentConfigError::Serialization(format!("Failed to serialize to TOML: {}", e))
             })?,
             ConfigFormat::Json => serde_json::to_string_pretty(config).map_err(|e| {
-                AgentError::ConfigError(format!("Failed to serialize to JSON: {}", e))
+                AgentConfigError::Serialization(format!("Failed to serialize to JSON: {}", e))
             })?,
+            ConfigFormat::Ini => {
+                return Err(AgentConfigError::Serialization("INI serialization not directly supported. Use JSON, YAML, or TOML for saving.".to_string()));
+            }
+            ConfigFormat::Ron => {
+                return Err(AgentConfigError::Serialization("RON serialization not directly supported. Use JSON, YAML, or TOML for saving.".to_string()));
+            }
+            ConfigFormat::Json5 => {
+                // JSON5 is compatible with JSON for serialization purposes
+                serde_json::to_string_pretty(config).map_err(|e| {
+                    AgentConfigError::Serialization(format!("Failed to serialize to JSON5: {}", e))
+                })?
+            }
         };
 
         Ok(content)
@@ -168,7 +255,7 @@ impl ConfigLoader {
     /// 将配置保存到文件
     pub fn save_file(config: &AgentConfig, path: &str) -> AgentResult<()> {
         let format = ConfigFormat::from_extension(path).ok_or_else(|| {
-            AgentError::ConfigError(format!(
+            AgentConfigError::UnsupportedFormat(format!(
                 "Unable to determine config format from file extension: {}",
                 path
             ))
@@ -177,7 +264,7 @@ impl ConfigLoader {
         let content = Self::to_string(config, format)?;
 
         std::fs::write(path, content).map_err(|e| {
-            AgentError::ConfigError(format!("Failed to write config file '{}': {}", path, e))
+            AgentConfigError::Io(e)
         })?;
 
         Ok(())
@@ -188,19 +275,21 @@ impl ConfigLoader {
         let mut configs = Vec::new();
 
         let entries = std::fs::read_dir(dir_path).map_err(|e| {
-            AgentError::ConfigError(format!("Failed to read directory '{}': {}", dir_path, e))
+            AgentConfigError::Io(e)
         })?;
+
+        let supported_extensions = ["yaml", "yml", "toml", "json", "ini", "ron", "json5"];
 
         for entry in entries {
             let entry = entry.map_err(|e| {
-                AgentError::ConfigError(format!("Failed to read directory entry: {}", e))
+                AgentConfigError::Io(e)
             })?;
 
             let path = entry.path();
             if path.is_file()
                 && let Some(ext) = path.extension().and_then(|e| e.to_str()) {
                     let ext_lower = ext.to_lowercase();
-                    if ext_lower == "yaml" || ext_lower == "yml" || ext_lower == "toml" || ext_lower == "json" {
+                    if supported_extensions.contains(&ext_lower.as_str()) {
                         let path_str = path.to_string_lossy().to_string();
                         match Self::load_file(&path_str) {
                             Ok(config) => configs.push(config),
@@ -247,6 +336,16 @@ impl ConfigLoader {
             version: overlay.version.or(base.version),
         }
     }
+
+    /// 从多个文件合并加载配置
+    pub fn load_merged_files(paths: &[&str]) -> AgentResult<AgentConfig> {
+        load_merged(paths).map_err(|e| match e {
+            ConfigError::Io(e) => AgentConfigError::Io(e),
+            ConfigError::Parse(e) => AgentConfigError::Parse(e.to_string()),
+            ConfigError::Serialization(e) => AgentConfigError::Serialization(e),
+            ConfigError::UnsupportedFormat(e) => AgentConfigError::UnsupportedFormat(e),
+        })
+    }
 }
 
 use super::schema::ComponentsConfig;
@@ -261,7 +360,20 @@ mod tests {
         assert_eq!(ConfigFormat::from_extension("config.yml"), Some(ConfigFormat::Yaml));
         assert_eq!(ConfigFormat::from_extension("config.toml"), Some(ConfigFormat::Toml));
         assert_eq!(ConfigFormat::from_extension("config.json"), Some(ConfigFormat::Json));
+        assert_eq!(ConfigFormat::from_extension("config.ini"), Some(ConfigFormat::Ini));
+        assert_eq!(ConfigFormat::from_extension("config.ron"), Some(ConfigFormat::Ron));
+        assert_eq!(ConfigFormat::from_extension("config.json5"), Some(ConfigFormat::Json5));
         assert_eq!(ConfigFormat::from_extension("config.txt"), None);
+    }
+
+    #[test]
+    fn test_format_to_file_format() {
+        assert_eq!(ConfigFormat::Yaml.to_file_format(), FileFormat::Yaml);
+        assert_eq!(ConfigFormat::Toml.to_file_format(), FileFormat::Toml);
+        assert_eq!(ConfigFormat::Json.to_file_format(), FileFormat::Json);
+        assert_eq!(ConfigFormat::Ini.to_file_format(), FileFormat::Ini);
+        assert_eq!(ConfigFormat::Ron.to_file_format(), FileFormat::Ron);
+        assert_eq!(ConfigFormat::Json5.to_file_format(), FileFormat::Json5);
     }
 
     #[test]
@@ -308,14 +420,70 @@ model = "gpt-4"
     }
 
     #[test]
+    fn test_load_ini_string() {
+        let ini = r#"
+[id]
+value = "test-agent"
+
+[name]
+value = "Test Agent"
+
+[type]
+value = "llm"
+
+[model]
+value = "gpt-4"
+"#;
+
+        let config = ConfigLoader::from_ini(ini).unwrap();
+        assert_eq!(config.id, "test-agent");
+        assert_eq!(config.name, "Test Agent");
+    }
+
+    #[test]
+    fn test_load_ron_string() {
+        let ron = r#"
+(
+    id: "test-agent",
+    name: "Test Agent",
+    type: "llm",
+    model: "gpt-4",
+)
+"#;
+
+        let config = ConfigLoader::from_ron(ron).unwrap();
+        assert_eq!(config.id, "test-agent");
+        assert_eq!(config.name, "Test Agent");
+    }
+
+    #[test]
+    fn test_load_json5_string() {
+        let json5 = r#"{
+    // JSON5 allows comments
+    id: "test-agent",
+    name: "Test Agent",
+    type: "llm",
+    model: "gpt-4",
+}
+"#;
+
+        let config = ConfigLoader::from_json5(json5).unwrap();
+        assert_eq!(config.id, "test-agent");
+        assert_eq!(config.name, "Test Agent");
+    }
+
+    #[test]
     fn test_serialize_config() {
         let config = AgentConfig::new("my-agent", "My Agent");
 
-        let mut yaml = ConfigLoader::to_string(&config, ConfigFormat::Yaml).unwrap();
+        let yaml = ConfigLoader::to_string(&config, ConfigFormat::Yaml).unwrap();
         assert!(yaml.contains("my-agent"));
 
-        let mut json = ConfigLoader::to_string(&config, ConfigFormat::Json).unwrap();
+        let json = ConfigLoader::to_string(&config, ConfigFormat::Json).unwrap();
         assert!(json.contains("my-agent"));
+
+        let toml = ConfigLoader::to_string(&config, ConfigFormat::Toml).unwrap();
+        assert!(toml.contains("my-agent"));
     }
 
     #[test]
@@ -334,5 +502,25 @@ model = "gpt-4"
         assert_eq!(merged.id, "base-agent"); // From base
         assert_eq!(merged.name, "Override Name"); // From overlay
         assert_eq!(merged.description, Some("Override description".to_string())); // From overlay
+    }
+
+    #[test]
+    fn test_format_names() {
+        assert_eq!(ConfigFormat::Yaml.name(), "yaml");
+        assert_eq!(ConfigFormat::Toml.name(), "toml");
+        assert_eq!(ConfigFormat::Json.name(), "json");
+        assert_eq!(ConfigFormat::Ini.name(), "ini");
+        assert_eq!(ConfigFormat::Ron.name(), "ron");
+        assert_eq!(ConfigFormat::Json5.name(), "json5");
+    }
+
+    #[test]
+    fn test_default_extensions() {
+        assert_eq!(ConfigFormat::Yaml.default_extension(), "yml");
+        assert_eq!(ConfigFormat::Toml.default_extension(), "toml");
+        assert_eq!(ConfigFormat::Json.default_extension(), "json");
+        assert_eq!(ConfigFormat::Ini.default_extension(), "ini");
+        assert_eq!(ConfigFormat::Ron.default_extension(), "ron");
+        assert_eq!(ConfigFormat::Json5.default_extension(), "json5");
     }
 }

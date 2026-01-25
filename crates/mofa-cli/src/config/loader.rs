@@ -1,33 +1,58 @@
 //! Configuration file discovery and loading
+//!
+//! Supports multiple configuration formats: YAML, TOML, JSON, INI, RON, JSON5
 
 use super::AgentConfig;
 use anyhow::Context;
+use mofa_kernel::config::{detect_format, from_str, load_config};
 use std::path::{Path, PathBuf};
 
 /// Configuration file types supported
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ConfigFormat {
     Yaml,
+    Toml,
     Json,
+    Ini,
+    Ron,
+    Json5,
 }
 
 impl ConfigFormat {
     /// Detect format from file extension
     pub fn from_path(path: &Path) -> Option<Self> {
-        path.extension()
-            .and_then(|ext| ext.to_str())
-            .and_then(|ext| match ext.to_lowercase().as_str() {
-                "yml" | "yaml" => Some(Self::Yaml),
-                "json" => Some(Self::Json),
-                _ => None,
-            })
+        match detect_format(path.to_str().unwrap_or("")) {
+            Ok(config::FileFormat::Yaml) => Some(Self::Yaml),
+            Ok(config::FileFormat::Toml) => Some(Self::Toml),
+            Ok(config::FileFormat::Json) => Some(Self::Json),
+            Ok(config::FileFormat::Ini) => Some(Self::Ini),
+            Ok(config::FileFormat::Ron) => Some(Self::Ron),
+            Ok(config::FileFormat::Json5) => Some(Self::Json5),
+            _ => None,
+        }
     }
 
     /// Get default filename for this format
     pub fn default_filename(&self) -> &str {
         match self {
             Self::Yaml => "agent.yml",
+            Self::Toml => "agent.toml",
             Self::Json => "agent.json",
+            Self::Ini => "agent.ini",
+            Self::Ron => "agent.ron",
+            Self::Json5 => "agent.json5",
+        }
+    }
+
+    /// Get file extensions for this format
+    pub fn extensions(&self) -> &[&str] {
+        match self {
+            Self::Yaml => &["yml", "yaml"],
+            Self::Toml => &["toml"],
+            Self::Json => &["json"],
+            Self::Ini => &["ini"],
+            Self::Ron => &["ron"],
+            Self::Json5 => &["json5"],
         }
     }
 }
@@ -59,16 +84,17 @@ impl ConfigFile {
 
     /// Parse the configuration file
     pub fn parse(&self) -> anyhow::Result<AgentConfig> {
-        match self.format {
-            ConfigFormat::Yaml => {
-                serde_yaml::from_str(&self.content)
-                    .context("Failed to parse YAML configuration")
-            }
-            ConfigFormat::Json => {
-                serde_json::from_str(&self.content)
-                    .context("Failed to parse JSON configuration")
-            }
-        }
+        let file_format = match self.format {
+            ConfigFormat::Yaml => config::FileFormat::Yaml,
+            ConfigFormat::Toml => config::FileFormat::Toml,
+            ConfigFormat::Json => config::FileFormat::Json,
+            ConfigFormat::Ini => config::FileFormat::Ini,
+            ConfigFormat::Ron => config::FileFormat::Ron,
+            ConfigFormat::Json5 => config::FileFormat::Json5,
+        };
+
+        from_str(&self.content, file_format)
+            .context("Failed to parse configuration")
     }
 }
 
@@ -95,8 +121,17 @@ impl ConfigLoader {
 
     /// Find a configuration file by searching upward from current directory
     pub fn find_config(&self) -> Option<PathBuf> {
+        let supported_filenames = [
+            "agent.yml", "agent.yaml",
+            "agent.toml",
+            "agent.json",
+            "agent.ini",
+            "agent.ron",
+            "agent.json5",
+        ];
+
         // Try current directory first
-        for name in &["agent.yml", "agent.yaml", "agent.json"] {
+        for name in &supported_filenames {
             let path = PathBuf::from(name);
             if path.exists() {
                 return Some(path);
@@ -106,7 +141,7 @@ impl ConfigLoader {
         // Search upward
         let mut current = std::env::current_dir().ok()?;
         loop {
-            for name in &["agent.yml", "agent.yaml", "agent.json"] {
+            for name in &supported_filenames {
                 let target = current.join(name);
                 if target.exists() {
                     return Some(target);
@@ -127,7 +162,26 @@ impl ConfigLoader {
 
         // If path is a directory, look for config files
         let config_path = if path.is_dir() {
-            path.join("agent.yml")
+            // Try to find a config file in the directory
+            let supported_filenames = [
+                "agent.yml", "agent.yaml",
+                "agent.toml",
+                "agent.json",
+                "agent.ini",
+                "agent.ron",
+                "agent.json5",
+            ];
+
+            let mut found = None;
+            for name in &supported_filenames {
+                let target = path.join(name);
+                if target.exists() {
+                    found = Some(target);
+                    break;
+                }
+            }
+
+            found.ok_or_else(|| anyhow::anyhow!("No config file found in directory: {}", path.display()))?
         } else {
             path.to_path_buf()
         };
@@ -175,8 +229,24 @@ mod tests {
             Some(ConfigFormat::Yaml)
         );
         assert_eq!(
+            ConfigFormat::from_path(Path::new("agent.toml")),
+            Some(ConfigFormat::Toml)
+        );
+        assert_eq!(
             ConfigFormat::from_path(Path::new("agent.json")),
             Some(ConfigFormat::Json)
+        );
+        assert_eq!(
+            ConfigFormat::from_path(Path::new("agent.ini")),
+            Some(ConfigFormat::Ini)
+        );
+        assert_eq!(
+            ConfigFormat::from_path(Path::new("agent.ron")),
+            Some(ConfigFormat::Ron)
+        );
+        assert_eq!(
+            ConfigFormat::from_path(Path::new("agent.json5")),
+            Some(ConfigFormat::Json5)
         );
         assert_eq!(
             ConfigFormat::from_path(Path::new("agent.txt")),
@@ -187,6 +257,20 @@ mod tests {
     #[test]
     fn test_default_filename() {
         assert_eq!(ConfigFormat::Yaml.default_filename(), "agent.yml");
+        assert_eq!(ConfigFormat::Toml.default_filename(), "agent.toml");
         assert_eq!(ConfigFormat::Json.default_filename(), "agent.json");
+        assert_eq!(ConfigFormat::Ini.default_filename(), "agent.ini");
+        assert_eq!(ConfigFormat::Ron.default_filename(), "agent.ron");
+        assert_eq!(ConfigFormat::Json5.default_filename(), "agent.json5");
+    }
+
+    #[test]
+    fn test_extensions() {
+        assert_eq!(ConfigFormat::Yaml.extensions(), &["yml", "yaml"]);
+        assert_eq!(ConfigFormat::Toml.extensions(), &["toml"]);
+        assert_eq!(ConfigFormat::Json.extensions(), &["json"]);
+        assert_eq!(ConfigFormat::Ini.extensions(), &["ini"]);
+        assert_eq!(ConfigFormat::Ron.extensions(), &["ron"]);
+        assert_eq!(ConfigFormat::Json5.extensions(), &["json5"]);
     }
 }

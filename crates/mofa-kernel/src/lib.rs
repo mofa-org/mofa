@@ -25,3 +25,6 @@ pub mod message;
 
 // Unified Agent Framework (统一 Agent 框架)
 pub mod agent;
+
+// Unified Configuration System (统一配置系统)
+pub mod config;

@@ -38,6 +38,9 @@ tracing.workspace = true
 # YAML config parsing
 serde_yaml = "0.9"
 
+# Config parsing (multi-format)
+config.workspace = true
+
 # Regex for prompt template parsing
 regex = "1.11"
 

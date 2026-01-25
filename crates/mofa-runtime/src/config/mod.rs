@@ -1,18 +1,19 @@
 //! 统一配置管理模块
 //!
 //! 提供框架级的配置加载、解析和访问接口，支持：
+//! - 多种配置格式 (YAML, TOML, JSON, INI, RON, JSON5)
 //! - 数据库配置
 //! - 缓存配置
 //! - 消息队列配置
 //! - 多环境支持
 //! - 配置热加载
 
+use mofa_kernel::config::{detect_format, from_str, load_config};
+use serde::{Deserialize, Serialize};
+use thiserror::Error;
 use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
-
-use serde::{Deserialize, Serialize};
-use thiserror::Error;
 
 /// 配置错误类型
 #[derive(Error, Debug)]
@@ -20,11 +21,8 @@ pub enum ConfigError {
     #[error("IO error: {0}")]
     Io(#[from] std::io::Error),
 
-    #[error("JSON parse error: {0}")]
-    Json(#[from] serde_json::Error),
-
-    #[error("YAML parse error: {0}")]
-    Yaml(#[from] serde_yaml::Error),
+    #[error("Config parse error: {0}")]
+    Parse(String),
 
     #[error("Config field missing: {0}")]
     FieldMissing(&'static str),
@@ -42,28 +40,17 @@ pub struct ConfigLoader {
 }
 
 impl ConfigLoader {
-    /// 从文件加载配置
+    /// 从文件加载配置 (自动检测格式)
     pub fn from_file<P: AsRef<Path>>(path: P) -> Result<Self, ConfigError> {
-        let path = path.as_ref();
-        let ext = path
-            .extension()
-            .ok_or_else(|| ConfigError::UnsupportedFormat("No file extension".to_string()))?
-            .to_str()
-            .ok_or_else(|| ConfigError::UnsupportedFormat("Invalid file extension".to_string()))?;
+        let path_str = path.as_ref().to_string_lossy().to_string();
+        let config = load_config(&path_str).map_err(|e| match e {
+            mofa_kernel::config::ConfigError::Io(e) => ConfigError::Io(e),
+            mofa_kernel::config::ConfigError::Parse(e) => ConfigError::Parse(e.to_string()),
+            mofa_kernel::config::ConfigError::Serialization(e) => ConfigError::Parse(e),
+            mofa_kernel::config::ConfigError::UnsupportedFormat(e) => ConfigError::UnsupportedFormat(e),
+        })?;
 
-        let content = fs::read_to_string(path)?;
-
-        match ext.to_lowercase().as_str() {
-            "json" => {
-                let config: FrameworkConfig = serde_json::from_str(&content)?;
-                Ok(Self { config })
-            }
-            "yaml" | "yml" => {
-                let config: FrameworkConfig = serde_yaml::from_str(&content)?;
-                Ok(Self { config })
-            }
-            _ => Err(ConfigError::UnsupportedFormat(ext.to_string())),
-        }
+        Ok(Self { config })
     }
 
     /// 从环境变量加载配置
@@ -179,4 +166,117 @@ pub struct FrameworkConfig {
 
     /// 环境名称
     pub environment: Option<String>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_load_yaml_config() {
+        let yaml = r#"
+database:
+  type: postgresql
+  url: postgresql://localhost/mydb
+  max_connections: 10
+
+cache:
+  type: redis
+  servers:
+    - localhost:6379
+  default_ttl: 3600
+
+message_queue:
+  type: kafka
+  brokers:
+    - localhost:9092
+  topic: mofa-events
+"#;
+
+        let config: FrameworkConfig = from_str(yaml, config::FileFormat::Yaml).unwrap();
+        assert_eq!(config.database.r#type, "postgresql");
+        assert_eq!(config.cache.r#type, "redis");
+        assert_eq!(config.message_queue.r#type, "kafka");
+    }
+
+    #[test]
+    fn test_load_json_config() {
+        let json = r#"{
+    "database": {
+        "type": "postgresql",
+        "url": "postgresql://localhost/mydb"
+    },
+    "cache": {
+        "type": "redis",
+        "servers": ["localhost:6379"]
+    }
+}"#;
+
+        let config: FrameworkConfig = from_str(json, config::FileFormat::Json).unwrap();
+        assert_eq!(config.database.r#type, "postgresql");
+        assert_eq!(config.cache.r#type, "redis");
+    }
+
+    #[test]
+    fn test_load_toml_config() {
+        let toml = r#"
+[database]
+type = "postgresql"
+url = "postgresql://localhost/mydb"
+
+[cache]
+type = "redis"
+servers = ["localhost:6379"]
+"#;
+
+        let config: FrameworkConfig = from_str(toml, config::FileFormat::Toml).unwrap();
+        assert_eq!(config.database.r#type, "postgresql");
+        assert_eq!(config.cache.r#type, "redis");
+    }
+
+    #[test]
+    fn test_load_ini_config() {
+        let ini = r#"
+[database.type]
+value = "postgresql"
+
+[database.url]
+value = "postgresql://localhost/mydb"
+
+[cache.type]
+value = "redis"
+
+[cache.servers]
+value = "localhost:6379"
+"#;
+
+        let config: FrameworkConfig = from_str(ini, config::FileFormat::Ini).unwrap();
+        assert_eq!(config.database.r#type, "postgresql");
+        assert_eq!(config.cache.r#type, "redis");
+    }
+
+    #[test]
+    fn test_load_ron_config() {
+        let ron = r#"
+(
+    database: (
+        type: "postgresql",
+        url: "postgresql://localhost/mydb",
+    ),
+    cache: (
+        type: "redis",
+        servers: ["localhost:6379"],
+    ),
+    message_queue: (
+        type: "kafka",
+        brokers: ["localhost:9092"],
+    ),
+)
+"#;
+
+        let config: FrameworkConfig = from_str(ron, config::FileFormat::Ron).unwrap();
+        assert_eq!(config.database.r#type, "postgresql");
+        assert_eq!(config.cache.r#type, "redis");
+        assert_eq!(config.message_queue.r#type, "kafka");
+    }
 }

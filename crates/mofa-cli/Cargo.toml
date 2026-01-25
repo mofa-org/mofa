@@ -18,6 +18,8 @@ path = "src/main.rs"
 [dependencies]
 # Core
 mofa-sdk = { path = "../mofa-sdk" }
+mofa-kernel = { path = "../mofa-kernel" }
+config.workspace = true
 tokio = { workspace = true }
 anyhow = { workspace = true }
 
@@ -29,6 +31,7 @@ colored = "2"
 serde = { workspace = true }
 serde_json = { workspace = true }
 serde_yaml = "0.9"
+toml = "0.8"
 
 
 # Utilities

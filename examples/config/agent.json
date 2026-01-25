@@ -1,0 +1,47 @@
+{
+  // Agent Configuration (JSON format)
+  // This is an example configuration file showing all supported formats
+
+  "agent": {
+    "id": "my-agent-001",
+    "name": "My LLM Agent",
+    "description": "A helpful AI assistant powered by MoFA",
+    "capabilities": ["llm", "tools", "memory"]
+  },
+
+  "llm": {
+    "provider": "openai",
+    "model": "gpt-4o",
+    "api_key": "${OPENAI_API_KEY}",
+    "base_url": null,
+    "temperature": 0.7,
+    "max_tokens": 4096,
+    "system_prompt": "You are a helpful assistant with access to various tools."
+  },
+
+  "tools": [
+    {
+      "name": "web_search",
+      "enabled": true,
+      "config": {
+        "max_results": 5
+      }
+    },
+    {
+      "name": "calculator",
+      "enabled": true
+    },
+    {
+      "name": "file_reader",
+      "enabled": false
+    }
+  ],
+
+  "runtime": {
+    "max_concurrent_tasks": 10,
+    "default_timeout_secs": 30
+  },
+
+  "inputs": ["user_input", "context_data"],
+  "outputs": ["response", "action_taken"]
+}

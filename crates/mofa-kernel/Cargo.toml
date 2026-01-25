@@ -28,4 +28,9 @@ hex.workspace = true
 
 # Config parsing
 toml = "0.8"
+config.workspace = true
+regex.workspace = true
+
+[dev-dependencies]
+tempfile = "3"
 
