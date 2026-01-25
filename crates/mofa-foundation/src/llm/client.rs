@@ -745,6 +745,11 @@ impl ChatSession {
         // 添加助手消息到历史
         self.messages.push(ChatMessage::assistant(&content));
 
+        // 滑动窗口：裁剪历史消息以保持固定大小
+        if self.context_window_size.is_some() {
+            self.messages = Self::apply_sliding_window_static(&self.messages, self.context_window_size);
+        }
+
         Ok(content)
     }
 

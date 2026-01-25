@@ -1889,6 +1889,13 @@ impl LLMAgent {
                         .messages_mut()
                         .push(ChatMessage::assistant(&full_response));
 
+                    // 滑动窗口：裁剪历史消息以保持固定大小
+                    let window_size = session.context_window_size();
+                    if window_size.is_some() {
+                        let current_messages = session.messages().to_vec();
+                        *session.messages_mut() = ChatSession::apply_sliding_window_static(&current_messages, window_size);
+                    }
+
                     if let Some(handler) = event_handler_clone {
                         if let Some(meta) = &metadata {
                             let _ = handler.after_chat_with_metadata(&full_response, meta).await;
@@ -1972,6 +1979,13 @@ impl LLMAgent {
                     session
                         .messages_mut()
                         .push(ChatMessage::assistant(&processed_response));
+
+                    // 滑动窗口：裁剪历史消息以保持固定大小
+                    let window_size = session.context_window_size();
+                    if window_size.is_some() {
+                        let current_messages = session.messages().to_vec();
+                        *session.messages_mut() = ChatSession::apply_sliding_window_static(&current_messages, window_size);
+                    }
 
                     // 调用 after_chat 钩子（带元数据）
                     if let Some(handler) = event_handler_clone {
