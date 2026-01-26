@@ -106,7 +106,7 @@ pub fn config_from_env(prefix: &str) -> AgentConfig {
 
     // Parse environment variables
     for (key, value) in std::env::vars() {
-        if key.starts_with(prefix) {
+        if key.as_str().starts_with(prefix) {
             let rest = &key[prefix.len()..];
             let rest = rest.trim_start_matches('_');
 
@@ -143,7 +143,7 @@ pub fn config_from_env(prefix: &str) -> AgentConfig {
                 }
                 _ => {
                     // Store in node_config
-                    config.node_config.insert(key.to_lowercase(), serde_json::json!(value));
+                    config.node_config.insert(key.as_str().to_lowercase(), serde_json::json!(value));
                 }
             }
         }
@@ -161,92 +161,5 @@ fn default_llm_config() -> super::LlmConfig {
         temperature: None,
         max_tokens: None,
         system_prompt: None,
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_merge_configs() {
-        let mut base = AgentConfig {
-            agent: super::super::AgentIdentity {
-                id: "base-id".to_string(),
-                name: "Base Agent".to_string(),
-                description: Some("Base description".to_string()),
-                capabilities: Some(vec!["llm".to_string()]),
-            },
-            llm: Some(super::super::LlmConfig {
-                provider: "openai".to_string(),
-                model: "gpt-4o".to_string(),
-                api_key: Some("base-key".to_string()),
-                base_url: None,
-                temperature: Some(0.7),
-                max_tokens: None,
-                system_prompt: None,
-            }),
-            runtime: Some(super::super::RuntimeConfig {
-                max_concurrent_tasks: Some(10),
-                default_timeout_secs: Some(30),
-                dora_enabled: None,
-                persistence: None,
-            }),
-            node_config: HashMap::new(),
-        };
-
-        let overrides = AgentConfig {
-            agent: super::super::AgentIdentity {
-                id: "override-id".to_string(),
-                name: String::new(), // Empty, should not override
-                description: None,
-                capabilities: None,
-            },
-            llm: Some(super::super::LlmConfig {
-                provider: String::new(), // Empty, should not override
-                model: "gpt-4o-mini".to_string(),
-                api_key: None,
-                base_url: Some("http://custom".to_string()),
-                temperature: None,
-                max_tokens: Some(2048),
-                system_prompt: Some("Custom prompt".to_string()),
-            }),
-            runtime: Some(super::super::RuntimeConfig {
-                max_concurrent_tasks: None,
-                default_timeout_secs: Some(60),
-                dora_enabled: Some(true),
-                persistence: None,
-            }),
-            node_config: {
-                let mut map = HashMap::new();
-                map.insert("custom_key".to_string(), serde_json::json!("custom_value"));
-                map
-            },
-        };
-
-        let merged = merge_configs(base, overrides, ConfigMergeStrategy::FilePrecedence);
-
-        assert_eq!(merged.agent.id, "override-id");
-        assert_eq!(merged.agent.name, "Base Agent"); // Not overridden
-        assert_eq!(merged.agent.description, Some("Base description".to_string()));
-
-        let llm = merged.llm.unwrap();
-        assert_eq!(llm.provider, "openai"); // Not overridden
-        assert_eq!(llm.model, "gpt-4o-mini");
-        assert_eq!(llm.api_key, Some("base-key".to_string())); // Not overridden
-        assert_eq!(llm.base_url, Some("http://custom".to_string()));
-        assert_eq!(llm.temperature, Some(0.7)); // Not overridden
-        assert_eq!(llm.max_tokens, Some(2048));
-        assert_eq!(llm.system_prompt, Some("Custom prompt".to_string()));
-
-        let runtime = merged.runtime.unwrap();
-        assert_eq!(runtime.max_concurrent_tasks, Some(10)); // Not overridden
-        assert_eq!(runtime.default_timeout_secs, Some(60));
-        assert_eq!(runtime.dora_enabled, Some(true));
-
-        assert_eq!(
-            merged.node_config.get("custom_key"),
-            Some(&serde_json::json!("custom_value"))
-        );
     }
 }

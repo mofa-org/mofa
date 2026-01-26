@@ -35,6 +35,8 @@ pub fn run(name: &str, template: &str, output: Option<&std::path::Path>) -> anyh
         println!("  export OPENAI_API_KEY='sk-...'");
         println!("  cargo run");
     } else {
+        // Basic and LLM templates require OPENAI_API_KEY
+        println!("  export OPENAI_API_KEY='sk-...'");
         println!("  cargo run");
     }
 
@@ -52,81 +54,38 @@ edition = "2024"
 [dependencies]
 mofa-sdk = "0.1"
 tokio = {{ version = "1", features = ["full"] }}
-async-trait = "0.1"
 anyhow = "1.0"
 "#
     );
     std::fs::write(project_dir.join("Cargo.toml"), cargo_toml)?;
 
-    // Create src/main.rs
+    // Create src/main.rs with LLMAgentBuilder
     std::fs::create_dir_all(project_dir.join("src"))?;
-    let main_rs = r#"use mofa_sdk::{MoFAAgent, AgentConfig, AgentEvent, AgentInterrupt, run_agent};
-use async_trait::async_trait;
-use std::collections::HashMap;
-
-struct MyAgent {
-    config: AgentConfig,
-}
-
-impl MyAgent {
-    fn new(id: &str, name: &str) -> Self {
-        Self {
-            config: AgentConfig {
-                agent_id: id.to_string(),
-                name: name.to_string(),
-                node_config: HashMap::new(),
-            },
-        }
-    }
-}
-
-#[async_trait]
-impl MoFAAgent for MyAgent {
-    fn config(&self) -> &AgentConfig {
-        &self.config
-    }
-
-    async fn init(&mut self, _interrupt: &AgentInterrupt) -> anyhow::Result<()> {
-        println!("Agent {} initialized", self.config.agent_id);
-        Ok(())
-    }
-
-    async fn handle_event(&mut self, event: AgentEvent, _interrupt: &AgentInterrupt) -> anyhow::Result<()> {
-        println!("Received event: {:?}", event);
-        Ok(())
-    }
-
-    async fn destroy(&mut self) -> anyhow::Result<()> {
-        println!("Agent {} destroyed", self.config.agent_id);
-        Ok(())
-    }
-
-    async fn on_interrupt(&mut self) -> anyhow::Result<()> {
-        println!("Agent interrupted");
-        Ok(())
-    }
-}
+    let main_rs = r#"use mofa_sdk::llm::{LLMAgentBuilder, OpenAIProvider};
+use std::sync::Arc;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    let agent = MyAgent::new("agent-001", "MyAgent");
-    run_agent(agent).await
+    let agent = LLMAgentBuilder::new()
+        .with_provider(Arc::new(OpenAIProvider::from_env()))
+        .with_system_prompt("You are a helpful AI assistant.")
+        .build();
+
+    println!("Agent: {}", agent.config().name);
+    let response = agent.ask("Hello!").await?;
+    println!("Response: {}", response);
+    Ok(())
 }
 "#;
     std::fs::write(project_dir.join("src/main.rs"), main_rs)?;
 
-    // Create agent.yml
-    let agent_yml = format!(
-        r#"# MoFA Agent Configuration
-agent:
-  id: "{name}-001"
-  name: "{name}"
-  capabilities:
-    - llm
-    - tool_call
-"#
-    );
-    std::fs::write(project_dir.join("agent.yml"), agent_yml)?;
+    // Create .env.example
+    let env_example = r#"# OpenAI Configuration
+OPENAI_API_KEY=sk-your-api-key-here
+OPENAI_BASE_URL=
+OPENAI_MODEL=gpt-4o
+"#;
+    std::fs::write(project_dir.join(".env.example"), env_example)?;
 
     Ok(())
 }
@@ -143,30 +102,34 @@ edition = "2024"
 mofa-sdk = "0.1"
 tokio = {{ version = "1", features = ["full"] }}
 anyhow = "1.0"
+uuid = "1"
 "#
     );
     std::fs::write(project_dir.join("Cargo.toml"), cargo_toml)?;
 
-    // Create src/main.rs that reads config from agent.yml
+    // Create src/main.rs with full LLMAgentBuilder example
     std::fs::create_dir_all(project_dir.join("src"))?;
     let main_rs = r#"//! MoFA LLM Agent
 //!
-//! This agent reads configuration from agent.yml and provides LLM interaction.
+//! This agent demonstrates the LLMAgentBuilder API for LLM interactions.
 //!
-//! ## Configuration
+//! ## Environment Variables
 //!
-//! Edit `agent.yml` to configure your LLM provider:
-//! - openai: Set OPENAI_API_KEY or api_key in config
-//! - ollama: No API key needed, just start ollama server
-//! - azure: Set endpoint, api_key, and deployment
+//! Set these before running:
+//! - `OPENAI_API_KEY`: Your OpenAI API key (required)
+//! - `OPENAI_BASE_URL`: Optional custom base URL
+//! - `OPENAI_MODEL`: Model to use (default: gpt-4o)
 //!
 //! ## Run
 //!
 //! ```bash
+//! export OPENAI_API_KEY="sk-..."
 //! cargo run
 //! ```
 
-use mofa_sdk::llm::agent_from_config;
+use mofa_sdk::llm::{LLMAgentBuilder, OpenAIProvider};
+use std::sync::Arc;
+use uuid::Uuid;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -174,23 +137,28 @@ async fn main() -> anyhow::Result<()> {
     println!("  MoFA LLM Agent                       ");
     println!("========================================\n");
 
-    // Load agent from agent.yml configuration
-    let agent = agent_from_config("agent.yml")
-        .map_err(|e| anyhow::anyhow!("Failed to load config: {}", e))?;
+    // Create agent using LLMAgentBuilder (matching docs/usage.md)
+    let agent = LLMAgentBuilder::new()
+        .with_id(Uuid::new_v4().to_string())
+        .with_name("My LLM Agent")
+        .with_provider(Arc::new(OpenAIProvider::from_env()))
+        .with_system_prompt("You are a helpful AI assistant.")
+        .with_temperature(0.7)
+        .with_max_tokens(2048)
+        .build();
 
-    println!("Agent loaded: {}", agent.config().name);
+    println!("Agent: {}", agent.config().name);
     println!("Agent ID: {}\n", agent.config().agent_id);
 
-    // Demo: Interactive chat
+    // Demo: Simple Q&A (no context retention)
     println!("--- Chat Demo ---\n");
 
-    // Simple Q&A (no context retention)
     let response = agent.ask("Hello! What can you help me with?").await
         .map_err(|e| anyhow::anyhow!("LLM error: {}", e))?;
     println!("Q: Hello! What can you help me with?");
     println!("A: {}\n", response);
 
-    // Multi-turn conversation (with context retention)
+    // Demo: Multi-turn conversation (with context retention)
     println!("--- Multi-turn Conversation ---\n");
 
     let r1 = agent.chat("My favorite programming language is Rust.").await
@@ -212,54 +180,13 @@ async fn main() -> anyhow::Result<()> {
 "#;
     std::fs::write(project_dir.join("src/main.rs"), main_rs)?;
 
-    // Create agent.yml with full LLM configuration
-    let agent_yml = format!(
-        r#"# MoFA LLM Agent Configuration
-# This file configures the LLM agent. Edit the values below to customize.
-
-agent:
-  id: "{name}-001"
-  name: "{name}"
-  description: "A helpful LLM-powered assistant"
-  capabilities:
-    - llm
-    - chat
-
-# LLM Provider Configuration
-# Supported providers: openai, ollama, azure, compatible
-llm:
-  # Provider type (openai, ollama, azure, compatible)
-  provider: openai
-
-  # Model to use
-  # OpenAI: gpt-4o, gpt-4o-mini, gpt-3.5-turbo
-  # Ollama: llama2, mistral, codellama, etc.
-  model: gpt-4o
-
-  # API Key - use ${{ENV_VAR}} syntax to read from environment
-  # For OpenAI: set OPENAI_API_KEY environment variable
-  # Or specify directly (not recommended for production)
-  api_key: ${{OPENAI_API_KEY}}
-
-  # Optional: Custom API endpoint (for self-hosted or compatible APIs)
-  # base_url: http://localhost:11434/v1
-
-  # Generation parameters
-  temperature: 0.7
-  max_tokens: 4096
-
-  # System prompt - defines the agent's personality and behavior
-  system_prompt: |
-    You are a helpful AI assistant. Be concise, accurate, and friendly.
-    When you don't know something, say so rather than making up information.
-
-# Runtime configuration
-runtime:
-  max_concurrent_tasks: 10
-  default_timeout_secs: 60
-"#
-    );
-    std::fs::write(project_dir.join("agent.yml"), agent_yml)?;
+    // Create .env.example
+    let env_example = r#"# OpenAI Configuration
+OPENAI_API_KEY=sk-your-api-key-here
+OPENAI_BASE_URL=
+OPENAI_MODEL=gpt-4o
+"#;
+    std::fs::write(project_dir.join(".env.example"), env_example)?;
 
     Ok(())
 }
