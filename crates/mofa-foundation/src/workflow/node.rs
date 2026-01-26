@@ -3,6 +3,7 @@
 //! 定义各种工作流节点类型
 
 use super::state::{NodeResult, WorkflowContext, WorkflowValue};
+use crate::llm::LLMAgent;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::future::Future;
@@ -444,6 +445,86 @@ impl WorkflowNode {
             executor: None,
             condition: None,
             transform: Some(Arc::new(move |inputs| Box::pin(transform_fn(inputs)))),
+            loop_condition: None,
+            max_iterations: None,
+            parallel_branches: Vec::new(),
+            join_nodes: Vec::new(),
+            sub_workflow_id: None,
+            wait_event_type: None,
+            condition_branches: HashMap::new(),
+        }
+    }
+
+    /// 创建 LLM 智能体节点（使用 LLMAgentBuilder）
+    ///
+    /// 这个方法接受 LLMAgentBuilder，构建 LLMAgent 并创建节点。
+    /// Agent 将被包装在闭包中以便在工作流中执行。
+    pub fn llm_agent(id: &str, name: &str, agent: Arc<LLMAgent>) -> Self {
+        let agent_clone = Arc::clone(&agent);
+        Self {
+            config: NodeConfig::new(id, name, NodeType::Agent),
+            executor: Some(Arc::new(move |_ctx, input| {
+                let agent = Arc::clone(&agent_clone);
+                Box::pin(async move {
+                    let prompt_str = match input.as_str() {
+                        Some(s) => s.to_string(),
+                        None => serde_json::to_string(&input).unwrap_or_default(),
+                    };
+                    agent.chat(&prompt_str)
+                        .await
+                        .map(|response| WorkflowValue::String(response))
+                        .map_err(|e| e.to_string())
+                })
+            })),
+            condition: None,
+            transform: None,
+            loop_condition: None,
+            max_iterations: None,
+            parallel_branches: Vec::new(),
+            join_nodes: Vec::new(),
+            sub_workflow_id: None,
+            wait_event_type: None,
+            condition_branches: HashMap::new(),
+        }
+    }
+
+    /// 创建 LLM 智能体节点（使用自定义 prompt 模板）
+    ///
+    /// 允许使用 Jinja-style 模板格式化输入，例如：
+    /// ```text
+    /// Process this data: {{ input }}
+    /// ```
+    pub fn llm_agent_with_template(
+        id: &str,
+        name: &str,
+        agent: Arc<LLMAgent>,
+        prompt_template: String,
+    ) -> Self {
+        let agent_clone = Arc::clone(&agent);
+        Self {
+            config: NodeConfig::new(id, name, NodeType::Agent),
+            executor: Some(Arc::new(move |_ctx, input| {
+                let agent = Arc::clone(&agent_clone);
+                let template = prompt_template.clone();
+                Box::pin(async move {
+                    // 简单的模板替换（只支持 {{ input }}）
+                    let prompt = if template.contains("{{") {
+                        let input_str = match input.as_str() {
+                            Some(s) => s.to_string(),
+                            None => serde_json::to_string(&input).unwrap_or_default(),
+                        };
+                        template.replace("{{ input }}", &input_str)
+                    } else {
+                        template
+                    };
+                    agent.chat(&prompt)
+                        .await
+                        .map(|response| WorkflowValue::String(response))
+                        .map_err(|e| e.to_string())
+                })
+            })),
+            condition: None,
+            transform: None,
             loop_condition: None,
             max_iterations: None,
             parallel_branches: Vec::new(),

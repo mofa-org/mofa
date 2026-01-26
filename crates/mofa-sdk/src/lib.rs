@@ -255,6 +255,14 @@ pub use mofa_foundation::workflow::{
     WorkflowGraph, WorkflowNode, WorkflowValue
 };
 
+// Re-export workflow DSL types
+pub use mofa_foundation::workflow::dsl::{
+    AgentRef, DslError, DslResult, EdgeDefinition, LlmAgentConfig,
+    LoopConditionDef, NodeConfigDef, NodeDefinition, RetryPolicy, TaskExecutorDef,
+    TimeoutConfig, TransformDef, WorkflowConfig, WorkflowDefinition, WorkflowDslParser,
+    WorkflowMetadata,
+};
+
 // Re-export dashboard module
 pub mod dashboard {
     pub use mofa_monitoring::*;

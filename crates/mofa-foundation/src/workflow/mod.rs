@@ -7,6 +7,7 @@
 //! - 状态管理与数据传递
 //! - 错误处理与重试
 //! - 检查点与恢复
+//! - DSL (YAML/TOML) 配置支持
 
 mod builder;
 mod executor;
@@ -14,7 +15,10 @@ mod graph;
 mod node;
 mod state;
 
+pub mod dsl;
+
 pub use builder::*;
+pub use dsl::*;
 pub use executor::*;
 pub use graph::*;
 pub use node::*;

@@ -5,8 +5,10 @@
 use super::graph::{EdgeConfig, WorkflowGraph};
 use super::node::{RetryPolicy, WorkflowNode};
 use super::state::WorkflowValue;
+use crate::llm::LLMAgent;
 use std::collections::HashMap;
 use std::future::Future;
+use std::sync::Arc;
 
 /// 工作流构建器
 pub struct WorkflowBuilder {
@@ -123,6 +125,73 @@ impl WorkflowBuilder {
         Fut: Future<Output = Result<WorkflowValue, String>> + Send + 'static,
     {
         let node = WorkflowNode::agent(id, name, agent_fn);
+        self.graph.add_node(node);
+
+        if let Some(ref current) = self.current_node {
+            self.graph.connect(current, id);
+        }
+
+        self.current_node = Some(id.to_string());
+        self
+    }
+
+    /// 添加 LLM 智能体节点（使用 LLMAgent）
+    ///
+    /// 允许在工作流中使用预配置的 LLMAgent。
+    ///
+    /// # 示例
+    ///
+    /// ```rust,ignore
+    /// let agent = LLMAgentBuilder::new()
+    ///     .with_id("my-agent")
+    ///     .with_provider(Arc::new(openai_from_env()?))
+    ///     .with_system_prompt("You are a helpful assistant.")
+    ///     .build()?;
+    ///
+    /// let workflow = WorkflowBuilder::new("test", "Test")
+    ///     .start()
+    ///     .llm_agent("agent1", "LLM Agent", Arc::new(agent))
+    ///     .end()
+    ///     .build();
+    /// ```
+    pub fn llm_agent(mut self, id: &str, name: &str, agent: Arc<LLMAgent>) -> Self {
+        let node = WorkflowNode::llm_agent(id, name, agent);
+        self.graph.add_node(node);
+
+        if let Some(ref current) = self.current_node {
+            self.graph.connect(current, id);
+        }
+
+        self.current_node = Some(id.to_string());
+        self
+    }
+
+    /// 添加 LLM 智能体节点（带 prompt 模板）
+    ///
+    /// 允许使用 Jinja-style 模板格式化输入。
+    ///
+    /// # 示例
+    ///
+    /// ```rust,ignore
+    /// let workflow = WorkflowBuilder::new("test", "Test")
+    ///     .start()
+    ///     .llm_agent_with_template(
+    ///         "agent1",
+    ///         "LLM Agent",
+    ///         Arc::new(agent),
+    ///         "Process this data: {{ input }}".to_string()
+    ///     )
+    ///     .end()
+    ///     .build();
+    /// ```
+    pub fn llm_agent_with_template(
+        mut self,
+        id: &str,
+        name: &str,
+        agent: Arc<LLMAgent>,
+        prompt_template: String,
+    ) -> Self {
+        let node = WorkflowNode::llm_agent_with_template(id, name, agent, prompt_template);
         self.graph.add_node(node);
 
         if let Some(ref current) = self.current_node {
@@ -398,6 +467,30 @@ impl ParallelBuilder {
         Fut: Future<Output = Result<WorkflowValue, String>> + Send + 'static,
     {
         let node = WorkflowNode::agent(id, name, agent_fn);
+        self.parent.graph.add_node(node);
+        self.parent.graph.connect(&self.parallel_node, id);
+        self.branches.push(id.to_string());
+        self
+    }
+
+    /// 添加 LLM 智能体分支
+    ///
+    /// 允许在并行执行中使用预配置的 LLMAgent。
+    ///
+    /// # 示例
+    ///
+    /// ```rust,ignore
+    /// let workflow = WorkflowBuilder::new("test", "Test")
+    ///     .start()
+    ///     .parallel("fork", "Fork")
+    ///     .llm_agent_branch("agent_a", "Agent A", Arc::new(agent_a))
+    ///     .llm_agent_branch("agent_b", "Agent B", Arc::new(agent_b))
+    ///     .join("join", "Join")
+    ///     .end()
+    ///     .build();
+    /// ```
+    pub fn llm_agent_branch(mut self, id: &str, name: &str, agent: Arc<LLMAgent>) -> Self {
+        let node = WorkflowNode::llm_agent(id, name, agent);
         self.parent.graph.add_node(node);
         self.parent.graph.connect(&self.parallel_node, id);
         self.branches.push(id.to_string());

@@ -44,6 +44,9 @@ config.workspace = true
 # Regex for prompt template parsing
 regex = "1.11"
 
+# TOML parsing for DSL
+toml = "0.8"
+
 # OpenAI support (optional, enabled by default)
 async-openai = { version = "0.27", optional = true }
 
