@@ -153,6 +153,9 @@ pub struct ChatRequestBuilder {
     request: ChatCompletionRequest,
     tool_executor: Option<Arc<dyn ToolExecutor>>,
     max_tool_rounds: u32,
+    // Retry configuration
+    retry_policy: Option<LLMRetryPolicy>,
+    retry_enabled: bool,
 }
 
 impl ChatRequestBuilder {
@@ -163,6 +166,8 @@ impl ChatRequestBuilder {
             request: ChatCompletionRequest::new(model),
             tool_executor: None,
             max_tool_rounds: 10,
+            retry_policy: None,
+            retry_enabled: false,
         }
     }
 
@@ -244,9 +249,99 @@ impl ChatRequestBuilder {
         self
     }
 
+    // ========================================================================
+    // Retry Configuration
+    // ========================================================================
+
+    /// Enable retry with default policy
+    ///
+    /// Uses PromptRetry strategy for serialization errors (best for JSON mode)
+    /// and DirectRetry for network/transient errors.
+    ///
+    /// # Example
+    /// ```rust,ignore
+    /// let response = client.chat()
+    ///     .json_mode()
+    ///     .with_retry()
+    ///     .send()
+    ///     .await?;
+    /// ```
+    pub fn with_retry(mut self) -> Self {
+        self.retry_enabled = true;
+        self.retry_policy = Some(LLMRetryPolicy::default());
+        self
+    }
+
+    /// Enable retry with custom policy
+    ///
+    /// # Example
+    /// ```rust,ignore
+    /// use mofa_foundation::llm::{LLMRetryPolicy, BackoffStrategy};
+    ///
+    /// let custom_policy = LLMRetryPolicy {
+    ///     max_attempts: 5,
+    ///     backoff: BackoffStrategy::ExponentialWithJitter {
+    ///         initial_delay_ms: 500,
+    ///         max_delay_ms: 60000,
+    ///         jitter_ms: 250,
+    ///     },
+    ///     ..Default::default()
+    /// };
+    ///
+    /// let response = client.chat()
+    ///     .with_retry_policy(custom_policy)
+    ///     .send()
+    ///     .await?;
+    /// ```
+    pub fn with_retry_policy(mut self, policy: LLMRetryPolicy) -> Self {
+        self.retry_enabled = true;
+        self.retry_policy = Some(policy);
+        self
+    }
+
+    /// Disable retry (explicit)
+    ///
+    /// This is the default behavior, but can be used to override
+    /// any previously set retry configuration.
+    pub fn without_retry(mut self) -> Self {
+        self.retry_enabled = false;
+        self.retry_policy = None;
+        self
+    }
+
+    /// Set max retry attempts (convenience method)
+    ///
+    /// Shortcut for setting max_attempts in the default retry policy.
+    /// Equivalent to `.with_retry_policy(LLMRetryPolicy::with_max_attempts(n))`
+    ///
+    /// # Example
+    /// ```rust,ignore
+    /// let response = client.chat()
+    ///     .json_mode()
+    ///     .max_retries(3)
+    ///     .send()
+    ///     .await?;
+    /// ```
+    pub fn max_retries(mut self, max: u32) -> Self {
+        if self.retry_policy.is_none() {
+            self.retry_policy = Some(LLMRetryPolicy::default());
+        }
+        if let Some(ref mut policy) = self.retry_policy {
+            policy.max_attempts = max;
+        }
+        self.retry_enabled = true;
+        self
+    }
+
     /// 发送请求
     pub async fn send(self) -> LLMResult<ChatCompletionResponse> {
-        self.provider.chat(self.request).await
+        if self.retry_enabled {
+            let policy = self.retry_policy.unwrap_or_default();
+            let executor = crate::llm::retry::RetryExecutor::new(self.provider, policy);
+            executor.chat(self.request).await
+        } else {
+            self.provider.chat(self.request).await
+        }
     }
 
     /// 发送流式请求

@@ -4223,6 +4223,7 @@ dependencies = [
  "mofa-plugins",
  "once_cell",
  "ractor",
+ "rand 0.8.5",
  "regex",
  "rhai",
  "serde",

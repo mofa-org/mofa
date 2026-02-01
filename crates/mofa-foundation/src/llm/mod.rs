@@ -261,6 +261,7 @@ pub mod agent;
 pub mod client;
 pub mod plugin;
 pub mod provider;
+pub mod retry;
 pub mod types;
 
 // 高级 API
@@ -275,6 +276,7 @@ pub use plugin::{LLMCapability, LLMPlugin, MockLLMProvider};
 pub use provider::{
     global_registry, ChatStream, LLMConfig, LLMProvider, LLMRegistry, ModelCapabilities, ModelInfo,
 };
+pub use retry::RetryExecutor;
 pub use types::*;
 
 // Re-export 标准 LLM Agent
