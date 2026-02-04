@@ -1,6 +1,6 @@
 # MoFA Agent框架
 
-[English](README_en.md) | [简体中文](README_en.md)
+[English](README_en.md) | [简体中文](README.md)
 
 <p align="center">
     <img src="docs/images/mofa-logo.png" width="30%"/>
