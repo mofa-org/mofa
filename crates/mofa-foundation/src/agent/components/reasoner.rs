@@ -2,10 +2,10 @@
 //!
 //! 定义 Agent 的推理/思考能力
 
-use crate::agent::capabilities::ReasoningStrategy;
-use crate::agent::context::AgentContext;
-use crate::agent::error::AgentResult;
-use crate::agent::types::AgentInput;
+use mofa_kernel::agent::capabilities::ReasoningStrategy;
+use mofa_kernel::agent::context::AgentContext;
+use mofa_kernel::agent::types::AgentInput;
+use mofa_kernel::agent::AgentResult;
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 
@@ -271,8 +271,8 @@ impl Reasoner for DirectReasoner {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::agent::context::AgentContext;
-    use crate::agent::types::AgentInput;
+    use mofa_kernel::agent::context::AgentContext;
+    use mofa_kernel::agent::types::AgentInput;
 
     #[tokio::test]
     async fn test_direct_reasoner() {

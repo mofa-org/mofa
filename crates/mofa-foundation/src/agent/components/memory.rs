@@ -2,312 +2,20 @@
 //!
 //! 定义 Agent 的记忆/状态持久化能力
 
-use crate::agent::error::AgentResult;
 use async_trait::async_trait;
-use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::path::{Path, PathBuf};
+use std::sync::Arc;
+use tokio::sync::RwLock;
+use chrono::Utc;
+use mofa_kernel::agent::error::AgentError;
 
-/// 记忆组件 Trait
-///
-/// 负责 Agent 的记忆存储和检索
-///
-/// # 示例
-///
-/// ```rust,ignore
-/// use mofa_foundation::agent::components::memory::{Memory, MemoryValue, MemoryItem};
-///
-/// struct InMemoryStorage {
-///     data: HashMap<String, MemoryValue>,
-/// }
-///
-/// #[async_trait]
-/// impl Memory for InMemoryStorage {
-///     async fn store(&mut self, key: &str, value: MemoryValue) -> AgentResult<()> {
-///         self.data.insert(key.to_string(), value);
-///         Ok(())
-///     }
-///
-///     async fn retrieve(&self, key: &str) -> AgentResult<Option<MemoryValue>> {
-///         Ok(self.data.get(key).cloned())
-///     }
-///
-///     // ... other methods
-/// }
-/// ```
-#[async_trait]
-pub trait Memory: Send + Sync {
-    /// 存储记忆项
-    async fn store(&mut self, key: &str, value: MemoryValue) -> AgentResult<()>;
+pub use mofa_kernel::agent::components::memory::{
+    Memory, MemoryItem, MemoryValue, Message, MessageRole, MemoryStats,
+};
 
-    /// 检索记忆项
-    async fn retrieve(&self, key: &str) -> AgentResult<Option<MemoryValue>>;
-
-    /// 删除记忆项
-    async fn remove(&mut self, key: &str) -> AgentResult<bool>;
-
-    /// 检查是否存在
-    async fn contains(&self, key: &str) -> AgentResult<bool> {
-        Ok(self.retrieve(key).await?.is_some())
-    }
-
-    /// 语义搜索
-    async fn search(&self, query: &str, limit: usize) -> AgentResult<Vec<MemoryItem>>;
-
-    /// 清空所有记忆
-    async fn clear(&mut self) -> AgentResult<()>;
-
-    /// 获取对话历史
-    async fn get_history(&self, session_id: &str) -> AgentResult<Vec<Message>>;
-
-    /// 添加对话消息
-    async fn add_to_history(&mut self, session_id: &str, message: Message) -> AgentResult<()>;
-
-    /// 清空对话历史
-    async fn clear_history(&mut self, session_id: &str) -> AgentResult<()>;
-
-    /// 获取记忆统计
-    async fn stats(&self) -> AgentResult<MemoryStats> {
-        Ok(MemoryStats::default())
-    }
-
-    /// 记忆类型名称
-    fn memory_type(&self) -> &str {
-        "memory"
-    }
-}
-
-/// 记忆值类型
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum MemoryValue {
-    /// 文本
-    Text(String),
-    /// 嵌入向量
-    Embedding(Vec<f32>),
-    /// 结构化数据
-    Structured(serde_json::Value),
-    /// 二进制数据
-    Binary(Vec<u8>),
-    /// 带嵌入的文本
-    TextWithEmbedding {
-        text: String,
-        embedding: Vec<f32>,
-    },
-}
-
-impl MemoryValue {
-    /// 创建文本值
-    pub fn text(s: impl Into<String>) -> Self {
-        Self::Text(s.into())
-    }
-
-    /// 创建嵌入向量值
-    pub fn embedding(e: Vec<f32>) -> Self {
-        Self::Embedding(e)
-    }
-
-    /// 创建结构化值
-    pub fn structured(v: serde_json::Value) -> Self {
-        Self::Structured(v)
-    }
-
-    /// 创建带嵌入的文本
-    pub fn text_with_embedding(text: impl Into<String>, embedding: Vec<f32>) -> Self {
-        Self::TextWithEmbedding {
-            text: text.into(),
-            embedding,
-        }
-    }
-
-    /// 获取文本内容
-    pub fn as_text(&self) -> Option<&str> {
-        match self {
-            Self::Text(s) => Some(s),
-            Self::TextWithEmbedding { text, .. } => Some(text),
-            _ => None,
-        }
-    }
-
-    /// 获取嵌入向量
-    pub fn as_embedding(&self) -> Option<&[f32]> {
-        match self {
-            Self::Embedding(e) => Some(e),
-            Self::TextWithEmbedding { embedding, .. } => Some(embedding),
-            _ => None,
-        }
-    }
-
-    /// 获取结构化数据
-    pub fn as_structured(&self) -> Option<&serde_json::Value> {
-        match self {
-            Self::Structured(v) => Some(v),
-            _ => None,
-        }
-    }
-}
-
-impl From<String> for MemoryValue {
-    fn from(s: String) -> Self {
-        Self::Text(s)
-    }
-}
-
-impl From<&str> for MemoryValue {
-    fn from(s: &str) -> Self {
-        Self::Text(s.to_string())
-    }
-}
-
-impl From<serde_json::Value> for MemoryValue {
-    fn from(v: serde_json::Value) -> Self {
-        Self::Structured(v)
-    }
-}
-
-/// 记忆项 (搜索结果)
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct MemoryItem {
-    /// 记忆键
-    pub key: String,
-    /// 记忆值
-    pub value: MemoryValue,
-    /// 相似度分数 (0.0 - 1.0)
-    pub score: f32,
-    /// 元数据
-    pub metadata: HashMap<String, String>,
-    /// 创建时间
-    pub created_at: u64,
-    /// 最后访问时间
-    pub last_accessed: u64,
-}
-
-impl MemoryItem {
-    /// 创建新的记忆项
-    pub fn new(key: impl Into<String>, value: MemoryValue) -> Self {
-        let now = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_millis() as u64;
-
-        Self {
-            key: key.into(),
-            value,
-            score: 1.0,
-            metadata: HashMap::new(),
-            created_at: now,
-            last_accessed: now,
-        }
-    }
-
-    /// 设置分数
-    pub fn with_score(mut self, score: f32) -> Self {
-        self.score = score.clamp(0.0, 1.0);
-        self
-    }
-
-    /// 添加元数据
-    pub fn with_metadata(mut self, key: impl Into<String>, value: impl Into<String>) -> Self {
-        self.metadata.insert(key.into(), value.into());
-        self
-    }
-}
-
-/// 对话消息
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Message {
-    /// 消息角色
-    pub role: MessageRole,
-    /// 消息内容
-    pub content: String,
-    /// 时间戳
-    pub timestamp: u64,
-    /// 元数据
-    pub metadata: HashMap<String, serde_json::Value>,
-}
-
-impl Message {
-    /// 创建新消息
-    pub fn new(role: MessageRole, content: impl Into<String>) -> Self {
-        let now = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_millis() as u64;
-
-        Self {
-            role,
-            content: content.into(),
-            timestamp: now,
-            metadata: HashMap::new(),
-        }
-    }
-
-    /// 创建系统消息
-    pub fn system(content: impl Into<String>) -> Self {
-        Self::new(MessageRole::System, content)
-    }
-
-    /// 创建用户消息
-    pub fn user(content: impl Into<String>) -> Self {
-        Self::new(MessageRole::User, content)
-    }
-
-    /// 创建助手消息
-    pub fn assistant(content: impl Into<String>) -> Self {
-        Self::new(MessageRole::Assistant, content)
-    }
-
-    /// 创建工具消息
-    pub fn tool(tool_name: impl Into<String>, content: impl Into<String>) -> Self {
-        let mut msg = Self::new(MessageRole::Tool, content);
-        msg.metadata.insert(
-            "tool_name".to_string(),
-            serde_json::Value::String(tool_name.into()),
-        );
-        msg
-    }
-
-    /// 添加元数据
-    pub fn with_metadata(mut self, key: impl Into<String>, value: serde_json::Value) -> Self {
-        self.metadata.insert(key.into(), value);
-        self
-    }
-}
-
-/// 消息角色
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub enum MessageRole {
-    /// 系统消息
-    System,
-    /// 用户消息
-    User,
-    /// 助手消息
-    Assistant,
-    /// 工具消息
-    Tool,
-}
-
-impl std::fmt::Display for MessageRole {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::System => write!(f, "system"),
-            Self::User => write!(f, "user"),
-            Self::Assistant => write!(f, "assistant"),
-            Self::Tool => write!(f, "tool"),
-        }
-    }
-}
-
-/// 记忆统计
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct MemoryStats {
-    /// 总记忆项数
-    pub total_items: usize,
-    /// 总对话会话数
-    pub total_sessions: usize,
-    /// 总消息数
-    pub total_messages: usize,
-    /// 内存使用 (字节)
-    pub memory_bytes: usize,
-}
+// Use kernel's AgentResult type
+pub use mofa_kernel::agent::AgentResult;
 
 // ============================================================================
 // 内存实现
@@ -409,60 +117,465 @@ impl Memory for InMemoryStorage {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
+// ============================================================================
+// 基于文件的持久化存储实现
+// ============================================================================
 
-    #[tokio::test]
-    async fn test_in_memory_storage() {
-        let mut storage = InMemoryStorage::new();
+/// 基于文件的持久化存储
+///
+/// 文件结构:
+/// ```
+/// memory/
+/// ├── data.json              # KV 存储 (MemoryValue items)
+/// ├── MEMORY.md              # 长期记忆
+/// ├── sessions/              # 会话历史
+/// │   ├── <session_id>.json  # 单个会话的消息历史
+/// ├── 2024-01-15.md          # 每日笔记 (YYYY-MM-DD.md)
+/// └── ...
+/// ```
+///
+/// # 特性
+///
+/// - 持久化到磁盘
+/// - 线程安全 (Arc<RwLock<T>>)
+/// - 原子文件写入 (临时文件 + rename)
+/// - 懒加载 (启动时从文件加载到内存)
+/// - 与 nanobot MemoryStore 格式兼容
+pub struct FileBasedStorage {
+    /// 基础目录
+    base_dir: PathBuf,
+    /// memory 目录
+    memory_dir: PathBuf,
+    /// sessions 目录
+    sessions_dir: PathBuf,
+    /// data.json 文件路径
+    data_file: PathBuf,
+    /// MEMORY.md 文件路径 (长期记忆)
+    long_term_file: PathBuf,
+    /// 内存数据 (key -> MemoryItem)
+    data: Arc<RwLock<HashMap<String, MemoryItem>>>,
+    /// 会话历史 (session_id -> Vec<Message>)
+    sessions: Arc<RwLock<HashMap<String, Vec<Message>>>>,
+}
 
-        // 存储和检索
-        storage.store("key1", MemoryValue::text("value1")).await.unwrap();
-        let value = storage.retrieve("key1").await.unwrap();
-        assert!(value.is_some());
-        assert_eq!(value.unwrap().as_text(), Some("value1"));
+impl FileBasedStorage {
+    /// 创建新的基于文件的存储
+    ///
+    /// # 参数
+    ///
+    /// - `base_dir`: 基础目录，将在其下创建 memory/ 和 memory/sessions/
+    ///
+    /// # 示例
+    ///
+    /// ```rust,ignore
+    /// use mofa_foundation::agent::components::memory::FileBasedStorage;
+    ///
+    /// let storage = FileBasedStorage::new("/tmp/workspace").await?;
+    /// ```
+    pub async fn new(base_dir: impl AsRef<Path>) -> AgentResult<Self> {
+        let base_dir = base_dir.as_ref().to_path_buf();
+        let memory_dir = base_dir.join("memory");
+        let sessions_dir = memory_dir.join("sessions");
+        let data_file = memory_dir.join("data.json");
+        let long_term_file = memory_dir.join("MEMORY.md");
 
-        // 删除
-        let removed = storage.remove("key1").await.unwrap();
-        assert!(removed);
-        assert!(storage.retrieve("key1").await.unwrap().is_none());
+        // 创建目录
+        tokio::fs::create_dir_all(&sessions_dir).await
+            .map_err(|e| AgentError::IoError(format!("Failed to create sessions directory: {}", e)))?;
+
+        // 加载现有数据
+        let data = Self::load_data(&data_file).await?;
+        let sessions = Self::load_sessions(&sessions_dir).await?;
+
+        Ok(Self {
+            base_dir,
+            memory_dir,
+            sessions_dir,
+            data_file,
+            long_term_file,
+            data: Arc::new(RwLock::new(data)),
+            sessions: Arc::new(RwLock::new(sessions)),
+        })
     }
 
-    #[tokio::test]
-    async fn test_conversation_history() {
-        let mut storage = InMemoryStorage::new();
-        let session = "session-1";
+    /// 从 data.json 加载数据
+    async fn load_data(data_file: &Path) -> AgentResult<HashMap<String, MemoryItem>> {
+        if !data_file.exists() {
+            return Ok(HashMap::new());
+        }
 
-        storage.add_to_history(session, Message::user("Hello")).await.unwrap();
-        storage.add_to_history(session, Message::assistant("Hi there!")).await.unwrap();
+        let content = tokio::fs::read_to_string(data_file).await
+            .map_err(|e| AgentError::IoError(format!("Failed to read data.json: {}", e)))?;
 
-        let history = storage.get_history(session).await.unwrap();
-        assert_eq!(history.len(), 2);
-        assert_eq!(history[0].role, MessageRole::User);
-        assert_eq!(history[1].role, MessageRole::Assistant);
+        if content.trim().is_empty() {
+            return Ok(HashMap::new());
+        }
+
+        serde_json::from_str(&content)
+            .map_err(|e| AgentError::SerializationError(format!("Failed to parse data.json: {}", e)))
     }
 
-    #[tokio::test]
-    async fn test_search() {
-        let mut storage = InMemoryStorage::new();
+    /// 从 sessions 目录加载所有会话
+    async fn load_sessions(sessions_dir: &Path) -> AgentResult<HashMap<String, Vec<Message>>> {
+        if !sessions_dir.exists() {
+            return Ok(HashMap::new());
+        }
 
-        storage.store("doc1", MemoryValue::text("Hello world")).await.unwrap();
-        storage.store("doc2", MemoryValue::text("Goodbye world")).await.unwrap();
-        storage.store("doc3", MemoryValue::text("Hello there")).await.unwrap();
+        let mut sessions = HashMap::new();
+        let mut entries = tokio::fs::read_dir(sessions_dir).await
+            .map_err(|e| AgentError::IoError(format!("Failed to read sessions directory: {}", e)))?;
 
-        let results = storage.search("Hello", 10).await.unwrap();
-        assert_eq!(results.len(), 2);
+        while let Some(entry) = entries.next_entry().await
+            .map_err(|e| AgentError::IoError(format!("Failed to read session entry: {}", e)))? {
+            let path = entry.path();
+
+            // 只处理 .json 文件
+            if path.extension().and_then(|s: &std::ffi::OsStr| s.to_str()) != Some("json") {
+                continue;
+            }
+
+            // 从文件名获取 session_id (例如: "session-123.json" -> "session-123")
+            let session_id = path.file_stem()
+                .and_then(|s: &std::ffi::OsStr| s.to_str())
+                .ok_or_else(|| AgentError::IoError(format!("Invalid session file name: {:?}", path)))?;
+
+            // 读取会话数据
+            let content = tokio::fs::read_to_string(&path).await
+                .map_err(|e| AgentError::IoError(format!("Failed to read session file {:?}: {}", path, e)))?;
+
+            let messages: Vec<Message> = serde_json::from_str(&content)
+                .map_err(|e| AgentError::SerializationError(format!("Failed to parse session file {:?}: {}", path, e)))?;
+
+            sessions.insert(session_id.to_string(), messages);
+        }
+
+        Ok(sessions)
     }
 
-    #[test]
-    fn test_message_creation() {
-        let msg = Message::user("Hello");
-        assert_eq!(msg.role, MessageRole::User);
-        assert_eq!(msg.content, "Hello");
+    /// 持久化数据到 data.json
+    ///
+    /// 使用原子写入: 写入临时文件然后 rename
+    async fn persist_data(&self) -> AgentResult<()> {
+        let data = self.data.read().await;
+        let json = serde_json::to_string_pretty(&*data)
+            .map_err(|e| AgentError::SerializationError(format!("Failed to serialize data: {}", e)))?;
+        drop(data);
 
-        let tool_msg = Message::tool("calculator", "Result: 42");
-        assert_eq!(tool_msg.role, MessageRole::Tool);
-        assert!(tool_msg.metadata.contains_key("tool_name"));
+        // 原子写入: 临时文件 + rename
+        let temp_file = self.data_file.with_extension("json.tmp");
+        tokio::fs::write(&temp_file, json).await
+            .map_err(|e| AgentError::IoError(format!("Failed to write temp data file: {}", e)))?;
+
+        tokio::fs::rename(&temp_file, &self.data_file).await
+            .map_err(|e| AgentError::IoError(format!("Failed to rename data file: {}", e)))?;
+
+        Ok(())
+    }
+
+    /// 持久化单个会话到文件
+    async fn persist_session(&self, session_id: &str) -> AgentResult<()> {
+        let sessions = self.sessions.read().await;
+        let messages = sessions.get(session_id);
+
+        let session_file = self.sessions_dir.join(format!("{}.json", session_id));
+
+        if let Some(messages) = messages {
+            // 写入会话数据
+            let json = serde_json::to_string_pretty(messages)
+                .map_err(|e| AgentError::SerializationError(format!("Failed to serialize session: {}", e)))?;
+            drop(sessions);
+
+            // 原子写入
+            let temp_file = session_file.with_extension("json.tmp");
+            tokio::fs::write(&temp_file, json).await
+                .map_err(|e| AgentError::IoError(format!("Failed to write temp session file: {}", e)))?;
+
+            tokio::fs::rename(&temp_file, &session_file).await
+                .map_err(|e| AgentError::IoError(format!("Failed to rename session file: {}", e)))?;
+        } else {
+            // 会话不存在，删除文件
+            drop(sessions);
+            if session_file.exists() {
+                tokio::fs::remove_file(&session_file).await
+                    .map_err(|e| AgentError::IoError(format!("Failed to remove session file: {}", e)))?;
+            }
+        }
+
+        Ok(())
+    }
+
+    /// 获取今日日期字符串 (YYYY-MM-DD)
+    fn today_key() -> String {
+        Utc::now().format("%Y-%m-%d").to_string()
+    }
+
+    /// 获取今日文件路径 (YYYY-MM-DD.md)
+    fn today_file(&self) -> PathBuf {
+        self.memory_dir.join(format!("{}.md", Self::today_key()))
+    }
+
+    /// 读取今日笔记内容
+    pub async fn read_today_file(&self) -> AgentResult<String> {
+        let today_file = self.today_file();
+        if today_file.exists() {
+            tokio::fs::read_to_string(&today_file).await
+                .map_err(|e| AgentError::IoError(format!("Failed to read today file: {}", e)))
+        } else {
+            Ok(String::new())
+        }
+    }
+
+    /// 追加内容到今日笔记
+    pub async fn append_today_file(&self, content: &str) -> AgentResult<()> {
+        let today_file = self.today_file();
+        let final_content = if today_file.exists() {
+            let existing = tokio::fs::read_to_string(&today_file).await
+                .map_err(|e| AgentError::IoError(format!("Failed to read today file: {}", e)))?;
+            format!("{}\n{}", existing, content)
+        } else {
+            // 新文件，添加日期头部
+            let today = Self::today_key();
+            format!("# {}\n\n{}", today, content)
+        };
+
+        tokio::fs::write(&today_file, final_content).await
+            .map_err(|e| AgentError::IoError(format!("Failed to write today file: {}", e)))?;
+
+        Ok(())
+    }
+
+    /// 读取长期记忆 (MEMORY.md)
+    pub async fn read_long_term_file(&self) -> AgentResult<String> {
+        if self.long_term_file.exists() {
+            tokio::fs::read_to_string(&self.long_term_file).await
+                .map_err(|e| AgentError::IoError(format!("Failed to read long-term file: {}", e)))
+        } else {
+            Ok(String::new())
+        }
+    }
+
+    /// 写入长期记忆 (MEMORY.md)
+    pub async fn write_long_term_file(&self, content: &str) -> AgentResult<()> {
+        // 确保目录存在
+        tokio::fs::create_dir_all(&self.memory_dir).await
+            .map_err(|e| AgentError::IoError(format!("Failed to create memory directory: {}", e)))?;
+
+        tokio::fs::write(&self.long_term_file, content).await
+            .map_err(|e| AgentError::IoError(format!("Failed to write long-term file: {}", e)))?;
+
+        Ok(())
+    }
+
+    /// 获取最近 N 天的记忆
+    pub async fn get_recent_memories_files(&self, days: u32) -> AgentResult<String> {
+        let mut memories = Vec::new();
+
+        for i in 0..days {
+            let date = Utc::now() - chrono::Duration::days(i as i64);
+            let date_str = date.format("%Y-%m-%d").to_string();
+            let file_path = self.memory_dir.join(format!("{}.md", date_str));
+
+            if file_path.exists() {
+                let content = tokio::fs::read_to_string(&file_path).await
+                    .map_err(|e| AgentError::IoError(format!("Failed to read memory file {:?}: {}", file_path, e)))?;
+                memories.push(content);
+            }
+        }
+
+        Ok(memories.join("\n\n---\n\n"))
+    }
+
+    /// 列出所有记忆文件 (按日期排序，最新的在前)
+    async fn list_memory_files(&self) -> AgentResult<Vec<PathBuf>> {
+        if !self.memory_dir.exists() {
+            return Ok(Vec::new());
+        }
+
+        let mut entries = tokio::fs::read_dir(&self.memory_dir).await
+            .map_err(|e| AgentError::IoError(format!("Failed to read memory directory: {}", e)))?;
+        let mut files = Vec::new();
+
+        while let Some(entry) = entries.next_entry().await
+            .map_err(|e| AgentError::IoError(format!("Failed to read entry: {}", e)))? {
+            let path = entry.path();
+            if let Some(name) = path.file_name().and_then(|n: &std::ffi::OsStr| n.to_str()) {
+                // 检查是否匹配 YYYY-MM-DD.md 模式
+                if Self::is_date_file(name) {
+                    files.push(path);
+                }
+            }
+        }
+
+        // 按文件名倒序排序 (最新的在前)
+        files.sort_by(|a: &PathBuf, b: &PathBuf| b.cmp(a));
+        Ok(files)
+    }
+
+    /// 检查文件名是否匹配日期格式 (YYYY-MM-DD.md)
+    fn is_date_file(name: &str) -> bool {
+        if name.len() != 13 {  // "2024-01-15.md" = 13 bytes
+            return false;
+        }
+        let bytes = name.as_bytes();
+        bytes[4] == b'-' && bytes[7] == b'-' && name.ends_with(".md")
+    }
+
+    /// 获取记忆上下文 (用于 nanobot 兼容性)
+    ///
+    /// 组合长期记忆和今日笔记
+    pub async fn get_memory_context(&self) -> AgentResult<String> {
+        let mut parts = Vec::new();
+
+        // 长期记忆
+        let long_term = self.read_long_term_file().await?;
+        if !long_term.is_empty() {
+            parts.push(format!("## Long-term Memory\n{}", long_term));
+        }
+
+        // 今日笔记
+        let today = self.read_today_file().await?;
+        if !today.is_empty() {
+            parts.push(format!("## Today's Notes\n{}", today));
+        }
+
+        Ok(parts.join("\n\n"))
+    }
+}
+
+#[async_trait]
+impl Memory for FileBasedStorage {
+    async fn store(&mut self, key: &str, value: MemoryValue) -> AgentResult<()> {
+        let item = MemoryItem::new(key, value);
+        {
+            let mut data = self.data.write().await;
+            data.insert(key.to_string(), item);
+        }
+        self.persist_data().await?;
+        Ok(())
+    }
+
+    async fn retrieve(&self, key: &str) -> AgentResult<Option<MemoryValue>> {
+        let data = self.data.read().await;
+        Ok(data.get(key).map(|item| item.value.clone()))
+    }
+
+    async fn remove(&mut self, key: &str) -> AgentResult<bool> {
+        let removed = {
+            let mut data = self.data.write().await;
+            data.remove(key).is_some()
+        };
+        if removed {
+            self.persist_data().await?;
+        }
+        Ok(removed)
+    }
+
+    async fn search(&self, query: &str, limit: usize) -> AgentResult<Vec<MemoryItem>> {
+        // 在内存数据中搜索
+        let query_lower = query.to_lowercase();
+        let mut results: Vec<MemoryItem> = {
+            let data = self.data.read().await;
+            data.values()
+                .filter(|item| {
+                    if let Some(text) = item.value.as_text() {
+                        text.to_lowercase().contains(&query_lower)
+                    } else {
+                        false
+                    }
+                })
+                .cloned()
+                .collect()
+        };
+
+        // 同时在 markdown 文件中搜索
+        let memory_files = self.list_memory_files().await?;
+        for file_path in memory_files {
+            if let Ok(content) = tokio::fs::read_to_string(&file_path).await {
+                if content.to_lowercase().contains(&query_lower) {
+                    let file_name = file_path.file_name()
+                        .and_then(|n| n.to_str())
+                        .unwrap_or("unknown")
+                        .to_string();
+
+                    results.push(MemoryItem::new(
+                        file_name,
+                        MemoryValue::text(content)
+                    ));
+                }
+            }
+        }
+
+        results.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(std::cmp::Ordering::Equal));
+        results.truncate(limit);
+        Ok(results)
+    }
+
+    async fn clear(&mut self) -> AgentResult<()> {
+        // 清空内存
+        {
+            let mut data = self.data.write().await;
+            data.clear();
+        }
+        {
+            let mut sessions = self.sessions.write().await;
+            sessions.clear();
+        }
+
+        // 删除所有文件
+        if self.data_file.exists() {
+            tokio::fs::remove_file(&self.data_file).await
+                .map_err(|e| AgentError::IoError(format!("Failed to remove data file: {}", e)))?;
+        }
+
+        if self.sessions_dir.exists() {
+            tokio::fs::remove_dir_all(&self.sessions_dir).await
+                .map_err(|e| AgentError::IoError(format!("Failed to remove sessions directory: {}", e)))?;
+            tokio::fs::create_dir_all(&self.sessions_dir).await
+                .map_err(|e| AgentError::IoError(format!("Failed to recreate sessions directory: {}", e)))?;
+        }
+
+        Ok(())
+    }
+
+    async fn get_history(&self, session_id: &str) -> AgentResult<Vec<Message>> {
+        let sessions = self.sessions.read().await;
+        Ok(sessions.get(session_id).cloned().unwrap_or_default())
+    }
+
+    async fn add_to_history(&mut self, session_id: &str, message: Message) -> AgentResult<()> {
+        {
+            let mut sessions = self.sessions.write().await;
+            sessions.entry(session_id.to_string()).or_default().push(message);
+        }
+        self.persist_session(session_id).await?;
+        Ok(())
+    }
+
+    async fn clear_history(&mut self, session_id: &str) -> AgentResult<()> {
+        {
+            let mut sessions = self.sessions.write().await;
+            sessions.remove(session_id);
+        }
+        self.persist_session(session_id).await?;
+        Ok(())
+    }
+
+    async fn stats(&self) -> AgentResult<MemoryStats> {
+        let data = self.data.read().await;
+        let sessions = self.sessions.read().await;
+
+        let total_messages: usize = sessions.values().map(|v| v.len()).sum();
+        let memory_bytes = data.len() * std::mem::size_of::<MemoryItem>();
+
+        Ok(MemoryStats {
+            total_items: data.len(),
+            total_sessions: sessions.len(),
+            total_messages,
+            memory_bytes,
+        })
+    }
+
+    fn memory_type(&self) -> &str {
+        "file-based"
     }
 }

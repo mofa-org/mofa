@@ -172,7 +172,9 @@ pub use types::{
 // 重新导出组件
 pub use components::{
     coordinator::{CoordinationPattern, Coordinator},
-    memory::{Memory, MemoryItem, MemoryValue},
+    memory::{
+        Memory, MemoryItem, MemoryValue, Message, MessageRole, MemoryStats,
+    },
     reasoner::{Reasoner, ReasoningResult},
     tool::{Tool, ToolDescriptor, ToolInput, ToolMetadata, ToolResult},
 };

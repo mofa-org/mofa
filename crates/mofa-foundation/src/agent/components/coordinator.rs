@@ -2,9 +2,9 @@
 //!
 //! 定义多 Agent 协调能力
 
-use crate::agent::context::AgentContext;
-use crate::agent::error::AgentResult;
-use crate::agent::types::AgentOutput;
+use mofa_kernel::agent::context::AgentContext;
+use mofa_kernel::agent::types::AgentOutput;
+use mofa_kernel::agent::AgentResult;
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -321,7 +321,7 @@ pub fn aggregate_outputs(
             outputs
                 .into_iter()
                 .find(|o| !o.is_error())
-                .ok_or_else(|| crate::agent::error::AgentError::CoordinationError(
+                .ok_or_else(|| mofa_kernel::agent::error::AgentError::CoordinationError(
                     "No successful output".to_string()
                 ))
         }

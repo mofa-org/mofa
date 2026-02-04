@@ -8,6 +8,8 @@ pub mod reasoner;
 pub mod tool;
 
 pub use coordinator::{CoordinationPattern, Coordinator, DispatchResult, Task};
-pub use memory::{Memory, MemoryItem, MemoryValue};
+pub use memory::{
+    Memory, MemoryItem, MemoryValue, Message, MessageRole, MemoryStats,
+};
 pub use reasoner::{Decision, Reasoner, ReasoningResult, ThoughtStep};
 pub use tool::{Tool, ToolDescriptor, ToolInput, ToolMetadata, ToolRegistry, ToolResult};

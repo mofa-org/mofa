@@ -24,6 +24,7 @@ pub mod secretary;
 
 // collaboration module - 自适应协作协议
 pub mod collaboration;
+pub mod agent;
 
 // Re-export config types
 pub use config::{AgentInfo, AgentYamlConfig, LLMYamlConfig, RuntimeConfig, ToolConfig};

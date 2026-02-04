@@ -130,6 +130,15 @@ pub mod kernel {
         UnifiedError, UnifiedEvent, UnifiedMessage, UnifiedResult,
     };
 
+    // Memory components
+    pub use mofa_kernel::agent::{
+        Memory, MemoryItem, MemoryValue, Message, MessageRole, MemoryStats,
+    };
+    // Implementations are in foundation
+    pub use mofa_foundation::agent::{
+        InMemoryStorage, FileBasedStorage,
+    };
+
     pub use mofa_foundation::collaboration::{
         CollaborationContent, CollaborationMessage, CollaborationMode,
         CollaborationProtocol, CollaborationResult, CollaborationStats,

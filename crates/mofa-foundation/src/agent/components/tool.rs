@@ -2,8 +2,8 @@
 //!
 //! 定义统一的工具接口，合并 ToolExecutor 和 ReActTool
 
-use crate::agent::context::AgentContext;
-use crate::agent::error::{AgentError, AgentResult};
+use mofa_kernel::agent::context::AgentContext;
+use mofa_kernel::agent::error::{AgentError, AgentResult};
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -462,7 +462,7 @@ impl Tool for EchoTool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::agent::context::AgentContext;
+    use mofa_kernel::agent::context::AgentContext;
 
     #[tokio::test]
     async fn test_echo_tool() {
