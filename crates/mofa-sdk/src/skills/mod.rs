@@ -7,12 +7,12 @@
 
 pub mod manager;
 
-pub use manager::SkillsManager;
+pub use manager::{SkillsManager, SkillInfo};
 
 // 重新导出 skill 相关类型
 pub use mofa_plugins::skill::{
-    DisclosureController, SkillMetadata, SkillParser,
-    SkillState, SkillVersion,
+    DisclosureController, Requirement, RequirementCheck, SkillMetadata, SkillParser,
+    SkillRequirements, SkillState, SkillVersion,
 };
 
 use std::path::PathBuf;
@@ -20,26 +20,47 @@ use std::path::PathBuf;
 /// Skills 管理器构建器
 #[derive(Debug, Clone)]
 pub struct SkillsManagerBuilder {
-    skills_dir: PathBuf,
+    search_dirs: Vec<PathBuf>,
 }
 
 impl SkillsManagerBuilder {
     /// 创建新的构建器
     pub fn new(skills_dir: impl Into<PathBuf>) -> Self {
         Self {
-            skills_dir: skills_dir.into(),
+            search_dirs: vec![skills_dir.into()],
         }
     }
 
-    /// 设置 skills 目录
+    /// 设置 skills 目录（单目录）
     pub fn with_skills_dir(mut self, dir: impl Into<PathBuf>) -> Self {
-        self.skills_dir = dir.into();
+        self.search_dirs = vec![dir.into()];
+        self
+    }
+
+    /// 添加搜索目录（多目录，按优先级排序）
+    pub fn with_search_dirs(mut self, dirs: Vec<PathBuf>) -> Self {
+        self.search_dirs = dirs;
+        self
+    }
+
+    /// 添加一个搜索目录
+    pub fn add_search_dir(mut self, dir: impl Into<PathBuf>) -> Self {
+        self.search_dirs.push(dir.into());
         self
     }
 
     /// 构建 SkillsManager
     pub fn build(&self) -> anyhow::Result<SkillsManager> {
-        SkillsManager::new(&self.skills_dir)
+        SkillsManager::new(&self.search_dirs[0])
+    }
+
+    /// 构建支持多目录的 SkillsManager
+    pub fn build_multi(&self) -> anyhow::Result<SkillsManager> {
+        if self.search_dirs.len() == 1 {
+            SkillsManager::new(&self.search_dirs[0])
+        } else {
+            SkillsManager::with_search_dirs(self.search_dirs.clone())
+        }
     }
 }
 

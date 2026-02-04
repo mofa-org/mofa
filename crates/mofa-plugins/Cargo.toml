@@ -32,6 +32,7 @@ rhai = { version = "1.20", features = ["sync", "serde"] }
 url = "2.5.7"
 regex = "1.12.2"
 walkdir = "2.4"
+which = "7"
 # TTS support (optional - using kokoros for real TTS)
 rodio = { version = "0.17", optional = true }
 kokoro-tts = { git = "https://github.com/aios-rs/kokoro.git", branch = "master", optional = true }

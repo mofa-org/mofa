@@ -23,6 +23,15 @@ pub struct SkillMetadata {
     /// 作者
     #[serde(default)]
     pub author: Option<String>,
+    /// 是否始终加载（always skills）
+    #[serde(default)]
+    pub always: bool,
+    /// 依赖要求
+    #[serde(default)]
+    pub requires: Option<SkillRequirements>,
+    /// 安装指令
+    #[serde(default)]
+    pub install: Option<String>,
 }
 
 /// Skill 版本信息
@@ -52,4 +61,33 @@ pub struct CodeFile {
     pub language: String,
     /// 执行命令模板
     pub command: Option<String>,
+}
+
+/// Skill 依赖要求
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct SkillRequirements {
+    /// 需要的 CLI 工具
+    #[serde(default)]
+    pub cli_tools: Vec<String>,
+    /// 需要的环境变量
+    #[serde(default)]
+    pub env_vars: Vec<String>,
+}
+
+/// 依赖项类型
+#[derive(Debug, Clone, PartialEq)]
+pub enum Requirement {
+    /// CLI 工具
+    CliTool(String),
+    /// 环境变量
+    EnvVar(String),
+}
+
+/// 依赖检查结果
+#[derive(Debug, Clone, Default)]
+pub struct RequirementCheck {
+    /// 是否满足所有要求
+    pub satisfied: bool,
+    /// 缺失的依赖
+    pub missing: Vec<Requirement>,
 }

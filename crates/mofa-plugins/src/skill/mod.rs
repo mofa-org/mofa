@@ -7,5 +7,5 @@ pub mod parser;
 pub mod disclosure;
 
 pub use disclosure::DisclosureController;
-pub use metadata::{CodeFile, SkillMetadata, SkillState, SkillVersion};
+pub use metadata::{CodeFile, Requirement, RequirementCheck, SkillMetadata, SkillRequirements, SkillState, SkillVersion};
 pub use parser::SkillParser;

@@ -786,8 +786,8 @@ pub mod dora {
 // Agent Skills - Progressive Disclosure Skills System
 // =============================================================================
 
-// Module declaration for skills
-mod skills;
+// Module declaration for skills (public)
+pub mod skills;
 
 // Public skills module with re-exports
 pub mod skill_api {
