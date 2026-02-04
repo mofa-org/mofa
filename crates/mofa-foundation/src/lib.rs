@@ -4,6 +4,9 @@ pub mod prompt;
 // react module
 pub mod react;
 
+// messaging module
+pub mod messaging;
+
 // persistence module
 pub mod persistence;
 
@@ -28,6 +31,9 @@ pub mod agent;
 
 // Re-export config types
 pub use config::{AgentInfo, AgentYamlConfig, LLMYamlConfig, RuntimeConfig, ToolConfig};
+
+// Re-export messaging types
+pub use messaging::{MessageBus, InboundMessage, OutboundMessage, SimpleInboundMessage, SimpleOutboundMessage};
 
 // Re-export prompt types
 pub use prompt::{

@@ -5,7 +5,7 @@
 use mofa_kernel::agent::components::tool::{
     LLMTool, ToolDescriptor, ToolInput, ToolMetadata, ToolRegistry, ToolResult,
 };
-use mofa_kernel::agent::context::AgentContext;
+use mofa_kernel::agent::context::CoreAgentContext;
 use mofa_kernel::agent::error::{AgentError, AgentResult};
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
@@ -94,6 +94,143 @@ pub trait ToolExt: mofa_kernel::agent::components::tool::Tool {
 
     /// Get this tool as `Any` for downcasting
     fn as_any(&self) -> &dyn Any;
+}
+
+// ============================================================================
+// SimpleTool - Convenience trait for tools that don't need context
+// ============================================================================
+
+/// Simple tool trait for tools that don't need AgentContext
+///
+/// This is a convenience trait for implementing simple tools that only need
+/// the input parameters and don't require access to the agent context.
+/// SimpleToolAdapter automatically implements the full Tool trait.
+///
+/// # Example
+///
+/// ```rust,ignore
+/// use mofa_foundation::agent::components::tool::{SimpleTool, ToolInput, ToolResult};
+/// use serde_json::json;
+///
+/// struct HelloTool;
+///
+/// impl SimpleTool for HelloTool {
+///     fn name(&self) -> &str {
+///         "hello"
+///     }
+///
+///     fn description(&self) -> &str {
+///         "Says hello to someone"
+///     }
+///
+///     fn parameters_schema(&self) -> serde_json::Value {
+///         json!({
+///             "type": "object",
+///             "properties": {
+///                 "name": {"type": "string"}
+///             },
+///             "required": ["name"]
+///         })
+///     }
+///
+///     async fn execute(&self, input: ToolInput) -> ToolResult {
+///         let name = input.get_str("name").unwrap_or("World");
+///         ToolResult::success_text(format!("Hello, {}!", name))
+///     }
+/// }
+/// ```
+#[async_trait]
+pub trait SimpleTool: Send + Sync {
+    /// Get the tool's name
+    fn name(&self) -> &str;
+
+    /// Get the tool's description
+    fn description(&self) -> &str;
+
+    /// Get the JSON Schema for the tool's parameters
+    fn parameters_schema(&self) -> Value;
+
+    /// Execute the tool with given input (no context needed)
+    async fn execute(&self, input: ToolInput) -> ToolResult;
+
+    /// Get tool metadata (optional override)
+    fn metadata(&self) -> ToolMetadata {
+        ToolMetadata::default()
+    }
+
+    /// Get tool category (optional override)
+    fn category(&self) -> ToolCategory {
+        ToolCategory::Custom
+    }
+}
+
+/// Adapter that implements the full Tool trait for SimpleTool
+///
+/// This adapter wraps a SimpleTool and implements the Tool trait by
+/// ignoring the AgentContext parameter.
+pub struct SimpleToolAdapter<T: SimpleTool> {
+    inner: T,
+}
+
+impl<T: SimpleTool> SimpleToolAdapter<T> {
+    /// Create a new adapter from a SimpleTool
+    pub fn new(inner: T) -> Self {
+        Self { inner }
+    }
+
+    /// Get a reference to the inner tool
+    pub fn inner(&self) -> &T {
+        &self.inner
+    }
+}
+
+#[async_trait]
+impl<T: SimpleTool + Send + Sync + 'static> mofa_kernel::agent::components::tool::Tool for SimpleToolAdapter<T> {
+    fn name(&self) -> &str {
+        self.inner.name()
+    }
+
+    fn description(&self) -> &str {
+        self.inner.description()
+    }
+
+    fn parameters_schema(&self) -> Value {
+        self.inner.parameters_schema()
+    }
+
+    async fn execute(&self, input: ToolInput, _ctx: &CoreAgentContext) -> ToolResult {
+        self.inner.execute(input).await
+    }
+
+    fn metadata(&self) -> ToolMetadata {
+        self.inner.metadata()
+    }
+}
+
+impl<T: SimpleTool + 'static> ToolExt for SimpleToolAdapter<T> {
+    fn category(&self) -> ToolCategory {
+        self.inner.category()
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+}
+
+/// Convenience function to convert a SimpleTool into an Arc<dyn Tool>
+///
+/// # Example
+///
+/// ```rust,ignore
+/// use mofa_foundation::agent::components::tool::{SimpleTool, as_tool};
+/// use std::sync::Arc;
+///
+/// let tool = Arc::new(MySimpleTool);
+/// let tool_ref = as_tool(tool);
+/// registry.register(tool_ref)?;
+/// ```
+pub fn as_tool<T: SimpleTool + Send + Sync + 'static>(tool: T) -> Arc<dyn mofa_kernel::agent::components::tool::Tool> {
+    Arc::new(SimpleToolAdapter::new(tool))
 }
 
 // ============================================================================
@@ -187,7 +324,7 @@ impl mofa_kernel::agent::components::tool::Tool for EchoTool {
         })
     }
 
-    async fn execute(&self, input: ToolInput, _ctx: &AgentContext) -> ToolResult {
+    async fn execute(&self, input: ToolInput, _ctx: &CoreAgentContext) -> ToolResult {
         if let Some(message) = input.get_str("message") {
             ToolResult::success_text(message)
         } else if let Some(raw) = &input.raw_input {
@@ -216,7 +353,7 @@ mod tests {
     #[tokio::test]
     async fn test_echo_tool() {
         let tool = EchoTool;
-        let ctx = AgentContext::new("test");
+        let ctx = CoreAgentContext::new("test");
         let input = ToolInput::from_json(json!({"message": "Hello!"}));
 
         let result = tool.execute(input, &ctx).await;
@@ -247,9 +384,92 @@ mod tests {
         assert!(registry.contains("echo"));
         assert_eq!(registry.count(), 1);
 
-        let ctx = AgentContext::new("test");
+        let ctx = CoreAgentContext::new("test");
         let result = registry
             .execute("echo", ToolInput::from_json(json!({"message": "test"})), &ctx)
+            .await
+            .unwrap();
+
+        assert!(result.success);
+    }
+
+    // SimpleTool tests
+    struct TestSimpleTool {
+        name: String,
+    }
+
+    #[async_trait]
+    impl SimpleTool for TestSimpleTool {
+        fn name(&self) -> &str {
+            &self.name
+        }
+
+        fn description(&self) -> &str {
+            "A test tool"
+        }
+
+        fn parameters_schema(&self) -> Value {
+            json!({
+                "type": "object",
+                "properties": {
+                    "value": {"type": "string"}
+                }
+            })
+        }
+
+        async fn execute(&self, input: ToolInput) -> ToolResult {
+            if let Some(value) = input.get_str("value") {
+                ToolResult::success_text(format!("Got: {}", value))
+            } else {
+                ToolResult::failure("No value provided")
+            }
+        }
+
+        fn category(&self) -> ToolCategory {
+            ToolCategory::Custom
+        }
+    }
+
+    #[tokio::test]
+    async fn test_simple_tool() {
+        let tool = TestSimpleTool { name: "test_tool".to_string() };
+        let input = ToolInput::from_json(json!({"value": "hello"}));
+
+        let result = tool.execute(input).await;
+        assert!(result.success);
+        assert_eq!(result.as_text(), Some("Got: hello"));
+    }
+
+    #[tokio::test]
+    async fn test_simple_tool_adapter() {
+        let simple_tool = TestSimpleTool { name: "test_adapter".to_string() };
+        let adapter = SimpleToolAdapter::new(simple_tool);
+
+        assert_eq!(adapter.name(), "test_adapter");
+        assert_eq!(adapter.description(), "A test tool");
+        assert_eq!(adapter.category(), ToolCategory::Custom);
+
+        let ctx = CoreAgentContext::new("test");
+        let input = ToolInput::from_json(json!({"value": "world"}));
+
+        let result = mofa_kernel::agent::components::tool::Tool::execute(&adapter, input, &ctx).await;
+        assert!(result.success);
+        assert_eq!(result.as_text(), Some("Got: world"));
+    }
+
+    #[tokio::test]
+    async fn test_as_tool_function() {
+        let simple_tool = TestSimpleTool { name: "test_as_tool".to_string() };
+        let tool_ref = as_tool(simple_tool);
+
+        let mut registry = SimpleToolRegistry::new();
+        registry.register(tool_ref).unwrap();
+
+        assert!(registry.contains("test_as_tool"));
+
+        let ctx = CoreAgentContext::new("test");
+        let result = registry
+            .execute("test_as_tool", ToolInput::from_json(json!({"value": "test"})), &ctx)
             .await
             .unwrap();
 

@@ -52,4 +52,7 @@ pub use memory::{
 pub use reasoner::DirectReasoner;
 
 // Tool 扩展和实现
-pub use tool::{EchoTool, SimpleToolRegistry, ToolCategory, ToolExt};
+pub use tool::{
+    EchoTool, SimpleToolRegistry, ToolCategory, ToolExt,
+    SimpleTool, SimpleToolAdapter, as_tool,
+};

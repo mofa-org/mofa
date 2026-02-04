@@ -257,6 +257,7 @@
 //!     .await?;
 //! ```
 
+pub mod adapter;
 pub mod agent;
 pub mod client;
 pub mod plugin;
@@ -270,7 +271,17 @@ pub mod multi_agent;
 pub mod pipeline;
 pub mod openai;
 
+// Framework components
+pub mod agent_loop;
+pub mod task_orchestrator;
+pub mod context;
+pub mod vision;
+
+// Audio processing
+pub mod transcription;
+
 // Re-export 核心类型
+pub use adapter::{LegacyLLMProvider, LLMProviderAdapter, LLMResponse, LegacyToolCall, as_llm_provider};
 pub use client::{function_tool, ChatRequestBuilder, ChatSession, LLMClient, ToolExecutor};
 pub use plugin::{LLMCapability, LLMPlugin, MockLLMProvider};
 pub use provider::{
@@ -306,3 +317,22 @@ pub use pipeline::{
     agent_pipe, agent_pipe_with_templates, ask_with_template, batch_ask, quick_ask, Pipeline,
     StreamPipeline,
 };
+
+// Re-export framework components
+pub use agent_loop::{AgentLoop, AgentLoopConfig, SimpleToolExecutor};
+pub use task_orchestrator::{
+    TaskOrchestrator, TaskOrchestratorConfig, TaskOrigin, BackgroundTask, TaskStatus, TaskResult,
+};
+pub use context::{AgentContextBuilder, AgentIdentity, SkillsManager, NoOpSkillsManager};
+pub use vision::{
+    encode_image_data_url, encode_image_url, build_vision_message, build_vision_chat_message,
+    build_vision_chat_message_single, image_url_from_string, image_url_with_detail,
+    ImageDetailExt, is_image_file, get_mime_type,
+};
+// ImageDetail is already re-exported via types::*;
+
+// Re-export our ToolExecutor as AgentLoopToolExecutor to avoid conflicts
+pub use agent_loop::ToolExecutor as AgentLoopToolExecutor;
+
+// Re-export transcription module
+pub use transcription::{TranscriptionProvider, GroqTranscriptionProvider, OpenAITranscriptionProvider};

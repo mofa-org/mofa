@@ -35,6 +35,8 @@ pub use components::{
     ParallelCoordinator, SequentialCoordinator, SimpleToolRegistry,
     // Foundation 扩展类型
     ToolCategory, ToolExt,
+    // SimpleTool 便捷接口
+    SimpleTool, SimpleToolAdapter, as_tool,
 };
 
 // Re-export context module

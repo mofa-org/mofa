@@ -92,6 +92,9 @@ pub mod kernel {
         AgentOutput, AgentResult,
     };
 
+    // Context types (CoreAgentContext is the new preferred context)
+    pub use mofa_kernel::agent::context::CoreAgentContext;
+
     // Agent metadata and state
     pub use mofa_kernel::agent::{
         AgentMetadata, AgentState,
@@ -152,6 +155,17 @@ pub mod kernel {
 
     // Tool system with categories
     pub use mofa_foundation::agent::ToolCategory;
+
+    // Tool system core interfaces (from kernel)
+    pub use mofa_kernel::agent::components::tool::{
+        Tool, ToolInput, ToolResult, ToolMetadata, ToolRegistry, ToolDescriptor, LLMTool,
+    };
+
+    // Tool registry implementation (from foundation)
+    pub use mofa_foundation::agent::SimpleToolRegistry;
+
+    // SimpleTool convenience trait and adapter (from foundation)
+    pub use mofa_foundation::agent::{SimpleTool, SimpleToolAdapter, as_tool};
 
     // Agent executor for LLM-based agents
     pub use mofa_foundation::agent::{
@@ -227,6 +241,7 @@ pub mod runtime {
 pub mod foundation {
     pub use super::collaboration;
     pub use super::llm;
+    pub use super::messaging;
     pub use super::persistence;
     pub use super::react;
     pub use super::secretary;
@@ -677,6 +692,37 @@ pub mod persistence {
             .with_system_prompt(system_prompt)
             .with_plugin(plugin))
     }
+}
+
+// =============================================================================
+// Messaging module (re-export from mofa-foundation)
+// =============================================================================
+
+// Re-export Messaging module from mofa-foundation
+pub mod messaging {
+    //! Generic message bus framework for decoupled agent architectures
+    //!
+    //! Provides:
+    //! - Generic message types with pub/sub patterns
+    //! - Inbound/outbound message separation
+    //! - Trait-based message contracts
+    //!
+    //! # Quick Start
+    //!
+    //! ```rust,ignore
+    //! use mofa_sdk::messaging::{MessageBus, SimpleInboundMessage, SimpleOutboundMessage};
+    //!
+    //! let bus = MessageBus::new(100);
+    //!
+    //! // Subscribe to inbound messages
+    //! let mut rx = bus.subscribe_inbound();
+    //!
+    //! // Publish a message
+    //! let msg = SimpleInboundMessage::new("telegram", "user", "chat", "Hello");
+    //! bus.publish_inbound(msg).await?;
+    //! ```
+
+    pub use mofa_foundation::messaging::*;
 }
 
 // =============================================================================
