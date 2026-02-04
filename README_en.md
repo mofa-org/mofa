@@ -45,35 +45,36 @@
 </p>
 
 ## Overview
-MoFA (Modular Framework for Agents) is not just another agent framework.
-It is the first production-grade agent framework achieving **"write once, share across languages"**, focusing on **extreme performance, unlimited extensibility, and runtime programmability**.
-Through revolutionary architectural design, it creates an innovative **dual-layer plugin system** (compile-time plugins + runtime plugins), achieving a rare perfect balance of "performance and flexibility" in the industry.
+MoFA (Modular Framework for Agents) is not just another entry in the crowded agent framework landscape.
+It is the first production-grade framework to achieve **"write once, run everywhere"** across languages, built for **extreme performance, boundless extensibility, and runtime programmability**.
+Through its revolutionary microkernel architecture and innovative **dual-layer plugin system** (compile-time + runtime), MoFA strikes the elusive balance between raw performance and dynamic flexibility.
 
-MoFA's Breakthroughs:</br>
-✅ Rust Core + UniFFI: Extreme performance + native multi-language calls</br>
-✅ Dual-layer plugins: Compile-time high performance + runtime zero-deployment modification</br>
-✅ Microkernel architecture: Modular, easy to extend</br>
-✅ Cloud-native: Native support for distributed and edge computing</br>
+What Sets MoFA Apart:</br>
+✅ **Rust Core + UniFFI**: Blazing performance with native multi-language interoperability</br>
+✅ **Dual-Layer Plugins**: Zero-cost compile-time extensions meet hot-swappable runtime scripts</br>
+✅ **Microkernel Architecture**: Clean separation of concerns, effortless to extend</br>
+✅ **Cloud-Native by Design**: First-class support for distributed and edge deployments</br>
 
-## Why Choose MoFA?
-### **Performance Advantages**
+## Why MoFA?
 
-- Built on Rust with zero-cost abstractions
-- Memory safety guarantees
-- Significant performance improvements over Python ecosystem frameworks
+### **Performance**
 
-### **Multi-Language Support**
+- Zero-cost abstractions in Rust
+- Memory safety without garbage collection
+- Orders of magnitude faster than Python-based frameworks
 
-- Generate Python, Java, Go, Kotlin, Swift bindings via UniFFI
-- Support calling Rust core logic from multiple languages
-- Cross-language call performance superior to traditional FFI solutions
+### **Polyglot by Design**
+
+- Auto-generated bindings for Python, Java, Go, Kotlin, Swift via UniFFI
+- Call Rust core logic natively from any supported language
+- Near-zero overhead compared to traditional FFI
 
 ### **Runtime Programmability**
 
-- Integrated Rhai scripting engine
-- Support hot-reload business logic
-- Support runtime configuration and rule adjustments
-- User-defined extensions
+- Embedded Rhai scripting engine
+- Hot-reload business logic without recompilation
+- Runtime configuration and rule adjustments
+- User-defined extensions on the fly
 
 ### **Dual-Layer Plugin Architecture**
 
@@ -81,17 +82,17 @@ MoFA's Breakthroughs:</br>
 - **Runtime plugins**: Dynamic loading, instant effect
 - Support plugin hot loading and version management
 
-### **Distributed Dataflow (Dora)**
+### **Distributed by Nature**
 
-- Support Dora-rs distributed runtime
-- Cross-process/cross-machine agent communication
-- Suitable for edge computing scenarios
+- Built on Dora-rs for distributed dataflow
+- Seamless cross-process, cross-machine agent communication
+- Edge computing ready
 
-### **Actor Concurrency Model (Ractor)**
+### **Actor-Model Concurrency**
 
-- Good isolation between agents
-- Message-driven architecture
-- Support high-concurrency scenarios
+- Isolated agent processes via Ractor
+- Message-passing architecture
+- Battle-tested for high-concurrency workloads
 
 ## Core Architecture
 
