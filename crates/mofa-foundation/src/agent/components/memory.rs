@@ -420,9 +420,7 @@ impl FileBasedStorage {
         bytes[4] == b'-' && bytes[7] == b'-' && name.ends_with(".md")
     }
 
-    /// 获取记忆上下文 (用于 nanobot 兼容性)
-    ///
-    /// 组合长期记忆和今日笔记
+    /// 获取记忆上下文
     pub async fn get_memory_context(&self) -> AgentResult<String> {
         let mut parts = Vec::new();
 
@@ -439,6 +437,31 @@ impl FileBasedStorage {
         }
 
         Ok(parts.join("\n\n"))
+    }
+
+    /// 读取今日笔记
+    pub async fn read_today(&self) -> AgentResult<String> {
+        self.read_today_file().await
+    }
+
+    /// 追加今日笔记
+    pub async fn append_today(&self, content: &str) -> AgentResult<()> {
+        self.append_today_file(content).await
+    }
+
+    /// 读取长期记忆
+    pub async fn read_long_term(&self) -> AgentResult<String> {
+        self.read_long_term_file().await
+    }
+
+    /// 写入长期记忆
+    pub async fn write_long_term(&self, content: &str) -> AgentResult<()> {
+        self.write_long_term_file(content).await
+    }
+
+    /// 获取最近记忆
+    pub async fn get_recent_memories(&self, days: u32) -> AgentResult<String> {
+        self.get_recent_memories_files(days).await
     }
 }
 

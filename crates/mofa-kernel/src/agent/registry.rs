@@ -516,21 +516,26 @@ impl AgentRegistry {
 mod tests {
     use super::*;
     use crate::agent::capabilities::AgentCapabilities;
-    use crate::agent::context::AgentContext;
+    use crate::agent::context::CoreAgentContext;
     use crate::agent::core::MoFAAgent;
     use crate::agent::error::AgentResult;
-    use crate::agent::traits::BaseAgent;
     use crate::agent::types::{AgentInput, AgentOutput, AgentState};
 
-    // 测试用的简单 Agent
+    // 测试用的简单 Agent (内联实现，不依赖 BaseAgent)
     struct TestAgent {
-        base: BaseAgent,
+        id: String,
+        name: String,
+        capabilities: AgentCapabilities,
+        state: AgentState,
     }
 
     impl TestAgent {
         fn new(id: &str, name: &str) -> Self {
             Self {
-                base: BaseAgent::new(id, name),
+                id: id.to_string(),
+                name: name.to_string(),
+                capabilities: AgentCapabilities::default(),
+                state: AgentState::Created,
             }
         }
     }
@@ -538,31 +543,33 @@ mod tests {
     #[async_trait]
     impl MoFAAgent for TestAgent {
         fn id(&self) -> &str {
-            self.base.id()
+            &self.id
         }
 
         fn name(&self) -> &str {
-            self.base.name()
+            &self.name
         }
 
         fn capabilities(&self) -> &AgentCapabilities {
-            self.base.capabilities()
+            &self.capabilities
         }
 
-        async fn initialize(&mut self, ctx: &AgentContext) -> AgentResult<()> {
-            self.base.initialize(ctx).await
+        fn state(&self) -> AgentState {
+            self.state.clone()
         }
 
-        async fn execute(&mut self, _input: AgentInput, _ctx: &AgentContext) -> AgentResult<AgentOutput> {
+        async fn initialize(&mut self, _ctx: &CoreAgentContext) -> AgentResult<()> {
+            self.state = AgentState::Ready;
+            Ok(())
+        }
+
+        async fn execute(&mut self, _input: AgentInput, _ctx: &CoreAgentContext) -> AgentResult<AgentOutput> {
             Ok(AgentOutput::text("test output"))
         }
 
         async fn shutdown(&mut self) -> AgentResult<()> {
-            self.base.shutdown().await
-        }
-
-        fn state(&self) -> AgentState {
-            self.base.state()
+            self.state = AgentState::Shutdown;
+            Ok(())
         }
     }
 
@@ -621,13 +628,13 @@ mod tests {
 
         // 创建带有标签的 Agent
         let mut agent1 = TestAgent::new("agent-1", "Agent 1");
-        agent1.base.capabilities = AgentCapabilities::builder()
+        agent1.capabilities = AgentCapabilities::builder()
             .with_tag("llm")
             .with_tag("chat")
             .build();
 
         let mut agent2 = TestAgent::new("agent-2", "Agent 2");
-        agent2.base.capabilities = AgentCapabilities::builder()
+        agent2.capabilities = AgentCapabilities::builder()
             .with_tag("react")
             .with_tag("chat")
             .build();

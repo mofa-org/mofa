@@ -155,3 +155,197 @@ The `examples/` directory contains 17+ examples demonstrating various features:
 - `monitoring_dashboard/`: Observability features
 
 Review these when implementing new features to understand existing patterns.
+
+---
+
+## MoFA Microkernel Architecture Standards
+
+### Architecture Layering
+
+MoFA follows a strict microkernel architecture with clear separation of concerns:
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    mofa-sdk (Unified API)                   │
+│  - External unified interface                                 │
+│  - Re-exports core types from kernel and foundation          │
+└─────────────────────────────────────────────────────────────┘
+                            ↓
+┌─────────────────────────────────────────────────────────────┐
+│              mofa-runtime (Execution Lifecycle)              │
+│  - AgentRegistry, EventLoop, PluginManager                  │
+│  - Dynamic loading and plugin management                      │
+└─────────────────────────────────────────────────────────────┘
+                            ↓
+┌─────────────────────────────────────────────────────────────┐
+│            mofa-foundation (Business Logic)                  │
+│  - ✅ Concrete implementations (InMemoryStorage, SimpleToolRegistry) |
+│  - ✅ Extended types (RichAgentContext, business-specific data)  |
+│  - ❌ FORBIDDEN: Re-defining kernel traits                          │
+│  - ✅ ALLOWED: Importing and extending kernel traits                   │
+└─────────────────────────────────────────────────────────────┘
+                            ↓
+┌─────────────────────────────────────────────────────────────┐
+│              mofa-kernel (Microkernel Core)                  │
+│  - ✅ Trait definitions (Tool, Memory, Reasoner, etc.)       │
+│  - ✅ Core data types (AgentInput, AgentOutput, AgentState)  │
+│  - ✅ Base abstractions (MoFAAgent, AgentPlugin)             │
+│  - ❌ FORBIDDEN: Concrete implementations (except test code)   │
+│  - ❌ FORBIDDEN: Business logic                                │
+└─────────────────────────────────────────────────────────────┘
+                            ↓
+┌─────────────────────────────────────────────────────────────┐
+│            mofa-plugins (Plugin Layer)                       │
+│  - Plugin adapters (ToolPluginAdapter)                       │
+│  - Concrete plugin implementations                            │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### Core Rules
+
+#### Rule 1: Trait Definition Location
+- ✅ **Kernel Layer**: Define ALL core trait interfaces
+- ❌ **Foundation Layer**: NEVER re-define the same trait from kernel
+- ✅ **Foundation Layer**: CAN import traits from kernel and add extension methods
+
+#### Rule 2: Implementation Location
+- ✅ **Foundation Layer**: Provide ALL concrete implementations
+- ❌ **Kernel Layer**: NO concrete implementations (test code excepted)
+- ✅ **Plugins Layer**: Provide optional advanced implementations
+
+#### Rule 3: Type Exports
+- ✅ **Kernel**: Export only types it defines
+- ✅ **Foundation**: Export only types it implements, NOT re-export kernel traits
+- ✅ **SDK**: Unified re-export of user-facing APIs
+
+#### Rule 4: Data Types
+- ✅ **Kernel Layer**: Base data types (AgentInput, AgentOutput, AgentState, ToolInput, ToolResult)
+- ✅ **Foundation Layer**: Business-specific data types (Session, PromptContext, ComponentOutput)
+- ⚠️ **Boundary**: If a type is part of a trait definition, put it in kernel; if business-specific, put it in foundation
+
+#### Rule 5: Dependency Direction
+```
+Foundation → Kernel (ALLOWED)
+Plugins → Kernel (ALLOWED)
+Plugins → Foundation (ALLOWED)
+Kernel → Foundation (FORBIDDEN! Creates circular dependency)
+```
+
+### Code Checklist
+
+#### Kernel Layer Checklist
+- [ ] Is this a trait definition? ✅ Otherwise it shouldn't be here
+- [ ] Is this a core data type? ✅ AgentInput/Output/State, ToolInput/Result, etc.
+- [ ] Is this a base type? ✅ Interfaces, primitives
+- [ ] Does it contain concrete implementations? ❌ Move to foundation
+
+#### Foundation Layer Checklist
+- [ ] Does it re-define a kernel trait? ❌ Import from kernel instead
+- [ ] Is this a concrete implementation? ✅ Correct location
+- [ ] Does it depend on kernel types? ✅ Allowed: `use mofa_kernel::...`
+- [ ] Is it depended on by kernel? ❌ Creates circular dependency
+
+#### Type Export Checklist
+- [ ] Does foundation re-export kernel traits? ❌ Remove duplicate exports
+- [ ] Can users clearly tell which layer a type comes from? ✅ Should be clear
+- [ ] Are there naming conflicts? ❌ Should be avoided
+
+### Common Anti-Patterns
+
+#### ❌ Anti-Pattern 1: Foundation Re-defining Kernel Trait
+
+```rust
+// crates/mofa-foundation/src/agent/components/tool.rs
+// ❌ WRONG: Re-defining kernel trait in foundation
+#[async_trait]
+pub trait Tool: Send + Sync {
+    fn name(&self) -> &str;
+    // ...
+}
+```
+
+**Correct Approach**:
+```rust
+// ✅ CORRECT: Import from kernel
+pub use mofa_kernel::agent::components::tool::Tool;
+
+// If you need to extend, define a wrapper
+pub struct FoundationTool {
+    inner: Arc<dyn Tool>,
+    extra_field: String,
+}
+```
+
+#### ❌ Anti-Pattern 2: Kernel Containing Concrete Implementation
+
+```rust
+// crates/mofa-kernel/src/agent/components/tool.rs
+// ❌ WRONG: Kernel should not contain concrete implementations
+pub struct SimpleToolRegistry {
+    tools: HashMap<String, Arc<dyn Tool>>,
+}
+
+#[async_trait]
+impl ToolRegistry for SimpleToolRegistry {
+    // Implementation...
+}
+```
+
+**Correct Approach**:
+```rust
+// ✅ CORRECT: Only define trait in kernel
+#[async_trait]
+pub trait ToolRegistry: Send + Sync {
+    fn register(&mut self, tool: Arc<dyn Tool>) -> AgentResult<()>;
+    // ...
+}
+
+// Concrete implementation goes in foundation
+// crates/mofa-foundation/src/agent/components/tool_registry.rs
+pub struct SimpleToolRegistry {
+    tools: HashMap<String, Arc<dyn Tool>>,
+}
+
+#[async_trait]
+impl ToolRegistry for SimpleToolRegistry {
+    // Implementation...
+}
+```
+
+#### ❌ Anti-Pattern 3: Duplicate Exports Causing Type Confusion
+
+```rust
+// crates/mofa-foundation/src/agent/mod.rs
+// ❌ WRONG: Duplicate exports of kernel types
+pub use mofa_kernel::agent::{Tool, ToolRegistry};
+pub use components::tool::{Tool, ToolRegistry, SimpleToolRegistry};
+```
+
+**Correct Approach**:
+```rust
+// ✅ CORRECT: Foundation exports only what it implements
+pub use components::tool_registry::{SimpleToolRegistry, EchoTool};
+pub use components::tool::ToolCategory; // Foundation-specific extension
+
+// Tool and ToolRegistry are exported by kernel, no need to re-export here
+```
+
+### Identifying Architecture Violations
+
+When reviewing code, check for these warning signs:
+
+1. **Same trait name in multiple crates**: Indicates duplicate definition
+2. **Foundation `pub use` of kernel traits with custom modifications**: Likely should be extension not replacement
+3. **Kernel `pub struct` with trait implementations**: Concrete code in wrong layer
+4. **Circular dependency warnings in Cargo.toml**: Architecture violation
+
+### Quick Reference
+
+| What | Where | Example |
+|-------|-------|---------|
+| **Trait definitions** | `mofa-kernel` | `Tool`, `Memory`, `Reasoner`, `Coordinator` |
+| **Core data types** | `mofa-kernel` | `AgentInput`, `AgentOutput`, `AgentState` |
+| **Base abstractions** | `mofa-kernel` | `MoFAAgent`, `AgentPlugin` |
+| **Concrete implementations** | `mofa-foundation` | `SimpleToolRegistry`, `InMemoryStorage` |
+| **Business types** | `mofa-foundation` | `Session`, `PromptContext`, `RichAgentContext` |
+| **Plugin implementations** | `mofa-plugins` | `ToolPluginAdapter`, `LLMPlugin` |

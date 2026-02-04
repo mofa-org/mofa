@@ -594,20 +594,25 @@ impl ExecutionEngine {
 mod tests {
     use super::*;
     use crate::agent::capabilities::AgentCapabilities;
+    use crate::agent::context::CoreAgentContext;
     use crate::agent::core::MoFAAgent;
-    use crate::agent::traits::BaseAgent;
+    use crate::agent::types::AgentState;
 
-    // 测试用 Agent
+    // 测试用 Agent (内联实现，不依赖 BaseAgent)
     struct TestAgent {
-        base: BaseAgent,
+        id: String,
         response: String,
+        capabilities: AgentCapabilities,
+        state: AgentState,
     }
 
     impl TestAgent {
         fn new(id: &str, response: &str) -> Self {
             Self {
-                base: BaseAgent::new(id, id),
+                id: id.to_string(),
                 response: response.to_string(),
+                capabilities: AgentCapabilities::default(),
+                state: AgentState::Created,
             }
         }
     }
@@ -615,35 +620,37 @@ mod tests {
     #[async_trait::async_trait]
     impl MoFAAgent for TestAgent {
         fn id(&self) -> &str {
-            self.base.id()
+            &self.id
         }
 
         fn name(&self) -> &str {
-            self.base.name()
+            &self.id
         }
 
         fn capabilities(&self) -> &AgentCapabilities {
-            self.base.capabilities()
+            &self.capabilities
         }
 
-        async fn initialize(&mut self, ctx: &AgentContext) -> AgentResult<()> {
-            self.base.initialize(ctx).await
+        fn state(&self) -> AgentState {
+            self.state.clone()
+        }
+
+        async fn initialize(&mut self, _ctx: &CoreAgentContext) -> AgentResult<()> {
+            self.state = AgentState::Ready;
+            Ok(())
         }
 
         async fn execute(
             &mut self,
             _input: AgentInput,
-            _ctx: &AgentContext,
+            _ctx: &CoreAgentContext,
         ) -> AgentResult<AgentOutput> {
             Ok(AgentOutput::text(&self.response))
         }
 
         async fn shutdown(&mut self) -> AgentResult<()> {
-            self.base.shutdown().await
-        }
-
-        fn state(&self) -> AgentState {
-            self.base.state()
+            self.state = AgentState::Shutdown;
+            Ok(())
         }
     }
 

@@ -143,7 +143,7 @@ pub use capabilities::{
     AgentCapabilities, AgentCapabilitiesBuilder, AgentRequirements, AgentRequirementsBuilder,
     ReasoningStrategy,
 };
-pub use context::{AgentContext, AgentEvent, ContextConfig, EventBus, ExecutionMetrics};
+pub use context::{AgentContext, AgentEvent, ContextConfig, CoreAgentContext, EventBus};
 pub use core::{
     // MoFAAgent - 统一的 Agent 接口
     AgentLifecycle,
@@ -151,7 +151,7 @@ pub use core::{
 };
 pub use error::{AgentError, AgentResult};
 pub use traits::{
-    AgentMetadata, AgentStats, BaseAgent, DynAgent, HealthStatus,
+    AgentMetadata, AgentStats, DynAgent, HealthStatus,
 };
 pub use types::event::execution as execution_events;
 // Event type constants are available via types::event::lifecycle, types::event::execution, etc.
@@ -167,6 +167,9 @@ pub use types::{
     OutputType, ReasoningStep, ReasoningStepType,
     TokenUsage, ToolUsage,
     UnifiedError, UnifiedEvent, UnifiedMessage, UnifiedResult,
+    // LLM types
+    ChatCompletionRequest, ChatMessage, ChatCompletionResponse,
+    ToolCall, ToolDefinition, LLMProvider,
 };
 
 // 重新导出组件
@@ -196,7 +199,7 @@ pub mod prelude {
     pub use super::capabilities::{
         AgentCapabilities, AgentCapabilitiesBuilder, AgentRequirements, ReasoningStrategy,
     };
-    pub use super::context::{AgentContext, AgentEvent, ContextConfig};
+    pub use super::context::{AgentContext, AgentEvent, ContextConfig, CoreAgentContext};
     pub use super::core::{
         // MoFAAgent - 统一的 Agent 接口
         AgentLifecycle,
@@ -204,9 +207,12 @@ pub mod prelude {
     };
     pub use super::error::{AgentError, AgentResult};
     pub use super::runner::{run_agent, AgentRunner, RunnerState, RunnerStats};
-    pub use super::traits::{AgentMetadata, BaseAgent, DynAgent, HealthStatus};
+    pub use super::traits::{AgentMetadata, DynAgent, HealthStatus};
     pub use super::types::{
         AgentInput, AgentOutput, AgentState, InputType, InterruptResult, OutputType,
+        TokenUsage, ToolUsage,
+        // LLM types
+        ChatCompletionRequest, ChatMessage, LLMProvider,
     };
     // AgentPlugin 统一到 plugin 模块
     pub use crate::plugin::AgentPlugin;

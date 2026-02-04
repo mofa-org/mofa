@@ -1,6 +1,17 @@
 //! Agent 上下文定义
 //!
 //! 统一的执行上下文，用于在 Agent 及其组件间传递状态
+//!
+//! # 核心原则
+//!
+//! CoreAgentContext 只包含内核原语（kernel primitives）：
+//! - 基本的状态存储（K/V store）
+//! - 中断信号
+//! - 事件总线
+//! - 配置
+//! - 父子上下文关系
+//!
+//! 业务逻辑（如指标收集、输出记录）应该在 foundation 层的 RichAgentContext 中实现。
 
 use serde::{de::DeserializeOwned, Serialize};
 use std::collections::HashMap;
@@ -12,19 +23,35 @@ use tokio::sync::{mpsc, RwLock};
 // Agent 上下文
 // ============================================================================
 
-/// Agent 执行上下文
+/// 核心执行上下文 (Core Agent Context)
 ///
-/// 在 Agent 执行过程中传递状态、配置和信号
+/// 提供最小的内核原语用于 Agent 执行：
+/// - 执行 ID 和会话 ID
+/// - 父子上下文关系（用于嵌套执行）
+/// - 通用键值存储
+/// - 中断信号
+/// - 事件总线
+/// - 配置
+///
+/// # 示例
+///
+/// ```rust,ignore
+/// use mofa_kernel::agent::context::CoreAgentContext;
+///
+/// let ctx = CoreAgentContext::new("execution-123");
+/// ctx.set("user_id", "user-456").await;
+/// let value: Option<String> = ctx.get("user_id").await;
+/// ```
 #[derive(Clone)]
-pub struct AgentContext {
+pub struct CoreAgentContext {
     /// 执行 ID (唯一标识本次执行)
     pub execution_id: String,
     /// 会话 ID (用于多轮对话)
     pub session_id: Option<String>,
     /// 父上下文 (用于层级执行)
-    parent: Option<Arc<AgentContext>>,
-    /// 共享状态
-    state: Arc<RwLock<ContextState>>,
+    parent: Option<Arc<CoreAgentContext>>,
+    /// 共享状态 (通用键值存储)
+    state: Arc<RwLock<HashMap<String, serde_json::Value>>>,
     /// 中断信号
     interrupt: Arc<InterruptSignal>,
     /// 事件总线
@@ -33,42 +60,11 @@ pub struct AgentContext {
     config: Arc<ContextConfig>,
 }
 
-/// 上下文内部状态
-#[derive(Default)]
-struct ContextState {
-    /// 键值存储
-    values: HashMap<String, serde_json::Value>,
-    /// 累积输出
-    outputs: Vec<ComponentOutput>,
-    /// 执行指标
-    metrics: ExecutionMetrics,
-}
-
-/// 组件输出记录
-#[derive(Debug, Clone)]
-pub struct ComponentOutput {
-    /// 组件名称
-    pub component: String,
-    /// 输出内容
-    pub output: serde_json::Value,
-    /// 时间戳
-    pub timestamp_ms: u64,
-}
-
-/// 执行指标
-#[derive(Debug, Clone, Default)]
-pub struct ExecutionMetrics {
-    /// 开始时间
-    pub start_time_ms: u64,
-    /// 结束时间
-    pub end_time_ms: Option<u64>,
-    /// 组件执行次数
-    pub component_calls: HashMap<String, u64>,
-    /// Token 使用
-    pub total_tokens: u64,
-    /// 工具调用次数
-    pub tool_calls: u64,
-}
+/// 已弃用：请使用 CoreAgentContext
+///
+/// 为了向后兼容保留的类型别名，将在未来版本中移除。
+#[deprecated(since = "0.2.0", note = "Use CoreAgentContext instead")]
+pub type AgentContext = CoreAgentContext;
 
 /// 上下文配置
 #[derive(Debug, Clone, Default)]
@@ -83,22 +79,14 @@ pub struct ContextConfig {
     pub custom: HashMap<String, serde_json::Value>,
 }
 
-impl AgentContext {
+impl CoreAgentContext {
     /// 创建新的上下文
     pub fn new(execution_id: impl Into<String>) -> Self {
-        let now = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_millis() as u64;
-
-        let mut state = ContextState::default();
-        state.metrics.start_time_ms = now;
-
         Self {
             execution_id: execution_id.into(),
             session_id: None,
             parent: None,
-            state: Arc::new(RwLock::new(state)),
+            state: Arc::new(RwLock::new(HashMap::new())),
             interrupt: Arc::new(InterruptSignal::new()),
             event_bus: Arc::new(EventBus::new()),
             config: Arc::new(ContextConfig::default()),
@@ -118,7 +106,7 @@ impl AgentContext {
             execution_id: execution_id.into(),
             session_id: self.session_id.clone(),
             parent: Some(Arc::new(self.clone())),
-            state: Arc::new(RwLock::new(ContextState::default())),
+            state: Arc::new(RwLock::new(HashMap::new())),
             interrupt: self.interrupt.clone(), // 共享中断信号
             event_bus: self.event_bus.clone(), // 共享事件总线
             config: self.config.clone(),
@@ -135,7 +123,6 @@ impl AgentContext {
     pub async fn get<T: DeserializeOwned>(&self, key: &str) -> Option<T> {
         let state = self.state.read().await;
         state
-            .values
             .get(key)
             .and_then(|v| serde_json::from_value(v.clone()).ok())
     }
@@ -144,93 +131,26 @@ impl AgentContext {
     pub async fn set<T: Serialize>(&self, key: &str, value: T) {
         if let Ok(v) = serde_json::to_value(value) {
             let mut state = self.state.write().await;
-            state.values.insert(key.to_string(), v);
+            state.insert(key.to_string(), v);
         }
     }
 
     /// 删除值
     pub async fn remove(&self, key: &str) -> Option<serde_json::Value> {
         let mut state = self.state.write().await;
-        state.values.remove(key)
+        state.remove(key)
     }
 
     /// 检查是否存在值
     pub async fn contains(&self, key: &str) -> bool {
         let state = self.state.read().await;
-        state.values.contains_key(key)
+        state.contains_key(key)
     }
 
     /// 获取所有键
     pub async fn keys(&self) -> Vec<String> {
         let state = self.state.read().await;
-        state.values.keys().cloned().collect()
-    }
-
-    /// 记录组件输出
-    pub async fn record_output(&self, component: impl Into<String>, output: serde_json::Value) {
-        let now = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_millis() as u64;
-
-        let mut state = self.state.write().await;
-        state.outputs.push(ComponentOutput {
-            component: component.into(),
-            output,
-            timestamp_ms: now,
-        });
-    }
-
-    /// 获取所有组件输出
-    pub async fn get_outputs(&self) -> Vec<ComponentOutput> {
-        let state = self.state.read().await;
-        state.outputs.clone()
-    }
-
-    /// 增加组件调用计数
-    pub async fn increment_component_calls(&self, component: &str) {
-        let mut state = self.state.write().await;
-        *state.metrics.component_calls.entry(component.to_string()).or_insert(0) += 1;
-    }
-
-    /// 增加 Token 使用
-    pub async fn add_tokens(&self, tokens: u64) {
-        let mut state = self.state.write().await;
-        state.metrics.total_tokens += tokens;
-    }
-
-    /// 增加工具调用计数
-    pub async fn increment_tool_calls(&self) {
-        let mut state = self.state.write().await;
-        state.metrics.tool_calls += 1;
-    }
-
-    /// 获取执行指标
-    pub async fn get_metrics(&self) -> ExecutionMetrics {
-        let state = self.state.read().await;
-        state.metrics.clone()
-    }
-
-    /// 结束执行 (记录结束时间)
-    pub async fn finish(&self) {
-        let now = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_millis() as u64;
-
-        let mut state = self.state.write().await;
-        state.metrics.end_time_ms = Some(now);
-    }
-
-    /// 获取执行时长 (毫秒)
-    pub async fn duration_ms(&self) -> u64 {
-        let now = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_millis() as u64;
-
-        let state = self.state.read().await;
-        state.metrics.end_time_ms.unwrap_or(now) - state.metrics.start_time_ms
+        state.keys().cloned().collect()
     }
 
     /// 检查是否被中断
@@ -254,7 +174,7 @@ impl AgentContext {
     }
 
     /// 获取父上下文
-    pub fn parent(&self) -> Option<&Arc<AgentContext>> {
+    pub fn parent(&self) -> Option<&Arc<CoreAgentContext>> {
         self.parent.as_ref()
     }
 
@@ -422,7 +342,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_context_basic() {
-        let ctx = AgentContext::new("test-execution");
+        let ctx = CoreAgentContext::new("test-execution");
 
         ctx.set("key1", "value1").await;
         let value: Option<String> = ctx.get("key1").await;
@@ -431,7 +351,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_context_child() {
-        let parent = AgentContext::new("parent");
+        let parent = CoreAgentContext::new("parent");
         parent.set("parent_key", "parent_value").await;
 
         let child = parent.child("child");
@@ -448,7 +368,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_interrupt_signal() {
-        let ctx = AgentContext::new("test");
+        let ctx = CoreAgentContext::new("test");
 
         assert!(!ctx.is_interrupted());
         ctx.trigger_interrupt();
@@ -459,7 +379,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_event_bus() {
-        let ctx = AgentContext::new("test");
+        let ctx = CoreAgentContext::new("test");
 
         let mut rx = ctx.subscribe("test_event").await;
 
@@ -467,20 +387,5 @@ mod tests {
 
         let event = rx.recv().await.unwrap();
         assert_eq!(event.event_type, "test_event");
-    }
-
-    #[tokio::test]
-    async fn test_metrics() {
-        let ctx = AgentContext::new("test");
-
-        ctx.increment_component_calls("llm").await;
-        ctx.increment_component_calls("llm").await;
-        ctx.add_tokens(100).await;
-        ctx.increment_tool_calls().await;
-
-        let metrics = ctx.get_metrics().await;
-        assert_eq!(metrics.component_calls.get("llm"), Some(&2));
-        assert_eq!(metrics.total_tokens, 100);
-        assert_eq!(metrics.tool_calls, 1);
     }
 }

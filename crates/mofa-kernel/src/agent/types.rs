@@ -2,6 +2,7 @@
 //!
 //! 定义统一的 Agent 输入、输出和状态类型
 
+use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fmt;
@@ -506,6 +507,100 @@ impl TokenUsage {
             total_tokens,
         }
     }
+}
+
+// ============================================================================
+// LLM 相关类型
+// ============================================================================
+
+/// LLM 聊天完成请求
+#[derive(Debug, Clone)]
+pub struct ChatCompletionRequest {
+    /// Messages for the chat completion
+    pub messages: Vec<ChatMessage>,
+    /// Model to use
+    pub model: Option<String>,
+    /// Tool definitions (if tools are available)
+    pub tools: Option<Vec<ToolDefinition>>,
+    /// Temperature
+    pub temperature: Option<f32>,
+    /// Max tokens
+    pub max_tokens: Option<u32>,
+}
+
+/// 聊天消息
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ChatMessage {
+    /// Role: system, user, assistant, tool
+    pub role: String,
+    /// Content (text or structured)
+    pub content: Option<String>,
+    /// Tool call ID (for tool responses)
+    pub tool_call_id: Option<String>,
+    /// Tool calls (for assistant messages with tools)
+    pub tool_calls: Option<Vec<ToolCall>>,
+}
+
+/// LLM 工具调用
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ToolCall {
+    /// Tool call ID
+    pub id: String,
+    /// Tool name
+    pub name: String,
+    /// Tool arguments (as JSON string or Value)
+    pub arguments: serde_json::Value,
+}
+
+/// LLM 工具定义
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ToolDefinition {
+    /// Tool name
+    pub name: String,
+    /// Tool description
+    pub description: String,
+    /// Tool parameters (JSON Schema)
+    pub parameters: serde_json::Value,
+}
+
+/// LLM 聊天完成响应
+#[derive(Debug, Clone)]
+pub struct ChatCompletionResponse {
+    /// Response content
+    pub content: Option<String>,
+    /// Tool calls from the LLM
+    pub tool_calls: Option<Vec<ToolCall>>,
+    /// Usage statistics
+    pub usage: Option<TokenUsage>,
+}
+
+/// LLM Provider trait - 定义 LLM 提供商接口
+///
+/// 这是一个核心抽象，定义了所有 LLM 提供商必须实现的最小接口。
+///
+/// # 示例
+///
+/// ```rust,ignore
+/// use mofa_kernel::agent::types::{LLMProvider, ChatCompletionRequest, ChatCompletionResponse};
+///
+/// struct MyLLMProvider;
+///
+/// #[async_trait]
+/// impl LLMProvider for MyLLMProvider {
+///     fn name(&self) -> &str { "my-llm" }
+///
+///     async fn chat(&self, request: ChatCompletionRequest) -> AgentResult<ChatCompletionResponse> {
+///         // 实现 LLM 调用逻辑
+///     }
+/// }
+/// ```
+#[async_trait]
+pub trait LLMProvider: Send + Sync {
+    /// Get provider name
+    fn name(&self) -> &str;
+
+    /// Complete a chat request
+    async fn chat(&self, request: ChatCompletionRequest) -> super::error::AgentResult<ChatCompletionResponse>;
 }
 
 // ============================================================================

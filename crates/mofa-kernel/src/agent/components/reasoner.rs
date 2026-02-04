@@ -17,11 +17,15 @@ use serde::{Deserialize, Serialize};
 ///
 /// ```rust,ignore
 /// use mofa_kernel::agent::components::reasoner::{Reasoner, ReasoningResult};
+/// use mofa_foundation::agent::components::reasoner::DirectReasoner;
 ///
-/// struct DirectReasoner;
+/// // 使用 foundation 层提供的具体实现
+/// let reasoner = DirectReasoner;
+/// // 或者实现自定义 Reasoner
+/// struct MyReasoner;
 ///
 /// #[async_trait]
-/// impl Reasoner for DirectReasoner {
+/// impl Reasoner for MyReasoner {
 ///     async fn reason(&self, input: &AgentInput, ctx: &AgentContext) -> AgentResult<ReasoningResult> {
 ///         Ok(ReasoningResult {
 ///             thoughts: vec![],
@@ -240,76 +244,5 @@ impl ToolCall {
     }
 }
 
-// ============================================================================
-// 内置推理器实现
-// ============================================================================
-
-/// 直接推理器
-///
-/// 最简单的推理器，直接返回输入作为响应
-pub struct DirectReasoner;
-
-#[async_trait]
-impl Reasoner for DirectReasoner {
-    async fn reason(&self, input: &AgentInput, _ctx: &AgentContext) -> AgentResult<ReasoningResult> {
-        Ok(ReasoningResult::respond(input.to_text()))
-    }
-
-    fn strategy(&self) -> ReasoningStrategy {
-        ReasoningStrategy::Direct
-    }
-
-    fn name(&self) -> &str {
-        "direct"
-    }
-
-    fn description(&self) -> Option<&str> {
-        Some("直接推理器，将输入作为输出")
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::agent::context::AgentContext;
-    use crate::agent::types::AgentInput;
-
-    #[tokio::test]
-    async fn test_direct_reasoner() {
-        let reasoner = DirectReasoner;
-        let ctx = AgentContext::new("test");
-        let input = AgentInput::text("Hello, world!");
-
-        let result = reasoner.reason(&input, &ctx).await.unwrap();
-
-        match result.decision {
-            Decision::Respond { content } => {
-                assert_eq!(content, "Hello, world!");
-            }
-            _ => panic!("Expected Respond decision"),
-        }
-    }
-
-    #[test]
-    fn test_reasoning_result_builder() {
-        let result = ReasoningResult::respond("Hello")
-            .with_thought(ThoughtStep::thought("Thinking...", 1))
-            .with_confidence(0.9);
-
-        assert_eq!(result.thoughts.len(), 1);
-        assert_eq!(result.confidence, 0.9);
-    }
-
-    #[test]
-    fn test_tool_call_decision() {
-        let result = ReasoningResult::call_tool("calculator", serde_json::json!({"a": 1, "b": 2}));
-
-        match result.decision {
-            Decision::CallTool { tool_name, arguments } => {
-                assert_eq!(tool_name, "calculator");
-                assert_eq!(arguments["a"], 1);
-            }
-            _ => panic!("Expected CallTool decision"),
-        }
-    }
-}
+// Note: Concrete Reasoner implementations (like DirectReasoner) are provided
+// in the foundation layer (mofa-foundation::agent::components::reasoner)

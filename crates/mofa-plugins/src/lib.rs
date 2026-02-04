@@ -10,6 +10,7 @@
 
 pub mod hot_reload;
 pub mod wasm_runtime;
+pub mod tool;
 pub mod tools;
 pub mod skill;
 pub mod tts;
@@ -325,6 +326,7 @@ impl AgentPlugin for LLMPlugin {
 pub mod rhai_runtime;
 
 pub use rhai_runtime::*;
+pub use tool::*;
 pub use tools::*;
 pub use tts::{
     TTSEngine, TTSPlugin, TTSPluginConfig, MockTTSEngine, VoiceInfo, TTSCommand, TextToSpeechTool, AudioPlaybackConfig,

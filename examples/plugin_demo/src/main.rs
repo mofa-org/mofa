@@ -3,7 +3,8 @@ use mofa_kernel::agent::context::AgentContext;
 use mofa_kernel::agent::execution::{ExecutionEngine, ExecutionOptions};
 use mofa_kernel::agent::plugins::{CustomFunctionPlugin, HttpPlugin, PluginStage};
 use mofa_kernel::agent::registry::AgentRegistry;
-use mofa_kernel::agent::traits::{BaseAgent, UnifiedAgent};
+use mofa_foundation::agent::BaseAgent;
+use mofa_kernel::agent::traits::UnifiedAgent;
 use mofa_kernel::agent::types::{AgentInput, AgentOutput};
 
 // 定义一个简单的LLM Agent

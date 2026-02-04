@@ -139,6 +139,26 @@ pub mod kernel {
         InMemoryStorage, FileBasedStorage,
     };
 
+    // Prompt context
+    pub use mofa_foundation::agent::{
+        AgentIdentity, PromptContext, PromptContextBuilder,
+    };
+
+    // Session management
+    pub use mofa_foundation::agent::{
+        JsonlSessionStorage, MemorySessionStorage, Session, SessionManager,
+        SessionMessage, SessionStorage,
+    };
+
+    // Tool system with categories
+    pub use mofa_foundation::agent::ToolCategory;
+
+    // Agent executor for LLM-based agents
+    pub use mofa_foundation::agent::{
+        AgentExecutor, AgentExecutorConfig, ChatCompletionRequest, ChatCompletionResponse,
+        ChatMessage, LLMProvider, TokenUsage, ToolCall, ToolDefinition,
+    };
+
     pub use mofa_foundation::collaboration::{
         CollaborationContent, CollaborationMessage, CollaborationMode,
         CollaborationProtocol, CollaborationResult, CollaborationStats,

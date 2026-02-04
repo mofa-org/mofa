@@ -23,8 +23,12 @@ pub use core::*;
 // message module
 pub mod message;
 
-// Unified Agent Framework (统一 Agent 框架)
+// Agent Framework (统一 Agent 框架)
 pub mod agent;
 
 // Unified Configuration System (统一配置系统)
 pub mod config;
+
+// Storage traits (存储接口)
+pub mod storage;
+pub use storage::Storage;

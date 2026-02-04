@@ -3,8 +3,9 @@
 //! 整合内置工具、MCP 工具、自定义工具的注册中心
 
 use crate::agent::components::tool::{
-    Tool, ToolDescriptor, ToolRegistry,
+    Tool, ToolDescriptor, ToolRegistry, ToolInput, ToolResult,
 };
+use crate::agent::context::CoreAgentContext;
 use crate::agent::error::AgentResult;
 use async_trait::async_trait;
 use std::collections::HashMap;
@@ -18,12 +19,12 @@ use std::sync::Arc;
 ///
 /// ```rust,ignore
 /// use mofa_kernel::agent::tools::UnifiedToolRegistry;
-/// use mofa_kernel::agent::components::tool::EchoTool;
+/// use mofa_kernel::agent::components::tool::TestEchoTool;
 ///
 /// let mut registry = UnifiedToolRegistry::new();
 ///
 /// // 注册内置工具
-/// registry.register(Arc::new(EchoTool)).unwrap();
+/// registry.register(Arc::new(TestEchoTool)).unwrap();
 ///
 /// // 注册 MCP 服务器的工具
 /// registry.load_mcp_server("http://localhost:8080").await?;
@@ -250,13 +251,43 @@ impl<'a> ToolSearcher<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::agent::components::tool::EchoTool;
+
+    // Local test tool since EchoTool moved to foundation
+    struct TestEchoTool;
+
+    #[async_trait::async_trait]
+    impl Tool for TestEchoTool {
+        fn name(&self) -> &str {
+            "echo"
+        }
+
+        fn description(&self) -> &str {
+            "Echo test tool"
+        }
+
+        fn parameters_schema(&self) -> serde_json::Value {
+            serde_json::json!({
+                "type": "object",
+                "properties": {
+                    "message": {"type": "string"}
+                }
+            })
+        }
+
+        async fn execute(&self, input: ToolInput, _ctx: &CoreAgentContext) -> ToolResult {
+            if let Some(msg) = input.get_str("message") {
+                ToolResult::success_text(msg)
+            } else {
+                ToolResult::success_text("echo")
+            }
+        }
+    }
 
     #[test]
     fn test_unified_registry_basic() {
         let mut registry = UnifiedToolRegistry::new();
 
-        registry.register(Arc::new(EchoTool)).unwrap();
+        registry.register(Arc::new(TestEchoTool)).unwrap();
 
         assert!(registry.contains("echo"));
         assert_eq!(registry.count(), 1);
@@ -270,7 +301,7 @@ mod tests {
         let mut registry = UnifiedToolRegistry::new();
 
         registry
-            .register_with_source(Arc::new(EchoTool), ToolSource::Builtin)
+            .register_with_source(Arc::new(TestEchoTool), ToolSource::Builtin)
             .unwrap();
 
         let source = registry.get_source("echo");
@@ -282,7 +313,7 @@ mod tests {
         let mut registry = UnifiedToolRegistry::new();
 
         registry
-            .register_with_source(Arc::new(EchoTool), ToolSource::Builtin)
+            .register_with_source(Arc::new(TestEchoTool), ToolSource::Builtin)
             .unwrap();
 
         let builtin_tools = registry.filter_by_source("builtin");
@@ -295,7 +326,7 @@ mod tests {
     #[test]
     fn test_tool_searcher() {
         let mut registry = UnifiedToolRegistry::new();
-        registry.register(Arc::new(EchoTool)).unwrap();
+        registry.register(Arc::new(TestEchoTool)).unwrap();
 
         let searcher = ToolSearcher::new(&registry);
 

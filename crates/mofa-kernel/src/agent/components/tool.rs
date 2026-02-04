@@ -308,10 +308,10 @@ pub struct LLMTool {
 }
 
 // ============================================================================
-// 工具注册中心
+// 工具注册中心 Trait (接口仅在此定义)
 // ============================================================================
 
-/// 工具注册中心 Trait
+/// 定义工具注册的接口，具体实现在 foundation 层。
 #[async_trait]
 pub trait ToolRegistry: Send + Sync {
     /// 注册工具
@@ -363,117 +363,10 @@ pub trait ToolRegistry: Send + Sync {
     }
 }
 
-/// 简单工具注册中心实现
-pub struct SimpleToolRegistry {
-    tools: HashMap<String, Arc<dyn Tool>>,
-}
-
-impl SimpleToolRegistry {
-    /// 创建新的注册中心
-    pub fn new() -> Self {
-        Self {
-            tools: HashMap::new(),
-        }
-    }
-}
-
-impl Default for SimpleToolRegistry {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-#[async_trait]
-impl ToolRegistry for SimpleToolRegistry {
-    fn register(&mut self, tool: Arc<dyn Tool>) -> AgentResult<()> {
-        self.tools.insert(tool.name().to_string(), tool);
-        Ok(())
-    }
-
-    fn get(&self, name: &str) -> Option<Arc<dyn Tool>> {
-        self.tools.get(name).cloned()
-    }
-
-    fn unregister(&mut self, name: &str) -> AgentResult<bool> {
-        Ok(self.tools.remove(name).is_some())
-    }
-
-    fn list(&self) -> Vec<ToolDescriptor> {
-        self.tools
-            .values()
-            .map(|t| ToolDescriptor::from_tool(t.as_ref()))
-            .collect()
-    }
-
-    fn list_names(&self) -> Vec<String> {
-        self.tools.keys().cloned().collect()
-    }
-
-    fn contains(&self, name: &str) -> bool {
-        self.tools.contains_key(name)
-    }
-
-    fn count(&self) -> usize {
-        self.tools.len()
-    }
-}
-
-// ============================================================================
-// 内置工具
-// ============================================================================
-
-/// Echo 工具 (用于测试)
-pub struct EchoTool;
-
-#[async_trait]
-impl Tool for EchoTool {
-    fn name(&self) -> &str {
-        "echo"
-    }
-
-    fn description(&self) -> &str {
-        "Echo the input back as output"
-    }
-
-    fn parameters_schema(&self) -> serde_json::Value {
-        serde_json::json!({
-            "type": "object",
-            "properties": {
-                "message": {
-                    "type": "string",
-                    "description": "The message to echo"
-                }
-            },
-            "required": ["message"]
-        })
-    }
-
-    async fn execute(&self, input: ToolInput, _ctx: &AgentContext) -> ToolResult {
-        if let Some(message) = input.get_str("message") {
-            ToolResult::success_text(message)
-        } else if let Some(raw) = &input.raw_input {
-            ToolResult::success_text(raw)
-        } else {
-            ToolResult::failure("No message provided")
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::agent::context::AgentContext;
-
-    #[tokio::test]
-    async fn test_echo_tool() {
-        let tool = EchoTool;
-        let ctx = AgentContext::new("test");
-        let input = ToolInput::from_json(serde_json::json!({"message": "Hello!"}));
-
-        let result = tool.execute(input, &ctx).await;
-        assert!(result.success);
-        assert_eq!(result.as_text(), Some("Hello!"));
-    }
 
     #[test]
     fn test_tool_input_from_json() {
@@ -495,22 +388,5 @@ mod tests {
         let failure = ToolResult::failure("Something went wrong");
         assert!(!failure.success);
         assert!(failure.error.is_some());
-    }
-
-    #[tokio::test]
-    async fn test_simple_tool_registry() {
-        let mut registry = SimpleToolRegistry::new();
-        registry.register(Arc::new(EchoTool)).unwrap();
-
-        assert!(registry.contains("echo"));
-        assert_eq!(registry.count(), 1);
-
-        let ctx = AgentContext::new("test");
-        let result = registry
-            .execute("echo", ToolInput::from_json(serde_json::json!({"message": "test"})), &ctx)
-            .await
-            .unwrap();
-
-        assert!(result.success);
     }
 }

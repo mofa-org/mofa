@@ -1,371 +1,110 @@
 //! 工具组件
 //!
-//! 定义统一的工具接口，合并 ToolExecutor 和 ReActTool
+//! 从 kernel 层导入 Tool trait，提供具体实现和扩展
 
+use mofa_kernel::agent::components::tool::{
+    LLMTool, ToolDescriptor, ToolInput, ToolMetadata, ToolRegistry, ToolResult,
+};
 use mofa_kernel::agent::context::AgentContext;
 use mofa_kernel::agent::error::{AgentError, AgentResult};
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
+use serde_json::{json, Value};
+use std::any::Any;
 use std::collections::HashMap;
 use std::sync::Arc;
 
-/// 统一工具 Trait
-///
-/// 合并了 ToolExecutor 和 ReActTool 的功能
-///
-/// # 示例
-///
-/// ```rust,ignore
-/// use mofa_foundation::agent::components::tool::{Tool, ToolInput, ToolResult, ToolMetadata};
-///
-/// struct Calculator;
-///
-/// #[async_trait]
-/// impl Tool for Calculator {
-///     fn name(&self) -> &str { "calculator" }
-///     fn description(&self) -> &str { "Perform arithmetic operations" }
-///     fn parameters_schema(&self) -> serde_json::Value {
-///         serde_json::json!({
-///             "type": "object",
-///             "properties": {
-///                 "operation": { "type": "string", "enum": ["add", "sub", "mul", "div"] },
-///                 "a": { "type": "number" },
-///                 "b": { "type": "number" }
-///             },
-///             "required": ["operation", "a", "b"]
-///         })
-///     }
-///
-///     async fn execute(&self, input: ToolInput, ctx: &AgentContext) -> ToolResult {
-///         // Implementation
-///     }
-///
-///     fn metadata(&self) -> ToolMetadata {
-///         ToolMetadata::default()
-///     }
-/// }
-/// ```
-#[async_trait]
-pub trait Tool: Send + Sync {
-    /// 工具名称 (唯一标识符)
-    fn name(&self) -> &str;
+// ============================================================================
+// Foundation 层扩展类型
+// ============================================================================
 
-    /// 工具描述 (用于 LLM 理解)
-    fn description(&self) -> &str;
+/// Tool categories for organization and discovery
+///
+/// Foundation-specific extension for tool categorization
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ToolCategory {
+    /// File operations (read, write, edit)
+    File,
+    /// Command execution (shell, scripts)
+    Shell,
+    /// Web operations (search, fetch)
+    Web,
+    /// Memory operations (read, write memory)
+    Memory,
+    /// Agent control (spawn, coordinate)
+    Agent,
+    /// Messaging and communication
+    Communication,
+    /// General purpose tools
+    General,
+    /// Custom tools
+    Custom,
+}
 
-    /// 参数 JSON Schema
-    fn parameters_schema(&self) -> serde_json::Value;
-
-    /// 执行工具
-    async fn execute(&self, input: ToolInput, ctx: &AgentContext) -> ToolResult;
-
-    /// 工具元数据
-    fn metadata(&self) -> ToolMetadata {
-        ToolMetadata::default()
+impl ToolCategory {
+    /// Get the category as a string
+    pub fn as_str(&self) -> &str {
+        match self {
+            Self::File => "file",
+            Self::Shell => "shell",
+            Self::Web => "web",
+            Self::Memory => "memory",
+            Self::Agent => "agent",
+            Self::Communication => "communication",
+            Self::General => "general",
+            Self::Custom => "custom",
+        }
     }
 
-    /// 验证输入
-    fn validate_input(&self, input: &ToolInput) -> AgentResult<()> {
-        // 默认不做验证，子类可以覆盖
-        let _ = input;
-        Ok(())
-    }
-
-    /// 是否需要确认
-    fn requires_confirmation(&self) -> bool {
-        false
-    }
-
-    /// 转换为 LLM Tool 格式
-    fn to_llm_tool(&self) -> LLMTool {
-        LLMTool {
-            name: self.name().to_string(),
-            description: self.description().to_string(),
-            parameters: self.parameters_schema(),
+    /// Parse from string
+    pub fn from_str(s: &str) -> Option<Self> {
+        match s.to_lowercase().as_str() {
+            "file" => Some(Self::File),
+            "shell" => Some(Self::Shell),
+            "web" => Some(Self::Web),
+            "memory" => Some(Self::Memory),
+            "agent" => Some(Self::Agent),
+            "communication" => Some(Self::Communication),
+            "general" => Some(Self::General),
+            "custom" => Some(Self::Custom),
+            _ => None,
         }
     }
 }
 
-/// 工具输入
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ToolInput {
-    /// 结构化参数
-    pub arguments: serde_json::Value,
-    /// 原始输入 (可选)
-    pub raw_input: Option<String>,
-}
-
-impl ToolInput {
-    /// 从 JSON 参数创建
-    pub fn from_json(arguments: serde_json::Value) -> Self {
-        Self {
-            arguments,
-            raw_input: None,
-        }
-    }
-
-    /// 从原始字符串创建
-    pub fn from_raw(raw: impl Into<String>) -> Self {
-        let raw = raw.into();
-        Self {
-            arguments: serde_json::Value::String(raw.clone()),
-            raw_input: Some(raw),
-        }
-    }
-
-    /// 获取参数值
-    pub fn get<T: serde::de::DeserializeOwned>(&self, key: &str) -> Option<T> {
-        self.arguments
-            .get(key)
-            .and_then(|v| serde_json::from_value(v.clone()).ok())
-    }
-
-    /// 获取字符串参数
-    pub fn get_str(&self, key: &str) -> Option<&str> {
-        self.arguments.get(key).and_then(|v| v.as_str())
-    }
-
-    /// 获取数字参数
-    pub fn get_number(&self, key: &str) -> Option<f64> {
-        self.arguments.get(key).and_then(|v| v.as_f64())
-    }
-
-    /// 获取布尔参数
-    pub fn get_bool(&self, key: &str) -> Option<bool> {
-        self.arguments.get(key).and_then(|v| v.as_bool())
-    }
-}
-
-impl From<serde_json::Value> for ToolInput {
-    fn from(v: serde_json::Value) -> Self {
-        Self::from_json(v)
-    }
-}
-
-impl From<String> for ToolInput {
-    fn from(s: String) -> Self {
-        Self::from_raw(s)
-    }
-}
-
-impl From<&str> for ToolInput {
-    fn from(s: &str) -> Self {
-        Self::from_raw(s)
-    }
-}
-
-/// 工具执行结果
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ToolResult {
-    /// 是否成功
-    pub success: bool,
-    /// 输出内容
-    pub output: serde_json::Value,
-    /// 错误信息 (如果失败)
-    pub error: Option<String>,
-    /// 额外元数据
-    pub metadata: HashMap<String, String>,
-}
-
-impl ToolResult {
-    /// 创建成功结果
-    pub fn success(output: serde_json::Value) -> Self {
-        Self {
-            success: true,
-            output,
-            error: None,
-            metadata: HashMap::new(),
-        }
-    }
-
-    /// 创建文本成功结果
-    pub fn success_text(text: impl Into<String>) -> Self {
-        Self::success(serde_json::Value::String(text.into()))
-    }
-
-    /// 创建失败结果
-    pub fn failure(error: impl Into<String>) -> Self {
-        Self {
-            success: false,
-            output: serde_json::Value::Null,
-            error: Some(error.into()),
-            metadata: HashMap::new(),
-        }
-    }
-
-    /// 添加元数据
-    pub fn with_metadata(mut self, key: impl Into<String>, value: impl Into<String>) -> Self {
-        self.metadata.insert(key.into(), value.into());
-        self
-    }
-
-    /// 获取文本输出
-    pub fn as_text(&self) -> Option<&str> {
-        self.output.as_str()
-    }
-
-    /// 转换为字符串
-    pub fn to_string_output(&self) -> String {
-        if self.success {
-            match &self.output {
-                serde_json::Value::String(s) => s.clone(),
-                v => v.to_string(),
-            }
-        } else {
-            format!("Error: {}", self.error.as_deref().unwrap_or("Unknown error"))
-        }
-    }
-}
-
-/// 工具元数据
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct ToolMetadata {
+/// 扩展的 Tool trait (Foundation 特有方法)
+///
+/// 注意：这是 Foundation 层提供的扩展 trait，不是 kernel 层的 Tool trait
+pub trait ToolExt: mofa_kernel::agent::components::tool::Tool {
     /// 工具分类
-    pub category: Option<String>,
-    /// 工具标签
-    pub tags: Vec<String>,
-    /// 是否为危险操作
-    pub is_dangerous: bool,
-    /// 是否需要网络
-    pub requires_network: bool,
-    /// 是否需要文件系统访问
-    pub requires_filesystem: bool,
-    /// 自定义属性
-    pub custom: HashMap<String, serde_json::Value>,
-}
+    fn category(&self) -> ToolCategory;
 
-impl ToolMetadata {
-    /// 创建新的元数据
-    pub fn new() -> Self {
-        Self::default()
+    /// 转换为 OpenAI function schema 格式 (兼容性方法)
+    fn to_openai_schema(&self) -> Value {
+        use mofa_kernel::agent::components::tool::Tool;
+        json!({
+            "type": "function",
+            "function": {
+                "name": self.name(),
+                "description": self.description(),
+                "parameters": self.parameters_schema()
+            }
+        })
     }
 
-    /// 设置分类
-    pub fn with_category(mut self, category: impl Into<String>) -> Self {
-        self.category = Some(category.into());
-        self
-    }
-
-    /// 添加标签
-    pub fn with_tag(mut self, tag: impl Into<String>) -> Self {
-        self.tags.push(tag.into());
-        self
-    }
-
-    /// 标记为危险操作
-    pub fn dangerous(mut self) -> Self {
-        self.is_dangerous = true;
-        self
-    }
-
-    /// 标记需要网络
-    pub fn needs_network(mut self) -> Self {
-        self.requires_network = true;
-        self
-    }
-
-    /// 标记需要文件系统
-    pub fn needs_filesystem(mut self) -> Self {
-        self.requires_filesystem = true;
-        self
-    }
-}
-
-/// 工具描述符 (用于列表展示)
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ToolDescriptor {
-    /// 工具名称
-    pub name: String,
-    /// 工具描述
-    pub description: String,
-    /// 参数 Schema
-    pub parameters_schema: serde_json::Value,
-    /// 元数据
-    pub metadata: ToolMetadata,
-}
-
-impl ToolDescriptor {
-    /// 从 Tool 创建描述符
-    pub fn from_tool(tool: &dyn Tool) -> Self {
-        Self {
-            name: tool.name().to_string(),
-            description: tool.description().to_string(),
-            parameters_schema: tool.parameters_schema(),
-            metadata: tool.metadata(),
-        }
-    }
-}
-
-/// LLM Tool 格式 (用于 API 调用)
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct LLMTool {
-    /// 工具名称
-    pub name: String,
-    /// 工具描述
-    pub description: String,
-    /// 参数 Schema
-    pub parameters: serde_json::Value,
+    /// Get this tool as `Any` for downcasting
+    fn as_any(&self) -> &dyn Any;
 }
 
 // ============================================================================
-// 工具注册中心
+// 工具注册中心实现
 // ============================================================================
-
-/// 工具注册中心 Trait
-#[async_trait]
-pub trait ToolRegistry: Send + Sync {
-    /// 注册工具
-    fn register(&mut self, tool: Arc<dyn Tool>) -> AgentResult<()>;
-
-    /// 批量注册工具
-    fn register_all(&mut self, tools: Vec<Arc<dyn Tool>>) -> AgentResult<()> {
-        for tool in tools {
-            self.register(tool)?;
-        }
-        Ok(())
-    }
-
-    /// 获取工具
-    fn get(&self, name: &str) -> Option<Arc<dyn Tool>>;
-
-    /// 移除工具
-    fn unregister(&mut self, name: &str) -> AgentResult<bool>;
-
-    /// 列出所有工具
-    fn list(&self) -> Vec<ToolDescriptor>;
-
-    /// 列出所有工具名称
-    fn list_names(&self) -> Vec<String>;
-
-    /// 检查工具是否存在
-    fn contains(&self, name: &str) -> bool;
-
-    /// 获取工具数量
-    fn count(&self) -> usize;
-
-    /// 执行工具
-    async fn execute(&self, name: &str, input: ToolInput, ctx: &AgentContext) -> AgentResult<ToolResult> {
-        let tool = self.get(name).ok_or_else(|| AgentError::ToolNotFound(name.to_string()))?;
-        tool.validate_input(&input)?;
-        Ok(tool.execute(input, ctx).await)
-    }
-
-    /// 转换为 LLM Tools
-    fn to_llm_tools(&self) -> Vec<LLMTool> {
-        self.list()
-            .iter()
-            .map(|d| LLMTool {
-                name: d.name.clone(),
-                description: d.description.clone(),
-                parameters: d.parameters_schema.clone(),
-            })
-            .collect()
-    }
-}
 
 /// 简单工具注册中心实现
+///
+/// Foundation 层的具体实现
 pub struct SimpleToolRegistry {
-    tools: HashMap<String, Arc<dyn Tool>>,
+    tools: HashMap<String, Arc<dyn mofa_kernel::agent::components::tool::Tool>>,
 }
 
 impl SimpleToolRegistry {
@@ -385,12 +124,12 @@ impl Default for SimpleToolRegistry {
 
 #[async_trait]
 impl ToolRegistry for SimpleToolRegistry {
-    fn register(&mut self, tool: Arc<dyn Tool>) -> AgentResult<()> {
+    fn register(&mut self, tool: Arc<dyn mofa_kernel::agent::components::tool::Tool>) -> AgentResult<()> {
         self.tools.insert(tool.name().to_string(), tool);
         Ok(())
     }
 
-    fn get(&self, name: &str) -> Option<Arc<dyn Tool>> {
+    fn get(&self, name: &str) -> Option<Arc<dyn mofa_kernel::agent::components::tool::Tool>> {
         self.tools.get(name).cloned()
     }
 
@@ -426,7 +165,7 @@ impl ToolRegistry for SimpleToolRegistry {
 pub struct EchoTool;
 
 #[async_trait]
-impl Tool for EchoTool {
+impl mofa_kernel::agent::components::tool::Tool for EchoTool {
     fn name(&self) -> &str {
         "echo"
     }
@@ -435,8 +174,8 @@ impl Tool for EchoTool {
         "Echo the input back as output"
     }
 
-    fn parameters_schema(&self) -> serde_json::Value {
-        serde_json::json!({
+    fn parameters_schema(&self) -> Value {
+        json!({
             "type": "object",
             "properties": {
                 "message": {
@@ -459,16 +198,26 @@ impl Tool for EchoTool {
     }
 }
 
+impl ToolExt for EchoTool {
+    fn category(&self) -> ToolCategory {
+        ToolCategory::General
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    use mofa_kernel::agent::context::AgentContext;
+    use mofa_kernel::agent::components::tool::Tool; // Import Tool trait for method resolution
 
     #[tokio::test]
     async fn test_echo_tool() {
         let tool = EchoTool;
         let ctx = AgentContext::new("test");
-        let input = ToolInput::from_json(serde_json::json!({"message": "Hello!"}));
+        let input = ToolInput::from_json(json!({"message": "Hello!"}));
 
         let result = tool.execute(input, &ctx).await;
         assert!(result.success);
@@ -476,25 +225,18 @@ mod tests {
     }
 
     #[test]
-    fn test_tool_input_from_json() {
-        let input = ToolInput::from_json(serde_json::json!({
-            "name": "test",
-            "count": 42
-        }));
-
-        assert_eq!(input.get_str("name"), Some("test"));
-        assert_eq!(input.get_number("count"), Some(42.0));
+    fn test_tool_category() {
+        let category = ToolCategory::File;
+        assert_eq!(category.as_str(), "file");
+        assert_eq!(ToolCategory::from_str("file"), Some(ToolCategory::File));
     }
 
     #[test]
-    fn test_tool_result() {
-        let success = ToolResult::success_text("OK");
-        assert!(success.success);
-        assert_eq!(success.as_text(), Some("OK"));
-
-        let failure = ToolResult::failure("Something went wrong");
-        assert!(!failure.success);
-        assert!(failure.error.is_some());
+    fn test_tool_ext() {
+        let tool = EchoTool;
+        assert_eq!(tool.category(), ToolCategory::General);
+        let schema = tool.to_openai_schema();
+        assert_eq!(schema["function"]["name"], "echo");
     }
 
     #[tokio::test]
@@ -507,7 +249,7 @@ mod tests {
 
         let ctx = AgentContext::new("test");
         let result = registry
-            .execute("echo", ToolInput::from_json(serde_json::json!({"message": "test"})), &ctx)
+            .execute("echo", ToolInput::from_json(json!({"message": "test"})), &ctx)
             .await
             .unwrap();
 
