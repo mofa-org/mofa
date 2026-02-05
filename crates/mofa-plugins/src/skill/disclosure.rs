@@ -2,7 +2,7 @@
 
 use crate::skill::{metadata::SkillMetadata, parser::SkillParser, Requirement, RequirementCheck};
 use std::collections::HashMap;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 /// 渐进式披露控制器
 ///
@@ -56,24 +56,22 @@ impl DisclosureController {
         }
 
         // Try executable parent directory (installed binary)
-        if let Ok(exe) = std::env::current_exe() {
-            if let Some(parent) = exe.parent() {
+        if let Ok(exe) = std::env::current_exe()
+            && let Some(parent) = exe.parent() {
                 let skills_path = parent.join("skills");
                 if skills_path.exists() {
                     return Some(skills_path);
                 }
             }
-        }
 
         // Try grandparent directory (for /usr/local/bin/mofa -> /usr/local/lib/mofa/skills)
-        if let Ok(exe) = std::env::current_exe() {
-            if let Some(grandparent) = exe.parent().and_then(|p| p.parent()) {
+        if let Ok(exe) = std::env::current_exe()
+            && let Some(grandparent) = exe.parent().and_then(|p| p.parent()) {
                 let skills_path = grandparent.join("lib").join("mofa").join("skills");
                 if skills_path.exists() {
                     return Some(skills_path);
                 }
             }
-        }
 
         // Try standard installation path
         let standard_path = PathBuf::from("/usr/local/lib/mofa/skills");
@@ -195,8 +193,7 @@ impl DisclosureController {
     /// 获取技能的安装指令
     pub fn get_install_instructions(&self, name: &str) -> Option<String> {
         self.metadata_cache.get(name)
-            .and_then(|m| m.install.as_ref())
-            .map(|s| s.clone())
+            .and_then(|m| m.install.as_ref()).cloned()
     }
 
     /// 获取缺失依赖的描述字符串

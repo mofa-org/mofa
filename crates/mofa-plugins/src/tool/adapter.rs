@@ -3,7 +3,7 @@
 //! Provides an adapter that converts Tool implementations to AgentPlugin implementations.
 //! This allows tools to be registered and managed through the plugin system.
 
-use mofa_kernel::agent::components::tool::{Tool, ToolInput, ToolResult};
+use mofa_kernel::agent::components::tool::{Tool, ToolInput};
 use mofa_kernel::{
     AgentPlugin, PluginContext, PluginMetadata, PluginResult, PluginState, PluginType,
 };

@@ -8,7 +8,7 @@ use serde_json::Value;
 use std::collections::HashMap;
 
 use crate::agent::{
-    ChatCompletionRequest, ChatCompletionResponse, ChatMessage, LLMProvider,
+    ChatCompletionRequest, ChatCompletionResponse, LLMProvider,
     ToolCall, TokenUsage,
 };
 

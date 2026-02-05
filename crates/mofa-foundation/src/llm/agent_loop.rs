@@ -8,16 +8,14 @@
 //! - Media/vision support
 
 use crate::llm::types::{
-    ChatMessage, ChatCompletionRequest, Tool, ToolCall, Role, MessageContent,
+    ChatMessage, ChatCompletionRequest, Tool, Role, MessageContent,
     ContentPart, ImageUrl,
 };
 use crate::llm::LLMProvider;
 use anyhow::Result;
-use serde_json::json;
 use std::collections::HashMap;
 use std::path::Path;
 use std::sync::Arc;
-use tokio::sync::RwLock;
 
 /// Configuration for the agent loop
 #[derive(Debug, Clone)]
@@ -143,7 +141,7 @@ impl AgentLoop {
     ) -> Result<String> {
         let model = model.unwrap_or(&self.config.default_model);
 
-        for iteration in 0..self.config.max_tool_iterations {
+        for _iteration in 0..self.config.max_tool_iterations {
             // Build request
             let mut request = ChatCompletionRequest::new(model);
             request.messages = messages.clone();
@@ -158,8 +156,8 @@ impl AgentLoop {
             let response = self.provider.chat(request).await?;
 
             // Check for tool calls
-            if let Some(tool_calls) = response.tool_calls() {
-                if !tool_calls.is_empty() {
+            if let Some(tool_calls) = response.tool_calls()
+                && !tool_calls.is_empty() {
                     // Add assistant message with tool calls
                     messages.push(ChatMessage::assistant_with_tool_calls(tool_calls.clone()));
 
@@ -183,7 +181,6 @@ impl AgentLoop {
 
                     continue;
                 }
-            }
 
             // No tool calls, return the content
             if let Some(content) = response.content() {

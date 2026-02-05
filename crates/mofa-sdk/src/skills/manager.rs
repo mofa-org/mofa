@@ -140,11 +140,10 @@ impl SkillsManager {
         let mut parts = Vec::new();
 
         for name in skill_names {
-            if let Some(content) = self.load_skill_async(name).await {
-                if !content.is_empty() {
+            if let Some(content) = self.load_skill_async(name).await
+                && !content.is_empty() {
                     parts.push(format!("### Skill: {}\n\n{}", name, content));
                 }
-            }
         }
 
         parts.join("\n\n---\n\n")

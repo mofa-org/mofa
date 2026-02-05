@@ -472,7 +472,7 @@ impl WorkflowNode {
                     };
                     agent.chat(&prompt_str)
                         .await
-                        .map(|response| WorkflowValue::String(response))
+                        .map(WorkflowValue::String)
                         .map_err(|e| e.to_string())
                 })
             })),
@@ -519,7 +519,7 @@ impl WorkflowNode {
                     };
                     agent.chat(&prompt)
                         .await
-                        .map(|response| WorkflowValue::String(response))
+                        .map(WorkflowValue::String)
                         .map_err(|e| e.to_string())
                 })
             })),

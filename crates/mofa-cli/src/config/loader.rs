@@ -4,7 +4,7 @@
 
 use super::AgentConfig;
 use anyhow::Context;
-use mofa_kernel::config::{detect_format, from_str, load_config};
+use mofa_kernel::config::{detect_format, from_str};
 use std::path::{Path, PathBuf};
 
 /// Configuration file types supported

@@ -174,13 +174,11 @@ impl PromptContext {
         // 3. Memory context (lazy init)
         if let Err(_) = self.init_memory().await {
             // Memory is optional, continue without it
-        } else if let Some(memory) = &self.memory {
-            if let Ok(memory_context) = memory.get_memory_context().await {
-                if !memory_context.is_empty() {
+        } else if let Some(memory) = &self.memory
+            && let Ok(memory_context) = memory.get_memory_context().await
+                && !memory_context.is_empty() {
                     parts.push(format!("# Memory\n\n{}", memory_context));
                 }
-            }
-        }
 
         // 4. Record that we built a prompt (using rich context)
         self.rich_ctx.record_output("prompt_builder", serde_json::json!({
@@ -238,11 +236,10 @@ When remembering something, write to {}/memory/MEMORY.md"#,
 
         for filename in &self.bootstrap_files {
             let file_path = self.workspace.join(filename);
-            if file_path.exists() {
-                if let Ok(content) = fs::read_to_string(&file_path).await {
+            if file_path.exists()
+                && let Ok(content) = fs::read_to_string(&file_path).await {
                     parts.push(format!("## {}\n\n{}", filename, content));
                 }
-            }
         }
 
         Ok(parts.join("\n\n"))

@@ -3,9 +3,8 @@
 //! 整合内置工具、MCP 工具、自定义工具的注册中心
 
 use crate::agent::components::tool::{
-    Tool, ToolDescriptor, ToolRegistry, ToolInput, ToolResult,
+    Tool, ToolDescriptor, ToolRegistry,
 };
-use crate::agent::context::CoreAgentContext;
 use crate::agent::error::AgentResult;
 use async_trait::async_trait;
 use std::collections::HashMap;

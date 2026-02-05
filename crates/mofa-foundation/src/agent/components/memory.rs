@@ -513,8 +513,8 @@ impl Memory for FileBasedStorage {
         // 同时在 markdown 文件中搜索
         let memory_files = self.list_memory_files().await?;
         for file_path in memory_files {
-            if let Ok(content) = tokio::fs::read_to_string(&file_path).await {
-                if content.to_lowercase().contains(&query_lower) {
+            if let Ok(content) = tokio::fs::read_to_string(&file_path).await
+                && content.to_lowercase().contains(&query_lower) {
                     let file_name = file_path.file_name()
                         .and_then(|n| n.to_str())
                         .unwrap_or("unknown")
@@ -525,7 +525,6 @@ impl Memory for FileBasedStorage {
                         MemoryValue::text(content)
                     ));
                 }
-            }
         }
 
         results.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(std::cmp::Ordering::Equal));

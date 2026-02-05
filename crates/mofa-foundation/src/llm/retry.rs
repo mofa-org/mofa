@@ -153,7 +153,7 @@ impl RetryExecutor {
                     // Append to existing system message
                     msg.content = Some(MessageContent::Text(format!(
                         "{}\n\n[RETRY CONTEXT: {}. Please fix the JSON and try again.]",
-                        msg.text_content().unwrap_or(&String::new()),
+                        msg.text_content().unwrap_or(""),
                         error_message
                     )));
                 } else {

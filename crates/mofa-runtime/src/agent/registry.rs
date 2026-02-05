@@ -151,7 +151,7 @@ impl CapabilityIndex {
 
         let mut result: Option<Vec<String>> = None;
         for tag in tags {
-            let mut ids = self.find_by_tag(tag);
+            let ids = self.find_by_tag(tag);
             result = match result {
                 None => Some(ids),
                 Some(existing) => {

@@ -8,11 +8,10 @@
 //! - 多环境支持
 //! - 配置热加载
 
-use mofa_kernel::config::{detect_format, from_str, load_config};
+use mofa_kernel::config::load_config;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use std::collections::HashMap;
-use std::fs;
 use std::path::Path;
 
 /// 配置错误类型

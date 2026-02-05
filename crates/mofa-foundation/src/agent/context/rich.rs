@@ -3,7 +3,7 @@
 //! 提供业务特定的功能，扩展内核的 CoreAgentContext
 
 use mofa_kernel::agent::context::CoreAgentContext;
-use serde::{de::DeserializeOwned, Deserialize, Serialize};
+use serde::{de::DeserializeOwned, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;

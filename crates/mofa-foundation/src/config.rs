@@ -29,7 +29,7 @@
 //!   default_timeout_secs: 30
 //! ```
 
-use mofa_kernel::config::{from_str, load_config, substitute_env_vars};
+use mofa_kernel::config::{from_str, load_config};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::Path;

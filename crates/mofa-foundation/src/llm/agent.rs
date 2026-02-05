@@ -896,7 +896,7 @@ impl LLMAgent {
     /// ```
     pub async fn tts_create_stream(
         &self,
-        text: &str,
+        _text: &str,
     ) -> LLMResult<TtsAudioStream> {
         #[cfg(feature = "kokoro")]
         {
@@ -986,13 +986,13 @@ impl LLMAgent {
     /// ```
     pub async fn tts_speak_f32_stream_batch(
         &self,
-        sentences: Vec<String>,
-        callback: Box<dyn Fn(Vec<f32>) + Send + Sync>,
+        _sentences: Vec<String>,
+        _callback: Box<dyn Fn(Vec<f32>) + Send + Sync>,
     ) -> LLMResult<()> {
         let tts = self.tts_plugin.as_ref()
             .ok_or_else(|| LLMError::Other("TTS plugin not configured".to_string()))?;
 
-        let tts_guard = tts.lock().await;
+        let _tts_guard = tts.lock().await;
 
         #[cfg(feature = "kokoro")]
         {

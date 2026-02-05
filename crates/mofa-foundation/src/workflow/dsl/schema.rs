@@ -369,6 +369,7 @@ pub enum TransformDef {
 
 /// Node-level configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Default)]
 pub struct NodeConfigDef {
     /// Retry policy
     #[serde(default)]
@@ -383,15 +384,6 @@ pub struct NodeConfigDef {
     pub metadata: HashMap<String, String>,
 }
 
-impl Default for NodeConfigDef {
-    fn default() -> Self {
-        Self {
-            retry_policy: None,
-            timeout_ms: None,
-            metadata: HashMap::new(),
-        }
-    }
-}
 
 /// Retry policy configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]

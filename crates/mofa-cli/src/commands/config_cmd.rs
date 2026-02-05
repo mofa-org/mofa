@@ -1,7 +1,7 @@
 //! `mofa config` command implementation
 
 use colored::Colorize;
-use mofa_kernel::config::{load_config, merge_configs, substitute_env_vars};
+use mofa_kernel::config::{load_config, substitute_env_vars};
 use serde_json::{json, Value};
 use std::collections::HashMap;
 use std::fs;
@@ -108,7 +108,7 @@ fn load_global_config() -> anyhow::Result<HashMap<String, String>> {
         return Ok(HashMap::new());
     }
 
-    let content = fs::read_to_string(&config_file)?;
+    let _content = fs::read_to_string(&config_file)?;
 
     // Use the unified config loading
     let config: Value = load_config(config_file.to_string_lossy().as_ref())
@@ -229,8 +229,8 @@ fn validate_config_file(path: &PathBuf) -> anyhow::Result<()> {
     };
 
     // Validate required fields
-    if let Ok(config) = result {
-        if let Some(obj) = config.as_object() {
+    if let Ok(config) = result
+        && let Some(obj) = config.as_object() {
             // Check for agent section
             if !obj.contains_key("agent") {
                 return Err(anyhow::anyhow!("Missing required 'agent' section"));
@@ -246,7 +246,6 @@ fn validate_config_file(path: &PathBuf) -> anyhow::Result<()> {
                 }
             }
         }
-    }
 
     Ok(())
 }

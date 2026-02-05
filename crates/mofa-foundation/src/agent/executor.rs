@@ -34,8 +34,7 @@ use mofa_kernel::agent::{AgentInput, AgentOutput, InputType, OutputType};
 use mofa_kernel::agent::{MoFAAgent, AgentState, AgentCapabilities};
 use mofa_kernel::agent::context::CoreAgentContext;
 use mofa_kernel::agent::types::{
-    ChatCompletionRequest, ChatCompletionResponse, ChatMessage, LLMProvider,
-    ToolCall, ToolDefinition, TokenUsage,
+    ChatCompletionRequest, ChatMessage, LLMProvider, ToolDefinition,
 };
 use serde_json::Value;
 use std::collections::HashMap;
@@ -47,7 +46,7 @@ use crate::agent::context::prompt::PromptContext;
 use crate::agent::base::BaseAgent;
 
 use super::{
-    Session, SessionManager, ToolCategory,
+    Session, SessionManager,
 };
 use super::components::tool::SimpleToolRegistry;
 use mofa_kernel::agent::components::tool::{Tool, ToolInput, ToolRegistry};
@@ -353,7 +352,7 @@ impl AgentExecutor {
                 // Execute tools
                 for tool_call in tool_calls {
                     // Convert arguments to HashMap
-                    let args_map: HashMap<String, Value> = if let Value::Object(map) = &tool_call.arguments {
+                    let _args_map: HashMap<String, Value> = if let Value::Object(map) = &tool_call.arguments {
                         map.iter()
                             .map(|(k, v)| (k.clone(), v.clone()))
                             .collect()
@@ -467,7 +466,7 @@ impl MoFAAgent for AgentExecutor {
         Ok(())
     }
 
-    async fn execute(&mut self, input: AgentInput, ctx: &CoreAgentContext) -> AgentResult<AgentOutput> {
+    async fn execute(&mut self, input: AgentInput, _ctx: &CoreAgentContext) -> AgentResult<AgentOutput> {
         // For simplicity, use the text content from the input
         let message = input.as_text().unwrap_or("");
         let session_key = "default"; // Use default session for now

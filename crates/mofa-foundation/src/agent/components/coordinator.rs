@@ -3,8 +3,7 @@
 //! 从 kernel 层导入 Coordinator trait，提供具体实现
 
 use mofa_kernel::agent::components::coordinator::{
-    aggregate_outputs, AggregationStrategy, Coordinator, CoordinationPattern, DispatchResult,
-    DispatchStatus, Task, TaskPriority, TaskType,
+    aggregate_outputs, AggregationStrategy, Coordinator, CoordinationPattern, DispatchResult, Task,
 };
 use mofa_kernel::agent::context::AgentContext;
 use mofa_kernel::agent::types::AgentOutput;

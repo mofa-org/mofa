@@ -8,7 +8,6 @@ use super::schema::AgentConfig;
 use mofa_kernel::config::{detect_format, from_str, load_config, load_merged, ConfigError};
 use config::FileFormat;
 use serde::{Deserialize, Serialize};
-use std::path::Path;
 
 /// 配置格式
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

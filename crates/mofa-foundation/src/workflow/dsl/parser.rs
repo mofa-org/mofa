@@ -5,7 +5,7 @@
 use super::env::substitute_env_recursive;
 use super::schema::*;
 use super::{DslError, DslResult};
-use crate::llm::{LLMAgent, LLMAgentBuilder};
+use crate::llm::LLMAgent;
 use crate::workflow::builder::WorkflowBuilder;
 use crate::workflow::state::WorkflowValue;
 use std::collections::HashMap;

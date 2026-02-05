@@ -754,20 +754,17 @@ pub type LLMResult<T> = Result<T, LLMError>;
 
 /// Retry strategy for LLM calls
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Default)]
 pub enum RetryStrategy {
     /// Fail immediately without retry
     NoRetry,
     /// Simple retry without prompt modification
+    #[default]
     DirectRetry,
     /// Append error context to system prompt (best for JSON errors)
     PromptRetry,
 }
 
-impl Default for RetryStrategy {
-    fn default() -> Self {
-        Self::DirectRetry
-    }
-}
 
 /// Backoff strategy for retry delays
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -802,12 +799,12 @@ impl BackoffStrategy {
                 std::time::Duration::from_millis(delay)
             }
             Self::Exponential { initial_delay_ms, max_delay_ms } => {
-                let delay = (*initial_delay_ms as u64) * 2u64.pow(attempt.min(10));
+                let delay = *initial_delay_ms * 2u64.pow(attempt.min(10));
                 let capped = delay.min(*max_delay_ms);
                 std::time::Duration::from_millis(capped)
             }
             Self::ExponentialWithJitter { initial_delay_ms, max_delay_ms, jitter_ms } => {
-                let base_delay = (*initial_delay_ms as u64) * 2u64.pow(attempt.min(10));
+                let base_delay = *initial_delay_ms * 2u64.pow(attempt.min(10));
                 let capped = base_delay.min(*max_delay_ms);
                 let jitter = if *jitter_ms > 0 {
                     use rand::Rng;

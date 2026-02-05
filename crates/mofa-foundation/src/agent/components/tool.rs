@@ -3,10 +3,10 @@
 //! 从 kernel 层导入 Tool trait，提供具体实现和扩展
 
 use mofa_kernel::agent::components::tool::{
-    LLMTool, ToolDescriptor, ToolInput, ToolMetadata, ToolRegistry, ToolResult,
+    ToolDescriptor, ToolInput, ToolMetadata, ToolRegistry, ToolResult,
 };
 use mofa_kernel::agent::context::CoreAgentContext;
-use mofa_kernel::agent::error::{AgentError, AgentResult};
+use mofa_kernel::agent::error::AgentResult;
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
