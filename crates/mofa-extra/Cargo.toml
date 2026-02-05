@@ -3,6 +3,15 @@ name = "mofa-extra"
 version.workspace = true
 edition.workspace = true
 description = "MoFA Extra modules including Rhai scripting support"
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+documentation = "https://docs.rs/mofa-extra"
+readme = "README.md"
+keywords = ["ai", "agents", "utilities", "scripting", "rhai"]
+categories = ["development-tools"]
+publish = true
 
 [features]
 default = ["rhai-scripting"]

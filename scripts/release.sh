@@ -329,7 +329,7 @@ main() {
         sleep 30
 
         log_info "Publishing remaining crates..."
-        run_cmd "cd '$PROJECT_ROOT' && cargo publish-workspace --no-dev-dependencies --skip mofa-sdk"
+        run_cmd "cd '$PROJECT_ROOT' && cargo publish-workspace --no-dev-dependencies --skip mofa-sdk --skip mofa-macros"
 
         log_success "All crates published to crates.io"
         echo ""

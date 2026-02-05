@@ -3,13 +3,15 @@ name = "mofa-cli"
 version.workspace = true
 edition.workspace = true
 description = "MoFA CLI - Command-line tool for building and managing AI agents"
-license = "MIT OR Apache-2.0"
-repository = "https://github.com/mofa-org/mofa"
-homepage = "https://github.com/mofa-org/mofa"
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
 documentation = "https://docs.rs/mofa-cli"
 readme = "README.md"
 keywords = ["ai", "agents", "cli", "dora", "framework"]
 categories = ["command-line-utilities", "development-tools"]
+publish = true
 
 [[bin]]
 name = "mofa"
@@ -17,8 +19,8 @@ path = "src/main.rs"
 
 [dependencies]
 # Core
-mofa-sdk = { path = "../mofa-sdk" }
-mofa-kernel = { path = "../mofa-kernel" }
+mofa-sdk = { path = "../mofa-sdk", version = "0.1" }
+mofa-kernel = { path = "../mofa-kernel", version = "0.1" }
 config.workspace = true
 tokio = { workspace = true }
 anyhow = { workspace = true }

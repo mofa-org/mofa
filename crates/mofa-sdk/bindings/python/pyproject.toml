@@ -8,7 +8,7 @@ version = "0.1.0"  # Will be synced with Rust version
 description = "MoFA SDK - Modular Framework for AI Agents"
 readme = "README.md"
 requires-python = ">=3.8"
-license = { text = "MIT OR Apache-2.0" }
+license = { text = "Apache-2.0" }
 authors = [
     { email = "mofa@example.com" },
 ]

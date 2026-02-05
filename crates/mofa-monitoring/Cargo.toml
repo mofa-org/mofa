@@ -3,10 +3,15 @@ name = "mofa-monitoring"
 version.workspace = true
 edition.workspace = true
 description = "MoFA Monitoring - Web-based dashboard and metrics collection"
-license = "MIT OR Apache-2.0"
-repository = "https://github.com/mofa-org/mofa"
-homepage = "https://github.com/mofa-org/mofa"
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
 documentation = "https://docs.rs/mofa-monitoring"
+readme = "README.md"
+keywords = ["ai", "agents", "monitoring", "dashboard", "metrics", "observability"]
+categories = ["development-tools"]
+publish = false
 
 [dependencies]
 # Workspace dependencies
@@ -32,5 +37,5 @@ rust-embed = { version = "8.0", features = ["compression"] }
 mime_guess = "2.0"
 
 # Local dependencies
-mofa-kernel = { path = "../mofa-kernel" }
+mofa-kernel = { path = "../mofa-kernel", version = "0.1" }
 futures = "0.3.31"

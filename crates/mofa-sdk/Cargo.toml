@@ -3,13 +3,15 @@ name = "mofa-sdk"
 version.workspace = true
 edition.workspace = true
 description = "MoFA SDK - Modular Framework for Agents. A unified development toolkit for building AI agents with Rust"
-license = "MIT OR Apache-2.0"
-repository = "https://github.com/mofa-org/mofa"
-homepage = "https://github.com/mofa-org/mofa"
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
 documentation = "https://docs.rs/mofa-sdk"
 readme = "README.md"
 keywords = ["ai", "agents", "llm", "dora", "framework"]
 categories = ["development-tools", "asynchronous"]
+publish = true
 
 [features]
 default = []
@@ -28,17 +30,17 @@ persistence-sqlite = ["mofa-foundation/persistence-sqlite", "sqlx"]
 persistence-all = ["mofa-foundation/persistence-all", "sqlx"]
 # Enable TTS audio playback support (via rodio)
 rodio = ["mofa-plugins/rodio"]
-# Enable Kokoro TTS engine support
-kokoro = ["mofa-foundation/kokoro", "mofa-plugins/kokoro"]
+# Enable monitoring support
+monitoring = ["mofa-runtime/monitoring", "dep:mofa-monitoring"]
 
 [dependencies]
 # Core dependencies
-mofa-runtime = { path = "../mofa-runtime" }
-mofa-foundation = { path = "../mofa-foundation" }
-mofa-kernel = { path = "../mofa-kernel" }
-mofa-plugins = { path = "../mofa-plugins" }
-mofa-extra = { path = "../mofa-extra", features = ["rhai-scripting"] }
-mofa-monitoring = {path = "../mofa-monitoring"}
+mofa-runtime = { path = "../mofa-runtime", version = "0.1" }
+mofa-foundation = { path = "../mofa-foundation", version = "0.1" }
+mofa-kernel = { path = "../mofa-kernel", version = "0.1" }
+mofa-plugins = { path = "../mofa-plugins", version = "0.1" }
+mofa-extra = { path = "../mofa-extra", version = "0.1", features = ["rhai-scripting"] }
+mofa-monitoring = { path = "../mofa-monitoring", version = "0.1", optional = true }
 sqlx = { version = "0.8", features = ["runtime-tokio", "postgres", "mysql", "sqlite", "uuid", "chrono", "json"], optional = true }
 async-trait = "0.1"
 tokio = { version = "1", features = ["full"] }
@@ -83,4 +85,3 @@ package_name = "org.mofa"
 # Swift bindings output
 [package.metadata.uniffi.bindings.swift]
 module_name = "MoFA"
-monitoring = ["mofa-runtime/monitoring", "dep:mofa-monitoring"]

@@ -18,6 +18,10 @@ exclude = [
 name = "mofa"
 version = "0.1.0"
 edition = "2024"
+authors = ["MoFA Contributors <contributors@mofa.org>"]
+license = "Apache-2.0"
+repository = "https://github.com/mofa-org/mofa"
+homepage = "https://github.com/mofa-org/mofa"
 
 [workspace.dependencies]
 async-trait = "0.1"

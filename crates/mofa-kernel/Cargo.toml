@@ -3,10 +3,15 @@ name = "mofa-kernel"
 version.workspace = true
 edition.workspace = true
 description = "MoFA Kernel - Core runtime and microkernel implementation"
-license = "MIT OR Apache-2.0"
-repository = "https://github.com/mofa-org/mofa"
-homepage = "https://github.com/mofa-org/mofa"
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
 documentation = "https://docs.rs/mofa-kernel"
+readme = "README.md"
+keywords = ["ai", "agents", "microkernel", "runtime", "async", "framework"]
+categories = ["development-tools", "asynchronous"]
+publish = true
 
 [dependencies]
 # Workspace dependencies

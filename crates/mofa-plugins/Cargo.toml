@@ -2,6 +2,16 @@
 name = "mofa-plugins"
 version.workspace = true
 edition.workspace = true
+description = "MoFA Plugins - Dual-layer plugin system with compile-time (Rust/WASM) and runtime (Rhai) support"
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+documentation = "https://docs.rs/mofa-plugins"
+readme = "README.md"
+keywords = ["ai", "agents", "plugins", "wasm", "scripting", "rhai"]
+categories = ["development-tools", "api-bindings"]
+publish = true
 
 [dependencies]
 # Workspace dependencies
@@ -24,18 +34,17 @@ rand.workspace = true
 # WASM plugin runtime
 wasmtime = { version = "40", features = ["component-model", "async"] }
 # Local dependencies
-mofa-kernel = { path = "../mofa-kernel" }
+mofa-kernel = { path = "../mofa-kernel", version = "0.1" }
 reqwest = { version = "0.12.28", features = ["json", "rustls-tls"] }
 chrono = { workspace = true, features = ["serde"] }
-mofa-extra = { version = "0.1.0", path = "../mofa-extra" }
+mofa-extra = { version = "0.1", path = "../mofa-extra" }
 rhai = { version = "1.20", features = ["sync", "serde"] }
 url = "2.5.7"
 regex = "1.12.2"
 walkdir = "2.4"
 which = "7"
-# TTS support (optional - using kokoros for real TTS)
+# TTS support (optional - using rodio for audio playback)
 rodio = { version = "0.17", optional = true }
-kokoro-tts = { git = "https://github.com/aios-rs/kokoro.git", branch = "master", optional = true }
 # Model download support
 hf-hub = "0.4"
 tokio-util = { version = "0.7", features = ["io"] }
@@ -47,4 +56,3 @@ futures = "0.3"
 [features]
 default = []
 rodio = ["dep:rodio"]
-kokoro = ["dep:kokoro-tts"]  # Feature flag for Kokoro TTS support

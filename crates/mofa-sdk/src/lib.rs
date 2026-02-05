@@ -307,7 +307,8 @@ pub use mofa_foundation::workflow::dsl::{
     WorkflowMetadata,
 };
 
-// Re-export dashboard module
+// Re-export dashboard module (only available with monitoring feature)
+#[cfg(feature = "monitoring")]
 pub mod dashboard {
     pub use mofa_monitoring::*;
 }
