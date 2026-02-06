@@ -663,6 +663,7 @@ pub struct PersistencePlugin {
     state: PluginState,
     message_store: Arc<dyn MessageStore + Send + Sync>,
     api_call_store: Arc<dyn ApiCallStore + Send + Sync>,
+    session_store: Option<Arc<dyn SessionStore + Send + Sync>>,
     user_id: Uuid,
     tenant_id: Uuid,
     agent_id: Uuid,
@@ -704,6 +705,7 @@ impl PersistencePlugin {
             state: PluginState::Loaded,
             message_store,
             api_call_store,
+            session_store: None,
             user_id,
             tenant_id,
             agent_id,
@@ -736,7 +738,8 @@ impl PersistencePlugin {
         S: MessageStore + ApiCallStore + SessionStore + Send + Sync + 'static,
     {
         let store_arc = Arc::new(store);
-        Self::new(
+        let session_store: Arc<dyn SessionStore + Send + Sync> = store_arc.clone();
+        let mut plugin = Self::new(
             plugin_id,
             store_arc.clone(),
             store_arc,
@@ -744,7 +747,9 @@ impl PersistencePlugin {
             tenant_id,
             agent_id,
             session_id,
-        )
+        );
+        plugin.session_store = Some(session_store);
+        plugin
     }
 
     /// 更新会话 ID
@@ -770,6 +775,11 @@ impl PersistencePlugin {
     /// 获取 API 调用存储引用
     pub fn api_call_store(&self) -> Arc<dyn ApiCallStore + Send + Sync> {
         self.api_call_store.clone()
+    }
+
+    /// 获取会话存储引用
+    pub fn session_store(&self) -> Option<Arc<dyn SessionStore + Send + Sync>> {
+        self.session_store.clone()
     }
 
     /// 获取用户 ID
@@ -826,6 +836,7 @@ impl Clone for PersistencePlugin {
             state: self.state.clone(),
             message_store: self.message_store.clone(),
             api_call_store: self.api_call_store.clone(),
+            session_store: self.session_store.clone(),
             user_id: self.user_id,
             tenant_id: self.tenant_id,
             agent_id: self.agent_id,
@@ -865,12 +876,12 @@ impl AgentPlugin for PersistencePlugin
     }
 
     async fn stop(&mut self) -> PluginResult<()> {
-        self.state = PluginState::Unloaded2;
+        self.state = PluginState::Unloaded;
         Ok(())
     }
 
     async fn unload(&mut self) -> PluginResult<()> {
-        self.state = PluginState::Unloaded2;
+        self.state = PluginState::Unloaded;
         Ok(())
     }
 

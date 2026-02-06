@@ -1,11 +1,13 @@
 use async_trait::async_trait;
-use mofa_kernel::agent::context::AgentContext;
-use mofa_kernel::agent::execution::{ExecutionEngine, ExecutionOptions};
-use mofa_kernel::agent::plugins::{CustomFunctionPlugin, HttpPlugin, PluginStage};
-use mofa_kernel::agent::registry::AgentRegistry;
+use mofa_runtime::agent::capabilities::AgentCapabilities;
+use mofa_runtime::agent::context::CoreAgentContext;
+use mofa_runtime::agent::error::AgentResult;
+use mofa_runtime::agent::execution::{ExecutionEngine, ExecutionOptions};
+use mofa_runtime::agent::plugins::{CustomFunctionPlugin, HttpPlugin, PluginStage};
+use mofa_runtime::agent::registry::AgentRegistry;
+use mofa_runtime::agent::types::{AgentInput, AgentOutput, AgentState, InterruptResult};
 use mofa_foundation::agent::BaseAgent;
-use mofa_kernel::agent::traits::UnifiedAgent;
-use mofa_kernel::agent::types::{AgentInput, AgentOutput};
+use mofa_runtime::agent::traits::UnifiedAgent;
 
 // 定义一个简单的LLM Agent
 struct SimpleLlmAgent {
@@ -30,15 +32,15 @@ impl UnifiedAgent for SimpleLlmAgent {
         &self.base.name
     }
 
-    fn capabilities(&self) -> &mofa_kernel::agent::capabilities::AgentCapabilities {
+    fn capabilities(&self) -> &AgentCapabilities {
         &self.base.capabilities
     }
 
-    async fn initialize(&mut self, ctx: &AgentContext) -> mofa_kernel::agent::error::AgentResult<()> {
+    async fn initialize(&mut self, ctx: &CoreAgentContext) -> AgentResult<()> {
         self.base.initialize(ctx).await
     }
 
-    async fn execute(&mut self, input: AgentInput, ctx: &AgentContext) -> mofa_kernel::agent::error::AgentResult<AgentOutput> {
+    async fn execute(&mut self, input: AgentInput, ctx: &CoreAgentContext) -> AgentResult<AgentOutput> {
         // 从上下文获取HTTP插件的响应
         if let Some(http_response) = ctx.get::<String>("http_response").await {
             println!("LLM Agent received HTTP response from context: {}", http_response);
@@ -53,21 +55,21 @@ impl UnifiedAgent for SimpleLlmAgent {
         Ok(AgentOutput::text("Hello from LLM Agent!"))
     }
 
-    async fn interrupt(&mut self) -> mofa_kernel::agent::error::AgentResult<mofa_kernel::agent::types::InterruptResult> {
-        Ok(mofa_kernel::agent::types::InterruptResult::Acknowledged)
+    async fn interrupt(&mut self) -> AgentResult<InterruptResult> {
+        Ok(InterruptResult::Acknowledged)
     }
 
-    async fn shutdown(&mut self) -> mofa_kernel::agent::error::AgentResult<()> {
+    async fn shutdown(&mut self) -> AgentResult<()> {
         Ok(())
     }
 
-    fn state(&self) -> mofa_kernel::agent::types::AgentState {
+    fn state(&self) -> AgentState {
         self.base.state.clone()
     }
 }
 
 #[tokio::main]
-async fn main() -> mofa_kernel::agent::error::AgentResult<()> {
+async fn main() -> AgentResult<()> {
     // 创建Agent注册中心
     let registry = Arc::new(AgentRegistry::new());
 
@@ -85,7 +87,7 @@ async fn main() -> mofa_kernel::agent::error::AgentResult<()> {
     let custom_plugin = Arc::new(CustomFunctionPlugin::new(
         "custom-input-plugin",
         "Custom input processing plugin",
-        |input: AgentInput, ctx: &AgentContext| {
+        |input: AgentInput, ctx: &CoreAgentContext| {
             println!("Custom plugin received input: {}", input.to_text());
 
             // 在上下文存储处理后的输入

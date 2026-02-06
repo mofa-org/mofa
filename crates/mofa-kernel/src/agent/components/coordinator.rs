@@ -2,7 +2,7 @@
 //!
 //! 定义多 Agent 协调能力
 
-use crate::agent::context::AgentContext;
+use crate::agent::context::CoreAgentContext;
 use crate::agent::error::AgentResult;
 use crate::agent::types::AgentOutput;
 use async_trait::async_trait;
@@ -24,7 +24,7 @@ use std::collections::HashMap;
 ///
 /// #[async_trait]
 /// impl Coordinator for SequentialCoordinator {
-///     async fn dispatch(&self, task: Task, ctx: &AgentContext) -> AgentResult<Vec<DispatchResult>> {
+///     async fn dispatch(&self, task: Task, ctx: &CoreAgentContext) -> AgentResult<Vec<DispatchResult>> {
 ///         // Sequential dispatch implementation
 ///     }
 ///
@@ -40,7 +40,7 @@ use std::collections::HashMap;
 #[async_trait]
 pub trait Coordinator: Send + Sync {
     /// 分发任务给 Agent(s)
-    async fn dispatch(&self, task: Task, ctx: &AgentContext) -> AgentResult<Vec<DispatchResult>>;
+    async fn dispatch(&self, task: Task, ctx: &CoreAgentContext) -> AgentResult<Vec<DispatchResult>>;
 
     /// 聚合多个 Agent 的结果
     async fn aggregate(&self, results: Vec<AgentOutput>) -> AgentResult<AgentOutput>;
@@ -54,7 +54,7 @@ pub trait Coordinator: Send + Sync {
     }
 
     /// 选择执行任务的 Agent
-    async fn select_agents(&self, task: &Task, ctx: &AgentContext) -> AgentResult<Vec<String>> {
+    async fn select_agents(&self, task: &Task, ctx: &CoreAgentContext) -> AgentResult<Vec<String>> {
         let _ = (task, ctx);
         Ok(vec![])
     }

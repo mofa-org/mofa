@@ -3,7 +3,7 @@
 //! 定义 Agent 的推理/思考能力
 
 use crate::agent::capabilities::ReasoningStrategy;
-use crate::agent::context::AgentContext;
+use crate::agent::context::CoreAgentContext;
 use crate::agent::error::AgentResult;
 use crate::agent::types::AgentInput;
 use async_trait::async_trait;
@@ -26,7 +26,7 @@ use serde::{Deserialize, Serialize};
 ///
 /// #[async_trait]
 /// impl Reasoner for MyReasoner {
-///     async fn reason(&self, input: &AgentInput, ctx: &AgentContext) -> AgentResult<ReasoningResult> {
+///     async fn reason(&self, input: &AgentInput, ctx: &CoreAgentContext) -> AgentResult<ReasoningResult> {
 ///         Ok(ReasoningResult {
 ///             thoughts: vec![],
 ///             decision: Decision::Respond { content: input.to_text() },
@@ -42,7 +42,7 @@ use serde::{Deserialize, Serialize};
 #[async_trait]
 pub trait Reasoner: Send + Sync {
     /// 执行推理过程
-    async fn reason(&self, input: &AgentInput, ctx: &AgentContext) -> AgentResult<ReasoningResult>;
+    async fn reason(&self, input: &AgentInput, ctx: &CoreAgentContext) -> AgentResult<ReasoningResult>;
 
     /// 获取推理策略
     fn strategy(&self) -> ReasoningStrategy;

@@ -140,7 +140,6 @@ impl Memory for InMemoryStorage {
 /// - 线程安全 (Arc<RwLock<T>>)
 /// - 原子文件写入 (临时文件 + rename)
 /// - 懒加载 (启动时从文件加载到内存)
-/// - 与 nanobot MemoryStore 格式兼容
 pub struct FileBasedStorage {
     /// 基础目录
     base_dir: PathBuf,

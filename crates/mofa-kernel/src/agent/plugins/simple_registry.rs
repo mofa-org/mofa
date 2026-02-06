@@ -1,6 +1,7 @@
 // 简单插件注册中心实现
 
 use super::{AgentResult, Plugin, PluginRegistry, PluginStage};
+use crate::agent::error::AgentError;
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
 
@@ -26,13 +27,13 @@ impl Default for SimplePluginRegistry {
 
 impl PluginRegistry for SimplePluginRegistry {
     fn register(&self, plugin: Arc<dyn Plugin>) -> AgentResult<()> {
-        let mut plugins = self.plugins.write().map_err(|_| super::AgentError::ExecutionFailed("Failed to acquire write lock".to_string()))?;
+        let mut plugins = self.plugins.write().map_err(|_| AgentError::ExecutionFailed("Failed to acquire write lock".to_string()))?;
         plugins.insert(plugin.name().to_string(), plugin);
         Ok(())
     }
 
     fn unregister(&self, name: &str) -> AgentResult<bool> {
-        let mut plugins = self.plugins.write().map_err(|_| super::AgentError::ExecutionFailed("Failed to acquire write lock".to_string()))?;
+        let mut plugins = self.plugins.write().map_err(|_| AgentError::ExecutionFailed("Failed to acquire write lock".to_string()))?;
         Ok(plugins.remove(name).is_some())
     }
 

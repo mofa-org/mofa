@@ -81,31 +81,34 @@ let agent = LLMAgentBuilder::new()
 ### 4. 带持久化的 Agent
 
 ```rust
-use mofa_sdk::llm::{LLMAgentBuilder, OpenAIProvider};
-use mofa_foundation::persistence::PostgresMessageStore;
+use mofa_sdk::llm::LLMAgentBuilder;
+use mofa_sdk::persistence::{PersistencePlugin, PostgresStore};
+use std::sync::Arc;
 use uuid::Uuid;
 
-let agent_id = Uuid::new_v4();
-let tenant_id = Uuid::new_v4();
+let user_id = Uuid::now_v7();
+let tenant_id = Uuid::now_v7();
+let agent_id = Uuid::now_v7();
+let session_id = Uuid::now_v7();
 
-// 创建持久化存储
-let message_store = PostgresMessageStore::new("postgresql://...").await?;
-let session_store = message_store.clone();
+// 创建持久化插件
+let store = Arc::new(PostgresStore::connect("postgresql://...").await?);
+let persistence = PersistencePlugin::new(
+    "persistence-plugin",
+    store,
+    user_id,
+    tenant_id,
+    agent_id,
+    session_id,
+);
 
-let agent = LLMAgentBuilder::new()
+let agent = LLMAgentBuilder::from_env()?
     .with_id(agent_id.to_string())
-    .with_provider(Arc::new(OpenAIProvider::from_env()))
-    .with_session_id("user_session_123".to_string())
+    .with_session_id(session_id.to_string())
     .with_sliding_window(20)  // 保持最近20轮对话
-    .with_persistence_stores(
-        message_store,
-        session_store,
-        Uuid::new_v4(),  // user_id
-        tenant_id,
-        agent_id
-    )
+    .with_persistence_plugin(persistence)
     .build_async()
-    .await?;
+    .await;
 ```
 
 ### 5. 带 TTS 插件的 Agent
@@ -237,8 +240,7 @@ let agent = LLMAgentBuilder::new()
 | 方法 | 参数 | 说明 |
 |------|------|------|
 | `with_event_handler()` | `handler: Box<dyn LLMAgentEventHandler>` | 设置事件处理器 |
-| `with_persistence_handler()` | `persistence: Arc<dyn PersistenceCallback>` | 设置持久化处理器 |
-| `with_persistence_stores()` | `message_store, session_store, user_id, tenant_id, agent_id` | 设置持久化存储 |
+| `with_persistence_plugin()` | `plugin: PersistencePlugin` | 添加持久化插件 |
 
 ### 会话管理
 

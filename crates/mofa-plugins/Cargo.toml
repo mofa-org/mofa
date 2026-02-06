@@ -45,6 +45,10 @@ walkdir = "2.4"
 which = "7"
 # TTS support (optional - using rodio for audio playback)
 rodio = { version = "0.17", optional = true }
+# Kokoro TTS (optional)
+kokoro-tts = { version = "0.2.8", optional = true }
+# Pin ort version for kokoro-tts compatibility
+ort = { version = "=2.0.0-rc.10", optional = true }
 # Model download support
 hf-hub = "0.4"
 tokio-util = { version = "0.7", features = ["io"] }
@@ -56,3 +60,4 @@ futures = "0.3"
 [features]
 default = []
 rodio = ["dep:rodio"]
+kokoro = ["dep:kokoro-tts", "dep:ort"]

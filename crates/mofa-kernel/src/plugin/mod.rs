@@ -254,8 +254,6 @@ pub enum PluginState {
     Paused,
     /// 错误状态
     Error(String),
-    /// 已卸载
-    Unloaded2,
 }
 
 /// 插件优先级（用于确定执行顺序）

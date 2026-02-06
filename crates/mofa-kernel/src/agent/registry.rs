@@ -4,7 +4,7 @@
 
 use crate::agent::capabilities::{AgentCapabilities, AgentRequirements};
 use crate::agent::config::AgentConfig;
-use crate::agent::context::AgentContext;
+use crate::agent::context::CoreAgentContext;
 use crate::agent::core::MoFAAgent;
 use crate::agent::error::{AgentError, AgentResult};
 use crate::agent::traits::AgentMetadata;
@@ -408,7 +408,7 @@ impl AgentRegistry {
     // ========================================================================
 
     /// 初始化所有 Agent
-    pub async fn initialize_all(&self, ctx: &AgentContext) -> AgentResult<Vec<String>> {
+    pub async fn initialize_all(&self, ctx: &CoreAgentContext) -> AgentResult<Vec<String>> {
         let agents = self.agents.read().await;
         let mut initialized = Vec::new();
 

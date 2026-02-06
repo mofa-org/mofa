@@ -25,6 +25,8 @@ persistence-mysql = ["dep:sqlx"]
 persistence-sqlite = ["dep:sqlx"]
 # Enable all database backends
 persistence-all = ["persistence-postgres", "persistence-mysql", "persistence-sqlite"]
+# Enable Kokoro TTS support
+kokoro = ["mofa-plugins/kokoro"]
 
 [dependencies]
 # Workspace dependencies
@@ -80,4 +82,3 @@ infer = "0.16"
 
 [dev-dependencies]
 tempfile = "3"
-

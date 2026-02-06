@@ -1,8 +1,8 @@
 use async_trait::async_trait;
-use mofa_sdk::kernel::AgentRunner;
+use mofa_sdk::runtime::AgentRunner;
 use mofa_sdk::{
-    AgentBuilder, AgentCapabilities, AgentContext, AgentEvent, AgentInput, AgentOutput, AgentResult,
-    AgentState, MoFAAgent, SimpleRuntime,
+    run_agents, AgentBuilder, AgentCapabilities, CoreAgentContext, AgentEvent, AgentInput, AgentOutput,
+    AgentResult, AgentState, MoFAAgent, SimpleRuntime,
 };
 use tracing::info;
 // ============================================================================
@@ -48,13 +48,13 @@ impl MoFAAgent for SimpleRuntimeAgent {
         &self.capabilities
     }
 
-    async fn initialize(&mut self, _ctx: &AgentContext) -> AgentResult<()> {
+    async fn initialize(&mut self, _ctx: &CoreAgentContext) -> AgentResult<()> {
         self.state = AgentState::Ready;
         info!("Agent {} initialized", self.id);
         Ok(())
     }
 
-    async fn execute(&mut self, input: AgentInput, _ctx: &AgentContext) -> AgentResult<AgentOutput> {
+    async fn execute(&mut self, input: AgentInput, _ctx: &CoreAgentContext) -> AgentResult<AgentOutput> {
         self.state = AgentState::Executing;
         self.event_count += 1;
 
@@ -91,14 +91,20 @@ async fn main() -> anyhow::Result<()> {
     info!("=== MoFA Runtime Example (New API) ===\n");
 
     // ========================================================================
-    // Example 1: 使用 run_agent 简化函数
+    // Example 1: 使用 run_agents 批量执行
     // ========================================================================
-    info!("Example 1: Using run_agent() helper function");
-    info!("Note: This will run until you press Ctrl+C (we'll skip it in this example)\n");
-
-    // Uncomment the line below to test:
-    // let agent = SimpleRuntimeAgent::new("agent_simple", "SimpleHelperAgent");
-    // run_agent(agent).await?;
+    info!("Example 1: Using run_agents() for batch execution");
+    let batch_agent = SimpleRuntimeAgent::new("agent_batch", "BatchAgent");
+    let batch_inputs = vec![
+        AgentInput::text("task-1"),
+        AgentInput::text("task-2"),
+        AgentInput::text("task-3"),
+    ];
+    let batch_outputs = run_agents(batch_agent, batch_inputs).await?;
+    for output in batch_outputs {
+        info!("Batch output: {}", output.to_text());
+    }
+    info!("\n");
 
     // ========================================================================
     // Example 2: 直接使用 AgentBuilder 构建和使用 SimpleAgentRuntime

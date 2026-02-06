@@ -100,7 +100,7 @@ pub trait ToolExt: mofa_kernel::agent::components::tool::Tool {
 // SimpleTool - Convenience trait for tools that don't need context
 // ============================================================================
 
-/// Simple tool trait for tools that don't need AgentContext
+/// Simple tool trait for tools that don't need CoreAgentContext
 ///
 /// This is a convenience trait for implementing simple tools that only need
 /// the input parameters and don't require access to the agent context.
@@ -167,7 +167,7 @@ pub trait SimpleTool: Send + Sync {
 /// Adapter that implements the full Tool trait for SimpleTool
 ///
 /// This adapter wraps a SimpleTool and implements the Tool trait by
-/// ignoring the AgentContext parameter.
+/// ignoring the CoreAgentContext parameter.
 pub struct SimpleToolAdapter<T: SimpleTool> {
     inner: T,
 }

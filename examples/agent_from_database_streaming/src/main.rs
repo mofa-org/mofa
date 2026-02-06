@@ -150,7 +150,7 @@ async fn main() -> anyhow::Result<()> {
     );
 
     let agent_builder = LLMAgentBuilder::from_agent_config(&config)?
-        .with_plugin(persistence_plugin);
+        .with_persistence_plugin(persistence_plugin);
 
     // 4. 构建 Agent（异步，支持从数据库加载会话历史）
     info!("正在构建 Agent...");

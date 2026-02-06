@@ -4,14 +4,10 @@
 //! that implements the TTSEngine trait for integration with MoFA.
 
 use super::{TTSEngine, VoiceInfo};
-use async_trait::async_trait;
-use futures::{Stream, StreamExt};
+use futures::StreamExt;
 pub use kokoro_tts::{KokoroTts, Voice, SynthStream, SynthSink};
-use std::collections::HashMap;
 use std::path::Path;
-use std::pin::Pin;
 use std::sync::Arc;
-use std::time::Duration;
 use tracing::{debug, info};
 
 /// Kokoro TTS engine implementation
@@ -29,6 +25,8 @@ pub struct KokoroTTS {
     tts: Arc<KokoroTts>,
     /// Default voice to use for synthesis
     default_voice: Voice,
+    /// Whether the model is v1.1 (affects voice defaults)
+    is_v11_model: bool,
 }
 
 /// Clone implementation for KokoroTTS
@@ -40,6 +38,7 @@ impl Clone for KokoroTTS {
         Self {
             tts: Arc::clone(&self.tts),
             default_voice: self.default_voice.clone(),
+            is_v11_model: self.is_v11_model,
         }
     }
 }
@@ -78,18 +77,56 @@ impl KokoroTTS {
             anyhow::anyhow!("Failed to initialize Kokoro TTS: {:?}", e)
         })?;
 
-        // Set default voice
-        let default_voice = Voice::AfMaple(1);
+        let model_lower = model_path.to_ascii_lowercase();
+        let is_v11_model = model_lower.contains("v1.1") || model_lower.contains("v11");
+
+        // Set default voice based on model version
+        let default_voice = if is_v11_model {
+            Voice::Zf088(1)
+        } else {
+            Voice::ZfXiaoxiao(1.0)
+        };
 
         Ok(Self {
             tts: Arc::new(tts),
             default_voice,
+            is_v11_model,
         })
     }
 
     /// Get the default voice
     pub fn default_voice_name(&self) -> &str {
         "default"
+    }
+
+    fn resolve_voice(&self, voice: &str) -> Voice {
+        let normalized = voice.trim().to_ascii_lowercase();
+        if normalized.is_empty() || normalized == "default" {
+            return self.default_voice;
+        }
+
+        // Common v1.1 voices (examples in docs)
+        match normalized.as_str() {
+            "zf_088" | "zf088" => return Voice::Zf088(1),
+            "zf_090" | "zf090" => return Voice::Zf090(1),
+            _ => {}
+        }
+
+        // Common v1.0 voices
+        match normalized.as_str() {
+            "zf_xiaoxiao" | "zfxiaoxiao" => return Voice::ZfXiaoxiao(1.0),
+            "zf_xiaoyi" | "zfxiaoyi" => return Voice::ZfXiaoyi(1.0),
+            "zm_yunyang" | "zmyunyang" => return Voice::ZmYunyang(1.0),
+            "zf_xiaobei" | "zfxiaobei" => return Voice::ZfXiaobei(1.0),
+            "zf_xiaoni" | "zfxiaoni" => return Voice::ZfXiaoni(1.0),
+            _ => {}
+        }
+
+        debug!(
+            "Unknown voice '{}', falling back to default (v1.1: {})",
+            voice, self.is_v11_model
+        );
+        self.default_voice
     }
 
     /// Create a stream for text synthesis (native f32 audio)
@@ -116,7 +153,7 @@ impl KokoroTTS {
         &self,
         voice: &str,
     ) -> Result<(SynthSink<String>,SynthStream), anyhow::Error> {
-        let voice_enum = Voice::from_name(voice);
+        let voice_enum = self.resolve_voice(voice);
         let (sink, stream) = self.tts.stream::<String>(voice_enum);
         Ok((sink,stream))
     }
@@ -150,7 +187,7 @@ impl KokoroTTS {
             text
         );
 
-        let voice_enum = Voice::from_name(voice);
+        let voice_enum = self.resolve_voice(voice);
 
         // Create a new stream for this synthesis
         let (mut sink, mut stream) = self.tts.stream::<String>(voice_enum);
@@ -179,7 +216,7 @@ impl TTSEngine for KokoroTTS {
             text
         );
 
-        let voice = Voice::from_name(voice);
+        let voice = self.resolve_voice(voice);
 
         // Create a stream for this synthesis
         let (mut sink, mut stream) = self.tts.stream::<String>(voice);
@@ -227,7 +264,7 @@ impl TTSEngine for KokoroTTS {
             text
         );
 
-        let voice_enum = Voice::from_name(voice);
+        let voice_enum = self.resolve_voice(voice);
 
         // Create a new stream for this synthesis
         let (mut sink, mut stream) = self.tts.stream::<String>(voice_enum);

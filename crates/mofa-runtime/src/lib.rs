@@ -13,7 +13,7 @@ pub use mofa_monitoring::*;
 // - AgentBuilder: Builder pattern for constructing agents
 // - SimpleRuntime: Multi-agent coordination (non-dora mode)
 // - AgentRuntime: Dora-rs integration (with `dora` feature)
-// - run_agent: Simplified agent execution helper
+// - run_agents: Simplified agent execution helper
 //
 // =============================================================================
 
@@ -97,40 +97,7 @@ pub struct AgentBuilder {
 // 简化的 SDK API
 // ------------------------------
 
-/// 运行智能体的简化接口
-///
-/// # 示例
-/// ```rust
-/// use mofa_runtime::{MoFAAgent, run_agent};
-///
-/// struct MyAgent { /* ... */ }
-///
-/// #[async_trait::async_trait]
-/// impl MoFAAgent for MyAgent { /* ... */ }
-///
-/// #[tokio::main]
-/// async fn main() -> anyhow::Result<()> {
-///     let agent = MyAgent::new();
-///     run_agent(agent).await
-/// }
-/// ```
-pub async fn run_agent<A: MoFAAgent>(agent: A) -> anyhow::Result<()> {
-    let builder = AgentBuilder::new(
-        agent.id(),
-        agent.name(),
-    );
-
-    // 使用 with_agent 需要所有权，所以我们直接使用内部 API
-    let mut runtime = builder.with_agent(agent).await?;
-
-    runtime.start().await?;
-
-    // 等待中断
-    tokio::signal::ctrl_c().await?;
-
-    runtime.stop().await?;
-    Ok(())
-}
+pub use crate::runner::run_agents;
 
 impl AgentBuilder {
     /// 创建新的 AgentBuilder
@@ -376,8 +343,8 @@ impl<A: MoFAAgent> AgentRuntime<A> {
 
     /// 运行事件循环
     pub async fn run_event_loop(&mut self) -> DoraResult<()> {
-        // 创建 AgentContext 并初始化智能体
-        let context = mofa_kernel::agent::AgentContext::new(self.metadata.id.clone());
+        // 创建 CoreAgentContext 并初始化智能体
+        let context = mofa_kernel::agent::CoreAgentContext::new(self.metadata.id.clone());
         self.agent
             .initialize(&context)
             .await
@@ -545,8 +512,8 @@ impl<A: MoFAAgent> SimpleAgentRuntime<A> {
 
     /// 启动运行时
     pub async fn start(&mut self) -> anyhow::Result<()> {
-        // 创建 AgentContext
-        let context = mofa_kernel::agent::AgentContext::new(self.metadata.id.clone());
+        // 创建 CoreAgentContext
+        let context = mofa_kernel::agent::CoreAgentContext::new(self.metadata.id.clone());
 
         // 初始化智能体 - 使用 MoFAAgent 的 initialize 方法
         self.agent.initialize(&context).await?;
@@ -570,7 +537,7 @@ impl<A: MoFAAgent> SimpleAgentRuntime<A> {
         use mofa_kernel::agent::types::AgentInput;
         
 
-        let context = mofa_kernel::agent::AgentContext::new(self.metadata.id.clone());
+        let context = mofa_kernel::agent::CoreAgentContext::new(self.metadata.id.clone());
 
         // 尝试将事件转换为输入
         let input = match event {

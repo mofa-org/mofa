@@ -3,7 +3,7 @@
 //! 提供了 MoFAAgent trait 的基础实现，可以作为其他 Agent 的基础
 
 use mofa_kernel::agent::{
-    AgentCapabilities, AgentContext, AgentError, AgentOutput, AgentResult,
+    AgentCapabilities, CoreAgentContext, AgentError, AgentOutput, AgentResult,
     AgentState, AgentStats, InterruptResult, MoFAAgent,
 };
 
@@ -116,7 +116,7 @@ impl BaseAgent {
     }
 
     /// 初始化
-    pub async fn initialize(&mut self, _ctx: &AgentContext) -> AgentResult<()> {
+    pub async fn initialize(&mut self, _ctx: &CoreAgentContext) -> AgentResult<()> {
         self.transition_to(AgentState::Initializing)?;
         self.transition_to(AgentState::Ready)?;
         Ok(())

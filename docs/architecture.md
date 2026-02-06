@@ -31,7 +31,7 @@ MoFA 严格遵循以下微内核架构设计原则：
 │  统一API入口：重新导出各层类型，提供跨语言绑定                            │
 │                                                                          │
 │  模块组织：                                                              │
-│  - kernel: 核心抽象层 (MoFAAgent, AgentContext, etc.)                   │
+│  - kernel: 核心抽象层 (MoFAAgent, CoreAgentContext, etc.)                   │
 │  - runtime: 运行时层 (AgentBuilder, SimpleRuntime, etc.)                │
 │  - foundation: 业务层 (llm, secretary, react, etc.)                    │
 │  - 顶层便捷导出：常用类型直接导入                                         │
@@ -99,7 +99,7 @@ MoFA 严格遵循以下微内核架构设计原则：
 │  - AgentPluginSupport: 插件管理                                         │
 │                                                                          │
 │  核心类型：                                                              │
-│  - AgentContext: 执行上下文                                              │
+│  - CoreAgentContext: 执行上下文                                              │
 │  - AgentInput/AgentOutput: 输入输出                                      │
 │  - AgentState: Agent 状态                                               │
 │  - AgentCapabilities: 能力描述                                          │
@@ -232,45 +232,383 @@ SDK层 (mofa-sdk)
 - 指标收集
 - 分布式追踪
 
-## 使用示例
+## 渐进式披露 Skills 机制
 
-### 基础用法
+MoFA 支持基于 `SKILL.md` 的技能体系，并采用渐进式披露策略以控制上下文长度与成本。
+
+- 第 1 层：仅注入技能元数据摘要（名称、描述、可用性）
+- 第 2 层：按需加载指定技能的完整内容（当任务需要时）
+- 支持 always skills 与多目录搜索（workspace > builtin > system）
 
 ```rust
-use mofa_sdk::{AgentBuilder, MoFAAgent, run_agent};
-use mofa_sdk::AgentInput;
-use async_trait::async_trait;
+use mofa_sdk::skills::SkillsManager;
 
-struct MyAgent;
+#[tokio::main]
+async fn main() -> anyhow::Result<()> {
+    // 扫描 skills 目录
+    let skills = SkillsManager::new("./skills")?;
+
+    // 仅注入摘要（metadata）
+    let summary = skills.build_skills_summary().await;
+
+    // 按需加载技能内容（SKILL.md）
+    let requested = vec!["pdf_processing".to_string()];
+    let content = skills.load_skills_for_context(&requested).await;
+
+    let system_prompt = format!(
+        "You are a helpful assistant.\n\n# Skills Summary\n{}\n\n# Requested Skills\n{}",
+        summary, content
+    );
+    println!("{}", system_prompt);
+    Ok(())
+}
+```
+
+## 使用示例
+
+### 自定义 Agent（结合 Skills 与运行时）
+
+```rust
+use mofa_sdk::{
+    AgentCapabilities, AgentCapabilitiesBuilder, CoreAgentContext, AgentError, AgentInput, AgentOutput,
+    AgentResult, AgentState, MoFAAgent,
+};
+use mofa_sdk::kernel::CoreAgentContext;
+use mofa_sdk::runtime::AgentRunner;
+use mofa_sdk::llm::{LLMClient, openai_from_env};
+use mofa_sdk::skills::SkillsManager;
+use async_trait::async_trait;
+use std::sync::Arc;
+
+struct MyAgent {
+    caps: AgentCapabilities,
+    state: AgentState,
+    llm: LLMClient,
+    skills: SkillsManager,
+}
+
+impl MyAgent {
+    fn new(llm: LLMClient, skills: SkillsManager) -> Self {
+        Self {
+            caps: AgentCapabilitiesBuilder::new().tag("llm").tag("skills").build(),
+            state: AgentState::Created,
+            llm,
+            skills,
+        }
+    }
+}
 
 #[async_trait]
 impl MoFAAgent for MyAgent {
     fn id(&self) -> &str { "my-agent" }
     fn name(&self) -> &str { "My Agent" }
-    fn capabilities(&self) -> &AgentCapabilities {
-        &self.caps
-    }
+    fn capabilities(&self) -> &AgentCapabilities { &self.caps }
 
-    async fn initialize(&mut self, ctx: &AgentContext) -> AgentResult<()> {
+    async fn initialize(&mut self, _ctx: &CoreAgentContext) -> AgentResult<()> {
+        self.state = AgentState::Ready;
         Ok(())
     }
 
-    async fn execute(&mut self, input: AgentInput, ctx: &AgentContext) -> AgentResult<AgentOutput> {
-        Ok(AgentOutput::text("Hello!"))
+    async fn execute(&mut self, input: AgentInput, ctx: &CoreAgentContext) -> AgentResult<AgentOutput> {
+        let user_input = input.to_text();
+        let requested: Option<Vec<String>> = ctx.get("skill_names").await;
+
+        let summary = self.skills.build_skills_summary().await;
+        let mut system_prompt = format!("You are a helpful assistant.\n\n{}", summary);
+
+        if let Some(names) = requested.as_ref() {
+            let details = self.skills.load_skills_for_context(names).await;
+            if !details.is_empty() {
+                system_prompt = format!("{}\n\n# Requested Skills\n\n{}", system_prompt, details);
+            }
+        }
+
+        let response = self.llm
+            .chat()
+            .system(system_prompt)
+            .user(user_input)
+            .send()
+            .await
+            .map_err(|e| AgentError::ExecutionFailed(e.to_string()))?;
+
+        Ok(AgentOutput::text(response.content().unwrap_or_default()))
     }
 
     async fn shutdown(&mut self) -> AgentResult<()> {
+        self.state = AgentState::Shutdown;
         Ok(())
     }
 
-    fn state(&self) -> AgentState {
-        AgentState::Ready
-    }
+    fn state(&self) -> AgentState { self.state.clone() }
 }
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    run_agent(MyAgent).await
+    let provider = openai_from_env()?;
+    let llm = LLMClient::new(Arc::new(provider));
+    let skills = SkillsManager::new("./skills")?;
+    let agent = MyAgent::new(llm, skills);
+
+    let ctx = CoreAgentContext::with_session("exec-001", "session-001");
+    ctx.set("skill_names", vec!["pdf_processing".to_string()]).await;
+
+    let mut runner = AgentRunner::with_context(agent, ctx).await?;
+    let output = runner.execute(AgentInput::text("Extract key fields from this PDF")).await?;
+    runner.shutdown().await?;
+    println!("{}", output.to_text());
+    Ok(())
+}
+```
+
+### 批量执行
+
+```rust
+use mofa_sdk::{AgentCapabilities, AgentCapabilitiesBuilder, CoreAgentContext, AgentInput, AgentOutput, AgentResult, AgentState, MoFAAgent, run_agents};
+use async_trait::async_trait;
+
+struct EchoAgent {
+    caps: AgentCapabilities,
+    state: AgentState,
+}
+
+impl EchoAgent {
+    fn new() -> Self {
+        Self {
+            caps: AgentCapabilitiesBuilder::new().tag("echo").build(),
+            state: AgentState::Created,
+        }
+    }
+}
+
+#[async_trait]
+impl MoFAAgent for EchoAgent {
+    fn id(&self) -> &str { "echo-agent" }
+    fn name(&self) -> &str { "Echo Agent" }
+    fn capabilities(&self) -> &AgentCapabilities { &self.caps }
+
+    async fn initialize(&mut self, _ctx: &CoreAgentContext) -> AgentResult<()> {
+        self.state = AgentState::Ready;
+        Ok(())
+    }
+
+    async fn execute(&mut self, input: AgentInput, _ctx: &CoreAgentContext) -> AgentResult<AgentOutput> {
+        Ok(AgentOutput::text(format!("Echo: {}", input.to_text())))
+    }
+
+    async fn shutdown(&mut self) -> AgentResult<()> {
+        self.state = AgentState::Shutdown;
+        Ok(())
+    }
+
+    fn state(&self) -> AgentState { self.state.clone() }
+}
+
+#[tokio::main]
+async fn main() -> anyhow::Result<()> {
+    let inputs = vec![
+        AgentInput::text("task-1"),
+        AgentInput::text("task-2"),
+    ];
+    let outputs = run_agents(EchoAgent::new(), inputs).await?;
+    for output in outputs {
+        println!("{}", output.to_text());
+    }
+    Ok(())
+}
+```
+
+### LLMAgentBuilder（核心构建器）
+
+`LLMAgentBuilder` 位于 foundation 层，负责把 LLM provider、提示词、会话、插件与持久化等能力组装为 `LLMAgent`。`LLMAgent` 实现了 `MoFAAgent`，因此可以被运行时执行引擎或 `AgentRunner` 直接运行。
+
+#### 端到端：从构建到运行（最佳实践）
+
+```rust
+use mofa_sdk::kernel::CoreAgentContext;
+use mofa_sdk::runtime::AgentRunner;
+use mofa_sdk::llm::{LLMAgentBuilder, HotReloadableRhaiPromptPlugin};
+use mofa_sdk::persistence::{PersistencePlugin, PostgresStore};
+use mofa_sdk::AgentInput;
+use std::sync::Arc;
+use uuid::Uuid;
+
+#[tokio::main]
+async fn main() -> anyhow::Result<()> {
+    // 1) 持久化插件（可选，但推荐用于生产）
+    let store = Arc::new(PostgresStore::connect("postgres://localhost/mofa").await?);
+    let user_id = Uuid::now_v7();
+    let tenant_id = Uuid::now_v7();
+    let agent_id = Uuid::now_v7();
+    let session_id = Uuid::now_v7();
+    let persistence = PersistencePlugin::new(
+        "persistence-plugin",
+        store,
+        user_id,
+        tenant_id,
+        agent_id,
+        session_id,
+    );
+
+    // 2) 提示词模板（可热重载）
+    let prompt = HotReloadableRhaiPromptPlugin::new("./prompts/template.rhai").await;
+
+    // 3) 构建 LLM Agent（配置 + 会话 + 插件）
+    let mut agent = LLMAgentBuilder::from_env()?
+        .with_id("support-agent")
+        .with_name("Support Agent")
+        .with_system_prompt("You are a helpful assistant.")
+        .with_sliding_window(10)
+        .with_session_id(session_id.to_string())
+        .with_hot_reload_prompt_plugin(prompt)
+        .with_persistence_plugin(persistence)
+        .build_async()
+        .await;
+
+    // 4) Session 管理（可在运行前创建/切换）
+    let session_id = agent.create_session().await;
+    agent.switch_session(&session_id).await?;
+
+    // 5) 运行时上下文（执行态元数据）
+    let ctx = CoreAgentContext::with_session("exec-001", session_id.clone());
+    ctx.set("user_id", user_id.to_string()).await;
+
+    // 6) 通过 AgentRunner 运行（MoFAAgent 生命周期）
+    let mut runner = AgentRunner::with_context(agent, ctx).await?;
+    let output = runner.execute(AgentInput::text("Hello")).await?;
+    println!("{}", output.to_text());
+    Ok(())
+}
+```
+
+#### Agent 上下文管理
+
+```rust
+use mofa_sdk::kernel::CoreAgentContext;
+use mofa_sdk::runtime::AgentRunner;
+use mofa_sdk::llm::LLMAgentBuilder;
+use mofa_sdk::AgentInput;
+
+#[tokio::main]
+async fn main() -> anyhow::Result<()> {
+    let agent = LLMAgentBuilder::from_env()?
+        .with_system_prompt("You are a helpful assistant.")
+        .build();
+
+    let ctx = CoreAgentContext::with_session("exec-001", "session-001");
+    ctx.set("user_id", "user-123").await;
+
+    let mut runner = AgentRunner::with_context(agent, ctx).await?;
+    let output = runner.execute(AgentInput::text("Hello")).await?;
+    println!("{}", output.to_text());
+    Ok(())
+}
+```
+
+#### 插件上下文与配置传递（LLM Plugin Context）
+
+LLMAgent 初始化时会为每个 `AgentPlugin` 构造 `PluginContext`，并注入：
+`custom_config`、`user_id`、`tenant_id`、`session_id`。插件可在 `load` 阶段读取这些配置。
+
+```rust
+use mofa_sdk::{
+    AgentPlugin, PluginContext, PluginMetadata, PluginResult, PluginState, PluginType,
+};
+
+struct MyPlugin;
+
+#[async_trait::async_trait]
+impl AgentPlugin for MyPlugin {
+    fn metadata(&self) -> &PluginMetadata {
+        static META: std::sync::OnceLock<PluginMetadata> = std::sync::OnceLock::new();
+        META.get_or_init(|| {
+            PluginMetadata::new("my-plugin", "My Plugin", PluginType::Custom("example".to_string()))
+        })
+    }
+    fn state(&self) -> PluginState { PluginState::Unloaded }
+    async fn load(&mut self, ctx: &PluginContext) -> PluginResult<()> {
+        if let Some(model) = ctx.config.get_string("model") {
+            println!("model = {}", model);
+        }
+        Ok(())
+    }
+    async fn init_plugin(&mut self) -> PluginResult<()> { Ok(()) }
+    async fn start(&mut self) -> PluginResult<()> { Ok(()) }
+    async fn stop(&mut self) -> PluginResult<()> { Ok(()) }
+    async fn unload(&mut self) -> PluginResult<()> { Ok(()) }
+    async fn execute(&mut self, input: String) -> PluginResult<String> { Ok(input) }
+    fn as_any(&self) -> &dyn std::any::Any { self }
+    fn as_any_mut(&mut self) -> &mut dyn std::any::Any { self }
+    fn into_any(self: Box<Self>) -> Box<dyn std::any::Any> { self }
+}
+
+// 通过 LLMAgentBuilder 传递自定义配置：
+// LLMAgentBuilder::new().with_config("model", "gpt-4o-mini").with_plugin(MyPlugin)
+```
+
+#### 提示词管理（模板/热重载）
+
+```rust
+use mofa_sdk::llm::{LLMAgentBuilder, HotReloadableRhaiPromptPlugin};
+
+#[tokio::main]
+async fn main() -> anyhow::Result<()> {
+    let prompt = HotReloadableRhaiPromptPlugin::new("./prompts/template.rhai").await;
+
+    let _agent = LLMAgentBuilder::from_env()?
+        .with_hot_reload_prompt_plugin(prompt)
+        .build();
+    Ok(())
+}
+```
+
+#### Session 管理
+
+```rust
+use mofa_sdk::llm::LLMAgentBuilder;
+
+#[tokio::main]
+async fn main() -> anyhow::Result<()> {
+    let agent = LLMAgentBuilder::from_env()?
+        .with_session_id("user-session-001")
+        .build();
+
+    let session_id = agent.create_session().await;
+    let reply = agent.chat_with_session(&session_id, "Hello").await?;
+    println!("{}", reply);
+    Ok(())
+}
+```
+
+#### 持久化管理
+
+```rust
+use mofa_sdk::llm::LLMAgentBuilder;
+use mofa_sdk::persistence::{PersistencePlugin, PostgresStore};
+use std::sync::Arc;
+use uuid::Uuid;
+
+#[tokio::main]
+async fn main() -> anyhow::Result<()> {
+    let store = Arc::new(PostgresStore::connect("postgres://localhost/mofa").await?);
+    let user_id = Uuid::now_v7();
+    let tenant_id = Uuid::now_v7();
+    let agent_id = Uuid::now_v7();
+    let session_id = Uuid::now_v7();
+
+    let plugin = PersistencePlugin::new(
+        "persistence-plugin",
+        store,
+        user_id,
+        tenant_id,
+        agent_id,
+        session_id,
+    );
+
+    let _agent = LLMAgentBuilder::from_env()?
+        .with_persistence_plugin(plugin)
+        .build_async()
+        .await;
+    Ok(())
 }
 ```
 

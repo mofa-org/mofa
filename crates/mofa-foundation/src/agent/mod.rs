@@ -18,7 +18,6 @@ pub use mofa_kernel::agent::{
 
 // Re-export additional types needed by components
 pub use mofa_kernel::agent::error::{AgentError, AgentResult};
-// Note: Using CoreAgentContext instead of deprecated AgentContext
 pub use mofa_kernel::agent::context::CoreAgentContext;
 pub use mofa_kernel::agent::types::AgentInput;
 

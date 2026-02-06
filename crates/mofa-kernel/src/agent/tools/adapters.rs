@@ -3,7 +3,7 @@
 //! 提供便捷的工具创建方式
 
 use crate::agent::components::tool::{Tool, ToolInput, ToolMetadata, ToolResult};
-use crate::agent::context::AgentContext;
+use crate::agent::context::CoreAgentContext;
 use async_trait::async_trait;
 use std::future::Future;
 use std::pin::Pin;
@@ -17,7 +17,7 @@ use std::pin::Pin;
 /// ```rust,ignore
 /// use mofa_kernel::agent::tools::FunctionTool;
 ///
-/// async fn my_tool_fn(input: ToolInput, ctx: &AgentContext) -> ToolResult {
+/// async fn my_tool_fn(input: ToolInput, ctx: &CoreAgentContext) -> ToolResult {
 ///     let message = input.get_str("message").unwrap_or("default");
 ///     ToolResult::success_text(format!("Processed: {}", message))
 /// }
@@ -36,7 +36,7 @@ use std::pin::Pin;
 /// ```
 pub struct FunctionTool<F>
 where
-    F: Fn(ToolInput, &AgentContext) -> Pin<Box<dyn Future<Output = ToolResult> + Send + '_>>
+    F: Fn(ToolInput, &CoreAgentContext) -> Pin<Box<dyn Future<Output = ToolResult> + Send + '_>>
         + Send
         + Sync,
 {
@@ -49,7 +49,7 @@ where
 
 impl<F> FunctionTool<F>
 where
-    F: Fn(ToolInput, &AgentContext) -> Pin<Box<dyn Future<Output = ToolResult> + Send + '_>>
+    F: Fn(ToolInput, &CoreAgentContext) -> Pin<Box<dyn Future<Output = ToolResult> + Send + '_>>
         + Send
         + Sync,
 {
@@ -79,7 +79,7 @@ where
 #[async_trait]
 impl<F> Tool for FunctionTool<F>
 where
-    F: Fn(ToolInput, &AgentContext) -> Pin<Box<dyn Future<Output = ToolResult> + Send + '_>>
+    F: Fn(ToolInput, &CoreAgentContext) -> Pin<Box<dyn Future<Output = ToolResult> + Send + '_>>
         + Send
         + Sync,
 {
@@ -95,7 +95,7 @@ where
         self.parameters_schema.clone()
     }
 
-    async fn execute(&self, input: ToolInput, ctx: &AgentContext) -> ToolResult {
+    async fn execute(&self, input: ToolInput, ctx: &CoreAgentContext) -> ToolResult {
         (self.handler)(input, ctx).await
     }
 
@@ -182,7 +182,7 @@ where
         self.parameters_schema.clone()
     }
 
-    async fn execute(&self, input: ToolInput, _ctx: &AgentContext) -> ToolResult {
+    async fn execute(&self, input: ToolInput, _ctx: &CoreAgentContext) -> ToolResult {
         (self.handler)(input)
     }
 
@@ -352,7 +352,7 @@ mod tests {
             ToolResult::success_text(format!("Got: {}", msg))
         });
 
-        let ctx = AgentContext::new("test");
+        let ctx = CoreAgentContext::new("test");
         let input = ToolInput::from_json(serde_json::json!({"message": "hello"}));
 
         let result = tool.execute(input, &ctx).await;
@@ -363,7 +363,7 @@ mod tests {
     #[tokio::test]
     async fn test_calculator_tool() {
         let tool = BuiltinTools::calculator();
-        let ctx = AgentContext::new("test");
+        let ctx = CoreAgentContext::new("test");
 
         // Test addition
         let input = ToolInput::from_json(serde_json::json!({
@@ -388,7 +388,7 @@ mod tests {
     #[tokio::test]
     async fn test_string_utils_tool() {
         let tool = BuiltinTools::string_utils();
-        let ctx = AgentContext::new("test");
+        let ctx = CoreAgentContext::new("test");
 
         let input = ToolInput::from_json(serde_json::json!({
             "operation": "upper",

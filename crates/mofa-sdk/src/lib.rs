@@ -32,7 +32,7 @@
 //! ```
 //!
 //! ```rust,ignore
-//! use mofa_sdk::{AgentBuilder, MoFAAgent, run_agent};
+//! use mofa_sdk::{AgentBuilder, AgentInput, MoFAAgent, run_agents};
 //!
 //! struct MyAgent;
 //!
@@ -43,7 +43,9 @@
 //!
 //! #[tokio::main]
 //! async fn main() -> anyhow::Result<()> {
-//!     run_agent(MyAgent).await
+//!     let outputs = run_agents(MyAgent, vec![AgentInput::text("Hello")]).await?;
+//!     println!("{}", outputs[0].to_text());
+//!     Ok(())
 //! }
 //! ```
 
@@ -88,21 +90,13 @@ pub mod kernel {
 
     // Core types
     pub use mofa_kernel::agent::{
-        AgentCapabilities, AgentContext, AgentError, AgentInput,
+        AgentCapabilities, CoreAgentContext, AgentError, AgentInput,
         AgentOutput, AgentResult,
     };
-
-    // Context types (CoreAgentContext is the new preferred context)
-    pub use mofa_kernel::agent::context::CoreAgentContext;
 
     // Agent metadata and state
     pub use mofa_kernel::agent::{
         AgentMetadata, AgentState,
-    };
-
-    // Agent runner
-    pub use mofa_kernel::agent::{
-        run_agent, AgentRunner,
     };
 
     // Core configuration
@@ -213,8 +207,11 @@ pub mod runtime {
     // Simple runtime (non-dora)
     pub use mofa_runtime::SimpleRuntime;
 
-    // Run agent helper
-    pub use mofa_runtime::run_agent;
+    // Agent runner (single-execution utilities)
+    pub use mofa_runtime::runner::{
+        AgentRunner, AgentRunnerBuilder, RunnerState, RunnerStats,
+        run_agents,
+    };
 
     pub use mofa_runtime::config::FrameworkConfig;
 
@@ -254,7 +251,7 @@ pub mod foundation {
 // Top-level re-exports for convenience and backward compatibility
 pub use kernel::{
     AgentCapabilities,
-    AgentContext, AgentError,
+    CoreAgentContext, AgentError,
     AgentEvent, AgentInput, AgentLifecycle, AgentMessage, AgentMessaging,
     AgentMetadata, AgentOutput,
     AgentPluginSupport, AgentResult,
@@ -267,7 +264,7 @@ pub use kernel::{
 // Note: For MessageContent, use kernel::MessageContent explicitly to avoid conflict with llm::MessageContent
 
 pub use runtime::{
-    run_agent, AgentBuilder, SimpleRuntime,
+    run_agents, AgentBuilder, SimpleRuntime,
 };
 
 // Re-export plugin types
@@ -754,13 +751,13 @@ mod python_bindings {
     /// Python module initialization
     #[pymodule]
     pub fn mofa(m: &Bound<'_, PyModule>) -> PyResult<()> {
-        m.add_function(wrap_pyfunction!(run_agent, m)?)?;
+        m.add_function(wrap_pyfunction!(run_agents, m)?)?;
         Ok(())
     }
 
     /// Run a Python agent
     #[pyfunction]
-    fn run_agent(py: Python<'_>, agent: PyObject) -> PyResult<Bound<'_, PyAny>> {
+    fn run_agents(py: Python<'_>, agent: PyObject) -> PyResult<Bound<'_, PyAny>> {
         let py_config = agent.getattr(py, "config")?;
         let agent_id: String = py_config.getattr(py, "agent_id")?.extract(py)?;
         let name: String = py_config.getattr(py, "name")?.extract(py)?;
@@ -775,7 +772,7 @@ mod python_bindings {
         };
 
         pyo3_async_runtimes::tokio::future_into_py(py, async move {
-            if let Err(e) = mofa_runtime::run_agent(wrapper).await {
+            if let Err(e) = mofa_runtime::run_agents(wrapper, Vec::new()).await {
                 return Err(PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(format!(
                     "Agent failed: {}",
                     e

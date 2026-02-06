@@ -60,12 +60,6 @@ pub struct CoreAgentContext {
     config: Arc<ContextConfig>,
 }
 
-/// 已弃用：请使用 CoreAgentContext
-///
-/// 为了向后兼容保留的类型别名，将在未来版本中移除。
-#[deprecated(since = "0.2.0", note = "Use CoreAgentContext instead")]
-pub type AgentContext = CoreAgentContext;
-
 /// 上下文配置
 #[derive(Debug, Clone, Default)]
 pub struct ContextConfig {

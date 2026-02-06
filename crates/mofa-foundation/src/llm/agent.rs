@@ -5,17 +5,18 @@
 //! # 示例
 //!
 //! ```rust,ignore
-//! use mofa_sdk::{run_agent, llm::{LLMAgentBuilder, openai_from_env}};
-//! use std::sync::Arc;
+//! use mofa_sdk::{AgentInput, run_agents, llm::LLMAgentBuilder};
 //!
 //! #[tokio::main]
 //! async fn main() -> anyhow::Result<()> {
-//!     let agent = LLMAgentBuilder::new("my-llm-agent")
-//!         .with_provider(Arc::new(openai_from_env()))
+//!     let agent = LLMAgentBuilder::from_env()?
+//!         .with_id("my-llm-agent")
 //!         .with_system_prompt("You are a helpful assistant.")
 //!         .build();
 //!
-//!     run_agent(agent).await
+//!     let outputs = run_agents(agent, vec![AgentInput::text("Hello")]).await?;
+//!     println!("{}", outputs[0].to_text());
+//!     Ok(())
 //! }
 //! ```
 
@@ -2179,6 +2180,12 @@ impl LLMAgentBuilder {
     /// # }
     /// ```
     pub fn with_persistence_plugin(mut self, plugin: crate::persistence::PersistencePlugin) -> Self {
+        self.message_store = Some(plugin.message_store());
+        self.session_store = plugin.session_store();
+        self.persistence_user_id = Some(plugin.user_id());
+        self.persistence_tenant_id = Some(plugin.tenant_id());
+        self.persistence_agent_id = Some(plugin.agent_id());
+
         // 将持久化插件添加到插件列表
         // 同时作为事件处理器
         let plugin_box: Box<dyn AgentPlugin> = Box::new(plugin.clone());
@@ -2282,48 +2289,6 @@ impl LLMAgentBuilder {
         self
     }
 
-    /// 设置持久化存储（用于从数据库加载历史会话）
-    ///
-    /// **已弃用**：请使用 `with_persistence_plugin()` 代替。
-    ///
-    /// 此方法保留用于向后兼容，将在未来版本中移除。
-    ///
-    /// 推荐的新方式：
-    /// ```rust,ignore
-    /// use mofa_sdk::persistence::{PersistencePlugin, PostgresStore};
-    ///
-    /// let store = Arc::new(PostgresStore::connect("...").await?);
-    /// let plugin = PersistencePlugin::new(
-    ///     "persistence-plugin",
-    ///     store,
-    ///     user_id,
-    ///     tenant_id,
-    ///     agent_id,
-    ///     session_id,
-    /// );
-    ///
-    /// let agent = LLMAgentBuilder::new()
-    ///     .with_persistence_plugin(plugin)
-    ///     .build_async()
-    ///     .await;
-    /// ```
-    #[deprecated(since = "0.2.0", note = "请使用 with_persistence_plugin() 代替")]
-    pub fn with_persistence_stores(
-        mut self,
-        message_store: Arc<dyn crate::persistence::MessageStore + Send + Sync>,
-        session_store: Arc<dyn crate::persistence::SessionStore + Send + Sync>,
-        user_id: uuid::Uuid,
-        tenant_id: uuid::Uuid,
-        agent_id: uuid::Uuid,
-    ) -> Self {
-        self.message_store = Some(message_store);
-        self.session_store = Some(session_store);
-        self.persistence_user_id = Some(user_id);
-        self.persistence_tenant_id = Some(tenant_id);
-        self.persistence_agent_id = Some(agent_id);
-        self
-    }
-
     /// 从环境变量创建基础配置
     ///
     /// 自动配置：
@@ -2367,40 +2332,6 @@ impl LLMAgentBuilder {
             .with_provider(Arc::new(OpenAIProvider::with_config(config)))
             .with_temperature(0.7)
             .with_max_tokens(4096))
-    }
-
-    /// 添加持久化事件处理器（便捷方法）
-    ///
-    /// **已弃用**：请使用 `with_persistence_plugin()` 代替。
-    ///
-    /// 此方法保留用于向后兼容，将在未来版本中移除。
-    ///
-    /// 推荐的新方式：
-    /// ```rust,ignore
-    /// use mofa_sdk::persistence::{PersistencePlugin, PostgresStore};
-    ///
-    /// let store = Arc::new(PostgresStore::connect("...").await?);
-    /// let plugin = PersistencePlugin::new(
-    ///     "persistence-plugin",
-    ///     store,
-    ///     user_id,
-    ///     tenant_id,
-    ///     agent_id,
-    ///     session_id,
-    /// );
-    ///
-    /// let agent = LLMAgentBuilder::new()
-    ///     .with_persistence_plugin(plugin)
-    ///     .build_async()
-    ///     .await;
-    /// ```
-    #[deprecated(since = "0.2.0", note = "请使用 with_persistence_plugin() 代替")]
-    pub fn with_persistence_handler(
-        mut self,
-        persistence: std::sync::Arc<dyn crate::persistence::PersistenceCallback>
-    ) -> Self {
-        self.event_handler = Some(Box::new(crate::persistence::AgentPersistenceHandler::new(persistence)));
-        self
     }
 
     /// 构建 LLM Agent
@@ -2525,9 +2456,7 @@ impl LLMAgentBuilder {
 
     /// 异步构建 LLM Agent（支持从数据库加载会话）
     ///
-    /// 支持两种方式加载会话历史：
-    /// 1. 使用 `with_persistence_plugin()` - 推荐的新方式
-    /// 2. 使用 `with_persistence_stores()` - 旧方式（向后兼容）
+    /// 使用持久化插件加载会话历史。
     ///
     /// # 示例（使用持久化插件）
     ///
@@ -3056,10 +2985,29 @@ impl mofa_kernel::agent::MoFAAgent for LLMAgent {
 
     async fn initialize(
         &mut self,
-        ctx: &mofa_kernel::agent::AgentContext,
+        ctx: &mofa_kernel::agent::CoreAgentContext,
     ) -> mofa_kernel::agent::AgentResult<()> {
-        // 初始化所有插件
+        // 初始化所有插件（load -> init）
+        let mut plugin_config = mofa_kernel::plugin::PluginConfig::new();
+        for (k, v) in &self.config.custom_config {
+            plugin_config.set(k, v);
+        }
+        if let Some(user_id) = &self.config.user_id {
+            plugin_config.set("user_id", user_id);
+        }
+        if let Some(tenant_id) = &self.config.tenant_id {
+            plugin_config.set("tenant_id", tenant_id);
+        }
+        let session_id = self.active_session_id.read().await.clone();
+        plugin_config.set("session_id", session_id);
+
+        let plugin_ctx = mofa_kernel::plugin::PluginContext::new(self.id())
+            .with_config(plugin_config);
+
         for plugin in &mut self.plugins {
+            plugin.load(&plugin_ctx).await.map_err(|e| {
+                mofa_kernel::agent::AgentError::InitializationFailed(e.to_string())
+            })?;
             plugin.init_plugin().await.map_err(|e| {
                 mofa_kernel::agent::AgentError::InitializationFailed(e.to_string())
             })?;
@@ -3075,7 +3023,7 @@ impl mofa_kernel::agent::MoFAAgent for LLMAgent {
     async fn execute(
         &mut self,
         input: mofa_kernel::agent::AgentInput,
-        _ctx: &mofa_kernel::agent::AgentContext,
+        _ctx: &mofa_kernel::agent::CoreAgentContext,
     ) -> mofa_kernel::agent::AgentResult<mofa_kernel::agent::AgentOutput> {
         use mofa_kernel::agent::{AgentError, AgentInput, AgentOutput};
 

@@ -31,7 +31,7 @@ use async_trait::async_trait;
 use chrono::Utc;
 use mofa_sdk::{
     kernel::AgentConfig,
-    llm::{openai_from_env, LLMClient}, AgentCapabilities, AgentContext,
+    llm::{openai_from_env, LLMClient}, AgentCapabilities, CoreAgentContext,
     // AgentConfig moved to kernel module
     AgentEvent,
     AgentInput, AgentMetadata, AgentOutput, AgentResult,
@@ -340,13 +340,13 @@ impl MoFAAgent for MasterAgent {
         &self.capabilities
     }
 
-    async fn initialize(&mut self, _ctx: &AgentContext) -> AgentResult<()> {
+    async fn initialize(&mut self, _ctx: &CoreAgentContext) -> AgentResult<()> {
         info!("Master Agent: Initializing...");
         self.state = AgentState::Ready;
         Ok(())
     }
 
-    async fn execute(&mut self, input: AgentInput, _ctx: &AgentContext) -> AgentResult<AgentOutput> {
+    async fn execute(&mut self, input: AgentInput, _ctx: &CoreAgentContext) -> AgentResult<AgentOutput> {
         // 处理输入 - 这里简化处理，实际应该解析输入并执行相应的任务分配
         let text = input.to_text();
         info!("Master Agent: Received input - {}", text);
@@ -509,7 +509,7 @@ impl MoFAAgent for WorkerAgent {
         &self.capabilities
     }
 
-    async fn initialize(&mut self, _ctx: &AgentContext) -> AgentResult<()> {
+    async fn initialize(&mut self, _ctx: &CoreAgentContext) -> AgentResult<()> {
         info!(
             "Worker Agent ({}): Initializing with specialty '{:?}'...",
             self.id, self.specialty
@@ -518,7 +518,7 @@ impl MoFAAgent for WorkerAgent {
         Ok(())
     }
 
-    async fn execute(&mut self, input: AgentInput, _ctx: &AgentContext) -> AgentResult<AgentOutput> {
+    async fn execute(&mut self, input: AgentInput, _ctx: &CoreAgentContext) -> AgentResult<AgentOutput> {
         let text = input.to_text();
 
         // 解析任务

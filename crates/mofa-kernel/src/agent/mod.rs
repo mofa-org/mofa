@@ -26,7 +26,7 @@
 //! │  └─────────────────────────────────────────────────────────────┘    │
 //! │                                                                      │
 //! │  ┌─────────────────────────────────────────────────────────────┐    │
-//! │  │               AgentContext (统一上下文)                       │    │
+//! │  │               CoreAgentContext (统一上下文)                       │    │
 //! │  └─────────────────────────────────────────────────────────────┘    │
 //! └─────────────────────────────────────────────────────────────────────┘
 //! ```
@@ -46,11 +46,11 @@
 //!     fn name(&self) -> &str { "My Agent" }
 //!     fn capabilities(&self) -> &AgentCapabilities { &self.caps }
 //!
-//!     async fn initialize(&mut self, ctx: &AgentContext) -> AgentResult<()> {
+//!     async fn initialize(&mut self, ctx: &CoreAgentContext) -> AgentResult<()> {
 //!         Ok(())
 //!     }
 //!
-//!     async fn execute(&mut self, input: AgentInput, ctx: &AgentContext) -> AgentResult<AgentOutput> {
+//!     async fn execute(&mut self, input: AgentInput, ctx: &CoreAgentContext) -> AgentResult<AgentOutput> {
 //!         Ok(AgentOutput::text("Hello!"))
 //!     }
 //!
@@ -83,12 +83,12 @@
 //!     .build();
 //! ```
 //!
-//! ## AgentContext
+//! ## CoreAgentContext
 //!
 //! 执行上下文，在 Agent 执行过程中传递状态：
 //!
 //! ```rust,ignore
-//! let ctx = AgentContext::new("execution-123");
+//! let ctx = CoreAgentContext::new("execution-123");
 //! ctx.set("user_id", "user-456").await;
 //! ctx.emit_event(AgentEvent::new("task_started", json!({}))).await;
 //! ```
@@ -99,7 +99,7 @@
 //! - `traits` - UnifiedAgent trait 定义
 //! - `types` - AgentInput, AgentOutput, AgentState 等类型
 //! - `capabilities` - AgentCapabilities 能力描述
-//! - `context` - AgentContext 执行上下文
+//! - `context` - CoreAgentContext 执行上下文
 //! - `error` - 错误类型定义
 //! - `components` - 组件 trait (Reasoner, Tool, Memory, Coordinator)
 //! - `config` - 配置系统
@@ -126,11 +126,7 @@ pub mod registry;
 // 工具系统
 pub mod tools;
 
-// 执行引擎
-pub mod execution;
-
-// 统一运行器
-pub mod runner;
+// 执行引擎与运行器已迁移到 mofa-runtime
 
 // 秘书Agent抽象
 pub mod secretary;
@@ -143,7 +139,7 @@ pub use capabilities::{
     AgentCapabilities, AgentCapabilitiesBuilder, AgentRequirements, AgentRequirementsBuilder,
     ReasoningStrategy,
 };
-pub use context::{AgentContext, AgentEvent, ContextConfig, CoreAgentContext, EventBus};
+pub use context::{AgentEvent, ContextConfig, CoreAgentContext, EventBus};
 pub use core::{
     // MoFAAgent - 统一的 Agent 接口
     AgentLifecycle,
@@ -155,7 +151,7 @@ pub use traits::{
 };
 pub use types::event::execution as execution_events;
 // Event type constants are available via types::event::lifecycle, types::event::execution, etc.
-// Note: Aliased to avoid conflict with existing modules (execution, plugins, etc.)
+// Note: Aliased to avoid conflict with existing modules (plugins, etc.)
 pub use types::event::lifecycle;
 pub use types::event::message as message_events;
 pub use types::event::plugin as plugin_events;
@@ -188,25 +184,19 @@ pub use registry::{AgentFactory, AgentRegistry, RegistryStats};
 // 重新导出配置
 pub use config::{AgentConfig, AgentType, ConfigFormat, ConfigLoader};
 
-// 重新导出执行引擎
-pub use execution::{ExecutionEngine, ExecutionOptions, ExecutionResult, ExecutionStatus};
-
-// 重新导出运行器
-pub use runner::{run_agent, AgentRunner, AgentRunnerBuilder, RunnerState, RunnerStats};
 
 /// Prelude 模块 - 常用类型导入
 pub mod prelude {
     pub use super::capabilities::{
         AgentCapabilities, AgentCapabilitiesBuilder, AgentRequirements, ReasoningStrategy,
     };
-    pub use super::context::{AgentContext, AgentEvent, ContextConfig, CoreAgentContext};
+    pub use super::context::{AgentEvent, ContextConfig, CoreAgentContext};
     pub use super::core::{
         // MoFAAgent - 统一的 Agent 接口
         AgentLifecycle,
         AgentMessage, AgentMessaging, AgentPluginSupport, MoFAAgent,
     };
     pub use super::error::{AgentError, AgentResult};
-    pub use super::runner::{run_agent, AgentRunner, RunnerState, RunnerStats};
     pub use super::traits::{AgentMetadata, DynAgent, HealthStatus};
     pub use super::types::{
         AgentInput, AgentOutput, AgentState, InputType, InterruptResult, OutputType,

@@ -33,7 +33,7 @@ pub use crate::agent::context::AgentEvent;
 use crate::agent::{
     error::AgentResult,
     types::{AgentInput, AgentOutput, AgentState, InterruptResult},
-    AgentCapabilities, AgentContext,
+    AgentCapabilities, CoreAgentContext,
 };
 use async_trait::async_trait;
 
@@ -83,12 +83,12 @@ use async_trait::async_trait;
 ///     fn capabilities(&self) -> &AgentCapabilities { &self.capabilities }
 ///     fn state(&self) -> AgentState { self.state.clone() }
 ///
-///     async fn initialize(&mut self, _ctx: &AgentContext) -> AgentResult<()> {
+///     async fn initialize(&mut self, _ctx: &CoreAgentContext) -> AgentResult<()> {
 ///         self.state = AgentState::Ready;
 ///         Ok(())
 ///     }
 ///
-///     async fn execute(&mut self, input: AgentInput, _ctx: &AgentContext) -> AgentResult<AgentOutput> {
+///     async fn execute(&mut self, input: AgentInput, _ctx: &CoreAgentContext) -> AgentResult<AgentOutput> {
 ///         // 处理输入并返回输出
 ///         Ok(AgentOutput::text("Response"))
 ///     }
@@ -142,7 +142,7 @@ pub trait MoFAAgent: Send + Sync + 'static {
     /// # 状态转换
     ///
     /// Created -> Initializing -> Ready
-    async fn initialize(&mut self, ctx: &AgentContext) -> AgentResult<()>;
+    async fn initialize(&mut self, ctx: &CoreAgentContext) -> AgentResult<()>;
 
     /// 执行任务 - 核心方法
     ///
@@ -163,7 +163,7 @@ pub trait MoFAAgent: Send + Sync + 'static {
     async fn execute(
         &mut self,
         input: AgentInput,
-        ctx: &AgentContext,
+        ctx: &CoreAgentContext,
     ) -> AgentResult<AgentOutput>;
 
     /// 关闭 Agent

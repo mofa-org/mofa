@@ -2,7 +2,7 @@
 //!
 //! 提供 Agent 执行、工作流编排、错误处理等功能
 
-use crate::agent::context::{AgentContext, AgentEvent};
+use crate::agent::context::{CoreAgentContext, AgentEvent};
 use crate::agent::core::MoFAAgent;
 use crate::agent::error::{AgentError, AgentResult};
 use crate::agent::plugins::{PluginExecutor, PluginRegistry, SimplePluginRegistry};
@@ -242,7 +242,7 @@ impl ExecutionEngine {
             .ok_or_else(|| AgentError::NotFound(format!("Agent not found: {}", agent_id)))?;
 
         // 创建上下文
-        let ctx = AgentContext::new(&execution_id);
+        let ctx = CoreAgentContext::new(&execution_id);
 
         // 发送开始事件
         if options.tracing_enabled {
@@ -333,7 +333,7 @@ impl ExecutionEngine {
         &self,
         agent: &Arc<RwLock<dyn MoFAAgent>>,
         input: AgentInput,
-        ctx: &AgentContext,
+        ctx: &CoreAgentContext,
         options: &ExecutionOptions,
     ) -> AgentResult<AgentOutput> {
         let mut last_error = None;
@@ -367,7 +367,7 @@ impl ExecutionEngine {
         &self,
         agent: &Arc<RwLock<dyn MoFAAgent>>,
         input: AgentInput,
-        ctx: &AgentContext,
+        ctx: &CoreAgentContext,
         options: &ExecutionOptions,
     ) -> AgentResult<AgentOutput> {
         let mut agent_guard = agent.write().await;
@@ -587,5 +587,129 @@ impl ExecutionEngine {
         }
 
         Ok(results)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::agent::capabilities::AgentCapabilities;
+    use crate::agent::context::CoreAgentContext;
+    use crate::agent::core::MoFAAgent;
+    use crate::agent::types::AgentState;
+
+    // 测试用 Agent (内联实现，不依赖 BaseAgent)
+    struct TestAgent {
+        id: String,
+        response: String,
+        capabilities: AgentCapabilities,
+        state: AgentState,
+    }
+
+    impl TestAgent {
+        fn new(id: &str, response: &str) -> Self {
+            Self {
+                id: id.to_string(),
+                response: response.to_string(),
+                capabilities: AgentCapabilities::default(),
+                state: AgentState::Created,
+            }
+        }
+    }
+
+    #[async_trait::async_trait]
+    impl MoFAAgent for TestAgent {
+        fn id(&self) -> &str {
+            &self.id
+        }
+
+        fn name(&self) -> &str {
+            &self.id
+        }
+
+        fn capabilities(&self) -> &AgentCapabilities {
+            &self.capabilities
+        }
+
+        fn state(&self) -> AgentState {
+            self.state.clone()
+        }
+
+        async fn initialize(&mut self, _ctx: &CoreAgentContext) -> AgentResult<()> {
+            self.state = AgentState::Ready;
+            Ok(())
+        }
+
+        async fn execute(
+            &mut self,
+            _input: AgentInput,
+            _ctx: &CoreAgentContext,
+        ) -> AgentResult<AgentOutput> {
+            Ok(AgentOutput::text(&self.response))
+        }
+
+        async fn shutdown(&mut self) -> AgentResult<()> {
+            self.state = AgentState::Shutdown;
+            Ok(())
+        }
+    }
+
+    #[tokio::test]
+    async fn test_execution_engine_basic() {
+        let registry = Arc::new(AgentRegistry::new());
+
+        // 注册测试 Agent
+        let agent = Arc::new(RwLock::new(TestAgent::new("test-agent", "Hello, World!")));
+        registry.register(agent).await.unwrap();
+
+        // 创建引擎并执行
+        let engine = ExecutionEngine::new(registry);
+        let result = engine
+            .execute(
+                "test-agent",
+                AgentInput::text("input"),
+                ExecutionOptions::default(),
+            )
+            .await
+            .unwrap();
+
+        assert!(result.is_success());
+        assert_eq!(
+            result.output.unwrap().to_text(),
+            "Hello, World!"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_execution_timeout() {
+        let registry = Arc::new(AgentRegistry::new());
+        let agent = Arc::new(RwLock::new(TestAgent::new("slow-agent", "response")));
+        registry.register(agent).await.unwrap();
+
+        let engine = ExecutionEngine::new(registry);
+        let result = engine
+            .execute(
+                "slow-agent",
+                AgentInput::text("input"),
+                ExecutionOptions::default().with_timeout(1), // 1ms timeout
+            )
+            .await
+            .unwrap();
+
+        // 可能成功也可能超时，取决于执行速度
+        assert!(result.status == ExecutionStatus::Success || result.status == ExecutionStatus::Timeout);
+    }
+
+    #[test]
+    fn test_execution_options() {
+        let options = ExecutionOptions::new()
+            .with_timeout(5000)
+            .with_retry(3, 500)
+            .without_tracing();
+
+        assert_eq!(options.timeout_ms, Some(5000));
+        assert_eq!(options.max_retries, 3);
+        assert_eq!(options.retry_delay_ms, 500);
+        assert!(!options.tracing_enabled);
     }
 }

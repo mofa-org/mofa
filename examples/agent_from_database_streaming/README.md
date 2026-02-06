@@ -111,10 +111,17 @@ let mut agent_builder = LLMAgentBuilder::from_database_with_tenant(
     &agent_code
 ).await?;
 
-// 设置持久化存储
-agent_builder = agent_builder
-    .with_persistence_stores(store.clone(), store, user_id, tenant_id, agent_id)
-    .with_persistence_handler(persistence);
+// 设置持久化插件
+let persistence_plugin = PersistencePlugin::from_store(
+    "persistence-plugin",
+    store,
+    user_id,
+    tenant_id,
+    agent_id,
+    session_id,
+);
+
+agent_builder = agent_builder.with_persistence_plugin(persistence_plugin);
 
 // 构建Agent
 let agent = agent_builder.build_async().await;

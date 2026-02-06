@@ -46,57 +46,79 @@ mofa-sdk = { version = "0.1", features = ["openai", "uniffi", "dora"] }
 ### Basic Agent
 
 ```rust
-use mofa_sdk::{MoFAAgent, AgentConfig, AgentEvent, AgentInterrupt, run_agent};
+use mofa_sdk::{
+    AgentCapabilities, AgentCapabilitiesBuilder, CoreAgentContext, AgentInput, AgentOutput,
+    AgentResult, AgentState, MoFAAgent, run_agents,
+};
 use async_trait::async_trait;
-use std::collections::HashMap;
 
 struct MyAgent {
-    config: AgentConfig,
+    id: String,
+    name: String,
+    caps: AgentCapabilities,
+    state: AgentState,
 }
 
 impl MyAgent {
     fn new(id: &str, name: &str) -> Self {
         Self {
-            config: AgentConfig {
-                agent_id: id.to_string(),
-                name: name.to_string(),
-                node_config: HashMap::new(),
-            },
+            id: id.to_string(),
+            name: name.to_string(),
+            caps: AgentCapabilitiesBuilder::new().build(),
+            state: AgentState::Created,
         }
     }
 }
 
 #[async_trait]
 impl MoFAAgent for MyAgent {
-    fn config(&self) -> &AgentConfig {
-        &self.config
-    }
+    fn id(&self) -> &str { &self.id }
+    fn name(&self) -> &str { &self.name }
+    fn capabilities(&self) -> &AgentCapabilities { &self.caps }
 
-    async fn init(&mut self, _interrupt: &AgentInterrupt) -> anyhow::Result<()> {
-        info!("Agent {} initialized", self.config.agent_id);
+    async fn initialize(&mut self, _ctx: &CoreAgentContext) -> AgentResult<()> {
+        self.state = AgentState::Ready;
         Ok(())
     }
 
-    async fn handle_event(&mut self, event: AgentEvent, _interrupt: &AgentInterrupt) -> anyhow::Result<()> {
-        info!("Received event: {:?}", event);
+    async fn execute(&mut self, _input: AgentInput, _ctx: &CoreAgentContext) -> AgentResult<AgentOutput> {
+        Ok(AgentOutput::text("Hello from MyAgent"))
+    }
+
+    async fn shutdown(&mut self) -> AgentResult<()> {
+        self.state = AgentState::Shutdown;
         Ok(())
     }
 
-    async fn destroy(&mut self) -> anyhow::Result<()> {
-        info!("Agent {} destroyed", self.config.agent_id);
-        Ok(())
-    }
-
-    async fn on_interrupt(&mut self) -> anyhow::Result<()> {
-        info!("Agent interrupted");
-        Ok(())
-    }
+    fn state(&self) -> AgentState { self.state.clone() }
 }
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     let agent = MyAgent::new("agent-001", "MyAgent");
-    run_agent(agent).await
+    let outputs = run_agents(agent, vec![AgentInput::text("Hello")]).await?;
+    println!("{}", outputs[0].to_text());
+    Ok(())
+}
+```
+
+### Batch Execution
+
+```rust
+use mofa_sdk::{run_agents, AgentInput};
+
+#[tokio::main]
+async fn main() -> anyhow::Result<()> {
+    let agent = MyAgent::new("agent-002", "BatchAgent");
+    let inputs = vec![
+        AgentInput::text("task-1"),
+        AgentInput::text("task-2"),
+    ];
+    let outputs = run_agents(agent, inputs).await?;
+    for output in outputs {
+        println!("{}", output.to_text());
+    }
+    Ok(())
 }
 ```
 
@@ -105,14 +127,13 @@ async fn main() -> anyhow::Result<()> {
 Use the built-in LLMAgent for quick LLM interactions:
 
 ```rust
-use mofa_sdk::llm::{LLMAgentBuilder, openai_from_env};
-use std::sync::Arc;
+use mofa_sdk::llm::LLMAgentBuilder;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     // Create from environment (OPENAI_API_KEY)
-    let agent = LLMAgentBuilder::new("my-agent")
-        .with_provider(Arc::new(openai_from_env()))
+    let agent = LLMAgentBuilder::from_env()?
+        .with_id("my-agent")
         .with_system_prompt("You are a helpful assistant.")
         .build();
 
