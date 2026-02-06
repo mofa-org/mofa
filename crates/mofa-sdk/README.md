@@ -13,6 +13,24 @@ mofa-sdk (统一 API 层 - SDK)
 └── mofa-plugins (插件系统)
 ```
 
+## Public Modules
+
+- `kernel`: core abstractions from `mofa-kernel`
+- `runtime`: lifecycle and execution runtime
+- `agent`: foundation agent building blocks
+- `llm`: LLM integration and helpers
+- `plugins`: plugin system and adapters
+- `workflow`: workflow engine and DSL
+- `persistence`: persistence stores and plugins
+- `messaging`: message bus and contracts
+- `secretary`: secretary agent pattern
+- `collaboration`: multi-agent collaboration protocols
+- `coordination`: scheduling and coordination utilities
+- `prompt`: prompt templates and composition
+- `config`: unified config facade (kernel/runtime/foundation)
+- `skills`: progressive disclosure skills system
+- `prelude`: common imports for quick start
+
 ## Installation
 
 Add this to your `Cargo.toml`:
@@ -47,7 +65,7 @@ mofa-sdk = { version = "0.1", features = ["openai", "uniffi", "dora"] }
 
 ```rust
 use mofa_sdk::kernel::{
-    AgentCapabilities, AgentCapabilitiesBuilder, CoreAgentContext, AgentInput, AgentOutput,
+    AgentCapabilities, AgentCapabilitiesBuilder, AgentContext, AgentInput, AgentOutput,
     AgentResult, AgentState, MoFAAgent,
 };
 use mofa_sdk::runtime::run_agents;
@@ -77,12 +95,12 @@ impl MoFAAgent for MyAgent {
     fn name(&self) -> &str { &self.name }
     fn capabilities(&self) -> &AgentCapabilities { &self.caps }
 
-    async fn initialize(&mut self, _ctx: &CoreAgentContext) -> AgentResult<()> {
+    async fn initialize(&mut self, _ctx: &AgentContext) -> AgentResult<()> {
         self.state = AgentState::Ready;
         Ok(())
     }
 
-    async fn execute(&mut self, _input: AgentInput, _ctx: &CoreAgentContext) -> AgentResult<AgentOutput> {
+    async fn execute(&mut self, _input: AgentInput, _ctx: &AgentContext) -> AgentResult<AgentOutput> {
         Ok(AgentOutput::text("Hello from MyAgent"))
     }
 

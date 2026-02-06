@@ -83,100 +83,83 @@
 /// }
 /// ```
 pub mod kernel {
-    // Core agent trait and extensions
+    //! Core abstractions and infrastructure from `mofa-kernel`.
+    //!
+    //! This module is a normalized, comprehensive facade over `mofa-kernel` with
+    //! structured submodules and curated top-level re-exports.
+
+    // ---------------------------------------------------------------------
+    // Structured submodules (full coverage)
+    // ---------------------------------------------------------------------
+    pub mod agent {
+        pub use mofa_kernel::agent::*;
+    }
+    pub mod message {
+        pub use mofa_kernel::message::*;
+    }
+    pub mod bus {
+        pub use mofa_kernel::bus::*;
+    }
+    pub mod plugin {
+        pub use mofa_kernel::plugin::*;
+    }
+    pub mod config {
+        pub use mofa_kernel::config::*;
+    }
+    pub mod core {
+        pub use mofa_kernel::core::*;
+    }
+    pub mod storage {
+        pub use mofa_kernel::storage::*;
+    }
+
+    // ---------------------------------------------------------------------
+    // Curated, commonly-used exports
+    // ---------------------------------------------------------------------
     pub use mofa_kernel::agent::{
-        AgentLifecycle,
-        AgentMessaging, AgentPlugin, AgentPluginSupport, MoFAAgent,
+        AgentCapabilities, AgentCapabilitiesBuilder, AgentRequirements, AgentRequirementsBuilder,
+        ReasoningStrategy,
+        AgentContext, ContextConfig, EventBus,
+        AgentLifecycle, AgentMessage as CoreAgentMessage, AgentMessaging, AgentPluginSupport, MoFAAgent,
+        AgentError, AgentResult,
+        AgentMetadata, AgentStats, DynAgent, HealthStatus,
+        AgentInput, AgentOutput, AgentState, InputType, OutputContent, OutputType, InterruptResult,
+        MessageContent, MessageMetadata, EventBuilder,
+        ErrorCategory, ErrorContext, UnifiedError, UnifiedEvent, UnifiedMessage, UnifiedResult,
+        ReasoningStep, ReasoningStepType, TokenUsage, ToolUsage,
+        ChatCompletionRequest, ChatCompletionResponse, ChatMessage, ToolCall, ToolDefinition, LLMProvider,
+        Tool, ToolDescriptor, ToolInput, ToolMetadata, ToolResult,
+        Memory, MemoryItem, MemoryValue, Message, MessageRole, MemoryStats,
+        CoordinationPattern, Coordinator, Reasoner, ReasoningResult,
+        AgentFactory, AgentRegistry, RegistryStats,
+        execution_events, lifecycle, message_events, plugin_events, state_events,
     };
 
-// Core types
-pub use mofa_kernel::agent::{
-    AgentCapabilities, AgentContext, AgentError, AgentInput,
-    AgentOutput, AgentResult,
-};
-
-    // Agent metadata and state
-    pub use mofa_kernel::agent::{
-        AgentMetadata, AgentState,
-    };
-
-    // Core configuration
+    // Core AgentConfig (runtime-level, lightweight)
     pub use mofa_kernel::core::AgentConfig;
 
-// Message types
-pub use mofa_kernel::message::{
-    AgentEvent, AgentMessage, TaskPriority, TaskRequest, TaskStatus,
-};
+    // Schema/config types for agent definitions
+    pub use mofa_kernel::agent::config::{
+        AgentConfig as AgentSchemaConfig, AgentType, ConfigFormat, ConfigLoader,
+    };
+
+    // Message-level events and task primitives (stream + scheduling included)
+    pub use mofa_kernel::message::{
+        AgentEvent, AgentMessage, TaskPriority, TaskRequest, TaskStatus,
+        StreamControlCommand, StreamType, SchedulingStatus,
+    };
 
     // Bus
     pub use mofa_kernel::bus::AgentBus;
 
-    // MessageContent is available via kernel::MessageContent to avoid conflict with llm::MessageContent
-    pub use mofa_kernel::agent::MessageContent;
-    // Event type constants (aliased to avoid conflicts with existing modules)
-    pub use mofa_kernel::agent::{
-        execution_events,
-        lifecycle,
-        message_events,
-        plugin_events,
-        state_events,
-    };
-    // Unified types (new)
-    pub use mofa_kernel::agent::{
-        ErrorCategory, ErrorContext,
-        EventBuilder, MessageMetadata,
-        UnifiedError, UnifiedEvent, UnifiedMessage, UnifiedResult,
+    // Plugin primitives
+    pub use mofa_kernel::plugin::{
+        AgentPlugin, HotReloadConfig, PluginContext, PluginEvent, PluginMetadata, PluginResult,
+        PluginState, PluginType, ReloadEvent, ReloadStrategy,
     };
 
-    // Memory components
-    pub use mofa_kernel::agent::{
-        Memory, MemoryItem, MemoryValue, Message, MessageRole, MemoryStats,
-    };
-    // Implementations are in foundation
-    pub use mofa_foundation::agent::{
-        InMemoryStorage, FileBasedStorage,
-    };
-
-    // Prompt context
-    pub use mofa_foundation::agent::{
-        AgentIdentity, PromptContext, PromptContextBuilder,
-    };
-
-    // Session management
-    pub use mofa_foundation::agent::{
-        JsonlSessionStorage, MemorySessionStorage, Session, SessionManager,
-        SessionMessage, SessionStorage,
-    };
-
-    // Tool system with categories
-    pub use mofa_foundation::agent::ToolCategory;
-
-    // Tool system core interfaces (from kernel)
-    pub use mofa_kernel::agent::components::tool::{
-        Tool, ToolInput, ToolResult, ToolMetadata, ToolRegistry, ToolDescriptor, LLMTool,
-    };
-
-    // Tool registry implementation (from foundation)
-    pub use mofa_foundation::agent::SimpleToolRegistry;
-
-    // SimpleTool convenience trait and adapter (from foundation)
-    pub use mofa_foundation::agent::{SimpleTool, SimpleToolAdapter, as_tool};
-
-    // Agent executor for LLM-based agents
-    pub use mofa_foundation::agent::{
-        AgentExecutor, AgentExecutorConfig, ChatCompletionRequest, ChatCompletionResponse,
-        ChatMessage, LLMProvider, TokenUsage, ToolCall, ToolDefinition,
-    };
-
-    pub use mofa_foundation::collaboration::{
-        CollaborationContent, CollaborationMessage, CollaborationMode,
-        CollaborationProtocol, CollaborationResult, CollaborationStats,
-        DecisionContext, LLMDrivenCollaborationManager, ProtocolRegistry,
-    };
-    // Coordination and collaboration (moved to foundation)
-    pub use mofa_foundation::coordination::{
-        AgentCoordinator, CoordinationStrategy,
-    };
+    // Storage trait
+    pub use mofa_kernel::Storage;
 }
 
 // =============================================================================
@@ -222,6 +205,63 @@ pub mod runtime {
 }
 
 // =============================================================================
+// Agent Layer - Foundation Agent Building Blocks
+// =============================================================================
+
+/// Agent building blocks and concrete implementations (foundation layer)
+pub mod agent {
+    pub use mofa_foundation::agent::*;
+}
+
+// =============================================================================
+// Prompt Layer - Prompt Composition & Management
+// =============================================================================
+
+/// Prompt templates, registries, and composition utilities
+pub mod prompt {
+    pub use mofa_foundation::prompt::*;
+}
+
+// =============================================================================
+// Coordination Layer - Task Coordination
+// =============================================================================
+
+/// Coordination strategies and schedulers (foundation layer)
+pub mod coordination {
+    pub use mofa_foundation::coordination::*;
+}
+
+// =============================================================================
+// Config Layer - Unified Configuration
+// =============================================================================
+
+/// Unified configuration facade (kernel + runtime + foundation)
+pub mod config {
+    /// Kernel config helpers and loaders
+    pub mod kernel {
+        pub use mofa_kernel::config::*;
+        pub use mofa_kernel::agent::config::*;
+        pub use mofa_kernel::core::AgentConfig as CoreAgentConfig;
+    }
+
+    /// Runtime config
+    pub mod runtime {
+        pub use mofa_runtime::config::*;
+    }
+
+    /// Foundation YAML config
+    pub mod foundation {
+        pub use mofa_foundation::config::*;
+    }
+
+    // Curated top-level re-exports
+    pub use mofa_runtime::config::FrameworkConfig;
+    pub use mofa_foundation::config::{
+        AgentInfo, AgentYamlConfig, LLMYamlConfig, RuntimeConfig as YamlRuntimeConfig, ToolConfig,
+    };
+}
+
+// =============================================================================
 // Foundation Layer - Business Functionality
 // =============================================================================
 
@@ -237,12 +277,17 @@ pub mod runtime {
 /// - `collaboration`: Multi-agent collaboration protocols
 /// - `persistence`: Database persistence
 pub mod foundation {
+    pub use super::agent;
     pub use super::collaboration;
+    pub use super::coordination;
+    pub use super::config;
     pub use super::llm;
     pub use super::messaging;
     pub use super::persistence;
+    pub use super::prompt;
     pub use super::react;
     pub use super::secretary;
+    pub use super::workflow;
 }
 
 // =============================================================================
@@ -293,6 +338,22 @@ pub mod workflow {
         TimeoutConfig, TransformDef, WorkflowConfig, WorkflowDefinition, WorkflowDslParser,
         WorkflowMetadata,
     };
+}
+
+// =============================================================================
+// Prelude - Commonly Used Imports
+// =============================================================================
+
+/// Commonly used types for quick start
+pub mod prelude {
+    pub use crate::kernel::{
+        AgentCapabilities, AgentCapabilitiesBuilder, AgentContext, AgentError, AgentInput,
+        AgentOutput, AgentResult, AgentState, AgentMetadata, MoFAAgent,
+    };
+    pub use crate::runtime::{
+        AgentBuilder, AgentRunner, run_agents, SimpleRuntime,
+    };
+    pub use async_trait::async_trait;
 }
 
 // Re-export dashboard module (only available with monitoring feature)

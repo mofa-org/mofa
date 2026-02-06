@@ -31,7 +31,7 @@ MoFA 严格遵循以下微内核架构设计原则：
 │  统一API入口：重新导出各层类型，提供跨语言绑定                            │
 │                                                                          │
 │  模块组织：                                                              │
-│  - kernel: 核心抽象层 (MoFAAgent, CoreAgentContext, etc.)                   │
+│  - kernel: 核心抽象层 (MoFAAgent, AgentContext, etc.)                        │
 │  - runtime: 运行时层 (AgentBuilder, SimpleRuntime, etc.)                │
 │  - foundation: 业务层 (llm, secretary, react, etc.)                    │
 │  - 顶层便捷导出：常用类型直接导入                                         │
@@ -99,7 +99,7 @@ MoFA 严格遵循以下微内核架构设计原则：
 │  - AgentPluginSupport: 插件管理                                         │
 │                                                                          │
 │  核心类型：                                                              │
-│  - CoreAgentContext: 执行上下文                                              │
+│  - AgentContext: 执行上下文                                                  │
 │  - AgentInput/AgentOutput: 输入输出                                      │
 │  - AgentState: Agent 状态                                               │
 │  - AgentCapabilities: 能力描述                                          │
@@ -270,7 +270,7 @@ async fn main() -> anyhow::Result<()> {
 
 ```rust
 use mofa_sdk::kernel::{
-    AgentCapabilities, AgentCapabilitiesBuilder, CoreAgentContext, AgentError, AgentInput, AgentOutput,
+    AgentCapabilities, AgentCapabilitiesBuilder, AgentContext, AgentError, AgentInput, AgentOutput,
     AgentResult, AgentState, MoFAAgent,
 };
 use mofa_sdk::runtime::AgentRunner;
@@ -303,12 +303,12 @@ impl MoFAAgent for MyAgent {
     fn name(&self) -> &str { "My Agent" }
     fn capabilities(&self) -> &AgentCapabilities { &self.caps }
 
-    async fn initialize(&mut self, _ctx: &CoreAgentContext) -> AgentResult<()> {
+    async fn initialize(&mut self, _ctx: &AgentContext) -> AgentResult<()> {
         self.state = AgentState::Ready;
         Ok(())
     }
 
-    async fn execute(&mut self, input: AgentInput, ctx: &CoreAgentContext) -> AgentResult<AgentOutput> {
+    async fn execute(&mut self, input: AgentInput, ctx: &AgentContext) -> AgentResult<AgentOutput> {
         let user_input = input.to_text();
         let requested: Option<Vec<String>> = ctx.get("skill_names").await;
 
@@ -348,7 +348,7 @@ async fn main() -> anyhow::Result<()> {
     let skills = SkillsManager::new("./skills")?;
     let agent = MyAgent::new(llm, skills);
 
-    let ctx = CoreAgentContext::with_session("exec-001", "session-001");
+    let ctx = AgentContext::with_session("exec-001", "session-001");
     ctx.set("skill_names", vec!["pdf_processing".to_string()]).await;
 
     let mut runner = AgentRunner::with_context(agent, ctx).await?;
@@ -362,7 +362,7 @@ async fn main() -> anyhow::Result<()> {
 ### 批量执行
 
 ```rust
-use mofa_sdk::kernel::{AgentCapabilities, AgentCapabilitiesBuilder, CoreAgentContext, AgentInput, AgentOutput, AgentResult, AgentState, MoFAAgent};
+use mofa_sdk::kernel::{AgentCapabilities, AgentCapabilitiesBuilder, AgentContext, AgentInput, AgentOutput, AgentResult, AgentState, MoFAAgent};
 use mofa_sdk::runtime::run_agents;
 use async_trait::async_trait;
 
@@ -386,12 +386,12 @@ impl MoFAAgent for EchoAgent {
     fn name(&self) -> &str { "Echo Agent" }
     fn capabilities(&self) -> &AgentCapabilities { &self.caps }
 
-    async fn initialize(&mut self, _ctx: &CoreAgentContext) -> AgentResult<()> {
+    async fn initialize(&mut self, _ctx: &AgentContext) -> AgentResult<()> {
         self.state = AgentState::Ready;
         Ok(())
     }
 
-    async fn execute(&mut self, input: AgentInput, _ctx: &CoreAgentContext) -> AgentResult<AgentOutput> {
+    async fn execute(&mut self, input: AgentInput, _ctx: &AgentContext) -> AgentResult<AgentOutput> {
         Ok(AgentOutput::text(format!("Echo: {}", input.to_text())))
     }
 
@@ -424,7 +424,7 @@ async fn main() -> anyhow::Result<()> {
 #### 端到端：从构建到运行（最佳实践）
 
 ```rust
-use mofa_sdk::kernel::CoreAgentContext;
+use mofa_sdk::kernel::AgentContext;
 use mofa_sdk::runtime::AgentRunner;
 use mofa_sdk::llm::{LLMAgentBuilder, HotReloadableRhaiPromptPlugin};
 use mofa_sdk::persistence::{PersistencePlugin, PostgresStore};
@@ -469,7 +469,7 @@ async fn main() -> anyhow::Result<()> {
     agent.switch_session(&session_id).await?;
 
     // 5) 运行时上下文（执行态元数据）
-    let ctx = CoreAgentContext::with_session("exec-001", session_id.clone());
+    let ctx = AgentContext::with_session("exec-001", session_id.clone());
     ctx.set("user_id", user_id.to_string()).await;
 
     // 6) 通过 AgentRunner 运行（MoFAAgent 生命周期）
@@ -483,7 +483,7 @@ async fn main() -> anyhow::Result<()> {
 #### Agent 上下文管理
 
 ```rust
-use mofa_sdk::kernel::CoreAgentContext;
+use mofa_sdk::kernel::AgentContext;
 use mofa_sdk::runtime::AgentRunner;
 use mofa_sdk::llm::LLMAgentBuilder;
 use mofa_sdk::kernel::AgentInput;
@@ -494,7 +494,7 @@ async fn main() -> anyhow::Result<()> {
         .with_system_prompt("You are a helpful assistant.")
         .build();
 
-    let ctx = CoreAgentContext::with_session("exec-001", "session-001");
+    let ctx = AgentContext::with_session("exec-001", "session-001");
     ctx.set("user_id", "user-123").await;
 
     let mut runner = AgentRunner::with_context(agent, ctx).await?;
