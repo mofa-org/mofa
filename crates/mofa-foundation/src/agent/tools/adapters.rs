@@ -2,11 +2,12 @@
 //!
 //! 提供便捷的工具创建方式
 
-use crate::agent::components::tool::{Tool, ToolInput, ToolMetadata, ToolResult};
-use crate::agent::context::AgentContext;
+use mofa_kernel::agent::components::tool::{ToolInput, ToolMetadata, ToolResult};
+use mofa_kernel::agent::context::AgentContext;
 use async_trait::async_trait;
 use std::future::Future;
 use std::pin::Pin;
+use mofa_kernel::agent::Tool;
 
 /// 函数工具
 ///
@@ -15,9 +16,9 @@ use std::pin::Pin;
 /// # 示例
 ///
 /// ```rust,ignore
-/// use mofa_kernel::agent::tools::FunctionTool;
+/// use mofa_foundation::agent::tools::FunctionTool;
 ///
-/// async fn my_tool_fn(input: ToolInput, ctx: &CoreAgentContext) -> ToolResult {
+/// async fn my_tool_fn(input: ToolInput, ctx: &AgentContext) -> ToolResult {
 ///     let message = input.get_str("message").unwrap_or("default");
 ///     ToolResult::success_text(format!("Processed: {}", message))
 /// }
@@ -111,7 +112,7 @@ where
 /// # 示例
 ///
 /// ```rust,ignore
-/// use mofa_kernel::agent::tools::ClosureTool;
+/// use mofa_foundation::agent::tools::ClosureTool;
 ///
 /// let tool = ClosureTool::new(
 ///     "add",

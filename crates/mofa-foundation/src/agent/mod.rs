@@ -7,6 +7,7 @@ pub mod context;
 pub mod session;
 pub mod executor;
 pub mod base;
+pub mod tools;
 
 // ========================================================================
 // 从 Kernel 层重导出核心类型
@@ -37,6 +38,9 @@ pub use components::{
     // SimpleTool 便捷接口
     SimpleTool, SimpleToolAdapter, as_tool,
 };
+
+// Tool adapters and registries (Foundation implementations)
+pub use tools::{BuiltinTools, ClosureTool, FunctionTool, ToolSearcher, UnifiedToolRegistry};
 
 // Re-export context module
 pub use context::{

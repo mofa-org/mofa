@@ -20,7 +20,7 @@ path = "src/main.rs"
 [dependencies]
 # Core
 mofa-sdk = { path = "../mofa-sdk", version = "0.1" }
-mofa-kernel = { path = "../mofa-kernel", version = "0.1" }
+mofa-kernel = { path = "../mofa-kernel", version = "0.1", features = ["config"] }
 config.workspace = true
 tokio = { workspace = true }
 anyhow = { workspace = true }

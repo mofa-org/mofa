@@ -131,7 +131,7 @@ pub mod kernel {
         Tool, ToolDescriptor, ToolInput, ToolMetadata, ToolResult,
         Memory, MemoryItem, MemoryValue, Message, MessageRole, MemoryStats,
         CoordinationPattern, Coordinator, Reasoner, ReasoningResult,
-        AgentFactory, AgentRegistry, RegistryStats,
+        AgentFactory,
         execution_events, lifecycle, message_events, plugin_events, state_events,
     };
 
@@ -190,6 +190,9 @@ pub mod runtime {
 
     // Simple runtime (non-dora)
     pub use mofa_runtime::SimpleRuntime;
+
+    // Agent registry (runtime implementation)
+    pub use mofa_runtime::agent::{AgentFactory, AgentRegistry, RegistryStats};
 
     // Agent runner (single-execution utilities)
     pub use mofa_runtime::runner::{

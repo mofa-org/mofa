@@ -8,6 +8,7 @@
 //! 3. LLM响应后：后处理LLM返回结果
 //!
 //! 插件可以是HTTP请求、自定义函数等任何实现了Plugin trait的类型
+//! 运行时层提供执行器与默认注册中心实现。
 
 use crate::agent::context::AgentContext;
 use crate::agent::error::AgentResult;
@@ -16,9 +17,6 @@ use async_trait::async_trait;
 use std::collections::HashMap;
 use std::sync::Arc;
 
-// 导入 simple_registry
-mod simple_registry;
-pub use simple_registry::SimplePluginRegistry;
 
 // ============================================================================
 // 插件接口
@@ -123,76 +121,4 @@ pub trait PluginRegistry: Send + Sync {
 
     /// 插件数量
     fn count(&self) -> usize;
-}
-
-// ============================================================================
-// 插件执行器
-// ============================================================================
-
-/// 插件执行器
-pub struct PluginExecutor {
-    pub registry: Arc<dyn PluginRegistry>,
-}
-
-impl PluginExecutor {
-    /// 创建插件执行器
-    pub fn new(registry: Arc<dyn PluginRegistry>) -> Self {
-        Self { registry }
-    }
-
-    /// 执行指定阶段的所有插件
-    pub async fn execute_stage(
-        &self,
-        stage: PluginStage,
-        ctx: &AgentContext,
-    ) -> AgentResult<()> {
-        let plugins = self.registry.list_by_stage(stage);
-        for plugin in plugins {
-            match stage {
-                PluginStage::PreContext => {
-                    plugin.pre_context(ctx).await?;
-                }
-                PluginStage::PostProcess => {
-                    plugin.post_process(ctx).await?;
-                }
-                _ => {
-                    // PreRequest 和 PostResponse 需要参数，单独处理
-                    continue;
-                }
-            }
-        }
-        Ok(())
-    }
-
-    /// 执行PreRequest阶段的所有插件
-    pub async fn execute_pre_request(
-        &self,
-        input: AgentInput,
-        ctx: &AgentContext,
-    ) -> AgentResult<AgentInput> {
-        let mut result = input;
-        let plugins = self.registry.list_by_stage(PluginStage::PreRequest);
-
-        for plugin in plugins {
-            result = plugin.pre_request(result.clone(), ctx).await?;
-        }
-
-        Ok(result)
-    }
-
-    /// 执行PostResponse阶段的所有插件
-    pub async fn execute_post_response(
-        &self,
-        output: AgentOutput,
-        ctx: &AgentContext,
-    ) -> AgentResult<AgentOutput> {
-        let mut result = output;
-        let plugins = self.registry.list_by_stage(PluginStage::PostResponse);
-
-        for plugin in plugins {
-            result = plugin.post_response(result.clone(), ctx).await?;
-        }
-
-        Ok(result)
-    }
 }

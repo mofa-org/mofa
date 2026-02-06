@@ -69,7 +69,7 @@ chrono.workspace = true
 sqlx = { version = "0.8", features = ["runtime-tokio", "postgres", "mysql", "sqlite", "uuid", "chrono", "json"], optional = true }
 
 # Local dependencies
-mofa-kernel = { path = "../mofa-kernel", version = "0.1" }
+mofa-kernel = { path = "../mofa-kernel", version = "0.1", features = ["config"] }
 mofa-extra = { path = "../mofa-extra", version = "0.1" }
 mofa-plugins = { path = "../mofa-plugins", version = "0.1" }
 once_cell = "1.21.3"

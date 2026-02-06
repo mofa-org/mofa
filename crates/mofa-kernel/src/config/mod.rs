@@ -10,6 +10,8 @@
 //! - Configuration merging from multiple sources
 //! - Support for all major configuration formats
 
+#![cfg(feature = "config")]
+
 use config::{Config as Cfg, Environment, File, FileFormat};
 use regex::Regex;
 use serde::de::DeserializeOwned;
@@ -298,7 +300,7 @@ where
         .map_err(|e| ConfigError::Serialization(e.to_string()))
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "config"))]
 mod unit_tests {
     use super::*;
 

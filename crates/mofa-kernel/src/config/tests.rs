@@ -1,3 +1,4 @@
+#![cfg(feature = "config")]
 //! Integration tests for multi-format configuration support
 //!
 //! Tests all supported configuration formats with environment variable substitution.

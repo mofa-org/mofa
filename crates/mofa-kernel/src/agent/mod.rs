@@ -22,7 +22,7 @@
 //! │  └───────────────────────────────────────────────────────────────┘  │
 //! │                                                                      │
 //! │  ┌─────────────────────────────────────────────────────────────┐    │
-//! │  │               AgentRegistry (Agent 注册中心)                  │    │
+//! │  │        AgentRegistry (runtime 注册中心实现)                    │    │
 //! │  └─────────────────────────────────────────────────────────────┘    │
 //! │                                                                      │
 //! │  ┌─────────────────────────────────────────────────────────────┐    │
@@ -124,7 +124,6 @@ pub mod config;
 pub mod registry;
 
 // 工具系统
-pub mod tools;
 
 // 执行引擎与运行器已迁移到 mofa-runtime
 
@@ -178,11 +177,13 @@ pub use components::{
     tool::{Tool, ToolDescriptor, ToolInput, ToolMetadata, ToolResult},
 };
 
-// 重新导出注册中心
-pub use registry::{AgentFactory, AgentRegistry, RegistryStats};
+// 重新导出工厂接口
+pub use registry::AgentFactory;
 
 // 重新导出配置
-pub use config::{AgentConfig, AgentType, ConfigFormat, ConfigLoader};
+pub use config::{AgentConfig, AgentType};
+#[cfg(feature = "config")]
+pub use config::{ConfigFormat, ConfigLoader};
 
 
 /// Prelude 模块 - 常用类型导入

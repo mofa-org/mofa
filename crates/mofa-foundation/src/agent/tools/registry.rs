@@ -2,10 +2,8 @@
 //!
 //! 整合内置工具、MCP 工具、自定义工具的注册中心
 
-use crate::agent::components::tool::{
-    Tool, ToolDescriptor, ToolRegistry,
-};
-use crate::agent::error::AgentResult;
+use mofa_kernel::agent::components::tool::{Tool, ToolDescriptor, ToolRegistry};
+use mofa_kernel::agent::error::AgentResult;
 use async_trait::async_trait;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -17,13 +15,13 @@ use std::sync::Arc;
 /// # 示例
 ///
 /// ```rust,ignore
-/// use mofa_kernel::agent::tools::UnifiedToolRegistry;
-/// use mofa_kernel::agent::components::tool::TestEchoTool;
+/// use mofa_foundation::agent::tools::UnifiedToolRegistry;
+/// use mofa_foundation::agent::components::tool::EchoTool;
 ///
 /// let mut registry = UnifiedToolRegistry::new();
 ///
 /// // 注册内置工具
-/// registry.register(Arc::new(TestEchoTool)).unwrap();
+/// registry.register(Arc::new(EchoTool)).unwrap();
 ///
 /// // 注册 MCP 服务器的工具
 /// registry.load_mcp_server("http://localhost:8080").await?;

@@ -67,6 +67,7 @@
 
 mod agent_router;
 mod core;
+mod connection;
 mod llm;
 
 /// 默认实现模块
@@ -80,13 +81,9 @@ pub mod monitoring;
 // 核心 traits (来自 mofa-kernel)
 pub use mofa_kernel::agent::secretary::{
     // Traits
-    ChannelConnection, ConnectionFactory, CoreState, EventListener, InputHandler, Middleware,
-    PhaseHandler, PhaseResult, SecretaryBehavior, SecretaryContext, SecretaryContextBuilder,
-    // Context
-    SecretaryCoreConfig, SecretaryEvent, SecretaryHandle,
-    // Connection
-    SecretaryInput, SecretaryOutput, SharedSecretaryContext, TimeoutConnection,
-    // Core config
+    ConnectionFactory, EventListener, InputHandler, Middleware, PhaseHandler, PhaseResult,
+    SecretaryBehavior, SecretaryContext, SecretaryContextBuilder, SecretaryEvent,
+    SecretaryInput, SecretaryOutput, SharedSecretaryContext,
     UserConnection, WorkflowOrchestrator, WorkflowResult,
 };
 
@@ -96,6 +93,10 @@ pub use mofa_kernel::agent::secretary::{
 
 // 核心引擎实现 (SecretaryCore 在此模块实现，使用 kernel 的抽象)
 pub use core::{SecretaryCore, SecretaryCoreBuilder};
+pub use core::{CoreState, SecretaryCoreConfig, SecretaryHandle};
+
+// 连接实现 (Foundation)
+pub use connection::{ChannelConnection, TimeoutConnection};
 
 // LLM 抽象
 pub use llm::{

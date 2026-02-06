@@ -12,9 +12,123 @@
 use tokio::sync::mpsc;
 
 // 使用 mofa-kernel 的核心抽象
-use mofa_kernel::agent::secretary::{
-    SecretaryBehavior, SecretaryContext, SecretaryCoreConfig, SecretaryHandle, UserConnection,
-};
+use mofa_kernel::agent::secretary::{SecretaryBehavior, SecretaryContext, UserConnection};
+
+// =============================================================================
+// Core 配置与状态 (Foundation 实现)
+// =============================================================================
+
+/// 秘书核心配置
+#[derive(Debug, Clone)]
+pub struct SecretaryCoreConfig {
+    /// 事件循环轮询间隔（毫秒）
+    pub poll_interval_ms: u64,
+
+    /// 是否在启动时发送欢迎消息
+    pub send_welcome: bool,
+
+    /// 是否启用定时检查
+    pub enable_periodic_check: bool,
+
+    /// 定时检查间隔（毫秒）
+    pub periodic_check_interval_ms: u64,
+
+    /// 最大连续错误次数（超过后停止）
+    pub max_consecutive_errors: u32,
+}
+
+impl Default for SecretaryCoreConfig {
+    fn default() -> Self {
+        Self {
+            poll_interval_ms: 100,
+            send_welcome: true,
+            enable_periodic_check: true,
+            periodic_check_interval_ms: 1000,
+            max_consecutive_errors: 10,
+        }
+    }
+}
+
+/// 秘书核心状态
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CoreState {
+    /// 初始化中
+    Initializing,
+    /// 运行中
+    Running,
+    /// 暂停
+    Paused,
+    /// 已停止
+    Stopped,
+}
+
+/// 秘书控制句柄
+///
+/// 用于从外部控制秘书的运行状态。
+#[derive(Clone)]
+pub struct SecretaryHandle {
+    /// 是否运行中
+    running: std::sync::Arc<std::sync::atomic::AtomicBool>,
+    /// 是否暂停
+    paused: std::sync::Arc<std::sync::atomic::AtomicBool>,
+    /// 停止信号发送器
+    stop_tx: mpsc::Sender<()>,
+}
+
+impl SecretaryHandle {
+    /// 创建新的控制句柄
+    pub fn new(stop_tx: mpsc::Sender<()>) -> Self {
+        Self {
+            running: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
+            paused: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
+            stop_tx,
+        }
+    }
+
+    /// 获取 running 标志的克隆
+    pub fn running_flag(&self) -> std::sync::Arc<std::sync::atomic::AtomicBool> {
+        self.running.clone()
+    }
+
+    /// 获取 paused 标志的克隆
+    pub fn paused_flag(&self) -> std::sync::Arc<std::sync::atomic::AtomicBool> {
+        self.paused.clone()
+    }
+
+    /// 检查是否运行中
+    pub fn is_running(&self) -> bool {
+        self.running.load(std::sync::atomic::Ordering::SeqCst)
+    }
+
+    /// 检查是否暂停
+    pub fn is_paused(&self) -> bool {
+        self.paused.load(std::sync::atomic::Ordering::SeqCst)
+    }
+
+    /// 设置运行状态
+    pub fn set_running(&self, running: bool) {
+        self.running
+            .store(running, std::sync::atomic::Ordering::SeqCst);
+    }
+
+    /// 暂停秘书
+    pub fn pause(&self) {
+        self.paused.store(true, std::sync::atomic::Ordering::SeqCst);
+    }
+
+    /// 恢复秘书
+    pub fn resume(&self) {
+        self.paused
+            .store(false, std::sync::atomic::Ordering::SeqCst);
+    }
+
+    /// 停止秘书
+    pub async fn stop(&self) {
+        self.running
+            .store(false, std::sync::atomic::Ordering::SeqCst);
+        let _ = self.stop_tx.send(()).await;
+    }
+}
 
 // =============================================================================
 // 秘书核心引擎

@@ -18,7 +18,7 @@ publish = true
 async-trait.workspace = true
 serde.workspace = true
 serde_json.workspace = true
-serde_yaml.workspace = true
+serde_yaml = { workspace = true, optional = true }
 tokio.workspace = true
 bincode.workspace = true
 anyhow.workspace = true
@@ -28,10 +28,14 @@ tracing.workspace = true
 
 
 # Config parsing
-toml = "0.8"
-config.workspace = true
-regex.workspace = true
+toml = { version = "0.8", optional = true }
+config = { workspace = true, optional = true }
+regex = { workspace = true, optional = true }
 
 [dev-dependencies]
 tempfile = "3"
 
+[features]
+default = []
+# Config loader (formats, env substitution, merge)
+config = ["dep:config", "dep:regex", "dep:serde_yaml", "dep:toml"]

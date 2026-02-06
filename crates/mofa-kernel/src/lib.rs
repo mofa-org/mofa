@@ -27,7 +27,10 @@ pub mod message;
 pub mod agent;
 
 // Unified Configuration System (统一配置系统)
+#[cfg(feature = "config")]
 pub mod config;
+#[cfg(feature = "config")]
+pub use config::*;
 
 // Storage traits (存储接口)
 pub mod storage;

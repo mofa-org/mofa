@@ -18,7 +18,8 @@ pub mod registry;
 
 // 重新导出常用类型
 pub use execution::{ExecutionEngine, ExecutionOptions, ExecutionResult, ExecutionStatus};
-pub use registry::{AgentFactory, AgentRegistry, RegistryStats};
+pub use mofa_kernel::agent::registry::AgentFactory;
+pub use registry::{AgentRegistry, RegistryStats};
 pub use crate::runner::{
     AgentRunner, AgentRunnerBuilder, RunnerState, RunnerStats,
     run_agents,
