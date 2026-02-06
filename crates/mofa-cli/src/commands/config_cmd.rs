@@ -110,7 +110,7 @@ fn load_global_config() -> anyhow::Result<HashMap<String, String>> {
 
     let _content = fs::read_to_string(&config_file)?;
 
-    // Use the unified config loading
+    // Use the global config loading
     let config: Value = load_config(config_file.to_string_lossy().as_ref())
         .map_err(|e| anyhow::anyhow!("Failed to parse config: {}", e))?;
 

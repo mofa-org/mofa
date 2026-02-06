@@ -9,7 +9,7 @@
 //! │                         统一 Agent 框架                              │
 //! ├─────────────────────────────────────────────────────────────────────┤
 //! │  ┌─────────────────────────────────────────────────────────────┐    │
-//! │  │                   UnifiedAgent Trait                         │    │
+//! │  │                    MoFAAgent Trait                            │    │
 //! │  │  (统一 Agent 接口：id, capabilities, execute, interrupt)      │    │
 //! │  └───────────────────────────┬─────────────────────────────────┘    │
 //! │                              │                                       │
@@ -33,7 +33,7 @@
 //!
 //! # 核心概念
 //!
-//! ## UnifiedAgent Trait
+//! ## MoFAAgent Trait
 //!
 //! 所有 Agent 实现的统一接口：
 //!
@@ -41,7 +41,7 @@
 //! use mofa_kernel::agent::prelude::*;
 //!
 //! #[async_trait]
-//! impl UnifiedAgent for MyAgent {
+//! impl MoFAAgent for MyAgent {
 //!     fn id(&self) -> &str { "my-agent" }
 //!     fn name(&self) -> &str { "My Agent" }
 //!     fn capabilities(&self) -> &AgentCapabilities { &self.caps }
@@ -96,7 +96,7 @@
 //! # 模块结构
 //!
 //! - `core` - AgentCore 微内核接口（最小化核心）
-//! - `traits` - UnifiedAgent trait 定义
+//! - `traits` - MoFAAgent trait 定义
 //! - `types` - AgentInput, AgentOutput, AgentState 等类型
 //! - `capabilities` - AgentCapabilities 能力描述
 //! - `context` - CoreAgentContext 执行上下文
@@ -158,10 +158,10 @@ pub use types::event::state as state_events;
 pub use types::{
     AgentInput, AgentOutput, AgentState, ErrorCategory, ErrorContext, EventBuilder, InputType,
     InterruptResult, MessageContent, MessageMetadata, OutputContent,
-    // Unified types
+    // Global types
     OutputType, ReasoningStep, ReasoningStepType,
     TokenUsage, ToolUsage,
-    UnifiedError, UnifiedEvent, UnifiedMessage, UnifiedResult,
+    GlobalError, GlobalEvent, GlobalMessage, GlobalResult,
     // LLM types
     ChatCompletionRequest, ChatMessage, ChatCompletionResponse,
     ToolCall, ToolDefinition, LLMProvider,

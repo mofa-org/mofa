@@ -1,10 +1,10 @@
-//! 统一错误类型系统
+//! 全局错误类型系统
 //!
-//! 本模块提供统一的错误类型层次结构，整合各层的错误类型。
+//! 本模块提供全局错误类型层次结构，整合各层的错误类型。
 //!
 //! # 设计目标
 //!
-//! - 提供统一的错误抽象，避免多种错误类型（AgentResult, LLMResult, PluginResult）
+//! - 提供全局错误抽象，避免多种错误类型（AgentResult, LLMResult, PluginResult）
 //! - 保留各层错误的特定信息
 //! - 支持错误链和上下文
 //! - 提供清晰的错误来源标识
@@ -13,14 +13,14 @@ use crate::agent::error::AgentError;
 use std::fmt;
 
 // ============================================================================
-// UnifiedError - 统一错误类型
+// GlobalError - 全局错误类型
 // ============================================================================
 
-/// 统一错误类型
+/// 全局错误类型
 ///
 /// 整合所有层的错误类型，提供单一的错误抽象。
 #[derive(Debug, thiserror::Error)]
-pub enum UnifiedError {
+pub enum GlobalError {
     /// Agent 层错误
     #[error("Agent error: {0}")]
     Agent(#[from] AgentError),
@@ -50,7 +50,7 @@ pub enum UnifiedError {
     Other(String),
 }
 
-impl UnifiedError {
+impl GlobalError {
     /// 创建 LLM 错误
     pub fn llm(msg: impl Into<String>) -> Self {
         Self::LLM(msg.into())
@@ -133,31 +133,31 @@ impl fmt::Display for ErrorCategory {
 }
 
 // ============================================================================
-// UnifiedResult - 统一结果类型
+// GlobalResult - 全局结果类型
 // ============================================================================
 
-/// 统一结果类型
+/// 全局结果类型
 ///
 /// 替代 `AgentResult`, `LLMResult`, `PluginResult`，提供单一的结果类型。
-pub type UnifiedResult<T> = Result<T, UnifiedError>;
+pub type GlobalResult<T> = Result<T, GlobalError>;
 
 // ============================================================================
 // 从其他错误类型转换
 // ============================================================================
 
-impl From<anyhow::Error> for UnifiedError {
+impl From<anyhow::Error> for GlobalError {
     fn from(err: anyhow::Error) -> Self {
         Self::Other(err.to_string())
     }
 }
 
-impl From<String> for UnifiedError {
+impl From<String> for GlobalError {
     fn from(s: String) -> Self {
         Self::Other(s)
     }
 }
 
-impl From<&str> for UnifiedError {
+impl From<&str> for GlobalError {
     fn from(s: &str) -> Self {
         Self::Other(s.to_string())
     }
@@ -211,10 +211,10 @@ impl ErrorContext {
 #[macro_export]
 macro_rules! format_err {
     ($msg:expr) => {
-        $crate::agent::types::error::UnifiedError::Other($msg.to_string())
+        $crate::agent::types::error::GlobalError::Other($msg.to_string())
     };
     ($fmt:expr, $($arg:tt)*) => {
-        $crate::agent::types::error::UnifiedError::Other(format!($fmt, $($arg)*))
+        $crate::agent::types::error::GlobalError::Other(format!($fmt, $($arg)*))
     };
 }
 
@@ -222,10 +222,10 @@ macro_rules! format_err {
 #[macro_export]
 macro_rules! llm_err {
     ($msg:expr) => {
-        $crate::agent::types::error::UnifiedError::LLM($msg.to_string())
+        $crate::agent::types::error::GlobalError::LLM($msg.to_string())
     };
     ($fmt:expr, $($arg:tt)*) => {
-        $crate::agent::types::error::UnifiedError::LLM(format!($fmt, $($arg)*))
+        $crate::agent::types::error::GlobalError::LLM(format!($fmt, $($arg)*))
     };
 }
 
@@ -233,10 +233,10 @@ macro_rules! llm_err {
 #[macro_export]
 macro_rules! plugin_err {
     ($msg:expr) => {
-        $crate::agent::types::error::UnifiedError::Plugin($msg.to_string())
+        $crate::agent::types::error::GlobalError::Plugin($msg.to_string())
     };
     ($fmt:expr, $($arg:tt)*) => {
-        $crate::agent::types::error::UnifiedError::Plugin(format!($fmt, $($arg)*))
+        $crate::agent::types::error::GlobalError::Plugin(format!($fmt, $($arg)*))
     };
 }
 
@@ -251,34 +251,34 @@ mod tests {
     #[test]
     fn test_error_from_agent_error() {
         let agent_err = AgentError::NotFound("test-agent".to_string());
-        let unified_err: UnifiedError = agent_err.into();
+        let global_err: GlobalError = agent_err.into();
 
-        assert_eq!(unified_err.category(), ErrorCategory::Agent);
-        assert!(unified_err.to_string().contains("test-agent"));
+        assert_eq!(global_err.category(), ErrorCategory::Agent);
+        assert!(global_err.to_string().contains("test-agent"));
     }
 
     #[test]
     fn test_error_categories() {
-        assert_eq!(UnifiedError::llm("test").category(), ErrorCategory::LLM);
-        assert_eq!(UnifiedError::plugin("test").category(), ErrorCategory::Plugin);
-        assert_eq!(UnifiedError::runtime("test").category(), ErrorCategory::Runtime);
+        assert_eq!(GlobalError::llm("test").category(), ErrorCategory::LLM);
+        assert_eq!(GlobalError::plugin("test").category(), ErrorCategory::Plugin);
+        assert_eq!(GlobalError::runtime("test").category(), ErrorCategory::Runtime);
     }
 
     #[test]
     fn test_retryable_errors() {
-        assert!(UnifiedError::llm("timeout").is_retryable());
-        assert!(UnifiedError::plugin("temporary failure").is_retryable());
-        assert!(UnifiedError::runtime("network error").is_retryable());
+        assert!(GlobalError::llm("timeout").is_retryable());
+        assert!(GlobalError::plugin("temporary failure").is_retryable());
+        assert!(GlobalError::runtime("network error").is_retryable());
     }
 
     #[test]
     fn test_result_type() {
-        type Result = UnifiedResult<String>;
+        type Result = GlobalResult<String>;
 
         let ok: Result = Ok("success".to_string());
         assert!(ok.is_ok());
 
-        let err: Result = Err(UnifiedError::llm("failed"));
+        let err: Result = Err(GlobalError::llm("failed"));
         assert!(err.is_err());
     }
 
@@ -297,12 +297,12 @@ mod tests {
     #[test]
     fn test_macros() {
         let err = format_err!("test error");
-        assert!(matches!(err, UnifiedError::Other(_)));
+        assert!(matches!(err, GlobalError::Other(_)));
 
         let err = llm_err!("LLM failed: {}", "timeout");
-        assert!(matches!(err, UnifiedError::LLM(_)));
+        assert!(matches!(err, GlobalError::LLM(_)));
 
         let err = plugin_err!("Plugin error: {}", "not found");
-        assert!(matches!(err, UnifiedError::Plugin(_)));
+        assert!(matches!(err, GlobalError::Plugin(_)));
     }
 }

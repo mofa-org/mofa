@@ -1,6 +1,6 @@
-//! MoFA API - Unified SDK for MoFA framework
+//! MoFA API - Standard SDK for MoFA framework
 //!
-//! This crate provides a unified API for the MoFA (Model-based Framework for Agents) framework.
+//! This crate provides a standardized API for the MoFA (Model-based Framework for Agents) framework.
 //!
 //! # Architecture Layers
 //!
@@ -12,7 +12,7 @@
 //! └─────────────────┬───────────────────────┘
 //!                   ↓
 //! ┌─────────────────────────────────────────┐
-//! │     SDK (Unified API Surface)           │
+//! │     SDK (Standard API Surface)          │
 //! │  - kernel: Core abstractions            │
 //! │  - runtime: Lifecycle management        │
 //! │  - foundation: Business functionality   │
@@ -62,7 +62,7 @@
 ///
 /// # Core Trait
 ///
-/// - `MoFAAgent`: The unified agent interface (id, name, capabilities, execute, etc.)
+/// - `MoFAAgent`: The core agent interface (id, name, capabilities, execute, etc.)
 ///
 /// # Extension Traits
 ///
@@ -125,7 +125,7 @@ pub mod kernel {
         AgentMetadata, AgentStats, DynAgent, HealthStatus,
         AgentInput, AgentOutput, AgentState, InputType, OutputContent, OutputType, InterruptResult,
         MessageContent, MessageMetadata, EventBuilder,
-        ErrorCategory, ErrorContext, UnifiedError, UnifiedEvent, UnifiedMessage, UnifiedResult,
+        ErrorCategory, ErrorContext, GlobalError, GlobalEvent, GlobalMessage, GlobalResult,
         ReasoningStep, ReasoningStepType, TokenUsage, ToolUsage,
         ChatCompletionRequest, ChatCompletionResponse, ChatMessage, ToolCall, ToolDefinition, LLMProvider,
         Tool, ToolDescriptor, ToolInput, ToolMetadata, ToolResult,
@@ -235,10 +235,10 @@ pub mod coordination {
 }
 
 // =============================================================================
-// Config Layer - Unified Configuration
+// Config Layer - Global Configuration
 // =============================================================================
 
-/// Unified configuration facade (kernel + runtime + foundation)
+/// Global configuration facade (kernel + runtime + foundation)
 pub mod config {
     /// Kernel config helpers and loaders
     pub mod kernel {

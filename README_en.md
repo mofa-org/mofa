@@ -163,7 +163,7 @@ MoFA adopts a **layered microkernel architecture** with `mofa-kernel` at its cor
 - LLM capabilities are implemented through `LLMPlugin`, encapsulating LLM providers as plugins compliant with microkernel specifications
 
 #### Integration with LLM
-- LLM exists as a plugin component of the microkernel, providing unified LLM access capabilities through the `LLMCapability` interface
+- LLM exists as a plugin component of the microkernel, providing standard LLM access capabilities through the `LLMCapability` interface
 - All agent collaboration patterns (chain, parallel, debate, etc.) are built on the microkernel's workflow engine and interact with LLMs through standardized LLM plugin interfaces
 - Secretary mode is also implemented based on the microkernel's A2A communication protocol and task scheduling system
 
@@ -178,7 +178,7 @@ MoFA adopts a **layered microkernel architecture** with `mofa-kernel` at its cor
 - **Workflow Engine**: Visual workflow builder and executor
 
 ### 4. LLM and AI Capabilities
-- **LLM Abstraction Layer**: Unified LLM integration interface
+- **LLM Abstraction Layer**: Standardized LLM integration interface
 - **OpenAI Support**: Built-in OpenAI API integration
 - **ReAct Pattern**: Agent framework based on reasoning and action
 - **Multi-Agent Collaboration**: Team-based agent coordination, supporting multiple collaboration patterns:

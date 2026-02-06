@@ -1,13 +1,13 @@
 use async_trait::async_trait;
 use mofa_runtime::agent::capabilities::AgentCapabilities;
-use mofa_runtime::agent::context::CoreAgentContext;
+use mofa_runtime::agent::context::AgentContext;
 use mofa_runtime::agent::error::AgentResult;
 use mofa_runtime::agent::execution::{ExecutionEngine, ExecutionOptions};
 use mofa_runtime::agent::plugins::{CustomFunctionPlugin, HttpPlugin, PluginStage};
 use mofa_runtime::agent::registry::AgentRegistry;
 use mofa_runtime::agent::types::{AgentInput, AgentOutput, AgentState, InterruptResult};
 use mofa_foundation::agent::BaseAgent;
-use mofa_runtime::agent::traits::UnifiedAgent;
+use mofa_runtime::agent::core::MoFAAgent;
 
 // 定义一个简单的LLM Agent
 struct SimpleLlmAgent {
@@ -23,7 +23,7 @@ impl SimpleLlmAgent {
 }
 
 #[async_trait]
-impl UnifiedAgent for SimpleLlmAgent {
+impl MoFAAgent for SimpleLlmAgent {
     fn id(&self) -> &str {
         &self.base.id
     }
@@ -36,11 +36,11 @@ impl UnifiedAgent for SimpleLlmAgent {
         &self.base.capabilities
     }
 
-    async fn initialize(&mut self, ctx: &CoreAgentContext) -> AgentResult<()> {
+    async fn initialize(&mut self, ctx: &AgentContext) -> AgentResult<()> {
         self.base.initialize(ctx).await
     }
 
-    async fn execute(&mut self, input: AgentInput, ctx: &CoreAgentContext) -> AgentResult<AgentOutput> {
+    async fn execute(&mut self, input: AgentInput, ctx: &AgentContext) -> AgentResult<AgentOutput> {
         // 从上下文获取HTTP插件的响应
         if let Some(http_response) = ctx.get::<String>("http_response").await {
             println!("LLM Agent received HTTP response from context: {}", http_response);
@@ -87,7 +87,7 @@ async fn main() -> AgentResult<()> {
     let custom_plugin = Arc::new(CustomFunctionPlugin::new(
         "custom-input-plugin",
         "Custom input processing plugin",
-        |input: AgentInput, ctx: &CoreAgentContext| {
+        |input: AgentInput, ctx: &AgentContext| {
             println!("Custom plugin received input: {}", input.to_text());
 
             // 在上下文存储处理后的输入

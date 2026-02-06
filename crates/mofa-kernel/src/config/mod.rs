@@ -1,6 +1,6 @@
-//! Unified Configuration System
+//! Global Configuration System
 //!
-//! This module provides a unified configuration loading abstraction that supports
+//! This module provides a global configuration loading abstraction that supports
 //! multiple configuration formats: YAML, TOML, JSON, INI, RON, JSON5.
 //!
 //! ## Features

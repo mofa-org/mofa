@@ -61,7 +61,7 @@ mofa/
 │   ├── mofa-runtime/       # Runtime system (message bus, registry, event loop)
 │   ├── mofa-plugins/       # Plugin system (dual-layer architecture)
 │   ├── mofa-cli/           # CLI tool (`mofa` command)
-│   ├── mofa-sdk/           # Main SDK - unified API surface
+│   ├── mofa-sdk/           # Main SDK - standard API surface
 │   ├── mofa-macros/        # Procedural macros
 │   ├── mofa-monitoring/    # Monitoring and observability
 │   └── mofa-extra/         # Additional utilities
@@ -82,7 +82,7 @@ MoFA uses a layered microkernel architecture:
 
 ### Key Crates
 
-- **`mofa-sdk`**: Main entry point - high-level unified API, multi-language bindings, secretary agent mode
+- **`mofa-sdk`**: Main entry point - high-level standard API, multi-language bindings, secretary agent mode
 - **`mofa-runtime`**: Message bus, agent registry, event loop, health checks, state management
 - **`mofa-foundation`**: LLM integration (OpenAI provider), agent abstractions, persistence layer (PostgreSQL/MySQL/SQLite)
 - **`mofa-plugins`**: Dual-layer plugin system with Rhai scripting engine integration
@@ -166,8 +166,8 @@ MoFA follows a strict microkernel architecture with clear separation of concerns
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                    mofa-sdk (Unified API)                   │
-│  - External unified interface                                 │
+│                    mofa-sdk (Standard API)                  │
+│  - External standard interface                               │
 │  - Re-exports core types from kernel and foundation          │
 └─────────────────────────────────────────────────────────────┘
                             ↓
@@ -216,7 +216,7 @@ MoFA follows a strict microkernel architecture with clear separation of concerns
 #### Rule 3: Type Exports
 - ✅ **Kernel**: Export only types it defines
 - ✅ **Foundation**: Export only types it implements, NOT re-export kernel traits
-- ✅ **SDK**: Unified re-export of user-facing APIs
+- ✅ **SDK**: Standard re-export of user-facing APIs
 
 #### Rule 4: Data Types
 - ✅ **Kernel Layer**: Base data types (AgentInput, AgentOutput, AgentState, ToolInput, ToolResult)

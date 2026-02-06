@@ -40,7 +40,7 @@ pub use components::{
 };
 
 // Tool adapters and registries (Foundation implementations)
-pub use tools::{BuiltinTools, ClosureTool, FunctionTool, ToolSearcher, UnifiedToolRegistry};
+pub use tools::{BuiltinTools, ClosureTool, FunctionTool, ToolSearcher};
 
 // Re-export context module
 pub use context::{

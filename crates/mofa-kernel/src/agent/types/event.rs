@@ -1,6 +1,6 @@
-//! 统一事件系统
+//! 全局事件系统
 //!
-//! 本模块提供统一的事件系统，用于替代分散的 AgentEvent 和 PluginEvent 定义。
+//! 本模块提供全局事件系统，用于替代分散的 AgentEvent 和 PluginEvent 定义。
 //!
 //! # 设计目标
 //!
@@ -13,12 +13,12 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 // ============================================================================
-// UnifiedEvent - 统一事件类型
+// GlobalEvent - 全局事件类型
 // ============================================================================
 
-/// 统一事件类型
+/// 全局事件类型
 ///
-/// 替代 `AgentEvent` 和 `PluginEvent`，提供统一的事件抽象。
+/// 替代 `AgentEvent` 和 `PluginEvent`，提供全局事件抽象。
 ///
 /// # 事件类型
 ///
@@ -30,7 +30,7 @@ use std::collections::HashMap;
 /// - `state:*` - 状态变更事件（changed, error）
 /// - `custom:*` - 自定义事件
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct UnifiedEvent {
+pub struct GlobalEvent {
     /// 事件 ID（唯一标识）
     pub event_id: String,
 
@@ -52,7 +52,7 @@ pub struct UnifiedEvent {
     pub metadata: HashMap<String, String>,
 }
 
-impl UnifiedEvent {
+impl GlobalEvent {
     /// 创建新事件
     pub fn new(event_type: impl Into<String>, source: impl Into<String>) -> Self {
         let timestamp = std::time::SystemTime::now()
@@ -111,14 +111,14 @@ impl UnifiedEvent {
 ///
 /// 提供流式 API 来构建事件。
 pub struct EventBuilder {
-    event: UnifiedEvent,
+    event: GlobalEvent,
 }
 
 impl EventBuilder {
     /// 创建新构建器
     pub fn new(event_type: impl Into<String>, source: impl Into<String>) -> Self {
         Self {
-            event: UnifiedEvent::new(event_type, source),
+            event: GlobalEvent::new(event_type, source),
         }
     }
 
@@ -147,7 +147,7 @@ impl EventBuilder {
     }
 
     /// 构建事件
-    pub fn build(self) -> UnifiedEvent {
+    pub fn build(self) -> GlobalEvent {
         self.event
     }
 }
@@ -203,18 +203,18 @@ pub mod state {
 // ============================================================================
 
 /// 创建生命周期事件
-pub fn lifecycle_event(event_type: &str, source: &str) -> UnifiedEvent {
-    UnifiedEvent::new(event_type, source)
+pub fn lifecycle_event(event_type: &str, source: &str) -> GlobalEvent {
+    GlobalEvent::new(event_type, source)
 }
 
 /// 创建执行事件
-pub fn execution_event(event_type: &str, source: &str, data: serde_json::Value) -> UnifiedEvent {
-    UnifiedEvent::new(event_type, source).with_data(data)
+pub fn execution_event(event_type: &str, source: &str, data: serde_json::Value) -> GlobalEvent {
+    GlobalEvent::new(event_type, source).with_data(data)
 }
 
 /// 创建状态变更事件
-pub fn state_changed_event(source: &str, old_state: &str, new_state: &str) -> UnifiedEvent {
-    UnifiedEvent::new(state::CHANGED, source)
+pub fn state_changed_event(source: &str, old_state: &str, new_state: &str) -> GlobalEvent {
+    GlobalEvent::new(state::CHANGED, source)
         .with_data(serde_json::json!({
             "old_state": old_state,
             "new_state": new_state
@@ -222,8 +222,8 @@ pub fn state_changed_event(source: &str, old_state: &str, new_state: &str) -> Un
 }
 
 /// 创建错误事件
-pub fn error_event(source: &str, error: &str) -> UnifiedEvent {
-    UnifiedEvent::new("error", source)
+pub fn error_event(source: &str, error: &str) -> GlobalEvent {
+    GlobalEvent::new("error", source)
         .with_data(serde_json::json!({
             "error": error
         }))
@@ -239,7 +239,7 @@ mod tests {
 
     #[test]
     fn test_event_creation() {
-        let event = UnifiedEvent::new("test:event", "agent1");
+        let event = GlobalEvent::new("test:event", "agent1");
         assert_eq!(event.event_type, "test:event");
         assert_eq!(event.source, "agent1");
         assert!(!event.event_id.is_empty());
@@ -248,7 +248,7 @@ mod tests {
     #[test]
     fn test_event_with_data() {
         let data = serde_json::json!({ "key": "value" });
-        let event = UnifiedEvent::new("test:event", "agent1")
+        let event = GlobalEvent::new("test:event", "agent1")
             .with_data(data.clone());
 
         assert_eq!(event.data, data);
@@ -270,7 +270,7 @@ mod tests {
 
     #[test]
     fn test_event_type_checks() {
-        let event = UnifiedEvent::new("lifecycle:initialized", "agent1");
+        let event = GlobalEvent::new("lifecycle:initialized", "agent1");
 
         assert!(event.is_type("lifecycle:initialized"));
         assert!(event.is_from("agent1"));

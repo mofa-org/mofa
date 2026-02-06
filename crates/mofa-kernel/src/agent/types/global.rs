@@ -1,6 +1,6 @@
-//! 统一消息协议
+//! 全局消息协议
 //!
-//! 本模块提供统一的抽象消息协议，用于替代多个重复的 AgentMessage 定义。
+//! 本模块提供全局抽象消息协议，用于替代多个重复的 AgentMessage 定义。
 //!
 //! # 设计目标
 //!
@@ -13,12 +13,12 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 // ============================================================================
-// UnifiedMessage - 统一消息类型
+// GlobalMessage - 全局消息类型
 // ============================================================================
 
-/// 统一消息类型
+/// 全局消息类型
 ///
-/// 替代多处重复的 `AgentMessage` 定义，提供统一的消息抽象。
+/// 替代多处重复的 `AgentMessage` 定义，提供全局消息抽象。
 ///
 /// # 消息模式
 ///
@@ -28,7 +28,7 @@ use std::collections::HashMap;
 /// - `Response`: 响应消息
 /// - `PubSub`: 发布-订阅模式
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum UnifiedMessage {
+pub enum GlobalMessage {
     /// 点对点直接消息
     Direct {
         /// 发送者 ID
@@ -84,7 +84,7 @@ pub enum UnifiedMessage {
     },
 }
 
-impl UnifiedMessage {
+impl GlobalMessage {
     /// 获取消息发送者 ID
     pub fn sender(&self) -> &str {
         match self {
@@ -334,22 +334,22 @@ mod tests {
     }
 
     #[test]
-    fn test_unified_message_direct() {
-        let msg = UnifiedMessage::direct("agent1", "agent2", MessageContent::text("test"));
+    fn test_global_message_direct() {
+        let msg = GlobalMessage::direct("agent1", "agent2", MessageContent::text("test"));
         assert_eq!(msg.sender(), "agent1");
         assert_eq!(msg.message_type(), "direct");
     }
 
     #[test]
-    fn test_unified_message_request_response() {
-        let request = UnifiedMessage::request(
+    fn test_global_message_request_response() {
+        let request = GlobalMessage::request(
             "client",
             "server",
             "req-123",
             MessageContent::text("ping"),
         );
 
-        let response = UnifiedMessage::response(
+        let response = GlobalMessage::response(
             "server",
             "req-123",
             MessageContent::text("pong"),

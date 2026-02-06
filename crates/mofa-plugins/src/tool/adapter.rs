@@ -14,7 +14,7 @@ use async_trait::async_trait;
 /// Adapter that converts a Tool to an AgentPlugin
 ///
 /// This allows any Tool implementation to be registered as a plugin,
-/// enabling unified management through the plugin system.
+/// enabling centralized management through the plugin system.
 ///
 /// # Example
 ///

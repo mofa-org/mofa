@@ -26,7 +26,7 @@ pub mod message;
 // Agent Framework (统一 Agent 框架)
 pub mod agent;
 
-// Unified Configuration System (统一配置系统)
+// Global Configuration System (全局配置系统)
 #[cfg(feature = "config")]
 pub mod config;
 #[cfg(feature = "config")]

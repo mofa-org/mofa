@@ -1,11 +1,11 @@
 # MoFA SDK
 
-MoFA (Modular Framework for Agents) SDK - A unified development toolkit for building AI agents with Rust.
+MoFA (Modular Framework for Agents) SDK - A standard development toolkit for building AI agents with Rust.
 
 ## Architecture
 
 ```
-mofa-sdk (统一 API 层 - SDK)
+mofa-sdk (标准 API 层 - SDK)
     ↓
 ├── mofa-kernel (微内核核心)
 ├── mofa-runtime (运行时)
@@ -27,7 +27,7 @@ mofa-sdk (统一 API 层 - SDK)
 - `collaboration`: multi-agent collaboration protocols
 - `coordination`: scheduling and coordination utilities
 - `prompt`: prompt templates and composition
-- `config`: unified config facade (kernel/runtime/foundation)
+- `config`: global config facade (kernel/runtime/foundation)
 - `skills`: progressive disclosure skills system
 - `prelude`: common imports for quick start
 

@@ -7,4 +7,4 @@ pub mod adapters;
 pub mod registry;
 
 pub use adapters::{BuiltinTools, ClosureTool, FunctionTool};
-pub use registry::{ToolSearcher, UnifiedToolRegistry};
+pub use registry::{ToolRegistry, ToolSearcher};

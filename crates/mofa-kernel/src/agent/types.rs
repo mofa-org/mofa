@@ -8,15 +8,15 @@ use std::collections::HashMap;
 use std::fmt;
 
 // 导出统一类型模块
-pub mod unified;
+pub mod global;
 pub mod event;
 pub mod error;
 
-pub use error::{ErrorCategory, ErrorContext, UnifiedError, UnifiedResult};
+pub use error::{ErrorCategory, ErrorContext, GlobalError, GlobalResult};
 pub use event::{execution, lifecycle, message, plugin, state};
-pub use event::{EventBuilder, UnifiedEvent};
+pub use event::{EventBuilder, GlobalEvent};
 // 重新导出常用类型
-pub use unified::{MessageContent, MessageMetadata, UnifiedMessage};
+pub use global::{MessageContent, MessageMetadata, GlobalMessage};
 
 // ============================================================================
 // Agent 状态

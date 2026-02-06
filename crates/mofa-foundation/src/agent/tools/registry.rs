@@ -2,7 +2,9 @@
 //!
 //! 整合内置工具、MCP 工具、自定义工具的注册中心
 
-use mofa_kernel::agent::components::tool::{Tool, ToolDescriptor, ToolRegistry};
+use mofa_kernel::agent::components::tool::{
+    Tool, ToolDescriptor, ToolRegistry as ToolRegistryTrait,
+};
 use mofa_kernel::agent::error::AgentResult;
 use async_trait::async_trait;
 use std::collections::HashMap;
@@ -15,10 +17,10 @@ use std::sync::Arc;
 /// # 示例
 ///
 /// ```rust,ignore
-/// use mofa_foundation::agent::tools::UnifiedToolRegistry;
+/// use mofa_foundation::agent::tools::ToolRegistry;
 /// use mofa_foundation::agent::components::tool::EchoTool;
 ///
-/// let mut registry = UnifiedToolRegistry::new();
+/// let mut registry = ToolRegistry::new();
 ///
 /// // 注册内置工具
 /// registry.register(Arc::new(EchoTool)).unwrap();
@@ -31,7 +33,7 @@ use std::sync::Arc;
 ///     info!("{}: {}", tool.name, tool.description);
 /// }
 /// ```
-pub struct UnifiedToolRegistry {
+pub struct ToolRegistry {
     /// 工具存储
     tools: HashMap<String, Arc<dyn Tool>>,
     /// 工具来源
@@ -53,7 +55,7 @@ pub enum ToolSource {
     Dynamic,
 }
 
-impl UnifiedToolRegistry {
+impl ToolRegistry {
     /// 创建新的统一注册中心
     pub fn new() -> Self {
         Self {
@@ -143,14 +145,14 @@ impl UnifiedToolRegistry {
     }
 }
 
-impl Default for UnifiedToolRegistry {
+impl Default for ToolRegistry {
     fn default() -> Self {
         Self::new()
     }
 }
 
 #[async_trait]
-impl ToolRegistry for UnifiedToolRegistry {
+impl ToolRegistryTrait for ToolRegistry {
     fn register(&mut self, tool: Arc<dyn Tool>) -> AgentResult<()> {
         self.register_with_source(tool, ToolSource::Dynamic)
     }
@@ -190,12 +192,12 @@ impl ToolRegistry for UnifiedToolRegistry {
 
 /// 工具搜索器
 pub struct ToolSearcher<'a> {
-    registry: &'a UnifiedToolRegistry,
+    registry: &'a ToolRegistry,
 }
 
 impl<'a> ToolSearcher<'a> {
     /// 创建搜索器
-    pub fn new(registry: &'a UnifiedToolRegistry) -> Self {
+    pub fn new(registry: &'a ToolRegistry) -> Self {
         Self { registry }
     }
 
