@@ -31,7 +31,7 @@ use tokio::fs;
 
 use super::rich::RichAgentContext;
 use crate::agent::components::memory::FileBasedStorage;
-use mofa_kernel::agent::context::CoreAgentContext;
+use mofa_kernel::agent::context::AgentContext;
 use mofa_kernel::agent::error::{AgentError, AgentResult};
 use std::sync::Arc;
 
@@ -97,7 +97,7 @@ impl PromptContext {
     /// Create a new prompt context
     pub async fn new(workspace: impl AsRef<Path>) -> AgentResult<Self> {
         let workspace = workspace.as_ref().to_path_buf();
-        let core_ctx = CoreAgentContext::new(format!("prompt-{}", uuid::Uuid::new_v4()));
+        let core_ctx = AgentContext::new(format!("prompt-{}", uuid::Uuid::new_v4()));
         let rich_ctx = RichAgentContext::new(core_ctx);
 
         Ok(Self {
@@ -118,7 +118,7 @@ impl PromptContext {
     ) -> AgentResult<Self> {
         let workspace = workspace.as_ref().to_path_buf();
         let agent_name = identity.name.clone();
-        let core_ctx = CoreAgentContext::new(format!("prompt-{}", uuid::Uuid::new_v4()));
+        let core_ctx = AgentContext::new(format!("prompt-{}", uuid::Uuid::new_v4()));
         let rich_ctx = RichAgentContext::new(core_ctx);
 
         Ok(Self {

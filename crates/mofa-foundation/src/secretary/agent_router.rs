@@ -32,14 +32,14 @@
 //!     .with_custom_prompt(my_prompt);
 //!
 //! // 3. 在SecretaryAgent中使用
-//! let secretary = SecretaryAgentBuilder::new()
+//! let secretary = DefaultSecretaryBuilder::new()
 //!     .with_agent_provider(Arc::new(my_provider))
 //!     .with_agent_router(Arc::new(router))
 //!     .build()
 //!     .await;
 //! ```
 
-use super::default::types::{ExecutorCapability, ProjectRequirement, Subtask};
+use super::default::types::{ProjectRequirement, Subtask};
 use super::llm::{parse_llm_json, ChatMessage, LLMProvider};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -128,34 +128,6 @@ impl AgentInfo {
         self
     }
 
-    /// 转换为ExecutorCapability（兼容旧接口）
-    pub fn to_executor_capability(&self) -> ExecutorCapability {
-        ExecutorCapability {
-            agent_id: self.id.clone(),
-            name: self.name.clone(),
-            capabilities: self.capabilities.clone(),
-            current_load: self.current_load,
-            available: self.available,
-            performance_score: self.performance_score,
-        }
-    }
-}
-
-impl From<ExecutorCapability> for AgentInfo {
-    fn from(cap: ExecutorCapability) -> Self {
-        Self {
-            id: cap.agent_id,
-            name: cap.name,
-            description: String::new(),
-            capabilities: cap.capabilities,
-            supported_task_types: Vec::new(),
-            prompt_template: None,
-            current_load: cap.current_load,
-            available: cap.available,
-            performance_score: cap.performance_score,
-            metadata: HashMap::new(),
-        }
-    }
 }
 
 // =============================================================================

@@ -139,7 +139,7 @@ pub use capabilities::{
     AgentCapabilities, AgentCapabilitiesBuilder, AgentRequirements, AgentRequirementsBuilder,
     ReasoningStrategy,
 };
-pub use context::{AgentEvent, ContextConfig, CoreAgentContext, EventBus};
+pub use context::{AgentEvent, ContextConfig, AgentContext, EventBus};
 pub use core::{
     // MoFAAgent - 统一的 Agent 接口
     AgentLifecycle,
@@ -190,7 +190,7 @@ pub mod prelude {
     pub use super::capabilities::{
         AgentCapabilities, AgentCapabilitiesBuilder, AgentRequirements, ReasoningStrategy,
     };
-    pub use super::context::{AgentEvent, ContextConfig, CoreAgentContext};
+    pub use super::context::{AgentEvent, ContextConfig, AgentContext};
     pub use super::core::{
         // MoFAAgent - 统一的 Agent 接口
         AgentLifecycle,

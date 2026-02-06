@@ -9,7 +9,7 @@
 //!
 //! Run with: cargo run --example wasm_plugin
 
-use mofa_sdk::wasm_runtime::{PluginCapability, ResourceLimits, RuntimeConfig, WasmPluginConfig, WasmPluginManager, WasmRuntime};
+use mofa_sdk::plugins::wasm_runtime::{PluginCapability, ResourceLimits, RuntimeConfig, WasmPluginConfig, WasmPluginManager, WasmRuntime};
 use std::sync::Arc;
 use tracing::info;
 

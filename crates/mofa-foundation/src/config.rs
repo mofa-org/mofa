@@ -188,7 +188,7 @@ impl AgentYamlConfig {
         from_str(content, file_format).map_err(|e| anyhow::anyhow!("Failed to parse config: {}", e))
     }
 
-    /// 从字符串解析配置 (自动检测为 YAML，保持向后兼容)
+    /// 从字符串解析配置 (自动检测为 YAML)
     pub fn from_str(content: &str) -> anyhow::Result<Self> {
         Self::from_str_with_format(content, "yaml")
     }

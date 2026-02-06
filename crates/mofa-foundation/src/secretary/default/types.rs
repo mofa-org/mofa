@@ -241,27 +241,6 @@ pub struct HumanResponse {
 }
 
 // =============================================================================
-// 执行 Agent 类型
-// =============================================================================
-
-/// 执行 Agent 能力描述
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ExecutorCapability {
-    /// Agent ID
-    pub agent_id: String,
-    /// Agent 名称
-    pub name: String,
-    /// 能力标签列表
-    pub capabilities: Vec<String>,
-    /// 当前负载（0-100）
-    pub current_load: u32,
-    /// 是否可用
-    pub available: bool,
-    /// 性能评分（历史表现）
-    pub performance_score: f32,
-}
-
-// =============================================================================
 // 汇报类型
 // =============================================================================
 

@@ -7,7 +7,7 @@ pub use mofa_kernel::agent::plugins::{
     Plugin, PluginExecutor, PluginMetadata, PluginRegistry, PluginStage, SimplePluginRegistry,
 };
 
-use crate::agent::context::CoreAgentContext;
+use crate::agent::context::AgentContext;
 use crate::agent::error::AgentResult;
 use crate::agent::types::AgentInput;
 use async_trait::async_trait;
@@ -54,7 +54,7 @@ impl Plugin for HttpPlugin {
         metadata
     }
 
-    async fn pre_context(&self, ctx: &CoreAgentContext) -> AgentResult<()> {
+    async fn pre_context(&self, ctx: &AgentContext) -> AgentResult<()> {
         // 这里可以实现HTTP请求逻辑，并将结果存入上下文
         // 示例：将固定内容存入上下文
         ctx.set("http_response", "示例HTTP响应内容").await;
@@ -66,14 +66,14 @@ impl Plugin for HttpPlugin {
 pub struct CustomFunctionPlugin {
     name: String,
     description: String,
-    func: Arc<dyn Fn(AgentInput, &CoreAgentContext) -> AgentResult<AgentInput> + Send + Sync + 'static>,
+    func: Arc<dyn Fn(AgentInput, &AgentContext) -> AgentResult<AgentInput> + Send + Sync + 'static>,
 }
 
 impl CustomFunctionPlugin {
     /// 创建自定义函数插件
     pub fn new<F>(name: impl Into<String>, desc: impl Into<String>, func: F) -> Self
     where
-        F: Fn(AgentInput, &CoreAgentContext) -> AgentResult<AgentInput> + Send + Sync + 'static,
+        F: Fn(AgentInput, &AgentContext) -> AgentResult<AgentInput> + Send + Sync + 'static,
     {
         Self {
             name: name.into(),
@@ -102,7 +102,7 @@ impl Plugin for CustomFunctionPlugin {
         metadata
     }
 
-    async fn pre_request(&self, input: AgentInput, ctx: &CoreAgentContext) -> AgentResult<AgentInput> {
+    async fn pre_request(&self, input: AgentInput, ctx: &AgentContext) -> AgentResult<AgentInput> {
         (self.func)(input, ctx)
     }
 }

@@ -9,7 +9,7 @@
 //!
 //! 插件可以是HTTP请求、自定义函数等任何实现了Plugin trait的类型
 
-use crate::agent::context::CoreAgentContext;
+use crate::agent::context::AgentContext;
 use crate::agent::error::AgentResult;
 use crate::agent::types::{AgentInput, AgentOutput};
 use async_trait::async_trait;
@@ -66,25 +66,25 @@ pub trait Plugin: Send + Sync {
 
     /// 在请求处理前执行
     /// 可以修改输入内容
-    async fn pre_request(&self, input: AgentInput, _ctx: &CoreAgentContext) -> AgentResult<AgentInput> {
+    async fn pre_request(&self, input: AgentInput, _ctx: &AgentContext) -> AgentResult<AgentInput> {
         Ok(input)
     }
 
     /// 在上下文组装前执行
     /// 可以动态修改上下文
-    async fn pre_context(&self, _ctx: &CoreAgentContext) -> AgentResult<()> {
+    async fn pre_context(&self, _ctx: &AgentContext) -> AgentResult<()> {
         Ok(())
     }
 
     /// 在LLM响应后执行
     /// 可以修改LLM返回的结果
-    async fn post_response(&self, output: AgentOutput, _ctx: &CoreAgentContext) -> AgentResult<AgentOutput> {
+    async fn post_response(&self, output: AgentOutput, _ctx: &AgentContext) -> AgentResult<AgentOutput> {
         Ok(output)
     }
 
     /// 在整个流程完成后执行
     /// 可以进行清理或后续处理
-    async fn post_process(&self, _ctx: &CoreAgentContext) -> AgentResult<()> {
+    async fn post_process(&self, _ctx: &AgentContext) -> AgentResult<()> {
         Ok(())
     }
 }
@@ -144,7 +144,7 @@ impl PluginExecutor {
     pub async fn execute_stage(
         &self,
         stage: PluginStage,
-        ctx: &CoreAgentContext,
+        ctx: &AgentContext,
     ) -> AgentResult<()> {
         let plugins = self.registry.list_by_stage(stage);
         for plugin in plugins {
@@ -168,7 +168,7 @@ impl PluginExecutor {
     pub async fn execute_pre_request(
         &self,
         input: AgentInput,
-        ctx: &CoreAgentContext,
+        ctx: &AgentContext,
     ) -> AgentResult<AgentInput> {
         let mut result = input;
         let plugins = self.registry.list_by_stage(PluginStage::PreRequest);
@@ -184,7 +184,7 @@ impl PluginExecutor {
     pub async fn execute_post_response(
         &self,
         output: AgentOutput,
-        ctx: &CoreAgentContext,
+        ctx: &AgentContext,
     ) -> AgentResult<AgentOutput> {
         let mut result = output;
         let plugins = self.registry.list_by_stage(PluginStage::PostResponse);

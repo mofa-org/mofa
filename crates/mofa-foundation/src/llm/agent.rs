@@ -5,7 +5,9 @@
 //! # 示例
 //!
 //! ```rust,ignore
-//! use mofa_sdk::{AgentInput, run_agents, llm::LLMAgentBuilder};
+//! use mofa_sdk::kernel::AgentInput;
+//! use mofa_sdk::runtime::run_agents;
+//! use mofa_sdk::llm::LLMAgentBuilder;
 //!
 //! #[tokio::main]
 //! async fn main() -> anyhow::Result<()> {
@@ -296,7 +298,7 @@ pub trait LLMAgentEventHandler: Send + Sync {
 
     /// 处理用户消息前的钩子（带模型名称）
     ///
-    /// 默认实现调用 `before_chat`，保持向后兼容。
+    /// 默认实现调用 `before_chat`。
     /// 如果需要知道使用的模型名称（例如用于持久化），请实现此方法。
     async fn before_chat_with_model(
         &self,
@@ -313,7 +315,7 @@ pub trait LLMAgentEventHandler: Send + Sync {
 
     /// 处理 LLM 响应后的钩子（带元数据）
     ///
-    /// 默认实现调用 after_chat，保持向后兼容。
+    /// 默认实现调用 after_chat。
     /// 如果需要访问响应元数据（如 response_id, model, token counts），请实现此方法。
     async fn after_chat_with_metadata(
         &self,
@@ -2504,9 +2506,6 @@ impl LLMAgentBuilder {
             context_window_size: self.context_window_size,
         };
 
-        // Clone session_id before moving it (needed for plugin sync)
-        let session_id_clone = self.session_id.clone();
-
         // Fallback: If stores are set but persistence_tenant_id is None, use tenant_id
         let persistence_tenant_id = if self.session_store.is_some()
             && self.persistence_tenant_id.is_none()
@@ -2517,7 +2516,7 @@ impl LLMAgentBuilder {
             self.persistence_tenant_id
         };
 
-        // 使用异步方法，支持从数据库加载（旧方式，向后兼容）
+        // 使用异步方法，支持从数据库加载
         let mut agent = LLMAgent::with_initial_session_async(
             config,
             provider,
@@ -2541,25 +2540,9 @@ impl LLMAgentBuilder {
         // 处理插件列表：
         // 1. 从持久化插件加载历史（新方式）
         // 2. 提取 TTS 插件
-        // 3. 同步 session_id 到持久化插件
         let mut plugins = self.plugins;
         let mut tts_plugin = None;
         let history_loaded_from_plugin = false;
-
-        // 首先处理持久化插件：加载历史并同步 session_id
-        for plugin in &plugins {
-            // 检查是否是 PersistencePlugin（通过检查类型名称）
-            if plugin.metadata().plugin_type == PluginType::Storage {
-                // 尝试同步 session_id
-                if let Some(session_id_str) = session_id_clone.as_deref()
-                    && let Ok(session_uuid) = uuid::Uuid::parse_str(session_id_str) {
-                        // 使用 Any 的 downcast_ref 来访问 PersistencePlugin 的方法
-                        // 由于 PersistencePlugin<S> 是泛型，我们无法直接 downcast
-                        // 但可以通过 metadata 来识别并调用
-                        tracing::info!("🔗 检测到持久化插件，session_id: {}", session_uuid);
-                    }
-            }
-        }
 
         // 查找并提取 TTS 插件
         for i in (0..plugins.len()).rev() {
@@ -2598,19 +2581,6 @@ impl LLMAgentBuilder {
 
         // 设置事件处理器
         if let Some(handler) = self.event_handler {
-            // 同步 session_id 到持久化处理器
-            if let Some(session_id_str) = session_id_clone.as_deref()
-                && let Ok(session_uuid) = uuid::Uuid::parse_str(session_id_str) {
-                    // 尝试将 handler 转换为 AgentPersistenceHandler 并设置 session_id
-                    use crate::persistence::AgentPersistenceHandler;
-                    if let Some(persist_handler) = handler.as_any().downcast_ref::<AgentPersistenceHandler>() {
-                        persist_handler.set_session_id(session_uuid).await;
-                        tracing::info!("🔗 AgentPersistenceHandler session_id 已同步: {}", session_uuid);
-                    }
-                    // 尝试将 handler 转换为 PersistencePlugin 并设置 session_id
-                    // 由于 PersistencePlugin 是泛型的，我们无法直接 downcast
-                    // 但如果使用的是 PostgresStore，我们可以尝试
-                }
             agent.set_event_handler(handler);
         }
 
@@ -2985,7 +2955,7 @@ impl mofa_kernel::agent::MoFAAgent for LLMAgent {
 
     async fn initialize(
         &mut self,
-        ctx: &mofa_kernel::agent::CoreAgentContext,
+        ctx: &mofa_kernel::agent::AgentContext,
     ) -> mofa_kernel::agent::AgentResult<()> {
         // 初始化所有插件（load -> init）
         let mut plugin_config = mofa_kernel::plugin::PluginConfig::new();
@@ -3023,7 +2993,7 @@ impl mofa_kernel::agent::MoFAAgent for LLMAgent {
     async fn execute(
         &mut self,
         input: mofa_kernel::agent::AgentInput,
-        _ctx: &mofa_kernel::agent::CoreAgentContext,
+        _ctx: &mofa_kernel::agent::AgentContext,
     ) -> mofa_kernel::agent::AgentResult<mofa_kernel::agent::AgentOutput> {
         use mofa_kernel::agent::{AgentError, AgentInput, AgentOutput};
 

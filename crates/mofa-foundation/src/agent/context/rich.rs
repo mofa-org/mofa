@@ -2,7 +2,7 @@
 //!
 //! 提供业务特定的功能，扩展内核的 CoreAgentContext
 
-use mofa_kernel::agent::context::CoreAgentContext;
+use mofa_kernel::agent::context::AgentContext;
 use serde::{de::DeserializeOwned, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -85,7 +85,7 @@ impl ExecutionMetrics {
 #[derive(Clone)]
 pub struct RichAgentContext {
     /// 内核上下文 (委托核心功能)
-    inner: Arc<CoreAgentContext>,
+    inner: Arc<AgentContext>,
     /// 累积输出
     outputs: Arc<RwLock<Vec<ComponentOutput>>>,
     /// 执行指标
@@ -94,7 +94,7 @@ pub struct RichAgentContext {
 
 impl RichAgentContext {
     /// 从 CoreAgentContext 创建 RichAgentContext
-    pub fn new(inner: CoreAgentContext) -> Self {
+    pub fn new(inner: AgentContext) -> Self {
         Self {
             inner: Arc::new(inner),
             outputs: Arc::new(RwLock::new(Vec::new())),
@@ -207,7 +207,7 @@ impl RichAgentContext {
     }
 
     /// 获取父上下文
-    pub fn parent(&self) -> Option<&Arc<CoreAgentContext>> {
+    pub fn parent(&self) -> Option<&Arc<AgentContext>> {
         self.inner.parent()
     }
 
@@ -242,20 +242,20 @@ impl RichAgentContext {
     }
 
     /// 获取内部核心上下文的引用
-    pub fn inner(&self) -> &CoreAgentContext {
+    pub fn inner(&self) -> &AgentContext {
         &self.inner
     }
 }
 
 // ===== 转换实现 =====
 
-impl From<CoreAgentContext> for RichAgentContext {
-    fn from(inner: CoreAgentContext) -> Self {
+impl From<AgentContext> for RichAgentContext {
+    fn from(inner: AgentContext) -> Self {
         Self::new(inner)
     }
 }
 
-impl From<RichAgentContext> for CoreAgentContext {
+impl From<RichAgentContext> for AgentContext {
     fn from(rich: RichAgentContext) -> Self {
         // 注意：这会克隆内部上下文，丢失 RichAgentContext 的扩展状态
         // 在实际使用中，应该通过 AsRef trait 来获取引用
@@ -263,8 +263,8 @@ impl From<RichAgentContext> for CoreAgentContext {
     }
 }
 
-impl AsRef<CoreAgentContext> for RichAgentContext {
-    fn as_ref(&self) -> &CoreAgentContext {
+impl AsRef<AgentContext> for RichAgentContext {
+    fn as_ref(&self) -> &AgentContext {
         &self.inner
     }
 }

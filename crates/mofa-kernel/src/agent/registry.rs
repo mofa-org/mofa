@@ -4,7 +4,7 @@
 
 use crate::agent::capabilities::{AgentCapabilities, AgentRequirements};
 use crate::agent::config::AgentConfig;
-use crate::agent::context::CoreAgentContext;
+use crate::agent::context::AgentContext;
 use crate::agent::core::MoFAAgent;
 use crate::agent::error::{AgentError, AgentResult};
 use crate::agent::traits::AgentMetadata;
@@ -408,7 +408,7 @@ impl AgentRegistry {
     // ========================================================================
 
     /// 初始化所有 Agent
-    pub async fn initialize_all(&self, ctx: &CoreAgentContext) -> AgentResult<Vec<String>> {
+    pub async fn initialize_all(&self, ctx: &AgentContext) -> AgentResult<Vec<String>> {
         let agents = self.agents.read().await;
         let mut initialized = Vec::new();
 
@@ -516,7 +516,7 @@ impl AgentRegistry {
 mod tests {
     use super::*;
     use crate::agent::capabilities::AgentCapabilities;
-    use crate::agent::context::CoreAgentContext;
+    use crate::agent::context::AgentContext;
     use crate::agent::core::MoFAAgent;
     use crate::agent::error::AgentResult;
     use crate::agent::types::{AgentInput, AgentOutput, AgentState};
@@ -558,12 +558,12 @@ mod tests {
             self.state.clone()
         }
 
-        async fn initialize(&mut self, _ctx: &CoreAgentContext) -> AgentResult<()> {
+        async fn initialize(&mut self, _ctx: &AgentContext) -> AgentResult<()> {
             self.state = AgentState::Ready;
             Ok(())
         }
 
-        async fn execute(&mut self, _input: AgentInput, _ctx: &CoreAgentContext) -> AgentResult<AgentOutput> {
+        async fn execute(&mut self, _input: AgentInput, _ctx: &AgentContext) -> AgentResult<AgentOutput> {
             Ok(AgentOutput::text("test output"))
         }
 

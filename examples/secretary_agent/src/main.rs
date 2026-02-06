@@ -9,8 +9,8 @@
 //! 该示例使用了最新的API版本。
 
 use mofa_sdk::secretary::{
-    ChannelConnection, DefaultInput, DefaultOutput,
-    DefaultSecretaryBuilder, DispatchStrategy, ExecutorCapability, SecretaryCore
+    AgentInfo, ChannelConnection, DefaultInput, DefaultOutput,
+    DefaultSecretaryBuilder, DispatchStrategy, SecretaryCore
 };
 use tracing::info;
 
@@ -32,6 +32,33 @@ async fn main() -> anyhow::Result<()> {
     let llm_provider = llm_integration::create_llm_provider();
     info!("✅ LLM提供者已创建: {}\n", llm_provider.name());
 
+    // 创建执行Agent信息
+    let mut frontend_agent = AgentInfo::new("frontend_agent", "前端开发Agent");
+    frontend_agent.capabilities = vec![
+        "frontend".to_string(),
+        "ui_design".to_string(),
+        "react".to_string(),
+    ];
+    frontend_agent.current_load = 20;
+    frontend_agent.available = true;
+    frontend_agent.performance_score = 0.85;
+
+    let mut backend_agent = AgentInfo::new("backend_agent", "后端开发Agent");
+    backend_agent.capabilities = vec![
+        "backend".to_string(),
+        "api_design".to_string(),
+        "database".to_string(),
+    ];
+    backend_agent.current_load = 30;
+    backend_agent.available = true;
+    backend_agent.performance_score = 0.9;
+
+    let mut test_agent = AgentInfo::new("test_agent", "测试Agent");
+    test_agent.capabilities = vec!["testing".to_string(), "qa".to_string()];
+    test_agent.current_load = 10;
+    test_agent.available = true;
+    test_agent.performance_score = 0.88;
+
     // 创建秘书Agent并注册执行Agent和LLM
     let secretary_behavior = DefaultSecretaryBuilder::new()
         .with_name("基于LLM的开发项目秘书")
@@ -40,32 +67,11 @@ async fn main() -> anyhow::Result<()> {
         .with_auto_dispatch(true) // 自动分配
         .with_llm(llm_provider)
         // 注册前端开发Agent
-        .with_executor(ExecutorCapability {
-            agent_id: "frontend_agent".to_string(),
-            name: "前端开发Agent".to_string(),
-            capabilities: vec!["frontend".to_string(), "ui_design".to_string(), "react".to_string()],
-            current_load: 20,
-            available: true,
-            performance_score: 0.85,
-        })
+        .with_executor(frontend_agent)
         // 注册后端开发Agent
-        .with_executor(ExecutorCapability {
-            agent_id: "backend_agent".to_string(),
-            name: "后端开发Agent".to_string(),
-            capabilities: vec!["backend".to_string(), "api_design".to_string(), "database".to_string()],
-            current_load: 30,
-            available: true,
-            performance_score: 0.9,
-        })
+        .with_executor(backend_agent)
         // 注册测试Agent
-        .with_executor(ExecutorCapability {
-            agent_id: "test_agent".to_string(),
-            name: "测试Agent".to_string(),
-            capabilities: vec!["testing".to_string(), "qa".to_string()],
-            current_load: 10,
-            available: true,
-            performance_score: 0.88,
-        })
+        .with_executor(test_agent)
         .build();
 
     info!("✅ 秘书Agent已创建，使用最新API\n");

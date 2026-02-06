@@ -56,8 +56,8 @@ let agent = LLMAgentBuilder::new()
 
 ```rust
 use mofa_sdk::llm::{LLMAgentBuilder, OpenAIProvider};
-use mofa_sdk::create_builtin_tool_plugin;
-use mofa_sdk::ToolPluginAdapter;
+use mofa_sdk::plugins::tools::create_builtin_tool_plugin;
+use mofa_sdk::plugins::ToolPluginAdapter;
 
 // 创建内置工具插件（包含 HTTP、文件系统、Shell、计算器等工具）
 let mut tool_plugin = create_builtin_tool_plugin("comprehensive_tools")?;
@@ -114,7 +114,8 @@ let agent = LLMAgentBuilder::from_env()?
 ### 5. 带 TTS 插件的 Agent
 
 ```rust
-use mofa_sdk::llm::{LLMAgentBuilder, OpenAIProvider, TTSPlugin};
+use mofa_sdk::llm::{LLMAgentBuilder, OpenAIProvider};
+use mofa_sdk::plugins::TTSPlugin;
 use uuid::Uuid;
 
 // 使用 TTS 插件（客户端）
@@ -135,7 +136,7 @@ LLMAgentBuilder::new()
 
 ```rust
 use mofa_sdk::llm::{LLMAgentBuilder, OpenAIProvider};
-use mofa_sdk::{RhaiPlugin, RhaiPluginConfig, PluginContext};
+use mofa_sdk::plugins::{RhaiPlugin, RhaiPluginConfig, PluginContext};
 
 // 创建 Rhai 插件（支持热重载）
 let config = RhaiPluginConfig::new_file("dynamic_rules", "./rules/plugin.rhai");

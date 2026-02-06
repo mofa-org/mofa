@@ -7,7 +7,7 @@
 //! 4. Executing the updated plugin to see changes
 
 use anyhow::Result;
-use mofa_sdk::{AgentPlugin, PluginContext, RhaiPlugin};
+use mofa_sdk::plugins::{AgentPlugin, PluginContext, RhaiPlugin};
 use std::path::PathBuf;
 use tokio::time;
 use tracing::{info, warn, Level};

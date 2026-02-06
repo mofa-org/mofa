@@ -32,7 +32,7 @@ use async_trait::async_trait;
 use mofa_kernel::agent::error::{AgentError, AgentResult};
 use mofa_kernel::agent::{AgentInput, AgentOutput, InputType, OutputType};
 use mofa_kernel::agent::{MoFAAgent, AgentState, AgentCapabilities};
-use mofa_kernel::agent::context::CoreAgentContext;
+use mofa_kernel::agent::context::AgentContext;
 use mofa_kernel::agent::types::{
     ChatCompletionRequest, ChatMessage, LLMProvider, ToolDefinition,
 };
@@ -367,7 +367,7 @@ impl AgentExecutor {
                         let tools_guard = self.tools.read().await;
                         if let Some(tool) = tools_guard.get(&tool_call.name) {
                             let input = ToolInput::from_json(tool_call.arguments.clone());
-                            tool.execute(input, &CoreAgentContext::new("executor")).await
+                            tool.execute(input, &AgentContext::new("executor")).await
                         } else {
                             return Err(AgentError::ExecutionFailed(format!("Tool not found: {}", tool_call.name)));
                         }
@@ -456,7 +456,7 @@ impl MoFAAgent for AgentExecutor {
         self.base.state()
     }
 
-    async fn initialize(&mut self, ctx: &CoreAgentContext) -> AgentResult<()> {
+    async fn initialize(&mut self, ctx: &AgentContext) -> AgentResult<()> {
         // Initialize base agent
         self.base.initialize(ctx).await?;
 
@@ -466,7 +466,7 @@ impl MoFAAgent for AgentExecutor {
         Ok(())
     }
 
-    async fn execute(&mut self, input: AgentInput, _ctx: &CoreAgentContext) -> AgentResult<AgentOutput> {
+    async fn execute(&mut self, input: AgentInput, _ctx: &AgentContext) -> AgentResult<AgentOutput> {
         // For simplicity, use the text content from the input
         let message = input.as_text().unwrap_or("");
         let session_key = "default"; // Use default session for now

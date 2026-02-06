@@ -10,7 +10,7 @@ use tokio::sync::RwLock;
 use tracing::{debug, error, info};
 use wasmtime::*;
 
-use super::host::{DefaultHostFunctions, HostContext, HostFunctions};
+use super::host::{DefaultHostFunctions, HostContext};
 use super::types::{
     ExecutionConfig, PluginCapability, PluginManifest, ResourceLimits, WasmError, WasmResult,
     WasmValue,

@@ -7,7 +7,7 @@
 //! After: 1 line with the new API!
 
 use mofa_sdk::llm::{LLMAgentBuilder, openai_from_env};
-use mofa_sdk::{KokoroTTS, TTSPlugin};
+use mofa_sdk::plugins::{KokoroTTS, TTSPlugin};
 use rodio::{OutputStream, Sink, buffer::SamplesBuffer};
 use std::env;
 use std::sync::Arc;

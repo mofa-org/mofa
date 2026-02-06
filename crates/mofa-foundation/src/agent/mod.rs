@@ -18,7 +18,7 @@ pub use mofa_kernel::agent::{
 
 // Re-export additional types needed by components
 pub use mofa_kernel::agent::error::{AgentError, AgentResult};
-pub use mofa_kernel::agent::context::CoreAgentContext;
+pub use mofa_kernel::agent::context::AgentContext;
 pub use mofa_kernel::agent::types::AgentInput;
 
 // 重新导出组件 (从 components 模块统一导入)

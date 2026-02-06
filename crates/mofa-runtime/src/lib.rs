@@ -344,7 +344,7 @@ impl<A: MoFAAgent> AgentRuntime<A> {
     /// 运行事件循环
     pub async fn run_event_loop(&mut self) -> DoraResult<()> {
         // 创建 CoreAgentContext 并初始化智能体
-        let context = mofa_kernel::agent::CoreAgentContext::new(self.metadata.id.clone());
+        let context = mofa_kernel::agent::AgentContext::new(self.metadata.id.clone());
         self.agent
             .initialize(&context)
             .await
@@ -513,7 +513,7 @@ impl<A: MoFAAgent> SimpleAgentRuntime<A> {
     /// 启动运行时
     pub async fn start(&mut self) -> anyhow::Result<()> {
         // 创建 CoreAgentContext
-        let context = mofa_kernel::agent::CoreAgentContext::new(self.metadata.id.clone());
+        let context = mofa_kernel::agent::AgentContext::new(self.metadata.id.clone());
 
         // 初始化智能体 - 使用 MoFAAgent 的 initialize 方法
         self.agent.initialize(&context).await?;
@@ -537,7 +537,7 @@ impl<A: MoFAAgent> SimpleAgentRuntime<A> {
         use mofa_kernel::agent::types::AgentInput;
         
 
-        let context = mofa_kernel::agent::CoreAgentContext::new(self.metadata.id.clone());
+        let context = mofa_kernel::agent::AgentContext::new(self.metadata.id.clone());
 
         // 尝试将事件转换为输入
         let input = match event {

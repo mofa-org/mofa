@@ -52,37 +52,58 @@
 //!
 //! ```rust,ignore
 //! use mofa_foundation::persistence::{InMemoryStore, PersistencePlugin};
+//! use uuid::Uuid;
 //!
 //! let store = InMemoryStore::new();
-//! let plugin = PersistencePlugin::new(store);
-//!
-//! let agent = LLMAgent::builder()
-//!     .with_plugin(plugin)
-//!     .build()?;
+//! let plugin = PersistencePlugin::from_store(
+//!     "persistence-plugin",
+//!     store,
+//!     Uuid::now_v7(),
+//!     Uuid::now_v7(),
+//!     Uuid::now_v7(),
+//!     Uuid::now_v7(),
+//! );
 //! ```
 //!
 //! ## PostgreSQL 存储 (需要 `persistence-postgres` feature)
 //!
 //! ```rust,ignore
-//! use mofa_foundation::persistence::{PostgresStore, PersistenceHandler};
+//! use mofa_foundation::persistence::{PostgresStore, PersistencePlugin};
+//! use uuid::Uuid;
 //!
 //! let store = PostgresStore::connect("postgres://localhost/mofa").await?;
-//! let handler = PersistenceHandler::new(store.into(), user_id, agent_id);
+//! let plugin = PersistencePlugin::from_store(
+//!     "persistence-plugin",
+//!     store,
+//!     Uuid::now_v7(),
+//!     Uuid::now_v7(),
+//!     Uuid::now_v7(),
+//!     Uuid::now_v7(),
+//! );
 //! ```
 //!
 //! ## MySQL 存储 (需要 `persistence-mysql` feature)
 //!
 //! ```rust,ignore
-//! use mofa_foundation::persistence::{MySqlStore, PersistenceHandler};
+//! use mofa_foundation::persistence::{MySqlStore, PersistencePlugin};
+//! use uuid::Uuid;
 //!
 //! let store = MySqlStore::connect("mysql://localhost/mofa").await?;
-//! let handler = PersistenceHandler::new(store.into(), user_id, agent_id);
+//! let plugin = PersistencePlugin::from_store(
+//!     "persistence-plugin",
+//!     store,
+//!     Uuid::now_v7(),
+//!     Uuid::now_v7(),
+//!     Uuid::now_v7(),
+//!     Uuid::now_v7(),
+//! );
 //! ```
 //!
 //! ## SQLite 存储 (需要 `persistence-sqlite` feature)
 //!
 //! ```rust,ignore
-//! use mofa_foundation::persistence::{SqliteStore, PersistenceHandler};
+//! use mofa_foundation::persistence::{SqliteStore, PersistencePlugin};
+//! use uuid::Uuid;
 //!
 //! // 文件数据库
 //! let store = SqliteStore::connect("sqlite:./data.db").await?;
@@ -90,7 +111,14 @@
 //! // 内存数据库 (适用于测试)
 //! let store = SqliteStore::in_memory().await?;
 //!
-//! let handler = PersistenceHandler::new(store.into(), user_id, agent_id);
+//! let plugin = PersistencePlugin::from_store(
+//!     "persistence-plugin",
+//!     store,
+//!     Uuid::now_v7(),
+//!     Uuid::now_v7(),
+//!     Uuid::now_v7(),
+//!     Uuid::now_v7(),
+//! );
 //! ```
 
 mod entities;

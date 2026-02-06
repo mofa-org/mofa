@@ -70,7 +70,6 @@ pub use types::{
     DefaultInput,
     DefaultOutput,
     ExecutionResult,
-    ExecutorCapability,
     HumanResponse,
     ProjectRequirement,
     QueryType,

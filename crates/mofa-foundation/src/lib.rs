@@ -50,13 +50,13 @@ pub use secretary::{
     // LLM
     DecisionType, DefaultInput, DefaultOutput, DefaultSecretaryBehavior,
     // Default implementation
-    DefaultSecretaryBuilder, ExecutionResult, ExecutorCapability, HumanResponse,
-    // Legacy aliases
+    DefaultSecretaryBuilder, ExecutionResult, HumanResponse,
+    // LLM integration
     LLMProvider, ProjectRequirement, QueryType,
     // Command types
     Report, ReportType, Resource,
     // Task types
-    SecretaryAgent, SecretaryAgentBuilder, SecretaryBehavior, SecretaryCommand, SecretaryContext, SecretaryCore,
+    SecretaryBehavior, SecretaryCommand, SecretaryContext, SecretaryCore,
     SecretaryEvent, SecretaryHandle, SecretaryMessage, Subtask, TaskExecutionStatus, TodoItem,
-    TodoPriority, TodoStatus, UserConnection, UserInput, WorkPhase,
+    TodoPriority, TodoStatus, UserConnection, WorkPhase,
 };

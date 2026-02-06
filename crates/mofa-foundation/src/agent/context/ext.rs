@@ -22,7 +22,7 @@
 //! rich.record_output("llm", json!("response")).await;
 //! ```
 
-use mofa_kernel::agent::context::CoreAgentContext;
+use mofa_kernel::agent::context::AgentContext;
 use std::any::{Any, TypeId};
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -33,13 +33,13 @@ use tokio::sync::RwLock;
 /// Allows adding custom data to any context implementation
 pub trait ContextExt {
     /// Set extension data
-    async fn set_extension<T: Send + Sync + serde::Serialize + 'static>(&self, value: T);
+    fn set_extension<T: Send + Sync + serde::Serialize + 'static>(&self, value: T) -> impl std::future::Future<Output = ()> + Send;
     /// Get extension data
-    async fn get_extension<T: Send + Sync + serde::de::DeserializeOwned + 'static>(&self) -> Option<T>;
+    fn get_extension<T: Send + Sync + serde::de::DeserializeOwned + 'static>(&self) -> impl std::future::Future<Output = Option<T>> + Send;
     /// Remove extension data
-    async fn remove_extension<T: Send + Sync + serde::de::DeserializeOwned + 'static>(&self) -> Option<T>;
+    fn remove_extension<T: Send + Sync + serde::de::DeserializeOwned + 'static>(&self) -> impl std::future::Future<Output = Option<T>> + Send;
     /// Check if extension exists
-    async fn has_extension<T: Send + Sync + 'static>(&self) -> bool;
+    fn has_extension<T: Send + Sync + 'static>(&self) -> impl std::future::Future<Output = bool> + Send;
 }
 
 /// Extension storage for context
@@ -88,7 +88,7 @@ impl ExtensionStorage {
 }
 
 /// Implement ContextExt for CoreAgentContext using extension storage
-impl ContextExt for CoreAgentContext {
+impl ContextExt for AgentContext {
     async fn set_extension<T: Send + Sync + serde::Serialize + 'static>(&self, value: T) {
         // Store in the generic K/V store
         let type_name = std::any::type_name::<T>();
@@ -151,7 +151,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_context_ext() {
-        let ctx = CoreAgentContext::new("test-exec");
+        let ctx = AgentContext::new("test-exec");
 
         ctx.set_extension(TestExtension {
             value: "test".to_string(),

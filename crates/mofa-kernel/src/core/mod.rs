@@ -3,7 +3,7 @@
 //! 此模块包含 Agent 相关的核心配置和元数据类型。
 
 pub use crate::agent::{
-    types::InterruptResult, CoreAgentContext, AgentEvent, AgentInput, AgentOutput,
+    types::InterruptResult, AgentContext, AgentEvent, AgentInput, AgentOutput,
     AgentState,
 };
 

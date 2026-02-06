@@ -43,13 +43,13 @@ use tokio::sync::{mpsc, RwLock};
 /// let value: Option<String> = ctx.get("user_id").await;
 /// ```
 #[derive(Clone)]
-pub struct CoreAgentContext {
+pub struct AgentContext {
     /// 执行 ID (唯一标识本次执行)
     pub execution_id: String,
     /// 会话 ID (用于多轮对话)
     pub session_id: Option<String>,
     /// 父上下文 (用于层级执行)
-    parent: Option<Arc<CoreAgentContext>>,
+    parent: Option<Arc<AgentContext>>,
     /// 共享状态 (通用键值存储)
     state: Arc<RwLock<HashMap<String, serde_json::Value>>>,
     /// 中断信号
@@ -73,7 +73,7 @@ pub struct ContextConfig {
     pub custom: HashMap<String, serde_json::Value>,
 }
 
-impl CoreAgentContext {
+impl AgentContext {
     /// 创建新的上下文
     pub fn new(execution_id: impl Into<String>) -> Self {
         Self {
@@ -168,7 +168,7 @@ impl CoreAgentContext {
     }
 
     /// 获取父上下文
-    pub fn parent(&self) -> Option<&Arc<CoreAgentContext>> {
+    pub fn parent(&self) -> Option<&Arc<AgentContext>> {
         self.parent.as_ref()
     }
 
@@ -336,7 +336,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_context_basic() {
-        let ctx = CoreAgentContext::new("test-execution");
+        let ctx = AgentContext::new("test-execution");
 
         ctx.set("key1", "value1").await;
         let value: Option<String> = ctx.get("key1").await;
@@ -345,7 +345,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_context_child() {
-        let parent = CoreAgentContext::new("parent");
+        let parent = AgentContext::new("parent");
         parent.set("parent_key", "parent_value").await;
 
         let child = parent.child("child");
@@ -362,7 +362,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_interrupt_signal() {
-        let ctx = CoreAgentContext::new("test");
+        let ctx = AgentContext::new("test");
 
         assert!(!ctx.is_interrupted());
         ctx.trigger_interrupt();
@@ -373,7 +373,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_event_bus() {
-        let ctx = CoreAgentContext::new("test");
+        let ctx = AgentContext::new("test");
 
         let mut rx = ctx.subscribe("test_event").await;
 

@@ -4,7 +4,7 @@
 //! using YAML configuration files through the mofa-sdk.
 
 use mofa_sdk::llm::{LLMAgent, LLMAgentBuilder};
-use mofa_sdk::{
+use mofa_sdk::workflow::{
     ExecutorConfig, LlmAgentConfig, WorkflowDefinition, WorkflowDslParser,
     WorkflowExecutor, WorkflowValue,
 };

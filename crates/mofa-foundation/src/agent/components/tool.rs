@@ -5,7 +5,7 @@
 use mofa_kernel::agent::components::tool::{
     ToolDescriptor, ToolInput, ToolMetadata, ToolRegistry, ToolResult,
 };
-use mofa_kernel::agent::context::CoreAgentContext;
+use mofa_kernel::agent::context::AgentContext;
 use mofa_kernel::agent::error::AgentResult;
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
@@ -198,7 +198,7 @@ impl<T: SimpleTool + Send + Sync + 'static> mofa_kernel::agent::components::tool
         self.inner.parameters_schema()
     }
 
-    async fn execute(&self, input: ToolInput, _ctx: &CoreAgentContext) -> ToolResult {
+    async fn execute(&self, input: ToolInput, _ctx: &AgentContext) -> ToolResult {
         self.inner.execute(input).await
     }
 
@@ -324,7 +324,7 @@ impl mofa_kernel::agent::components::tool::Tool for EchoTool {
         })
     }
 
-    async fn execute(&self, input: ToolInput, _ctx: &CoreAgentContext) -> ToolResult {
+    async fn execute(&self, input: ToolInput, _ctx: &AgentContext) -> ToolResult {
         if let Some(message) = input.get_str("message") {
             ToolResult::success_text(message)
         } else if let Some(raw) = &input.raw_input {
@@ -353,7 +353,7 @@ mod tests {
     #[tokio::test]
     async fn test_echo_tool() {
         let tool = EchoTool;
-        let ctx = CoreAgentContext::new("test");
+        let ctx = AgentContext::new("test");
         let input = ToolInput::from_json(json!({"message": "Hello!"}));
 
         let result = tool.execute(input, &ctx).await;
@@ -384,7 +384,7 @@ mod tests {
         assert!(registry.contains("echo"));
         assert_eq!(registry.count(), 1);
 
-        let ctx = CoreAgentContext::new("test");
+        let ctx = AgentContext::new("test");
         let result = registry
             .execute("echo", ToolInput::from_json(json!({"message": "test"})), &ctx)
             .await
@@ -449,7 +449,7 @@ mod tests {
         assert_eq!(adapter.description(), "A test tool");
         assert_eq!(adapter.category(), ToolCategory::Custom);
 
-        let ctx = CoreAgentContext::new("test");
+        let ctx = AgentContext::new("test");
         let input = ToolInput::from_json(json!({"value": "world"}));
 
         let result = mofa_kernel::agent::components::tool::Tool::execute(&adapter, input, &ctx).await;
@@ -467,7 +467,7 @@ mod tests {
 
         assert!(registry.contains("test_as_tool"));
 
-        let ctx = CoreAgentContext::new("test");
+        let ctx = AgentContext::new("test");
         let result = registry
             .execute("test_as_tool", ToolInput::from_json(json!({"value": "test"})), &ctx)
             .await

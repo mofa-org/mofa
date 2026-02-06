@@ -46,10 +46,11 @@ mofa-sdk = { version = "0.1", features = ["openai", "uniffi", "dora"] }
 ### Basic Agent
 
 ```rust
-use mofa_sdk::{
+use mofa_sdk::kernel::{
     AgentCapabilities, AgentCapabilitiesBuilder, CoreAgentContext, AgentInput, AgentOutput,
-    AgentResult, AgentState, MoFAAgent, run_agents,
+    AgentResult, AgentState, MoFAAgent,
 };
+use mofa_sdk::runtime::run_agents;
 use async_trait::async_trait;
 
 struct MyAgent {
@@ -105,7 +106,8 @@ async fn main() -> anyhow::Result<()> {
 ### Batch Execution
 
 ```rust
-use mofa_sdk::{run_agents, AgentInput};
+use mofa_sdk::kernel::AgentInput;
+use mofa_sdk::runtime::run_agents;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {

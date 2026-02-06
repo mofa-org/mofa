@@ -32,7 +32,8 @@
 //! ```
 //!
 //! ```rust,ignore
-//! use mofa_sdk::{AgentBuilder, AgentInput, MoFAAgent, run_agents};
+//! use mofa_sdk::kernel::{AgentInput, MoFAAgent};
+//! use mofa_sdk::runtime::run_agents;
 //!
 //! struct MyAgent;
 //!
@@ -88,11 +89,11 @@ pub mod kernel {
         AgentMessaging, AgentPlugin, AgentPluginSupport, MoFAAgent,
     };
 
-    // Core types
-    pub use mofa_kernel::agent::{
-        AgentCapabilities, CoreAgentContext, AgentError, AgentInput,
-        AgentOutput, AgentResult,
-    };
+// Core types
+pub use mofa_kernel::agent::{
+    AgentCapabilities, AgentContext, AgentError, AgentInput,
+    AgentOutput, AgentResult,
+};
 
     // Agent metadata and state
     pub use mofa_kernel::agent::{
@@ -102,10 +103,10 @@ pub mod kernel {
     // Core configuration
     pub use mofa_kernel::core::AgentConfig;
 
-    // Message types
-    pub use mofa_kernel::message::{
-        AgentEvent, AgentMessage,
-    };
+// Message types
+pub use mofa_kernel::message::{
+    AgentEvent, AgentMessage, TaskPriority, TaskRequest, TaskStatus,
+};
 
     // Bus
     pub use mofa_kernel::bus::AgentBus;
@@ -245,64 +246,54 @@ pub mod foundation {
 }
 
 // =============================================================================
-// Convenience Re-exports (Backward Compatibility)
+// Plugins (explicit module)
 // =============================================================================
 
-// Top-level re-exports for convenience and backward compatibility
-pub use kernel::{
-    AgentCapabilities,
-    CoreAgentContext, AgentError,
-    AgentEvent, AgentInput, AgentLifecycle, AgentMessage, AgentMessaging,
-    AgentMetadata, AgentOutput,
-    AgentPluginSupport, AgentResult,
-    AgentState, ErrorCategory,
-    // Unified types (new) - MessageContent excluded due to naming conflict with LLM module
-    ErrorContext, EventBuilder,
-    MessageMetadata, MoFAAgent,
-    UnifiedError, UnifiedEvent, UnifiedMessage, UnifiedResult,
-};
-// Note: For MessageContent, use kernel::MessageContent explicitly to avoid conflict with llm::MessageContent
+pub mod plugins {
+    pub use mofa_plugins::{
+        tool, tools, AgentPlugin, LLMPlugin, LLMPluginConfig, MemoryPlugin, MemoryStorage,
+        PluginManager, RhaiPlugin, RhaiPluginConfig, RhaiPluginState, StoragePlugin, ToolCall,
+        ToolDefinition, ToolExecutor, ToolPlugin, ToolResult, ToolPluginAdapter, adapt_tool,
+        // TTS plugin types
+        TTSPlugin, TTSPluginConfig, TTSEngine, MockTTSEngine, VoiceInfo, TTSCommand, TextToSpeechTool, AudioPlaybackConfig,
+        // TTS audio playback function
+        play_audio, play_audio_async,
+        // Runtime plugin creation helpers
+        rhai_runtime, wasm_runtime,
+        // Kernel plugin primitives
+        PluginConfig, PluginContext, PluginEvent, PluginMetadata, PluginResult, PluginState, PluginType,
+    };
 
-pub use runtime::{
-    run_agents, AgentBuilder, SimpleRuntime,
-};
+    pub use mofa_kernel::PluginPriority;
 
-// Re-export plugin types
-pub use mofa_plugins::{
-    tools, AgentPlugin, LLMPlugin, LLMPluginConfig, MemoryPlugin, MemoryStorage,
-    PluginManager, RhaiPlugin, RhaiPluginConfig, RhaiPluginState, StoragePlugin, ToolCall,
-    ToolDefinition, ToolExecutor, ToolPlugin, ToolResult,
-    // TTS plugin types
-    TTSPlugin, TTSPluginConfig, TTSEngine, MockTTSEngine, VoiceInfo, TTSCommand, TextToSpeechTool, AudioPlaybackConfig,
-    // TTS audio playback function
-    play_audio, play_audio_async,
-};
+    // Re-export KokoroTTSWrapper when kokoro feature is enabled
+    #[cfg(feature = "kokoro")]
+    pub use mofa_plugins::KokoroTTS;
 
-// Re-export KokoroTTSWrapper when kokoro feature is enabled
-#[cfg(feature = "kokoro")]
-pub use mofa_plugins::KokoroTTS;
+    // Hot reload utilities
+    pub mod hot_reload {
+        pub use mofa_plugins::hot_reload::*;
+    }
+}
 
-// Re-export rhai_runtime module for runtime plugin creation
-pub use mofa_plugins::rhai_runtime;
+// =============================================================================
+// Workflow (explicit module)
+// =============================================================================
 
-// Re-export wasm_runtime module
-pub use mofa_plugins::wasm_runtime;
+pub mod workflow {
+    pub use mofa_foundation::workflow::{
+        ExecutionEvent, ExecutorConfig,
+        WorkflowBuilder, WorkflowExecutor,
+        WorkflowGraph, WorkflowNode, WorkflowValue,
+    };
 
-// Re-export workflow types from mofa-foundation
-// Note: workflow module has been moved from kernel to foundation
-pub use mofa_foundation::workflow::{
-    ExecutionEvent, ExecutorConfig,
-    WorkflowBuilder, WorkflowExecutor,
-    WorkflowGraph, WorkflowNode, WorkflowValue
-};
-
-// Re-export workflow DSL types
-pub use mofa_foundation::workflow::dsl::{
-    AgentRef, DslError, DslResult, EdgeDefinition, LlmAgentConfig,
-    LoopConditionDef, NodeConfigDef, NodeDefinition, RetryPolicy, TaskExecutorDef,
-    TimeoutConfig, TransformDef, WorkflowConfig, WorkflowDefinition, WorkflowDslParser,
-    WorkflowMetadata,
-};
+    pub use mofa_foundation::workflow::dsl::{
+        AgentRef, DslError, DslResult, EdgeDefinition, LlmAgentConfig,
+        LoopConditionDef, NodeConfigDef, NodeDefinition, RetryPolicy, TaskExecutorDef,
+        TimeoutConfig, TransformDef, WorkflowConfig, WorkflowDefinition, WorkflowDslParser,
+        WorkflowMetadata,
+    };
+}
 
 // Re-export dashboard module (only available with monitoring feature)
 #[cfg(feature = "monitoring")]
@@ -310,20 +301,10 @@ pub mod dashboard {
     pub use mofa_monitoring::*;
 }
 
-// Re-export plugin module
-pub use mofa_plugins::PluginContext;
-
-// Re-export hot_reload types
-pub use mofa_plugins::hot_reload;
-pub use mofa_plugins::hot_reload::*;
-
-pub use mofa_kernel::message::{TaskPriority, TaskRequest, TaskStatus};
-// Re-export additional kernel types needed by plugins
-pub use mofa_kernel::{PluginMetadata, PluginPriority, PluginResult, PluginState, PluginType};
-
-// Re-export rhai module from mofa-extra
-pub use mofa_extra::rhai;
-pub use mofa_extra::rhai::*;
+// Rhai scripting helpers (explicit module)
+pub mod rhai {
+    pub use mofa_extra::rhai::*;
+}
 
 // Re-export LLM module from mofa-foundation (always available)
 pub mod llm {
@@ -407,26 +388,25 @@ pub mod secretary {
     //!
     //! ```rust,ignore
     //! use mofa_sdk::secretary::{
-    //!     SecretaryAgentBuilder, ChannelConnection, UserInput,
-    //!     SecretaryOutput, ExecutorCapability, TodoPriority,
+    //!     AgentInfo, DefaultSecretaryBuilder, ChannelConnection, DefaultInput,
+    //!     SecretaryOutput, TodoPriority,
     //! };
     //! use std::sync::Arc;
     //!
     //! #[tokio::main]
     //! async fn main() -> anyhow::Result<()> {
     //!     // 1. 创建秘书Agent
-    //!     let secretary = SecretaryAgentBuilder::new()
+    //!     let mut backend_agent = AgentInfo::new("backend_agent", "后端Agent");
+    //!     backend_agent.capabilities = vec!["backend".to_string()];
+    //!     backend_agent.current_load = 0;
+    //!     backend_agent.available = true;
+    //!     backend_agent.performance_score = 0.9;
+    //!
+    //!     let secretary = DefaultSecretaryBuilder::new()
     //!         .with_id("my_secretary")
     //!         .with_name("项目秘书")
     //!         .with_auto_clarify(true)
-    //!         .with_executor(ExecutorCapability {
-    //!             agent_id: "backend_agent".to_string(),
-    //!             name: "后端Agent".to_string(),
-    //!             capabilities: vec!["backend".to_string()],
-    //!             current_load: 0,
-    //!             available: true,
-    //!             performance_score: 0.9,
-    //!         })
+    //!         .with_executor(backend_agent)
     //!         .build()
     //!         .await;
     //!
@@ -437,7 +417,7 @@ pub mod secretary {
     //!     let handle = secretary.start(conn).await;
     //!
     //!     // 4. 发送用户输入
-    //!     input_tx.send(UserInput::Idea {
+    //!     input_tx.send(DefaultInput::Idea {
     //!         content: "开发一个REST API".to_string(),
     //!         priority: Some(TodoPriority::High),
     //!         metadata: None,
@@ -487,7 +467,7 @@ pub mod secretary {
     //!
     //! // 使用自定义LLM
     //! let llm = Arc::new(MyLLMProvider { api_key: "...".to_string() });
-    //! let secretary = SecretaryAgentBuilder::new()
+    //! let secretary = DefaultSecretaryBuilder::new()
     //!     .with_llm(llm)
     //!     .build()
     //!     .await;
@@ -523,17 +503,15 @@ pub mod collaboration {
     //! # 快速开始
     //!
     //! ```rust,ignore
-    //! use mofa_sdk::{
-    //!     collaboration::{
-    //!         RequestResponseProtocol, PublishSubscribeProtocol, ConsensusProtocol,
-    //!     },
-    //!     AdaptiveCollaborationManager,
+    //! use mofa_sdk::collaboration::{
+    //!     RequestResponseProtocol, PublishSubscribeProtocol, ConsensusProtocol,
+    //!     LLMDrivenCollaborationManager,
     //! };
     //! use std::sync::Arc;
     //!
     //! #[tokio::main]
     //! async fn main() -> anyhow::Result<()> {
-    //!     let manager = AdaptiveCollaborationManager::new("agent_001");
+    //!     let manager = LLMDrivenCollaborationManager::new("agent_001");
     //!
     //!     // 注册标准协议
     //!     manager.register_protocol(Arc::new(RequestResponseProtocol::new("agent_001"))).await?;
@@ -834,34 +812,3 @@ pub mod dora {
 pub mod skills;
 
 // Public skills module with re-exports
-pub mod skill_api {
-    //! Agent Skills 管理 API
-    //!
-    //! 提供 Skills 的统一管理接口，支持：
-    //! - 渐进式披露（Progressive Disclosure）
-    //! - 热更新支持
-    //! - 搜索和加载
-    //!
-    //! # Example
-    //!
-    //! ```no_run
-    //! use mofa_sdk::SkillsManager;
-    //!
-    //! let manager = SkillsManager::new("./skills").unwrap();
-    //! let prompt = manager.build_system_prompt();
-    //! println!("{}", prompt);
-    //!
-    //! // Load a specific skill
-    //! if let Some(content) = manager.load_skill("pdf_processing") {
-    //!     println!("Skill content: {}", content);
-    //! }
-    //! ```
-
-    pub use crate::skills::*;
-}
-
-// =============================================================================
-// Top-level skills re-exports for convenience
-// =============================================================================
-
-pub use skills::{from_dir, SkillsManager, SkillsManagerBuilder};

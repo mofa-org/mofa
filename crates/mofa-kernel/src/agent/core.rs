@@ -33,7 +33,7 @@ pub use crate::agent::context::AgentEvent;
 use crate::agent::{
     error::AgentResult,
     types::{AgentInput, AgentOutput, AgentState, InterruptResult},
-    AgentCapabilities, CoreAgentContext,
+    AgentCapabilities, AgentContext,
 };
 use async_trait::async_trait;
 
@@ -51,7 +51,7 @@ use async_trait::async_trait;
 /// 1. **统一接口**：所有 Agent 实现同一个 trait
 /// 2. **最小化核心**：只包含最基本的方法
 /// 3. **可选扩展**：通过扩展 trait 提供额外功能
-/// 4. **向后兼容**：保留类型别名以兼容旧代码
+/// 4. **一致性**：统一接口与扩展约定
 ///
 /// # 必须实现的方法
 ///
@@ -142,7 +142,7 @@ pub trait MoFAAgent: Send + Sync + 'static {
     /// # 状态转换
     ///
     /// Created -> Initializing -> Ready
-    async fn initialize(&mut self, ctx: &CoreAgentContext) -> AgentResult<()>;
+    async fn initialize(&mut self, ctx: &AgentContext) -> AgentResult<()>;
 
     /// 执行任务 - 核心方法
     ///
@@ -163,7 +163,7 @@ pub trait MoFAAgent: Send + Sync + 'static {
     async fn execute(
         &mut self,
         input: AgentInput,
-        ctx: &CoreAgentContext,
+        ctx: &AgentContext,
     ) -> AgentResult<AgentOutput>;
 
     /// 关闭 Agent

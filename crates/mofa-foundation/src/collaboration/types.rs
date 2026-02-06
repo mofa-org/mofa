@@ -677,9 +677,6 @@ impl LLMDrivenCollaborationManager {
     }
 }
 
-/// 向后兼容的类型别名
-pub type AdaptiveCollaborationManager = LLMDrivenCollaborationManager;
-
 // ============================================================================
 // 测试
 // ============================================================================

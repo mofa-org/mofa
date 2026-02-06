@@ -129,7 +129,6 @@ pub use default::{
     DispatchResult,
     DispatchStrategy,
     ExecutionResult,
-    ExecutorCapability,
     HumanResponse,
     MonitorEvent,
     ProjectRequirement,
@@ -156,22 +155,6 @@ pub use default::{
     TodoStatus,
     WorkPhase,
 };
-
-// =============================================================================
-// 兼容性别名（保持向后兼容）
-// =============================================================================
-
-/// 兼容性别名: UserInput -> DefaultInput
-pub type UserInput = DefaultInput;
-
-/// SecretaryAgent 的兼容性类型
-///
-/// 注意：新代码应使用 `SecretaryCore<DefaultSecretaryBehavior>`
-pub type SecretaryAgent = SecretaryCore<DefaultSecretaryBehavior>;
-
-/// SecretaryAgentBuilder 的兼容性别名
-pub use default::DefaultSecretaryBuilder as SecretaryAgentBuilder;
-
 
 // =============================================================================
 // Prelude 模块

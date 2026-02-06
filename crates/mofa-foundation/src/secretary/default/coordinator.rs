@@ -47,7 +47,7 @@ pub struct DispatchResult {
 /// 任务协调器
 pub struct TaskCoordinator {
     /// 可用的执行Agent列表
-    executors: Arc<RwLock<HashMap<String, ExecutorCapability>>>,
+    executors: Arc<RwLock<HashMap<String, AgentInfo>>>,
     /// 分配策略
     strategy: DispatchStrategy,
     /// 任务分配记录
@@ -124,14 +124,14 @@ impl TaskCoordinator {
     }
 
     /// 注册执行Agent
-    pub async fn register_executor(&self, executor: ExecutorCapability) {
+    pub async fn register_executor(&self, executor: AgentInfo) {
         let mut executors = self.executors.write().await;
         tracing::info!(
             "Registered executor: {} with capabilities: {:?}",
-            executor.agent_id,
+            executor.id,
             executor.capabilities
         );
-        executors.insert(executor.agent_id.clone(), executor);
+        executors.insert(executor.id.clone(), executor);
     }
 
     /// 注销执行Agent
@@ -151,7 +151,7 @@ impl TaskCoordinator {
     }
 
     /// 获取所有可用执行Agent
-    pub async fn list_available_executors(&self) -> Vec<ExecutorCapability> {
+    pub async fn list_available_executors(&self) -> Vec<AgentInfo> {
         let executors = self.executors.read().await;
         executors
             .values()
@@ -173,7 +173,7 @@ impl TaskCoordinator {
             return Err(anyhow::anyhow!("No available executors"));
         }
 
-        let (selected, score): (&ExecutorCapability, f32) = match &self.strategy {
+        let (selected, score): (&AgentInfo, f32) = match &self.strategy {
             DispatchStrategy::RoundRobin => {
                 let mut idx = self.round_robin_index.write().await;
                 let selected = available[*idx % available.len()];
@@ -225,7 +225,7 @@ impl TaskCoordinator {
 
         let result = DispatchResult {
             subtask_id: subtask.id.clone(),
-            agent_id: selected.agent_id.clone(),
+            agent_id: selected.id.clone(),
             match_score: score,
             dispatched_at: now,
             routing_decision: None,
@@ -239,7 +239,7 @@ impl TaskCoordinator {
         tracing::info!(
             "Dispatched subtask {} to agent {} with score {}",
             subtask.id,
-            selected.agent_id,
+            selected.id,
             score
         );
 
@@ -312,7 +312,7 @@ impl TaskCoordinator {
         let agents: Vec<AgentInfo> = executors
             .values()
             .filter(|e| e.available)
-            .map(|e| AgentInfo::from(e.clone()))
+            .cloned()
             .collect();
 
         Ok(agents)
@@ -320,10 +320,10 @@ impl TaskCoordinator {
 
     fn select_by_capability<'a>(
         &self,
-        available: &[&'a ExecutorCapability],
+        available: &[&'a AgentInfo],
         required_capabilities: &[String],
-    ) -> anyhow::Result<(&'a ExecutorCapability, f32)> {
-        let mut best: Option<(&ExecutorCapability, f32)> = None;
+    ) -> anyhow::Result<(&'a AgentInfo, f32)> {
+        let mut best: Option<(&AgentInfo, f32)> = None;
 
         for executor in available {
             let match_count = required_capabilities
@@ -347,13 +347,13 @@ impl TaskCoordinator {
 
     fn select_composite<'a>(
         &self,
-        available: &[&'a ExecutorCapability],
+        available: &[&'a AgentInfo],
         required_capabilities: &[String],
         capability_weight: f32,
         load_weight: f32,
         performance_weight: f32,
-    ) -> anyhow::Result<(&'a ExecutorCapability, f32)> {
-        let mut best: Option<(&ExecutorCapability, f32)> = None;
+    ) -> anyhow::Result<(&'a AgentInfo, f32)> {
+        let mut best: Option<(&AgentInfo, f32)> = None;
 
         for executor in available {
             let capability_score = if required_capabilities.is_empty() {
@@ -458,19 +458,21 @@ impl Default for TaskCoordinator {
 mod tests {
     use super::*;
 
+    fn make_agent(id: &str, name: &str, capability: &str) -> AgentInfo {
+        let mut agent = AgentInfo::new(id, name);
+        agent.capabilities = vec![capability.to_string()];
+        agent.current_load = 0;
+        agent.available = true;
+        agent.performance_score = 0.8;
+        agent
+    }
+
     #[tokio::test]
     async fn test_register_executor() {
         let coordinator = TaskCoordinator::new(DispatchStrategy::RoundRobin);
 
         coordinator
-            .register_executor(ExecutorCapability {
-                agent_id: "agent_1".to_string(),
-                name: "Test Agent".to_string(),
-                capabilities: vec!["backend".to_string()],
-                current_load: 0,
-                available: true,
-                performance_score: 0.8,
-            })
+            .register_executor(make_agent("agent_1", "Test Agent", "backend"))
             .await;
 
         let executors = coordinator.list_available_executors().await;
@@ -482,25 +484,11 @@ mod tests {
         let coordinator = TaskCoordinator::new(DispatchStrategy::CapabilityFirst);
 
         coordinator
-            .register_executor(ExecutorCapability {
-                agent_id: "frontend_agent".to_string(),
-                name: "Frontend Agent".to_string(),
-                capabilities: vec!["frontend".to_string()],
-                current_load: 0,
-                available: true,
-                performance_score: 0.8,
-            })
+            .register_executor(make_agent("frontend_agent", "Frontend Agent", "frontend"))
             .await;
 
         coordinator
-            .register_executor(ExecutorCapability {
-                agent_id: "backend_agent".to_string(),
-                name: "Backend Agent".to_string(),
-                capabilities: vec!["backend".to_string()],
-                current_load: 0,
-                available: true,
-                performance_score: 0.8,
-            })
+            .register_executor(make_agent("backend_agent", "Backend Agent", "backend"))
             .await;
 
         let subtask = Subtask {

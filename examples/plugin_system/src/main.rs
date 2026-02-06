@@ -10,8 +10,12 @@
 
 // Rhai scripting
 use mofa_sdk::rhai::{RhaiScriptEngine, ScriptContext, ScriptEngineConfig};
-use mofa_sdk::PluginPriority;
-use mofa_sdk::{AgentPlugin, LLMPlugin, LLMPluginConfig, MemoryPlugin, MemoryStorage, PluginContext, PluginManager, PluginMetadata, PluginResult, PluginState, PluginType, StoragePlugin, ToolDefinition, ToolExecutor, ToolPlugin};
+use mofa_sdk::plugins::PluginPriority;
+use mofa_sdk::plugins::{
+    AgentPlugin, LLMPlugin, LLMPluginConfig, MemoryPlugin, MemoryStorage, PluginContext,
+    PluginManager, PluginMetadata, PluginResult, PluginState, PluginType, StoragePlugin,
+    ToolDefinition, ToolExecutor, ToolPlugin,
+};
 use std::any::Any;
 use std::collections::HashMap;
 use tracing::{info, warn};

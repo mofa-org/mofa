@@ -280,7 +280,7 @@ impl<A: MoFAAgent> AgentRuntime<A> {
     /// 运行事件循环
     pub async fn run_event_loop(&mut self) -> DoraResult<()> {
         // 创建 CoreAgentContext 并初始化智能体
-        let context = mofa_kernel::agent::CoreAgentContext::new(self.metadata.id.clone());
+        let context = mofa_kernel::agent::AgentContext::new(self.metadata.id.clone());
         self.agent
             .initialize(&context)
             .await
@@ -437,7 +437,7 @@ impl<A: MoFAAgent> SimpleAgentRuntime<A> {
     /// 启动运行时
     pub async fn start(&mut self) -> anyhow::Result<()> {
         // 创建 CoreAgentContext 并初始化智能体
-        let context = mofa_kernel::agent::CoreAgentContext::new(self.metadata.id.clone());
+        let context = mofa_kernel::agent::AgentContext::new(self.metadata.id.clone());
         self.agent.initialize(&context).await?;
         // 初始化插件
         self.init_plugins().await?;
@@ -457,7 +457,7 @@ impl<A: MoFAAgent> SimpleAgentRuntime<A> {
         use mofa_kernel::agent::types::AgentInput;
         
 
-        let context = mofa_kernel::agent::CoreAgentContext::new(self.metadata.id.clone());
+        let context = mofa_kernel::agent::AgentContext::new(self.metadata.id.clone());
         let input = match event {
             AgentEvent::TaskReceived(task) => AgentInput::text(task.content),
             AgentEvent::Shutdown => {
@@ -494,7 +494,7 @@ impl<A: MoFAAgent> SimpleAgentRuntime<A> {
                 Ok(Some(event)) => {
                     // 将事件转换为输入并执行
                     use mofa_kernel::agent::types::AgentInput;
-                    let context = mofa_kernel::agent::CoreAgentContext::new(self.metadata.id.clone());
+                    let context = mofa_kernel::agent::AgentContext::new(self.metadata.id.clone());
                     let input = match event {
                         AgentEvent::TaskReceived(task) => AgentInput::text(task.content),
                         AgentEvent::Custom(data, _) => AgentInput::text(data),

@@ -5,10 +5,8 @@
 //! - 运行时接收监管部门的规则更新，自动重载插件并执行新规则
 
 use anyhow::Result;
-use mofa_sdk::{
-    rhai_runtime::{RhaiPlugin, RhaiPluginConfig}, AgentPlugin,
-    PluginContext,
-};
+use mofa_sdk::plugins::rhai_runtime::{RhaiPlugin, RhaiPluginConfig};
+use mofa_sdk::plugins::{AgentPlugin, PluginContext};
 use notify::{Config, EventKind, RecommendedWatcher, RecursiveMode, Watcher};
 use std::path::Path;
 use std::sync::Arc;

@@ -23,8 +23,6 @@ pub enum Role {
     Assistant,
     /// 工具调用结果
     Tool,
-    /// 函数调用结果（兼容旧 API）
-    Function,
 }
 
 /// 消息内容类型
@@ -496,8 +494,6 @@ pub enum FinishReason {
     ToolCalls,
     /// 内容过滤
     ContentFilter,
-    /// 函数调用（旧 API）
-    FunctionCall,
 }
 
 /// Token 使用统计

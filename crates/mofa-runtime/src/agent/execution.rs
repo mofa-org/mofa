@@ -2,7 +2,7 @@
 //!
 //! 提供 Agent 执行、工作流编排、错误处理等功能
 
-use crate::agent::context::{CoreAgentContext, AgentEvent};
+use crate::agent::context::{AgentContext, AgentEvent};
 use crate::agent::core::MoFAAgent;
 use crate::agent::error::{AgentError, AgentResult};
 use crate::agent::plugins::{PluginExecutor, PluginRegistry, SimplePluginRegistry};
@@ -242,7 +242,7 @@ impl ExecutionEngine {
             .ok_or_else(|| AgentError::NotFound(format!("Agent not found: {}", agent_id)))?;
 
         // 创建上下文
-        let ctx = CoreAgentContext::new(&execution_id);
+        let ctx = AgentContext::new(&execution_id);
 
         // 发送开始事件
         if options.tracing_enabled {
@@ -333,7 +333,7 @@ impl ExecutionEngine {
         &self,
         agent: &Arc<RwLock<dyn MoFAAgent>>,
         input: AgentInput,
-        ctx: &CoreAgentContext,
+        ctx: &AgentContext,
         options: &ExecutionOptions,
     ) -> AgentResult<AgentOutput> {
         let mut last_error = None;
@@ -367,7 +367,7 @@ impl ExecutionEngine {
         &self,
         agent: &Arc<RwLock<dyn MoFAAgent>>,
         input: AgentInput,
-        ctx: &CoreAgentContext,
+        ctx: &AgentContext,
         options: &ExecutionOptions,
     ) -> AgentResult<AgentOutput> {
         let mut agent_guard = agent.write().await;
@@ -594,7 +594,7 @@ impl ExecutionEngine {
 mod tests {
     use super::*;
     use crate::agent::capabilities::AgentCapabilities;
-    use crate::agent::context::CoreAgentContext;
+    use crate::agent::context::AgentContext;
     use crate::agent::core::MoFAAgent;
     use crate::agent::types::AgentState;
 
@@ -635,7 +635,7 @@ mod tests {
             self.state.clone()
         }
 
-        async fn initialize(&mut self, _ctx: &CoreAgentContext) -> AgentResult<()> {
+        async fn initialize(&mut self, _ctx: &AgentContext) -> AgentResult<()> {
             self.state = AgentState::Ready;
             Ok(())
         }
@@ -643,7 +643,7 @@ mod tests {
         async fn execute(
             &mut self,
             _input: AgentInput,
-            _ctx: &CoreAgentContext,
+            _ctx: &AgentContext,
         ) -> AgentResult<AgentOutput> {
             Ok(AgentOutput::text(&self.response))
         }

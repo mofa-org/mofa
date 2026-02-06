@@ -1,9 +1,9 @@
 use async_trait::async_trait;
-use mofa_sdk::runtime::AgentRunner;
-use mofa_sdk::{
-    run_agents, AgentBuilder, AgentCapabilities, CoreAgentContext, AgentEvent, AgentInput, AgentOutput,
-    AgentResult, AgentState, MoFAAgent, SimpleRuntime,
+use mofa_sdk::kernel::{
+    AgentCapabilities, AgentContext, AgentEvent, AgentInput, AgentOutput,
+    AgentResult, AgentState, MoFAAgent,
 };
+use mofa_sdk::runtime::{AgentRunner, run_agents, AgentBuilder, SimpleRuntime};
 use tracing::info;
 // ============================================================================
 // SimpleRuntimeAgent - 新版 MoFAAgent 实现
@@ -48,13 +48,13 @@ impl MoFAAgent for SimpleRuntimeAgent {
         &self.capabilities
     }
 
-    async fn initialize(&mut self, _ctx: &CoreAgentContext) -> AgentResult<()> {
+    async fn initialize(&mut self, _ctx: &AgentContext) -> AgentResult<()> {
         self.state = AgentState::Ready;
         info!("Agent {} initialized", self.id);
         Ok(())
     }
 
-    async fn execute(&mut self, input: AgentInput, _ctx: &CoreAgentContext) -> AgentResult<AgentOutput> {
+    async fn execute(&mut self, input: AgentInput, _ctx: &AgentContext) -> AgentResult<AgentOutput> {
         self.state = AgentState::Executing;
         self.event_count += 1;
 

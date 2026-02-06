@@ -70,7 +70,7 @@
 //! ```
 
 use crate::agent::capabilities::AgentCapabilities;
-use crate::agent::context::{CoreAgentContext, AgentEvent};
+use crate::agent::context::{AgentContext, AgentEvent};
 use crate::agent::core::{AgentLifecycle, AgentMessage, AgentMessaging, MoFAAgent};
 use crate::agent::error::{AgentError, AgentResult};
 use crate::agent::types::{AgentInput, AgentOutput, AgentState, InterruptResult};
@@ -118,7 +118,7 @@ pub struct AgentRunner<T: MoFAAgent> {
     /// Agent 实例
     agent: T,
     /// 执行上下文
-    context: CoreAgentContext,
+    context: AgentContext,
     /// 运行器状态
     state: Arc<RwLock<RunnerState>>,
     /// 统计信息
@@ -130,7 +130,7 @@ impl<T: MoFAAgent> AgentRunner<T> {
     ///
     /// 此方法会初始化 Agent。
     pub async fn new(mut agent: T) -> AgentResult<Self> {
-        let context = CoreAgentContext::new(agent.id().to_string());
+        let context = AgentContext::new(agent.id().to_string());
 
         // 初始化 Agent
         agent
@@ -147,7 +147,7 @@ impl<T: MoFAAgent> AgentRunner<T> {
     }
 
     /// 使用自定义上下文创建运行器
-    pub async fn with_context(mut agent: T, context: CoreAgentContext) -> AgentResult<Self> {
+    pub async fn with_context(mut agent: T, context: AgentContext) -> AgentResult<Self> {
         agent
             .initialize(&context)
             .await
@@ -172,7 +172,7 @@ impl<T: MoFAAgent> AgentRunner<T> {
     }
 
     /// 获取执行上下文
-    pub fn context(&self) -> &CoreAgentContext {
+    pub fn context(&self) -> &AgentContext {
         &self.context
     }
 
@@ -375,7 +375,7 @@ impl<T: MoFAAgent + AgentMessaging> AgentRunner<T> {
 /// AgentRunner 构建器
 pub struct AgentRunnerBuilder<T: MoFAAgent> {
     agent: Option<T>,
-    context: Option<CoreAgentContext>,
+    context: Option<AgentContext>,
 }
 
 impl<T: MoFAAgent> AgentRunnerBuilder<T> {
@@ -394,7 +394,7 @@ impl<T: MoFAAgent> AgentRunnerBuilder<T> {
     }
 
     /// 设置上下文
-    pub fn with_context(mut self, context: CoreAgentContext) -> Self {
+    pub fn with_context(mut self, context: AgentContext) -> Self {
         self.context = Some(context);
         self
     }
@@ -474,7 +474,7 @@ mod tests {
             CAPS.get_or_init(|| AgentCapabilitiesBuilder::new().build())
         }
 
-        async fn initialize(&mut self, _ctx: &CoreAgentContext) -> AgentResult<()> {
+        async fn initialize(&mut self, _ctx: &AgentContext) -> AgentResult<()> {
             self.state = AgentState::Ready;
             Ok(())
         }
@@ -482,7 +482,7 @@ mod tests {
         async fn execute(
             &mut self,
             input: AgentInput,
-            _ctx: &CoreAgentContext,
+            _ctx: &AgentContext,
         ) -> AgentResult<AgentOutput> {
             self.state = AgentState::Executing;
             let text = input.to_text();

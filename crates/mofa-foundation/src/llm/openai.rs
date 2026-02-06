@@ -292,20 +292,6 @@ impl OpenAIProvider {
                     .map_err(|e| LLMError::Other(e.to_string()))?
                     .into())
             }
-            Role::Function => {
-                // 旧版 function 角色，转换为 tool
-                let tool_call_id = msg
-                    .tool_call_id
-                    .clone()
-                    .unwrap_or_else(|| "unknown".to_string());
-
-                Ok(ChatCompletionRequestToolMessageArgs::default()
-                    .tool_call_id(tool_call_id)
-                    .content(content)
-                    .build()
-                    .map_err(|e| LLMError::Other(e.to_string()))?
-                    .into())
-            }
         }
     }
 
@@ -351,7 +337,7 @@ impl OpenAIProvider {
                     async_openai::types::FinishReason::Length => FinishReason::Length,
                     async_openai::types::FinishReason::ToolCalls => FinishReason::ToolCalls,
                     async_openai::types::FinishReason::ContentFilter => FinishReason::ContentFilter,
-                    async_openai::types::FinishReason::FunctionCall => FinishReason::FunctionCall,
+                    async_openai::types::FinishReason::FunctionCall => FinishReason::ToolCalls,
                 });
 
                 Choice {
@@ -766,7 +752,7 @@ impl OpenAIProvider {
                     async_openai::types::FinishReason::Length => FinishReason::Length,
                     async_openai::types::FinishReason::ToolCalls => FinishReason::ToolCalls,
                     async_openai::types::FinishReason::ContentFilter => FinishReason::ContentFilter,
-                    async_openai::types::FinishReason::FunctionCall => FinishReason::FunctionCall,
+                    async_openai::types::FinishReason::FunctionCall => FinishReason::ToolCalls,
                 });
 
                 ChunkChoice {

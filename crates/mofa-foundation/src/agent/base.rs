@@ -3,7 +3,7 @@
 //! 提供了 MoFAAgent trait 的基础实现，可以作为其他 Agent 的基础
 
 use mofa_kernel::agent::{
-    AgentCapabilities, CoreAgentContext, AgentError, AgentOutput, AgentResult,
+    AgentCapabilities, AgentContext, AgentError, AgentOutput, AgentResult,
     AgentState, AgentStats, InterruptResult, MoFAAgent,
 };
 
@@ -116,7 +116,7 @@ impl BaseAgent {
     }
 
     /// 初始化
-    pub async fn initialize(&mut self, _ctx: &CoreAgentContext) -> AgentResult<()> {
+    pub async fn initialize(&mut self, _ctx: &AgentContext) -> AgentResult<()> {
         self.transition_to(AgentState::Initializing)?;
         self.transition_to(AgentState::Ready)?;
         Ok(())
@@ -149,7 +149,7 @@ impl MoFAAgent for BaseAgent  {
         &self.capabilities
     }
 
-    async fn initialize(&mut self, _ctx: &mofa_kernel::agent::context::CoreAgentContext) -> AgentResult<()> {
+    async fn initialize(&mut self, _ctx: &mofa_kernel::agent::context::AgentContext) -> AgentResult<()> {
         self.transition_to(AgentState::Initializing)?;
         self.transition_to(AgentState::Ready)?;
         Ok(())
@@ -158,7 +158,7 @@ impl MoFAAgent for BaseAgent  {
     async fn execute(
         &mut self,
         _input: mofa_kernel::agent::AgentInput,
-        _ctx: &mofa_kernel::agent::context::CoreAgentContext,
+        _ctx: &mofa_kernel::agent::context::AgentContext,
     ) -> AgentResult<AgentOutput> {
         Ok(AgentOutput::text("BaseAgent execute"))
     }

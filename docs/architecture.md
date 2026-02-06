@@ -37,10 +37,10 @@ MoFA 严格遵循以下微内核架构设计原则：
 │  - 顶层便捷导出：常用类型直接导入                                         │
 │                                                                          │
 │  特性：                                                                  │
-│  - 单一导入点 (use mofa_sdk::*)                                        │
+│  - 模块化入口 (use mofa_sdk::kernel::*, runtime::*, etc.)             │
 │  - Feature flags 控制可选能力                                           │
 │  - 跨语言绑定 (UniFFI, PyO3)                                            │
-│  - 向后兼容层                                                           │
+│  - 模块化命名空间                                                       │
 └─────────────────────────────────────────────────────────────────────────┘
                                   ↓
 ┌─────────────────────────────────────────────────────────────────────────┐
@@ -197,7 +197,7 @@ SDK层 (mofa-sdk)
 - 统一 API 入口
 - 重新导出各层功能
 - 提供跨语言绑定
-- 维护向后兼容性
+- 模块化命名空间
 
 ### 业务层
 - LLM 集成
@@ -269,11 +269,10 @@ async fn main() -> anyhow::Result<()> {
 ### 自定义 Agent（结合 Skills 与运行时）
 
 ```rust
-use mofa_sdk::{
+use mofa_sdk::kernel::{
     AgentCapabilities, AgentCapabilitiesBuilder, CoreAgentContext, AgentError, AgentInput, AgentOutput,
     AgentResult, AgentState, MoFAAgent,
 };
-use mofa_sdk::kernel::CoreAgentContext;
 use mofa_sdk::runtime::AgentRunner;
 use mofa_sdk::llm::{LLMClient, openai_from_env};
 use mofa_sdk::skills::SkillsManager;
@@ -363,7 +362,8 @@ async fn main() -> anyhow::Result<()> {
 ### 批量执行
 
 ```rust
-use mofa_sdk::{AgentCapabilities, AgentCapabilitiesBuilder, CoreAgentContext, AgentInput, AgentOutput, AgentResult, AgentState, MoFAAgent, run_agents};
+use mofa_sdk::kernel::{AgentCapabilities, AgentCapabilitiesBuilder, CoreAgentContext, AgentInput, AgentOutput, AgentResult, AgentState, MoFAAgent};
+use mofa_sdk::runtime::run_agents;
 use async_trait::async_trait;
 
 struct EchoAgent {
@@ -428,7 +428,7 @@ use mofa_sdk::kernel::CoreAgentContext;
 use mofa_sdk::runtime::AgentRunner;
 use mofa_sdk::llm::{LLMAgentBuilder, HotReloadableRhaiPromptPlugin};
 use mofa_sdk::persistence::{PersistencePlugin, PostgresStore};
-use mofa_sdk::AgentInput;
+use mofa_sdk::kernel::AgentInput;
 use std::sync::Arc;
 use uuid::Uuid;
 
@@ -486,7 +486,7 @@ async fn main() -> anyhow::Result<()> {
 use mofa_sdk::kernel::CoreAgentContext;
 use mofa_sdk::runtime::AgentRunner;
 use mofa_sdk::llm::LLMAgentBuilder;
-use mofa_sdk::AgentInput;
+use mofa_sdk::kernel::AgentInput;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -510,7 +510,7 @@ LLMAgent 初始化时会为每个 `AgentPlugin` 构造 `PluginContext`，并注�
 `custom_config`、`user_id`、`tenant_id`、`session_id`。插件可在 `load` 阶段读取这些配置。
 
 ```rust
-use mofa_sdk::{
+use mofa_sdk::plugins::{
     AgentPlugin, PluginContext, PluginMetadata, PluginResult, PluginState, PluginType,
 };
 
@@ -630,7 +630,8 @@ async fn main() -> anyhow::Result<()> {
 ### 多 Agent 协调
 
 ```rust
-use mofa_sdk::{SimpleRuntime, AgentBuilder, MoFAAgent};
+use mofa_sdk::runtime::{SimpleRuntime, AgentBuilder};
+use mofa_sdk::kernel::MoFAAgent;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {

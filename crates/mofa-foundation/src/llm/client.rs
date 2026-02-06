@@ -1001,7 +1001,6 @@ impl ChatSession {
                 crate::llm::types::Role::User => crate::persistence::MessageRole::User,
                 crate::llm::types::Role::Assistant => crate::persistence::MessageRole::Assistant,
                 crate::llm::types::Role::Tool => crate::persistence::MessageRole::Tool,
-                crate::llm::types::Role::Function => crate::persistence::MessageRole::Tool, // Map Function to Tool role
             };
 
             // Convert MessageContent to persistence format

@@ -2,7 +2,7 @@
 //!
 //! 定义统一的工具接口，合并 ToolExecutor 和 ReActTool
 
-use crate::agent::context::CoreAgentContext;
+use crate::agent::context::AgentContext;
 use crate::agent::error::{AgentError, AgentResult};
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
@@ -57,7 +57,7 @@ pub trait Tool: Send + Sync {
     fn parameters_schema(&self) -> serde_json::Value;
 
     /// 执行工具
-    async fn execute(&self, input: ToolInput, ctx: &CoreAgentContext) -> ToolResult;
+    async fn execute(&self, input: ToolInput, ctx: &AgentContext) -> ToolResult;
 
     /// 工具元数据
     fn metadata(&self) -> ToolMetadata {
@@ -344,7 +344,7 @@ pub trait ToolRegistry: Send + Sync {
     fn count(&self) -> usize;
 
     /// 执行工具
-    async fn execute(&self, name: &str, input: ToolInput, ctx: &CoreAgentContext) -> AgentResult<ToolResult> {
+    async fn execute(&self, name: &str, input: ToolInput, ctx: &AgentContext) -> AgentResult<ToolResult> {
         let tool = self.get(name).ok_or_else(|| AgentError::ToolNotFound(name.to_string()))?;
         tool.validate_input(&input)?;
         Ok(tool.execute(input, ctx).await)
@@ -366,7 +366,7 @@ pub trait ToolRegistry: Send + Sync {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::agent::context::CoreAgentContext;
+    use crate::agent::context::AgentContext;
 
     #[test]
     fn test_tool_input_from_json() {

@@ -10,11 +10,11 @@
 //!
 //! 运行: cargo run --example workflow_orchestration
 
-use mofa_sdk::{
+use mofa_sdk::workflow::{
     ExecutionEvent, ExecutorConfig, WorkflowBuilder, WorkflowExecutor, WorkflowGraph, WorkflowNode, WorkflowValue,
-    llm::{LLMAgent, LLMAgentBuilder, openai_from_env},
-    react::{ReActAgent, prelude::all_builtin_tools},
 };
+use mofa_sdk::llm::{LLMAgent, LLMAgentBuilder, openai_from_env};
+use mofa_sdk::react::{ReActAgent, prelude::all_builtin_tools};
 use std::{collections::HashMap, sync::Arc};
 use tokio::sync::mpsc;
 use tracing::{info, Level};

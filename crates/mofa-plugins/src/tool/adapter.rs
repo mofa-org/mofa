@@ -111,7 +111,7 @@ impl AgentPlugin for ToolPluginAdapter {
             .map_err(|e| anyhow::anyhow!("Failed to parse tool input: {}", e))?;
 
         // Execute the tool with a minimal context
-        let ctx = mofa_kernel::agent::context::CoreAgentContext::new("tool-execution");
+        let ctx = mofa_kernel::agent::context::AgentContext::new("tool-execution");
         let result = self.tool.execute(tool_input, &ctx).await;
 
         self.call_count += 1;

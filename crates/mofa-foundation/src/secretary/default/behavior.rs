@@ -9,7 +9,7 @@ use super::reporter::{ReportConfig, Reporter};
 use super::todo::TodoManager;
 use super::types::*;
 
-use crate::secretary::agent_router::{AgentProvider, AgentRouter};
+use crate::secretary::agent_router::{AgentInfo, AgentProvider, AgentRouter};
 use crate::secretary::llm::{ChatMessage, ConversationHistory, LLMProvider};
 
 // 使用 mofa-kernel 的核心抽象
@@ -122,7 +122,7 @@ pub struct DefaultSecretaryBehavior {
     /// Agent路由器
     agent_router: Option<Arc<dyn AgentRouter>>,
     /// 预注册的执行器
-    executors: Vec<ExecutorCapability>,
+    executors: Vec<AgentInfo>,
 }
 
 impl DefaultSecretaryBehavior {
@@ -156,7 +156,7 @@ impl DefaultSecretaryBehavior {
     }
 
     /// 添加执行器
-    pub fn with_executor(mut self, executor: ExecutorCapability) -> Self {
+    pub fn with_executor(mut self, executor: AgentInfo) -> Self {
         self.executors.push(executor);
         self
     }
@@ -628,7 +628,7 @@ pub struct DefaultSecretaryBuilder {
     llm: Option<Arc<dyn LLMProvider>>,
     agent_provider: Option<Arc<dyn AgentProvider>>,
     agent_router: Option<Arc<dyn AgentRouter>>,
-    executors: Vec<ExecutorCapability>,
+    executors: Vec<AgentInfo>,
 }
 
 impl DefaultSecretaryBuilder {
@@ -698,7 +698,7 @@ impl DefaultSecretaryBuilder {
     }
 
     /// 添加执行器
-    pub fn with_executor(mut self, executor: ExecutorCapability) -> Self {
+    pub fn with_executor(mut self, executor: AgentInfo) -> Self {
         self.executors.push(executor);
         self
     }

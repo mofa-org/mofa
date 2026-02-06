@@ -156,8 +156,7 @@ async fn main() -> LLMResult<()> {
             info!("✅ 助手消息保存成功: ID = {}", assistant_msg_id);
 
             info!("🔄 保存 API 调用记录...");
-            // 使用 PersistenceHandler 或直接使用 store API 保存 API 调用记录
-            // PersistenceContext 不直接提供此方法，示例简化
+            // 直接使用 store API 保存 API 调用记录（示例简化）
             info!("✅ API 调用记录保存成功: 延迟 = {}ms", latency);
         }
     }

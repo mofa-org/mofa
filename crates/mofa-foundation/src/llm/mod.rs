@@ -143,7 +143,8 @@
 //!
 //! ```rust,ignore
 //! use mofa_foundation::llm::{LLMPlugin, LLMConfig};
-//! use mofa_sdk::{MoFAAgent, AgentBuilder};
+//! use mofa_sdk::kernel::MoFAAgent;
+//! use mofa_sdk::runtime::AgentBuilder;
 //!
 //! // 创建 LLM 插件
 //! let llm_plugin = LLMPlugin::new("openai-llm", provider);
@@ -257,7 +258,6 @@
 //!     .await?;
 //! ```
 
-pub mod adapter;
 pub mod agent;
 pub mod client;
 pub mod plugin;
@@ -281,7 +281,6 @@ pub mod vision;
 pub mod transcription;
 
 // Re-export 核心类型
-pub use adapter::{LegacyLLMProvider, LLMProviderAdapter, LLMResponse, LegacyToolCall, as_llm_provider};
 pub use client::{function_tool, ChatRequestBuilder, ChatSession, LLMClient, ToolExecutor};
 pub use plugin::{LLMCapability, LLMPlugin, MockLLMProvider};
 pub use provider::{

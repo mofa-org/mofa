@@ -5,7 +5,7 @@
 use mofa_kernel::agent::components::coordinator::{
     aggregate_outputs, AggregationStrategy, Coordinator, CoordinationPattern, DispatchResult, Task,
 };
-use mofa_kernel::agent::context::CoreAgentContext;
+use mofa_kernel::agent::context::AgentContext;
 use mofa_kernel::agent::types::AgentOutput;
 use mofa_kernel::agent::AgentResult;
 use async_trait::async_trait;
@@ -30,7 +30,7 @@ impl SequentialCoordinator {
 
 #[async_trait]
 impl Coordinator for SequentialCoordinator {
-    async fn dispatch(&self, task: Task, _ctx: &CoreAgentContext) -> AgentResult<Vec<DispatchResult>> {
+    async fn dispatch(&self, task: Task, _ctx: &AgentContext) -> AgentResult<Vec<DispatchResult>> {
         // 简化实现：为每个 agent 创建待处理结果
         let mut results = Vec::new();
         for agent_id in &self.agent_ids {
@@ -52,7 +52,7 @@ impl Coordinator for SequentialCoordinator {
         "sequential"
     }
 
-    async fn select_agents(&self, _task: &Task, _ctx: &CoreAgentContext) -> AgentResult<Vec<String>> {
+    async fn select_agents(&self, _task: &Task, _ctx: &AgentContext) -> AgentResult<Vec<String>> {
         Ok(self.agent_ids.clone())
     }
 }
@@ -73,7 +73,7 @@ impl ParallelCoordinator {
 
 #[async_trait]
 impl Coordinator for ParallelCoordinator {
-    async fn dispatch(&self, task: Task, _ctx: &CoreAgentContext) -> AgentResult<Vec<DispatchResult>> {
+    async fn dispatch(&self, task: Task, _ctx: &AgentContext) -> AgentResult<Vec<DispatchResult>> {
         let mut results = Vec::new();
         for agent_id in &self.agent_ids {
             results.push(DispatchResult::pending(&task.id, agent_id));
@@ -93,7 +93,7 @@ impl Coordinator for ParallelCoordinator {
         "parallel"
     }
 
-    async fn select_agents(&self, _task: &Task, _ctx: &CoreAgentContext) -> AgentResult<Vec<String>> {
+    async fn select_agents(&self, _task: &Task, _ctx: &AgentContext) -> AgentResult<Vec<String>> {
         Ok(self.agent_ids.clone())
     }
 }
@@ -119,7 +119,7 @@ mod tests {
     #[tokio::test]
     async fn test_sequential_dispatch() {
         let coordinator = SequentialCoordinator::new(vec!["agent-1".to_string(), "agent-2".to_string()]);
-        let ctx = CoreAgentContext::new("test");
+        let ctx = AgentContext::new("test");
         let task = Task::new("task-1", "Do something");
 
         let results = coordinator.dispatch(task, &ctx).await.unwrap();

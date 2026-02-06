@@ -188,13 +188,6 @@ impl PromptBuilder {
                     tool_calls: None,
                     tool_call_id: None,
                 },
-                Role::Function => ChatMessage {
-                    role: Role::Function,
-                    content: Some(MessageContent::Text(content)),
-                    name: None,
-                    tool_calls: None,
-                    tool_call_id: None,
-                },
             };
 
             if let Some(ref name) = entry.name {
