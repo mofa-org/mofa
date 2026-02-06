@@ -8,23 +8,22 @@ use std::collections::HashMap;
 use std::fmt;
 
 // 导出统一类型模块
-pub mod global;
-pub mod event;
 pub mod error;
+pub mod event;
+pub mod global;
 
 pub use error::{ErrorCategory, ErrorContext, GlobalError, GlobalResult};
-pub use event::{execution, lifecycle, message, plugin, state};
 pub use event::{EventBuilder, GlobalEvent};
+pub use event::{execution, lifecycle, message, plugin, state};
 // 重新导出常用类型
-pub use global::{MessageContent, MessageMetadata, GlobalMessage};
+pub use global::{GlobalMessage, MessageContent, MessageMetadata};
 
 // ============================================================================
 // Agent 状态
 // ============================================================================
 
 /// Agent 状态机
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
-#[derive(Default)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, Default)]
 pub enum AgentState {
     /// 已创建，未初始化
     #[default]
@@ -53,7 +52,6 @@ pub enum AgentState {
     Error(String),
 }
 
-
 impl fmt::Display for AgentState {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
@@ -67,19 +65,28 @@ impl fmt::Display for AgentState {
             AgentState::Shutdown => write!(f, "Shutdown"),
             AgentState::Failed => write!(f, "Failed"),
             AgentState::Error(msg) => write!(f, "Error({})", msg),
-            AgentState::Running => {write!(f, "Running")}
-            AgentState::Destroyed => {write!(f, "Destroyed")}
+            AgentState::Running => {
+                write!(f, "Running")
+            }
+            AgentState::Destroyed => {
+                write!(f, "Destroyed")
+            }
         }
     }
 }
 
 impl AgentState {
     /// 转换到目标状态
-    pub fn transition_to(&self, target: AgentState) -> Result<AgentState, super::error::AgentError> {
+    pub fn transition_to(
+        &self,
+        target: AgentState,
+    ) -> Result<AgentState, super::error::AgentError> {
         if self.can_transition_to(&target) {
             Ok(target)
         } else {
-            Err(super::error::AgentError::invalid_state_transition(self, &target))
+            Err(super::error::AgentError::invalid_state_transition(
+                self, &target,
+            ))
         }
     }
 
@@ -119,7 +126,10 @@ impl AgentState {
 
     /// 是否为终止状态
     pub fn is_terminal(&self) -> bool {
-        matches!(self, AgentState::Shutdown | AgentState::Failed | AgentState::Error(_))
+        matches!(
+            self,
+            AgentState::Shutdown | AgentState::Failed | AgentState::Error(_)
+        )
     }
 }
 
@@ -128,8 +138,7 @@ impl AgentState {
 // ============================================================================
 
 /// Agent 输入类型
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[derive(Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub enum AgentInput {
     /// 文本输入
     Text(String),
@@ -145,7 +154,6 @@ pub enum AgentInput {
     #[default]
     Empty,
 }
-
 
 impl AgentInput {
     /// 创建文本输入
@@ -453,7 +461,11 @@ pub struct ReasoningStep {
 
 impl ReasoningStep {
     /// 创建新的推理步骤
-    pub fn new(step_type: ReasoningStepType, content: impl Into<String>, step_number: usize) -> Self {
+    pub fn new(
+        step_type: ReasoningStepType,
+        content: impl Into<String>,
+        step_number: usize,
+    ) -> Self {
         let now = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap_or_default()
@@ -600,7 +612,10 @@ pub trait LLMProvider: Send + Sync {
     fn name(&self) -> &str;
 
     /// Complete a chat request
-    async fn chat(&self, request: ChatCompletionRequest) -> super::error::AgentResult<ChatCompletionResponse>;
+    async fn chat(
+        &self,
+        request: ChatCompletionRequest,
+    ) -> super::error::AgentResult<ChatCompletionResponse>;
 }
 
 // ============================================================================
@@ -666,7 +681,10 @@ fn base64_encode(data: &[u8]) -> String {
         let (n, _pad) = match chunk.len() {
             1 => (((chunk[0] as u32) << 16), 2),
             2 => (((chunk[0] as u32) << 16) | ((chunk[1] as u32) << 8), 1),
-            _ => (((chunk[0] as u32) << 16) | ((chunk[1] as u32) << 8) | (chunk[2] as u32), 0),
+            _ => (
+                ((chunk[0] as u32) << 16) | ((chunk[1] as u32) << 8) | (chunk[2] as u32),
+                0,
+            ),
         };
 
         result.push(CHARS[((n >> 18) & 0x3F) as usize]);

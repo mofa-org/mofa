@@ -116,7 +116,9 @@ impl PostgresPromptStore {
                 .map_err(|e| PromptError::ParseError(e.to_string()))?,
             description: row.try_get("description").ok(),
             template_ids,
-            separator: row.try_get("separator").unwrap_or_else(|_| "\n\n".to_string()),
+            separator: row
+                .try_get("separator")
+                .unwrap_or_else(|_| "\n\n".to_string()),
             enabled: row.try_get("enabled").unwrap_or(true),
             created_at: row
                 .try_get("created_at")
@@ -189,11 +191,12 @@ impl PromptStore for PostgresPromptStore {
     }
 
     async fn get_template(&self, template_id: &str) -> PromptResult<Option<PromptEntity>> {
-        let row = sqlx::query("SELECT * FROM prompt_template WHERE template_id = $1 AND enabled = true")
-            .bind(template_id)
-            .fetch_optional(&self.pool)
-            .await
-            .map_err(|e| PromptError::ParseError(e.to_string()))?;
+        let row =
+            sqlx::query("SELECT * FROM prompt_template WHERE template_id = $1 AND enabled = true")
+                .bind(template_id)
+                .fetch_optional(&self.pool)
+                .await
+                .map_err(|e| PromptError::ParseError(e.to_string()))?;
 
         match row {
             Some(row) => Ok(Some(Self::parse_template_row(&row)?)),
@@ -331,12 +334,14 @@ impl PromptStore for PostgresPromptStore {
     }
 
     async fn set_template_enabled(&self, template_id: &str, enabled: bool) -> PromptResult<()> {
-        sqlx::query("UPDATE prompt_template SET enabled = $2, updated_at = NOW() WHERE template_id = $1")
-            .bind(template_id)
-            .bind(enabled)
-            .execute(&self.pool)
-            .await
-            .map_err(|e| PromptError::ParseError(e.to_string()))?;
+        sqlx::query(
+            "UPDATE prompt_template SET enabled = $2, updated_at = NOW() WHERE template_id = $1",
+        )
+        .bind(template_id)
+        .bind(enabled)
+        .execute(&self.pool)
+        .await
+        .map_err(|e| PromptError::ParseError(e.to_string()))?;
 
         Ok(())
     }
@@ -419,12 +424,17 @@ impl PromptStore for PostgresPromptStore {
         Ok(())
     }
 
-    async fn get_composition(&self, composition_id: &str) -> PromptResult<Option<PromptCompositionEntity>> {
-        let row = sqlx::query("SELECT * FROM prompt_composition WHERE composition_id = $1 AND enabled = true")
-            .bind(composition_id)
-            .fetch_optional(&self.pool)
-            .await
-            .map_err(|e| PromptError::ParseError(e.to_string()))?;
+    async fn get_composition(
+        &self,
+        composition_id: &str,
+    ) -> PromptResult<Option<PromptCompositionEntity>> {
+        let row = sqlx::query(
+            "SELECT * FROM prompt_composition WHERE composition_id = $1 AND enabled = true",
+        )
+        .bind(composition_id)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(|e| PromptError::ParseError(e.to_string()))?;
 
         match row {
             Some(row) => Ok(Some(Self::parse_composition_row(&row)?)),
@@ -433,10 +443,12 @@ impl PromptStore for PostgresPromptStore {
     }
 
     async fn query_compositions(&self) -> PromptResult<Vec<PromptCompositionEntity>> {
-        let rows = sqlx::query("SELECT * FROM prompt_composition WHERE enabled = true ORDER BY updated_at DESC")
-            .fetch_all(&self.pool)
-            .await
-            .map_err(|e| PromptError::ParseError(e.to_string()))?;
+        let rows = sqlx::query(
+            "SELECT * FROM prompt_composition WHERE enabled = true ORDER BY updated_at DESC",
+        )
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|e| PromptError::ParseError(e.to_string()))?;
 
         rows.iter().map(Self::parse_composition_row).collect()
     }
@@ -500,8 +512,7 @@ impl MySqlPromptStore {
         let id_bytes: Vec<u8> = row
             .try_get("id")
             .map_err(|e| PromptError::ParseError(e.to_string()))?;
-        let id = Uuid::from_slice(&id_bytes)
-            .map_err(|e| PromptError::ParseError(e.to_string()))?;
+        let id = Uuid::from_slice(&id_bytes).map_err(|e| PromptError::ParseError(e.to_string()))?;
 
         Ok(PromptEntity {
             id,
@@ -599,11 +610,12 @@ impl PromptStore for MySqlPromptStore {
     }
 
     async fn get_template(&self, template_id: &str) -> PromptResult<Option<PromptEntity>> {
-        let row = sqlx::query("SELECT * FROM prompt_template WHERE template_id = ? AND enabled = true")
-            .bind(template_id)
-            .fetch_optional(&self.pool)
-            .await
-            .map_err(|e| PromptError::ParseError(e.to_string()))?;
+        let row =
+            sqlx::query("SELECT * FROM prompt_template WHERE template_id = ? AND enabled = true")
+                .bind(template_id)
+                .fetch_optional(&self.pool)
+                .await
+                .map_err(|e| PromptError::ParseError(e.to_string()))?;
 
         match row {
             Some(row) => Ok(Some(Self::parse_template_row(&row)?)),
@@ -639,7 +651,10 @@ impl PromptStore for MySqlPromptStore {
         }
         if let Some(ref search) = filter.search {
             let pattern = format!("%{}%", search);
-            query = query.bind(pattern.clone()).bind(pattern.clone()).bind(pattern);
+            query = query
+                .bind(pattern.clone())
+                .bind(pattern.clone())
+                .bind(pattern);
         }
         query = query.bind(limit).bind(offset);
 
@@ -694,12 +709,14 @@ impl PromptStore for MySqlPromptStore {
     }
 
     async fn set_template_enabled(&self, template_id: &str, enabled: bool) -> PromptResult<()> {
-        sqlx::query("UPDATE prompt_template SET enabled = ?, updated_at = NOW() WHERE template_id = ?")
-            .bind(enabled)
-            .bind(template_id)
-            .execute(&self.pool)
-            .await
-            .map_err(|e| PromptError::ParseError(e.to_string()))?;
+        sqlx::query(
+            "UPDATE prompt_template SET enabled = ?, updated_at = NOW() WHERE template_id = ?",
+        )
+        .bind(enabled)
+        .bind(template_id)
+        .execute(&self.pool)
+        .await
+        .map_err(|e| PromptError::ParseError(e.to_string()))?;
 
         Ok(())
     }
@@ -788,7 +805,10 @@ impl PromptStore for MySqlPromptStore {
         Ok(())
     }
 
-    async fn get_composition(&self, composition_id: &str) -> PromptResult<Option<PromptCompositionEntity>> {
+    async fn get_composition(
+        &self,
+        composition_id: &str,
+    ) -> PromptResult<Option<PromptCompositionEntity>> {
         // 简化实现，返回 None
         Ok(None)
     }
@@ -891,10 +911,12 @@ impl SqlitePromptStore {
         .map_err(|e| PromptError::ParseError(e.to_string()))?;
 
         // 创建索引
-        sqlx::query("CREATE INDEX IF NOT EXISTS idx_prompt_template_id ON prompt_template(template_id)")
-            .execute(&self.pool)
-            .await
-            .ok();
+        sqlx::query(
+            "CREATE INDEX IF NOT EXISTS idx_prompt_template_id ON prompt_template(template_id)",
+        )
+        .execute(&self.pool)
+        .await
+        .ok();
 
         sqlx::query("CREATE INDEX IF NOT EXISTS idx_prompt_enabled ON prompt_template(enabled)")
             .execute(&self.pool)
@@ -919,8 +941,7 @@ impl SqlitePromptStore {
         let id_str: String = row
             .try_get("id")
             .map_err(|e| PromptError::ParseError(e.to_string()))?;
-        let id = Uuid::parse_str(&id_str)
-            .map_err(|e| PromptError::ParseError(e.to_string()))?;
+        let id = Uuid::parse_str(&id_str).map_err(|e| PromptError::ParseError(e.to_string()))?;
 
         let created_at_str: String = row
             .try_get("created_at")
@@ -1015,11 +1036,12 @@ impl PromptStore for SqlitePromptStore {
     }
 
     async fn get_template(&self, template_id: &str) -> PromptResult<Option<PromptEntity>> {
-        let row = sqlx::query("SELECT * FROM prompt_template WHERE template_id = ? AND enabled = 1")
-            .bind(template_id)
-            .fetch_optional(&self.pool)
-            .await
-            .map_err(|e| PromptError::ParseError(e.to_string()))?;
+        let row =
+            sqlx::query("SELECT * FROM prompt_template WHERE template_id = ? AND enabled = 1")
+                .bind(template_id)
+                .fetch_optional(&self.pool)
+                .await
+                .map_err(|e| PromptError::ParseError(e.to_string()))?;
 
         match row {
             Some(row) => Ok(Some(Self::parse_template_row(&row)?)),
@@ -1055,7 +1077,10 @@ impl PromptStore for SqlitePromptStore {
         }
         if let Some(ref search) = filter.search {
             let pattern = format!("%{}%", search);
-            query = query.bind(pattern.clone()).bind(pattern.clone()).bind(pattern);
+            query = query
+                .bind(pattern.clone())
+                .bind(pattern.clone())
+                .bind(pattern);
         }
         query = query.bind(limit).bind(offset);
 
@@ -1197,7 +1222,10 @@ impl PromptStore for SqlitePromptStore {
         Ok(())
     }
 
-    async fn get_composition(&self, composition_id: &str) -> PromptResult<Option<PromptCompositionEntity>> {
+    async fn get_composition(
+        &self,
+        composition_id: &str,
+    ) -> PromptResult<Option<PromptCompositionEntity>> {
         Ok(None)
     }
 

@@ -3,9 +3,7 @@
 //! 提供动态插件机制，允许用户在运行时扩展和控制上下文内容
 //! 该模块基于 mofa-kernel 的插件抽象，并提供运行时示例实现
 
-pub use mofa_kernel::agent::plugins::{
-    Plugin, PluginMetadata, PluginRegistry, PluginStage,
-};
+pub use mofa_kernel::agent::plugins::{Plugin, PluginMetadata, PluginRegistry, PluginStage};
 
 use crate::agent::context::AgentContext;
 use crate::agent::error::{AgentError, AgentResult};
@@ -40,17 +38,19 @@ impl Default for SimplePluginRegistry {
 
 impl PluginRegistry for SimplePluginRegistry {
     fn register(&self, plugin: Arc<dyn Plugin>) -> AgentResult<()> {
-        let mut plugins = self.plugins.write().map_err(|_| {
-            AgentError::ExecutionFailed("Failed to acquire write lock".to_string())
-        })?;
+        let mut plugins = self
+            .plugins
+            .write()
+            .map_err(|_| AgentError::ExecutionFailed("Failed to acquire write lock".to_string()))?;
         plugins.insert(plugin.name().to_string(), plugin);
         Ok(())
     }
 
     fn unregister(&self, name: &str) -> AgentResult<bool> {
-        let mut plugins = self.plugins.write().map_err(|_| {
-            AgentError::ExecutionFailed("Failed to acquire write lock".to_string())
-        })?;
+        let mut plugins = self
+            .plugins
+            .write()
+            .map_err(|_| AgentError::ExecutionFailed("Failed to acquire write lock".to_string()))?;
         Ok(plugins.remove(name).is_some())
     }
 

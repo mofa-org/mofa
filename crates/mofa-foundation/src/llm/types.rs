@@ -5,6 +5,8 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
+use super::tool_schema;
+
 // ============================================================================
 // 消息类型
 // ============================================================================
@@ -115,6 +117,22 @@ impl ChatMessage {
             tool_calls: None,
             tool_call_id: None,
         }
+    }
+
+    /// 创建用户消息（结构化内容）
+    pub fn user_with_content(content: MessageContent) -> Self {
+        Self {
+            role: Role::User,
+            content: Some(content),
+            name: None,
+            tool_calls: None,
+            tool_call_id: None,
+        }
+    }
+
+    /// 创建用户消息（多部分内容）
+    pub fn user_with_parts(parts: Vec<ContentPart>) -> Self {
+        Self::user_with_content(MessageContent::Parts(parts))
     }
 
     /// 创建助手消息
@@ -228,6 +246,7 @@ impl Tool {
         description: impl Into<String>,
         parameters: serde_json::Value,
     ) -> Self {
+        let parameters = tool_schema::normalize_schema(parameters);
         Self {
             tool_type: "function".to_string(),
             function: FunctionDefinition {
@@ -749,8 +768,7 @@ pub type LLMResult<T> = Result<T, LLMError>;
 // ============================================================================
 
 /// Retry strategy for LLM calls
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-#[derive(Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
 pub enum RetryStrategy {
     /// Fail immediately without retry
     NoRetry,
@@ -761,18 +779,27 @@ pub enum RetryStrategy {
     PromptRetry,
 }
 
-
 /// Backoff strategy for retry delays
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub enum BackoffStrategy {
     /// Fixed delay between retries
     Fixed { delay_ms: u64 },
     /// Linear backoff with increment
-    Linear { initial_delay_ms: u64, increment_ms: u64 },
+    Linear {
+        initial_delay_ms: u64,
+        increment_ms: u64,
+    },
     /// Exponential backoff
-    Exponential { initial_delay_ms: u64, max_delay_ms: u64 },
+    Exponential {
+        initial_delay_ms: u64,
+        max_delay_ms: u64,
+    },
     /// Exponential backoff with jitter
-    ExponentialWithJitter { initial_delay_ms: u64, max_delay_ms: u64, jitter_ms: u64 },
+    ExponentialWithJitter {
+        initial_delay_ms: u64,
+        max_delay_ms: u64,
+        jitter_ms: u64,
+    },
 }
 
 impl Default for BackoffStrategy {
@@ -790,16 +817,26 @@ impl BackoffStrategy {
     pub fn delay(&self, attempt: u32) -> std::time::Duration {
         match self {
             Self::Fixed { delay_ms } => std::time::Duration::from_millis(*delay_ms),
-            Self::Linear { initial_delay_ms, increment_ms } => {
+            Self::Linear {
+                initial_delay_ms,
+                increment_ms,
+            } => {
                 let delay = *initial_delay_ms + (*increment_ms * attempt as u64);
                 std::time::Duration::from_millis(delay)
             }
-            Self::Exponential { initial_delay_ms, max_delay_ms } => {
+            Self::Exponential {
+                initial_delay_ms,
+                max_delay_ms,
+            } => {
                 let delay = *initial_delay_ms * 2u64.pow(attempt.min(10));
                 let capped = delay.min(*max_delay_ms);
                 std::time::Duration::from_millis(capped)
             }
-            Self::ExponentialWithJitter { initial_delay_ms, max_delay_ms, jitter_ms } => {
+            Self::ExponentialWithJitter {
+                initial_delay_ms,
+                max_delay_ms,
+                jitter_ms,
+            } => {
                 let base_delay = *initial_delay_ms * 2u64.pow(attempt.min(10));
                 let capped = base_delay.min(*max_delay_ms);
                 let jitter = if *jitter_ms > 0 {
@@ -901,7 +938,10 @@ impl LLMRetryPolicy {
     fn default_strategies() -> std::collections::HashMap<RetryableErrorType, RetryStrategy> {
         let mut map = std::collections::HashMap::new();
         // PromptRetry is best for serialization errors (e.g., JSON format issues)
-        map.insert(RetryableErrorType::Serialization, RetryStrategy::PromptRetry);
+        map.insert(
+            RetryableErrorType::Serialization,
+            RetryStrategy::PromptRetry,
+        );
         // Direct retry for transient errors
         map.insert(RetryableErrorType::Network, RetryStrategy::DirectRetry);
         map.insert(RetryableErrorType::RateLimit, RetryStrategy::DirectRetry);
@@ -991,7 +1031,10 @@ mod tests {
 
     #[test]
     fn test_backoff_linear() {
-        let strategy = BackoffStrategy::Linear { initial_delay_ms: 1000, increment_ms: 500 };
+        let strategy = BackoffStrategy::Linear {
+            initial_delay_ms: 1000,
+            increment_ms: 500,
+        };
         assert_eq!(strategy.delay(0).as_millis(), 1000);
         assert_eq!(strategy.delay(1).as_millis(), 1500);
         assert_eq!(strategy.delay(2).as_millis(), 2000);
@@ -999,7 +1042,10 @@ mod tests {
 
     #[test]
     fn test_backoff_exponential_capping() {
-        let strategy = BackoffStrategy::Exponential { initial_delay_ms: 1000, max_delay_ms: 5000 };
+        let strategy = BackoffStrategy::Exponential {
+            initial_delay_ms: 1000,
+            max_delay_ms: 5000,
+        };
         assert_eq!(strategy.delay(0).as_millis(), 1000);
         assert_eq!(strategy.delay(1).as_millis(), 2000);
         assert_eq!(strategy.delay(2).as_millis(), 4000);
@@ -1016,7 +1062,11 @@ mod tests {
         };
         // Jitter should keep delay within reasonable bounds
         let delay = strategy.delay(1).as_millis();
-        assert!(delay >= 1800 && delay <= 2200, "Delay {} out of range", delay);
+        assert!(
+            delay >= 1800 && delay <= 2200,
+            "Delay {} out of range",
+            delay
+        );
     }
 
     #[test]
@@ -1025,23 +1075,38 @@ mod tests {
 
         // Serialization errors should use PromptRetry
         let serde_err = LLMError::SerializationError("Invalid JSON".to_string());
-        assert_eq!(policy.strategy_for_error(&serde_err), RetryStrategy::PromptRetry);
+        assert_eq!(
+            policy.strategy_for_error(&serde_err),
+            RetryStrategy::PromptRetry
+        );
 
         // Network errors should use DirectRetry
         let net_err = LLMError::NetworkError("Connection failed".to_string());
-        assert_eq!(policy.strategy_for_error(&net_err), RetryStrategy::DirectRetry);
+        assert_eq!(
+            policy.strategy_for_error(&net_err),
+            RetryStrategy::DirectRetry
+        );
     }
 
     #[test]
     fn test_retryable_error_type_mapping() {
         let net_err = LLMError::NetworkError("error".to_string());
-        assert_eq!(RetryableErrorType::from_error(&net_err), Some(RetryableErrorType::Network));
+        assert_eq!(
+            RetryableErrorType::from_error(&net_err),
+            Some(RetryableErrorType::Network)
+        );
 
         let rate_err = LLMError::RateLimited("error".to_string());
-        assert_eq!(RetryableErrorType::from_error(&rate_err), Some(RetryableErrorType::RateLimit));
+        assert_eq!(
+            RetryableErrorType::from_error(&rate_err),
+            Some(RetryableErrorType::RateLimit)
+        );
 
         let auth_err = LLMError::AuthError("error".to_string());
-        assert_eq!(RetryableErrorType::from_error(&auth_err), Some(RetryableErrorType::Authentication));
+        assert_eq!(
+            RetryableErrorType::from_error(&auth_err),
+            Some(RetryableErrorType::Authentication)
+        );
 
         // Non-retryable errors return None
         let quota_err = LLMError::QuotaExceeded("error".to_string());

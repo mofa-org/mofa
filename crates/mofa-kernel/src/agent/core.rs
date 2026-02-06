@@ -31,9 +31,9 @@
 
 pub use crate::agent::context::AgentEvent;
 use crate::agent::{
+    AgentCapabilities, AgentContext,
     error::AgentResult,
     types::{AgentInput, AgentOutput, AgentState, InterruptResult},
-    AgentCapabilities, AgentContext,
 };
 use async_trait::async_trait;
 
@@ -160,11 +160,7 @@ pub trait MoFAAgent: Send + Sync + 'static {
     /// # 状态转换
     ///
     /// Ready -> Executing -> Ready
-    async fn execute(
-        &mut self,
-        input: AgentInput,
-        ctx: &AgentContext,
-    ) -> AgentResult<AgentOutput>;
+    async fn execute(&mut self, input: AgentInput, ctx: &AgentContext) -> AgentResult<AgentOutput>;
 
     /// 关闭 Agent
     ///

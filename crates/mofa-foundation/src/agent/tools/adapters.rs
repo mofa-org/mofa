@@ -2,12 +2,12 @@
 //!
 //! 提供便捷的工具创建方式
 
+use async_trait::async_trait;
+use mofa_kernel::agent::Tool;
 use mofa_kernel::agent::components::tool::{ToolInput, ToolMetadata, ToolResult};
 use mofa_kernel::agent::context::AgentContext;
-use async_trait::async_trait;
 use std::future::Future;
 use std::pin::Pin;
-use mofa_kernel::agent::Tool;
 
 /// 函数工具
 ///
@@ -279,17 +279,21 @@ impl BuiltinTools {
 
     /// 创建 JSON 解析工具
     pub fn json_parser() -> impl Tool {
-        ClosureTool::new("json_parser", "Parse JSON string into structured data", |input| {
-            let json_str = match input.get_str("json") {
-                Some(s) => s,
-                None => return ToolResult::failure("No JSON string provided"),
-            };
+        ClosureTool::new(
+            "json_parser",
+            "Parse JSON string into structured data",
+            |input| {
+                let json_str = match input.get_str("json") {
+                    Some(s) => s,
+                    None => return ToolResult::failure("No JSON string provided"),
+                };
 
-            match serde_json::from_str::<serde_json::Value>(json_str) {
-                Ok(parsed) => ToolResult::success(parsed),
-                Err(e) => ToolResult::failure(format!("Failed to parse JSON: {}", e)),
-            }
-        })
+                match serde_json::from_str::<serde_json::Value>(json_str) {
+                    Ok(parsed) => ToolResult::success(parsed),
+                    Err(e) => ToolResult::failure(format!("Failed to parse JSON: {}", e)),
+                }
+            },
+        )
         .with_schema(serde_json::json!({
             "type": "object",
             "properties": {
@@ -304,26 +308,24 @@ impl BuiltinTools {
 
     /// 创建字符串处理工具
     pub fn string_utils() -> impl Tool {
-        ClosureTool::new(
-            "string_utils",
-            "String manipulation utilities",
-            |input| {
-                let operation = input.get_str("operation").unwrap_or("length");
-                let text = input.get_str("text").unwrap_or("");
+        ClosureTool::new("string_utils", "String manipulation utilities", |input| {
+            let operation = input.get_str("operation").unwrap_or("length");
+            let text = input.get_str("text").unwrap_or("");
 
-                let result = match operation {
-                    "length" => serde_json::json!({ "length": text.len() }),
-                    "upper" => serde_json::json!({ "result": text.to_uppercase() }),
-                    "lower" => serde_json::json!({ "result": text.to_lowercase() }),
-                    "trim" => serde_json::json!({ "result": text.trim() }),
-                    "reverse" => serde_json::json!({ "result": text.chars().rev().collect::<String>() }),
-                    "word_count" => serde_json::json!({ "count": text.split_whitespace().count() }),
-                    _ => return ToolResult::failure(format!("Unknown operation: {}", operation)),
-                };
+            let result = match operation {
+                "length" => serde_json::json!({ "length": text.len() }),
+                "upper" => serde_json::json!({ "result": text.to_uppercase() }),
+                "lower" => serde_json::json!({ "result": text.to_lowercase() }),
+                "trim" => serde_json::json!({ "result": text.trim() }),
+                "reverse" => {
+                    serde_json::json!({ "result": text.chars().rev().collect::<String>() })
+                }
+                "word_count" => serde_json::json!({ "count": text.split_whitespace().count() }),
+                _ => return ToolResult::failure(format!("Unknown operation: {}", operation)),
+            };
 
-                ToolResult::success(result)
-            },
-        )
+            ToolResult::success(result)
+        })
         .with_schema(serde_json::json!({
             "type": "object",
             "properties": {

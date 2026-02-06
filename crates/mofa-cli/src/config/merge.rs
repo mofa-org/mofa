@@ -130,7 +130,10 @@ pub fn config_from_env(prefix: &str) -> AgentConfig {
                 }
                 ["LLM", "TEMPERATURE"] => {
                     if let Ok(temp) = value.parse::<f32>() {
-                        config.llm.get_or_insert_with(default_llm_config).temperature = Some(temp);
+                        config
+                            .llm
+                            .get_or_insert_with(default_llm_config)
+                            .temperature = Some(temp);
                     }
                 }
                 ["LLM", "MAX", "TOKENS"] => {
@@ -139,11 +142,16 @@ pub fn config_from_env(prefix: &str) -> AgentConfig {
                     }
                 }
                 ["LLM", "SYSTEM", "PROMPT"] => {
-                    config.llm.get_or_insert_with(default_llm_config).system_prompt = Some(value);
+                    config
+                        .llm
+                        .get_or_insert_with(default_llm_config)
+                        .system_prompt = Some(value);
                 }
                 _ => {
                     // Store in node_config
-                    config.node_config.insert(key.as_str().to_lowercase(), serde_json::json!(value));
+                    config
+                        .node_config
+                        .insert(key.as_str().to_lowercase(), serde_json::json!(value));
                 }
             }
         }

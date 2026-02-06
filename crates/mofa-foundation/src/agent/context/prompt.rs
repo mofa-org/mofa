@@ -147,13 +147,11 @@ impl PromptContext {
     /// Initialize memory storage (lazy)
     async fn init_memory(&mut self) -> AgentResult<()> {
         if self.memory.is_none() {
-            self.memory = Some(
-                Arc::new(
-                    FileBasedStorage::new(&self.workspace)
-                        .await
-                        .map_err(|e| AgentError::MemoryError(format!("Failed to init memory: {}", e)))?,
-                )
-            );
+            self.memory = Some(Arc::new(
+                FileBasedStorage::new(&self.workspace).await.map_err(|e| {
+                    AgentError::MemoryError(format!("Failed to init memory: {}", e))
+                })?,
+            ));
         }
         Ok(())
     }
@@ -176,15 +174,21 @@ impl PromptContext {
             // Memory is optional, continue without it
         } else if let Some(memory) = &self.memory
             && let Ok(memory_context) = memory.get_memory_context().await
-                && !memory_context.is_empty() {
-                    parts.push(format!("# Memory\n\n{}", memory_context));
-                }
+            && !memory_context.is_empty()
+        {
+            parts.push(format!("# Memory\n\n{}", memory_context));
+        }
 
         // 4. Record that we built a prompt (using rich context)
-        self.rich_ctx.record_output("prompt_builder", serde_json::json!({
-            "prompt_length": parts.join("\n\n---\n\n").len(),
-            "bootstrap_files": self.bootstrap_files.len(),
-        })).await;
+        self.rich_ctx
+            .record_output(
+                "prompt_builder",
+                serde_json::json!({
+                    "prompt_length": parts.join("\n\n---\n\n").len(),
+                    "bootstrap_files": self.bootstrap_files.len(),
+                }),
+            )
+            .await;
 
         Ok(parts.join("\n\n---\n\n"))
     }
@@ -237,9 +241,10 @@ When remembering something, write to {}/memory/MEMORY.md"#,
         for filename in &self.bootstrap_files {
             let file_path = self.workspace.join(filename);
             if file_path.exists()
-                && let Ok(content) = fs::read_to_string(&file_path).await {
-                    parts.push(format!("## {}\n\n{}", filename, content));
-                }
+                && let Ok(content) = fs::read_to_string(&file_path).await
+            {
+                parts.push(format!("## {}\n\n{}", filename, content));
+            }
         }
 
         Ok(parts.join("\n\n"))
@@ -325,7 +330,8 @@ impl PromptContextBuilder {
     /// Build the PromptContext
     pub async fn build(self) -> AgentResult<PromptContext> {
         let agent_name = self.identity.name.clone();
-        PromptContext::with_identity(&self.workspace, self.identity).await
+        PromptContext::with_identity(&self.workspace, self.identity)
+            .await
             .map(|mut ctx| {
                 ctx.bootstrap_files = self.bootstrap_files;
                 ctx.always_load = self.always_load;

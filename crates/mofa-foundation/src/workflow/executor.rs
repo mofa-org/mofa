@@ -11,7 +11,7 @@ use super::state::{
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Instant;
-use tokio::sync::{mpsc, oneshot, RwLock, Semaphore};
+use tokio::sync::{RwLock, Semaphore, mpsc, oneshot};
 use tracing::{error, info, warn};
 
 /// 执行器配置

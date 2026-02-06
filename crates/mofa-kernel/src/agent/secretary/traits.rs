@@ -11,7 +11,7 @@
 //! - [`WorkflowOrchestrator`]: 编排多阶段工作流
 
 use async_trait::async_trait;
-use serde::{de::DeserializeOwned, Serialize};
+use serde::{Serialize, de::DeserializeOwned};
 use std::fmt::Debug;
 
 // =============================================================================
@@ -35,7 +35,10 @@ use std::fmt::Debug;
 ///
 /// impl SecretaryInput for MyInput {}
 /// ```
-pub trait SecretaryInput: Send + Sync + Clone + Debug + Serialize + DeserializeOwned + 'static {}
+pub trait SecretaryInput:
+    Send + Sync + Clone + Debug + Serialize + DeserializeOwned + 'static
+{
+}
 
 /// 秘书输出消息Trait
 ///
@@ -54,7 +57,10 @@ pub trait SecretaryInput: Send + Sync + Clone + Debug + Serialize + DeserializeO
 ///
 /// impl SecretaryOutput for MyOutput {}
 /// ```
-pub trait SecretaryOutput: Send + Sync + Clone + Debug + Serialize + DeserializeOwned + 'static {}
+pub trait SecretaryOutput:
+    Send + Sync + Clone + Debug + Serialize + DeserializeOwned + 'static
+{
+}
 
 // =============================================================================
 // 秘书行为定义

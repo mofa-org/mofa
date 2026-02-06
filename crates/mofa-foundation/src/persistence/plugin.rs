@@ -4,9 +4,11 @@
 
 use super::entities::*;
 use super::traits::*;
-use crate::llm::{LLMError, LLMResult};
 use crate::llm::types::LLMResponseMetadata;
-use mofa_kernel::plugin::{AgentPlugin, PluginContext, PluginMetadata, PluginResult, PluginState, PluginType};
+use crate::llm::{LLMError, LLMResult};
+use mofa_kernel::plugin::{
+    AgentPlugin, PluginContext, PluginMetadata, PluginResult, PluginState, PluginType,
+};
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
@@ -32,7 +34,12 @@ where
     S: MessageStore + ApiCallStore + SessionStore + Send + Sync + 'static,
 {
     /// 创建新的持久化上下文
-    pub async fn new(store: Arc<S>, user_id: Uuid, tenant_id: Uuid, agent_id: Uuid) -> LLMResult<Self> {
+    pub async fn new(
+        store: Arc<S>,
+        user_id: Uuid,
+        tenant_id: Uuid,
+        agent_id: Uuid,
+    ) -> LLMResult<Self> {
         let session = ChatSession::new(user_id, agent_id);
         store
             .create_session(&session)
@@ -49,7 +56,13 @@ where
     }
 
     /// 从现有会话创建上下文
-    pub fn from_session(store: Arc<S>, user_id: Uuid, agent_id: Uuid, tenant_id:Uuid, session_id: Uuid) -> Self {
+    pub fn from_session(
+        store: Arc<S>,
+        user_id: Uuid,
+        agent_id: Uuid,
+        tenant_id: Uuid,
+        session_id: Uuid,
+    ) -> Self {
         Self {
             store,
             user_id,
@@ -137,7 +150,6 @@ where
     pub fn store(&self) -> Arc<S> {
         self.store.clone()
     }
-
 }
 
 // ============================================================================
@@ -286,7 +298,9 @@ impl PersistencePlugin {
 
     /// 获取历史消息（用于 build_async）
     pub async fn load_history(&self) -> PersistenceResult<Vec<LLMMessage>> {
-        self.message_store.get_session_messages(*self.session_id.read().await).await
+        self.message_store
+            .get_session_messages(*self.session_id.read().await)
+            .await
     }
 
     /// 获取消息存储引用
@@ -347,7 +361,8 @@ impl PersistencePlugin {
 
     /// 保存助手消息
     pub async fn save_assistant_message(&self, content: &str) -> LLMResult<Uuid> {
-        self.save_message_internal(MessageRole::Assistant, content).await
+        self.save_message_internal(MessageRole::Assistant, content)
+            .await
     }
 }
 
@@ -372,8 +387,7 @@ impl Clone for PersistencePlugin {
 }
 
 #[async_trait::async_trait]
-impl AgentPlugin for PersistencePlugin
-{
+impl AgentPlugin for PersistencePlugin {
     fn metadata(&self) -> &PluginMetadata {
         &self.metadata
     }
@@ -413,10 +427,22 @@ impl AgentPlugin for PersistencePlugin
 
     fn stats(&self) -> HashMap<String, serde_json::Value> {
         let mut stats = HashMap::new();
-        stats.insert("plugin_type".to_string(), serde_json::Value::String("persistence".to_string()));
-        stats.insert("user_id".to_string(), serde_json::Value::String(self.user_id.to_string()));
-        stats.insert("tenant_id".to_string(), serde_json::Value::String(self.tenant_id.to_string()));
-        stats.insert("agent_id".to_string(), serde_json::Value::String(self.agent_id.to_string()));
+        stats.insert(
+            "plugin_type".to_string(),
+            serde_json::Value::String("persistence".to_string()),
+        );
+        stats.insert(
+            "user_id".to_string(),
+            serde_json::Value::String(self.user_id.to_string()),
+        );
+        stats.insert(
+            "tenant_id".to_string(),
+            serde_json::Value::String(self.tenant_id.to_string()),
+        );
+        stats.insert(
+            "agent_id".to_string(),
+            serde_json::Value::String(self.agent_id.to_string()),
+        );
         stats
     }
 
@@ -435,8 +461,7 @@ impl AgentPlugin for PersistencePlugin
 
 // 实现 LLMAgentEventHandler trait
 #[async_trait::async_trait]
-impl crate::llm::agent::LLMAgentEventHandler for PersistencePlugin
-{
+impl crate::llm::agent::LLMAgentEventHandler for PersistencePlugin {
     fn clone_box(&self) -> Box<dyn crate::llm::agent::LLMAgentEventHandler> {
         // 由于 PersistencePlugin 需要 Arc<S>，我们创建一个新的克隆实例
         Box::new(self.clone())
@@ -504,17 +529,21 @@ impl crate::llm::agent::LLMAgentEventHandler for PersistencePlugin
                 user_msg_id,
                 assistant_msg_id,
                 model_name,
-                0,  // 未知（没有元数据时无法获取真实值）
-                response.len() as i32 / 4,  // 简单估算 completion_tokens (每4字符一个token)
+                0,                         // 未知（没有元数据时无法获取真实值）
+                response.len() as i32 / 4, // 简单估算 completion_tokens (每4字符一个token)
                 request_time,
                 now,
             );
 
-            let _ = self.api_call_store
+            let _ = self
+                .api_call_store
                 .save_api_call(&api_call)
                 .await
                 .map_err(|e| LLMError::Other(e.to_string()));
-            info!("✅ [持久化插件] API 调用记录已保存: 模型={}, 延迟={}ms", model_name, latency);
+            info!(
+                "✅ [持久化插件] API 调用记录已保存: 模型={}, 延迟={}ms",
+                model_name, latency
+            );
         }
 
         // 清理状态
@@ -567,7 +596,8 @@ impl crate::llm::agent::LLMAgentEventHandler for PersistencePlugin
             // 设置 response_id
             api_call = api_call.with_api_response_id(&metadata.id);
 
-            let _ = self.api_call_store
+            let _ = self
+                .api_call_store
                 .save_api_call(&api_call)
                 .await
                 .map_err(|e| LLMError::Other(e.to_string()));
@@ -609,7 +639,8 @@ impl crate::llm::agent::LLMAgentEventHandler for PersistencePlugin
                 now,
             );
 
-            let _ = self.api_call_store
+            let _ = self
+                .api_call_store
                 .save_api_call(&api_call)
                 .await
                 .map_err(|e| LLMError::Other(e.to_string()));

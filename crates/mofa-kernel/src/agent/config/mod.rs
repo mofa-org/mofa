@@ -9,6 +9,6 @@ pub mod schema;
 #[cfg(feature = "config")]
 pub use loader::{ConfigFormat, ConfigLoader};
 pub use schema::{
-    AgentConfig, AgentType, CapabilitiesConfig, ComponentsConfig, LlmAgentConfig,
-    ReActAgentConfig, TeamAgentConfig, WorkflowAgentConfig,
+    AgentConfig, AgentType, CapabilitiesConfig, ComponentsConfig, LlmAgentConfig, ReActAgentConfig,
+    TeamAgentConfig, WorkflowAgentConfig,
 };

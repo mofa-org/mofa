@@ -37,19 +37,12 @@ pub fn substitute_env(input: &str) -> String {
 /// Substitute environment variables in all string values of a YAML/JSON structure
 pub fn substitute_env_recursive(value: &serde_json::Value) -> serde_json::Value {
     match value {
-        serde_json::Value::String(s) => {
-            serde_json::Value::String(substitute_env(s))
-        }
-        serde_json::Value::Array(arr) => {
-            arr.iter()
-                .map(substitute_env_recursive)
-                .collect()
-        }
-        serde_json::Value::Object(obj) => {
-            obj.iter()
-                .map(|(k, v)| (k.clone(), substitute_env_recursive(v)))
-                .collect()
-        }
+        serde_json::Value::String(s) => serde_json::Value::String(substitute_env(s)),
+        serde_json::Value::Array(arr) => arr.iter().map(substitute_env_recursive).collect(),
+        serde_json::Value::Object(obj) => obj
+            .iter()
+            .map(|(k, v)| (k.clone(), substitute_env_recursive(v)))
+            .collect(),
         _ => value.clone(),
     }
 }
@@ -61,13 +54,11 @@ pub fn substitute_with(input: &str, vars: &HashMap<String, String>) -> String {
     ENV_VAR_REGEX
         .replace_all(input, |caps: &regex::Captures| {
             let var_name = &caps[1];
-            vars.get(var_name)
-                .map(|v| v.as_str())
-                .unwrap_or_else(|| {
-                    std::env::var(var_name)
-                        .unwrap_or_else(|_| caps[0].to_string())
-                        .leak()
-                })
+            vars.get(var_name).map(|v| v.as_str()).unwrap_or_else(|| {
+                std::env::var(var_name)
+                    .unwrap_or_else(|_| caps[0].to_string())
+                    .leak()
+            })
         })
         .to_string()
 }

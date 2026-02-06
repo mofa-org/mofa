@@ -71,7 +71,9 @@ pub fn run_schema(db_type: DatabaseType) -> anyhow::Result<()> {
 
 fn get_migration_sql(db_type: DatabaseType) -> &'static str {
     match db_type {
-        DatabaseType::Postgres => include_str!("../../../../scripts/sql/migrations/postgres_init.sql"),
+        DatabaseType::Postgres => {
+            include_str!("../../../../scripts/sql/migrations/postgres_init.sql")
+        }
         DatabaseType::Mysql => include_str!("../../../../scripts/sql/migrations/mysql_init.sql"),
         DatabaseType::Sqlite => include_str!("../../../../scripts/sql/migrations/sqlite_init.sql"),
     }

@@ -4391,6 +4391,7 @@ dependencies = [
  "mofa-runtime",
  "pyo3",
  "pyo3-async-runtimes",
+ "serde_json",
  "sqlx",
  "tempfile",
  "thiserror 1.0.69",

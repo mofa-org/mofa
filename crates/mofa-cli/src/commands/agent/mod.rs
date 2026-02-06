@@ -6,4 +6,3 @@ pub mod restart;
 pub mod start;
 pub mod status;
 pub mod stop;
-

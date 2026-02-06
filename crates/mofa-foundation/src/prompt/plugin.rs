@@ -100,7 +100,11 @@ impl PromptTemplatePlugin for RhaiScriptPromptPlugin {
 
     async fn get_available_scenarios(&self) -> Vec<String> {
         let registry = self.registry.read().await;
-        registry.list_ids().into_iter().map(|id| id.to_string()).collect()
+        registry
+            .list_ids()
+            .into_iter()
+            .map(|id| id.to_string())
+            .collect()
     }
 
     async fn refresh_templates(&self) -> PluginResult<()> {
@@ -135,10 +139,13 @@ impl PromptTemplatePlugin for RhaiScriptPromptPlugin {
                 let engine = Engine::new();
 
                 // Wrap the script to return the template object
-                let script = format!("
+                let script = format!(
+                    "
                     let template = {};
                     template
-                ", script);
+                ",
+                    script
+                );
 
                 // Evaluate the script to get Rhai Dynamic object
                 let template_dyn: rhai::Dynamic = match engine.eval(&script) {
@@ -176,13 +183,13 @@ impl PromptTemplatePlugin for RhaiScriptPromptPlugin {
             }
         }
 
-        tracing::info!("Successfully refreshed prompt templates from path: {:?}", self.script_path);
+        tracing::info!(
+            "Successfully refreshed prompt templates from path: {:?}",
+            self.script_path
+        );
         Ok(())
     }
-
 }
-
-
 
 #[async_trait::async_trait]
 impl mofa_kernel::plugin::AgentPlugin for RhaiScriptPromptPlugin {
@@ -205,7 +212,10 @@ impl mofa_kernel::plugin::AgentPlugin for RhaiScriptPromptPlugin {
         mofa_kernel::plugin::PluginState::Loaded
     }
 
-    async fn load(&mut self, _ctx: &mofa_kernel::plugin::PluginContext) -> mofa_kernel::plugin::PluginResult<()> {
+    async fn load(
+        &mut self,
+        _ctx: &mofa_kernel::plugin::PluginContext,
+    ) -> mofa_kernel::plugin::PluginResult<()> {
         // Load templates on plugin load
         self.refresh_templates().await?;
         Ok(())
@@ -231,11 +241,15 @@ impl mofa_kernel::plugin::AgentPlugin for RhaiScriptPromptPlugin {
         // Parse input to decide what to do
         // This could support commands like "set_scenario:promotion" or "get_template:outage"
         if input.starts_with("set_scenario:") {
-            let scenario = input.strip_prefix("set_scenario:").ok_or_else(|| anyhow::anyhow!("Invalid scenario"))?;
+            let scenario = input
+                .strip_prefix("set_scenario:")
+                .ok_or_else(|| anyhow::anyhow!("Invalid scenario"))?;
             self.set_active_scenario(scenario).await;
             Ok(format!("Successfully switched to scenario: {}", scenario))
         } else if input.starts_with("get_template:") {
-            let scenario = input.strip_prefix("get_template:").ok_or_else(|| anyhow::anyhow!("Invalid scenario"))?;
+            let scenario = input
+                .strip_prefix("get_template:")
+                .ok_or_else(|| anyhow::anyhow!("Invalid scenario"))?;
             if let Some(template) = self.get_prompt_template(scenario).await {
                 Ok(serde_json::to_string(&template)?)
             } else {

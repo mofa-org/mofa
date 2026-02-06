@@ -1,6 +1,6 @@
 //! 渐进式披露控制
 
-use crate::skill::{metadata::SkillMetadata, parser::SkillParser, Requirement, RequirementCheck};
+use crate::skill::{Requirement, RequirementCheck, metadata::SkillMetadata, parser::SkillParser};
 use std::collections::HashMap;
 use std::path::PathBuf;
 
@@ -57,21 +57,23 @@ impl DisclosureController {
 
         // Try executable parent directory (installed binary)
         if let Ok(exe) = std::env::current_exe()
-            && let Some(parent) = exe.parent() {
-                let skills_path = parent.join("skills");
-                if skills_path.exists() {
-                    return Some(skills_path);
-                }
+            && let Some(parent) = exe.parent()
+        {
+            let skills_path = parent.join("skills");
+            if skills_path.exists() {
+                return Some(skills_path);
             }
+        }
 
         // Try grandparent directory (for /usr/local/bin/mofa -> /usr/local/lib/mofa/skills)
         if let Ok(exe) = std::env::current_exe()
-            && let Some(grandparent) = exe.parent().and_then(|p| p.parent()) {
-                let skills_path = grandparent.join("lib").join("mofa").join("skills");
-                if skills_path.exists() {
-                    return Some(skills_path);
-                }
+            && let Some(grandparent) = exe.parent().and_then(|p| p.parent())
+        {
+            let skills_path = grandparent.join("lib").join("mofa").join("skills");
+            if skills_path.exists() {
+                return Some(skills_path);
             }
+        }
 
         // Try standard installation path
         let standard_path = PathBuf::from("/usr/local/lib/mofa/skills");
@@ -109,16 +111,21 @@ impl DisclosureController {
 
                     let skill_md = entry.path().join("SKILL.md");
                     if skill_md.exists()
-                        && let Ok((metadata, _)) = SkillParser::parse_from_file(&skill_md) {
-                            self.metadata_cache.insert(metadata.name.clone(), metadata);
-                            self.skill_sources.insert(skill_name, skills_dir.clone());
-                            count += 1;
-                        }
+                        && let Ok((metadata, _)) = SkillParser::parse_from_file(&skill_md)
+                    {
+                        self.metadata_cache.insert(metadata.name.clone(), metadata);
+                        self.skill_sources.insert(skill_name, skills_dir.clone());
+                        count += 1;
+                    }
                 }
             }
         }
 
-        tracing::info!("Scanned {} skills from {} directories", count, self.search_dirs.len());
+        tracing::info!(
+            "Scanned {} skills from {} directories",
+            count,
+            self.search_dirs.len()
+        );
         Ok(count)
     }
 
@@ -129,7 +136,9 @@ impl DisclosureController {
 
     /// 构建系统提示（仅包含元数据）
     pub fn build_system_prompt(&self) -> String {
-        let metadata: Vec<String> = self.metadata_cache.values()
+        let metadata: Vec<String> = self
+            .metadata_cache
+            .values()
             .map(|m| format!("- {}: {}", m.name, m.description))
             .collect();
 
@@ -152,7 +161,8 @@ impl DisclosureController {
 
     /// 获取标记为 always 的技能名称列表
     pub fn get_always_skills(&self) -> Vec<String> {
-        self.metadata_cache.values()
+        self.metadata_cache
+            .values()
             .filter(|m| m.always)
             .map(|m| m.name.clone())
             .collect()
@@ -192,8 +202,10 @@ impl DisclosureController {
 
     /// 获取技能的安装指令
     pub fn get_install_instructions(&self, name: &str) -> Option<String> {
-        self.metadata_cache.get(name)
-            .and_then(|m| m.install.as_ref()).cloned()
+        self.metadata_cache
+            .get(name)
+            .and_then(|m| m.install.as_ref())
+            .cloned()
     }
 
     /// 获取缺失依赖的描述字符串
@@ -202,7 +214,9 @@ impl DisclosureController {
         if check.satisfied {
             String::new()
         } else {
-            check.missing.iter()
+            check
+                .missing
+                .iter()
                 .map(|r| match r {
                     Requirement::CliTool(t) => format!("CLI: {}", t),
                     Requirement::EnvVar(v) => format!("ENV: {}", v),
@@ -221,11 +235,14 @@ impl DisclosureController {
     pub fn search(&self, query: &str) -> Vec<String> {
         let query_lower = query.to_lowercase();
 
-        self.metadata_cache.values()
+        self.metadata_cache
+            .values()
             .filter(|m| {
                 m.name.to_lowercase().contains(&query_lower)
                     || m.description.to_lowercase().contains(&query_lower)
-                    || m.tags.iter().any(|t| t.to_lowercase().contains(&query_lower))
+                    || m.tags
+                        .iter()
+                        .any(|t| t.to_lowercase().contains(&query_lower))
             })
             .map(|m| m.name.clone())
             .collect()
@@ -243,7 +260,8 @@ mod tests {
         let skill_dir = dir.join(name);
         fs::create_dir_all(&skill_dir)?;
 
-        let content = format!(r#"---
+        let content = format!(
+            r#"---
 name: {}
 description: {}
 category: test
@@ -253,7 +271,9 @@ version: "1.0.0"
 
 # {} Skill
 
-This is a test skill."#, name, description, name);
+This is a test skill."#,
+            name, description, name
+        );
 
         fs::write(skill_dir.join("SKILL.md"), content)?;
         Ok(())

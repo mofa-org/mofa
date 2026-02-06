@@ -5,8 +5,8 @@
 use super::types::{PluginMetadata, RhaiPluginResult};
 use mofa_extra::rhai::{RhaiScriptEngine, ScriptContext, ScriptEngineConfig};
 use mofa_kernel::plugin::{
-    AgentPlugin, PluginContext, PluginMetadata as KernelPluginMetadata, PluginResult,
-    PluginState, PluginType,
+    AgentPlugin, PluginContext, PluginMetadata as KernelPluginMetadata, PluginResult, PluginState,
+    PluginType,
 };
 use rhai::Dynamic;
 use std::any::Any;
@@ -215,15 +215,15 @@ impl RhaiPlugin {
 
         // Update last modified time from file metadata if available
         self.last_modified = match &self.config.source {
-            RhaiPluginSource::File(path) => {
-                std::fs::metadata(path)?.modified()?.duration_since(std::time::UNIX_EPOCH).expect("时间转换失败").as_secs()
-            }
-            _ => {
-                std::time::SystemTime::now()
-                    .duration_since(std::time::UNIX_EPOCH)
-                    .unwrap_or_default()
-                    .as_secs()
-            }
+            RhaiPluginSource::File(path) => std::fs::metadata(path)?
+                .modified()?
+                .duration_since(std::time::UNIX_EPOCH)
+                .expect("时间转换失败")
+                .as_secs(),
+            _ => std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_secs(),
         };
 
         // Re-extract metadata
@@ -386,9 +386,10 @@ impl AgentPlugin for RhaiPlugin {
 
         // Add input to the script and call execute function
         // Properly escape the JSON string as a Rhai string literal
-        let full_script = format!("{}\n\n// Call the execute function with the input\nreturn execute({:?});",
-                                  self.cached_content,
-                                  input);
+        let full_script = format!(
+            "{}\n\n// Call the execute function with the input\nreturn execute({:?});",
+            self.cached_content, input
+        );
 
         // Execute script
         let result = self.engine.execute(&full_script, &context).await;
@@ -404,14 +405,15 @@ impl AgentPlugin for RhaiPlugin {
                 error!("Full script content: {}", full_script);
 
                 // If calling named function fails, try just executing the script directly
-                warn!("Failed to call execute function: {}, trying direct execution", e);
+                warn!(
+                    "Failed to call execute function: {}, trying direct execution",
+                    e
+                );
 
                 let result = self.engine.execute(&self.cached_content, &context).await;
 
                 match result {
-                    Ok(script_result) => {
-                        Ok(serde_json::to_string_pretty(&script_result.value)?)
-                    }
+                    Ok(script_result) => Ok(serde_json::to_string_pretty(&script_result.value)?),
                     Err(e) => Err(anyhow::anyhow!("Execution error: {}", e)),
                 }
             }
@@ -476,19 +478,34 @@ mod tests {
 
         let ctx = PluginContext::default();
         plugin.load(&ctx).await.unwrap();
-        assert!(matches!(*plugin.state.read().await, RhaiPluginState::Loaded));
+        assert!(matches!(
+            *plugin.state.read().await,
+            RhaiPluginState::Loaded
+        ));
 
         plugin.init_plugin().await.unwrap();
-        assert!(matches!(*plugin.state.read().await, RhaiPluginState::Running));
+        assert!(matches!(
+            *plugin.state.read().await,
+            RhaiPluginState::Running
+        ));
 
         plugin.stop().await.unwrap();
-        assert!(matches!(*plugin.state.read().await, RhaiPluginState::Paused));
+        assert!(matches!(
+            *plugin.state.read().await,
+            RhaiPluginState::Paused
+        ));
 
         plugin.start().await.unwrap();
-        assert!(matches!(*plugin.state.read().await, RhaiPluginState::Running));
+        assert!(matches!(
+            *plugin.state.read().await,
+            RhaiPluginState::Running
+        ));
 
         plugin.unload().await.unwrap();
-        assert!(matches!(*plugin.state.read().await, RhaiPluginState::Unloaded));
+        assert!(matches!(
+            *plugin.state.read().await,
+            RhaiPluginState::Unloaded
+        ));
     }
 
     #[tokio::test]

@@ -10,8 +10,8 @@ mod utils;
 mod widgets;
 
 use clap::Parser;
-use colored::Colorize;
 use cli::Cli;
+use colored::Colorize;
 
 fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
@@ -38,7 +38,11 @@ fn run_command(cli: Cli) -> anyhow::Result<()> {
     use cli::Commands;
 
     match cli.command {
-        Some(Commands::New { name, template, output }) => {
+        Some(Commands::New {
+            name,
+            template,
+            output,
+        }) => {
             commands::new::run(&name, &template, output.as_deref())?;
         }
 
@@ -102,10 +106,7 @@ fn run_command(cli: Cli) -> anyhow::Result<()> {
             cli::AgentCommands::Stop { agent_id } => {
                 commands::agent::stop::run(&agent_id)?;
             }
-            cli::AgentCommands::Restart {
-                agent_id,
-                config,
-            } => {
+            cli::AgentCommands::Restart { agent_id, config } => {
                 commands::agent::restart::run(&agent_id, config.as_deref())?;
             }
             cli::AgentCommands::Status { agent_id } => {
@@ -140,7 +141,10 @@ fn run_command(cli: Cli) -> anyhow::Result<()> {
         },
 
         Some(Commands::Plugin { action }) => match action {
-            cli::PluginCommands::List { installed, available } => {
+            cli::PluginCommands::List {
+                installed,
+                available,
+            } => {
                 commands::plugin::list::run(installed, available)?;
             }
             cli::PluginCommands::Info { name } => {
@@ -156,7 +160,10 @@ fn run_command(cli: Cli) -> anyhow::Result<()> {
                 commands::session::list::run(agent.as_deref(), limit)?;
             }
             cli::SessionCommands::Show { session_id, format } => {
-                commands::session::show::run(&session_id, format.map(|f| f.to_string()).as_deref())?;
+                commands::session::show::run(
+                    &session_id,
+                    format.map(|f| f.to_string()).as_deref(),
+                )?;
             }
             cli::SessionCommands::Delete { session_id, force } => {
                 commands::session::delete::run(&session_id, force)?;
@@ -182,7 +189,10 @@ fn run_command(cli: Cli) -> anyhow::Result<()> {
         None => {
             // Should have been handled by TUI check above
             // If we get here, show help
-            println!("{}", "No command specified. Use --help for usage information.".yellow());
+            println!(
+                "{}",
+                "No command specified. Use --help for usage information.".yellow()
+            );
             println!("Run with --tui flag or without arguments to launch the TUI.");
         }
     }

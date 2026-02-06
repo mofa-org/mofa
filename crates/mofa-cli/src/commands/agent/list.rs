@@ -40,7 +40,11 @@ pub fn run(running_only: bool, show_all: bool) -> anyhow::Result<()> {
 
     // Filter based on flags
     let filtered: Vec<_> = if running_only {
-        agents.iter().filter(|a| a.status == "running").cloned().collect()
+        agents
+            .iter()
+            .filter(|a| a.status == "running")
+            .cloned()
+            .collect()
     } else {
         agents
     };

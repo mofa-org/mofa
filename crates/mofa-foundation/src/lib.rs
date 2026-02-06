@@ -26,14 +26,16 @@ pub mod config;
 pub mod secretary;
 
 // collaboration module - 自适应协作协议
-pub mod collaboration;
 pub mod agent;
+pub mod collaboration;
 
 // Re-export config types
 pub use config::{AgentInfo, AgentYamlConfig, LLMYamlConfig, RuntimeConfig, ToolConfig};
 
 // Re-export messaging types
-pub use messaging::{MessageBus, InboundMessage, OutboundMessage, SimpleInboundMessage, SimpleOutboundMessage};
+pub use messaging::{
+    InboundMessage, MessageBus, OutboundMessage, SimpleInboundMessage, SimpleOutboundMessage,
+};
 
 // Re-export prompt types
 pub use prompt::{
@@ -43,20 +45,45 @@ pub use prompt::{
 
 // Re-export secretary types for convenience
 pub use secretary::{
-    // Core types
-    extract_json_block, parse_llm_json, Artifact, ChannelConnection, ChatMessage,
+    Artifact,
+    ChannelConnection,
+    ChatMessage,
     // Connection
-    CriticalDecision, DecisionOption,
+    CriticalDecision,
+    DecisionOption,
     // LLM
-    DecisionType, DefaultInput, DefaultOutput, DefaultSecretaryBehavior,
+    DecisionType,
+    DefaultInput,
+    DefaultOutput,
+    DefaultSecretaryBehavior,
     // Default implementation
-    DefaultSecretaryBuilder, ExecutionResult, HumanResponse,
+    DefaultSecretaryBuilder,
+    ExecutionResult,
+    HumanResponse,
     // LLM integration
-    LLMProvider, ProjectRequirement, QueryType,
+    LLMProvider,
+    ProjectRequirement,
+    QueryType,
     // Command types
-    Report, ReportType, Resource,
+    Report,
+    ReportType,
+    Resource,
     // Task types
-    SecretaryBehavior, SecretaryCommand, SecretaryContext, SecretaryCore,
-    SecretaryEvent, SecretaryHandle, SecretaryMessage, Subtask, TaskExecutionStatus, TodoItem,
-    TodoPriority, TodoStatus, UserConnection, WorkPhase,
+    SecretaryBehavior,
+    SecretaryCommand,
+    SecretaryContext,
+    SecretaryCore,
+    SecretaryEvent,
+    SecretaryHandle,
+    SecretaryMessage,
+    Subtask,
+    TaskExecutionStatus,
+    TodoItem,
+    TodoPriority,
+    TodoStatus,
+    UserConnection,
+    WorkPhase,
+    // Core types
+    extract_json_block,
+    parse_llm_json,
 };

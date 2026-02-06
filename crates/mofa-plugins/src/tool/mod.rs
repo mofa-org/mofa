@@ -4,4 +4,4 @@
 
 pub mod adapter;
 
-pub use adapter::{adapt_tool, ToolPluginAdapter};
+pub use adapter::{ToolPluginAdapter, adapt_tool};

@@ -33,13 +33,22 @@ use tokio::sync::RwLock;
 /// Allows adding custom data to any context implementation
 pub trait ContextExt {
     /// Set extension data
-    fn set_extension<T: Send + Sync + serde::Serialize + 'static>(&self, value: T) -> impl std::future::Future<Output = ()> + Send;
+    fn set_extension<T: Send + Sync + serde::Serialize + 'static>(
+        &self,
+        value: T,
+    ) -> impl std::future::Future<Output = ()> + Send;
     /// Get extension data
-    fn get_extension<T: Send + Sync + serde::de::DeserializeOwned + 'static>(&self) -> impl std::future::Future<Output = Option<T>> + Send;
+    fn get_extension<T: Send + Sync + serde::de::DeserializeOwned + 'static>(
+        &self,
+    ) -> impl std::future::Future<Output = Option<T>> + Send;
     /// Remove extension data
-    fn remove_extension<T: Send + Sync + serde::de::DeserializeOwned + 'static>(&self) -> impl std::future::Future<Output = Option<T>> + Send;
+    fn remove_extension<T: Send + Sync + serde::de::DeserializeOwned + 'static>(
+        &self,
+    ) -> impl std::future::Future<Output = Option<T>> + Send;
     /// Check if extension exists
-    fn has_extension<T: Send + Sync + 'static>(&self) -> impl std::future::Future<Output = bool> + Send;
+    fn has_extension<T: Send + Sync + 'static>(
+        &self,
+    ) -> impl std::future::Future<Output = bool> + Send;
 }
 
 /// Extension storage for context
@@ -98,16 +107,21 @@ impl ContextExt for AgentContext {
         }
     }
 
-    async fn get_extension<T: Send + Sync + serde::de::DeserializeOwned + 'static>(&self) -> Option<T> {
+    async fn get_extension<T: Send + Sync + serde::de::DeserializeOwned + 'static>(
+        &self,
+    ) -> Option<T> {
         let type_name = std::any::type_name::<T>();
         let key = format!("__ext__:{}", type_name);
         self.get(&key).await
     }
 
-    async fn remove_extension<T: Send + Sync + serde::de::DeserializeOwned + 'static>(&self) -> Option<T> {
+    async fn remove_extension<T: Send + Sync + serde::de::DeserializeOwned + 'static>(
+        &self,
+    ) -> Option<T> {
         let type_name = std::any::type_name::<T>();
         let key = format!("__ext__:{}", type_name);
-        self.remove(&key).await
+        self.remove(&key)
+            .await
             .and_then(|v| serde_json::from_value(v).ok())
     }
 
@@ -132,10 +146,12 @@ mod tests {
     async fn test_extension_storage() {
         let storage = ExtensionStorage::new();
 
-        storage.set(TestExtension {
-            value: "test".to_string(),
-            count: 42,
-        }).await;
+        storage
+            .set(TestExtension {
+                value: "test".to_string(),
+                count: 42,
+            })
+            .await;
 
         assert!(storage.has::<TestExtension>().await);
 
@@ -156,7 +172,8 @@ mod tests {
         ctx.set_extension(TestExtension {
             value: "test".to_string(),
             count: 42,
-        }).await;
+        })
+        .await;
 
         assert!(ctx.has_extension::<TestExtension>().await);
 

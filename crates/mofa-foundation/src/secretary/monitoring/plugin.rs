@@ -229,7 +229,6 @@ impl EventResponsePlugin for BaseEventResponsePlugin {
     }
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -30,15 +30,18 @@
 use super::provider::{ChatStream, LLMProvider, ModelCapabilities, ModelInfo};
 use super::types::*;
 use async_openai::{
+    Client,
     config::OpenAIConfig as AsyncOpenAIConfig,
     types::{
         ChatCompletionRequestAssistantMessageArgs, ChatCompletionRequestMessage,
-        ChatCompletionRequestSystemMessageArgs, ChatCompletionRequestToolMessageArgs,
-        ChatCompletionRequestUserMessageArgs, ChatCompletionToolArgs,
-        ChatCompletionToolChoiceOption, ChatCompletionToolType, CreateChatCompletionRequestArgs,
-        FunctionObjectArgs,
+        ChatCompletionRequestMessageContentPartAudio, ChatCompletionRequestMessageContentPartImage,
+        ChatCompletionRequestMessageContentPartText, ChatCompletionRequestSystemMessageArgs,
+        ChatCompletionRequestToolMessageArgs, ChatCompletionRequestUserMessageArgs,
+        ChatCompletionRequestUserMessageContent, ChatCompletionRequestUserMessageContentPart,
+        ChatCompletionToolArgs, ChatCompletionToolChoiceOption, ChatCompletionToolType,
+        CreateChatCompletionRequestArgs, FunctionObjectArgs, ImageDetail as OpenAIImageDetail,
+        ImageUrl as OpenAIImageUrl, InputAudio, InputAudioFormat,
     },
-    Client,
 };
 use async_trait::async_trait;
 use futures::StreamExt;
@@ -225,7 +228,7 @@ impl OpenAIProvider {
 
     /// 转换单个消息
     fn convert_message(msg: &ChatMessage) -> Result<ChatCompletionRequestMessage, LLMError> {
-        let content = msg
+        let text_only_content = msg
             .content
             .as_ref()
             .map(|c| match c {
@@ -243,19 +246,78 @@ impl OpenAIProvider {
 
         match msg.role {
             Role::System => Ok(ChatCompletionRequestSystemMessageArgs::default()
-                .content(content)
+                .content(text_only_content)
                 .build()
                 .map_err(|e| LLMError::Other(e.to_string()))?
                 .into()),
-            Role::User => Ok(ChatCompletionRequestUserMessageArgs::default()
-                .content(content)
-                .build()
-                .map_err(|e| LLMError::Other(e.to_string()))?
-                .into()),
+            Role::User => {
+                let content = match msg.content.as_ref() {
+                    Some(MessageContent::Text(s)) => {
+                        ChatCompletionRequestUserMessageContent::Text(s.clone())
+                    }
+                    Some(MessageContent::Parts(parts)) => {
+                        let mut out = Vec::new();
+                        for part in parts {
+                            match part {
+                                ContentPart::Text { text } => {
+                                    out.push(ChatCompletionRequestUserMessageContentPart::Text(
+                                        ChatCompletionRequestMessageContentPartText {
+                                            text: text.clone(),
+                                        },
+                                    ));
+                                }
+                                ContentPart::Image { image_url } => {
+                                    let detail = image_url.detail.as_ref().map(|d| match d {
+                                        ImageDetail::Auto => OpenAIImageDetail::Auto,
+                                        ImageDetail::Low => OpenAIImageDetail::Low,
+                                        ImageDetail::High => OpenAIImageDetail::High,
+                                    });
+                                    let image_part = ChatCompletionRequestMessageContentPartImage {
+                                        image_url: OpenAIImageUrl {
+                                            url: image_url.url.clone(),
+                                            detail,
+                                        },
+                                    };
+                                    out.push(
+                                        ChatCompletionRequestUserMessageContentPart::ImageUrl(
+                                            image_part,
+                                        ),
+                                    );
+                                }
+                                ContentPart::Audio { audio } => {
+                                    let format = match audio.format.to_lowercase().as_str() {
+                                        "wav" => InputAudioFormat::Wav,
+                                        _ => InputAudioFormat::Mp3,
+                                    };
+                                    let audio_part = ChatCompletionRequestMessageContentPartAudio {
+                                        input_audio: InputAudio {
+                                            data: audio.data.clone(),
+                                            format,
+                                        },
+                                    };
+                                    out.push(
+                                        ChatCompletionRequestUserMessageContentPart::InputAudio(
+                                            audio_part,
+                                        ),
+                                    );
+                                }
+                            }
+                        }
+                        ChatCompletionRequestUserMessageContent::Array(out)
+                    }
+                    None => ChatCompletionRequestUserMessageContent::Text(String::new()),
+                };
+
+                Ok(ChatCompletionRequestUserMessageArgs::default()
+                    .content(content)
+                    .build()
+                    .map_err(|e| LLMError::Other(e.to_string()))?
+                    .into())
+            }
             Role::Assistant => {
                 let mut builder = ChatCompletionRequestAssistantMessageArgs::default();
-                if !content.is_empty() {
-                    builder.content(content);
+                if !text_only_content.is_empty() {
+                    builder.content(text_only_content);
                 }
 
                 // 处理工具调用
@@ -287,7 +349,7 @@ impl OpenAIProvider {
 
                 Ok(ChatCompletionRequestToolMessageArgs::default()
                     .tool_call_id(tool_call_id)
-                    .content(content)
+                    .content(text_only_content)
                     .build()
                     .map_err(|e| LLMError::Other(e.to_string()))?
                     .into())
@@ -563,8 +625,6 @@ impl LLMProvider for OpenAIProvider {
             .create_stream(openai_request)
             .await
             .map_err(Self::convert_error)?;
-
-
 
         // 转换流，过滤掉 UTF-8 错误（某些 OpenAI 兼容 API 可能返回无效的 UTF-8 数据）
         let converted_stream = stream

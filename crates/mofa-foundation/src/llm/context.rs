@@ -6,7 +6,7 @@
 //! - Agent identity integration
 //! - Vision message support
 
-use crate::llm::types::{ChatMessage, Role, MessageContent, ContentPart, ImageUrl};
+use crate::llm::types::{ChatMessage, ContentPart, ImageUrl, MessageContent, Role};
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
@@ -43,13 +43,8 @@ impl AgentIdentity {
 }
 
 /// Default bootstrap files to load
-const DEFAULT_BOOTSTRAP_FILES: &[&str] = &[
-    "AGENTS.md",
-    "SOUL.md",
-    "USER.md",
-    "TOOLS.md",
-    "IDENTITY.md",
-];
+const DEFAULT_BOOTSTRAP_FILES: &[&str] =
+    &["AGENTS.md", "SOUL.md", "USER.md", "TOOLS.md", "IDENTITY.md"];
 
 /// Skills manager trait for progressive loading
 #[async_trait::async_trait]
@@ -239,7 +234,10 @@ The following skills extend your capabilities. To use a skill, read its document
                 if !names.is_empty() {
                     let skills_content = skills.load_skills_for_context(names).await;
                     if !skills_content.is_empty() {
-                        format!("{}\n\n# Requested Skills\n\n{}", system_prompt, skills_content)
+                        format!(
+                            "{}\n\n# Requested Skills\n\n{}",
+                            system_prompt, skills_content
+                        )
                     } else {
                         system_prompt
                     }
@@ -296,8 +294,8 @@ The following skills extend your capabilities. To use a skill, read its document
 
     /// Encode an image file as a data URL
     fn encode_image_data_url(path: &Path) -> Result<ImageUrl> {
-        use base64::engine::general_purpose::STANDARD_NO_PAD;
         use base64::Engine;
+        use base64::engine::general_purpose::STANDARD_NO_PAD;
         use std::fs;
 
         let bytes = fs::read(path)?;
@@ -309,10 +307,7 @@ The following skills extend your capabilities. To use a skill, read its document
         let base64 = STANDARD_NO_PAD.encode(&bytes);
         let url = format!("data:{};base64,{}", mime_type, base64);
 
-        Ok(ImageUrl {
-            url,
-            detail: None,
-        })
+        Ok(ImageUrl { url, detail: None })
     }
 
     /// Load a file's content
@@ -369,8 +364,7 @@ mod tests {
     async fn test_context_builder_with_identity() {
         let workspace = std::env::temp_dir();
         let identity = AgentIdentity::new("custom", "Custom agent");
-        let builder = AgentContextBuilder::new(workspace)
-            .with_identity(identity);
+        let builder = AgentContextBuilder::new(workspace).with_identity(identity);
 
         assert_eq!(builder.identity().name, "custom");
     }

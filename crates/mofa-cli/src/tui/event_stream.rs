@@ -5,8 +5,8 @@
 
 use anyhow::Result;
 use crossterm::event::{Event, KeyEvent, MouseEvent};
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 use tokio::sync::mpsc;
 
@@ -92,8 +92,6 @@ impl Default for EventBroker {
 impl TuiEventStream {
     /// Create a new event stream
     pub fn new() -> Result<Self> {
-        
-
         // Enable focus change events
         #[cfg(feature = "bracketed-paste")]
         execute!(std::io::stdout(), crossterm::event::EnableFocusChange)?;

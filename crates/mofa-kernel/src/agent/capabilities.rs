@@ -7,8 +7,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 
 /// 推理策略
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
-#[derive(Default)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, Default)]
 pub enum ReasoningStrategy {
     /// 直接 LLM 推理
     #[default]
@@ -28,7 +27,6 @@ pub enum ReasoningStrategy {
     /// 自定义推理模式
     Custom(String),
 }
-
 
 /// Agent 能力描述
 ///
@@ -86,7 +84,11 @@ impl AgentCapabilities {
     /// 检查是否匹配需求
     pub fn matches(&self, requirements: &AgentRequirements) -> bool {
         // 检查必需标签
-        if !requirements.required_tags.iter().all(|t| self.tags.contains(t)) {
+        if !requirements
+            .required_tags
+            .iter()
+            .all(|t| self.tags.contains(t))
+        {
             return false;
         }
 

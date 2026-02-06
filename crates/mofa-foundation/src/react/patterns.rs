@@ -556,10 +556,7 @@ impl ParallelAgent {
         let parallel_id = uuid::Uuid::now_v7().to_string();
 
         if self.verbose {
-            tracing::info!(
-                "[Parallel] Starting {} agents for task",
-                self.agents.len()
-            );
+            tracing::info!("[Parallel] Starting {} agents for task", self.agents.len());
         }
 
         // 准备所有任务
@@ -701,12 +698,10 @@ impl ParallelAgent {
                 Ok(outputs.join(sep))
             }
 
-            AggregationStrategy::FirstSuccess => {
-                Ok(successful_results
-                    .first()
-                    .map(|r| r.output.content.clone())
-                    .unwrap_or_default())
-            }
+            AggregationStrategy::FirstSuccess => Ok(successful_results
+                .first()
+                .map(|r| r.output.content.clone())
+                .unwrap_or_default()),
 
             AggregationStrategy::CollectAll => {
                 let collected: Vec<serde_json::Value> = results
@@ -720,8 +715,7 @@ impl ParallelAgent {
                         })
                     })
                     .collect();
-                Ok(serde_json::to_string_pretty(&collected)
-                    .unwrap_or_else(|_| "[]".to_string()))
+                Ok(serde_json::to_string_pretty(&collected).unwrap_or_else(|_| "[]".to_string()))
             }
 
             AggregationStrategy::Vote => {

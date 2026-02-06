@@ -130,16 +130,18 @@ impl AgentConfig {
     pub fn resolve_env_vars(&mut self) -> anyhow::Result<()> {
         // Resolve API key
         if let Some(ref mut llm) = self.llm
-            && let Some(ref api_key) = llm.api_key {
-                llm.api_key = Some(resolve_env_value(api_key)?);
-            }
+            && let Some(ref api_key) = llm.api_key
+        {
+            llm.api_key = Some(resolve_env_value(api_key)?);
+        }
 
         // Resolve database URL
         if let Some(ref mut runtime) = self.runtime
             && let Some(ref mut persistence) = runtime.persistence
-                && let Some(ref database_url) = persistence.database_url {
-                    persistence.database_url = Some(resolve_env_value(database_url)?);
-                }
+            && let Some(ref database_url) = persistence.database_url
+        {
+            persistence.database_url = Some(resolve_env_value(database_url)?);
+        }
 
         Ok(())
     }
@@ -153,16 +155,14 @@ fn resolve_env_value(value: &str) -> anyhow::Result<String> {
     // Check for ${VAR} syntax
     if trimmed.starts_with("${") && trimmed.ends_with('}') {
         let var_name = &trimmed[2..trimmed.len() - 1];
-        return std::env::var(var_name).map_err(|_| {
-            anyhow::anyhow!("Environment variable '{}' not found", var_name)
-        });
+        return std::env::var(var_name)
+            .map_err(|_| anyhow::anyhow!("Environment variable '{}' not found", var_name));
     }
 
     // Check for $VAR syntax
     if let Some(var_name) = trimmed.strip_prefix('$') {
-        return std::env::var(var_name).map_err(|_| {
-            anyhow::anyhow!("Environment variable '{}' not found", var_name)
-        });
+        return std::env::var(var_name)
+            .map_err(|_| anyhow::anyhow!("Environment variable '{}' not found", var_name));
     }
 
     Ok(trimmed.to_string())

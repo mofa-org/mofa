@@ -1,7 +1,7 @@
 //! JSON output formatting
 
 use serde::Serialize;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 /// Trait for types that can be serialized to JSON output
 pub trait JsonOutput: Send + Sync {

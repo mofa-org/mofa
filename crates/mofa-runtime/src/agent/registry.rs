@@ -98,10 +98,8 @@ impl CapabilityIndex {
             result = match result {
                 None => Some(ids),
                 Some(existing) => {
-                    let intersection: Vec<String> = existing
-                        .into_iter()
-                        .filter(|id| ids.contains(id))
-                        .collect();
+                    let intersection: Vec<String> =
+                        existing.into_iter().filter(|id| ids.contains(id)).collect();
                     Some(intersection)
                 }
             };
@@ -254,7 +252,10 @@ impl AgentRegistry {
     // ========================================================================
 
     /// 按能力要求查找 Agent
-    pub async fn find_by_capabilities(&self, requirements: &AgentRequirements) -> Vec<AgentMetadata> {
+    pub async fn find_by_capabilities(
+        &self,
+        requirements: &AgentRequirements,
+    ) -> Vec<AgentMetadata> {
         let agents = self.agents.read().await;
 
         agents
@@ -330,7 +331,11 @@ impl AgentRegistry {
     }
 
     /// 通过工厂创建 Agent
-    pub async fn create(&self, type_id: &str, config: AgentConfig) -> AgentResult<Arc<RwLock<dyn MoFAAgent>>> {
+    pub async fn create(
+        &self,
+        type_id: &str,
+        config: AgentConfig,
+    ) -> AgentResult<Arc<RwLock<dyn MoFAAgent>>> {
         let factory = self
             .get_factory(type_id)
             .await
@@ -341,7 +346,11 @@ impl AgentRegistry {
     }
 
     /// 创建并注册 Agent
-    pub async fn create_and_register(&self, type_id: &str, config: AgentConfig) -> AgentResult<Arc<RwLock<dyn MoFAAgent>>> {
+    pub async fn create_and_register(
+        &self,
+        type_id: &str,
+        config: AgentConfig,
+    ) -> AgentResult<Arc<RwLock<dyn MoFAAgent>>> {
         let agent = self.create(type_id, config).await?;
         self.register(agent.clone()).await?;
         Ok(agent)
@@ -459,12 +468,12 @@ impl AgentRegistry {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use async_trait::async_trait;
     use crate::agent::capabilities::AgentCapabilities;
     use crate::agent::context::AgentContext;
     use crate::agent::core::MoFAAgent;
     use crate::agent::error::AgentResult;
     use crate::agent::types::{AgentInput, AgentOutput, AgentState};
+    use async_trait::async_trait;
 
     // 测试用的简单 Agent (内联实现，不依赖 BaseAgent)
     struct TestAgent {
@@ -508,7 +517,11 @@ mod tests {
             Ok(())
         }
 
-        async fn execute(&mut self, _input: AgentInput, _ctx: &AgentContext) -> AgentResult<AgentOutput> {
+        async fn execute(
+            &mut self,
+            _input: AgentInput,
+            _ctx: &AgentContext,
+        ) -> AgentResult<AgentOutput> {
             Ok(AgentOutput::text("test output"))
         }
 
@@ -584,8 +597,14 @@ mod tests {
             .with_tag("chat")
             .build();
 
-        registry.register(Arc::new(RwLock::new(agent1))).await.unwrap();
-        registry.register(Arc::new(RwLock::new(agent2))).await.unwrap();
+        registry
+            .register(Arc::new(RwLock::new(agent1)))
+            .await
+            .unwrap();
+        registry
+            .register(Arc::new(RwLock::new(agent2)))
+            .await
+            .unwrap();
 
         // 按标签查找
         let chat_agents = registry.find_by_tag("chat").await;

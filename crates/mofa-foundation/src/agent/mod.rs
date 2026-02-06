@@ -2,41 +2,63 @@
 //!
 //! 包含 Agent 能力描述和组件 trait 定义
 
+pub mod base;
 pub mod components;
 pub mod context;
-pub mod session;
 pub mod executor;
-pub mod base;
+pub mod session;
 pub mod tools;
 
 // ========================================================================
 // 从 Kernel 层重导出核心类型
 // ========================================================================
 
-pub use mofa_kernel::agent::{
-    AgentCapabilities, AgentRequirements, ReasoningStrategy,
-};
+pub use mofa_kernel::agent::{AgentCapabilities, AgentRequirements, ReasoningStrategy};
 
 // Re-export additional types needed by components
-pub use mofa_kernel::agent::error::{AgentError, AgentResult};
 pub use mofa_kernel::agent::context::AgentContext;
+pub use mofa_kernel::agent::error::{AgentError, AgentResult};
 pub use mofa_kernel::agent::types::AgentInput;
 
 // 重新导出组件 (从 components 模块统一导入)
 pub use components::{
+    CoordinationPattern,
     // Kernel traits 和类型 (通过 components 重导出)
-    Coordinator, Reasoner, Tool,
-    CoordinationPattern, DispatchResult, Task,
-    Decision, ReasoningResult, ThoughtStep,
-    LLMTool, ToolDescriptor, ToolInput, ToolMetadata, ToolRegistry, ToolResult,
+    Coordinator,
+    Decision,
     // Foundation 具体实现
-    DirectReasoner, EchoTool, FileBasedStorage, InMemoryStorage,
-    Memory, MemoryItem, MemoryStats, MemoryValue, Message, MessageRole,
-    ParallelCoordinator, SequentialCoordinator, SimpleToolRegistry,
-    // Foundation 扩展类型
-    ToolCategory, ToolExt,
+    DirectReasoner,
+    DispatchResult,
+    EchoTool,
+    FileBasedStorage,
+    InMemoryStorage,
+    LLMTool,
+    Memory,
+    MemoryItem,
+    MemoryStats,
+    MemoryValue,
+    Message,
+    MessageRole,
+    ParallelCoordinator,
+    Reasoner,
+    ReasoningResult,
+    SequentialCoordinator,
     // SimpleTool 便捷接口
-    SimpleTool, SimpleToolAdapter, as_tool,
+    SimpleTool,
+    SimpleToolAdapter,
+    SimpleToolRegistry,
+    Task,
+    ThoughtStep,
+    Tool,
+    // Foundation 扩展类型
+    ToolCategory,
+    ToolDescriptor,
+    ToolExt,
+    ToolInput,
+    ToolMetadata,
+    ToolRegistry,
+    ToolResult,
+    as_tool,
 };
 
 // Tool adapters and registries (Foundation implementations)
@@ -57,14 +79,12 @@ pub use session::{
 };
 
 // Re-export executor module
-pub use executor::{
-    AgentExecutor, AgentExecutorConfig,
-};
+pub use executor::{AgentExecutor, AgentExecutorConfig};
 
 // Re-export LLM types from kernel
 pub use mofa_kernel::agent::types::{
-    ChatCompletionRequest, ChatCompletionResponse, ChatMessage, LLMProvider,
-    ToolCall, ToolDefinition, TokenUsage,
+    ChatCompletionRequest, ChatCompletionResponse, ChatMessage, LLMProvider, TokenUsage, ToolCall,
+    ToolDefinition,
 };
 
 // Re-export BaseAgent from base module
@@ -76,7 +96,5 @@ pub use base::BaseAgent;
 
 /// Prelude 模块
 pub mod prelude {
-    pub use super::{
-        AgentCapabilities, AgentRequirements, ReasoningStrategy,
-    };
+    pub use super::{AgentCapabilities, AgentRequirements, ReasoningStrategy};
 }

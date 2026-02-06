@@ -217,7 +217,10 @@ impl ExecutionEngine {
     }
 
     /// 创建带有自定义插件注册中心的执行引擎
-    pub fn with_plugin_registry(registry: Arc<AgentRegistry>, plugin_registry: Arc<dyn PluginRegistry>) -> Self {
+    pub fn with_plugin_registry(
+        registry: Arc<AgentRegistry>,
+        plugin_registry: Arc<dyn PluginRegistry>,
+    ) -> Self {
         Self {
             registry,
             plugin_executor: PluginExecutor::new(plugin_registry),
@@ -257,10 +260,15 @@ impl ExecutionEngine {
         }
 
         // 插件执行阶段1: 请求处理前 - 数据处理
-        let processed_input = self.plugin_executor.execute_pre_request(input, &ctx).await?;
+        let processed_input = self
+            .plugin_executor
+            .execute_pre_request(input, &ctx)
+            .await?;
 
         // 插件执行阶段2: 上下文组装前
-        self.plugin_executor.execute_stage(crate::agent::plugins::PluginStage::PreContext, &ctx).await?;
+        self.plugin_executor
+            .execute_stage(crate::agent::plugins::PluginStage::PreContext, &ctx)
+            .await?;
 
         // 执行 (带超时和重试)
         let result = self
@@ -273,10 +281,15 @@ impl ExecutionEngine {
         let execution_result = match result {
             Ok(output) => {
                 // 插件执行阶段3: LLM响应后
-                let processed_output = self.plugin_executor.execute_post_response(output, &ctx).await?;
+                let processed_output = self
+                    .plugin_executor
+                    .execute_post_response(output, &ctx)
+                    .await?;
 
                 // 插件执行阶段4: 整个流程完成后
-                self.plugin_executor.execute_stage(crate::agent::plugins::PluginStage::PostProcess, &ctx).await?;
+                self.plugin_executor
+                    .execute_stage(crate::agent::plugins::PluginStage::PostProcess, &ctx)
+                    .await?;
 
                 if options.tracing_enabled {
                     ctx.emit_event(AgentEvent::new(
@@ -290,7 +303,12 @@ impl ExecutionEngine {
                     .await;
                 }
 
-                ExecutionResult::success(execution_id, agent_id.to_string(), processed_output, duration_ms)
+                ExecutionResult::success(
+                    execution_id,
+                    agent_id.to_string(),
+                    processed_output,
+                    duration_ms,
+                )
             }
             Err(e) => {
                 let status = match &e {
@@ -460,10 +478,7 @@ impl ExecutionEngine {
 
     /// 中断所有执行中的 Agent
     pub async fn interrupt_all(&self) -> AgentResult<Vec<String>> {
-        let executing = self
-            .registry
-            .find_by_state(AgentState::Executing)
-            .await;
+        let executing = self.registry.find_by_state(AgentState::Executing).await;
 
         let mut interrupted = Vec::new();
         for metadata in executing {
@@ -476,7 +491,10 @@ impl ExecutionEngine {
     }
 
     /// 注册插件
-    pub fn register_plugin(&self, plugin: Arc<dyn crate::agent::plugins::Plugin>) -> AgentResult<()> {
+    pub fn register_plugin(
+        &self,
+        plugin: Arc<dyn crate::agent::plugins::Plugin>,
+    ) -> AgentResult<()> {
         // 现在 PluginRegistry 支持 &self 注册，因为使用了内部可变性
         self.plugin_executor.registry.register(plugin)
     }
@@ -674,10 +692,7 @@ mod tests {
             .unwrap();
 
         assert!(result.is_success());
-        assert_eq!(
-            result.output.unwrap().to_text(),
-            "Hello, World!"
-        );
+        assert_eq!(result.output.unwrap().to_text(), "Hello, World!");
     }
 
     #[tokio::test]
@@ -697,7 +712,9 @@ mod tests {
             .unwrap();
 
         // 可能成功也可能超时，取决于执行速度
-        assert!(result.status == ExecutionStatus::Success || result.status == ExecutionStatus::Timeout);
+        assert!(
+            result.status == ExecutionStatus::Success || result.status == ExecutionStatus::Timeout
+        );
     }
 
     #[test]

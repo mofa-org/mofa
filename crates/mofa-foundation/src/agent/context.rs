@@ -48,9 +48,9 @@
 //! rich.record_output("llm", json!("response")).await;
 //! ```
 
-pub mod rich;
 pub mod ext;
 pub mod prompt;
+pub mod rich;
 
 // Re-export rich context types (primary foundation extension)
 pub use rich::{ComponentOutput, ExecutionMetrics, RichAgentContext};
@@ -59,4 +59,4 @@ pub use rich::{ComponentOutput, ExecutionMetrics, RichAgentContext};
 pub use ext::ContextExt;
 
 // Re-export prompt context (specialized builder)
-pub use prompt::{PromptContext, PromptContextBuilder, AgentIdentity};
+pub use prompt::{AgentIdentity, PromptContext, PromptContextBuilder};

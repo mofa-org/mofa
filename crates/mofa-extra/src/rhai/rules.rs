@@ -8,7 +8,7 @@
 //! - 规则热更新
 
 use super::engine::{RhaiScriptEngine, ScriptContext, ScriptEngineConfig};
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -54,11 +54,20 @@ pub enum RuleAction {
     /// 执行脚本并返回结果
     ExecuteScript { script: String },
     /// 调用函数
-    CallFunction { function: String, args: Vec<serde_json::Value> },
+    CallFunction {
+        function: String,
+        args: Vec<serde_json::Value>,
+    },
     /// 修改上下文变量
-    SetVariable { name: String, value: serde_json::Value },
+    SetVariable {
+        name: String,
+        value: serde_json::Value,
+    },
     /// 触发事件
-    TriggerEvent { event_type: String, data: serde_json::Value },
+    TriggerEvent {
+        event_type: String,
+        data: serde_json::Value,
+    },
     /// 跳转到另一个规则
     GotoRule { rule_id: String },
     /// 停止规则执行
@@ -256,7 +265,8 @@ pub struct RuleEngine {
     /// 规则组存储
     groups: Arc<RwLock<HashMap<String, RuleGroupDefinition>>>,
     /// 事件处理器
-    event_handlers: Arc<RwLock<HashMap<String, Vec<Box<dyn Fn(&str, &serde_json::Value) + Send + Sync>>>>>,
+    event_handlers:
+        Arc<RwLock<HashMap<String, Vec<Box<dyn Fn(&str, &serde_json::Value) + Send + Sync>>>>>,
 }
 
 impl RuleEngine {
@@ -336,7 +346,10 @@ impl RuleEngine {
         let result = self.engine.execute(&rule.condition, context).await?;
 
         if !result.success {
-            warn!("Rule {} condition evaluation failed: {:?}", rule.id, result.error);
+            warn!(
+                "Rule {} condition evaluation failed: {:?}",
+                rule.id, result.error
+            );
             return Ok(false);
         }
 
@@ -356,7 +369,8 @@ impl RuleEngine {
         &'a self,
         action: &'a RuleAction,
         context: &'a mut ScriptContext,
-    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<RuleExecutionResult>> + Send + 'a>> {
+    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<RuleExecutionResult>> + Send + 'a>>
+    {
         Box::pin(async move {
             let start_time = std::time::Instant::now();
             let mut variable_updates = HashMap::new();
@@ -650,7 +664,9 @@ impl RuleEngine {
 
             // 检查是否跳转
             let goto_rule = if let Some(obj) = result.result.as_object() {
-                obj.get("goto").and_then(|v| v.as_str()).map(|s| s.to_string())
+                obj.get("goto")
+                    .and_then(|v| v.as_str())
+                    .map(|s| s.to_string())
             } else {
                 None
             };
@@ -681,12 +697,13 @@ impl RuleEngine {
         // 如果没有匹配且有默认动作
         let used_default = !any_matched && group.default_action.is_some();
         if let Some(ref default_action) = group.default_action
-            && !any_matched {
-                let mut result = self.execute_action(default_action, context).await?;
-                result.rule_id = format!("{}_default", group_id);
-                final_result = Some(result.result.clone());
-                execution_results.push(result);
-            }
+            && !any_matched
+        {
+            let mut result = self.execute_action(default_action, context).await?;
+            result.rule_id = format!("{}_default", group_id);
+            final_result = Some(result.result.clone());
+            execution_results.push(result);
+        }
 
         Ok(RuleGroupExecutionResult {
             group_id: group_id.to_string(),
@@ -932,11 +949,12 @@ mod tests {
 
         engine.register_rule(rule).await.unwrap();
 
-        let mut context = ScriptContext::new()
-            .with_variable("value", 150)
-            .unwrap();
+        let mut context = ScriptContext::new().with_variable("value", 150).unwrap();
 
-        let result = engine.execute_rule("check_value", &mut context).await.unwrap();
+        let result = engine
+            .execute_rule("check_value", &mut context)
+            .await
+            .unwrap();
 
         assert!(result.is_some());
         let result = result.unwrap();
@@ -955,11 +973,12 @@ mod tests {
 
         engine.register_rule(rule).await.unwrap();
 
-        let mut context = ScriptContext::new()
-            .with_variable("value", 50)
-            .unwrap();
+        let mut context = ScriptContext::new().with_variable("value", 50).unwrap();
 
-        let result = engine.execute_rule("check_value", &mut context).await.unwrap();
+        let result = engine
+            .execute_rule("check_value", &mut context)
+            .await
+            .unwrap();
 
         assert!(result.is_none());
     }
@@ -997,20 +1016,22 @@ mod tests {
         engine.register_group(group).await.unwrap();
 
         // 测试高值
-        let mut context = ScriptContext::new()
-            .with_variable("value", 150)
+        let mut context = ScriptContext::new().with_variable("value", 150).unwrap();
+        let result = engine
+            .execute_group("value_checker", &mut context)
+            .await
             .unwrap();
-        let result = engine.execute_group("value_checker", &mut context).await.unwrap();
 
         assert!(result.any_matched);
         assert_eq!(result.execution_results.len(), 1);
         assert_eq!(result.final_result, Some(serde_json::json!("high")));
 
         // 测试中值
-        let mut context = ScriptContext::new()
-            .with_variable("value", 75)
+        let mut context = ScriptContext::new().with_variable("value", 75).unwrap();
+        let result = engine
+            .execute_group("value_checker", &mut context)
+            .await
             .unwrap();
-        let result = engine.execute_group("value_checker", &mut context).await.unwrap();
 
         assert!(result.any_matched);
         assert_eq!(result.final_result, Some(serde_json::json!("medium")));
@@ -1036,10 +1057,11 @@ mod tests {
         engine.register_group(group).await.unwrap();
 
         // 测试负值，应该使用默认动作
-        let mut context = ScriptContext::new()
-            .with_variable("value", -10)
+        let mut context = ScriptContext::new().with_variable("value", -10).unwrap();
+        let result = engine
+            .execute_group("number_group", &mut context)
+            .await
             .unwrap();
-        let result = engine.execute_group("number_group", &mut context).await.unwrap();
 
         assert!(!result.any_matched);
         assert!(result.used_default);
@@ -1058,11 +1080,18 @@ mod tests {
         engine.register_rule(rule).await.unwrap();
 
         let mut context = ScriptContext::new();
-        let result = engine.execute_rule("set_status", &mut context).await.unwrap().unwrap();
+        let result = engine
+            .execute_rule("set_status", &mut context)
+            .await
+            .unwrap()
+            .unwrap();
 
         assert!(result.success);
         assert!(result.variable_updates.contains_key("status"));
-        assert_eq!(context.get_variable::<String>("status"), Some("processed".to_string()));
+        assert_eq!(
+            context.get_variable::<String>("status"),
+            Some("processed".to_string())
+        );
     }
 
     #[test]

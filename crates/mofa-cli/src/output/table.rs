@@ -74,10 +74,11 @@ impl Table {
 
         // Extract headers from first object
         if let Some(first) = arr.first()
-            && let Some(obj) = first.as_object() {
-                let headers: Vec<String> = obj.keys().cloned().collect();
-                table.set_header(&headers);
-            }
+            && let Some(obj) = first.as_object()
+        {
+            let headers: Vec<String> = obj.keys().cloned().collect();
+            table.set_header(&headers);
+        }
 
         // Add rows
         for item in arr {

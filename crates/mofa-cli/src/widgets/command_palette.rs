@@ -6,11 +6,11 @@ use crate::tui::app::App;
 use crate::tui::app_event::{AppEvent, ExitMode, View};
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use ratatui::{
+    Frame,
     layout::{Constraint, Direction, Layout, Rect},
     style::{Color, Style},
     text::{Line, Span},
     widgets::{Block, Clear, List, ListItem, Paragraph},
-    Frame,
 };
 
 /// Result type for command palette interaction
@@ -37,9 +37,10 @@ impl CommandToExecute {
             app.app_event_tx.send(AppEvent::SwitchView(view));
         }
         if let Some(feature) = self.feature
-            && feature == "create_agent" {
-                app.app_event_tx.send(AppEvent::CreateAgent);
-            }
+            && feature == "create_agent"
+        {
+            app.app_event_tx.send(AppEvent::CreateAgent);
+        }
         if self.quit {
             app.app_event_tx.send(AppEvent::Exit(ExitMode::Clean));
         }
@@ -273,23 +274,17 @@ impl CommandPalette {
             .split(area);
 
         // Input box
-        let input_text = vec![
-            Line::from(vec![
-                Span::styled(
-                    "> ",
-                    Style::default().fg(Color::Rgb(108, 95, 224)),
-                ),
-                Span::raw(&self.input),
-                Span::raw(" "), // Cursor indicator
-            ]),
-        ];
+        let input_text = vec![Line::from(vec![
+            Span::styled("> ", Style::default().fg(Color::Rgb(108, 95, 224))),
+            Span::raw(&self.input),
+            Span::raw(" "), // Cursor indicator
+        ])];
 
-        let input_para = Paragraph::new(input_text)
-            .block(
-                Block::bordered()
-                    .title(" Commands ")
-                    .title_style(Style::default().fg(Color::Rgb(108, 95, 224)).bold()),
-            );
+        let input_para = Paragraph::new(input_text).block(
+            Block::bordered()
+                .title(" Commands ")
+                .title_style(Style::default().fg(Color::Rgb(108, 95, 224)).bold()),
+        );
         frame.render_widget(input_para, chunks[0]);
 
         // Command list
@@ -299,20 +294,13 @@ impl CommandPalette {
             .map(|&idx| {
                 let cmd = &self.commands[idx];
                 ListItem::new(vec![
-                    Line::from(vec![
-                        Span::styled(
-                            &cmd.name,
-                            Style::default()
-                                .fg(Color::Cyan)
-                                .bold(),
-                        ),
-                    ]),
+                    Line::from(vec![Span::styled(
+                        &cmd.name,
+                        Style::default().fg(Color::Cyan).bold(),
+                    )]),
                     Line::from(vec![
                         Span::raw("  "),
-                        Span::styled(
-                            &cmd.description,
-                            Style::default().fg(Color::DarkGray),
-                        ),
+                        Span::styled(&cmd.description, Style::default().fg(Color::DarkGray)),
                     ]),
                 ])
             })
@@ -320,11 +308,7 @@ impl CommandPalette {
 
         let list = List::new(items)
             .block(Block::bordered())
-            .highlight_style(
-                Style::default()
-                    .bg(Color::Rgb(69, 69, 117))
-                    .bold(),
-            );
+            .highlight_style(Style::default().bg(Color::Rgb(69, 69, 117)).bold());
 
         let mut list_state = ratatui::widgets::ListState::default();
         if !self.filtered_commands.is_empty() {

@@ -892,12 +892,13 @@ impl ProviderStore for SqliteStore {
         tenant_id: Uuid,
         name: &str,
     ) -> PersistenceResult<Option<super::entities::Provider>> {
-        let row = sqlx::query("SELECT * FROM entity_provider WHERE tenant_id = ? AND provider_name = ?")
-            .bind(tenant_id.to_string())
-            .bind(name)
-            .fetch_optional(&self.pool)
-            .await
-            .map_err(|e| PersistenceError::Query(e.to_string()))?;
+        let row =
+            sqlx::query("SELECT * FROM entity_provider WHERE tenant_id = ? AND provider_name = ?")
+                .bind(tenant_id.to_string())
+                .bind(name)
+                .fetch_optional(&self.pool)
+                .await
+                .map_err(|e| PersistenceError::Query(e.to_string()))?;
 
         match row {
             Some(row) => Ok(Some(Self::parse_provider_row(&row)?)),
@@ -905,12 +906,17 @@ impl ProviderStore for SqliteStore {
         }
     }
 
-    async fn list_providers(&self, tenant_id: Uuid) -> PersistenceResult<Vec<super::entities::Provider>> {
-        let rows = sqlx::query("SELECT * FROM entity_provider WHERE tenant_id = ? ORDER BY create_time DESC")
-            .bind(tenant_id.to_string())
-            .fetch_all(&self.pool)
-            .await
-            .map_err(|e| PersistenceError::Query(e.to_string()))?;
+    async fn list_providers(
+        &self,
+        tenant_id: Uuid,
+    ) -> PersistenceResult<Vec<super::entities::Provider>> {
+        let rows = sqlx::query(
+            "SELECT * FROM entity_provider WHERE tenant_id = ? ORDER BY create_time DESC",
+        )
+        .bind(tenant_id.to_string())
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|e| PersistenceError::Query(e.to_string()))?;
 
         rows.iter().map(Self::parse_provider_row).collect()
     }
@@ -944,7 +950,10 @@ impl AgentStore for SqliteStore {
         }
     }
 
-    async fn get_agent_by_code(&self, code: &str) -> PersistenceResult<Option<super::entities::Agent>> {
+    async fn get_agent_by_code(
+        &self,
+        code: &str,
+    ) -> PersistenceResult<Option<super::entities::Agent>> {
         let row = sqlx::query("SELECT * FROM entity_agent WHERE agent_code = ?")
             .bind(code)
             .fetch_optional(&self.pool)
@@ -976,16 +985,20 @@ impl AgentStore for SqliteStore {
     }
 
     async fn list_agents(&self, tenant_id: Uuid) -> PersistenceResult<Vec<super::entities::Agent>> {
-        let rows = sqlx::query("SELECT * FROM entity_agent WHERE tenant_id = ? ORDER BY agent_order")
-            .bind(tenant_id.to_string())
-            .fetch_all(&self.pool)
-            .await
-            .map_err(|e| PersistenceError::Query(e.to_string()))?;
+        let rows =
+            sqlx::query("SELECT * FROM entity_agent WHERE tenant_id = ? ORDER BY agent_order")
+                .bind(tenant_id.to_string())
+                .fetch_all(&self.pool)
+                .await
+                .map_err(|e| PersistenceError::Query(e.to_string()))?;
 
         rows.iter().map(Self::parse_agent_row).collect()
     }
 
-    async fn get_active_agents(&self, tenant_id: Uuid) -> PersistenceResult<Vec<super::entities::Agent>> {
+    async fn get_active_agents(
+        &self,
+        tenant_id: Uuid,
+    ) -> PersistenceResult<Vec<super::entities::Agent>> {
         let rows = sqlx::query("SELECT * FROM entity_agent WHERE tenant_id = ? AND agent_status = 1 ORDER BY agent_order")
             .bind(tenant_id.to_string())
             .fetch_all(&self.pool)
@@ -1123,10 +1136,14 @@ impl SqliteStore {
             enabled: row.try_get("enabled").unwrap_or(1) == 1,
             create_time: row
                 .try_get("create_time")
-                .map_err(|e: chrono::format::ParseError| PersistenceError::Serialization(e.to_string()))?,
+                .map_err(|e: chrono::format::ParseError| {
+                    PersistenceError::Serialization(e.to_string())
+                })?,
             update_time: row
                 .try_get("update_time")
-                .map_err(|e: chrono::format::ParseError| PersistenceError::Serialization(e.to_string()))?,
+                .map_err(|e: chrono::format::ParseError| {
+                    PersistenceError::Serialization(e.to_string())
+                })?,
         })
     }
 
@@ -1190,14 +1207,20 @@ impl SqliteStore {
             thinking,
             create_time: row
                 .try_get("create_time")
-                .map_err(|e: chrono::format::ParseError| PersistenceError::Serialization(e.to_string()))?,
+                .map_err(|e: chrono::format::ParseError| {
+                    PersistenceError::Serialization(e.to_string())
+                })?,
             update_time: row
                 .try_get("update_time")
-                .map_err(|e: chrono::format::ParseError| PersistenceError::Serialization(e.to_string()))?,
+                .map_err(|e: chrono::format::ParseError| {
+                    PersistenceError::Serialization(e.to_string())
+                })?,
         })
     }
 
-    fn parse_provider_row_from_join(row: &SqliteRow) -> PersistenceResult<super::entities::Provider> {
+    fn parse_provider_row_from_join(
+        row: &SqliteRow,
+    ) -> PersistenceResult<super::entities::Provider> {
         let id_str: String = row
             .try_get("provider_id")
             .map_err(|e| PersistenceError::Query(e.to_string()))?;
@@ -1226,12 +1249,12 @@ impl SqliteStore {
                 .try_get("api_key")
                 .map_err(|e| PersistenceError::Query(e.to_string()))?,
             enabled: row.try_get("provider_enabled").unwrap_or(1) == 1,
-            create_time: row
-                .try_get("provider_create_time")
-                .map_err(|e: chrono::format::ParseError| PersistenceError::Serialization(e.to_string()))?,
-            update_time: row
-                .try_get("provider_update_time")
-                .map_err(|e: chrono::format::ParseError| PersistenceError::Serialization(e.to_string()))?,
+            create_time: row.try_get("provider_create_time").map_err(
+                |e: chrono::format::ParseError| PersistenceError::Serialization(e.to_string()),
+            )?,
+            update_time: row.try_get("provider_update_time").map_err(
+                |e: chrono::format::ParseError| PersistenceError::Serialization(e.to_string()),
+            )?,
         })
     }
 
@@ -1295,10 +1318,14 @@ impl SqliteStore {
             thinking,
             create_time: row
                 .try_get("create_time")
-                .map_err(|e: chrono::format::ParseError| PersistenceError::Serialization(e.to_string()))?,
+                .map_err(|e: chrono::format::ParseError| {
+                    PersistenceError::Serialization(e.to_string())
+                })?,
             update_time: row
                 .try_get("update_time")
-                .map_err(|e: chrono::format::ParseError| PersistenceError::Serialization(e.to_string()))?,
+                .map_err(|e: chrono::format::ParseError| {
+                    PersistenceError::Serialization(e.to_string())
+                })?,
         })
     }
 }

@@ -5,7 +5,7 @@
 use super::span::SpanData;
 use async_trait::async_trait;
 use std::sync::Arc;
-use tokio::sync::{mpsc, RwLock};
+use tokio::sync::{RwLock, mpsc};
 use tracing::{debug, error, info};
 
 /// 导出器配置

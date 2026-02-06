@@ -37,7 +37,7 @@ pub enum AgentError {
     /// 配置错误
     #[error("Configuration error: {0}")]
     ConfigError(String),
-    
+
     #[error("Shutdown Failed: {0}")]
     ShutdownFailed(String),
     /// 无效输入

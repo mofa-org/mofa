@@ -432,20 +432,18 @@ mod tests {
             messages[0].text_content().unwrap(),
             "You are a professional assistant."
         );
-        assert_eq!(
-            messages[1].text_content().unwrap(),
-            "Help me with coding."
-        );
+        assert_eq!(messages[1].text_content().unwrap(), "Help me with coding.");
     }
 
     #[test]
     fn test_builder_missing_var() {
-        let result = PromptBuilder::new()
-            .user("Hello, {name}!")
-            .build();
+        let result = PromptBuilder::new().user("Hello, {name}!").build();
 
         assert!(result.is_err());
-        assert!(matches!(result.unwrap_err(), PromptError::MissingVariable(_)));
+        assert!(matches!(
+            result.unwrap_err(),
+            PromptError::MissingVariable(_)
+        ));
     }
 
     #[test]

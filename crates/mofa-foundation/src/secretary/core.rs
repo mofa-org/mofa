@@ -219,10 +219,10 @@ where
         let handle = SecretaryHandle::new(stop_tx);
         let handle_clone = handle.clone();
 
-        let join_handle = tokio::spawn(async move {
-            
-            self.run_event_loop(connection, handle_clone, stop_rx).await
-        });
+        let join_handle =
+            tokio::spawn(
+                async move { self.run_event_loop(connection, handle_clone, stop_rx).await },
+            );
 
         (handle, join_handle)
     }
@@ -256,9 +256,10 @@ where
         // 发送欢迎消息
         if self.config.send_welcome
             && let Some(welcome) = self.behavior.welcome_message()
-                && let Err(e) = connection.send(welcome).await {
-                    tracing::warn!("Failed to send welcome message: {}", e);
-                }
+            && let Err(e) = connection.send(welcome).await
+        {
+            tracing::warn!("Failed to send welcome message: {}", e);
+        }
 
         let mut consecutive_errors = 0u32;
         let mut last_periodic_check = std::time::Instant::now();

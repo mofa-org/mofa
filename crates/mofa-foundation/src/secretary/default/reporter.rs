@@ -121,7 +121,11 @@ impl Reporter {
     }
 
     fn format_completion_markdown(&self, todo: &TodoItem, result: &ExecutionResult) -> String {
-        let status = if result.success { "✅ 成功" } else { "❌ 失败" };
+        let status = if result.success {
+            "✅ 成功"
+        } else {
+            "❌ 失败"
+        };
 
         let mut content = format!(
             "# 任务完成汇报\n\n\
@@ -146,7 +150,10 @@ impl Reporter {
         if !result.artifacts.is_empty() {
             content.push_str("\n## 产出物\n");
             for artifact in &result.artifacts {
-                content.push_str(&format!("- {} ({})\n", artifact.name, artifact.artifact_type));
+                content.push_str(&format!(
+                    "- {} ({})\n",
+                    artifact.name, artifact.artifact_type
+                ));
             }
         }
 

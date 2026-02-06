@@ -2,13 +2,13 @@
 //!
 //! 从 kernel 层导入 Coordinator trait，提供具体实现
 
+use async_trait::async_trait;
+use mofa_kernel::agent::AgentResult;
 use mofa_kernel::agent::components::coordinator::{
-    aggregate_outputs, AggregationStrategy, Coordinator, CoordinationPattern, DispatchResult, Task,
+    AggregationStrategy, CoordinationPattern, Coordinator, DispatchResult, Task, aggregate_outputs,
 };
 use mofa_kernel::agent::context::AgentContext;
 use mofa_kernel::agent::types::AgentOutput;
-use mofa_kernel::agent::AgentResult;
-use async_trait::async_trait;
 
 // ============================================================================
 // 具体协调器实现
@@ -104,21 +104,24 @@ mod tests {
 
     #[test]
     fn test_sequential_coordinator() {
-        let coordinator = SequentialCoordinator::new(vec!["agent-1".to_string(), "agent-2".to_string()]);
+        let coordinator =
+            SequentialCoordinator::new(vec!["agent-1".to_string(), "agent-2".to_string()]);
         assert_eq!(coordinator.name(), "sequential");
         assert_eq!(coordinator.pattern(), CoordinationPattern::Sequential);
     }
 
     #[test]
     fn test_parallel_coordinator() {
-        let coordinator = ParallelCoordinator::new(vec!["agent-1".to_string(), "agent-2".to_string()]);
+        let coordinator =
+            ParallelCoordinator::new(vec!["agent-1".to_string(), "agent-2".to_string()]);
         assert_eq!(coordinator.name(), "parallel");
         assert_eq!(coordinator.pattern(), CoordinationPattern::Parallel);
     }
 
     #[tokio::test]
     async fn test_sequential_dispatch() {
-        let coordinator = SequentialCoordinator::new(vec!["agent-1".to_string(), "agent-2".to_string()]);
+        let coordinator =
+            SequentialCoordinator::new(vec!["agent-1".to_string(), "agent-2".to_string()]);
         let ctx = AgentContext::new("test");
         let task = Task::new("task-1", "Do something");
 
@@ -129,10 +132,7 @@ mod tests {
     #[tokio::test]
     async fn test_sequential_aggregate() {
         let coordinator = SequentialCoordinator::new(vec!["agent-1".to_string()]);
-        let results = vec![
-            AgentOutput::text("Result 1"),
-            AgentOutput::text("Result 2"),
-        ];
+        let results = vec![AgentOutput::text("Result 1"), AgentOutput::text("Result 2")];
 
         let aggregated = coordinator.aggregate(results).await.unwrap();
         assert!(aggregated.to_text().contains("Result 1"));

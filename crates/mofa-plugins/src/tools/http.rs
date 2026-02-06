@@ -100,7 +100,11 @@ impl ToolExecutor for HttpRequestTool {
 
         // Truncate body if too long
         let truncated_body = if body.len() > 5000 {
-            format!("{}... [truncated, total {} bytes]", &body[..5000], body.len())
+            format!(
+                "{}... [truncated, total {} bytes]",
+                &body[..5000],
+                body.len()
+            )
         } else {
             body
         };

@@ -93,8 +93,7 @@ impl ConfigFile {
             ConfigFormat::Json5 => config::FileFormat::Json5,
         };
 
-        from_str(&self.content, file_format)
-            .context("Failed to parse configuration")
+        from_str(&self.content, file_format).context("Failed to parse configuration")
     }
 }
 
@@ -122,7 +121,8 @@ impl ConfigLoader {
     /// Find a configuration file by searching upward from current directory
     pub fn find_config(&self) -> Option<PathBuf> {
         let supported_filenames = [
-            "agent.yml", "agent.yaml",
+            "agent.yml",
+            "agent.yaml",
             "agent.toml",
             "agent.json",
             "agent.ini",
@@ -164,7 +164,8 @@ impl ConfigLoader {
         let config_path = if path.is_dir() {
             // Try to find a config file in the directory
             let supported_filenames = [
-                "agent.yml", "agent.yaml",
+                "agent.yml",
+                "agent.yaml",
                 "agent.toml",
                 "agent.json",
                 "agent.ini",
@@ -181,7 +182,9 @@ impl ConfigLoader {
                 }
             }
 
-            found.ok_or_else(|| anyhow::anyhow!("No config file found in directory: {}", path.display()))?
+            found.ok_or_else(|| {
+                anyhow::anyhow!("No config file found in directory: {}", path.display())
+            })?
         } else {
             path.to_path_buf()
         };
@@ -248,10 +251,7 @@ mod tests {
             ConfigFormat::from_path(Path::new("agent.json5")),
             Some(ConfigFormat::Json5)
         );
-        assert_eq!(
-            ConfigFormat::from_path(Path::new("agent.txt")),
-            None
-        );
+        assert_eq!(ConfigFormat::from_path(Path::new("agent.txt")), None);
     }
 
     #[test]

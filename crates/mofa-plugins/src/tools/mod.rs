@@ -1,4 +1,3 @@
-
 //! Built-in tools module
 //!
 //! Provides a collection of commonly used tools that can be registered
@@ -9,18 +8,18 @@ pub use crate::{
 };
 
 // Individual tool implementations
-pub mod http;
-pub mod filesystem;
-pub mod shell;
-pub mod datetime;
 pub mod calculator;
-pub mod json;
-pub mod rhai;
-pub mod response_optimizer;
-pub mod medical_knowledge;
+pub mod datetime;
 mod duck_search;
-mod web_scrapper;
+pub mod filesystem;
+pub mod http;
+pub mod json;
+pub mod medical_knowledge;
 mod postgres;
+pub mod response_optimizer;
+pub mod rhai;
+pub mod shell;
+mod web_scrapper;
 
 pub use calculator::CalculatorTool;
 pub use datetime::DateTimeTool;

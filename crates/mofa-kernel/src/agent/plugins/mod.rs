@@ -17,7 +17,6 @@ use async_trait::async_trait;
 use std::collections::HashMap;
 use std::sync::Arc;
 
-
 // ============================================================================
 // 插件接口
 // ============================================================================
@@ -76,7 +75,11 @@ pub trait Plugin: Send + Sync {
 
     /// 在LLM响应后执行
     /// 可以修改LLM返回的结果
-    async fn post_response(&self, output: AgentOutput, _ctx: &AgentContext) -> AgentResult<AgentOutput> {
+    async fn post_response(
+        &self,
+        output: AgentOutput,
+        _ctx: &AgentContext,
+    ) -> AgentResult<AgentOutput> {
         Ok(output)
     }
 

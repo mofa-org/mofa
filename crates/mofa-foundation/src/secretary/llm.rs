@@ -171,15 +171,17 @@ pub fn extract_json_block(text: &str) -> Option<&str> {
     // 尝试直接查找 { ... } 或 [ ... ]
     if let Some(start) = text.find('{')
         && let Some(end) = text.rfind('}')
-            && end > start {
-                return Some(&text[start..=end]);
-            }
+        && end > start
+    {
+        return Some(&text[start..=end]);
+    }
 
     if let Some(start) = text.find('[')
         && let Some(end) = text.rfind(']')
-            && end > start {
-                return Some(&text[start..=end]);
-            }
+        && end > start
+    {
+        return Some(&text[start..=end]);
+    }
 
     None
 }

@@ -147,9 +147,8 @@ impl PriorityScheduler {
                 .ok_or_else(|| anyhow::anyhow!("No running task on agent: {}", agent_id))?;
 
             // 发送抢占指令，标记低优先级任务为 Preempted
-            let preempt_msg = AgentMessage::Event(AgentEvent::TaskPreempted(
-                low_priority_task_id.clone(),
-            ));
+            let preempt_msg =
+                AgentMessage::Event(AgentEvent::TaskPreempted(low_priority_task_id.clone()));
             self.bus
                 .send_message(
                     "scheduler",

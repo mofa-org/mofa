@@ -46,7 +46,9 @@ impl Theme {
 
     /// Create a bold primary style
     pub fn primary_bold() -> Style {
-        Style::default().fg(Self::PRIMARY).add_modifier(Modifier::BOLD)
+        Style::default()
+            .fg(Self::PRIMARY)
+            .add_modifier(Modifier::BOLD)
     }
 
     /// Create a success style
@@ -88,7 +90,12 @@ impl Theme {
     }
 
     /// Get the symbol for a status
-    pub fn status_symbol(running: bool, starting: bool, stopping: bool, error: bool) -> &'static str {
+    pub fn status_symbol(
+        running: bool,
+        starting: bool,
+        stopping: bool,
+        error: bool,
+    ) -> &'static str {
         if error {
             ""
         } else if running {

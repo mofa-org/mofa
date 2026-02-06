@@ -310,7 +310,11 @@ pub enum TaskExecutorDef {
     Function { function: String },
 
     /// HTTP request executor
-    Http { url: String, #[serde(default)] method: Option<String> },
+    Http {
+        url: String,
+        #[serde(default)]
+        method: Option<String>,
+    },
 
     /// Script executor (Rhai)
     Script { script: String },
@@ -368,8 +372,7 @@ pub enum TransformDef {
 }
 
 /// Node-level configuration
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[derive(Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct NodeConfigDef {
     /// Retry policy
     #[serde(default)]
@@ -383,7 +386,6 @@ pub struct NodeConfigDef {
     #[serde(default)]
     pub metadata: HashMap<String, String>,
 }
-
 
 /// Retry policy configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]

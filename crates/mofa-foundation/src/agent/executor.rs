@@ -29,26 +29,22 @@
 //! ```
 
 use async_trait::async_trait;
-use mofa_kernel::agent::error::{AgentError, AgentResult};
-use mofa_kernel::agent::{AgentInput, AgentOutput, InputType, OutputType};
-use mofa_kernel::agent::{MoFAAgent, AgentState, AgentCapabilities};
 use mofa_kernel::agent::context::AgentContext;
-use mofa_kernel::agent::types::{
-    ChatCompletionRequest, ChatMessage, LLMProvider, ToolDefinition,
-};
+use mofa_kernel::agent::error::{AgentError, AgentResult};
+use mofa_kernel::agent::types::{ChatCompletionRequest, ChatMessage, LLMProvider, ToolDefinition};
+use mofa_kernel::agent::{AgentCapabilities, AgentState, MoFAAgent};
+use mofa_kernel::agent::{AgentInput, AgentOutput, InputType, OutputType};
 use serde_json::Value;
 use std::collections::HashMap;
 use std::path::Path;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
-use crate::agent::context::prompt::PromptContext;
 use crate::agent::base::BaseAgent;
+use crate::agent::context::prompt::PromptContext;
 
-use super::{
-    Session, SessionManager,
-};
 use super::components::tool::SimpleToolRegistry;
+use super::{Session, SessionManager};
 use mofa_kernel::agent::components::tool::{Tool, ToolInput, ToolRegistry};
 
 // ============================================================================
@@ -155,10 +151,7 @@ pub struct AgentExecutor {
 
 impl AgentExecutor {
     /// Create a new agent executor
-    pub async fn new(
-        llm: Arc<dyn LLMProvider>,
-        workspace: impl AsRef<Path>,
-    ) -> AgentResult<Self> {
+    pub async fn new(llm: Arc<dyn LLMProvider>, workspace: impl AsRef<Path>) -> AgentResult<Self> {
         let workspace = workspace.as_ref();
         let context = Arc::new(RwLock::new(PromptContext::new(workspace).await?));
         let sessions = Arc::new(SessionManager::with_jsonl(workspace).await?);
@@ -175,7 +168,7 @@ impl AgentExecutor {
                     .input_type(InputType::Text)
                     .output_type(OutputType::Text)
                     .supports_tools(true)
-                    .build()
+                    .build(),
             );
 
         Ok(Self {
@@ -210,7 +203,7 @@ impl AgentExecutor {
                     .input_type(InputType::Text)
                     .output_type(OutputType::Text)
                     .supports_tools(true)
-                    .build()
+                    .build(),
             );
 
         Ok(Self {
@@ -245,7 +238,9 @@ impl AgentExecutor {
         };
 
         // 3. Build messages
-        let mut messages = self.build_messages(&session, &system_prompt, message).await?;
+        let mut messages = self
+            .build_messages(&session, &system_prompt, message)
+            .await?;
 
         // 4. Run agent loop
         let response = self.run_agent_loop(&mut messages).await?;
@@ -352,16 +347,15 @@ impl AgentExecutor {
                 // Execute tools
                 for tool_call in tool_calls {
                     // Convert arguments to HashMap
-                    let _args_map: HashMap<String, Value> = if let Value::Object(map) = &tool_call.arguments {
-                        map.iter()
-                            .map(|(k, v)| (k.clone(), v.clone()))
-                            .collect()
-                    } else {
-                        return Err(AgentError::ExecutionFailed(format!(
-                            "Invalid tool arguments for {}: {:?}",
-                            tool_call.name, tool_call.arguments
-                        )));
-                    };
+                    let _args_map: HashMap<String, Value> =
+                        if let Value::Object(map) = &tool_call.arguments {
+                            map.iter().map(|(k, v)| (k.clone(), v.clone())).collect()
+                        } else {
+                            return Err(AgentError::ExecutionFailed(format!(
+                                "Invalid tool arguments for {}: {:?}",
+                                tool_call.name, tool_call.arguments
+                            )));
+                        };
 
                     let result = {
                         let tools_guard = self.tools.read().await;
@@ -369,7 +363,10 @@ impl AgentExecutor {
                             let input = ToolInput::from_json(tool_call.arguments.clone());
                             tool.execute(input, &AgentContext::new("executor")).await
                         } else {
-                            return Err(AgentError::ExecutionFailed(format!("Tool not found: {}", tool_call.name)));
+                            return Err(AgentError::ExecutionFailed(format!(
+                                "Tool not found: {}",
+                                tool_call.name
+                            )));
                         }
                     };
 
@@ -377,7 +374,10 @@ impl AgentExecutor {
                     let result_str = if result.success {
                         result.to_string_output()
                     } else {
-                        format!("Error: {}", result.error.unwrap_or_else(|| "Unknown error".to_string()))
+                        format!(
+                            "Error: {}",
+                            result.error.unwrap_or_else(|| "Unknown error".to_string())
+                        )
                     };
 
                     // Add tool result message
@@ -466,7 +466,11 @@ impl MoFAAgent for AgentExecutor {
         Ok(())
     }
 
-    async fn execute(&mut self, input: AgentInput, _ctx: &AgentContext) -> AgentResult<AgentOutput> {
+    async fn execute(
+        &mut self,
+        input: AgentInput,
+        _ctx: &AgentContext,
+    ) -> AgentResult<AgentOutput> {
         // For simplicity, use the text content from the input
         let message = input.as_text().unwrap_or("");
         let session_key = "default"; // Use default session for now

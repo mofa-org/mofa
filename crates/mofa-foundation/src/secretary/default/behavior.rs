@@ -247,7 +247,9 @@ impl DefaultSecretaryBehavior {
             let mut conversation = ConversationHistory::new();
 
             // 系统提示词
-            conversation.add_system("你是一个专业的需求分析师，请将用户的需求想法转换为结构化的项目需求文档。");
+            conversation.add_system(
+                "你是一个专业的需求分析师，请将用户的需求想法转换为结构化的项目需求文档。",
+            );
 
             // 用户需求
             conversation.add_user(format!("用户需求: {}", todo.raw_idea));
@@ -374,7 +376,10 @@ impl DefaultSecretaryBehavior {
             .await?;
 
         Ok(vec![DefaultOutput::Acknowledgment {
-            message: format!("决策 {} 已记录，选择了选项 {}", decision_id, selected_option),
+            message: format!(
+                "决策 {} 已记录，选择了选项 {}",
+                decision_id, selected_option
+            ),
         }])
     }
 
@@ -747,9 +752,7 @@ mod tests {
 
     #[test]
     fn test_welcome_message() {
-        let behavior = DefaultSecretaryBuilder::new()
-            .with_name("小助手")
-            .build();
+        let behavior = DefaultSecretaryBuilder::new().with_name("小助手").build();
 
         let welcome = behavior.welcome_message().unwrap();
         match welcome {

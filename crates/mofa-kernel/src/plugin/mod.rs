@@ -98,13 +98,16 @@ impl HotReloadConfig {
 #[derive(Debug, Clone)]
 pub enum ReloadEvent {
     /// 热加载开始
-    ReloadStarted { plugin_id: String, path: std::path::PathBuf },
+    ReloadStarted {
+        plugin_id: String,
+        path: std::path::PathBuf,
+    },
     /// 热加载完成
     ReloadCompleted {
         plugin_id: String,
         path: std::path::PathBuf,
         success: bool,
-        duration: std::time::Duration
+        duration: std::time::Duration,
     },
     /// 热加载失败
     ReloadFailed {
@@ -114,14 +117,14 @@ pub enum ReloadEvent {
         attempt: u32,
     },
     /// 回滚已触发
-    RollbackTriggered {
-        plugin_id: String,
-        reason: String,
-    },
+    RollbackTriggered { plugin_id: String, reason: String },
     /// 插件已发现
     PluginDiscovered { path: std::path::PathBuf },
     /// 插件已移除
-    PluginRemoved { plugin_id: String, path: std::path::PathBuf },
+    PluginRemoved {
+        plugin_id: String,
+        path: std::path::PathBuf,
+    },
     /// 插件状态已保存
     StatePreserved { plugin_id: String },
     /// 插件状态已恢复

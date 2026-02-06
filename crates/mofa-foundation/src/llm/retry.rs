@@ -27,7 +27,10 @@ impl RetryExecutor {
     }
 
     /// Execute a chat completion request with retry logic
-    pub async fn chat(&self, mut request: ChatCompletionRequest) -> LLMResult<ChatCompletionResponse> {
+    pub async fn chat(
+        &self,
+        mut request: ChatCompletionRequest,
+    ) -> LLMResult<ChatCompletionResponse> {
         let max_attempts = self.policy.max_attempts.max(1);
         let mut error_history = Vec::new();
 
@@ -35,7 +38,12 @@ impl RetryExecutor {
             // Apply backoff delay if this is a retry attempt
             if attempt > 0 {
                 let delay = self.policy.backoff.delay(attempt - 1);
-                debug!("Retry attempt {}/{} after {}ms", attempt + 1, max_attempts, delay.as_millis());
+                debug!(
+                    "Retry attempt {}/{} after {}ms",
+                    attempt + 1,
+                    max_attempts,
+                    delay.as_millis()
+                );
                 tokio::time::sleep(delay).await;
             }
 
@@ -46,7 +54,11 @@ impl RetryExecutor {
                     if let Some(json_error) = self.validate_json_response(&request, &response) {
                         let error = LLMError::SerializationError(json_error.to_string());
                         if attempt < max_attempts - 1 && self.policy.should_retry_error(&error) {
-                            warn!("JSON validation failed (attempt {}): {}", attempt + 1, json_error);
+                            warn!(
+                                "JSON validation failed (attempt {}): {}",
+                                attempt + 1,
+                                json_error
+                            );
                             error_history.push(error.clone());
                             request = self.prepare_retry_request(request, &error);
                             continue;
@@ -62,14 +74,22 @@ impl RetryExecutor {
                 Err(error) => {
                     // Check if we should retry this error
                     if attempt < max_attempts - 1 && self.policy.should_retry_error(&error) {
-                        warn!("Request failed (attempt {}): {}, retrying", attempt + 1, error);
+                        warn!(
+                            "Request failed (attempt {}): {}, retrying",
+                            attempt + 1,
+                            error
+                        );
                         error_history.push(error.clone());
                         request = self.prepare_retry_request(request, &error);
                         continue;
                     }
                     // No more retries or non-retryable error
                     if !error_history.is_empty() {
-                        warn!("Request failed after {} attempts. Last error: {}", attempt + 1, error);
+                        warn!(
+                            "Request failed after {} attempts. Last error: {}",
+                            attempt + 1,
+                            error
+                        );
                     }
                     return Err(error);
                 }
@@ -77,7 +97,9 @@ impl RetryExecutor {
         }
 
         // This should not be reached, but handle it for completeness
-        Err(LLMError::Other("Retry loop completed without result".into()))
+        Err(LLMError::Other(
+            "Retry loop completed without result".into(),
+        ))
     }
 
     /// Validate JSON response when JSON mode is enabled
@@ -92,9 +114,7 @@ impl RetryExecutor {
         let is_json_mode = request
             .response_format
             .as_ref()
-            .map(|rf| {
-                rf.format_type == "json_object" || rf.format_type == "json_schema"
-            })
+            .map(|rf| rf.format_type == "json_object" || rf.format_type == "json_schema")
             .unwrap_or(false);
 
         if !is_json_mode {
@@ -127,13 +147,20 @@ impl RetryExecutor {
             Err(e) => Some(JSONValidationError {
                 raw_content: content.to_string(),
                 parse_error: e.to_string(),
-                expected_schema: request.response_format.as_ref().and_then(|rf| rf.json_schema.clone()),
+                expected_schema: request
+                    .response_format
+                    .as_ref()
+                    .and_then(|rf| rf.json_schema.clone()),
             }),
         }
     }
 
     /// Prepare request for retry based on the error and strategy
-    fn prepare_retry_request(&self, mut request: ChatCompletionRequest, error: &LLMError) -> ChatCompletionRequest {
+    fn prepare_retry_request(
+        &self,
+        mut request: ChatCompletionRequest,
+        error: &LLMError,
+    ) -> ChatCompletionRequest {
         let strategy = self.policy.strategy_for_error(error);
 
         match strategy {
@@ -198,7 +225,9 @@ mod tests {
         }
 
         async fn chat(&self, _request: ChatCompletionRequest) -> LLMResult<ChatCompletionResponse> {
-            let index = self.call_count.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            let index = self
+                .call_count
+                .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
             if index < self.responses.len() {
                 self.responses[index].clone()
             } else {
@@ -263,9 +292,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_retry_json_with_markdown_blocks() {
-        let provider = Arc::new(MockProvider::new(vec![
-            Ok(create_json_response("```json\n{\"wrapped\": \"content\"}\n```")),
-        ]));
+        let provider = Arc::new(MockProvider::new(vec![Ok(create_json_response(
+            "```json\n{\"wrapped\": \"content\"}\n```",
+        ))]));
 
         let executor = RetryExecutor::new(provider, LLMRetryPolicy::default());
         let request = create_json_request();
@@ -291,9 +320,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_no_retry_policy() {
-        let provider = Arc::new(MockProvider::new(vec![
-            Err(LLMError::NetworkError("Should not retry".to_string())),
-        ]));
+        let provider = Arc::new(MockProvider::new(vec![Err(LLMError::NetworkError(
+            "Should not retry".to_string(),
+        ))]));
 
         let executor = RetryExecutor::new(provider, LLMRetryPolicy::no_retry());
         let request = create_json_request();
@@ -306,7 +335,9 @@ mod tests {
     async fn test_prompt_retry_modifies_system_message() {
         // Create a request with an existing system message
         let mut request = create_json_request();
-        request.messages.insert(0, ChatMessage::system("You are a helpful assistant."));
+        request
+            .messages
+            .insert(0, ChatMessage::system("You are a helpful assistant."));
 
         // Check that system message is present
         assert_eq!(request.messages[0].role, Role::System);
@@ -314,7 +345,9 @@ mod tests {
         let error = LLMError::SerializationError("Invalid JSON".to_string());
 
         // Create executor and prepare retry request
-        let provider = Arc::new(MockProvider::new(vec![Ok(create_json_response(r#"{"ok": true}"#))]));
+        let provider = Arc::new(MockProvider::new(vec![Ok(create_json_response(
+            r#"{"ok": true}"#,
+        ))]));
         let executor = RetryExecutor::new(provider, LLMRetryPolicy::default());
         let modified_request = executor.prepare_retry_request(request.clone(), &error);
 

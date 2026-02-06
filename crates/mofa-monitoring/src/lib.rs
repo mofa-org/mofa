@@ -15,7 +15,7 @@
 //! # async fn main() -> Result<(), Box<dyn std::error::Error>> {
 //! let config = DashboardConfig::new()
 //!     .with_port(8080);
-//! 
+//!
 //! let server = DashboardServer::new(config);
 //! server.start().await?;
 //! # Ok(())
@@ -26,8 +26,8 @@ mod dashboard;
 pub mod tracing;
 
 pub use dashboard::{
-    AgentMetrics, AgentStatus, ApiError, ApiResponse, DashboardConfig, DashboardServer,
-    Gauge, Histogram, MetricType, MetricValue, MetricsCollector, MetricsConfig,
-    MetricsRegistry, MetricsSnapshot, PluginMetrics, PluginStatus, ServerState, SystemMetrics,
-    SystemStatus, WebSocketClient, WebSocketHandler, WebSocketMessage, WorkflowMetrics,
+    AgentMetrics, AgentStatus, ApiError, ApiResponse, DashboardConfig, DashboardServer, Gauge,
+    Histogram, MetricType, MetricValue, MetricsCollector, MetricsConfig, MetricsRegistry,
+    MetricsSnapshot, PluginMetrics, PluginStatus, ServerState, SystemMetrics, SystemStatus,
+    WebSocketClient, WebSocketHandler, WebSocketMessage, WorkflowMetrics,
 };

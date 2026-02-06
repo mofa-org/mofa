@@ -4,11 +4,11 @@
 
 use crossterm::event::{KeyCode, KeyEvent};
 use ratatui::{
+    Frame,
     layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::{Color, Style, Stylize},
     text::{Line, Span},
     widgets::{Block, Clear, Paragraph},
-    Frame,
 };
 
 /// Result type for confirm dialog interaction
@@ -93,14 +93,8 @@ impl ConfirmDialog {
         // Message section
         let message_lines = vec![
             Line::from(vec![
-                Span::styled(
-                    "⚠ ",
-                    Style::default().fg(Color::Yellow),
-                ),
-                Span::styled(
-                    &self.title,
-                    Style::default().fg(Color::Yellow).bold(),
-                ),
+                Span::styled("⚠ ", Style::default().fg(Color::Yellow)),
+                Span::styled(&self.title, Style::default().fg(Color::Yellow).bold()),
             ]),
             Line::from(""),
             Line::from(self.message.as_str()),
@@ -138,8 +132,7 @@ impl ConfirmDialog {
             Span::raw(" ]"),
         ])];
 
-        let btn_paragraph = Paragraph::new(buttons)
-            .alignment(Alignment::Center);
+        let btn_paragraph = Paragraph::new(buttons).alignment(Alignment::Center);
 
         frame.render_widget(btn_paragraph, chunks[1]);
     }

@@ -14,9 +14,7 @@ pub async fn run() -> Result<AppExitInfo> {
     // Initialize logging (only if not already set by main.rs)
     if std::env::var("RUST_LOG").is_err() {
         let _ = tracing_subscriber::fmt()
-            .with_env_filter(
-                "info,mofa_cli=debug,mofa_sdk=debug,mofa_kernel=debug",
-            )
+            .with_env_filter("info,mofa_cli=debug,mofa_sdk=debug,mofa_kernel=debug")
             .try_init();
     } else {
         let _ = tracing_subscriber::fmt::try_init();
@@ -55,10 +53,7 @@ pub async fn run_with_panic_hook() -> Result<AppExitInfo> {
     std::panic::set_hook(Box::new(move |panic_info| {
         // Try to restore terminal
         let _ = crossterm::terminal::disable_raw_mode;
-        let _ = crossterm::execute!(
-            std::io::stdout(),
-            crossterm::terminal::LeaveAlternateScreen
-        );
+        let _ = crossterm::execute!(std::io::stdout(), crossterm::terminal::LeaveAlternateScreen);
         // Call original panic hook
         original_hook(panic_info);
     }));

@@ -128,8 +128,8 @@ pub mod registry;
 // 执行引擎与运行器已迁移到 mofa-runtime
 
 // 秘书Agent抽象
-pub mod secretary;
 pub mod plugins;
+pub mod secretary;
 
 // AgentPlugin 统一到 plugin 模块
 pub use crate::plugin::AgentPlugin;
@@ -138,16 +138,17 @@ pub use capabilities::{
     AgentCapabilities, AgentCapabilitiesBuilder, AgentRequirements, AgentRequirementsBuilder,
     ReasoningStrategy,
 };
-pub use context::{AgentEvent, ContextConfig, AgentContext, EventBus};
+pub use context::{AgentContext, AgentEvent, ContextConfig, EventBus};
 pub use core::{
     // MoFAAgent - 统一的 Agent 接口
     AgentLifecycle,
-    AgentMessage, AgentMessaging, AgentPluginSupport, MoFAAgent,
+    AgentMessage,
+    AgentMessaging,
+    AgentPluginSupport,
+    MoFAAgent,
 };
 pub use error::{AgentError, AgentResult};
-pub use traits::{
-    AgentMetadata, AgentStats, DynAgent, HealthStatus,
-};
+pub use traits::{AgentMetadata, AgentStats, DynAgent, HealthStatus};
 pub use types::event::execution as execution_events;
 // Event type constants are available via types::event::lifecycle, types::event::execution, etc.
 // Note: Aliased to avoid conflict with existing modules (plugins, etc.)
@@ -156,23 +157,40 @@ pub use types::event::message as message_events;
 pub use types::event::plugin as plugin_events;
 pub use types::event::state as state_events;
 pub use types::{
-    AgentInput, AgentOutput, AgentState, ErrorCategory, ErrorContext, EventBuilder, InputType,
-    InterruptResult, MessageContent, MessageMetadata, OutputContent,
-    // Global types
-    OutputType, ReasoningStep, ReasoningStepType,
-    TokenUsage, ToolUsage,
-    GlobalError, GlobalEvent, GlobalMessage, GlobalResult,
+    AgentInput,
+    AgentOutput,
+    AgentState,
     // LLM types
-    ChatCompletionRequest, ChatMessage, ChatCompletionResponse,
-    ToolCall, ToolDefinition, LLMProvider,
+    ChatCompletionRequest,
+    ChatCompletionResponse,
+    ChatMessage,
+    ErrorCategory,
+    ErrorContext,
+    EventBuilder,
+    GlobalError,
+    GlobalEvent,
+    GlobalMessage,
+    GlobalResult,
+    InputType,
+    InterruptResult,
+    LLMProvider,
+    MessageContent,
+    MessageMetadata,
+    OutputContent,
+    // Global types
+    OutputType,
+    ReasoningStep,
+    ReasoningStepType,
+    TokenUsage,
+    ToolCall,
+    ToolDefinition,
+    ToolUsage,
 };
 
 // 重新导出组件
 pub use components::{
     coordinator::{CoordinationPattern, Coordinator},
-    memory::{
-        Memory, MemoryItem, MemoryValue, Message, MessageRole, MemoryStats,
-    },
+    memory::{Memory, MemoryItem, MemoryStats, MemoryValue, Message, MessageRole},
     reasoner::{Reasoner, ReasoningResult},
     tool::{Tool, ToolDescriptor, ToolInput, ToolMetadata, ToolResult},
 };
@@ -185,25 +203,35 @@ pub use config::{AgentConfig, AgentType};
 #[cfg(feature = "config")]
 pub use config::{ConfigFormat, ConfigLoader};
 
-
 /// Prelude 模块 - 常用类型导入
 pub mod prelude {
     pub use super::capabilities::{
         AgentCapabilities, AgentCapabilitiesBuilder, AgentRequirements, ReasoningStrategy,
     };
-    pub use super::context::{AgentEvent, ContextConfig, AgentContext};
+    pub use super::context::{AgentContext, AgentEvent, ContextConfig};
     pub use super::core::{
         // MoFAAgent - 统一的 Agent 接口
         AgentLifecycle,
-        AgentMessage, AgentMessaging, AgentPluginSupport, MoFAAgent,
+        AgentMessage,
+        AgentMessaging,
+        AgentPluginSupport,
+        MoFAAgent,
     };
     pub use super::error::{AgentError, AgentResult};
     pub use super::traits::{AgentMetadata, DynAgent, HealthStatus};
     pub use super::types::{
-        AgentInput, AgentOutput, AgentState, InputType, InterruptResult, OutputType,
-        TokenUsage, ToolUsage,
+        AgentInput,
+        AgentOutput,
+        AgentState,
         // LLM types
-        ChatCompletionRequest, ChatMessage, LLMProvider,
+        ChatCompletionRequest,
+        ChatMessage,
+        InputType,
+        InterruptResult,
+        LLMProvider,
+        OutputType,
+        TokenUsage,
+        ToolUsage,
     };
     // AgentPlugin 统一到 plugin 模块
     pub use crate::plugin::AgentPlugin;

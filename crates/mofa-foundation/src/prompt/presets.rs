@@ -38,13 +38,12 @@ pub fn role_assistant() -> PromptTemplate {
             3. 给出可操作的建议",
         )
         .with_variable(
-            PromptVariable::new("role")
-                .with_description("角色名称，如：软件工程师、数据分析师")
+            PromptVariable::new("role").with_description("角色名称，如：软件工程师、数据分析师"),
         )
         .with_variable(
             PromptVariable::new("expertise")
                 .with_description("专业领域")
-                .with_default("解决问题和提供帮助")
+                .with_default("解决问题和提供帮助"),
         )
         .with_tag("system")
         .with_tag("role")
@@ -73,7 +72,7 @@ pub fn code_review() -> PromptTemplate {
         .with_variable(
             PromptVariable::new("language")
                 .with_description("编程语言")
-                .with_default("代码")
+                .with_default("代码"),
         )
         .with_variable(PromptVariable::new("code").with_description("要审查的代码"))
         .with_tag("code")
@@ -97,7 +96,7 @@ pub fn code_explain() -> PromptTemplate {
         .with_variable(
             PromptVariable::new("language")
                 .with_description("编程语言")
-                .with_default("代码")
+                .with_default("代码"),
         )
         .with_variable(PromptVariable::new("code").with_description("要解释的代码"))
         .with_tag("code")
@@ -118,14 +117,8 @@ pub fn code_generate() -> PromptTemplate {
             3. 考虑边界情况和错误处理\n\
             4. 遵循 {language} 的最佳实践",
         )
-        .with_variable(
-            PromptVariable::new("language")
-                .with_description("编程语言")
-        )
-        .with_variable(
-            PromptVariable::new("requirement")
-                .with_description("功能需求描述")
-        )
+        .with_variable(PromptVariable::new("language").with_description("编程语言"))
+        .with_variable(PromptVariable::new("requirement").with_description("功能需求描述"))
         .with_tag("code")
         .with_tag("generate")
 }
@@ -147,13 +140,13 @@ pub fn code_refactor() -> PromptTemplate {
         .with_variable(
             PromptVariable::new("language")
                 .with_description("编程语言")
-                .with_default("代码")
+                .with_default("代码"),
         )
         .with_variable(PromptVariable::new("code").with_description("要重构的代码"))
         .with_variable(
             PromptVariable::new("goal")
                 .with_description("重构目标")
-                .with_default("使其更加清晰、高效")
+                .with_default("使其更加清晰、高效"),
         )
         .with_tag("code")
         .with_tag("refactor")
@@ -173,15 +166,12 @@ pub fn code_test() -> PromptTemplate {
             3. 包含错误情况测试\n\
             4. 使用 {test_framework} 测试框架",
         )
-        .with_variable(
-            PromptVariable::new("language")
-                .with_description("编程语言")
-        )
+        .with_variable(PromptVariable::new("language").with_description("编程语言"))
         .with_variable(PromptVariable::new("code").with_description("要测试的代码"))
         .with_variable(
             PromptVariable::new("test_framework")
                 .with_description("测试框架")
-                .with_default("标准")
+                .with_default("标准"),
         )
         .with_tag("code")
         .with_tag("test")
@@ -210,7 +200,7 @@ pub fn tech_doc() -> PromptTemplate {
         .with_variable(
             PromptVariable::new("audience")
                 .with_description("目标读者")
-                .with_default("开发者")
+                .with_default("开发者"),
         )
         .with_tag("doc")
         .with_tag("writing")
@@ -233,7 +223,7 @@ pub fn summarize() -> PromptTemplate {
         .with_variable(
             PromptVariable::new("length")
                 .with_description("目标长度")
-                .with_default("200-300字")
+                .with_default("200-300字"),
         )
         .with_tag("writing")
         .with_tag("summary")
@@ -256,12 +246,12 @@ pub fn translate() -> PromptTemplate {
         .with_variable(
             PromptVariable::new("source_lang")
                 .with_description("源语言")
-                .with_default("英文")
+                .with_default("英文"),
         )
         .with_variable(
             PromptVariable::new("target_lang")
                 .with_description("目标语言")
-                .with_default("中文")
+                .with_default("中文"),
         )
         .with_variable(PromptVariable::new("content").with_description("要翻译的内容"))
         .with_tag("writing")
@@ -291,7 +281,7 @@ pub fn analyze() -> PromptTemplate {
         .with_variable(
             PromptVariable::new("context")
                 .with_description("相关背景信息")
-                .with_default("无额外上下文")
+                .with_default("无额外上下文"),
         )
         .with_tag("analysis")
         .with_tag("problem-solving")
@@ -316,7 +306,7 @@ pub fn compare() -> PromptTemplate {
         .with_variable(
             PromptVariable::new("dimensions")
                 .with_description("对比维度")
-                .with_default("功能、性能、易用性、成本")
+                .with_default("功能、性能、易用性、成本"),
         )
         .with_tag("analysis")
         .with_tag("comparison")
@@ -383,13 +373,13 @@ pub fn debater() -> PromptTemplate {
         .with_variable(
             PromptVariable::new("position")
                 .with_description("辩论立场")
-                .with_enum(vec!["正".to_string(), "反".to_string()])
+                .with_enum(vec!["正".to_string(), "反".to_string()]),
         )
         .with_variable(PromptVariable::new("topic").with_description("辩论话题"))
         .with_variable(
             PromptVariable::new("previous")
                 .with_description("之前的辩论内容")
-                .with_default("这是辩论的开始")
+                .with_default("这是辩论的开始"),
         )
         .with_tag("multi-agent")
         .with_tag("debate")
@@ -524,9 +514,7 @@ mod tests {
         let template = role_assistant();
 
         // 使用默认值
-        let result = template
-            .render(&[("role", "数据分析师")])
-            .unwrap();
+        let result = template.render(&[("role", "数据分析师")]).unwrap();
 
         assert!(result.contains("数据分析师"));
         assert!(result.contains("解决问题和提供帮助")); // 默认值
@@ -548,9 +536,7 @@ mod tests {
     fn test_translate_template() {
         let template = translate();
 
-        let result = template
-            .render(&[("content", "Hello, World!")])
-            .unwrap();
+        let result = template.render(&[("content", "Hello, World!")]).unwrap();
 
         assert!(result.contains("Hello, World!"));
         assert!(result.contains("英文")); // 默认值

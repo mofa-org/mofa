@@ -5,11 +5,11 @@
 use super::entities::*;
 use super::traits::*;
 use async_trait::async_trait;
-use sqlx::mysql::{MySqlPool, MySqlPoolOptions, MySqlRow};
 use sqlx::Row;
+use sqlx::mysql::{MySqlPool, MySqlPoolOptions, MySqlRow};
 use std::collections::HashMap;
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use uuid::Uuid;
 
 /// MySQL 存储
@@ -703,12 +703,13 @@ impl ProviderStore for MySqlStore {
         tenant_id: Uuid,
         name: &str,
     ) -> PersistenceResult<Option<super::entities::Provider>> {
-        let row = sqlx::query("SELECT * FROM entity_provider WHERE tenant_id = ? AND provider_name = ?")
-            .bind(tenant_id.to_string())
-            .bind(name)
-            .fetch_optional(&self.pool)
-            .await
-            .map_err(|e| PersistenceError::Query(e.to_string()))?;
+        let row =
+            sqlx::query("SELECT * FROM entity_provider WHERE tenant_id = ? AND provider_name = ?")
+                .bind(tenant_id.to_string())
+                .bind(name)
+                .fetch_optional(&self.pool)
+                .await
+                .map_err(|e| PersistenceError::Query(e.to_string()))?;
 
         match row {
             Some(row) => Ok(Some(Self::parse_provider_row(&row)?)),
@@ -716,12 +717,17 @@ impl ProviderStore for MySqlStore {
         }
     }
 
-    async fn list_providers(&self, tenant_id: Uuid) -> PersistenceResult<Vec<super::entities::Provider>> {
-        let rows = sqlx::query("SELECT * FROM entity_provider WHERE tenant_id = ? ORDER BY create_time DESC")
-            .bind(tenant_id.to_string())
-            .fetch_all(&self.pool)
-            .await
-            .map_err(|e| PersistenceError::Query(e.to_string()))?;
+    async fn list_providers(
+        &self,
+        tenant_id: Uuid,
+    ) -> PersistenceResult<Vec<super::entities::Provider>> {
+        let rows = sqlx::query(
+            "SELECT * FROM entity_provider WHERE tenant_id = ? ORDER BY create_time DESC",
+        )
+        .bind(tenant_id.to_string())
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|e| PersistenceError::Query(e.to_string()))?;
 
         rows.iter().map(Self::parse_provider_row).collect()
     }
@@ -755,7 +761,10 @@ impl AgentStore for MySqlStore {
         }
     }
 
-    async fn get_agent_by_code(&self, code: &str) -> PersistenceResult<Option<super::entities::Agent>> {
+    async fn get_agent_by_code(
+        &self,
+        code: &str,
+    ) -> PersistenceResult<Option<super::entities::Agent>> {
         let row = sqlx::query("SELECT * FROM entity_agent WHERE agent_code = ?")
             .bind(code)
             .fetch_optional(&self.pool)
@@ -787,16 +796,20 @@ impl AgentStore for MySqlStore {
     }
 
     async fn list_agents(&self, tenant_id: Uuid) -> PersistenceResult<Vec<super::entities::Agent>> {
-        let rows = sqlx::query("SELECT * FROM entity_agent WHERE tenant_id = ? ORDER BY agent_order")
-            .bind(tenant_id.to_string())
-            .fetch_all(&self.pool)
-            .await
-            .map_err(|e| PersistenceError::Query(e.to_string()))?;
+        let rows =
+            sqlx::query("SELECT * FROM entity_agent WHERE tenant_id = ? ORDER BY agent_order")
+                .bind(tenant_id.to_string())
+                .fetch_all(&self.pool)
+                .await
+                .map_err(|e| PersistenceError::Query(e.to_string()))?;
 
         rows.iter().map(Self::parse_agent_row).collect()
     }
 
-    async fn get_active_agents(&self, tenant_id: Uuid) -> PersistenceResult<Vec<super::entities::Agent>> {
+    async fn get_active_agents(
+        &self,
+        tenant_id: Uuid,
+    ) -> PersistenceResult<Vec<super::entities::Agent>> {
         let rows = sqlx::query("SELECT * FROM entity_agent WHERE tenant_id = ? AND agent_status = TRUE ORDER BY agent_order")
             .bind(tenant_id.to_string())
             .fetch_all(&self.pool)
@@ -1012,7 +1025,9 @@ impl MySqlStore {
         })
     }
 
-    fn parse_provider_row_from_join(row: &MySqlRow) -> PersistenceResult<super::entities::Provider> {
+    fn parse_provider_row_from_join(
+        row: &MySqlRow,
+    ) -> PersistenceResult<super::entities::Provider> {
         let id_str: String = row
             .try_get("provider_id")
             .map_err(|e| PersistenceError::Query(e.to_string()))?;

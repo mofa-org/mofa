@@ -360,10 +360,7 @@ impl<T: MoFAAgent + AgentMessaging> AgentRunner<T> {
     }
 
     /// 发送消息给 Agent
-    pub async fn send_message(
-        &mut self,
-        msg: AgentMessage,
-    ) -> AgentResult<AgentMessage> {
+    pub async fn send_message(&mut self, msg: AgentMessage) -> AgentResult<AgentMessage> {
         self.agent.handle_message(msg).await
     }
 }

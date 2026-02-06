@@ -18,8 +18,8 @@ pub use exporter::{
     ConsoleExporter, ExporterConfig, JaegerExporter, OtlpExporter, TracingExporter,
 };
 pub use instrumentation::{
-    trace_agent_operation, trace_workflow_execution, AgentTracer, MessageTracer, TracedAgent, TracedWorkflow,
-    WorkflowTracer,
+    AgentTracer, MessageTracer, TracedAgent, TracedWorkflow, WorkflowTracer, trace_agent_operation,
+    trace_workflow_execution,
 };
 pub use propagator::{B3Propagator, HeaderCarrier, TracePropagator, W3CTraceContextPropagator};
 pub use span::{Span, SpanAttribute, SpanBuilder, SpanEvent, SpanKind, SpanLink, SpanStatus};

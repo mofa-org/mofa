@@ -21,8 +21,8 @@ pub mod tool;
 
 // Coordinator - Kernel trait 和类型
 pub use mofa_kernel::agent::components::coordinator::{
-    aggregate_outputs, AggregationStrategy, Coordinator, CoordinationPattern, DispatchResult,
-    DispatchStatus, Task, TaskPriority, TaskType,
+    AggregationStrategy, CoordinationPattern, Coordinator, DispatchResult, DispatchStatus, Task,
+    TaskPriority, TaskType, aggregate_outputs,
 };
 
 // Reasoner - Kernel trait 和类型
@@ -53,6 +53,5 @@ pub use reasoner::DirectReasoner;
 
 // Tool 扩展和实现
 pub use tool::{
-    EchoTool, SimpleToolRegistry, ToolCategory, ToolExt,
-    SimpleTool, SimpleToolAdapter, as_tool,
+    EchoTool, SimpleTool, SimpleToolAdapter, SimpleToolRegistry, ToolCategory, ToolExt, as_tool,
 };

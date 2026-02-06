@@ -10,9 +10,9 @@
 
 use mofa_kernel::config::load_config;
 use serde::{Deserialize, Serialize};
-use thiserror::Error;
 use std::collections::HashMap;
 use std::path::Path;
+use thiserror::Error;
 
 /// 配置错误类型
 #[derive(Error, Debug)]
@@ -46,7 +46,9 @@ impl ConfigLoader {
             mofa_kernel::config::ConfigError::Io(e) => ConfigError::Io(e),
             mofa_kernel::config::ConfigError::Parse(e) => ConfigError::Parse(e.to_string()),
             mofa_kernel::config::ConfigError::Serialization(e) => ConfigError::Parse(e),
-            mofa_kernel::config::ConfigError::UnsupportedFormat(e) => ConfigError::UnsupportedFormat(e),
+            mofa_kernel::config::ConfigError::UnsupportedFormat(e) => {
+                ConfigError::UnsupportedFormat(e)
+            }
         })?;
 
         Ok(Self { config })

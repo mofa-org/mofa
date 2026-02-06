@@ -55,25 +55,22 @@ let agent = LLMAgentBuilder::new()
 ### 3. 带工具调用的 Agent
 
 ```rust
-use mofa_sdk::llm::{LLMAgentBuilder, OpenAIProvider};
+use mofa_sdk::llm::{LLMAgentBuilder, OpenAIProvider, ToolExecutor, ToolPluginExecutor};
 use mofa_sdk::plugins::tools::create_builtin_tool_plugin;
-use mofa_sdk::plugins::ToolPluginAdapter;
+use std::sync::Arc;
 
 // 创建内置工具插件（包含 HTTP、文件系统、Shell、计算器等工具）
 let mut tool_plugin = create_builtin_tool_plugin("comprehensive_tools")?;
 tool_plugin.init_plugin().await?;
 
-// 创建适配器连接到 LLM
-let adapter = ToolPluginAdapter::new(tool_plugin);
-let tools = adapter.available_tools();
-let executor: Arc<dyn LLMToolExecutor> = Arc::new(adapter);
+// 创建适配器连接到 LLM（自动发现工具）
+let executor: Arc<dyn ToolExecutor> = Arc::new(ToolPluginExecutor::new(tool_plugin));
 
 // 构建带工具的 Agent
 let agent = LLMAgentBuilder::new()
     .with_name("工具调用助手".to_string())
     .with_provider(Arc::new(OpenAIProvider::from_env()))
     .with_system_prompt("你是一个可以使用工具的AI助手。".to_string())
-    .with_tools(tools)
     .with_tool_executor(executor)
     .build();
 ```
@@ -109,6 +106,37 @@ let agent = LLMAgentBuilder::from_env()?
     .with_persistence_plugin(persistence)
     .build_async()
     .await;
+```
+
+### 5. 官方 AgentLoop（支持 ContextBuilder + Session）
+
+```rust
+use mofa_sdk::llm::{AgentLoop, AgentLoopConfig, AgentLoopRunner, AgentContextBuilder, ChatSession, LLMClient, OpenAIProvider, ToolExecutor};
+use std::path::PathBuf;
+use std::sync::Arc;
+
+let provider = Arc::new(OpenAIProvider::from_env());
+let tool_executor: Arc<dyn ToolExecutor> = /* your executor */;
+
+let loop_config = AgentLoopConfig::default();
+let agent_loop = AgentLoop::new(provider.clone(), tool_executor.clone(), loop_config);
+
+let workspace = PathBuf::from("./workspace");
+let context_builder = AgentContextBuilder::new(workspace);
+
+let client = LLMClient::new(provider);
+let mut session = ChatSession::new(client).with_tool_executor(tool_executor);
+
+let mut runner = AgentLoopRunner::new(agent_loop)
+    .with_context_builder(context_builder)
+    .with_session(session);
+
+let reply = runner
+    .run(
+        "请分析这张图片",
+        Some(vec!["/path/to/image.png".to_string()]),
+    )
+    .await?;
 ```
 
 ### 5. 带 TTS 插件的 Agent

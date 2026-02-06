@@ -5,7 +5,7 @@
 
 use super::{TTSEngine, VoiceInfo};
 use futures::StreamExt;
-pub use kokoro_tts::{KokoroTts, Voice, SynthStream, SynthSink};
+pub use kokoro_tts::{KokoroTts, SynthSink, SynthStream, Voice};
 use std::path::Path;
 use std::sync::Arc;
 use tracing::{debug, info};
@@ -73,9 +73,9 @@ impl KokoroTTS {
         }
 
         // Initialize Kokoro TTS
-        let tts = KokoroTts::new(model_path, voice_path).await.map_err(|e| {
-            anyhow::anyhow!("Failed to initialize Kokoro TTS: {:?}", e)
-        })?;
+        let tts = KokoroTts::new(model_path, voice_path)
+            .await
+            .map_err(|e| anyhow::anyhow!("Failed to initialize Kokoro TTS: {:?}", e))?;
 
         let model_lower = model_path.to_ascii_lowercase();
         let is_v11_model = model_lower.contains("v1.1") || model_lower.contains("v11");
@@ -152,10 +152,10 @@ impl KokoroTTS {
     pub async fn create_stream(
         &self,
         voice: &str,
-    ) -> Result<(SynthSink<String>,SynthStream), anyhow::Error> {
+    ) -> Result<(SynthSink<String>, SynthStream), anyhow::Error> {
         let voice_enum = self.resolve_voice(voice);
         let (sink, stream) = self.tts.stream::<String>(voice_enum);
-        Ok((sink,stream))
+        Ok((sink, stream))
     }
 
     /// Stream synthesis with f32 callback (native format)
@@ -183,8 +183,7 @@ impl KokoroTTS {
     ) -> Result<(), anyhow::Error> {
         debug!(
             "[KokoroTTS] F32 stream synthesizing with voice '{}': {}",
-            voice,
-            text
+            voice, text
         );
 
         let voice_enum = self.resolve_voice(voice);
@@ -193,9 +192,9 @@ impl KokoroTTS {
         let (mut sink, mut stream) = self.tts.stream::<String>(voice_enum);
 
         // Submit text for synthesis
-        sink.synth(text.to_string()).await.map_err(|e| {
-            anyhow::anyhow!("Failed to submit text for f32 streaming: {:?}", e)
-        })?;
+        sink.synth(text.to_string())
+            .await
+            .map_err(|e| anyhow::anyhow!("Failed to submit text for f32 streaming: {:?}", e))?;
 
         // Process audio chunks and call callback for each chunk
         while let Some((audio_f32, _took)) = stream.next().await {
@@ -212,8 +211,7 @@ impl TTSEngine for KokoroTTS {
     async fn synthesize(&self, text: &str, voice: &str) -> Result<Vec<u8>, anyhow::Error> {
         debug!(
             "[KokoroTTS] Synthesizing text with voice '{}': {}",
-            voice,
-            text
+            voice, text
         );
 
         let voice = self.resolve_voice(voice);
@@ -222,9 +220,9 @@ impl TTSEngine for KokoroTTS {
         let (mut sink, mut stream) = self.tts.stream::<String>(voice);
 
         // Submit text for synthesis using the synth method
-        sink.synth(text.to_string()).await.map_err(|e| {
-            anyhow::anyhow!("Failed to submit text for synthesis: {:?}", e)
-        })?;
+        sink.synth(text.to_string())
+            .await
+            .map_err(|e| anyhow::anyhow!("Failed to submit text for synthesis: {:?}", e))?;
 
         // Collect all audio chunks
         let mut audio = Vec::new();
@@ -260,8 +258,7 @@ impl TTSEngine for KokoroTTS {
     ) -> Result<(), anyhow::Error> {
         debug!(
             "[KokoroTTS] Stream synthesizing text with voice '{}': {}",
-            voice,
-            text
+            voice, text
         );
 
         let voice_enum = self.resolve_voice(voice);

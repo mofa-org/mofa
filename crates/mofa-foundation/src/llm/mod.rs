@@ -1,4 +1,3 @@
-
 //! LLM 模块
 //!
 //! 提供 LLM (Large Language Model) 集成支持
@@ -123,8 +122,8 @@
 //!         }
 //!     }
 //!
-//!     fn available_tools(&self) -> Vec<Tool> {
-//!         vec![weather_tool.clone()]
+//!     async fn available_tools(&self) -> LLMResult<Vec<Tool>> {
+//!         Ok(vec![weather_tool.clone()])
 //!     }
 //! }
 //!
@@ -263,75 +262,82 @@ pub mod client;
 pub mod plugin;
 pub mod provider;
 pub mod retry;
+pub mod tool_executor;
+pub mod tool_schema;
 pub mod types;
 
 // 高级 API
 pub mod agent_workflow;
 pub mod multi_agent;
-pub mod pipeline;
 pub mod openai;
+pub mod pipeline;
 
 // Framework components
 pub mod agent_loop;
-pub mod task_orchestrator;
 pub mod context;
+pub mod task_orchestrator;
 pub mod vision;
 
 // Audio processing
 pub mod transcription;
 
 // Re-export 核心类型
-pub use client::{function_tool, ChatRequestBuilder, ChatSession, LLMClient, ToolExecutor};
+pub use client::{ChatRequestBuilder, ChatSession, LLMClient, function_tool};
 pub use plugin::{LLMCapability, LLMPlugin, MockLLMProvider};
 pub use provider::{
-    global_registry, ChatStream, LLMConfig, LLMProvider, LLMRegistry, ModelCapabilities, ModelInfo,
+    ChatStream, LLMConfig, LLMProvider, LLMRegistry, ModelCapabilities, ModelInfo, global_registry,
 };
 pub use retry::RetryExecutor;
+pub use tool_executor::ToolExecutor;
+pub use tool_schema::{normalize_schema, parse_schema, validate_schema};
 pub use types::*;
 
 // Re-export 标准 LLM Agent
 pub use agent::{
-    simple_llm_agent, LLMAgent, LLMAgentBuilder, LLMAgentConfig, LLMAgentEventHandler, StreamEvent,
-    TextStream,
+    LLMAgent, LLMAgentBuilder, LLMAgentConfig, LLMAgentEventHandler, StreamEvent, TextStream,
+    simple_llm_agent,
 };
 
 // Re-export agent_from_config (when openai feature is enabled)
 pub use agent::agent_from_config;
 
 // Re-export OpenAI Provider (when enabled)
-pub use openai::{
-    OpenAIConfig, OpenAIProvider,
-};
+pub use openai::{OpenAIConfig, OpenAIProvider};
 
 // Re-export 高级 API
 pub use agent_workflow::{
-    agent_chain, agent_parallel, agent_router, AgentEdge, AgentNode, AgentNodeType,
-    AgentValue, AgentWorkflow, AgentWorkflowBuilder, AgentWorkflowContext,
+    AgentEdge, AgentNode, AgentNodeType, AgentValue, AgentWorkflow, AgentWorkflowBuilder,
+    AgentWorkflowContext, agent_chain, agent_parallel, agent_router,
 };
 pub use multi_agent::{
-    analysis_team, code_review_team, content_creation_team, debate_team, AgentMember, AgentRole,
-    AgentTeam, AgentTeamBuilder, TeamPattern,
+    AgentMember, AgentRole, AgentTeam, AgentTeamBuilder, TeamPattern, analysis_team,
+    code_review_team, content_creation_team, debate_team,
 };
 pub use pipeline::{
-    agent_pipe, agent_pipe_with_templates, ask_with_template, batch_ask, quick_ask, Pipeline,
-    StreamPipeline,
+    Pipeline, StreamPipeline, agent_pipe, agent_pipe_with_templates, ask_with_template, batch_ask,
+    quick_ask,
 };
 
 // Re-export framework components
-pub use agent_loop::{AgentLoop, AgentLoopConfig, SimpleToolExecutor};
+pub use agent_loop::{AgentLoop, AgentLoopConfig, AgentLoopRunner, SimpleToolExecutor};
+pub use context::{AgentContextBuilder, AgentIdentity, NoOpSkillsManager, SkillsManager};
 pub use task_orchestrator::{
-    TaskOrchestrator, TaskOrchestratorConfig, TaskOrigin, BackgroundTask, TaskStatus, TaskResult,
+    BackgroundTask, TaskOrchestrator, TaskOrchestratorConfig, TaskOrigin, TaskResult, TaskStatus,
 };
-pub use context::{AgentContextBuilder, AgentIdentity, SkillsManager, NoOpSkillsManager};
 pub use vision::{
-    encode_image_data_url, encode_image_url, build_vision_message, build_vision_chat_message,
-    build_vision_chat_message_single, image_url_from_string, image_url_with_detail,
-    ImageDetailExt, is_image_file, get_mime_type,
+    ImageDetailExt, build_vision_chat_message, build_vision_chat_message_single,
+    build_vision_message, encode_image_data_url, encode_image_url, get_mime_type,
+    image_url_from_string, image_url_with_detail, is_image_file,
 };
 // ImageDetail is already re-exported via types::*;
 
-// Re-export our ToolExecutor as AgentLoopToolExecutor to avoid conflicts
-pub use agent_loop::ToolExecutor as AgentLoopToolExecutor;
+// Compatibility re-export for older AgentLoopToolExecutor name
+#[deprecated(
+    note = "Use llm::ToolExecutor instead. AgentLoop now uses the unified ToolExecutor."
+)]
+pub use tool_executor::ToolExecutor as AgentLoopToolExecutor;
 
 // Re-export transcription module
-pub use transcription::{TranscriptionProvider, GroqTranscriptionProvider, OpenAITranscriptionProvider};
+pub use transcription::{
+    GroqTranscriptionProvider, OpenAITranscriptionProvider, TranscriptionProvider,
+};

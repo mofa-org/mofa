@@ -535,7 +535,6 @@ impl<A: MoFAAgent> SimpleAgentRuntime<A> {
 
         // 将事件转换为输入并使用 execute
         use mofa_kernel::agent::types::AgentInput;
-        
 
         let context = mofa_kernel::agent::AgentContext::new(self.metadata.id.clone());
 
@@ -557,7 +556,9 @@ impl<A: MoFAAgent> SimpleAgentRuntime<A> {
     /// 运行事件循环（使用内部事件接收器）
     pub async fn run(&mut self) -> anyhow::Result<()> {
         // 获取内部事件接收器
-        let event_rx = self.event_rx.take()
+        let event_rx = self
+            .event_rx
+            .take()
             .ok_or_else(|| anyhow::anyhow!("Event receiver already taken"))?;
 
         self.run_with_receiver(event_rx).await
@@ -568,8 +569,6 @@ impl<A: MoFAAgent> SimpleAgentRuntime<A> {
         &mut self,
         mut event_rx: tokio::sync::mpsc::Receiver<AgentEvent>,
     ) -> anyhow::Result<()> {
-        
-
         loop {
             // 检查中断
             if self.interrupt.check() {
@@ -639,7 +638,7 @@ pub struct SimpleAgentInfo {
 
 /// 流状态信息
 #[cfg(not(feature = "dora"))]
-#[derive(Debug,Clone)]
+#[derive(Debug, Clone)]
 pub struct StreamInfo {
     pub stream_id: String,
     pub stream_type: StreamType,
@@ -998,12 +997,20 @@ impl SimpleRuntime {
 
     /// 取消订阅流
     pub async fn unsubscribe_stream(&self, agent_id: &str, stream_id: &str) -> anyhow::Result<()> {
-        self.message_bus.unsubscribe_stream(agent_id, stream_id).await
+        self.message_bus
+            .unsubscribe_stream(agent_id, stream_id)
+            .await
     }
 
     /// 发送流消息
-    pub async fn send_stream_message(&self, stream_id: &str, message: Vec<u8>) -> anyhow::Result<()> {
-        self.message_bus.send_stream_message(stream_id, message).await
+    pub async fn send_stream_message(
+        &self,
+        stream_id: &str,
+        message: Vec<u8>,
+    ) -> anyhow::Result<()> {
+        self.message_bus
+            .send_stream_message(stream_id, message)
+            .await
     }
 
     /// 暂停流

@@ -1,4 +1,4 @@
-use mofa_sdk::llm::{ChatMessage, ToolCall, ToolExecutor};
+use mofa_sdk::llm::{Tool, ToolExecutor};
 use std::sync::Arc;
 
 /// 示例工具执行器
@@ -6,33 +6,34 @@ pub struct ExampleToolExecutor;
 
 #[async_trait::async_trait]
 impl ToolExecutor for ExampleToolExecutor {
-    async fn execute_tool(&self, tool_call: ToolCall) -> anyhow::Result<ChatMessage> {
-        let function_name = &tool_call.function.name;
-        let arguments = &tool_call.function.arguments;
+    async fn execute(&self, name: &str, arguments: &str) -> mofa_sdk::llm::LLMResult<String> {
+        println!("Executing tool: {} with args: {}", name, arguments);
 
-        println!("Executing tool: {} with args: {}", function_name, arguments);
-
-        match function_name.as_str() {
+        match name {
             "calculator" => {
                 let result = self.execute_calculator(arguments).await;
-                Ok(ChatMessage::tool_response(&tool_call.id, result))
+                Ok(result)
             }
             "weather_query" => {
                 let result = self.execute_weather(arguments).await;
-                Ok(ChatMessage::tool_response(&tool_call.id, result))
+                Ok(result)
             }
             "news_query" => {
                 let result = self.execute_news(arguments).await;
-                Ok(ChatMessage::tool_response(&tool_call.id, result))
+                Ok(result)
             }
             "stock_query" => {
                 let result = self.execute_stock(arguments).await;
-                Ok(ChatMessage::tool_response(&tool_call.id, result))
+                Ok(result)
             }
             _ => {
-                Err(anyhow::anyhow!("Unknown tool: {}", function_name))
+                Err(mofa_sdk::llm::LLMError::Other(format!("Unknown tool: {}", name)))
             }
         }
+    }
+
+    async fn available_tools(&self) -> mofa_sdk::llm::LLMResult<Vec<Tool>> {
+        Ok(Vec::new())
     }
 }
 
@@ -139,4 +140,3 @@ impl ExampleToolExecutor {
         }
     }
 }
-

@@ -82,12 +82,16 @@ impl ResponseOptimizerTool {
         // 检查规则：连续三次"不懂"切换到更基础的模式
         if stats.consecutive_confused >= 3 && stats.current_mode != "basic" {
             stats.current_mode = "basic".to_string();
-            return format!("Mode switched from {} to basic because of {} consecutive 'confused' feedbacks", old_mode, stats.consecutive_confused);
+            return format!(
+                "Mode switched from {} to basic because of {} consecutive 'confused' feedbacks",
+                old_mode, stats.consecutive_confused
+            );
         }
         // 如果学生表示理解且当前模式是基础模式，切换回正常模式
         else if feedback_type == "understand" && stats.current_mode == "basic" {
             stats.current_mode = "normal".to_string();
-            return "Mode switched from basic to normal because student reported understanding".to_string();
+            return "Mode switched from basic to normal because student reported understanding"
+                .to_string();
         }
 
         "No mode change".to_string()
@@ -107,9 +111,9 @@ impl ToolExecutor for ResponseOptimizerTool {
 
         match action {
             "record_feedback" => {
-                let feedback_type = arguments["feedback_type"]
-                    .as_str()
-                    .ok_or_else(|| anyhow::anyhow!("feedback_type is required for record_feedback"))?;
+                let feedback_type = arguments["feedback_type"].as_str().ok_or_else(|| {
+                    anyhow::anyhow!("feedback_type is required for record_feedback")
+                })?;
 
                 let feedback_content = arguments["feedback_content"].as_str().unwrap_or("");
 
@@ -166,46 +170,66 @@ mod tests {
         let optimizer = ResponseOptimizerTool::new();
 
         // 初始状态检查
-        let status = optimizer.execute(json!({
-            "action": "check_status"
-        })).await.unwrap();
+        let status = optimizer
+            .execute(json!({
+                "action": "check_status"
+            }))
+            .await
+            .unwrap();
         assert_eq!(status["current_mode"], "normal");
         assert_eq!(status["consecutive_confused"], 0);
 
         // 第一次反馈"不懂"
-        let result = optimizer.execute(json!({
-            "action": "record_feedback",
-            "feedback_type": "confused",
-            "feedback_content": "不明白"
-        })).await.unwrap();
+        let result = optimizer
+            .execute(json!({
+                "action": "record_feedback",
+                "feedback_type": "confused",
+                "feedback_content": "不明白"
+            }))
+            .await
+            .unwrap();
         assert_eq!(result["consecutive_confused"], 1);
         assert_eq!(result["current_mode"], "normal");
 
         // 第二次反馈"不懂"
-        let result = optimizer.execute(json!({
-            "action": "record_feedback",
-            "feedback_type": "confused",
-            "feedback_content": "还是不明白"
-        })).await.unwrap();
+        let result = optimizer
+            .execute(json!({
+                "action": "record_feedback",
+                "feedback_type": "confused",
+                "feedback_content": "还是不明白"
+            }))
+            .await
+            .unwrap();
         assert_eq!(result["consecutive_confused"], 2);
         assert_eq!(result["current_mode"], "normal");
 
         // 第三次反馈"不懂" - 应该切换到基础模式
-        let result = optimizer.execute(json!({
-            "action": "record_feedback",
-            "feedback_type": "confused",
-            "feedback_content": "完全不明白"
-        })).await.unwrap();
+        let result = optimizer
+            .execute(json!({
+                "action": "record_feedback",
+                "feedback_type": "confused",
+                "feedback_content": "完全不明白"
+            }))
+            .await
+            .unwrap();
         assert_eq!(result["consecutive_confused"], 3);
         assert_eq!(result["current_mode"], "basic");
-        assert!(result["mode_change"].as_str().unwrap().contains("Mode switched"));
+        assert!(
+            result["mode_change"]
+                .as_str()
+                .unwrap()
+                .contains("Mode switched")
+        );
 
         // 反馈"理解" - 应该切换回正常模式
-        let result = optimizer.execute(json!({
-            "action": "record_feedback",
-            "feedback_type": "understand",
-            "feedback_content": "现在明白了"
-        })).await.unwrap();
+        let result = optimizer
+            .execute(json!({
+                "action": "record_feedback",
+                "feedback_type": "understand",
+                "feedback_content": "现在明白了"
+            }))
+            .await
+            .unwrap();
         assert_eq!(result["consecutive_confused"], 0);
         assert_eq!(result["current_mode"], "normal");
 

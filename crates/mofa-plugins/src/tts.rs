@@ -85,7 +85,7 @@ fn default_auto_download() -> bool {
 }
 
 fn default_download_timeout() -> u64 {
-    600  // 10 minutes default
+    600 // 10 minutes default
 }
 
 impl Default for TTSPluginConfig {
@@ -168,8 +168,7 @@ impl TTSEngine for MockTTSEngine {
     async fn synthesize(&self, text: &str, voice: &str) -> PluginResult<Vec<u8>> {
         debug!(
             "[MockTTS] Synthesizing text with voice '{}': {}",
-            voice,
-            text
+            voice, text
         );
 
         // Generate a placeholder WAV file
@@ -412,8 +411,8 @@ pub fn play_audio(audio_data: Vec<u8>) -> PluginResult<()> {
     let sink = Sink::try_new(&stream_handle)
         .map_err(|e| anyhow::anyhow!("Failed to create sink: {}", e))?;
 
-    let source = Decoder::new(cursor)
-        .map_err(|e| anyhow::anyhow!("Failed to decode audio: {}", e))?;
+    let source =
+        Decoder::new(cursor).map_err(|e| anyhow::anyhow!("Failed to decode audio: {}", e))?;
     sink.append(source);
     sink.sleep_until_end();
 
@@ -426,7 +425,10 @@ pub fn play_audio(audio_data: Vec<u8>) -> PluginResult<()> {
 /// Enable the rodio feature for actual audio playback.
 #[cfg(not(feature = "rodio"))]
 pub fn play_audio(audio_data: Vec<u8>) -> PluginResult<()> {
-    debug!("Playing {} bytes of audio (placeholder - rodio not enabled)", audio_data.len());
+    debug!(
+        "Playing {} bytes of audio (placeholder - rodio not enabled)",
+        audio_data.len()
+    );
 
     warn!(
         "Audio playback is simulated. Enable the 'rodio' feature in Cargo.toml \
@@ -508,7 +510,11 @@ impl TTSPlugin {
     /// // 指定音色
     /// let plugin = TTSPlugin::with_engine("tts", kokoro_engine, Some("zf_090"));
     /// ```
-    pub fn with_engine<E: TTSEngine + 'static>(plugin_id: &str, engine: E, default_voice: Option<&str>) -> Self {
+    pub fn with_engine<E: TTSEngine + 'static>(
+        plugin_id: &str,
+        engine: E,
+        default_voice: Option<&str>,
+    ) -> Self {
         let mut plugin = Self::new(plugin_id);
         plugin.engine = Some(Arc::new(engine));
         if let Some(voice) = default_voice {
@@ -691,9 +697,10 @@ impl TTSPlugin {
         );
         // Add cache info if available
         if let Some(cache) = &self.model_cache
-            && let Some(cache_dir) = cache.cache_dir().to_str() {
-                stats.insert("cache_dir".to_string(), serde_json::json!(cache_dir));
-            }
+            && let Some(cache_dir) = cache.cache_dir().to_str()
+        {
+            stats.insert("cache_dir".to_string(), serde_json::json!(cache_dir));
+        }
         if let Some(engine) = &self.engine {
             stats.insert("engine".to_string(), serde_json::json!(engine.name()));
         }
@@ -813,12 +820,12 @@ impl AgentPlugin for TTSPlugin {
                 .validate(&self.config.model_url, Some(expected_checksum))
                 .await
                 .map_err(|e| anyhow::anyhow!("Failed to validate model: {}", e))?
-            {
-                return Err(anyhow::anyhow!(
-                    "Model validation failed. The cached model may be corrupted. \
+        {
+            return Err(anyhow::anyhow!(
+                "Model validation failed. The cached model may be corrupted. \
                     Try deleting the cache and re-downloading."
-                ));
-            }
+            ));
+        }
 
         // Initialize engine with downloaded/cached model
         if self.engine.is_none() {
@@ -830,9 +837,7 @@ impl AgentPlugin for TTSPlugin {
                     .parent()
                     .map(|p| p.join("voices-v1.1-zh.bin"))
                     .unwrap_or_else(|| std::path::PathBuf::from("voices-v1.1-zh.bin"));
-                let voice_path = voice_path_buf
-                    .to_str()
-                    .unwrap_or("voices-v1.1-zh.bin");
+                let voice_path = voice_path_buf.to_str().unwrap_or("voices-v1.1-zh.bin");
 
                 let model_path_str = model_path
                     .to_str()
@@ -1058,10 +1063,7 @@ impl ToolExecutor for TextToSpeechTool {
         if !arguments.is_object() {
             return Err(anyhow::anyhow!("Arguments must be an object"));
         }
-        if arguments
-            .get("text")
-            .and_then(|v| v.as_str()).is_none()
-        {
+        if arguments.get("text").and_then(|v| v.as_str()).is_none() {
             return Err(anyhow::anyhow!("Missing required parameter: text"));
         }
         Ok(())
@@ -1170,10 +1172,7 @@ mod tests {
         let plugin = TTSPlugin::new("test_tts");
         let stats = plugin.stats();
 
-        assert_eq!(
-            stats.get("synthesis_count"),
-            Some(&serde_json::json!(0))
-        );
+        assert_eq!(stats.get("synthesis_count"), Some(&serde_json::json!(0)));
         assert_eq!(stats.get("total_chars"), Some(&serde_json::json!(0)));
     }
 

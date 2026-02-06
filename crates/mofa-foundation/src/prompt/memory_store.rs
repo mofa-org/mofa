@@ -120,21 +120,24 @@ impl PromptStore for InMemoryPromptStore {
 
                 // 按模板 ID 过滤
                 if let Some(ref tid) = filter.template_id
-                    && &e.template_id != tid {
-                        return false;
-                    }
+                    && &e.template_id != tid
+                {
+                    return false;
+                }
 
                 // 按租户过滤
                 if let Some(tenant_id) = filter.tenant_id
-                    && e.tenant_id != Some(tenant_id) {
-                        return false;
-                    }
+                    && e.tenant_id != Some(tenant_id)
+                {
+                    return false;
+                }
 
                 // 按标签过滤
                 if let Some(ref tags) = filter.tags
-                    && !tags.iter().any(|t| e.tags.contains(t)) {
-                        return false;
-                    }
+                    && !tags.iter().any(|t| e.tags.contains(t))
+                {
+                    return false;
+                }
 
                 // 按关键词搜索
                 if let Some(ref keyword) = filter.search {
@@ -223,10 +226,11 @@ impl PromptStore for InMemoryPromptStore {
         let mut templates = self.templates.write().unwrap();
 
         if let Some(&uuid) = index.get(template_id)
-            && let Some(entity) = templates.get_mut(&uuid) {
-                entity.enabled = enabled;
-                entity.updated_at = chrono::Utc::now();
-            }
+            && let Some(entity) = templates.get_mut(&uuid)
+        {
+            entity.enabled = enabled;
+            entity.updated_at = chrono::Utc::now();
+        }
 
         Ok(())
     }

@@ -32,15 +32,13 @@ pub struct TreatmentPlan {
 }
 
 /// 医疗知识存储
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[derive(Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct MedicalKnowledge {
     /// 疾病诊断标准
     pub diagnoses: Vec<DiseaseDiagnosis>,
     /// 治疗方案
     pub treatments: Vec<TreatmentPlan>,
 }
-
 
 /// 医疗知识动态注入工具
 pub struct MedicalKnowledgeTool {
@@ -130,7 +128,9 @@ impl ToolExecutor for MedicalKnowledgeTool {
                     // 从文件注入
                     self.load_knowledge_from_file(file_path).await?
                 } else {
-                    return Err(anyhow::anyhow!("Either knowledge JSON or file_path must be provided for inject_knowledge"));
+                    return Err(anyhow::anyhow!(
+                        "Either knowledge JSON or file_path must be provided for inject_knowledge"
+                    ));
                 };
 
                 // 获取统计信息
@@ -153,13 +153,17 @@ impl ToolExecutor for MedicalKnowledgeTool {
 
             // 查询诊断标准
             "query_diagnosis" => {
-                let disease = arguments["disease"]
-                    .as_str()
-                    .ok_or_else(|| anyhow::anyhow!("Disease name is required for query_diagnosis"))?;
+                let disease = arguments["disease"].as_str().ok_or_else(|| {
+                    anyhow::anyhow!("Disease name is required for query_diagnosis")
+                })?;
 
                 let knowledge = self.knowledge.read().unwrap();
 
-                if let Some(diagnosis) = knowledge.diagnoses.iter().find(|d| d.disease_name.to_lowercase() == disease.to_lowercase()) {
+                if let Some(diagnosis) = knowledge
+                    .diagnoses
+                    .iter()
+                    .find(|d| d.disease_name.to_lowercase() == disease.to_lowercase())
+                {
                     Ok(serde_json::to_value(diagnosis)?)
                 } else {
                     Ok(json!({
@@ -171,13 +175,17 @@ impl ToolExecutor for MedicalKnowledgeTool {
 
             // 查询治疗方案
             "query_treatment" => {
-                let disease = arguments["disease"]
-                    .as_str()
-                    .ok_or_else(|| anyhow::anyhow!("Disease name is required for query_treatment"))?;
+                let disease = arguments["disease"].as_str().ok_or_else(|| {
+                    anyhow::anyhow!("Disease name is required for query_treatment")
+                })?;
 
                 let knowledge = self.knowledge.read().unwrap();
 
-                if let Some(treatment) = knowledge.treatments.iter().find(|t| t.disease_name.to_lowercase() == disease.to_lowercase()) {
+                if let Some(treatment) = knowledge
+                    .treatments
+                    .iter()
+                    .find(|t| t.disease_name.to_lowercase() == disease.to_lowercase())
+                {
                     Ok(serde_json::to_value(treatment)?)
                 } else {
                     Ok(json!({
@@ -195,7 +203,9 @@ impl ToolExecutor for MedicalKnowledgeTool {
                 } else {
                     // 使用当前知识文件路径
                     let path = self.knowledge_path.read().unwrap();
-                    path.to_str().unwrap_or("medical_knowledge.json").to_string()
+                    path.to_str()
+                        .unwrap_or("medical_knowledge.json")
+                        .to_string()
                 };
 
                 let new_knowledge = self.load_knowledge_from_file(&file_path).await?;
@@ -215,10 +225,7 @@ impl ToolExecutor for MedicalKnowledgeTool {
                 }))
             }
 
-            _ => {
-                Err(anyhow::anyhow!("Unsupported action: {}", action))
-            }
+            _ => Err(anyhow::anyhow!("Unsupported action: {}", action)),
         }
     }
 }
-

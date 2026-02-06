@@ -470,7 +470,8 @@ impl WorkflowNode {
                         Some(s) => s.to_string(),
                         None => serde_json::to_string(&input).unwrap_or_default(),
                     };
-                    agent.chat(&prompt_str)
+                    agent
+                        .chat(&prompt_str)
                         .await
                         .map(WorkflowValue::String)
                         .map_err(|e| e.to_string())
@@ -517,7 +518,8 @@ impl WorkflowNode {
                     } else {
                         template
                     };
-                    agent.chat(&prompt)
+                    agent
+                        .chat(&prompt)
                         .await
                         .map(WorkflowValue::String)
                         .map_err(|e| e.to_string())

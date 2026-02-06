@@ -3,7 +3,7 @@
 //! 提供业务特定的功能，扩展内核的 CoreAgentContext
 
 use mofa_kernel::agent::context::AgentContext;
-use serde::{de::DeserializeOwned, Serialize};
+use serde::{Serialize, de::DeserializeOwned};
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
@@ -126,7 +126,10 @@ impl RichAgentContext {
     /// 增加组件调用计数
     pub async fn increment_component_calls(&self, component: &str) {
         let mut metrics = self.metrics.write().await;
-        *metrics.component_calls.entry(component.to_string()).or_insert(0) += 1;
+        *metrics
+            .component_calls
+            .entry(component.to_string())
+            .or_insert(0) += 1;
     }
 
     /// 增加 Token 使用
@@ -237,7 +240,10 @@ impl RichAgentContext {
     }
 
     /// 订阅事件
-    pub async fn subscribe(&self, event_type: &str) -> tokio::sync::mpsc::Receiver<mofa_kernel::agent::context::AgentEvent> {
+    pub async fn subscribe(
+        &self,
+        event_type: &str,
+    ) -> tokio::sync::mpsc::Receiver<mofa_kernel::agent::context::AgentEvent> {
         self.inner.subscribe(event_type).await
     }
 

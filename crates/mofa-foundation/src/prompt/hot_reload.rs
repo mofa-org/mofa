@@ -6,7 +6,8 @@ use super::plugin::{PromptTemplatePlugin, RhaiScriptPromptPlugin};
 // 只导入明确需要的类型，避免冲突
 use mofa_plugins::hot_reload::{
     // 不导入 HotReloadConfig，而是在代码中直接指定类型
-    HotReloadManager, ReloadEvent,
+    HotReloadManager,
+    ReloadEvent,
 };
 use std::path::Path;
 use std::sync::Arc;
@@ -72,7 +73,10 @@ impl HotReloadableRhaiPromptPlugin {
             }
         }
 
-        info!("Hot-reload prompt template watcher started for path: {:?}", script_path);
+        info!(
+            "Hot-reload prompt template watcher started for path: {:?}",
+            script_path
+        );
 
         // 订阅热重载事件
         let mut event_subscriber = self.hot_reload_manager.read().await.subscribe();
@@ -165,7 +169,10 @@ impl HotReloadableRhaiPromptPlugin {
 
 #[async_trait::async_trait]
 impl super::plugin::PromptTemplatePlugin for HotReloadableRhaiPromptPlugin {
-    async fn get_prompt_template(&self, scenario: &str) -> Option<Arc<super::template::PromptTemplate>> {
+    async fn get_prompt_template(
+        &self,
+        scenario: &str,
+    ) -> Option<Arc<super::template::PromptTemplate>> {
         let inner_guard = self.inner.read().await;
         inner_guard.get_prompt_template(scenario).await
     }
@@ -190,4 +197,3 @@ impl super::plugin::PromptTemplatePlugin for HotReloadableRhaiPromptPlugin {
         inner_guard.refresh_templates().await
     }
 }
-

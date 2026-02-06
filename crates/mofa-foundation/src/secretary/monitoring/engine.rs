@@ -66,10 +66,7 @@ impl EventHandlingEngine {
     }
 
     /// Register multiple plugins at once
-    pub async fn register_plugins(
-        &self,
-        plugins: Vec<Box<dyn EventResponsePlugin + Send + Sync>>,
-    ) {
+    pub async fn register_plugins(&self, plugins: Vec<Box<dyn EventResponsePlugin + Send + Sync>>) {
         for plugin in plugins {
             self.register_plugin(plugin).await;
         }
@@ -120,7 +117,10 @@ impl EventHandlingEngine {
 
                 // Process the event
                 // Downcast to mutable EventResponsePlugin
-                let plugin_mut = plugin.as_any_mut().downcast_mut::<Box<dyn EventResponsePlugin + Send + Sync>>().unwrap();
+                let plugin_mut = plugin
+                    .as_any_mut()
+                    .downcast_mut::<Box<dyn EventResponsePlugin + Send + Sync>>()
+                    .unwrap();
                 let processed_event = plugin_mut.handle_event(event).await?;
 
                 println!(
@@ -142,7 +142,10 @@ impl EventHandlingEngine {
 
     /// Start the engine and process events continuously
     pub async fn start(&self) -> PluginResult<()> {
-        println!("Starting event handling engine with {} concurrent handlers...", self.max_concurrent_handlers);
+        println!(
+            "Starting event handling engine with {} concurrent handlers...",
+            self.max_concurrent_handlers
+        );
 
         // Keep processing events forever
         loop {
@@ -174,7 +177,9 @@ impl EventHandlingEngine {
 mod tests {
     use super::*;
     use crate::secretary::monitoring::event::*;
-    use crate::secretary::monitoring::plugins::{NetworkAttackResponsePlugin, ServerFaultResponsePlugin};
+    use crate::secretary::monitoring::plugins::{
+        NetworkAttackResponsePlugin, ServerFaultResponsePlugin,
+    };
 
     #[tokio::test]
     async fn test_event_handling() {
@@ -186,10 +191,12 @@ mod tests {
         let network_attack_plugin = NetworkAttackResponsePlugin::new();
 
         // Register plugins with explicit boxing
-        engine.register_plugins(vec![
-            Box::new(server_fault_plugin) as Box<dyn EventResponsePlugin + Send + Sync>,
-            Box::new(network_attack_plugin) as Box<dyn EventResponsePlugin + Send + Sync>
-        ]).await;
+        engine
+            .register_plugins(vec![
+                Box::new(server_fault_plugin) as Box<dyn EventResponsePlugin + Send + Sync>,
+                Box::new(network_attack_plugin) as Box<dyn EventResponsePlugin + Send + Sync>,
+            ])
+            .await;
 
         // Create server fault event
         let server_fault_event = Event::new(

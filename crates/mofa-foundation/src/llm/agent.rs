@@ -22,15 +22,16 @@
 //! }
 //! ```
 
-use super::client::{ChatSession, LLMClient, ToolExecutor};
+use super::client::{ChatSession, LLMClient};
 use super::provider::{ChatStream, LLMProvider};
+use super::tool_executor::ToolExecutor;
 use super::types::{ChatMessage, LLMError, LLMResult, Tool};
 use crate::prompt;
-use mofa_plugins::tts::TTSPlugin;
 use futures::{Stream, StreamExt};
 use mofa_kernel::agent::AgentMetadata;
 use mofa_kernel::agent::AgentState;
 use mofa_kernel::plugin::{AgentPlugin, PluginType};
+use mofa_plugins::tts::TTSPlugin;
 use std::collections::HashMap;
 use std::io::Write;
 use std::pin::Pin;
@@ -49,7 +50,9 @@ struct CancellationToken {
 
 impl CancellationToken {
     fn new() -> Self {
-        Self { cancel: Arc::new(AtomicBool::new(false)) }
+        Self {
+            cancel: Arc::new(AtomicBool::new(false)),
+        }
     }
 
     fn is_cancelled(&self) -> bool {
@@ -61,7 +64,9 @@ impl CancellationToken {
     }
 
     fn clone_token(&self) -> CancellationToken {
-        CancellationToken { cancel: Arc::clone(&self.cancel) }
+        CancellationToken {
+            cancel: Arc::clone(&self.cancel),
+        }
     }
 }
 
@@ -111,7 +116,9 @@ struct SentenceBuffer {
 
 impl SentenceBuffer {
     fn new() -> Self {
-        Self { buffer: String::new() }
+        Self {
+            buffer: String::new(),
+        }
     }
 
     /// 推入文本块，返回完整句子（如果有）
@@ -482,9 +489,21 @@ impl LLMAgent {
         let initial_session_id_clone = initial_session_id.clone();
 
         // 1. 尝试从数据库加载会话（如果有 stores 且指定了 session_id）
-        let session = if let (Some(sid), Some(msg_store), Some(sess_store), Some(user_id),Some(tenant_id), Some(agent_id)) =
-            (initial_session_id_clone, message_store.clone(), session_store.clone(), persistence_user_id,persistence_tenant_id, persistence_agent_id)
-        {
+        let session = if let (
+            Some(sid),
+            Some(msg_store),
+            Some(sess_store),
+            Some(user_id),
+            Some(tenant_id),
+            Some(agent_id),
+        ) = (
+            initial_session_id_clone,
+            message_store.clone(),
+            session_store.clone(),
+            persistence_user_id,
+            persistence_tenant_id,
+            persistence_agent_id,
+        ) {
             // Clone stores before moving them into ChatSession::load
             let msg_store_clone = msg_store.clone();
             let sess_store_clone = sess_store.clone();
@@ -504,9 +523,15 @@ impl LLMAgent {
                 msg_store,
                 sess_store,
                 config.context_window_size,
-            ).await {
+            )
+            .await
+            {
                 Ok(loaded_session) => {
-                    tracing::info!("✅ 从数据库加载会话: {} ({} 条消息)", sid, loaded_session.messages().len());
+                    tracing::info!(
+                        "✅ 从数据库加载会话: {} ({} 条消息)",
+                        sid,
+                        loaded_session.messages().len()
+                    );
                     loaded_session
                 }
                 Err(e) => {
@@ -527,7 +552,9 @@ impl LLMAgent {
                         msg_store_clone,
                         sess_store_clone,
                         config.context_window_size,
-                    ).await {
+                    )
+                    .await
+                    {
                         Ok(mut new_session) => {
                             if let Some(ref prompt) = config.system_prompt {
                                 new_session = new_session.with_system(prompt.clone());
@@ -657,13 +684,14 @@ impl LLMAgent {
         let mut system_prompt = self.config.system_prompt.clone();
 
         if let Some(ref plugin) = self.prompt_plugin
-            && let Some(template) = plugin.get_current_template().await {
-                // 渲染默认模板
-                system_prompt = match template.render(&[]) {
-                    Ok(prompt) => Some(prompt),
-                    Err(_) => self.config.system_prompt.clone(),
-                };
-            }
+            && let Some(template) = plugin.get_current_template().await
+        {
+            // 渲染默认模板
+            system_prompt = match template.render(&[]) {
+                Ok(prompt) => Some(prompt),
+                Err(_) => self.config.system_prompt.clone(),
+            };
+        }
 
         if let Some(ref prompt) = system_prompt {
             session = session.with_system(prompt.clone());
@@ -703,19 +731,21 @@ impl LLMAgent {
             }
         }
 
-        let mut session = ChatSession::with_id_str(&session_id, LLMClient::new(self.provider.clone()));
+        let mut session =
+            ChatSession::with_id_str(&session_id, LLMClient::new(self.provider.clone()));
 
         // 使用动态 Prompt 模板（如果可用）
         let mut system_prompt = self.config.system_prompt.clone();
 
         if let Some(ref plugin) = self.prompt_plugin
-            && let Some(template) = plugin.get_current_template().await {
-                // 渲染默认模板
-                system_prompt = match template.render(&[]) {
-                    Ok(prompt) => Some(prompt),
-                    Err(_) => self.config.system_prompt.clone(),
-                };
-            }
+            && let Some(template) = plugin.get_current_template().await
+        {
+            // 渲染默认模板
+            system_prompt = match template.render(&[]) {
+                Ok(prompt) => Some(prompt),
+                Err(_) => self.config.system_prompt.clone(),
+            };
+        }
 
         if let Some(ref prompt) = system_prompt {
             session = session.with_system(prompt.clone());
@@ -822,11 +852,15 @@ impl LLMAgent {
     /// agent.tts_speak("Hello world").await?;
     /// ```
     pub async fn tts_speak(&self, text: &str) -> LLMResult<()> {
-        let tts = self.tts_plugin.as_ref()
+        let tts = self
+            .tts_plugin
+            .as_ref()
             .ok_or_else(|| LLMError::Other("TTS plugin not configured".to_string()))?;
 
         let mut tts_guard = tts.lock().await;
-        tts_guard.synthesize_and_play(text).await
+        tts_guard
+            .synthesize_and_play(text)
+            .await
             .map_err(|e| LLMError::Other(format!("TTS synthesis failed: {}", e)))
     }
 
@@ -844,11 +878,15 @@ impl LLMAgent {
         text: &str,
         callback: Box<dyn Fn(Vec<u8>) + Send + Sync>,
     ) -> LLMResult<()> {
-        let tts = self.tts_plugin.as_ref()
+        let tts = self
+            .tts_plugin
+            .as_ref()
             .ok_or_else(|| LLMError::Other("TTS plugin not configured".to_string()))?;
 
         let mut tts_guard = tts.lock().await;
-        tts_guard.synthesize_streaming(text, callback).await
+        tts_guard
+            .synthesize_streaming(text, callback)
+            .await
             .map_err(|e| LLMError::Other(format!("TTS streaming failed: {}", e)))
     }
 
@@ -872,11 +910,15 @@ impl LLMAgent {
         text: &str,
         callback: Box<dyn Fn(Vec<f32>) + Send + Sync>,
     ) -> LLMResult<()> {
-        let tts = self.tts_plugin.as_ref()
+        let tts = self
+            .tts_plugin
+            .as_ref()
             .ok_or_else(|| LLMError::Other("TTS plugin not configured".to_string()))?;
 
         let mut tts_guard = tts.lock().await;
-        tts_guard.synthesize_streaming_f32(text, callback).await
+        tts_guard
+            .synthesize_streaming_f32(text, callback)
+            .await
             .map_err(|e| LLMError::Other(format!("TTS f32 streaming failed: {}", e)))
     }
 
@@ -897,10 +939,7 @@ impl LLMAgent {
     ///     }
     /// }
     /// ```
-    pub async fn tts_create_stream(
-        &self,
-        text: &str,
-    ) -> LLMResult<TtsAudioStream> {
+    pub async fn tts_create_stream(&self, text: &str) -> LLMResult<TtsAudioStream> {
         #[cfg(feature = "kokoro")]
         {
             use mofa_plugins::tts::kokoro_wrapper::KokoroTTS;
@@ -916,12 +955,15 @@ impl LLMAgent {
                 engine
             } else {
                 // 首次调用：获取 tts_plugin 的锁，downcast 并缓存
-                let tts = self.tts_plugin.as_ref()
+                let tts = self
+                    .tts_plugin
+                    .as_ref()
                     .ok_or_else(|| LLMError::Other("TTS plugin not configured".to_string()))?;
 
                 let tts_guard = tts.lock().await;
 
-                let engine = tts_guard.engine()
+                let engine = tts_guard
+                    .engine()
                     .ok_or_else(|| LLMError::Other("TTS engine not initialized".to_string()))?;
 
                 if let Some(kokoro_ref) = engine.as_any().downcast_ref::<KokoroTTS>() {
@@ -930,7 +972,9 @@ impl LLMAgent {
                     let cloned_arc = Arc::new(cloned);
 
                     // 获取 voice 配置
-                    let voice = tts_guard.stats().get("default_voice")
+                    let voice = tts_guard
+                        .stats()
+                        .get("default_voice")
                         .and_then(|v| v.as_str())
                         .unwrap_or("default");
 
@@ -948,12 +992,15 @@ impl LLMAgent {
 
             // 使用缓存的引擎创建 stream（无需再次获取 tts_plugin 的锁）
             let voice = "default"; // 可以从配置中获取
-            let (mut sink, stream) = kokoro.create_stream(voice).await
+            let (mut sink, stream) = kokoro
+                .create_stream(voice)
+                .await
                 .map_err(|e| LLMError::Other(format!("Failed to create TTS stream: {}", e)))?;
 
             // Submit text for synthesis
-            sink.synth(text.to_string()).await
-                .map_err(|e| LLMError::Other(format!("Failed to submit text for synthesis: {}", e)))?;
+            sink.synth(text.to_string()).await.map_err(|e| {
+                LLMError::Other(format!("Failed to submit text for synthesis: {}", e))
+            })?;
 
             // Box the stream to hide the concrete type
             return Ok(Box::pin(stream));
@@ -992,7 +1039,9 @@ impl LLMAgent {
         sentences: Vec<String>,
         callback: Box<dyn Fn(Vec<f32>) + Send + Sync>,
     ) -> LLMResult<()> {
-        let tts = self.tts_plugin.as_ref()
+        let tts = self
+            .tts_plugin
+            .as_ref()
             .ok_or_else(|| LLMError::Other("TTS plugin not configured".to_string()))?;
 
         let tts_guard = tts.lock().await;
@@ -1001,17 +1050,22 @@ impl LLMAgent {
         {
             use mofa_plugins::tts::kokoro_wrapper::KokoroTTS;
 
-            let engine = tts_guard.engine()
+            let engine = tts_guard
+                .engine()
                 .ok_or_else(|| LLMError::Other("TTS engine not initialized".to_string()))?;
 
             if let Some(kokoro) = engine.as_any().downcast_ref::<KokoroTTS>() {
-                let voice = tts_guard.stats().get("default_voice")
+                let voice = tts_guard
+                    .stats()
+                    .get("default_voice")
                     .and_then(|v| v.as_str())
                     .unwrap_or("default")
                     .to_string();
 
                 // Create ONE stream for all sentences
-                let (mut sink, mut stream) = kokoro.create_stream(&voice).await
+                let (mut sink, mut stream) = kokoro
+                    .create_stream(&voice)
+                    .await
                     .map_err(|e| LLMError::Other(format!("Failed to create TTS stream: {}", e)))?;
 
                 // Spawn a task to consume the stream continuously
@@ -1023,7 +1077,8 @@ impl LLMAgent {
 
                 // Submit all sentences to the same sink
                 for sentence in sentences {
-                    sink.synth(sentence).await
+                    sink.synth(sentence)
+                        .await
                         .map_err(|e| LLMError::Other(format!("Failed to submit text: {}", e)))?;
                 }
 
@@ -1102,7 +1157,8 @@ impl LLMAgent {
         message: impl Into<String>,
         callback: impl Fn(Vec<f32>) + Send + Sync + 'static,
     ) -> LLMResult<()> {
-        self.chat_with_tts_internal(session_id, message, Some(Box::new(callback))).await
+        self.chat_with_tts_internal(session_id, message, Some(Box::new(callback)))
+            .await
     }
 
     /// 创建实时 TTS 流
@@ -1121,23 +1177,32 @@ impl LLMAgent {
     ) -> LLMResult<TTSStreamHandle> {
         use mofa_plugins::tts::kokoro_wrapper::KokoroTTS;
 
-        let tts = self.tts_plugin.as_ref()
+        let tts = self
+            .tts_plugin
+            .as_ref()
             .ok_or_else(|| LLMError::Other("TTS plugin not configured".to_string()))?;
 
         let tts_guard = tts.lock().await;
-        let engine = tts_guard.engine()
+        let engine = tts_guard
+            .engine()
             .ok_or_else(|| LLMError::Other("TTS engine not initialized".to_string()))?;
 
-        let kokoro = engine.as_any().downcast_ref::<KokoroTTS>()
+        let kokoro = engine
+            .as_any()
+            .downcast_ref::<KokoroTTS>()
             .ok_or_else(|| LLMError::Other("TTS engine is not KokoroTTS".to_string()))?;
 
-        let voice = tts_guard.stats().get("default_voice")
+        let voice = tts_guard
+            .stats()
+            .get("default_voice")
             .and_then(|v| v.as_str())
             .unwrap_or("default")
             .to_string();
 
         // 创建 TTS stream（只创建一次）
-        let (sink, mut stream) = kokoro.create_stream(&voice).await
+        let (sink, mut stream) = kokoro
+            .create_stream(&voice)
+            .await
             .map_err(|e| LLMError::Other(format!("Failed to create TTS stream: {}", e)))?;
 
         // Clone cancellation token for the spawned task
@@ -1182,13 +1247,15 @@ impl LLMAgent {
                 Some(cb) => cb,
                 None => {
                     // 无 TTS 请求，仅流式输出文本
-                    let mut text_stream = self.chat_stream_with_session(session_id, message).await?;
+                    let mut text_stream =
+                        self.chat_stream_with_session(session_id, message).await?;
                     while let Some(result) = text_stream.next().await {
                         match result {
                             Ok(text_chunk) => {
                                 print!("{}", text_chunk);
-                                std::io::stdout().flush()
-                                    .map_err(|e| LLMError::Other(format!("Failed to flush stdout: {}", e)))?;
+                                std::io::stdout().flush().map_err(|e| {
+                                    LLMError::Other(format!("Failed to flush stdout: {}", e))
+                                })?;
                             }
                             Err(e) if e.to_string().contains("__stream_end__") => break,
                             Err(e) => return Err(e),
@@ -1206,10 +1273,9 @@ impl LLMAgent {
             let cancellation_token = CancellationToken::new();
 
             // Step 2: 在 LLM 流式输出之前创建 TTS stream（传入 cancellation token）
-            let mut tts_handle = self.create_tts_stream_handle(
-                callback,
-                Some(cancellation_token.clone_token())
-            ).await?;
+            let mut tts_handle = self
+                .create_tts_stream_handle(callback, Some(cancellation_token.clone_token()))
+                .await?;
 
             // Step 3: 创建并跟踪新的 TTS session
             let session = TTSSession::new(cancellation_token);
@@ -1239,8 +1305,9 @@ impl LLMAgent {
 
                         // 实时显示文本
                         print!("{}", text_chunk);
-                        std::io::stdout().flush()
-                            .map_err(|e| LLMError::Other(format!("Failed to flush stdout: {}", e)))?;
+                        std::io::stdout().flush().map_err(|e| {
+                            LLMError::Other(format!("Failed to flush stdout: {}", e))
+                        })?;
 
                         // 检测句子并立即提交到 TTS
                         if let Some(sentence) = buffer.push(&text_chunk) {
@@ -1271,10 +1338,11 @@ impl LLMAgent {
             // Step 7: 等待 TTS 流完成（所有音频块处理完毕）
             let _ = tokio::time::timeout(
                 tokio::time::Duration::from_secs(30),
-                tts_handle._stream_handle
-            ).await
-                .map_err(|_| LLMError::Other("TTS stream processing timeout".to_string()))
-                .and_then(|r| r.map_err(|e| LLMError::Other(format!("TTS stream task failed: {}", e))));
+                tts_handle._stream_handle,
+            )
+            .await
+            .map_err(|_| LLMError::Other("TTS stream processing timeout".to_string()))
+            .and_then(|r| r.map_err(|e| LLMError::Other(format!("TTS stream task failed: {}", e))));
 
             Ok(())
         }
@@ -1291,8 +1359,9 @@ impl LLMAgent {
                 match result {
                     Ok(text_chunk) => {
                         print!("{}", text_chunk);
-                        std::io::stdout().flush()
-                            .map_err(|e| LLMError::Other(format!("Failed to flush stdout: {}", e)))?;
+                        std::io::stdout().flush().map_err(|e| {
+                            LLMError::Other(format!("Failed to flush stdout: {}", e))
+                        })?;
 
                         if let Some(sentence) = buffer.push(&text_chunk) {
                             sentences.push(sentence);
@@ -1310,14 +1379,15 @@ impl LLMAgent {
 
             // 批量播放 TTS（如果有回调）
             if !sentences.is_empty()
-                && let Some(cb) = callback {
-                    for sentence in &sentences {
-                        println!("\n[TTS] {}", sentence);
-                    }
-                    // 注意：非 kokoro 环境下无法调用此方法
-                    // 这里需要根据实际情况处理
-                    let _ = cb;
+                && let Some(cb) = callback
+            {
+                for sentence in &sentences {
+                    println!("\n[TTS] {}", sentence);
                 }
+                // 注意：非 kokoro 环境下无法调用此方法
+                // 这里需要根据实际情况处理
+                let _ = cb;
+            }
 
             Ok(())
         }
@@ -1424,16 +1494,17 @@ impl LLMAgent {
         let mut system_prompt = self.config.system_prompt.clone();
 
         if let Some(ref plugin) = self.prompt_plugin
-            && let Some(template) = plugin.get_current_template().await {
-                // 渲染默认模板（可以根据需要添加变量）
-                match template.render(&[]) {
-                    Ok(prompt) => system_prompt = Some(prompt),
-                    Err(_) => {
-                        // 如果渲染失败，使用回退的系统提示词
-                        system_prompt = self.config.system_prompt.clone();
-                    }
+            && let Some(template) = plugin.get_current_template().await
+        {
+            // 渲染默认模板（可以根据需要添加变量）
+            match template.render(&[]) {
+                Ok(prompt) => system_prompt = Some(prompt),
+                Err(_) => {
+                    // 如果渲染失败，使用回退的系统提示词
+                    system_prompt = self.config.system_prompt.clone();
                 }
             }
+        }
 
         // 设置系统提示词
         if let Some(ref system) = system_prompt {
@@ -1451,16 +1522,23 @@ impl LLMAgent {
         builder = builder.user(question);
 
         // 添加工具
-        if !self.tools.is_empty() {
-            builder = builder.tools(self.tools.clone());
-            if let Some(ref executor) = self.tool_executor {
-                builder = builder.with_tool_executor(executor.clone());
-                let response = builder.send_with_tools().await?;
-                return response
-                    .content()
-                    .map(|s| s.to_string())
-                    .ok_or_else(|| LLMError::Other("No content in response".to_string()));
+        if let Some(ref executor) = self.tool_executor {
+            let tools = if self.tools.is_empty() {
+                executor.available_tools().await?
+            } else {
+                self.tools.clone()
+            };
+
+            if !tools.is_empty() {
+                builder = builder.tools(tools);
             }
+
+            builder = builder.with_tool_executor(executor.clone());
+            let response = builder.send_with_tools().await?;
+            return response
+                .content()
+                .map(|s| s.to_string())
+                .ok_or_else(|| LLMError::Other("No content in response".to_string()));
         }
 
         let response = builder.send().await?;
@@ -1672,7 +1750,8 @@ impl LLMAgent {
 
         // 创建一个包装流，在完成时更新历史并调用事件处理
         let event_handler = self.event_handler.clone().map(Arc::new);
-        let wrapped_stream = Self::create_history_updating_stream(chunk_stream, session, event_handler);
+        let wrapped_stream =
+            Self::create_history_updating_stream(chunk_stream, session, event_handler);
 
         Ok(wrapped_stream)
     }
@@ -1802,7 +1881,8 @@ impl LLMAgent {
 
         // 创建收集完整响应的流
         let event_handler = self.event_handler.clone().map(Arc::new);
-        let wrapped_stream = Self::create_collecting_stream(chunk_stream, session, tx, event_handler);
+        let wrapped_stream =
+            Self::create_collecting_stream(chunk_stream, session, tx, event_handler);
 
         Ok((wrapped_stream, rx))
     }
@@ -1896,7 +1976,10 @@ impl LLMAgent {
                     let window_size = session.context_window_size();
                     if window_size.is_some() {
                         let current_messages = session.messages().to_vec();
-                        *session.messages_mut() = ChatSession::apply_sliding_window_static(&current_messages, window_size);
+                        *session.messages_mut() = ChatSession::apply_sliding_window_static(
+                            &current_messages,
+                            window_size,
+                        );
                     }
 
                     if let Some(handler) = event_handler_clone {
@@ -1927,8 +2010,8 @@ impl LLMAgent {
         tx: tokio::sync::oneshot::Sender<String>,
         event_handler: Option<Arc<Box<dyn LLMAgentEventHandler>>>,
     ) -> TextStream {
-        use futures::StreamExt;
         use super::types::LLMResponseMetadata;
+        use futures::StreamExt;
 
         let collected = Arc::new(tokio::sync::Mutex::new(String::new()));
         let collected_clone = collected.clone();
@@ -1987,16 +2070,23 @@ impl LLMAgent {
                     let window_size = session.context_window_size();
                     if window_size.is_some() {
                         let current_messages = session.messages().to_vec();
-                        *session.messages_mut() = ChatSession::apply_sliding_window_static(&current_messages, window_size);
+                        *session.messages_mut() = ChatSession::apply_sliding_window_static(
+                            &current_messages,
+                            window_size,
+                        );
                     }
 
                     // 调用 after_chat 钩子（带元数据）
                     if let Some(handler) = event_handler_clone {
                         if let Some(meta) = &metadata {
-                            if let Ok(Some(resp)) = handler.after_chat_with_metadata(&processed_response, meta).await {
+                            if let Ok(Some(resp)) = handler
+                                .after_chat_with_metadata(&processed_response, meta)
+                                .await
+                            {
                                 processed_response = resp;
                             }
-                        } else if let Ok(Some(resp)) = handler.after_chat(&processed_response).await {
+                        } else if let Ok(Some(resp)) = handler.after_chat(&processed_response).await
+                        {
                             processed_response = resp;
                         }
                     }
@@ -2181,7 +2271,10 @@ impl LLMAgentBuilder {
     /// # Ok(())
     /// # }
     /// ```
-    pub fn with_persistence_plugin(mut self, plugin: crate::persistence::PersistencePlugin) -> Self {
+    pub fn with_persistence_plugin(
+        mut self,
+        plugin: crate::persistence::PersistencePlugin,
+    ) -> Self {
         self.message_store = Some(plugin.message_store());
         self.session_store = plugin.session_store();
         self.persistence_user_id = Some(plugin.user_id());
@@ -2198,13 +2291,19 @@ impl LLMAgentBuilder {
     }
 
     /// 设置 Prompt 模板插件
-    pub fn with_prompt_plugin(mut self, plugin: impl prompt::PromptTemplatePlugin + 'static) -> Self {
+    pub fn with_prompt_plugin(
+        mut self,
+        plugin: impl prompt::PromptTemplatePlugin + 'static,
+    ) -> Self {
         self.prompt_plugin = Some(Box::new(plugin));
         self
     }
 
     /// 设置支持热重载的 Prompt 模板插件
-    pub fn with_hot_reload_prompt_plugin(mut self, plugin: prompt::HotReloadableRhaiPromptPlugin) -> Self {
+    pub fn with_hot_reload_prompt_plugin(
+        mut self,
+        plugin: prompt::HotReloadableRhaiPromptPlugin,
+    ) -> Self {
         self.prompt_plugin = Some(Box::new(plugin));
         self
     }
@@ -2315,10 +2414,9 @@ impl LLMAgentBuilder {
     pub fn from_env() -> LLMResult<Self> {
         use super::openai::{OpenAIConfig, OpenAIProvider};
 
-        let api_key = std::env::var("OPENAI_API_KEY")
-            .map_err(|_| LLMError::ConfigError(
-                "OPENAI_API_KEY environment variable not set".to_string()
-            ))?;
+        let api_key = std::env::var("OPENAI_API_KEY").map_err(|_| {
+            LLMError::ConfigError("OPENAI_API_KEY environment variable not set".to_string())
+        })?;
 
         let mut config = OpenAIConfig::new(api_key);
 
@@ -2362,9 +2460,7 @@ impl LLMAgentBuilder {
         // 设置Prompt模板插件
         agent.prompt_plugin = self.prompt_plugin;
 
-        if !self.tools.is_empty()
-            && let Some(executor) = self.tool_executor
-        {
+        if let Some(executor) = self.tool_executor {
             agent.set_tools(self.tools, executor);
         }
 
@@ -2420,9 +2516,7 @@ impl LLMAgentBuilder {
 
         let mut agent = LLMAgent::with_initial_session(config, provider, self.session_id);
 
-        if !self.tools.is_empty()
-            && let Some(executor) = self.tool_executor
-        {
+        if let Some(executor) = self.tool_executor {
             agent.set_tools(self.tools, executor);
         }
 
@@ -2486,7 +2580,7 @@ impl LLMAgentBuilder {
     ///     .build_async()
     ///     .await;
     /// ```
-    pub async fn build_async(self) -> LLMAgent {
+    pub async fn build_async(mut self) -> LLMAgent {
         let provider = self
             .provider
             .expect("LLM provider must be set before building");
@@ -2526,14 +2620,21 @@ impl LLMAgentBuilder {
             self.persistence_user_id,
             persistence_tenant_id,
             self.persistence_agent_id,
-        ).await;
+        )
+        .await;
 
         // 设置Prompt模板插件
         agent.prompt_plugin = self.prompt_plugin;
 
-        if !self.tools.is_empty()
-            && let Some(executor) = self.tool_executor
-        {
+        if self.tools.is_empty() {
+            if let Some(executor) = self.tool_executor.as_ref() {
+                if let Ok(tools) = executor.available_tools().await {
+                    self.tools = tools;
+                }
+            }
+        }
+
+        if let Some(executor) = self.tool_executor {
             agent.set_tools(self.tools, executor);
         }
 
@@ -2562,7 +2663,10 @@ impl LLMAgentBuilder {
             for plugin in &plugins {
                 // 通过 metadata 识别持久化插件
                 if plugin.metadata().plugin_type == PluginType::Storage
-                    && plugin.metadata().capabilities.contains(&"message_persistence".to_string())
+                    && plugin
+                        .metadata()
+                        .capabilities
+                        .contains(&"message_persistence".to_string())
                 {
                     // 这里我们无法直接调用泛型 PersistencePlugin 的 load_history
                     // 因为 trait object 无法访问泛型方法
@@ -2592,7 +2696,6 @@ impl LLMAgentBuilder {
 // 从配置文件创建
 // ============================================================================
 
-
 impl LLMAgentBuilder {
     /// 从 agent.yml 配置文件创建 Builder
     ///
@@ -2612,7 +2715,9 @@ impl LLMAgentBuilder {
 
     /// 从 YAML 配置创建 Builder
     pub fn from_yaml_config(config: crate::config::AgentYamlConfig) -> LLMResult<Self> {
-        let mut builder = Self::new().with_id(&config.agent.id).with_name(&config.agent.name);
+        let mut builder = Self::new()
+            .with_id(&config.agent.id)
+            .with_name(&config.agent.name);
         // 配置 LLM provider
         if let Some(llm_config) = config.llm {
             let provider = create_provider_from_config(&llm_config)?;
@@ -2779,7 +2884,7 @@ impl LLMAgentBuilder {
                     openai_config = openai_config.with_temperature(temp);
                 }
 
-                if let Some(max_tokens) = agent.max_completion_tokens{
+                if let Some(max_tokens) = agent.max_completion_tokens {
                     openai_config = openai_config.with_max_tokens(max_tokens as u32);
                 }
 
@@ -2789,7 +2894,7 @@ impl LLMAgentBuilder {
                 return Err(LLMError::Other(format!(
                     "Unsupported provider type: {}",
                     other
-                )))
+                )));
             }
         };
 
@@ -2971,16 +3076,18 @@ impl mofa_kernel::agent::MoFAAgent for LLMAgent {
         let session_id = self.active_session_id.read().await.clone();
         plugin_config.set("session_id", session_id);
 
-        let plugin_ctx = mofa_kernel::plugin::PluginContext::new(self.id())
-            .with_config(plugin_config);
+        let plugin_ctx =
+            mofa_kernel::plugin::PluginContext::new(self.id()).with_config(plugin_config);
 
         for plugin in &mut self.plugins {
-            plugin.load(&plugin_ctx).await.map_err(|e| {
-                mofa_kernel::agent::AgentError::InitializationFailed(e.to_string())
-            })?;
-            plugin.init_plugin().await.map_err(|e| {
-                mofa_kernel::agent::AgentError::InitializationFailed(e.to_string())
-            })?;
+            plugin
+                .load(&plugin_ctx)
+                .await
+                .map_err(|e| mofa_kernel::agent::AgentError::InitializationFailed(e.to_string()))?;
+            plugin
+                .init_plugin()
+                .await
+                .map_err(|e| mofa_kernel::agent::AgentError::InitializationFailed(e.to_string()))?;
         }
         self.state = mofa_kernel::agent::AgentState::Ready;
 
@@ -3004,14 +3111,15 @@ impl mofa_kernel::agent::MoFAAgent for LLMAgent {
             _ => {
                 return Err(AgentError::ValidationFailed(
                     "Unsupported input type for LLMAgent".to_string(),
-                ))
+                ));
             }
         };
 
         // 执行 chat
-        let response = self.chat(&message).await.map_err(|e| {
-            AgentError::ExecutionFailed(format!("LLM chat failed: {}", e))
-        })?;
+        let response = self
+            .chat(&message)
+            .await
+            .map_err(|e| AgentError::ExecutionFailed(format!("LLM chat failed: {}", e)))?;
 
         // 将响应转换为 AgentOutput
         Ok(AgentOutput::text(response))
@@ -3020,9 +3128,10 @@ impl mofa_kernel::agent::MoFAAgent for LLMAgent {
     async fn shutdown(&mut self) -> mofa_kernel::agent::AgentResult<()> {
         // 销毁所有插件
         for plugin in &mut self.plugins {
-            plugin.unload().await.map_err(|e| {
-                mofa_kernel::agent::AgentError::ShutdownFailed(e.to_string())
-            })?;
+            plugin
+                .unload()
+                .await
+                .map_err(|e| mofa_kernel::agent::AgentError::ShutdownFailed(e.to_string()))?;
         }
         self.state = mofa_kernel::agent::AgentState::Shutdown;
         Ok(())

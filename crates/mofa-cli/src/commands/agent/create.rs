@@ -1,7 +1,7 @@
 //! `mofa agent create` command - Interactive agent creation wizard
 
 use colored::Colorize;
-use dialoguer::{theme::ColorfulTheme, Confirm, Input, Select};
+use dialoguer::{Confirm, Input, Select, theme::ColorfulTheme};
 use std::path::PathBuf;
 
 /// Agent configuration built from the interactive wizard
@@ -70,9 +70,15 @@ pub fn run(non_interactive: bool, config_path: Option<PathBuf>) -> anyhow::Resul
 
 fn run_interactive_wizard() -> anyhow::Result<AgentConfigBuilder> {
     println!();
-    println!("{}", "═══════════════════════════════════════════════".cyan());
+    println!(
+        "{}",
+        "═══════════════════════════════════════════════".cyan()
+    );
     println!("{}", "  MoFA Agent Creation Wizard".cyan().bold());
-    println!("{}", "═══════════════════════════════════════════════".cyan());
+    println!(
+        "{}",
+        "═══════════════════════════════════════════════".cyan()
+    );
     println!();
 
     let theme = ColorfulTheme::default();
@@ -127,11 +133,7 @@ fn run_interactive_wizard() -> anyhow::Result<AgentConfigBuilder> {
             .with_prompt("API key (or leave empty to use env var)")
             .allow_empty(true)
             .interact()?;
-        if key.is_empty() {
-            None
-        } else {
-            Some(key)
-        }
+        if key.is_empty() { None } else { Some(key) }
     } else {
         None
     };
@@ -141,11 +143,7 @@ fn run_interactive_wizard() -> anyhow::Result<AgentConfigBuilder> {
             .with_prompt("Base URL (optional)")
             .allow_empty(true)
             .interact()?;
-        if url.is_empty() {
-            None
-        } else {
-            Some(url)
-        }
+        if url.is_empty() { None } else { Some(url) }
     } else {
         None
     };
@@ -172,7 +170,10 @@ fn run_interactive_wizard() -> anyhow::Result<AgentConfigBuilder> {
         .with_prompt("Max tokens")
         .default("4096".to_string())
         .validate_with(|input: &String| {
-            input.parse::<u32>().map_err(|_| "Must be a positive number").map(|_| ())
+            input
+                .parse::<u32>()
+                .map_err(|_| "Must be a positive number")
+                .map(|_| ())
         })
         .interact()?
         .parse()?;
@@ -214,9 +215,15 @@ fn run_interactive_wizard() -> anyhow::Result<AgentConfigBuilder> {
     println!();
 
     // Confirmation
-    println!("{}", "═══════════════════════════════════════════════".cyan());
+    println!(
+        "{}",
+        "═══════════════════════════════════════════════".cyan()
+    );
     println!("{}", "  Configuration Summary".bold());
-    println!("{}", "═══════════════════════════════════════════════".cyan());
+    println!(
+        "{}",
+        "═══════════════════════════════════════════════".cyan()
+    );
     println!("  Name:           {}", name.cyan());
     println!("  ID:             {}", id.cyan());
     println!("  Description:    {}", description.white());
@@ -254,7 +261,9 @@ fn run_interactive_wizard() -> anyhow::Result<AgentConfigBuilder> {
     })
 }
 
-fn config_from_file_or_defaults(config_path: Option<PathBuf>) -> anyhow::Result<AgentConfigBuilder> {
+fn config_from_file_or_defaults(
+    config_path: Option<PathBuf>,
+) -> anyhow::Result<AgentConfigBuilder> {
     if let Some(_path) = config_path {
         // Load from file (would parse the file here)
         anyhow::bail!("Config file loading not yet implemented for non-interactive mode");
@@ -289,7 +298,12 @@ fn write_agent_config(config: &AgentConfigBuilder) -> anyhow::Result<()> {
     let capabilities_str = if config.capabilities.is_empty() {
         "    - llm".to_string()
     } else {
-        config.capabilities.iter().map(|c| format!("    - {}", c)).collect::<Vec<_>>().join("\n")
+        config
+            .capabilities
+            .iter()
+            .map(|c| format!("    - {}", c))
+            .collect::<Vec<_>>()
+            .join("\n")
     };
 
     let api_key_str = match &config.api_key {
@@ -347,10 +361,17 @@ runtime:
 
     std::fs::write(filename, content)?;
 
-    println!("{} Agent configuration written to {}", "✓".green(), filename.cyan());
+    println!(
+        "{} Agent configuration written to {}",
+        "✓".green(),
+        filename.cyan()
+    );
     println!();
     println!("Next steps:");
-    println!("  1. Review and edit {} to customize your agent", filename.cyan());
+    println!(
+        "  1. Review and edit {} to customize your agent",
+        filename.cyan()
+    );
     println!("  2. Set your API key: export OPENAI_API_KEY='sk-...'");
     println!("  3. Run your agent: mofa run");
     println!();

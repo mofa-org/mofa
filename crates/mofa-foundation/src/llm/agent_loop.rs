@@ -7,11 +7,14 @@
 //! - LLM provider abstraction
 //! - Media/vision support
 
-use crate::llm::types::{
-    ChatMessage, ChatCompletionRequest, Tool, Role, MessageContent,
-    ContentPart, ImageUrl,
-};
 use crate::llm::LLMProvider;
+use crate::llm::client::ChatSession;
+use crate::llm::context::AgentContextBuilder;
+use crate::llm::tool_executor::ToolExecutor;
+use crate::llm::types::{
+    ChatCompletionRequest, ChatMessage, ContentPart, ImageUrl, LLMResult, MessageContent, Role,
+    Tool,
+};
 use anyhow::Result;
 use std::collections::HashMap;
 use std::path::Path;
@@ -41,16 +44,6 @@ impl Default for AgentLoopConfig {
     }
 }
 
-/// Tool executor trait for executing tool calls (AgentLoop specific)
-#[async_trait::async_trait]
-pub trait ToolExecutor: Send + Sync {
-    /// Execute a tool call
-    async fn execute(&self, name: &str, arguments: &str) -> Result<String>;
-
-    /// Get available tool definitions
-    fn available_tools(&self) -> Vec<Tool>;
-}
-
 /// Agent loop that processes messages with tool support
 pub struct AgentLoop {
     /// LLM provider
@@ -59,6 +52,17 @@ pub struct AgentLoop {
     tools: Arc<dyn ToolExecutor>,
     /// Configuration
     config: AgentLoopConfig,
+}
+
+/// High-level runner that wires AgentLoop with optional context and session.
+///
+/// This provides a single entry point when you just want to run the loop with
+/// a configured provider/tools, and optionally persist history in a session.
+pub struct AgentLoopRunner {
+    agent_loop: AgentLoop,
+    context_builder: Option<AgentContextBuilder>,
+    session: Option<ChatSession>,
+    model: Option<String>,
 }
 
 impl AgentLoop {
@@ -76,10 +80,7 @@ impl AgentLoop {
     }
 
     /// Create with default configuration
-    pub fn with_defaults(
-        provider: Arc<dyn LLMProvider>,
-        tools: Arc<dyn ToolExecutor>,
-    ) -> Self {
+    pub fn with_defaults(provider: Arc<dyn LLMProvider>, tools: Arc<dyn ToolExecutor>) -> Self {
         Self::new(provider, tools, AgentLoopConfig::default())
     }
 
@@ -90,7 +91,8 @@ impl AgentLoop {
         content: &str,
         media: Option<Vec<String>>,
     ) -> Result<String> {
-        self.process_with_options(context, content, media, None).await
+        self.process_with_options(context, content, media, None)
+            .await
     }
 
     /// Process with custom model
@@ -101,7 +103,8 @@ impl AgentLoop {
         media: Option<Vec<String>>,
         model: &str,
     ) -> Result<String> {
-        self.process_with_options(context, content, media, Some(model)).await
+        self.process_with_options(context, content, media, Some(model))
+            .await
     }
 
     /// Process with custom context builder and options
@@ -126,10 +129,95 @@ impl AgentLoop {
         context.push(user_msg);
 
         // Get tool definitions
-        let tools = self.tools.available_tools();
+        let tools = self
+            .tools
+            .available_tools()
+            .await
+            .map_err(|e| anyhow::anyhow!(e))?;
 
         // Run the agent loop
         self.run_agent_loop(context, &tools, model).await
+    }
+
+    /// Process with a context builder (system prompt + history) and optional model.
+    pub async fn process_with_context_builder(
+        &self,
+        context_builder: &AgentContextBuilder,
+        history: Vec<ChatMessage>,
+        content: &str,
+        media: Option<Vec<String>>,
+        model: Option<&str>,
+    ) -> Result<String> {
+        let context = context_builder
+            .build_messages(history, content, media)
+            .await?;
+
+        let tools = self
+            .tools
+            .available_tools()
+            .await
+            .map_err(|e| anyhow::anyhow!(e))?;
+
+        self.run_agent_loop(context, &tools, model).await
+    }
+
+    /// Process with a session, updating history automatically.
+    ///
+    /// If a context builder is provided, it will be used to construct the LLM
+    /// prompt (system + history + user). The session will still record only
+    /// the user/assistant messages.
+    pub async fn process_with_session(
+        &self,
+        session: &mut ChatSession,
+        content: &str,
+        media: Option<Vec<String>>,
+        context_builder: Option<&AgentContextBuilder>,
+        model: Option<&str>,
+    ) -> Result<String> {
+        let history = session.messages().to_vec();
+
+        let context = if let Some(builder) = context_builder {
+            builder
+                .build_messages(history, content, media.clone())
+                .await?
+        } else {
+            let mut messages = history;
+            let user_msg = if let Some(media_paths) = media.clone() {
+                if !media_paths.is_empty() {
+                    Self::build_vision_message(content, &media_paths)?
+                } else {
+                    ChatMessage::user(content)
+                }
+            } else {
+                ChatMessage::user(content)
+            };
+            messages.push(user_msg);
+            messages
+        };
+
+        let tools = self
+            .tools
+            .available_tools()
+            .await
+            .map_err(|e| anyhow::anyhow!(e))?;
+
+        let response = self.run_agent_loop(context, &tools, model).await?;
+
+        let user_msg = if let Some(media_paths) = media {
+            if !media_paths.is_empty() {
+                Self::build_vision_message(content, &media_paths)?
+            } else {
+                ChatMessage::user(content)
+            }
+        } else {
+            ChatMessage::user(content)
+        };
+        session.messages_mut().push(user_msg);
+        session
+            .messages_mut()
+            .push(ChatMessage::assistant(&response));
+
+        Ok(response)
     }
 
     /// Run the main agent loop with tool execution
@@ -157,30 +245,31 @@ impl AgentLoop {
 
             // Check for tool calls
             if let Some(tool_calls) = response.tool_calls()
-                && !tool_calls.is_empty() {
-                    // Add assistant message with tool calls
-                    messages.push(ChatMessage::assistant_with_tool_calls(tool_calls.clone()));
+                && !tool_calls.is_empty()
+            {
+                // Add assistant message with tool calls
+                messages.push(ChatMessage::assistant_with_tool_calls(tool_calls.clone()));
 
-                    // Execute tools
-                    for tool_call in tool_calls {
-                        tracing::debug!(
-                            "Executing tool: {} with args: {:?}",
-                            tool_call.function.name,
-                            tool_call.function.arguments
-                        );
+                // Execute tools
+                for tool_call in tool_calls {
+                    tracing::debug!(
+                        "Executing tool: {} with args: {:?}",
+                        tool_call.function.name,
+                        tool_call.function.arguments
+                    );
 
-                        let result = self
-                            .execute_tool(&tool_call.function.name, &tool_call.function.arguments)
-                            .await;
+                    let result = self
+                        .execute_tool(&tool_call.function.name, &tool_call.function.arguments)
+                        .await;
 
-                        messages.push(ChatMessage::tool_result(
-                            &tool_call.id,
-                            result.unwrap_or_else(|e| format!("Error: {}", e))),
-                        );
-                    }
-
-                    continue;
+                    messages.push(ChatMessage::tool_result(
+                        &tool_call.id,
+                        result.unwrap_or_else(|e| format!("Error: {}", e)),
+                    ));
                 }
+
+                continue;
+            }
 
             // No tool calls, return the content
             if let Some(content) = response.content() {
@@ -199,7 +288,7 @@ impl AgentLoop {
     }
 
     /// Execute a tool call
-    async fn execute_tool(&self, name: &str, arguments: &str) -> Result<String> {
+    async fn execute_tool(&self, name: &str, arguments: &str) -> LLMResult<String> {
         self.tools.execute(name, arguments).await
     }
 
@@ -225,8 +314,8 @@ impl AgentLoop {
 
     /// Encode an image file as a data URL
     fn encode_image_data_url(path: &Path) -> Result<ImageUrl> {
-        use base64::engine::general_purpose::STANDARD_NO_PAD;
         use base64::Engine;
+        use base64::engine::general_purpose::STANDARD_NO_PAD;
         use std::fs;
 
         let bytes = fs::read(path)?;
@@ -238,15 +327,75 @@ impl AgentLoop {
         let base64 = STANDARD_NO_PAD.encode(&bytes);
         let url = format!("data:{};base64,{}", mime_type, base64);
 
-        Ok(ImageUrl {
-            url,
-            detail: None,
-        })
+        Ok(ImageUrl { url, detail: None })
     }
 
     /// Get the configuration
     pub fn config(&self) -> &AgentLoopConfig {
         &self.config
+    }
+}
+
+impl AgentLoopRunner {
+    /// Create a new runner from an AgentLoop.
+    pub fn new(agent_loop: AgentLoop) -> Self {
+        Self {
+            agent_loop,
+            context_builder: None,
+            session: None,
+            model: None,
+        }
+    }
+
+    /// Attach a context builder (system prompt + workspace bootstrap).
+    pub fn with_context_builder(mut self, context_builder: AgentContextBuilder) -> Self {
+        self.context_builder = Some(context_builder);
+        self
+    }
+
+    /// Attach a session to persist history.
+    pub fn with_session(mut self, session: ChatSession) -> Self {
+        self.session = Some(session);
+        self
+    }
+
+    /// Set an explicit model override.
+    pub fn with_model(mut self, model: impl Into<String>) -> Self {
+        self.model = Some(model.into());
+        self
+    }
+
+    /// Get mutable access to the session (if attached).
+    pub fn session_mut(&mut self) -> Option<&mut ChatSession> {
+        self.session.as_mut()
+    }
+
+    /// Run the loop with optional media inputs.
+    pub async fn run(&mut self, content: &str, media: Option<Vec<String>>) -> Result<String> {
+        if let Some(session) = self.session.as_mut() {
+            let builder = self.context_builder.as_ref();
+            return self
+                .agent_loop
+                .process_with_session(session, content, media, builder, self.model.as_deref())
+                .await;
+        }
+
+        if let Some(builder) = self.context_builder.as_ref() {
+            return self
+                .agent_loop
+                .process_with_context_builder(
+                    builder,
+                    Vec::new(),
+                    content,
+                    media,
+                    self.model.as_deref(),
+                )
+                .await;
+        }
+
+        self.agent_loop
+            .process_with_options(Vec::new(), content, media, self.model.as_deref())
+            .await
     }
 }
 
@@ -279,17 +428,20 @@ impl Default for SimpleToolExecutor {
 
 #[async_trait::async_trait]
 impl ToolExecutor for SimpleToolExecutor {
-    async fn execute(&self, name: &str, arguments: &str) -> Result<String> {
+    async fn execute(&self, name: &str, arguments: &str) -> LLMResult<String> {
         if let Some(handler) = self.tools.get(name) {
-            handler(arguments)
+            handler(arguments).map_err(|e| crate::llm::types::LLMError::Other(e.to_string()))
         } else {
-            Err(anyhow::anyhow!("Unknown tool: {}", name))
+            Err(crate::llm::types::LLMError::Other(format!(
+                "Unknown tool: {}",
+                name
+            )))
         }
     }
 
-    fn available_tools(&self) -> Vec<Tool> {
+    async fn available_tools(&self) -> LLMResult<Vec<Tool>> {
         // Return empty since this is just for testing
-        Vec::new()
+        Ok(Vec::new())
     }
 }
 

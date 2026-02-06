@@ -6,8 +6,8 @@
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::path::{Path, PathBuf};
 use std::fs;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::SystemTime;
 use tokio::sync::RwLock;
@@ -114,8 +114,8 @@ impl ModelCache {
     pub async fn save_metadata(&self, metadata: &ModelMetadata) -> Result<()> {
         let metadata_path = self.metadata_path(&metadata.model_id);
 
-        let content = serde_json::to_string_pretty(metadata)
-            .context("Failed to serialize metadata")?;
+        let content =
+            serde_json::to_string_pretty(metadata).context("Failed to serialize metadata")?;
 
         fs::write(&metadata_path, content)
             .context(format!("Failed to write metadata: {:?}", metadata_path))?;
@@ -154,10 +154,11 @@ impl ModelCache {
 
         // Verify checksum if provided
         if let Some(expected) = expected_checksum
-            && metadata.checksum != expected {
-                warn!("Model checksum mismatch for {}", model_id);
-                return Ok(false);
-            }
+            && metadata.checksum != expected
+        {
+            warn!("Model checksum mismatch for {}", model_id);
+            return Ok(false);
+        }
 
         debug!("Model validation passed: {}", model_id);
         Ok(true)
@@ -166,8 +167,8 @@ impl ModelCache {
     /// Get model size in bytes
     pub async fn get_size(&self, model_id: &str) -> Result<u64> {
         let model_path = self.model_path(model_id);
-        let metadata = fs::metadata(&model_path)
-            .context(format!("Model not found: {:?}", model_path))?;
+        let metadata =
+            fs::metadata(&model_path).context(format!("Model not found: {:?}", model_path))?;
         Ok(metadata.len())
     }
 
@@ -185,8 +186,10 @@ impl ModelCache {
     pub async fn list_models(&self) -> Result<Vec<String>> {
         let mut models = Vec::new();
 
-        let entries = fs::read_dir(&self.cache_dir)
-            .context(format!("Failed to read cache directory: {:?}", self.cache_dir))?;
+        let entries = fs::read_dir(&self.cache_dir).context(format!(
+            "Failed to read cache directory: {:?}",
+            self.cache_dir
+        ))?;
 
         for entry in entries {
             let entry = entry?;

@@ -212,7 +212,10 @@ impl ToolResult {
                 v => v.to_string(),
             }
         } else {
-            format!("Error: {}", self.error.as_deref().unwrap_or("Unknown error"))
+            format!(
+                "Error: {}",
+                self.error.as_deref().unwrap_or("Unknown error")
+            )
         }
     }
 }
@@ -344,8 +347,15 @@ pub trait ToolRegistry: Send + Sync {
     fn count(&self) -> usize;
 
     /// 执行工具
-    async fn execute(&self, name: &str, input: ToolInput, ctx: &AgentContext) -> AgentResult<ToolResult> {
-        let tool = self.get(name).ok_or_else(|| AgentError::ToolNotFound(name.to_string()))?;
+    async fn execute(
+        &self,
+        name: &str,
+        input: ToolInput,
+        ctx: &AgentContext,
+    ) -> AgentResult<ToolResult> {
+        let tool = self
+            .get(name)
+            .ok_or_else(|| AgentError::ToolNotFound(name.to_string()))?;
         tool.validate_input(&input)?;
         Ok(tool.execute(input, ctx).await)
     }

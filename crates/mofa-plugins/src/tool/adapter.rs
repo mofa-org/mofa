@@ -3,13 +3,13 @@
 //! Provides an adapter that converts Tool implementations to AgentPlugin implementations.
 //! This allows tools to be registered and managed through the plugin system.
 
+use async_trait::async_trait;
 use mofa_kernel::agent::components::tool::{Tool, ToolInput};
 use mofa_kernel::{
     AgentPlugin, PluginContext, PluginMetadata, PluginResult, PluginState, PluginType,
 };
 use std::any::Any;
 use std::sync::Arc;
-use async_trait::async_trait;
 
 /// Adapter that converts a Tool to an AgentPlugin
 ///

@@ -96,18 +96,24 @@ impl WorkflowDslParser {
         let node_ids: Vec<&str> = definition.nodes.iter().map(|n| n.id()).collect();
 
         // Verify start node exists
-        if !node_ids.iter().any(|&id| definition.nodes.iter().any(|n| {
-            matches!(n, NodeDefinition::Start { id: start_id, .. } if start_id == id)
-        })) {
+        if !node_ids.iter().any(|&id| {
+            definition
+                .nodes
+                .iter()
+                .any(|n| matches!(n, NodeDefinition::Start { id: start_id, .. } if start_id == id))
+        }) {
             return Err(DslError::Validation(
                 "Workflow must have a start node".to_string(),
             ));
         }
 
         // Verify end node exists
-        if !node_ids.iter().any(|&id| definition.nodes.iter().any(|n| {
-            matches!(n, NodeDefinition::End { id: end_id, .. } if end_id == id)
-        })) {
+        if !node_ids.iter().any(|&id| {
+            definition
+                .nodes
+                .iter()
+                .any(|n| matches!(n, NodeDefinition::End { id: end_id, .. } if end_id == id))
+        }) {
             return Err(DslError::Validation(
                 "Workflow must have an end node".to_string(),
             ));
@@ -161,18 +167,19 @@ impl WorkflowDslParser {
             NodeDefinition::End { id, .. } => {
                 builder = builder.end_with_id(&id);
             }
-            NodeDefinition::Task { id, name, executor, .. } => {
+            NodeDefinition::Task {
+                id, name, executor, ..
+            } => {
                 // For now, tasks are limited to simple operations
                 // More complex task execution will be added later
                 match executor {
                     TaskExecutorDef::None => {
-                        builder = builder.task(&id, &name, |_ctx, input| async move {
-                            Ok(input)
-                        });
+                        builder = builder.task(&id, &name, |_ctx, input| async move { Ok(input) });
                     }
                     _ => {
                         return Err(DslError::Validation(
-                            "Only 'none' executor type is currently supported for task nodes".to_string(),
+                            "Only 'none' executor type is currently supported for task nodes"
+                                .to_string(),
                         ));
                     }
                 }
@@ -185,12 +192,10 @@ impl WorkflowDslParser {
                 ..
             } => {
                 let llm_agent = match agent {
-                    AgentRef::Registry { agent_id } => {
-                        agent_registry
-                            .get(agent_id.as_str())
-                            .ok_or_else(|| DslError::AgentNotFound(agent_id.clone()))?
-                            .clone()
-                    }
+                    AgentRef::Registry { agent_id } => agent_registry
+                        .get(agent_id.as_str())
+                        .ok_or_else(|| DslError::AgentNotFound(agent_id.clone()))?
+                        .clone(),
                     AgentRef::Inline(_) => {
                         // Build agent from inline config
                         // Note: This requires a provider to be available
@@ -216,43 +221,51 @@ impl WorkflowDslParser {
             }
             NodeDefinition::Parallel { id, name, .. } => {
                 // Parallel node - just mark it, actual parallelism handled by edges
-                builder = builder.task(&id, &name, |_ctx, input| async move {
-                    Ok(input)
-                });
+                builder = builder.task(&id, &name, |_ctx, input| async move { Ok(input) });
             }
-            NodeDefinition::Join { id, name, wait_for, .. } => {
+            NodeDefinition::Join {
+                id, name, wait_for, ..
+            } => {
                 let wait_for_refs: Vec<&str> = wait_for.iter().map(|s| s.as_str()).collect();
                 builder = builder.goto(&id);
                 // Note: The join node will be connected later
                 let _ = (id, name, wait_for_refs);
             }
-            NodeDefinition::Loop { id, name, body, .. } => {
-                match body {
-                    TaskExecutorDef::None => {
-                        builder = builder.loop_node(
-                            &id,
-                            &name,
-                            |_ctx, input| async move { Ok(input) },
-                            |_ctx, _input| async move { false },
-                            10,
-                        );
-                    }
-                    _ => {
-                        return Err(DslError::Validation(
-                            "Loop body executor not supported yet".to_string(),
-                        ));
-                    }
+            NodeDefinition::Loop { id, name, body, .. } => match body {
+                TaskExecutorDef::None => {
+                    builder = builder.loop_node(
+                        &id,
+                        &name,
+                        |_ctx, input| async move { Ok(input) },
+                        |_ctx, _input| async move { false },
+                        10,
+                    );
                 }
-            }
+                _ => {
+                    return Err(DslError::Validation(
+                        "Loop body executor not supported yet".to_string(),
+                    ));
+                }
+            },
             NodeDefinition::Transform { id, name, .. } => {
                 builder = builder.transform(&id, &name, |inputs| async move {
                     inputs.get("input").cloned().unwrap_or(WorkflowValue::Null)
                 });
             }
-            NodeDefinition::SubWorkflow { id, name, workflow_id, .. } => {
+            NodeDefinition::SubWorkflow {
+                id,
+                name,
+                workflow_id,
+                ..
+            } => {
                 builder = builder.sub_workflow(&id, &name, &workflow_id);
             }
-            NodeDefinition::Wait { id, name, event_type, .. } => {
+            NodeDefinition::Wait {
+                id,
+                name,
+                event_type,
+                ..
+            } => {
                 builder = builder.wait(&id, &name, &event_type);
             }
         }

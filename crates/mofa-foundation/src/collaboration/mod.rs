@@ -178,7 +178,10 @@ impl CollaborationProtocol for RequestResponseProtocol {
         Ok(queue.pop())
     }
 
-    async fn process_message(&self, msg: CollaborationMessage) -> anyhow::Result<CollaborationResult> {
+    async fn process_message(
+        &self,
+        msg: CollaborationMessage,
+    ) -> anyhow::Result<CollaborationResult> {
         let start = std::time::Instant::now();
 
         tracing::debug!(
@@ -196,23 +199,28 @@ impl CollaborationProtocol for RequestResponseProtocol {
                 )
                 .await?
         } else {
-            CollaborationContent::Text(format!(
-                "已收到来自 {} 的请求并处理",
-                msg.sender
-            ))
+            CollaborationContent::Text(format!("已收到来自 {} 的请求并处理", msg.sender))
         };
 
         let duration = start.elapsed().as_millis() as u64;
 
-        Ok(CollaborationResult::success(content, duration, CollaborationMode::RequestResponse)
-            .with_participant(self.helper.agent_id().to_string())
-            .with_participant(msg.sender))
+        Ok(
+            CollaborationResult::success(content, duration, CollaborationMode::RequestResponse)
+                .with_participant(self.helper.agent_id().to_string())
+                .with_participant(msg.sender),
+        )
     }
 
     fn stats(&self) -> HashMap<String, serde_json::Value> {
         HashMap::from([
-            ("agent_id".to_string(), serde_json::json!(self.helper.agent_id())),
-            ("use_llm".to_string(), serde_json::json!(self.helper.use_llm)),
+            (
+                "agent_id".to_string(),
+                serde_json::json!(self.helper.agent_id()),
+            ),
+            (
+                "use_llm".to_string(),
+                serde_json::json!(self.helper.use_llm),
+            ),
         ])
     }
 }
@@ -251,7 +259,11 @@ impl PublishSubscribeProtocol {
     pub async fn subscribe(&self, topic: String) -> anyhow::Result<()> {
         let mut subscribed = self.subscribed_topics.write().await;
         subscribed.insert(topic.clone());
-        tracing::debug!("[PublishSubscribe] {} subscribed to topic: {}", self.helper.agent_id(), topic);
+        tracing::debug!(
+            "[PublishSubscribe] {} subscribed to topic: {}",
+            self.helper.agent_id(),
+            topic
+        );
         Ok(())
     }
 }
@@ -290,7 +302,10 @@ impl CollaborationProtocol for PublishSubscribeProtocol {
         Ok(queue.pop())
     }
 
-    async fn process_message(&self, msg: CollaborationMessage) -> anyhow::Result<CollaborationResult> {
+    async fn process_message(
+        &self,
+        msg: CollaborationMessage,
+    ) -> anyhow::Result<CollaborationResult> {
         let start = std::time::Instant::now();
 
         tracing::debug!(
@@ -308,25 +323,33 @@ impl CollaborationProtocol for PublishSubscribeProtocol {
                 )
                 .await?
         } else {
-            CollaborationContent::Text(format!(
-                "已发布消息到主题 {:?}",
-                msg.topic
-            ))
+            CollaborationContent::Text(format!("已发布消息到主题 {:?}", msg.topic))
         };
 
         let duration = start.elapsed().as_millis() as u64;
 
-        Ok(CollaborationResult::success(content, duration, CollaborationMode::PublishSubscribe)
-            .with_participant(self.helper.agent_id().to_string())
-            .with_participant(msg.sender))
+        Ok(
+            CollaborationResult::success(content, duration, CollaborationMode::PublishSubscribe)
+                .with_participant(self.helper.agent_id().to_string())
+                .with_participant(msg.sender),
+        )
     }
 
     fn stats(&self) -> HashMap<String, serde_json::Value> {
         let topics = self.subscribed_topics.blocking_read();
         HashMap::from([
-            ("agent_id".to_string(), serde_json::json!(self.helper.agent_id())),
-            ("use_llm".to_string(), serde_json::json!(self.helper.use_llm)),
-            ("subscribed_topics".to_string(), serde_json::json!(topics.len())),
+            (
+                "agent_id".to_string(),
+                serde_json::json!(self.helper.agent_id()),
+            ),
+            (
+                "use_llm".to_string(),
+                serde_json::json!(self.helper.use_llm),
+            ),
+            (
+                "subscribed_topics".to_string(),
+                serde_json::json!(topics.len()),
+            ),
         ])
     }
 }
@@ -396,7 +419,10 @@ impl CollaborationProtocol for ConsensusProtocol {
         Ok(queue.pop())
     }
 
-    async fn process_message(&self, msg: CollaborationMessage) -> anyhow::Result<CollaborationResult> {
+    async fn process_message(
+        &self,
+        msg: CollaborationMessage,
+    ) -> anyhow::Result<CollaborationResult> {
         let start = std::time::Instant::now();
 
         tracing::debug!(
@@ -413,23 +439,28 @@ impl CollaborationProtocol for ConsensusProtocol {
                 )
                 .await?
         } else {
-            CollaborationContent::Text(format!(
-                "已参与共识决策，阈值: {}",
-                self.threshold
-            ))
+            CollaborationContent::Text(format!("已参与共识决策，阈值: {}", self.threshold))
         };
 
         let duration = start.elapsed().as_millis() as u64;
 
-        Ok(CollaborationResult::success(content, duration, CollaborationMode::Consensus)
-            .with_participant(self.helper.agent_id().to_string())
-            .with_participant(msg.sender))
+        Ok(
+            CollaborationResult::success(content, duration, CollaborationMode::Consensus)
+                .with_participant(self.helper.agent_id().to_string())
+                .with_participant(msg.sender),
+        )
     }
 
     fn stats(&self) -> HashMap<String, serde_json::Value> {
         HashMap::from([
-            ("agent_id".to_string(), serde_json::json!(self.helper.agent_id())),
-            ("use_llm".to_string(), serde_json::json!(self.helper.use_llm)),
+            (
+                "agent_id".to_string(),
+                serde_json::json!(self.helper.agent_id()),
+            ),
+            (
+                "use_llm".to_string(),
+                serde_json::json!(self.helper.use_llm),
+            ),
             ("threshold".to_string(), serde_json::json!(self.threshold)),
         ])
     }
@@ -500,7 +531,10 @@ impl CollaborationProtocol for DebateProtocol {
         Ok(queue.pop())
     }
 
-    async fn process_message(&self, msg: CollaborationMessage) -> anyhow::Result<CollaborationResult> {
+    async fn process_message(
+        &self,
+        msg: CollaborationMessage,
+    ) -> anyhow::Result<CollaborationResult> {
         let start = std::time::Instant::now();
 
         tracing::debug!(
@@ -517,23 +551,28 @@ impl CollaborationProtocol for DebateProtocol {
                 )
                 .await?
         } else {
-            CollaborationContent::Text(format!(
-                "已参与辩论，最大轮数: {}",
-                self.max_rounds
-            ))
+            CollaborationContent::Text(format!("已参与辩论，最大轮数: {}", self.max_rounds))
         };
 
         let duration = start.elapsed().as_millis() as u64;
 
-        Ok(CollaborationResult::success(content, duration, CollaborationMode::Debate)
-            .with_participant(self.helper.agent_id().to_string())
-            .with_participant(msg.sender))
+        Ok(
+            CollaborationResult::success(content, duration, CollaborationMode::Debate)
+                .with_participant(self.helper.agent_id().to_string())
+                .with_participant(msg.sender),
+        )
     }
 
     fn stats(&self) -> HashMap<String, serde_json::Value> {
         HashMap::from([
-            ("agent_id".to_string(), serde_json::json!(self.helper.agent_id())),
-            ("use_llm".to_string(), serde_json::json!(self.helper.use_llm)),
+            (
+                "agent_id".to_string(),
+                serde_json::json!(self.helper.agent_id()),
+            ),
+            (
+                "use_llm".to_string(),
+                serde_json::json!(self.helper.use_llm),
+            ),
             ("max_rounds".to_string(), serde_json::json!(self.max_rounds)),
         ])
     }
@@ -604,7 +643,10 @@ impl CollaborationProtocol for ParallelProtocol {
         Ok(queue.pop())
     }
 
-    async fn process_message(&self, msg: CollaborationMessage) -> anyhow::Result<CollaborationResult> {
+    async fn process_message(
+        &self,
+        msg: CollaborationMessage,
+    ) -> anyhow::Result<CollaborationResult> {
         let start = std::time::Instant::now();
 
         tracing::debug!(
@@ -629,16 +671,27 @@ impl CollaborationProtocol for ParallelProtocol {
 
         let duration = start.elapsed().as_millis() as u64;
 
-        Ok(CollaborationResult::success(content, duration, CollaborationMode::Parallel)
-            .with_participant(self.helper.agent_id().to_string())
-            .with_participant(msg.sender))
+        Ok(
+            CollaborationResult::success(content, duration, CollaborationMode::Parallel)
+                .with_participant(self.helper.agent_id().to_string())
+                .with_participant(msg.sender),
+        )
     }
 
     fn stats(&self) -> HashMap<String, serde_json::Value> {
         HashMap::from([
-            ("agent_id".to_string(), serde_json::json!(self.helper.agent_id())),
-            ("use_llm".to_string(), serde_json::json!(self.helper.use_llm)),
-            ("max_workers".to_string(), serde_json::json!(self.max_workers)),
+            (
+                "agent_id".to_string(),
+                serde_json::json!(self.helper.agent_id()),
+            ),
+            (
+                "use_llm".to_string(),
+                serde_json::json!(self.helper.use_llm),
+            ),
+            (
+                "max_workers".to_string(),
+                serde_json::json!(self.max_workers),
+            ),
         ])
     }
 }
@@ -705,7 +758,10 @@ impl CollaborationProtocol for SequentialProtocol {
         Ok(queue.pop())
     }
 
-    async fn process_message(&self, msg: CollaborationMessage) -> anyhow::Result<CollaborationResult> {
+    async fn process_message(
+        &self,
+        msg: CollaborationMessage,
+    ) -> anyhow::Result<CollaborationResult> {
         let start = std::time::Instant::now();
 
         tracing::debug!(
@@ -727,15 +783,23 @@ impl CollaborationProtocol for SequentialProtocol {
 
         let duration = start.elapsed().as_millis() as u64;
 
-        Ok(CollaborationResult::success(content, duration, CollaborationMode::Sequential)
-            .with_participant(self.helper.agent_id().to_string())
-            .with_participant(msg.sender))
+        Ok(
+            CollaborationResult::success(content, duration, CollaborationMode::Sequential)
+                .with_participant(self.helper.agent_id().to_string())
+                .with_participant(msg.sender),
+        )
     }
 
     fn stats(&self) -> HashMap<String, serde_json::Value> {
         HashMap::from([
-            ("agent_id".to_string(), serde_json::json!(self.helper.agent_id())),
-            ("use_llm".to_string(), serde_json::json!(self.helper.use_llm)),
+            (
+                "agent_id".to_string(),
+                serde_json::json!(self.helper.agent_id()),
+            ),
+            (
+                "use_llm".to_string(),
+                serde_json::json!(self.helper.use_llm),
+            ),
         ])
     }
 }

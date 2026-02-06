@@ -113,7 +113,11 @@ impl EventResponsePlugin for ServerFaultResponsePlugin {
             Ok(success) => {
                 result.insert(
                     "auto_restart".to_string(),
-                    if success { "success".to_string() } else { "failed".to_string() },
+                    if success {
+                        "success".to_string()
+                    } else {
+                        "failed".to_string()
+                    },
                 );
             }
             Err(err) => {
@@ -151,7 +155,10 @@ impl mofa_kernel::plugin::AgentPlugin for ServerFaultResponsePlugin {
         self.base.state()
     }
 
-    async fn load(&mut self, ctx: &mofa_kernel::plugin::PluginContext) -> mofa_kernel::plugin::PluginResult<()> {
+    async fn load(
+        &mut self,
+        ctx: &mofa_kernel::plugin::PluginContext,
+    ) -> mofa_kernel::plugin::PluginResult<()> {
         self.base.load(ctx).await
     }
 
@@ -308,7 +315,14 @@ impl EventResponsePlugin for NetworkAttackResponsePlugin {
         let block_result = self.block_attacking_ip(source_ip).await;
         match block_result {
             Ok(success) => {
-                result.insert("block_ip".to_string(), if success { "success".to_string() } else { "failed".to_string() });
+                result.insert(
+                    "block_ip".to_string(),
+                    if success {
+                        "success".to_string()
+                    } else {
+                        "failed".to_string()
+                    },
+                );
             }
             Err(err) => {
                 result.insert("block_ip".to_string(), format!("error: {}", err));
@@ -355,7 +369,10 @@ impl mofa_kernel::plugin::AgentPlugin for NetworkAttackResponsePlugin {
         self.base.state()
     }
 
-    async fn load(&mut self, ctx: &mofa_kernel::plugin::PluginContext) -> mofa_kernel::plugin::PluginResult<()> {
+    async fn load(
+        &mut self,
+        ctx: &mofa_kernel::plugin::PluginContext,
+    ) -> mofa_kernel::plugin::PluginResult<()> {
         self.base.load(ctx).await
     }
 

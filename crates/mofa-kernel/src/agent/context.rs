@@ -13,11 +13,11 @@
 //!
 //! 业务逻辑（如指标收集、输出记录）应该在 foundation 层的 RichAgentContext 中实现。
 
-use serde::{de::DeserializeOwned, Serialize};
+use serde::{Serialize, de::DeserializeOwned};
 use std::collections::HashMap;
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
-use tokio::sync::{mpsc, RwLock};
+use std::sync::atomic::{AtomicBool, Ordering};
+use tokio::sync::{RwLock, mpsc};
 
 // ============================================================================
 // Agent 上下文
@@ -377,7 +377,11 @@ mod tests {
 
         let mut rx = ctx.subscribe("test_event").await;
 
-        ctx.emit_event(AgentEvent::new("test_event", serde_json::json!({"msg": "hello"}))).await;
+        ctx.emit_event(AgentEvent::new(
+            "test_event",
+            serde_json::json!({"msg": "hello"}),
+        ))
+        .await;
 
         let event = rx.recv().await.unwrap();
         assert_eq!(event.event_type, "test_event");

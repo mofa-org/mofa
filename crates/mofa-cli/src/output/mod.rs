@@ -59,10 +59,7 @@ impl CommandResult {
 }
 
 /// Format result for display
-pub fn format_result<T: JsonOutput>(
-    result: &T,
-    format: OutputFormat,
-) -> anyhow::Result<String> {
+pub fn format_result<T: JsonOutput>(result: &T, format: OutputFormat) -> anyhow::Result<String> {
     match format {
         OutputFormat::Text => Ok(format_text(result)),
         OutputFormat::Json => Ok(format_json(result)),
@@ -83,9 +80,10 @@ fn format_table<T: JsonOutput>(result: &T) -> String {
     // Try to convert to table format
     let json = result.to_json();
     if let Some(arr) = json.as_array()
-        && !arr.is_empty() {
-            return Table::from_json_array(arr).to_string();
-        }
+        && !arr.is_empty()
+    {
+        return Table::from_json_array(arr).to_string();
+    }
     // Fallback to JSON
     json.to_string()
 }

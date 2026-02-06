@@ -69,8 +69,7 @@ pub trait Coordinator: Send + Sync {
 }
 
 /// 协调模式
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[derive(Default)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub enum CoordinationPattern {
     /// 顺序执行
     #[default]
@@ -99,7 +98,6 @@ pub enum CoordinationPattern {
     /// 自定义模式
     Custom(String),
 }
-
 
 /// 任务定义
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -196,8 +194,7 @@ pub enum TaskType {
 }
 
 /// 任务优先级
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
-#[derive(Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, Default)]
 pub enum TaskPriority {
     Low = 0,
     #[default]
@@ -205,7 +202,6 @@ pub enum TaskPriority {
     High = 2,
     Urgent = 3,
 }
-
 
 /// 分发结果
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -226,7 +222,12 @@ pub struct DispatchResult {
 
 impl DispatchResult {
     /// 创建成功结果
-    pub fn success(task_id: impl Into<String>, agent_id: impl Into<String>, output: AgentOutput, duration_ms: u64) -> Self {
+    pub fn success(
+        task_id: impl Into<String>,
+        agent_id: impl Into<String>,
+        output: AgentOutput,
+        duration_ms: u64,
+    ) -> Self {
         Self {
             task_id: task_id.into(),
             agent_id: agent_id.into(),
@@ -238,7 +239,12 @@ impl DispatchResult {
     }
 
     /// 创建失败结果
-    pub fn failure(task_id: impl Into<String>, agent_id: impl Into<String>, error: impl Into<String>, duration_ms: u64) -> Self {
+    pub fn failure(
+        task_id: impl Into<String>,
+        agent_id: impl Into<String>,
+        error: impl Into<String>,
+        duration_ms: u64,
+    ) -> Self {
         Self {
             task_id: task_id.into(),
             agent_id: agent_id.into(),
@@ -284,13 +290,10 @@ pub enum DispatchStatus {
 // ============================================================================
 
 /// 结果聚合策略
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[derive(Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub enum AggregationStrategy {
     /// 连接所有结果
-    Concatenate {
-        separator: String,
-    },
+    Concatenate { separator: String },
     /// 取第一个成功的结果
     FirstSuccess,
     /// 收集所有结果
@@ -299,13 +302,10 @@ pub enum AggregationStrategy {
     /// 投票选择
     Vote,
     /// 使用 LLM 总结
-    LLMSummarize {
-        prompt_template: String,
-    },
+    LLMSummarize { prompt_template: String },
     /// 自定义聚合
     Custom(String),
 }
-
 
 /// 聚合结果
 pub fn aggregate_outputs(
@@ -318,12 +318,11 @@ pub fn aggregate_outputs(
             Ok(AgentOutput::text(texts.join(separator)))
         }
         AggregationStrategy::FirstSuccess => {
-            outputs
-                .into_iter()
-                .find(|o| !o.is_error())
-                .ok_or_else(|| crate::agent::error::AgentError::CoordinationError(
-                    "No successful output".to_string()
-                ))
+            outputs.into_iter().find(|o| !o.is_error()).ok_or_else(|| {
+                crate::agent::error::AgentError::CoordinationError(
+                    "No successful output".to_string(),
+                )
+            })
         }
         AggregationStrategy::CollectAll => {
             let texts: Vec<String> = outputs.iter().map(|o| o.to_text()).collect();
@@ -380,12 +379,8 @@ mod tests {
 
     #[test]
     fn test_dispatch_result() {
-        let success = DispatchResult::success(
-            "task-1",
-            "agent-1",
-            AgentOutput::text("Result"),
-            100,
-        );
+        let success =
+            DispatchResult::success("task-1", "agent-1", AgentOutput::text("Result"), 100);
         assert_eq!(success.status, DispatchStatus::Completed);
         assert!(success.output.is_some());
 

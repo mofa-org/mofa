@@ -7,7 +7,7 @@
 
 pub mod manager;
 
-pub use manager::{SkillsManager, SkillInfo};
+pub use manager::{SkillInfo, SkillsManager};
 
 // 重新导出 skill 相关类型
 pub use mofa_plugins::skill::{

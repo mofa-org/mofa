@@ -25,8 +25,6 @@ pub use operator::{
 
 // 导出运行时支持（真实 dora API）
 pub use runtime::{
-    run_dataflow,
-    run_dataflow_with_logs,
     // 运行时
     DataflowResult,
     DistributedConfig,
@@ -42,4 +40,6 @@ pub use runtime::{
     // 辅助函数
     RuntimeMode,
     RuntimeState,
+    run_dataflow,
+    run_dataflow_with_logs,
 };

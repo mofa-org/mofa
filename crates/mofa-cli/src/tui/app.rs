@@ -7,17 +7,15 @@ use super::app_event::{AgentStatus, AppEvent, ExitMode, View};
 use super::app_event_sender::AppEventSender;
 use super::event_stream::{TuiEvent, TuiEventStream};
 use super::terminal::{restore_terminal, setup_terminal};
-use crate::widgets::{
-    command_palette::CommandPalette, confirm_dialog::ConfirmDialog,
-};
+use crate::widgets::{command_palette::CommandPalette, confirm_dialog::ConfirmDialog};
 use anyhow::{Context, Result};
 use crossterm::event::{KeyCode, KeyModifiers};
 use ratatui::{
+    Frame,
     layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span, Text},
     widgets::{Block, Paragraph, Wrap},
-    Frame,
 };
 use std::time::Duration;
 use tokio::sync::mpsc;
@@ -198,8 +196,7 @@ impl App {
     /// Run the main event loop
     pub async fn run(&mut self) -> Result<AppExitInfo> {
         let mut terminal = setup_terminal().context("Failed to setup terminal")?;
-        let mut event_stream = TuiEventStream::new()
-            .context("Failed to create event stream")?;
+        let mut event_stream = TuiEventStream::new().context("Failed to create event stream")?;
 
         info!("Starting TUI event loop");
 
@@ -298,32 +295,24 @@ impl App {
         // Handle overlay first
         let overlay_result = if let Some(ref mut overlay) = self.overlay {
             match overlay {
-                Overlay::CommandPalette(palette) => {
-                    match palette.handle_key(key) {
-                        crate::widgets::command_palette::CommandPaletteResult::Continue => {
-                            None
-                        }
-                        crate::widgets::command_palette::CommandPaletteResult::Execute(action) => {
-                            Some(OverlayAction::ExecuteCommand(action))
-                        }
-                        crate::widgets::command_palette::CommandPaletteResult::Cancel => {
-                            Some(OverlayAction::Close)
-                        }
+                Overlay::CommandPalette(palette) => match palette.handle_key(key) {
+                    crate::widgets::command_palette::CommandPaletteResult::Continue => None,
+                    crate::widgets::command_palette::CommandPaletteResult::Execute(action) => {
+                        Some(OverlayAction::ExecuteCommand(action))
                     }
-                }
-                Overlay::ConfirmDialog(dialog) => {
-                    match dialog.handle_key(key) {
-                        crate::widgets::confirm_dialog::ConfirmDialogResult::Continue => {
-                            None
-                        }
-                        crate::widgets::confirm_dialog::ConfirmDialogResult::Confirm => {
-                            Some(OverlayAction::ConfirmDialog)
-                        }
-                        crate::widgets::confirm_dialog::ConfirmDialogResult::Cancel => {
-                            Some(OverlayAction::Close)
-                        }
+                    crate::widgets::command_palette::CommandPaletteResult::Cancel => {
+                        Some(OverlayAction::Close)
                     }
-                }
+                },
+                Overlay::ConfirmDialog(dialog) => match dialog.handle_key(key) {
+                    crate::widgets::confirm_dialog::ConfirmDialogResult::Continue => None,
+                    crate::widgets::confirm_dialog::ConfirmDialogResult::Confirm => {
+                        Some(OverlayAction::ConfirmDialog)
+                    }
+                    crate::widgets::confirm_dialog::ConfirmDialogResult::Cancel => {
+                        Some(OverlayAction::Close)
+                    }
+                },
             }
         } else {
             None
@@ -360,7 +349,8 @@ impl App {
             }
             (KeyCode::Esc, _) => {
                 if self.current_view != View::Dashboard {
-                    self.app_event_tx.send(AppEvent::SwitchView(View::Dashboard));
+                    self.app_event_tx
+                        .send(AppEvent::SwitchView(View::Dashboard));
                     return;
                 }
             }
@@ -421,19 +411,22 @@ impl App {
             KeyCode::Char('s') => {
                 if let Some(idx) = self.selected_agent {
                     let agent = &self.agents[idx];
-                    self.app_event_tx.send(AppEvent::StartAgent(agent.id.clone()));
+                    self.app_event_tx
+                        .send(AppEvent::StartAgent(agent.id.clone()));
                 }
             }
             KeyCode::Char('x') => {
                 if let Some(idx) = self.selected_agent {
                     let agent = &self.agents[idx];
-                    self.app_event_tx.send(AppEvent::StopAgent(agent.id.clone()));
+                    self.app_event_tx
+                        .send(AppEvent::StopAgent(agent.id.clone()));
                 }
             }
             KeyCode::Char('r') => {
                 if let Some(idx) = self.selected_agent {
                     let agent = &self.agents[idx];
-                    self.app_event_tx.send(AppEvent::RestartAgent(agent.id.clone()));
+                    self.app_event_tx
+                        .send(AppEvent::RestartAgent(agent.id.clone()));
                 }
             }
             _ => {}
@@ -463,13 +456,15 @@ impl App {
             KeyCode::Char('d') => {
                 if let Some(idx) = self.selected_session {
                     let session = &self.sessions[idx];
-                    self.app_event_tx.send(AppEvent::DeleteSession(session.id.clone()));
+                    self.app_event_tx
+                        .send(AppEvent::DeleteSession(session.id.clone()));
                 }
             }
             KeyCode::Char('e') => {
                 if let Some(idx) = self.selected_session {
                     let session = &self.sessions[idx];
-                    self.app_event_tx.send(AppEvent::ExportSession(session.id.clone()));
+                    self.app_event_tx
+                        .send(AppEvent::ExportSession(session.id.clone()));
                 }
             }
             _ => {}
@@ -518,51 +513,37 @@ impl App {
     fn render_header(&self, area: Rect, frame: &mut Frame) {
         let logo = Text::from(vec![
             Line::from(""),
-            Line::from(vec![
-                Span::styled(
-                    "   __  __          _____                    _             _",
-                    Style::default().fg(Color::Rgb(108, 95, 224)),
-                ),
-            ]),
-            Line::from(vec![
-                Span::styled(
-                    "  |  \\/  |   /\\   |  __ \\                  | |           (_)",
-                    Style::default().fg(Color::Rgb(108, 95, 224)),
-                ),
-            ]),
-            Line::from(vec![
-                Span::styled(
-                    "  | \\  / |  /  \\  | |__) |_ _ _ __ ___  ___| | __ _ _ __ _ _ __ ___",
-                    Style::default().fg(Color::Rgb(108, 95, 224)),
-                ),
-            ]),
-            Line::from(vec![
-                Span::styled(
-                    "  | |\\/| | / /\\ \\ |  ___/ _` | '__/ _ \\/ __| |/ _` | '__| | '_ ` _ \\",
-                    Style::default().fg(Color::Rgb(108, 95, 224)),
-                ),
-            ]),
-            Line::from(vec![
-                Span::styled(
-                    "  | |  | |/ ____ \\ | |  | (_| | | |  __/\\__ \\ | (_| | |  | | | | | |",
-                    Style::default().fg(Color::Rgb(108, 95, 224)),
-                ),
-            ]),
-            Line::from(vec![
-                Span::styled(
-                    "  |_|  |_/_/    \\_\\_|   \\__,_|_|  \\___||___/_|\\__,_|_|  |_|_| |_| |_|",
-                    Style::default().fg(Color::Rgb(108, 95, 224)),
-                ),
-            ]),
+            Line::from(vec![Span::styled(
+                "   __  __          _____                    _             _",
+                Style::default().fg(Color::Rgb(108, 95, 224)),
+            )]),
+            Line::from(vec![Span::styled(
+                "  |  \\/  |   /\\   |  __ \\                  | |           (_)",
+                Style::default().fg(Color::Rgb(108, 95, 224)),
+            )]),
+            Line::from(vec![Span::styled(
+                "  | \\  / |  /  \\  | |__) |_ _ _ __ ___  ___| | __ _ _ __ _ _ __ ___",
+                Style::default().fg(Color::Rgb(108, 95, 224)),
+            )]),
+            Line::from(vec![Span::styled(
+                "  | |\\/| | / /\\ \\ |  ___/ _` | '__/ _ \\/ __| |/ _` | '__| | '_ ` _ \\",
+                Style::default().fg(Color::Rgb(108, 95, 224)),
+            )]),
+            Line::from(vec![Span::styled(
+                "  | |  | |/ ____ \\ | |  | (_| | | |  __/\\__ \\ | (_| | |  | | | | | |",
+                Style::default().fg(Color::Rgb(108, 95, 224)),
+            )]),
+            Line::from(vec![Span::styled(
+                "  |_|  |_/_/    \\_\\_|   \\__,_|_|  \\___||___/_|\\__,_|_|  |_|_| |_| |_|",
+                Style::default().fg(Color::Rgb(108, 95, 224)),
+            )]),
             Line::from(""),
-            Line::from(vec![
-                Span::styled(
-                    "                Modular Framework for Agents",
-                    Style::default()
-                        .fg(Color::Rgb(108, 95, 224))
-                        .add_modifier(Modifier::BOLD),
-                ),
-            ]),
+            Line::from(vec![Span::styled(
+                "                Modular Framework for Agents",
+                Style::default()
+                    .fg(Color::Rgb(108, 95, 224))
+                    .add_modifier(Modifier::BOLD),
+            )]),
             Line::from(""),
         ]);
 
@@ -584,8 +565,16 @@ impl App {
             )
             .split(area);
 
-        let running_count = self.agents.iter().filter(|a| matches!(a.status, AgentStatus::Running)).count();
-        let stopped_count = self.agents.iter().filter(|a| matches!(a.status, AgentStatus::Stopped)).count();
+        let running_count = self
+            .agents
+            .iter()
+            .filter(|a| matches!(a.status, AgentStatus::Running))
+            .count();
+        let stopped_count = self
+            .agents
+            .iter()
+            .filter(|a| matches!(a.status, AgentStatus::Stopped))
+            .count();
 
         // Agent count card
         let agent_card = Block::bordered()
@@ -720,7 +709,10 @@ impl App {
                         Span::raw(format!("{}", agent.status)),
                     ]),
                     Line::from(vec![
-                        Span::styled("Description: ", Style::default().fg(Color::Rgb(108, 95, 224))),
+                        Span::styled(
+                            "Description: ",
+                            Style::default().fg(Color::Rgb(108, 95, 224)),
+                        ),
                         Span::raw(agent.description.clone()),
                     ]),
                     Line::from(vec![
@@ -808,7 +800,10 @@ impl App {
             if let Some(session) = self.sessions.get(idx) {
                 let details = vec![
                     Line::from(vec![
-                        Span::styled("Session ID: ", Style::default().fg(Color::Rgb(108, 95, 224))),
+                        Span::styled(
+                            "Session ID: ",
+                            Style::default().fg(Color::Rgb(108, 95, 224)),
+                        ),
                         Span::raw(session.id.clone()),
                     ]),
                     Line::from(vec![
@@ -938,12 +933,23 @@ impl App {
                     Line::from(vec![
                         Span::styled("Status: ", Style::default().fg(Color::Rgb(108, 95, 224))),
                         Span::styled(
-                            if plugin.installed { "Installed" } else { "Available" },
-                            Style::default().fg(if plugin.installed { Color::Green } else { Color::Yellow }),
+                            if plugin.installed {
+                                "Installed"
+                            } else {
+                                "Available"
+                            },
+                            Style::default().fg(if plugin.installed {
+                                Color::Green
+                            } else {
+                                Color::Yellow
+                            }),
                         ),
                     ]),
                     Line::from(vec![
-                        Span::styled("Description: ", Style::default().fg(Color::Rgb(108, 95, 224))),
+                        Span::styled(
+                            "Description: ",
+                            Style::default().fg(Color::Rgb(108, 95, 224)),
+                        ),
                         Span::raw(plugin.description.clone()),
                     ]),
                 ];
@@ -1014,11 +1020,7 @@ impl App {
         ]);
 
         let para = Paragraph::new(line)
-            .style(
-                Style::default()
-                    .bg(Color::Rgb(30, 30, 50))
-                    .fg(Color::White),
-            );
+            .style(Style::default().bg(Color::Rgb(30, 30, 50)).fg(Color::White));
         frame.render_widget(para, area);
     }
 }

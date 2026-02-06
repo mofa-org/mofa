@@ -6,8 +6,8 @@ use super::entities::*;
 use super::traits::*;
 use async_trait::async_trait;
 use std::collections::HashMap;
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use tokio::sync::RwLock;
 use uuid::Uuid;
 
@@ -422,7 +422,10 @@ impl SessionStore for InMemoryStore {
 
 #[async_trait]
 impl ProviderStore for InMemoryStore {
-    async fn get_provider(&self, _id: Uuid) -> PersistenceResult<Option<crate::persistence::entities::Provider>> {
+    async fn get_provider(
+        &self,
+        _id: Uuid,
+    ) -> PersistenceResult<Option<crate::persistence::entities::Provider>> {
         // Memory store doesn't support providers - return not found
         Ok(None)
     }
@@ -455,7 +458,10 @@ impl ProviderStore for InMemoryStore {
 
 #[async_trait]
 impl AgentStore for InMemoryStore {
-    async fn get_agent(&self, _id: Uuid) -> PersistenceResult<Option<crate::persistence::entities::Agent>> {
+    async fn get_agent(
+        &self,
+        _id: Uuid,
+    ) -> PersistenceResult<Option<crate::persistence::entities::Agent>> {
         // Memory store doesn't support agents - return not found
         Ok(None)
     }
@@ -707,7 +713,10 @@ impl SessionStore for BoundedInMemoryStore {
 
 #[async_trait]
 impl ProviderStore for BoundedInMemoryStore {
-    async fn get_provider(&self, id: Uuid) -> PersistenceResult<Option<crate::persistence::entities::Provider>> {
+    async fn get_provider(
+        &self,
+        id: Uuid,
+    ) -> PersistenceResult<Option<crate::persistence::entities::Provider>> {
         self.inner.get_provider(id).await
     }
 
@@ -736,7 +745,10 @@ impl ProviderStore for BoundedInMemoryStore {
 
 #[async_trait]
 impl AgentStore for BoundedInMemoryStore {
-    async fn get_agent(&self, id: Uuid) -> PersistenceResult<Option<crate::persistence::entities::Agent>> {
+    async fn get_agent(
+        &self,
+        id: Uuid,
+    ) -> PersistenceResult<Option<crate::persistence::entities::Agent>> {
         self.inner.get_agent(id).await
     }
 
@@ -752,7 +764,9 @@ impl AgentStore for BoundedInMemoryStore {
         tenant_id: Uuid,
         code: &str,
     ) -> PersistenceResult<Option<crate::persistence::entities::Agent>> {
-        self.inner.get_agent_by_code_and_tenant(tenant_id, code).await
+        self.inner
+            .get_agent_by_code_and_tenant(tenant_id, code)
+            .await
     }
 
     async fn list_agents(
@@ -788,7 +802,9 @@ impl AgentStore for BoundedInMemoryStore {
         tenant_id: Uuid,
         code: &str,
     ) -> PersistenceResult<Option<crate::persistence::entities::AgentConfig>> {
-        self.inner.get_agent_by_code_and_tenant_with_provider(tenant_id, code).await
+        self.inner
+            .get_agent_by_code_and_tenant_with_provider(tenant_id, code)
+            .await
     }
 }
 

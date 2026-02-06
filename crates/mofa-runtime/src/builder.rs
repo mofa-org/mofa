@@ -15,8 +15,8 @@ use crate::interrupt::AgentInterrupt;
 #[cfg(feature = "dora")]
 use crate::message::AgentMessage;
 use crate::{AgentConfig, AgentMetadata, MoFAAgent};
-use mofa_kernel::message::AgentEvent;
 use mofa_kernel::AgentPlugin;
+use mofa_kernel::message::AgentEvent;
 use std::collections::HashMap;
 #[cfg(feature = "dora")]
 use std::sync::Arc;
@@ -455,7 +455,6 @@ impl<A: MoFAAgent> SimpleAgentRuntime<A> {
 
         // 将事件转换为输入并执行
         use mofa_kernel::agent::types::AgentInput;
-        
 
         let context = mofa_kernel::agent::AgentContext::new(self.metadata.id.clone());
         let input = match event {

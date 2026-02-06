@@ -2,8 +2,8 @@
 //!
 //! 提供安全的、可扩展的脚本执行环境
 
-use anyhow::{anyhow, Result};
-use rhai::{Dynamic, Engine, Map, Scope, AST};
+use anyhow::{Result, anyhow};
+use rhai::{AST, Dynamic, Engine, Map, Scope};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::Path;
@@ -173,7 +173,9 @@ impl ScriptResult {
     /// 转换为指定类型
     pub fn into_typed<T: for<'de> Deserialize<'de>>(self) -> Result<T> {
         if !self.success {
-            return Err(anyhow!(self.error.unwrap_or_else(|| "Unknown error".into())));
+            return Err(anyhow!(
+                self.error.unwrap_or_else(|| "Unknown error".into())
+            ));
         }
         serde_json::from_value(self.value).map_err(|e| anyhow!("Failed to deserialize: {}", e))
     }
@@ -513,7 +515,9 @@ impl RhaiScriptEngine {
         self.prepare_scope(&mut scope, context);
 
         // 执行已编译的 AST
-        let result = self.engine.eval_ast_with_scope::<Dynamic>(&mut scope, &compiled.ast);
+        let result = self
+            .engine
+            .eval_ast_with_scope::<Dynamic>(&mut scope, &compiled.ast);
 
         let execution_time_ms = start_time.elapsed().as_millis() as u64;
         let logs = self.logs.read().await.clone();
@@ -640,9 +644,7 @@ impl RhaiScriptEngine {
     pub fn engine_mut(&mut self) -> &mut Engine {
         &mut self.engine
     }
-
 }
-
 
 // ============================================================================
 // 辅助函数
@@ -805,10 +807,7 @@ mod tests {
         let context = ScriptContext::new();
 
         // 测试字符串函数
-        let result = engine
-            .execute(r#"upper("hello")"#, &context)
-            .await
-            .unwrap();
+        let result = engine.execute(r#"upper("hello")"#, &context).await.unwrap();
         assert_eq!(result.value, "HELLO");
 
         // 测试 JSON 函数

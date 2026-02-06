@@ -94,9 +94,9 @@ pub use tools::*;
 /// 便捷 prelude 模块
 pub mod prelude {
     pub use super::patterns::{
-        chain_agents, parallel_agents, parallel_agents_with_summarizer, AgentOutput,
-        AgentUnit, AggregationStrategy, ChainAgent, ChainResult, ChainStepResult, MapReduceAgent,
-        MapReduceResult, ParallelAgent, ParallelResult, ParallelStepResult,
+        AgentOutput, AgentUnit, AggregationStrategy, ChainAgent, ChainResult, ChainStepResult,
+        MapReduceAgent, MapReduceResult, ParallelAgent, ParallelResult, ParallelStepResult,
+        chain_agents, parallel_agents, parallel_agents_with_summarizer,
     };
     pub use super::tools::prelude::*;
 }

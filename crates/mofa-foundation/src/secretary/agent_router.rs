@@ -40,7 +40,7 @@
 //! ```
 
 use super::default::types::{ProjectRequirement, Subtask};
-use super::llm::{parse_llm_json, ChatMessage, LLMProvider};
+use super::llm::{ChatMessage, LLMProvider, parse_llm_json};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -127,7 +127,6 @@ impl AgentInfo {
         self.performance_score = score;
         self
     }
-
 }
 
 // =============================================================================
@@ -750,19 +749,11 @@ impl RuleBasedRouter {
             RuleOperator::NotContains => !field_value.contains(&condition.value),
             RuleOperator::StartsWith => field_value.starts_with(&condition.value),
             RuleOperator::EndsWith => field_value.ends_with(&condition.value),
-            RuleOperator::Regex => {
-                regex::Regex::new(&condition.value)
-                    .map(|re| re.is_match(&field_value))
-                    .unwrap_or(false)
-            }
-            RuleOperator::In => condition
-                .value
-                .split(',')
-                .any(|v| v.trim() == field_value),
-            RuleOperator::NotIn => !condition
-                .value
-                .split(',')
-                .any(|v| v.trim() == field_value),
+            RuleOperator::Regex => regex::Regex::new(&condition.value)
+                .map(|re| re.is_match(&field_value))
+                .unwrap_or(false),
+            RuleOperator::In => condition.value.split(',').any(|v| v.trim() == field_value),
+            RuleOperator::NotIn => !condition.value.split(',').any(|v| v.trim() == field_value),
         }
     }
 
@@ -808,7 +799,10 @@ impl AgentRouter for RuleBasedRouter {
         for rule in rules.iter() {
             if self.check_rule(rule, context) {
                 // 验证目标Agent是否可用
-                if available_agents.iter().any(|a| a.id == rule.target_agent_id) {
+                if available_agents
+                    .iter()
+                    .any(|a| a.id == rule.target_agent_id)
+                {
                     return Ok(RoutingDecision {
                         agent_id: rule.target_agent_id.clone(),
                         reason: format!("匹配规则: {} ({})", rule.name, rule.id),
@@ -1052,7 +1046,11 @@ impl AgentRouter for CompositeRouter {
             agent_id: agent.id.clone(),
             reason: "所有路由器均无高置信度匹配，使用默认分配".to_string(),
             confidence: 0.3,
-            alternatives: available_agents.iter().skip(1).map(|a| a.id.clone()).collect(),
+            alternatives: available_agents
+                .iter()
+                .skip(1)
+                .map(|a| a.id.clone())
+                .collect(),
             decision_type: RoutingDecisionType::Default,
             needs_human_confirmation: true,
             execution_params: HashMap::new(),
@@ -1094,7 +1092,9 @@ mod tests {
         assert_eq!(agents.len(), 2);
 
         // 按能力筛选
-        let backend_agents = provider.filter_by_capabilities(&["backend".to_string()]).await;
+        let backend_agents = provider
+            .filter_by_capabilities(&["backend".to_string()])
+            .await;
         assert_eq!(backend_agents.len(), 1);
         assert_eq!(backend_agents[0].id, "agent_1");
     }
@@ -1183,9 +1183,11 @@ mod tests {
             .add_router(rule_router)
             .with_fallback(capability_router);
 
-        let agents = vec![AgentInfo::new("agent_1", "Agent 1")
-            .with_capability("general")
-            .with_performance_score(0.8)];
+        let agents = vec![
+            AgentInfo::new("agent_1", "Agent 1")
+                .with_capability("general")
+                .with_performance_score(0.8),
+        ];
 
         let context = RoutingContext::new(
             Subtask {

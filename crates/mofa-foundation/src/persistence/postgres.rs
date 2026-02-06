@@ -5,11 +5,11 @@
 use super::entities::*;
 use super::traits::*;
 use async_trait::async_trait;
-use sqlx::postgres::{PgPool, PgPoolOptions, PgRow};
 use sqlx::Row;
+use sqlx::postgres::{PgPool, PgPoolOptions, PgRow};
 use std::collections::HashMap;
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use tracing::error;
 use uuid::Uuid;
 
@@ -92,10 +92,9 @@ impl PostgresStore {
     /// let store = PostgresStore::from_env().await?;
     /// ```
     pub async fn from_env() -> PersistenceResult<Arc<Self>> {
-        let database_url = std::env::var("DATABASE_URL")
-            .map_err(|_| PersistenceError::Other(
-                "DATABASE_URL environment variable not set".to_string()
-            ))?;
+        let database_url = std::env::var("DATABASE_URL").map_err(|_| {
+            PersistenceError::Other("DATABASE_URL environment variable not set".to_string())
+        })?;
         Self::shared(&database_url).await
     }
 
@@ -112,11 +111,12 @@ impl PostgresStore {
     /// let store = PostgresStore::from_env_with_options(20).await?;
     /// ```
     pub async fn from_env_with_options(max_connections: u32) -> PersistenceResult<Arc<Self>> {
-        let database_url = std::env::var("DATABASE_URL")
-            .map_err(|_| PersistenceError::Other(
-                "DATABASE_URL environment variable not set".to_string()
-            ))?;
-        Ok(Arc::new(Self::connect_with_options(&database_url, max_connections).await?))
+        let database_url = std::env::var("DATABASE_URL").map_err(|_| {
+            PersistenceError::Other("DATABASE_URL environment variable not set".to_string())
+        })?;
+        Ok(Arc::new(
+            Self::connect_with_options(&database_url, max_connections).await?,
+        ))
     }
 
     /// 获取连接池引用
@@ -277,7 +277,9 @@ impl PostgresStore {
     }
 
     /// 从行解析 provider
-    fn parse_provider_row(row: &PgRow) -> PersistenceResult<crate::persistence::entities::Provider> {
+    fn parse_provider_row(
+        row: &PgRow,
+    ) -> PersistenceResult<crate::persistence::entities::Provider> {
         Ok(crate::persistence::entities::Provider {
             id: row
                 .try_get("id")
@@ -942,14 +944,13 @@ impl crate::persistence::traits::AgentStore for PostgresStore {
         tenant_id: Uuid,
         code: &str,
     ) -> PersistenceResult<Option<crate::persistence::entities::Agent>> {
-        let row = sqlx::query(
-            "SELECT * FROM entity_agent WHERE tenant_id = $1 AND agent_code = $2",
-        )
-        .bind(tenant_id)
-        .bind(code)
-        .fetch_optional(&self.pool)
-        .await
-        .map_err(|e| PersistenceError::Query(e.to_string()))?;
+        let row =
+            sqlx::query("SELECT * FROM entity_agent WHERE tenant_id = $1 AND agent_code = $2")
+                .bind(tenant_id)
+                .bind(code)
+                .fetch_optional(&self.pool)
+                .await
+                .map_err(|e| PersistenceError::Query(e.to_string()))?;
 
         match row {
             Some(row) => Ok(Some(Self::parse_agent_row(&row)?)),
@@ -974,13 +975,12 @@ impl crate::persistence::traits::AgentStore for PostgresStore {
         &self,
         tenant_id: Uuid,
     ) -> PersistenceResult<Vec<crate::persistence::entities::Agent>> {
-        let rows = sqlx::query(
-            "SELECT * FROM entity_agent WHERE tenant_id = $1 AND agent_status = true",
-        )
-        .bind(tenant_id)
-        .fetch_all(&self.pool)
-        .await
-        .map_err(|e| PersistenceError::Query(e.to_string()))?;
+        let rows =
+            sqlx::query("SELECT * FROM entity_agent WHERE tenant_id = $1 AND agent_status = true")
+                .bind(tenant_id)
+                .fetch_all(&self.pool)
+                .await
+                .map_err(|e| PersistenceError::Query(e.to_string()))?;
 
         rows.iter().map(Self::parse_agent_row).collect()
     }

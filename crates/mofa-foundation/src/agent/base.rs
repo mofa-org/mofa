@@ -3,8 +3,8 @@
 //! 提供了 MoFAAgent trait 的基础实现，可以作为其他 Agent 的基础
 
 use mofa_kernel::agent::{
-    AgentCapabilities, AgentContext, AgentError, AgentOutput, AgentResult,
-    AgentState, AgentStats, InterruptResult, MoFAAgent,
+    AgentCapabilities, AgentContext, AgentError, AgentOutput, AgentResult, AgentState, AgentStats,
+    InterruptResult, MoFAAgent,
 };
 
 use async_trait::async_trait;
@@ -67,7 +67,10 @@ impl BaseAgent {
             self.state = new_state;
             Ok(())
         } else {
-            Err(AgentError::invalid_state_transition(&self.state, &new_state))
+            Err(AgentError::invalid_state_transition(
+                &self.state,
+                &new_state,
+            ))
         }
     }
 
@@ -136,7 +139,7 @@ impl BaseAgent {
 }
 
 #[async_trait]
-impl MoFAAgent for BaseAgent  {
+impl MoFAAgent for BaseAgent {
     fn id(&self) -> &str {
         &self.id
     }
@@ -149,7 +152,10 @@ impl MoFAAgent for BaseAgent  {
         &self.capabilities
     }
 
-    async fn initialize(&mut self, _ctx: &mofa_kernel::agent::context::AgentContext) -> AgentResult<()> {
+    async fn initialize(
+        &mut self,
+        _ctx: &mofa_kernel::agent::context::AgentContext,
+    ) -> AgentResult<()> {
         self.transition_to(AgentState::Initializing)?;
         self.transition_to(AgentState::Ready)?;
         Ok(())

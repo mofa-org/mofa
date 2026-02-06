@@ -260,8 +260,14 @@ mod tests {
     #[test]
     fn test_error_categories() {
         assert_eq!(GlobalError::llm("test").category(), ErrorCategory::LLM);
-        assert_eq!(GlobalError::plugin("test").category(), ErrorCategory::Plugin);
-        assert_eq!(GlobalError::runtime("test").category(), ErrorCategory::Runtime);
+        assert_eq!(
+            GlobalError::plugin("test").category(),
+            ErrorCategory::Plugin
+        );
+        assert_eq!(
+            GlobalError::runtime("test").category(),
+            ErrorCategory::Runtime
+        );
     }
 
     #[test]

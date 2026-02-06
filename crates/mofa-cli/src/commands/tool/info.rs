@@ -13,7 +13,10 @@ pub fn run(name: &str) -> anyhow::Result<()> {
     println!("  Description:    {}", "A helpful tool".white());
     println!("  Version:        {}", "1.0.0".white());
     println!("  Enabled:        {}", "Yes".green());
-    println!("  Parameters:     {}", "query (required), limit (optional)".white());
+    println!(
+        "  Parameters:     {}",
+        "query (required), limit (optional)".white()
+    );
     println!();
 
     Ok(())

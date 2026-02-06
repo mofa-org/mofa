@@ -145,7 +145,10 @@ pub trait ProviderStore: Send + Sync {
     ) -> PersistenceResult<Option<super::entities::Provider>>;
 
     /// 列出租户的所有 providers
-    async fn list_providers(&self, tenant_id: Uuid) -> PersistenceResult<Vec<super::entities::Provider>>;
+    async fn list_providers(
+        &self,
+        tenant_id: Uuid,
+    ) -> PersistenceResult<Vec<super::entities::Provider>>;
 
     /// 获取租户所有启用的 providers
     async fn get_enabled_providers(

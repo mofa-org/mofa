@@ -108,7 +108,11 @@ impl GlobalMessage {
     }
 
     /// 创建点对点消息
-    pub fn direct(sender: impl Into<String>, recipient: impl Into<String>, content: MessageContent) -> Self {
+    pub fn direct(
+        sender: impl Into<String>,
+        recipient: impl Into<String>,
+        content: MessageContent,
+    ) -> Self {
         Self::Direct {
             sender: sender.into(),
             recipient: recipient.into(),
@@ -117,7 +121,11 @@ impl GlobalMessage {
     }
 
     /// 创建广播消息
-    pub fn broadcast(sender: impl Into<String>, topic: impl Into<String>, content: MessageContent) -> Self {
+    pub fn broadcast(
+        sender: impl Into<String>,
+        topic: impl Into<String>,
+        content: MessageContent,
+    ) -> Self {
         Self::Broadcast {
             sender: sender.into(),
             topic: topic.into(),
@@ -342,18 +350,10 @@ mod tests {
 
     #[test]
     fn test_global_message_request_response() {
-        let request = GlobalMessage::request(
-            "client",
-            "server",
-            "req-123",
-            MessageContent::text("ping"),
-        );
+        let request =
+            GlobalMessage::request("client", "server", "req-123", MessageContent::text("ping"));
 
-        let response = GlobalMessage::response(
-            "server",
-            "req-123",
-            MessageContent::text("pong"),
-        );
+        let response = GlobalMessage::response("server", "req-123", MessageContent::text("pong"));
 
         assert_eq!(request.message_type(), "request");
         assert_eq!(response.message_type(), "response");

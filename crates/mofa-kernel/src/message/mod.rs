@@ -10,7 +10,6 @@ pub enum StreamType {
     CommandStream, // 命令流 - 控制命令传递
 }
 
-
 // 智能体通信消息协议
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub enum AgentMessage {

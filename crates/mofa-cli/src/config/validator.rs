@@ -179,7 +179,7 @@ impl ConfigValidator {
         if agent.id.is_empty() {
             result.add_error(
                 ValidationError::new("agent.id", "Agent ID cannot be empty")
-                    .with_suggestion("Set a unique identifier for your agent")
+                    .with_suggestion("Set a unique identifier for your agent"),
             );
         }
 
@@ -187,7 +187,7 @@ impl ConfigValidator {
         if agent.name.is_empty() {
             result.add_error(
                 ValidationError::new("agent.name", "Agent name cannot be empty")
-                    .with_suggestion("Set a human-readable name for your agent")
+                    .with_suggestion("Set a human-readable name for your agent"),
             );
         }
 
@@ -228,7 +228,7 @@ impl ConfigValidator {
                     "llm.provider",
                     format!("Unknown provider: {}", llm.provider),
                 )
-                .with_suggestion("Use: openai, ollama, azure, or compatible")
+                .with_suggestion("Use: openai, ollama, azure, or compatible"),
             );
         }
 
@@ -236,42 +236,45 @@ impl ConfigValidator {
         if llm.model.is_empty() {
             result.add_error(
                 ValidationError::new("llm.model", "Model cannot be empty")
-                    .with_suggestion("Specify the model to use (e.g., gpt-4o, llama2)")
+                    .with_suggestion("Specify the model to use (e.g., gpt-4o, llama2)"),
             );
         }
 
         // Validate API key for providers that require it
         if llm.provider != "ollama"
-            && (llm.api_key.is_none() || llm.api_key.as_ref().is_none_or(|k| k.is_empty())) {
-                result.add_warning(ValidationWarning::new(
-                    "llm.api_key",
-                    format!("API key not set for {} provider (may be in environment variable)", llm.provider),
-                ));
-            }
+            && (llm.api_key.is_none() || llm.api_key.as_ref().is_none_or(|k| k.is_empty()))
+        {
+            result.add_warning(ValidationWarning::new(
+                "llm.api_key",
+                format!(
+                    "API key not set for {} provider (may be in environment variable)",
+                    llm.provider
+                ),
+            ));
+        }
 
         // Validate temperature
         if let Some(temp) = llm.temperature
-            && (!(0.0..=2.0).contains(&temp)) {
-                result.add_error(
-                    ValidationError::new(
-                        "llm.temperature",
-                        format!("Temperature out of range: {}", temp),
-                    )
-                    .with_suggestion("Temperature must be between 0.0 and 2.0")
-                );
-            }
+            && (!(0.0..=2.0).contains(&temp))
+        {
+            result.add_error(
+                ValidationError::new(
+                    "llm.temperature",
+                    format!("Temperature out of range: {}", temp),
+                )
+                .with_suggestion("Temperature must be between 0.0 and 2.0"),
+            );
+        }
 
         // Validate max_tokens
         if let Some(max_tokens) = llm.max_tokens
-            && max_tokens == 0 {
-                result.add_error(
-                    ValidationError::new(
-                        "llm.max_tokens",
-                        "max_tokens cannot be zero",
-                    )
-                    .with_suggestion("Set a positive value or remove to use default")
-                );
-            }
+            && max_tokens == 0
+        {
+            result.add_error(
+                ValidationError::new("llm.max_tokens", "max_tokens cannot be zero")
+                    .with_suggestion("Set a positive value or remove to use default"),
+            );
+        }
     }
 
     fn validate_runtime_config(
@@ -281,34 +284,38 @@ impl ConfigValidator {
     ) {
         // Validate max_concurrent_tasks
         if let Some(max_tasks) = runtime.max_concurrent_tasks
-            && max_tasks == 0 {
-                result.add_error(
-                    ValidationError::new(
-                        "runtime.max_concurrent_tasks",
-                        "Cannot be zero",
-                    )
-                    .with_suggestion("Set a positive value or remove to use default")
-                );
-            }
+            && max_tasks == 0
+        {
+            result.add_error(
+                ValidationError::new("runtime.max_concurrent_tasks", "Cannot be zero")
+                    .with_suggestion("Set a positive value or remove to use default"),
+            );
+        }
 
         // Validate default_timeout_secs
         if let Some(timeout) = runtime.default_timeout_secs
-            && timeout == 0 {
-                result.add_warning(ValidationWarning::new(
-                    "runtime.default_timeout_secs",
-                    "Zero timeout may cause operations to hang",
-                ));
-            }
+            && timeout == 0
+        {
+            result.add_warning(ValidationWarning::new(
+                "runtime.default_timeout_secs",
+                "Zero timeout may cause operations to hang",
+            ));
+        }
 
         // Validate persistence
         if let Some(ref persistence) = runtime.persistence
             && persistence.enabled == Some(true)
-                && (persistence.database_url.is_none() || persistence.database_url.as_ref().is_none_or(|u| u.is_empty())) {
-                    result.add_warning(ValidationWarning::new(
-                        "runtime.persistence.database_url",
-                        "Persistence enabled but no database URL configured",
-                    ));
-                }
+            && (persistence.database_url.is_none()
+                || persistence
+                    .database_url
+                    .as_ref()
+                    .is_none_or(|u| u.is_empty()))
+        {
+            result.add_warning(ValidationWarning::new(
+                "runtime.persistence.database_url",
+                "Persistence enabled but no database URL configured",
+            ));
+        }
     }
 }
 

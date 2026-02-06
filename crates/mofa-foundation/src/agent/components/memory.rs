@@ -3,15 +3,15 @@
 //! 定义 Agent 的记忆/状态持久化能力
 
 use async_trait::async_trait;
+use chrono::Utc;
+use mofa_kernel::agent::error::AgentError;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use chrono::Utc;
-use mofa_kernel::agent::error::AgentError;
 
 pub use mofa_kernel::agent::components::memory::{
-    Memory, MemoryItem, MemoryValue, Message, MessageRole, MemoryStats,
+    Memory, MemoryItem, MemoryStats, MemoryValue, Message, MessageRole,
 };
 
 // Use kernel's AgentResult type
@@ -75,7 +75,11 @@ impl Memory for InMemoryStorage {
             .cloned()
             .collect();
 
-        results.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(std::cmp::Ordering::Equal));
+        results.sort_by(|a, b| {
+            b.score
+                .partial_cmp(&a.score)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
         results.truncate(limit);
         Ok(results)
     }
@@ -179,8 +183,11 @@ impl FileBasedStorage {
         let long_term_file = memory_dir.join("MEMORY.md");
 
         // 创建目录
-        tokio::fs::create_dir_all(&sessions_dir).await
-            .map_err(|e| AgentError::IoError(format!("Failed to create sessions directory: {}", e)))?;
+        tokio::fs::create_dir_all(&sessions_dir)
+            .await
+            .map_err(|e| {
+                AgentError::IoError(format!("Failed to create sessions directory: {}", e))
+            })?;
 
         // 加载现有数据
         let data = Self::load_data(&data_file).await?;
@@ -203,15 +210,17 @@ impl FileBasedStorage {
             return Ok(HashMap::new());
         }
 
-        let content = tokio::fs::read_to_string(data_file).await
+        let content = tokio::fs::read_to_string(data_file)
+            .await
             .map_err(|e| AgentError::IoError(format!("Failed to read data.json: {}", e)))?;
 
         if content.trim().is_empty() {
             return Ok(HashMap::new());
         }
 
-        serde_json::from_str(&content)
-            .map_err(|e| AgentError::SerializationError(format!("Failed to parse data.json: {}", e)))
+        serde_json::from_str(&content).map_err(|e| {
+            AgentError::SerializationError(format!("Failed to parse data.json: {}", e))
+        })
     }
 
     /// 从 sessions 目录加载所有会话
@@ -221,11 +230,15 @@ impl FileBasedStorage {
         }
 
         let mut sessions = HashMap::new();
-        let mut entries = tokio::fs::read_dir(sessions_dir).await
-            .map_err(|e| AgentError::IoError(format!("Failed to read sessions directory: {}", e)))?;
+        let mut entries = tokio::fs::read_dir(sessions_dir).await.map_err(|e| {
+            AgentError::IoError(format!("Failed to read sessions directory: {}", e))
+        })?;
 
-        while let Some(entry) = entries.next_entry().await
-            .map_err(|e| AgentError::IoError(format!("Failed to read session entry: {}", e)))? {
+        while let Some(entry) = entries
+            .next_entry()
+            .await
+            .map_err(|e| AgentError::IoError(format!("Failed to read session entry: {}", e)))?
+        {
             let path = entry.path();
 
             // 只处理 .json 文件
@@ -234,16 +247,24 @@ impl FileBasedStorage {
             }
 
             // 从文件名获取 session_id (例如: "session-123.json" -> "session-123")
-            let session_id = path.file_stem()
+            let session_id = path
+                .file_stem()
                 .and_then(|s: &std::ffi::OsStr| s.to_str())
-                .ok_or_else(|| AgentError::IoError(format!("Invalid session file name: {:?}", path)))?;
+                .ok_or_else(|| {
+                    AgentError::IoError(format!("Invalid session file name: {:?}", path))
+                })?;
 
             // 读取会话数据
-            let content = tokio::fs::read_to_string(&path).await
-                .map_err(|e| AgentError::IoError(format!("Failed to read session file {:?}: {}", path, e)))?;
+            let content = tokio::fs::read_to_string(&path).await.map_err(|e| {
+                AgentError::IoError(format!("Failed to read session file {:?}: {}", path, e))
+            })?;
 
-            let messages: Vec<Message> = serde_json::from_str(&content)
-                .map_err(|e| AgentError::SerializationError(format!("Failed to parse session file {:?}: {}", path, e)))?;
+            let messages: Vec<Message> = serde_json::from_str(&content).map_err(|e| {
+                AgentError::SerializationError(format!(
+                    "Failed to parse session file {:?}: {}",
+                    path, e
+                ))
+            })?;
 
             sessions.insert(session_id.to_string(), messages);
         }
@@ -256,16 +277,19 @@ impl FileBasedStorage {
     /// 使用原子写入: 写入临时文件然后 rename
     async fn persist_data(&self) -> AgentResult<()> {
         let data = self.data.read().await;
-        let json = serde_json::to_string_pretty(&*data)
-            .map_err(|e| AgentError::SerializationError(format!("Failed to serialize data: {}", e)))?;
+        let json = serde_json::to_string_pretty(&*data).map_err(|e| {
+            AgentError::SerializationError(format!("Failed to serialize data: {}", e))
+        })?;
         drop(data);
 
         // 原子写入: 临时文件 + rename
         let temp_file = self.data_file.with_extension("json.tmp");
-        tokio::fs::write(&temp_file, json).await
+        tokio::fs::write(&temp_file, json)
+            .await
             .map_err(|e| AgentError::IoError(format!("Failed to write temp data file: {}", e)))?;
 
-        tokio::fs::rename(&temp_file, &self.data_file).await
+        tokio::fs::rename(&temp_file, &self.data_file)
+            .await
             .map_err(|e| AgentError::IoError(format!("Failed to rename data file: {}", e)))?;
 
         Ok(())
@@ -280,23 +304,29 @@ impl FileBasedStorage {
 
         if let Some(messages) = messages {
             // 写入会话数据
-            let json = serde_json::to_string_pretty(messages)
-                .map_err(|e| AgentError::SerializationError(format!("Failed to serialize session: {}", e)))?;
+            let json = serde_json::to_string_pretty(messages).map_err(|e| {
+                AgentError::SerializationError(format!("Failed to serialize session: {}", e))
+            })?;
             drop(sessions);
 
             // 原子写入
             let temp_file = session_file.with_extension("json.tmp");
-            tokio::fs::write(&temp_file, json).await
-                .map_err(|e| AgentError::IoError(format!("Failed to write temp session file: {}", e)))?;
+            tokio::fs::write(&temp_file, json).await.map_err(|e| {
+                AgentError::IoError(format!("Failed to write temp session file: {}", e))
+            })?;
 
-            tokio::fs::rename(&temp_file, &session_file).await
-                .map_err(|e| AgentError::IoError(format!("Failed to rename session file: {}", e)))?;
+            tokio::fs::rename(&temp_file, &session_file)
+                .await
+                .map_err(|e| {
+                    AgentError::IoError(format!("Failed to rename session file: {}", e))
+                })?;
         } else {
             // 会话不存在，删除文件
             drop(sessions);
             if session_file.exists() {
-                tokio::fs::remove_file(&session_file).await
-                    .map_err(|e| AgentError::IoError(format!("Failed to remove session file: {}", e)))?;
+                tokio::fs::remove_file(&session_file).await.map_err(|e| {
+                    AgentError::IoError(format!("Failed to remove session file: {}", e))
+                })?;
             }
         }
 
@@ -317,7 +347,8 @@ impl FileBasedStorage {
     pub async fn read_today_file(&self) -> AgentResult<String> {
         let today_file = self.today_file();
         if today_file.exists() {
-            tokio::fs::read_to_string(&today_file).await
+            tokio::fs::read_to_string(&today_file)
+                .await
                 .map_err(|e| AgentError::IoError(format!("Failed to read today file: {}", e)))
         } else {
             Ok(String::new())
@@ -328,7 +359,8 @@ impl FileBasedStorage {
     pub async fn append_today_file(&self, content: &str) -> AgentResult<()> {
         let today_file = self.today_file();
         let final_content = if today_file.exists() {
-            let existing = tokio::fs::read_to_string(&today_file).await
+            let existing = tokio::fs::read_to_string(&today_file)
+                .await
                 .map_err(|e| AgentError::IoError(format!("Failed to read today file: {}", e)))?;
             format!("{}\n{}", existing, content)
         } else {
@@ -337,7 +369,8 @@ impl FileBasedStorage {
             format!("# {}\n\n{}", today, content)
         };
 
-        tokio::fs::write(&today_file, final_content).await
+        tokio::fs::write(&today_file, final_content)
+            .await
             .map_err(|e| AgentError::IoError(format!("Failed to write today file: {}", e)))?;
 
         Ok(())
@@ -346,7 +379,8 @@ impl FileBasedStorage {
     /// 读取长期记忆 (MEMORY.md)
     pub async fn read_long_term_file(&self) -> AgentResult<String> {
         if self.long_term_file.exists() {
-            tokio::fs::read_to_string(&self.long_term_file).await
+            tokio::fs::read_to_string(&self.long_term_file)
+                .await
                 .map_err(|e| AgentError::IoError(format!("Failed to read long-term file: {}", e)))
         } else {
             Ok(String::new())
@@ -356,10 +390,14 @@ impl FileBasedStorage {
     /// 写入长期记忆 (MEMORY.md)
     pub async fn write_long_term_file(&self, content: &str) -> AgentResult<()> {
         // 确保目录存在
-        tokio::fs::create_dir_all(&self.memory_dir).await
-            .map_err(|e| AgentError::IoError(format!("Failed to create memory directory: {}", e)))?;
+        tokio::fs::create_dir_all(&self.memory_dir)
+            .await
+            .map_err(|e| {
+                AgentError::IoError(format!("Failed to create memory directory: {}", e))
+            })?;
 
-        tokio::fs::write(&self.long_term_file, content).await
+        tokio::fs::write(&self.long_term_file, content)
+            .await
             .map_err(|e| AgentError::IoError(format!("Failed to write long-term file: {}", e)))?;
 
         Ok(())
@@ -375,8 +413,12 @@ impl FileBasedStorage {
             let file_path = self.memory_dir.join(format!("{}.md", date_str));
 
             if file_path.exists() {
-                let content = tokio::fs::read_to_string(&file_path).await
-                    .map_err(|e| AgentError::IoError(format!("Failed to read memory file {:?}: {}", file_path, e)))?;
+                let content = tokio::fs::read_to_string(&file_path).await.map_err(|e| {
+                    AgentError::IoError(format!(
+                        "Failed to read memory file {:?}: {}",
+                        file_path, e
+                    ))
+                })?;
                 memories.push(content);
             }
         }
@@ -390,12 +432,16 @@ impl FileBasedStorage {
             return Ok(Vec::new());
         }
 
-        let mut entries = tokio::fs::read_dir(&self.memory_dir).await
+        let mut entries = tokio::fs::read_dir(&self.memory_dir)
+            .await
             .map_err(|e| AgentError::IoError(format!("Failed to read memory directory: {}", e)))?;
         let mut files = Vec::new();
 
-        while let Some(entry) = entries.next_entry().await
-            .map_err(|e| AgentError::IoError(format!("Failed to read entry: {}", e)))? {
+        while let Some(entry) = entries
+            .next_entry()
+            .await
+            .map_err(|e| AgentError::IoError(format!("Failed to read entry: {}", e)))?
+        {
             let path = entry.path();
             if let Some(name) = path.file_name().and_then(|n: &std::ffi::OsStr| n.to_str()) {
                 // 检查是否匹配 YYYY-MM-DD.md 模式
@@ -412,7 +458,8 @@ impl FileBasedStorage {
 
     /// 检查文件名是否匹配日期格式 (YYYY-MM-DD.md)
     fn is_date_file(name: &str) -> bool {
-        if name.len() != 13 {  // "2024-01-15.md" = 13 bytes
+        if name.len() != 13 {
+            // "2024-01-15.md" = 13 bytes
             return false;
         }
         let bytes = name.as_bytes();
@@ -513,20 +560,23 @@ impl Memory for FileBasedStorage {
         let memory_files = self.list_memory_files().await?;
         for file_path in memory_files {
             if let Ok(content) = tokio::fs::read_to_string(&file_path).await
-                && content.to_lowercase().contains(&query_lower) {
-                    let file_name = file_path.file_name()
-                        .and_then(|n| n.to_str())
-                        .unwrap_or("unknown")
-                        .to_string();
+                && content.to_lowercase().contains(&query_lower)
+            {
+                let file_name = file_path
+                    .file_name()
+                    .and_then(|n| n.to_str())
+                    .unwrap_or("unknown")
+                    .to_string();
 
-                    results.push(MemoryItem::new(
-                        file_name,
-                        MemoryValue::text(content)
-                    ));
-                }
+                results.push(MemoryItem::new(file_name, MemoryValue::text(content)));
+            }
         }
 
-        results.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(std::cmp::Ordering::Equal));
+        results.sort_by(|a, b| {
+            b.score
+                .partial_cmp(&a.score)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
         results.truncate(limit);
         Ok(results)
     }
@@ -544,15 +594,22 @@ impl Memory for FileBasedStorage {
 
         // 删除所有文件
         if self.data_file.exists() {
-            tokio::fs::remove_file(&self.data_file).await
+            tokio::fs::remove_file(&self.data_file)
+                .await
                 .map_err(|e| AgentError::IoError(format!("Failed to remove data file: {}", e)))?;
         }
 
         if self.sessions_dir.exists() {
-            tokio::fs::remove_dir_all(&self.sessions_dir).await
-                .map_err(|e| AgentError::IoError(format!("Failed to remove sessions directory: {}", e)))?;
-            tokio::fs::create_dir_all(&self.sessions_dir).await
-                .map_err(|e| AgentError::IoError(format!("Failed to recreate sessions directory: {}", e)))?;
+            tokio::fs::remove_dir_all(&self.sessions_dir)
+                .await
+                .map_err(|e| {
+                    AgentError::IoError(format!("Failed to remove sessions directory: {}", e))
+                })?;
+            tokio::fs::create_dir_all(&self.sessions_dir)
+                .await
+                .map_err(|e| {
+                    AgentError::IoError(format!("Failed to recreate sessions directory: {}", e))
+                })?;
         }
 
         Ok(())
@@ -566,7 +623,10 @@ impl Memory for FileBasedStorage {
     async fn add_to_history(&mut self, session_id: &str, message: Message) -> AgentResult<()> {
         {
             let mut sessions = self.sessions.write().await;
-            sessions.entry(session_id.to_string()).or_default().push(message);
+            sessions
+                .entry(session_id.to_string())
+                .or_default()
+                .push(message);
         }
         self.persist_session(session_id).await?;
         Ok(())

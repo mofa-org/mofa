@@ -1,4 +1,3 @@
-
 use super::*;
 use serde_json::json;
 use tokio::process::Command;
@@ -14,7 +13,9 @@ impl ShellCommandTool {
         Self {
             definition: ToolDefinition {
                 name: "shell".to_string(),
-                description: "Execute shell commands. Only whitelisted commands are allowed for security.".to_string(),
+                description:
+                    "Execute shell commands. Only whitelisted commands are allowed for security."
+                        .to_string(),
                 parameters: json!({
                     "type": "object",
                     "properties": {

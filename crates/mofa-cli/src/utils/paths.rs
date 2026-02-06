@@ -44,9 +44,10 @@ pub fn find_project_root() -> Option<PathBuf> {
 
     for marker in markers {
         if let Some(path) = find_file_upward(Path::new(marker))
-            && let Some(parent) = path.parent() {
-                return Some(parent.to_path_buf());
-            }
+            && let Some(parent) = path.parent()
+        {
+            return Some(parent.to_path_buf());
+        }
     }
 
     None
@@ -105,9 +106,10 @@ pub fn ensure_mofa_data_dir() -> anyhow::Result<PathBuf> {
 pub fn normalize_path<P: AsRef<Path>>(path: P) -> String {
     let path = path.as_ref();
     if let Ok(cwd) = std::env::current_dir()
-        && let Ok(rel) = path.strip_prefix(&cwd) {
-            return rel.display().to_string();
-        }
+        && let Ok(rel) = path.strip_prefix(&cwd)
+    {
+        return rel.display().to_string();
+    }
     path.display().to_string()
 }
 

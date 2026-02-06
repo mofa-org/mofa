@@ -38,7 +38,11 @@ pub fn run(agent_id: Option<&str>, limit: Option<usize>) -> anyhow::Result<()> {
     ];
 
     let filtered: Vec<_> = if let Some(agent) = agent_id {
-        sessions.iter().filter(|s| s.agent_id == agent).cloned().collect()
+        sessions
+            .iter()
+            .filter(|s| s.agent_id == agent)
+            .cloned()
+            .collect()
     } else {
         sessions
     };

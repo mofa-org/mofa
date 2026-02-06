@@ -92,10 +92,7 @@ impl ReasoningResult {
     }
 
     /// 创建工具调用结果
-    pub fn call_tool(
-        tool_name: impl Into<String>,
-        arguments: serde_json::Value,
-    ) -> Self {
+    pub fn call_tool(tool_name: impl Into<String>, arguments: serde_json::Value) -> Self {
         Self {
             thoughts: vec![],
             decision: Decision::CallTool {

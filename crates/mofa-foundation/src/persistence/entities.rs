@@ -359,7 +359,7 @@ impl LLMApiCall {
             error_message: None,
             error_code: None,
             create_time: request_time,
-            update_time: response_time
+            update_time: response_time,
         }
     }
 

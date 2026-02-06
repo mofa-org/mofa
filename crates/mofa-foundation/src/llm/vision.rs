@@ -6,7 +6,7 @@
 //! - Structured content array generation
 //! - Multi-modal message builders
 
-use crate::llm::types::{ChatMessage, Role, MessageContent, ContentPart, ImageUrl, ImageDetail};
+use crate::llm::types::{ChatMessage, ContentPart, ImageDetail, ImageUrl, MessageContent, Role};
 use anyhow::Result;
 use std::path::Path;
 
@@ -24,8 +24,8 @@ use std::path::Path;
 /// assert!(url.starts_with("data:image/png;base64,"));
 /// ```
 pub fn encode_image_data_url(path: &Path) -> Result<String> {
-    use base64::engine::general_purpose::STANDARD_NO_PAD;
     use base64::Engine;
+    use base64::engine::general_purpose::STANDARD_NO_PAD;
     use std::fs;
 
     let bytes = fs::read(path)?;
@@ -48,10 +48,7 @@ pub fn encode_image_data_url(path: &Path) -> Result<String> {
 /// An ImageUrl struct suitable for use in ContentPart
 pub fn encode_image_url(path: &Path) -> Result<ImageUrl> {
     let url = encode_image_data_url(path)?;
-    Ok(ImageUrl {
-        url,
-        detail: None,
-    })
+    Ok(ImageUrl { url, detail: None })
 }
 
 /// Build multi-modal message content with images
@@ -146,10 +143,7 @@ pub fn image_url_from_string(url: impl Into<String>) -> ImageUrl {
 ///
 /// # Returns
 /// An ImageUrl struct with specified detail level
-pub fn image_url_with_detail(
-    url: impl Into<String>,
-    detail: ImageDetail,
-) -> ImageUrl {
+pub fn image_url_with_detail(url: impl Into<String>, detail: ImageDetail) -> ImageUrl {
     ImageUrl {
         url: url.into(),
         detail: Some(detail),

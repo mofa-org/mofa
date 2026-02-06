@@ -11,13 +11,13 @@
 //! - **插件扩展**: 支持基于插件的动态模板管理
 
 mod builder;
+mod hot_reload;
 mod memory_store;
+mod plugin;
 mod presets;
 mod registry;
 mod store;
-mod template;
-mod plugin;
-mod hot_reload; // 新增插件模块
+mod template; // 新增插件模块
 
 // SQL 存储模块 (条件编译)
 #[cfg(any(
@@ -69,4 +69,3 @@ pub mod prelude {
     #[cfg(feature = "persistence-sqlite")]
     pub use super::sql_store::SqlitePromptStore;
 }
-

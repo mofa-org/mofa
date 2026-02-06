@@ -5,8 +5,8 @@
 //! 使用统一的 config crate 提供一致的 API 接口
 
 use super::schema::AgentConfig;
-use mofa_kernel::config::{detect_format, from_str, load_config, load_merged, ConfigError};
 use config::FileFormat;
+use mofa_kernel::config::{ConfigError, detect_format, from_str, load_config, load_merged};
 use serde::{Deserialize, Serialize};
 
 /// 配置格式
@@ -185,9 +185,9 @@ impl ConfigLoader {
         })?;
 
         // 验证配置
-        config.validate().map_err(|errors| {
-            AgentConfigError::Validation(errors.join(", "))
-        })?;
+        config
+            .validate()
+            .map_err(|errors| AgentConfigError::Validation(errors.join(", ")))?;
 
         Ok(config)
     }
@@ -235,10 +235,16 @@ impl ConfigLoader {
                 AgentConfigError::Serialization(format!("Failed to serialize to JSON: {}", e))
             })?,
             ConfigFormat::Ini => {
-                return Err(AgentConfigError::Serialization("INI serialization not directly supported. Use JSON, YAML, or TOML for saving.".to_string()));
+                return Err(AgentConfigError::Serialization(
+                    "INI serialization not directly supported. Use JSON, YAML, or TOML for saving."
+                        .to_string(),
+                ));
             }
             ConfigFormat::Ron => {
-                return Err(AgentConfigError::Serialization("RON serialization not directly supported. Use JSON, YAML, or TOML for saving.".to_string()));
+                return Err(AgentConfigError::Serialization(
+                    "RON serialization not directly supported. Use JSON, YAML, or TOML for saving."
+                        .to_string(),
+                ));
             }
             ConfigFormat::Json5 => {
                 // JSON5 is compatible with JSON for serialization purposes
@@ -262,9 +268,7 @@ impl ConfigLoader {
 
         let content = Self::to_string(config, format)?;
 
-        std::fs::write(path, content).map_err(|e| {
-            AgentConfigError::Io(e)
-        })?;
+        std::fs::write(path, content).map_err(|e| AgentConfigError::Io(e))?;
 
         Ok(())
     }
@@ -273,32 +277,29 @@ impl ConfigLoader {
     pub fn load_directory(dir_path: &str) -> AgentResult<Vec<AgentConfig>> {
         let mut configs = Vec::new();
 
-        let entries = std::fs::read_dir(dir_path).map_err(|e| {
-            AgentConfigError::Io(e)
-        })?;
+        let entries = std::fs::read_dir(dir_path).map_err(|e| AgentConfigError::Io(e))?;
 
         let supported_extensions = ["yaml", "yml", "toml", "json", "ini", "ron", "json5"];
 
         for entry in entries {
-            let entry = entry.map_err(|e| {
-                AgentConfigError::Io(e)
-            })?;
+            let entry = entry.map_err(|e| AgentConfigError::Io(e))?;
 
             let path = entry.path();
             if path.is_file()
-                && let Some(ext) = path.extension().and_then(|e| e.to_str()) {
-                    let ext_lower = ext.to_lowercase();
-                    if supported_extensions.contains(&ext_lower.as_str()) {
-                        let path_str = path.to_string_lossy().to_string();
-                        match Self::load_file(&path_str) {
-                            Ok(config) => configs.push(config),
-                            Err(e) => {
-                                // 记录错误但继续加载其他文件
-                                tracing::warn!("Failed to load config '{}': {}", path_str, e);
-                            }
+                && let Some(ext) = path.extension().and_then(|e| e.to_str())
+            {
+                let ext_lower = ext.to_lowercase();
+                if supported_extensions.contains(&ext_lower.as_str()) {
+                    let path_str = path.to_string_lossy().to_string();
+                    match Self::load_file(&path_str) {
+                        Ok(config) => configs.push(config),
+                        Err(e) => {
+                            // 记录错误但继续加载其他文件
+                            tracing::warn!("Failed to load config '{}': {}", path_str, e);
                         }
                     }
                 }
+            }
         }
 
         Ok(configs)
@@ -307,14 +308,25 @@ impl ConfigLoader {
     /// 合并多个配置 (后面的覆盖前面的)
     pub fn merge(base: AgentConfig, overlay: AgentConfig) -> AgentConfig {
         AgentConfig {
-            id: if overlay.id.is_empty() { base.id } else { overlay.id },
-            name: if overlay.name.is_empty() { base.name } else { overlay.name },
+            id: if overlay.id.is_empty() {
+                base.id
+            } else {
+                overlay.id
+            },
+            name: if overlay.name.is_empty() {
+                base.name
+            } else {
+                overlay.name
+            },
             description: overlay.description.or(base.description),
             agent_type: overlay.agent_type,
             components: ComponentsConfig {
                 reasoner: overlay.components.reasoner.or(base.components.reasoner),
                 memory: overlay.components.memory.or(base.components.memory),
-                coordinator: overlay.components.coordinator.or(base.components.coordinator),
+                coordinator: overlay
+                    .components
+                    .coordinator
+                    .or(base.components.coordinator),
             },
             capabilities: if overlay.capabilities.tags.is_empty() {
                 base.capabilities
@@ -355,13 +367,34 @@ mod tests {
 
     #[test]
     fn test_format_from_extension() {
-        assert_eq!(ConfigFormat::from_extension("config.yaml"), Some(ConfigFormat::Yaml));
-        assert_eq!(ConfigFormat::from_extension("config.yml"), Some(ConfigFormat::Yaml));
-        assert_eq!(ConfigFormat::from_extension("config.toml"), Some(ConfigFormat::Toml));
-        assert_eq!(ConfigFormat::from_extension("config.json"), Some(ConfigFormat::Json));
-        assert_eq!(ConfigFormat::from_extension("config.ini"), Some(ConfigFormat::Ini));
-        assert_eq!(ConfigFormat::from_extension("config.ron"), Some(ConfigFormat::Ron));
-        assert_eq!(ConfigFormat::from_extension("config.json5"), Some(ConfigFormat::Json5));
+        assert_eq!(
+            ConfigFormat::from_extension("config.yaml"),
+            Some(ConfigFormat::Yaml)
+        );
+        assert_eq!(
+            ConfigFormat::from_extension("config.yml"),
+            Some(ConfigFormat::Yaml)
+        );
+        assert_eq!(
+            ConfigFormat::from_extension("config.toml"),
+            Some(ConfigFormat::Toml)
+        );
+        assert_eq!(
+            ConfigFormat::from_extension("config.json"),
+            Some(ConfigFormat::Json)
+        );
+        assert_eq!(
+            ConfigFormat::from_extension("config.ini"),
+            Some(ConfigFormat::Ini)
+        );
+        assert_eq!(
+            ConfigFormat::from_extension("config.ron"),
+            Some(ConfigFormat::Ron)
+        );
+        assert_eq!(
+            ConfigFormat::from_extension("config.json5"),
+            Some(ConfigFormat::Json5)
+        );
         assert_eq!(ConfigFormat::from_extension("config.txt"), None);
     }
 
@@ -487,8 +520,8 @@ value = "gpt-4"
 
     #[test]
     fn test_merge_configs() {
-        let base = AgentConfig::new("base-agent", "Base Agent")
-            .with_description("Base description");
+        let base =
+            AgentConfig::new("base-agent", "Base Agent").with_description("Base description");
 
         let overlay = AgentConfig {
             id: String::new(), // Empty, should use base

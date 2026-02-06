@@ -2,7 +2,9 @@
 //!
 //! 提供 Prompt 模板的数据库存储支持
 
-use super::template::{PromptComposition, PromptError, PromptResult, PromptTemplate, PromptVariable};
+use super::template::{
+    PromptComposition, PromptError, PromptResult, PromptTemplate, PromptVariable,
+};
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -70,8 +72,8 @@ impl PromptEntity {
     pub fn to_template(&self) -> PromptResult<PromptTemplate> {
         let variables: Vec<PromptVariable> = serde_json::from_value(self.variables.clone())
             .map_err(|e| PromptError::ParseError(e.to_string()))?;
-        let metadata: HashMap<String, String> = serde_json::from_value(self.metadata.clone())
-            .unwrap_or_default();
+        let metadata: HashMap<String, String> =
+            serde_json::from_value(self.metadata.clone()).unwrap_or_default();
 
         Ok(PromptTemplate {
             id: self.template_id.clone(),
@@ -271,7 +273,10 @@ pub trait PromptStore: Send + Sync {
     async fn save_composition(&self, entity: &PromptCompositionEntity) -> PromptResult<()>;
 
     /// 获取组合
-    async fn get_composition(&self, composition_id: &str) -> PromptResult<Option<PromptCompositionEntity>>;
+    async fn get_composition(
+        &self,
+        composition_id: &str,
+    ) -> PromptResult<Option<PromptCompositionEntity>>;
 
     /// 查询所有组合
     async fn query_compositions(&self) -> PromptResult<Vec<PromptCompositionEntity>>;

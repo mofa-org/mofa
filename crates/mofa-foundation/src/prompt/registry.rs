@@ -44,7 +44,8 @@ impl PromptRegistry {
 
     /// 注册组合
     pub fn register_composition(&mut self, composition: PromptComposition) {
-        self.compositions.insert(composition.id.clone(), composition);
+        self.compositions
+            .insert(composition.id.clone(), composition);
     }
 
     /// 获取模板
@@ -97,11 +98,7 @@ impl PromptRegistry {
     pub fn find_by_tag(&self, tag: &str) -> Vec<&PromptTemplate> {
         self.tag_index
             .get(tag)
-            .map(|ids| {
-                ids.iter()
-                    .filter_map(|id| self.templates.get(id))
-                    .collect()
-            })
+            .map(|ids| ids.iter().filter_map(|id| self.templates.get(id)).collect())
             .unwrap_or_default()
     }
 

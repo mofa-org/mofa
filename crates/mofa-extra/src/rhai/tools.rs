@@ -7,7 +7,7 @@
 //! - 工具执行沙箱
 
 use super::engine::{RhaiScriptEngine, ScriptContext, ScriptEngineConfig};
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 #[allow(unused_imports)]
 use rhai::{Dynamic, Engine, Map, Scope};
 use serde::{Deserialize, Serialize};
@@ -34,7 +34,6 @@ pub enum ParameterType {
     Object,
     Any,
 }
-
 
 /// 工具参数定义
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -132,53 +131,51 @@ impl ToolParameter {
 
         // 检查枚举值
         if let Some(ref enum_values) = self.enum_values
-            && !enum_values.contains(value) {
-                return Err(anyhow!(
-                    "Parameter '{}' value must be one of {:?}",
-                    self.name,
-                    enum_values
-                ));
-            }
+            && !enum_values.contains(value)
+        {
+            return Err(anyhow!(
+                "Parameter '{}' value must be one of {:?}",
+                self.name,
+                enum_values
+            ));
+        }
 
         // 检查数值范围
         if let serde_json::Value::Number(n) = value
-            && let Some(f) = n.as_f64() {
-                if let Some(min) = self.minimum
-                    && f < min {
-                        return Err(anyhow!(
-                            "Parameter '{}' must be >= {}",
-                            self.name,
-                            min
-                        ));
-                    }
-                if let Some(max) = self.maximum
-                    && f > max {
-                        return Err(anyhow!(
-                            "Parameter '{}' must be <= {}",
-                            self.name,
-                            max
-                        ));
-                    }
+            && let Some(f) = n.as_f64()
+        {
+            if let Some(min) = self.minimum
+                && f < min
+            {
+                return Err(anyhow!("Parameter '{}' must be >= {}", self.name, min));
             }
+            if let Some(max) = self.maximum
+                && f > max
+            {
+                return Err(anyhow!("Parameter '{}' must be <= {}", self.name, max));
+            }
+        }
 
         // 检查字符串长度
         if let serde_json::Value::String(s) = value {
             if let Some(min) = self.min_length
-                && s.len() < min {
-                    return Err(anyhow!(
-                        "Parameter '{}' length must be >= {}",
-                        self.name,
-                        min
-                    ));
-                }
+                && s.len() < min
+            {
+                return Err(anyhow!(
+                    "Parameter '{}' length must be >= {}",
+                    self.name,
+                    min
+                ));
+            }
             if let Some(max) = self.max_length
-                && s.len() > max {
-                    return Err(anyhow!(
-                        "Parameter '{}' length must be <= {}",
-                        self.name,
-                        max
-                    ));
-                }
+                && s.len() > max
+            {
+                return Err(anyhow!(
+                    "Parameter '{}' length must be <= {}",
+                    self.name,
+                    max
+                ));
+            }
             // 检查正则表达式
             if let Some(ref pattern) = self.pattern {
                 let re = regex::Regex::new(pattern)
@@ -196,21 +193,23 @@ impl ToolParameter {
         // 检查数组长度
         if let serde_json::Value::Array(arr) = value {
             if let Some(min) = self.min_length
-                && arr.len() < min {
-                    return Err(anyhow!(
-                        "Parameter '{}' array length must be >= {}",
-                        self.name,
-                        min
-                    ));
-                }
+                && arr.len() < min
+            {
+                return Err(anyhow!(
+                    "Parameter '{}' array length must be >= {}",
+                    self.name,
+                    min
+                ));
+            }
             if let Some(max) = self.max_length
-                && arr.len() > max {
-                    return Err(anyhow!(
-                        "Parameter '{}' array length must be <= {}",
-                        self.name,
-                        max
-                    ));
-                }
+                && arr.len() > max
+            {
+                return Err(anyhow!(
+                    "Parameter '{}' array length must be <= {}",
+                    self.name,
+                    max
+                ));
+            }
         }
 
         Ok(())
@@ -315,9 +314,10 @@ impl ScriptToolDefinition {
     pub fn apply_defaults(&self, input: &mut HashMap<String, serde_json::Value>) {
         for param in &self.parameters {
             if !input.contains_key(&param.name)
-                && let Some(ref default) = param.default {
-                    input.insert(param.name.clone(), default.clone());
-                }
+                && let Some(ref default) = param.default
+            {
+                input.insert(param.name.clone(), default.clone());
+            }
         }
     }
 
@@ -342,7 +342,10 @@ impl ScriptToolDefinition {
             prop.insert("type".to_string(), serde_json::json!(type_str));
 
             if !param.description.is_empty() {
-                prop.insert("description".to_string(), serde_json::json!(param.description));
+                prop.insert(
+                    "description".to_string(),
+                    serde_json::json!(param.description),
+                );
             }
 
             if let Some(ref enum_values) = param.enum_values {
@@ -482,9 +485,7 @@ impl ScriptToolRegistry {
                     Some("yaml") | Some("yml") => {
                         self.load_from_yaml(path.to_str().unwrap()).await.ok()
                     }
-                    Some("json") => {
-                        self.load_from_json(path.to_str().unwrap()).await.ok()
-                    }
+                    Some("json") => self.load_from_json(path.to_str().unwrap()).await.ok(),
                     _ => None,
                 };
                 if let Some(id) = id {
@@ -531,12 +532,12 @@ impl ScriptToolRegistry {
 
         // 执行脚本
         let script_id = format!("tool_{}", tool_id);
-        
 
         if tool.enable_cache {
             // 尝试调用入口函数
             let input_value = serde_json::json!(params);
-            match self.engine
+            match self
+                .engine
                 .call_function::<serde_json::Value>(
                     &script_id,
                     &tool.entry_function,
@@ -854,12 +855,11 @@ mod tests {
                     .with_range(1.0, 100.0),
             )
             .param(
-                ToolParameter::new("sort", ParameterType::String)
-                    .with_enum(vec![
-                        serde_json::json!("relevance"),
-                        serde_json::json!("date"),
-                        serde_json::json!("name"),
-                    ]),
+                ToolParameter::new("sort", ParameterType::String).with_enum(vec![
+                    serde_json::json!("relevance"),
+                    serde_json::json!("date"),
+                    serde_json::json!("name"),
+                ]),
             )
             .script("")
             .build();

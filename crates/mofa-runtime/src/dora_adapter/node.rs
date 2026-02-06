@@ -2,16 +2,16 @@
 //!
 //! 封装 dora-rs 的 Node API，提供智能体生命周期管理
 
+use crate::AgentMessage;
 use crate::dora_adapter::error::{DoraError, DoraResult};
 use crate::interrupt::AgentInterrupt;
 use crate::message::{AgentEvent, TaskRequest};
-use crate::AgentMessage;
 use dora_node_api::Event;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
-use tokio::sync::{mpsc, RwLock};
+use tokio::sync::{RwLock, mpsc};
 use tracing::{debug, info, warn};
 
 /// DoraNode 配置

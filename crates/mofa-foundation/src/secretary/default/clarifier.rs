@@ -420,9 +420,7 @@ mod tests {
     #[tokio::test]
     async fn test_start_session() {
         let clarifier = RequirementClarifier::new(ClarificationStrategy::Automatic);
-        let session = clarifier
-            .start_session("todo_1", "Build a REST API")
-            .await;
+        let session = clarifier.start_session("todo_1", "Build a REST API").await;
 
         assert_eq!(session.todo_id, "todo_1");
         assert!(!session.pending_questions.is_empty());

@@ -300,9 +300,10 @@ impl LlmAgentConfig {
         }
 
         if let Some(top_p) = self.top_p
-            && (!(0.0..=1.0).contains(&top_p)) {
-                errors.push("Top P must be between 0.0 and 1.0".to_string());
-            }
+            && (!(0.0..=1.0).contains(&top_p))
+        {
+            errors.push("Top P must be between 0.0 and 1.0".to_string());
+        }
 
         if errors.is_empty() {
             Ok(())
@@ -415,8 +416,7 @@ pub enum ToolType {
 // ============================================================================
 
 /// Workflow Agent 配置
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[derive(Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct WorkflowAgentConfig {
     /// 工作流步骤
     pub steps: Vec<WorkflowStep>,
@@ -429,7 +429,6 @@ pub struct WorkflowAgentConfig {
     #[serde(default)]
     pub error_strategy: ErrorStrategy,
 }
-
 
 impl WorkflowAgentConfig {
     /// 验证配置
@@ -490,14 +489,9 @@ pub enum ErrorStrategy {
     /// 继续执行
     Continue,
     /// 重试
-    Retry {
-        max_retries: usize,
-        delay_ms: u64,
-    },
+    Retry { max_retries: usize, delay_ms: u64 },
     /// 回退
-    Fallback {
-        fallback_agent_id: String,
-    },
+    Fallback { fallback_agent_id: String },
 }
 
 // ============================================================================
@@ -505,8 +499,7 @@ pub enum ErrorStrategy {
 // ============================================================================
 
 /// Team Agent 配置
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[derive(Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct TeamAgentConfig {
     /// 团队成员
     pub members: Vec<TeamMember>,
@@ -523,7 +516,6 @@ pub struct TeamAgentConfig {
     #[serde(default)]
     pub dispatch_strategy: DispatchStrategy,
 }
-
 
 impl TeamAgentConfig {
     /// 验证配置

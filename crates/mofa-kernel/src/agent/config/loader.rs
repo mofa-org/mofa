@@ -6,7 +6,7 @@
 
 use super::schema::AgentConfig;
 use crate::agent::error::{AgentError, AgentResult};
-use crate::config::{detect_format, from_str, load_config, load_merged, ConfigError};
+use crate::config::{ConfigError, detect_format, from_str, load_config, load_merged};
 use config::FileFormat;
 use serde::{Deserialize, Serialize};
 
@@ -117,9 +117,15 @@ impl ConfigLoader {
     /// 从字符串加载配置
     pub fn from_str(content: &str, format: ConfigFormat) -> AgentResult<AgentConfig> {
         from_str(content, format.to_file_format()).map_err(|e| match e {
-            ConfigError::Parse(e) => AgentError::ConfigError(format!("Failed to parse config: {}", e)),
-            ConfigError::Serialization(e) => AgentError::ConfigError(format!("Failed to deserialize config: {}", e)),
-            ConfigError::UnsupportedFormat(e) => AgentError::ConfigError(format!("Unsupported config format: {}", e)),
+            ConfigError::Parse(e) => {
+                AgentError::ConfigError(format!("Failed to parse config: {}", e))
+            }
+            ConfigError::Serialization(e) => {
+                AgentError::ConfigError(format!("Failed to deserialize config: {}", e))
+            }
+            ConfigError::UnsupportedFormat(e) => {
+                AgentError::ConfigError(format!("Unsupported config format: {}", e))
+            }
             _ => AgentError::ConfigError(format!("Config error: {}", e)),
         })
     }
@@ -157,10 +163,20 @@ impl ConfigLoader {
     /// 从文件加载配置 (自动检测格式)
     pub fn load_file(path: &str) -> AgentResult<AgentConfig> {
         let config: AgentConfig = load_config(path).map_err(|e| match e {
-            ConfigError::Io(e) => AgentError::ConfigError(format!("Failed to read config file '{}': {}", path, e)),
-            ConfigError::Parse(e) => AgentError::ConfigError(format!("Failed to parse config file '{}': {}", path, e)),
-            ConfigError::Serialization(e) => AgentError::ConfigError(format!("Failed to deserialize config file '{}': {}", path, e)),
-            ConfigError::UnsupportedFormat(e) => AgentError::ConfigError(format!("Unsupported config format for file '{}': {}", path, e)),
+            ConfigError::Io(e) => {
+                AgentError::ConfigError(format!("Failed to read config file '{}': {}", path, e))
+            }
+            ConfigError::Parse(e) => {
+                AgentError::ConfigError(format!("Failed to parse config file '{}': {}", path, e))
+            }
+            ConfigError::Serialization(e) => AgentError::ConfigError(format!(
+                "Failed to deserialize config file '{}': {}",
+                path, e
+            )),
+            ConfigError::UnsupportedFormat(e) => AgentError::ConfigError(format!(
+                "Unsupported config format for file '{}': {}",
+                path, e
+            )),
         })?;
 
         // 验证配置
@@ -214,10 +230,16 @@ impl ConfigLoader {
                 AgentError::ConfigError(format!("Failed to serialize to JSON: {}", e))
             })?,
             ConfigFormat::Ini => {
-                return Err(AgentError::ConfigError("INI serialization not directly supported. Use JSON, YAML, or TOML for saving.".to_string()));
+                return Err(AgentError::ConfigError(
+                    "INI serialization not directly supported. Use JSON, YAML, or TOML for saving."
+                        .to_string(),
+                ));
             }
             ConfigFormat::Ron => {
-                return Err(AgentError::ConfigError("RON serialization not directly supported. Use JSON, YAML, or TOML for saving.".to_string()));
+                return Err(AgentError::ConfigError(
+                    "RON serialization not directly supported. Use JSON, YAML, or TOML for saving."
+                        .to_string(),
+                ));
             }
             ConfigFormat::Json5 => {
                 // JSON5 is compatible with JSON for serialization purposes
@@ -265,19 +287,20 @@ impl ConfigLoader {
 
             let path = entry.path();
             if path.is_file()
-                && let Some(ext) = path.extension().and_then(|e| e.to_str()) {
-                    let ext_lower = ext.to_lowercase();
-                    if supported_extensions.contains(&ext_lower.as_str()) {
-                        let path_str = path.to_string_lossy().to_string();
-                        match Self::load_file(&path_str) {
-                            Ok(config) => configs.push(config),
-                            Err(e) => {
-                                // 记录错误但继续加载其他文件
-                                tracing::warn!("Failed to load config '{}': {}", path_str, e);
-                            }
+                && let Some(ext) = path.extension().and_then(|e| e.to_str())
+            {
+                let ext_lower = ext.to_lowercase();
+                if supported_extensions.contains(&ext_lower.as_str()) {
+                    let path_str = path.to_string_lossy().to_string();
+                    match Self::load_file(&path_str) {
+                        Ok(config) => configs.push(config),
+                        Err(e) => {
+                            // 记录错误但继续加载其他文件
+                            tracing::warn!("Failed to load config '{}': {}", path_str, e);
                         }
                     }
                 }
+            }
         }
 
         Ok(configs)
@@ -286,14 +309,25 @@ impl ConfigLoader {
     /// 合并多个配置 (后面的覆盖前面的)
     pub fn merge(base: AgentConfig, overlay: AgentConfig) -> AgentConfig {
         AgentConfig {
-            id: if overlay.id.is_empty() { base.id } else { overlay.id },
-            name: if overlay.name.is_empty() { base.name } else { overlay.name },
+            id: if overlay.id.is_empty() {
+                base.id
+            } else {
+                overlay.id
+            },
+            name: if overlay.name.is_empty() {
+                base.name
+            } else {
+                overlay.name
+            },
             description: overlay.description.or(base.description),
             agent_type: overlay.agent_type,
             components: ComponentsConfig {
                 reasoner: overlay.components.reasoner.or(base.components.reasoner),
                 memory: overlay.components.memory.or(base.components.memory),
-                coordinator: overlay.components.coordinator.or(base.components.coordinator),
+                coordinator: overlay
+                    .components
+                    .coordinator
+                    .or(base.components.coordinator),
             },
             capabilities: if overlay.capabilities.tags.is_empty() {
                 base.capabilities
@@ -318,10 +352,18 @@ impl ConfigLoader {
     /// 从多个文件合并加载配置
     pub fn load_merged_files(paths: &[&str]) -> AgentResult<AgentConfig> {
         load_merged(paths).map_err(|e| match e {
-            ConfigError::Io(e) => AgentError::ConfigError(format!("Failed to read config file: {}", e)),
-            ConfigError::Parse(e) => AgentError::ConfigError(format!("Failed to parse config: {}", e)),
-            ConfigError::Serialization(e) => AgentError::ConfigError(format!("Failed to deserialize config: {}", e)),
-            ConfigError::UnsupportedFormat(e) => AgentError::ConfigError(format!("Unsupported config format: {}", e)),
+            ConfigError::Io(e) => {
+                AgentError::ConfigError(format!("Failed to read config file: {}", e))
+            }
+            ConfigError::Parse(e) => {
+                AgentError::ConfigError(format!("Failed to parse config: {}", e))
+            }
+            ConfigError::Serialization(e) => {
+                AgentError::ConfigError(format!("Failed to deserialize config: {}", e))
+            }
+            ConfigError::UnsupportedFormat(e) => {
+                AgentError::ConfigError(format!("Unsupported config format: {}", e))
+            }
         })
     }
 }
@@ -334,13 +376,34 @@ mod tests {
 
     #[test]
     fn test_format_from_extension() {
-        assert_eq!(ConfigFormat::from_extension("config.yaml"), Some(ConfigFormat::Yaml));
-        assert_eq!(ConfigFormat::from_extension("config.yml"), Some(ConfigFormat::Yaml));
-        assert_eq!(ConfigFormat::from_extension("config.toml"), Some(ConfigFormat::Toml));
-        assert_eq!(ConfigFormat::from_extension("config.json"), Some(ConfigFormat::Json));
-        assert_eq!(ConfigFormat::from_extension("config.ini"), Some(ConfigFormat::Ini));
-        assert_eq!(ConfigFormat::from_extension("config.ron"), Some(ConfigFormat::Ron));
-        assert_eq!(ConfigFormat::from_extension("config.json5"), Some(ConfigFormat::Json5));
+        assert_eq!(
+            ConfigFormat::from_extension("config.yaml"),
+            Some(ConfigFormat::Yaml)
+        );
+        assert_eq!(
+            ConfigFormat::from_extension("config.yml"),
+            Some(ConfigFormat::Yaml)
+        );
+        assert_eq!(
+            ConfigFormat::from_extension("config.toml"),
+            Some(ConfigFormat::Toml)
+        );
+        assert_eq!(
+            ConfigFormat::from_extension("config.json"),
+            Some(ConfigFormat::Json)
+        );
+        assert_eq!(
+            ConfigFormat::from_extension("config.ini"),
+            Some(ConfigFormat::Ini)
+        );
+        assert_eq!(
+            ConfigFormat::from_extension("config.ron"),
+            Some(ConfigFormat::Ron)
+        );
+        assert_eq!(
+            ConfigFormat::from_extension("config.json5"),
+            Some(ConfigFormat::Json5)
+        );
         assert_eq!(ConfigFormat::from_extension("config.txt"), None);
     }
 
@@ -466,8 +529,8 @@ value = "gpt-4"
 
     #[test]
     fn test_merge_configs() {
-        let base = AgentConfig::new("base-agent", "Base Agent")
-            .with_description("Base description");
+        let base =
+            AgentConfig::new("base-agent", "Base Agent").with_description("Base description");
 
         let overlay = AgentConfig {
             id: String::new(), // Empty, should use base

@@ -55,8 +55,7 @@ pub struct TaskCoordinator {
     /// 轮询索引
     round_robin_index: Arc<RwLock<usize>>,
     /// 消息发送回调
-    message_sender:
-        Option<Arc<dyn Fn(SecretaryMessage, &str) -> anyhow::Result<()> + Send + Sync>>,
+    message_sender: Option<Arc<dyn Fn(SecretaryMessage, &str) -> anyhow::Result<()> + Send + Sync>>,
     /// 动态Agent提供者
     agent_provider: Option<Arc<dyn AgentProvider>>,
     /// Agent路由器

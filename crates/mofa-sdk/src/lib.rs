@@ -117,21 +117,17 @@ pub mod kernel {
     // Curated, commonly-used exports
     // ---------------------------------------------------------------------
     pub use mofa_kernel::agent::{
-        AgentCapabilities, AgentCapabilitiesBuilder, AgentRequirements, AgentRequirementsBuilder,
-        ReasoningStrategy,
-        AgentContext, ContextConfig, EventBus,
-        AgentLifecycle, AgentMessage as CoreAgentMessage, AgentMessaging, AgentPluginSupport, MoFAAgent,
-        AgentError, AgentResult,
-        AgentMetadata, AgentStats, DynAgent, HealthStatus,
-        AgentInput, AgentOutput, AgentState, InputType, OutputContent, OutputType, InterruptResult,
-        MessageContent, MessageMetadata, EventBuilder,
-        ErrorCategory, ErrorContext, GlobalError, GlobalEvent, GlobalMessage, GlobalResult,
-        ReasoningStep, ReasoningStepType, TokenUsage, ToolUsage,
-        ChatCompletionRequest, ChatCompletionResponse, ChatMessage, ToolCall, ToolDefinition, LLMProvider,
-        Tool, ToolDescriptor, ToolInput, ToolMetadata, ToolResult,
-        Memory, MemoryItem, MemoryValue, Message, MessageRole, MemoryStats,
-        CoordinationPattern, Coordinator, Reasoner, ReasoningResult,
-        AgentFactory,
+        AgentCapabilities, AgentCapabilitiesBuilder, AgentContext, AgentError, AgentFactory,
+        AgentInput, AgentLifecycle, AgentMessage as CoreAgentMessage, AgentMessaging,
+        AgentMetadata, AgentOutput, AgentPluginSupport, AgentRequirements,
+        AgentRequirementsBuilder, AgentResult, AgentState, AgentStats, ChatCompletionRequest,
+        ChatCompletionResponse, ChatMessage, ContextConfig, CoordinationPattern, Coordinator,
+        DynAgent, ErrorCategory, ErrorContext, EventBuilder, EventBus, GlobalError, GlobalEvent,
+        GlobalMessage, GlobalResult, HealthStatus, InputType, InterruptResult, LLMProvider, Memory,
+        MemoryItem, MemoryStats, MemoryValue, Message, MessageContent, MessageMetadata,
+        MessageRole, MoFAAgent, OutputContent, OutputType, Reasoner, ReasoningResult,
+        ReasoningStep, ReasoningStepType, ReasoningStrategy, TokenUsage, Tool, ToolCall,
+        ToolDefinition, ToolDescriptor, ToolInput, ToolMetadata, ToolResult, ToolUsage,
         execution_events, lifecycle, message_events, plugin_events, state_events,
     };
 
@@ -145,8 +141,8 @@ pub mod kernel {
 
     // Message-level events and task primitives (stream + scheduling included)
     pub use mofa_kernel::message::{
-        AgentEvent, AgentMessage, TaskPriority, TaskRequest, TaskStatus,
-        StreamControlCommand, StreamType, SchedulingStatus,
+        AgentEvent, AgentMessage, SchedulingStatus, StreamControlCommand, StreamType, TaskPriority,
+        TaskRequest, TaskStatus,
     };
 
     // Bus
@@ -196,8 +192,7 @@ pub mod runtime {
 
     // Agent runner (single-execution utilities)
     pub use mofa_runtime::runner::{
-        AgentRunner, AgentRunnerBuilder, RunnerState, RunnerStats,
-        run_agents,
+        AgentRunner, AgentRunnerBuilder, RunnerState, RunnerStats, run_agents,
     };
 
     pub use mofa_runtime::config::FrameworkConfig;
@@ -242,8 +237,8 @@ pub mod coordination {
 pub mod config {
     /// Kernel config helpers and loaders
     pub mod kernel {
-        pub use mofa_kernel::config::*;
         pub use mofa_kernel::agent::config::*;
+        pub use mofa_kernel::config::*;
         pub use mofa_kernel::core::AgentConfig as CoreAgentConfig;
     }
 
@@ -258,10 +253,10 @@ pub mod config {
     }
 
     // Curated top-level re-exports
-    pub use mofa_runtime::config::FrameworkConfig;
     pub use mofa_foundation::config::{
         AgentInfo, AgentYamlConfig, LLMYamlConfig, RuntimeConfig as YamlRuntimeConfig, ToolConfig,
     };
+    pub use mofa_runtime::config::FrameworkConfig;
 }
 
 // =============================================================================
@@ -282,8 +277,8 @@ pub mod config {
 pub mod foundation {
     pub use super::agent;
     pub use super::collaboration;
-    pub use super::coordination;
     pub use super::config;
+    pub use super::coordination;
     pub use super::llm;
     pub use super::messaging;
     pub use super::persistence;
@@ -299,17 +294,48 @@ pub mod foundation {
 
 pub mod plugins {
     pub use mofa_plugins::{
-        tool, tools, AgentPlugin, LLMPlugin, LLMPluginConfig, MemoryPlugin, MemoryStorage,
-        PluginManager, RhaiPlugin, RhaiPluginConfig, RhaiPluginState, StoragePlugin, ToolCall,
-        ToolDefinition, ToolExecutor, ToolPlugin, ToolResult, ToolPluginAdapter, adapt_tool,
-        // TTS plugin types
-        TTSPlugin, TTSPluginConfig, TTSEngine, MockTTSEngine, VoiceInfo, TTSCommand, TextToSpeechTool, AudioPlaybackConfig,
-        // TTS audio playback function
-        play_audio, play_audio_async,
-        // Runtime plugin creation helpers
-        rhai_runtime, wasm_runtime,
+        AgentPlugin,
+        AudioPlaybackConfig,
+        LLMPlugin,
+        LLMPluginConfig,
+        MemoryPlugin,
+        MemoryStorage,
+        MockTTSEngine,
         // Kernel plugin primitives
-        PluginConfig, PluginContext, PluginEvent, PluginMetadata, PluginResult, PluginState, PluginType,
+        PluginConfig,
+        PluginContext,
+        PluginEvent,
+        PluginManager,
+        PluginMetadata,
+        PluginResult,
+        PluginState,
+        PluginType,
+        RhaiPlugin,
+        RhaiPluginConfig,
+        RhaiPluginState,
+        StoragePlugin,
+        TTSCommand,
+        TTSEngine,
+        // TTS plugin types
+        TTSPlugin,
+        TTSPluginConfig,
+        TextToSpeechTool,
+        ToolCall,
+        ToolDefinition,
+        ToolExecutor,
+        ToolPlugin,
+        ToolPluginAdapter,
+        ToolResult,
+        VoiceInfo,
+        adapt_tool,
+        // TTS audio playback function
+        play_audio,
+        play_audio_async,
+        // Runtime plugin creation helpers
+        rhai_runtime,
+        tool,
+        tools,
+        wasm_runtime,
     };
 
     pub use mofa_kernel::PluginPriority;
@@ -330,16 +356,14 @@ pub mod plugins {
 
 pub mod workflow {
     pub use mofa_foundation::workflow::{
-        ExecutionEvent, ExecutorConfig,
-        WorkflowBuilder, WorkflowExecutor,
-        WorkflowGraph, WorkflowNode, WorkflowValue,
+        ExecutionEvent, ExecutorConfig, WorkflowBuilder, WorkflowExecutor, WorkflowGraph,
+        WorkflowNode, WorkflowValue,
     };
 
     pub use mofa_foundation::workflow::dsl::{
-        AgentRef, DslError, DslResult, EdgeDefinition, LlmAgentConfig,
-        LoopConditionDef, NodeConfigDef, NodeDefinition, RetryPolicy, TaskExecutorDef,
-        TimeoutConfig, TransformDef, WorkflowConfig, WorkflowDefinition, WorkflowDslParser,
-        WorkflowMetadata,
+        AgentRef, DslError, DslResult, EdgeDefinition, LlmAgentConfig, LoopConditionDef,
+        NodeConfigDef, NodeDefinition, RetryPolicy, TaskExecutorDef, TimeoutConfig, TransformDef,
+        WorkflowConfig, WorkflowDefinition, WorkflowDslParser, WorkflowMetadata,
     };
 }
 
@@ -351,11 +375,9 @@ pub mod workflow {
 pub mod prelude {
     pub use crate::kernel::{
         AgentCapabilities, AgentCapabilitiesBuilder, AgentContext, AgentError, AgentInput,
-        AgentOutput, AgentResult, AgentState, AgentMetadata, MoFAAgent,
+        AgentMetadata, AgentOutput, AgentResult, AgentState, MoFAAgent,
     };
-    pub use crate::runtime::{
-        AgentBuilder, AgentRunner, run_agents, SimpleRuntime,
-    };
+    pub use crate::runtime::{AgentBuilder, AgentRunner, SimpleRuntime, run_agents};
     pub use async_trait::async_trait;
 }
 
@@ -369,6 +391,8 @@ pub mod dashboard {
 pub mod rhai {
     pub use mofa_extra::rhai::*;
 }
+
+mod llm_tools;
 
 // Re-export LLM module from mofa-foundation (always available)
 pub mod llm {
@@ -397,6 +421,7 @@ pub mod llm {
     //! let answer = client.ask("What is Rust?").await?;
     //! ```
 
+    pub use crate::llm_tools::ToolPluginExecutor;
     pub use mofa_foundation::llm::openai::{OpenAIConfig, OpenAIProvider};
     pub use mofa_foundation::llm::*;
 
@@ -416,8 +441,11 @@ pub mod llm {
     /// ```
     #[cfg(feature = "openai")]
     pub fn openai_from_env() -> Result<OpenAIProvider, crate::llm::LLMError> {
-        let api_key = std::env::var("OPENAI_API_KEY")
-            .map_err(|_| crate::llm::LLMError::ConfigError("OpenAI API key not found in environment variable OPENAI_API_KEY".to_string()))?;
+        let api_key = std::env::var("OPENAI_API_KEY").map_err(|_| {
+            crate::llm::LLMError::ConfigError(
+                "OpenAI API key not found in environment variable OPENAI_API_KEY".to_string(),
+            )
+        })?;
 
         let mut config = OpenAIConfig::new(api_key);
 
@@ -637,13 +665,14 @@ pub mod persistence {
     /// ```
     #[cfg(all(feature = "persistence-postgres"))]
     pub async fn quick_agent_with_postgres(
-        system_prompt: &str
+        system_prompt: &str,
     ) -> Result<crate::llm::LLMAgentBuilder, crate::llm::LLMError> {
         use std::sync::Arc;
 
         // 1. 初始化数据库
-        let store_arc = PostgresStore::from_env().await
-            .map_err(|e| crate::llm::LLMError::Other(format!("数据库连接失败: {}", e.to_string())))?;
+        let store_arc = PostgresStore::from_env().await.map_err(|e| {
+            crate::llm::LLMError::Other(format!("数据库连接失败: {}", e.to_string()))
+        })?;
 
         // 2. 从环境变量获取或生成 IDs
         let user_id = std::env::var("USER_ID")
@@ -707,7 +736,7 @@ pub mod persistence {
     /// ```
     #[cfg(feature = "openai")]
     pub async fn quick_agent_with_memory(
-        system_prompt: &str
+        system_prompt: &str,
     ) -> Result<crate::llm::LLMAgentBuilder, crate::llm::LLMError> {
         use std::sync::Arc;
 

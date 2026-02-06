@@ -13,7 +13,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
 use std::sync::Arc;
-use tokio::sync::{broadcast, RwLock};
+use tokio::sync::{RwLock, broadcast};
 use uuid::Uuid;
 
 /// Where to route task results
@@ -134,7 +134,11 @@ pub struct TaskResult {
 
 impl TaskResult {
     /// Create a successful result
-    pub fn success(task_id: impl Into<String>, origin: TaskOrigin, content: impl Into<String>) -> Self {
+    pub fn success(
+        task_id: impl Into<String>,
+        origin: TaskOrigin,
+        content: impl Into<String>,
+    ) -> Self {
         Self {
             task_id: task_id.into(),
             origin,
@@ -145,7 +149,11 @@ impl TaskResult {
     }
 
     /// Create a failed result
-    pub fn failure(task_id: impl Into<String>, origin: TaskOrigin, error: impl Into<String>) -> Self {
+    pub fn failure(
+        task_id: impl Into<String>,
+        origin: TaskOrigin,
+        error: impl Into<String>,
+    ) -> Self {
         Self {
             task_id: task_id.into(),
             origin,
@@ -188,10 +196,7 @@ pub struct TaskOrchestrator {
 
 impl TaskOrchestrator {
     /// Create a new task orchestrator
-    pub fn new(
-        provider: Arc<dyn LLMProvider>,
-        config: TaskOrchestratorConfig,
-    ) -> Self {
+    pub fn new(provider: Arc<dyn LLMProvider>, config: TaskOrchestratorConfig) -> Self {
         let (result_sender, _) = broadcast::channel(100);
 
         Self {
@@ -224,7 +229,10 @@ impl TaskOrchestrator {
         task.mark_running();
 
         // Store task
-        self.active_tasks.write().await.insert(task_id.clone(), task.clone());
+        self.active_tasks
+            .write()
+            .await
+            .insert(task_id.clone(), task.clone());
 
         // Spawn background task
         let provider = Arc::clone(&self.provider);
@@ -274,7 +282,9 @@ impl TaskOrchestrator {
         use crate::llm::types::ChatCompletionRequest;
 
         let request = ChatCompletionRequest::new(model)
-            .system("You are a helpful assistant. Complete the given task thoroughly and concisely.")
+            .system(
+                "You are a helpful assistant. Complete the given task thoroughly and concisely.",
+            )
             .user(prompt);
 
         let response = provider.chat(request).await?;

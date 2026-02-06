@@ -107,7 +107,10 @@ impl TranscriptionProvider for GroqTranscriptionProvider {
         }
 
         if !file_path.exists() {
-            return Err(anyhow::anyhow!("Audio file not found: {}", file_path.display()));
+            return Err(anyhow::anyhow!(
+                "Audio file not found: {}",
+                file_path.display()
+            ));
         }
 
         debug!("Transcribing audio file: {}", file_path.display());
@@ -144,15 +147,17 @@ impl TranscriptionProvider for GroqTranscriptionProvider {
             .map_err(|e| anyhow::anyhow!("Groq API error: {}", e))?;
 
         let status = response.status();
-        let response_text = response.text().await.map_err(|e| {
-            anyhow::anyhow!("Failed to read response: {}", e)
-        })?;
+        let response_text = response
+            .text()
+            .await
+            .map_err(|e| anyhow::anyhow!("Failed to read response: {}", e))?;
 
         if !status.is_success() {
             warn!("Groq API error: {}", response_text);
             return Err(anyhow::anyhow!(
                 "Groq API returned status {}: {}",
-                status, response_text
+                status,
+                response_text
             ));
         }
 
@@ -242,10 +247,16 @@ impl TranscriptionProvider for OpenAITranscriptionProvider {
         }
 
         if !file_path.exists() {
-            return Err(anyhow::anyhow!("Audio file not found: {}", file_path.display()));
+            return Err(anyhow::anyhow!(
+                "Audio file not found: {}",
+                file_path.display()
+            ));
         }
 
-        debug!("Transcribing audio file with OpenAI: {}", file_path.display());
+        debug!(
+            "Transcribing audio file with OpenAI: {}",
+            file_path.display()
+        );
 
         // Read the file content
         let file_content = tokio::fs::read(file_path)
@@ -279,15 +290,17 @@ impl TranscriptionProvider for OpenAITranscriptionProvider {
             .map_err(|e| anyhow::anyhow!("OpenAI API error: {}", e))?;
 
         let status = response.status();
-        let response_text = response.text().await.map_err(|e| {
-            anyhow::anyhow!("Failed to read response: {}", e)
-        })?;
+        let response_text = response
+            .text()
+            .await
+            .map_err(|e| anyhow::anyhow!("Failed to read response: {}", e))?;
 
         if !status.is_success() {
             warn!("OpenAI API error: {}", response_text);
             return Err(anyhow::anyhow!(
                 "OpenAI API returned status {}: {}",
-                status, response_text
+                status,
+                response_text
             ));
         }
 
@@ -345,6 +358,9 @@ mod tests {
     fn test_openai_provider_custom_url() {
         let provider = OpenAITranscriptionProvider::new("test-key")
             .with_api_url("https://custom.api/v1/audio/transcriptions");
-        assert_eq!(provider.api_url, "https://custom.api/v1/audio/transcriptions");
+        assert_eq!(
+            provider.api_url,
+            "https://custom.api/v1/audio/transcriptions"
+        );
     }
 }

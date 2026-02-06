@@ -3,8 +3,8 @@
 //! Defines abstract storage interfaces that can be implemented
 //! by different storage backends (in-memory, file, database, etc.)
 
-use async_trait::async_trait;
 use crate::agent::error::AgentResult;
+use async_trait::async_trait;
 
 // ============================================================================
 // Generic Storage Trait
@@ -123,7 +123,10 @@ mod tests {
         let storage = InMemoryStorage::new();
 
         // Save
-        storage.save(&"key1".to_string(), &vec![1, 2, 3]).await.unwrap();
+        storage
+            .save(&"key1".to_string(), &vec![1, 2, 3])
+            .await
+            .unwrap();
 
         // Load
         let value = storage.load(&"key1".to_string()).await.unwrap();

@@ -93,7 +93,9 @@ impl ToolExecutor for CalculatorTool {
             }
             "sqrt" => {
                 if a < 0.0 {
-                    return Err(anyhow::anyhow!("Cannot compute square root of negative number"));
+                    return Err(anyhow::anyhow!(
+                        "Cannot compute square root of negative number"
+                    ));
                 }
                 a.sqrt()
             }

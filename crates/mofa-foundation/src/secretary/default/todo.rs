@@ -125,13 +125,22 @@ impl TodoManager {
 
         stats.insert("total".to_string(), todos.len());
 
-        let pending = todos.values().filter(|t| t.status == TodoStatus::Pending).count();
+        let pending = todos
+            .values()
+            .filter(|t| t.status == TodoStatus::Pending)
+            .count();
         stats.insert("pending".to_string(), pending);
 
-        let in_progress = todos.values().filter(|t| t.status == TodoStatus::InProgress).count();
+        let in_progress = todos
+            .values()
+            .filter(|t| t.status == TodoStatus::InProgress)
+            .count();
         stats.insert("in_progress".to_string(), in_progress);
 
-        let completed = todos.values().filter(|t| t.status == TodoStatus::Completed).count();
+        let completed = todos
+            .values()
+            .filter(|t| t.status == TodoStatus::Completed)
+            .count();
         stats.insert("completed".to_string(), completed);
 
         stats

@@ -162,8 +162,12 @@ value = "gpt-4"
     fn test_env_var_substitution_braced() {
         let temp_dir = TempDir::new().unwrap();
 
-        unsafe { std::env::set_var("TEST_MODEL", "gpt-4-turbo"); }
-        unsafe { std::env::set_var("TEST_KEY", "sk-test-key-123"); }
+        unsafe {
+            std::env::set_var("TEST_MODEL", "gpt-4-turbo");
+        }
+        unsafe {
+            std::env::set_var("TEST_KEY", "sk-test-key-123");
+        }
 
         // YAML with env vars
         let yaml = r#"
@@ -208,15 +212,21 @@ api_key = "${TEST_KEY}"
         let toml_config: TestAgentConfig = load_config(toml_path.to_str().unwrap()).unwrap();
         assert_eq!(toml_config.llm.unwrap().model, "gpt-4-turbo");
 
-        unsafe { std::env::remove_var("TEST_MODEL"); }
-        unsafe { std::env::remove_var("TEST_KEY"); }
+        unsafe {
+            std::env::remove_var("TEST_MODEL");
+        }
+        unsafe {
+            std::env::remove_var("TEST_KEY");
+        }
     }
 
     #[test]
     fn test_env_var_substitution_unbraced() {
         let temp_dir = TempDir::new().unwrap();
 
-        unsafe { std::env::set_var("TEST_PROVIDER", "ollama"); }
+        unsafe {
+            std::env::set_var("TEST_PROVIDER", "ollama");
+        }
 
         let yaml = r#"
 agent:
@@ -229,7 +239,9 @@ llm:
         let yaml_config: TestAgentConfig = load_config(yaml_path.to_str().unwrap()).unwrap();
         assert_eq!(yaml_config.llm.unwrap().provider, "ollama");
 
-        unsafe { std::env::remove_var("TEST_PROVIDER"); }
+        unsafe {
+            std::env::remove_var("TEST_PROVIDER");
+        }
     }
 
     #[test]
@@ -261,7 +273,8 @@ llm:
         let merged: TestAgentConfig = merge_configs(&[
             (base, FileFormat::Json),
             (override_config, FileFormat::Json),
-        ]).unwrap();
+        ])
+        .unwrap();
 
         // Should have base values with override applied
         assert_eq!(merged.agent.id, "base-001");
@@ -293,10 +306,8 @@ runtime:
 "#;
         let override_path = create_test_file(&temp_dir, "override.yml", override_config);
 
-        let merged: TestAgentConfig = load_merged(&[
-            base_path.to_str().unwrap(),
-            override_path.to_str().unwrap(),
-        ]).unwrap();
+        let merged: TestAgentConfig =
+            load_merged(&[base_path.to_str().unwrap(), override_path.to_str().unwrap()]).unwrap();
 
         assert_eq!(merged.agent.id, "base-001");
         assert_eq!(merged.llm.unwrap().model, "gpt-4");
@@ -307,7 +318,9 @@ runtime:
     fn test_env_var_with_env_override() {
         let temp_dir = TempDir::new().unwrap();
 
-        unsafe { std::env::set_var("MYAPP_LLM__MODEL", "gpt-4-from-env"); }
+        unsafe {
+            std::env::set_var("MYAPP_LLM__MODEL", "gpt-4-from-env");
+        }
 
         let yaml = r#"
 agent:
@@ -317,14 +330,13 @@ llm:
 "#;
         let yaml_path = create_test_file(&temp_dir, "agent.yml", yaml);
 
-        let config: TestAgentConfig = load_with_env(
-            yaml_path.to_str().unwrap(),
-            "MYAPP"
-        ).unwrap();
+        let config: TestAgentConfig = load_with_env(yaml_path.to_str().unwrap(), "MYAPP").unwrap();
 
         assert_eq!(config.llm.unwrap().model, "gpt-4-from-env");
 
-        unsafe { std::env::remove_var("MYAPP_LLM__MODEL"); }
+        unsafe {
+            std::env::remove_var("MYAPP_LLM__MODEL");
+        }
     }
 
     #[test]
@@ -338,14 +350,22 @@ llm:
 
     #[test]
     fn test_partial_env_var_substitution() {
-        unsafe { std::env::set_var("HOST", "localhost"); }
-        unsafe { std::env::set_var("PORT", "8080"); }
+        unsafe {
+            std::env::set_var("HOST", "localhost");
+        }
+        unsafe {
+            std::env::set_var("PORT", "8080");
+        }
 
         let result = substitute_env_vars("url: http://${HOST}:${PORT}/api");
         assert_eq!(result, "url: http://localhost:8080/api");
 
-        unsafe { std::env::remove_var("HOST"); }
-        unsafe { std::env::remove_var("PORT"); }
+        unsafe {
+            std::env::remove_var("HOST");
+        }
+        unsafe {
+            std::env::remove_var("PORT");
+        }
     }
 
     #[test]
@@ -391,7 +411,15 @@ runtime:
         let config: TestAgentConfig = from_str(yaml, FileFormat::Yaml).unwrap();
         assert_eq!(config.agent.id, "complex-001");
         assert_eq!(config.llm.as_ref().unwrap().temperature.unwrap(), 0.7);
-        assert_eq!(config.runtime.as_ref().unwrap().max_concurrent_tasks.unwrap(), 10);
+        assert_eq!(
+            config
+                .runtime
+                .as_ref()
+                .unwrap()
+                .max_concurrent_tasks
+                .unwrap(),
+            10
+        );
     }
 
     #[test]

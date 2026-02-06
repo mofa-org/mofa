@@ -42,7 +42,6 @@ mod schema;
 pub use parser::*;
 pub use schema::*;
 
-
 /// Result type for DSL operations
 pub type DslResult<T> = Result<T, DslError>;
 

@@ -2,13 +2,11 @@
 //!
 //! 从 kernel 层导入 Reasoner trait，提供具体实现
 
-use mofa_kernel::agent::components::reasoner::{
-    Reasoner, ReasoningResult,
-};
+use async_trait::async_trait;
+use mofa_kernel::agent::components::reasoner::{Reasoner, ReasoningResult};
 use mofa_kernel::agent::context::AgentContext;
 use mofa_kernel::agent::types::AgentInput;
 use mofa_kernel::agent::{AgentResult, capabilities::ReasoningStrategy};
-use async_trait::async_trait;
 
 // ============================================================================
 // 具体推理器实现
@@ -21,7 +19,11 @@ pub struct DirectReasoner;
 
 #[async_trait]
 impl Reasoner for DirectReasoner {
-    async fn reason(&self, input: &AgentInput, _ctx: &AgentContext) -> AgentResult<ReasoningResult> {
+    async fn reason(
+        &self,
+        input: &AgentInput,
+        _ctx: &AgentContext,
+    ) -> AgentResult<ReasoningResult> {
         Ok(ReasoningResult::respond(input.to_text()))
     }
 

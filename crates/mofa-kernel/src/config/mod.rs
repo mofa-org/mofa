@@ -59,9 +59,7 @@ pub fn detect_format(path: &str) -> ConfigResult<FileFormat> {
     let ext = Path::new(path)
         .extension()
         .and_then(|e| e.to_str())
-        .ok_or_else(|| ConfigError::UnsupportedFormat(
-            "No file extension found".to_string(),
-        ))?;
+        .ok_or_else(|| ConfigError::UnsupportedFormat("No file extension found".to_string()))?;
 
     match ext.to_lowercase().as_str() {
         "yaml" | "yml" => Ok(FileFormat::Yaml),
@@ -98,18 +96,22 @@ pub fn substitute_env_vars(content: &str) -> String {
 
     // Match ${VAR_NAME} pattern (braced syntax - higher priority)
     let re_braced = Regex::new(r"\$\{([A-Za-z_][A-Za-z0-9_]*)\}").unwrap();
-    result = re_braced.replace_all(&result, |caps: &regex::Captures| {
-        let var_name = &caps[1];
-        std::env::var(var_name).unwrap_or_else(|_| caps[0].to_string())
-    }).to_string();
+    result = re_braced
+        .replace_all(&result, |caps: &regex::Captures| {
+            let var_name = &caps[1];
+            std::env::var(var_name).unwrap_or_else(|_| caps[0].to_string())
+        })
+        .to_string();
 
     // Match $VAR_NAME pattern (non-braced, but only if not already substituted)
     // This regex matches $ followed by a valid identifier name
     let re_simple = Regex::new(r"\$([A-Za-z_][A-Za-z0-9_]*)\b").unwrap();
-    result = re_simple.replace_all(&result, |caps: &regex::Captures| {
-        let var_name = &caps[1];
-        std::env::var(var_name).unwrap_or_else(|_| caps[0].to_string())
-    }).to_string();
+    result = re_simple
+        .replace_all(&result, |caps: &regex::Captures| {
+            let var_name = &caps[1];
+            std::env::var(var_name).unwrap_or_else(|_| caps[0].to_string())
+        })
+        .to_string();
 
     result
 }
@@ -223,7 +225,8 @@ where
         builder = builder.add_source(File::from_str(&substituted, *format));
     }
 
-    let config = builder.build()
+    let config = builder
+        .build()
         .map_err(|e| ConfigError::Parse(e.to_string()))?;
 
     config
@@ -259,7 +262,8 @@ where
         builder = builder.add_source(File::from_str(&substituted, format));
     }
 
-    let config = builder.build()
+    let config = builder
+        .build()
         .map_err(|e| ConfigError::Parse(e.to_string()))?;
 
     config
@@ -318,18 +322,26 @@ mod unit_tests {
 
     #[test]
     fn test_substitute_env_vars_braced() {
-        unsafe { std::env::set_var("TEST_VAR", "test_value"); }
+        unsafe {
+            std::env::set_var("TEST_VAR", "test_value");
+        }
         let result = substitute_env_vars("value: ${TEST_VAR}");
         assert_eq!(result, "value: test_value");
-        unsafe { std::env::remove_var("TEST_VAR"); }
+        unsafe {
+            std::env::remove_var("TEST_VAR");
+        }
     }
 
     #[test]
     fn test_substitute_env_vars_simple() {
-        unsafe { std::env::set_var("TEST_VAR", "test_value"); }
+        unsafe {
+            std::env::set_var("TEST_VAR", "test_value");
+        }
         let result = substitute_env_vars("value: $TEST_VAR");
         assert_eq!(result, "value: test_value");
-        unsafe { std::env::remove_var("TEST_VAR"); }
+        unsafe {
+            std::env::remove_var("TEST_VAR");
+        }
     }
 
     #[test]
@@ -340,12 +352,20 @@ mod unit_tests {
 
     #[test]
     fn test_substitute_env_vars_multiple() {
-        unsafe { std::env::set_var("VAR1", "value1"); }
-        unsafe { std::env::set_var("VAR2", "value2"); }
+        unsafe {
+            std::env::set_var("VAR1", "value1");
+        }
+        unsafe {
+            std::env::set_var("VAR2", "value2");
+        }
         let result = substitute_env_vars("${VAR1} and $VAR2");
         assert_eq!(result, "value1 and value2");
-        unsafe { std::env::remove_var("VAR1"); }
-        unsafe { std::env::remove_var("VAR2"); }
+        unsafe {
+            std::env::remove_var("VAR1");
+        }
+        unsafe {
+            std::env::remove_var("VAR2");
+        }
     }
 
     #[test]
@@ -494,7 +514,11 @@ default.name = "Test Agent"
             model: String,
         }
 
-        let config: TestConfig = merge_configs(&[(base, FileFormat::Json), (override_config, FileFormat::Json)]).unwrap();
+        let config: TestConfig = merge_configs(&[
+            (base, FileFormat::Json),
+            (override_config, FileFormat::Json),
+        ])
+        .unwrap();
         assert_eq!(config.id, "base-agent");
         assert_eq!(config.name, "Base Name");
         assert_eq!(config.model, "gpt-4");

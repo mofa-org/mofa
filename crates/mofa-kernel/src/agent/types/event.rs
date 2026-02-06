@@ -214,19 +214,17 @@ pub fn execution_event(event_type: &str, source: &str, data: serde_json::Value) 
 
 /// 创建状态变更事件
 pub fn state_changed_event(source: &str, old_state: &str, new_state: &str) -> GlobalEvent {
-    GlobalEvent::new(state::CHANGED, source)
-        .with_data(serde_json::json!({
-            "old_state": old_state,
-            "new_state": new_state
-        }))
+    GlobalEvent::new(state::CHANGED, source).with_data(serde_json::json!({
+        "old_state": old_state,
+        "new_state": new_state
+    }))
 }
 
 /// 创建错误事件
 pub fn error_event(source: &str, error: &str) -> GlobalEvent {
-    GlobalEvent::new("error", source)
-        .with_data(serde_json::json!({
-            "error": error
-        }))
+    GlobalEvent::new("error", source).with_data(serde_json::json!({
+        "error": error
+    }))
 }
 
 // ============================================================================
@@ -248,8 +246,7 @@ mod tests {
     #[test]
     fn test_event_with_data() {
         let data = serde_json::json!({ "key": "value" });
-        let event = GlobalEvent::new("test:event", "agent1")
-            .with_data(data.clone());
+        let event = GlobalEvent::new("test:event", "agent1").with_data(data.clone());
 
         assert_eq!(event.data, data);
     }

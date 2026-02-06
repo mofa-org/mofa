@@ -7,7 +7,7 @@
 //! - 循环控制逻辑
 
 use super::engine::{RhaiScriptEngine, ScriptContext, ScriptEngineConfig, ScriptResult};
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -142,10 +142,7 @@ pub struct ScriptWorkflowNode {
 
 impl ScriptWorkflowNode {
     /// 创建脚本节点
-    pub async fn new(
-        config: ScriptNodeConfig,
-        engine: Arc<RhaiScriptEngine>,
-    ) -> Result<Self> {
+    pub async fn new(config: ScriptNodeConfig, engine: Arc<RhaiScriptEngine>) -> Result<Self> {
         let mut node = Self {
             config,
             engine,
@@ -251,10 +248,12 @@ impl ScriptWorkflowNode {
         if let Some(ref script_id) = self.cached_script_id {
             // 如果有入口函数，调用函数
             if let Some(ref entry) = self.config.entry_function {
-                let input = context.get_variable::<serde_json::Value>("input")
+                let input = context
+                    .get_variable::<serde_json::Value>("input")
                     .unwrap_or(serde_json::Value::Null);
 
-                let result: serde_json::Value = self.engine
+                let result: serde_json::Value = self
+                    .engine
                     .call_function(script_id, entry, vec![input], context)
                     .await?;
 
@@ -273,7 +272,11 @@ impl ScriptWorkflowNode {
         let result = self.execute(input).await?;
 
         if !result.success {
-            return Err(anyhow!(result.error.unwrap_or_else(|| "Condition execution failed".into())));
+            return Err(anyhow!(
+                result
+                    .error
+                    .unwrap_or_else(|| "Condition execution failed".into())
+            ));
         }
 
         // 尝试将结果转换为布尔值
@@ -368,7 +371,11 @@ impl ScriptWorkflowDefinition {
 
     /// 添加条件边
     pub fn add_conditional_edge(&mut self, from: &str, to: &str, condition: &str) -> &mut Self {
-        self.edges.push((from.to_string(), to.to_string(), Some(condition.to_string())));
+        self.edges.push((
+            from.to_string(),
+            to.to_string(),
+            Some(condition.to_string()),
+        ));
         self
     }
 
@@ -499,9 +506,10 @@ impl ScriptWorkflowExecutor {
 
         while let Some(ref node_id) = state.current_node.clone() {
             // 获取节点
-            let node = self.nodes.get(node_id).ok_or_else(|| {
-                anyhow!("Node not found: {}", node_id)
-            })?;
+            let node = self
+                .nodes
+                .get(node_id)
+                .ok_or_else(|| anyhow!("Node not found: {}", node_id))?;
 
             // 检查是否为结束节点
             if self.definition.end_nodes.contains(node_id) {
@@ -514,7 +522,9 @@ impl ScriptWorkflowExecutor {
                 }
 
                 // 保存节点输出
-                state.node_outputs.insert(node_id.clone(), result.output.clone());
+                state
+                    .node_outputs
+                    .insert(node_id.clone(), result.output.clone());
 
                 state.completed = true;
                 state.final_result = Some(result.output.clone());
@@ -531,11 +541,17 @@ impl ScriptWorkflowExecutor {
                 let error = result.error.clone(); // Clone the error before moving it
                 state.error = error.clone();
                 let error_detail = error.unwrap_or_else(|| "unknown error".to_string());
-                return Err(anyhow!("Node {} execution failed: {}", node_id, error_detail));
+                return Err(anyhow!(
+                    "Node {} execution failed: {}",
+                    node_id,
+                    error_detail
+                ));
             }
 
             // 保存节点输出
-            state.node_outputs.insert(node_id.clone(), result.output.clone());
+            state
+                .node_outputs
+                .insert(node_id.clone(), result.output.clone());
             current_value = result.output;
 
             // 确定下一个节点
@@ -543,7 +559,10 @@ impl ScriptWorkflowExecutor {
             state.current_node = next_node;
         }
 
-        Ok(state.final_result.clone().unwrap_or(serde_json::Value::Null))
+        Ok(state
+            .final_result
+            .clone()
+            .unwrap_or(serde_json::Value::Null))
     }
 
     /// 确定下一个节点
@@ -553,7 +572,9 @@ impl ScriptWorkflowExecutor {
         output: &serde_json::Value,
     ) -> Result<Option<String>> {
         // 查找从当前节点出发的边
-        let candidate_edges: Vec<_> = self.definition.edges
+        let candidate_edges: Vec<_> = self
+            .definition
+            .edges
             .iter()
             .filter(|(from, _, _)| from == current_node_id)
             .collect();
@@ -575,7 +596,10 @@ impl ScriptWorkflowExecutor {
                 let condition_value = {
                     // Simple implementation for equality checks on object fields
                     if cond.contains("==") {
-                        let parts: Vec<_> = cond.split("==").map(|s| s.trim().replace("\"", "")).collect();
+                        let parts: Vec<_> = cond
+                            .split("==")
+                            .map(|s| s.trim().replace("\"", ""))
+                            .collect();
                         if parts.len() == 2 {
                             let field = parts[0].clone();
                             let value = parts[1].clone();
@@ -585,7 +609,9 @@ impl ScriptWorkflowExecutor {
                                 serde_json::Value::Object(obj) => {
                                     if let Some(serde_json::Value::String(v)) = obj.get(&field) {
                                         *v == value
-                                    } else if let Some(serde_json::Value::Number(n)) = obj.get(&field) {
+                                    } else if let Some(serde_json::Value::Number(n)) =
+                                        obj.get(&field)
+                                    {
                                         n.to_string() == value
                                     } else {
                                         false
@@ -597,7 +623,9 @@ impl ScriptWorkflowExecutor {
                             // Fall back to original comparison
                             match output {
                                 serde_json::Value::String(s) => s == cond,
-                                serde_json::Value::Bool(b) => (*b && cond == "true") || (!*b && cond == "false"),
+                                serde_json::Value::Bool(b) => {
+                                    (*b && cond == "true") || (!*b && cond == "false")
+                                }
                                 _ => false,
                             }
                         }
@@ -605,7 +633,9 @@ impl ScriptWorkflowExecutor {
                         // Fall back to original comparison
                         match output {
                             serde_json::Value::String(s) => s == cond,
-                            serde_json::Value::Bool(b) => (*b && cond == "true") || (!*b && cond == "false"),
+                            serde_json::Value::Bool(b) => {
+                                (*b && cond == "true") || (!*b && cond == "false")
+                            }
                             _ => false,
                         }
                     }
@@ -696,16 +726,21 @@ mod tests {
     async fn test_condition_node() {
         let engine = Arc::new(RhaiScriptEngine::new(ScriptEngineConfig::default()).unwrap());
 
-        let config = condition_script(
-            "check_positive",
-            "Check Positive",
-            "input > 0",
-        );
+        let config = condition_script("check_positive", "Check Positive", "input > 0");
 
         let node = ScriptWorkflowNode::new(config, engine).await.unwrap();
 
-        assert!(node.execute_as_condition(serde_json::json!(10)).await.unwrap());
-        assert!(!node.execute_as_condition(serde_json::json!(-5)).await.unwrap());
+        assert!(
+            node.execute_as_condition(serde_json::json!(10))
+                .await
+                .unwrap()
+        );
+        assert!(
+            !node
+                .execute_as_condition(serde_json::json!(-5))
+                .await
+                .unwrap()
+        );
     }
 
     #[tokio::test]

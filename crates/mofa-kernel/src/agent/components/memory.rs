@@ -88,10 +88,7 @@ pub enum MemoryValue {
     /// 二进制数据
     Binary(Vec<u8>),
     /// 带嵌入的文本
-    TextWithEmbedding {
-        text: String,
-        embedding: Vec<f32>,
-    },
+    TextWithEmbedding { text: String, embedding: Vec<f32> },
 }
 
 impl MemoryValue {

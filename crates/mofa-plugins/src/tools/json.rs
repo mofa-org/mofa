@@ -67,7 +67,11 @@ impl JsonTool {
         Some(current)
     }
 
-    fn set_by_path(value: &mut serde_json::Value, path: &str, new_value: serde_json::Value) -> PluginResult<()> {
+    fn set_by_path(
+        value: &mut serde_json::Value,
+        path: &str,
+        new_value: serde_json::Value,
+    ) -> PluginResult<()> {
         let parts: Vec<&str> = path.split('.').collect();
         let mut current = value;
 
@@ -76,10 +80,11 @@ impl JsonTool {
                 // Last part - set the value
                 if let Ok(index) = part.parse::<usize>() {
                     if let Some(arr) = current.as_array_mut()
-                        && index < arr.len() {
-                            arr[index] = new_value;
-                            return Ok(());
-                        }
+                        && index < arr.len()
+                    {
+                        arr[index] = new_value;
+                        return Ok(());
+                    }
                 } else if let Some(obj) = current.as_object_mut() {
                     obj.insert(part.to_string(), new_value);
                     return Ok(());
@@ -88,9 +93,13 @@ impl JsonTool {
             } else {
                 // Navigate to next level
                 if let Ok(index) = part.parse::<usize>() {
-                    current = current.get_mut(index).ok_or_else(|| anyhow::anyhow!("Invalid path"))?;
+                    current = current
+                        .get_mut(index)
+                        .ok_or_else(|| anyhow::anyhow!("Invalid path"))?;
                 } else {
-                    current = current.get_mut(*part).ok_or_else(|| anyhow::anyhow!("Invalid path"))?;
+                    current = current
+                        .get_mut(*part)
+                        .ok_or_else(|| anyhow::anyhow!("Invalid path"))?;
                 }
             }
         }
@@ -123,7 +132,10 @@ impl ToolExecutor for JsonTool {
             }
             "stringify" => {
                 let data = &arguments["data"];
-                let pretty = arguments.get("pretty").and_then(|p| p.as_bool()).unwrap_or(true);
+                let pretty = arguments
+                    .get("pretty")
+                    .and_then(|p| p.as_bool())
+                    .unwrap_or(true);
                 let result = if pretty {
                     serde_json::to_string_pretty(data)?
                 } else {

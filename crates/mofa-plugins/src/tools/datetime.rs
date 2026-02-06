@@ -87,7 +87,8 @@ impl ToolExecutor for DateTimeTool {
                 let timezone = arguments["timezone"].as_str().unwrap_or("UTC");
 
                 let formatted = if timezone == "Local" {
-                    Local.timestamp_opt(timestamp, 0)
+                    Local
+                        .timestamp_opt(timestamp, 0)
                         .single()
                         .map(|dt| dt.format(format).to_string())
                 } else {
@@ -105,9 +106,9 @@ impl ToolExecutor for DateTimeTool {
                 }
             }
             "parse" => {
-                let date_string = arguments["date_string"]
-                    .as_str()
-                    .ok_or_else(|| anyhow::anyhow!("date_string is required for parse operation"))?;
+                let date_string = arguments["date_string"].as_str().ok_or_else(|| {
+                    anyhow::anyhow!("date_string is required for parse operation")
+                })?;
 
                 // Try RFC3339 first
                 if let Ok(dt) = DateTime::parse_from_rfc3339(date_string) {
@@ -118,20 +119,27 @@ impl ToolExecutor for DateTimeTool {
                 }
 
                 // Try common format
-                if let Ok(dt) = chrono::NaiveDateTime::parse_from_str(date_string, "%Y-%m-%d %H:%M:%S") {
+                if let Ok(dt) =
+                    chrono::NaiveDateTime::parse_from_str(date_string, "%Y-%m-%d %H:%M:%S")
+                {
                     return Ok(json!({
                         "timestamp": dt.and_utc().timestamp(),
                         "utc": dt.and_utc().to_rfc3339()
                     }));
                 }
 
-                Err(anyhow::anyhow!("Could not parse date string: {}", date_string))
+                Err(anyhow::anyhow!(
+                    "Could not parse date string: {}",
+                    date_string
+                ))
             }
             "add" => {
-                let timestamp = arguments["timestamp"].as_i64().unwrap_or_else(|| Utc::now().timestamp());
-                let duration = arguments["duration_seconds"]
+                let timestamp = arguments["timestamp"]
                     .as_i64()
-                    .ok_or_else(|| anyhow::anyhow!("duration_seconds is required for add operation"))?;
+                    .unwrap_or_else(|| Utc::now().timestamp());
+                let duration = arguments["duration_seconds"].as_i64().ok_or_else(|| {
+                    anyhow::anyhow!("duration_seconds is required for add operation")
+                })?;
 
                 let new_timestamp = timestamp + duration;
                 let dt = Utc.timestamp_opt(new_timestamp, 0).single();

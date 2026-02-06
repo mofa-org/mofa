@@ -88,9 +88,7 @@ where
     }
 
     fn is_connected(&self) -> bool {
-        self.connected
-            .load(std::sync::atomic::Ordering::SeqCst)
-            && !self.output_tx.is_closed()
+        self.connected.load(std::sync::atomic::Ordering::SeqCst) && !self.output_tx.is_closed()
     }
 
     async fn close(&self) -> anyhow::Result<()> {

@@ -135,16 +135,19 @@ impl JsonlSessionStorage {
     /// Create a new JSONL session storage
     pub async fn new(workspace: impl AsRef<Path>) -> AgentResult<Self> {
         let sessions_dir = workspace.as_ref().join("sessions");
-        fs::create_dir_all(&sessions_dir)
-            .await
-            .map_err(|e| AgentError::IoError(format!("Failed to create sessions directory: {}", e)))?;
+        fs::create_dir_all(&sessions_dir).await.map_err(|e| {
+            AgentError::IoError(format!("Failed to create sessions directory: {}", e))
+        })?;
 
         Ok(Self { sessions_dir })
     }
 
     /// Get the file path for a session
     fn session_file(&self, key: &str) -> PathBuf {
-        let safe_key = key.replace(|c: char| !c.is_alphanumeric() && c != '-' && c != ':' && c != '_', "_");
+        let safe_key = key.replace(
+            |c: char| !c.is_alphanumeric() && c != '-' && c != ':' && c != '_',
+            "_",
+        );
         self.sessions_dir.join(format!("{}.jsonl", safe_key))
     }
 
@@ -160,26 +163,30 @@ impl JsonlSessionStorage {
             .map_err(|e| AgentError::IoError(format!("Failed to read session file: {}", e)))?;
 
         let mut lines = content.lines();
-        let header = lines.next().ok_or_else(|| {
-            AgentError::SerializationError("Empty session file".to_string())
-        })?;
+        let header = lines
+            .next()
+            .ok_or_else(|| AgentError::SerializationError("Empty session file".to_string()))?;
 
         // Parse header for metadata
-        let header_data: Value = serde_json::from_str(header)
-            .map_err(|e| AgentError::SerializationError(format!("Failed to parse session header: {}", e)))?;
+        let header_data: Value = serde_json::from_str(header).map_err(|e| {
+            AgentError::SerializationError(format!("Failed to parse session header: {}", e))
+        })?;
 
-        let key = header_data.get("key")
+        let key = header_data
+            .get("key")
             .and_then(|v| v.as_str())
             .unwrap_or(key)
             .to_string();
 
-        let created_at = header_data.get("created_at")
+        let created_at = header_data
+            .get("created_at")
             .and_then(|v| v.as_str())
             .and_then(|s| DateTime::parse_from_rfc3339(s).ok())
             .map(|dt| dt.with_timezone(&Utc))
             .unwrap_or_else(Utc::now);
 
-        let metadata = header_data.get("metadata")
+        let metadata = header_data
+            .get("metadata")
             .and_then(|v| serde_json::from_value::<HashMap<String, Value>>(v.clone()).ok())
             .unwrap_or_default();
 
@@ -211,9 +218,9 @@ impl SessionStorage for JsonlSessionStorage {
 
         // Ensure directory exists
         if let Some(parent) = session_file.parent() {
-            fs::create_dir_all(parent)
-                .await
-                .map_err(|e| AgentError::IoError(format!("Failed to create sessions directory: {}", e)))?;
+            fs::create_dir_all(parent).await.map_err(|e| {
+                AgentError::IoError(format!("Failed to create sessions directory: {}", e))
+            })?;
         }
 
         let mut lines = vec![
@@ -223,14 +230,15 @@ impl SessionStorage for JsonlSessionStorage {
                 "updated_at": session.updated_at.to_rfc3339(),
                 "metadata": session.metadata,
             }))
-            .map_err(|e| AgentError::SerializationError(format!("Failed to serialize session: {}", e)))?
+            .map_err(|e| {
+                AgentError::SerializationError(format!("Failed to serialize session: {}", e))
+            })?,
         ];
 
         for msg in &session.messages {
-            lines.push(
-                serde_json::to_string(msg)
-                    .map_err(|e| AgentError::SerializationError(format!("Failed to serialize message: {}", e)))?
-            );
+            lines.push(serde_json::to_string(msg).map_err(|e| {
+                AgentError::SerializationError(format!("Failed to serialize message: {}", e))
+            })?);
         }
 
         fs::write(&session_file, lines.join("\n"))
@@ -243,9 +251,9 @@ impl SessionStorage for JsonlSessionStorage {
     async fn delete(&self, key: &str) -> AgentResult<bool> {
         let session_file = self.session_file(key);
         if session_file.exists() {
-            fs::remove_file(&session_file)
-                .await
-                .map_err(|e| AgentError::IoError(format!("Failed to remove session file: {}", e)))?;
+            fs::remove_file(&session_file).await.map_err(|e| {
+                AgentError::IoError(format!("Failed to remove session file: {}", e))
+            })?;
             Ok(true)
         } else {
             Ok(false)
@@ -253,13 +261,16 @@ impl SessionStorage for JsonlSessionStorage {
     }
 
     async fn list(&self) -> AgentResult<Vec<String>> {
-        let mut entries = fs::read_dir(&self.sessions_dir)
-            .await
-            .map_err(|e| AgentError::IoError(format!("Failed to read sessions directory: {}", e)))?;
+        let mut entries = fs::read_dir(&self.sessions_dir).await.map_err(|e| {
+            AgentError::IoError(format!("Failed to read sessions directory: {}", e))
+        })?;
 
         let mut keys = Vec::new();
-        while let Some(entry) = entries.next_entry().await
-            .map_err(|e| AgentError::IoError(format!("Failed to read entry: {}", e)))? {
+        while let Some(entry) = entries
+            .next_entry()
+            .await
+            .map_err(|e| AgentError::IoError(format!("Failed to read entry: {}", e)))?
+        {
             if let Some(name) = entry.path().file_stem().and_then(|s| s.to_str()) {
                 // Convert back the safe filename to original key
                 let key = name.replace('_', ":");

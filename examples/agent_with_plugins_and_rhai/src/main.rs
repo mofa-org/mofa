@@ -8,103 +8,20 @@
 //！
 //！ 核心概念：
 //！ - ToolPlugin: 工具插件，管理多个工具执行器
-//！ - ToolPluginAdapter: 将 ToolPlugin 适配为 LLM 的 ToolExecutor
+//！ - ToolPluginExecutor: 将 ToolPlugin 适配为 LLM 的 ToolExecutor
 //！ - RhaiPlugin: Rhai 脚本运行时插件，支持动态脚本执行
 //！ - LLMAgent: 集成工具调用能力的智能体
 
 use anyhow::Result;
-use mofa_sdk::llm::{LLMAgentBuilder, LLMError, LLMResult, Tool, ToolExecutor as LLMToolExecutor};
+use mofa_sdk::llm::{LLMAgentBuilder, ToolExecutor, ToolPluginExecutor};
 use mofa_sdk::plugins::rhai_runtime::{RhaiPlugin, RhaiPluginConfig};
 use mofa_sdk::plugins::tools::create_builtin_tool_plugin;
-use mofa_sdk::plugins::{AgentPlugin, ToolCall, ToolDefinition, ToolPlugin};
 use notify::{Config, RecommendedWatcher, RecursiveMode, Watcher};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
-use tokio::sync::RwLock;
 use tokio::time;
 use tracing::{info, warn, Level};
-
-// ============================================================================
-// ToolPlugin 到 LLM ToolExecutor 的适配器
-// ============================================================================
-
-/// 将 ToolPlugin 适配为 LLM 模块的 ToolExecutor trait
-///
-/// 这是连接插件系统和 LLM Function Calling 的桥梁
-struct ToolPluginAdapter {
-    /// 内部持有的工具插件（使用 Arc<RwLock> 支持并发访问）
-    tool_plugin: Arc<RwLock<ToolPlugin>>,
-    /// 缓存的工具定义（转换为 LLM Tool 格式）
-    tools: Vec<Tool>,
-}
-
-impl ToolPluginAdapter {
-    /// 从 ToolPlugin 创建适配器
-    fn new(tool_plugin: ToolPlugin) -> Self {
-        // 将 ToolDefinition 转换为 LLM Tool 格式
-        let tools: Vec<Tool> = tool_plugin
-            .list_tools()
-            .into_iter()
-            .map(|def| tool_definition_to_llm_tool(&def))
-            .collect();
-
-        Self {
-            tool_plugin: Arc::new(RwLock::new(tool_plugin)),
-            tools,
-        }
-    }
-}
-
-/// 将 ToolDefinition 转换为 LLM Tool
-fn tool_definition_to_llm_tool(def: &ToolDefinition) -> Tool {
-    Tool::function(&def.name, &def.description, def.parameters.clone())
-}
-
-#[async_trait::async_trait]
-impl LLMToolExecutor for ToolPluginAdapter {
-    /// 执行工具调用
-    ///
-    /// LLM 返回工具调用时，此方法被自动调用
-    async fn execute(&self, name: &str, arguments: &str) -> LLMResult<String> {
-        info!("LLM 请求调用工具: {} 参数: {}", name, arguments);
-
-        // 解析 JSON 参数
-        let args: serde_json::Value = serde_json::from_str(arguments)
-            .map_err(|e| LLMError::Other(format!("参数解析失败: {}", e)))?;
-
-        // 构造工具调用请求
-        let call = ToolCall {
-            call_id: uuid::Uuid::now_v7().to_string(),
-            name: name.to_string(),
-            arguments: args,
-        };
-
-        // 调用工具插件
-        let mut plugin = self.tool_plugin.write().await;
-        let result = plugin
-            .call_tool(call)
-            .await
-            .map_err(|e| LLMError::Other(format!("工具执行失败: {}", e)))?;
-
-        // 返回结果
-        if result.success {
-            let result_str = serde_json::to_string(&result.result)
-                .map_err(|e| LLMError::Other(format!("结果序列化失败: {}", e)))?;
-            info!("工具执行成功: {}", result_str);
-            Ok(result_str)
-        } else {
-            let error_msg = result.error.unwrap_or_else(|| "未知错误".to_string());
-            warn!("工具执行失败: {}", error_msg);
-            Err(LLMError::Other(error_msg))
-        }
-    }
-
-    /// 获取可用工具列表
-    fn available_tools(&self) -> Vec<Tool> {
-        self.tools.clone()
-    }
-}
 
 // ============================================================================
 // 演示 4: 基于文件的动态插件 - 支持运行时修改和自动重载
@@ -298,9 +215,7 @@ fn execute(llm_response) {
     let mut tool_plugin = create_builtin_tool_plugin("comprehensive_tools")?;
     tool_plugin.init_plugin().await?;
 
-    let adapter = ToolPluginAdapter::new(tool_plugin);
-    let tools = adapter.available_tools();
-    let executor: Arc<dyn LLMToolExecutor> = Arc::new(adapter);
+    let executor: Arc<dyn ToolExecutor> = Arc::new(ToolPluginExecutor::new(tool_plugin));
 
     // 创建 LLM Provider
     let provider = Arc::new(mofa_sdk::llm::openai::OpenAIProvider::from_env());
@@ -313,7 +228,6 @@ fn execute(llm_response) {
         .with_system_prompt(
             r#"你是一个强大的AI助手，可以使用计算器工具来帮助用户。"#,
         )
-        .with_tools(tools)
         .with_tool_executor(executor)
         .build();
 

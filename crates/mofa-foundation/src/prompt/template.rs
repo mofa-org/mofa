@@ -65,7 +65,9 @@ impl VariableType {
             VariableType::String => true,
             VariableType::Integer => value.parse::<i64>().is_ok(),
             VariableType::Float => value.parse::<f64>().is_ok(),
-            VariableType::Boolean => matches!(value.to_lowercase().as_str(), "true" | "false" | "1" | "0"),
+            VariableType::Boolean => {
+                matches!(value.to_lowercase().as_str(), "true" | "false" | "1" | "0")
+            }
             VariableType::List => value.starts_with('[') && value.ends_with(']'),
             VariableType::Json => serde_json::from_str::<serde_json::Value>(value).is_ok(),
         }
@@ -165,7 +167,8 @@ impl PromptVariable {
 
         // 正则验证
         if let Some(ref pattern) = self.pattern {
-            let re = regex::Regex::new(pattern).map_err(|e| PromptError::ParseError(e.to_string()))?;
+            let re =
+                regex::Regex::new(pattern).map_err(|e| PromptError::ParseError(e.to_string()))?;
             if !re.is_match(value) {
                 return Err(PromptError::ValidationFailed {
                     name: self.name.clone(),
@@ -176,12 +179,13 @@ impl PromptVariable {
 
         // 枚举验证
         if let Some(ref enum_values) = self.enum_values
-            && !enum_values.contains(&value.to_string()) {
-                return Err(PromptError::ValidationFailed {
-                    name: self.name.clone(),
-                    reason: format!("Value must be one of: {:?}", enum_values),
-                });
-            }
+            && !enum_values.contains(&value.to_string())
+        {
+            return Err(PromptError::ValidationFailed {
+                name: self.name.clone(),
+                reason: format!("Value must be one of: {:?}", enum_values),
+            });
+        }
 
         Ok(())
     }
@@ -373,7 +377,8 @@ impl PromptTemplate {
 
     /// 使用 owned HashMap 渲染模板
     pub fn render_with_owned_map(&self, vars: &HashMap<String, String>) -> PromptResult<String> {
-        let borrowed: HashMap<&str, &str> = vars.iter().map(|(k, v)| (k.as_str(), v.as_str())).collect();
+        let borrowed: HashMap<&str, &str> =
+            vars.iter().map(|(k, v)| (k.as_str(), v.as_str())).collect();
         self.render_with_map(&borrowed)
     }
 
@@ -396,7 +401,10 @@ impl PromptTemplate {
 
         // 检查预定义的必需变量
         for var_def in &self.variables {
-            if var_def.required && var_def.default.is_none() && !var_set.contains(var_def.name.as_str()) {
+            if var_def.required
+                && var_def.default.is_none()
+                && !var_set.contains(var_def.name.as_str())
+            {
                 return false;
             }
         }
@@ -490,10 +498,17 @@ mod tests {
             .with_content("Hello, {name}! Welcome to {place}. Your role is {role}.");
 
         let result = template
-            .render(&[("name", "Alice"), ("place", "Wonderland"), ("role", "explorer")])
+            .render(&[
+                ("name", "Alice"),
+                ("place", "Wonderland"),
+                ("role", "explorer"),
+            ])
             .unwrap();
 
-        assert_eq!(result, "Hello, Alice! Welcome to Wonderland. Your role is explorer.");
+        assert_eq!(
+            result,
+            "Hello, Alice! Welcome to Wonderland. Your role is explorer."
+        );
     }
 
     #[test]
@@ -517,7 +532,10 @@ mod tests {
 
         let result = template.render(&[]);
         assert!(result.is_err());
-        assert!(matches!(result.unwrap_err(), PromptError::MissingVariable(_)));
+        assert!(matches!(
+            result.unwrap_err(),
+            PromptError::MissingVariable(_)
+        ));
     }
 
     #[test]
@@ -533,7 +551,8 @@ mod tests {
 
     #[test]
     fn test_variable_enum() {
-        let var = PromptVariable::new("language").with_enum(vec!["rust".to_string(), "python".to_string()]);
+        let var = PromptVariable::new("language")
+            .with_enum(vec!["rust".to_string(), "python".to_string()]);
 
         assert!(var.validate("rust").is_ok());
         assert!(var.validate("python").is_ok());
@@ -542,7 +561,8 @@ mod tests {
 
     #[test]
     fn test_partial_render() {
-        let template = PromptTemplate::new("test").with_content("Hello, {name}! Your {item} is ready.");
+        let template =
+            PromptTemplate::new("test").with_content("Hello, {name}! Your {item} is ready.");
 
         let result = template.partial_render(&[("name", "Alice")]);
         assert_eq!(result, "Hello, Alice! Your {item} is ready.");

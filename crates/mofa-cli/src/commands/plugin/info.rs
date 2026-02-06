@@ -14,7 +14,10 @@ pub fn run(name: &str) -> anyhow::Result<()> {
     println!("  Version:        {}", "0.1.0".white());
     println!("  Description:    {}", "A helpful plugin".white());
     println!("  Author:         {}", "MoFA Team".white());
-    println!("  Repository:     {}", "https://github.com/mofa-org/...".blue());
+    println!(
+        "  Repository:     {}",
+        "https://github.com/mofa-org/...".blue()
+    );
     println!("  License:        {}", "MIT".white());
     println!("  Installed:      {}", "Yes".green());
     println!();

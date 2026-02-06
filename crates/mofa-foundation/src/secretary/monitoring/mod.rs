@@ -4,11 +4,11 @@
 //! operation and maintenance, including event definitions, response plugins,
 //! and a runtime rule adjustment mechanism.
 
+pub mod engine;
 pub mod event;
 pub mod plugin;
 pub mod plugins;
 pub mod rule_manager;
-pub mod engine;
 
 pub use engine::*;
 // Re-export key components

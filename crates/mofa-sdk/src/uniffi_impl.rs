@@ -3,8 +3,8 @@
 //! This module provides clean implementations for the types defined in mofa.udl
 
 use std::sync::{Arc, Mutex as StdMutex};
-use tokio::sync::RwLock;
 use tokio::runtime::Runtime;
+use tokio::sync::RwLock;
 
 // =============================================================================
 // Error Types
@@ -253,7 +253,6 @@ impl LLMAgent {
 
     /// Simple Q&A (no context retention)
     pub fn ask(&self, question: String) -> Result<String, MoFaError> {
-
         {
             self.runtime.block_on(async {
                 let agent = self.inner.read().await;
@@ -274,7 +273,6 @@ impl LLMAgent {
 
     /// Multi-turn chat (with context retention)
     pub fn chat(&self, message: String) -> Result<String, MoFaError> {
-
         {
             self.runtime.block_on(async {
                 let agent = self.inner.read().await;
@@ -295,7 +293,6 @@ impl LLMAgent {
 
     /// Clear conversation history
     pub fn clear_history(&self) {
-
         {
             self.runtime.block_on(async {
                 let agent = self.inner.read().await;
@@ -306,7 +303,6 @@ impl LLMAgent {
 
     /// Get conversation history
     pub fn get_history(&self) -> Vec<ChatMessage> {
-
         {
             self.runtime.block_on(async {
                 let agent = self.inner.read().await;
@@ -500,10 +496,12 @@ impl LLMAgentBuilder {
             let state = self.state.lock().unwrap();
 
             // Get or generate agent_id
-            let agent_id = state.agent_id.clone().unwrap_or_else(|| uuid::Uuid::now_v7().to_string());
+            let agent_id = state
+                .agent_id
+                .clone()
+                .unwrap_or_else(|| uuid::Uuid::now_v7().to_string());
 
-            let mut builder = LLMAgentBuilder::new()
-                .with_id(&agent_id);
+            let mut builder = LLMAgentBuilder::new().with_id(&agent_id);
 
             // Set name if provided
             if let Some(ref name) = state.name {
@@ -560,7 +558,8 @@ impl LLMAgentBuilder {
 
             drop(state);
 
-            let inner_agent = builder.try_build()
+            let inner_agent = builder
+                .try_build()
                 .map_err(|e| MoFaError::ConfigError(e.to_string()))?;
 
             let agent_id = inner_agent.config().agent_id.clone();

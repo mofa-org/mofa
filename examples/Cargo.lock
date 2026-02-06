@@ -2973,6 +2973,7 @@ dependencies = [
  "mofa-monitoring",
  "mofa-plugins",
  "mofa-runtime",
+ "serde_json",
  "sqlx",
  "tokio",
  "tracing",

@@ -101,7 +101,6 @@ pub enum CollaborationMode {
     Custom(String),
 }
 
-
 impl std::fmt::Display for CollaborationMode {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -149,11 +148,14 @@ pub enum CollaborationContent {
     /// 结构化数据（JSON）
     Data(serde_json::Value),
     /// 混合内容（文本 + 数据）
-    Mixed { text: String, data: serde_json::Value },
+    Mixed {
+        text: String,
+        data: serde_json::Value,
+    },
     /// LLM 生成的响应
     LLMResponse {
-        reasoning: String,      // LLM 的推理过程
-        conclusion: String,     // LLM 的结论
+        reasoning: String,       // LLM 的推理过程
+        conclusion: String,      // LLM 的结论
         data: serde_json::Value, // 相关数据
     },
 }
@@ -165,7 +167,11 @@ impl CollaborationContent {
             CollaborationContent::Text(s) => s.clone(),
             CollaborationContent::Data(v) => v.to_string(),
             CollaborationContent::Mixed { text, data } => format!("{}\n\n数据: {}", text, data),
-            CollaborationContent::LLMResponse { reasoning, conclusion, .. } => {
+            CollaborationContent::LLMResponse {
+                reasoning,
+                conclusion,
+                ..
+            } => {
                 format!("推理: {}\n\n结论: {}", reasoning, conclusion)
             }
         }
@@ -366,7 +372,10 @@ pub trait CollaborationProtocol: Send + Sync {
     /// 协议可以选择：
     /// 1. 直接处理（快速路径）
     /// 2. 调用 LLM 辅助处理（智能路径）
-    async fn process_message(&self, msg: CollaborationMessage) -> anyhow::Result<CollaborationResult>;
+    async fn process_message(
+        &self,
+        msg: CollaborationMessage,
+    ) -> anyhow::Result<CollaborationResult>;
 
     /// 检查协议是否可用
     fn is_available(&self) -> bool {
@@ -388,12 +397,39 @@ pub trait CollaborationProtocol: Send + Sync {
 /// 这不是硬编码的映射，而是提供给 LLM 的参考信息
 pub fn scenario_to_mode_suggestions() -> HashMap<String, Vec<CollaborationMode>> {
     HashMap::from([
-        ("数据处理".to_string(), vec![CollaborationMode::RequestResponse, CollaborationMode::Parallel]),
-        ("创意生成".to_string(), vec![CollaborationMode::PublishSubscribe, CollaborationMode::Debate]),
-        ("决策制定".to_string(), vec![CollaborationMode::Consensus, CollaborationMode::Debate]),
-        ("分析任务".to_string(), vec![CollaborationMode::Parallel, CollaborationMode::Sequential]),
-        ("审查任务".to_string(), vec![CollaborationMode::Debate, CollaborationMode::Consensus]),
-        ("搜索任务".to_string(), vec![CollaborationMode::Parallel, CollaborationMode::RequestResponse]),
+        (
+            "数据处理".to_string(),
+            vec![
+                CollaborationMode::RequestResponse,
+                CollaborationMode::Parallel,
+            ],
+        ),
+        (
+            "创意生成".to_string(),
+            vec![
+                CollaborationMode::PublishSubscribe,
+                CollaborationMode::Debate,
+            ],
+        ),
+        (
+            "决策制定".to_string(),
+            vec![CollaborationMode::Consensus, CollaborationMode::Debate],
+        ),
+        (
+            "分析任务".to_string(),
+            vec![CollaborationMode::Parallel, CollaborationMode::Sequential],
+        ),
+        (
+            "审查任务".to_string(),
+            vec![CollaborationMode::Debate, CollaborationMode::Consensus],
+        ),
+        (
+            "搜索任务".to_string(),
+            vec![
+                CollaborationMode::Parallel,
+                CollaborationMode::RequestResponse,
+            ],
+        ),
     ])
 }
 
@@ -566,7 +602,10 @@ impl LLMDrivenCollaborationManager {
     }
 
     /// 注册协作协议
-    pub async fn register_protocol(&self, protocol: Arc<dyn CollaborationProtocol>) -> anyhow::Result<()> {
+    pub async fn register_protocol(
+        &self,
+        protocol: Arc<dyn CollaborationProtocol>,
+    ) -> anyhow::Result<()> {
         self.registry.register(protocol).await
     }
 
@@ -587,7 +626,10 @@ impl LLMDrivenCollaborationManager {
         }
 
         // 获取协议
-        let protocol = self.registry.get(protocol_name).await
+        let protocol = self
+            .registry
+            .get(protocol_name)
+            .await
             .ok_or_else(|| anyhow::anyhow!("Protocol not found: {}", protocol_name))?;
 
         // 更新当前协议
@@ -597,11 +639,7 @@ impl LLMDrivenCollaborationManager {
         }
 
         // 创建协作消息
-        let msg = CollaborationMessage::new(
-            self.agent_id.clone(),
-            content,
-            protocol.mode(),
-        );
+        let msg = CollaborationMessage::new(self.agent_id.clone(), content, protocol.mode());
 
         // 处理消息
         let result = protocol.process_message(msg).await;
@@ -622,8 +660,9 @@ impl LLMDrivenCollaborationManager {
                     // 更新平均执行时间
                     let total = stats.successful_tasks + stats.failed_tasks;
                     if total > 0 {
-                        stats.avg_duration_ms =
-                            (stats.avg_duration_ms * (total - 1) as f64 + duration as f64) / total as f64;
+                        stats.avg_duration_ms = (stats.avg_duration_ms * (total - 1) as f64
+                            + duration as f64)
+                            / total as f64;
                     }
                 }
 
@@ -687,8 +726,14 @@ mod tests {
 
     #[test]
     fn test_collaboration_mode_display() {
-        assert_eq!(CollaborationMode::RequestResponse.to_string(), "请求-响应模式");
-        assert_eq!(CollaborationMode::PublishSubscribe.to_string(), "发布-订阅模式");
+        assert_eq!(
+            CollaborationMode::RequestResponse.to_string(),
+            "请求-响应模式"
+        );
+        assert_eq!(
+            CollaborationMode::PublishSubscribe.to_string(),
+            "发布-订阅模式"
+        );
         assert_eq!(CollaborationMode::Consensus.to_string(), "共识机制模式");
     }
 

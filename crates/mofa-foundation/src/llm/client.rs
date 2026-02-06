@@ -3,6 +3,7 @@
 //! 提供便捷的 LLM 交互 API，包括消息管理、工具调用循环等
 
 use super::provider::{LLMConfig, LLMProvider};
+use super::tool_executor::ToolExecutor;
 use super::types::*;
 use std::sync::Arc;
 
@@ -183,6 +184,22 @@ impl ChatRequestBuilder {
         self
     }
 
+    /// 添加用户消息（结构化内容）
+    pub fn user_with_content(mut self, content: MessageContent) -> Self {
+        self.request
+            .messages
+            .push(ChatMessage::user_with_content(content));
+        self
+    }
+
+    /// 添加用户消息（多部分内容）
+    pub fn user_with_parts(mut self, parts: Vec<ContentPart>) -> Self {
+        self.request
+            .messages
+            .push(ChatMessage::user_with_parts(parts));
+        self
+    }
+
     /// 添加助手消息
     pub fn assistant(mut self, content: impl Into<String>) -> Self {
         self.request.messages.push(ChatMessage::assistant(content));
@@ -360,6 +377,19 @@ impl ChatRequestBuilder {
             .take()
             .ok_or_else(|| LLMError::ConfigError("Tool executor not set".to_string()))?;
 
+        if self
+            .request
+            .tools
+            .as_ref()
+            .map(|tools| tools.is_empty())
+            .unwrap_or(true)
+        {
+            let tools = executor.available_tools().await?;
+            if !tools.is_empty() {
+                self.request.tools = Some(tools);
+            }
+        }
+
         let max_rounds = self.max_tool_rounds;
         let mut round = 0;
 
@@ -406,25 +436,6 @@ impl ChatRequestBuilder {
     }
 }
 
-/// 工具执行器 trait
-///
-/// 实现此 trait 以支持自动工具调用
-#[async_trait::async_trait]
-pub trait ToolExecutor: Send + Sync {
-    /// 执行工具
-    ///
-    /// # 参数
-    /// - `name`: 工具名称
-    /// - `arguments`: JSON 格式的参数
-    ///
-    /// # 返回
-    /// 工具执行结果（JSON 格式）
-    async fn execute(&self, name: &str, arguments: &str) -> LLMResult<String>;
-
-    /// 获取可用工具列表
-    fn available_tools(&self) -> Vec<Tool>;
-}
-
 // ============================================================================
 // 会话管理
 // ============================================================================
@@ -467,9 +478,7 @@ pub struct ChatSession {
 
 impl ChatSession {
     /// 创建新会话（自动生成 ID）
-    pub fn new(
-        client: LLMClient,
-    ) -> Self {
+    pub fn new(client: LLMClient) -> Self {
         // 默认使用内存存储
         let store = Arc::new(crate::persistence::InMemoryStore::new());
         Self::with_id_and_stores(
@@ -506,10 +515,7 @@ impl ChatSession {
     }
 
     /// 使用指定 UUID 创建会话
-    pub fn with_id(
-        session_id: uuid::Uuid,
-        client: LLMClient,
-    ) -> Self {
+    pub fn with_id(session_id: uuid::Uuid, client: LLMClient) -> Self {
         // 默认使用内存存储
         let store = Arc::new(crate::persistence::InMemoryStore::new());
         Self {
@@ -532,13 +538,9 @@ impl ChatSession {
     }
 
     /// 使用指定字符串 ID 创建会话
-    pub fn with_id_str(
-        session_id: &str,
-        client: LLMClient,
-    ) -> Self {
+    pub fn with_id_str(session_id: &str, client: LLMClient) -> Self {
         // 尝试将字符串解析为 UUID，如果失败则生成新的 UUID
-        let session_id = uuid::Uuid::parse_str(session_id)
-            .unwrap_or_else(|_| uuid::Uuid::now_v7());
+        let session_id = uuid::Uuid::parse_str(session_id).unwrap_or_else(|_| uuid::Uuid::now_v7());
         Self::with_id(session_id, client)
     }
 
@@ -614,8 +616,8 @@ impl ChatSession {
         );
 
         // 持久化会话记录到数据库
-        let db_session = crate::persistence::ChatSession::new(user_id, agent_id)
-            .with_id(session_id);
+        let db_session =
+            crate::persistence::ChatSession::new(user_id, agent_id).with_id(session_id);
         session_store.create_session(&db_session).await?;
 
         Ok(session)
@@ -671,7 +673,9 @@ impl ChatSession {
         let _db_session = session_store
             .get_session(session_id)
             .await?
-            .ok_or_else(|| crate::persistence::PersistenceError::NotFound("Session not found".to_string()))?;
+            .ok_or_else(|| {
+                crate::persistence::PersistenceError::NotFound("Session not found".to_string())
+            })?;
 
         // Load messages from database
         // Use pagination when context_window_size is set to avoid loading all messages
@@ -706,7 +710,10 @@ impl ChatSession {
             };
 
             // Convert MessageContent to domain format
-            let domain_content = db_msg.content.text.map(crate::llm::types::MessageContent::Text);
+            let domain_content = db_msg
+                .content
+                .text
+                .map(crate::llm::types::MessageContent::Text);
 
             // Create domain message
             let domain_msg = ChatMessage {
@@ -796,6 +803,12 @@ impl ChatSession {
         self
     }
 
+    /// 仅设置工具执行器（工具列表自动发现）
+    pub fn with_tool_executor(mut self, executor: Arc<dyn ToolExecutor>) -> Self {
+        self.tool_executor = Some(executor);
+        self
+    }
+
     /// 发送消息
     pub async fn send(&mut self, content: impl Into<String>) -> LLMResult<String> {
         // 添加用户消息
@@ -814,11 +827,18 @@ impl ChatSession {
         builder = builder.messages(messages_for_context);
 
         // 添加工具
-        if !self.tools.is_empty() {
-            builder = builder.tools(self.tools.clone());
-            if let Some(ref executor) = self.tool_executor {
-                builder = builder.with_tool_executor(executor.clone());
+        if let Some(ref executor) = self.tool_executor {
+            let tools = if self.tools.is_empty() {
+                executor.available_tools().await?
+            } else {
+                self.tools.clone()
+            };
+
+            if !tools.is_empty() {
+                builder = builder.tools(tools);
             }
+
+            builder = builder.with_tool_executor(executor.clone());
         }
 
         // 发送请求
@@ -842,7 +862,67 @@ impl ChatSession {
 
         // 滑动窗口：裁剪历史消息以保持固定大小
         if self.context_window_size.is_some() {
-            self.messages = Self::apply_sliding_window_static(&self.messages, self.context_window_size);
+            self.messages =
+                Self::apply_sliding_window_static(&self.messages, self.context_window_size);
+        }
+
+        Ok(content)
+    }
+
+    /// 发送结构化消息（支持多模态）
+    pub async fn send_with_content(&mut self, content: MessageContent) -> LLMResult<String> {
+        self.messages.push(ChatMessage::user_with_content(content));
+
+        // 构建请求
+        let mut builder = self.client.chat();
+
+        // 添加系统提示
+        if let Some(ref system) = self.system_prompt {
+            builder = builder.system(system.clone());
+        }
+
+        // 添加历史消息（应用滑动窗口）
+        let messages_for_context = self.apply_sliding_window();
+        builder = builder.messages(messages_for_context);
+
+        // 添加工具
+        if let Some(ref executor) = self.tool_executor {
+            let tools = if self.tools.is_empty() {
+                executor.available_tools().await?
+            } else {
+                self.tools.clone()
+            };
+
+            if !tools.is_empty() {
+                builder = builder.tools(tools);
+            }
+
+            builder = builder.with_tool_executor(executor.clone());
+        }
+
+        // 发送请求
+        let response = if self.tool_executor.is_some() {
+            builder.send_with_tools().await?
+        } else {
+            builder.send().await?
+        };
+
+        // 存储响应元数据
+        self.last_response_metadata = Some(super::types::LLMResponseMetadata::from(&response));
+
+        // 提取响应内容
+        let content = response
+            .content()
+            .ok_or_else(|| LLMError::Other("No content in response".to_string()))?
+            .to_string();
+
+        // 添加助手消息到历史
+        self.messages.push(ChatMessage::assistant(&content));
+
+        // 滑动窗口：裁剪历史消息以保持固定大小
+        if self.context_window_size.is_some() {
+            self.messages =
+                Self::apply_sliding_window_static(&self.messages, self.context_window_size);
         }
 
         Ok(content)
@@ -983,12 +1063,9 @@ impl ChatSession {
     /// 保存会话和消息到数据库
     pub async fn save(&self) -> crate::persistence::PersistenceResult<()> {
         // Convert ChatSession to persistence entity
-        let db_session = crate::persistence::ChatSession::new(
-            self.user_id,
-            self.agent_id,
-        )
-        .with_id(self.session_id)
-        .with_metadata("client_version", serde_json::json!("0.1.0"));
+        let db_session = crate::persistence::ChatSession::new(self.user_id, self.agent_id)
+            .with_id(self.session_id)
+            .with_metadata("client_version", serde_json::json!("0.1.0"));
 
         // Save session
         self.session_store.create_session(&db_session).await?;
@@ -1010,7 +1087,8 @@ impl ChatSession {
                 }
                 Some(crate::llm::types::MessageContent::Parts(parts)) => {
                     // For now, only handle text parts
-                    let text = parts.iter()
+                    let text = parts
+                        .iter()
                         .filter_map(|part| {
                             if let crate::llm::types::ContentPart::Text { text } = part {
                                 Some(text.clone())
@@ -1049,9 +1127,7 @@ impl ChatSession {
             .await?;
 
         // Delete the session itself
-        self.session_store
-            .delete_session(self.session_id)
-            .await?;
+        self.session_store.delete_session(self.session_id).await?;
 
         Ok(())
     }

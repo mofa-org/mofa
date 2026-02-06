@@ -398,7 +398,10 @@ pub enum DefaultOutput {
     /// 状态更新
     StatusUpdate { todo_id: String, status: TodoStatus },
     /// 任务完成通知
-    TaskCompleted { todo_id: String, result: ExecutionResult },
+    TaskCompleted {
+        todo_id: String,
+        result: ExecutionResult,
+    },
     /// 错误消息
     Error { message: String },
     /// 通用消息（LLM生成）

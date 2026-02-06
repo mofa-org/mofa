@@ -15,12 +15,10 @@ mod metrics;
 mod server;
 mod websocket;
 
-pub use api::{
-    AgentStatus, ApiError, ApiResponse, PluginStatus, SystemStatus,
-};
+pub use api::{AgentStatus, ApiError, ApiResponse, PluginStatus, SystemStatus};
 pub use metrics::{
-    AgentMetrics, Gauge, Histogram, MetricType, MetricValue, MetricsCollector,
-    MetricsConfig, MetricsRegistry, MetricsSnapshot, PluginMetrics, SystemMetrics, WorkflowMetrics,
+    AgentMetrics, Gauge, Histogram, MetricType, MetricValue, MetricsCollector, MetricsConfig,
+    MetricsRegistry, MetricsSnapshot, PluginMetrics, SystemMetrics, WorkflowMetrics,
 };
 pub use server::{DashboardConfig, DashboardServer, ServerState};
 pub use websocket::{WebSocketClient, WebSocketHandler, WebSocketMessage};

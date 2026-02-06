@@ -3,11 +3,11 @@
 //! Provides REST API for monitoring data access
 
 use axum::{
-    extract::{Path, Query, State}, http::StatusCode,
+    Json, Router,
+    extract::{Path, Query, State},
+    http::StatusCode,
     response::IntoResponse,
     routing::get,
-    Json,
-    Router,
 };
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;

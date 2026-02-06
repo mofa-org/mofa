@@ -2,14 +2,14 @@
 //!
 //! 从 kernel 层导入 Tool trait，提供具体实现和扩展
 
+use async_trait::async_trait;
 use mofa_kernel::agent::components::tool::{
     ToolDescriptor, ToolInput, ToolMetadata, ToolRegistry, ToolResult,
 };
 use mofa_kernel::agent::context::AgentContext;
 use mofa_kernel::agent::error::AgentResult;
-use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::any::Any;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -185,7 +185,9 @@ impl<T: SimpleTool> SimpleToolAdapter<T> {
 }
 
 #[async_trait]
-impl<T: SimpleTool + Send + Sync + 'static> mofa_kernel::agent::components::tool::Tool for SimpleToolAdapter<T> {
+impl<T: SimpleTool + Send + Sync + 'static> mofa_kernel::agent::components::tool::Tool
+    for SimpleToolAdapter<T>
+{
     fn name(&self) -> &str {
         self.inner.name()
     }
@@ -229,7 +231,9 @@ impl<T: SimpleTool + 'static> ToolExt for SimpleToolAdapter<T> {
 /// let tool_ref = as_tool(tool);
 /// registry.register(tool_ref)?;
 /// ```
-pub fn as_tool<T: SimpleTool + Send + Sync + 'static>(tool: T) -> Arc<dyn mofa_kernel::agent::components::tool::Tool> {
+pub fn as_tool<T: SimpleTool + Send + Sync + 'static>(
+    tool: T,
+) -> Arc<dyn mofa_kernel::agent::components::tool::Tool> {
     Arc::new(SimpleToolAdapter::new(tool))
 }
 
@@ -261,7 +265,10 @@ impl Default for SimpleToolRegistry {
 
 #[async_trait]
 impl ToolRegistry for SimpleToolRegistry {
-    fn register(&mut self, tool: Arc<dyn mofa_kernel::agent::components::tool::Tool>) -> AgentResult<()> {
+    fn register(
+        &mut self,
+        tool: Arc<dyn mofa_kernel::agent::components::tool::Tool>,
+    ) -> AgentResult<()> {
         self.tools.insert(tool.name().to_string(), tool);
         Ok(())
     }
@@ -386,7 +393,11 @@ mod tests {
 
         let ctx = AgentContext::new("test");
         let result = registry
-            .execute("echo", ToolInput::from_json(json!({"message": "test"})), &ctx)
+            .execute(
+                "echo",
+                ToolInput::from_json(json!({"message": "test"})),
+                &ctx,
+            )
             .await
             .unwrap();
 
@@ -432,7 +443,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_simple_tool() {
-        let tool = TestSimpleTool { name: "test_tool".to_string() };
+        let tool = TestSimpleTool {
+            name: "test_tool".to_string(),
+        };
         let input = ToolInput::from_json(json!({"value": "hello"}));
 
         let result = tool.execute(input).await;
@@ -442,7 +455,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_simple_tool_adapter() {
-        let simple_tool = TestSimpleTool { name: "test_adapter".to_string() };
+        let simple_tool = TestSimpleTool {
+            name: "test_adapter".to_string(),
+        };
         let adapter = SimpleToolAdapter::new(simple_tool);
 
         assert_eq!(adapter.name(), "test_adapter");
@@ -452,14 +467,17 @@ mod tests {
         let ctx = AgentContext::new("test");
         let input = ToolInput::from_json(json!({"value": "world"}));
 
-        let result = mofa_kernel::agent::components::tool::Tool::execute(&adapter, input, &ctx).await;
+        let result =
+            mofa_kernel::agent::components::tool::Tool::execute(&adapter, input, &ctx).await;
         assert!(result.success);
         assert_eq!(result.as_text(), Some("Got: world"));
     }
 
     #[tokio::test]
     async fn test_as_tool_function() {
-        let simple_tool = TestSimpleTool { name: "test_as_tool".to_string() };
+        let simple_tool = TestSimpleTool {
+            name: "test_as_tool".to_string(),
+        };
         let tool_ref = as_tool(simple_tool);
 
         let mut registry = SimpleToolRegistry::new();
@@ -469,7 +487,11 @@ mod tests {
 
         let ctx = AgentContext::new("test");
         let result = registry
-            .execute("test_as_tool", ToolInput::from_json(json!({"value": "test"})), &ctx)
+            .execute(
+                "test_as_tool",
+                ToolInput::from_json(json!({"value": "test"})),
+                &ctx,
+            )
             .await
             .unwrap();
 

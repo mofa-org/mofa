@@ -3,7 +3,7 @@
 use super::types::*;
 use std::collections::HashMap;
 use std::sync::Arc;
-use tokio::sync::{mpsc, RwLock};
+use tokio::sync::{RwLock, mpsc};
 
 /// 监控事件
 #[derive(Debug, Clone)]
@@ -17,7 +17,10 @@ pub enum MonitorEvent {
         message: Option<String>,
     },
     /// 任务完成
-    TaskCompleted { task_id: String, result: ExecutionResult },
+    TaskCompleted {
+        task_id: String,
+        result: ExecutionResult,
+    },
     /// 任务失败
     TaskFailed { task_id: String, error: String },
     /// 需要决策
@@ -223,7 +226,10 @@ impl TaskMonitor {
     }
 
     /// 请求人类决策
-    pub async fn request_decision(&self, decision: CriticalDecision) -> anyhow::Result<HumanResponse> {
+    pub async fn request_decision(
+        &self,
+        decision: CriticalDecision,
+    ) -> anyhow::Result<HumanResponse> {
         let decision_id = decision.id.clone();
         let (tx, mut rx) = mpsc::channel(1);
 
@@ -235,7 +241,8 @@ impl TaskMonitor {
             responses.insert(decision_id.clone(), tx);
         }
 
-        self.emit_event(MonitorEvent::DecisionRequired { decision }).await;
+        self.emit_event(MonitorEvent::DecisionRequired { decision })
+            .await;
 
         // 等待人类响应
         rx.recv()
@@ -273,7 +280,9 @@ impl TaskMonitor {
         {
             let mut responses = self.decision_responses.write().await;
             if let Some(tx) = responses.remove(decision_id) {
-                tx.send(response).await.map_err(|_| anyhow::anyhow!("Failed to send response"))?;
+                tx.send(response)
+                    .await
+                    .map_err(|_| anyhow::anyhow!("Failed to send response"))?;
             }
         }
 
@@ -302,7 +311,8 @@ impl TaskMonitor {
                 progress,
                 message,
             } => {
-                self.update_task_status(&task_id, status, progress, message).await;
+                self.update_task_status(&task_id, status, progress, message)
+                    .await;
             }
             SecretaryMessage::TaskCompleteReport { task_id, result } => {
                 self.complete_task(&task_id, result).await;
@@ -311,7 +321,8 @@ impl TaskMonitor {
                 let mut pending = self.pending_decisions.write().await;
                 pending.insert(decision.id.clone(), decision.clone());
 
-                self.emit_event(MonitorEvent::DecisionRequired { decision }).await;
+                self.emit_event(MonitorEvent::DecisionRequired { decision })
+                    .await;
             }
             _ => {}
         }

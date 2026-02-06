@@ -9,7 +9,7 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
-use tokio::sync::{broadcast, RwLock};
+use tokio::sync::{RwLock, broadcast};
 
 /// Generic message bus for bidirectional messaging
 #[derive(Clone)]
@@ -26,7 +26,8 @@ where
     outbound_subscribers: Arc<RwLock<HashMap<String, Vec<OutboundCallback<U>>>>>,
 }
 
-type OutboundCallback<U> = Arc<dyn Fn(U) -> std::pin::Pin<Box<dyn std::future::Future<Output = ()> + Send>> + Send + Sync>;
+type OutboundCallback<U> =
+    Arc<dyn Fn(U) -> std::pin::Pin<Box<dyn std::future::Future<Output = ()> + Send>> + Send + Sync>;
 
 impl<T, U> MessageBus<T, U>
 where
@@ -335,8 +336,7 @@ mod tests {
 
     #[test]
     fn test_simple_outbound_message_with_reply() {
-        let msg = SimpleOutboundMessage::new("telegram", "123", "Response")
-            .with_reply_to("msg456");
+        let msg = SimpleOutboundMessage::new("telegram", "123", "Response").with_reply_to("msg456");
         assert_eq!(msg.reply_to, Some("msg456".to_string()));
     }
 }

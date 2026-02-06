@@ -122,7 +122,11 @@ impl RuleManager {
     }
 
     /// Update default rules for a plugin
-    pub fn update_default_rules(&mut self, plugin_id: &str, rules: HashMap<String, serde_json::Value>) {
+    pub fn update_default_rules(
+        &mut self,
+        plugin_id: &str,
+        rules: HashMap<String, serde_json::Value>,
+    ) {
         self.default_rules.insert(plugin_id.to_string(), rules);
     }
 }

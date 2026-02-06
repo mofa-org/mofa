@@ -34,9 +34,7 @@ impl SkillsManager {
             controller.scan_metadata()?;
         }
 
-        Ok(Self {
-            controller,
-        })
+        Ok(Self { controller })
     }
 
     /// 创建支持多目录搜索的 Skills Manager
@@ -141,9 +139,10 @@ impl SkillsManager {
 
         for name in skill_names {
             if let Some(content) = self.load_skill_async(name).await
-                && !content.is_empty() {
-                    parts.push(format!("### Skill: {}\n\n{}", name, content));
-                }
+                && !content.is_empty()
+            {
+                parts.push(format!("### Skill: {}\n\n{}", name, content));
+            }
         }
 
         parts.join("\n\n---\n\n")
@@ -194,7 +193,9 @@ impl SkillsManager {
         for metadata in all_metadata {
             let name = escape_xml(&metadata.name);
             let desc = escape_xml(&metadata.description);
-            let path = self.controller.get_skill_path(&metadata.name)
+            let path = self
+                .controller
+                .get_skill_path(&metadata.name)
                 .map(|p| p.display().to_string())
                 .unwrap_or_default();
             let check = self.check_requirements_async(&metadata.name).await;
@@ -207,7 +208,9 @@ impl SkillsManager {
 
             // Show missing requirements for unavailable skills
             if !available {
-                let missing = check.missing.iter()
+                let missing = check
+                    .missing
+                    .iter()
                     .map(|r| match r {
                         super::Requirement::CliTool(t) => format!("CLI: {}", t),
                         super::Requirement::EnvVar(v) => format!("ENV: {}", v),
@@ -286,7 +289,9 @@ impl SkillsManager {
 
         for metadata in all_metadata {
             let name = metadata.name.clone();
-            let path = self.controller.get_skill_path(&name)
+            let path = self
+                .controller
+                .get_skill_path(&name)
                 .map(|p| p.display().to_string())
                 .unwrap_or_default();
             let source = "skills".to_string();
@@ -298,11 +303,7 @@ impl SkillsManager {
                 }
             }
 
-            skills.push(SkillInfo {
-                name,
-                path,
-                source,
-            });
+            skills.push(SkillInfo { name, path, source });
         }
 
         skills
@@ -334,7 +335,8 @@ mod tests {
         let skill_dir = dir.join(name);
         fs::create_dir_all(&skill_dir)?;
 
-        let content = format!(r#"---
+        let content = format!(
+            r#"---
 name: {}
 description: {}
 category: test
@@ -344,7 +346,9 @@ version: "1.0.0"
 
 # {} Skill
 
-This is a test skill."#, name, description, name);
+This is a test skill."#,
+            name, description, name
+        );
 
         fs::write(skill_dir.join("SKILL.md"), content)?;
         Ok(())

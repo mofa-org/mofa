@@ -2,11 +2,11 @@
 //!
 //! 整合内置工具、MCP 工具、自定义工具的注册中心
 
+use async_trait::async_trait;
 use mofa_kernel::agent::components::tool::{
     Tool, ToolDescriptor, ToolRegistry as ToolRegistryTrait,
 };
 use mofa_kernel::agent::error::AgentResult;
-use async_trait::async_trait;
 use std::collections::HashMap;
 use std::sync::Arc;
 
@@ -66,7 +66,11 @@ impl ToolRegistry {
     }
 
     /// 注册工具并记录来源
-    pub fn register_with_source(&mut self, tool: Arc<dyn Tool>, source: ToolSource) -> AgentResult<()> {
+    pub fn register_with_source(
+        &mut self,
+        tool: Arc<dyn Tool>,
+        source: ToolSource,
+    ) -> AgentResult<()> {
         let name = tool.name().to_string();
         self.sources.insert(name.clone(), source);
         self.tools.insert(name, tool);
@@ -93,9 +97,10 @@ impl ToolRegistry {
             .iter()
             .filter_map(|(name, source)| {
                 if let ToolSource::Mcp { endpoint: ep } = source
-                    && ep == endpoint {
-                        return Some(name.clone());
-                    }
+                    && ep == endpoint
+                {
+                    return Some(name.clone());
+                }
                 None
             })
             .collect();

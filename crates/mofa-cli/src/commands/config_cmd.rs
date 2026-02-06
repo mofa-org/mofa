@@ -2,7 +2,7 @@
 
 use colored::Colorize;
 use mofa_kernel::config::{load_config, substitute_env_vars};
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::collections::HashMap;
 use std::fs;
 use std::path::PathBuf;
@@ -22,7 +22,12 @@ pub fn run_get(key: &str) -> anyhow::Result<()> {
 
 /// Execute the `mofa config set` command
 pub fn run_set(key: &str, value: &str) -> anyhow::Result<()> {
-    println!("{} Setting config: {} = {}", "->".green(), key.cyan(), value.white());
+    println!(
+        "{} Setting config: {} = {}",
+        "->".green(),
+        key.cyan(),
+        value.white()
+    );
 
     let mut config = load_global_config()?;
     config.insert(key.to_string(), value.to_string());
@@ -77,7 +82,10 @@ pub fn run_validate(config_path: Option<PathBuf>) -> anyhow::Result<()> {
         find_config_file().ok_or_else(|| anyhow::anyhow!("No config file found"))?
     };
 
-    println!("  Config file: {}", config_path.display().to_string().cyan());
+    println!(
+        "  Config file: {}",
+        config_path.display().to_string().cyan()
+    );
 
     // Load and validate the config
     match validate_config_file(&config_path) {
@@ -148,7 +156,8 @@ fn save_global_config(config: HashMap<String, String>) -> anyhow::Result<()> {
 /// Find a config file in the current directory or parent directories
 fn find_config_file() -> Option<PathBuf> {
     let supported_filenames = [
-        "agent.yml", "agent.yaml",
+        "agent.yml",
+        "agent.yaml",
         "agent.toml",
         "agent.json",
         "agent.ini",
@@ -193,18 +202,12 @@ fn validate_config_file(path: &PathBuf) -> anyhow::Result<()> {
     let result = match path.extension().and_then(|e| e.to_str()) {
         Some(ext) => {
             match ext.to_lowercase().as_str() {
-                "yaml" | "yml" => {
-                    serde_yaml::from_str::<Value>(&substituted)
-                        .map_err(|e| anyhow::anyhow!("YAML parsing error: {}", e))
-                }
-                "toml" => {
-                    toml::from_str::<Value>(&substituted)
-                        .map_err(|e| anyhow::anyhow!("TOML parsing error: {}", e))
-                }
-                "json" => {
-                    serde_json::from_str::<Value>(&substituted)
-                        .map_err(|e| anyhow::anyhow!("JSON parsing error: {}", e))
-                }
+                "yaml" | "yml" => serde_yaml::from_str::<Value>(&substituted)
+                    .map_err(|e| anyhow::anyhow!("YAML parsing error: {}", e)),
+                "toml" => toml::from_str::<Value>(&substituted)
+                    .map_err(|e| anyhow::anyhow!("TOML parsing error: {}", e)),
+                "json" => serde_json::from_str::<Value>(&substituted)
+                    .map_err(|e| anyhow::anyhow!("JSON parsing error: {}", e)),
                 "json5" => {
                     // Try to parse as JSON5 (fall back to JSON for validation)
                     serde_json::from_str::<Value>(&substituted)
@@ -230,22 +233,23 @@ fn validate_config_file(path: &PathBuf) -> anyhow::Result<()> {
 
     // Validate required fields
     if let Ok(config) = result
-        && let Some(obj) = config.as_object() {
-            // Check for agent section
-            if !obj.contains_key("agent") {
-                return Err(anyhow::anyhow!("Missing required 'agent' section"));
-            }
+        && let Some(obj) = config.as_object()
+    {
+        // Check for agent section
+        if !obj.contains_key("agent") {
+            return Err(anyhow::anyhow!("Missing required 'agent' section"));
+        }
 
-            // Check for required agent fields
-            if let Some(agent) = obj.get("agent").and_then(|v| v.as_object()) {
-                if !agent.contains_key("id") {
-                    return Err(anyhow::anyhow!("Missing required 'agent.id' field"));
-                }
-                if !agent.contains_key("name") {
-                    return Err(anyhow::anyhow!("Missing required 'agent.name' field"));
-                }
+        // Check for required agent fields
+        if let Some(agent) = obj.get("agent").and_then(|v| v.as_object()) {
+            if !agent.contains_key("id") {
+                return Err(anyhow::anyhow!("Missing required 'agent.id' field"));
+            }
+            if !agent.contains_key("name") {
+                return Err(anyhow::anyhow!("Missing required 'agent.name' field"));
             }
         }
+    }
 
     Ok(())
 }

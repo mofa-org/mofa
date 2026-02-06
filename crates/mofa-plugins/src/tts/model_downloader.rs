@@ -4,9 +4,10 @@
 //! with progress tracking, checksum validation, and retry logic.
 
 use super::cache::{ModelCache, ModelMetadata};
-use anyhow::{anyhow, bail, Context, Result};
-use backoff::future::retry;
+use anyhow::{Context, Result, anyhow, bail};
 use backoff::ExponentialBackoff;
+use backoff::future::retry;
+use futures::stream::StreamExt;
 use md5::{Digest, Md5};
 use reqwest::Client;
 use std::fs;
@@ -15,7 +16,6 @@ use std::time::{Duration, SystemTime};
 use tokio::io::AsyncWriteExt;
 use tokio::sync::Semaphore;
 use tracing::{debug, error, info, warn};
-use futures::stream::StreamExt;
 
 /// Download progress callback type
 pub type ProgressCallback = Box<dyn Fn(u64, u64) + Send + Sync>;
@@ -96,10 +96,7 @@ impl HFHubClient {
 
     /// Get direct download URL for a model file
     pub fn get_download_url(&self, model_id: &str, filename: &str) -> String {
-        format!(
-            "{}/{}/resolve/main/{}",
-            self.api_base, model_id, filename
-        )
+        format!("{}/{}/resolve/main/{}", self.api_base, model_id, filename)
     }
 
     /// Download model file with progress tracking
@@ -122,13 +119,13 @@ impl HFHubClient {
         // Check if model already exists and is valid
         if cache.exists(&config.model_id).await
             && let Some(expected_checksum) = &config.checksum
-                && cache
-                    .validate(&config.model_id, Some(expected_checksum))
-                    .await?
-                {
-                    info!("Model already cached and valid: {}", config.model_id);
-                    return Ok(cache.model_path(&config.model_id));
-                }
+            && cache
+                .validate(&config.model_id, Some(expected_checksum))
+                .await?
+        {
+            info!("Model already cached and valid: {}", config.model_id);
+            return Ok(cache.model_path(&config.model_id));
+        }
 
         // Get download URL
         let download_url = self.get_download_url(&config.model_id, &config.filename);
@@ -147,14 +144,16 @@ impl HFHubClient {
 
         // Validate checksum if provided
         if let Some(expected) = &config.checksum
-            && actual_checksum != *expected {
-                error!("Checksum validation failed");
-                fs::remove_file(&output_path)?;
-                bail!(
-                    "Downloaded file checksum mismatch. Expected: {}, Got: {}",
-                    expected, actual_checksum
-                );
-            }
+            && actual_checksum != *expected
+        {
+            error!("Checksum validation failed");
+            fs::remove_file(&output_path)?;
+            bail!(
+                "Downloaded file checksum mismatch. Expected: {}, Got: {}",
+                expected,
+                actual_checksum
+            );
+        }
 
         // Save metadata
         let metadata = ModelMetadata {
@@ -267,8 +266,7 @@ impl HFHubClient {
 
     /// Calculate MD5 checksum of a file
     fn calculate_checksum(&self, path: &std::path::PathBuf) -> Result<String> {
-        let file = fs::File::open(path)
-            .context(format!("Failed to open file: {:?}", path))?;
+        let file = fs::File::open(path).context(format!("Failed to open file: {:?}", path))?;
 
         let mut hasher = Md5::new();
         let mut reader = std::io::BufReader::new(file);
