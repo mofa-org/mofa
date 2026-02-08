@@ -1,3 +1,4 @@
+#![allow(dead_code, unused_imports, improper_ctypes_definitions)]
 //! 插件机制模块
 //!
 //! 提供完整的插件系统，支持：

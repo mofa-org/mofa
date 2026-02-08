@@ -36,6 +36,8 @@ pub enum LLMProviderType {
     Ollama,
     Azure,
     Compatible,
+    Anthropic,
+    Gemini,
 }
 
 /// Chat message role
@@ -104,33 +106,23 @@ pub struct LLMAgent {
 impl LLMAgent {
     /// Create from configuration file (agent.yml)
     pub fn from_config_file(config_path: String) -> Result<Self, MoFaError> {
-        #[cfg(feature = "openai")]
-        {
-            let runtime = tokio::runtime::Runtime::new()
-                .map_err(|e| MoFaError::RuntimeError(e.to_string()))?;
+        let runtime =
+            tokio::runtime::Runtime::new().map_err(|e| MoFaError::RuntimeError(e.to_string()))?;
 
-            let agent = mofa_foundation::llm::agent_from_config(&config_path)
-                .map_err(|e| MoFaError::ConfigError(e.to_string()))?;
+        let agent = mofa_foundation::llm::agent_from_config(&config_path)
+            .map_err(|e| MoFaError::ConfigError(e.to_string()))?;
 
-            let agent_id = agent.config().agent_id.clone();
-            let name = agent.config().name.clone();
+        let agent_id = agent.config().agent_id.clone();
+        let name = agent.config().name.clone();
 
-            Ok(Self {
-                agent_id,
-                name,
-                inner: Arc::new(RwLock::new(agent)),
-                _inner: std::marker::PhantomData,
-                runtime: Arc::new(runtime),
-                _runtime: std::marker::PhantomData,
-            })
-        }
-        #[cfg(not(feature = "openai"))]
-        {
-            let _ = config_path;
-            Err(MoFaError::ConfigError(
-                "OpenAI feature not enabled. Rebuild with --features openai".to_string(),
-            ))
-        }
+        Ok(Self {
+            agent_id,
+            name,
+            inner: Arc::new(RwLock::new(agent)),
+            _inner: std::marker::PhantomData,
+            runtime: Arc::new(runtime),
+            _runtime: std::marker::PhantomData,
+        })
     }
 
     /// Create from configuration dictionary
@@ -139,106 +131,147 @@ impl LLMAgent {
         agent_id: String,
         name: String,
     ) -> Result<Self, MoFaError> {
-        #[cfg(feature = "openai")]
-        {
-            use mofa_foundation::llm::{LLMAgentBuilder, OpenAIConfig, OpenAIProvider};
+        use mofa_foundation::llm::{
+            AnthropicConfig, AnthropicProvider, GeminiConfig, GeminiProvider, LLMAgentBuilder,
+            OpenAIConfig, OpenAIProvider,
+        };
 
-            let runtime = tokio::runtime::Runtime::new()
-                .map_err(|e| MoFaError::RuntimeError(e.to_string()))?;
+        let runtime =
+            tokio::runtime::Runtime::new().map_err(|e| MoFaError::RuntimeError(e.to_string()))?;
 
-            let mut builder = LLMAgentBuilder::new().with_id(&agent_id).with_name(&name);
+        let mut builder = LLMAgentBuilder::new().with_id(&agent_id).with_name(&name);
 
-            // Create provider based on config
-            let provider: Arc<dyn mofa_foundation::llm::LLMProvider> = match config.provider {
-                LLMProviderType::OpenAI => {
-                    let api_key = config
-                        .api_key
-                        .clone()
-                        .or_else(|| std::env::var("OPENAI_API_KEY").ok())
-                        .ok_or_else(|| {
-                            MoFaError::ConfigError("OpenAI API key not set".to_string())
-                        })?;
+        // Create provider based on config
+        let provider: Arc<dyn mofa_foundation::llm::LLMProvider> = match config.provider {
+            LLMProviderType::OpenAI => {
+                let api_key = config
+                    .api_key
+                    .clone()
+                    .or_else(|| std::env::var("OPENAI_API_KEY").ok())
+                    .ok_or_else(|| MoFaError::ConfigError("OpenAI API key not set".to_string()))?;
 
-                    let mut oai_config = OpenAIConfig::new(api_key);
-                    if let Some(model) = config.model.clone() {
-                        oai_config = oai_config.with_model(model);
-                    }
-                    if let Some(base_url) = config.base_url.clone() {
-                        oai_config = oai_config.with_base_url(base_url);
-                    }
-                    if let Some(temp) = config.temperature {
-                        oai_config = oai_config.with_temperature(temp);
-                    }
-                    if let Some(tokens) = config.max_tokens {
-                        oai_config = oai_config.with_max_tokens(tokens);
-                    }
-                    Arc::new(OpenAIProvider::with_config(oai_config))
+                let mut oai_config = OpenAIConfig::new(api_key);
+                if let Some(model) = config.model.clone() {
+                    oai_config = oai_config.with_model(model);
                 }
-                LLMProviderType::Ollama => {
-                    let model = config.model.clone().unwrap_or_else(|| "llama2".to_string());
-                    Arc::new(OpenAIProvider::ollama(model))
+                if let Some(base_url) = config.base_url.clone() {
+                    oai_config = oai_config.with_base_url(base_url);
                 }
-                LLMProviderType::Azure => {
-                    let endpoint = config.base_url.clone().ok_or_else(|| {
-                        MoFaError::ConfigError("Azure endpoint not set".to_string())
+                if let Some(temp) = config.temperature {
+                    oai_config = oai_config.with_temperature(temp);
+                }
+                if let Some(tokens) = config.max_tokens {
+                    oai_config = oai_config.with_max_tokens(tokens);
+                }
+                Arc::new(OpenAIProvider::with_config(oai_config))
+            }
+            LLMProviderType::Ollama => {
+                let model = config.model.clone().unwrap_or_else(|| "llama2".to_string());
+                Arc::new(OpenAIProvider::ollama(model))
+            }
+            LLMProviderType::Azure => {
+                let endpoint = config
+                    .base_url
+                    .clone()
+                    .ok_or_else(|| MoFaError::ConfigError("Azure endpoint not set".to_string()))?;
+                let api_key = config
+                    .api_key
+                    .clone()
+                    .ok_or_else(|| MoFaError::ConfigError("Azure API key not set".to_string()))?;
+                let deployment = config
+                    .deployment
+                    .clone()
+                    .or(config.model.clone())
+                    .ok_or_else(|| {
+                        MoFaError::ConfigError("Azure deployment not set".to_string())
                     })?;
-                    let api_key = config.api_key.clone().ok_or_else(|| {
-                        MoFaError::ConfigError("Azure API key not set".to_string())
+                Arc::new(OpenAIProvider::azure(endpoint, api_key, deployment))
+            }
+            LLMProviderType::Compatible => {
+                let base_url = config
+                    .base_url
+                    .clone()
+                    .ok_or_else(|| MoFaError::ConfigError("base_url not set".to_string()))?;
+                let model = config
+                    .model
+                    .clone()
+                    .unwrap_or_else(|| "default".to_string());
+                Arc::new(OpenAIProvider::local(base_url, model))
+            }
+            LLMProviderType::Anthropic => {
+                let api_key = config
+                    .api_key
+                    .clone()
+                    .or_else(|| std::env::var("ANTHROPIC_API_KEY").ok())
+                    .ok_or_else(|| {
+                        MoFaError::ConfigError("Anthropic API key not set".to_string())
                     })?;
-                    let deployment = config
-                        .deployment
-                        .clone()
-                        .or(config.model.clone())
-                        .ok_or_else(|| {
-                            MoFaError::ConfigError("Azure deployment not set".to_string())
-                        })?;
-                    Arc::new(OpenAIProvider::azure(endpoint, api_key, deployment))
+
+                let mut a_cfg = AnthropicConfig::new(api_key);
+                if let Some(model) = config.model.clone() {
+                    a_cfg = a_cfg.with_model(model);
                 }
-                LLMProviderType::Compatible => {
-                    let base_url = config
-                        .base_url
-                        .clone()
-                        .ok_or_else(|| MoFaError::ConfigError("base_url not set".to_string()))?;
-                    let model = config
-                        .model
-                        .clone()
-                        .unwrap_or_else(|| "default".to_string());
-                    Arc::new(OpenAIProvider::local(base_url, model))
+                if let Some(base_url) = config.base_url.clone() {
+                    a_cfg = a_cfg.with_base_url(base_url);
                 }
-            };
+                if let Some(temp) = config.temperature {
+                    a_cfg = a_cfg.with_temperature(temp);
+                }
+                if let Some(tokens) = config.max_tokens {
+                    a_cfg = a_cfg.with_max_tokens(tokens);
+                }
 
-            builder = builder.with_provider(provider);
-
-            if let Some(temp) = config.temperature {
-                builder = builder.with_temperature(temp);
+                Arc::new(AnthropicProvider::with_config(a_cfg))
             }
-            if let Some(tokens) = config.max_tokens {
-                builder = builder.with_max_tokens(tokens);
-            }
-            if let Some(prompt) = config.system_prompt {
-                builder = builder.with_system_prompt(prompt);
-            }
+            LLMProviderType::Gemini => {
+                let api_key = config
+                    .api_key
+                    .clone()
+                    .or_else(|| std::env::var("GEMINI_API_KEY").ok())
+                    .ok_or_else(|| MoFaError::ConfigError("Gemini API key not set".to_string()))?;
 
-            let inner_agent = builder
-                .try_build()
-                .map_err(|e| MoFaError::ConfigError(e.to_string()))?;
+                let mut g_cfg = GeminiConfig::new(api_key);
+                if let Some(model) = config.model.clone() {
+                    g_cfg = g_cfg.with_model(model);
+                }
+                if let Some(base_url) = config.base_url.clone() {
+                    g_cfg = g_cfg.with_base_url(base_url);
+                }
+                if let Some(temp) = config.temperature {
+                    g_cfg = g_cfg.with_temperature(temp);
+                }
+                if let Some(tokens) = config.max_tokens {
+                    g_cfg = g_cfg.with_max_tokens(tokens);
+                }
 
-            Ok(Self {
-                agent_id,
-                name,
-                inner: Arc::new(RwLock::new(inner_agent)),
-                _inner: std::marker::PhantomData,
-                runtime: Arc::new(runtime),
-                _runtime: std::marker::PhantomData,
-            })
+                Arc::new(GeminiProvider::with_config(g_cfg))
+            }
+        };
+
+        builder = builder.with_provider(provider);
+
+        if let Some(temp) = config.temperature {
+            builder = builder.with_temperature(temp);
         }
-        #[cfg(not(feature = "openai"))]
-        {
-            let _ = (config, agent_id, name);
-            Err(MoFaError::ConfigError(
-                "OpenAI feature not enabled. Rebuild with --features openai".to_string(),
-            ))
+        if let Some(tokens) = config.max_tokens {
+            builder = builder.with_max_tokens(tokens);
         }
+        if let Some(prompt) = config.system_prompt {
+            builder = builder.with_system_prompt(prompt);
+        }
+
+        let inner_agent = builder
+            .try_build()
+            .map_err(|e| MoFaError::ConfigError(e.to_string()))?;
+
+        Ok(Self {
+            agent_id,
+            name,
+            inner: Arc::new(RwLock::new(inner_agent)),
+            _inner: std::marker::PhantomData,
+            runtime: Arc::new(runtime),
+            _runtime: std::marker::PhantomData,
+        })
     }
 
     /// Get agent ID
@@ -262,13 +295,6 @@ impl LLMAgent {
                     .map_err(|e| MoFaError::LLMError(e.to_string()))
             })
         }
-        #[cfg(not(feature = "openai"))]
-        {
-            let _ = question;
-            Err(MoFaError::ConfigError(
-                "OpenAI feature not enabled".to_string(),
-            ))
-        }
     }
 
     /// Multi-turn chat (with context retention)
@@ -281,13 +307,6 @@ impl LLMAgent {
                     .await
                     .map_err(|e| MoFaError::LLMError(e.to_string()))
             })
-        }
-        #[cfg(not(feature = "openai"))]
-        {
-            let _ = message;
-            Err(MoFaError::ConfigError(
-                "OpenAI feature not enabled".to_string(),
-            ))
         }
     }
 
@@ -329,10 +348,6 @@ impl LLMAgent {
                     })
                     .collect()
             })
-        }
-        #[cfg(not(feature = "openai"))]
-        {
-            Vec::new()
         }
     }
 }
@@ -488,98 +503,88 @@ impl LLMAgentBuilder {
 
     /// Build the LLMAgent synchronously
     pub fn build(self: Arc<Self>) -> Result<Arc<LLMAgent>, MoFaError> {
-        #[cfg(feature = "openai")]
-        {
-            use mofa_foundation::llm::{LLMAgentBuilder, OpenAIConfig, OpenAIProvider};
-            use std::sync::Arc as StdArc;
+        use mofa_foundation::llm::{LLMAgentBuilder, OpenAIConfig, OpenAIProvider};
+        use std::sync::Arc as StdArc;
 
-            let state = self.state.lock().unwrap();
+        let state = self.state.lock().unwrap();
 
-            // Get or generate agent_id
-            let agent_id = state
-                .agent_id
-                .clone()
-                .unwrap_or_else(|| uuid::Uuid::now_v7().to_string());
+        // Get or generate agent_id
+        let agent_id = state
+            .agent_id
+            .clone()
+            .unwrap_or_else(|| uuid::Uuid::now_v7().to_string());
 
-            let mut builder = LLMAgentBuilder::new().with_id(&agent_id);
+        let mut builder = LLMAgentBuilder::new().with_id(&agent_id);
 
-            // Set name if provided
-            if let Some(ref name) = state.name {
-                builder = builder.with_name(name);
-            }
-
-            // Set system prompt if provided
-            if let Some(ref prompt) = state.system_prompt {
-                builder = builder.with_system_prompt(prompt);
-            }
-
-            // Set temperature if provided
-            if let Some(temp) = state.temperature {
-                builder = builder.with_temperature(temp);
-            }
-
-            // Set max tokens if provided
-            if let Some(tokens) = state.max_tokens {
-                builder = builder.with_max_tokens(tokens);
-            }
-
-            // Set session ID if provided
-            if let Some(ref session_id) = state.session_id {
-                builder = builder.with_session_id(session_id);
-            }
-
-            // Set user ID if provided
-            if let Some(ref user_id) = state.user_id {
-                builder = builder.with_user(user_id);
-            }
-
-            // Set tenant ID if provided
-            if let Some(ref tenant_id) = state.tenant_id {
-                builder = builder.with_tenant(tenant_id);
-            }
-
-            // Set context window size if provided
-            if let Some(size) = state.context_window_size {
-                builder = builder.with_sliding_window(size);
-            }
-
-            // Set OpenAI provider if API key is provided
-            if let Some(ref api_key) = state.openai_api_key {
-                let mut config = OpenAIConfig::new(api_key.clone());
-                if let Some(ref base_url) = state.openai_base_url {
-                    config = config.with_base_url(base_url);
-                }
-                if let Some(ref model) = state.openai_model {
-                    config = config.with_model(model);
-                }
-                let provider = StdArc::new(OpenAIProvider::with_config(config));
-                builder = builder.with_provider(provider);
-            }
-
-            drop(state);
-
-            let inner_agent = builder
-                .try_build()
-                .map_err(|e| MoFaError::ConfigError(e.to_string()))?;
-
-            let agent_id = inner_agent.config().agent_id.clone();
-            let name = inner_agent.config().name.clone();
-
-            Ok(Arc::new(LLMAgent {
-                agent_id,
-                name,
-                inner: Arc::new(RwLock::new(inner_agent)),
-                _inner: std::marker::PhantomData,
-                runtime: self.runtime.clone(),
-                _runtime: std::marker::PhantomData,
-            }))
+        // Set name if provided
+        if let Some(ref name) = state.name {
+            builder = builder.with_name(name);
         }
 
-        #[cfg(not(feature = "openai"))]
-        {
-            Err(MoFaError::ConfigError(
-                "OpenAI feature not enabled. Rebuild with --features openai".to_string(),
-            ))
+        // Set system prompt if provided
+        if let Some(ref prompt) = state.system_prompt {
+            builder = builder.with_system_prompt(prompt);
         }
+
+        // Set temperature if provided
+        if let Some(temp) = state.temperature {
+            builder = builder.with_temperature(temp);
+        }
+
+        // Set max tokens if provided
+        if let Some(tokens) = state.max_tokens {
+            builder = builder.with_max_tokens(tokens);
+        }
+
+        // Set session ID if provided
+        if let Some(ref session_id) = state.session_id {
+            builder = builder.with_session_id(session_id);
+        }
+
+        // Set user ID if provided
+        if let Some(ref user_id) = state.user_id {
+            builder = builder.with_user(user_id);
+        }
+
+        // Set tenant ID if provided
+        if let Some(ref tenant_id) = state.tenant_id {
+            builder = builder.with_tenant(tenant_id);
+        }
+
+        // Set context window size if provided
+        if let Some(size) = state.context_window_size {
+            builder = builder.with_sliding_window(size);
+        }
+
+        // Set OpenAI provider if API key is provided
+        if let Some(ref api_key) = state.openai_api_key {
+            let mut config = OpenAIConfig::new(api_key.clone());
+            if let Some(ref base_url) = state.openai_base_url {
+                config = config.with_base_url(base_url);
+            }
+            if let Some(ref model) = state.openai_model {
+                config = config.with_model(model);
+            }
+            let provider = StdArc::new(OpenAIProvider::with_config(config));
+            builder = builder.with_provider(provider);
+        }
+
+        drop(state);
+
+        let inner_agent = builder
+            .try_build()
+            .map_err(|e| MoFaError::ConfigError(e.to_string()))?;
+
+        let agent_id = inner_agent.config().agent_id.clone();
+        let name = inner_agent.config().name.clone();
+
+        Ok(Arc::new(LLMAgent {
+            agent_id,
+            name,
+            inner: Arc::new(RwLock::new(inner_agent)),
+            _inner: std::marker::PhantomData,
+            runtime: self.runtime.clone(),
+            _runtime: std::marker::PhantomData,
+        }))
     }
 }

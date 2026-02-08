@@ -268,6 +268,8 @@ pub mod types;
 
 // 高级 API
 pub mod agent_workflow;
+pub mod anthropic;
+pub mod google;
 pub mod multi_agent;
 pub mod openai;
 pub mod pipeline;
@@ -303,6 +305,10 @@ pub use agent::agent_from_config;
 
 // Re-export OpenAI Provider (when enabled)
 pub use openai::{OpenAIConfig, OpenAIProvider};
+// Re-export Anthropic Provider
+pub use anthropic::{AnthropicConfig, AnthropicProvider};
+// Re-export Google Gemini Provider
+pub use google::{GeminiConfig, GeminiProvider};
 
 // Re-export 高级 API
 pub use agent_workflow::{

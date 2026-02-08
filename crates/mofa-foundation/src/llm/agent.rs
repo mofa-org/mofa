@@ -2410,7 +2410,6 @@ impl LLMAgentBuilder {
     ///     .with_system_prompt("You are a helpful assistant.")
     ///     .build();
     /// ```
-    #[cfg(feature = "openai")]
     pub fn from_env() -> LLMResult<Self> {
         use super::openai::{OpenAIConfig, OpenAIProvider};
 
@@ -2889,6 +2888,34 @@ impl LLMAgentBuilder {
                 }
 
                 Arc::new(OpenAIProvider::with_config(openai_config))
+            }
+            "anthropic" => {
+                let mut cfg = AnthropicConfig::new(provider.api_key.clone());
+                cfg = cfg.with_base_url(&provider.api_base);
+                cfg = cfg.with_model(&agent.model_name);
+
+                if let Some(temp) = agent.temperature {
+                    cfg = cfg.with_temperature(temp);
+                }
+                if let Some(tokens) = agent.max_completion_tokens {
+                    cfg = cfg.with_max_tokens(tokens as u32);
+                }
+
+                Arc::new(AnthropicProvider::with_config(cfg))
+            }
+            "gemini" => {
+                let mut cfg = GeminiConfig::new(provider.api_key.clone());
+                cfg = cfg.with_base_url(&provider.api_base);
+                cfg = cfg.with_model(&agent.model_name);
+
+                if let Some(temp) = agent.temperature {
+                    cfg = cfg.with_temperature(temp);
+                }
+                if let Some(tokens) = agent.max_completion_tokens {
+                    cfg = cfg.with_max_tokens(tokens as u32);
+                }
+
+                Arc::new(GeminiProvider::with_config(cfg))
             }
             other => {
                 return Err(LLMError::Other(format!(

@@ -422,6 +422,8 @@ pub mod llm {
     //! ```
 
     pub use crate::llm_tools::ToolPluginExecutor;
+    pub use mofa_foundation::llm::anthropic::{AnthropicConfig, AnthropicProvider};
+    pub use mofa_foundation::llm::google::{GeminiConfig, GeminiProvider};
     pub use mofa_foundation::llm::openai::{OpenAIConfig, OpenAIProvider};
     pub use mofa_foundation::llm::*;
 
@@ -439,7 +441,6 @@ pub mod llm {
     ///
     /// let provider = openai_from_env().unwrap();
     /// ```
-    #[cfg(feature = "openai")]
     pub fn openai_from_env() -> Result<OpenAIProvider, crate::llm::LLMError> {
         let api_key = std::env::var("OPENAI_API_KEY").map_err(|_| {
             crate::llm::LLMError::ConfigError(
@@ -459,6 +460,52 @@ pub mod llm {
 
         Ok(OpenAIProvider::with_config(config))
     }
+}
+
+/// 从环境变量创建 Anthropic 提供器
+///
+/// 读取环境变量:
+/// - ANTHROPIC_API_KEY (必需)
+/// - ANTHROPIC_BASE_URL (可选)
+/// - ANTHROPIC_MODEL (可选)
+pub fn anthropic_from_env() -> Result<crate::llm::AnthropicProvider, crate::llm::LLMError> {
+    let api_key = std::env::var("ANTHROPIC_API_KEY").map_err(|_| {
+        crate::llm::LLMError::ConfigError(
+            "Anthropic API key not found in ANTHROPIC_API_KEY".to_string(),
+        )
+    })?;
+
+    let mut cfg = crate::llm::AnthropicConfig::new(api_key);
+    if let Ok(base_url) = std::env::var("ANTHROPIC_BASE_URL") {
+        cfg = cfg.with_base_url(base_url);
+    }
+    if let Ok(model) = std::env::var("ANTHROPIC_MODEL") {
+        cfg = cfg.with_model(model);
+    }
+
+    Ok(crate::llm::AnthropicProvider::with_config(cfg))
+}
+
+/// 从环境变量创建 Google Gemini 提供器
+///
+/// 读取环境变量:
+/// - GEMINI_API_KEY (必需)
+/// - GEMINI_BASE_URL (可选)
+/// - GEMINI_MODEL (可选)
+pub fn gemini_from_env() -> Result<crate::llm::GeminiProvider, crate::llm::LLMError> {
+    let api_key = std::env::var("GEMINI_API_KEY").map_err(|_| {
+        crate::llm::LLMError::ConfigError("Gemini API key not found in GEMINI_API_KEY".to_string())
+    })?;
+
+    let mut cfg = crate::llm::GeminiConfig::new(api_key);
+    if let Ok(base_url) = std::env::var("GEMINI_BASE_URL") {
+        cfg = cfg.with_base_url(base_url);
+    }
+    if let Ok(model) = std::env::var("GEMINI_MODEL") {
+        cfg = cfg.with_model(model);
+    }
+
+    Ok(crate::llm::GeminiProvider::with_config(cfg))
 }
 
 // Re-export Secretary module from mofa-foundation (always available)
@@ -734,12 +781,9 @@ pub mod persistence {
     ///     Ok(())
     /// }
     /// ```
-    #[cfg(feature = "openai")]
     pub async fn quick_agent_with_memory(
         system_prompt: &str,
     ) -> Result<crate::llm::LLMAgentBuilder, crate::llm::LLMError> {
-        use std::sync::Arc;
-
         let store = InMemoryStore::new();
 
         // 生成 IDs
@@ -799,10 +843,10 @@ pub mod messaging {
 // =============================================================================
 
 #[cfg(feature = "uniffi")]
-mod uniffi_impl;
+mod uniffi_bindings;
 
 #[cfg(feature = "uniffi")]
-pub use uniffi_impl::*;
+pub use uniffi_bindings::*;
 
 // Include generated UniFFI scaffolding
 #[cfg(feature = "uniffi")]

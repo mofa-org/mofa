@@ -74,7 +74,7 @@ pub struct AgentInfo {
 /// LLM 配置
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LLMYamlConfig {
-    /// Provider 类型: openai, ollama, azure, compatible
+    /// Provider 类型: openai, ollama, azure, compatible, anthropic, gemini
     #[serde(default = "default_provider")]
     pub provider: String,
     /// 模型名称

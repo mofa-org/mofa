@@ -28,6 +28,8 @@ enum LLMProviderType {
     "Ollama",
     "Azure",
     "Compatible",
+    "Anthropic",
+    "Gemini",
 };
 
 // Chat message role
@@ -109,4 +111,3 @@ interface LLMAgent {
     // Get conversation history
     sequence<ChatMessage> get_history();
 };
-

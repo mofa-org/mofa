@@ -27,6 +27,8 @@ pub enum LLMProvider {
     Ollama,
     Azure,
     Compatible,
+    Anthropic,
+    Gemini,
 }
 
 impl LLMProvider {
@@ -36,6 +38,8 @@ impl LLMProvider {
             Self::Ollama => "Ollama",
             Self::Azure => "Azure OpenAI",
             Self::Compatible => "Compatible API",
+            Self::Anthropic => "Anthropic Claude",
+            Self::Gemini => "Google Gemini",
         }
     }
 
@@ -45,6 +49,8 @@ impl LLMProvider {
             Self::Ollama => "llama2",
             Self::Azure => "gpt-4o",
             Self::Compatible => "gpt-4o",
+            Self::Anthropic => "claude-3.5-sonnet-20241022",
+            Self::Gemini => "gemini-1.5-pro-latest",
         }
     }
 
@@ -104,7 +110,14 @@ fn run_interactive_wizard() -> anyhow::Result<AgentConfigBuilder> {
 
     // Step 2: LLM Provider
     println!("{}", "Step 2: LLM Provider".bold().yellow());
-    let providers = vec!["OpenAI", "Ollama", "Azure OpenAI", "Compatible API"];
+    let providers = vec![
+        "OpenAI",
+        "Ollama",
+        "Azure OpenAI",
+        "Compatible API",
+        "Anthropic Claude",
+        "Google Gemini",
+    ];
     let provider_selection = Select::with_theme(&theme)
         .with_prompt("Select LLM provider")
         .items(&providers)
@@ -116,6 +129,8 @@ fn run_interactive_wizard() -> anyhow::Result<AgentConfigBuilder> {
         1 => LLMProvider::Ollama,
         2 => LLMProvider::Azure,
         3 => LLMProvider::Compatible,
+        4 => LLMProvider::Anthropic,
+        5 => LLMProvider::Gemini,
         _ => LLMProvider::OpenAI,
     };
 
@@ -138,7 +153,8 @@ fn run_interactive_wizard() -> anyhow::Result<AgentConfigBuilder> {
         None
     };
 
-    let base_url: Option<String> = if provider != LLMProvider::OpenAI {
+    let base_url: Option<String> = if !matches!(provider, LLMProvider::OpenAI | LLMProvider::Ollama)
+    {
         let url: String = Input::with_theme(&theme)
             .with_prompt("Base URL (optional)")
             .allow_empty(true)
@@ -293,6 +309,8 @@ fn write_agent_config(config: &AgentConfigBuilder) -> anyhow::Result<()> {
         LLMProvider::Ollama => "ollama",
         LLMProvider::Azure => "azure",
         LLMProvider::Compatible => "compatible",
+        LLMProvider::Anthropic => "anthropic",
+        LLMProvider::Gemini => "gemini",
     };
 
     let capabilities_str = if config.capabilities.is_empty() {
@@ -308,7 +326,14 @@ fn write_agent_config(config: &AgentConfigBuilder) -> anyhow::Result<()> {
 
     let api_key_str = match &config.api_key {
         Some(key) => format!("  api_key: {}", key),
-        None => "  api_key: ${OPENAI_API_KEY}".to_string(),
+        None => match config.provider {
+            LLMProvider::OpenAI | LLMProvider::Azure | LLMProvider::Compatible => {
+                "  api_key: ${OPENAI_API_KEY}".to_string()
+            }
+            LLMProvider::Anthropic => "  api_key: ${ANTHROPIC_API_KEY}".to_string(),
+            LLMProvider::Gemini => "  api_key: ${GEMINI_API_KEY}".to_string(),
+            LLMProvider::Ollama => "  api_key: ".to_string(), // not used
+        },
     };
 
     let base_url_str = match &config.base_url {

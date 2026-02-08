@@ -17,8 +17,6 @@ publish = true
 default = []
 # Enable UniFFI cross-language bindings (Python, Kotlin, Swift, Java)
 uniffi = ["dep:uniffi", "dep:thiserror"]
-# Enable OpenAI provider support (required for LLM functionality)
-openai = ["mofa-foundation/openai"]
 # Enable PyO3 Python bindings (native Python extension)
 python = ["dep:pyo3", "dep:pyo3-async-runtimes"]
 # Enable dora-rs runtime support (distributed dataflow)

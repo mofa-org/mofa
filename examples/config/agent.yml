@@ -11,10 +11,10 @@ agent:
     - memory
 
 llm:
-  provider: openai          # openai, ollama, azure, compatible
-  model: gpt-4o
-  api_key: ${OPENAI_API_KEY}  # Supports ${VAR} and $VAR syntax
-  base_url: null            # Optional, for custom endpoints
+  provider: openai          # openai, ollama, azure, compatible, anthropic, gemini
+  model: gpt-4o             # claude-3.5-sonnet-20241022 (anthropic) / gemini-1.5-pro-latest (gemini)
+  api_key: ${OPENAI_API_KEY}  # Supports ${VAR} and $VAR syntax (ANTHROPIC_API_KEY / GEMINI_API_KEY)
+  base_url: null            # Optional, for custom endpoints (Azure/Gemini/兼容)
   temperature: 0.7
   max_tokens: 4096
   system_prompt: "You are a helpful assistant with access to various tools."

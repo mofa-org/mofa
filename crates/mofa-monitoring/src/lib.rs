@@ -1,3 +1,4 @@
+#![allow(dead_code, unused_imports)]
 //! MoFA Monitoring - Web-based dashboard and metrics collection
 //!
 //! This crate provides monitoring capabilities for MoFA agents:
