@@ -1,4 +1,4 @@
-# MoFA Development Framework
+# MoFA (Modular Framework for AI Agents) Development Framework
 
 [English](README_en.md) | [简体中文](README.md)
 
@@ -34,7 +34,7 @@
 
 ## 1. Design Philosophy
 
-MoFA is a software framework for building composable AI agents. With MoFA, developers can create agents through templates and combine them in a stacking manner to form more powerful super agents.
+MoFA (Modular Framework for AI Agents) is a software framework for building composable AI agents. With MoFA, developers can create agents through templates and combine them in a stacking manner to form more powerful super agents.
 
 ### 1.1 Core Design Philosophy
 
