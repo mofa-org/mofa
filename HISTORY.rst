@@ -2,6 +2,11 @@
 History
 =======
 
+0.1.36 (2026-02-11)
+------------------
+
+* Auto-release: Merge pull request #105 from mofa-org/copilot/update-readme-mofa-full-name
+
 0.1.35 (2025-11-07)
 ------------------
 
