@@ -1,4 +1,4 @@
-# MoFA 开发框架
+# MoFA (Modular Framework for AI Agents) 开发框架
 
 [English](README_en.md) | [简体中文](README.md)
 
@@ -34,7 +34,7 @@
 
 ## 1. 设计理念
 
-MoFA 是一个用于构建可组合 AI 智能体的软件框架。通过 MoFA，开发者可以通过模板创建智能体（Agent），并以堆叠方式组合形成更强大的超级智能体（Super Agent）。
+MoFA（Modular Framework for AI Agents）是一个用于构建可组合 AI 智能体的软件框架。通过 MoFA，开发者可以通过模板创建智能体（Agent），并以堆叠方式组合形成更强大的超级智能体（Super Agent）。
 
 ### 1.1 核心设计哲学
 
