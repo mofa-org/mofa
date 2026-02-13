@@ -355,11 +355,55 @@ pub mod plugins {
 // =============================================================================
 
 pub mod workflow {
+    //! Workflow orchestration module with LangGraph-inspired StateGraph API
+    //!
+    //! # StateGraph API (Recommended)
+    //!
+    //! The new StateGraph API provides a more intuitive way to build workflows:
+    //!
+    //! ```rust,ignore
+    //! use mofa_sdk::workflow::{StateGraphImpl, AppendReducer, OverwriteReducer, StateGraph, START, END};
+    //!
+    //! let graph = StateGraphImpl::<MyState>::new("my_workflow")
+    //!     .add_reducer("messages", Box::new(AppendReducer))
+    //!     .add_node("process", Box::new(ProcessNode))
+    //!     .add_edge(START, "process")
+    //!     .add_edge("process", END)
+    //!     .compile()?;
+    //!
+    //! let result = graph.invoke(initial_state, None).await?;
+    //! ```
+    //!
+    //! # Legacy Workflow API
+    //!
+    //! The original WorkflowGraph API is still available for backward compatibility.
+
+    // Re-export kernel workflow types
+    pub use mofa_kernel::workflow::{
+        Command, CompiledGraph, ControlFlow, EdgeTarget, GraphConfig, GraphState, JsonState,
+        NodeFunc, Reducer, ReducerType, RemainingSteps, RuntimeContext, SendCommand, StateSchema,
+        StateUpdate, StreamEvent, StepResult, END, START,
+    };
+
+    // Re-export kernel StateGraph trait
+    pub use mofa_kernel::workflow::StateGraph;
+
+    // Foundation layer implementations
+    pub use mofa_foundation::workflow::{
+        // StateGraph implementation
+        CompiledGraphImpl, StateGraphImpl,
+        // Reducers
+        AppendReducer, ExtendReducer, FirstReducer, LastNReducer, LastReducer,
+        MergeReducer, OverwriteReducer, CustomReducer, create_reducer,
+    };
+
+    // Legacy workflow API
     pub use mofa_foundation::workflow::{
         ExecutionEvent, ExecutorConfig, WorkflowBuilder, WorkflowExecutor, WorkflowGraph,
         WorkflowNode, WorkflowValue,
     };
 
+    // DSL support
     pub use mofa_foundation::workflow::dsl::{
         AgentRef, DslError, DslResult, EdgeDefinition, LlmAgentConfig, LoopConditionDef,
         NodeConfigDef, NodeDefinition, RetryPolicy, TaskExecutorDef, TimeoutConfig, TransformDef,

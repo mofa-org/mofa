@@ -34,3 +34,7 @@ pub use config::*;
 // Storage traits (存储接口)
 pub mod storage;
 pub use storage::Storage;
+
+// Workflow traits (工作流接口)
+pub mod workflow;
+pub use workflow::*;
