@@ -1,4 +1,4 @@
-//! Build script for mofa-sdk
+//! Build script for mofa-ffi
 //!
 //! Generates UniFFI scaffolding when the `uniffi` feature is enabled.
 

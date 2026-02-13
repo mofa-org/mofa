@@ -1,7 +1,7 @@
 #!/bin/bash
 # MoFA UniFFI Binding Generation Script
 #
-# This script generates language bindings from the compiled mofa-sdk library.
+# This script generates language bindings from the compiled mofa-ffi library.
 #
 # Prerequisites:
 # - Rust toolchain installed
@@ -55,17 +55,17 @@ detect_platform() {
     esac
 }
 
-# Build the library with uniffi and openai features
+# Build the library with uniffi feature
 build_library() {
-    print_info "Building mofa-sdk with uniffi and openai features..."
+    print_info "Building mofa-ffi with uniffi feature..."
     cd "$PROJECT_ROOT"
-    cargo build --release --features "uniffi,openai" -p mofa-sdk
+    cargo build --release --features "uniffi" -p mofa-ffi
     cd "$CRATE_DIR"
 }
 
 # Find the compiled library
 find_library() {
-    LIB_PATH="$PROJECT_ROOT/target/release/libmofa_sdk.$LIB_EXT"
+    LIB_PATH="$PROJECT_ROOT/target/release/libmofa_ffi.$LIB_EXT"
     if [ ! -f "$LIB_PATH" ]; then
         print_error "Library not found at $LIB_PATH"
         print_info "Building library first..."
@@ -155,7 +155,7 @@ print_usage() {
     echo "  all     - Generate all bindings"
     echo ""
     echo "Prerequisites:"
-    echo "  - Build library: cargo build --release --features 'uniffi,openai' -p mofa-sdk"
+    echo "  - Build library: cargo build --release --features 'uniffi' -p mofa-ffi"
     echo "  - Install uniffi-bindgen: cargo install uniffi-bindgen-cli"
     echo "  - For Java: cargo install uniffi-bindgen-java"
 }

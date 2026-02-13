@@ -21,9 +21,9 @@
 //!
 //! # Features
 //!
-//! - `uniffi` - Enable UniFFI cross-language bindings (Python, Kotlin, Swift, Java)
-//! - `python` - Enable PyO3 Python bindings (native Python extension)
 //! - `dora` - Enable dora-rs runtime support for distributed dataflow
+//!
+//! For FFI bindings (Python, Kotlin, Swift, Java), use the `mofa-ffi` crate.
 //!
 //! # Quick Start
 //!
@@ -881,69 +881,6 @@ pub mod messaging {
 
     pub use mofa_foundation::messaging::*;
 }
-
-// =============================================================================
-// UniFFI bindings (enabled with `uniffi` feature)
-// =============================================================================
-
-#[cfg(feature = "uniffi")]
-mod uniffi_bindings;
-
-#[cfg(feature = "uniffi")]
-pub use uniffi_bindings::*;
-
-// Include generated UniFFI scaffolding
-#[cfg(feature = "uniffi")]
-uniffi::include_scaffolding!("mofa");
-
-// =============================================================================
-// PyO3 Python bindings (enabled with `python` feature)
-// =============================================================================
-
-// Note: Python bindings are being refactored to use MoFAAgent directly.
-// The PyAgentWrapper will be reimplemented to wrap MoFAAgent instead of RuntimeAgent.
-
-#[cfg(feature = "python")]
-mod python_bindings {
-    use pyo3::prelude::*;
-
-    /// Python module initialization
-    #[pymodule]
-    pub fn mofa(m: &Bound<'_, PyModule>) -> PyResult<()> {
-        m.add_function(wrap_pyfunction!(run_agents, m)?)?;
-        Ok(())
-    }
-
-    /// Run a Python agent
-    #[pyfunction]
-    fn run_agents(py: Python<'_>, agent: PyObject) -> PyResult<Bound<'_, PyAny>> {
-        let py_config = agent.getattr(py, "config")?;
-        let agent_id: String = py_config.getattr(py, "agent_id")?.extract(py)?;
-        let name: String = py_config.getattr(py, "name")?.extract(py)?;
-
-        let wrapper = PyAgentWrapper {
-            py_agent: agent,
-            config: AgentConfig {
-                agent_id,
-                name,
-                node_config: HashMap::new(),
-            },
-        };
-
-        pyo3_async_runtimes::tokio::future_into_py(py, async move {
-            if let Err(e) = mofa_runtime::run_agents(wrapper, Vec::new()).await {
-                return Err(PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(format!(
-                    "Agent failed: {}",
-                    e
-                )));
-            }
-            Ok(Python::with_gil(|py| py.None()))
-        })
-    }
-}
-
-#[cfg(feature = "python")]
-pub use python_bindings::mofa;
 
 // =============================================================================
 // Dora-rs runtime support (enabled with `dora` feature)

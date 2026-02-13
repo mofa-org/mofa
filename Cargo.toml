@@ -9,6 +9,7 @@ members = [
     "crates/mofa-plugins",
     "crates/mofa-macros",
     "crates/mofa-sdk",
+    "crates/mofa-ffi",
     "crates/mofa-extra",
 ]
 exclude = [
