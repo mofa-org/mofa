@@ -5,7 +5,7 @@ edition.workspace = true
 
 [dependencies]
 # Local dependencies
-mofa-sdk = { path = "../../crates/mofa-sdk", features = ["openai"] }
+mofa-sdk = { path = "../../crates/mofa-sdk"}
 
 # Workspace dependencies
 serde_json.workspace = true

@@ -5,7 +5,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-mofa-sdk = { path = "../../crates/mofa-sdk", features = ["persistence-postgres", "openai"] }
+mofa-sdk = { path = "../../crates/mofa-sdk", features = ["persistence-postgres"] }
 tokio = { version = "1.37", features = ["full"] }
 futures = "0.3.30"
 uuid = { version = "1.8", features = ["v7"] }
