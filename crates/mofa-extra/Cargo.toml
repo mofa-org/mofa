@@ -9,7 +9,7 @@ repository.workspace = true
 homepage.workspace = true
 documentation = "https://docs.rs/mofa-extra"
 readme = "README.md"
-keywords = ["ai", "agents", "utilities", "scripting", "rhai"]
+keywords = ["ai", "agent", "utilities", "extensions", "scripting"]
 categories = ["development-tools"]
 publish = true
 

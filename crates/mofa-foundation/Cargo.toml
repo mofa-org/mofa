@@ -9,7 +9,7 @@ repository.workspace = true
 homepage.workspace = true
 documentation = "https://docs.rs/mofa-foundation"
 readme = "README.md"
-keywords = ["ai", "agents", "llm", "persistence", "actor", "framework"]
+keywords = ["ai", "agent", "llm", "persistence", "implementation", "storage"]
 categories = ["development-tools", "asynchronous"]
 publish = true
 

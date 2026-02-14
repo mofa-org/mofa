@@ -9,7 +9,7 @@ repository.workspace = true
 homepage.workspace = true
 documentation = "https://docs.rs/mofa-plugins"
 readme = "README.md"
-keywords = ["ai", "agents", "plugins", "wasm", "scripting", "rhai"]
+keywords = ["ai", "agent", "plugin", "wasm", "rhai", "dual-layer"]
 categories = ["development-tools", "api-bindings"]
 publish = true
 

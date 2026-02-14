@@ -9,7 +9,7 @@ repository.workspace = true
 homepage.workspace = true
 documentation = "https://docs.rs/mofa-runtime"
 readme = "README.md"
-keywords = ["ai", "agents", "runtime", "actor", "async", "distributed"]
+keywords = ["ai", "agent", "runtime", "actor", "message-bus", "event-loop"]
 categories = ["development-tools", "asynchronous"]
 publish = true
 

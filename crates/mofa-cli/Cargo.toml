@@ -9,7 +9,7 @@ repository.workspace = true
 homepage.workspace = true
 documentation = "https://docs.rs/mofa-cli"
 readme = "README.md"
-keywords = ["ai", "agents", "cli", "dora", "framework"]
+keywords = ["ai", "agent", "cli", "scaffolding", "code-generation"]
 categories = ["command-line-utilities", "development-tools"]
 publish = true
 

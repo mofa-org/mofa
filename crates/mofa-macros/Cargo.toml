@@ -9,7 +9,7 @@ repository.workspace = true
 homepage.workspace = true
 documentation = "https://docs.rs/mofa-macros"
 readme = "README.md"
-keywords = ["ai", "agents", "macros", "code-generation", "procedural-macros"]
+keywords = ["ai", "agent", "macro", "procedural", "code-generation"]
 categories = ["development-tools::procedural-macro-helpers"]
 publish = false
 

@@ -9,7 +9,7 @@ repository.workspace = true
 homepage.workspace = true
 documentation = "https://docs.rs/mofa-ffi"
 readme = "README.md"
-keywords = ["ai", "agents", "llm", "ffi", "bindings"]
+keywords = ["ai", "agent", "ffi", "bindings", "uniffi", "multi-language"]
 categories = ["development-tools::ffi", "api-bindings"]
 publish = true
 
