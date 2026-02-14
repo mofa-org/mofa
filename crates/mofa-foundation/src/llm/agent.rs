@@ -39,6 +39,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 use tokio::sync::{Mutex, RwLock};
+use crate::llm::{AnthropicConfig, AnthropicProvider, GeminiConfig, GeminiProvider};
 
 /// Type alias for TTS audio stream - boxed to avoid exposing kokoro-tts types
 pub type TtsAudioStream = Pin<Box<dyn Stream<Item = (Vec<f32>, Duration)> + Send>>;
