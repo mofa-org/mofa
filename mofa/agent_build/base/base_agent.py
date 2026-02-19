@@ -107,7 +107,8 @@ class MofaAgent:
         log_params = ['IS_WRITE_LOG', 'WRITE_LOG']
         for log_status in log_params:
             if os.getenv(log_status, None) is not None:
-                self.is_write_log = os.getenv(log_status)
+                # self.is_write_log = os.getenv(log_status)
+                self.is_write_log = os.getenv(log_status).lower() in ['true', '1', 't', 'y', 'yes']
         self.agent_log = MofaLogger(agent_name=self.agent_name, log_file=self.log_file)
 
     def __init_mcp(self):
