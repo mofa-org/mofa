@@ -273,6 +273,8 @@ Add MoFA to your Cargo.toml:
 mofa-sdk = "0.1.0"
 ```
 
+See [Quick Start](/docs/QuickStart.md) for the full guide!
+
 The runtime mode is most suitable for scenarios that require building complete agent workflows, specifically including:
 
   ---
