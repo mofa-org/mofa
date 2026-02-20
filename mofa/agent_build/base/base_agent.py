@@ -106,8 +106,11 @@ class MofaAgent:
                 load_dotenv(dotenv_path=env_file)
         log_params = ['IS_WRITE_LOG', 'WRITE_LOG']
         for log_status in log_params:
-            if os.getenv(log_status, None) is not None:
-                self.is_write_log = os.getenv(log_status)
+            env_val = os.getenv(log_status)
+            if env_val is not None:
+                val = env_val.strip().lower()
+                # Explicitly check for True-ish values
+                self.is_write_log = val in ("true", "1", "t", "y", "yes")
         self.agent_log = MofaLogger(agent_name=self.agent_name, log_file=self.log_file)
 
     def __init_mcp(self):
