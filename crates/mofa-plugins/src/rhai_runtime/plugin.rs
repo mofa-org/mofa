@@ -149,6 +149,8 @@ pub struct RhaiPlugin {
     engine: Arc<RhaiScriptEngine>,
     /// Plugin metadata
     metadata: PluginMetadata,
+    /// Cached kernel metadata — stored here to avoid Box::leak in metadata()
+    kernel_metadata: KernelPluginMetadata,
     /// Current plugin state
     state: RwLock<RhaiPluginState>,
     /// Plugin context
@@ -183,12 +185,20 @@ impl RhaiPlugin {
         let mut metadata = PluginMetadata::default();
         metadata.id = config.plugin_id.clone();
 
+        // Build kernel metadata once so metadata() can return a plain borrow
+        let kernel_metadata = KernelPluginMetadata::new(
+            &config.plugin_id,
+            &metadata.name,
+            PluginType::Tool,
+        );
+
         // Create plugin
         Ok(Self {
             id: config.plugin_id.clone(),
             config,
             engine,
             metadata,
+            kernel_metadata,
             state: RwLock::new(RhaiPluginState::Unloaded),
             plugin_context: RwLock::new(None),
             last_modified,
@@ -259,13 +269,7 @@ impl RhaiPlugin {
 #[async_trait::async_trait]
 impl AgentPlugin for RhaiPlugin {
     fn metadata(&self) -> &KernelPluginMetadata {
-        // Return a static reference - this is a temporary fix
-        // In production, we should store KernelPluginMetadata in the struct
-        Box::leak(Box::new(KernelPluginMetadata::new(
-            &self.id,
-            &self.metadata.name,
-            PluginType::Tool,
-        )))
+        &self.kernel_metadata
     }
 
     fn state(&self) -> PluginState {
