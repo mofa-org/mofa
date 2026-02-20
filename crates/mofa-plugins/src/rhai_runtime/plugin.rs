@@ -236,7 +236,11 @@ impl RhaiPlugin {
     async fn extract_metadata(&mut self) -> RhaiPluginResult<()> {
         // Compile and cache the script first to define global variables
         let script_id = format!("{}_metadata", self.id);
-        if let Err(e) = self.engine.compile_and_cache(&script_id, "metadata", &self.cached_content).await {
+        if let Err(e) = self
+            .engine
+            .compile_and_cache(&script_id, "metadata", &self.cached_content)
+            .await
+        {
             warn!("Failed to compile script for metadata extraction: {}", e);
             return Ok(());
         }
@@ -425,27 +429,42 @@ impl AgentPlugin for RhaiPlugin {
 
         // Compile and cache the script first
         let script_id = format!("{}_exec", self.id);
-        self.engine.compile_and_cache(&script_id, "execute", &self.cached_content).await?;
+        self.engine
+            .compile_and_cache(&script_id, "execute", &self.cached_content)
+            .await?;
 
         // Try to call the execute function with the input
-        match self.engine.call_function::<serde_json::Value>(
-            &script_id,
-            "execute",
-            vec![serde_json::json!(input)],
-            &context,
-        ).await {
+        match self
+            .engine
+            .call_function::<serde_json::Value>(
+                &script_id,
+                "execute",
+                vec![serde_json::json!(input)],
+                &context,
+            )
+            .await
+        {
             Ok(result) => {
-                info!("Rhai plugin {} executed successfully via call_function", self.id);
+                info!(
+                    "Rhai plugin {} executed successfully via call_function",
+                    self.id
+                );
                 Ok(serde_json::to_string_pretty(&result)?)
             }
             Err(e) => {
-                warn!("Failed to call execute function: {}, falling back to direct execution", e);
+                warn!(
+                    "Failed to call execute function: {}, falling back to direct execution",
+                    e
+                );
 
                 // Fallback: execute the script directly
                 let result = self.engine.execute(&self.cached_content, &context).await?;
 
                 if !result.success {
-                    return Err(anyhow::anyhow!("Script execution failed: {:?}", result.error));
+                    return Err(anyhow::anyhow!(
+                        "Script execution failed: {:?}",
+                        result.error
+                    ));
                 }
 
                 Ok(serde_json::to_string_pretty(&result.value)?)
@@ -560,8 +579,11 @@ mod tests {
 
         // The execute function returns a string, which gets JSON serialized
         // So we expect the result to be a JSON string containing our message
-        assert!(result.contains("Hello from Rhai plugin!") || result.contains("Hello World!"),
-            "Result should contain expected text, got: {}", result);
+        assert!(
+            result.contains("Hello from Rhai plugin!") || result.contains("Hello World!"),
+            "Result should contain expected text, got: {}",
+            result
+        );
 
         plugin.unload().await.unwrap();
     }

@@ -383,6 +383,9 @@ mod tests {
         );
 
         assert!(ctx.is_sub_workflow());
-        assert_eq!(ctx.parent_execution_id, Some("parent-execution-123".to_string()));
+        assert_eq!(
+            ctx.parent_execution_id,
+            Some("parent-execution-123".to_string())
+        );
     }
 }

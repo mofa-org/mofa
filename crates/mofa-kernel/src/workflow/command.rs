@@ -173,7 +173,11 @@ impl SendCommand {
     }
 
     /// Create a send command with a branch ID
-    pub fn with_branch(target: impl Into<String>, input: Value, branch_id: impl Into<String>) -> Self {
+    pub fn with_branch(
+        target: impl Into<String>,
+        input: Value,
+        branch_id: impl Into<String>,
+    ) -> Self {
         Self {
             target: target.into(),
             input,
@@ -201,9 +205,7 @@ mod tests {
 
     #[test]
     fn test_command_continue() {
-        let cmd = Command::new()
-            .update("result", json!("done"))
-            .continue_();
+        let cmd = Command::new().update("result", json!("done")).continue_();
 
         assert_eq!(cmd.control, ControlFlow::Continue);
         assert!(!cmd.is_return());
@@ -211,9 +213,7 @@ mod tests {
 
     #[test]
     fn test_command_return() {
-        let cmd = Command::new()
-            .update("final", json!("result"))
-            .return_();
+        let cmd = Command::new().update("final", json!("result")).return_();
 
         assert!(cmd.is_return());
     }
@@ -239,11 +239,8 @@ mod tests {
         assert_eq!(send.target, "process");
         assert!(send.branch_id.is_none());
 
-        let send_with_branch = SendCommand::with_branch(
-            "process",
-            json!({"data": "test"}),
-            "branch-1",
-        );
+        let send_with_branch =
+            SendCommand::with_branch("process", json!({"data": "test"}), "branch-1");
         assert_eq!(send_with_branch.branch_id, Some("branch-1".to_string()));
     }
 
