@@ -49,6 +49,8 @@ pub mod state;
 // Re-export public API
 pub use command::{Command, ControlFlow, SendCommand};
 pub use context::{GraphConfig, RemainingSteps, RuntimeContext};
-pub use graph::{CompiledGraph, EdgeTarget, NodeFunc, StateGraph, StreamEvent, StepResult, END, START};
+pub use graph::{
+    CompiledGraph, END, EdgeTarget, NodeFunc, START, StateGraph, StepResult, StreamEvent,
+};
 pub use reducer::{Reducer, ReducerType, StateUpdate};
 pub use state::{GraphState, JsonState, StateSchema};
