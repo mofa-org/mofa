@@ -15,7 +15,7 @@ with open('HISTORY.rst') as history_file:
 with open('requirements.txt',encoding='utf-8') as requirements_file:
     all_pkgs = requirements_file.readlines()
 
-requirements = [pkg.replace('\n', '') for pkg in all_pkgs if "#" not in pkg]
+requirements = [pkg.split('#')[0].strip() for pkg in all_pkgs if pkg.split('#')[0].strip()]
 test_requirements = []
 
 # Collect all files from agents and flows directories
