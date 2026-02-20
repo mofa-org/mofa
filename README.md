@@ -9,7 +9,7 @@
 
 <div align="center">
   <a href="https://crates.io/crates/mofa-sdk">
-    <img src="https://img.shields.io/crates/v/mofa.svg" alt="crates.io"/>
+    <img src="https://img.shields.io/crates/v/mofa-sdk.svg" alt="crates.io"/>
   </a>
   <a href="https://pypi.org/project/mofa-core/">
     <img src="https://img.shields.io/pypi/v/mofa-core.svg" alt="PyPI"/>
@@ -181,14 +181,14 @@ MoFA adopts a **layered microkernel architecture** with `mofa-kernel` at its cor
 - **LLM Abstraction Layer**: Standardized LLM integration interface
 - **OpenAI Support**: Built-in OpenAI API integration
 - **ReAct Pattern**: Agent framework based on reasoning and action
-- **Multi-Agent Collaboration**: Team-based agent coordination, supporting multiple collaboration patterns:
-  - **Chain Mode**: Multi-agent sequential workflow where output of one agent becomes input of the next, suitable for pipeline processing scenarios
-  - **Parallel Mode**: Multiple agents execute simultaneously with automatic result aggregation, significantly improving processing efficiency
-  - **Debate Mode**: Multiple agents alternate speaking, optimizing result quality through debate mechanism
-  - **Supervision Mode**: A supervisor agent evaluates and filters results
-  - **MapReduce Mode**: Parallel processing with result reduction, suitable for large-scale tasks
-  - **Routing Mode**: Dynamically select the next agent to execute based on conditions
-  - **Aggregation Mode**: Collect and merge results from multiple agents
+- **Multi-Agent Collaboration**: LLM-driven agent coordination, supporting multiple collaboration modes:
+  - **Request-Response**: One-to-one deterministic tasks with synchronous replies
+  - **Publish-Subscribe**: One-to-many broadcast tasks with multiple receivers
+  - **Consensus**: Multi-round negotiation and voting for decision-making
+  - **Debate**: Agents alternate speaking to iteratively refine results
+  - **Parallel**: Simultaneous execution with automatic result aggregation
+  - **Sequential**: Pipeline execution where output flows to the next agent
+  - **Custom**: User-defined modes interpreted by the LLM
 - **Secretary Mode**: Provides end-to-end task closed-loop management, including 5 core phases: receive ideas → record todos, clarify requirements → convert to project documents, schedule dispatch → call execution agents, monitor feedback → push key decisions to humans, acceptance report → update todos
   </br>**Features**:
     - 🧠 Autonomous task planning and decomposition
@@ -329,7 +329,7 @@ Suitable for building production applications that need stable operation, rather
 
 ## Documentation
 
-- [API Documentation](https://docs.rs/mofa)
+- [API Documentation](https://docs.rs/mofa-sdk)
 - [GitHub Repository](https://github.com/mofa-org/mofa)
 - [Examples](examples/)
 

@@ -9,7 +9,7 @@
 
 <div align="center">
   <a href="https://crates.io/crates/mofa-sdk">
-    <img src="https://img.shields.io/crates/v/mofa.svg" alt="crates.io"/>
+    <img src="https://img.shields.io/crates/v/mofa-sdk.svg" alt="crates.io"/>
   </a>
   <a href="https://pypi.org/project/mofa-core/">
     <img src="https://img.shields.io/pypi/v/mofa-core.svg" alt="PyPI 最新版本"/>
@@ -182,14 +182,14 @@ MoFA采用**分层微内核架构**，以 `mofa-kernel` 为核心，所有其他
 - **LLM抽象层**: 统一的LLM集成接口
 - **OpenAI支持**: 内置的OpenAI API集成
 - **ReAct模式**: 基于推理和行动的智能体框架
-- **多智能体协作**: 基于团队的智能体协调，支持多种协作模式：
-  - **链式模式**: 多Agent按顺序执行的工作流，前一个Agent的输出作为后一个Agent的输入，适用于流水线处理场景
-  - **并行模式**: 多Agent同时执行并自动聚合结果，显著提高处理效率
-  - **辩论模式**: 多个Agent交替发言，通过辩论机制优化结果质量
-  - **监督模式**: 由一个监督Agent评估和筛选结果
-  - **MapReduce模式**: 并行处理后归约结果，适合大规模任务
-  - **路由模式**: 基于条件动态选择下一个执行的Agent
-  - **聚合模式**: 收集多个Agent的结果并合并
+- **多智能体协作**: LLM驱动的智能体协调，支持多种协作模式：
+  - **请求-响应模式**: 一对一确定性任务，同步等待返回结果
+  - **发布-订阅模式**: 一对多广播任务，多个接收者异步处理
+  - **共识机制模式**: 多轮协商与投票决策，适合需要达成一致的场景
+  - **辩论模式**: 多个Agent交替发言，通过迭代优化结果质量
+  - **并行模式**: 多Agent同时执行并自动聚合结果
+  - **顺序模式**: 流水线执行，前一个Agent的输出作为后一个的输入
+  - **自定义模式**: 用户自定义协作模式，由LLM解释执行
 - **秘书模式**: 提供端到端的任务闭环管理，包括5个核心阶段：接收想法→记录Todo、澄清需求→转换为项目文档、调度分配→调用执行Agent、监控反馈→推送关键决策给人类、验收汇报→更新Todo
   </br>**特点**：
     - 🧠 自主任务规划与分解
@@ -328,7 +328,7 @@ mofa-sdk = "0.1.0"
 适合构建需要稳定运行的生产级应用，而不是简单的插件测试或原型开发。
 ## 文档
 
-- [API 文档](https://docs.rs/mofa)
+- [API 文档](https://docs.rs/mofa-sdk)
 - [GitHub 仓库](https://github.com/mofa-org/mofa)
 - [示例](examples/)
 
