@@ -210,10 +210,13 @@ Mark it as "Ready for review" only when `cargo fmt --check`, `cargo clippy`, and
 <!-- What does this PR do? -->
 
 ## Motivation
-<!-- Why is this change needed? Link to the relevant issue. -->
+<!-- Why is this change needed? -->
 
 ## Changes
 <!-- Bullet list of what was changed and in which crate. -->
+
+## Related Issues
+<!-- Link to a related issue if present -->
 
 ## Testing
 <!-- How was this tested? New unit tests? Manual verification? -->
