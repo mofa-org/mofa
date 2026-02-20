@@ -39,6 +39,71 @@ cargo clippy
 - Ensure `cargo clippy` passes without warnings
 - Add tests for new functionality
 
+## Security Guidelines
+
+We take security seriously. When contributing to MoFA, please follow these security best practices:
+
+### Secret Management
+
+- **NEVER commit secrets, credentials, or sensitive data** to the repository
+- Use environment variables for configuration secrets
+- Add `.env` files to `.gitignore`
+- Use placeholder values in examples and documentation
+
+```rust
+// DO
+let api_key = std::env::var("OPENAI_API_KEY")?;
+
+// DO NOT
+let api_key = "sk-abc123...";  // Never hardcode credentials
+```
+
+### Secure Coding Practices
+
+- Validate all input parameters
+- Sanitize all output data
+- Use error handling (avoid `unwrap()` and `expect()` in production code)
+- Follow the principle of least privilege
+- Avoid unsafe code when possible
+- Use type-safe interfaces
+
+### Dependencies
+
+- Keep dependencies up to date
+- Review security advisories for dependencies
+- Use `cargo-audit` to check for vulnerable dependencies:
+  ```bash
+  cargo install cargo-audit
+  cargo audit
+  ```
+- Use `cargo-deny` to enforce dependency policies:
+  ```bash
+  cargo install cargo-deny
+  cargo deny check
+  ```
+
+### Security Review Process
+
+- All code changes are subject to review
+- Security-relevant changes receive additional scrutiny
+- Maintainers may request security-focused changes
+- Security considerations should be documented in PR descriptions
+
+### Reporting Security Issues
+
+- **DO NOT report security vulnerabilities in public issues or PRs**
+- Report security vulnerabilities privately through [GitHub Security Advisories](https://github.com/mofa-org/mofa/security/advisories)
+- See [SECURITY.md](SECURITY.md) for detailed reporting instructions
+
+### Testing
+
+- Write tests for security-critical code paths
+- Test for common vulnerabilities (injection attacks, buffer overflows, etc.)
+- Use property-based testing for input validation
+- Test error handling paths
+
+For more information on security best practices, see our [Security Guide](docs/security.md).
+
 ## Architecture
 
 Please read [CLAUDE.md](CLAUDE.md) for the project architecture and layering rules before making changes. Key points:
