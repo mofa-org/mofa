@@ -320,7 +320,6 @@ mod unit_tests {
         assert!(detect_format("config.txt").is_err());
     }
 
-
     #[test]
     fn test_from_str_toml() {
         let toml = r#"

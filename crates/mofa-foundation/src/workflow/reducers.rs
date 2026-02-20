@@ -183,11 +183,7 @@ impl Reducer for MergeReducer {
     }
 
     fn name(&self) -> &str {
-        if self.deep {
-            "merge_deep"
-        } else {
-            "merge"
-        }
+        if self.deep { "merge_deep" } else { "merge" }
     }
 
     fn reducer_type(&self) -> ReducerType {
@@ -451,10 +447,7 @@ mod tests {
         assert_eq!(result, json!([1, 2, 3, 4]));
 
         // Single item extends
-        let result = reducer
-            .reduce(Some(&json!([1])), &json!(2))
-            .await
-            .unwrap();
+        let result = reducer.reduce(Some(&json!([1])), &json!(2)).await.unwrap();
         assert_eq!(result, json!([1, 2]));
     }
 
@@ -560,17 +553,12 @@ mod tests {
     #[tokio::test]
     async fn test_custom_reducer() {
         let reducer = CustomReducer::new("sum", |current, update| {
-            let curr = current
-                .and_then(|v| v.as_i64())
-                .unwrap_or(0);
+            let curr = current.and_then(|v| v.as_i64()).unwrap_or(0);
             let upd = update.as_i64().unwrap_or(0);
             Ok(json!(curr + upd))
         });
 
-        let result = reducer
-            .reduce(Some(&json!(10)), &json!(5))
-            .await
-            .unwrap();
+        let result = reducer.reduce(Some(&json!(10)), &json!(5)).await.unwrap();
         assert_eq!(result, json!(15));
 
         assert_eq!(reducer.name(), "sum");

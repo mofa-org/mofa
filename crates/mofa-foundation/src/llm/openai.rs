@@ -204,11 +204,6 @@ impl OpenAIProvider {
         Self::with_config(config)
     }
 
-    /// 创建 Ollama Provider
-    pub fn ollama(model: impl Into<String>) -> Self {
-        Self::local("http://localhost:11434/v1", model)
-    }
-
     /// 获取底层 async-openai 客户端
     pub fn client(&self) -> &Client<AsyncOpenAIConfig> {
         &self.client
