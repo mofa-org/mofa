@@ -9,9 +9,9 @@ repository.workspace = true
 homepage.workspace = true
 documentation = "https://docs.rs/mofa-monitoring"
 readme = "README.md"
-keywords = ["ai", "agent", "monitoring", "observability", "dashboard", "metrics"]
+keywords = ["ai", "agent", "monitoring", "dashboard", "metrics"]
 categories = ["development-tools"]
-publish = false
+publish = true
 
 [dependencies]
 # Workspace dependencies

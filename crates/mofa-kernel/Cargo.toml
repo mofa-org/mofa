@@ -9,7 +9,7 @@ repository.workspace = true
 homepage.workspace = true
 documentation = "https://docs.rs/mofa-kernel"
 readme = "README.md"
-keywords = ["ai", "agent", "microkernel", "trait", "abstraction", "async"]
+keywords = ["ai", "agent", "microkernel", "trait", "async"]
 categories = ["development-tools", "asynchronous"]
 publish = true
 
