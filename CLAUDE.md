@@ -62,10 +62,11 @@ mofa/
 │   ├── mofa-plugins/       # Plugin system (dual-layer architecture)
 │   ├── mofa-cli/           # CLI tool (`mofa` command)
 │   ├── mofa-sdk/           # Main SDK - standard API surface
+│   ├── mofa-ffi/           # FFI bindings (UniFFI for Python, Java, Go, Kotlin, Swift)
 │   ├── mofa-macros/        # Procedural macros
 │   ├── mofa-monitoring/    # Monitoring and observability
 │   └── mofa-extra/         # Additional utilities
-├── examples/               # Usage examples (17+ examples)
+├── examples/               # Usage examples (27+ examples)
 └── docs/                   # Documentation
 ```
 
@@ -90,14 +91,14 @@ MoFA uses a layered microkernel architecture:
 
 ### Multi-Agent Coordination Patterns
 
-The framework supports 7 coordination modes:
-- **Chain**: Sequential execution (output of one agent becomes input of next)
-- **Parallel**: Simultaneous execution with result aggregation
+The framework supports 7 LLM-driven collaboration modes:
+- **Request-Response**: One-to-one deterministic tasks with synchronous replies
+- **Publish-Subscribe**: One-to-many broadcast tasks with multiple receivers
+- **Consensus**: Multi-round negotiation and voting for decision-making
 - **Debate**: Multi-agent alternating discussion for quality improvement
-- **Supervision**: Supervisor agent evaluates and filters results
-- **MapReduce**: Parallel processing with result reduction
-- **Routing**: Dynamic agent selection based on conditions
-- **Aggregation**: Collects and combines results from multiple agents
+- **Parallel**: Simultaneous execution with result aggregation
+- **Sequential**: Pipeline execution (output of one agent becomes input of next)
+- **Custom**: User-defined modes interpreted by the LLM
 
 ### Secretary Agent Pattern
 
@@ -145,14 +146,24 @@ Run tests for specific crates:
 
 ### Examples Directory
 
-The `examples/` directory contains 17+ examples demonstrating various features:
+The `examples/` directory contains 27+ examples demonstrating various features:
 - `react_agent/`: Basic ReAct pattern agent
 - `secretary_agent/`: Secretary agent with human-in-the-loop
+- `hitl_secretary/`: Human-in-the-loop secretary variant
 - `multi_agent_coordination/`: Various coordination patterns
+- `adaptive_collaboration_agent/`: Adaptive collaboration demo
+- `chat_stream/`: Streaming chat example
 - `rhai_scripting/`: Runtime scripting
+- `rhai_hot_reload/`: Hot-reloadable Rhai scripts
 - `workflow_orchestration/`: Workflow builder
+- `workflow_dsl/`: Workflow DSL usage
 - `wasm_plugin/`: WASM plugin development
 - `monitoring_dashboard/`: Observability features
+- `plugin_demo/`, `plugin_system/`: Plugin development
+- `python_bindings/`, `java_bindings/`, `go_bindings/`: FFI examples
+- `tool_routing/`, `skills/`: Tool and skill management
+- `streaming_persistence/`, `streaming_manual_persistence/`: Persistence examples
+- `financial_compliance_agent/`, `medical_diagnosis_agent/`: Domain-specific agents
 
 Review these when implementing new features to understand existing patterns.
 

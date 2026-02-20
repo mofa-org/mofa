@@ -1,6 +1,6 @@
-# MoFA Agent框架
+# MoFA Agent Framework
 
-[English](README_en.md) | [简体中文](README.md)
+[English](README.md) | [简体中文](README_cn.md)
 
 <p align="center">
     <img src="docs/images/mofa-logo.png" width="30%"/>
@@ -9,358 +9,359 @@
 
 <div align="center">
   <a href="https://crates.io/crates/mofa-sdk">
-    <img src="https://img.shields.io/crates/v/mofa.svg" alt="crates.io"/>
+    <img src="https://img.shields.io/crates/v/mofa-sdk.svg" alt="crates.io"/>
   </a>
   <a href="https://pypi.org/project/mofa-core/">
-    <img src="https://img.shields.io/pypi/v/mofa-core.svg" alt="PyPI 最新版本"/>
+    <img src="https://img.shields.io/pypi/v/mofa-core.svg" alt="PyPI"/>
   </a>
   <a href="https://github.com/mofa-org/mofa/blob/main/LICENSE">
-    <img src="https://img.shields.io/github/license/mofa-org/mofa" alt="许可证"/>
+    <img src="https://img.shields.io/github/license/mofa-org/mofa" alt="License"/>
   </a>
   <a href="https://docs.rs/mofa-sdk">
-    <img src="https://img.shields.io/badge/built_with-Rust-dca282.svg?logo=rust"  alt="docs"/>
+    <img src="https://img.shields.io/badge/built_with-Rust-dca282.svg?logo=rust" alt="docs"/>
   </a>
   <a href="https://github.com/mofa-org/mofa/stargazers">
-    <img src="https://img.shields.io/github/stars/mofa-org/mofa" alt="GitHub 星标数"/>
+    <img src="https://img.shields.io/github/stars/mofa-org/mofa" alt="GitHub Stars"/>
   </a>
 </div>
 
 <h2 align="center">
-  <a href="https://mofa.ai/">官网</a>
+  <a href="https://mofa.ai/">Website</a>
   |
-  <a href="https://mofa.ai/docs/0overview/">快速入门</a>
+  <a href="https://mofa.ai/docs/0overview/">Quick Start</a>
   |
   <a href="https://github.com/mofa-org/mofa">GitHub</a>
   |
-  <a href="https://hackathon.mofa.ai/">比赛</a>
+  <a href="https://hackathon.mofa.ai/">Hackathon</a>
   |
-  <a href="https://discord.com/invite/hKJZzDMMm9">社区</a>
+  <a href="https://discord.com/invite/hKJZzDMMm9">Community</a>
 </h2>
 
 <p align="center">
- <img src="https://img.shields.io/badge/性能-极致-red?style=for-the-badge" />
- <img src="https://img.shields.io/badge/扩展-无限-orange?style=for-the-badge" />
- <img src="https://img.shields.io/badge/语言-多端-yellow?style=for-the-badge" />
- <img src="https://img.shields.io/badge/运行时-可编程-green?style=for-the-badge" />
+ <img src="https://img.shields.io/badge/Performance-Extreme-red?style=for-the-badge" />
+ <img src="https://img.shields.io/badge/Extensibility-Unlimited-orange?style=for-the-badge" />
+ <img src="https://img.shields.io/badge/Languages-Multi_platform-yellow?style=for-the-badge" />
+ <img src="https://img.shields.io/badge/Runtime-Programmable-green?style=for-the-badge" />
 </p>
 
-## 概述
-MoFA (Modular Framework for Agents) 不是又一个智能体框架。
-它是第一个实现"一次编写，多语言共享"的生产级智能体框架，专注于**极致性能、无限扩展性和运行时可编程性**。
-通过革命性的架构设计，独创**双层插件系统**（编译时插件 + 运行时插件），实现了业界罕见的"性能与灵活性"完美平衡。
+## Overview
+MoFA (Modular Framework for Agents) is not just another entry in the crowded agent framework landscape.
+It is the first production-grade framework to achieve **"write once, run everywhere"** across languages, built for **extreme performance, boundless extensibility, and runtime programmability**.
+Through its revolutionary microkernel architecture and innovative **dual-layer plugin system** (compile-time + runtime), MoFA strikes the elusive balance between raw performance and dynamic flexibility.
 
-MoFA的突破：</br>
-✅ Rust内核 + UniFFI：极致性能 + 多语言原生调用 </br>
-✅ 双层插件：编译时高性能 + 运行时零部署修改 </br>
-✅ 微内核架构：模块化，易扩展</br>
-✅ 云原生：天生支持分布式和边缘计算</br>
+What Sets MoFA Apart:</br>
+✅ **Rust Core + UniFFI**: Blazing performance with native multi-language interoperability</br>
+✅ **Dual-Layer Plugins**: Zero-cost compile-time extensions meet hot-swappable runtime scripts</br>
+✅ **Microkernel Architecture**: Clean separation of concerns, effortless to extend</br>
+✅ **Cloud-Native by Design**: First-class support for distributed and edge deployments</br>
 
-## 为什么选择MoFA？
-### **性能优势**
+## Why MoFA?
 
-- 基于Rust 零成本抽象
-- 内存安全
-- 比Python生态框架性能提升显著
+### **Performance**
 
-### **多语言支持**
+- Zero-cost abstractions in Rust
+- Memory safety without garbage collection
+- Orders of magnitude faster than Python-based frameworks
 
-- 通过UniFFI生成Python、Java、Go、Kotlin、Swift绑定
-- 支持多种语言调用Rust核心逻辑
-- 跨语言调用性能优于传统FFI方案
+### **Polyglot by Design**
 
-### **运行时可编程**
+- Auto-generated bindings for Python, Java, Go, Kotlin, Swift via UniFFI
+- Call Rust core logic natively from any supported language
+- Near-zero overhead compared to traditional FFI
 
-- 集成Rhai脚本引擎
-- 支持热重载业务逻辑
-- 支持运行时配置和规则调整
-- 用户自定义扩展
+### **Runtime Programmability**
 
+- Embedded Rhai scripting engine
+- Hot-reload business logic without recompilation
+- Runtime configuration and rule adjustments
+- User-defined extensions on the fly
 
-### **双层插件架构**
+### **Dual-Layer Plugin Architecture**
 
-- **编译时插件**: 极致性能，原生集成
-- **运行时插件**: 动态加载，即时生效
-- 支持插件热加载和版本管理
+- **Compile-time plugins**: Extreme performance, native integration
+- **Runtime plugins**: Dynamic loading, instant effect
+- Support plugin hot loading and version management
 
-### **分布式数据流 (Dora)**
+### **Distributed by Nature**
 
-- 支持Dora-rs分布式运行时
-- 跨进程/跨机器Agent通信
-- 适合边缘计算场景
+- Built on Dora-rs for distributed dataflow
+- Seamless cross-process, cross-machine agent communication
+- Edge computing ready
 
-### **Actor并发模型 (Ractor)**
+### **Actor-Model Concurrency**
 
-- Agent间隔离性好
-- 消息驱动架构
-- 支持高并发场景
+- Isolated agent processes via Ractor
+- Message-passing architecture
+- Battle-tested for high-concurrency workloads
 
-## 核心架构
+## Core Architecture
 
-### 微内核 + 双层插件系统
+### Microkernel + Dual-Layer Plugin System
 
-MoFA采用**分层微内核架构**，通过**双层插件系统**实现极致的扩展性：
+MoFA adopts a **layered microkernel architecture**, achieving extreme extensibility through a **dual-layer plugin system**:
 
 ```
 ┌─────────────────────────────────────────────────────────┐
-│                    业务层                                │
-│  (用户自定义Agent、工作流、规则)                            │
+│                    Business Layer                        │
+│  (User-defined Agents, Workflows, Rules)                 │
 └─────────────────────────────────────────────────────────┘
                           ↓
 ┌─────────────────────────────────────────────────────────┐
-│              运行时插件层 (Rhai脚本)                       │
-│  • 动态工具注册  • 规则引擎  • 脚本化工作流                  │
-│  • 热加载逻辑    • 表达式求值                              │
+│          Runtime Plugin Layer (Rhai Scripts)              │
+│  • Dynamic tool registration  • Rule engine  • Scripts   │
+│  • Hot-load logic    • Expression evaluation             │
 └─────────────────────────────────────────────────────────┘
                           ↓
 ┌─────────────────────────────────────────────────────────┐
-│            编译时插件层 (Rust/WASM)                       │
-│  • LLM插件  • 工具插件  • 存储插件  • 协议插件               │
-│  • 高性能模块  • 原生系统集成                               │
+│            Compile-time Plugin Layer (Rust/WASM)         │
+│  • LLM plugins  • Tool plugins  • Storage  • Protocol    │
+│  • High-performance modules  • Native system integration  │
 └─────────────────────────────────────────────────────────┘
                           ↓
 ┌─────────────────────────────────────────────────────────┐
-│                  微内核 (mofa-kernel)                    │
-│  • 生命周期管理  • 元数据系统  • 通信总线                    │
-│  • 任务调度       • 内存管理                               │
+│                  Microkernel (mofa-kernel)               │
+│  • Lifecycle management  • Metadata  • Communication     │
+│  • Task scheduling       • Memory management             │
 └─────────────────────────────────────────────────────────┘
 ```
 
-#### 双层插件系统的优势
+#### Advantages of Dual-Layer Plugin System
 
-**编译时插件 (Rust/WASM)**
+**Compile-time Plugins (Rust/WASM)**
 
-- 极致性能，零运行时开销
-- 类型安全，编译期错误检查
-- 支持复杂系统调用和原生集成
-- WASM沙箱提供安全隔离
+- Extreme performance, zero runtime overhead
+- Type safety, compile-time error checking
+- Support complex system calls and native integration
+- WASM sandbox provides secure isolation
 
-**运行时插件 (Rhai脚本)**
+**Runtime Plugins (Rhai Scripts)**
 
-- 无需重编译，即时生效
-- 业务逻辑热更新
-- 用户自定义扩展
-- 安全沙箱执行，可配置资源限制
+- No recompilation needed, instant effect
+- Business logic hot updates
+- User-defined extensions
+- Secure sandbox execution with configurable resource limits
 
-**组合威力**
+**Combined Power**
 
-- 性能关键路径使用Rust插件（如LLM推理、数据处理）
-- 业务逻辑使用Rhai脚本（如规则引擎、工作流编排）
-- 两者无缝互操作，覆盖99%的扩展场景
+- Use Rust plugins for performance-critical paths (e.g., LLM inference, data processing)
+- Use Rhai scripts for business logic (e.g., rule engines, workflow orchestration)
+- Seamless interoperability between both, covering 99% of extension scenarios
 
+## Core Features
 
-## 核心特性
+### 1. Microkernel Architecture
+MoFA adopts a **layered microkernel architecture** with `mofa-kernel` at its core. All other features (including plugin system, LLM capabilities, multi-agent collaboration, etc.) are built as modular components on top of the microkernel.
 
-### 1. 微内核架构
-MoFA采用**分层微内核架构**，以 `mofa-kernel` 为核心，所有其他功能（包括插件系统、LLM能力、多智能体协作等）均以模块化组件形式构建在微内核之上。
+#### Core Design Principles
+- **Core Simplicity**: The microkernel contains only the most basic functions: agent lifecycle management, metadata system, and dynamic management
+- **High Extensibility**: All advanced features are extended through modular components and plugins, keeping the kernel stable
+- **Loose Coupling**: Components communicate through standardized interfaces, easy to replace and upgrade
 
-#### 核心设计理念
-- **核心简洁性**: 微内核仅包含智能体生命周期管理、元数据系统和动态管理等最基础功能
-- **高扩展性**: 所有高级功能通过模块化组件和插件形式扩展，保持内核稳定
-- **松耦合**: 组件之间通过标准化接口通信，易于替换和升级
+#### Integration with Plugin System
+- The plugin system is developed based on the `Plugin` interface of the microkernel. All plugins (including LLM plugins, tool plugins, etc.) are integrated through the `AgentPlugin` standard interface
+- The microkernel provides plugin registration center and lifecycle management, supporting plugin hot loading and version control
+- LLM capabilities are implemented through `LLMPlugin`, encapsulating LLM providers as plugins compliant with microkernel specifications
 
-#### 与插件系统的融合
-- 插件系统基于微内核的 `Plugin` 接口开发，所有插件（包括LLM插件、工具插件等）均通过 `AgentPlugin` 标准接口集成
-- 微内核提供插件注册中心和生命周期管理，支持插件的热加载和版本控制
-- LLM能力通过 `LLMPlugin` 实现，将LLM提供者封装为符合微内核规范的插件
+#### Integration with LLM
+- LLM exists as a plugin component of the microkernel, providing standard LLM access capabilities through the `LLMCapability` interface
+- All agent collaboration patterns (chain, parallel, debate, etc.) are built on the microkernel's workflow engine and interact with LLMs through standardized LLM plugin interfaces
+- Secretary mode is also implemented based on the microkernel's A2A communication protocol and task scheduling system
 
-#### 与LLM的融合
-- LLM作为微内核的插件组件存在，通过 `LLMCapability` 接口提供统一的LLM访问能力
-- 所有智能体协作模式（链式、并行、辩论等）均构建在微内核的工作流引擎之上，并通过标准化的LLM插件接口与LLM交互
-- 秘书模式同样基于微内核的A2A通信协议和任务调度系统实现
+### 2. Dual-Layer Plugins
+- **Compile-time plugins**: Extreme performance, native integration
+- **Runtime plugins**: Dynamic loading, instant effect
+- Seamless collaboration between both, covering all scenarios
 
-### 2. 双层插件
-- **编译时插件**: 极致性能，原生集成
-- **运行时插件**: 动态加载，即时生效
-- 两者无缝协作，覆盖所有场景
+### 3. Agent Coordination
+- **Priority Scheduling**: Task scheduling system based on priority levels
+- **Communication Bus**: Built-in inter-agent communication bus
+- **Workflow Engine**: Visual workflow builder and executor
 
-### 3. 智能体协调
-- **优先级调度**: 基于优先级的任务调度系统
-- **通信总线**: 内置的智能体间通信总线
-- **工作流引擎**: 可视化工作流构建器和执行器
+### 4. LLM and AI Capabilities
+- **LLM Abstraction Layer**: Standardized LLM integration interface
+- **OpenAI Support**: Built-in OpenAI API integration
+- **ReAct Pattern**: Agent framework based on reasoning and action
+- **Multi-Agent Collaboration**: LLM-driven agent coordination, supporting multiple collaboration modes:
+  - **Request-Response**: One-to-one deterministic tasks with synchronous replies
+  - **Publish-Subscribe**: One-to-many broadcast tasks with multiple receivers
+  - **Consensus**: Multi-round negotiation and voting for decision-making
+  - **Debate**: Agents alternate speaking to iteratively refine results
+  - **Parallel**: Simultaneous execution with automatic result aggregation
+  - **Sequential**: Pipeline execution where output flows to the next agent
+  - **Custom**: User-defined modes interpreted by the LLM
+- **Secretary Mode**: Provides end-to-end task closed-loop management, including 5 core phases: receive ideas → record todos, clarify requirements → convert to project documents, schedule dispatch → call execution agents, monitor feedback → push key decisions to humans, acceptance report → update todos
+  </br>**Features**:
+    - 🧠 Autonomous task planning and decomposition
+    - 🔄 Intelligent agent scheduling and orchestration
+    - 👤 Human intervention at key nodes
+    - 📊 Full process observability and traceability
+    - 🔁 Closed-loop feedback and continuous optimization
 
-### 4. LLM和AI能力
-- **LLM抽象层**: 统一的LLM集成接口
-- **OpenAI支持**: 内置的OpenAI API集成
-- **ReAct模式**: 基于推理和行动的智能体框架
-- **多智能体协作**: 基于团队的智能体协调，支持多种协作模式：
-  - **链式模式**: 多Agent按顺序执行的工作流，前一个Agent的输出作为后一个Agent的输入，适用于流水线处理场景
-  - **并行模式**: 多Agent同时执行并自动聚合结果，显著提高处理效率
-  - **辩论模式**: 多个Agent交替发言，通过辩论机制优化结果质量
-  - **监督模式**: 由一个监督Agent评估和筛选结果
-  - **MapReduce模式**: 并行处理后归约结果，适合大规模任务
-  - **路由模式**: 基于条件动态选择下一个执行的Agent
-  - **聚合模式**: 收集多个Agent的结果并合并
-- **秘书模式**: 提供端到端的任务闭环管理，包括5个核心阶段：接收想法→记录Todo、澄清需求→转换为项目文档、调度分配→调用执行Agent、监控反馈→推送关键决策给人类、验收汇报→更新Todo
-  </br>**特点**：
-    - 🧠 自主任务规划与分解
-    - 🔄 智能Agent调度编排
-    - 👤 关键节点人类介入
-    - 📊 全流程可观测追溯
-    - 🔁 闭环反馈持续优化
+### 5. Persistence Layer
+- **Multiple Backends**: Support PostgreSQL, MySQL, and SQLite
+- **Session Management**: Persistent agent session storage
+- **Memory System**: Stateful agent memory management
 
-### 5. 持久化层
-- **多种后端**: 支持PostgreSQL、MySQL和SQLite
-- **会话管理**: 持久化的智能体会话存储
-- **记忆系统**: 状态化智能体记忆管理
+### 6. Monitoring & Observability
+- **Dashboard**: Built-in web dashboard with real-time metrics
+- **Metrics System**: Prometheus-compatible metrics system
+- **Tracing Framework**: Distributed tracing system
 
-### 6. 监控与可观察性
-- **仪表盘**: 内置的Web仪表盘，支持实时指标
-- **指标系统**: Prometheus兼容的指标系统
-- **追踪框架**: 分布式追踪系统
+### 7. Rhai Script Engine
 
-### 7. Rhai 脚本引擎
+MoFA integrates the [Rhai](https://github.com/rhaiscript/rhai) embedded scripting language, providing **runtime programmability** without recompilation.
 
-MoFA 集成了 [Rhai](https://github.com/rhaiscript/rhai) 嵌入式脚本语言，提供**运行时可编程能力**，无需重新编译即可修改业务逻辑。
+#### Script Engine Core
+- **Safe Sandbox Execution**: Configurable operation limits, call stack depth, loop control
+- **Script Compilation Cache**: Pre-compile scripts for improved repeated execution performance
+- **Rich Built-in Functions**: String manipulation, math functions, JSON processing, time utilities
+- **Bidirectional JSON Conversion**: Seamless conversion between JSON and Rhai Dynamic types
 
-#### 脚本引擎核心
-- **安全沙箱执行**: 可配置的操作数限制、调用栈深度、循环控制
-- **脚本编译缓存**: 预编译脚本，提升重复执行性能
-- **丰富的内置函数**: 字符串操作、数学函数、JSON处理、时间工具
-- **双向JSON转换**: JSON与Rhai Dynamic类型无缝转换
+#### Scripted Workflow Nodes
+- **Script Task Nodes**: Execute business logic via scripts
+- **Script Condition Nodes**: Dynamic branch decisions
+- **Script Transform Nodes**: Data format transformation
+- **YAML/JSON Workflow Loading**: Define workflows through configuration files
 
-#### 脚本化工作流节点
-- **脚本任务节点**: 通过脚本执行业务逻辑
-- **脚本条件节点**: 动态分支判断
-- **脚本转换节点**: 数据格式转换
-- **YAML/JSON工作流加载**: 通过配置文件定义工作流
+#### Dynamic Tool System
+- **Script-based Tool Definition**: Register tools at runtime
+- **Parameter Validation**: Type checking, range validation, enum constraints
+- **Auto JSON Schema Generation**: Compatible with LLM Function Calling
+- **Hot Loading**: Dynamically load tools from directories
 
-#### 动态工具系统
-- **脚本化工具定义**: 运行时注册工具
-- **参数验证**: 类型检查、范围验证、枚举约束
-- **自动JSON Schema生成**: 兼容LLM Function Calling
-- **热加载**: 从目录动态加载工具
+#### Rule Engine
+- **Priority Rules**: Critical > High > Normal > Low
+- **Multiple Match Modes**: First match, all match, ordered match
+- **Composite Actions**: Set variables, trigger events, goto rules
+- **Rule Group Management**: Support default fallback actions
 
-#### 规则引擎
-- **优先级规则**: Critical > High > Normal > Low
-- **多种匹配模式**: 首次匹配、全部匹配、有序匹配
-- **复合动作**: 设置变量、触发事件、跳转规则
-- **规则组管理**: 支持默认回退动作
+#### Typical Application Scenarios
+| Scenario | Description |
+|----------|-------------|
+| **Dynamic Business Rules** | Discount strategies, content moderation rules, no redeployment needed |
+| **Configurable Workflows** | User-defined data processing pipelines |
+| **LLM Tool Extensions** | Register new tools at runtime for LLM calls |
+| **A/B Testing** | Control experiment logic through scripts |
+| **Expression Evaluation** | Dynamic condition checking, formula calculation |
 
-#### 典型应用场景
-| 场景 | 说明 |
-|------|------|
-| **动态业务规则** | 折扣策略、内容审核规则，无需重新部署 |
-| **可配置工作流** | 用户自定义数据处理管道 |
-| **LLM工具扩展** | 运行时注册新工具供LLM调用 |
-| **A/B测试** | 通过脚本控制实验逻辑 |
-| **表达式求值** | 动态条件判断、公式计算 |
+## Roadmap
 
-## 路线图
+### Short-term Goals
+- [ ] Dora-rs runtime support for distributed dataflow
+- [ ] Complete distributed tracing implementation
+- [ ] Python binding generation
+- [ ] More LLM provider integrations
 
-### 短期目标
-- [ ] Dora-rs运行时支持，用于分布式数据流
-- [ ] 完整的分布式追踪实现
-- [ ] Python绑定生成
-- [ ] 更多LLM提供商集成
+### Long-term Goals
+- [ ] Visual workflow designer UI
+- [ ] Cloud-native deployment support
+- [ ] Advanced agent coordination algorithms
+- [ ] Agent platform
+- [ ] Cross-process/cross-machine distributed agent collaboration
+- [ ] Multi-agent collaboration standard protocol
+- [ ] Cross-platform mobile support
+- [ ] Evolve into agent operating system
 
-### 长期目标
-- [ ] 可视化工作流设计器UI
-- [ ] 云原生部署支持
-- [ ] 高级智能体协调算法
-- [ ] 智能体平台
-- [ ] 跨进程/跨机器分布式Agent协作
-- [ ] 多智能体协作标准协议
-- [ ] 跨平台移动端支持
-- [ ] 向智能体操作系统演进
+## Quick Start
 
-## 快速开始
+### Installation
 
-### 安装
-
-将MoFA添加到您的Cargo.toml：
+Add MoFA to your Cargo.toml:
 
 ```toml
 [dependencies]
 mofa-sdk = "0.1.0"
 ```
-运行时模式最适合需要构建完整智能体工作流的场景，具体包括：
+
+The runtime mode is most suitable for scenarios that require building complete agent workflows, specifically including:
 
   ---
-1. 多智能体协同工作场景
+1. Multi-agent collaboration scenarios
 
-运行时提供消息总线（SimpleMessageBus/DoraChannel）和智能体注册系统，支持智能体之间的：
-- 点对点通信（send_to_agent）
-- 广播消息（broadcast）
-- 主题订阅发布（publish_to_topic/subscribe_topic）
-- 角色管理（get_agents_by_role）
+The runtime provides a message bus (SimpleMessageBus/DoraChannel) and agent registration system, supporting communication between agents:
+- Point-to-point communication (send_to_agent)
+- Broadcast messages (broadcast)
+- Topic pub/sub (publish_to_topic/subscribe_topic)
+- Role management (get_agents_by_role)
 
-当需要多个智能体协作完成复杂任务（如主从架构、分工协作）时，运行时的通信机制可以显著简化开发。
-
-  ---
-2. 事件驱动的智能体应用
-
-运行时内置事件循环（run_with_receiver/run_event_loop）和中断处理系统，自动管理：
-- 事件接收与分发
-- 智能体状态生命周期
-- 超时与中断处理
-
-适合构建需要响应外部事件或定时器的应用（如实时对话系统、事件响应机器人）。
+When you need multiple agents to collaborate on complex tasks (such as master-slave architecture, division of labor), the runtime's communication mechanism can significantly simplify development.
 
   ---
-3. 分布式智能体系统
+2. Event-driven agent applications
 
-当启用 dora 特性时，运行时提供Dora 适配器（DoraAgentNode/DoraDataflow），支持：
-- 分布式节点部署
-- 跨节点智能体通信
-- 数据流管理
+The runtime has a built-in event loop (run_with_receiver/run_event_loop) and interrupt handling system, automatically managing:
+- Event reception and dispatch
+- Agent state lifecycle
+- Timeout and interrupt handling
 
-适合需要大规模部署、低延迟通信的生产级场景。
-
-  ---
-4. 结构化智能体构建
-
-运行时提供AgentBuilder 流式 API，简化智能体的：
-- 配置管理
-- 插件集成
-- 能力声明
-- 端口配置
-
-适合需要快速构建标准化智能体的场景，尤其是需要统一管理多个智能体配置时。
+Suitable for building applications that need to respond to external events or timers (such as real-time dialogue systems, event response robots).
 
   ---
-5. 生产级应用
+3. Distributed agent systems
 
-运行时提供完善的：
-- 健康检查与状态管理
-- 日志与监控集成
-- 错误处理机制
+When the dora feature is enabled, the runtime provides Dora adapters (DoraAgentNode/DoraDataflow), supporting:
+- Distributed node deployment
+- Cross-node agent communication
+- Data flow management
 
-适合构建需要稳定运行的生产级应用，而不是简单的插件测试或原型开发。
-## 文档
+Suitable for production scenarios requiring large-scale deployment and low-latency communication.
 
-- [API 文档](https://docs.rs/mofa)
-- [GitHub 仓库](https://github.com/mofa-org/mofa)
-- [示例](examples/)
+  ---
+4. Structured agent building
 
-## 贡献
+The runtime provides AgentBuilder fluent API, simplifying agent:
+- Configuration management
+- Plugin integration
+- Capability declaration
+- Port configuration
 
-我们欢迎贡献！请查看我们的[贡献指南](CONTRIBUTING.md)了解更多详情。
+Suitable for scenarios where you need to quickly build standardized agents, especially when you need to uniformly manage multiple agent configurations.
 
-## 社区
+  ---
+5. Production-grade applications
+
+The runtime provides comprehensive:
+- Health checks and state management
+- Logging and monitoring integration
+- Error handling mechanisms
+
+Suitable for building production applications that need stable operation, rather than simple plugin testing or prototype development.
+
+## Documentation
+
+- [API Documentation](https://docs.rs/mofa-sdk)
+- [GitHub Repository](https://github.com/mofa-org/mofa)
+- [Examples](examples/)
+
+## Contributing
+
+We welcome contributions! Please check out our [contributing guide](CONTRIBUTING.md) for more details.
+
+## Community
 
 - GitHub Issues: [https://github.com/mofa-org/mofa/discussions](https://github.com/mofa-org/mofa/discussions)
 - Discord: [https://discord.com/invite/hKJZzDMMm9](https://discord.com/invite/hKJZzDMMm9)
 
-## 星标历史
+## Star History
 
 [![Star History Chart](https://api.star-history.com/svg?repos=mofa-org/mofa&type=Date)](https://www.star-history.com/#mofa-org/mofa&Date)
 
-## 🙏 致谢
+## 🙏 Acknowledgments
 
-MoFA站在巨人的肩膀上：
+MoFA stands on the shoulders of giants:
 
-- [Rust](https://www.rust-lang.org/) - 性能与安全的完美结合
-- [UniFFI](https://mozilla.github.io/uniffi-rs/) - Mozilla的多语言绑定魔法
-- [Rhai](https://rhai.rs/) - 强大的嵌入式脚本引擎
-- [Tokio](https://tokio.rs/) - 异步运行时基石
-- [Ractor](https://github.com/slawlor/ractor) - Actor模型并发框架
-- [Dora](https://github.com/dora-rs/dora) - 分布式数据流运行时
-- [Wasmtime](https://wasmtime.dev/) - WebAssembly运行时
+- [Rust](https://www.rust-lang.org/) - Perfect combination of performance and safety
+- [UniFFI](https://mozilla.github.io/uniffi-rs/) - Mozilla's multi-language binding magic
+- [Rhai](https://rhai.rs/) - Powerful embedded scripting engine
+- [Tokio](https://tokio.rs/) - Async runtime cornerstone
+- [Ractor](https://github.com/slawlor/ractor) - Actor model concurrency framework
+- [Dora](https://github.com/dora-rs/dora) - Distributed dataflow runtime
+- [Wasmtime](https://wasmtime.dev/) - WebAssembly runtime
 
-## 支持
+## Support
 
 源起之道支持｜Supported by Upstream Labs
 
-## 许可证
+## License
 
 [Apache License 2.0](./LICENSE)
