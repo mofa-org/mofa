@@ -115,7 +115,7 @@ impl EventHandlingEngine {
                     plugin.metadata().name
                 );
 
-                // Process the event - call handle_event directly on the trait object
+                // Process the event
                 let processed_event = plugin.handle_event(event).await?;
 
                 println!(
