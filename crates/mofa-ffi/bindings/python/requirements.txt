@@ -1,0 +1,12 @@
+# MoFA Python Bindings Requirements
+#
+# Note: The mofa module is generated from Rust via UniFFI
+# This file lists dependencies for running the Python examples
+
+# No external dependencies required for the bindings themselves
+# The mofa module is self-contained and uses ctypes to load the Rust library
+
+# Optional: For development
+# pytest>=7.0.0
+# black>=22.0.0
+# mypy>=0.950

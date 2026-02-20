@@ -1,0 +1,536 @@
+//! Tracer 和 TracerProvider
+//!
+//! 提供追踪器的创建和管理
+
+use super::context::{SpanContext, SpanId, TraceFlags, TraceId};
+use super::exporter::TracingExporter;
+use super::propagator::TracePropagator;
+use super::span::{Span, SpanBuilder, SpanData, SpanKind};
+use std::collections::HashMap;
+use std::sync::Arc;
+use tokio::sync::RwLock;
+
+/// 采样策略
+#[derive(Debug, Clone, Default)]
+pub enum SamplingStrategy {
+    /// 始终采样
+    #[default]
+    AlwaysOn,
+    /// 从不采样
+    AlwaysOff,
+    /// 按概率采样
+    Probabilistic(f64),
+    /// 基于速率限制采样
+    RateLimiting { traces_per_second: f64 },
+    /// 父级决定
+    ParentBased { root: Box<SamplingStrategy> },
+}
+
+impl SamplingStrategy {
+    /// 判断是否应该采样
+    pub fn should_sample(
+        &self,
+        parent_context: Option<&SpanContext>,
+        trace_id: &TraceId,
+        name: &str,
+    ) -> bool {
+        match self {
+            SamplingStrategy::AlwaysOn => true,
+            SamplingStrategy::AlwaysOff => false,
+            SamplingStrategy::Probabilistic(probability) => {
+                let hash = trace_id
+                    .as_bytes()
+                    .iter()
+                    .fold(0u64, |acc, &b| acc.wrapping_mul(31).wrapping_add(b as u64));
+                (hash as f64 / u64::MAX as f64) < *probability
+            }
+            SamplingStrategy::RateLimiting { traces_per_second } => {
+                // 简化实现：使用概率近似
+                let probability = (*traces_per_second / 1000.0).min(1.0);
+                rand::random::<f64>() < probability
+            }
+            SamplingStrategy::ParentBased { root } => {
+                if let Some(parent) = parent_context {
+                    parent.is_sampled()
+                } else {
+                    root.should_sample(None, trace_id, name)
+                }
+            }
+        }
+    }
+}
+
+/// Tracer 配置
+#[derive(Debug, Clone)]
+pub struct TracerConfig {
+    /// 服务名称
+    pub service_name: String,
+    /// 服务版本
+    pub service_version: Option<String>,
+    /// 环境
+    pub environment: Option<String>,
+    /// 采样策略
+    pub sampling_strategy: SamplingStrategy,
+    /// 最大属性数
+    pub max_attributes: usize,
+    /// 最大事件数
+    pub max_events: usize,
+    /// 最大链接数
+    pub max_links: usize,
+}
+
+impl Default for TracerConfig {
+    fn default() -> Self {
+        Self {
+            service_name: "unknown-service".to_string(),
+            service_version: None,
+            environment: None,
+            sampling_strategy: SamplingStrategy::AlwaysOn,
+            max_attributes: 128,
+            max_events: 128,
+            max_links: 128,
+        }
+    }
+}
+
+impl TracerConfig {
+    pub fn new(service_name: impl Into<String>) -> Self {
+        Self {
+            service_name: service_name.into(),
+            ..Default::default()
+        }
+    }
+
+    pub fn with_version(mut self, version: impl Into<String>) -> Self {
+        self.service_version = Some(version.into());
+        self
+    }
+
+    pub fn with_environment(mut self, env: impl Into<String>) -> Self {
+        self.environment = Some(env.into());
+        self
+    }
+
+    pub fn with_sampling_strategy(mut self, strategy: SamplingStrategy) -> Self {
+        self.sampling_strategy = strategy;
+        self
+    }
+}
+
+/// Span 处理器 trait
+#[async_trait::async_trait]
+pub trait SpanProcessor: Send + Sync {
+    /// Span 开始时调用
+    async fn on_start(&self, span: &Span, parent_context: Option<&SpanContext>);
+    /// Span 结束时调用
+    async fn on_end(&self, span: SpanData);
+    /// 关闭处理器
+    async fn shutdown(&self) -> Result<(), String>;
+    /// 强制刷新
+    async fn force_flush(&self) -> Result<(), String>;
+}
+
+/// 简单 Span 处理器 - 直接导出
+pub struct SimpleSpanProcessor {
+    exporter: Arc<dyn TracingExporter>,
+}
+
+impl SimpleSpanProcessor {
+    pub fn new(exporter: Arc<dyn TracingExporter>) -> Self {
+        Self { exporter }
+    }
+}
+
+#[async_trait::async_trait]
+impl SpanProcessor for SimpleSpanProcessor {
+    async fn on_start(&self, _span: &Span, _parent_context: Option<&SpanContext>) {
+        // 简单处理器不在开始时做任何事
+    }
+
+    async fn on_end(&self, span: SpanData) {
+        if let Err(e) = self.exporter.export(vec![span]).await {
+            tracing::error!("Failed to export span: {}", e);
+        }
+    }
+
+    async fn shutdown(&self) -> Result<(), String> {
+        self.exporter.shutdown().await
+    }
+
+    async fn force_flush(&self) -> Result<(), String> {
+        self.exporter.force_flush().await
+    }
+}
+
+/// 批处理 Span 处理器
+pub struct BatchSpanProcessor {
+    exporter: Arc<dyn TracingExporter>,
+    buffer: Arc<RwLock<Vec<SpanData>>>,
+    batch_size: usize,
+    max_queue_size: usize,
+}
+
+impl BatchSpanProcessor {
+    pub fn new(
+        exporter: Arc<dyn TracingExporter>,
+        batch_size: usize,
+        max_queue_size: usize,
+    ) -> Self {
+        Self {
+            exporter,
+            buffer: Arc::new(RwLock::new(Vec::new())),
+            batch_size,
+            max_queue_size,
+        }
+    }
+
+    async fn maybe_export(&self) -> Result<(), String> {
+        let to_export: Option<Vec<SpanData>> = {
+            let mut buffer = self.buffer.write().await;
+            if buffer.len() >= self.batch_size {
+                Some(buffer.drain(..).collect())
+            } else {
+                None
+            }
+        };
+
+        if let Some(spans) = to_export {
+            self.exporter.export(spans).await?;
+        }
+
+        Ok(())
+    }
+}
+
+#[async_trait::async_trait]
+impl SpanProcessor for BatchSpanProcessor {
+    async fn on_start(&self, _span: &Span, _parent_context: Option<&SpanContext>) {
+        // 批处理器不在开始时做任何事
+    }
+
+    async fn on_end(&self, span: SpanData) {
+        {
+            let mut buffer = self.buffer.write().await;
+            if buffer.len() < self.max_queue_size {
+                buffer.push(span);
+            }
+        }
+
+        if let Err(e) = self.maybe_export().await {
+            tracing::error!("Failed to export spans: {}", e);
+        }
+    }
+
+    async fn shutdown(&self) -> Result<(), String> {
+        self.force_flush().await?;
+        self.exporter.shutdown().await
+    }
+
+    async fn force_flush(&self) -> Result<(), String> {
+        let to_export: Vec<SpanData> = {
+            let mut buffer = self.buffer.write().await;
+            buffer.drain(..).collect()
+        };
+
+        if !to_export.is_empty() {
+            self.exporter.export(to_export).await?;
+        }
+
+        self.exporter.force_flush().await
+    }
+}
+
+/// Tracer - 追踪器
+pub struct Tracer {
+    config: TracerConfig,
+    processor: Arc<dyn SpanProcessor>,
+}
+
+impl Tracer {
+    pub fn new(config: TracerConfig, processor: Arc<dyn SpanProcessor>) -> Self {
+        Self { config, processor }
+    }
+
+    /// 创建新的根 Span
+    pub fn start_span(&self, name: impl Into<String>) -> Span {
+        self.start_span_with_kind(name, SpanKind::Internal, None)
+    }
+
+    /// 创建带类型的 Span
+    pub fn start_span_with_kind(
+        &self,
+        name: impl Into<String>,
+        kind: SpanKind,
+        parent: Option<&SpanContext>,
+    ) -> Span {
+        let name = name.into();
+        let trace_id = parent.map(|p| p.trace_id).unwrap_or_default();
+
+        // 检查是否应该采样
+        let should_sample = self
+            .config
+            .sampling_strategy
+            .should_sample(parent, &trace_id, &name);
+
+        let trace_flags = if should_sample {
+            TraceFlags::SAMPLED
+        } else {
+            TraceFlags::NONE
+        };
+
+        let span_context = SpanContext::new(trace_id, SpanId::new(), trace_flags, false);
+
+        if !should_sample {
+            return Span::non_recording(span_context);
+        }
+
+        let span = Span::new(
+            name,
+            span_context.clone(),
+            parent.cloned(),
+            kind,
+            &self.config.service_name,
+        );
+
+        // 通知处理器
+        let processor = self.processor.clone();
+        let span_clone = span.clone();
+        let parent_clone = parent.cloned();
+        tokio::spawn(async move {
+            processor.on_start(&span_clone, parent_clone.as_ref()).await;
+        });
+
+        span
+    }
+
+    /// 创建子 Span
+    pub fn start_child_span(&self, name: impl Into<String>, parent: &SpanContext) -> Span {
+        self.start_span_with_kind(name, SpanKind::Internal, Some(parent))
+    }
+
+    /// 使用 SpanBuilder 创建 Span
+    pub fn span_builder(&self, name: impl Into<String>) -> SpanBuilder {
+        SpanBuilder::new(name, &self.config.service_name)
+    }
+
+    /// 结束 Span 并导出
+    pub async fn end_span(&self, span: &Span) {
+        span.end().await;
+        if span.is_recording().await {
+            let data = span.get_data().await;
+            self.processor.on_end(data).await;
+        }
+    }
+
+    /// 获取服务名称
+    pub fn service_name(&self) -> &str {
+        &self.config.service_name
+    }
+
+    /// 关闭 Tracer
+    pub async fn shutdown(&self) -> Result<(), String> {
+        self.processor.shutdown().await
+    }
+
+    /// 强制刷新
+    pub async fn force_flush(&self) -> Result<(), String> {
+        self.processor.force_flush().await
+    }
+}
+
+/// Tracer Provider - 管理多个 Tracer
+pub struct TracerProvider {
+    config: TracerConfig,
+    processor: Arc<dyn SpanProcessor>,
+    tracers: Arc<RwLock<HashMap<String, Arc<Tracer>>>>,
+    propagator: Arc<dyn TracePropagator>,
+}
+
+impl TracerProvider {
+    pub fn new(config: TracerConfig, processor: Arc<dyn SpanProcessor>) -> Self {
+        use super::propagator::W3CTraceContextPropagator;
+
+        Self {
+            config,
+            processor,
+            tracers: Arc::new(RwLock::new(HashMap::new())),
+            propagator: Arc::new(W3CTraceContextPropagator::new()),
+        }
+    }
+
+    pub fn with_propagator(mut self, propagator: Arc<dyn TracePropagator>) -> Self {
+        self.propagator = propagator;
+        self
+    }
+
+    /// 获取或创建 Tracer
+    pub async fn tracer(&self, name: &str) -> Arc<Tracer> {
+        {
+            let tracers = self.tracers.read().await;
+            if let Some(tracer) = tracers.get(name) {
+                return tracer.clone();
+            }
+        }
+
+        let tracer = Arc::new(Tracer::new(
+            TracerConfig {
+                service_name: name.to_string(),
+                ..self.config.clone()
+            },
+            self.processor.clone(),
+        ));
+
+        {
+            let mut tracers = self.tracers.write().await;
+            tracers.insert(name.to_string(), tracer.clone());
+        }
+
+        tracer
+    }
+
+    /// 获取默认 Tracer
+    pub async fn default_tracer(&self) -> Arc<Tracer> {
+        self.tracer(&self.config.service_name).await
+    }
+
+    /// 获取传播器
+    pub fn propagator(&self) -> Arc<dyn TracePropagator> {
+        self.propagator.clone()
+    }
+
+    /// 关闭 Provider
+    pub async fn shutdown(&self) -> Result<(), String> {
+        self.processor.shutdown().await
+    }
+}
+
+/// 全局 Tracer
+pub struct GlobalTracer {
+    provider: Arc<RwLock<Option<Arc<TracerProvider>>>>,
+}
+
+impl GlobalTracer {
+    /// 创建新的全局 Tracer 实例
+    pub fn new() -> Self {
+        Self {
+            provider: Arc::new(RwLock::new(None)),
+        }
+    }
+
+    /// 设置全局 TracerProvider
+    pub async fn set_provider(&self, provider: Arc<TracerProvider>) {
+        let mut guard = self.provider.write().await;
+        *guard = Some(provider);
+    }
+
+    /// 获取全局 TracerProvider
+    pub async fn provider(&self) -> Option<Arc<TracerProvider>> {
+        let guard = self.provider.read().await;
+        guard.clone()
+    }
+
+    /// 获取默认 Tracer
+    pub async fn tracer(&self) -> Option<Arc<Tracer>> {
+        let provider = self.provider().await?;
+        Some(provider.default_tracer().await)
+    }
+
+    /// 获取指定名称的 Tracer
+    pub async fn tracer_with_name(&self, name: &str) -> Option<Arc<Tracer>> {
+        let provider = self.provider().await?;
+        Some(provider.tracer(name).await)
+    }
+}
+
+impl Default for GlobalTracer {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+// 全局静态实例
+lazy_static::lazy_static! {
+    static ref GLOBAL_TRACER: GlobalTracer = GlobalTracer::new();
+}
+
+/// 获取全局 Tracer
+pub fn global_tracer() -> &'static GlobalTracer {
+    &GLOBAL_TRACER
+}
+
+/// 设置全局 TracerProvider
+pub async fn set_global_tracer_provider(provider: Arc<TracerProvider>) {
+    GLOBAL_TRACER.set_provider(provider).await;
+}
+
+/// 获取全局默认 Tracer
+pub async fn get_tracer() -> Option<Arc<Tracer>> {
+    GLOBAL_TRACER.tracer().await
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::tracing::exporter::{ConsoleExporter, ExporterConfig};
+
+    #[tokio::test]
+    async fn test_tracer_creation() {
+        let config = ExporterConfig::new("test-service");
+        let exporter = Arc::new(ConsoleExporter::new(config).with_summary_only());
+        let processor = Arc::new(SimpleSpanProcessor::new(exporter));
+
+        let tracer_config = TracerConfig::new("test-service");
+        let tracer = Tracer::new(tracer_config, processor);
+
+        let span = tracer.start_span("test-operation");
+        assert!(span.is_recording().await);
+
+        tracer.end_span(&span).await;
+        assert!(span.is_ended().await);
+    }
+
+    #[tokio::test]
+    async fn test_tracer_provider() {
+        let config = ExporterConfig::new("test-service");
+        let exporter = Arc::new(ConsoleExporter::new(config).with_summary_only());
+        let processor = Arc::new(SimpleSpanProcessor::new(exporter));
+
+        let tracer_config = TracerConfig::new("test-service");
+        let provider = TracerProvider::new(tracer_config, processor);
+
+        let tracer1 = provider.tracer("service-a").await;
+        let tracer2 = provider.tracer("service-a").await;
+
+        // 应该返回相同的 tracer
+        assert_eq!(tracer1.service_name(), tracer2.service_name());
+    }
+
+    #[test]
+    fn test_sampling_always_on() {
+        let strategy = SamplingStrategy::AlwaysOn;
+        assert!(strategy.should_sample(None, &TraceId::new(), "test"));
+    }
+
+    #[test]
+    fn test_sampling_always_off() {
+        let strategy = SamplingStrategy::AlwaysOff;
+        assert!(!strategy.should_sample(None, &TraceId::new(), "test"));
+    }
+
+    #[test]
+    fn test_sampling_probabilistic() {
+        let strategy = SamplingStrategy::Probabilistic(0.5);
+        let mut sampled_count = 0;
+        let iterations = 1000;
+
+        for _ in 0..iterations {
+            if strategy.should_sample(None, &TraceId::new(), "test") {
+                sampled_count += 1;
+            }
+        }
+
+        // 应该大约有一半被采样
+        let ratio = sampled_count as f64 / iterations as f64;
+        assert!(ratio > 0.3 && ratio < 0.7);
+    }
+}

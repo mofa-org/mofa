@@ -1,0 +1,222 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to release (e.g., 1.0.0)'
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  check:
+    name: Pre-release Checks
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Cache dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Check formatting
+        run: cargo fmt -- --check
+
+      - name: Run clippy
+        run: cargo clippy --workspace -- -D warnings
+
+      - name: Run tests
+        run: cargo test --workspace --all-features
+
+      - name: Build documentation
+        run: cargo doc --workspace --no-deps
+
+  build:
+    name: Build Release Binaries
+    needs: check
+    strategy:
+      matrix:
+        include:
+          - target: x86_64-unknown-linux-gnu
+            os: ubuntu-latest
+            artifact_name: mofa
+            asset_name: mofa-x86_64-unknown-linux-gnu
+          - target: x86_64-apple-darwin
+            os: macos-latest
+            artifact_name: mofa
+            asset_name: mofa-x86_64-apple-darwin
+          - target: aarch64-apple-darwin
+            os: macos-latest
+            artifact_name: mofa
+            asset_name: mofa-aarch64-apple-darwin
+          - target: x86_64-pc-windows-msvc
+            os: windows-latest
+            artifact_name: mofa.exe
+            asset_name: mofa-x86_64-pc-windows-msvc.exe
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Cache dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-${{ matrix.target }}-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Build release binary
+        run: cargo build --release --target ${{ matrix.target }} --bins
+
+      - name: Extract version
+        id: version
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "version=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
+          else
+            echo "version=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.asset_name }}
+          path: target/${{ matrix.target }}/release/${{ matrix.artifact_name }}
+
+  create-release:
+    name: Create GitHub Release
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Extract version
+        id: version
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "version=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
+          else
+            echo "version=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: ./artifacts
+
+      - name: Create checksums
+        run: |
+          cd artifacts
+          for dir in */; do
+            cd "$dir"
+            shasum -a 256 * > SHA256SUMS
+            cd ..
+          done
+          cd ..
+
+      - name: Generate release notes
+        id: release_notes
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          NOTES="## MoFA v${VERSION}
+
+          ### Changes
+          See [CHANGELOG.md](https://github.com/mofa-org/mofa/blob/main/CHANGELOG.md) for details.
+
+          ### Installation
+
+          \`\`\`bash
+          # Using cargo
+          cargo install mofa-cli --version ${VERSION}
+
+          # Or download the binary for your platform
+          \`\`\`
+
+          ### Binaries
+
+          | Platform | Binary | SHA256 Checksum |
+          |----------|--------|-----------------|
+          "
+
+          for dir in artifacts/*/; do
+            NAME=$(basename "$dir" | sed 's/mofa-/mofa /')
+            SHA=$(cat "$dir"SHA256SUMS | awk '{print $1}')
+            NOTES="${NAS}$NAME | [\`${NAME}\`](https://github.com/mofa-org/mofa/releases/download/v${VERSION}/${NAME}) | \`${SHA}\`"$'\n'
+          done
+
+          # Save to file for multiline output
+          echo "$NOTES" > release_notes.md
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: v${{ steps.version.outputs.version }}
+          name: Release v${{ steps.version.outputs.version }}
+          body_path: release_notes.md
+          draft: false
+          prerelease: false
+          files: |
+            artifacts/*/*
+
+  publish-crates:
+    name: Publish to crates.io
+    needs: check
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Publish mofa-sdk
+        run: |
+          cd crates/mofa-sdk
+          cargo publish --token ${{ secrets.CARGO_REGISTRY_TOKEN }}
+
+      - name: Wait for mofa-sdk
+        run: sleep 30
+
+      - name: Publish remaining crates
+        run: |
+          for crate in mofa-kernel mofa-foundation mofa-runtime mofa-plugins mofa-monitoring mofa-macros mofa-cli mofa-extra; do
+            cd crates/$crate
+            cargo publish --token ${{ secrets.CARGO_REGISTRY_TOKEN }}
+            cd ../..
+            sleep 5
+          done

@@ -1,0 +1,42 @@
+[package]
+name = "mofa-kernel"
+version.workspace = true
+edition.workspace = true
+description = "MoFA Kernel - Core runtime and microkernel implementation"
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+documentation = "https://docs.rs/mofa-kernel"
+readme = "README.md"
+keywords = ["ai", "agent", "microkernel", "trait", "abstraction", "async"]
+categories = ["development-tools", "asynchronous"]
+publish = true
+
+[dependencies]
+# Workspace dependencies
+async-trait.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+serde_yaml = { workspace = true, optional = true }
+tokio.workspace = true
+bincode.workspace = true
+anyhow.workspace = true
+thiserror.workspace = true
+uuid = {workspace = true,features = ["serde", "v4"]}
+tracing.workspace = true
+futures.workspace = true
+
+
+# Config parsing
+toml = { version = "0.8", optional = true }
+config = { workspace = true, optional = true }
+regex = { workspace = true, optional = true }
+
+[dev-dependencies]
+tempfile = "3"
+
+[features]
+default = []
+# Config loader (formats, env substitution, merge)
+config = ["dep:config", "dep:regex", "dep:serde_yaml", "dep:toml"]

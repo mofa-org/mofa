@@ -1,0 +1,65 @@
+[build-system]
+requires = ["maturin>=1.0,<2.0"]
+build-backend = "maturin"
+
+[project]
+name = "mofa-sdk"
+version = "0.1.0"  # Will be synced with Rust version
+description = "MoFA SDK - Modular Framework for AI Agents"
+readme = "README.md"
+requires-python = ">=3.8"
+license = { text = "Apache-2.0" }
+authors = [
+    { email = "mofa@example.com" },
+]
+keywords = ["ai", "agents", "llm", "framework", "multi-agent"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "License :: OSI Approved :: Apache Software License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Rust",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+dependencies = []
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0",
+    "pytest-asyncio>=0.21",
+    "black>=23.0",
+    "ruff>=0.1",
+]
+
+[project.urls]
+Homepage = "https://github.com/mofa-org/mofa"
+Documentation = "https://docs.mofa.org"
+Repository = "https://github.com/mofa-org/mofa"
+Issues = "https://github.com/mofa-org/mofa/issues"
+
+[tool.maturin]
+python-source = "python"
+module-name = "mofa._mofa"  # Native extension
+# Include the generated UniFFI bindings
+bindings = "uniffi"
+# Strip debug symbols from the built library
+strip = true
+
+[tool.black]
+line-length = 100
+target-version = ["py38", "py39", "py310", "py311", "py312"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py38"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+addopts = "-v"

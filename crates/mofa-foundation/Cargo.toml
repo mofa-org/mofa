@@ -1,0 +1,82 @@
+[package]
+name = "mofa-foundation"
+version.workspace = true
+edition.workspace = true
+description = "MoFA Foundation - Core building blocks and utilities"
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+documentation = "https://docs.rs/mofa-foundation"
+readme = "README.md"
+keywords = ["ai", "agent", "llm", "persistence", "implementation", "storage"]
+categories = ["development-tools", "asynchronous"]
+publish = true
+
+[features]
+default = []
+# Enable PostgreSQL persistence backend
+persistence-postgres = ["dep:sqlx"]
+# Enable MySQL/MariaDB persistence backend
+persistence-mysql = ["dep:sqlx"]
+# Enable SQLite persistence backend
+persistence-sqlite = ["dep:sqlx"]
+# Enable all database backends
+persistence-all = ["persistence-postgres", "persistence-mysql", "persistence-sqlite"]
+# Enable Kokoro TTS support
+kokoro = ["mofa-plugins/kokoro"]
+
+[dependencies]
+# Workspace dependencies
+async-trait.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+uuid.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+futures.workspace = true
+anyhow.workspace = true
+tokio-stream = { workspace = true }
+tracing.workspace = true
+rand.workspace = true
+# YAML config parsing
+serde_yaml = "0.9"
+
+# HTTP client (transcription + HTTP providers)
+reqwest = { version = "0.12", features = ["multipart", "json", "gzip", "brotli", "deflate"] }
+
+# Config parsing (multi-format)
+config.workspace = true
+
+# Regex for prompt template parsing
+regex = "1.11"
+
+# TOML parsing for DSL
+toml = "0.8"
+
+# OpenAI / compatible APIs
+async-openai = { version = "0.27" }
+
+# Actor framework for ReAct agents
+ractor.workspace = true
+
+# Datetime support for persistence
+chrono.workspace = true
+
+# Database support (optional)
+sqlx = { version = "0.8", features = ["runtime-tokio", "postgres", "mysql", "sqlite", "uuid", "chrono", "json"], optional = true }
+
+# Local dependencies
+mofa-kernel = { path = "../mofa-kernel", version = "0.1", features = ["config"] }
+mofa-extra = { path = "../mofa-extra", version = "0.1" }
+mofa-plugins = { path = "../mofa-plugins", version = "0.1" }
+once_cell = "1.21.3"
+rhai = { version = "1", features = ["sync", "serde"] }
+lazy_static = "1.4"
+
+# Image encoding and MIME detection
+base64 = "0.22"
+infer = "0.16"
+
+[dev-dependencies]
+tempfile = "3"

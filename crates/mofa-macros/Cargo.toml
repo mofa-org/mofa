@@ -1,0 +1,19 @@
+[package]
+name = "mofa-macros"
+version.workspace = true
+edition.workspace = true
+description = "MoFA Macros - Procedural macros for code generation and boilerplate reduction"
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+documentation = "https://docs.rs/mofa-macros"
+readme = "README.md"
+keywords = ["ai", "agent", "macro", "procedural", "code-generation"]
+categories = ["development-tools::procedural-macro-helpers"]
+publish = false
+
+[lib]
+proc-macro = true
+
+[dependencies]

@@ -1,0 +1,43 @@
+# Agent Configuration (YAML format)
+# This is an example configuration file showing all supported formats
+
+agent:
+  id: "my-agent-001"
+  name: "My LLM Agent"
+  description: "A helpful AI assistant powered by MoFA"
+  capabilities:
+    - llm
+    - tools
+    - memory
+
+llm:
+  provider: openai          # openai, ollama, azure, compatible, anthropic, gemini
+  model: gpt-4o             # claude-3.5-sonnet-20241022 (anthropic) / gemini-1.5-pro-latest (gemini)
+  api_key: ${OPENAI_API_KEY}  # Supports ${VAR} and $VAR syntax (ANTHROPIC_API_KEY / GEMINI_API_KEY)
+  base_url: null            # Optional, for custom endpoints (Azure/Gemini/兼容)
+  temperature: 0.7
+  max_tokens: 4096
+  system_prompt: "You are a helpful assistant with access to various tools."
+
+tools:
+  - name: web_search
+    enabled: true
+    config:
+      max_results: 5
+  - name: calculator
+    enabled: true
+  - name: file_reader
+    enabled: false
+
+runtime:
+  max_concurrent_tasks: 10
+  default_timeout_secs: 30
+
+# Dora-specific configuration (optional)
+inputs:
+  - user_input
+  - context_data
+
+outputs:
+  - response
+  - action_taken

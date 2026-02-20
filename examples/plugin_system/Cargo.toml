@@ -1,0 +1,16 @@
+[package]
+name = "plugin_system"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+# Local dependencies
+mofa-sdk = { path = "../../crates/mofa-sdk" }
+
+# Workspace dependencies
+serde_json.workspace = true
+tracing.workspace = true
+tokio.workspace = true
+async-trait.workspace = true
+anyhow.workspace = true
+tracing-subscriber.workspace = true

@@ -1,25 +1,32 @@
-# MoFA (Modular Framework for AI Agents) Development Framework
+# MoFA Agent Framework
 
 [English](README_en.md) | [简体中文](README.md)
 
 <p align="center">
-    <img src="documents/images/mofa-logo.png" width="30%"/>
+    <img src="docs/images/mofa-logo.png" width="30%"/>
 </p>
 
+
 <div align="center">
+  <a href="https://crates.io/crates/mofa-sdk">
+    <img src="https://img.shields.io/crates/v/mofa.svg" alt="crates.io"/>
+  </a>
   <a href="https://pypi.org/project/mofa-core/">
-    <img src="https://img.shields.io/pypi/v/mofa-core.svg" alt="Latest PyPI version"/>
+    <img src="https://img.shields.io/pypi/v/mofa-core.svg" alt="PyPI"/>
   </a>
   <a href="https://github.com/mofa-org/mofa/blob/main/LICENSE">
     <img src="https://img.shields.io/github/license/mofa-org/mofa" alt="License"/>
   </a>
+  <a href="https://docs.rs/mofa-sdk">
+    <img src="https://img.shields.io/badge/built_with-Rust-dca282.svg?logo=rust" alt="docs"/>
+  </a>
   <a href="https://github.com/mofa-org/mofa/stargazers">
-    <img src="https://img.shields.io/github/stars/mofa-org/mofa" alt="GitHub stars"/>
+    <img src="https://img.shields.io/github/stars/mofa-org/mofa" alt="GitHub Stars"/>
   </a>
 </div>
 
 <h2 align="center">
-  <a href="https://mofa.ai/">Official Site</a>
+  <a href="https://mofa.ai/">Website</a>
   |
   <a href="https://mofa.ai/docs/0overview/">Quick Start</a>
   |
@@ -30,297 +37,331 @@
   <a href="https://discord.com/invite/hKJZzDMMm9">Community</a>
 </h2>
 
----
-
-## 1. Design Philosophy
-
-MoFA (Modular Framework for AI Agents) is a software framework for building composable AI agents. With MoFA, developers can create agents through templates and combine them in a stacking manner to form more powerful super agents.
-
-### 1.1 Core Design Philosophy
-
-- **Empowering Everyone to Do Extraordinary Things**: AI should not be exclusive to elites. MoFA enables everyone to develop and apply AI, turning the impossible into possible.
-- **Composable AI**: Inspired by Unix philosophy, with "composition" as the core, build and connect agents and tools like building blocks, making AI simple, flexible, and powerful.
-- **Everything is an Agent**: In the MoFA ecosystem, agents are the application carriers of the AI era—not only large language models, but also code, scripts, APIs, and even MoFA itself.
-- **Data Flow Driven**: Abandoning complex workflows in favor of a more intuitive data flow pattern, enabling agents to be freely combined, decomposed, and reused.
-
-### 1.2 Technical Architecture
-
 <p align="center">
-  <img src="documents/images/Organizational_Chart_cn.png" width="60%">
+ <img src="https://img.shields.io/badge/Performance-Extreme-red?style=for-the-badge" />
+ <img src="https://img.shields.io/badge/Extensibility-Unlimited-orange?style=for-the-badge" />
+ <img src="https://img.shields.io/badge/Languages-Multi_platform-yellow?style=for-the-badge" />
+ <img src="https://img.shields.io/badge/Runtime-Programmable-green?style=for-the-badge" />
 </p>
 
----
+## Overview
+MoFA (Modular Framework for Agents) is not just another entry in the crowded agent framework landscape.
+It is the first production-grade framework to achieve **"write once, run everywhere"** across languages, built for **extreme performance, boundless extensibility, and runtime programmability**.
+Through its revolutionary microkernel architecture and innovative **dual-layer plugin system** (compile-time + runtime), MoFA strikes the elusive balance between raw performance and dynamic flexibility.
 
-## 2. Core Features
+What Sets MoFA Apart:</br>
+✅ **Rust Core + UniFFI**: Blazing performance with native multi-language interoperability</br>
+✅ **Dual-Layer Plugins**: Zero-cost compile-time extensions meet hot-swappable runtime scripts</br>
+✅ **Microkernel Architecture**: Clean separation of concerns, effortless to extend</br>
+✅ **Cloud-Native by Design**: First-class support for distributed and edge deployments</br>
 
-- **Composable AI Architecture**: Quickly build complex agent systems through modular agent stacking and composition, supporting multi-model and multi-tool collaboration.
-- **Data Flow Driven**: Adopts an intuitive DataFlow pattern to replace traditional Workflow, achieving flexible decoupling and dynamic recombination between agents.
-- **Full-Stack Python Support**: Provides Python-friendly interfaces from agent development to data flow configuration, while supporting high-performance Rust node extensions.
-- **Rich Node Ecosystem**: Built-in foundational nodes for terminal interaction, LLM calls, tool integration, etc., with support for quick integration of custom nodes.
-- **Multi-Framework Compatibility**: Built on Dora-rs runtime, seamlessly integrating with systems like ROS2 and OpenTelemetry.
-- **MoFA Stage Visualization Tool**: Provides a graphical interface supporting visual creation, management, and debugging of Dataflows and Nodes.
+## Why MoFA?
 
----
+### **Performance**
 
-## 3. Support Matrix
+- Zero-cost abstractions in Rust
+- Memory safety without garbage collection
+- Orders of magnitude faster than Python-based frameworks
 
-| Feature | Support Level |
-|---------|---------------|
-| **API Support** | Python 3.10+ [Fully Supported] <br> Rust Extension [Experimental] |
-| **Operating Systems** | Linux (Ubuntu 22.04) [Fully Supported] <br> macOS (ARM/x86) [Fully Supported] <br> WSL2 [Fully Supported] <br> Windows [Not Supported] |
-| **Communication Methods** | Shared Memory (Local) [Fully Supported] <br> TCP Network (Distributed) [Experimental] |
-| **Message Formats** | JSON [Fully Supported] <br> Apache Arrow [Experimental] |
-| **LLM Integration** | OpenAI Series [Fully Supported] <br> Qwen Series [Fully Supported] <br> Local Models (llama.cpp) [Experimental] |
-| **Configuration Methods** | YAML Dataflow Definition [Fully Supported] <br> Python Code Generation [Experimental] <br> MoFA Stage Graphical Configuration [Fully Supported] |
-| **Package Management** | pip (Python Nodes) [Fully Supported] <br> cargo (Rust Nodes) [Experimental] |
+### **Polyglot by Design**
 
-> Legend:
-> - [Fully Supported] = Stable and production-ready
-> - [Experimental] = Experimental support (contributions welcome)
-> - [Not Supported] = Not yet supported
+- Auto-generated bindings for Python, Java, Go, Kotlin, Swift via UniFFI
+- Call Rust core logic natively from any supported language
+- Near-zero overhead compared to traditional FFI
 
----
+### **Runtime Programmability**
 
-## 4. Quick Start
+- Embedded Rhai scripting engine
+- Hot-reload business logic without recompilation
+- Runtime configuration and rule adjustments
+- User-defined extensions on the fly
 
-### 4.1 Environment Requirements
+### **Dual-Layer Plugin Architecture**
 
-**Required Environment**:
-- Python 3.10 or 3.11
-- Operating System: WSL (Ubuntu 22.04), macOS, Linux
-- Windows is not currently supported
+- **Compile-time plugins**: Extreme performance, native integration
+- **Runtime plugins**: Dynamic loading, instant effect
+- Support plugin hot loading and version management
 
-**Optional Environment** (for Rust node development):
-- Rust toolchain (rustc, cargo)
+### **Distributed by Nature**
 
-### 4.2 Installing MoFA
+- Built on Dora-rs for distributed dataflow
+- Seamless cross-process, cross-machine agent communication
+- Edge computing ready
 
-#### Option 1: Install with pip
+### **Actor-Model Concurrency**
 
-```bash
-# Create a virtual environment (recommended)
-python3 -m venv .mofa
-source .mofa/bin/activate
+- Isolated agent processes via Ractor
+- Message-passing architecture
+- Battle-tested for high-concurrency workloads
 
-# Install from PyPI
-pip install mofa-core
+## Core Architecture
 
-# Verify installation
-mofa --help
+### Microkernel + Dual-Layer Plugin System
+
+MoFA adopts a **layered microkernel architecture**, achieving extreme extensibility through a **dual-layer plugin system**:
+
+```
+┌─────────────────────────────────────────────────────────┐
+│                    Business Layer                        │
+│  (User-defined Agents, Workflows, Rules)                 │
+└─────────────────────────────────────────────────────────┘
+                          ↓
+┌─────────────────────────────────────────────────────────┐
+│          Runtime Plugin Layer (Rhai Scripts)              │
+│  • Dynamic tool registration  • Rule engine  • Scripts   │
+│  • Hot-load logic    • Expression evaluation             │
+└─────────────────────────────────────────────────────────┘
+                          ↓
+┌─────────────────────────────────────────────────────────┐
+│            Compile-time Plugin Layer (Rust/WASM)         │
+│  • LLM plugins  • Tool plugins  • Storage  • Protocol    │
+│  • High-performance modules  • Native system integration  │
+└─────────────────────────────────────────────────────────┘
+                          ↓
+┌─────────────────────────────────────────────────────────┐
+│                  Microkernel (mofa-kernel)               │
+│  • Lifecycle management  • Metadata  • Communication     │
+│  • Task scheduling       • Memory management             │
+└─────────────────────────────────────────────────────────┘
 ```
 
-#### Option 2: Install with uv (faster)
+#### Advantages of Dual-Layer Plugin System
 
-```bash
-# Install in a virtual environment
-uv venv .mofa
-source .mofa/bin/activate
-uv pip install mofa-core
+**Compile-time Plugins (Rust/WASM)**
 
-# Or install globally as a standalone tool
-uv tool install mofa-core
+- Extreme performance, zero runtime overhead
+- Type safety, compile-time error checking
+- Support complex system calls and native integration
+- WASM sandbox provides secure isolation
 
-# Verify installation
-mofa --help
+**Runtime Plugins (Rhai Scripts)**
+
+- No recompilation needed, instant effect
+- Business logic hot updates
+- User-defined extensions
+- Secure sandbox execution with configurable resource limits
+
+**Combined Power**
+
+- Use Rust plugins for performance-critical paths (e.g., LLM inference, data processing)
+- Use Rhai scripts for business logic (e.g., rule engines, workflow orchestration)
+- Seamless interoperability between both, covering 99% of extension scenarios
+
+## Core Features
+
+### 1. Microkernel Architecture
+MoFA adopts a **layered microkernel architecture** with `mofa-kernel` at its core. All other features (including plugin system, LLM capabilities, multi-agent collaboration, etc.) are built as modular components on top of the microkernel.
+
+#### Core Design Principles
+- **Core Simplicity**: The microkernel contains only the most basic functions: agent lifecycle management, metadata system, and dynamic management
+- **High Extensibility**: All advanced features are extended through modular components and plugins, keeping the kernel stable
+- **Loose Coupling**: Components communicate through standardized interfaces, easy to replace and upgrade
+
+#### Integration with Plugin System
+- The plugin system is developed based on the `Plugin` interface of the microkernel. All plugins (including LLM plugins, tool plugins, etc.) are integrated through the `AgentPlugin` standard interface
+- The microkernel provides plugin registration center and lifecycle management, supporting plugin hot loading and version control
+- LLM capabilities are implemented through `LLMPlugin`, encapsulating LLM providers as plugins compliant with microkernel specifications
+
+#### Integration with LLM
+- LLM exists as a plugin component of the microkernel, providing standard LLM access capabilities through the `LLMCapability` interface
+- All agent collaboration patterns (chain, parallel, debate, etc.) are built on the microkernel's workflow engine and interact with LLMs through standardized LLM plugin interfaces
+- Secretary mode is also implemented based on the microkernel's A2A communication protocol and task scheduling system
+
+### 2. Dual-Layer Plugins
+- **Compile-time plugins**: Extreme performance, native integration
+- **Runtime plugins**: Dynamic loading, instant effect
+- Seamless collaboration between both, covering all scenarios
+
+### 3. Agent Coordination
+- **Priority Scheduling**: Task scheduling system based on priority levels
+- **Communication Bus**: Built-in inter-agent communication bus
+- **Workflow Engine**: Visual workflow builder and executor
+
+### 4. LLM and AI Capabilities
+- **LLM Abstraction Layer**: Standardized LLM integration interface
+- **OpenAI Support**: Built-in OpenAI API integration
+- **ReAct Pattern**: Agent framework based on reasoning and action
+- **Multi-Agent Collaboration**: Team-based agent coordination, supporting multiple collaboration patterns:
+  - **Chain Mode**: Multi-agent sequential workflow where output of one agent becomes input of the next, suitable for pipeline processing scenarios
+  - **Parallel Mode**: Multiple agents execute simultaneously with automatic result aggregation, significantly improving processing efficiency
+  - **Debate Mode**: Multiple agents alternate speaking, optimizing result quality through debate mechanism
+  - **Supervision Mode**: A supervisor agent evaluates and filters results
+  - **MapReduce Mode**: Parallel processing with result reduction, suitable for large-scale tasks
+  - **Routing Mode**: Dynamically select the next agent to execute based on conditions
+  - **Aggregation Mode**: Collect and merge results from multiple agents
+- **Secretary Mode**: Provides end-to-end task closed-loop management, including 5 core phases: receive ideas → record todos, clarify requirements → convert to project documents, schedule dispatch → call execution agents, monitor feedback → push key decisions to humans, acceptance report → update todos
+  </br>**Features**:
+    - 🧠 Autonomous task planning and decomposition
+    - 🔄 Intelligent agent scheduling and orchestration
+    - 👤 Human intervention at key nodes
+    - 📊 Full process observability and traceability
+    - 🔁 Closed-loop feedback and continuous optimization
+
+### 5. Persistence Layer
+- **Multiple Backends**: Support PostgreSQL, MySQL, and SQLite
+- **Session Management**: Persistent agent session storage
+- **Memory System**: Stateful agent memory management
+
+### 6. Monitoring & Observability
+- **Dashboard**: Built-in web dashboard with real-time metrics
+- **Metrics System**: Prometheus-compatible metrics system
+- **Tracing Framework**: Distributed tracing system
+
+### 7. Rhai Script Engine
+
+MoFA integrates the [Rhai](https://github.com/rhaiscript/rhai) embedded scripting language, providing **runtime programmability** without recompilation.
+
+#### Script Engine Core
+- **Safe Sandbox Execution**: Configurable operation limits, call stack depth, loop control
+- **Script Compilation Cache**: Pre-compile scripts for improved repeated execution performance
+- **Rich Built-in Functions**: String manipulation, math functions, JSON processing, time utilities
+- **Bidirectional JSON Conversion**: Seamless conversion between JSON and Rhai Dynamic types
+
+#### Scripted Workflow Nodes
+- **Script Task Nodes**: Execute business logic via scripts
+- **Script Condition Nodes**: Dynamic branch decisions
+- **Script Transform Nodes**: Data format transformation
+- **YAML/JSON Workflow Loading**: Define workflows through configuration files
+
+#### Dynamic Tool System
+- **Script-based Tool Definition**: Register tools at runtime
+- **Parameter Validation**: Type checking, range validation, enum constraints
+- **Auto JSON Schema Generation**: Compatible with LLM Function Calling
+- **Hot Loading**: Dynamically load tools from directories
+
+#### Rule Engine
+- **Priority Rules**: Critical > High > Normal > Low
+- **Multiple Match Modes**: First match, all match, ordered match
+- **Composite Actions**: Set variables, trigger events, goto rules
+- **Rule Group Management**: Support default fallback actions
+
+#### Typical Application Scenarios
+| Scenario | Description |
+|----------|-------------|
+| **Dynamic Business Rules** | Discount strategies, content moderation rules, no redeployment needed |
+| **Configurable Workflows** | User-defined data processing pipelines |
+| **LLM Tool Extensions** | Register new tools at runtime for LLM calls |
+| **A/B Testing** | Control experiment logic through scripts |
+| **Expression Evaluation** | Dynamic condition checking, formula calculation |
+
+## Roadmap
+
+### Short-term Goals
+- [ ] Dora-rs runtime support for distributed dataflow
+- [ ] Complete distributed tracing implementation
+- [ ] Python binding generation
+- [ ] More LLM provider integrations
+
+### Long-term Goals
+- [ ] Visual workflow designer UI
+- [ ] Cloud-native deployment support
+- [ ] Advanced agent coordination algorithms
+- [ ] Agent platform
+- [ ] Cross-process/cross-machine distributed agent collaboration
+- [ ] Multi-agent collaboration standard protocol
+- [ ] Cross-platform mobile support
+- [ ] Evolve into agent operating system
+
+## Quick Start
+
+### Installation
+
+Add MoFA to your Cargo.toml:
+
+```toml
+[dependencies]
+mofa-sdk = "0.1.0"
 ```
 
-> **Tip**: uv is a faster Python package manager. Installation instructions: [github.com/astral-sh/uv](https://github.com/astral-sh/uv)
+The runtime mode is most suitable for scenarios that require building complete agent workflows, specifically including:
 
-#### Option 3: Install from source
+  ---
+1. Multi-agent collaboration scenarios
 
-```bash
-pip install git+https://github.com/mofa-org/mofa.git
-```
+The runtime provides a message bus (SimpleMessageBus/DoraChannel) and agent registration system, supporting communication between agents:
+- Point-to-point communication (send_to_agent)
+- Broadcast messages (broadcast)
+- Topic pub/sub (publish_to_topic/subscribe_topic)
+- Role management (get_agents_by_role)
 
-### 4.3 Run the Hello World Example
+When you need multiple agents to collaborate on complex tasks (such as master-slave architecture, division of labor), the runtime's communication mechanism can significantly simplify development.
 
-```bash
-# Clone the repository
-git clone https://github.com/mofa-org/mofa.git
-cd mofa/dataflows/hello_world
+  ---
+2. Event-driven agent applications
 
-# Run the dataflow
-mofa run-flow hello_world_dataflow.yml
-```
+The runtime has a built-in event loop (run_with_receiver/run_event_loop) and interrupt handling system, automatically managing:
+- Event reception and dispatch
+- Agent state lifecycle
+- Timeout and interrupt handling
 
-**Example Output**:
-```
-Send Your Task: 你好
--------------hello_world_result---------------
-你好
-```
+Suitable for building applications that need to respond to external events or timers (such as real-time dialogue systems, event response robots).
 
-### 4.4 Optional: Install Rust Environment
+  ---
+3. Distributed agent systems
 
-If you need to develop or use Rust nodes:
+When the dora feature is enabled, the runtime provides Dora adapters (DoraAgentNode/DoraDataflow), supporting:
+- Distributed node deployment
+- Cross-node agent communication
+- Data flow management
 
-```bash
-# Install Rust toolchain
-curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
-# Keep the default configuration during installation (press Enter)
+Suitable for production scenarios requiring large-scale deployment and low-latency communication.
 
-# Verify installation
-rustc --version
-cargo --version
-```
+  ---
+4. Structured agent building
 
----
+The runtime provides AgentBuilder fluent API, simplifying agent:
+- Configuration management
+- Plugin integration
+- Capability declaration
+- Port configuration
 
-## 5. MoFA Stage Visualization Tool
+Suitable for scenarios where you need to quickly build standardized agents, especially when you need to uniformly manage multiple agent configurations.
 
-MoFA Stage is the graphical control center of the MoFA ecosystem, supporting quick creation, management, and debugging of Dataflows and Nodes in a visual interface.
+  ---
+5. Production-grade applications
 
-### 5.1 Core Functionality
+The runtime provides comprehensive:
+- Health checks and state management
+- Logging and monitoring integration
+- Error handling mechanisms
 
-- **Node/Dataflow Template Library**: Provides rich agent templates for one-click node project generation
-- **Visual Dataflow Creation**: Define data flows through drag-and-drop interface, intuitively configure message passing relationships between nodes
-- **Node Management**: Unified management of custom and official nodes, supporting quick integration of new features
-- **Agent Lifecycle Management**: Start, stop, and monitor agent runtime status in the graphical interface
+Suitable for building production applications that need stable operation, rather than simple plugin testing or prototype development.
 
-### 5.2 Interface Preview
+## Documentation
 
-<p align="center">
-  <img src="documents/images/mofastage-hub.png" alt="MoFA Hub Interface" width="80%"/>
-  <br/>
-  <i>Node Hub Interface</i>
-</p>
+- [API Documentation](https://docs.rs/mofa)
+- [GitHub Repository](https://github.com/mofa-org/mofa)
+- [Examples](examples/)
 
-<p align="center">
-  <img src="documents/images/mofastage-dataflow.png" alt="Create Agent Interface" width="80%"/>
-  <br/>
-  <i>Dataflow Interface</i>
-</p>
+## Contributing
 
----
+We welcome contributions! Please check out our [contributing guide](CONTRIBUTING.md) for more details.
 
-## 6. Development Guide
+## Community
 
-### 6.1 Quick Development Guide
+- GitHub Issues: [https://github.com/mofa-org/mofa/discussions](https://github.com/mofa-org/mofa/discussions)
+- Discord: [https://discord.com/invite/hKJZzDMMm9](https://discord.com/invite/hKJZzDMMm9)
 
-Refer to the [6-Minute Development Guide](https://mofa.ai/docs/2-getting-started/your-first-application/) to quickly build agents based on large language models, including the full process of environment variable configuration, project initialization, logic implementation, and data flow definition.
-
-### 6.2 Examples and Documentation
-
-| Type | Name | Description | Last Updated |
-|------|------|-------------|--------------|
-| Tutorial | [Hello World](https://github.com/mofa-org/mofa/tree/main/dataflows/hello_world) | Basic dataflow interaction example | ![Last Commit](https://img.shields.io/github/last-commit/mofa-org/mofa?path=dataflows%2Fhello_world&label=Last%20Commit) |
-| LLM | [Qwen Agent](https://github.com/nanana2002/mofa-node-hub/tree/main/node-hub/QwenAgent) | Conversational agent using Qwen API | ![Last Commit](https://img.shields.io/github/last-commit/nanana2002/mofa-node-hub?path=node-hub%2FQwenAgent&label=Last%20Commit) |
-| Tool Integration | [Weather Query](https://github.com/nanana2002/mofa-node-hub/tree/main/node-hub/WeatherForecastNode) | Agent for querying weather by IP location | ![Last Commit](https://img.shields.io/github/last-commit/nanana2002/mofa-node-hub?path=node-hub%2FWeatherForecastNode&label=Last%20Commit) |
-
-For more documentation, please refer to [MoFA Official Documentation](https://docs.mofa-org.com).
-
----
-
-## 7. Frequently Asked Questions
-
-### 7.1 Command 'mofa' not found
-
-**Problem Description**: After installing mofa-core, running the `mofa` command shows "command not found".
-
-```bash
-$ mofa --help
-Command 'mofa' not found
-```
-
-**Root Cause**: When using `pip install --user` or system Python for user-level installation, the executable is installed to the `~/.local/bin` directory, which may not be in the system's PATH environment variable.
-
-**Solutions**:
-
-#### Solution 1: Add ~/.local/bin to PATH (Recommended)
-
-For Bash users:
-```bash
-echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc
-source ~/.bashrc
-```
-
-For Zsh users:
-```bash
-echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.zshrc
-source ~/.zshrc
-```
-
-#### Solution 2: Run with full path
-
-```bash
-~/.local/bin/mofa --help
-```
-
-#### Solution 3: Install in a virtual environment (Recommended)
-
-Using venv:
-```bash
-python3 -m venv .mofa
-source .mofa/bin/activate
-pip install mofa-core
-mofa --help
-```
-
-Using uv (faster):
-```bash
-uv venv .mofa
-source .mofa/bin/activate
-uv pip install mofa-core
-mofa --help
-```
-
-#### Verify PATH Configuration
-
-```bash
-# Check if ~/.local/bin is in PATH
-echo $PATH | grep ".local/bin"
-
-# Confirm mofa installation location
-which mofa
-```
-
-### 7.2 Slow Dependency Installation
-
-**Problem Description**: `pip install mofa-core` downloads very slowly or times out.
-
-**Solutions**:
-
-Use domestic mirror sources to speed up installation:
-```bash
-# Use Tsinghua mirror
-pip install -i https://pypi.tuna.tsinghua.edu.cn/simple mofa-core
-
-# Or use Alibaba Cloud mirror
-pip install -i https://mirrors.aliyun.com/pypi/simple/ mofa-core
-```
-
-Configure mirror source permanently:
-```bash
-pip config set global.index-url https://pypi.tuna.tsinghua.edu.cn/simple
-```
-
----
-
-## 8. Contribution Guidelines
-
-We welcome all developers to contribute, regardless of your experience level. Please refer to the [Contribution Guide](https://github.com/mofa-org/mofa/tree/main/documents) to learn how to participate in project development.
-
----
-
-## 9. Community
-
-- [GitHub Discussions](https://github.com/mofa-org/mofa/discussions)
-- [Discord Server](https://discord.com/invite/hKJZzDMMm9)
-
----
-
-## 10. License
-
-This project is licensed under the Apache-2.0 License. See [LICENSE](LICENSE) for details.
-
----
-
-## 11. Related Resources
-
-- [Dora-rs Documentation](https://dora-rs.ai/docs/guides/)
-
----
-
-## 12. Star History
+## Star History
 
 [![Star History Chart](https://api.star-history.com/svg?repos=mofa-org/mofa&type=Date)](https://www.star-history.com/#mofa-org/mofa&Date)
+
+## 🙏 Acknowledgments
+
+MoFA stands on the shoulders of giants:
+
+- [Rust](https://www.rust-lang.org/) - Perfect combination of performance and safety
+- [UniFFI](https://mozilla.github.io/uniffi-rs/) - Mozilla's multi-language binding magic
+- [Rhai](https://rhai.rs/) - Powerful embedded scripting engine
+- [Tokio](https://tokio.rs/) - Async runtime cornerstone
+- [Ractor](https://github.com/slawlor/ractor) - Actor model concurrency framework
+- [Dora](https://github.com/dora-rs/dora) - Distributed dataflow runtime
+- [Wasmtime](https://wasmtime.dev/) - WebAssembly runtime
+
+## Support
+
+源起之道支持｜Supported by Upstream Labs
+
+## License
+
+[Apache License 2.0](./LICENSE)

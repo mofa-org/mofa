@@ -1,0 +1,1169 @@
+//! LLM Client - 高级 LLM 交互封装
+//!
+//! 提供便捷的 LLM 交互 API，包括消息管理、工具调用循环等
+
+use super::provider::{LLMConfig, LLMProvider};
+use super::tool_executor::ToolExecutor;
+use super::types::*;
+use std::sync::Arc;
+
+/// LLM 客户端
+///
+/// 提供高级 LLM 交互功能
+///
+/// # 示例
+///
+/// ```rust,ignore
+/// use mofa_foundation::llm::{LLMClient, LLMConfig, ChatMessage};
+///
+/// // 创建客户端
+/// let client = LLMClient::new(provider);
+///
+/// // 简单对话
+/// let response = client
+///     .chat()
+///     .system("You are a helpful assistant.")
+///     .user("Hello!")
+///     .send()
+///     .await?;
+///
+/// info!("{}", response.content().unwrap_or_default());
+/// ```
+pub struct LLMClient {
+    provider: Arc<dyn LLMProvider>,
+    config: LLMConfig,
+}
+
+impl LLMClient {
+    /// 使用 Provider 创建客户端
+    pub fn new(provider: Arc<dyn LLMProvider>) -> Self {
+        Self {
+            provider,
+            config: LLMConfig::default(),
+        }
+    }
+
+    /// 使用配置创建客户端
+    pub fn with_config(provider: Arc<dyn LLMProvider>, config: LLMConfig) -> Self {
+        Self { provider, config }
+    }
+
+    /// 获取 Provider
+    pub fn provider(&self) -> &Arc<dyn LLMProvider> {
+        &self.provider
+    }
+
+    /// 获取配置
+    pub fn config(&self) -> &LLMConfig {
+        &self.config
+    }
+
+    /// 创建 Chat 请求构建器
+    pub fn chat(&self) -> ChatRequestBuilder {
+        let model = self
+            .config
+            .default_model
+            .clone()
+            .unwrap_or_else(|| self.provider.default_model().to_string());
+
+        let mut builder = ChatRequestBuilder::new(self.provider.clone(), model);
+
+        if let Some(temp) = self.config.default_temperature {
+            builder = builder.temperature(temp);
+        }
+        if let Some(tokens) = self.config.default_max_tokens {
+            builder = builder.max_tokens(tokens);
+        }
+
+        builder
+    }
+
+    /// 创建 Embedding 请求
+    pub async fn embed(&self, input: impl Into<String>) -> LLMResult<Vec<f32>> {
+        let model = self
+            .config
+            .default_model
+            .clone()
+            .unwrap_or_else(|| "text-embedding-ada-002".to_string());
+
+        let request = EmbeddingRequest {
+            model,
+            input: EmbeddingInput::Single(input.into()),
+            encoding_format: None,
+            dimensions: None,
+            user: None,
+        };
+
+        let response = self.provider.embedding(request).await?;
+        response
+            .data
+            .into_iter()
+            .next()
+            .map(|d| d.embedding)
+            .ok_or_else(|| LLMError::Other("No embedding data returned".to_string()))
+    }
+
+    /// 批量 Embedding
+    pub async fn embed_batch(&self, inputs: Vec<String>) -> LLMResult<Vec<Vec<f32>>> {
+        let model = self
+            .config
+            .default_model
+            .clone()
+            .unwrap_or_else(|| "text-embedding-ada-002".to_string());
+
+        let request = EmbeddingRequest {
+            model,
+            input: EmbeddingInput::Multiple(inputs),
+            encoding_format: None,
+            dimensions: None,
+            user: None,
+        };
+
+        let response = self.provider.embedding(request).await?;
+        Ok(response.data.into_iter().map(|d| d.embedding).collect())
+    }
+
+    /// 简单对话（单次问答）
+    pub async fn ask(&self, question: impl Into<String>) -> LLMResult<String> {
+        let response = self.chat().user(question).send().await?;
+
+        response
+            .content()
+            .map(|s| s.to_string())
+            .ok_or_else(|| LLMError::Other("No content in response".to_string()))
+    }
+
+    /// 带系统提示的简单对话
+    pub async fn ask_with_system(
+        &self,
+        system: impl Into<String>,
+        question: impl Into<String>,
+    ) -> LLMResult<String> {
+        let response = self.chat().system(system).user(question).send().await?;
+
+        response
+            .content()
+            .map(|s| s.to_string())
+            .ok_or_else(|| LLMError::Other("No content in response".to_string()))
+    }
+}
+
+/// Chat 请求构建器
+pub struct ChatRequestBuilder {
+    provider: Arc<dyn LLMProvider>,
+    request: ChatCompletionRequest,
+    tool_executor: Option<Arc<dyn ToolExecutor>>,
+    max_tool_rounds: u32,
+    // Retry configuration
+    retry_policy: Option<LLMRetryPolicy>,
+    retry_enabled: bool,
+}
+
+impl ChatRequestBuilder {
+    /// 创建新的构建器
+    pub fn new(provider: Arc<dyn LLMProvider>, model: impl Into<String>) -> Self {
+        Self {
+            provider,
+            request: ChatCompletionRequest::new(model),
+            tool_executor: None,
+            max_tool_rounds: 10,
+            retry_policy: None,
+            retry_enabled: false,
+        }
+    }
+
+    /// 添加系统消息
+    pub fn system(mut self, content: impl Into<String>) -> Self {
+        self.request.messages.push(ChatMessage::system(content));
+        self
+    }
+
+    /// 添加用户消息
+    pub fn user(mut self, content: impl Into<String>) -> Self {
+        self.request.messages.push(ChatMessage::user(content));
+        self
+    }
+
+    /// 添加用户消息（结构化内容）
+    pub fn user_with_content(mut self, content: MessageContent) -> Self {
+        self.request
+            .messages
+            .push(ChatMessage::user_with_content(content));
+        self
+    }
+
+    /// 添加用户消息（多部分内容）
+    pub fn user_with_parts(mut self, parts: Vec<ContentPart>) -> Self {
+        self.request
+            .messages
+            .push(ChatMessage::user_with_parts(parts));
+        self
+    }
+
+    /// 添加助手消息
+    pub fn assistant(mut self, content: impl Into<String>) -> Self {
+        self.request.messages.push(ChatMessage::assistant(content));
+        self
+    }
+
+    /// 添加消息
+    pub fn message(mut self, message: ChatMessage) -> Self {
+        self.request.messages.push(message);
+        self
+    }
+
+    /// 添加消息列表
+    pub fn messages(mut self, messages: Vec<ChatMessage>) -> Self {
+        self.request.messages.extend(messages);
+        self
+    }
+
+    /// 设置温度
+    pub fn temperature(mut self, temp: f32) -> Self {
+        self.request.temperature = Some(temp);
+        self
+    }
+
+    /// 设置最大 token 数
+    pub fn max_tokens(mut self, tokens: u32) -> Self {
+        self.request.max_tokens = Some(tokens);
+        self
+    }
+
+    /// 添加工具
+    pub fn tool(mut self, tool: Tool) -> Self {
+        self.request.tools.get_or_insert_with(Vec::new).push(tool);
+        self
+    }
+
+    /// 设置工具列表
+    pub fn tools(mut self, tools: Vec<Tool>) -> Self {
+        self.request.tools = Some(tools);
+        self
+    }
+
+    /// 设置工具执行器
+    pub fn with_tool_executor(mut self, executor: Arc<dyn ToolExecutor>) -> Self {
+        self.tool_executor = Some(executor);
+        self
+    }
+
+    /// 设置最大工具调用轮数
+    pub fn max_tool_rounds(mut self, rounds: u32) -> Self {
+        self.max_tool_rounds = rounds;
+        self
+    }
+
+    /// 设置响应格式为 JSON
+    pub fn json_mode(mut self) -> Self {
+        self.request.response_format = Some(ResponseFormat::json());
+        self
+    }
+
+    /// 设置停止序列
+    pub fn stop(mut self, sequences: Vec<String>) -> Self {
+        self.request.stop = Some(sequences);
+        self
+    }
+
+    // ========================================================================
+    // Retry Configuration
+    // ========================================================================
+
+    /// Enable retry with default policy
+    ///
+    /// Uses PromptRetry strategy for serialization errors (best for JSON mode)
+    /// and DirectRetry for network/transient errors.
+    ///
+    /// # Example
+    /// ```rust,ignore
+    /// let response = client.chat()
+    ///     .json_mode()
+    ///     .with_retry()
+    ///     .send()
+    ///     .await?;
+    /// ```
+    pub fn with_retry(mut self) -> Self {
+        self.retry_enabled = true;
+        self.retry_policy = Some(LLMRetryPolicy::default());
+        self
+    }
+
+    /// Enable retry with custom policy
+    ///
+    /// # Example
+    /// ```rust,ignore
+    /// use mofa_foundation::llm::{LLMRetryPolicy, BackoffStrategy};
+    ///
+    /// let custom_policy = LLMRetryPolicy {
+    ///     max_attempts: 5,
+    ///     backoff: BackoffStrategy::ExponentialWithJitter {
+    ///         initial_delay_ms: 500,
+    ///         max_delay_ms: 60000,
+    ///         jitter_ms: 250,
+    ///     },
+    ///     ..Default::default()
+    /// };
+    ///
+    /// let response = client.chat()
+    ///     .with_retry_policy(custom_policy)
+    ///     .send()
+    ///     .await?;
+    /// ```
+    pub fn with_retry_policy(mut self, policy: LLMRetryPolicy) -> Self {
+        self.retry_enabled = true;
+        self.retry_policy = Some(policy);
+        self
+    }
+
+    /// Disable retry (explicit)
+    ///
+    /// This is the default behavior, but can be used to override
+    /// any previously set retry configuration.
+    pub fn without_retry(mut self) -> Self {
+        self.retry_enabled = false;
+        self.retry_policy = None;
+        self
+    }
+
+    /// Set max retry attempts (convenience method)
+    ///
+    /// Shortcut for setting max_attempts in the default retry policy.
+    /// Equivalent to `.with_retry_policy(LLMRetryPolicy::with_max_attempts(n))`
+    ///
+    /// # Example
+    /// ```rust,ignore
+    /// let response = client.chat()
+    ///     .json_mode()
+    ///     .max_retries(3)
+    ///     .send()
+    ///     .await?;
+    /// ```
+    pub fn max_retries(mut self, max: u32) -> Self {
+        if self.retry_policy.is_none() {
+            self.retry_policy = Some(LLMRetryPolicy::default());
+        }
+        if let Some(ref mut policy) = self.retry_policy {
+            policy.max_attempts = max;
+        }
+        self.retry_enabled = true;
+        self
+    }
+
+    /// 发送请求
+    pub async fn send(self) -> LLMResult<ChatCompletionResponse> {
+        if self.retry_enabled {
+            let policy = self.retry_policy.unwrap_or_default();
+            let executor = crate::llm::retry::RetryExecutor::new(self.provider, policy);
+            executor.chat(self.request).await
+        } else {
+            self.provider.chat(self.request).await
+        }
+    }
+
+    /// 发送流式请求
+    pub async fn send_stream(mut self) -> LLMResult<super::provider::ChatStream> {
+        self.request.stream = Some(true);
+        self.provider.chat_stream(self.request).await
+    }
+
+    /// 发送请求并自动执行工具调用
+    ///
+    /// 当 LLM 返回工具调用时，自动执行工具并继续对话，
+    /// 直到 LLM 返回最终响应或达到最大轮数
+    pub async fn send_with_tools(mut self) -> LLMResult<ChatCompletionResponse> {
+        let executor = self
+            .tool_executor
+            .take()
+            .ok_or_else(|| LLMError::ConfigError("Tool executor not set".to_string()))?;
+
+        if self
+            .request
+            .tools
+            .as_ref()
+            .map(|tools| tools.is_empty())
+            .unwrap_or(true)
+        {
+            let tools = executor.available_tools().await?;
+            if !tools.is_empty() {
+                self.request.tools = Some(tools);
+            }
+        }
+
+        let max_rounds = self.max_tool_rounds;
+        let mut round = 0;
+
+        loop {
+            let response = self.provider.chat(self.request.clone()).await?;
+
+            // 检查是否有工具调用
+            if !response.has_tool_calls() {
+                return Ok(response);
+            }
+
+            round += 1;
+            if round >= max_rounds {
+                return Err(LLMError::Other(format!(
+                    "Max tool rounds ({}) exceeded",
+                    max_rounds
+                )));
+            }
+
+            // 添加助手消息（包含工具调用）
+            if let Some(choice) = response.choices.first() {
+                self.request.messages.push(choice.message.clone());
+            }
+
+            // 执行工具调用
+            if let Some(tool_calls) = response.tool_calls() {
+                for tool_call in tool_calls {
+                    let result = executor
+                        .execute(&tool_call.function.name, &tool_call.function.arguments)
+                        .await;
+
+                    let result_str = match result {
+                        Ok(r) => r,
+                        Err(e) => format!("Error: {}", e),
+                    };
+
+                    // 添加工具结果消息
+                    self.request
+                        .messages
+                        .push(ChatMessage::tool_result(&tool_call.id, result_str));
+                }
+            }
+        }
+    }
+}
+
+// ============================================================================
+// 会话管理
+// ============================================================================
+
+/// 对话会话
+///
+/// 管理多轮对话的消息历史
+pub struct ChatSession {
+    /// 会话唯一标识
+    session_id: uuid::Uuid,
+    /// 用户 ID
+    user_id: uuid::Uuid,
+    /// Agent ID
+    agent_id: uuid::Uuid,
+    /// 租户 ID
+    tenant_id: uuid::Uuid,
+    /// LLM 客户端
+    client: LLMClient,
+    /// 消息历史
+    messages: Vec<ChatMessage>,
+    /// 系统提示词
+    system_prompt: Option<String>,
+    /// 工具列表
+    tools: Vec<Tool>,
+    /// 工具执行器
+    tool_executor: Option<Arc<dyn ToolExecutor>>,
+    /// 会话创建时间
+    created_at: std::time::Instant,
+    /// 会话元数据
+    metadata: std::collections::HashMap<String, String>,
+    /// 消息存储
+    message_store: Arc<dyn crate::persistence::MessageStore>,
+    /// 会话存储
+    session_store: Arc<dyn crate::persistence::SessionStore>,
+    /// 上下文窗口大小（滑动窗口，限制对话轮数）
+    context_window_size: Option<usize>,
+    /// 最后一次 LLM 响应的元数据
+    last_response_metadata: Option<super::types::LLMResponseMetadata>,
+}
+
+impl ChatSession {
+    /// 创建新会话（自动生成 ID）
+    pub fn new(client: LLMClient) -> Self {
+        // 默认使用内存存储
+        let store = Arc::new(crate::persistence::InMemoryStore::new());
+        Self::with_id_and_stores(
+            Self::generate_session_id(),
+            client,
+            uuid::Uuid::now_v7(),
+            uuid::Uuid::now_v7(),
+            uuid::Uuid::now_v7(),
+            store.clone(),
+            store.clone(),
+            None,
+        )
+    }
+
+    /// 创建新会话并指定存储实现
+    pub fn new_with_stores(
+        client: LLMClient,
+        user_id: uuid::Uuid,
+        tenant_id: uuid::Uuid,
+        agent_id: uuid::Uuid,
+        message_store: Arc<dyn crate::persistence::MessageStore>,
+        session_store: Arc<dyn crate::persistence::SessionStore>,
+    ) -> Self {
+        Self::with_id_and_stores(
+            Self::generate_session_id(),
+            client,
+            user_id,
+            tenant_id,
+            agent_id,
+            message_store,
+            session_store,
+            None,
+        )
+    }
+
+    /// 使用指定 UUID 创建会话
+    pub fn with_id(session_id: uuid::Uuid, client: LLMClient) -> Self {
+        // 默认使用内存存储
+        let store = Arc::new(crate::persistence::InMemoryStore::new());
+        Self {
+            session_id,
+            user_id: uuid::Uuid::now_v7(),
+            agent_id: uuid::Uuid::now_v7(),
+            tenant_id: uuid::Uuid::now_v7(),
+            client,
+            messages: Vec::new(),
+            system_prompt: None,
+            tools: Vec::new(),
+            tool_executor: None,
+            created_at: std::time::Instant::now(),
+            metadata: std::collections::HashMap::new(),
+            message_store: store.clone(),
+            session_store: store.clone(),
+            context_window_size: None,
+            last_response_metadata: None,
+        }
+    }
+
+    /// 使用指定字符串 ID 创建会话
+    pub fn with_id_str(session_id: &str, client: LLMClient) -> Self {
+        // 尝试将字符串解析为 UUID，如果失败则生成新的 UUID
+        let session_id = uuid::Uuid::parse_str(session_id).unwrap_or_else(|_| uuid::Uuid::now_v7());
+        Self::with_id(session_id, client)
+    }
+
+    /// 使用指定 ID 和存储实现创建会话
+    pub fn with_id_and_stores(
+        session_id: uuid::Uuid,
+        client: LLMClient,
+        user_id: uuid::Uuid,
+        tenant_id: uuid::Uuid,
+        agent_id: uuid::Uuid,
+        message_store: Arc<dyn crate::persistence::MessageStore>,
+        session_store: Arc<dyn crate::persistence::SessionStore>,
+        context_window_size: Option<usize>,
+    ) -> Self {
+        Self {
+            session_id,
+            user_id,
+            tenant_id,
+            agent_id,
+            client,
+            messages: Vec::new(),
+            system_prompt: None,
+            tools: Vec::new(),
+            tool_executor: None,
+            created_at: std::time::Instant::now(),
+            metadata: std::collections::HashMap::new(),
+            message_store,
+            session_store,
+            context_window_size,
+            last_response_metadata: None,
+        }
+    }
+
+    /// 使用指定 ID 和存储实现创建会话，并立即持久化到数据库
+    ///
+    /// 这个方法会将会话记录保存到数据库，确保会话在创建时就被持久化。
+    /// 这对于需要将会话 ID 用作外键的场景很重要（例如保存消息时）。
+    ///
+    /// # 参数
+    /// - `session_id`: 会话 ID
+    /// - `client`: LLM 客户端
+    /// - `user_id`: 用户 ID
+    /// - `agent_id`: Agent ID
+    /// - `message_store`: 消息存储
+    /// - `session_store`: 会话存储
+    /// - `context_window_size`: 可选的上下文窗口大小
+    ///
+    /// # 返回
+    /// 返回创建并持久化后的会话
+    ///
+    /// # 错误
+    /// 如果数据库操作失败，返回错误
+    pub async fn with_id_and_stores_and_persist(
+        session_id: uuid::Uuid,
+        client: LLMClient,
+        user_id: uuid::Uuid,
+        tenant_id: uuid::Uuid,
+        agent_id: uuid::Uuid,
+        message_store: Arc<dyn crate::persistence::MessageStore>,
+        session_store: Arc<dyn crate::persistence::SessionStore>,
+        context_window_size: Option<usize>,
+    ) -> crate::persistence::PersistenceResult<Self> {
+        // 创建内存会话
+        let session = Self::with_id_and_stores(
+            session_id,
+            client,
+            user_id,
+            tenant_id,
+            agent_id,
+            message_store,
+            session_store.clone(),
+            context_window_size,
+        );
+
+        // 持久化会话记录到数据库
+        let db_session =
+            crate::persistence::ChatSession::new(user_id, agent_id).with_id(session_id);
+        session_store.create_session(&db_session).await?;
+
+        Ok(session)
+    }
+
+    /// 生成唯一会话 ID
+    fn generate_session_id() -> uuid::Uuid {
+        uuid::Uuid::now_v7()
+    }
+
+    /// 获取会话 ID
+    pub fn session_id(&self) -> uuid::Uuid {
+        self.session_id
+    }
+
+    /// 获取会话 ID 字符串
+    pub fn session_id_str(&self) -> String {
+        self.session_id.to_string()
+    }
+
+    /// 获取会话创建时间
+    pub fn created_at(&self) -> std::time::Instant {
+        self.created_at
+    }
+
+    /// 从数据库加载会话
+    ///
+    /// 创建一个新的 ChatSession 实例，加载指定 ID 的会话和消息。
+    ///
+    /// # 参数
+    /// - `session_id`: 会话 ID
+    /// - `client`: LLM 客户端
+    /// - `user_id`: 用户 ID
+    /// - `agent_id`: Agent ID
+    /// - `message_store`: 消息存储
+    /// - `session_store`: 会话存储
+    /// - `context_window_size`: 可选的上下文窗口大小（轮数），如果指定则只加载最近的 N 轮对话
+    ///
+    /// # 注意
+    /// 当指定 `context_window_size` 时，只会加载最近的 N 轮对话到内存中。
+    /// 这对于长期对话很有用，可以避免加载大量历史消息。
+    pub async fn load(
+        session_id: uuid::Uuid,
+        client: LLMClient,
+        user_id: uuid::Uuid,
+        tenant_id: uuid::Uuid,
+        agent_id: uuid::Uuid,
+        message_store: Arc<dyn crate::persistence::MessageStore>,
+        session_store: Arc<dyn crate::persistence::SessionStore>,
+        context_window_size: Option<usize>,
+    ) -> crate::persistence::PersistenceResult<Self> {
+        // Load session from database
+        let _db_session = session_store
+            .get_session(session_id)
+            .await?
+            .ok_or_else(|| {
+                crate::persistence::PersistenceError::NotFound("Session not found".to_string())
+            })?;
+
+        // Load messages from database
+        // Use pagination when context_window_size is set to avoid loading all messages
+        let db_messages = if context_window_size.is_some() {
+            // Use pagination to avoid loading all messages for long-running sessions
+            let total_count = message_store.count_session_messages(session_id).await?;
+
+            // Calculate fetch limit: rounds * 2 (user+assistant per round) + buffer for system messages
+            let rounds = context_window_size.unwrap_or(0);
+            let limit = (rounds * 2 + 20) as i64; // 20 message buffer for system messages at beginning
+
+            // Calculate offset to get the most recent messages
+            let offset = std::cmp::max(0, total_count - limit);
+
+            message_store
+                .get_session_messages_paginated(session_id, offset, limit)
+                .await?
+        } else {
+            // No window size specified, fetch all messages (current behavior)
+            message_store.get_session_messages(session_id).await?
+        };
+
+        // Convert messages to domain format
+        let mut messages = Vec::new();
+        for db_msg in db_messages {
+            // Convert MessageRole to Role
+            let domain_role = match db_msg.role {
+                crate::persistence::MessageRole::System => crate::llm::types::Role::System,
+                crate::persistence::MessageRole::User => crate::llm::types::Role::User,
+                crate::persistence::MessageRole::Assistant => crate::llm::types::Role::Assistant,
+                crate::persistence::MessageRole::Tool => crate::llm::types::Role::Tool,
+            };
+
+            // Convert MessageContent to domain format
+            let domain_content = db_msg
+                .content
+                .text
+                .map(crate::llm::types::MessageContent::Text);
+
+            // Create domain message
+            let domain_msg = ChatMessage {
+                role: domain_role,
+                content: domain_content,
+                name: None,
+                tool_calls: None,
+                tool_call_id: None,
+            };
+            messages.push(domain_msg);
+        }
+
+        // 应用滑动窗口逻辑（如果指定了 context_window_size）
+        let messages = Self::apply_sliding_window_static(&messages, context_window_size);
+
+        // Create and return ChatSession
+        Ok(Self {
+            session_id,
+            user_id,
+            tenant_id,
+            agent_id,
+            client,
+            messages,
+            system_prompt: None, // System prompt is not stored in messages
+            tools: Vec::new(),   // Tools are not persisted yet
+            tool_executor: None, // Tool executor is not persisted
+            created_at: std::time::Instant::now(), // TODO: Convert from db_session.create_time
+            metadata: std::collections::HashMap::new(), // TODO: Convert from db_session.metadata
+            message_store,
+            session_store,
+            context_window_size,
+            last_response_metadata: None,
+        })
+    }
+
+    /// 获取会话存活时长
+    pub fn elapsed(&self) -> std::time::Duration {
+        self.created_at.elapsed()
+    }
+
+    /// 设置元数据
+    pub fn set_metadata(&mut self, key: impl Into<String>, value: impl Into<String>) {
+        self.metadata.insert(key.into(), value.into());
+    }
+
+    /// 获取元数据
+    pub fn get_metadata(&self, key: &str) -> Option<&String> {
+        self.metadata.get(key)
+    }
+
+    /// 获取所有元数据
+    pub fn metadata(&self) -> &std::collections::HashMap<String, String> {
+        &self.metadata
+    }
+
+    /// 设置系统提示
+    pub fn with_system(mut self, prompt: impl Into<String>) -> Self {
+        self.system_prompt = Some(prompt.into());
+        self
+    }
+
+    /// 设置上下文窗口大小（滑动窗口）
+    ///
+    /// # 参数
+    /// - `size`: 保留的最大对话轮数（None 表示不限制）
+    ///
+    /// # 注意
+    /// - 单位是**轮数**（rounds），不是 token 数量
+    /// - 每轮对话 ≈ 1 个用户消息 + 1 个助手响应
+    /// - 系统消息始终保留，不计入轮数限制
+    ///
+    /// # 示例
+    ///
+    /// ```rust,ignore
+    /// let session = ChatSession::new(client)
+    ///     .with_context_window_size(Some(10)); // 只保留最近 10 轮对话
+    /// ```
+    pub fn with_context_window_size(mut self, size: Option<usize>) -> Self {
+        self.context_window_size = size;
+        self
+    }
+
+    /// 设置工具
+    pub fn with_tools(mut self, tools: Vec<Tool>, executor: Arc<dyn ToolExecutor>) -> Self {
+        self.tools = tools;
+        self.tool_executor = Some(executor);
+        self
+    }
+
+    /// 仅设置工具执行器（工具列表自动发现）
+    pub fn with_tool_executor(mut self, executor: Arc<dyn ToolExecutor>) -> Self {
+        self.tool_executor = Some(executor);
+        self
+    }
+
+    /// 发送消息
+    pub async fn send(&mut self, content: impl Into<String>) -> LLMResult<String> {
+        // 添加用户消息
+        self.messages.push(ChatMessage::user(content));
+
+        // 构建请求
+        let mut builder = self.client.chat();
+
+        // 添加系统提示
+        if let Some(ref system) = self.system_prompt {
+            builder = builder.system(system.clone());
+        }
+
+        // 添加历史消息（应用滑动窗口）
+        let messages_for_context = self.apply_sliding_window();
+        builder = builder.messages(messages_for_context);
+
+        // 添加工具
+        if let Some(ref executor) = self.tool_executor {
+            let tools = if self.tools.is_empty() {
+                executor.available_tools().await?
+            } else {
+                self.tools.clone()
+            };
+
+            if !tools.is_empty() {
+                builder = builder.tools(tools);
+            }
+
+            builder = builder.with_tool_executor(executor.clone());
+        }
+
+        // 发送请求
+        let response = if self.tool_executor.is_some() {
+            builder.send_with_tools().await?
+        } else {
+            builder.send().await?
+        };
+
+        // 存储响应元数据
+        self.last_response_metadata = Some(super::types::LLMResponseMetadata::from(&response));
+
+        // 提取响应内容
+        let content = response
+            .content()
+            .ok_or_else(|| LLMError::Other("No content in response".to_string()))?
+            .to_string();
+
+        // 添加助手消息到历史
+        self.messages.push(ChatMessage::assistant(&content));
+
+        // 滑动窗口：裁剪历史消息以保持固定大小
+        if self.context_window_size.is_some() {
+            self.messages =
+                Self::apply_sliding_window_static(&self.messages, self.context_window_size);
+        }
+
+        Ok(content)
+    }
+
+    /// 发送结构化消息（支持多模态）
+    pub async fn send_with_content(&mut self, content: MessageContent) -> LLMResult<String> {
+        self.messages.push(ChatMessage::user_with_content(content));
+
+        // 构建请求
+        let mut builder = self.client.chat();
+
+        // 添加系统提示
+        if let Some(ref system) = self.system_prompt {
+            builder = builder.system(system.clone());
+        }
+
+        // 添加历史消息（应用滑动窗口）
+        let messages_for_context = self.apply_sliding_window();
+        builder = builder.messages(messages_for_context);
+
+        // 添加工具
+        if let Some(ref executor) = self.tool_executor {
+            let tools = if self.tools.is_empty() {
+                executor.available_tools().await?
+            } else {
+                self.tools.clone()
+            };
+
+            if !tools.is_empty() {
+                builder = builder.tools(tools);
+            }
+
+            builder = builder.with_tool_executor(executor.clone());
+        }
+
+        // 发送请求
+        let response = if self.tool_executor.is_some() {
+            builder.send_with_tools().await?
+        } else {
+            builder.send().await?
+        };
+
+        // 存储响应元数据
+        self.last_response_metadata = Some(super::types::LLMResponseMetadata::from(&response));
+
+        // 提取响应内容
+        let content = response
+            .content()
+            .ok_or_else(|| LLMError::Other("No content in response".to_string()))?
+            .to_string();
+
+        // 添加助手消息到历史
+        self.messages.push(ChatMessage::assistant(&content));
+
+        // 滑动窗口：裁剪历史消息以保持固定大小
+        if self.context_window_size.is_some() {
+            self.messages =
+                Self::apply_sliding_window_static(&self.messages, self.context_window_size);
+        }
+
+        Ok(content)
+    }
+
+    /// 获取消息历史
+    pub fn messages(&self) -> &[ChatMessage] {
+        &self.messages
+    }
+
+    /// 获取消息历史（可变引用）
+    pub fn messages_mut(&mut self) -> &mut Vec<ChatMessage> {
+        &mut self.messages
+    }
+
+    /// 清空消息历史
+    pub fn clear(&mut self) {
+        self.messages.clear();
+    }
+
+    /// 获取消息数量
+    pub fn len(&self) -> usize {
+        self.messages.len()
+    }
+
+    /// 是否为空
+    pub fn is_empty(&self) -> bool {
+        self.messages.is_empty()
+    }
+
+    /// 设置上下文窗口大小（滑动窗口）
+    ///
+    /// # 参数
+    /// - `size`: 保留的最大对话轮数（None 表示不限制）
+    ///
+    /// # 注意
+    /// - 单位是**轮数**（rounds），不是 token 数量
+    /// - 每轮对话 ≈ 1 个用户消息 + 1 个助手响应（可能包含工具调用）
+    /// - 系统消息始终保留，不计入轮数限制
+    ///
+    /// # 示例
+    ///
+    /// ```rust,ignore
+    /// session.set_context_window_size(Some(10)); // 只保留最近 10 轮对话
+    /// session.set_context_window_size(None);     // 不限制对话轮数
+    /// ```
+    pub fn set_context_window_size(&mut self, size: Option<usize>) {
+        self.context_window_size = size;
+    }
+
+    /// 获取上下文窗口大小（轮数）
+    pub fn context_window_size(&self) -> Option<usize> {
+        self.context_window_size
+    }
+
+    /// 获取最后一次 LLM 响应的元数据
+    pub fn last_response_metadata(&self) -> Option<&super::types::LLMResponseMetadata> {
+        self.last_response_metadata.as_ref()
+    }
+
+    /// 应用滑动窗口，返回限定后的消息列表
+    ///
+    /// 保留最近的 N 轮对话（每轮包括用户消息和助手响应）。
+    /// 系统消息始终保留。
+    ///
+    /// # 参数
+    /// - `messages`: 要过滤的消息列表
+    /// - `window_size`: 保留的最大对话轮数（None 表示不限制）
+    ///
+    /// # 算法说明
+    /// - 1. 分离系统消息和对话消息
+    /// - 2. 从对话消息中保留最近的 N 轮
+    /// - 3. 合并系统消息和裁剪后的对话消息
+    ///
+    /// # 示例
+    ///
+    /// ```rust,ignore
+    /// // 假设有 20 条消息（约 10 轮对话）
+    /// // 设置 window_size = Some(3)
+    /// // 结果：保留最近 3 轮对话（约 6 条消息）+ 所有系统消息
+    /// let limited = ChatSession::apply_sliding_window_static(messages, Some(3));
+    /// ```
+    fn apply_sliding_window(&self) -> Vec<ChatMessage> {
+        Self::apply_sliding_window_static(&self.messages, self.context_window_size)
+    }
+
+    /// 静态方法：应用滑动窗口到消息列表
+    ///
+    /// 这个方法可以在不拥有 ChatSession 实例的情况下使用，
+    /// 例如在从数据库加载消息时。
+    ///
+    /// # 参数
+    /// - `messages`: 要过滤的消息列表
+    /// - `window_size`: 保留的最大对话轮数（None 表示不限制）
+    pub fn apply_sliding_window_static(
+        messages: &[ChatMessage],
+        window_size: Option<usize>,
+    ) -> Vec<ChatMessage> {
+        let max_rounds = match window_size {
+            Some(size) if size > 0 => size,
+            _ => return messages.to_vec(), // 无限制，返回所有消息
+        };
+
+        // 分离系统消息和对话消息
+        let mut system_messages = Vec::new();
+        let mut conversation_messages = Vec::new();
+
+        for msg in messages {
+            if msg.role == Role::System {
+                system_messages.push(msg.clone());
+            } else {
+                conversation_messages.push(msg.clone());
+            }
+        }
+
+        // 计算需要保留的最大消息数（每轮大约2条：用户+助手）
+        let max_messages = max_rounds * 2;
+
+        if conversation_messages.len() <= max_messages {
+            // 对话消息数量在限制内，返回所有消息
+            return messages.to_vec();
+        }
+
+        // 保留最后的 N 条对话消息
+        let start_index = conversation_messages.len() - max_messages;
+        let limited_conversation: Vec<ChatMessage> = conversation_messages
+            .into_iter()
+            .skip(start_index)
+            .collect();
+
+        // 合并系统消息和裁剪后的对话消息
+        let mut result = system_messages;
+        result.extend(limited_conversation);
+
+        result
+    }
+
+    /// 保存会话和消息到数据库
+    pub async fn save(&self) -> crate::persistence::PersistenceResult<()> {
+        // Convert ChatSession to persistence entity
+        let db_session = crate::persistence::ChatSession::new(self.user_id, self.agent_id)
+            .with_id(self.session_id)
+            .with_metadata("client_version", serde_json::json!("0.1.0"));
+
+        // Save session
+        self.session_store.create_session(&db_session).await?;
+
+        // Convert and save messages
+        for msg in self.messages.iter() {
+            // Convert Role to MessageRole
+            let persistence_role = match msg.role {
+                crate::llm::types::Role::System => crate::persistence::MessageRole::System,
+                crate::llm::types::Role::User => crate::persistence::MessageRole::User,
+                crate::llm::types::Role::Assistant => crate::persistence::MessageRole::Assistant,
+                crate::llm::types::Role::Tool => crate::persistence::MessageRole::Tool,
+            };
+
+            // Convert MessageContent to persistence format
+            let persistence_content = match &msg.content {
+                Some(crate::llm::types::MessageContent::Text(text)) => {
+                    crate::persistence::MessageContent::text(text)
+                }
+                Some(crate::llm::types::MessageContent::Parts(parts)) => {
+                    // For now, only handle text parts
+                    let text = parts
+                        .iter()
+                        .filter_map(|part| {
+                            if let crate::llm::types::ContentPart::Text { text } = part {
+                                Some(text.clone())
+                            } else {
+                                None
+                            }
+                        })
+                        .collect::<Vec<_>>()
+                        .join("\n");
+                    crate::persistence::MessageContent::text(text)
+                }
+                None => crate::persistence::MessageContent::text(""),
+            };
+
+            let llm_message = crate::persistence::LLMMessage::new(
+                self.session_id,
+                self.agent_id,
+                self.user_id,
+                self.tenant_id,
+                persistence_role,
+                persistence_content,
+            );
+
+            // Save message
+            self.message_store.save_message(&llm_message).await?;
+        }
+
+        Ok(())
+    }
+
+    /// 从数据库删除会话和消息
+    pub async fn delete(&self) -> crate::persistence::PersistenceResult<()> {
+        // Delete all messages for the session
+        self.message_store
+            .delete_session_messages(self.session_id)
+            .await?;
+
+        // Delete the session itself
+        self.session_store.delete_session(self.session_id).await?;
+
+        Ok(())
+    }
+}
+
+// ============================================================================
+// 便捷函数
+// ============================================================================
+
+/// 快速创建函数工具定义
+///
+/// # 示例
+///
+/// ```rust,ignore
+/// use mofa_foundation::llm::function_tool;
+/// use serde_json::json;
+///
+/// let tool = function_tool(
+///     "get_weather",
+///     "Get the current weather for a location",
+///     json!({
+///         "type": "object",
+///         "properties": {
+///             "location": {
+///                 "type": "string",
+///                 "description": "City name"
+///             }
+///         },
+///         "required": ["location"]
+///     })
+/// );
+/// ```
+pub fn function_tool(
+    name: impl Into<String>,
+    description: impl Into<String>,
+    parameters: serde_json::Value,
+) -> Tool {
+    Tool::function(name, description, parameters)
+}

@@ -1,0 +1,63 @@
+[package]
+name = "mofa-plugins"
+version.workspace = true
+edition.workspace = true
+description = "MoFA Plugins - Dual-layer plugin system with compile-time (Rust/WASM) and runtime (Rhai) support"
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+documentation = "https://docs.rs/mofa-plugins"
+readme = "README.md"
+keywords = ["ai", "agent", "plugin", "wasm", "rhai", "dual-layer"]
+categories = ["development-tools", "api-bindings"]
+publish = true
+
+[dependencies]
+# Workspace dependencies
+async-trait.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+serde_yaml.workspace = true
+tokio.workspace = true
+tokio-stream = { workspace = true }
+anyhow.workspace = true
+thiserror.workspace = true
+parking_lot.workspace = true
+notify.workspace = true
+libloading.workspace = true
+tempfile.workspace = true
+sha2.workspace = true
+tracing.workspace = true
+uuid = {workspace = true,features = ["v7"]}
+rand.workspace = true
+# WASM plugin runtime
+wasmtime = { version = "40", features = ["component-model", "async"] }
+# Local dependencies
+mofa-kernel = { path = "../mofa-kernel", version = "0.1" }
+reqwest = { version = "0.12.28", features = ["json", "rustls-tls"] }
+chrono = { workspace = true, features = ["serde"] }
+mofa-extra = { version = "0.1", path = "../mofa-extra" }
+rhai = { version = "1.20", features = ["sync", "serde"] }
+url = "2.5.7"
+regex = "1.12.2"
+walkdir = "2.4"
+which = "7"
+# TTS support (optional - using rodio for audio playback)
+rodio = { version = "0.17", optional = true }
+# Kokoro TTS (optional)
+kokoro-tts = { version = "0.2.8", optional = true }
+# Pin ort version for kokoro-tts compatibility
+ort = { version = "=2.0.0-rc.10", optional = true }
+# Model download support
+hf-hub = "0.4"
+tokio-util = { version = "0.7", features = ["io"] }
+dirs = "5.0"
+md-5 = "0.10"
+backoff = { version = "0.4", features = ["tokio"] }
+futures = "0.3"
+
+[features]
+default = []
+rodio = ["dep:rodio"]
+kokoro = ["dep:kokoro-tts", "dep:ort"]

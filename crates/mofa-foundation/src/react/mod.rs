@@ -1,0 +1,102 @@
+//! ReAct (Reasoning + Acting) Agent 框架
+//!
+//! 基于 ractor Actor 模型实现的 ReAct Agent，支持：
+//!
+//! - **思考-行动-观察循环**: 标准 ReAct 推理模式
+//! - **工具调用**: 支持自定义工具注册和执行
+//! - **Actor 模型**: 基于 ractor 实现，支持并发和消息传递
+//! - **AutoAgent**: 自动选择最佳行动策略
+//! - **流式输出**: 支持流式思考过程输出
+//!
+//! # 架构
+//!
+//! ```text
+//! ┌─────────────────────────────────────────────────────────────────┐
+//! │                     ReAct Agent 架构                             │
+//! ├─────────────────────────────────────────────────────────────────┤
+//! │                                                                 │
+//! │  ┌─────────────┐      ┌─────────────┐      ┌─────────────┐     │
+//! │  │   Input     │─────▶│  Thought    │─────▶│   Action    │     │
+//! │  │  (任务)     │      │  (推理)     │      │  (行动)     │     │
+//! │  └─────────────┘      └─────────────┘      └──────┬──────┘     │
+//! │                                                   │            │
+//! │                                                   ▼            │
+//! │  ┌─────────────┐      ┌─────────────┐      ┌─────────────┐     │
+//! │  │   Output    │◀─────│   Final     │◀─────│ Observation │     │
+//! │  │   (结果)    │      │  Answer     │      │  (观察)     │     │
+//! │  └─────────────┘      └─────────────┘      └─────────────┘     │
+//! │                                                                 │
+//! │  ┌─────────────────────────────────────────────────────────┐   │
+//! │  │                     Tool Registry                        │   │
+//! │  │  ┌─────┐ ┌─────┐ ┌─────┐ ┌─────┐ ┌─────┐               │   │
+//! │  │  │Tool1│ │Tool2│ │Tool3│ │Tool4│ │ ... │               │   │
+//! │  │  └─────┘ └─────┘ └─────┘ └─────┘ └─────┘               │   │
+//! │  └─────────────────────────────────────────────────────────┘   │
+//! │                                                                 │
+//! └─────────────────────────────────────────────────────────────────┘
+//! ```
+//!
+//! # 示例
+//!
+//! ## 基本用法
+//!
+//! ```rust,ignore
+//! use mofa_foundation::react::{ReActAgent, ReActTool};
+//! use std::sync::Arc;
+//!
+//! // 定义工具
+//! struct SearchTool;
+//!
+//! #[async_trait::async_trait]
+//! impl ReActTool for SearchTool {
+//!     fn name(&self) -> &str { "search" }
+//!     fn description(&self) -> &str { "Search the web for information" }
+//!
+//!     async fn execute(&self, input: &str) -> Result<String, String> {
+//!         Ok(format!("Search results for: {}", input))
+//!     }
+//! }
+//!
+//! // 创建 ReAct Agent
+//! let agent = ReActAgent::builder()
+//!     .with_llm(llm_agent)
+//!     .with_tool(Arc::new(SearchTool))
+//!     .with_max_iterations(5)
+//!     .build()?;
+//!
+//! // 执行任务
+//! let result = agent.run("What is the capital of France?").await?;
+//! info!("Answer: {}", result.answer);
+//! ```
+//!
+//! ## 使用 Actor 模型
+//!
+//! ```rust,ignore
+//! use mofa_foundation::react::{ReActActorRef, spawn_react_agent};
+//!
+//! // 启动 ReAct Actor
+//! let (actor, handle) = spawn_react_agent(config).await?;
+//!
+//! // 发送任务
+//! let result = actor.run_task("Analyze this data").await?;
+//! ```
+
+mod actor;
+mod core;
+pub mod patterns;
+pub mod tools;
+
+pub use actor::*;
+pub use core::*;
+pub use patterns::*;
+pub use tools::*;
+
+/// 便捷 prelude 模块
+pub mod prelude {
+    pub use super::patterns::{
+        AgentOutput, AgentUnit, AggregationStrategy, ChainAgent, ChainResult, ChainStepResult,
+        MapReduceAgent, MapReduceResult, ParallelAgent, ParallelResult, ParallelStepResult,
+        chain_agents, parallel_agents, parallel_agents_with_summarizer,
+    };
+    pub use super::tools::prelude::*;
+}
