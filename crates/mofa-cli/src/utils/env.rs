@@ -45,18 +45,6 @@ pub fn get_env_uint(key: &str, default: u64) -> u64 {
         .unwrap_or(default)
 }
 
-/// Set environment variable for current process
-pub fn set_env_var(key: &str, value: &str) {
-    // SAFETY: set_var is safe for this use case
-    unsafe { std_env::set_var(key, value) };
-}
-
-/// Remove environment variable for current process
-pub fn remove_env_var(key: &str) {
-    // SAFETY: remove_var is safe for this use case
-    unsafe { std_env::remove_var(key) };
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -73,24 +61,24 @@ mod tests {
         assert_eq!(get_env_bool("NONEXISTENT_BOOL", false), false);
 
         // Test parsing
-        set_env_var("TEST_BOOL_TRUE", "1");
+        unsafe { std_env::set_var("TEST_BOOL_TRUE", "1") };
         assert_eq!(get_env_bool("TEST_BOOL_TRUE", false), true);
 
-        set_env_var("TEST_BOOL_YES", "yes");
+        unsafe { std_env::set_var("TEST_BOOL_YES", "yes") };
         assert_eq!(get_env_bool("TEST_BOOL_YES", false), true);
 
-        set_env_var("TEST_BOOL_FALSE", "0");
+        unsafe { std_env::set_var("TEST_BOOL_FALSE", "0") };
         assert_eq!(get_env_bool("TEST_BOOL_FALSE", true), false);
 
-        remove_env_var("TEST_BOOL_TRUE");
-        remove_env_var("TEST_BOOL_YES");
-        remove_env_var("TEST_BOOL_FALSE");
+        unsafe { std_env::remove_var("TEST_BOOL_TRUE") };
+        unsafe { std_env::remove_var("TEST_BOOL_YES") };
+        unsafe { std_env::remove_var("TEST_BOOL_FALSE") };
     }
 
     #[test]
     fn test_get_env_int() {
-        set_env_var("TEST_INT", "42");
+        unsafe { std_env::set_var("TEST_INT", "42") };
         assert_eq!(get_env_int("TEST_INT", 0), 42);
-        remove_env_var("TEST_INT");
+        unsafe { std_env::remove_var("TEST_INT") };
     }
 }
