@@ -43,6 +43,9 @@ toml = "0.8"
 config.workspace = true
 regex.workspace = true
 
+[lints]
+workspace = true
+
 [features]
 
 dora = ["dora-node-api", "dora-operator-api", "dora-daemon", "dora-core", "dora-message"]

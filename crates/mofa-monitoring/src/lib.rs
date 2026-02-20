@@ -13,13 +13,13 @@
 //! use mofa_monitoring::{DashboardServer, DashboardConfig};
 //!
 //! # #[tokio::main]
-//! # async fn main() -> Result<(), Box<dyn std::error::Error>> {
+//! # async fn main() {
 //! let config = DashboardConfig::new()
 //!     .with_port(8080);
 //!
 //! let server = DashboardServer::new(config);
-//! server.start().await?;
-//! # Ok(())
+//! // Start the server (this would block)
+//! // server.start().await.unwrap();
 //! # }
 //! ```
 

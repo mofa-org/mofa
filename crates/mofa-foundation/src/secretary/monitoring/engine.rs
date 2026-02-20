@@ -115,13 +115,8 @@ impl EventHandlingEngine {
                     plugin.metadata().name
                 );
 
-                // Process the event
-                // Downcast to mutable EventResponsePlugin
-                let plugin_mut = plugin
-                    .as_any_mut()
-                    .downcast_mut::<Box<dyn EventResponsePlugin + Send + Sync>>()
-                    .unwrap();
-                let processed_event = plugin_mut.handle_event(event).await?;
+                // Process the event - call handle_event directly on the trait object
+                let processed_event = plugin.handle_event(event).await?;
 
                 println!(
                     "Event {} processed successfully by plugin {}",

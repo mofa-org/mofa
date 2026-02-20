@@ -122,6 +122,7 @@ pub enum NodeDefinition {
     },
 
     /// LLM Agent node
+    #[serde(rename = "llm_agent")]
     LLM_AGENT {
         id: String,
         name: String,
@@ -499,6 +500,16 @@ edges:
     #[test]
     fn test_parse_agent_config() {
         let yaml = r#"
+metadata:
+  id: agent_config_test
+  name: Agent Config Test
+
+nodes:
+  - type: start
+    id: start
+  - type: end
+    id: end
+
 agents:
   my_agent:
     model: gpt-4

@@ -78,5 +78,8 @@ lazy_static = "1.4"
 base64 = "0.22"
 infer = "0.16"
 
+[lints]
+workspace = true
+
 [dev-dependencies]
 tempfile = "3"

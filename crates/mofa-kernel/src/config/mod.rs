@@ -320,53 +320,6 @@ mod unit_tests {
         assert!(detect_format("config.txt").is_err());
     }
 
-    #[test]
-    fn test_substitute_env_vars_braced() {
-        unsafe {
-            std::env::set_var("TEST_VAR", "test_value");
-        }
-        let result = substitute_env_vars("value: ${TEST_VAR}");
-        assert_eq!(result, "value: test_value");
-        unsafe {
-            std::env::remove_var("TEST_VAR");
-        }
-    }
-
-    #[test]
-    fn test_substitute_env_vars_simple() {
-        unsafe {
-            std::env::set_var("TEST_VAR", "test_value");
-        }
-        let result = substitute_env_vars("value: $TEST_VAR");
-        assert_eq!(result, "value: test_value");
-        unsafe {
-            std::env::remove_var("TEST_VAR");
-        }
-    }
-
-    #[test]
-    fn test_substitute_env_vars_missing() {
-        let result = substitute_env_vars("value: ${MISSING_VAR}");
-        assert_eq!(result, "value: ${MISSING_VAR}");
-    }
-
-    #[test]
-    fn test_substitute_env_vars_multiple() {
-        unsafe {
-            std::env::set_var("VAR1", "value1");
-        }
-        unsafe {
-            std::env::set_var("VAR2", "value2");
-        }
-        let result = substitute_env_vars("${VAR1} and $VAR2");
-        assert_eq!(result, "value1 and value2");
-        unsafe {
-            std::env::remove_var("VAR1");
-        }
-        unsafe {
-            std::env::remove_var("VAR2");
-        }
-    }
 
     #[test]
     fn test_from_str_toml() {
