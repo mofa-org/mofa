@@ -13,7 +13,7 @@ use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
 use super::metrics::{
-    AgentMetrics, MetricsCollector, MetricsSnapshot, PluginMetrics, WorkflowMetrics,
+    AgentMetrics, LLMMetrics, MetricsCollector, MetricsSnapshot, PluginMetrics, WorkflowMetrics,
 };
 
 /// API response wrapper
@@ -189,6 +189,60 @@ impl From<PluginMetrics> for PluginStatus {
     }
 }
 
+/// LLM status response - specialized for model inference metrics
+///
+/// Separate from PluginStatus because LLM metrics include model-specific
+/// inference data (tokens/s, TTFT, token counts) that don't apply to
+/// generic plugins.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LLMStatus {
+    pub plugin_id: String,
+    pub provider_name: String,
+    pub model_name: String,
+    pub state: String,
+    pub total_requests: u64,
+    pub successful_requests: u64,
+    pub failed_requests: u64,
+    pub success_rate: f64,
+    pub total_tokens: u64,
+    pub prompt_tokens: u64,
+    pub completion_tokens: u64,
+    pub avg_latency_ms: f64,
+    pub tokens_per_second: Option<f64>,
+    pub time_to_first_token_ms: Option<f64>,
+    pub requests_per_minute: f64,
+    pub error_rate: f64,
+}
+
+impl From<LLMMetrics> for LLMStatus {
+    fn from(m: LLMMetrics) -> Self {
+        let success_rate = if m.total_requests > 0 {
+            (m.successful_requests as f64 / m.total_requests as f64) * 100.0
+        } else {
+            0.0
+        };
+
+        Self {
+            plugin_id: m.plugin_id,
+            provider_name: m.provider_name,
+            model_name: m.model_name,
+            state: m.state,
+            total_requests: m.total_requests,
+            successful_requests: m.successful_requests,
+            failed_requests: m.failed_requests,
+            success_rate,
+            total_tokens: m.total_tokens,
+            prompt_tokens: m.prompt_tokens,
+            completion_tokens: m.completion_tokens,
+            avg_latency_ms: m.avg_latency_ms,
+            tokens_per_second: m.tokens_per_second,
+            time_to_first_token_ms: m.time_to_first_token_ms,
+            requests_per_minute: m.requests_per_minute,
+            error_rate: m.error_rate,
+        }
+    }
+}
+
 /// System status response
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SystemStatus {
@@ -212,6 +266,7 @@ pub struct DashboardOverview {
     pub agents_summary: AgentsSummary,
     pub workflows_summary: WorkflowsSummary,
     pub plugins_summary: PluginsSummary,
+    pub llm_summary: LLMSummary,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -238,6 +293,18 @@ pub struct PluginsSummary {
     pub loaded: usize,
     pub failed: usize,
     pub total_calls: u64,
+}
+
+/// LLM summary for dashboard overview
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LLMSummary {
+    pub total_plugins: usize,
+    pub active_models: usize,
+    pub total_requests: u64,
+    pub total_tokens: u64,
+    pub avg_latency_ms: f64,
+    pub avg_tokens_per_second: f64,
+    pub total_errors: u64,
 }
 
 /// Query parameters for history endpoint
@@ -273,6 +340,9 @@ pub fn create_api_router(collector: Arc<MetricsCollector>) -> Router {
         // Plugins
         .route("/plugins", get(get_plugins))
         .route("/plugins/:id", get(get_plugin))
+        // LLM (model inference metrics)
+        .route("/llm", get(get_llm_metrics))
+        .route("/llm/:id", get(get_llm_plugin))
         // System
         .route("/system", get(get_system_status))
         .route("/health", get(health_check))
@@ -345,6 +415,38 @@ async fn get_overview(
         total_calls: snapshot.plugins.iter().map(|p| p.call_count).sum(),
     };
 
+    // Calculate LLM summary
+    let llm_summary = {
+        let total_requests: u64 = snapshot.llm_metrics.iter().map(|l| l.total_requests).sum();
+        let total_tokens: u64 = snapshot.llm_metrics.iter().map(|l| l.total_tokens).sum();
+        let total_errors: u64 = snapshot.llm_metrics.iter().map(|l| l.failed_requests).sum();
+        let avg_latency = if !snapshot.llm_metrics.is_empty() {
+            snapshot.llm_metrics.iter().map(|l| l.avg_latency_ms).sum::<f64>()
+                / snapshot.llm_metrics.len() as f64
+        } else {
+            0.0
+        };
+        let avg_tps = if !snapshot.llm_metrics.is_empty() {
+            snapshot.llm_metrics
+                .iter()
+                .filter_map(|l| l.tokens_per_second)
+                .sum::<f64>()
+                / snapshot.llm_metrics.iter().filter(|l| l.tokens_per_second.is_some()).count().max(1) as f64
+        } else {
+            0.0
+        };
+
+        LLMSummary {
+            total_plugins: snapshot.llm_metrics.len(),
+            active_models: snapshot.llm_metrics.iter().filter(|l| l.state == "running").count(),
+            total_requests,
+            total_tokens,
+            avg_latency_ms: avg_latency,
+            avg_tokens_per_second: avg_tps,
+            total_errors,
+        }
+    };
+
     let system = SystemStatus {
         status: "operational".to_string(),
         uptime_secs: snapshot.system.uptime_secs,
@@ -368,6 +470,7 @@ async fn get_overview(
         agents_summary,
         workflows_summary,
         plugins_summary,
+        llm_summary,
     };
 
     Ok(Json(ApiResponse::success(overview)))
@@ -480,6 +583,30 @@ async fn get_plugin(
         .ok_or_else(|| ApiError::NotFound(format!("Plugin {} not found", id)))?;
 
     Ok(Json(ApiResponse::success(plugin.into())))
+}
+
+/// Get all LLM metrics
+async fn get_llm_metrics(
+    State(state): State<Arc<ApiState>>,
+) -> Result<Json<ApiResponse<Vec<LLMStatus>>>, ApiError> {
+    let snapshot = state.collector.current().await;
+    let llm: Vec<LLMStatus> = snapshot.llm_metrics.into_iter().map(|l| l.into()).collect();
+    Ok(Json(ApiResponse::success(llm)))
+}
+
+/// Get single LLM plugin metrics
+async fn get_llm_plugin(
+    State(state): State<Arc<ApiState>>,
+    Path(id): Path<String>,
+) -> Result<Json<ApiResponse<LLMStatus>>, ApiError> {
+    let snapshot = state.collector.current().await;
+    let llm = snapshot
+        .llm_metrics
+        .into_iter()
+        .find(|l| l.plugin_id == id)
+        .ok_or_else(|| ApiError::NotFound(format!("LLM plugin {} not found", id)))?;
+
+    Ok(Json(ApiResponse::success(llm.into())))
 }
 
 /// Get system status

@@ -28,7 +28,8 @@ pub mod tracing;
 
 pub use dashboard::{
     AgentMetrics, AgentStatus, ApiError, ApiResponse, DashboardConfig, DashboardServer, Gauge,
-    Histogram, MetricType, MetricValue, MetricsCollector, MetricsConfig, MetricsRegistry,
-    MetricsSnapshot, PluginMetrics, PluginStatus, ServerState, SystemMetrics, SystemStatus,
-    WebSocketClient, WebSocketHandler, WebSocketMessage, WorkflowMetrics,
+    Histogram, LLMMetrics, LLMStatus, LLMSummary, MetricType, MetricValue, MetricsCollector,
+    MetricsConfig, MetricsRegistry, MetricsSnapshot, PluginMetrics, PluginStatus, ServerState,
+    SystemMetrics, SystemStatus, WebSocketClient, WebSocketHandler, WebSocketMessage,
+    WorkflowMetrics,
 };
