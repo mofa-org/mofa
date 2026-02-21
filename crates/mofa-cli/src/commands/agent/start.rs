@@ -38,8 +38,12 @@ pub async fn run_async(agent_id: &str, _config: Option<&std::path::Path>, daemon
             .as_secs()
     );
 
-    // Save to store
-    store.update(record).await?;
+    // Save to store (create if new, update if existing)
+    if store.exists(agent_id).await? {
+        store.update(record).await?;
+    } else {
+        store.create(record).await?;
+    }
 
     println!("{} Agent '{}' started", "✓".green(), agent_id);
 
