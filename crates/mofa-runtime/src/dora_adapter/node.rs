@@ -297,6 +297,8 @@ pub fn convert_dora_event(dora_event: &Event) -> Option<AgentEvent> {
 
 #[cfg(test)]
 mod tests {
+    use super::{DoraAgentNode, DoraNodeConfig, NodeState};
+
     #[tokio::test]
     async fn test_node_lifecycle() {
         let config = DoraNodeConfig {

@@ -295,7 +295,7 @@ impl Default for OperatorChain {
 
 #[cfg(test)]
 mod tests {
-    use super::{OperatorChain, OperatorInput, PluginOperatorAdapter};
+    use super::{MoFAOperator, OperatorChain, OperatorInput, PluginOperatorAdapter};
     use mofa_plugins::LLMPlugin;
 
     #[tokio::test]

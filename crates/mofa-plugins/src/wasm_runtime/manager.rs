@@ -63,7 +63,7 @@ pub enum PluginEvent {
     /// Plugin loaded
     Loaded {
         plugin_id: String,
-        manifest: PluginManifest,
+        manifest: Box<PluginManifest>,
     },
     /// Plugin initialized
     Initialized { plugin_id: String },
@@ -291,7 +291,7 @@ impl WasmPluginManager {
         // Emit event
         let _ = self.event_tx.send(PluginEvent::Loaded {
             plugin_id: plugin_id.clone(),
-            manifest,
+            manifest: Box::new(manifest),
         });
 
         info!("Loaded plugin: {}", plugin_id);

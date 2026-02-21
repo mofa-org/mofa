@@ -2605,9 +2605,9 @@ impl LLMAgentBuilder {
         // Fallback: If stores are set but persistence_tenant_id is None, use tenant_id
         let persistence_tenant_id = if self.session_store.is_some()
             && self.persistence_tenant_id.is_none()
-            && tenant_id_for_persistence.is_some()
+            && let Some(ref tenant_id) = tenant_id_for_persistence
         {
-            uuid::Uuid::parse_str(&tenant_id_for_persistence.unwrap()).ok()
+            uuid::Uuid::parse_str(tenant_id).ok()
         } else {
             self.persistence_tenant_id
         };

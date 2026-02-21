@@ -381,6 +381,8 @@ impl Default for ChannelManager {
 
 #[cfg(test)]
 mod tests {
+    use super::{ChannelConfig, ChannelManager, DoraChannel, MessageEnvelope};
+
     #[tokio::test]
     async fn test_p2p_communication() {
         let channel = DoraChannel::new(ChannelConfig::default());
