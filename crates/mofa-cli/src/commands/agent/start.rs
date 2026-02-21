@@ -71,6 +71,7 @@ pub async fn run(
         id: agent_id.to_string(),
         name: agent_config.name.clone(),
         state: "Running".to_string(),
+        description: agent_config.description.clone(),
     };
     ctx.agent_store
         .save(agent_id, &entry)

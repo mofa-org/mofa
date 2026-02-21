@@ -30,6 +30,8 @@ pub struct AgentConfigEntry {
     pub id: String,
     pub name: String,
     pub state: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -338,6 +340,7 @@ mod tests {
             id: "persisted-agent".to_string(),
             name: "Persisted Agent".to_string(),
             state: "Running".to_string(),
+            description: None,
         };
         ctx1.agent_store.save("persisted-agent", &entry).unwrap();
         drop(ctx1);
