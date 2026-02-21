@@ -1,0 +1,7 @@
+This PR fixes two critical runtime issues in the mofa-monitoring service after upgrading to axum v0.8:
+
+🚨 Route syntax panic caused by outdated route definitions incompatible with axum v0.8.
+
+🔌 WebSocket dead handler issue where closed/disconnected clients caused tasks to hang or panic.
+
+All existing tests pass and additional regression tests have been added to prevent future breakage.
