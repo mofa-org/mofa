@@ -2,17 +2,16 @@
 //!
 //! 封装 dora-rs 的 Node API，提供智能体生命周期管理
 
-use crate::AgentMessage;
 use crate::dora_adapter::error::{DoraError, DoraResult};
 use crate::interrupt::AgentInterrupt;
-use crate::message::{AgentEvent, TaskRequest};
+use mofa_kernel::message::{AgentEvent, AgentMessage, TaskPriority, TaskRequest};
 use dora_node_api::Event;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::{RwLock, mpsc};
-use tracing::{debug, info, warn};
+use ::tracing::{debug, info, warn};
 
 /// DoraNode 配置
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -277,7 +276,7 @@ pub fn convert_dora_event(dora_event: &Event) -> Option<AgentEvent> {
                         Some(AgentEvent::TaskReceived(TaskRequest {
                             task_id,
                             content,
-                            priority: crate::message::TaskPriority::Medium,
+                            priority: TaskPriority::Medium,
                             deadline: None,
                             metadata: HashMap::new(),
                         }))
@@ -298,6 +297,8 @@ pub fn convert_dora_event(dora_event: &Event) -> Option<AgentEvent> {
 
 #[cfg(test)]
 mod tests {
+    use super::{DoraAgentNode, DoraNodeConfig, NodeState};
+
     #[tokio::test]
     async fn test_node_lifecycle() {
         let config = DoraNodeConfig {

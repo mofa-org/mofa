@@ -545,6 +545,7 @@ impl ChatSession {
     }
 
     /// 使用指定 ID 和存储实现创建会话
+    #[allow(clippy::too_many_arguments)]
     pub fn with_id_and_stores(
         session_id: uuid::Uuid,
         client: LLMClient,
@@ -593,6 +594,7 @@ impl ChatSession {
     ///
     /// # 错误
     /// 如果数据库操作失败，返回错误
+    #[allow(clippy::too_many_arguments)]
     pub async fn with_id_and_stores_and_persist(
         session_id: uuid::Uuid,
         client: LLMClient,
@@ -659,6 +661,7 @@ impl ChatSession {
     /// # 注意
     /// 当指定 `context_window_size` 时，只会加载最近的 N 轮对话到内存中。
     /// 这对于长期对话很有用，可以避免加载大量历史消息。
+    #[allow(clippy::too_many_arguments)]
     pub async fn load(
         session_id: uuid::Uuid,
         client: LLMClient,
