@@ -3,6 +3,7 @@ import json
 import os
 from functools import wraps
 import traceback
+import time
 from os import mkdir
 import pyarrow as pa
 from attrs import define, field
@@ -258,10 +259,16 @@ class BaseMofaAgent:
 def run_agent(func):
     @wraps(func)
     def wrapper(*args, **kwargs):
-        while True:
+        max_retries = 3
+        retry_count = 0
+        while retry_count < max_retries:
             try:
-                func(*args, **kwargs)
+                return func(*args, **kwargs)
             except Exception as e:
+                retry_count += 1
                 print(f"Error occurred: {e}")
                 traceback.print_exc()
+                if retry_count >= max_retries:
+                    raise
+                time.sleep(2 ** retry_count)
     return wrapper
