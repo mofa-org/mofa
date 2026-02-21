@@ -11,12 +11,13 @@ use super::StateUpdate;
 /// Control flow directive for workflow execution
 ///
 /// Determines what happens after a node completes execution.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
 pub enum ControlFlow {
     /// Jump to a specific node by ID
     Goto(String),
 
     /// Continue to the next node(s) based on graph edges
+    #[default]
     Continue,
 
     /// End workflow execution and return current state
@@ -24,12 +25,6 @@ pub enum ControlFlow {
 
     /// Dynamically create parallel execution branches (MapReduce pattern)
     Send(Vec<SendCommand>),
-}
-
-impl Default for ControlFlow {
-    fn default() -> Self {
-        Self::Continue
-    }
 }
 
 /// Command returned by node functions

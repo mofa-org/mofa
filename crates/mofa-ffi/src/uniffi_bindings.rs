@@ -167,7 +167,11 @@ impl LLMAgent {
             }
             LLMProviderType::Ollama => {
                 let model = config.model.clone().unwrap_or_else(|| "llama2".to_string());
-                Arc::new(OpenAIProvider::ollama(model))
+                let base_url = config
+                    .base_url
+                    .clone()
+                    .unwrap_or_else(|| "http://localhost:11434/v1".to_string());
+                Arc::new(OpenAIProvider::local(base_url, model))
             }
             LLMProviderType::Azure => {
                 let endpoint = config

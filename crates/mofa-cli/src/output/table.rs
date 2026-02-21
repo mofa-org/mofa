@@ -110,6 +110,7 @@ impl Table {
     }
 
     /// Convert to string
+    #[allow(clippy::inherent_to_string_shadow_display)]
     pub fn to_string(&self) -> String {
         self.inner.to_string()
     }

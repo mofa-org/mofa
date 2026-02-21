@@ -460,7 +460,7 @@ impl<S: GraphState + 'static> CompiledGraph<S> for CompiledGraphImpl<S> {
             let mut state = input;
             let mut current_nodes = vec![entry_point];
 
-            while !current_nodes.is_empty() {
+            if !current_nodes.is_empty() {
                 // Check recursion limit
                 if ctx.remaining_steps.is_exhausted().await {
                     let _ = tx
@@ -548,10 +548,6 @@ impl<S: GraphState + 'static> CompiledGraph<S> for CompiledGraphImpl<S> {
                         }))
                         .await;
                 }
-
-                // For simplicity, break after first round
-                // TODO: Implement proper edge following
-                break;
             }
 
             // Send final event

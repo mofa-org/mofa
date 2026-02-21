@@ -184,7 +184,8 @@ pub mod runtime {
     // Agent builder
     pub use mofa_runtime::AgentBuilder;
 
-    // Simple runtime (non-dora)
+    // Simple runtime is only available without dora runtime integration.
+    #[cfg(not(feature = "dora"))]
     pub use mofa_runtime::SimpleRuntime;
 
     // Agent registry (runtime implementation)
@@ -429,7 +430,9 @@ pub mod prelude {
         AgentCapabilities, AgentCapabilitiesBuilder, AgentContext, AgentError, AgentInput,
         AgentMetadata, AgentOutput, AgentResult, AgentState, MoFAAgent,
     };
-    pub use crate::runtime::{AgentBuilder, AgentRunner, SimpleRuntime, run_agents};
+    #[cfg(not(feature = "dora"))]
+    pub use crate::runtime::SimpleRuntime;
+    pub use crate::runtime::{AgentBuilder, AgentRunner, run_agents};
     pub use async_trait::async_trait;
 }
 

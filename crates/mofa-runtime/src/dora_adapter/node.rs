@@ -5,8 +5,8 @@
 use crate::AgentMessage;
 use crate::dora_adapter::error::{DoraError, DoraResult};
 use crate::interrupt::AgentInterrupt;
-use crate::message::{AgentEvent, TaskRequest};
 use dora_node_api::Event;
+use mofa_kernel::message::{AgentEvent, TaskPriority, TaskRequest};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -277,7 +277,7 @@ pub fn convert_dora_event(dora_event: &Event) -> Option<AgentEvent> {
                         Some(AgentEvent::TaskReceived(TaskRequest {
                             task_id,
                             content,
-                            priority: crate::message::TaskPriority::Medium,
+                            priority: TaskPriority::Medium,
                             deadline: None,
                             metadata: HashMap::new(),
                         }))
@@ -298,6 +298,8 @@ pub fn convert_dora_event(dora_event: &Event) -> Option<AgentEvent> {
 
 #[cfg(test)]
 mod tests {
+    use super::*;
+
     #[tokio::test]
     async fn test_node_lifecycle() {
         let config = DoraNodeConfig {

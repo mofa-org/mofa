@@ -1136,14 +1136,10 @@ impl SqliteStore {
             enabled: row.try_get("enabled").unwrap_or(1) == 1,
             create_time: row
                 .try_get("create_time")
-                .map_err(|e: chrono::format::ParseError| {
-                    PersistenceError::Serialization(e.to_string())
-                })?,
+                .map_err(|e| PersistenceError::Query(e.to_string()))?,
             update_time: row
                 .try_get("update_time")
-                .map_err(|e: chrono::format::ParseError| {
-                    PersistenceError::Serialization(e.to_string())
-                })?,
+                .map_err(|e| PersistenceError::Query(e.to_string()))?,
         })
     }
 
@@ -1207,14 +1203,10 @@ impl SqliteStore {
             thinking,
             create_time: row
                 .try_get("create_time")
-                .map_err(|e: chrono::format::ParseError| {
-                    PersistenceError::Serialization(e.to_string())
-                })?,
+                .map_err(|e| PersistenceError::Query(e.to_string()))?,
             update_time: row
                 .try_get("update_time")
-                .map_err(|e: chrono::format::ParseError| {
-                    PersistenceError::Serialization(e.to_string())
-                })?,
+                .map_err(|e| PersistenceError::Query(e.to_string()))?,
         })
     }
 
@@ -1249,12 +1241,12 @@ impl SqliteStore {
                 .try_get("api_key")
                 .map_err(|e| PersistenceError::Query(e.to_string()))?,
             enabled: row.try_get("provider_enabled").unwrap_or(1) == 1,
-            create_time: row.try_get("provider_create_time").map_err(
-                |e: chrono::format::ParseError| PersistenceError::Serialization(e.to_string()),
-            )?,
-            update_time: row.try_get("provider_update_time").map_err(
-                |e: chrono::format::ParseError| PersistenceError::Serialization(e.to_string()),
-            )?,
+            create_time: row
+                .try_get("provider_create_time")
+                .map_err(|e| PersistenceError::Query(e.to_string()))?,
+            update_time: row
+                .try_get("provider_update_time")
+                .map_err(|e| PersistenceError::Query(e.to_string()))?,
         })
     }
 
@@ -1318,14 +1310,10 @@ impl SqliteStore {
             thinking,
             create_time: row
                 .try_get("create_time")
-                .map_err(|e: chrono::format::ParseError| {
-                    PersistenceError::Serialization(e.to_string())
-                })?,
+                .map_err(|e| PersistenceError::Query(e.to_string()))?,
             update_time: row
                 .try_get("update_time")
-                .map_err(|e: chrono::format::ParseError| {
-                    PersistenceError::Serialization(e.to_string())
-                })?,
+                .map_err(|e| PersistenceError::Query(e.to_string()))?,
         })
     }
 }
@@ -1419,5 +1407,79 @@ mod tests {
         let stats = store.get_statistics(&filter).await.unwrap();
         assert_eq!(stats.total_calls, 1);
         assert_eq!(stats.total_tokens, 150);
+    }
+
+    #[tokio::test]
+    async fn test_sqlite_store_provider_agent_parsing_roundtrip() {
+        let store = SqliteStore::in_memory().await.unwrap();
+        let tenant_id = Uuid::now_v7();
+        let provider_id = Uuid::now_v7();
+        let agent_id = Uuid::now_v7();
+        let now = chrono::Utc::now().to_rfc3339();
+
+        sqlx::query(
+            r#"
+            INSERT INTO entity_provider (
+                id, tenant_id, provider_name, provider_type, api_base, api_key, enabled, create_time, update_time
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            "#,
+        )
+        .bind(provider_id.to_string())
+        .bind(tenant_id.to_string())
+        .bind("openai")
+        .bind("openai")
+        .bind("https://api.openai.com/v1")
+        .bind("test-key")
+        .bind(1_i64)
+        .bind(&now)
+        .bind(&now)
+        .execute(&store.pool)
+        .await
+        .unwrap();
+
+        sqlx::query(
+            r#"
+            INSERT INTO entity_agent (
+                id, tenant_id, agent_code, agent_name, agent_order, agent_status, context_limit,
+                custom_params, max_completion_tokens, model_name, provider_id, response_format,
+                system_prompt, temperature, stream, thinking, create_time, update_time
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            "#,
+        )
+        .bind(agent_id.to_string())
+        .bind(tenant_id.to_string())
+        .bind("agent-code")
+        .bind("Agent Name")
+        .bind(1_i64)
+        .bind(1_i64)
+        .bind(4096_i64)
+        .bind("{}")
+        .bind(512_i64)
+        .bind("gpt-4o-mini")
+        .bind(provider_id.to_string())
+        .bind("json")
+        .bind("You are a test agent.")
+        .bind(0.7_f64)
+        .bind(1_i64)
+        .bind("{}")
+        .bind(&now)
+        .bind(&now)
+        .execute(&store.pool)
+        .await
+        .unwrap();
+
+        let provider = store.get_provider(provider_id).await.unwrap().unwrap();
+        assert_eq!(provider.provider_name, "openai");
+
+        let agent = store.get_agent(agent_id).await.unwrap().unwrap();
+        assert_eq!(agent.agent_code, "agent-code");
+
+        let joined = store
+            .get_agent_with_provider(agent_id)
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(joined.provider.id, provider_id);
+        assert_eq!(joined.agent.id, agent_id);
     }
 }

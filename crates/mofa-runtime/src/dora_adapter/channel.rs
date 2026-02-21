@@ -3,7 +3,7 @@
 //! 提供与 dora-rs 集成的跨智能体通信通道
 
 use crate::dora_adapter::error::{DoraError, DoraResult};
-use crate::message::AgentMessage;
+use mofa_kernel::message::AgentMessage;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -381,6 +381,8 @@ impl Default for ChannelManager {
 
 #[cfg(test)]
 mod tests {
+    use super::*;
+
     #[tokio::test]
     async fn test_p2p_communication() {
         let channel = DoraChannel::new(ChannelConfig::default());

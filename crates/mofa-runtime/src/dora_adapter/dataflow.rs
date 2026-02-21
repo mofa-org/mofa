@@ -425,6 +425,8 @@ impl DataflowBuilder {
 
 #[cfg(test)]
 mod tests {
+    use super::*;
+
     #[tokio::test]
     async fn test_dataflow_builder() {
         let node1_config = DoraNodeConfig {

@@ -58,6 +58,7 @@ pub struct LoadedPlugin {
 }
 
 /// Plugin event
+#[allow(clippy::large_enum_variant)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum PluginEvent {
     /// Plugin loaded

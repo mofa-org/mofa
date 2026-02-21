@@ -252,6 +252,9 @@ pub struct RuleGroupExecutionResult {
     pub total_time_ms: u64,
 }
 
+type EventHandler = Box<dyn Fn(&str, &serde_json::Value) + Send + Sync>;
+type EventHandlerMap = HashMap<String, Vec<EventHandler>>;
+
 // ============================================================================
 // 规则引擎
 // ============================================================================
@@ -265,8 +268,7 @@ pub struct RuleEngine {
     /// 规则组存储
     groups: Arc<RwLock<HashMap<String, RuleGroupDefinition>>>,
     /// 事件处理器
-    event_handlers:
-        Arc<RwLock<HashMap<String, Vec<Box<dyn Fn(&str, &serde_json::Value) + Send + Sync>>>>>,
+    event_handlers: Arc<RwLock<EventHandlerMap>>,
 }
 
 impl RuleEngine {

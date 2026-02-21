@@ -3,7 +3,7 @@
 //! 将 MoFA 插件系统与 dora-rs Operator API 集成
 
 use crate::dora_adapter::error::{DoraError, DoraResult};
-use crate::plugin::AgentPlugin;
+use mofa_kernel::plugin::AgentPlugin;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -295,7 +295,8 @@ impl Default for OperatorChain {
 
 #[cfg(test)]
 mod tests {
-    use crate::plugin::LLMPlugin;
+    use super::*;
+    use mofa_plugins::LLMPlugin;
 
     #[tokio::test]
     async fn test_plugin_operator_adapter() {

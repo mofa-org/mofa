@@ -5,6 +5,8 @@ use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use tokio::sync::{RwLock, broadcast};
 
+type AgentChannelMap = HashMap<String, HashMap<CommunicationMode, broadcast::Sender<Vec<u8>>>>;
+
 /// 通信模式枚举
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
 pub enum CommunicationMode {
@@ -20,8 +22,7 @@ pub enum CommunicationMode {
 #[derive(Clone)]
 pub struct AgentBus {
     /// 智能体-通信通道映射
-    agent_channels:
-        Arc<RwLock<HashMap<String, HashMap<CommunicationMode, broadcast::Sender<Vec<u8>>>>>>,
+    agent_channels: Arc<RwLock<AgentChannelMap>>,
     /// 主题-订阅者映射（PubSub 模式专用）
     topic_subscribers: Arc<RwLock<HashMap<String, HashSet<String>>>>,
     /// 广播通道

@@ -372,6 +372,7 @@ impl DoraRuntime {
             session_id,
             self.config.embedded.uv,
             log_destination,
+            None, // write_events_to
         )
         .await
         .context("Failed to run dataflow")?;
