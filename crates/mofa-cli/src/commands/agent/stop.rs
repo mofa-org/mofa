@@ -27,6 +27,17 @@ pub async fn run(ctx: &CliContext, agent_id: &str) -> anyhow::Result<()> {
         .await
         .map_err(|e| anyhow::anyhow!("Failed to unregister agent: {}", e))?;
 
+    if let Some(mut entry) = ctx
+        .agent_store
+        .get(agent_id)
+        .map_err(|e| anyhow::anyhow!("Failed to load persisted agent '{}': {}", agent_id, e))?
+    {
+        entry.state = "Stopped".to_string();
+        ctx.agent_store
+            .save(agent_id, &entry)
+            .map_err(|e| anyhow::anyhow!("Failed to update agent '{}': {}", agent_id, e))?;
+    }
+
     if removed {
         println!(
             "{} Agent '{}' stopped and unregistered",

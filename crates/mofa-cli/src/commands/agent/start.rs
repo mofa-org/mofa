@@ -1,7 +1,7 @@
 //! `mofa agent start` command implementation
 
 use crate::config::loader::ConfigLoader;
-use crate::context::CliContext;
+use crate::context::{AgentConfigEntry, CliContext};
 use colored::Colorize;
 
 /// Execute the `mofa agent start` command
@@ -54,37 +54,54 @@ pub async fn run(
     // Check if a matching factory type is available
     let factory_types = ctx.agent_registry.list_factory_types().await;
     if factory_types.is_empty() {
-        println!(
-            "  {} No agent factories registered. Agent registered with config only.",
-            "!".yellow()
+        anyhow::bail!(
+            "No agent factories registered. Cannot start agent '{}'",
+            agent_id
         );
-        println!("  Agent config stored for: {}", agent_config.name.cyan());
-    } else {
-        // Try to create via factory
-        let type_id = factory_types.first().unwrap();
-        match ctx
-            .agent_registry
-            .create_and_register(type_id, agent_config.clone())
-            .await
-        {
-            Ok(_) => {
-                println!(
-                    "{} Agent '{}' created and registered",
-                    "✓".green(),
-                    agent_id
-                );
-            }
-            Err(e) => {
-                println!(
-                    "  {} Failed to create agent via factory: {}",
-                    "!".yellow(),
-                    e
-                );
-            }
-        }
     }
+
+    // Try to create via factory
+    let type_id = factory_types.first().unwrap();
+    ctx.agent_registry
+        .create_and_register(type_id, agent_config.clone())
+        .await
+        .map_err(|e| anyhow::anyhow!("Failed to start agent '{}': {}", agent_id, e))?;
+
+    let entry = AgentConfigEntry {
+        id: agent_id.to_string(),
+        name: agent_config.name.clone(),
+        state: "Running".to_string(),
+    };
+    ctx.agent_store
+        .save(agent_id, &entry)
+        .map_err(|e| anyhow::anyhow!("Failed to persist agent '{}': {}", agent_id, e))?;
 
     println!("{} Agent '{}' started", "✓".green(), agent_id);
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::context::CliContext;
+    use tempfile::TempDir;
+
+    #[tokio::test]
+    async fn test_start_returns_err_when_no_factories() {
+        let temp = TempDir::new().unwrap();
+        let ctx = CliContext::with_temp_dir(temp.path()).await.unwrap();
+
+        let result = run(&ctx, "test-agent", None, false).await;
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_start_does_not_register_on_failure() {
+        let temp = TempDir::new().unwrap();
+        let ctx = CliContext::with_temp_dir(temp.path()).await.unwrap();
+
+        let _ = run(&ctx, "ghost-agent", None, false).await;
+        assert!(!ctx.agent_registry.contains("ghost-agent").await);
+    }
 }

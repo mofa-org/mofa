@@ -36,7 +36,15 @@ pub async fn run(
 
     let mut sessions = Vec::new();
     for key in &keys {
-        let session = ctx.session_manager.get_or_create(key).await;
+        let session = match ctx
+            .session_manager
+            .get(key)
+            .await
+            .map_err(|e| anyhow::anyhow!("Failed to load session '{}': {}", key, e))?
+        {
+            Some(session) => session,
+            None => continue,
+        };
 
         // Filter by agent_id if provided (check metadata or key prefix)
         if let Some(agent) = agent_id {
