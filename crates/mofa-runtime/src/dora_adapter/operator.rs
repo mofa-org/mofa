@@ -295,7 +295,8 @@ impl Default for OperatorChain {
 
 #[cfg(test)]
 mod tests {
-    use crate::plugin::LLMPlugin;
+    use super::{OperatorChain, OperatorInput, PluginOperatorAdapter};
+    use mofa_plugins::LLMPlugin;
 
     #[tokio::test]
     async fn test_plugin_operator_adapter() {
