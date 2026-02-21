@@ -1,7 +1,6 @@
 //! Command implementations
 
 pub mod agent;
-pub mod backend;
 pub mod build;
 pub mod config_cmd;
 pub mod db;

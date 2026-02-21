@@ -1,35 +1,47 @@
 //! `mofa plugin info` command implementation
 
-use crate::commands::backend::CliBackend;
+use crate::context::CliContext;
 use colored::Colorize;
+use mofa_kernel::agent::plugins::PluginRegistry;
 
 /// Execute the `mofa plugin info` command
-pub fn run(name: &str) -> anyhow::Result<()> {
+pub async fn run(ctx: &CliContext, name: &str) -> anyhow::Result<()> {
     println!("{} Plugin information: {}", "→".green(), name.cyan());
     println!();
 
-    let backend = CliBackend::discover()?;
-    let plugin = backend.get_plugin(name)?;
-
-    println!("  Name:           {}", plugin.name.cyan());
-    println!("  Version:        {}", plugin.version.white());
-    println!("  Description:    {}", plugin.description.white());
-    println!("  Author:         {}", plugin.author.white());
-    if let Some(repo) = plugin.repository {
-        println!("  Repository:     {}", repo.blue());
-    }
-    if let Some(license) = plugin.license {
-        println!("  License:        {}", license.white());
-    }
-    println!(
-        "  Installed:      {}",
-        if plugin.installed {
-            "Yes".green()
-        } else {
-            "No".yellow()
+    match ctx.plugin_registry.get(name) {
+        Some(plugin) => {
+            let metadata = plugin.metadata();
+            println!("  Name:           {}", plugin.name().cyan());
+            println!("  Description:    {}", plugin.description().white());
+            println!("  Version:        {}", metadata.version.white());
+            println!(
+                "  Stages:         {}",
+                metadata
+                    .stages
+                    .iter()
+                    .map(|s| format!("{:?}", s))
+                    .collect::<Vec<_>>()
+                    .join(", ")
+                    .white()
+            );
+            if !metadata.custom.is_empty() {
+                println!("  Custom attrs:");
+                for (key, value) in &metadata.custom {
+                    println!("    {}: {}", key, value);
+                }
+            }
         }
-    );
-    println!();
+        None => {
+            println!("  Plugin '{}' not found in registry", name);
+            println!();
+            println!(
+                "  Use {} to see available plugins.",
+                "mofa plugin list".cyan()
+            );
+        }
+    }
 
+    println!();
     Ok(())
 }
