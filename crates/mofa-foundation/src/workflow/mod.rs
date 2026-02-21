@@ -42,9 +42,9 @@ pub mod dsl;
 
 // Re-export kernel workflow types for convenience
 pub use mofa_kernel::workflow::{
-    Command, CompiledGraph, ControlFlow, GraphConfig, GraphState, JsonState, NodeFunc,
-    Reducer, ReducerType, RemainingSteps, RuntimeContext, SendCommand, StateSchema, StateUpdate,
-    END, START,
+    Command, CompiledGraph, ControlFlow, END, GraphConfig, GraphState, JsonState, NodeFunc,
+    Reducer, ReducerType, RemainingSteps, RuntimeContext, START, SendCommand, StateSchema,
+    StateUpdate,
 };
 
 // Re-export kernel telemetry types
@@ -66,4 +66,3 @@ pub use session_recorder::InMemorySessionRecorder;
 pub use state::*;
 pub use state_graph::{CompiledGraphImpl, StateGraphImpl};
 pub use telemetry::{ChannelTelemetryEmitter, RecordingTelemetryEmitter};
-

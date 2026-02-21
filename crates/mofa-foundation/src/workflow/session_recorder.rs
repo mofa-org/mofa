@@ -63,9 +63,9 @@ impl SessionRecorder for InMemorySessionRecorder {
 
     async fn record_event(&self, session_id: &str, event: &DebugEvent) -> AgentResult<()> {
         let mut events = self.events.write().await;
-        let entry = events
-            .get_mut(session_id)
-            .ok_or_else(|| AgentError::InvalidInput(format!("Session not found: {}", session_id)))?;
+        let entry = events.get_mut(session_id).ok_or_else(|| {
+            AgentError::InvalidInput(format!("Session not found: {}", session_id))
+        })?;
         entry.push(event.clone());
 
         // Update event count in session metadata
@@ -79,9 +79,9 @@ impl SessionRecorder for InMemorySessionRecorder {
 
     async fn end_session(&self, session_id: &str, status: &str) -> AgentResult<()> {
         let mut sessions = self.sessions.write().await;
-        let session = sessions
-            .get_mut(session_id)
-            .ok_or_else(|| AgentError::InvalidInput(format!("Session not found: {}", session_id)))?;
+        let session = sessions.get_mut(session_id).ok_or_else(|| {
+            AgentError::InvalidInput(format!("Session not found: {}", session_id))
+        })?;
 
         session.ended_at = Some(DebugEvent::now_ms());
         session.status = status.to_string();

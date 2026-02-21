@@ -7,10 +7,10 @@ use mofa_kernel::agent::components::mcp::{
     McpClient, McpServerConfig, McpServerInfo, McpToolInfo, McpTransportConfig,
 };
 use mofa_kernel::agent::error::{AgentError, AgentResult};
+use rmcp::ServiceExt;
 use rmcp::model::{CallToolRequestParams, ClientCapabilities, ClientInfo, Implementation};
 use rmcp::service::{RoleClient, RunningService};
 use rmcp::transport::TokioChildProcess;
-use rmcp::ServiceExt;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::process::Command;
@@ -72,11 +72,9 @@ impl McpClientManager {
 
     /// 获取连接引用 (内部辅助方法)
     fn get_connection(&self, server_name: &str) -> AgentResult<&McpConnection> {
-        self.connections
-            .get(server_name)
-            .ok_or_else(|| AgentError::ToolNotFound(
-                format!("MCP server '{}' not connected", server_name),
-            ))
+        self.connections.get(server_name).ok_or_else(|| {
+            AgentError::ToolNotFound(format!("MCP server '{}' not connected", server_name))
+        })
     }
 
     /// 创建共享的客户端管理器引用
@@ -97,9 +95,10 @@ impl McpClient for McpClientManager {
         let server_name = config.name.clone();
 
         if self.connections.contains_key(&server_name) {
-            return Err(AgentError::ConfigError(
-                format!("MCP server '{}' is already connected", server_name),
-            ));
+            return Err(AgentError::ConfigError(format!(
+                "MCP server '{}' is already connected",
+                server_name
+            )));
         }
 
         tracing::info!("Connecting to MCP server '{}'...", server_name);
@@ -113,9 +112,10 @@ impl McpClient for McpClientManager {
                 }
 
                 let transport = TokioChildProcess::new(cmd).map_err(|e| {
-                    AgentError::InitializationFailed(
-                        format!("Failed to start MCP server process '{}': {}", server_name, e),
-                    )
+                    AgentError::InitializationFailed(format!(
+                        "Failed to start MCP server process '{}': {}",
+                        server_name, e
+                    ))
                 })?;
 
                 let client_info = ClientInfo {
@@ -133,9 +133,10 @@ impl McpClient for McpClientManager {
                 };
 
                 client_info.serve(transport).await.map_err(|e| {
-                    AgentError::InitializationFailed(
-                        format!("Failed to initialize MCP session with '{}': {}", server_name, e),
-                    )
+                    AgentError::InitializationFailed(format!(
+                        "Failed to initialize MCP session with '{}': {}",
+                        server_name, e
+                    ))
                 })?
             }
             McpTransportConfig::Http { url: _ } => {
@@ -149,10 +150,8 @@ impl McpClient for McpClientManager {
 
         tracing::info!("Connected to MCP server '{}'", server_name);
 
-        self.connections.insert(
-            server_name,
-            McpConnection { service, config },
-        );
+        self.connections
+            .insert(server_name, McpConnection { service, config });
 
         Ok(())
     }
@@ -161,16 +160,18 @@ impl McpClient for McpClientManager {
         if let Some(connection) = self.connections.remove(server_name) {
             tracing::info!("Disconnecting from MCP server '{}'...", server_name);
             connection.service.cancel().await.map_err(|e| {
-                AgentError::ShutdownFailed(
-                    format!("Failed to disconnect from MCP server '{}': {:?}", server_name, e),
-                )
+                AgentError::ShutdownFailed(format!(
+                    "Failed to disconnect from MCP server '{}': {:?}",
+                    server_name, e
+                ))
             })?;
             tracing::info!("Disconnected from MCP server '{}'", server_name);
             Ok(())
         } else {
-            Err(AgentError::ToolNotFound(
-                format!("MCP server '{}' not connected", server_name),
-            ))
+            Err(AgentError::ToolNotFound(format!(
+                "MCP server '{}' not connected",
+                server_name
+            )))
         }
     }
 
@@ -183,9 +184,10 @@ impl McpClient for McpClientManager {
             .list_tools(None)
             .await
             .map_err(|e| {
-                AgentError::ExecutionFailed(
-                    format!("Failed to list tools from MCP server '{}': {}", server_name, e),
-                )
+                AgentError::ExecutionFailed(format!(
+                    "Failed to list tools from MCP server '{}': {}",
+                    server_name, e
+                ))
             })?;
 
         let tools = result
@@ -227,9 +229,10 @@ impl McpClient for McpClientManager {
             .call_tool(params)
             .await
             .map_err(|e| {
-                AgentError::ExecutionFailed(
-                    format!("MCP tool call '{}' on server '{}' failed: {}", tool_name, server_name, e),
-                )
+                AgentError::ExecutionFailed(format!(
+                    "MCP tool call '{}' on server '{}' failed: {}",
+                    tool_name, server_name, e
+                ))
             })?;
 
         // Convert MCP CallToolResult content to JSON
@@ -238,7 +241,8 @@ impl McpClient for McpClientManager {
             .iter()
             .map(|content| {
                 // Each Content has a raw field that can be serialized
-                serde_json::to_value(content).unwrap_or(serde_json::json!({"error": "serialization failed"}))
+                serde_json::to_value(content)
+                    .unwrap_or(serde_json::json!({"error": "serialization failed"}))
             })
             .collect();
 

@@ -865,8 +865,8 @@ mod tests {
         graph.connect("double", "end");
 
         let (emitter, mut rx) = ChannelTelemetryEmitter::new(64);
-        let executor = WorkflowExecutor::new(ExecutorConfig::default())
-            .with_telemetry(Arc::new(emitter));
+        let executor =
+            WorkflowExecutor::new(ExecutorConfig::default()).with_telemetry(Arc::new(emitter));
 
         let result = executor
             .execute(&graph, WorkflowValue::Int(5))

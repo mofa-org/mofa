@@ -26,6 +26,7 @@ use super::client::{ChatSession, LLMClient};
 use super::provider::{ChatStream, LLMProvider};
 use super::tool_executor::ToolExecutor;
 use super::types::{ChatMessage, LLMError, LLMResult, Tool};
+use crate::llm::{AnthropicConfig, AnthropicProvider, GeminiConfig, GeminiProvider};
 use crate::prompt;
 use futures::{Stream, StreamExt};
 use mofa_kernel::agent::AgentMetadata;
@@ -39,7 +40,6 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 use tokio::sync::{Mutex, RwLock};
-use crate::llm::{AnthropicConfig, AnthropicProvider, GeminiConfig, GeminiProvider};
 
 /// Type alias for TTS audio stream - boxed to avoid exposing kokoro-tts types
 pub type TtsAudioStream = Pin<Box<dyn Stream<Item = (Vec<f32>, Duration)> + Send>>;
