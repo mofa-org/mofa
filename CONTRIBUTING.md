@@ -236,6 +236,21 @@ Mark it as "Ready for review" only when `cargo fmt --check`, `cargo clippy`, and
 - Address all review comments before requesting a re-review.
 - Prefer small, focused PRs over large monolithic ones — they get reviewed faster.
 
+### Automated PR Checks
+
+All PRs must pass the **PR Guard** CI job before they can be merged. This check runs automatically and verifies:
+
+1. **Clippy** - No compilation errors (run `cargo clippy` locally)
+2. **Tests** - All tests pass (run `cargo test` locally)
+
+```bash
+# Run these locally before pushing to ensure your PR will pass
+cargo clippy                    # Must have no errors
+cargo test --workspace          # All tests must pass
+```
+
+**Note:** Branch protection rules are enabled on `main` and `master` branches. PRs cannot be merged until all required status checks pass.
+
 ---
 
 ## Security Guidelines

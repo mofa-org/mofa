@@ -315,6 +315,7 @@ pub struct LLMApiCall {
 
 impl LLMApiCall {
     /// 创建成功的 API 调用记录
+    #[allow(clippy::too_many_arguments)]
     pub fn success(
         chat_session_id: Uuid,
         agent_id: Uuid,
@@ -364,6 +365,7 @@ impl LLMApiCall {
     }
 
     /// 创建失败的 API 调用记录
+    #[allow(clippy::too_many_arguments)]
     pub fn failed(
         chat_session_id: Uuid,
         agent_id: Uuid,

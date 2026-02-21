@@ -357,7 +357,7 @@ impl LLMAgent {
 // ============================================================================
 
 /// Builder state for storing configuration
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 struct BuilderState {
     agent_id: Option<String>,
     name: Option<String>,
@@ -371,25 +371,6 @@ struct BuilderState {
     openai_api_key: Option<String>,
     openai_base_url: Option<String>,
     openai_model: Option<String>,
-}
-
-impl Default for BuilderState {
-    fn default() -> Self {
-        Self {
-            agent_id: None,
-            name: None,
-            system_prompt: None,
-            temperature: None,
-            max_tokens: None,
-            session_id: None,
-            user_id: None,
-            tenant_id: None,
-            context_window_size: None,
-            openai_api_key: None,
-            openai_base_url: None,
-            openai_model: None,
-        }
-    }
 }
 
 /// LLM Agent Builder - fluent builder for creating LLMAgent instances

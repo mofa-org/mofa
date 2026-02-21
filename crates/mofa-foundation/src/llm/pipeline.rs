@@ -36,6 +36,10 @@ use std::future::Future;
 use std::pin::Pin;
 use std::sync::Arc;
 
+/// Type alias for async transform function
+pub type AsyncTransformFn =
+    Arc<dyn Fn(String) -> Pin<Box<dyn Future<Output = String> + Send>> + Send + Sync>;
+
 /// 流水线步骤
 enum PipelineStep {
     /// Agent 处理
@@ -47,9 +51,7 @@ enum PipelineStep {
     /// 同步转换
     Transform(Arc<dyn Fn(String) -> String + Send + Sync>),
     /// 异步转换
-    AsyncTransform(
-        Arc<dyn Fn(String) -> Pin<Box<dyn Future<Output = String> + Send>> + Send + Sync>,
-    ),
+    AsyncTransform(AsyncTransformFn),
     /// 过滤（如果返回 None，则使用原输入）
     Filter(Arc<dyn Fn(&str) -> bool + Send + Sync>),
     /// 条件分支

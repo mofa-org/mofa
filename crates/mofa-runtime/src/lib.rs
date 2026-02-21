@@ -75,7 +75,7 @@ use std::sync::Arc;
 #[cfg(feature = "dora")]
 use tokio::sync::RwLock;
 #[cfg(feature = "dora")]
-use tracing::{debug, info};
+use ::tracing::{debug, info};
 
 // Private import for internal use
 use mofa_kernel::message::StreamType;
