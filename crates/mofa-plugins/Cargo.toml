@@ -46,8 +46,8 @@ which = "7"
 # TTS support (optional - using rodio for audio playback)
 rodio = { version = "0.17", optional = true }
 # Kokoro TTS (optional)
-kokoro-tts = { version = "0.2.8", optional = true }
-# Pin ort version for kokoro-tts compatibility
+kokoro-tts = { version = "=0.2.9", optional = true }
+# Pin ort version for kokoro-tts compatibility across workspace resolution
 ort = { version = "=2.0.0-rc.10", optional = true }
 # Model download support
 hf-hub = "0.4"
