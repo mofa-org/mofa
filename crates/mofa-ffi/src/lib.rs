@@ -41,8 +41,8 @@
 //! cd crates/mofa-ffi && ./generate-bindings.sh kotlin  # or swift, java
 //! ```
 
-// Re-export everything from mofa-sdk for convenience
-pub use mofa_sdk::*;
+// Re-export everything from mofa-ai for convenience
+pub use mofa_ai::*;
 
 // =============================================================================
 // UniFFI bindings (enabled with `uniffi` feature)

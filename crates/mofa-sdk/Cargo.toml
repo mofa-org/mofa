@@ -1,13 +1,13 @@
 [package]
-name = "mofa-sdk"
+name = "mofa-ai"
 version.workspace = true
 edition.workspace = true
-description = "MoFA SDK - Modular Framework for Agents. A standard development toolkit for building AI agents with Rust"
+description = "MoFA - Modular Framework for Agents. A high-performance AI agent framework built in Rust"
 authors.workspace = true
 license.workspace = true
 repository.workspace = true
 homepage.workspace = true
-documentation = "https://docs.rs/mofa-sdk"
+documentation = "https://docs.rs/mofa-ai"
 readme = "README.md"
 keywords = ["ai", "agent", "sdk", "framework", "llm"]
 categories = ["development-tools", "asynchronous"]
@@ -31,12 +31,12 @@ monitoring = ["mofa-runtime/monitoring", "dep:mofa-monitoring"]
 
 [dependencies]
 # Core dependencies
-mofa-runtime = { path = "../mofa-runtime", version = "0.1" }
-mofa-foundation = { path = "../mofa-foundation", version = "0.1" }
-mofa-kernel = { path = "../mofa-kernel", version = "0.1", features = ["config"] }
-mofa-plugins = { path = "../mofa-plugins", version = "0.1" }
-mofa-extra = { path = "../mofa-extra", version = "0.1", features = ["rhai-scripting"] }
-mofa-monitoring = { path = "../mofa-monitoring", version = "0.1", optional = true }
+mofa-runtime = { path = "../mofa-runtime", version = "0.1.1" }
+mofa-foundation = { path = "../mofa-foundation", version = "0.1.1" }
+mofa-kernel = { path = "../mofa-kernel", version = "0.1.1", features = ["config"] }
+mofa-plugins = { path = "../mofa-plugins", version = "0.1.1" }
+mofa-extra = { path = "../mofa-extra", version = "0.1.1", features = ["rhai-scripting"] }
+mofa-monitoring = { path = "../mofa-monitoring", version = "0.1.1", optional = true }
 sqlx = { version = "0.8", features = ["runtime-tokio", "postgres", "mysql", "sqlite", "uuid", "chrono", "json"], optional = true }
 async-trait = "0.1"
 tokio = { version = "1", features = ["full"] }

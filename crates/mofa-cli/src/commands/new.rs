@@ -52,7 +52,7 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-mofa-sdk = "0.1"
+mofa-ai = "0.1"
 tokio = {{ version = "1", features = ["full"] }}
 anyhow = "1.0"
 "#
@@ -61,7 +61,7 @@ anyhow = "1.0"
 
     // Create src/main.rs with LLMAgentBuilder
     std::fs::create_dir_all(project_dir.join("src"))?;
-    let main_rs = r#"use mofa_sdk::llm::{LLMAgentBuilder, OpenAIProvider};
+    let main_rs = r#"use mofa_ai::llm::{LLMAgentBuilder, OpenAIProvider};
 use std::sync::Arc;
 
 #[tokio::main]
@@ -99,7 +99,7 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-mofa-sdk = "0.1"
+mofa-ai = "0.1"
 tokio = {{ version = "1", features = ["full"] }}
 anyhow = "1.0"
 uuid = "1"
@@ -127,7 +127,7 @@ uuid = "1"
 //! cargo run
 //! ```
 
-use mofa_sdk::llm::{LLMAgentBuilder, OpenAIProvider};
+use mofa_ai::llm::{LLMAgentBuilder, OpenAIProvider};
 use std::sync::Arc;
 use uuid::Uuid;
 
@@ -200,7 +200,7 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-mofa-sdk = "0.1"
+mofa-ai = "0.1"
 tokio = {{ version = "1", features = ["full"] }}
 axum = "0.7"
 tower = "0.4"
@@ -309,18 +309,18 @@ struct ErrorResponse {
 
 /// In-memory session storage
 /// In production, you would use a database for persistent storage
-type SessionStore = Arc<RwLock<HashMap<String, Vec<mofa_sdk::llm::ChatMessage>>>>;
+type SessionStore = Arc<RwLock<HashMap<String, Vec<mofa_ai::llm::ChatMessage>>>>;
 
 /// App state shared across all handlers
 #[derive(Clone)]
 struct AppState {
-    agent: mofa_sdk::llm::LLMAgent,
+    agent: mofa_ai::llm::LLMAgent,
     sessions: SessionStore,
 }
 
 /// Create an LLM agent using the modern LLMAgentBuilder API
-fn create_agent() -> anyhow::Result<mofa_sdk::llm::LLMAgent> {
-    mofa_sdk::llm::LLMAgentBuilder::from_env()?
+fn create_agent() -> anyhow::Result<mofa_ai::llm::LLMAgent> {
+    mofa_ai::llm::LLMAgentBuilder::from_env()?
         .with_system_prompt(
             "You are a helpful AI assistant. Be concise, accurate, and friendly. \
              When you don't know something, say so rather than making up information.",
@@ -376,7 +376,7 @@ async fn session_chat_handler(
     let history = sessions.entry(session_id.clone()).or_default();
 
     // Add user message to history
-    history.push(mofa_sdk::llm::ChatMessage {
+    history.push(mofa_ai::llm::ChatMessage {
         role: "user".to_string(),
         content: req.message.clone(),
     });
@@ -404,7 +404,7 @@ async fn session_chat_handler(
     // Update session history with assistant response
     let mut sessions = state.sessions.write().await;
     if let Some(history) = sessions.get_mut(&session_id) {
-        history.push(mofa_sdk::llm::ChatMessage {
+        history.push(mofa_ai::llm::ChatMessage {
             role: "assistant".to_string(),
             content: response.clone(),
         });
@@ -673,8 +673,8 @@ Health check endpoint.
 Edit `create_agent()` in `src/main.rs`:
 
 ```rust
-fn create_agent() -> anyhow::Result<mofa_sdk::llm::LLMAgent> {{
-    mofa_sdk::llm::LLMAgentBuilder::from_env()?
+fn create_agent() -> anyhow::Result<mofa_ai::llm::LLMAgent> {{
+    mofa_ai::llm::LLMAgentBuilder::from_env()?
         .with_system_prompt("Your custom system prompt here")
         .with_temperature(0.5)  // Lower for more deterministic
         .with_max_tokens(2048)  // Adjust response length
@@ -791,7 +791,7 @@ This agent uses the MoFA SDK (generated via UniFFI) for LLM interaction.
 
 Prerequisites:
     1. Build the mofa SDK with UniFFI bindings:
-       cargo build --release --features uniffi -p mofa-sdk
+       cargo build --release --features uniffi -p mofa-ai
 
     2. Generate Python bindings:
        cargo run --features uniffi --bin uniffi-bindgen generate \
@@ -818,7 +818,7 @@ try:
     USE_MOFA_SDK = True
 except ImportError:
     print("Warning: MoFA SDK not found. Using fallback implementation.")
-    print("To use the full SDK, build and install mofa-sdk with UniFFI bindings.")
+    print("To use the full SDK, build and install mofa-ai with UniFFI bindings.")
     USE_MOFA_SDK = False
 
 
@@ -1038,7 +1038,7 @@ This is a MoFA LLM Agent project for Python.
 
 ```bash
 cd /path/to/mofa
-cargo build --release --features uniffi -p mofa-sdk
+cargo build --release --features uniffi -p mofa-ai
 ```
 
 2. Generate Python bindings:

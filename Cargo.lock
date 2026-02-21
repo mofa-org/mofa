@@ -4243,8 +4243,28 @@ dependencies = [
 ]
 
 [[package]]
+name = "mofa-ai"
+version = "0.1.1"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "mofa-extra",
+ "mofa-foundation",
+ "mofa-kernel",
+ "mofa-monitoring",
+ "mofa-plugins",
+ "mofa-runtime",
+ "serde_json",
+ "sqlx",
+ "tempfile",
+ "tokio",
+ "tracing",
+ "uuid",
+]
+
+[[package]]
 name = "mofa-cli"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "assert_cmd",
@@ -4256,8 +4276,8 @@ dependencies = [
  "dialoguer",
  "dirs-next",
  "indicatif",
+ "mofa-ai",
  "mofa-kernel",
- "mofa-sdk",
  "predicates",
  "ratatui",
  "serde",
@@ -4274,7 +4294,7 @@ dependencies = [
 
 [[package]]
 name = "mofa-extra"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -4291,11 +4311,11 @@ dependencies = [
 
 [[package]]
 name = "mofa-ffi"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "async-trait",
+ "mofa-ai",
  "mofa-foundation",
- "mofa-sdk",
  "pyo3",
  "pyo3-async-runtimes",
  "tempfile",
@@ -4307,7 +4327,7 @@ dependencies = [
 
 [[package]]
 name = "mofa-foundation"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "async-openai",
@@ -4343,7 +4363,7 @@ dependencies = [
 
 [[package]]
 name = "mofa-kernel"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -4364,11 +4384,11 @@ dependencies = [
 
 [[package]]
 name = "mofa-macros"
-version = "0.1.0"
+version = "0.1.1"
 
 [[package]]
 name = "mofa-monitoring"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -4393,7 +4413,7 @@ dependencies = [
 
 [[package]]
 name = "mofa-plugins"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -4434,7 +4454,7 @@ dependencies = [
 
 [[package]]
 name = "mofa-runtime"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -4457,26 +4477,6 @@ dependencies = [
  "thiserror 1.0.69",
  "tokio",
  "toml 0.8.23",
- "tracing",
- "uuid",
-]
-
-[[package]]
-name = "mofa-sdk"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "async-trait",
- "mofa-extra",
- "mofa-foundation",
- "mofa-kernel",
- "mofa-monitoring",
- "mofa-plugins",
- "mofa-runtime",
- "serde_json",
- "sqlx",
- "tempfile",
- "tokio",
  "tracing",
  "uuid",
 ]

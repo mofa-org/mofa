@@ -28,7 +28,7 @@ pub fn run(config: &std::path::Path, _dora: bool) -> anyhow::Result<()> {
 /// Execute the `mofa dataflow` command (requires dora feature)
 #[cfg(feature = "dora")]
 pub fn run_dataflow(file: &std::path::Path, uv: bool) -> anyhow::Result<()> {
-    use mofa_sdk::dora::{DoraRuntime, RuntimeConfig};
+    use mofa_ai::dora::{DoraRuntime, RuntimeConfig};
 
     println!("{} Running dataflow: {}", "→".green(), file.display());
 
