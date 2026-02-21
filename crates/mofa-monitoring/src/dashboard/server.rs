@@ -140,7 +140,7 @@ impl DashboardServer {
             .route("/index.html", get(serve_index))
             .route("/styles.css", get(serve_styles))
             .route("/app.js", get(serve_app_js))
-            .route("/assets/*path", get(serve_static))
+            .route("/assets/{*path}", get(serve_static))
             // API routes
             .nest("/api", api_router)
             // WebSocket
