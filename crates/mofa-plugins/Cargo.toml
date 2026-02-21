@@ -9,7 +9,7 @@ repository.workspace = true
 homepage.workspace = true
 documentation = "https://docs.rs/mofa-plugins"
 readme = "README.md"
-keywords = ["ai", "agent", "plugin", "wasm", "rhai", "dual-layer"]
+keywords = ["ai", "agent", "plugin", "wasm", "rhai"]
 categories = ["development-tools", "api-bindings"]
 publish = true
 
@@ -56,6 +56,9 @@ dirs = "5.0"
 md-5 = "0.10"
 backoff = { version = "0.4", features = ["tokio"] }
 futures = "0.3"
+
+[lints]
+workspace = true
 
 [features]
 default = []

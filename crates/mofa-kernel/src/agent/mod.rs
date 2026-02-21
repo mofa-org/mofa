@@ -190,6 +190,7 @@ pub use types::{
 // 重新导出组件
 pub use components::{
     coordinator::{CoordinationPattern, Coordinator},
+    mcp::{McpClient, McpServerConfig, McpServerInfo, McpToolInfo, McpTransportConfig},
     memory::{Memory, MemoryItem, MemoryStats, MemoryValue, Message, MessageRole},
     reasoner::{Reasoner, ReasoningResult},
     tool::{Tool, ToolDescriptor, ToolInput, ToolMetadata, ToolResult},

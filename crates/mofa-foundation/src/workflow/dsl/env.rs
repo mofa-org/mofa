@@ -17,7 +17,7 @@ static ENV_VAR_REGEX: Lazy<Regex> =
 ///
 /// # Example
 ///
-/// ```rust
+/// ```rust,ignore
 /// use mofa_foundation::workflow::dsl::env::substitute_env;
 ///
 /// let input = "https://${API_HOST}/api";

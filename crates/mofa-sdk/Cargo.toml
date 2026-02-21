@@ -9,7 +9,7 @@ repository.workspace = true
 homepage.workspace = true
 documentation = "https://docs.rs/mofa-sdk"
 readme = "README.md"
-keywords = ["ai", "agent", "sdk", "framework", "uniffi", "multi-language"]
+keywords = ["ai", "agent", "sdk", "framework", "llm"]
 categories = ["development-tools", "asynchronous"]
 publish = true
 
@@ -51,3 +51,6 @@ tempfile.workspace = true
 
 [lib]
 crate-type = ["lib"]
+
+[lints]
+workspace = true

@@ -1110,7 +1110,10 @@ mod tests {
         plugin.load(&ctx).await.unwrap();
         assert_eq!(plugin.state(), PluginState::Loaded);
 
-        plugin.init_plugin().await.unwrap();
+        // Use mock engine to avoid model download in tests
+        let mock_engine = MockTTSEngine::new(TTSPluginConfig::default());
+        plugin.engine = Some(Arc::new(mock_engine));
+
         plugin.start().await.unwrap();
         assert_eq!(plugin.state(), PluginState::Running);
 
@@ -1127,7 +1130,11 @@ mod tests {
         let ctx = PluginContext::new("test_agent");
 
         plugin.load(&ctx).await.unwrap();
-        plugin.init_plugin().await.unwrap();
+
+        // Use mock engine to avoid model download in tests
+        let mock_engine = MockTTSEngine::new(TTSPluginConfig::default());
+        plugin.engine = Some(Arc::new(mock_engine));
+
         plugin.start().await.unwrap();
 
         let command = TTSCommand {
@@ -1150,7 +1157,11 @@ mod tests {
         let ctx = PluginContext::new("test_agent");
 
         plugin.load(&ctx).await.unwrap();
-        plugin.init_plugin().await.unwrap();
+
+        // Use mock engine to avoid model download in tests
+        let mock_engine = MockTTSEngine::new(TTSPluginConfig::default());
+        plugin.engine = Some(Arc::new(mock_engine));
+
         plugin.start().await.unwrap();
 
         let command = TTSCommand {

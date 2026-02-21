@@ -476,6 +476,7 @@ pub mod llm {
     pub use crate::llm_tools::ToolPluginExecutor;
     pub use mofa_foundation::llm::anthropic::{AnthropicConfig, AnthropicProvider};
     pub use mofa_foundation::llm::google::{GeminiConfig, GeminiProvider};
+    pub use mofa_foundation::llm::ollama::{OllamaConfig, OllamaProvider};
     pub use mofa_foundation::llm::openai::{OpenAIConfig, OpenAIProvider};
     pub use mofa_foundation::llm::*;
 
@@ -511,6 +512,15 @@ pub mod llm {
         }
 
         Ok(OpenAIProvider::with_config(config))
+    }
+
+    /// Create an Ollama provider from environment variables (no API key required).
+    ///
+    /// Reads:
+    /// - `OLLAMA_BASE_URL`: base URL without `/v1` suffix, e.g. `http://localhost:11434` (optional)
+    /// - `OLLAMA_MODEL`: model name, e.g. `llama3` (optional)
+    pub fn ollama_from_env() -> Result<OllamaProvider, crate::llm::LLMError> {
+        Ok(crate::llm::OllamaProvider::from_env())
     }
 }
 

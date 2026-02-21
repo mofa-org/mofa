@@ -27,6 +27,9 @@ use super::provider::{ChatStream, LLMProvider};
 use super::tool_executor::ToolExecutor;
 use super::types::{ChatMessage, LLMError, LLMResult, Tool};
 use crate::llm::{AnthropicConfig, AnthropicProvider, GeminiConfig, GeminiProvider};
+use crate::llm::{
+    AnthropicConfig, AnthropicProvider, GeminiConfig, GeminiProvider, OllamaConfig, OllamaProvider,
+};
 use crate::prompt;
 use futures::{Stream, StreamExt};
 use mofa_kernel::agent::AgentMetadata;
@@ -2875,7 +2878,7 @@ impl LLMAgentBuilder {
 
         // 根据 provider_type 创建 LLM Provider
         let llm_provider: Arc<dyn super::LLMProvider> = match provider.provider_type.as_str() {
-            "openai" | "azure" | "ollama" | "compatible" | "local" => {
+            "openai" | "azure" | "compatible" | "local" => {
                 let mut openai_config = OpenAIConfig::new(provider.api_key.clone());
                 openai_config = openai_config.with_base_url(&provider.api_base);
                 openai_config = openai_config.with_model(&agent.model_name);
@@ -2917,6 +2920,21 @@ impl LLMAgentBuilder {
                 }
 
                 Arc::new(GeminiProvider::with_config(cfg))
+            }
+            "ollama" => {
+                let mut ollama_config = OllamaConfig::new();
+                ollama_config = ollama_config.with_base_url(&provider.api_base);
+                ollama_config = ollama_config.with_model(&agent.model_name);
+
+                if let Some(temp) = agent.temperature {
+                    ollama_config = ollama_config.with_temperature(temp);
+                }
+
+                if let Some(max_tokens) = agent.max_completion_tokens {
+                    ollama_config = ollama_config.with_max_tokens(max_tokens as u32);
+                }
+
+                Arc::new(OllamaProvider::with_config(ollama_config))
             }
             other => {
                 return Err(LLMError::Other(format!(
@@ -3005,10 +3023,6 @@ fn create_provider_from_config(
             }
 
             Ok(OpenAIProvider::with_config(openai_config))
-        }
-        "ollama" => {
-            let model = config.model.clone().unwrap_or_else(|| "llama2".to_string());
-            Ok(OpenAIProvider::ollama(model))
         }
         "azure" => {
             let endpoint = config.base_url.clone().ok_or_else(|| {

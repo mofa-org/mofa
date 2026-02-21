@@ -273,6 +273,8 @@ Add MoFA to your Cargo.toml:
 mofa-sdk = "0.1.0"
 ```
 
+See [Quick Start](/docs/QuickStart.md) for the full guide!
+
 The runtime mode is most suitable for scenarios that require building complete agent workflows, specifically including:
 
   ---
@@ -330,8 +332,30 @@ Suitable for building production applications that need stable operation, rather
 ## Documentation
 
 - [API Documentation](https://docs.rs/mofa-sdk)
+- [Security Guide](docs/security.md) - Comprehensive security documentation
 - [GitHub Repository](https://github.com/mofa-org/mofa)
 - [Examples](examples/)
+
+## Security
+
+MoFA is designed with security-first principles. Key security features include:
+
+- **WASM Sandboxing**: Strong isolation for compile-time plugins
+- **Rhai Script Limits**: Configurable resource limits for runtime scripts (memory, CPU, operations)
+- **Type Safety**: Rust's memory safety and type system prevent entire classes of vulnerabilities
+- **Credential Management**: Environment variable support for secure credential handling
+- **Plugin Verification**: Version tracking and integrity checks for plugins
+
+For comprehensive security documentation, including:
+- Credential management best practices
+- Runtime scripting security configuration
+- Plugin security guidelines
+- Production deployment security checklist
+- Threat model and attack surface analysis
+
+Please see our [Security Guide](docs/security.md) and [Security Policy](SECURITY.md).
+
+**Reporting Vulnerabilities**: If you discover a security vulnerability, please report it privately through our [Security Policy](SECURITY.md).
 
 ## Contributing
 

@@ -65,6 +65,8 @@ pub struct BaseEventResponsePlugin {
     metadata: PluginMetadata,
     state: PluginState,
     config: RwLock<EventResponseConfig>,
+    /// Cached handled event types for synchronous access
+    handled_event_types: Vec<EventType>,
     workflow_steps: Vec<String>,
 }
 
@@ -81,7 +83,7 @@ impl BaseEventResponsePlugin {
             .with_capability("event-response");
 
         let config = EventResponseConfig {
-            handled_event_types,
+            handled_event_types: handled_event_types.clone(),
             ..Default::default()
         };
 
@@ -89,6 +91,7 @@ impl BaseEventResponsePlugin {
             metadata,
             state: PluginState::Unloaded,
             config: RwLock::new(config),
+            handled_event_types,
             workflow_steps,
         }
     }
@@ -111,6 +114,8 @@ impl BaseEventResponsePlugin {
             let mut config = self.config.write().unwrap();
             config.max_impact_scope = scope.to_string();
         }
+    pub fn with_max_impact_scope(self, _scope: &str) -> Self {
+        // Max impact scope is now stored in config, update via update_config
         self
     }
 }
@@ -202,6 +207,8 @@ impl EventResponsePlugin for BaseEventResponsePlugin {
     fn can_handle(&self, event: &Event) -> bool {
         let config = self.config.read().unwrap();
         config.enabled && config.handled_event_types.contains(&event.event_type)
+        // Use cached handled_event_types for synchronous access
+        self.handled_event_types.contains(&event.event_type)
     }
 
     async fn handle_event(&mut self, mut event: Event) -> PluginResult<Event> {

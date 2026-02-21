@@ -17,6 +17,7 @@ pub struct WorkflowDefinition {
     pub config: WorkflowConfig,
 
     /// Node definitions
+    #[serde(default)]
     pub nodes: Vec<NodeDefinition>,
 
     /// Edge definitions
@@ -124,6 +125,7 @@ pub enum NodeDefinition {
     /// LLM Agent node
     #[serde(rename = "llm_agent")]
     LLM_AGENT {
+    LlmAgent {
         id: String,
         name: String,
         /// Agent reference (agent_id for registry agents, inline for embedded)
@@ -214,7 +216,7 @@ impl NodeDefinition {
             NodeDefinition::Start { id, .. } => id,
             NodeDefinition::End { id, .. } => id,
             NodeDefinition::Task { id, .. } => id,
-            NodeDefinition::LLM_AGENT { id, .. } => id,
+            NodeDefinition::LlmAgent { id, .. } => id,
             NodeDefinition::Condition { id, .. } => id,
             NodeDefinition::Parallel { id, .. } => id,
             NodeDefinition::Join { id, .. } => id,
@@ -231,7 +233,7 @@ impl NodeDefinition {
             NodeDefinition::Start { .. } => NodeType::Start,
             NodeDefinition::End { .. } => NodeType::End,
             NodeDefinition::Task { .. } => NodeType::Task,
-            NodeDefinition::LLM_AGENT { .. } => NodeType::Agent,
+            NodeDefinition::LlmAgent { .. } => NodeType::Agent,
             NodeDefinition::Condition { .. } => NodeType::Condition,
             NodeDefinition::Parallel { .. } => NodeType::Parallel,
             NodeDefinition::Join { .. } => NodeType::Join,
@@ -504,6 +506,15 @@ metadata:
   id: test
   name: test
 nodes: []
+  id: agent_config_test
+  name: Agent Config Test
+
+nodes:
+  - type: start
+    id: start
+  - type: end
+    id: end
+
 agents:
   my_agent:
     model: gpt-4

@@ -9,7 +9,7 @@ repository.workspace = true
 homepage.workspace = true
 documentation = "https://docs.rs/mofa-runtime"
 readme = "README.md"
-keywords = ["ai", "agent", "runtime", "actor", "message-bus", "event-loop"]
+keywords = ["ai", "agent", "runtime", "actor", "message-bus"]
 categories = ["development-tools", "asynchronous"]
 publish = true
 
@@ -42,6 +42,9 @@ serde_yaml = { workspace = true }
 toml = "0.8"
 config.workspace = true
 regex.workspace = true
+
+[lints]
+workspace = true
 
 [features]
 
