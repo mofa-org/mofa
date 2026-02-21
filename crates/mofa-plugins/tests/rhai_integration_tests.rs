@@ -211,16 +211,10 @@ async fn test_call_script_function_with_object_return() {
     assert!(result.is_some());
     let result_map = result.unwrap();
 
-    // Verify it's a map/object
-    if let Some(map) = result_map.as_map() {
-        assert!(
-            map.contains_key("status") || map.iter().any(|(k, _)| k.to_string().contains("status"))
-        );
-        assert!(
-            map.contains_key("message")
-                || map.iter().any(|(k, _)| k.to_string().contains("message"))
-        );
-    }
+    // Verify it's a map/object by checking its string representation
+    let result_str = result_map.to_string();
+    assert!(result_str.contains("status"), "Expected 'status' in result: {}", result_str);
+    assert!(result_str.contains("message"), "Expected 'message' in result: {}", result_str);
 }
 
 // ============================================================================
