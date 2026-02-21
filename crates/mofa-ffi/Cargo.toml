@@ -79,3 +79,6 @@ package_name = "org.mofa"
 # Swift bindings output
 [package.metadata.uniffi.bindings.swift]
 module_name = "MoFA"
+
+[lints]
+workspace = true

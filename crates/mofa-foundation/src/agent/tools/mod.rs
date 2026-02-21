@@ -6,5 +6,14 @@
 pub mod adapters;
 pub mod registry;
 
+/// MCP (Model Context Protocol) 客户端实现
+///
+/// 需要启用 `mcp` feature flag:
+/// ```toml
+/// mofa-foundation = { version = "0.1", features = ["mcp"] }
+/// ```
+#[cfg(feature = "mcp")]
+pub mod mcp;
+
 pub use adapters::{BuiltinTools, ClosureTool, FunctionTool};
 pub use registry::{ToolRegistry, ToolSearcher};

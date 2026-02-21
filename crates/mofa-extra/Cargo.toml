@@ -38,3 +38,6 @@ thiserror = { workspace = true }
 uuid = { workspace = true }
 tracing = { workspace = true }
 regex = { version = "1.10", optional = true }
+
+[lints]
+workspace = true

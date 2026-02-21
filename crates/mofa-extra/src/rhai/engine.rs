@@ -314,6 +314,15 @@ impl RhaiScriptEngine {
             debug!("Script debug: {}", msg);
         });
 
+        // print as alias for debug (common in Rhai scripts)
+        let logs_clone = logs.clone();
+        engine.register_fn("print", move |msg: &str| {
+            if let Ok(mut l) = logs_clone.try_write() {
+                l.push(format!("[PRINT] {}", msg));
+            }
+            debug!("Script print: {}", msg);
+        });
+
         let logs_clone = logs.clone();
         engine.register_fn("warn", move |msg: &str| {
             if let Ok(mut l) = logs_clone.try_write() {

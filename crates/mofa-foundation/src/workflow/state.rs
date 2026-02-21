@@ -260,9 +260,13 @@ pub struct WorkflowContext {
 
 impl WorkflowContext {
     pub fn new(workflow_id: &str) -> Self {
+        Self::new_with_id(workflow_id, uuid::Uuid::now_v7().to_string())
+    }
+
+    pub fn new_with_id(workflow_id: &str, execution_id: String) -> Self {
         Self {
             workflow_id: workflow_id.to_string(),
-            execution_id: uuid::Uuid::now_v7().to_string(),
+            execution_id,
             input: Arc::new(RwLock::new(WorkflowValue::Null)),
             node_outputs: Arc::new(RwLock::new(HashMap::new())),
             node_statuses: Arc::new(RwLock::new(HashMap::new())),
@@ -314,6 +318,10 @@ impl WorkflowContext {
     pub async fn get_node_status(&self, node_id: &str) -> Option<NodeStatus> {
         let statuses = self.node_statuses.read().await;
         statuses.get(node_id).cloned()
+    }
+
+    pub async fn get_all_outputs(&self) -> HashMap<String, WorkflowValue> {
+        self.node_outputs.read().await.clone()
     }
 
     /// 获取所有节点状态
@@ -422,6 +430,41 @@ pub struct CheckpointData {
     pub variables: HashMap<String, WorkflowValue>,
 }
 
+/// Serializable execution snapshot for cross-process resume
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ExecutionCheckpoint {
+    pub execution_id: String,
+    pub workflow_id: String,
+    pub completed_nodes: Vec<String>,
+    pub node_outputs: HashMap<String, WorkflowValue>,
+    pub variables: HashMap<String, WorkflowValue>,
+    pub timestamp: u64,
+}
+
+impl CheckpointData {
+    pub fn to_execution_checkpoint(
+        &self,
+        execution_id: String,
+        workflow_id: String,
+    ) -> ExecutionCheckpoint {
+        let completed_nodes = self
+            .node_statuses
+            .iter()
+            .filter(|(_, status)| *status == &NodeStatus::Completed)
+            .map(|(id, _)| id.clone())
+            .collect();
+
+        ExecutionCheckpoint {
+            execution_id,
+            workflow_id,
+            completed_nodes,
+            node_outputs: self.node_outputs.clone(),
+            variables: self.variables.clone(),
+            timestamp: self.timestamp,
+        }
+    }
+}
+
 /// 工作流执行历史记录
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ExecutionRecord {
@@ -437,6 +480,8 @@ pub struct ExecutionRecord {
     pub status: WorkflowStatus,
     /// 节点执行记录
     pub node_records: Vec<NodeExecutionRecord>,
+    #[serde(default)]
+    pub outputs: HashMap<String, WorkflowValue>,
 }
 
 /// 节点执行记录

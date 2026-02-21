@@ -462,18 +462,12 @@ model = "gpt-4"
 
     #[test]
     fn test_load_ini_string() {
+        // INI format requires flat key-value pairs at the root level for simple structures
         let ini = r#"
-[id]
-value = "test-agent"
-
-[name]
-value = "Test Agent"
-
-[type]
-value = "llm"
-
-[model]
-value = "gpt-4"
+id = "test-agent"
+name = "Test Agent"
+type = "llm"
+model = "gpt-4"
 "#;
 
         let config = ConfigLoader::from_ini(ini).unwrap();

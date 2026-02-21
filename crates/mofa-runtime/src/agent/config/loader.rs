@@ -453,18 +453,13 @@ model = "gpt-4"
 
     #[test]
     fn test_load_ini_string() {
+        // INI format requires sections or dot notation for nesting
+        // Using dot notation to match AgentConfig's flat structure
         let ini = r#"
-[id]
-value = "test-agent"
-
-[name]
-value = "Test Agent"
-
-[type]
-value = "llm"
-
-[model]
-value = "gpt-4"
+id = "test-agent"
+name = "Test Agent"
+type = "llm"
+model = "gpt-4"
 "#;
 
         let config = ConfigLoader::from_ini(ini).unwrap();

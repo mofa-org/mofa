@@ -380,9 +380,9 @@ pub mod workflow {
 
     // Re-export kernel workflow types
     pub use mofa_kernel::workflow::{
-        Command, CompiledGraph, ControlFlow, EdgeTarget, GraphConfig, GraphState, JsonState,
-        NodeFunc, Reducer, ReducerType, RemainingSteps, RuntimeContext, SendCommand, StateSchema,
-        StateUpdate, StreamEvent, StepResult, END, START,
+        Command, CompiledGraph, ControlFlow, END, EdgeTarget, GraphConfig, GraphState, JsonState,
+        NodeFunc, Reducer, ReducerType, RemainingSteps, RuntimeContext, START, SendCommand,
+        StateSchema, StateUpdate, StepResult, StreamEvent,
     };
 
     // Re-export kernel StateGraph trait
@@ -390,11 +390,19 @@ pub mod workflow {
 
     // Foundation layer implementations
     pub use mofa_foundation::workflow::{
-        // StateGraph implementation
-        CompiledGraphImpl, StateGraphImpl,
         // Reducers
-        AppendReducer, ExtendReducer, FirstReducer, LastNReducer, LastReducer,
-        MergeReducer, OverwriteReducer, CustomReducer, create_reducer,
+        AppendReducer,
+        // StateGraph implementation
+        CompiledGraphImpl,
+        CustomReducer,
+        ExtendReducer,
+        FirstReducer,
+        LastNReducer,
+        LastReducer,
+        MergeReducer,
+        OverwriteReducer,
+        StateGraphImpl,
+        create_reducer,
     };
 
     // Legacy workflow API
@@ -468,6 +476,7 @@ pub mod llm {
     pub use crate::llm_tools::ToolPluginExecutor;
     pub use mofa_foundation::llm::anthropic::{AnthropicConfig, AnthropicProvider};
     pub use mofa_foundation::llm::google::{GeminiConfig, GeminiProvider};
+    pub use mofa_foundation::llm::ollama::{OllamaConfig, OllamaProvider};
     pub use mofa_foundation::llm::openai::{OpenAIConfig, OpenAIProvider};
     pub use mofa_foundation::llm::*;
 
@@ -503,6 +512,15 @@ pub mod llm {
         }
 
         Ok(OpenAIProvider::with_config(config))
+    }
+
+    /// Create an Ollama provider from environment variables (no API key required).
+    ///
+    /// Reads:
+    /// - `OLLAMA_BASE_URL`: base URL without `/v1` suffix, e.g. `http://localhost:11434` (optional)
+    /// - `OLLAMA_MODEL`: model name, e.g. `llama3` (optional)
+    pub fn ollama_from_env() -> Result<OllamaProvider, crate::llm::LLMError> {
+        Ok(crate::llm::OllamaProvider::from_env())
     }
 }
 
