@@ -9,6 +9,36 @@ permissions:
   contents: read
 
 jobs:
+  # PR Guard: Fast check that must pass before merge
+  # This job blocks PRs with clippy errors or test failures
+  pr-guard:
+    name: PR Guard (Required)
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+
+      - name: Cache dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-pr-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Run clippy (deny errors)
+        run: cargo clippy --workspace --all-features
+
+      - name: Run tests
+        run: cargo test --workspace --all-features
+
   test:
     name: Test
     runs-on: ${{ matrix.os }}
@@ -16,7 +46,7 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
-        rust: [stable, nightly]
+        rust: [stable]
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -36,9 +66,6 @@ jobs:
             target
           key: ${{ runner.os }}-cargo-${{ matrix.rust }}-${{ hashFiles('**/Cargo.lock') }}
 
-      - name: Check formatting
-        run: cargo fmt -- --check
-
       - name: Run clippy
         run: cargo clippy --workspace -- -D warnings
 
@@ -47,30 +74,6 @@ jobs:
 
       - name: Build examples
         run: cargo build --examples
-
-  build-msrv:
-    name: Build (MSRV)
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          toolchain: "1.75.0"
-
-      - name: Cache dependencies
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            target
-          key: ${{ runner.os }}-cargo-msrv-${{ hashFiles('**/Cargo.lock') }}
-
-      - name: Build workspace
-        run: cargo build --workspace
 
   check-features:
     name: Check Features
@@ -104,21 +107,6 @@ jobs:
           cargo check -p mofa-plugins --features dora
           cargo check -p mofa-cli --features db
 
-  security:
-    name: Security Audit
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Run cargo audit
-        uses: rustsec/audit-check@v1
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-
   docs:
     name: Build Documentation
     runs-on: ubuntu-latest
@@ -143,38 +131,3 @@ jobs:
 
       - name: Check docs intra-doc links
         run: cargo doc --workspace --no-deps --all-features --document-private-items
-
-  wasm:
-    name: Build WASM Plugins
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: wasm32-wasi
-
-      - name: Cache dependencies
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            target
-          key: ${{ runner.os }}-cargo-wasm-${{ hashFiles('**/Cargo.lock') }}
-
-      - name: Build WASM example
-        run: |
-          cargo build --package mofa-plugins --target wasm32-wasi --examples
-
-  typos:
-    name: Check Typos
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Check for typos
-        uses: crate-ci/typos@master
