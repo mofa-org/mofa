@@ -5,6 +5,7 @@ mod commands;
 mod config;
 mod output;
 mod render;
+mod state;
 mod tui;
 mod utils;
 mod widgets;
@@ -23,18 +24,20 @@ fn main() -> anyhow::Result<()> {
         tracing_subscriber::fmt().with_env_filter("info").init();
     }
 
+    // Create async runtime for all operations (TUI and CLI commands)
+    let rt = tokio::runtime::Runtime::new()?;
+    
     // Launch TUI if requested or no command provided
     if cli.tui || cli.command.is_none() {
-        // Run TUI mode
-        tokio::runtime::Runtime::new()?.block_on(tui::run())?;
+        rt.block_on(tui::run())?;
         Ok(())
     } else {
-        // Run CLI command as usual
-        run_command(cli)
+        // Run CLI command in async context
+        rt.block_on(run_command_async(cli))
     }
 }
 
-fn run_command(cli: Cli) -> anyhow::Result<()> {
+async fn run_command_async(cli: Cli) -> anyhow::Result<()> {
     use cli::Commands;
 
     match cli.command {
@@ -101,10 +104,10 @@ fn run_command(cli: Cli) -> anyhow::Result<()> {
                 config,
                 daemon,
             } => {
-                commands::agent::start::run(&agent_id, config.as_deref(), daemon)?;
+                commands::agent::start::run_async(&agent_id, config.as_deref(), daemon).await?;
             }
             cli::AgentCommands::Stop { agent_id } => {
-                commands::agent::stop::run(&agent_id)?;
+                commands::agent::stop::run_async(&agent_id).await?;
             }
             cli::AgentCommands::Restart { agent_id, config } => {
                 commands::agent::restart::run(&agent_id, config.as_deref())?;
@@ -113,7 +116,7 @@ fn run_command(cli: Cli) -> anyhow::Result<()> {
                 commands::agent::status::run(agent_id.as_deref())?;
             }
             cli::AgentCommands::List { running, all } => {
-                commands::agent::list::run(running, all)?;
+                commands::agent::list::run_async(running, all).await?;
             }
         },
 

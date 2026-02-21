@@ -1,11 +1,12 @@
 //! `mofa agent list` command implementation
 
 use crate::output::Table;
+use crate::state::{self, AgentStatus, AgentStateStore};
 use colored::Colorize;
 use serde::Serialize;
 
-/// Execute the `mofa agent list` command
-pub fn run(running_only: bool, show_all: bool) -> anyhow::Result<()> {
+/// Execute the `mofa agent list` command (async version)
+pub async fn run_async(running_only: bool, show_all: bool) -> anyhow::Result<()> {
     println!("{} Listing agents", "→".green());
 
     if running_only {
@@ -16,51 +17,58 @@ pub fn run(running_only: bool, show_all: bool) -> anyhow::Result<()> {
 
     println!();
 
-    // TODO: Implement actual agent listing from state store
-    // For now, show example output
+    // Load agents from state store
+    let store = state::get_agent_store().await?;
+    let mut records = store.list().await?;
 
-    let agents = vec![
-        AgentInfo {
-            id: "agent-001".to_string(),
-            name: "MyAgent".to_string(),
-            status: "running".to_string(),
-            uptime: Some("5m 32s".to_string()),
-            provider: Some("openai".to_string()),
-            model: Some("gpt-4o".to_string()),
-        },
-        AgentInfo {
-            id: "agent-002".to_string(),
-            name: "TestAgent".to_string(),
-            status: "stopped".to_string(),
-            uptime: None,
-            provider: None,
-            model: None,
-        },
-    ];
+    // Filter based on status
+    if running_only {
+        records.retain(|r| r.status == AgentStatus::Running);
+    }
 
-    // Filter based on flags
-    let filtered: Vec<_> = if running_only {
-        agents
-            .iter()
-            .filter(|a| a.status == "running")
-            .cloned()
-            .collect()
-    } else {
-        agents
-    };
-
-    if filtered.is_empty() {
+    if records.is_empty() {
         println!("  No agents found.");
         return Ok(());
     }
 
+    // Convert to display format
+    let agents: Vec<AgentInfo> = records
+        .into_iter()
+        .map(|r| {
+            let uptime = r.uptime();
+            AgentInfo {
+                id: r.id,
+                name: r.name,
+                status: r.status.to_string(),
+                uptime,
+                provider: r.provider,
+                model: r.model,
+            }
+        })
+        .collect();
+
     // Display as table
-    let json = serde_json::to_value(&filtered)?;
+    let json = serde_json::to_value(&agents)?;
     if let Some(arr) = json.as_array() {
         let table = Table::from_json_array(arr);
         println!("{}", table);
     }
 
+    Ok(())
+}
+
+/// Keep the sync version for backward compatibility
+pub fn run(running_only: bool, show_all: bool) -> anyhow::Result<()> {
+    println!("{} Listing agents (warning: using fallback sync version)", "→".yellow());
+    
+    if running_only {
+        println!("  Showing running agents only");
+    } else if show_all {
+        println!("  Showing all agents");
+    }
+
+    println!();
+    println!("  {} No agents found (sync mode fallback)", "ℹ".blue());
     Ok(())
 }
 

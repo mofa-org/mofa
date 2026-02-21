@@ -24,6 +24,7 @@ mofa-kernel = { path = "../mofa-kernel", version = "0.1", features = ["config"] 
 config.workspace = true
 tokio = { workspace = true }
 anyhow = { workspace = true }
+async-trait = "0.1"
 
 # CLI
 clap = { version = "4", features = ["derive", "env"] }
@@ -65,6 +66,6 @@ predicates = "3"
 tempfile = "3"
 
 [features]
-default = []
+default = ["db"]
 dora = ["mofa-sdk/dora"]
 db = ["dep:sqlx"]
