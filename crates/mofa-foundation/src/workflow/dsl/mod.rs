@@ -35,7 +35,7 @@
 //!     to: end
 //! ```
 
-mod env;
+pub mod env;
 mod parser;
 mod schema;
 

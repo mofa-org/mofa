@@ -380,9 +380,9 @@ pub mod workflow {
 
     // Re-export kernel workflow types
     pub use mofa_kernel::workflow::{
-        Command, CompiledGraph, ControlFlow, EdgeTarget, GraphConfig, GraphState, JsonState,
-        NodeFunc, Reducer, ReducerType, RemainingSteps, RuntimeContext, SendCommand, StateSchema,
-        StateUpdate, StreamEvent, StepResult, END, START,
+        Command, CompiledGraph, ControlFlow, END, EdgeTarget, GraphConfig, GraphState, JsonState,
+        NodeFunc, Reducer, ReducerType, RemainingSteps, RuntimeContext, START, SendCommand,
+        StateSchema, StateUpdate, StepResult, StreamEvent,
     };
 
     // Re-export kernel StateGraph trait
@@ -390,11 +390,19 @@ pub mod workflow {
 
     // Foundation layer implementations
     pub use mofa_foundation::workflow::{
-        // StateGraph implementation
-        CompiledGraphImpl, StateGraphImpl,
         // Reducers
-        AppendReducer, ExtendReducer, FirstReducer, LastNReducer, LastReducer,
-        MergeReducer, OverwriteReducer, CustomReducer, create_reducer,
+        AppendReducer,
+        // StateGraph implementation
+        CompiledGraphImpl,
+        CustomReducer,
+        ExtendReducer,
+        FirstReducer,
+        LastNReducer,
+        LastReducer,
+        MergeReducer,
+        OverwriteReducer,
+        StateGraphImpl,
+        create_reducer,
     };
 
     // Legacy workflow API

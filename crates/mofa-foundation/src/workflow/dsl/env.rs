@@ -21,7 +21,7 @@ static ENV_VAR_REGEX: Lazy<Regex> =
 /// use mofa_foundation::workflow::dsl::env::substitute_env;
 ///
 /// let input = "https://${API_HOST}/api";
-/// std::env::set_var("API_HOST", "example.com");
+/// unsafe { std::env::set_var("API_HOST", "example.com"); }
 /// let output = substitute_env(input);
 /// assert_eq!(output, "https://example.com/api");
 /// ```

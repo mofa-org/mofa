@@ -26,6 +26,7 @@ use super::client::{ChatSession, LLMClient};
 use super::provider::{ChatStream, LLMProvider};
 use super::tool_executor::ToolExecutor;
 use super::types::{ChatMessage, LLMError, LLMResult, Tool};
+use crate::llm::{AnthropicConfig, AnthropicProvider, GeminiConfig, GeminiProvider};
 use crate::prompt;
 use futures::{Stream, StreamExt};
 use mofa_kernel::agent::AgentMetadata;
@@ -39,7 +40,6 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 use tokio::sync::{Mutex, RwLock};
-use crate::llm::{AnthropicConfig, AnthropicProvider, GeminiConfig, GeminiProvider};
 
 /// Type alias for TTS audio stream - boxed to avoid exposing kokoro-tts types
 pub type TtsAudioStream = Pin<Box<dyn Stream<Item = (Vec<f32>, Duration)> + Send>>;
@@ -940,7 +940,7 @@ impl LLMAgent {
     ///     }
     /// }
     /// ```
-    pub async fn tts_create_stream(&self, text: &str) -> LLMResult<TtsAudioStream> {
+    pub async fn tts_create_stream(&self, _text: &str) -> LLMResult<TtsAudioStream> {
         #[cfg(feature = "kokoro")]
         {
             use mofa_plugins::tts::kokoro_wrapper::KokoroTTS;
@@ -1037,15 +1037,15 @@ impl LLMAgent {
     /// ```
     pub async fn tts_speak_f32_stream_batch(
         &self,
-        sentences: Vec<String>,
-        callback: Box<dyn Fn(Vec<f32>) + Send + Sync>,
+        _sentences: Vec<String>,
+        _callback: Box<dyn Fn(Vec<f32>) + Send + Sync>,
     ) -> LLMResult<()> {
         let tts = self
             .tts_plugin
             .as_ref()
             .ok_or_else(|| LLMError::Other("TTS plugin not configured".to_string()))?;
 
-        let tts_guard = tts.lock().await;
+        let _tts_guard = tts.lock().await;
 
         #[cfg(feature = "kokoro")]
         {

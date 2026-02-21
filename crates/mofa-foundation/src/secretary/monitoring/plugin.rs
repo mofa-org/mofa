@@ -12,7 +12,7 @@ use mofa_kernel::plugin::{
 use serde::{Deserialize, Serialize};
 use std::any::Any;
 use std::collections::HashMap;
-use tokio::sync::RwLock;
+use std::sync::RwLock;
 
 /// Event response plugin configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -98,7 +98,7 @@ impl BaseEventResponsePlugin {
         self.metadata = self.metadata.with_priority(priority);
         {
             // Drop the lock before returning
-            let mut config = self.config.blocking_write();
+            let mut config = self.config.write().unwrap();
             config.priority = priority;
         }
         self
@@ -108,7 +108,7 @@ impl BaseEventResponsePlugin {
     pub fn with_max_impact_scope(self, scope: &str) -> Self {
         {
             // Drop the lock before returning
-            let mut config = self.config.blocking_write();
+            let mut config = self.config.write().unwrap();
             config.max_impact_scope = scope.to_string();
         }
         self
@@ -194,13 +194,13 @@ impl EventResponsePlugin for BaseEventResponsePlugin {
     }
 
     async fn update_config(&mut self, config: EventResponseConfig) -> PluginResult<()> {
-        let mut current_config = self.config.write().await;
+        let mut current_config = self.config.write().unwrap();
         *current_config = config;
         Ok(())
     }
 
     fn can_handle(&self, event: &Event) -> bool {
-        let config = self.config.blocking_read();
+        let config = self.config.read().unwrap();
         config.enabled && config.handled_event_types.contains(&event.event_type)
     }
 
