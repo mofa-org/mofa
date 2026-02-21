@@ -350,55 +350,19 @@ impl RhaiPlugin {
         Ok(())
     }
 
-    /// Call a named function inside the cached Rhai script, if it is defined.
+    /// Call a script function if it exists.
     ///
-    /// Returns `Ok(None)` when the function does not exist in the script so
-    /// optional lifecycle hooks (init, start, stop, unload) can be skipped
-    /// silently.  Returns `Err` only for genuine runtime failures.
+    /// Returns `Ok(None)` when the function is not defined in the script so
+    /// that optional lifecycle hooks can be omitted silently.
+    /// Implementation provided by PR #157 — kept as stub here to avoid overlap.
     async fn call_script_function(
         &self,
-        function_name: &str,
-        args: Vec<serde_json::Value>,
-    ) -> RhaiPluginResult<Option<serde_json::Value>> {
-        let script_id = format!("{}_exec", self.id);
-
-        // Compile & cache the script so call_function can find the AST.
-        // compile_and_cache is cheap when the cache entry already exists.
-        if let Err(e) = self
-            .engine
-            .compile_and_cache(&script_id, "plugin_script", &self.cached_content)
-            .await
-        {
-            warn!(
-                "Rhai plugin {}: failed to compile script for function '{}': {}",
-                self.id, function_name, e
-            );
-            return Ok(None);
-        }
-
-        let context = ScriptContext::new();
-
-        match self
-            .engine
-            .call_function::<serde_json::Value>(&script_id, function_name, args, &context)
-            .await
-        {
-            Ok(result) => Ok(Some(result)),
-            Err(e) => {
-                // Rhai reports a missing function as a "Function not found" error.
-                // Treat that as "not present" rather than a hard failure so that
-                // optional lifecycle hooks can be omitted from scripts.
-                let msg = e.to_string().to_lowercase();
-                if msg.contains("function not found")
-                    || msg.contains("not found in module")
-                    || msg.contains("undefined")
-                {
-                    Ok(None)
-                } else {
-                    Err(anyhow::anyhow!("{}", e).into())
-                }
-            }
-        }
+        _function_name: &str,
+        _args: &[Dynamic],
+    ) -> RhaiPluginResult<Option<Dynamic>> {
+        // Stub — full implementation lives in the companion PR that adds
+        // RhaiScriptEngine::call_function + Dynamic ↔ serde_json marshalling.
+        Ok(None)
     }
 
     /// Inner execution helper — called by [`execute`] so that timing and stats
@@ -501,7 +465,7 @@ impl AgentPlugin for RhaiPlugin {
         drop(state);
 
         // Call init function if exists
-        match self.call_script_function("init", vec![]).await {
+        match self.call_script_function("init", &[]).await {
             Ok(_) => {
                 info!("Rhai plugin {}: init function called", self.id);
             }
@@ -522,7 +486,7 @@ impl AgentPlugin for RhaiPlugin {
         }
 
         // Call start function if exists
-        match self.call_script_function("start", vec![]).await {
+        match self.call_script_function("start", &[]).await {
             Ok(_) => {
                 info!("Rhai plugin {}: start function called", self.id);
             }
@@ -542,7 +506,7 @@ impl AgentPlugin for RhaiPlugin {
         }
 
         // Call stop function if exists
-        match self.call_script_function("stop", vec![]).await {
+        match self.call_script_function("stop", &[]).await {
             Ok(_) => {
                 info!("Rhai plugin {}: stop function called", self.id);
             }
@@ -560,7 +524,7 @@ impl AgentPlugin for RhaiPlugin {
         *state = RhaiPluginState::Unloaded;
 
         // Call unload function if exists
-        match self.call_script_function("unload", vec![]).await {
+        match self.call_script_function("unload", &[]).await {
             Ok(_) => {
                 info!("Rhai plugin {}: unload function called", self.id);
             }
