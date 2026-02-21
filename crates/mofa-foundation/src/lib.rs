@@ -30,6 +30,9 @@ pub mod secretary;
 pub mod agent;
 pub mod collaboration;
 
+// orchestrator module - Edge Model Orchestrator (GSoC 2026)
+pub mod orchestrator;
+
 // Re-export config types
 pub use config::{AgentInfo, AgentYamlConfig, LLMYamlConfig, RuntimeConfig, ToolConfig};
 
@@ -43,6 +46,16 @@ pub use prompt::{
     ConversationBuilder, GlobalPromptRegistry, PromptBuilder, PromptComposition, PromptError,
     PromptRegistry, PromptResult, PromptTemplate, PromptVariable, VariableType,
 };
+
+// Re-export orchestrator types (GSoC 2026 Edge Model Orchestrator)
+pub use orchestrator::{
+    ModelOrchestrator, ModelProvider, ModelProviderConfig, OrchestratorError, OrchestratorResult,
+    PoolStatistics,
+};
+
+// Re-export Linux implementation when available
+#[cfg(target_os = "linux")]
+pub use orchestrator::{LinuxCandleProvider, ModelPool};
 
 // Re-export secretary types for convenience
 pub use secretary::{
