@@ -357,6 +357,18 @@ impl SessionManager {
         }
     }
 
+    /// Get a session by key without creating a new one
+    pub async fn get(&self, key: &str) -> AgentResult<Option<Session>> {
+        {
+            let cache = self.cache.read().await;
+            if let Some(session) = cache.get(key) {
+                return Ok(Some(session.clone()));
+            }
+        }
+
+        self.storage.load(key).await
+    }
+
     /// Get or create a session
     pub async fn get_or_create(&self, key: &str) -> Session {
         // Try cache first
@@ -468,5 +480,57 @@ mod tests {
         // Reload
         let loaded = manager.get_or_create("test:manager").await;
         assert_eq!(loaded.key, "test:manager");
+    }
+
+    #[tokio::test]
+    async fn test_session_get_returns_none_for_missing() {
+        let temp_dir = TempDir::new().unwrap();
+        let manager = SessionManager::with_jsonl(temp_dir.path()).await.unwrap();
+
+        let result = manager.get("nonexistent").await.unwrap();
+        assert!(result.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_session_get_returns_some_for_existing() {
+        let temp_dir = TempDir::new().unwrap();
+        let manager = SessionManager::with_jsonl(temp_dir.path()).await.unwrap();
+
+        let mut session = Session::new("exists");
+        session.add_message("user", "hello");
+        manager.save(&session).await.unwrap();
+
+        let result = manager.get("exists").await.unwrap();
+        assert!(result.is_some());
+        assert_eq!(result.unwrap().len(), 1);
+    }
+
+    #[tokio::test]
+    async fn test_session_get_does_not_create() {
+        let temp_dir = TempDir::new().unwrap();
+        let manager = SessionManager::with_jsonl(temp_dir.path()).await.unwrap();
+
+        let _ = manager.get("phantom").await.unwrap();
+        let keys = manager.list().await.unwrap();
+        assert!(!keys.contains(&"phantom".to_string()));
+    }
+
+    #[tokio::test]
+    async fn test_session_storage_path_no_double_nesting() {
+        let temp_dir = TempDir::new().unwrap();
+        let manager = SessionManager::with_jsonl(temp_dir.path()).await.unwrap();
+
+        let mut session = Session::new("nesting-test");
+        session.add_message("user", "hello");
+        manager.save(&session).await.unwrap();
+
+        assert!(
+            temp_dir
+                .path()
+                .join("sessions")
+                .join("nesting-test.jsonl")
+                .exists()
+        );
+        assert!(!temp_dir.path().join("sessions").join("sessions").exists());
     }
 }
