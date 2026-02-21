@@ -1,8 +1,8 @@
 //! `mofa tool list` command implementation
 
+use crate::commands::backend::CliBackend;
 use crate::output::Table;
 use colored::Colorize;
-use serde::Serialize;
 
 /// Execute the `mofa tool list` command
 pub fn run(available: bool, enabled: bool) -> anyhow::Result<()> {
@@ -16,35 +16,11 @@ pub fn run(available: bool, enabled: bool) -> anyhow::Result<()> {
 
     println!();
 
-    // TODO: Implement actual tool discovery from tool registry
-
-    let tools = vec![
-        ToolInfo {
-            name: "web-search".to_string(),
-            description: "Search the web for information".to_string(),
-            enabled: true,
-        },
-        ToolInfo {
-            name: "calculator".to_string(),
-            description: "Perform mathematical calculations".to_string(),
-            enabled: true,
-        },
-        ToolInfo {
-            name: "code-executor".to_string(),
-            description: "Execute code in a sandboxed environment".to_string(),
-            enabled: false,
-        },
-        ToolInfo {
-            name: "file-operations".to_string(),
-            description: "Read, write, and manipulate files".to_string(),
-            enabled: false,
-        },
-    ];
-
-    let filtered: Vec<_> = if enabled {
-        tools.iter().filter(|t| t.enabled).cloned().collect()
+    let backend = CliBackend::discover()?;
+    let filtered = if available {
+        backend.list_tools(false)?
     } else {
-        tools
+        backend.list_tools(enabled)?
     };
 
     if filtered.is_empty() {
@@ -59,11 +35,4 @@ pub fn run(available: bool, enabled: bool) -> anyhow::Result<()> {
     }
 
     Ok(())
-}
-
-#[derive(Debug, Clone, Serialize)]
-struct ToolInfo {
-    name: String,
-    description: String,
-    enabled: bool,
 }

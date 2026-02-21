@@ -1,5 +1,6 @@
 //! `mofa plugin info` command implementation
 
+use crate::commands::backend::CliBackend;
 use colored::Colorize;
 
 /// Execute the `mofa plugin info` command
@@ -7,19 +8,27 @@ pub fn run(name: &str) -> anyhow::Result<()> {
     println!("{} Plugin information: {}", "→".green(), name.cyan());
     println!();
 
-    // TODO: Implement actual plugin info lookup
-    // For now, show example output
+    let backend = CliBackend::discover()?;
+    let plugin = backend.get_plugin(name)?;
 
-    println!("  Name:           {}", name.cyan());
-    println!("  Version:        {}", "0.1.0".white());
-    println!("  Description:    {}", "A helpful plugin".white());
-    println!("  Author:         {}", "MoFA Team".white());
+    println!("  Name:           {}", plugin.name.cyan());
+    println!("  Version:        {}", plugin.version.white());
+    println!("  Description:    {}", plugin.description.white());
+    println!("  Author:         {}", plugin.author.white());
+    if let Some(repo) = plugin.repository {
+        println!("  Repository:     {}", repo.blue());
+    }
+    if let Some(license) = plugin.license {
+        println!("  License:        {}", license.white());
+    }
     println!(
-        "  Repository:     {}",
-        "https://github.com/mofa-org/...".blue()
+        "  Installed:      {}",
+        if plugin.installed {
+            "Yes".green()
+        } else {
+            "No".yellow()
+        }
     );
-    println!("  License:        {}", "MIT".white());
-    println!("  Installed:      {}", "Yes".green());
     println!();
 
     Ok(())

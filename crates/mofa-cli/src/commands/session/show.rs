@@ -1,5 +1,6 @@
 //! `mofa session show` command implementation
 
+use crate::commands::backend::CliBackend;
 use colored::Colorize;
 
 /// Execute the `mofa session show` command
@@ -7,44 +8,34 @@ pub fn run(session_id: &str, format: Option<&str>) -> anyhow::Result<()> {
     println!("{} Session details: {}", "→".green(), session_id.cyan());
     println!();
 
-    // TODO: Implement actual session retrieval from persistence layer
-
     let output_format = format.unwrap_or("text");
+    let backend = CliBackend::discover()?;
+    let session = backend.get_session(session_id)?;
 
     match output_format {
         "json" => {
             let json = serde_json::json!({
-                "session_id": session_id,
-                "agent_id": "agent-001",
-                "created_at": "2024-01-15T10:30:00Z",
-                "messages": [
-                    {"role": "user", "content": "Hello!"},
-                    {"role": "assistant", "content": "Hi there! How can I help you?"}
-                ],
-                "status": "active"
+                "session_id": session.session_id,
+                "agent_id": session.agent_id,
+                "created_at": session.created_at,
+                "messages": session.messages,
+                "status": session.status
             });
             println!("{}", serde_json::to_string_pretty(&json)?);
         }
         "yaml" => {
-            println!("session_id: {}", session_id);
-            println!("agent_id: agent-001");
-            println!("created_at: 2024-01-15T10:30:00Z");
-            println!("messages:");
-            println!("  - role: user");
-            println!("    content: Hello!");
-            println!("  - role: assistant");
-            println!("    content: Hi there! How can I help you?");
-            println!("status: active");
+            println!("{}", serde_yaml::to_string(&session)?);
         }
         _ => {
-            println!("  Session ID:    {}", session_id.cyan());
-            println!("  Agent ID:      {}", "agent-001".white());
-            println!("  Created:       {}", "2024-01-15 10:30:00".white());
-            println!("  Status:        {}", "active".green());
+            println!("  Session ID:    {}", session.session_id.cyan());
+            println!("  Agent ID:      {}", session.agent_id.white());
+            println!("  Created:       {}", session.created_at.white());
+            println!("  Status:        {}", session.status.green());
             println!();
             println!("  Messages:");
-            println!("    User:      Hello!");
-            println!("    Assistant: Hi there! How can I help you?");
+            for msg in session.messages {
+                println!("    {}: {}", msg.role, msg.content);
+            }
         }
     }
 

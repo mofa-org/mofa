@@ -1,18 +1,14 @@
 //! `mofa agent stop` command implementation
 
+use crate::commands::backend::CliBackend;
 use colored::Colorize;
 
 /// Execute the `mofa agent stop` command
 pub fn run(agent_id: &str) -> anyhow::Result<()> {
     println!("{} Stopping agent: {}", "→".green(), agent_id.cyan());
-
-    // TODO: Implement actual agent stopping logic
-    // This would involve:
-    // 1. Looking up the agent's PID/state
-    // 2. Sending a shutdown signal
-    // 3. Waiting for graceful shutdown
-
-    println!("{} Agent '{}' stopped", "✓".green(), agent_id);
+    let backend = CliBackend::discover()?;
+    let stopped = backend.stop_agent(agent_id)?;
+    println!("{} Agent '{}' stopped", "✓".green(), stopped.id);
 
     Ok(())
 }

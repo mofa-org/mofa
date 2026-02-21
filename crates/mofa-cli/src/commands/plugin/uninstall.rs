@@ -1,19 +1,14 @@
 //! `mofa plugin uninstall` command implementation
 
+use crate::commands::backend::CliBackend;
 use colored::Colorize;
 
 /// Execute the `mofa plugin uninstall` command
 pub fn run(name: &str, _force: bool) -> anyhow::Result<()> {
     println!("{} Uninstalling plugin: {}", "→".green(), name.cyan());
-
-    // TODO: Implement actual plugin uninstallation
-    // This would involve:
-    // 1. Checking if plugin is installed
-    // 2. Confirming uninstallation (unless --force)
-    // 3. Removing plugin files
-    // 4. Updating plugin registry
-
-    println!("{} Plugin '{}' uninstalled", "✓".green(), name);
+    let backend = CliBackend::discover()?;
+    let plugin = backend.uninstall_plugin(name)?;
+    println!("{} Plugin '{}' uninstalled", "✓".green(), plugin.name);
 
     Ok(())
 }

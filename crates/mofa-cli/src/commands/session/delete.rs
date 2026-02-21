@@ -1,5 +1,6 @@
 //! `mofa session delete` command implementation
 
+use crate::commands::backend::CliBackend;
 use colored::Colorize;
 
 /// Execute the `mofa session delete` command
@@ -14,8 +15,8 @@ pub fn run(session_id: &str, force: bool) -> anyhow::Result<()> {
     }
 
     println!("{} Deleting session: {}", "→".green(), session_id.cyan());
-
-    // TODO: Implement actual session deletion from persistence layer
+    let backend = CliBackend::discover()?;
+    backend.delete_session(session_id)?;
 
     println!("{} Session '{}' deleted", "✓".green(), session_id);
 
