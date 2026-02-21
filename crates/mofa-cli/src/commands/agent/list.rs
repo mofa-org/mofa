@@ -20,12 +20,14 @@ pub async fn run(ctx: &CliContext, running_only: bool, _show_all: bool) -> anyho
     let mut merged: BTreeMap<String, AgentInfo> = BTreeMap::new();
     for m in &agents_metadata {
         let status = format!("{:?}", m.state);
+        let is_running = is_running_state(&status);
         merged.insert(
             m.id.clone(),
             AgentInfo {
                 id: m.id.clone(),
                 name: m.name.clone(),
                 status,
+                is_running,
                 description: m.description.clone(),
             },
         );
@@ -33,16 +35,16 @@ pub async fn run(ctx: &CliContext, running_only: bool, _show_all: bool) -> anyho
 
     for (_, entry) in persisted_agents {
         merged.entry(entry.id.clone()).or_insert_with(|| {
-            // Agents not in the in-memory registry are not currently running,
-            // regardless of their last-persisted state.
-            let mut status = entry.state;
-            if status == "Running" || status == "Ready" {
-                status = "Stopped".to_string();
-            }
+            let status = if is_running_state(&entry.state) {
+                format!("{} (persisted)", entry.state)
+            } else {
+                entry.state
+            };
             AgentInfo {
                 id: entry.id,
                 name: entry.name,
                 status,
+                is_running: false,
                 description: entry.description,
             }
         });
@@ -62,10 +64,7 @@ pub async fn run(ctx: &CliContext, running_only: bool, _show_all: bool) -> anyho
 
     // Filter based on flags
     let filtered: Vec<_> = if running_only {
-        agents
-            .into_iter()
-            .filter(|a| a.status == "Running" || a.status == "Ready")
-            .collect()
+        agents.into_iter().filter(|a| a.is_running).collect()
     } else {
         agents
     };
@@ -90,6 +89,12 @@ struct AgentInfo {
     id: String,
     name: String,
     status: String,
+    #[serde(skip_serializing)]
+    is_running: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     description: Option<String>,
+}
+
+fn is_running_state(status: &str) -> bool {
+    status == "Running" || status == "Ready"
 }
