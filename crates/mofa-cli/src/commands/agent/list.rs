@@ -32,11 +32,19 @@ pub async fn run(ctx: &CliContext, running_only: bool, _show_all: bool) -> anyho
     }
 
     for (_, entry) in persisted_agents {
-        merged.entry(entry.id.clone()).or_insert_with(|| AgentInfo {
-            id: entry.id,
-            name: entry.name,
-            status: entry.state,
-            description: None,
+        merged.entry(entry.id.clone()).or_insert_with(|| {
+            // Agents not in the in-memory registry are not currently running,
+            // regardless of their last-persisted state.
+            let mut status = entry.state;
+            if status == "Running" || status == "Ready" {
+                status = "Stopped".to_string();
+            }
+            AgentInfo {
+                id: entry.id,
+                name: entry.name,
+                status,
+                description: entry.description,
+            }
         });
     }
 
