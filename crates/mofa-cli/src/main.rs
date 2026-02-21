@@ -123,9 +123,17 @@ async fn run_command(cli: Cli) -> anyhow::Result<()> {
                 cli::AgentCommands::Start {
                     agent_id,
                     config,
+                    factory_type,
                     daemon,
                 } => {
-                    commands::agent::start::run(ctx, &agent_id, config.as_deref(), daemon).await?;
+                    commands::agent::start::run(
+                        ctx,
+                        &agent_id,
+                        config.as_deref(),
+                        factory_type.as_deref(),
+                        daemon,
+                    )
+                    .await?;
                 }
                 cli::AgentCommands::Stop { agent_id } => {
                     commands::agent::stop::run(ctx, &agent_id).await?;

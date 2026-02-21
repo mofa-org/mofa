@@ -9,6 +9,7 @@ use serde_json::Value;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use tokio::fs;
+use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::sync::RwLock;
 
 use mofa_kernel::agent::error::{AgentError, AgentResult};
@@ -276,8 +277,11 @@ impl SessionStorage for JsonlSessionStorage {
                 continue;
             }
 
-            if let Ok(content) = fs::read_to_string(&path).await {
-                if let Some(header) = content.lines().next() {
+            if let Ok(file) = fs::File::open(&path).await {
+                let mut reader = BufReader::new(file);
+                let mut header = String::new();
+                if reader.read_line(&mut header).await.is_ok() {
+                    let header = header.trim_end();
                     if let Ok(header_data) = serde_json::from_str::<Value>(header) {
                         if let Some(key) = header_data.get("key").and_then(|v| v.as_str()) {
                             keys.push(key.to_string());
@@ -560,5 +564,23 @@ mod tests {
         let keys = manager.list().await.unwrap();
         assert!(keys.contains(&"team_alpha".to_string()));
         assert!(!keys.contains(&"team:alpha".to_string()));
+    }
+
+    #[tokio::test]
+    async fn test_session_list_prefers_header_key_without_loading_whole_file() {
+        let temp_dir = TempDir::new().unwrap();
+        let manager = SessionManager::with_jsonl(temp_dir.path()).await.unwrap();
+
+        let sessions_dir = temp_dir.path().join("sessions");
+        tokio::fs::write(
+            sessions_dir.join("alias.jsonl"),
+            "{\"key\":\"canonical:key\"}\n{\"role\":\"user\",\"content\":\"hello\"}\n",
+        )
+        .await
+        .unwrap();
+
+        let keys = manager.list().await.unwrap();
+        assert!(keys.contains(&"canonical:key".to_string()));
+        assert!(!keys.contains(&"alias".to_string()));
     }
 }

@@ -219,6 +219,10 @@ pub enum AgentCommands {
         #[arg(short, long)]
         config: Option<PathBuf>,
 
+        /// Agent factory type (use `mofa agent status` to inspect available factories)
+        #[arg(long = "type")]
+        factory_type: Option<String>,
+
         /// Run as daemon
         #[arg(long)]
         daemon: bool,
