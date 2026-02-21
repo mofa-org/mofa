@@ -2,19 +2,41 @@
 
 use crate::store::PersistedStore;
 use crate::utils::paths;
+use mofa_foundation::agent::components::tool::EchoTool;
 use mofa_foundation::agent::session::SessionManager;
-use mofa_foundation::agent::tools::registry::ToolRegistry;
-use mofa_runtime::agent::plugins::SimplePluginRegistry;
+use mofa_foundation::agent::tools::registry::{ToolRegistry, ToolSource};
+use mofa_kernel::agent::plugins::PluginRegistry;
+use mofa_runtime::agent::plugins::{HttpPlugin, SimplePluginRegistry};
 use mofa_runtime::agent::registry::AgentRegistry;
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
+
+const BUILTIN_HTTP_PLUGIN_KIND: &str = "builtin:http";
+const BUILTIN_ECHO_TOOL_KIND: &str = "builtin:echo";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AgentConfigEntry {
     pub id: String,
     pub name: String,
     pub state: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PluginSpecEntry {
+    pub id: String,
+    pub kind: String,
+    pub enabled: bool,
+    pub config: Value,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ToolSpecEntry {
+    pub id: String,
+    pub kind: String,
+    pub enabled: bool,
+    pub config: Value,
 }
 
 /// Shared context for CLI commands, holding references to backend services
@@ -25,6 +47,10 @@ pub struct CliContext {
     pub agent_registry: AgentRegistry,
     /// Persistent agent metadata store
     pub agent_store: PersistedStore<AgentConfigEntry>,
+    /// Persistent plugin source specifications
+    pub plugin_store: PersistedStore<PluginSpecEntry>,
+    /// Persistent tool source specifications
+    pub tool_store: PersistedStore<ToolSpecEntry>,
     /// In-memory plugin registry
     pub plugin_registry: Arc<SimplePluginRegistry>,
     /// In-memory tool registry
@@ -46,13 +72,23 @@ impl CliContext {
             .await
             .map_err(|e| anyhow::anyhow!("Failed to initialize session manager: {}", e))?;
         let agent_store = PersistedStore::new(data_dir.join("agents"))?;
+        let plugin_store = PersistedStore::new(data_dir.join("plugins"))?;
+        let tool_store = PersistedStore::new(data_dir.join("tools"))?;
+        seed_default_specs(&plugin_store, &tool_store)?;
+
+        let plugin_registry = Arc::new(SimplePluginRegistry::new());
+        replay_persisted_plugins(&plugin_registry, &plugin_store)?;
+        let mut tool_registry = ToolRegistry::new();
+        replay_persisted_tools(&mut tool_registry, &tool_store)?;
 
         Ok(Self {
             session_manager,
             agent_registry: AgentRegistry::new(),
             agent_store,
-            plugin_registry: Arc::new(SimplePluginRegistry::new()),
-            tool_registry: ToolRegistry::new(),
+            plugin_store,
+            tool_store,
+            plugin_registry,
+            tool_registry,
             data_dir,
             config_dir,
         })
@@ -72,17 +108,111 @@ impl CliContext {
             .await
             .map_err(|e| anyhow::anyhow!("{}", e))?;
         let agent_store = PersistedStore::new(data_dir.join("agents"))?;
+        let plugin_store = PersistedStore::new(data_dir.join("plugins"))?;
+        let tool_store = PersistedStore::new(data_dir.join("tools"))?;
+        seed_default_specs(&plugin_store, &tool_store)?;
+
+        let plugin_registry = Arc::new(SimplePluginRegistry::new());
+        replay_persisted_plugins(&plugin_registry, &plugin_store)?;
+        let mut tool_registry = ToolRegistry::new();
+        replay_persisted_tools(&mut tool_registry, &tool_store)?;
 
         Ok(Self {
             session_manager,
             agent_registry: AgentRegistry::new(),
             agent_store,
-            plugin_registry: Arc::new(SimplePluginRegistry::new()),
-            tool_registry: ToolRegistry::new(),
+            plugin_store,
+            tool_store,
+            plugin_registry,
+            tool_registry,
             data_dir,
             config_dir,
         })
     }
+}
+
+fn seed_default_specs(
+    plugin_store: &PersistedStore<PluginSpecEntry>,
+    tool_store: &PersistedStore<ToolSpecEntry>,
+) -> anyhow::Result<()> {
+    let default_plugin = PluginSpecEntry {
+        id: "http-plugin".to_string(),
+        kind: BUILTIN_HTTP_PLUGIN_KIND.to_string(),
+        enabled: true,
+        config: serde_json::json!({
+            "url": "https://example.com",
+        }),
+    };
+    if plugin_store.get(&default_plugin.id)?.is_none() {
+        plugin_store.save(&default_plugin.id, &default_plugin)?;
+    }
+
+    let default_tool = ToolSpecEntry {
+        id: "echo".to_string(),
+        kind: BUILTIN_ECHO_TOOL_KIND.to_string(),
+        enabled: true,
+        config: Value::Null,
+    };
+    if tool_store.get(&default_tool.id)?.is_none() {
+        tool_store.save(&default_tool.id, &default_tool)?;
+    }
+
+    Ok(())
+}
+
+fn replay_persisted_plugins(
+    plugin_registry: &Arc<SimplePluginRegistry>,
+    plugin_store: &PersistedStore<PluginSpecEntry>,
+) -> anyhow::Result<()> {
+    for (_, spec) in plugin_store.list()? {
+        if !spec.enabled {
+            continue;
+        }
+
+        match spec.kind.as_str() {
+            BUILTIN_HTTP_PLUGIN_KIND => {
+                let url = spec
+                    .config
+                    .get("url")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("https://example.com");
+                plugin_registry
+                    .register(Arc::new(HttpPlugin::new(url)))
+                    .map_err(|e| {
+                        anyhow::anyhow!("Failed to register plugin '{}': {}", spec.id, e)
+                    })?;
+            }
+            _ => {
+                // Ignore unknown kinds for forward compatibility.
+            }
+        }
+    }
+
+    Ok(())
+}
+
+fn replay_persisted_tools(
+    tool_registry: &mut ToolRegistry,
+    tool_store: &PersistedStore<ToolSpecEntry>,
+) -> anyhow::Result<()> {
+    for (_, spec) in tool_store.list()? {
+        if !spec.enabled {
+            continue;
+        }
+
+        match spec.kind.as_str() {
+            BUILTIN_ECHO_TOOL_KIND => {
+                tool_registry
+                    .register_with_source(Arc::new(EchoTool), ToolSource::Builtin)
+                    .map_err(|e| anyhow::anyhow!("Failed to register tool '{}': {}", spec.id, e))?;
+            }
+            _ => {
+                // Ignore unknown kinds for forward compatibility.
+            }
+        }
+    }
+
+    Ok(())
 }
 
 fn migrate_legacy_nested_sessions(data_dir: &Path) -> anyhow::Result<()> {
@@ -113,6 +243,8 @@ fn migrate_legacy_nested_sessions(data_dir: &Path) -> anyhow::Result<()> {
 mod tests {
     use super::*;
     use mofa_foundation::agent::session::Session;
+    use mofa_kernel::agent::components::tool::ToolRegistry as ToolRegistryTrait;
+    use mofa_kernel::agent::plugins::PluginRegistry as PluginRegistryTrait;
     use tempfile::TempDir;
 
     #[tokio::test]
@@ -158,5 +290,34 @@ mod tests {
                 .join("legacy-session.jsonl")
                 .exists()
         );
+    }
+
+    #[tokio::test]
+    async fn test_plugin_and_tool_specs_replayed_on_startup() {
+        let temp = TempDir::new().unwrap();
+        let ctx = CliContext::with_temp_dir(temp.path()).await.unwrap();
+
+        assert!(PluginRegistryTrait::contains(
+            ctx.plugin_registry.as_ref(),
+            "http-plugin"
+        ));
+        assert!(ToolRegistryTrait::contains(&ctx.tool_registry, "echo"));
+    }
+
+    #[tokio::test]
+    async fn test_disabled_plugin_spec_is_not_replayed() {
+        let temp = TempDir::new().unwrap();
+
+        let ctx1 = CliContext::with_temp_dir(temp.path()).await.unwrap();
+        let mut spec = ctx1.plugin_store.get("http-plugin").unwrap().unwrap();
+        spec.enabled = false;
+        ctx1.plugin_store.save("http-plugin", &spec).unwrap();
+        drop(ctx1);
+
+        let ctx2 = CliContext::with_temp_dir(temp.path()).await.unwrap();
+        assert!(!PluginRegistryTrait::contains(
+            ctx2.plugin_registry.as_ref(),
+            "http-plugin"
+        ));
     }
 }
