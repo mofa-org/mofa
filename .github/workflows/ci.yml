@@ -36,6 +36,12 @@ jobs:
             target
           key: ${{ runner.os }}-cargo-${{ matrix.rust }}-${{ hashFiles('**/Cargo.lock') }}
 
+      - name: Install system dependencies (Ubuntu)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y pkg-config libasound2-dev
+
       - name: Check formatting
         run: cargo fmt -- --check
 
@@ -58,7 +64,8 @@ jobs:
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain: "1.75.0"
+          # Workspace uses edition 2024 + resolver=3, which requires newer cargo/rustc.
+          toolchain: "1.93.0"
 
       - name: Cache dependencies
         uses: actions/cache@v4
@@ -90,6 +97,11 @@ jobs:
             ~/.cargo/git
             target
           key: ${{ runner.os }}-cargo-features-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y pkg-config libasound2-dev
 
       - name: Check with default features
         run: cargo check --workspace
@@ -138,6 +150,11 @@ jobs:
             target
           key: ${{ runner.os }}-cargo-docs-${{ hashFiles('**/Cargo.lock') }}
 
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y pkg-config libasound2-dev
+
       - name: Build documentation
         run: cargo doc --workspace --no-deps --all-features
 
@@ -154,7 +171,7 @@ jobs:
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
         with:
-          targets: wasm32-wasi
+          targets: wasm32-wasip1
 
       - name: Cache dependencies
         uses: actions/cache@v4
@@ -167,7 +184,7 @@ jobs:
 
       - name: Build WASM example
         run: |
-          cargo build --package mofa-plugins --target wasm32-wasi --examples
+          cargo build --package mofa-plugins --target wasm32-wasip1 --examples
 
   typos:
     name: Check Typos

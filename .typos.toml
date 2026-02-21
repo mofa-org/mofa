@@ -1,0 +1,3 @@
+[default.extend-words]
+# Proper noun used in security docs.
+Hashi = "Hashi"

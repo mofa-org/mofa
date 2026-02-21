@@ -186,11 +186,8 @@ impl RhaiPlugin {
         metadata.id = config.plugin_id.clone();
 
         // Build kernel metadata once so metadata() can return a plain borrow
-        let kernel_metadata = KernelPluginMetadata::new(
-            &config.plugin_id,
-            &metadata.name,
-            PluginType::Tool,
-        );
+        let kernel_metadata =
+            KernelPluginMetadata::new(&config.plugin_id, &metadata.name, PluginType::Tool);
 
         // Create plugin
         Ok(Self {
