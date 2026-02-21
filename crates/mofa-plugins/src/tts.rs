@@ -3,9 +3,9 @@
 //! Provides TTS capabilities using a generic TTS engine interface.
 //! This module is designed to work with multiple TTS backends.
 //!
-//! Note: The Kokoro TTS integration is currently prepared but commented out
-//! due to compatibility issues with the ort (ONNX Runtime) dependency.
-//! The plugin structure is ready for use with any TTS backend.
+//! Kokoro TTS is available behind the `kokoro` feature flag.
+//! When enabled, initialization failures are treated as hard errors so
+//! callers do not accidentally receive mock/silent synthesis.
 
 // Model cache and download modules
 pub mod cache;
@@ -248,113 +248,6 @@ impl TTSEngine for MockTTSEngine {
         self
     }
 }
-
-// ============================================================================
-// Kokoro TTS Engine (Prepared but Disabled)
-// ============================================================================
-//
-// The following code structure is prepared for Kokoro TTS integration.
-// It's currently disabled due to compatibility issues with the ort
-// (ONNX Runtime) dependency version used by kokoro-tts.
-//
-// To enable when dependencies are fixed:
-// 1. Uncomment kokoro-tts dependency in Cargo.toml
-// 2. Uncomment the KokoroEngine implementation below
-// 3. Update TtsPlugin::init_plugin to use KokoroEngine
-
-/*
-use std::io::Cursor;
-
-/// Kokoro TTS engine implementation
-///
-/// This is a placeholder showing how the Kokoro TTS engine would be integrated.
-/// The actual implementation would depend on the kokoro-tts crate API.
-pub struct KokoroEngine {
-    config: TTSPluginConfig,
-    voices: Vec<VoiceInfo>,
-    // kokoro: kokoro_tts::Kokoro,  // Would be initialized when dependencies are fixed
-}
-
-impl KokoroEngine {
-    /// Create a new Kokoro TTS engine
-    pub async fn new(config: TTSPluginConfig) -> PluginResult<Self> {
-        info!(
-            "Initializing Kokoro TTS engine with model version {}",
-            config.model_version
-        );
-
-        // TODO: Initialize actual Kokoro TTS instance
-        // let kokoro = kokoro_tts::Kokoro::new()
-        //     .await
-        //     .map_err(|e| anyhow::anyhow!("Failed to initialize Kokoro: {}", e))?;
-
-        let voices = vec![
-            VoiceInfo::new("default", "Default Voice", "en-US"),
-            VoiceInfo::new("af_heart", "Heart (Female)", "en-US"),
-            VoiceInfo::new("am_michael", "Michael (Male)", "en-US"),
-            VoiceInfo::new("bf_emma", "Emma (Female)", "en-US"),
-            VoiceInfo::new("bm_george", "George (Male)", "en-US"),
-            // Add more Kokoro voices as available
-        ];
-
-        Ok(Self {
-            config,
-            voices,
-            // kokoro,
-        })
-    }
-
-    /// Get the default voice
-    pub fn default_voice(&self) -> &str {
-        &self.config.default_voice
-    }
-}
-
-#[async_trait::async_trait]
-impl TTSEngine for KokoroEngine {
-    async fn synthesize(&self, text: &str, voice: &str) -> PluginResult<Vec<u8>> {
-        debug!("Synthesizing text with voice '{}': {}", voice, text);
-
-        // TODO: Replace with actual Kokoro TTS synthesis
-        // let audio = self.kokoro
-        //     .synthesize(text, voice)
-        //     .await
-        //     .map_err(|e| anyhow::anyhow!("Synthesis failed: {}", e))?;
-
-        // For now, return placeholder
-        Ok(vec![])
-    }
-
-    async fn synthesize_stream(
-        &self,
-        text: &str,
-        voice: &str,
-        callback: Box<dyn Fn(Vec<u8>) + Send + Sync>,
-    ) -> PluginResult<()> {
-        debug!("Stream synthesizing text with voice '{}': {}", voice, text);
-
-        // TODO: Replace with actual Kokoro streaming synthesis
-        // let mut stream = self.kokoro
-        //     .synthesize_stream(text, voice)
-        //     .await
-        //     .map_err(|e| anyhow::anyhow!("Stream synthesis failed: {}", e))?;
-
-        // while let Some(chunk) = stream.next().await {
-        //     callback(chunk?);
-        // }
-
-        Ok(())
-    }
-
-    async fn list_voices(&self) -> PluginResult<Vec<VoiceInfo>> {
-        Ok(self.voices.clone())
-    }
-
-    fn name(&self) -> &str {
-        "Kokoro"
-    }
-}
-*/
 
 // ============================================================================
 // Audio Playback Helper (Optional - Requires rodio feature)
@@ -854,12 +747,12 @@ impl AgentPlugin for TTSPlugin {
                         info!("Kokoro TTS engine initialized successfully");
                     }
                     Err(e) => {
-                        warn!(
-                            "Failed to initialize Kokoro engine: {}, falling back to mock engine",
+                        return Err(anyhow::anyhow!(
+                            "Failed to initialize Kokoro engine (model: {}, voices: {}): {}",
+                            model_path_str,
+                            voice_path,
                             e
-                        );
-                        let engine = MockTTSEngine::new(self.config.clone());
-                        self.engine = Some(Arc::new(engine));
+                        ));
                     }
                 }
             }
@@ -1077,6 +970,14 @@ impl ToolExecutor for TextToSpeechTool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::fs;
+    use tempfile::TempDir;
+
+    fn prepare_cached_model(plugin: &mut TTSPlugin, model_id: &str, cache_dir: &std::path::Path) {
+        plugin.config.model_url = model_id.to_string();
+        plugin.config.cache_dir = Some(cache_dir.to_string_lossy().to_string());
+        plugin.config.auto_download = false;
+    }
 
     #[tokio::test]
     async fn test_mock_tts_engine_creation() {
@@ -1211,5 +1112,47 @@ mod tests {
         assert_eq!(parsed.text, Some("Hello".to_string()));
         assert_eq!(parsed.voice, Some("default".to_string()));
         assert_eq!(parsed.play, Some(true));
+    }
+
+    #[cfg(feature = "kokoro")]
+    #[tokio::test]
+    async fn test_init_plugin_kokoro_mode_fails_instead_of_mock_fallback() {
+        let mut plugin = TTSPlugin::new("test_tts");
+        let cache_dir = TempDir::new().unwrap();
+        prepare_cached_model(&mut plugin, "test/kokoro.onnx", cache_dir.path());
+
+        let ctx = PluginContext::new("test_agent");
+        plugin.load(&ctx).await.unwrap();
+
+        let cached_model_path = plugin
+            .model_cache
+            .as_ref()
+            .unwrap()
+            .model_path(&plugin.config.model_url);
+        fs::write(&cached_model_path, b"fake-model-content").unwrap();
+
+        let result = plugin.init_plugin().await;
+        assert!(result.is_err());
+    }
+
+    #[cfg(not(feature = "kokoro"))]
+    #[tokio::test]
+    async fn test_init_plugin_without_kokoro_uses_mock_engine() {
+        let mut plugin = TTSPlugin::new("test_tts");
+        let cache_dir = TempDir::new().unwrap();
+        prepare_cached_model(&mut plugin, "test/kokoro.onnx", cache_dir.path());
+
+        let ctx = PluginContext::new("test_agent");
+        plugin.load(&ctx).await.unwrap();
+
+        let cached_model_path = plugin
+            .model_cache
+            .as_ref()
+            .unwrap()
+            .model_path(&plugin.config.model_url);
+        fs::write(&cached_model_path, b"fake-model-content").unwrap();
+
+        plugin.init_plugin().await.unwrap();
+        assert_eq!(plugin.engine.as_ref().unwrap().name(), "MockTTS");
     }
 }
