@@ -5,6 +5,7 @@ import os
 import shutil
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 from typing import Optional
 
@@ -35,16 +36,28 @@ def install_rust() -> bool:
     console.print("\n[yellow]Rust is not installed. Installing Rust...[/yellow]")
     console.print("[dim]This may take a few minutes...[/dim]\n")
 
+    script_path = None
     try:
-        # Download and run rustup installer
-        install_cmd = 'curl --proto "=https" --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y'
+        # Download rustup installer script
+        dl = subprocess.run(
+            ["curl", "--proto", "=https", "--tlsv1.2", "-sSf", "https://sh.rustup.rs"],
+            capture_output=True,
+            text=True,
+            check=True,
+            timeout=60,
+        )
+
+        # Save to temp file and execute without shell=True
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".sh", delete=False) as f:
+            f.write(dl.stdout)
+            script_path = f.name
 
         result = subprocess.run(
-            install_cmd,
-            shell=True,
+            ["sh", script_path, "-y"],
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
-            text=True
+            text=True,
+            timeout=300,
         )
 
         if result.returncode != 0:
@@ -63,6 +76,12 @@ def install_rust() -> bool:
     except Exception as e:
         console.print(f"[red]Error installing Rust: {e}[/red]")
         return False
+    finally:
+        if script_path and os.path.exists(script_path):
+            try:
+                os.unlink(script_path)
+            except OSError:
+                pass
 
 
 def download_examples_from_github(target_dir: Path) -> bool:
