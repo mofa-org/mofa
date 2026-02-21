@@ -2,19 +2,28 @@
 
 use crate::store::PersistedStore;
 use crate::utils::paths;
+use async_trait::async_trait;
+use mofa_foundation::agent::base::BaseAgent;
 use mofa_foundation::agent::components::tool::EchoTool;
 use mofa_foundation::agent::session::SessionManager;
 use mofa_foundation::agent::tools::registry::{ToolRegistry, ToolSource};
+use mofa_kernel::agent::AgentCapabilities;
+use mofa_kernel::agent::config::AgentConfig;
+use mofa_kernel::agent::core::MoFAAgent;
+use mofa_kernel::agent::error::{AgentError, AgentResult};
 use mofa_kernel::agent::plugins::PluginRegistry;
+use mofa_runtime::agent::AgentFactory;
 use mofa_runtime::agent::plugins::{HttpPlugin, SimplePluginRegistry};
 use mofa_runtime::agent::registry::AgentRegistry;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
+use tokio::sync::RwLock;
 
 const BUILTIN_HTTP_PLUGIN_KIND: &str = "builtin:http";
 const BUILTIN_ECHO_TOOL_KIND: &str = "builtin:echo";
+const CLI_BASE_FACTORY_KIND: &str = "cli-base";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AgentConfigEntry {
@@ -72,6 +81,8 @@ impl CliContext {
             .await
             .map_err(|e| anyhow::anyhow!("Failed to initialize session manager: {}", e))?;
         let agent_store = PersistedStore::new(data_dir.join("agents"))?;
+        let agent_registry = AgentRegistry::new();
+        register_default_agent_factories(&agent_registry).await?;
         let plugin_store = PersistedStore::new(data_dir.join("plugins"))?;
         let tool_store = PersistedStore::new(data_dir.join("tools"))?;
         seed_default_specs(&plugin_store, &tool_store)?;
@@ -83,7 +94,7 @@ impl CliContext {
 
         Ok(Self {
             session_manager,
-            agent_registry: AgentRegistry::new(),
+            agent_registry,
             agent_store,
             plugin_store,
             tool_store,
@@ -108,6 +119,8 @@ impl CliContext {
             .await
             .map_err(|e| anyhow::anyhow!("{}", e))?;
         let agent_store = PersistedStore::new(data_dir.join("agents"))?;
+        let agent_registry = AgentRegistry::new();
+        register_default_agent_factories(&agent_registry).await?;
         let plugin_store = PersistedStore::new(data_dir.join("plugins"))?;
         let tool_store = PersistedStore::new(data_dir.join("tools"))?;
         seed_default_specs(&plugin_store, &tool_store)?;
@@ -119,7 +132,7 @@ impl CliContext {
 
         Ok(Self {
             session_manager,
-            agent_registry: AgentRegistry::new(),
+            agent_registry,
             agent_store,
             plugin_store,
             tool_store,
@@ -129,6 +142,75 @@ impl CliContext {
             config_dir,
         })
     }
+}
+
+struct CliBaseAgentFactory;
+
+#[async_trait]
+impl AgentFactory for CliBaseAgentFactory {
+    async fn create(&self, config: AgentConfig) -> AgentResult<Arc<RwLock<dyn MoFAAgent>>> {
+        let mut agent =
+            BaseAgent::new(config.id, config.name).with_capabilities(self.default_capabilities());
+
+        if let Some(description) = config.description {
+            agent = agent.with_description(description);
+        }
+
+        if let Some(version) = config.version {
+            agent = agent.with_version(version);
+        }
+
+        Ok(Arc::new(RwLock::new(agent)))
+    }
+
+    fn type_id(&self) -> &str {
+        CLI_BASE_FACTORY_KIND
+    }
+
+    fn default_capabilities(&self) -> AgentCapabilities {
+        AgentCapabilities::builder().tag("cli").tag("base").build()
+    }
+
+    fn validate_config(&self, config: &AgentConfig) -> AgentResult<()> {
+        if config.id.trim().is_empty() {
+            return Err(AgentError::ConfigError(
+                "Agent id cannot be empty".to_string(),
+            ));
+        }
+        if config.name.trim().is_empty() {
+            return Err(AgentError::ConfigError(
+                "Agent name cannot be empty".to_string(),
+            ));
+        }
+        if !config.enabled {
+            return Err(AgentError::ConfigError(
+                "Cannot start disabled agent config".to_string(),
+            ));
+        }
+        Ok(())
+    }
+
+    fn description(&self) -> Option<&str> {
+        Some("Default CLI base-agent factory")
+    }
+}
+
+async fn register_default_agent_factories(agent_registry: &AgentRegistry) -> anyhow::Result<()> {
+    if agent_registry
+        .list_factory_types()
+        .await
+        .iter()
+        .any(|kind| kind == CLI_BASE_FACTORY_KIND)
+    {
+        return Ok(());
+    }
+
+    agent_registry
+        .register_factory(Arc::new(CliBaseAgentFactory))
+        .await
+        .map_err(|e| anyhow::anyhow!("Failed to register default agent factory: {}", e))?;
+
+    Ok(())
 }
 
 fn seed_default_specs(
@@ -319,5 +401,14 @@ mod tests {
             ctx2.plugin_registry.as_ref(),
             "http-plugin"
         ));
+    }
+
+    #[tokio::test]
+    async fn test_default_agent_factory_registered_on_startup() {
+        let temp = TempDir::new().unwrap();
+        let ctx = CliContext::with_temp_dir(temp.path()).await.unwrap();
+
+        let factory_types = ctx.agent_registry.list_factory_types().await;
+        assert!(factory_types.iter().any(|k| k == CLI_BASE_FACTORY_KIND));
     }
 }

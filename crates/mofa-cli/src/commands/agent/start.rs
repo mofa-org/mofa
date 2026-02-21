@@ -88,20 +88,22 @@ mod tests {
     use tempfile::TempDir;
 
     #[tokio::test]
-    async fn test_start_returns_err_when_no_factories() {
+    async fn test_start_succeeds_with_default_factory() {
         let temp = TempDir::new().unwrap();
         let ctx = CliContext::with_temp_dir(temp.path()).await.unwrap();
 
         let result = run(&ctx, "test-agent", None, false).await;
-        assert!(result.is_err());
+        assert!(result.is_ok());
+        assert!(ctx.agent_registry.contains("test-agent").await);
     }
 
     #[tokio::test]
-    async fn test_start_does_not_register_on_failure() {
+    async fn test_start_returns_err_for_duplicate_agent() {
         let temp = TempDir::new().unwrap();
         let ctx = CliContext::with_temp_dir(temp.path()).await.unwrap();
 
-        let _ = run(&ctx, "ghost-agent", None, false).await;
-        assert!(!ctx.agent_registry.contains("ghost-agent").await);
+        run(&ctx, "dup-agent", None, false).await.unwrap();
+        let result = run(&ctx, "dup-agent", None, false).await;
+        assert!(result.is_err());
     }
 }
