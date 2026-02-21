@@ -232,6 +232,7 @@ impl WorkflowExecutor {
                 format!("failed: {}", e)
             }
         };
+        execution_record.outputs = ctx.get_all_outputs().await;
 
         // 发送完成事件
         self.emit_event(ExecutionEvent::WorkflowCompleted {
@@ -559,16 +560,24 @@ impl WorkflowExecutor {
             let branch_ids: Vec<String> = edges.iter().map(|e| e.to.clone()).collect();
 
             if branch_ids.is_empty() {
+                ctx.set_node_output(node.id(), input.clone()).await;
+                ctx.set_node_status(node.id(), NodeStatus::Completed).await;
                 return Ok(input);
             }
 
-            return self
+            let result = self
                 .execute_branches_parallel(graph, ctx, &branch_ids, input, record)
-                .await;
+                .await?;
+            ctx.set_node_output(node.id(), result.clone()).await;
+            ctx.set_node_status(node.id(), NodeStatus::Completed).await;
+            return Ok(result);
         }
 
-        self.execute_branches_parallel(graph, ctx, branches, input, record)
-            .await
+        let result = self.execute_branches_parallel(graph, ctx, branches, input, record)
+            .await?;
+        ctx.set_node_output(node.id(), result.clone()).await;
+        ctx.set_node_status(node.id(), NodeStatus::Completed).await;
+        Ok(result)
     }
 
     /// 并行执行多个分支
@@ -706,6 +715,8 @@ impl WorkflowExecutor {
         } else {
             WorkflowValue::Null
         };
+        ctx.set_node_output(node.id(), output.clone()).await;
+        ctx.set_node_status(node.id(), NodeStatus::Completed).await;
 
         Ok(output)
     }
@@ -1002,5 +1013,113 @@ mod tests {
 
         assert_eq!(step1_count.load(Ordering::SeqCst), 0, "Step1 should be skipped");
         assert_eq!(step2_count.load(Ordering::SeqCst), 1, "Step2 should be executed");
+    }
+
+    #[tokio::test]
+    async fn test_sub_workflow_output() {
+        let executor = WorkflowExecutor::new(ExecutorConfig::default());
+
+        let mut sub_graph = WorkflowGraph::new("sub_wf", "Sub Workflow");
+        sub_graph.add_node(WorkflowNode::start("sub_start"));
+        sub_graph.add_node(WorkflowNode::task(
+            "sub_task",
+            "Sub Task",
+            |_ctx, _input| async move {
+                Ok(WorkflowValue::String("hello from sub".to_string()))
+            },
+        ));
+        sub_graph.add_node(WorkflowNode::end("sub_end"));
+        sub_graph.connect("sub_start", "sub_task");
+        sub_graph.connect("sub_task", "sub_end");
+
+        executor.register_sub_workflow("sub_wf", sub_graph).await;
+
+        let mut parent_graph = WorkflowGraph::new("parent_wf", "Parent Workflow");
+        parent_graph.add_node(WorkflowNode::start("parent_start"));
+        parent_graph.add_node(WorkflowNode::sub_workflow(
+            "call_sub",
+            "Call Sub Workflow",
+            "sub_wf",
+        ));
+        parent_graph.add_node(WorkflowNode::end("parent_end"));
+        parent_graph.connect("parent_start", "call_sub");
+        parent_graph.connect("call_sub", "parent_end");
+
+        let result = executor
+            .execute(&parent_graph, WorkflowValue::Null)
+            .await
+            .expect("Workflow execution failed");
+
+        assert!(matches!(result.status, WorkflowStatus::Completed));
+
+        let sub_output = result.outputs.get("call_sub")
+            .cloned()
+            .unwrap_or(WorkflowValue::Null);
+
+        assert_eq!(
+            sub_output.as_str().unwrap_or("Null"),
+            "hello from sub",
+            "Sub-workflow output was discarded!"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_parallel_output() {
+        let executor = WorkflowExecutor::new(ExecutorConfig::default());
+        let mut graph = WorkflowGraph::new("parallel_wf", "Parallel Output Workflow");
+
+        graph.add_node(WorkflowNode::start("start"));
+
+        // Add parallel node
+        graph.add_node(WorkflowNode::parallel(
+            "parallel_split",
+            "Split execution",
+            vec!["branch_a", "branch_b"],
+        ));
+
+        // Add branches
+        graph.add_node(WorkflowNode::task(
+            "branch_a",
+            "Branch A",
+            |_ctx, _input| async move { Ok(WorkflowValue::String("result_from_a".to_string())) },
+        ));
+        graph.add_node(WorkflowNode::task(
+            "branch_b",
+            "Branch B",
+            |_ctx, _input| async move { Ok(WorkflowValue::String("result_from_b".to_string())) },
+        ));
+
+        graph.add_node(WorkflowNode::end("end"));
+
+        graph.connect("start", "parallel_split");
+        graph.connect("parallel_split", "branch_a");
+        graph.connect("parallel_split", "branch_b");
+        graph.connect("branch_a", "end");
+        graph.connect("branch_b", "end");
+
+        let result = executor
+            .execute(&graph, WorkflowValue::Null)
+            .await
+            .expect("Workflow execution failed");
+
+        assert!(matches!(result.status, WorkflowStatus::Completed));
+
+        let parallel_output = result
+            .outputs
+            .get("parallel_split")
+            .cloned()
+            .unwrap_or(WorkflowValue::Null);
+        let map = parallel_output.as_map().cloned().unwrap_or_default();
+
+        assert_eq!(
+            map.get("branch_a").and_then(|v| v.as_str()),
+            Some("result_from_a"),
+            "Parallel node output missing branch A"
+        );
+        assert_eq!(
+            map.get("branch_b").and_then(|v| v.as_str()),
+            Some("result_from_b"),
+            "Parallel node output missing branch B"
+        );
     }
 }
