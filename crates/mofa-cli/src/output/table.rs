@@ -108,11 +108,6 @@ impl Table {
         let _ = self.inner.set_width(width as u16);
         self
     }
-
-    /// Convert to string
-    pub fn to_string(&self) -> String {
-        self.inner.to_string()
-    }
 }
 
 /// Table cell wrapper

@@ -450,6 +450,7 @@ impl<S: GraphState + 'static> CompiledGraph<S> for CompiledGraphImpl<S> {
 
         let nodes = self.nodes.clone();
         let reducers = self.reducers.clone();
+        let edges = self.edges.clone();
         let entry_point = self.entry_point.clone();
 
         // Create a channel for streaming events
@@ -459,8 +460,56 @@ impl<S: GraphState + 'static> CompiledGraph<S> for CompiledGraphImpl<S> {
         tokio::spawn(async move {
             let mut state = input;
             let mut current_nodes = vec![entry_point];
+            let mut iteration_count = 0;
+            const MAX_ITERATIONS: usize = 20;
+
+            // Helper function to get next nodes based on command and edges
+            let get_next_nodes = |current_node: &str, command: &Command| -> Vec<String> {
+                match &command.control {
+                    ControlFlow::Goto(target) => vec![target.clone()],
+                    ControlFlow::Return => vec![], // End execution
+                    ControlFlow::Send(sends) => {
+                        // MapReduce: create branches for each send target
+                        sends.iter().map(|s| s.target.clone()).collect()
+                    }
+                    ControlFlow::Continue => {
+                        // Follow graph edges
+                        match edges.get(current_node) {
+                            Some(EdgeTarget::Single(target)) => vec![target.clone()],
+                            Some(EdgeTarget::Parallel(targets)) => targets.clone(),
+                            Some(EdgeTarget::Conditional(routes)) => {
+                                // Find matching route based on state updates
+                                for update in &command.updates {
+                                    if let Some(target) = routes.get(&update.key) {
+                                        return vec![target.clone()];
+                                    }
+                                }
+                                // Default to first route if no match
+                                routes
+                                    .values()
+                                    .next()
+                                    .map(|t: &String| vec![t.clone()])
+                                    .unwrap_or_default()
+                            }
+                            None => vec![],
+                        }
+                    }
+                }
+            };
 
             while !current_nodes.is_empty() {
+                // Check iteration limit
+                iteration_count += 1;
+                if iteration_count > MAX_ITERATIONS {
+                    let _ = tx
+                        .send(Err(AgentError::Internal(format!(
+                            "Maximum iterations ({}) reached",
+                            MAX_ITERATIONS
+                        ))))
+                        .await;
+                    return;
+                }
+
                 // Check recursion limit
                 if ctx.remaining_steps.is_exhausted().await {
                     let _ = tx
@@ -547,11 +596,15 @@ impl<S: GraphState + 'static> CompiledGraph<S> for CompiledGraphImpl<S> {
                             command: command.clone(),
                         }))
                         .await;
+
+                    // Get next nodes and add to current_nodes for next iteration
+                    let next_nodes = get_next_nodes(&node_id, &command);
+                    current_nodes.extend(next_nodes);
                 }
 
-                // For simplicity, break after first round
-                // TODO: Implement proper edge following
-                break;
+                // Deduplicate current_nodes for parallel execution
+                let node_set: HashSet<String> = current_nodes.drain(..).collect();
+                current_nodes = node_set.into_iter().collect();
             }
 
             // Send final event
