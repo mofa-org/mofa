@@ -252,14 +252,12 @@ impl DoraDataflow {
                 for conn in conns.iter() {
                     if conn.source_node == msg.source_node
                         && conn.source_output == msg.source_output
+                        && let Some(target_node) = node_map.get(&conn.target_node)
+                        && let Ok(event) = bincode::deserialize(&msg.data)
                     {
-                        if let Some(target_node) = node_map.get(&conn.target_node) {
-                            // 将数据转换为事件并注入目标节点
-                            if let Ok(event) = bincode::deserialize(&msg.data) {
-                                if let Err(e) = target_node.inject_event(event).await {
-                                    error!("Failed to inject event to {}: {}", conn.target_node, e);
-                                }
-                            }
+                        // 将数据转换为事件并注入目标节点
+                        if let Err(e) = target_node.inject_event(event).await {
+                            error!("Failed to inject event to {}: {}", conn.target_node, e);
                         }
                     }
                 }

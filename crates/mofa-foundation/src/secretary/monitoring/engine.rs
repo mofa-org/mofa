@@ -27,6 +27,12 @@ pub struct EventHandlingEngine {
     semaphore: Arc<Semaphore>,
 }
 
+impl Default for EventHandlingEngine {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl EventHandlingEngine {
     /// Create a new event handling engine
     pub fn new() -> Self {

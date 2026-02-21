@@ -60,7 +60,7 @@ pub struct Table {
 
 impl Table {
     /// Create a new table from builder
-    pub fn new() -> TableBuilder {
+    pub fn builder() -> TableBuilder {
         TableBuilder::new()
     }
 
@@ -171,7 +171,7 @@ mod tests {
 
     #[test]
     fn test_table_builder() {
-        let table = Table::new()
+        let table = Table::builder()
             .headers(&["Name", "Value"])
             .add_row(&["foo", "bar"])
             .build();

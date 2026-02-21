@@ -121,10 +121,10 @@ impl WorkflowExecutor {
 
     /// Emit a debug telemetry event (no-op if no emitter is set).
     async fn emit_debug(&self, event: DebugEvent) {
-        if let Some(ref emitter) = self.telemetry {
-            if emitter.is_enabled() {
-                emitter.emit(event).await;
-            }
+        if let Some(ref emitter) = self.telemetry
+            && emitter.is_enabled()
+        {
+            emitter.emit(event).await;
         }
     }
 
@@ -449,8 +449,8 @@ impl WorkflowExecutor {
             // 检查点
             if self.config.enable_checkpoints
                 && self.config.checkpoint_interval > 0
-                && record.node_records.len() > 0
-                && record.node_records.len() % self.config.checkpoint_interval == 0
+                && !record.node_records.is_empty()
+                && record.node_records.len().is_multiple_of(self.config.checkpoint_interval)
             {
                 let label = format!("auto_checkpoint_{}", record.node_records.len());
                 ctx.create_checkpoint(&label).await;

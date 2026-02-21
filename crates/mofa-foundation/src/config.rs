@@ -189,7 +189,7 @@ impl AgentYamlConfig {
     }
 
     /// 从字符串解析配置 (自动检测为 YAML)
-    pub fn from_str(content: &str) -> anyhow::Result<Self> {
+    pub fn parse(content: &str) -> anyhow::Result<Self> {
         Self::from_str_with_format(content, "yaml")
     }
 }
