@@ -19,47 +19,51 @@ MoFA follows a **microkernel** architecture, borrowed from operating system desi
 
 > **The kernel defines contracts (traits). Everything else is a pluggable implementation.**
 
-This means you can swap LLM providers, storage backends, tool registries, and even scripting engines without touching the core. Here's how MoFA's 10 crates are layered:
+This means you can swap LLM providers, storage backends, tool registries, and even scripting engines without touching the core. Here's how MoFA's 10 crates are organized:
 
 ```
+ Developer-Facing Toolkit
 ┌─────────────────────────────────────────────────────┐
-│              mofa-sdk (Standard API)                │
-│  Your main entry point. Re-exports everything       │
-│  you need from the layers below.                    │
-└─────────────────────┬───────────────────────────────┘
-                      │
-┌─────────────────────▼───────────────────────────────┐
-│           mofa-runtime (Execution Engine)            │
-│  AgentRunner, AgentRegistry, event loop,             │
-│  lifecycle management                                │
-└─────────────────────┬───────────────────────────────┘
-                      │
-┌─────────────────────▼───────────────────────────────┐
-│         mofa-foundation (Implementations)            │
-│  LLM providers (OpenAI, Anthropic, Gemini, Ollama)   │
-│  LLMAgent, AgentTeam, tools, persistence,            │
-│  workflows, secretary agent                          │
-└─────────────────────┬───────────────────────────────┘
-                      │
-┌─────────────────────▼───────────────────────────────┐
-│           mofa-kernel (Trait Definitions)             │
-│  MoFAAgent, Tool, Memory, Reasoner, Coordinator,     │
-│  AgentPlugin, StateGraph — interfaces ONLY            │
-└─────────────────────────────────────────────────────┘
-                      │
-┌─────────────────────▼───────────────────────────────┐
-│          mofa-plugins (Plugin Layer)                  │
-│  Rhai scripting, WASM plugins, hot-reload,           │
-│  TTS, built-in tools                                 │
-└─────────────────────────────────────────────────────┘
+│              mofa-sdk (Development Toolkit)          │
+│  The API you use daily: builder helpers, re-exports, │
+│  convenience functions (openai_from_env, etc.)       │
+└──────────┬──────────────────────────────┬───────────┘
+           │  uses                        │  uses
+           ▼                              ▼
+ Framework Core                    Extension System
+┌────────────────────────┐  ┌─────────────────────────┐
+│  mofa-runtime          │  │  mofa-plugins            │
+│  AgentRunner, registry,│  │  Rhai scripting, WASM,   │
+│  event loop, lifecycle │  │  hot-reload, TTS,        │
+└──────────┬─────────────┘  │  built-in tools          │
+           │                └──────────┬──────────────┘
+           ▼                           │
+┌────────────────────────┐             │
+│  mofa-foundation       │             │
+│  LLM providers, agents,│◄────────────┘
+│  tools, persistence,   │
+│  workflows, secretary  │
+└──────────┬─────────────┘
+           │
+           ▼
+┌────────────────────────┐
+│  mofa-kernel           │
+│  Trait definitions ONLY│
+│  MoFAAgent, Tool,      │
+│  Memory, Reasoner,     │
+│  Coordinator, Plugin,  │
+│  StateGraph            │
+└────────────────────────┘
 
-Other crates:
-  mofa-cli        CLI tool with TUI
-  mofa-ffi        UniFFI + PyO3 bindings
-  mofa-monitoring  Dashboard, metrics, tracing
+ Peripheral Crates:
+  mofa-cli        CLI tool with TUI (project scaffolding)
+  mofa-ffi        UniFFI + PyO3 bindings (Python, Java, Go, Kotlin, Swift)
+  mofa-monitoring  Dashboard, metrics, distributed tracing
   mofa-extra      Rhai engine, rules engine
   mofa-macros     Procedural macros
 ```
+
+**mofa-sdk** is not a framework layer — it's a **development toolkit** that sits alongside the framework, giving you a clean, ergonomic API. Think of it like a toolbox: it reaches into the framework crates (kernel, foundation, runtime, plugins) and hands you exactly what you need, so you rarely have to import from individual crates directly.
 
 ### The Golden Rule
 
@@ -122,7 +126,7 @@ Each chapter builds on the previous one, but the code examples are self-containe
 
 - MoFA uses a **microkernel architecture**: kernel = traits, foundation = implementations
 - The dependency direction is strictly **foundation → kernel**, never the reverse
-- **10 crates** form a layered system: SDK → Runtime → Foundation → Kernel → Plugins
+- **mofa-sdk** is a developer-facing toolkit (not a framework layer); the framework core is Runtime → Foundation → Kernel, with Plugins as the extension system
 - The **dual-layer plugin system** gives you both performance (Rust/WASM) and flexibility (Rhai)
 - You'll build progressively more capable agents across chapters 3-8
 
