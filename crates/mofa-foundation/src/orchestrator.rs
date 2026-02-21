@@ -26,6 +26,12 @@ pub struct MockOrchestrator {
     loaded_models: std::collections::HashSet<String>,
 }
 
+impl Default for MockOrchestrator {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl MockOrchestrator {
     pub fn new() -> Self {
         Self {

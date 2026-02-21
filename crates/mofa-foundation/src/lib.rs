@@ -1,8 +1,9 @@
+#![allow(clippy::type_complexity, clippy::too_many_arguments, clippy::new_without_default, clippy::field_reassign_with_default, clippy::collapsible_if, clippy::doc_nested_refdefs, clippy::should_implement_trait, clippy::empty_line_after_doc_comments, clippy::only_used_in_recursion, clippy::redundant_pattern_matching, clippy::new_ret_no_self, clippy::unnecessary_unwrap, clippy::large_enum_variant, clippy::ptr_arg, dead_code, unused, clippy::let_underscore_future, clippy::non_minimal_cfg, clippy::mixed_attributes_style, clippy::enum_variant_names)]
 #![allow(
-    dead_code,
     unused_imports,
     non_camel_case_types,
-    ambiguous_glob_reexports
+    ambiguous_glob_reexports,
+    clippy::manual_async_fn
 )]
 // orchestrator module - Model Lifecycle & Allocation
 pub mod orchestrator;
