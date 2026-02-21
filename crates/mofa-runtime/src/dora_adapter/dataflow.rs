@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::{RwLock, mpsc};
-use tracing::{debug, error, info};
+use ::tracing::{debug, error, info};
 
 /// Dataflow 配置
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -62,7 +62,7 @@ use dora_message::{BuildId, SessionId};
 use eyre::{Context, Result};
 use serde::{Deserialize, Serialize};
 use tokio::sync::RwLock;
-use tracing::info;
+use ::tracing::info;
 use uuid::Uuid;
 
 // ============================================================================
@@ -372,6 +372,7 @@ impl DoraRuntime {
             session_id,
             self.config.embedded.uv,
             log_destination,
+            None, // working_dir
         )
         .await
         .context("Failed to run dataflow")?;
