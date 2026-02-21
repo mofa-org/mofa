@@ -36,6 +36,9 @@ tower-http = { version = "0.5", features = ["fs", "cors", "trace"] }
 rust-embed = { version = "8.0", features = ["compression"] }
 mime_guess = "2.0"
 
+# System metrics
+sysinfo = "0.33"
+
 # Local dependencies
 mofa-kernel = { path = "../mofa-kernel", version = "0.1" }
 futures = "0.3.31"

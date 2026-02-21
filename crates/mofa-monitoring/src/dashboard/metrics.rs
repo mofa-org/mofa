@@ -428,6 +428,8 @@ pub struct MetricsCollector {
     history: Arc<RwLock<Vec<MetricsSnapshot>>>,
     /// Start time
     start_time: Instant,
+    /// Cached system info instance (avoids expensive re-creation each tick)
+    system: Arc<RwLock<sysinfo::System>>,
     /// Agent metrics storage
     agent_metrics: Arc<RwLock<HashMap<String, AgentMetrics>>>,
     /// Workflow metrics storage
@@ -444,6 +446,7 @@ impl MetricsCollector {
             current_snapshot: Arc::new(RwLock::new(MetricsSnapshot::default())),
             history: Arc::new(RwLock::new(Vec::new())),
             start_time: Instant::now(),
+            system: Arc::new(RwLock::new(sysinfo::System::new_all())),
             agent_metrics: Arc::new(RwLock::new(HashMap::new())),
             workflow_metrics: Arc::new(RwLock::new(HashMap::new())),
             plugin_metrics: Arc::new(RwLock::new(HashMap::new())),
@@ -478,19 +481,35 @@ impl MetricsCollector {
         agents.remove(agent_id);
     }
 
-    /// Collect current system metrics
-    fn collect_system_metrics(&self) -> SystemMetrics {
+    /// Collect current system metrics using the cached sysinfo::System instance
+    async fn collect_system_metrics(&self) -> SystemMetrics {
         let now = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap_or_default()
             .as_secs();
 
+        let mut sys = self.system.write().await;
+        sys.refresh_cpu_all();
+        sys.refresh_memory();
+        sys.refresh_processes(sysinfo::ProcessesToUpdate::All, true);
+
+        let cpu_usage = sys.global_cpu_usage() as f64;
+        let memory_used = sys.used_memory();
+        let memory_total = sys.total_memory();
+
+        // Get thread count for the current process
+        let pid = sysinfo::Pid::from_u32(std::process::id());
+        let thread_count = sys
+            .process(pid)
+            .map(|p| p.tasks().map(|t| t.len() as u32).unwrap_or(1))
+            .unwrap_or(0);
+
         SystemMetrics {
-            cpu_usage: 0.0, // Would need system-specific implementation
-            memory_used: 0,
-            memory_total: 0,
+            cpu_usage,
+            memory_used,
+            memory_total,
             uptime_secs: self.start_time.elapsed().as_secs(),
-            thread_count: 0,
+            thread_count,
             timestamp: now,
         }
     }
@@ -503,7 +522,7 @@ impl MetricsCollector {
             .as_secs();
 
         let system = if self.config.enable_system_metrics {
-            self.collect_system_metrics()
+            self.collect_system_metrics().await
         } else {
             SystemMetrics::default()
         };
