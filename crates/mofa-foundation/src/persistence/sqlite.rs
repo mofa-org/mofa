@@ -1136,12 +1136,12 @@ impl SqliteStore {
             enabled: row.try_get("enabled").unwrap_or(1) == 1,
             create_time: row
                 .try_get("create_time")
-                .map_err(|e: chrono::format::ParseError| {
+                .map_err(|e| {
                     PersistenceError::Serialization(e.to_string())
                 })?,
             update_time: row
                 .try_get("update_time")
-                .map_err(|e: chrono::format::ParseError| {
+                .map_err(|e| {
                     PersistenceError::Serialization(e.to_string())
                 })?,
         })
@@ -1207,12 +1207,12 @@ impl SqliteStore {
             thinking,
             create_time: row
                 .try_get("create_time")
-                .map_err(|e: chrono::format::ParseError| {
+                .map_err(|e| {
                     PersistenceError::Serialization(e.to_string())
                 })?,
             update_time: row
                 .try_get("update_time")
-                .map_err(|e: chrono::format::ParseError| {
+                .map_err(|e| {
                     PersistenceError::Serialization(e.to_string())
                 })?,
         })
@@ -1250,10 +1250,10 @@ impl SqliteStore {
                 .map_err(|e| PersistenceError::Query(e.to_string()))?,
             enabled: row.try_get("provider_enabled").unwrap_or(1) == 1,
             create_time: row.try_get("provider_create_time").map_err(
-                |e: chrono::format::ParseError| PersistenceError::Serialization(e.to_string()),
+                |e| PersistenceError::Serialization(e.to_string()),
             )?,
             update_time: row.try_get("provider_update_time").map_err(
-                |e: chrono::format::ParseError| PersistenceError::Serialization(e.to_string()),
+                |e| PersistenceError::Serialization(e.to_string()),
             )?,
         })
     }
@@ -1318,12 +1318,12 @@ impl SqliteStore {
             thinking,
             create_time: row
                 .try_get("create_time")
-                .map_err(|e: chrono::format::ParseError| {
+                .map_err(|e| {
                     PersistenceError::Serialization(e.to_string())
                 })?,
             update_time: row
                 .try_get("update_time")
-                .map_err(|e: chrono::format::ParseError| {
+                .map_err(|e| {
                     PersistenceError::Serialization(e.to_string())
                 })?,
         })

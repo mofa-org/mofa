@@ -82,12 +82,12 @@ fn get_migration_sql(db_type: DatabaseType) -> &'static str {
 #[cfg(feature = "db")]
 fn mask_password(url: &str) -> String {
     // Mask password in database URL for display
-    if let Some(at_pos) = url.find('@') {
-        if let Some(colon_pos) = url[..at_pos].rfind(':') {
-            let prefix = &url[..colon_pos + 1];
-            let suffix = &url[at_pos..];
-            return format!("{}****{}", prefix, suffix);
-        }
+    if let Some(at_pos) = url.find('@')
+        && let Some(colon_pos) = url[..at_pos].rfind(':')
+    {
+        let prefix = &url[..colon_pos + 1];
+        let suffix = &url[at_pos..];
+        return format!("{}****{}", prefix, suffix);
     }
     url.to_string()
 }
