@@ -62,7 +62,7 @@ use dora_message::{BuildId, SessionId};
 use eyre::{Context, Result};
 use serde::{Deserialize, Serialize};
 use tokio::sync::RwLock;
-use tracing::info;
+use ::tracing::info;
 use uuid::Uuid;
 
 // ============================================================================
@@ -372,6 +372,7 @@ impl DoraRuntime {
             session_id,
             self.config.embedded.uv,
             log_destination,
+            None, // working_dir
         )
         .await
         .context("Failed to run dataflow")?;
@@ -517,9 +518,7 @@ pub async fn run_dataflow_with_logs<P: AsRef<Path>>(dataflow_path: P) -> Result<
     }
 
     // 现在运行数据流。由于后台任务正在主动排空通道，日志发送不会被阻塞
-    let result = runtime.run().await;
-
-    result
+    runtime.run().await
 }
 
 // ============================================================================

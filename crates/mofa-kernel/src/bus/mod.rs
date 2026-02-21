@@ -15,13 +15,12 @@ pub enum CommunicationMode {
     /// 订阅-发布通信（基于主题）
     PubSub(String),
 }
-
+pub type AgentChannelMap = Arc<RwLock<HashMap<String, HashMap<CommunicationMode, broadcast::Sender<Vec<u8>>>>>>;
 /// 通信总线核心结构体
 #[derive(Clone)]
 pub struct AgentBus {
     /// 智能体-通信通道映射
-    agent_channels:
-        Arc<RwLock<HashMap<String, HashMap<CommunicationMode, broadcast::Sender<Vec<u8>>>>>>,
+    agent_channels: AgentChannelMap,
     /// 主题-订阅者映射（PubSub 模式专用）
     topic_subscribers: Arc<RwLock<HashMap<String, HashSet<String>>>>,
     /// 广播通道

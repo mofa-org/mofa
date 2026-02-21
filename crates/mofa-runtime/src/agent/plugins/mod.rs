@@ -12,6 +12,10 @@ use async_trait::async_trait;
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
 
+/// Type alias for custom function handler in CustomFunctionPlugin
+pub type CustomFunctionHandler =
+    Arc<dyn Fn(AgentInput, &AgentContext) -> AgentResult<AgentInput> + Send + Sync + 'static>;
+
 // ============================================================================
 // 运行时插件注册中心
 // ============================================================================
@@ -199,12 +203,13 @@ impl Plugin for HttpPlugin {
     }
 
     fn metadata(&self) -> PluginMetadata {
-        let mut metadata = PluginMetadata::default();
-        metadata.name = self.name.clone();
-        metadata.description = self.description.clone();
-        metadata.version = "1.0.0".to_string();
-        metadata.stages = vec![PluginStage::PreContext];
-        metadata
+        PluginMetadata {
+            name: self.name.clone(),
+            description: self.description.clone(),
+            version: "1.0.0".to_string(),
+            stages: vec![PluginStage::PreContext],
+            ..Default::default()
+        }
     }
 
     async fn pre_context(&self, ctx: &AgentContext) -> AgentResult<()> {
@@ -219,7 +224,7 @@ impl Plugin for HttpPlugin {
 pub struct CustomFunctionPlugin {
     name: String,
     description: String,
-    func: Arc<dyn Fn(AgentInput, &AgentContext) -> AgentResult<AgentInput> + Send + Sync + 'static>,
+    func: CustomFunctionHandler,
 }
 
 impl CustomFunctionPlugin {
@@ -247,12 +252,13 @@ impl Plugin for CustomFunctionPlugin {
     }
 
     fn metadata(&self) -> PluginMetadata {
-        let mut metadata = PluginMetadata::default();
-        metadata.name = self.name.clone();
-        metadata.description = self.description.clone();
-        metadata.version = "1.0.0".to_string();
-        metadata.stages = vec![PluginStage::PreRequest];
-        metadata
+        PluginMetadata {
+            name: self.name.clone(),
+            description: self.description.clone(),
+            version: "1.0.0".to_string(),
+            stages: vec![PluginStage::PreRequest],
+            ..Default::default()
+        }
     }
 
     async fn pre_request(&self, input: AgentInput, ctx: &AgentContext) -> AgentResult<AgentInput> {

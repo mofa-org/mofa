@@ -58,9 +58,9 @@ impl RhaiPluginConfig {
     }
 
     /// Create a new plugin config from file path
-    pub fn new_file(plugin_id: &str, file_path: &PathBuf) -> Self {
+    pub fn new_file(plugin_id: &str, file_path: &std::path::Path) -> Self {
         Self {
-            source: RhaiPluginSource::File(file_path.clone()),
+            source: RhaiPluginSource::File(file_path.to_path_buf()),
             plugin_id: plugin_id.to_string(),
             ..Default::default()
         }
@@ -182,8 +182,10 @@ impl RhaiPlugin {
         let _script_metadata: HashMap<String, String> = HashMap::new();
 
         // Initialize with default metadata
-        let mut metadata = PluginMetadata::default();
-        metadata.id = config.plugin_id.clone();
+        let metadata = PluginMetadata {
+            id: config.plugin_id.clone(),
+            ..Default::default()
+        };
 
         // Build kernel metadata once so metadata() can return a plain borrow
         let kernel_metadata =
@@ -204,7 +206,7 @@ impl RhaiPlugin {
     }
 
     /// Create a new Rhai plugin from file path
-    pub async fn from_file(plugin_id: &str, path: &PathBuf) -> RhaiPluginResult<Self> {
+    pub async fn from_file(plugin_id: &str, path: &std::path::Path) -> RhaiPluginResult<Self> {
         let config = RhaiPluginConfig::new_file(plugin_id, path);
         Self::new(config).await
     }
@@ -255,33 +257,30 @@ impl RhaiPlugin {
         let context = mofa_extra::rhai::ScriptContext::new();
 
         // Execute the script to define global variables
-        if let Ok(_) = self.engine.execute_compiled(&script_id, &context).await {
+        if self.engine.execute_compiled(&script_id, &context).await.is_ok() {
             // Now try to extract variables by calling a snippet that returns them
             // Try to extract plugin_name
-            if let Ok(result) = self.engine.execute("plugin_name", &context).await {
-                if result.success {
-                    if let Some(name) = result.value.as_str() {
-                        self.metadata.name = name.to_string();
-                    }
-                }
+            if let Ok(result) = self.engine.execute("plugin_name", &context).await
+                && result.success
+                && let Some(name) = result.value.as_str()
+            {
+                self.metadata.name = name.to_string();
             }
 
             // Try to extract plugin_version
-            if let Ok(result) = self.engine.execute("plugin_version", &context).await {
-                if result.success {
-                    if let Some(version) = result.value.as_str() {
-                        self.metadata.version = version.to_string();
-                    }
-                }
+            if let Ok(result) = self.engine.execute("plugin_version", &context).await
+                && result.success
+                && let Some(version) = result.value.as_str()
+            {
+                self.metadata.version = version.to_string();
             }
 
             // Try to extract plugin_description
-            if let Ok(result) = self.engine.execute("plugin_description", &context).await {
-                if result.success {
-                    if let Some(description) = result.value.as_str() {
-                        self.metadata.description = description.to_string();
-                    }
-                }
+            if let Ok(result) = self.engine.execute("plugin_description", &context).await
+                && result.success
+                && let Some(description) = result.value.as_str()
+            {
+                self.metadata.description = description.to_string();
             }
         }
 

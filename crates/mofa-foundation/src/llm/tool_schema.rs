@@ -33,12 +33,12 @@ pub fn validate_schema(schema: &Value) -> LLMResult<()> {
         }
     }
 
-    if let Some(properties) = obj.get("properties") {
-        if !properties.is_object() {
-            return Err(LLMError::ConfigError(
-                "Tool schema 'properties' must be an object".to_string(),
-            ));
-        }
+    if let Some(properties) = obj.get("properties")
+        && !properties.is_object()
+    {
+        return Err(LLMError::ConfigError(
+            "Tool schema 'properties' must be an object".to_string(),
+        ));
     }
 
     if let Some(required) = obj.get("required") {
