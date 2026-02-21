@@ -339,7 +339,7 @@ pub fn create_api_router(collector: Arc<MetricsCollector>) -> Router {
         .route("/workflows/{id}", get(get_workflow))
         // Plugins
         .route("/plugins", get(get_plugins))
-        .route("/plugins/:id", get(get_plugin))
+        .route("/plugins/{id}", get(get_plugin))
         // System
         .route("/system", get(get_system_status))
         .route("/health", get(health_check))
@@ -700,9 +700,6 @@ mod tests {
         };
 
         let status: WorkflowStatus = metrics.into();
-        assert_eq!(status.success_rate, 95.0);
-    }
-}
         assert_eq!(status.success_rate, 95.0);
     }
 }

@@ -180,9 +180,9 @@ impl DashboardServer {
 
         // Start WebSocket updates
         if let Some(ws_handler) = &self.ws_handler {
-            let handler = ws_handler.clone();
+            let handler_for_task = Arc::clone(ws_handler);
             tokio::spawn(async move {
-                handler.start_updates();
+                handler_for_task.start_updates();
             });
         }
 
