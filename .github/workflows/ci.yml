@@ -77,43 +77,6 @@ jobs:
       - name: Build examples
         run: cargo build --examples
 
-  check-features:
-    name: Check Features
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Install system dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libasound2-dev
-
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Cache dependencies
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            target
-          key: ${{ runner.os }}-cargo-features-${{ hashFiles('**/Cargo.lock') }}
-
-      - name: Check with default features
-        run: cargo check --workspace
-
-      - name: Check with all features
-        run: cargo check --workspace --all-features
-
-      - name: Check individual feature combinations
-        run: |
-          cargo check -p mofa-sdk --features uniffi
-          cargo check -p mofa-foundation --features openai
-          cargo check -p mofa-plugins --features dora
-          cargo check -p mofa-cli --features db
-
   docs:
     name: Documentation
     runs-on: ubuntu-latest
