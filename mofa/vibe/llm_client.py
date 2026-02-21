@@ -187,21 +187,18 @@ Guidelines:
         base_url = os.getenv('OPENAI_API_BASE', 'https://api.openai.com/v1')
         model = os.getenv('MOFA_VIBE_MODEL', 'gpt-4o-mini')
 
-        # Build LLM integration example with actual values
-        llm_example = ""
-        if api_key:
-            llm_example = f"""
+        llm_example = f"""
 
 ## LLM Integration (if needed)
 If the requirement involves LLM/AI calls, you can use this pre-configured OpenAI client:
 
 ```python
+import os
 from openai import OpenAI
 
-# Pre-configured with your .env settings
 client = OpenAI(
-    api_key="{api_key}",
-    base_url="{base_url}"
+    api_key=os.getenv('OPENAI_API_KEY'),
+    base_url=os.getenv('OPENAI_API_BASE', 'https://api.openai.com/v1')
 )
 
 response = client.chat.completions.create(
@@ -216,7 +213,7 @@ response = client.chat.completions.create(
 result = response.choices[0].message.content
 ```
 
-Note: The API key, base URL, and model are from your .env configuration.
+Note: Set OPENAI_API_KEY and OPENAI_API_BASE in your environment before running.
 """
 
         # Build reference section if base code provided
