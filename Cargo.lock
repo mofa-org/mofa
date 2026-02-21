@@ -4248,6 +4248,8 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "assert_cmd",
+ "async-trait",
+ "chrono",
  "clap",
  "colored 2.2.0",
  "comfy-table",
@@ -4256,7 +4258,9 @@ dependencies = [
  "dialoguer",
  "dirs-next",
  "indicatif",
+ "mofa-foundation",
  "mofa-kernel",
+ "mofa-runtime",
  "mofa-sdk",
  "predicates",
  "ratatui",
