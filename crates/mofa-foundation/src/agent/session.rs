@@ -271,10 +271,24 @@ impl SessionStorage for JsonlSessionStorage {
             .await
             .map_err(|e| AgentError::IoError(format!("Failed to read entry: {}", e)))?
         {
-            if let Some(name) = entry.path().file_stem().and_then(|s| s.to_str()) {
-                // Convert back the safe filename to original key
-                let key = name.replace('_', ":");
-                keys.push(key);
+            let path = entry.path();
+            if path.extension().and_then(|s| s.to_str()) != Some("jsonl") {
+                continue;
+            }
+
+            if let Ok(content) = fs::read_to_string(&path).await {
+                if let Some(header) = content.lines().next() {
+                    if let Ok(header_data) = serde_json::from_str::<Value>(header) {
+                        if let Some(key) = header_data.get("key").and_then(|v| v.as_str()) {
+                            keys.push(key.to_string());
+                            continue;
+                        }
+                    }
+                }
+            }
+
+            if let Some(name) = path.file_stem().and_then(|s| s.to_str()) {
+                keys.push(name.to_string());
             }
         }
 
@@ -532,5 +546,19 @@ mod tests {
                 .exists()
         );
         assert!(!temp_dir.path().join("sessions").join("sessions").exists());
+    }
+
+    #[tokio::test]
+    async fn test_session_list_preserves_underscore_keys() {
+        let temp_dir = TempDir::new().unwrap();
+        let manager = SessionManager::with_jsonl(temp_dir.path()).await.unwrap();
+
+        let mut session = Session::new("team_alpha");
+        session.add_message("user", "hello");
+        manager.save(&session).await.unwrap();
+
+        let keys = manager.list().await.unwrap();
+        assert!(keys.contains(&"team_alpha".to_string()));
+        assert!(!keys.contains(&"team:alpha".to_string()));
     }
 }
