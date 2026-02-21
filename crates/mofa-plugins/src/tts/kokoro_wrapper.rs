@@ -24,7 +24,7 @@ use super::{TTSEngine, VoiceInfo};
 use futures::StreamExt;
 pub use kokoro_tts::{KokoroTts, SynthSink, SynthStream, Voice};
 use std::path::Path;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use tracing::{debug, info};
 
 /// Kokoro TTS engine implementation
@@ -37,6 +37,7 @@ use tracing::{debug, info};
 /// KokoroTTS is thread-safe and supports concurrent access. The underlying
 /// kokoro-tts library (KokoroTts) is Send + Sync, and each call to stream()
 /// returns independent sink/stream pairs that can be used concurrently.
+#[derive(Debug)]
 pub struct KokoroTTS {
     /// The underlying Kokoro TTS instance (thread-safe, no additional locking needed)
     tts: Arc<KokoroTts>,
@@ -677,30 +678,40 @@ mod tests {
         };
 
         let text = "这是一个关于流式合成的测试。";
-        let mut chunk_count = 0;
-        let mut total_bytes = 0;
+        let chunk_count = Arc::new(Mutex::new(0));
+        let total_bytes = Arc::new(Mutex::new(0));
+
+        let chunk_count_clone = Arc::clone(&chunk_count);
+        let total_bytes_clone = Arc::clone(&total_bytes);
 
         let result = kokoro
             .synthesize_stream(
                 text,
                 "default",
-                Box::new(|chunk| {
-                    chunk_count += 1;
-                    total_bytes += chunk.len();
+                Box::new(move |chunk| {
+                    if let Ok(mut count) = chunk_count_clone.lock() {
+                        *count += 1;
+                    }
+                    if let Ok(mut bytes) = total_bytes_clone.lock() {
+                        *bytes += chunk.len();
+                    }
                 }),
             )
             .await;
 
+        let final_chunk_count = chunk_count.lock().map(|c| *c).unwrap_or(0);
+        let final_total_bytes = total_bytes.lock().map(|b| *b).unwrap_or(0);
+
         match result {
             Ok(_) => {
                 assert!(
-                    chunk_count > 0,
+                    final_chunk_count > 0,
                     "Streaming should produce at least one chunk"
                 );
-                assert!(total_bytes > 0, "Streaming should produce audio data");
+                assert!(final_total_bytes > 0, "Streaming should produce audio data");
                 println!(
                     "✓ Streaming synthesis: {} chunks, {} bytes total",
-                    chunk_count, total_bytes
+                    final_chunk_count, final_total_bytes
                 );
             }
             Err(e) => {
@@ -1385,19 +1396,20 @@ mod tests {
             collector.callback(chunk.to_vec());
         }
 
+        let chunk_count_before_move = collector.chunk_count();
         let audio_reconstructed = collector.into_audio();
         assert_eq!(
             audio_orig, audio_reconstructed,
             "Collector should perfectly reconstruct audio"
         );
         assert!(
-            collector.chunk_count() > 0,
+            chunk_count_before_move > 0,
             "Collector should have received chunks"
         );
 
         println!(
             "✓ Streaming collector integration: {} chunks",
-            collector.chunk_count()
+            chunk_count_before_move
         );
     }
 
