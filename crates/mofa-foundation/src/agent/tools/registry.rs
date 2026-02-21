@@ -121,9 +121,7 @@ impl ToolRegistry {
         let client = self
             .mcp_client
             .get_or_insert_with(|| {
-                std::sync::Arc::new(tokio::sync::RwLock::new(
-                    super::mcp::McpClientManager::new(),
-                ))
+                std::sync::Arc::new(tokio::sync::RwLock::new(super::mcp::McpClientManager::new()))
             })
             .clone();
 
@@ -143,11 +141,8 @@ impl ToolRegistry {
         let mut registered_names = Vec::new();
         for tool_info in tools {
             let name = tool_info.name.clone();
-            let adapter = super::mcp::McpToolAdapter::new(
-                endpoint.clone(),
-                tool_info,
-                client.clone(),
-            );
+            let adapter =
+                super::mcp::McpToolAdapter::new(endpoint.clone(), tool_info, client.clone());
             self.register_with_source(
                 std::sync::Arc::new(adapter),
                 ToolSource::Mcp {
