@@ -102,11 +102,7 @@ pub struct McpServerConfig {
 
 impl McpServerConfig {
     /// 创建 Stdio 类型的 MCP 服务器配置
-    pub fn stdio(
-        name: impl Into<String>,
-        command: impl Into<String>,
-        args: Vec<String>,
-    ) -> Self {
+    pub fn stdio(name: impl Into<String>, command: impl Into<String>, args: Vec<String>) -> Self {
         Self {
             name: name.into(),
             transport: McpTransportConfig::Stdio {
@@ -250,13 +246,9 @@ mod tests {
 
     #[test]
     fn test_mcp_server_config_stdio() {
-        let config = McpServerConfig::stdio(
-            "test-server",
-            "node",
-            vec!["server.js".to_string()],
-        )
-        .with_env("API_KEY", "test-key")
-        .with_auto_connect(false);
+        let config = McpServerConfig::stdio("test-server", "node", vec!["server.js".to_string()])
+            .with_env("API_KEY", "test-key")
+            .with_auto_connect(false);
 
         assert_eq!(config.name, "test-server");
         assert!(!config.auto_connect);

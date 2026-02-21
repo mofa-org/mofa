@@ -1,6 +1,10 @@
 //! 工作流执行器
 //!
 //! 负责工作流的执行调度
+//!
+//! Supports optional telemetry emission for the time-travel debugger.
+//! When a `TelemetryEmitter` is attached via `with_telemetry()`, the
+//! executor emits `DebugEvent`s at key execution points.
 
 use super::graph::WorkflowGraph;
 use super::node::{NodeType, WorkflowNode};
@@ -8,6 +12,7 @@ use super::state::{
     ExecutionCheckpoint, ExecutionRecord, NodeExecutionRecord, NodeResult, NodeStatus, WorkflowContext, WorkflowStatus,
     WorkflowValue,
 };
+use mofa_kernel::workflow::telemetry::{DebugEvent, TelemetryEmitter};
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Instant;
@@ -76,6 +81,8 @@ pub struct WorkflowExecutor {
     config: ExecutorConfig,
     /// 事件发送器
     event_tx: Option<mpsc::Sender<ExecutionEvent>>,
+    /// Telemetry emitter for the time-travel debugger (optional)
+    telemetry: Option<Arc<dyn TelemetryEmitter>>,
     /// 子工作流注册表
     sub_workflows: Arc<RwLock<HashMap<String, Arc<WorkflowGraph>>>>,
     /// 外部事件等待器
@@ -90,6 +97,7 @@ impl WorkflowExecutor {
         Self {
             config,
             event_tx: None,
+            telemetry: None,
             sub_workflows: Arc::new(RwLock::new(HashMap::new())),
             event_waiters: Arc::new(RwLock::new(HashMap::new())),
             semaphore,
@@ -100,6 +108,24 @@ impl WorkflowExecutor {
     pub fn with_event_sender(mut self, tx: mpsc::Sender<ExecutionEvent>) -> Self {
         self.event_tx = Some(tx);
         self
+    }
+
+    /// Attach a telemetry emitter for time-travel debugger support.
+    ///
+    /// When set, the executor will emit `DebugEvent`s at key execution points
+    /// (workflow start/end, node start/end).
+    pub fn with_telemetry(mut self, emitter: Arc<dyn TelemetryEmitter>) -> Self {
+        self.telemetry = Some(emitter);
+        self
+    }
+
+    /// Emit a debug telemetry event (no-op if no emitter is set).
+    async fn emit_debug(&self, event: DebugEvent) {
+        if let Some(ref emitter) = self.telemetry {
+            if emitter.is_enabled() {
+                emitter.emit(event).await;
+            }
+        }
     }
 
     /// 注册子工作流
@@ -139,6 +165,14 @@ impl WorkflowExecutor {
         self.emit_event(ExecutionEvent::WorkflowStarted {
             workflow_id: graph.id.clone(),
             execution_id: ctx.execution_id.clone(),
+        })
+        .await;
+
+        // Emit debug telemetry: WorkflowStart
+        self.emit_debug(DebugEvent::WorkflowStart {
+            workflow_id: graph.id.clone(),
+            execution_id: ctx.execution_id.clone(),
+            timestamp_ms: DebugEvent::now_ms(),
         })
         .await;
 
@@ -186,22 +220,33 @@ impl WorkflowExecutor {
                 .as_millis() as u64,
         );
 
-        match result {
+        let final_status = match result {
             Ok(_) => {
                 execution_record.status = WorkflowStatus::Completed;
                 info!("Workflow {} completed in {:?}", graph.name, duration);
+                "completed".to_string()
             }
             Err(ref e) => {
                 execution_record.status = WorkflowStatus::Failed(e.clone());
                 error!("Workflow {} failed: {}", graph.name, e);
+                format!("failed: {}", e)
             }
-        }
+        };
 
         // 发送完成事件
         self.emit_event(ExecutionEvent::WorkflowCompleted {
             workflow_id: graph.id.clone(),
             execution_id: ctx.execution_id.clone(),
             status: execution_record.status.clone(),
+        })
+        .await;
+
+        // Emit debug telemetry: WorkflowEnd
+        self.emit_debug(DebugEvent::WorkflowEnd {
+            workflow_id: graph.id.clone(),
+            execution_id: ctx.execution_id.clone(),
+            timestamp_ms: DebugEvent::now_ms(),
+            status: final_status,
         })
         .await;
 
@@ -315,6 +360,14 @@ impl WorkflowExecutor {
 
             let is_completed = ctx.get_node_status(&current_node_id).await == Some(NodeStatus::Completed);
 
+            // Emit debug telemetry: NodeStart
+            self.emit_debug(DebugEvent::NodeStart {
+                node_id: current_node_id.clone(),
+                timestamp_ms: DebugEvent::now_ms(),
+                state_snapshot: serde_json::to_value(&current_input).unwrap_or_default(),
+            })
+            .await;
+
             let start_time = std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
                 .unwrap_or_default()
@@ -366,6 +419,18 @@ impl WorkflowExecutor {
                 .duration_since(std::time::UNIX_EPOCH)
                 .unwrap_or_default()
                 .as_millis() as u64;
+
+            // Emit debug telemetry: NodeEnd
+            self.emit_debug(DebugEvent::NodeEnd {
+                node_id: current_node_id.clone(),
+                timestamp_ms: end_time,
+                state_snapshot: match &result {
+                    Ok(output) => serde_json::to_value(output).unwrap_or_default(),
+                    Err(e) => serde_json::json!({"error": e}),
+                },
+                duration_ms: end_time.saturating_sub(start_time),
+            })
+            .await;
 
             // 记录节点执行
             if !is_completed {
