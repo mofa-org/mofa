@@ -19,7 +19,6 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::Duration;
 use tracing::info;
-use mofa_sdk::plugins::wasm_runtime::PluginMetrics;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
@@ -205,7 +204,7 @@ async fn generate_demo_data(collector: Arc<MetricsCollector>) {
         }
 
         // Log progress occasionally
-        if tick.is_multiple_of(60) {
+        if tick % 60 == 0 {
             info!("📊 Demo data tick: {} (agents: {}, workflows: {}, plugins: {})",
                 tick, agents.len(), workflows.len(), plugins.len());
         }
