@@ -17,4 +17,3 @@ pub mod mcp;
 
 pub use adapters::{BuiltinTools, ClosureTool, FunctionTool};
 pub use registry::{ToolRegistry, ToolSearcher};
-
