@@ -57,7 +57,7 @@ impl ToolCategory {
     }
 
     /// Parse from string
-    pub fn from_str(s: &str) -> Option<Self> {
+    pub fn parse(s: &str) -> Option<Self> {
         match s.to_lowercase().as_str() {
             "file" => Some(Self::File),
             "shell" => Some(Self::Shell),
@@ -372,7 +372,7 @@ mod tests {
     fn test_tool_category() {
         let category = ToolCategory::File;
         assert_eq!(category.as_str(), "file");
-        assert_eq!(ToolCategory::from_str("file"), Some(ToolCategory::File));
+        assert_eq!(ToolCategory::parse("file"), Some(ToolCategory::File));
     }
 
     #[test]

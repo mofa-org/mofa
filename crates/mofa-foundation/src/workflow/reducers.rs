@@ -129,16 +129,10 @@ impl Reducer for ExtendReducer {
 /// // Update: { "config": { "b": 3, "c": 4 } }
 /// // After (shallow): { "config": { "a": 1, "b": 3, "c": 4 } }
 /// ```
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct MergeReducer {
     /// Whether to perform deep merge on nested objects
     pub deep: bool,
-}
-
-impl Default for MergeReducer {
-    fn default() -> Self {
-        Self { deep: false }
-    }
 }
 
 impl MergeReducer {
@@ -162,14 +156,13 @@ impl Reducer for MergeReducer {
 
                 for (key, value) in update_map {
                     // If deep merge and both values are objects, recurse
-                    if self.deep {
-                        if let (Some(Value::Object(existing)), Value::Object(new_obj)) =
+                    if self.deep
+                        && let (Some(Value::Object(existing)), Value::Object(new_obj)) =
                             (result.get(key), value)
-                        {
-                            let merged = merge_objects_deep(existing.clone(), new_obj.clone());
-                            result.insert(key.clone(), Value::Object(merged));
-                            continue;
-                        }
+                    {
+                        let merged = merge_objects_deep(existing.clone(), new_obj.clone());
+                        result.insert(key.clone(), Value::Object(merged));
+                        continue;
                     }
                     result.insert(key.clone(), value.clone());
                 }

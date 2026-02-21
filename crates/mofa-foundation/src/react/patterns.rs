@@ -74,6 +74,9 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
 
+/// Type alias for mapper function in MapReduceAgent
+pub type MapFunction = Arc<dyn Fn(&str) -> Vec<String> + Send + Sync>;
+
 // ============================================================================
 // 通用类型
 // ============================================================================
@@ -922,7 +925,7 @@ pub fn parallel_agents_with_summarizer(
 /// ```
 pub struct MapReduceAgent {
     /// Map 函数 - 将输入拆分为多个子任务
-    mapper: Option<Arc<dyn Fn(&str) -> Vec<String> + Send + Sync>>,
+    mapper: Option<MapFunction>,
     /// 工作 Agent (处理子任务)
     worker: Option<AgentUnit>,
     /// Reduce Agent (聚合结果)

@@ -43,9 +43,10 @@ pub trait Reducer: Send + Sync {
 }
 
 /// Built-in reducer types
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub enum ReducerType {
     /// Overwrite the current value with the update (default)
+    #[default]
     Overwrite,
 
     /// Append the update to a list (creates list if doesn't exist)
@@ -74,12 +75,6 @@ pub enum ReducerType {
 
     /// Custom reducer with a name identifier
     Custom(String),
-}
-
-impl Default for ReducerType {
-    fn default() -> Self {
-        Self::Overwrite
-    }
 }
 
 impl std::fmt::Display for ReducerType {

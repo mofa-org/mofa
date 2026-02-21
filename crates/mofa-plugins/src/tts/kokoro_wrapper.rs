@@ -54,7 +54,7 @@ impl Clone for KokoroTTS {
     fn clone(&self) -> Self {
         Self {
             tts: Arc::clone(&self.tts),
-            default_voice: self.default_voice.clone(),
+            default_voice: self.default_voice,
             is_v11_model: self.is_v11_model,
         }
     }

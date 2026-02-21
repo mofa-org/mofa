@@ -7,6 +7,9 @@ use async_trait::async_trait;
 use serde::Deserialize;
 use serde_json::Value;
 
+/// Type alias for tool handler function
+pub type ToolHandler = Box<dyn Fn(&str) -> Result<String, String> + Send + Sync>;
+
 /// 计算器工具
 ///
 /// 支持基本的数学表达式计算
@@ -453,7 +456,7 @@ pub struct CustomToolBuilder {
     name: String,
     description: String,
     parameters_schema: Option<Value>,
-    handler: Option<Box<dyn Fn(&str) -> Result<String, String> + Send + Sync>>,
+    handler: Option<ToolHandler>,
 }
 
 impl CustomToolBuilder {
@@ -499,7 +502,7 @@ pub struct CustomTool {
     name: String,
     description: String,
     parameters_schema: Option<Value>,
-    handler: Box<dyn Fn(&str) -> Result<String, String> + Send + Sync>,
+    handler: ToolHandler,
 }
 
 #[async_trait]
