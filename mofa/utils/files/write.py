@@ -58,7 +58,12 @@ def copy_file(input_file='.env.secret', output_file='.env', overwrite=False):
     except Exception as e:
         print(f"An error occurred: {e}")
 
-def write_file(file_path:str,data:Any):
+def write_file(file_path: str, data: Any, base_dir: str = None):
+    if base_dir is not None:
+        file_path = os.path.normpath(os.path.abspath(file_path))
+        base_dir = os.path.normpath(os.path.abspath(base_dir))
+        if not file_path.startswith(base_dir + os.sep) and file_path != base_dir:
+            raise ValueError(f"Path traversal detected: {file_path} is outside {base_dir}")
     try:
         if data is not None and data != '' and data !=' ' and data != 'null':
             if os.path.exists(file_path):
