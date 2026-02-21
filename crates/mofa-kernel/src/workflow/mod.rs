@@ -45,6 +45,7 @@ pub mod context;
 pub mod graph;
 pub mod reducer;
 pub mod state;
+pub mod telemetry;
 
 // Re-export public API
 pub use command::{Command, ControlFlow, SendCommand};
@@ -52,3 +53,4 @@ pub use context::{GraphConfig, RemainingSteps, RuntimeContext};
 pub use graph::{CompiledGraph, EdgeTarget, NodeFunc, StateGraph, StreamEvent, StepResult, END, START};
 pub use reducer::{Reducer, ReducerType, StateUpdate};
 pub use state::{GraphState, JsonState, StateSchema};
+pub use telemetry::{DebugEvent, DebugSession, SessionRecorder, TelemetryEmitter};
