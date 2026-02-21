@@ -38,7 +38,6 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 serde_yaml = "0.9"
 toml = "0.8"
-chrono = { workspace = true }
 
 
 # Utilities
@@ -73,6 +72,3 @@ tempfile = "3"
 default = []
 dora = ["mofa-sdk/dora"]
 db = ["dep:sqlx"]
-
-[lints]
-workspace = true
