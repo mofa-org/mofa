@@ -449,6 +449,7 @@ impl<S: GraphState + 'static> CompiledGraph<S> for CompiledGraphImpl<S> {
             config.unwrap_or_else(|| RuntimeContext::with_config(&self.id, self.config.clone()));
 
         let nodes = self.nodes.clone();
+        let edges = self.edges.clone();
         let reducers = self.reducers.clone();
         let entry_point = self.entry_point.clone();
 
@@ -473,6 +474,7 @@ impl<S: GraphState + 'static> CompiledGraph<S> for CompiledGraphImpl<S> {
                 ctx.remaining_steps.decrement().await;
 
                 let nodes_to_execute = std::mem::take(&mut current_nodes);
+                let mut next_nodes_collector = Vec::new();
 
                 for node_id in nodes_to_execute {
                     let node = match nodes.get(&node_id) {
@@ -547,11 +549,44 @@ impl<S: GraphState + 'static> CompiledGraph<S> for CompiledGraphImpl<S> {
                             command: command.clone(),
                         }))
                         .await;
+
+                    // Follow edges to determine next nodes (mirrors invoke() logic)
+                    let next = match &command.control {
+                        ControlFlow::Goto(target) => vec![target.clone()],
+                        ControlFlow::Return => vec![],
+                        ControlFlow::Send(sends) => {
+                            sends.iter().map(|s| s.target.clone()).collect()
+                        }
+                        ControlFlow::Continue => {
+                            match edges.get(&node_id) {
+                                Some(EdgeTarget::Single(target)) => vec![target.clone()],
+                                Some(EdgeTarget::Parallel(targets)) => targets.clone(),
+                                Some(EdgeTarget::Conditional(routes)) => {
+                                    let mut matched = None;
+                                    for update in &command.updates {
+                                        if let Some(target) = routes.get(&update.key) {
+                                            matched = Some(vec![target.clone()]);
+                                            break;
+                                        }
+                                    }
+                                    matched.unwrap_or_else(|| {
+                                        routes.values().next()
+                                            .map(|t| vec![t.clone()])
+                                            .unwrap_or_default()
+                                    })
+                                }
+                                None => vec![],
+                            }
+                        }
+                    };
+                    next_nodes_collector.extend(next);
                 }
 
-                // For simplicity, break after first round
-                // TODO: Implement proper edge following
-                break;
+                // Deduplicate and filter END nodes
+                let next_set: HashSet<String> = next_nodes_collector.into_iter()
+                    .filter(|n| n != END)
+                    .collect();
+                current_nodes = next_set.into_iter().collect();
             }
 
             // Send final event
