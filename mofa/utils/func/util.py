@@ -12,6 +12,8 @@ def load_functions_from_directory(directory_path):
             file_path = os.path.join(directory_path, file)
 
             spec = importlib.util.spec_from_file_location(module_name, file_path)
+            if spec is None or spec.loader is None:
+                raise ImportError(f"Cannot load module {module_name}: no loader available")
             module = importlib.util.module_from_spec(spec)
             spec.loader.exec_module(module)
 
