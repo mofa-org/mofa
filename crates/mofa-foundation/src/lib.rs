@@ -1,4 +1,9 @@
-#![allow(dead_code, unused_imports, non_camel_case_types, ambiguous_glob_reexports)]
+#![allow(
+    dead_code,
+    unused_imports,
+    non_camel_case_types,
+    ambiguous_glob_reexports
+)]
 // prompt module
 pub mod prompt;
 

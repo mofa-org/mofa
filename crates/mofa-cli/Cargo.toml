@@ -68,3 +68,6 @@ tempfile = "3"
 default = []
 dora = ["mofa-sdk/dora"]
 db = ["dep:sqlx"]
+
+[lints]
+workspace = true

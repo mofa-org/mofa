@@ -128,7 +128,7 @@ impl Memory for InMemoryStorage {
 /// 基于文件的持久化存储
 ///
 /// 文件结构:
-/// ```
+/// ```text
 /// memory/
 /// ├── data.json              # KV 存储 (MemoryValue items)
 /// ├── MEMORY.md              # 长期记忆

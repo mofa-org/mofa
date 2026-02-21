@@ -137,7 +137,7 @@ impl WorkflowDslParser {
 
         // Verify agent references
         for node in &definition.nodes {
-            if let NodeDefinition::LLM_AGENT { agent, .. } = node {
+            if let NodeDefinition::LlmAgent { agent, .. } = node {
                 match agent {
                     AgentRef::Registry { agent_id } => {
                         if !definition.agents.contains_key(agent_id) {
@@ -184,7 +184,7 @@ impl WorkflowDslParser {
                     }
                 }
             }
-            NodeDefinition::LLM_AGENT {
+            NodeDefinition::LlmAgent {
                 id,
                 name,
                 agent,

@@ -38,8 +38,11 @@ pub struct ToolRegistry {
     tools: HashMap<String, Arc<dyn Tool>>,
     /// 工具来源
     sources: HashMap<String, ToolSource>,
-    /// MCP 客户端 (TODO: 实际 MCP 客户端实现)
+    /// MCP 端点列表
     mcp_endpoints: Vec<String>,
+    /// MCP 客户端管理器 (仅在 mcp feature 启用时使用)
+    #[cfg(feature = "mcp")]
+    mcp_client: Option<std::sync::Arc<tokio::sync::RwLock<super::mcp::McpClientManager>>>,
 }
 
 /// 工具来源
@@ -62,6 +65,8 @@ impl ToolRegistry {
             tools: HashMap::new(),
             sources: HashMap::new(),
             mcp_endpoints: Vec::new(),
+            #[cfg(feature = "mcp")]
+            mcp_client: None,
         }
     }
 
@@ -77,13 +82,90 @@ impl ToolRegistry {
         Ok(())
     }
 
-    /// 加载 MCP 服务器的工具 (TODO: 实际 MCP 实现)
-    pub async fn load_mcp_server(&mut self, endpoint: &str) -> AgentResult<Vec<String>> {
-        // TODO: 实际 MCP 客户端实现
-        // 这里只是记录端点
-        self.mcp_endpoints.push(endpoint.to_string());
+    /// 加载 MCP 服务器的工具
+    ///
+    /// 连接到 MCP 服务器，发现可用工具，并注册到工具注册中心。
+    ///
+    /// # 参数
+    ///
+    /// - `config`: MCP 服务器配置
+    ///
+    /// # 返回
+    ///
+    /// 成功注册的工具名称列表
+    ///
+    /// # 示例
+    ///
+    /// ```rust,ignore
+    /// use mofa_kernel::agent::components::mcp::McpServerConfig;
+    ///
+    /// let config = McpServerConfig::stdio(
+    ///     "github",
+    ///     "npx",
+    ///     vec!["-y".into(), "@modelcontextprotocol/server-github".into()],
+    /// );
+    /// let tool_names = registry.load_mcp_server(config).await?;
+    /// println!("Loaded {} MCP tools", tool_names.len());
+    /// ```
+    #[cfg(feature = "mcp")]
+    pub async fn load_mcp_server(
+        &mut self,
+        config: mofa_kernel::agent::components::mcp::McpServerConfig,
+    ) -> AgentResult<Vec<String>> {
+        use mofa_kernel::agent::components::mcp::McpClient;
 
-        // 模拟加载的工具名称
+        let endpoint = config.name.clone();
+        self.mcp_endpoints.push(endpoint.clone());
+
+        // Create or get the shared MCP client manager
+        let client = self
+            .mcp_client
+            .get_or_insert_with(|| {
+                std::sync::Arc::new(tokio::sync::RwLock::new(super::mcp::McpClientManager::new()))
+            })
+            .clone();
+
+        // Connect to the MCP server
+        {
+            let mut client_guard = client.write().await;
+            client_guard.connect(config).await?;
+        }
+
+        // List available tools
+        let tools = {
+            let client_guard = client.read().await;
+            client_guard.list_tools(&endpoint).await?
+        };
+
+        // Register each MCP tool as a kernel Tool
+        let mut registered_names = Vec::new();
+        for tool_info in tools {
+            let name = tool_info.name.clone();
+            let adapter =
+                super::mcp::McpToolAdapter::new(endpoint.clone(), tool_info, client.clone());
+            self.register_with_source(
+                std::sync::Arc::new(adapter),
+                ToolSource::Mcp {
+                    endpoint: endpoint.clone(),
+                },
+            )?;
+            registered_names.push(name);
+        }
+
+        tracing::info!(
+            "Loaded {} tools from MCP server '{}'",
+            registered_names.len(),
+            endpoint,
+        );
+
+        Ok(registered_names)
+    }
+
+    /// 加载 MCP 服务器的工具 (存根 - 需要启用 `mcp` feature)
+    #[cfg(not(feature = "mcp"))]
+    pub async fn load_mcp_server(&mut self, endpoint: &str) -> AgentResult<Vec<String>> {
+        self.mcp_endpoints.push(endpoint.to_string());
+        // MCP feature not enabled - return empty
         Ok(vec![])
     }
 

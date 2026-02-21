@@ -7,8 +7,8 @@ use async_trait::async_trait;
 use futures::Stream;
 use mofa_kernel::agent::error::{AgentError, AgentResult};
 use mofa_kernel::workflow::{
-    CompiledGraph, Command, ControlFlow, EdgeTarget, GraphConfig, GraphState,
-    NodeFunc, Reducer, RuntimeContext, StateUpdate, StreamEvent, StepResult, END, START,
+    Command, CompiledGraph, ControlFlow, END, EdgeTarget, GraphConfig, GraphState, NodeFunc,
+    Reducer, RuntimeContext, START, StateUpdate, StepResult, StreamEvent,
 };
 use serde_json::Value;
 use std::collections::{HashMap, HashSet};
@@ -86,7 +86,9 @@ impl<S: GraphState> StateGraphImpl<S> {
 
         // Check entry point
         if self.entry_point.is_none() {
-            errors.push("No entry point set. Use set_entry_point() or add_edge(START, node).".to_string());
+            errors.push(
+                "No entry point set. Use set_entry_point() or add_edge(START, node).".to_string(),
+            );
         }
 
         // Check that all nodes are reachable
@@ -94,7 +96,10 @@ impl<S: GraphState> StateGraphImpl<S> {
             let reachable = self.find_reachable_nodes(entry);
             for node_id in self.nodes.keys() {
                 if !reachable.contains(node_id) && node_id != entry {
-                    errors.push(format!("Node '{}' is not reachable from entry point", node_id));
+                    errors.push(format!(
+                        "Node '{}' is not reachable from entry point",
+                        node_id
+                    ));
                 }
             }
         }
@@ -184,10 +189,14 @@ impl<S: GraphState + 'static> mofa_kernel::workflow::StateGraph for StateGraphIm
             }
             Some(EdgeTarget::Single(existing)) => {
                 let existing = existing.clone();
-                self.edges.insert(from_id, EdgeTarget::parallel(vec![existing, to_id]));
+                self.edges
+                    .insert(from_id, EdgeTarget::parallel(vec![existing, to_id]));
             }
             Some(EdgeTarget::Conditional(_)) => {
-                warn!("Overwriting conditional edges with single edge for '{}'", from_id);
+                warn!(
+                    "Overwriting conditional edges with single edge for '{}'",
+                    from_id
+                );
                 self.edges.insert(from_id, EdgeTarget::single(to_id));
             }
             None => {
@@ -204,8 +213,12 @@ impl<S: GraphState + 'static> mofa_kernel::workflow::StateGraph for StateGraphIm
         conditions: HashMap<String, String>,
     ) -> &mut Self {
         let from_id = from.into();
-        debug!("Adding conditional edges from '{}': {:?}", from_id, conditions);
-        self.edges.insert(from_id, EdgeTarget::conditional(conditions));
+        debug!(
+            "Adding conditional edges from '{}': {:?}",
+            from_id, conditions
+        );
+        self.edges
+            .insert(from_id, EdgeTarget::conditional(conditions));
         self
     }
 
@@ -234,7 +247,11 @@ impl<S: GraphState + 'static> mofa_kernel::workflow::StateGraph for StateGraphIm
 
     fn add_reducer(&mut self, key: impl Into<String>, reducer: Box<dyn Reducer>) -> &mut Self {
         let key_str = key.into();
-        debug!("Adding reducer for key '{}' of type {:?}", key_str, reducer.reducer_type());
+        debug!(
+            "Adding reducer for key '{}' of type {:?}",
+            key_str,
+            reducer.reducer_type()
+        );
         self.reducers.insert(key_str, reducer);
         self
     }
@@ -309,7 +326,9 @@ impl<S: GraphState> CompiledGraphImpl<S> {
                             }
                         }
                         // Default to first route if no match
-                        routes.values().next()
+                        routes
+                            .values()
+                            .next()
                             .map(|t: &String| vec![t.clone()])
                             .unwrap_or_default()
                     }
@@ -345,11 +364,13 @@ impl<S: GraphState + 'static> CompiledGraph<S> for CompiledGraphImpl<S> {
     }
 
     async fn invoke(&self, input: S, config: Option<RuntimeContext>) -> AgentResult<S> {
-        let ctx = config.unwrap_or_else(|| {
-            RuntimeContext::with_config(&self.id, self.config.clone())
-        });
+        let ctx =
+            config.unwrap_or_else(|| RuntimeContext::with_config(&self.id, self.config.clone()));
 
-        info!("Starting graph execution '{}' with execution_id={}", self.id, ctx.execution_id);
+        info!(
+            "Starting graph execution '{}' with execution_id={}",
+            self.id, ctx.execution_id
+        );
 
         let mut state = input;
         let mut current_nodes = vec![self.entry_point.clone()];
@@ -357,9 +378,7 @@ impl<S: GraphState + 'static> CompiledGraph<S> for CompiledGraphImpl<S> {
         while !current_nodes.is_empty() {
             // Check recursion limit
             if ctx.is_recursion_limit_reached().await {
-                return Err(AgentError::Internal(
-                    "Recursion limit reached".to_string()
-                ));
+                return Err(AgentError::Internal("Recursion limit reached".to_string()));
             }
             ctx.decrement_steps().await;
 
@@ -367,7 +386,9 @@ impl<S: GraphState + 'static> CompiledGraph<S> for CompiledGraphImpl<S> {
             if current_nodes.len() == 1 {
                 // Single node execution
                 let node_id = current_nodes.remove(0);
-                let node = self.nodes.get(&node_id)
+                let node = self
+                    .nodes
+                    .get(&node_id)
                     .ok_or_else(|| AgentError::NotFound(format!("Node '{}'", node_id)))?;
 
                 ctx.set_current_node(&node_id).await;
@@ -381,14 +402,19 @@ impl<S: GraphState + 'static> CompiledGraph<S> for CompiledGraphImpl<S> {
                 // Get next nodes
                 current_nodes = self.get_next_nodes(&node_id, &command);
 
-                debug!("Node '{}' completed, next nodes: {:?}", node_id, current_nodes);
+                debug!(
+                    "Node '{}' completed, next nodes: {:?}",
+                    node_id, current_nodes
+                );
             } else {
                 // Parallel execution
                 let mut next_nodes = Vec::new();
                 let nodes_to_execute = std::mem::take(&mut current_nodes);
 
                 for node_id in nodes_to_execute {
-                    let node = self.nodes.get(&node_id)
+                    let node = self
+                        .nodes
+                        .get(&node_id)
                         .ok_or_else(|| AgentError::NotFound(format!("Node '{}'", node_id)))?;
 
                     ctx.set_current_node(&node_id).await;
@@ -419,9 +445,8 @@ impl<S: GraphState + 'static> CompiledGraph<S> for CompiledGraphImpl<S> {
         input: S,
         config: Option<RuntimeContext>,
     ) -> AgentResult<Pin<Box<dyn Stream<Item = AgentResult<StreamEvent<S>>> + Send>>> {
-        let ctx = config.unwrap_or_else(|| {
-            RuntimeContext::with_config(&self.id, self.config.clone())
-        });
+        let ctx =
+            config.unwrap_or_else(|| RuntimeContext::with_config(&self.id, self.config.clone()));
 
         let nodes = self.nodes.clone();
         let reducers = self.reducers.clone();
@@ -438,9 +463,11 @@ impl<S: GraphState + 'static> CompiledGraph<S> for CompiledGraphImpl<S> {
             while !current_nodes.is_empty() {
                 // Check recursion limit
                 if ctx.remaining_steps.is_exhausted().await {
-                    let _ = tx.send(Err(AgentError::Internal(
-                        "Recursion limit reached".to_string()
-                    ))).await;
+                    let _ = tx
+                        .send(Err(AgentError::Internal(
+                            "Recursion limit reached".to_string(),
+                        )))
+                        .await;
                     return;
                 }
                 ctx.remaining_steps.decrement().await;
@@ -451,7 +478,9 @@ impl<S: GraphState + 'static> CompiledGraph<S> for CompiledGraphImpl<S> {
                     let node = match nodes.get(&node_id) {
                         Some(n) => n,
                         None => {
-                            let _ = tx.send(Err(AgentError::NotFound(format!("Node '{}'", node_id)))).await;
+                            let _ = tx
+                                .send(Err(AgentError::NotFound(format!("Node '{}'", node_id))))
+                                .await;
                             return;
                         }
                     };
@@ -459,19 +488,23 @@ impl<S: GraphState + 'static> CompiledGraph<S> for CompiledGraphImpl<S> {
                     ctx.set_current_node(&node_id).await;
 
                     // Send start event
-                    let _ = tx.send(Ok(StreamEvent::NodeStart {
-                        node_id: node_id.clone(),
-                        state: state.clone(),
-                    })).await;
+                    let _ = tx
+                        .send(Ok(StreamEvent::NodeStart {
+                            node_id: node_id.clone(),
+                            state: state.clone(),
+                        }))
+                        .await;
 
                     // Execute node
                     let command = match node.call(&mut state, &ctx).await {
                         Ok(cmd) => cmd,
                         Err(e) => {
-                            let _ = tx.send(Ok(StreamEvent::Error {
-                                node_id: Some(node_id),
-                                error: e.to_string(),
-                            })).await;
+                            let _ = tx
+                                .send(Ok(StreamEvent::Error {
+                                    node_id: Some(node_id),
+                                    error: e.to_string(),
+                                }))
+                                .await;
                             return;
                         }
                     };
@@ -483,10 +516,12 @@ impl<S: GraphState + 'static> CompiledGraph<S> for CompiledGraphImpl<S> {
                             match reducer.reduce(current.as_ref(), &update.value).await {
                                 Ok(v) => v,
                                 Err(e) => {
-                                    let _ = tx.send(Ok(StreamEvent::Error {
-                                        node_id: Some(node_id.clone()),
-                                        error: e.to_string(),
-                                    })).await;
+                                    let _ = tx
+                                        .send(Ok(StreamEvent::Error {
+                                            node_id: Some(node_id.clone()),
+                                            error: e.to_string(),
+                                        }))
+                                        .await;
                                     return;
                                 }
                             }
@@ -494,20 +529,24 @@ impl<S: GraphState + 'static> CompiledGraph<S> for CompiledGraphImpl<S> {
                             update.value.clone()
                         };
                         if let Err(e) = state.apply_update(&update.key, new_value).await {
-                            let _ = tx.send(Ok(StreamEvent::Error {
-                                node_id: Some(node_id.clone()),
-                                error: e.to_string(),
-                            })).await;
+                            let _ = tx
+                                .send(Ok(StreamEvent::Error {
+                                    node_id: Some(node_id.clone()),
+                                    error: e.to_string(),
+                                }))
+                                .await;
                             return;
                         }
                     }
 
                     // Send end event
-                    let _ = tx.send(Ok(StreamEvent::NodeEnd {
-                        node_id: node_id.clone(),
-                        state: state.clone(),
-                        command: command.clone(),
-                    })).await;
+                    let _ = tx
+                        .send(Ok(StreamEvent::NodeEnd {
+                            node_id: node_id.clone(),
+                            state: state.clone(),
+                            command: command.clone(),
+                        }))
+                        .await;
                 }
 
                 // For simplicity, break after first round
@@ -516,9 +555,7 @@ impl<S: GraphState + 'static> CompiledGraph<S> for CompiledGraphImpl<S> {
             }
 
             // Send final event
-            let _ = tx.send(Ok(StreamEvent::End {
-                final_state: state,
-            })).await;
+            let _ = tx.send(Ok(StreamEvent::End { final_state: state })).await;
         });
 
         // Convert receiver to stream
@@ -526,9 +563,8 @@ impl<S: GraphState + 'static> CompiledGraph<S> for CompiledGraphImpl<S> {
     }
 
     async fn step(&self, input: S, config: Option<RuntimeContext>) -> AgentResult<StepResult<S>> {
-        let ctx = config.unwrap_or_else(|| {
-            RuntimeContext::with_config(&self.id, self.config.clone())
-        });
+        let ctx =
+            config.unwrap_or_else(|| RuntimeContext::with_config(&self.id, self.config.clone()));
 
         let mut state = input;
 
@@ -540,7 +576,9 @@ impl<S: GraphState + 'static> CompiledGraph<S> for CompiledGraphImpl<S> {
             current_node_id
         };
 
-        let node = self.nodes.get(&node_id)
+        let node = self
+            .nodes
+            .get(&node_id)
             .ok_or_else(|| AgentError::NotFound(format!("Node '{}'", node_id)))?;
 
         ctx.set_current_node(&node_id).await;
@@ -569,7 +607,8 @@ impl<S: GraphState + 'static> CompiledGraph<S> for CompiledGraphImpl<S> {
     }
 
     fn state_schema(&self) -> HashMap<String, String> {
-        self.reducers.iter()
+        self.reducers
+            .iter()
             .map(|(k, r)| (k.clone(), r.reducer_type().to_string()))
             .collect()
     }
@@ -589,7 +628,11 @@ mod tests {
 
     #[async_trait]
     impl NodeFunc<JsonState> for TestNode {
-        async fn call(&self, _state: &mut JsonState, _ctx: &RuntimeContext) -> AgentResult<Command> {
+        async fn call(
+            &self,
+            _state: &mut JsonState,
+            _ctx: &RuntimeContext,
+        ) -> AgentResult<Command> {
             let mut cmd = Command::new();
             for update in &self.updates {
                 cmd = cmd.update(update.key.clone(), update.value.clone());
@@ -607,14 +650,20 @@ mod tests {
         let mut graph = StateGraphImpl::<JsonState>::new("test_graph");
 
         graph
-            .add_node("start_node", Box::new(TestNode {
-                name: "start".to_string(),
-                updates: vec![StateUpdate::new("initialized", json!(true))],
-            }))
-            .add_node("end_node", Box::new(TestNode {
-                name: "end".to_string(),
-                updates: vec![StateUpdate::new("completed", json!(true))],
-            }))
+            .add_node(
+                "start_node",
+                Box::new(TestNode {
+                    name: "start".to_string(),
+                    updates: vec![StateUpdate::new("initialized", json!(true))],
+                }),
+            )
+            .add_node(
+                "end_node",
+                Box::new(TestNode {
+                    name: "end".to_string(),
+                    updates: vec![StateUpdate::new("completed", json!(true))],
+                }),
+            )
             .add_edge(START, "start_node")
             .add_edge("start_node", "end_node")
             .add_edge("end_node", END);
@@ -627,10 +676,13 @@ mod tests {
     async fn test_state_graph_no_entry_point() {
         let mut graph = StateGraphImpl::<JsonState>::new("test_graph");
 
-        graph.add_node("node1", Box::new(TestNode {
-            name: "node1".to_string(),
-            updates: vec![],
-        }));
+        graph.add_node(
+            "node1",
+            Box::new(TestNode {
+                name: "node1".to_string(),
+                updates: vec![],
+            }),
+        );
 
         let result = graph.compile();
         assert!(result.is_err());
@@ -641,13 +693,16 @@ mod tests {
         let mut graph = StateGraphImpl::<JsonState>::new("test_graph");
 
         graph
-            .add_node("process", Box::new(TestNode {
-                name: "process".to_string(),
-                updates: vec![
-                    StateUpdate::new("processed", json!(true)),
-                    StateUpdate::new("count", json!(1)),
-                ],
-            }))
+            .add_node(
+                "process",
+                Box::new(TestNode {
+                    name: "process".to_string(),
+                    updates: vec![
+                        StateUpdate::new("processed", json!(true)),
+                        StateUpdate::new("count", json!(1)),
+                    ],
+                }),
+            )
             .add_edge(START, "process")
             .add_edge("process", END);
 
