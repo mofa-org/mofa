@@ -4,6 +4,9 @@
     non_camel_case_types,
     ambiguous_glob_reexports
 )]
+// orchestrator module - Model Lifecycle & Allocation
+pub mod orchestrator;
+
 // prompt module
 pub mod prompt;
 

@@ -2,8 +2,10 @@
 //!
 //! Implements AgentPlugin for Rhai scripts
 
-use super::types::{PluginMetadata, RhaiPluginResult};
-use mofa_extra::rhai::{RhaiScriptEngine, ScriptContext, ScriptEngineConfig};
+use super::types::{PluginMetadata, RhaiPluginError, RhaiPluginResult};
+use mofa_extra::rhai::{
+    RhaiScriptEngine, ScriptContext, ScriptEngineConfig, dynamic_to_json, json_to_dynamic,
+};
 use mofa_kernel::plugin::{
     AgentPlugin, PluginContext, PluginMetadata as KernelPluginMetadata, PluginResult, PluginState,
     PluginType,
@@ -58,9 +60,9 @@ impl RhaiPluginConfig {
     }
 
     /// Create a new plugin config from file path
-    pub fn new_file(plugin_id: &str, file_path: &PathBuf) -> Self {
+    pub fn new_file(plugin_id: &str, file_path: &std::path::Path) -> Self {
         Self {
-            source: RhaiPluginSource::File(file_path.clone()),
+            source: RhaiPluginSource::File(file_path.to_path_buf()),
             plugin_id: plugin_id.to_string(),
             ..Default::default()
         }
@@ -182,15 +184,14 @@ impl RhaiPlugin {
         let _script_metadata: HashMap<String, String> = HashMap::new();
 
         // Initialize with default metadata
-        let mut metadata = PluginMetadata::default();
-        metadata.id = config.plugin_id.clone();
+        let metadata = PluginMetadata {
+            id: config.plugin_id.clone(),
+            ..Default::default()
+        };
 
         // Build kernel metadata once so metadata() can return a plain borrow
-        let kernel_metadata = KernelPluginMetadata::new(
-            &config.plugin_id,
-            &metadata.name,
-            PluginType::Tool,
-        );
+        let kernel_metadata =
+            KernelPluginMetadata::new(&config.plugin_id, &metadata.name, PluginType::Tool);
 
         // Create plugin
         Ok(Self {
@@ -207,7 +208,7 @@ impl RhaiPlugin {
     }
 
     /// Create a new Rhai plugin from file path
-    pub async fn from_file(plugin_id: &str, path: &PathBuf) -> RhaiPluginResult<Self> {
+    pub async fn from_file(plugin_id: &str, path: &std::path::Path) -> RhaiPluginResult<Self> {
         let config = RhaiPluginConfig::new_file(plugin_id, path);
         Self::new(config).await
     }
@@ -258,33 +259,30 @@ impl RhaiPlugin {
         let context = mofa_extra::rhai::ScriptContext::new();
 
         // Execute the script to define global variables
-        if let Ok(_) = self.engine.execute_compiled(&script_id, &context).await {
+        if self.engine.execute_compiled(&script_id, &context).await.is_ok() {
             // Now try to extract variables by calling a snippet that returns them
             // Try to extract plugin_name
-            if let Ok(result) = self.engine.execute("plugin_name", &context).await {
-                if result.success {
-                    if let Some(name) = result.value.as_str() {
-                        self.metadata.name = name.to_string();
-                    }
-                }
+            if let Ok(result) = self.engine.execute("plugin_name", &context).await
+                && result.success
+                && let Some(name) = result.value.as_str()
+            {
+                self.metadata.name = name.to_string();
             }
 
             // Try to extract plugin_version
-            if let Ok(result) = self.engine.execute("plugin_version", &context).await {
-                if result.success {
-                    if let Some(version) = result.value.as_str() {
-                        self.metadata.version = version.to_string();
-                    }
-                }
+            if let Ok(result) = self.engine.execute("plugin_version", &context).await
+                && result.success
+                && let Some(version) = result.value.as_str()
+            {
+                self.metadata.version = version.to_string();
             }
 
             // Try to extract plugin_description
-            if let Ok(result) = self.engine.execute("plugin_description", &context).await {
-                if result.success {
-                    if let Some(description) = result.value.as_str() {
-                        self.metadata.description = description.to_string();
-                    }
-                }
+            if let Ok(result) = self.engine.execute("plugin_description", &context).await
+                && result.success
+                && let Some(description) = result.value.as_str()
+            {
+                self.metadata.description = description.to_string();
             }
         }
 
@@ -292,16 +290,57 @@ impl RhaiPlugin {
     }
 
     /// Call a script function if it exists
-    async fn call_script_function(
+    pub async fn call_script_function(
         &self,
-        _function_name: &str,
-        _args: &[Dynamic],
+        function_name: &str,
+        args: &[Dynamic],
     ) -> RhaiPluginResult<Option<Dynamic>> {
-        // TODO: Implement proper function calling
-        // Current RhaiScriptEngine doesn't support calling specific functions,
-        // only executing entire scripts
+        // Compile and cache the plugin script if not already done
+        let script_id = format!("{}_main", self.id);
+        if let Err(e) = self
+            .engine
+            .compile_and_cache(&script_id, &self.id, &self.cached_content)
+            .await
+        {
+            return Err(RhaiPluginError::CompilationError(format!(
+                "Failed to compile script: {}",
+                e
+            )));
+        }
 
-        Ok(None)
+        // Create a script context
+        let context = ScriptContext::new();
+
+        // Convert Dynamic args to serde_json::Value for call_function
+        let json_args: Vec<serde_json::Value> = args.iter().map(|d| dynamic_to_json(d)).collect();
+
+        // Try to call the function, using serde_json::Value as the return type
+        // This is flexible and won't fail on deserialization
+        match self
+            .engine
+            .call_function::<serde_json::Value>(&script_id, function_name, json_args, &context)
+            .await
+        {
+            Ok(json_result) => {
+                // Convert JSON result back to Dynamic
+                let dynamic_result = json_to_dynamic(&json_result);
+                Ok(Some(dynamic_result))
+            }
+            Err(e) => {
+                let err_str = e.to_string();
+                // Check if error indicates function not found
+                if err_str.contains("not found")
+                    || err_str.contains("cannot find")
+                    || err_str.contains("invalid function call")
+                {
+                    // Function doesn't exist - return None instead of error
+                    // This allows optional functions like init, start, stop
+                    Ok(None)
+                } else {
+                    Err(RhaiPluginError::ExecutionError(err_str))
+                }
+            }
+        }
     }
 }
 
@@ -590,5 +629,351 @@ mod tests {
         );
 
         plugin.unload().await.unwrap();
+    }
+
+    // ========================================================================
+    // Unit Tests for call_script_function
+    // ========================================================================
+
+    #[tokio::test]
+    async fn test_call_script_function_basic_arithmetic() {
+        let script = r#"
+            fn add(a, b) {
+                a + b
+            }
+        "#;
+
+        let plugin = RhaiPlugin::from_content("test-add", script).await.unwrap();
+
+        let args = vec![Dynamic::from(5), Dynamic::from(3)];
+        let result = plugin.call_script_function("add", &args).await.unwrap();
+
+        assert!(result.is_some());
+        assert_eq!(result.unwrap().as_int().unwrap(), 8);
+    }
+
+    #[tokio::test]
+    async fn test_call_script_function_string_manipulation() {
+        let script = r#"
+            fn greet(name) {
+                "Hello, " + name + "!"
+            }
+        "#;
+
+        let plugin = RhaiPlugin::from_content("test-greet", script)
+            .await
+            .unwrap();
+
+        let args = vec![Dynamic::from("World")];
+        let result = plugin.call_script_function("greet", &args).await.unwrap();
+
+        assert!(result.is_some());
+        let result_str = result.unwrap().to_string();
+        assert!(result_str.contains("Hello") && result_str.contains("World"));
+    }
+
+    #[tokio::test]
+    async fn test_call_script_function_with_array() {
+        let script = r#"
+            fn sum_array(arr) {
+                let total = 0;
+                for i in arr {
+                    total = total + i;
+                }
+                total
+            }
+        "#;
+
+        let plugin = RhaiPlugin::from_content("test-sum", script).await.unwrap();
+
+        let array = rhai::Array::from(vec![Dynamic::from(1), Dynamic::from(2), Dynamic::from(3)]);
+        let args = vec![array.into()];
+
+        let result = plugin
+            .call_script_function("sum_array", &args)
+            .await
+            .unwrap();
+
+        assert!(result.is_some());
+        assert_eq!(result.unwrap().as_int().unwrap(), 6);
+    }
+
+    #[tokio::test]
+    async fn test_call_script_function_no_arguments() {
+        let script = r#"
+            fn get_pi() {
+                3.14159
+            }
+        "#;
+
+        let plugin = RhaiPlugin::from_content("test-pi", script).await.unwrap();
+
+        let result = plugin.call_script_function("get_pi", &[]).await.unwrap();
+
+        assert!(result.is_some());
+        let value = result.unwrap().as_float().unwrap();
+        assert!((value - std::f64::consts::PI).abs() < 0.001);
+    }
+
+    #[tokio::test]
+    async fn test_call_script_function_optional_function_not_found() {
+        let script = r#"
+            fn existing_function() {
+                42
+            }
+        "#;
+
+        let plugin = RhaiPlugin::from_content("test-optional", script)
+            .await
+            .unwrap();
+
+        // Try to call a function that doesn't exist - should return None
+        let result = plugin
+            .call_script_function("non_existent", &[])
+            .await
+            .unwrap();
+
+        assert!(result.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_call_script_function_nested_calls() {
+        let script = r#"
+            fn double(x) {
+                x * 2
+            }
+
+            fn process(value) {
+                double(value) + 10
+            }
+        "#;
+
+        let plugin = RhaiPlugin::from_content("test-nested", script)
+            .await
+            .unwrap();
+
+        let args = vec![Dynamic::from(5)];
+        let result = plugin.call_script_function("process", &args).await.unwrap();
+
+        assert!(result.is_some());
+        assert_eq!(result.unwrap().as_int().unwrap(), 20); // (5 * 2) + 10
+    }
+
+    #[tokio::test]
+    async fn test_call_script_function_recursive_factorial() {
+        let script = r#"
+            fn factorial(n) {
+                if n <= 1 {
+                    1
+                } else {
+                    n * factorial(n - 1)
+                }
+            }
+        "#;
+
+        let plugin = RhaiPlugin::from_content("test-factorial", script)
+            .await
+            .unwrap();
+
+        let args = vec![Dynamic::from(5)];
+        let result = plugin
+            .call_script_function("factorial", &args)
+            .await
+            .unwrap();
+
+        assert!(result.is_some());
+        assert_eq!(result.unwrap().as_int().unwrap(), 120);
+    }
+
+    #[tokio::test]
+    async fn test_call_script_function_conditional_logic() {
+        let script = r#"
+            fn check_value(n) {
+                if n > 10 {
+                    "large"
+                } else if n > 5 {
+                    "medium"
+                } else {
+                    "small"
+                }
+            }
+        "#;
+
+        let plugin = RhaiPlugin::from_content("test-conditional", script)
+            .await
+            .unwrap();
+
+        // Test different values
+        let test_cases = vec![(1, "small"), (7, "medium"), (15, "large")];
+
+        for (value, expected) in test_cases {
+            let args = vec![Dynamic::from(value)];
+            let result = plugin
+                .call_script_function("check_value", &args)
+                .await
+                .unwrap();
+
+            assert!(result.is_some());
+            let result_str = result.unwrap().to_string();
+            assert!(result_str.contains(expected));
+        }
+    }
+
+    #[tokio::test]
+    async fn test_call_script_function_multiple_sequential_calls() {
+        let script = r#"
+            let counter = 0;
+
+            fn increment() {
+                counter = counter + 1;
+                counter
+            }
+        "#;
+
+        let plugin = RhaiPlugin::from_content("test-counter", script)
+            .await
+            .unwrap();
+
+        // Make multiple calls - note that script state may or may not persist
+        // depending on implementation
+        for _ in 0..3 {
+            let result = plugin.call_script_function("increment", &[]).await.unwrap();
+            assert!(result.is_some());
+        }
+    }
+
+    #[tokio::test]
+    async fn test_call_script_function_with_various_types() {
+        let script = r#"
+            fn process_types(i, f, s, b) {
+                i + 1
+            }
+        "#;
+
+        let plugin = RhaiPlugin::from_content("test-types", script)
+            .await
+            .unwrap();
+
+        let args = vec![
+            Dynamic::from(42),
+            Dynamic::from(std::f64::consts::PI),
+            Dynamic::from("text"),
+            Dynamic::TRUE,
+        ];
+
+        let result = plugin
+            .call_script_function("process_types", &args)
+            .await
+            .unwrap();
+
+        assert!(result.is_some());
+        assert_eq!(result.unwrap().as_int().unwrap(), 43);
+    }
+
+    #[tokio::test]
+    async fn test_call_script_function_empty_string_arg() {
+        let script = r#"
+            fn is_empty(s) {
+                s == ""
+            }
+        "#;
+
+        let plugin = RhaiPlugin::from_content("test-empty-string", script)
+            .await
+            .unwrap();
+
+        let args = vec![Dynamic::from("")];
+        let result = plugin
+            .call_script_function("is_empty", &args)
+            .await
+            .unwrap();
+
+        assert!(result.is_some());
+        assert!(result.unwrap().as_bool().unwrap());
+    }
+
+    #[tokio::test]
+    async fn test_call_script_function_array_filtering() {
+        let script = r#"
+            fn is_even(n) {
+                n % 2 == 0
+            }
+
+            fn filter_even(arr) {
+                let result = [];
+                for item in arr {
+                    if is_even(item) {
+                        result.push(item);
+                    }
+                }
+                result
+            }
+        "#;
+
+        let plugin = RhaiPlugin::from_content("test-filter-even", script)
+            .await
+            .unwrap();
+
+        let array = rhai::Array::from(vec![
+            Dynamic::from(1),
+            Dynamic::from(2),
+            Dynamic::from(3),
+            Dynamic::from(4),
+            Dynamic::from(5),
+            Dynamic::from(6),
+        ]);
+        let args = vec![array.into()];
+
+        let result = plugin
+            .call_script_function("filter_even", &args)
+            .await
+            .unwrap();
+
+        assert!(result.is_some());
+        assert!(result.is_some()); // Just verify result is not None
+    }
+
+    #[tokio::test]
+    async fn test_call_script_function_boolean_logic() {
+        let script = r#"
+            fn validate(age, is_citizen) {
+                age >= 18 && is_citizen == true
+            }
+        "#;
+
+        let plugin = RhaiPlugin::from_content("test-validate", script)
+            .await
+            .unwrap();
+
+        let args = vec![Dynamic::from(21), Dynamic::TRUE];
+        let result = plugin
+            .call_script_function("validate", &args)
+            .await
+            .unwrap();
+
+        assert!(result.is_some());
+        assert!(result.unwrap().as_bool().unwrap());
+    }
+
+    #[tokio::test]
+    async fn test_call_script_function_string_length() {
+        let script = r#"
+            fn string_length(s) {
+                s.len()
+            }
+        "#;
+
+        let plugin = RhaiPlugin::from_content("test-str-len", script)
+            .await
+            .unwrap();
+
+        let args = vec![Dynamic::from("hello")];
+        let result = plugin
+            .call_script_function("string_length", &args)
+            .await
+            .unwrap();
+
+        assert!(result.is_some());
+        assert_eq!(result.unwrap().as_int().unwrap(), 5);
     }
 }

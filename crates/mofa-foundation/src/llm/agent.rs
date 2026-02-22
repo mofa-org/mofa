@@ -476,6 +476,7 @@ impl LLMAgent {
     ///     Some(agent_id),
     /// ).await?;
     /// ```
+    #[allow(clippy::too_many_arguments)]
     pub async fn with_initial_session_async(
         config: LLMAgentConfig,
         provider: Arc<dyn LLMProvider>,
@@ -1006,7 +1007,7 @@ impl LLMAgent {
             })?;
 
             // Box the stream to hide the concrete type
-            return Ok(Box::pin(stream));
+            Ok(Box::pin(stream))
         }
 
         #[cfg(not(feature = "kokoro"))]
@@ -1088,7 +1089,7 @@ impl LLMAgent {
                 return Ok(());
             }
 
-            return Err(LLMError::Other("TTS engine is not KokoroTTS".to_string()));
+            Err(LLMError::Other("TTS engine is not KokoroTTS".to_string()))
         }
 
         #[cfg(not(feature = "kokoro"))]
@@ -1215,10 +1216,10 @@ impl LLMAgent {
         let stream_handle = tokio::spawn(async move {
             while let Some((audio, _took)) = stream.next().await {
                 // 检查取消信号
-                if let Some(ref token) = token_clone {
-                    if token.is_cancelled() {
-                        break; // 退出循环，停止音频处理
-                    }
+                if let Some(ref token) = token_clone
+                    && token.is_cancelled()
+                {
+                    break; // 退出循环，停止音频处理
                 }
                 callback(audio);
             }
@@ -1299,10 +1300,10 @@ impl LLMAgent {
                         // 检查是否已被取消
                         {
                             let active_session = self.active_tts_session.lock().await;
-                            if let Some(ref session) = *active_session {
-                                if !session.is_active() {
-                                    return Ok(()); // 优雅退出
-                                }
+                            if let Some(ref session) = *active_session
+                                && !session.is_active()
+                            {
+                                return Ok(()); // 优雅退出
                             }
                         }
 
@@ -1313,11 +1314,11 @@ impl LLMAgent {
                         })?;
 
                         // 检测句子并立即提交到 TTS
-                        if let Some(sentence) = buffer.push(&text_chunk) {
-                            if let Err(e) = tts_handle.sink.synth(sentence).await {
-                                eprintln!("[TTS Error] Failed to submit sentence: {}", e);
-                                // 继续流式处理，即使 TTS 失败
-                            }
+                        if let Some(sentence) = buffer.push(&text_chunk)
+                            && let Err(e) = tts_handle.sink.synth(sentence).await
+                        {
+                            eprintln!("[TTS Error] Failed to submit sentence: {}", e);
+                            // 继续流式处理，即使 TTS 失败
                         }
                     }
                     Err(e) if e.to_string().contains("__stream_end__") => break,
@@ -1326,10 +1327,10 @@ impl LLMAgent {
             }
 
             // Step 5: 提交剩余文本
-            if let Some(remaining) = buffer.flush() {
-                if let Err(e) = tts_handle.sink.synth(remaining).await {
-                    eprintln!("[TTS Error] Failed to submit final sentence: {}", e);
-                }
+            if let Some(remaining) = buffer.flush()
+                && let Err(e) = tts_handle.sink.synth(remaining).await
+            {
+                eprintln!("[TTS Error] Failed to submit final sentence: {}", e);
             }
 
             // Step 6: 清理会话
@@ -2137,6 +2138,12 @@ pub struct LLMAgentBuilder {
     persistence_agent_id: Option<uuid::Uuid>,
 }
 
+impl Default for LLMAgentBuilder {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl LLMAgentBuilder {
     /// 创建新的构建器
     pub fn new() -> Self {
@@ -2605,9 +2612,9 @@ impl LLMAgentBuilder {
         // Fallback: If stores are set but persistence_tenant_id is None, use tenant_id
         let persistence_tenant_id = if self.session_store.is_some()
             && self.persistence_tenant_id.is_none()
-            && tenant_id_for_persistence.is_some()
+            && let Some(ref tenant_id) = tenant_id_for_persistence
         {
-            uuid::Uuid::parse_str(&tenant_id_for_persistence.unwrap()).ok()
+            uuid::Uuid::parse_str(tenant_id).ok()
         } else {
             self.persistence_tenant_id
         };
@@ -2628,12 +2635,11 @@ impl LLMAgentBuilder {
         // 设置Prompt模板插件
         agent.prompt_plugin = self.prompt_plugin;
 
-        if self.tools.is_empty() {
-            if let Some(executor) = self.tool_executor.as_ref() {
-                if let Ok(tools) = executor.available_tools().await {
-                    self.tools = tools;
-                }
-            }
+        if self.tools.is_empty()
+            && let Some(executor) = self.tool_executor.as_ref()
+            && let Ok(tools) = executor.available_tools().await
+        {
+            self.tools = tools;
         }
 
         if let Some(executor) = self.tool_executor {
@@ -2945,7 +2951,7 @@ impl LLMAgentBuilder {
 
         // 创建基础 builder
         let mut builder = Self::new()
-            .with_id(agent.id.clone())
+            .with_id(agent.id)
             .with_name(agent.agent_name.clone())
             .with_provider(llm_provider)
             .with_system_prompt(agent.system_prompt.clone())
@@ -2963,17 +2969,17 @@ impl LLMAgentBuilder {
         }
 
         // 处理 custom_params (JSONB) - 将每个 key-value 添加到 custom_config
-        if let Some(ref params) = agent.custom_params {
-            if let Some(obj) = params.as_object() {
-                for (key, value) in obj.iter() {
-                    let value_str: String = match value {
-                        serde_json::Value::String(s) => s.clone(),
-                        serde_json::Value::Bool(b) => b.to_string(),
-                        serde_json::Value::Number(n) => n.to_string(),
-                        _ => value.to_string(),
-                    };
-                    builder = builder.with_config(key.as_str(), value_str);
-                }
+        if let Some(ref params) = agent.custom_params
+            && let Some(obj) = params.as_object()
+        {
+            for (key, value) in obj.iter() {
+                let value_str: String = match value {
+                    serde_json::Value::String(s) => s.clone(),
+                    serde_json::Value::Bool(b) => b.to_string(),
+                    serde_json::Value::Number(n) => n.to_string(),
+                    _ => value.to_string(),
+                };
+                builder = builder.with_config(key.as_str(), value_str);
             }
         }
 
@@ -2992,7 +2998,6 @@ impl LLMAgentBuilder {
 }
 
 /// 从配置创建 LLM Provider
-
 fn create_provider_from_config(
     config: &crate::config::LLMYamlConfig,
 ) -> LLMResult<super::openai::OpenAIProvider> {
@@ -3222,7 +3227,6 @@ pub fn simple_llm_agent(
 ///
 /// let agent = agent_from_config("agent.yml")?;
 /// ```
-
 pub fn agent_from_config(path: impl AsRef<std::path::Path>) -> LLMResult<LLMAgent> {
     LLMAgentBuilder::from_config_file(path)?.try_build()
 }

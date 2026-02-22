@@ -13,7 +13,7 @@ use crate::dora_adapter::{
 };
 use crate::interrupt::AgentInterrupt;
 #[cfg(feature = "dora")]
-use crate::message::AgentMessage;
+use mofa_kernel::message::AgentMessage;
 use crate::{AgentConfig, AgentMetadata, MoFAAgent};
 use mofa_kernel::AgentPlugin;
 use mofa_kernel::message::AgentEvent;
@@ -24,7 +24,7 @@ use std::time::Duration;
 #[cfg(feature = "dora")]
 use tokio::sync::RwLock;
 #[cfg(feature = "dora")]
-use tracing::{debug, info};
+use ::tracing::{debug, info};
 
 /// 智能体构建器 - 提供流式 API
 pub struct AgentBuilder {
