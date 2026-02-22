@@ -1,6 +1,6 @@
 #![allow(missing_docs)]
 
-use anyhow::{Context, Result, bail};
+use anyhow::{bail, Context, Result};
 use serde_json::Value;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -462,7 +462,7 @@ fn binary_name(base: &str) -> String {
     if cfg!(windows) {
         format!("{base}.exe")
     } else {
-        base.to_string()
+        base.to_owned()
     }
 }
 
