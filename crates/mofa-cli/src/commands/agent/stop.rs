@@ -26,6 +26,32 @@ pub async fn run(
         anyhow::bail!("Agent '{}' not found", agent_id);
     }
 
+    // When commands run in separate CLI invocations, runtime registry state can be absent.
+    // In that case, if force_persisted_stop is true, update the persisted state.
+    if !in_registry && in_store && force_persisted_stop {
+        if let Some(mut entry) = previous_entry {
+            entry.state = "Stopped".to_string();
+            ctx.agent_store
+                .save(agent_id, &entry)
+                .map_err(|e| anyhow::anyhow!("Failed to update agent '{}': {}", agent_id, e))?;
+
+            println!(
+                "{} Agent '{}' persisted state updated to Stopped",
+                "✓".green(),
+                agent_id
+            );
+            return Ok(());
+        }
+    }
+
+    // If not in registry and no force flag, error out
+    if !in_registry {
+        anyhow::bail!(
+            "Agent '{}' is not active in runtime registry. Use --force-persisted-stop to update persisted state.",
+            agent_id
+        );
+    }
+
     // Attempt graceful shutdown via the agent instance
     if let Some(agent) = ctx.agent_registry.get(agent_id).await {
         let mut agent_guard = agent.write().await;
