@@ -5,8 +5,10 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
+use std::sync::RwLock as StdRwLock;
 use std::sync::atomic::{AtomicI64, AtomicU64, Ordering};
 use std::time::{Duration, Instant};
+use sysinfo::{Pid, System};
 use tokio::sync::RwLock;
 use tracing::{debug, info};
 
@@ -482,6 +484,8 @@ pub struct MetricsCollector {
     plugin_metrics: Arc<RwLock<HashMap<String, PluginMetrics>>>,
     /// LLM metrics storage (model-specific inference metrics)
     llm_metrics: Arc<RwLock<HashMap<String, LLMMetrics>>>,
+    /// Cached system info (using std sync RwLock for sync access)
+    system: Arc<StdRwLock<System>>,
 }
 
 impl MetricsCollector {
@@ -496,6 +500,7 @@ impl MetricsCollector {
             workflow_metrics: Arc::new(RwLock::new(HashMap::new())),
             plugin_metrics: Arc::new(RwLock::new(HashMap::new())),
             llm_metrics: Arc::new(RwLock::new(HashMap::new())),
+            system: Arc::new(StdRwLock::new(System::new_all())),
         }
     }
 
@@ -546,12 +551,27 @@ impl MetricsCollector {
             .unwrap_or_default()
             .as_secs();
 
+        let mut system = self.system.write().unwrap();
+        system.refresh_all();
+
+        let pid = Pid::from_u32(std::process::id());
+        let (cpu_usage, memory_used, thread_count) = system
+            .process(pid)
+            .map(|p| {
+                (
+                    p.cpu_usage() as f64,
+                    p.memory(),
+                    p.tasks().iter().count() as u32,
+                )
+            })
+            .unwrap_or((0.0, 0, 0));
+
         SystemMetrics {
-            cpu_usage: 0.0,
-            memory_used: 0,
-            memory_total: 0,
+            cpu_usage,
+            memory_used,
+            memory_total: system.total_memory(),
             uptime_secs: self.start_time.elapsed().as_secs(),
-            thread_count: 0,
+            thread_count,
             timestamp: now,
         }
     }

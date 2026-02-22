@@ -255,7 +255,8 @@ pub struct RuleGroupExecutionResult {
 // ============================================================================
 // Rule Engine
 // ============================================================================
-pub type HandlerMap = Arc<RwLock<HashMap<String, Vec<Box<dyn Fn(&str, &serde_json::Value) + Send + Sync>>>>>;
+pub type HandlerMap =
+    Arc<RwLock<HashMap<String, Vec<Box<dyn Fn(&str, &serde_json::Value) + Send + Sync>>>>>;
 /// Rule engine
 pub struct RuleEngine {
     /// Script engine

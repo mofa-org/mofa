@@ -500,7 +500,10 @@ impl WorkflowExecutor {
             if self.config.enable_checkpoints
                 && self.config.checkpoint_interval > 0
                 && !record.node_records.is_empty()
-                && record.node_records.len().is_multiple_of(self.config.checkpoint_interval)
+                && record
+                    .node_records
+                    .len()
+                    .is_multiple_of(self.config.checkpoint_interval)
             {
                 let label = format!("auto_checkpoint_{}", record.node_records.len());
                 ctx.create_checkpoint(&label).await;
@@ -637,7 +640,8 @@ impl WorkflowExecutor {
             return Ok(result);
         }
 
-        let result = self.execute_branches_parallel(graph, ctx, branches, input, record)
+        let result = self
+            .execute_branches_parallel(graph, ctx, branches, input, record)
             .await?;
         ctx.set_node_output(node.id(), result.clone()).await;
         ctx.set_node_status(node.id(), NodeStatus::Completed).await;
@@ -1137,9 +1141,7 @@ mod tests {
         sub_graph.add_node(WorkflowNode::task(
             "sub_task",
             "Sub Task",
-            |_ctx, _input| async move {
-                Ok(WorkflowValue::String("hello from sub".to_string()))
-            },
+            |_ctx, _input| async move { Ok(WorkflowValue::String("hello from sub".to_string())) },
         ));
         sub_graph.add_node(WorkflowNode::end("sub_end"));
         sub_graph.connect("sub_start", "sub_task");
@@ -1165,7 +1167,9 @@ mod tests {
 
         assert!(matches!(result.status, WorkflowStatus::Completed));
 
-        let sub_output = result.outputs.get("call_sub")
+        let sub_output = result
+            .outputs
+            .get("call_sub")
             .cloned()
             .unwrap_or(WorkflowValue::Null);
 

@@ -5,6 +5,7 @@
 //! Provides cross-agent communication channels integrated with dora-rs
 
 use crate::dora_adapter::error::{DoraError, DoraResult};
+use ::tracing::{debug, info};
 use mofa_kernel::message::AgentMessage;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -12,7 +13,6 @@ use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::{RwLock, broadcast, mpsc};
 use tokio::time::timeout;
-use ::tracing::{debug, info};
 
 /// 通道配置
 /// Channel configuration

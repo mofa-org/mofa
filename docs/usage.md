@@ -1,39 +1,44 @@
-## 使用说明
+# Usage Guide
 
-若启用持久化特性
-当前优先适配的是postgre，建议使用18版本
-uuid_v7特性
+## Persistence Feature
+
+If the persistence feature is enabled, PostgreSQL (version 18 recommended) is the primary backend with `uuid_v7` support.
 
 ---
-# 快速开始
-## 持久化
-examples/streaming_persistence
-## 从数据库初始化Agent
-examples/agent_from_database_streaming
-## 使用TTS插件
-examples/llm_tts_streaming
 
-上述示例包含了企业智能体开发最通用的流程：创建会话-配置智能体-发起会话-统计入库
+## Quick Start
 
+### Persistence
+- `examples/streaming_persistence`
 
-# 创建智能体
+### Initialize Agent from Database
+- `examples/agent_from_database_streaming`
 
-MoFA 提供了 `LLMAgentBuilder` 作为 LLM 智能体的建造者模式，支持链式调用配置智能体的各项属性。
+### Using TTS Plugin
+- `examples/llm_tts_streaming`
 
-## 基本用法
+The examples above cover the most common workflow for enterprise agent development: create session → configure agent → initiate conversation → log to database.
 
-### 1. 最简单的 LLM Agent 创建
+---
+
+# Creating Agents
+
+MoFA provides `LLMAgentBuilder` as a builder pattern for LLM agents, supporting chained configuration of agent properties.
+
+## Basic Usage
+
+### 1. Simplest LLM Agent Creation
 
 ```rust
 use mofa_sdk::llm::{LLMAgentBuilder, OpenAIProvider};
 
-// 从环境变量读取配置并创建
+// Create from environment variables
 let agent = LLMAgentBuilder::new()
     .with_provider(std::sync::Arc::new(OpenAIProvider::from_env()))
     .build();
 ```
 
-### 2. 完整配置示例
+### 2. Full Configuration Example
 
 ```rust
 use mofa_sdk::llm::{LLMAgentBuilder, OpenAIProvider};
@@ -43,39 +48,39 @@ use uuid::Uuid;
 let provider = OpenAIProvider::from_env();
 
 let agent = LLMAgentBuilder::new()
-    .with_id(Uuid::new_v4().to_string())  // 必须使用 UUID 格式，或省略自动生成
+    .with_id(Uuid::new_v4().to_string())  // Must use UUID format, or omit for auto-generation
     .with_name("My LLM Agent".to_string())
     .with_provider(Arc::new(provider))
-    .with_system_prompt("你是一个乐于助人的AI助手。".to_string())
+    .with_system_prompt("You are a helpful AI assistant.".to_string())
     .with_temperature(0.7)
     .with_max_tokens(2048)
     .build();
 ```
 
-### 3. 带工具调用的 Agent
+### 3. Agent with Tool Calling
 
 ```rust
 use mofa_sdk::llm::{LLMAgentBuilder, OpenAIProvider, ToolExecutor, ToolPluginExecutor};
 use mofa_sdk::plugins::tools::create_builtin_tool_plugin;
 use std::sync::Arc;
 
-// 创建内置工具插件（包含 HTTP、文件系统、Shell、计算器等工具）
+// Create built-in tool plugin (includes HTTP, filesystem, shell, calculator, etc.)
 let mut tool_plugin = create_builtin_tool_plugin("comprehensive_tools")?;
 tool_plugin.init_plugin().await?;
 
-// 创建适配器连接到 LLM（自动发现工具）
+// Create adapter to connect to LLM (auto-discovers tools)
 let executor: Arc<dyn ToolExecutor> = Arc::new(ToolPluginExecutor::new(tool_plugin));
 
-// 构建带工具的 Agent
+// Build agent with tools
 let agent = LLMAgentBuilder::new()
-    .with_name("工具调用助手".to_string())
+    .with_name("Tool Assistant".to_string())
     .with_provider(Arc::new(OpenAIProvider::from_env()))
-    .with_system_prompt("你是一个可以使用工具的AI助手。".to_string())
+    .with_system_prompt("You are an AI assistant that can use tools.".to_string())
     .with_tool_executor(executor)
     .build();
 ```
 
-### 4. 带持久化的 Agent
+### 4. Agent with Persistence
 
 ```rust
 use mofa_sdk::llm::LLMAgentBuilder;
@@ -88,7 +93,7 @@ let tenant_id = Uuid::now_v7();
 let agent_id = Uuid::now_v7();
 let session_id = Uuid::now_v7();
 
-// 创建持久化插件
+// Create persistence plugin
 let store = Arc::new(PostgresStore::connect("postgresql://...").await?);
 let persistence = PersistencePlugin::new(
     "persistence-plugin",
@@ -102,13 +107,13 @@ let persistence = PersistencePlugin::new(
 let agent = LLMAgentBuilder::from_env()?
     .with_id(agent_id.to_string())
     .with_session_id(session_id.to_string())
-    .with_sliding_window(20)  // 保持最近20轮对话
+    .with_sliding_window(20)  // Keep last 20 conversation turns
     .with_persistence_plugin(persistence)
     .build_async()
     .await;
 ```
 
-### 5. 官方 AgentLoop（支持 ContextBuilder + Session）
+### 5. Official AgentLoop (with ContextBuilder + Session)
 
 ```rust
 use mofa_sdk::llm::{AgentLoop, AgentLoopConfig, AgentLoopRunner, AgentContextBuilder, ChatSession, LLMClient, OpenAIProvider, ToolExecutor};
@@ -133,40 +138,40 @@ let mut runner = AgentLoopRunner::new(agent_loop)
 
 let reply = runner
     .run(
-        "请分析这张图片",
+        "Please analyze this image",
         Some(vec!["/path/to/image.png".to_string()]),
     )
     .await?;
 ```
 
-### 5. 带 TTS 插件的 Agent
+### 6. Agent with TTS Plugin
 
 ```rust
 use mofa_sdk::llm::{LLMAgentBuilder, OpenAIProvider};
 use mofa_sdk::plugins::TTSPlugin;
 use uuid::Uuid;
 
-// 使用 TTS 插件（客户端）
+// Using TTS plugin (client)
 let agent = Arc::new(
-LLMAgentBuilder::new()
-.with_id(Uuid::new_v4().to_string())
-.with_name("Chat TTS Agent")
-.with_session_id(Uuid::new_v4().to_string())
-.with_provider(Arc::new(openai_from_env()?))
-.with_system_prompt("你是一个友好的AI助手。")
-.with_temperature(0.7)
-.with_plugin(TTSPlugin::with_engine("tts", kokoro_engine, Some("zf_088")))
-.build();
+    LLMAgentBuilder::new()
+    .with_id(Uuid::new_v4().to_string())
+    .with_name("Chat TTS Agent")
+    .with_session_id(Uuid::new_v4().to_string())
+    .with_provider(Arc::new(openai_from_env()?))
+    .with_system_prompt("You are a friendly AI assistant.")
+    .with_temperature(0.7)
+    .with_plugin(TTSPlugin::with_engine("tts", kokoro_engine, Some("zf_088")))
+    .build();
 );
 ```
 
-### 6. 带 Rhai 运行时插件的 Agent
+### 7. Agent with Rhai Runtime Plugin
 
 ```rust
 use mofa_sdk::llm::{LLMAgentBuilder, OpenAIProvider};
 use mofa_sdk::plugins::{RhaiPlugin, RhaiPluginConfig, PluginContext};
 
-// 创建 Rhai 插件（支持热重载）
+// Create Rhai plugin (supports hot reload)
 let config = RhaiPluginConfig::new_file("dynamic_rules", "./rules/plugin.rhai");
 let mut rhai_plugin = RhaiPlugin::new(config).await?;
 
@@ -181,7 +186,7 @@ let agent = LLMAgentBuilder::new()
     .build();
 ```
 
-### 7. 多租户场景
+### 8. Multi-Tenant Scenario
 
 ```rust
 use mofa_sdk::llm::{LLMAgentBuilder, OpenAIProvider};
@@ -190,12 +195,12 @@ use uuid::Uuid;
 let agent = LLMAgentBuilder::new()
     .with_id(Uuid::new_v4().to_string())
     .with_provider(Arc::new(OpenAIProvider::from_env()))
-    .with_user("user_abc".to_string())    // 用户隔离
-    .with_tenant("tenant_xyz".to_string()) // 租户隔离
+    .with_user("user_abc".to_string())    // User isolation
+    .with_tenant("tenant_xyz".to_string()) // Tenant isolation
     .build();
 ```
 
-### 8. 带事件处理
+### 9. With Event Handling
 
 ```rust
 use mofa_sdk::llm::{LLMAgentBuilder, OpenAIProvider, LLMAgentEventHandler};
@@ -204,11 +209,11 @@ struct MyEventHandler;
 
 impl LLMAgentEventHandler for MyEventHandler {
     fn on_message_start(&self, msg: &str) {
-        println!("开始处理消息: {}", msg);
+        println!("Message processing started: {}", msg);
     }
 
     fn on_message_complete(&self, result: &str) {
-        println!("消息处理完成: {}", result);
+        println!("Message processing completed: {}", result);
     }
 }
 
@@ -218,12 +223,12 @@ let agent = LLMAgentBuilder::new()
     .build();
 ```
 
-### 9. 使用热重载提示词模板
+### 10. Using Hot-Reloadable Prompt Templates
 
 ```rust
 use mofa_sdk::llm::{LLMAgentBuilder, OpenAIProvider, HotReloadableRhaiPromptPlugin};
 
-// 支持运行时动态修改提示词，无需重启
+// Supports runtime prompt modification without restart
 let prompt_plugin = HotReloadableRhaiPromptPlugin::new("./prompts/template.rhai")?;
 
 let agent = LLMAgentBuilder::new()
@@ -232,77 +237,85 @@ let agent = LLMAgentBuilder::new()
     .build();
 ```
 
-## LLMAgentBuilder 方法说明
+## LLMAgentBuilder Method Reference
 
-### 核心配置
+### Core Configuration
 
-| 方法 | 参数 | 说明 | 默认值 |
-|------|------|------|--------|
-| `new()` | - | 创建新的 Builder 实例 | - |
-| `with_id()` | `id: String` | 设置智能体 ID（仅支持 UUID 格式） | 自动生成 UUID v7 |
-| `with_name()` | `name: String` | 设置智能体名称 | - |
-| `with_provider()` | `provider: Arc<dyn LLMProvider>` | 设置 LLM 提供商 | **必须设置** |
-| `with_system_prompt()` | `prompt: String` | 设置系统提示词 | - |
-| `with_temperature()` | `temperature: f32` | 设置温度参数 (0.0-1.0) | - |
-| `with_max_tokens()` | `max_tokens: u32` | 设置最大输出 token 数 | - |
+| Method | Parameter | Description | Default |
+|--------|-----------|-------------|---------|
+| `new()` | - | Create new Builder instance | - |
+| `with_id()` | `id: String` | Set agent ID (UUID format only) | Auto-generated UUID v7 |
+| `with_name()` | `name: String` | Set agent name | - |
+| `with_provider()` | `provider: Arc<dyn LLMProvider>` | Set LLM provider | **Required** |
+| `with_system_prompt()` | `prompt: String` | Set system prompt | - |
+| `with_temperature()` | `temperature: f32` | Set temperature (0.0-1.0) | - |
+| `with_max_tokens()` | `max_tokens: u32` | Set max output tokens | - |
 
-### 工具和执行
+### Tools and Execution
 
-| 方法 | 参数 | 说明 | 默认值 |
-|------|------|------|--------|
-| `with_tool()` | `tool: Tool` | 添加单个工具 | - |
-| `with_tools()` | `tools: Vec<Tool>` | 批量添加工具 | - |
-| `with_tool_executor()` | `executor: Arc<dyn ToolExecutor>` | 设置工具执行器 | - |
+| Method | Parameter | Description | Default |
+|--------|-----------|-------------|---------|
+| `with_tool()` | `tool: Tool` | Add single tool | - |
+| `with_tools()` | `tools: Vec<Tool>` | Add multiple tools | - |
+| `with_tool_executor()` | `executor: Arc<dyn ToolExecutor>` | Set tool executor | - |
 
-### 插件系统
+### Plugin System
 
-| 方法 | 参数 | 说明 |
-|------|------|------|
-| `with_plugin()` | `plugin: AgentPlugin` | 添加单个插件 |
-| `with_plugins()` | `plugins: Vec<Box<dyn AgentPlugin>>` | 批量添加插件 |
-| `with_tts_engine()` | `tts_engine: TTSPlugin` | 设置 TTS 插件 |
-| `with_prompt_plugin()` | `plugin: PromptTemplatePlugin` | 设置提示词模板插件 |
-| `with_hot_reload_prompt_plugin()` | `plugin: HotReloadableRhaiPromptPlugin` | 设置热重载提示词插件 |
+| Method | Parameter | Description |
+|--------|-----------|-------------|
+| `with_plugin()` | `plugin: AgentPlugin` | Add single plugin |
+| `with_plugins()` | `plugins: Vec<Box<dyn AgentPlugin>>` | Add multiple plugins |
+| `with_tts_engine()` | `tts_engine: TTSPlugin` | Set TTS plugin |
+| `with_prompt_plugin()` | `plugin: PromptTemplatePlugin` | Set prompt template plugin |
+| `with_hot_reload_prompt_plugin()` | `plugin: HotReloadableRhaiPromptPlugin` | Set hot-reload prompt plugin |
 
-### 事件和持久化
+### Events and Persistence
 
-| 方法 | 参数 | 说明 |
-|------|------|------|
-| `with_event_handler()` | `handler: Box<dyn LLMAgentEventHandler>` | 设置事件处理器 |
-| `with_persistence_plugin()` | `plugin: PersistencePlugin` | 添加持久化插件 |
+| Method | Parameter | Description |
+|--------|-----------|-------------|
+| `with_event_handler()` | `handler: Box<dyn LLMAgentEventHandler>` | Set event handler |
+| `with_persistence_plugin()` | `plugin: PersistencePlugin` | Add persistence plugin |
 
-### 会话管理
+### Session Management
 
-| 方法 | 参数 | 说明 | 默认值 |
-|------|------|------|--------|
-| `with_session_id()` | `session_id: String` | 设置会话 ID | - |
-| `with_sliding_window()` | `size: usize` | 设置上下文窗口大小（轮次） | - |
+| Method | Parameter | Description | Default |
+|--------|-----------|-------------|---------|
+| `with_session_id()` | `session_id: String` | Set session ID | - |
+| `with_sliding_window()` | `size: usize` | Set context window size (turns) | - |
 
-### 多租户
+### Multi-Tenancy
 
-| 方法 | 参数 | 说明 |
-|------|------|------|
-| `with_user()` | `user_id: String` | 设置用户 ID |
-| `with_tenant()` | `tenant_id: String` | 设置租户 ID |
+| Method | Parameter | Description |
+|--------|-----------|-------------|
+| `with_user()` | `user_id: String` | Set user ID |
+| `with_tenant()` | `tenant_id: String` | Set tenant ID |
 
-### 配置辅助
+### Configuration Helpers
 
-| 方法 | 参数 | 说明 |
-|------|------|------|
-| `with_config()` | `key: String, value: String` | 添加自定义配置 |
-| `from_env()` | - | 从环境变量创建配置 |
+| Method | Parameter | Description |
+|--------|-----------|-------------|
+| `with_config()` | `key: String, value: String` | Add custom configuration |
+| `from_env()` | - | Create configuration from environment |
 
-### 构建方法
+### Build Methods
 
-| 方法 | 说明 |
-|------|------|
-| `build()` | 同步构建（Provider 未设置会 panic） |
-| `try_build()` | 同步构建，返回 Result |
-| `build_async()` | 异步构建（支持从数据库加载） |
+| Method | Description |
+|--------|-------------|
+| `build()` | Synchronous build (panics if provider not set) |
+| `try_build()` | Synchronous build, returns Result |
+| `build_async()` | Async build (supports loading from database) |
 
 ---
 
-# uniffi
-生成python绑定
-cd crates/mofa-sdk                                                                                                                                                   
-./generate-bindings.sh python 
+# UniFFI
+
+Generate Python bindings:
+
+```bash
+cd crates/mofa-sdk
+./generate-bindings.sh python
+```
+
+---
+
+**English** | [简体中文](zh-CN/usage.md)

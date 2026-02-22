@@ -351,3 +351,7 @@ pub enum TeamPattern {
 **下一章：** [第 7 章：StateGraph 工作流](07-workflows_cn.md) — 构建基于图的有状态工作流。
 
 [← 返回目录](README_cn.md)
+
+---
+
+**English** | [简体中文](../zh-CN/tutorial/06-multi-agent_cn.md)

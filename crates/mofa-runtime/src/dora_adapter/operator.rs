@@ -5,12 +5,12 @@
 //! Integrates MoFA plugin system with dora-rs Operator API
 
 use crate::dora_adapter::error::{DoraError, DoraResult};
+use ::tracing::info;
 use mofa_kernel::plugin::AgentPlugin;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use ::tracing::info;
 
 /// Operator 配置
 /// Operator Configuration

@@ -17,19 +17,19 @@ use crate::dora_adapter::{
     DoraNodeConfig, DoraResult, MessageEnvelope,
 };
 use crate::interrupt::AgentInterrupt;
-#[cfg(feature = "dora")]
-use mofa_kernel::message::AgentMessage;
 use crate::{AgentConfig, AgentMetadata, MoFAAgent};
+#[cfg(feature = "dora")]
+use ::tracing::{debug, info};
 use mofa_kernel::AgentPlugin;
 use mofa_kernel::message::AgentEvent;
+#[cfg(feature = "dora")]
+use mofa_kernel::message::AgentMessage;
 use std::collections::HashMap;
 #[cfg(feature = "dora")]
 use std::sync::Arc;
 use std::time::Duration;
 #[cfg(feature = "dora")]
 use tokio::sync::RwLock;
-#[cfg(feature = "dora")]
-use ::tracing::{debug, info};
 
 /// 智能体构建器 - 提供流式 API
 /// Agent Builder - providing fluent API
@@ -669,11 +669,13 @@ impl SimpleMessageBus {
     /// 发送点对点消息
     /// Send point-to-point message
     pub async fn send_to(&self, target_id: &str, event: AgentEvent) -> anyhow::Result<()> {
-        let subs = self.subscribers.read().await;
-        if let Some(senders) = subs.get(target_id) {
-            for tx in senders {
-                let _ = tx.send(event.clone()).await;
-            }
+        let senders = {
+            let subs = self.subscribers.read().await;
+            subs.get(target_id).cloned().unwrap_or_default()
+        };
+
+        for tx in senders {
+            let _ = tx.send(event.clone()).await;
         }
         Ok(())
     }
@@ -681,11 +683,15 @@ impl SimpleMessageBus {
     /// 广播消息给所有智能体
     /// Broadcast message to all agents
     pub async fn broadcast(&self, event: AgentEvent) -> anyhow::Result<()> {
-        let subs = self.subscribers.read().await;
-        for senders in subs.values() {
-            for tx in senders {
-                let _ = tx.send(event.clone()).await;
-            }
+        let senders = {
+            let subs = self.subscribers.read().await;
+            subs.values()
+                .flat_map(|agent_senders| agent_senders.iter().cloned())
+                .collect::<Vec<_>>()
+        };
+
+        for tx in senders {
+            let _ = tx.send(event.clone()).await;
         }
         Ok(())
     }
@@ -693,16 +699,26 @@ impl SimpleMessageBus {
     /// 发布到主题
     /// Publish to topic
     pub async fn publish(&self, topic: &str, event: AgentEvent) -> anyhow::Result<()> {
-        let topics = self.topic_subscribers.read().await;
-        if let Some(agent_ids) = topics.get(topic) {
+        let agent_ids = {
+            let topics = self.topic_subscribers.read().await;
+            topics.get(topic).cloned().unwrap_or_default()
+        };
+
+        let senders = {
             let subs = self.subscribers.read().await;
-            for agent_id in agent_ids {
-                if let Some(senders) = subs.get(agent_id) {
-                    for tx in senders {
-                        let _ = tx.send(event.clone()).await;
+            let mut senders = Vec::new();
+            for agent_id in &agent_ids {
+                if let Some(agent_senders) = subs.get(agent_id) {
+                    for tx in agent_senders {
+                        senders.push(tx.clone());
                     }
                 }
             }
+            senders
+        };
+
+        for tx in senders {
+            let _ = tx.send(event.clone()).await;
         }
         Ok(())
     }
@@ -818,6 +834,89 @@ impl SimpleRuntime {
 impl Default for SimpleRuntime {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+#[cfg(all(test, not(feature = "dora")))]
+mod tests {
+    use super::SimpleMessageBus;
+    use mofa_kernel::message::AgentEvent;
+    use std::sync::Arc;
+    use tokio::sync::mpsc;
+    use tokio::time::{Duration, timeout};
+
+    #[tokio::test]
+    async fn send_to_does_not_block_register_on_backpressure() {
+        let bus = Arc::new(SimpleMessageBus::new());
+        let (slow_tx, mut slow_rx) = mpsc::channel(1);
+        bus.register("slow", slow_tx.clone()).await;
+
+        slow_tx.send(AgentEvent::Shutdown).await.unwrap();
+
+        let bus_for_send = Arc::clone(&bus);
+        let send_task =
+            tokio::spawn(async move { bus_for_send.send_to("slow", AgentEvent::Shutdown).await });
+
+        tokio::time::sleep(Duration::from_millis(50)).await;
+
+        let (new_tx, _new_rx) = mpsc::channel(1);
+        timeout(Duration::from_millis(200), bus.register("new", new_tx))
+            .await
+            .expect("register should not block while send_to waits");
+
+        let _ = slow_rx.recv().await;
+        send_task.await.unwrap().unwrap();
+    }
+
+    #[tokio::test]
+    async fn broadcast_does_not_block_register_on_backpressure() {
+        let bus = Arc::new(SimpleMessageBus::new());
+        let (slow_tx, mut slow_rx) = mpsc::channel(1);
+        bus.register("slow", slow_tx.clone()).await;
+
+        slow_tx.send(AgentEvent::Shutdown).await.unwrap();
+
+        let bus_for_send = Arc::clone(&bus);
+        let send_task =
+            tokio::spawn(async move { bus_for_send.broadcast(AgentEvent::Shutdown).await });
+
+        tokio::time::sleep(Duration::from_millis(50)).await;
+
+        let (new_tx, _new_rx) = mpsc::channel(1);
+        timeout(Duration::from_millis(200), bus.register("new", new_tx))
+            .await
+            .expect("register should not block while broadcast waits");
+
+        let _ = slow_rx.recv().await;
+        send_task.await.unwrap().unwrap();
+    }
+
+    #[tokio::test]
+    async fn publish_does_not_block_subscribe_on_backpressure() {
+        let bus = Arc::new(SimpleMessageBus::new());
+        let (slow_tx, mut slow_rx) = mpsc::channel(1);
+        bus.register("slow", slow_tx.clone()).await;
+        bus.subscribe("slow", "topic-a").await;
+
+        slow_tx.send(AgentEvent::Shutdown).await.unwrap();
+
+        let bus_for_send = Arc::clone(&bus);
+        let send_task =
+            tokio::spawn(
+                async move { bus_for_send.publish("topic-a", AgentEvent::Shutdown).await },
+            );
+
+        tokio::time::sleep(Duration::from_millis(50)).await;
+
+        timeout(
+            Duration::from_millis(200),
+            bus.subscribe("other", "topic-b"),
+        )
+        .await
+        .expect("subscribe should not block while publish waits");
+
+        let _ = slow_rx.recv().await;
+        send_task.await.unwrap().unwrap();
     }
 }
 

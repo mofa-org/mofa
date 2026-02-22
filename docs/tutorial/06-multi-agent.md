@@ -351,3 +351,7 @@ The `AgentTeam` abstraction handles this plumbing for you with LLM agents, inclu
 **Next:** [Chapter 7: Workflows with StateGraph](07-workflows.md) — Build stateful, graph-based workflows.
 
 [← Back to Table of Contents](README.md)
+
+---
+
+**English** | [简体中文](../zh-CN/tutorial/06-multi-agent.md)

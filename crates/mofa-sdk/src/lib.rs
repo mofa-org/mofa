@@ -430,9 +430,9 @@ pub mod prelude {
         AgentCapabilities, AgentCapabilitiesBuilder, AgentContext, AgentError, AgentInput,
         AgentMetadata, AgentOutput, AgentResult, AgentState, MoFAAgent,
     };
-    pub use crate::runtime::{AgentBuilder, AgentRunner, run_agents};
     #[cfg(not(feature = "dora"))]
     pub use crate::runtime::SimpleRuntime;
+    pub use crate::runtime::{AgentBuilder, AgentRunner, run_agents};
     pub use async_trait::async_trait;
 }
 

@@ -60,6 +60,7 @@ use std::net::SocketAddr;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
+use ::tracing::info;
 use dora_daemon::Daemon;
 pub use dora_daemon::LogDestination;
 use dora_message::common::LogMessage;
@@ -68,7 +69,6 @@ use dora_message::{BuildId, SessionId};
 use eyre::{Context, Result};
 use serde::{Deserialize, Serialize};
 use tokio::sync::RwLock;
-use ::tracing::info;
 use uuid::Uuid;
 
 // ============================================================================

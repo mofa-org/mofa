@@ -494,12 +494,12 @@ impl TTSPlugin {
     ///
     /// # Arguments
     /// - `text`: The text to synthesize
-    /// - `callback`: Function to call with each audio chunk (Vec<f32>)
+    /// - `callback`: Function to call with each audio chunk (`Vec<f32>`)
     ///
     /// # Example
     /// ```rust,ignore
     /// plugin.synthesize_streaming_f32("Hello", Box::new(|audio_f32| {
-    ///     // audio_f32 is Vec<f32> with values in [-1.0, 1.0]
+    ///     // audio_f32 is `Vec<f32>` with values in [-1.0, 1.0]
     ///     sink.append(SamplesBuffer::new(1, 24000, audio_f32));
     /// })).await?;
     /// ```

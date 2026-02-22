@@ -19,7 +19,8 @@ pub enum CommunicationMode {
     /// Pub-Sub communication (Topic-based)
     PubSub(String),
 }
-pub type AgentChannelMap = Arc<RwLock<HashMap<String, HashMap<CommunicationMode, broadcast::Sender<Vec<u8>>>>>>;
+pub type AgentChannelMap =
+    Arc<RwLock<HashMap<String, HashMap<CommunicationMode, broadcast::Sender<Vec<u8>>>>>>;
 /// 通信总线核心结构体
 /// Core structure for the communication bus
 #[derive(Clone)]
