@@ -602,7 +602,7 @@ mod tests {
 
         let compiled = runtime.compile_wat("test", wat).await.unwrap();
         assert_eq!(compiled.name, "test");
-        assert!(compiled.compile_time_ms >= 0);
+        assert!(compiled.compile_time_ms > 0);
 
         let stats = runtime.stats().await;
         assert_eq!(stats.modules_compiled, 1);

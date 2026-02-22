@@ -62,7 +62,7 @@ use dora_message::{BuildId, SessionId};
 use eyre::{Context, Result};
 use serde::{Deserialize, Serialize};
 use tokio::sync::RwLock;
-use tracing::info;
+use ::tracing::info;
 use uuid::Uuid;
 
 // ============================================================================
@@ -372,6 +372,7 @@ impl DoraRuntime {
             session_id,
             self.config.embedded.uv,
             log_destination,
+            None, // working_dir
         )
         .await
         .context("Failed to run dataflow")?;
@@ -506,19 +507,18 @@ pub async fn run_dataflow_with_logs<P: AsRef<Path>>(dataflow_path: P) -> Result<
 
     let mut runtime = DoraRuntime::new(config);
 
-    // 获取日志接收器并在后台线程中处理
-    // 注意：需要在 run() 之前设置，因为 run() 会创建 channel
-    let result = runtime.run().await;
-
-    // 处理日志（如果有）
+    // 修复：在运行数据流之前提取日志接收器，防止由于有界通道填满而导致的死锁
     if let Some(rx) = runtime.take_log_receiver() {
-        // 打印剩余的日志消息
-        while let Ok(msg) = rx.try_recv() {
-            info!("[{:?}] {}", msg.level, msg.message);
-        }
+        // 生成一个后台 Tokio 任务，并发地持续读取日志
+        tokio::spawn(async move {
+            while let Ok(msg) = rx.recv_async().await {
+                info!("[{:?}] {}", msg.level, msg.message);
+            }
+        });
     }
 
-    result
+    // 现在运行数据流。由于后台任务正在主动排空通道，日志发送不会被阻塞
+    runtime.run().await
 }
 
 // ============================================================================

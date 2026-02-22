@@ -13,6 +13,7 @@
 //！ - LLMAgent: 集成工具调用能力的智能体
 
 use anyhow::Result;
+use mofa_sdk::kernel::{AgentPlugin, PluginContext};
 use mofa_sdk::llm::{LLMAgentBuilder, ToolExecutor, ToolPluginExecutor};
 use mofa_sdk::plugins::rhai_runtime::{RhaiPlugin, RhaiPluginConfig};
 use mofa_sdk::plugins::tools::create_builtin_tool_plugin;
@@ -84,7 +85,7 @@ fn execute(prompt) {
     let mut rhai_plugin = RhaiPlugin::new(config).await?;
 
     // 创建上下文
-    let ctx = mofa_sdk::plugins::PluginContext::new("rules_engine_agent");
+    let ctx = PluginContext::new("rules_engine_agent");
 
     // 加载并启动插件
     rhai_plugin.load(&ctx).await?;
@@ -206,7 +207,7 @@ fn execute(llm_response) {
     let rules_config = RhaiPluginConfig::new_file("llm_rules", &rules_file.to_path_buf());
     let mut rules_plugin = RhaiPlugin::new(rules_config).await?;
 
-    let ctx = mofa_sdk::plugins::PluginContext::new("llm_rules_agent");
+    let ctx = PluginContext::new("llm_rules_agent");
     rules_plugin.load(&ctx).await?;
     rules_plugin.init_plugin().await?;
     rules_plugin.start().await?;

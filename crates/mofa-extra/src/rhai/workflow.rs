@@ -485,8 +485,10 @@ impl ScriptWorkflowExecutor {
         }
 
         // 初始化状态
-        let mut state = WorkflowExecutionState::default();
-        state.variables = definition.global_variables.clone();
+        let state = WorkflowExecutionState {
+            variables: definition.global_variables.clone(),
+            ..Default::default()
+        };
 
         Ok(Self {
             engine,

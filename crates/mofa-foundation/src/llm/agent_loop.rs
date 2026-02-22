@@ -18,6 +18,9 @@ use crate::llm::types::{
 use anyhow::Result;
 use std::collections::HashMap;
 use std::path::Path;
+
+/// Type alias for tool handler function in SimpleToolExecutor
+pub type SimpleToolHandler = Box<dyn Fn(&str) -> Result<String> + Send + Sync>;
 use std::sync::Arc;
 
 /// Configuration for the agent loop
@@ -401,7 +404,7 @@ impl AgentLoopRunner {
 
 /// Simple tool executor for testing
 pub struct SimpleToolExecutor {
-    tools: HashMap<String, Box<dyn Fn(&str) -> Result<String> + Send + Sync>>,
+    tools: HashMap<String, SimpleToolHandler>,
 }
 
 impl SimpleToolExecutor {

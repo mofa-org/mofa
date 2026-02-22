@@ -453,8 +453,8 @@ pub struct AgentWorkflow {
 }
 
 impl AgentWorkflow {
-    /// 创建新的工作流
-    pub fn new(id: impl Into<String>) -> AgentWorkflowBuilder {
+    /// 创建新的工作流构建器
+    pub fn builder(id: impl Into<String>) -> AgentWorkflowBuilder {
         AgentWorkflowBuilder::new(id)
     }
 

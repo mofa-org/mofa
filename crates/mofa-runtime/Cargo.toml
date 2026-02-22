@@ -9,7 +9,7 @@ repository.workspace = true
 homepage.workspace = true
 documentation = "https://docs.rs/mofa-runtime"
 readme = "README.md"
-keywords = ["ai", "agent", "runtime", "actor", "message-bus", "event-loop"]
+keywords = ["ai", "agent", "runtime", "actor", "message-bus"]
 categories = ["development-tools", "asynchronous"]
 publish = true
 
@@ -43,7 +43,9 @@ toml = "0.8"
 config.workspace = true
 regex.workspace = true
 
-[features]
+[lints]
+workspace = true
 
+[features]
 dora = ["dora-node-api", "dora-operator-api", "dora-daemon", "dora-core", "dora-message"]
 monitoring = ["dep:mofa-monitoring"]

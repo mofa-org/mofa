@@ -1,7 +1,7 @@
 //! `mofa new` command implementation
 
 use colored::Colorize;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 /// Execute the `mofa new` command
 pub fn run(name: &str, template: &str, output: Option<&std::path::Path>) -> anyhow::Result<()> {
@@ -43,7 +43,7 @@ pub fn run(name: &str, template: &str, output: Option<&std::path::Path>) -> anyh
     Ok(())
 }
 
-fn generate_basic_template(name: &str, project_dir: &PathBuf) -> anyhow::Result<()> {
+fn generate_basic_template(name: &str, project_dir: &Path) -> anyhow::Result<()> {
     // Create Cargo.toml
     let cargo_toml = format!(
         r#"[package]
@@ -90,7 +90,7 @@ OPENAI_MODEL=gpt-4o
     Ok(())
 }
 
-fn generate_llm_template(name: &str, project_dir: &PathBuf) -> anyhow::Result<()> {
+fn generate_llm_template(name: &str, project_dir: &Path) -> anyhow::Result<()> {
     // Create Cargo.toml with LLM dependencies
     let cargo_toml = format!(
         r#"[package]
@@ -191,7 +191,7 @@ OPENAI_MODEL=gpt-4o
     Ok(())
 }
 
-fn generate_axum_llm_template(name: &str, project_dir: &PathBuf) -> anyhow::Result<()> {
+fn generate_axum_llm_template(name: &str, project_dir: &Path) -> anyhow::Result<()> {
     // Create Cargo.toml with axum dependencies
     let cargo_toml = format!(
         r#"[package]
@@ -781,7 +781,7 @@ Thumbs.db
     Ok(())
 }
 
-fn generate_python_template(name: &str, project_dir: &PathBuf) -> anyhow::Result<()> {
+fn generate_python_template(name: &str, project_dir: &Path) -> anyhow::Result<()> {
     // Create main.py using mofa SDK
     let main_py = r#"#!/usr/bin/env python3
 """
