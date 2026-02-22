@@ -42,8 +42,6 @@ pub mod agent;
 pub mod collaboration;
 
 
-// orchestrator module - Edge Model Orchestrator (GSoC 2026)
-pub mod orchestrator;
 
 // RAG module - vector store and document chunking
 pub mod rag;
