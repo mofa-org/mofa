@@ -140,11 +140,20 @@ impl LLMClient for OpenAIClient {
         prompt: &str,
         callback: Box<dyn Fn(String) + Send + Sync>,
     ) -> PluginResult<String> {
-        // 模拟流式生成 TODO
+        // Stub: simulates word-level streaming with inter-token spacing.
+        // Replace with a real SSE/delta streaming call (e.g. via `async-openai`)
+        // once live credentials and an HTTP client are wired in.
         let response = format!("[{}] Stream response to: {}", self.config.model, prompt);
-        for chunk in response.as_str().split_whitespace() {
-            callback(chunk.to_string());
-            tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        let words: Vec<&str> = response.split_whitespace().collect();
+        let len = words.len();
+        for (i, word) in words.iter().enumerate() {
+            let chunk = if i + 1 < len {
+                format!("{} ", word) // preserve trailing space between tokens
+            } else {
+                word.to_string()
+            };
+            callback(chunk);
+            tokio::time::sleep(std::time::Duration::from_millis(20)).await;
         }
         Ok(response)
     }

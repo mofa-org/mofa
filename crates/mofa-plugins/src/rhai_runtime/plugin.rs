@@ -13,8 +13,67 @@ use std::any::Any;
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::time::Instant;
 use tokio::sync::RwLock;
-use tracing::{error, info, warn};
+use tracing::{info, warn};
+
+// ============================================================================
+// Plugin Runtime Statistics
+// ============================================================================
+
+/// Atomic counters that track invocation metrics for a single Rhai plugin.
+///
+/// Counters use `Relaxed` ordering because they are informational — no
+/// cross-thread synchronisation is required beyond the atomicity itself.
+#[derive(Debug, Default)]
+pub struct PluginStats {
+    /// Total invocations (successful + failed).
+    calls_total: AtomicU64,
+    /// Invocations that returned an error.
+    calls_failed: AtomicU64,
+    /// Running sum of wall-clock latencies in milliseconds.
+    total_latency_ms: AtomicU64,
+}
+
+impl PluginStats {
+    /// Record one completed invocation.
+    pub fn record(&self, latency_ms: u64, failed: bool) {
+        self.calls_total.fetch_add(1, Ordering::Relaxed);
+        self.total_latency_ms
+            .fetch_add(latency_ms, Ordering::Relaxed);
+        if failed {
+            self.calls_failed.fetch_add(1, Ordering::Relaxed);
+        }
+    }
+
+    /// Average wall-clock latency across all recorded invocations.
+    pub fn avg_latency_ms(&self) -> f64 {
+        let total = self.calls_total.load(Ordering::Relaxed);
+        if total == 0 {
+            return 0.0;
+        }
+        self.total_latency_ms.load(Ordering::Relaxed) as f64 / total as f64
+    }
+
+    /// Snapshot the current counters as a JSON map for the monitoring dashboard.
+    pub fn to_map(&self) -> HashMap<String, serde_json::Value> {
+        let mut map = HashMap::new();
+        map.insert(
+            "calls_total".to_string(),
+            serde_json::json!(self.calls_total.load(Ordering::Relaxed)),
+        );
+        map.insert(
+            "calls_failed".to_string(),
+            serde_json::json!(self.calls_failed.load(Ordering::Relaxed)),
+        );
+        map.insert(
+            "avg_latency_ms".to_string(),
+            serde_json::json!(self.avg_latency_ms()),
+        );
+        map
+    }
+}
 
 // ============================================================================
 // Rhai Plugin Configuration
@@ -159,6 +218,8 @@ pub struct RhaiPlugin {
     last_modified: u64,
     /// Cached script content
     cached_content: String,
+    /// Runtime invocation statistics
+    stats: Arc<PluginStats>,
 }
 
 impl RhaiPlugin {
@@ -188,11 +249,8 @@ impl RhaiPlugin {
         };
 
         // Build kernel metadata once so metadata() can return a plain borrow
-        let kernel_metadata = KernelPluginMetadata::new(
-            &config.plugin_id,
-            &metadata.name,
-            PluginType::Tool,
-        );
+        let kernel_metadata =
+            KernelPluginMetadata::new(&config.plugin_id, &metadata.name, PluginType::Tool);
 
         // Create plugin
         Ok(Self {
@@ -205,6 +263,7 @@ impl RhaiPlugin {
             plugin_context: RwLock::new(None),
             last_modified,
             cached_content: content,
+            stats: Arc::new(PluginStats::default()),
         })
     }
 
@@ -290,17 +349,74 @@ impl RhaiPlugin {
         Ok(())
     }
 
-    /// Call a script function if it exists
+    /// Call a script function if it exists.
+    ///
+    /// Returns `Ok(None)` when the function is not defined in the script so
+    /// that optional lifecycle hooks can be omitted silently.
+    /// Implementation provided by PR #157 — kept as stub here to avoid overlap.
     async fn call_script_function(
         &self,
         _function_name: &str,
         _args: &[Dynamic],
     ) -> RhaiPluginResult<Option<Dynamic>> {
-        // TODO: Implement proper function calling
-        // Current RhaiScriptEngine doesn't support calling specific functions,
-        // only executing entire scripts
-
+        // Stub — full implementation lives in the companion PR that adds
+        // RhaiScriptEngine::call_function + Dynamic ↔ serde_json marshalling.
         Ok(None)
+    }
+
+    /// Inner execution helper — called by [`execute`] so that timing and stats
+    /// collection are isolated from the actual script dispatch logic.
+    ///
+    /// Only reads from `self` so the borrow checker allows `execute()` to call
+    /// it via `&self` after temporarily releasing the mutable borrow.
+    async fn execute_script(&self, input: String) -> PluginResult<String> {
+        // Create context with input
+        let mut context = ScriptContext::new();
+        context = context.with_variable("input", input.clone())?;
+
+        // Compile and cache the script (idempotent when already cached)
+        let script_id = format!("{}_exec", self.id);
+        self.engine
+            .compile_and_cache(&script_id, "execute", &self.cached_content)
+            .await?;
+
+        // Try to call the execute function with the input
+        match self
+            .engine
+            .call_function::<serde_json::Value>(
+                &script_id,
+                "execute",
+                vec![serde_json::json!(input)],
+                &context,
+            )
+            .await
+        {
+            Ok(result) => {
+                info!(
+                    "Rhai plugin {} executed successfully via call_function",
+                    self.id
+                );
+                Ok(serde_json::to_string_pretty(&result)?)
+            }
+            Err(e) => {
+                warn!(
+                    "Failed to call execute function: {}, falling back to direct execution",
+                    e
+                );
+
+                // Fallback: execute the whole script directly
+                let result = self.engine.execute(&self.cached_content, &context).await?;
+
+                if !result.success {
+                    return Err(anyhow::anyhow!(
+                        "Script execution failed: {:?}",
+                        result.error
+                    ));
+                }
+
+                Ok(serde_json::to_string_pretty(&result.value)?)
+            }
+        }
     }
 }
 
@@ -420,63 +536,23 @@ impl AgentPlugin for RhaiPlugin {
     }
 
     async fn execute(&mut self, input: String) -> PluginResult<String> {
-        let state = self.state.read().await;
-        if *state != RhaiPluginState::Running {
-            return Err(anyhow::anyhow!("Plugin not running"));
-        }
-        drop(state);
-
-        // Create context with input
-        let mut context = ScriptContext::new();
-        context = context.with_variable("input", input.clone())?;
-
-        // Compile and cache the script first
-        let script_id = format!("{}_exec", self.id);
-        self.engine
-            .compile_and_cache(&script_id, "execute", &self.cached_content)
-            .await?;
-
-        // Try to call the execute function with the input
-        match self
-            .engine
-            .call_function::<serde_json::Value>(
-                &script_id,
-                "execute",
-                vec![serde_json::json!(input)],
-                &context,
-            )
-            .await
         {
-            Ok(result) => {
-                info!(
-                    "Rhai plugin {} executed successfully via call_function",
-                    self.id
-                );
-                Ok(serde_json::to_string_pretty(&result)?)
-            }
-            Err(e) => {
-                warn!(
-                    "Failed to call execute function: {}, falling back to direct execution",
-                    e
-                );
-
-                // Fallback: execute the script directly
-                let result = self.engine.execute(&self.cached_content, &context).await?;
-
-                if !result.success {
-                    return Err(anyhow::anyhow!(
-                        "Script execution failed: {:?}",
-                        result.error
-                    ));
-                }
-
-                Ok(serde_json::to_string_pretty(&result.value)?)
+            let state = self.state.read().await;
+            if *state != RhaiPluginState::Running {
+                return Err(anyhow::anyhow!("Plugin not running"));
             }
         }
+
+        // --- stats: start wall-clock timer ---
+        let timer = Instant::now();
+        let result = self.execute_script(input).await;
+        let latency_ms = timer.elapsed().as_millis() as u64;
+        self.stats.record(latency_ms, result.is_err());
+        result
     }
 
     fn stats(&self) -> HashMap<String, serde_json::Value> {
-        HashMap::new() // TODO: Implement stats
+        self.stats.to_map()
     }
 
     fn as_any(&self) -> &dyn Any {
