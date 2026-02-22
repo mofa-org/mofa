@@ -90,6 +90,7 @@ use crate::agent::error::{AgentError, AgentResult};
 use crate::agent::types::{AgentInput, AgentOutput, AgentState, InterruptResult};
 use std::sync::Arc;
 use tokio::sync::RwLock;
+use tokio::time::{Duration, MissedTickBehavior};
 
 /// 运行器状态
 /// Runner state
@@ -137,6 +138,43 @@ pub struct RunnerStats {
     /// 最后执行时间
     /// Last execution time
     pub last_execution_time_ms: Option<u64>,
+}
+
+/// 周期执行配置
+#[derive(Debug, Clone)]
+pub struct PeriodicRunConfig {
+    /// 执行间隔
+    pub interval: Duration,
+    /// 最大执行次数（必须大于 0）
+    pub max_runs: u64,
+    /// 是否立即执行第一轮（true: 立即执行；false: 等待一个间隔后执行）
+    pub run_immediately: bool,
+}
+
+impl Default for PeriodicRunConfig {
+    fn default() -> Self {
+        Self {
+            interval: Duration::from_secs(60),
+            max_runs: 1,
+            run_immediately: true,
+        }
+    }
+}
+
+impl PeriodicRunConfig {
+    fn validate(&self) -> AgentResult<()> {
+        if self.interval.is_zero() {
+            return Err(AgentError::ValidationFailed(
+                "Periodic interval must be greater than 0".to_string(),
+            ));
+        }
+        if self.max_runs == 0 {
+            return Err(AgentError::ValidationFailed(
+                "Periodic max_runs must be greater than 0".to_string(),
+            ));
+        }
+        Ok(())
+    }
 }
 
 /// 统一 Agent 运行器
@@ -325,6 +363,35 @@ impl<T: MoFAAgent> AgentRunner<T> {
             results.push(self.execute(input).await);
         }
         results
+    }
+
+    /// 按固定间隔周期执行同一输入
+    ///
+    /// 说明：
+    /// - 使用 `MissedTickBehavior::Skip` 避免执行落后时“补跑风暴”
+    /// - 执行串行进行，不允许同一 runner 内部重叠执行
+    pub async fn run_periodic(
+        &mut self,
+        input: AgentInput,
+        config: PeriodicRunConfig,
+    ) -> AgentResult<Vec<AgentOutput>> {
+        config.validate()?;
+
+        let mut outputs = Vec::with_capacity(config.max_runs as usize);
+        let mut ticker = tokio::time::interval(config.interval);
+        ticker.set_missed_tick_behavior(MissedTickBehavior::Skip);
+
+        // interval 首次 tick 立即返回。若不希望立即执行，先消费这次即时 tick。
+        if !config.run_immediately {
+            ticker.tick().await;
+        }
+
+        for _ in 0..config.max_runs {
+            ticker.tick().await;
+            outputs.push(self.execute(input.clone()).await?);
+        }
+
+        Ok(outputs)
     }
 
     /// 暂停运行器
@@ -522,6 +589,7 @@ pub async fn run_agents<T: MoFAAgent>(
 mod tests {
     use super::*;
     use crate::agent::capabilities::AgentCapabilitiesBuilder;
+    use std::time::{Duration as StdDuration, Instant};
 
     struct TestAgent {
         id: String,
@@ -613,5 +681,84 @@ mod tests {
         let outputs = run_agents(agent, inputs).await.unwrap();
 
         assert_eq!(outputs[0].to_text(), "Echo: Test");
+    }
+
+    #[tokio::test]
+    async fn test_agent_runner_run_periodic_executes_max_runs() {
+        let agent = TestAgent::new("test-004", "Periodic Agent");
+        let mut runner = AgentRunner::new(agent).await.unwrap();
+
+        let outputs = runner
+            .run_periodic(
+                AgentInput::text("Tick"),
+                PeriodicRunConfig {
+                    interval: Duration::from_millis(10),
+                    max_runs: 3,
+                    run_immediately: true,
+                },
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(outputs.len(), 3);
+        assert!(outputs.iter().all(|o| o.to_text() == "Echo: Tick"));
+
+        let stats = runner.stats().await;
+        assert_eq!(stats.total_executions, 3);
+        assert_eq!(stats.successful_executions, 3);
+    }
+
+    #[tokio::test]
+    async fn test_agent_runner_run_periodic_initial_delay_when_not_immediate() {
+        let agent = TestAgent::new("test-005", "Delayed Periodic Agent");
+        let mut runner = AgentRunner::new(agent).await.unwrap();
+
+        let started = Instant::now();
+        let outputs = runner
+            .run_periodic(
+                AgentInput::text("Delayed"),
+                PeriodicRunConfig {
+                    interval: Duration::from_millis(40),
+                    max_runs: 1,
+                    run_immediately: false,
+                },
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(outputs.len(), 1);
+        assert!(started.elapsed() >= StdDuration::from_millis(30));
+    }
+
+    #[tokio::test]
+    async fn test_agent_runner_run_periodic_rejects_invalid_config() {
+        let agent = TestAgent::new("test-006", "Invalid Config Agent");
+        let mut runner = AgentRunner::new(agent).await.unwrap();
+
+        let err = runner
+            .run_periodic(
+                AgentInput::text("x"),
+                PeriodicRunConfig {
+                    interval: Duration::ZERO,
+                    max_runs: 1,
+                    run_immediately: true,
+                },
+            )
+            .await
+            .unwrap_err();
+        assert!(matches!(err, AgentError::ValidationFailed(_)));
+
+        let err = runner
+            .run_periodic(
+                AgentInput::text("x"),
+                PeriodicRunConfig {
+                    interval: Duration::from_millis(10),
+                    max_runs: 0,
+                    run_immediately: true,
+                },
+            )
+            .await
+            .unwrap_err();
+        assert!(matches!(err, AgentError::ValidationFailed(_)));
     }
 }
