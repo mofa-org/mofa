@@ -6,7 +6,11 @@ use colored::Colorize;
 use serde::Serialize;
 
 /// Execute the `mofa session list` command
-pub async fn run(ctx: &CliContext, agent_id: Option<&str>, limit: Option<usize>) -> anyhow::Result<()> {
+pub async fn run(
+    ctx: &CliContext,
+    agent_id: Option<&str>,
+    limit: Option<usize>,
+) -> anyhow::Result<()> {
     println!("{} Listing sessions", "→".green());
 
     if let Some(agent) = agent_id {
@@ -32,7 +36,15 @@ pub async fn run(ctx: &CliContext, agent_id: Option<&str>, limit: Option<usize>)
 
     let mut sessions = Vec::new();
     for key in &keys {
-        let session = ctx.session_manager.get_or_create(key).await;
+        let session = match ctx
+            .session_manager
+            .get(key)
+            .await
+            .map_err(|e| anyhow::anyhow!("Failed to load session '{}': {}", key, e))?
+        {
+            Some(session) => session,
+            None => continue,
+        };
 
         // Filter by agent_id if provided (check metadata or key prefix)
         if let Some(agent) = agent_id {
@@ -86,4 +98,36 @@ struct SessionInfo {
     created_at: String,
     message_count: usize,
     status: String,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::context::CliContext;
+    use mofa_foundation::agent::session::Session;
+    use serde_json::json;
+    use tempfile::TempDir;
+
+    #[tokio::test]
+    async fn test_session_list_runs_with_saved_sessions() {
+        let temp = TempDir::new().unwrap();
+        let ctx = CliContext::with_temp_dir(temp.path()).await.unwrap();
+
+        let mut session_a = Session::new("agent-a:1");
+        session_a
+            .metadata
+            .insert("agent_id".to_string(), json!("agent-a"));
+        session_a.add_message("user", "hello");
+        ctx.session_manager.save(&session_a).await.unwrap();
+
+        let mut session_b = Session::new("agent-b:1");
+        session_b
+            .metadata
+            .insert("agent_id".to_string(), json!("agent-b"));
+        ctx.session_manager.save(&session_b).await.unwrap();
+
+        run(&ctx, None, None).await.unwrap();
+        run(&ctx, Some("agent-a"), None).await.unwrap();
+        run(&ctx, Some("agent-b"), Some(1)).await.unwrap();
+    }
 }
