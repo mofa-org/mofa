@@ -196,3 +196,7 @@ If you have questions, open an issue on GitHub or join the community discussions
 ---
 
 [← Back to Table of Contents](README.md)
+
+---
+
+**English** | [简体中文](../zh-CN/tutorial/09-whats-next.md)

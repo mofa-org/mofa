@@ -419,3 +419,7 @@ let result = executor.execute(&workflow, input).await?;
 **下一章：** [第 8 章：插件与脚本](08-plugins-and-scripting_cn.md) — 编写支持热重载的 Rhai 插件。
 
 [← 返回目录](README_cn.md)
+
+---
+
+**English** | [简体中文](../zh-CN/tutorial/07-workflows_cn.md)

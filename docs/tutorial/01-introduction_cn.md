@@ -135,3 +135,7 @@ MoFA 拥有独特的两层可扩展方案：
 **下一章：** [第 2 章：环境搭建](02-setup_cn.md) — 准备好你的开发环境。
 
 [← 返回目录](README_cn.md)
+
+---
+
+**English** | [简体中文](../zh-CN/tutorial/01-introduction_cn.md)

@@ -411,3 +411,7 @@ tool_plugin.init_plugin().await?;
 **下一章：** [第 6 章：多智能体协调](06-multi-agent_cn.md) — 编排多个智能体协同工作。
 
 [← 返回目录](README_cn.md)
+
+---
+
+**English** | [简体中文](../zh-CN/tutorial/05-tools_cn.md)

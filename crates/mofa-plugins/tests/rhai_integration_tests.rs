@@ -333,7 +333,7 @@ async fn test_call_script_function_no_args() {
 async fn test_call_script_function_returns_nothing() {
     let script = r#"
         fn side_effect_function() {
-            print("side effect");
+            let _tmp = 1 + 1;
         }
     "#;
 
