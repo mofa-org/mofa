@@ -313,9 +313,9 @@ mod error_handling_tests {
         let tts = MockKokoroTTSForErrors::new();
 
         let error_cases = vec![
-            ("", "Empty text"),
-            ("INVALID_UTF8", "UTF-8"),
-            ("NETWORK_ERROR", "Network"),
+            ("", "empty"),
+            ("INVALID_UTF8", "utf-8"),
+            ("NETWORK_ERROR", "network"),
         ];
 
         for (text, expected_keyword) in error_cases {
@@ -326,9 +326,7 @@ mod error_handling_tests {
 
             // Error should mention the specific problem
             assert!(
-                error
-                    .to_lowercase()
-                    .contains(&expected_keyword.to_lowercase())
+                error.to_lowercase().contains(expected_keyword)
                     || error.to_lowercase().contains("failed"),
                 "Error '{}' should mention '{}' or indicate failure",
                 error,
