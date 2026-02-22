@@ -6,6 +6,7 @@ mod config;
 mod context;
 mod output;
 mod render;
+mod state;
 mod tui;
 mod utils;
 mod widgets;

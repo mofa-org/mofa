@@ -6,7 +6,11 @@ use colored::Colorize;
 use serde::Serialize;
 
 /// Execute the `mofa session list` command
-pub async fn run(ctx: &CliContext, agent_id: Option<&str>, limit: Option<usize>) -> anyhow::Result<()> {
+pub async fn run(
+    ctx: &CliContext,
+    agent_id: Option<&str>,
+    limit: Option<usize>,
+) -> anyhow::Result<()> {
     println!("{} Listing sessions", "→".green());
 
     if let Some(agent) = agent_id {

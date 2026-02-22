@@ -1,5 +1,7 @@
 //! CLI context providing access to backend services
 
+use crate::state::PersistentAgentRegistry;
+use crate::utils::AgentProcessManager;
 use crate::utils::paths;
 use mofa_foundation::agent::session::SessionManager;
 use mofa_foundation::agent::tools::registry::ToolRegistry;
@@ -14,6 +16,10 @@ pub struct CliContext {
     pub session_manager: SessionManager,
     /// In-memory agent registry
     pub agent_registry: AgentRegistry,
+    /// Persistent agent state storage
+    pub persistent_agents: Arc<PersistentAgentRegistry>,
+    /// Agent process manager for spawning/managing processes
+    pub process_manager: AgentProcessManager,
     /// In-memory plugin registry
     pub plugin_registry: Arc<SimplePluginRegistry>,
     /// In-memory tool registry
@@ -35,9 +41,18 @@ impl CliContext {
             .await
             .map_err(|e| anyhow::anyhow!("Failed to initialize session manager: {}", e))?;
 
+        let agents_dir = data_dir.join("agents");
+        let persistent_agents = Arc::new(PersistentAgentRegistry::new(agents_dir).await.map_err(
+            |e| anyhow::anyhow!("Failed to initialize persistent agent registry: {}", e),
+        )?);
+
+        let process_manager = AgentProcessManager::new(config_dir.clone());
+
         Ok(Self {
             session_manager,
             agent_registry: AgentRegistry::new(),
+            persistent_agents,
+            process_manager,
             plugin_registry: Arc::new(SimplePluginRegistry::new()),
             tool_registry: ToolRegistry::new(),
             data_dir,
