@@ -65,6 +65,7 @@ page-break = true
 
 # PDF output (requires mdbook-pandoc and pandoc)
 [output.pandoc]
+optional = true
 hosted-html = "https://mofa-org.github.io/mofa/"
 
 # PDF configuration
