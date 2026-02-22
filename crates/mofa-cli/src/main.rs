@@ -3,8 +3,10 @@
 mod cli;
 mod commands;
 mod config;
+mod context;
 mod output;
 mod render;
+mod store;
 mod tui;
 mod utils;
 mod widgets;
@@ -12,6 +14,7 @@ mod widgets;
 use clap::Parser;
 use cli::Cli;
 use colored::Colorize;
+use context::CliContext;
 
 fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
@@ -23,19 +26,38 @@ fn main() -> anyhow::Result<()> {
         tracing_subscriber::fmt().with_env_filter("info").init();
     }
 
+    let rt = tokio::runtime::Runtime::new()?;
+
     // Launch TUI if requested or no command provided
     if cli.tui || cli.command.is_none() {
         // Run TUI mode
-        tokio::runtime::Runtime::new()?.block_on(tui::run())?;
+        rt.block_on(tui::run())?;
         Ok(())
     } else {
-        // Run CLI command as usual
-        run_command(cli)
+        // Run CLI command
+        rt.block_on(run_command(cli))
     }
 }
 
-fn run_command(cli: Cli) -> anyhow::Result<()> {
+async fn run_command(cli: Cli) -> anyhow::Result<()> {
     use cli::Commands;
+
+    // Initialize context for commands that need backend services
+    let needs_context = matches!(
+        &cli.command,
+        Some(
+            Commands::Agent(_)
+                | Commands::Plugin { .. }
+                | Commands::Session { .. }
+                | Commands::Tool { .. }
+        )
+    );
+
+    let ctx = if needs_context {
+        Some(CliContext::new().await?)
+    } else {
+        None
+    };
 
     match cli.command {
         Some(Commands::New {
@@ -89,33 +111,44 @@ fn run_command(cli: Cli) -> anyhow::Result<()> {
             }
         },
 
-        Some(Commands::Agent(agent_cmd)) => match agent_cmd {
-            cli::AgentCommands::Create {
-                non_interactive,
-                config,
-            } => {
-                commands::agent::create::run(non_interactive, config)?;
+        Some(Commands::Agent(agent_cmd)) => {
+            let ctx = ctx.as_ref().unwrap();
+            match agent_cmd {
+                cli::AgentCommands::Create {
+                    non_interactive,
+                    config,
+                } => {
+                    commands::agent::create::run(non_interactive, config)?;
+                }
+                cli::AgentCommands::Start {
+                    agent_id,
+                    config,
+                    factory_type,
+                    daemon,
+                } => {
+                    commands::agent::start::run(
+                        ctx,
+                        &agent_id,
+                        config.as_deref(),
+                        factory_type.as_deref(),
+                        daemon,
+                    )
+                    .await?;
+                }
+                cli::AgentCommands::Stop { agent_id } => {
+                    commands::agent::stop::run(ctx, &agent_id).await?;
+                }
+                cli::AgentCommands::Restart { agent_id, config } => {
+                    commands::agent::restart::run(ctx, &agent_id, config.as_deref()).await?;
+                }
+                cli::AgentCommands::Status { agent_id } => {
+                    commands::agent::status::run(ctx, agent_id.as_deref()).await?;
+                }
+                cli::AgentCommands::List { running, all } => {
+                    commands::agent::list::run(ctx, running, all).await?;
+                }
             }
-            cli::AgentCommands::Start {
-                agent_id,
-                config,
-                daemon,
-            } => {
-                commands::agent::start::run(&agent_id, config.as_deref(), daemon)?;
-            }
-            cli::AgentCommands::Stop { agent_id } => {
-                commands::agent::stop::run(&agent_id)?;
-            }
-            cli::AgentCommands::Restart { agent_id, config } => {
-                commands::agent::restart::run(&agent_id, config.as_deref())?;
-            }
-            cli::AgentCommands::Status { agent_id } => {
-                commands::agent::status::run(agent_id.as_deref())?;
-            }
-            cli::AgentCommands::List { running, all } => {
-                commands::agent::list::run(running, all)?;
-            }
-        },
+        }
 
         Some(Commands::Config { action }) => match action {
             cli::ConfigCommands::Value(value_cmd) => match value_cmd {
@@ -140,51 +173,63 @@ fn run_command(cli: Cli) -> anyhow::Result<()> {
             }
         },
 
-        Some(Commands::Plugin { action }) => match action {
-            cli::PluginCommands::List {
-                installed,
-                available,
-            } => {
-                commands::plugin::list::run(installed, available)?;
+        Some(Commands::Plugin { action }) => {
+            let ctx = ctx.as_ref().unwrap();
+            match action {
+                cli::PluginCommands::List {
+                    installed,
+                    available,
+                } => {
+                    commands::plugin::list::run(ctx, installed, available).await?;
+                }
+                cli::PluginCommands::Info { name } => {
+                    commands::plugin::info::run(ctx, &name).await?;
+                }
+                cli::PluginCommands::Uninstall { name, force } => {
+                    commands::plugin::uninstall::run(ctx, &name, force).await?;
+                }
             }
-            cli::PluginCommands::Info { name } => {
-                commands::plugin::info::run(&name)?;
-            }
-            cli::PluginCommands::Uninstall { name, force } => {
-                commands::plugin::uninstall::run(&name, force)?;
-            }
-        },
+        }
 
-        Some(Commands::Session { action }) => match action {
-            cli::SessionCommands::List { agent, limit } => {
-                commands::session::list::run(agent.as_deref(), limit)?;
+        Some(Commands::Session { action }) => {
+            let ctx = ctx.as_ref().unwrap();
+            match action {
+                cli::SessionCommands::List { agent, limit } => {
+                    commands::session::list::run(ctx, agent.as_deref(), limit).await?;
+                }
+                cli::SessionCommands::Show { session_id, format } => {
+                    commands::session::show::run(
+                        ctx,
+                        &session_id,
+                        format.map(|f| f.to_string()).as_deref(),
+                    )
+                    .await?;
+                }
+                cli::SessionCommands::Delete { session_id, force } => {
+                    commands::session::delete::run(ctx, &session_id, force).await?;
+                }
+                cli::SessionCommands::Export {
+                    session_id,
+                    output,
+                    format,
+                } => {
+                    commands::session::export::run(ctx, &session_id, output, &format.to_string())
+                        .await?;
+                }
             }
-            cli::SessionCommands::Show { session_id, format } => {
-                commands::session::show::run(
-                    &session_id,
-                    format.map(|f| f.to_string()).as_deref(),
-                )?;
-            }
-            cli::SessionCommands::Delete { session_id, force } => {
-                commands::session::delete::run(&session_id, force)?;
-            }
-            cli::SessionCommands::Export {
-                session_id,
-                output,
-                format,
-            } => {
-                commands::session::export::run(&session_id, output, &format.to_string())?;
-            }
-        },
+        }
 
-        Some(Commands::Tool { action }) => match action {
-            cli::ToolCommands::List { available, enabled } => {
-                commands::tool::list::run(available, enabled)?;
+        Some(Commands::Tool { action }) => {
+            let ctx = ctx.as_ref().unwrap();
+            match action {
+                cli::ToolCommands::List { available, enabled } => {
+                    commands::tool::list::run(ctx, available, enabled).await?;
+                }
+                cli::ToolCommands::Info { name } => {
+                    commands::tool::info::run(ctx, &name).await?;
+                }
             }
-            cli::ToolCommands::Info { name } => {
-                commands::tool::info::run(&name)?;
-            }
-        },
+        }
 
         None => {
             // Should have been handled by TUI check above

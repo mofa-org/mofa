@@ -5,10 +5,10 @@
 //!
 //! ## 核心Traits
 //!
-//! - [`SecretaryBehavior`]: 定义秘书的完整行为
-//! - [`InputHandler`]: 处理特定类型的输入
-//! - [`PhaseHandler`]: 处理工作流中的某个阶段
-//! - [`WorkflowOrchestrator`]: 编排多阶段工作流
+//! - [`SecretaryBehavior`][]: 定义秘书的完整行为
+//! - [`InputHandler`][]: 处理特定类型的输入
+//! - [`PhaseHandler`][]: 处理工作流中的某个阶段
+//! - [`WorkflowOrchestrator`][]: 编排多阶段工作流
 
 use async_trait::async_trait;
 use serde::{Serialize, de::DeserializeOwned};

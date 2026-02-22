@@ -19,7 +19,6 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::Duration;
 use tracing::info;
-use mofa_sdk::plugins::wasm_runtime::PluginMetrics;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {

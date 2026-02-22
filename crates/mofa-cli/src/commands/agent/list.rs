@@ -1,56 +1,76 @@
 //! `mofa agent list` command implementation
 
+use crate::context::CliContext;
 use crate::output::Table;
 use colored::Colorize;
 use serde::Serialize;
+use std::collections::BTreeMap;
 
 /// Execute the `mofa agent list` command
-pub fn run(running_only: bool, show_all: bool) -> anyhow::Result<()> {
+pub async fn run(ctx: &CliContext, running_only: bool, _show_all: bool) -> anyhow::Result<()> {
     println!("{} Listing agents", "→".green());
-
-    if running_only {
-        println!("  Showing running agents only");
-    } else if show_all {
-        println!("  Showing all agents");
-    }
-
     println!();
 
-    // TODO: Implement actual agent listing from state store
-    // For now, show example output
+    let agents_metadata = ctx.agent_registry.list().await;
+    let persisted_agents = ctx
+        .agent_store
+        .list()
+        .map_err(|e| anyhow::anyhow!("Failed to list persisted agents: {}", e))?;
 
-    let agents = vec![
-        AgentInfo {
-            id: "agent-001".to_string(),
-            name: "MyAgent".to_string(),
-            status: "running".to_string(),
-            uptime: Some("5m 32s".to_string()),
-            provider: Some("openai".to_string()),
-            model: Some("gpt-4o".to_string()),
-        },
-        AgentInfo {
-            id: "agent-002".to_string(),
-            name: "TestAgent".to_string(),
-            status: "stopped".to_string(),
-            uptime: None,
-            provider: None,
-            model: None,
-        },
-    ];
+    let mut merged: BTreeMap<String, AgentInfo> = BTreeMap::new();
+    for m in &agents_metadata {
+        let status = format!("{:?}", m.state);
+        let is_running = is_running_state(&status);
+        merged.insert(
+            m.id.clone(),
+            AgentInfo {
+                id: m.id.clone(),
+                name: m.name.clone(),
+                status,
+                is_running,
+                description: m.description.clone(),
+            },
+        );
+    }
+
+    for (_, entry) in persisted_agents {
+        merged.entry(entry.id.clone()).or_insert_with(|| {
+            let status = if is_running_state(&entry.state) {
+                format!("{} (persisted)", entry.state)
+            } else {
+                entry.state
+            };
+            AgentInfo {
+                id: entry.id,
+                name: entry.name,
+                status,
+                is_running: false,
+                description: entry.description,
+            }
+        });
+    }
+
+    if merged.is_empty() {
+        println!("  No agents registered.");
+        println!();
+        println!(
+            "  Use {} to start an agent.",
+            "mofa agent start <agent_id>".cyan()
+        );
+        return Ok(());
+    }
+
+    let agents: Vec<AgentInfo> = merged.into_values().collect();
 
     // Filter based on flags
     let filtered: Vec<_> = if running_only {
-        agents
-            .iter()
-            .filter(|a| a.status == "running")
-            .cloned()
-            .collect()
+        agents.into_iter().filter(|a| a.is_running).collect()
     } else {
         agents
     };
 
     if filtered.is_empty() {
-        println!("  No agents found.");
+        println!("  No agents found matching criteria.");
         return Ok(());
     }
 
@@ -69,10 +89,12 @@ struct AgentInfo {
     id: String,
     name: String,
     status: String,
+    #[serde(skip_serializing)]
+    is_running: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
-    uptime: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    provider: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    model: Option<String>,
+    description: Option<String>,
+}
+
+fn is_running_state(status: &str) -> bool {
+    status == "Running" || status == "Ready"
 }

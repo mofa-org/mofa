@@ -268,7 +268,7 @@ impl ConfigLoader {
 
         let content = Self::to_string(config, format)?;
 
-        std::fs::write(path, content).map_err(|e| AgentConfigError::Io(e))?;
+        std::fs::write(path, content).map_err(AgentConfigError::Io)?;
 
         Ok(())
     }
@@ -277,12 +277,12 @@ impl ConfigLoader {
     pub fn load_directory(dir_path: &str) -> AgentResult<Vec<AgentConfig>> {
         let mut configs = Vec::new();
 
-        let entries = std::fs::read_dir(dir_path).map_err(|e| AgentConfigError::Io(e))?;
+        let entries = std::fs::read_dir(dir_path).map_err(AgentConfigError::Io)?;
 
         let supported_extensions = ["yaml", "yml", "toml", "json", "ini", "ron", "json5"];
 
         for entry in entries {
-            let entry = entry.map_err(|e| AgentConfigError::Io(e))?;
+            let entry = entry.map_err(AgentConfigError::Io)?;
 
             let path = entry.path();
             if path.is_file()

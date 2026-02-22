@@ -8,6 +8,9 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
+/// Type alias for message sender function
+pub type MessageSenderFn = Arc<dyn Fn(SecretaryMessage, &str) -> anyhow::Result<()> + Send + Sync>;
+
 /// 分配策略
 #[derive(Debug, Clone)]
 pub enum DispatchStrategy {
@@ -55,7 +58,7 @@ pub struct TaskCoordinator {
     /// 轮询索引
     round_robin_index: Arc<RwLock<usize>>,
     /// 消息发送回调
-    message_sender: Option<Arc<dyn Fn(SecretaryMessage, &str) -> anyhow::Result<()> + Send + Sync>>,
+    message_sender: Option<MessageSenderFn>,
     /// 动态Agent提供者
     agent_provider: Option<Arc<dyn AgentProvider>>,
     /// Agent路由器

@@ -24,6 +24,12 @@ pub struct ServerFaultResponsePlugin {
     config: RwLock<EventResponseConfig>,
 }
 
+impl Default for ServerFaultResponsePlugin {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ServerFaultResponsePlugin {
     /// Create a new server fault response plugin
     pub fn new() -> Self {
@@ -220,6 +226,12 @@ impl From<ServerFaultResponsePlugin> for Box<dyn mofa_kernel::plugin::AgentPlugi
 pub struct NetworkAttackResponsePlugin {
     base: BaseEventResponsePlugin,
     config: RwLock<EventResponseConfig>,
+}
+
+impl Default for NetworkAttackResponsePlugin {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl NetworkAttackResponsePlugin {
