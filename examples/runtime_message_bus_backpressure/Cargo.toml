@@ -1,0 +1,11 @@
+[package]
+name = "runtime_message_bus_backpressure"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+tokio.workspace = true
+
+# Local dependencies
+mofa-sdk = { path = "../../crates/mofa-sdk" }
