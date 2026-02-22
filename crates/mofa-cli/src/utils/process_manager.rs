@@ -111,7 +111,7 @@ impl AgentProcessManager {
 
         #[cfg(unix)]
         {
-            use nix::sys::signal::{kill, Signal};
+            use nix::sys::signal::{Signal, kill};
             use nix::unistd::Pid;
 
             let nix_pid = Pid::from_raw(pid as i32);

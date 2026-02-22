@@ -10,11 +10,13 @@ pub async fn run(ctx: &CliContext, agent_id: &str) -> anyhow::Result<()> {
 
     // Check if agent exists in registry or store
     let in_registry = ctx.agent_registry.contains(agent_id).await;
-    let in_store = ctx
+
+    let previous_entry = ctx
         .agent_store
         .get(agent_id)
-        .map_err(|e| anyhow::anyhow!("Failed to check agent store: {}", e))?
-        .is_some();
+        .map_err(|e| anyhow::anyhow!("Failed to load persisted agent '{}': {}", agent_id, e))?;
+
+    let in_store = previous_entry.is_some();
 
     if !in_registry && !in_store {
         anyhow::bail!("Agent '{}' not found", agent_id);
@@ -27,11 +29,6 @@ pub async fn run(ctx: &CliContext, agent_id: &str) -> anyhow::Result<()> {
             println!("  {} Graceful shutdown failed: {}", "!".yellow(), e);
         }
     }
-
-    let previous_entry = ctx
-        .agent_store
-        .get(agent_id)
-        .map_err(|e| anyhow::anyhow!("Failed to load persisted agent '{}': {}", agent_id, e))?;
 
     let persisted_updated = if let Some(mut entry) = previous_entry.clone() {
         entry.state = "Stopped".to_string();
