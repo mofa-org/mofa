@@ -463,10 +463,9 @@ impl AgentRegistry {
             }
 
             // 统计注册时间
-            if let Some(ts) = entry.registered_at.checked_sub(0) {
-                earliest_registration = Some(earliest_registration.map_or(ts, |e| e.min(ts)));
-                latest_registration = Some(latest_registration.map_or(ts, |l| l.max(ts)));
-            }
+            let ts = entry.registered_at;
+            earliest_registration = Some(earliest_registration.map_or(ts, |e| e.min(ts)));
+            latest_registration = Some(latest_registration.map_or(ts, |l| l.max(ts)));
         }
 
         RegistryStats {
