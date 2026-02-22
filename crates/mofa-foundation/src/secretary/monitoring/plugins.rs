@@ -8,7 +8,6 @@ use super::plugin::{BaseEventResponsePlugin, EventResponseConfig, EventResponseP
 use async_trait::async_trait;
 use mofa_kernel::plugin::{PluginPriority, PluginResult};
 use std::collections::HashMap;
-use std::sync::RwLock;
 
 // ============================================================================
 // Server Fault Response Plugin
@@ -21,7 +20,7 @@ use std::sync::RwLock;
 /// 2. Notify the administrator about the fault
 pub struct ServerFaultResponsePlugin {
     base: BaseEventResponsePlugin,
-    config: RwLock<EventResponseConfig>,
+    config: EventResponseConfig,
 }
 
 impl Default for ServerFaultResponsePlugin {
@@ -48,11 +47,11 @@ impl ServerFaultResponsePlugin {
         .with_priority(PluginPriority::High) // Server faults should be handled quickly
         .with_max_impact_scope("instance");
 
-        let config = RwLock::new(EventResponseConfig {
+        let config = EventResponseConfig {
             handled_event_types,
             priority: PluginPriority::High,
             ..Default::default()
-        });
+        };
 
         Self { base, config }
     }
@@ -82,16 +81,11 @@ impl ServerFaultResponsePlugin {
 #[async_trait]
 impl EventResponsePlugin for ServerFaultResponsePlugin {
     fn config(&self) -> &EventResponseConfig {
-        panic!("config() should not be called directly on this plugin");
+        &self.config
     }
 
     async fn update_config(&mut self, config: EventResponseConfig) -> PluginResult<()> {
-        // Update the local config
-        {
-            let mut current_config = self.config.write().unwrap();
-            *current_config = config.clone();
-        }
-        // Update the base config
+        self.config = config.clone();
         self.base.update_config(config).await
     }
 
@@ -225,7 +219,7 @@ impl From<ServerFaultResponsePlugin> for Box<dyn mofa_kernel::plugin::AgentPlugi
 /// 3. Notify the security team
 pub struct NetworkAttackResponsePlugin {
     base: BaseEventResponsePlugin,
-    config: RwLock<EventResponseConfig>,
+    config: EventResponseConfig,
 }
 
 impl Default for NetworkAttackResponsePlugin {
@@ -253,11 +247,11 @@ impl NetworkAttackResponsePlugin {
         .with_priority(PluginPriority::Critical) // Network attacks require immediate action
         .with_max_impact_scope("system");
 
-        let config = RwLock::new(EventResponseConfig {
+        let config = EventResponseConfig {
             handled_event_types,
             priority: PluginPriority::Critical,
             ..Default::default()
-        });
+        };
 
         Self { base, config }
     }
@@ -293,16 +287,11 @@ impl NetworkAttackResponsePlugin {
 #[async_trait]
 impl EventResponsePlugin for NetworkAttackResponsePlugin {
     fn config(&self) -> &EventResponseConfig {
-        panic!("config() should not be called directly on this plugin");
+        &self.config
     }
 
     async fn update_config(&mut self, config: EventResponseConfig) -> PluginResult<()> {
-        // Update the local config
-        {
-            let mut current_config = self.config.write().unwrap();
-            *current_config = config.clone();
-        }
-        // Update the base config
+        self.config = config.clone();
         self.base.update_config(config).await
     }
 
