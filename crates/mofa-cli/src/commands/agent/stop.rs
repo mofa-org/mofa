@@ -5,7 +5,11 @@ use colored::Colorize;
 use tracing::info;
 
 /// Execute the `mofa agent stop` command
-pub async fn run(ctx: &CliContext, agent_id: &str) -> anyhow::Result<()> {
+pub async fn run(
+    ctx: &CliContext,
+    agent_id: &str,
+    force_persisted_stop: bool,
+) -> anyhow::Result<()> {
     println!("{} Stopping agent: {}", "→".green(), agent_id.cyan());
 
     // Check if agent exists in registry or store
@@ -28,11 +32,6 @@ pub async fn run(ctx: &CliContext, agent_id: &str) -> anyhow::Result<()> {
         }
     }
 
-    let previous_entry = ctx
-        .agent_store
-        .get(agent_id)
-        .map_err(|e| anyhow::anyhow!("Failed to load persisted agent '{}': {}", agent_id, e))?;
-
     let persisted_updated = if let Some(mut entry) = previous_entry.clone() {
         entry.state = "Stopped".to_string();
         ctx.agent_store
@@ -50,16 +49,17 @@ pub async fn run(ctx: &CliContext, agent_id: &str) -> anyhow::Result<()> {
         .await
         .map_err(|e| anyhow::anyhow!("Failed to unregister agent: {}", e))?;
 
-    if !removed && persisted_updated {
-        if let Some(previous) = previous_entry {
-            ctx.agent_store.save(agent_id, &previous).map_err(|e| {
-                anyhow::anyhow!(
-                    "Agent '{}' remained registered and failed to restore persisted state: {}",
-                    agent_id,
-                    e
-                )
-            })?;
-        }
+    if !removed
+        && persisted_updated
+        && let Some(previous) = previous_entry
+    {
+        ctx.agent_store.save(agent_id, &previous).map_err(|e| {
+            anyhow::anyhow!(
+                "Agent '{}' remained registered and failed to restore persisted state: {}",
+                agent_id,
+                e
+            )
+        })?;
     }
 
     if removed {
@@ -94,7 +94,7 @@ mod tests {
         start::run(&ctx, "stop-agent", None, None, false)
             .await
             .unwrap();
-        run(&ctx, "stop-agent").await.unwrap();
+        run(&ctx, "stop-agent", false).await.unwrap();
 
         assert!(!ctx.agent_registry.contains("stop-agent").await);
         let persisted = ctx.agent_store.get("stop-agent").unwrap().unwrap();
@@ -106,7 +106,58 @@ mod tests {
         let temp = TempDir::new().unwrap();
         let ctx = CliContext::with_temp_dir(temp.path()).await.unwrap();
 
-        let result = run(&ctx, "missing-agent").await;
+        let result = run(&ctx, "missing-agent", false).await;
         assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_stop_errors_when_registry_missing_even_if_persisted_exists() {
+        let temp = TempDir::new().unwrap();
+        let first_ctx = CliContext::with_temp_dir(temp.path()).await.unwrap();
+        start::run(&first_ctx, "persisted-agent", None, None, false)
+            .await
+            .unwrap();
+
+        // Simulate a new CLI process: persisted entry remains, runtime registry is empty.
+        let second_ctx = CliContext::with_temp_dir(temp.path()).await.unwrap();
+        assert!(!second_ctx.agent_registry.contains("persisted-agent").await);
+
+        let result = run(&second_ctx, "persisted-agent", false).await;
+        assert!(result.is_err());
+
+        let persisted = second_ctx
+            .agent_store
+            .get("persisted-agent")
+            .unwrap()
+            .unwrap();
+        assert_eq!(persisted.state, "Running");
+    }
+
+    #[tokio::test]
+    async fn test_stop_force_persisted_stop_updates_state_when_registry_missing() {
+        let temp = TempDir::new().unwrap();
+        let first_ctx = CliContext::with_temp_dir(temp.path()).await.unwrap();
+        start::run(&first_ctx, "persisted-agent-force", None, None, false)
+            .await
+            .unwrap();
+
+        let second_ctx = CliContext::with_temp_dir(temp.path()).await.unwrap();
+        assert!(
+            !second_ctx
+                .agent_registry
+                .contains("persisted-agent-force")
+                .await
+        );
+
+        run(&second_ctx, "persisted-agent-force", true)
+            .await
+            .unwrap();
+
+        let persisted = second_ctx
+            .agent_store
+            .get("persisted-agent-force")
+            .unwrap()
+            .unwrap();
+        assert_eq!(persisted.state, "Stopped");
     }
 }
