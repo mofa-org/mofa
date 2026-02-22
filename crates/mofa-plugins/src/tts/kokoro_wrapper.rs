@@ -1,14 +1,93 @@
 //! Kokoro TTS Engine Wrapper
 //!
-//! This module provides a wrapper around the kokoro-tts library
+//! This module provides a complete wrapper around the kokoro-tts library
 //! that implements the TTSEngine trait for integration with MoFA.
+//!
+//! # Overview
+//!
+//! The Kokoro TTS engine provides high-quality text-to-speech synthesis with
+//! support for multiple voices and languages. It uses ONNX models for efficient
+//! inference and supports both synchronous and streaming synthesis.
+//!
+//! # Supported Audio Format
+//!
+//! **Output Format**: PCM WAV (16-bit signed, mono)
+//! - Sample Rate: 24000 Hz
+//! - Channels: 1 (mono)
+//! - Bit Depth: 16-bit signed integer
+//! - Byte Order: Little-endian
+//!
+//! # Supported Voices
+//!
+//! ## Model Version Detection
+//!
+//! Kokoro TTS supports two model versions with different voice sets:
+//!
+//! ### Version 1.1 (v1.1) Voices
+//! - `zf_088` - Female voice (default for v1.1)
+//! - `zf_090` - Alternative female voice
+//! - More voices: `zf_092`, `zf_094`, etc. (check your model)
+//!
+//! ### Version 1.0 (v1.0) Voices
+//! - `zf_xiaoxiao` - Female voice (default for v1.0)
+//! - `zf_xiaoyi` - Alternative female voice
+//! - `zm_yunyang` - Male voice
+//! - `zf_xiaobei` - Female voice variant
+//! - `zf_xiaoni` - Female voice variant
+//!
+//! ### Special Voice Names
+//! - `"default"` - Uses the model-appropriate default voice
+//! - Case-insensitive matching (e.g., `"ZF_088"`, `"zf088"`)
+//! - Underscores optional (e.g., `"zf088"` same as `"zf_088"`)
+//!
+//! # Required Model Files
+//!
+//! To use the Kokoro TTS engine, you need:
+//! 1. ONNX model file (e.g., `kokoro-v1.1-zh.onnx`)
+//! 2. Voice embeddings file (e.g., `voices-v1.1-zh.bin`)
+//!
+//! Both files must be in the same directory or you must provide correct paths.
+//!
+//! # Error Handling
+//!
+//! The wrapper provides clear error messages for:
+//! - Missing model files (with path suggestions)
+//! - Invalid voice names (falls back to default with warning)
+//! - Text submission failures
+//! - Stream submission failures
+//! - Unknown voice selections
+//!
+//! # Examples
+//!
+//! ```rust,ignore
+//! use mofa_plugins::tts::kokoro_wrapper::KokoroTTS;
+//!
+//! // Initialize with model paths
+//! let kokoro = KokoroTTS::new(
+//!     "kokoro-v1.1-zh.onnx",
+//!     "voices-v1.1-zh.bin"
+//! ).await?;
+//!
+//! // Synchronous synthesis
+//! let audio_bytes = kokoro.synthesize("你好，世界", "zf_088").await?;
+//! println!("Generated {} bytes of audio", audio_bytes.len());
+//!
+//! // Streaming synthesis with callback
+//! kokoro.synthesize_stream(
+//!     "这是一个长文本...",
+//!     "default",
+//!     Box::new(|chunk: Vec<u8>| {
+//!         println!("Received {} bytes", chunk.len());
+//!     })
+//! ).await?;
+//! ```
 
 use super::{TTSEngine, VoiceInfo};
 use futures::StreamExt;
 pub use kokoro_tts::{KokoroTts, SynthSink, SynthStream, Voice};
 use std::path::Path;
 use std::sync::Arc;
-use tracing::{debug, info};
+use tracing::{debug, info, warn};
 
 /// Kokoro TTS engine implementation
 ///
@@ -208,6 +287,37 @@ impl KokoroTTS {
 #[async_trait::async_trait]
 impl TTSEngine for KokoroTTS {
     /// Synthesize text to audio data (synchronous version)
+    ///
+    /// This method synthesizes the entire input text and returns all audio data at once.
+    /// It's suitable for shorter texts or when you need the complete audio immediately.
+    ///
+    /// # Arguments
+    /// - `text`: The text to synthesize. Cannot be empty. It will be sent to the Kokoro
+    ///   inference engine for synthesis.
+    /// - `voice`: Voice identifier (e.g., "default", "zf_088", "zf_xiaoxiao").
+    ///   Case-insensitive and underscore-tolerant. Unrecognized voices fallback to default
+    ///   with a debug log warning.
+    ///
+    /// # Returns
+    /// - `Ok(Vec<u8>)`: Raw PCM audio data in WAV format (16-bit, mono, 24000 Hz)
+    /// - `Err`: If text submission fails, synthesis fails, or audio conversion fails
+    ///
+    /// # Error Cases
+    /// - Empty text: Will return error from synthesis
+    /// - Invalid voice: Falls back to default voice (logged with debug level)
+    /// - Network/system errors: Propagated with context
+    /// - Invalid UTF-8 in text: Handled by underlying library
+    ///
+    /// # Performance Notes
+    /// - Entire text is synthesized at once, blocking until complete
+    /// - Large texts will create proportionally larger audio data
+    /// - For streaming/chunked responses, use `synthesize_stream()` instead
+    ///
+    /// # Example
+    /// ```rust,ignore
+    /// let audio = kokoro.synthesize("Hello world", "default").await?;
+    /// println!("Audio size: {} bytes", audio.len());
+    /// ```
     async fn synthesize(&self, text: &str, voice: &str) -> Result<Vec<u8>, anyhow::Error> {
         debug!(
             "[KokoroTTS] Synthesizing text with voice '{}': {}",
@@ -250,6 +360,51 @@ impl TTSEngine for KokoroTTS {
     }
 
     /// Synthesize text with streaming callback
+    ///
+    /// This method is ideal for long texts where you want to process audio as it's
+    /// generated rather than waiting for full synthesis. The callback is called multiple
+    /// times as audio chunks become available.
+    ///
+    /// # Arguments
+    /// - `text`: The text to synthesize. Cannot be empty.
+    /// - `voice`: Voice identifier (same format as `synthesize()`)
+    /// - `callback`: Function called for each audio chunk. Called with Vec<u8> containing
+    ///   16-bit PCM WAV data. This may be called multiple times.
+    ///
+    /// # Returns
+    /// - `Ok(())`: Streaming synthesis completed successfully
+    /// - `Err`: If text submission fails, synthesis fails, or streaming fails
+    ///
+    /// # Error Cases
+    /// - Empty text: Returns error, callback not called
+    /// - Invalid voice: Falls back to default voice
+    /// - Stream failures: Propagated as error
+    /// - Callback panics: Propagated as error
+    ///
+    /// # Performance Notes
+    /// - Callback is invoked multiple times as chunks complete
+    /// - Good for long texts (books, articles, etc.)
+    /// - Allows real-time audio playback
+    /// - Lower memory footprint than `synthesize()`
+    ///
+    /// # Example
+    /// ```rust,ignore
+    /// # use std::sync::Arc;
+    /// # let kokoro = unimplemented!();
+    /// let chunk_count = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    /// let chunk_count_clone = chunk_count.clone();
+    ///
+    /// kokoro.synthesize_stream(
+    ///     "This is a long text...",
+    ///     "default",
+    ///     Box::new(move |chunk: Vec<u8>| {
+    ///         println!("Received chunk: {} bytes", chunk.len());
+    ///         chunk_count_clone.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+    ///     })
+    /// ).await?;
+    ///
+    /// println!("Total chunks: {}", chunk_count.load(std::sync::atomic::Ordering::SeqCst));
+    /// ```
     async fn synthesize_stream(
         &self,
         text: &str,
