@@ -1,23 +1,40 @@
 //! `mofa session delete` command implementation
 
+use crate::context::CliContext;
 use colored::Colorize;
+use dialoguer::Confirm;
 
 /// Execute the `mofa session delete` command
-pub fn run(session_id: &str, force: bool) -> anyhow::Result<()> {
+pub async fn run(ctx: &CliContext, session_id: &str, force: bool) -> anyhow::Result<()> {
     if !force {
-        println!("{} Delete session: {}?", "→".yellow(), session_id.cyan());
-        println!("  This action cannot be undone.");
-        println!();
-        println!("  Use --force to skip confirmation.");
-        // TODO: Add actual confirmation prompt
-        return Ok(());
+        let confirmed = Confirm::new()
+            .with_prompt(format!("Delete session '{}'? This cannot be undone", session_id))
+            .default(false)
+            .interact()?;
+
+        if !confirmed {
+            println!("{} Cancelled", "→".yellow());
+            return Ok(());
+        }
     }
 
     println!("{} Deleting session: {}", "→".green(), session_id.cyan());
 
-    // TODO: Implement actual session deletion from persistence layer
+    let deleted = ctx
+        .session_manager
+        .delete(session_id)
+        .await
+        .map_err(|e| anyhow::anyhow!("Failed to delete session: {}", e))?;
 
-    println!("{} Session '{}' deleted", "✓".green(), session_id);
+    if deleted {
+        println!("{} Session '{}' deleted", "✓".green(), session_id);
+    } else {
+        println!(
+            "{} Session '{}' not found",
+            "!".yellow(),
+            session_id
+        );
+    }
 
     Ok(())
 }
