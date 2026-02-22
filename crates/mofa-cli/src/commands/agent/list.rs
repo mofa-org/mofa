@@ -1,52 +1,56 @@
 //! `mofa agent list` command implementation
 
-use crate::context::CliContext;
 use crate::output::Table;
 use colored::Colorize;
 use serde::Serialize;
 
 /// Execute the `mofa agent list` command
-pub async fn run(ctx: &CliContext, running_only: bool, _show_all: bool) -> anyhow::Result<()> {
+pub fn run(running_only: bool, show_all: bool) -> anyhow::Result<()> {
     println!("{} Listing agents", "→".green());
-    println!();
 
-    let agents_metadata = ctx.agent_registry.list().await;
-
-    if agents_metadata.is_empty() {
-        println!("  No agents registered.");
-        println!();
-        println!(
-            "  Use {} to start an agent.",
-            "mofa agent start <agent_id>".cyan()
-        );
-        return Ok(());
+    if running_only {
+        println!("  Showing running agents only");
+    } else if show_all {
+        println!("  Showing all agents");
     }
 
-    let agents: Vec<AgentInfo> = agents_metadata
-        .iter()
-        .map(|m| {
-            let status = format!("{:?}", m.state);
-            AgentInfo {
-                id: m.id.clone(),
-                name: m.name.clone(),
-                status,
-                description: m.description.clone(),
-            }
-        })
-        .collect();
+    println!();
+
+    // TODO: Implement actual agent listing from state store
+    // For now, show example output
+
+    let agents = vec![
+        AgentInfo {
+            id: "agent-001".to_string(),
+            name: "MyAgent".to_string(),
+            status: "running".to_string(),
+            uptime: Some("5m 32s".to_string()),
+            provider: Some("openai".to_string()),
+            model: Some("gpt-4o".to_string()),
+        },
+        AgentInfo {
+            id: "agent-002".to_string(),
+            name: "TestAgent".to_string(),
+            status: "stopped".to_string(),
+            uptime: None,
+            provider: None,
+            model: None,
+        },
+    ];
 
     // Filter based on flags
     let filtered: Vec<_> = if running_only {
         agents
-            .into_iter()
-            .filter(|a| a.status == "Running" || a.status == "Ready")
+            .iter()
+            .filter(|a| a.status == "running")
+            .cloned()
             .collect()
     } else {
         agents
     };
 
     if filtered.is_empty() {
-        println!("  No agents found matching criteria.");
+        println!("  No agents found.");
         return Ok(());
     }
 
@@ -66,5 +70,9 @@ struct AgentInfo {
     name: String,
     status: String,
     #[serde(skip_serializing_if = "Option::is_none")]
-    description: Option<String>,
+    uptime: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    provider: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    model: Option<String>,
 }

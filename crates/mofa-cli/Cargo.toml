@@ -21,13 +21,9 @@ path = "src/main.rs"
 # Core
 mofa-sdk = { path = "../mofa-sdk", version = "0.1" }
 mofa-kernel = { path = "../mofa-kernel", version = "0.1", features = ["config"] }
-mofa-runtime = { path = "../mofa-runtime", version = "0.1" }
-mofa-foundation = { path = "../mofa-foundation", version = "0.1" }
 config.workspace = true
 tokio = { workspace = true }
 anyhow = { workspace = true }
-async-trait = { workspace = true }
-chrono = { workspace = true }
 
 # CLI
 clap = { version = "4", features = ["derive", "env"] }

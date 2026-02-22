@@ -1,43 +1,58 @@
 //! `mofa tool list` command implementation
 
-use crate::context::CliContext;
 use crate::output::Table;
 use colored::Colorize;
-use mofa_kernel::agent::components::tool::ToolRegistry;
 use serde::Serialize;
 
 /// Execute the `mofa tool list` command
-pub async fn run(ctx: &CliContext, _available: bool, _enabled: bool) -> anyhow::Result<()> {
+pub fn run(available: bool, enabled: bool) -> anyhow::Result<()> {
     println!("{} Listing tools", "→".green());
+
+    if available {
+        println!("  Showing available tools");
+    } else if enabled {
+        println!("  Showing enabled tools");
+    }
+
     println!();
 
-    let descriptors = ctx.tool_registry.list();
+    // TODO: Implement actual tool discovery from tool registry
 
-    if descriptors.is_empty() {
-        println!("  No tools registered.");
-        println!();
-        println!("  Tools can be registered programmatically via the SDK.");
+    let tools = vec![
+        ToolInfo {
+            name: "web-search".to_string(),
+            description: "Search the web for information".to_string(),
+            enabled: true,
+        },
+        ToolInfo {
+            name: "calculator".to_string(),
+            description: "Perform mathematical calculations".to_string(),
+            enabled: true,
+        },
+        ToolInfo {
+            name: "code-executor".to_string(),
+            description: "Execute code in a sandboxed environment".to_string(),
+            enabled: false,
+        },
+        ToolInfo {
+            name: "file-operations".to_string(),
+            description: "Read, write, and manipulate files".to_string(),
+            enabled: false,
+        },
+    ];
+
+    let filtered: Vec<_> = if enabled {
+        tools.iter().filter(|t| t.enabled).cloned().collect()
+    } else {
+        tools
+    };
+
+    if filtered.is_empty() {
+        println!("  No tools found.");
         return Ok(());
     }
 
-    let tools: Vec<ToolInfo> = descriptors
-        .iter()
-        .map(|d| {
-            let source = ctx
-                .tool_registry
-                .get_source(&d.name)
-                .map(|s| format!("{:?}", s))
-                .unwrap_or_else(|| "unknown".to_string());
-            ToolInfo {
-                name: d.name.clone(),
-                description: d.description.clone(),
-                category: d.metadata.category.clone().unwrap_or_default(),
-                source,
-            }
-        })
-        .collect();
-
-    let json = serde_json::to_value(&tools)?;
+    let json = serde_json::to_value(&filtered)?;
     if let Some(arr) = json.as_array() {
         let table = Table::from_json_array(arr);
         println!("{}", table);
@@ -50,6 +65,5 @@ pub async fn run(ctx: &CliContext, _available: bool, _enabled: bool) -> anyhow::
 struct ToolInfo {
     name: String,
     description: String,
-    category: String,
-    source: String,
+    enabled: bool,
 }
