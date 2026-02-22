@@ -40,5 +40,8 @@ mime_guess = "2.0"
 mofa-kernel = { path = "../mofa-kernel", version = "0.1" }
 futures = "0.3.31"
 
+# System metrics
+sysinfo = "0.32"
+
 [lints]
 workspace = true

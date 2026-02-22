@@ -47,6 +47,5 @@ regex.workspace = true
 workspace = true
 
 [features]
-
 dora = ["dora-node-api", "dora-operator-api", "dora-daemon", "dora-core", "dora-message"]
 monitoring = ["dep:mofa-monitoring"]

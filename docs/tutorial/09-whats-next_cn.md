@@ -196,3 +196,7 @@ agent.chat_with_tts(&session_id, "讲个笑话").await?;
 ---
 
 [← 返回目录](README_cn.md)
+
+---
+
+**English** | [简体中文](../zh-CN/tutorial/09-whats-next_cn.md)

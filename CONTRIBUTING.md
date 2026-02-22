@@ -191,8 +191,10 @@ refactor(foundation): extract SimpleToolRegistry to its own module
 3. Run the full quality gate locally:
    ```bash
    cargo fmt --check
-   cargo clippy
-   cargo test
+   cargo clippy --workspace --all-features -- -D errors
+   cargo test --workspace --all-features
+   cargo build --examples
+   cargo doc --workspace --no-deps --all-features
    ```
 4. Make sure every commit compiles on its own (`cargo check` per commit).
 
@@ -202,7 +204,14 @@ Open a **draft PR** early when:
 - You want early feedback on direction before the implementation is complete.
 - The change is large and you want to discuss the approach first.
 
-Mark it as "Ready for review" only when `cargo fmt --check`, `cargo clippy`, and `cargo test` all pass.
+Mark it as "Ready for review" only when all quality gates pass:
+```bash
+cargo fmt --check
+cargo clippy --workspace --all-features -- -D errors
+cargo test --workspace --all-features
+cargo build --examples
+cargo doc --workspace --no-deps --all-features
+```
 
 ### PR description template
 
@@ -224,8 +233,10 @@ Mark it as "Ready for review" only when `cargo fmt --check`, `cargo clippy`, and
 
 ## Checklist
 - [ ] `cargo fmt --check` passes
-- [ ] `cargo clippy` passes with no warnings
-- [ ] `cargo test` passes
+- [ ] `cargo clippy --workspace --all-features -- -D errors` passes
+- [ ] `cargo test --workspace --all-features` passes
+- [ ] `cargo build --examples` succeeds
+- [ ] `cargo doc --workspace --no-deps --all-features` succeeds
 - [ ] Architecture layer rules respected (see CONTRIBUTING.md)
 - [ ] Relevant documentation updated
 ```
@@ -240,13 +251,17 @@ Mark it as "Ready for review" only when `cargo fmt --check`, `cargo clippy`, and
 
 All PRs must pass the **PR Guard** CI job before they can be merged. This check runs automatically and verifies:
 
-1. **Clippy** - No compilation errors (run `cargo clippy` locally)
-2. **Tests** - All tests pass (run `cargo test` locally)
+1. **Clippy** - No compilation errors with all features enabled
+2. **Tests** - All tests pass with all features enabled
+3. **Examples** - All examples compile successfully
+4. **Documentation** - Documentation builds without errors
 
 ```bash
 # Run these locally before pushing to ensure your PR will pass
-cargo clippy                    # Must have no errors
-cargo test --workspace          # All tests must pass
+cargo clippy --workspace --all-features -- -D errors   # Lint with all features
+cargo test --workspace --all-features                   # Test with all features
+cargo build --examples                                  # Build all examples
+cargo doc --workspace --no-deps --all-features          # Build documentation
 ```
 
 **Note:** Branch protection rules are enabled on `main` and `master` branches. PRs cannot be merged until all required status checks pass.

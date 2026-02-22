@@ -213,8 +213,16 @@ async fn test_call_script_function_with_object_return() {
 
     // Verify it's a map/object by checking its string representation
     let result_str = result_map.to_string();
-    assert!(result_str.contains("status"), "Expected 'status' in result: {}", result_str);
-    assert!(result_str.contains("message"), "Expected 'message' in result: {}", result_str);
+    assert!(
+        result_str.contains("status"),
+        "Expected 'status' in result: {}",
+        result_str
+    );
+    assert!(
+        result_str.contains("message"),
+        "Expected 'message' in result: {}",
+        result_str
+    );
 }
 
 // ============================================================================
@@ -333,7 +341,7 @@ async fn test_call_script_function_no_args() {
 async fn test_call_script_function_returns_nothing() {
     let script = r#"
         fn side_effect_function() {
-            print("side effect");
+            let _tmp = 1 + 1;
         }
     "#;
 

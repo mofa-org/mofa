@@ -168,3 +168,7 @@ mofa/
 **Next:** [Chapter 3: Your First Agent](03-first-agent.md) — Implement the `MoFAAgent` trait from scratch.
 
 [← Back to Table of Contents](README.md)
+
+---
+
+**English** | [简体中文](../zh-CN/tutorial/02-setup.md)

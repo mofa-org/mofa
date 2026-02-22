@@ -331,3 +331,7 @@ async fn execute(
 **下一章：** [第 4 章：LLM 驱动的智能体](04-llm-agent_cn.md) — 将你的智能体连接到真实的 LLM。
 
 [← 返回目录](README_cn.md)
+
+---
+
+**English** | [简体中文](../zh-CN/tutorial/03-first-agent_cn.md)

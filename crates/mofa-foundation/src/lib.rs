@@ -7,6 +7,9 @@
 // orchestrator module - Model Lifecycle & Allocation
 pub mod orchestrator;
 
+// hardware discovery module
+pub mod hardware;
+
 // prompt module
 pub mod prompt;
 
@@ -38,8 +41,13 @@ pub mod secretary;
 pub mod agent;
 pub mod collaboration;
 
+
 // orchestrator module - Edge Model Orchestrator (GSoC 2026)
 pub mod orchestrator;
+
+// RAG module - vector store and document chunking
+pub mod rag;
+
 
 // Re-export config types
 pub use config::{AgentInfo, AgentYamlConfig, LLMYamlConfig, RuntimeConfig, ToolConfig};

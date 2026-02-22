@@ -414,3 +414,7 @@ These include:
 **Next:** [Chapter 6: Multi-Agent Coordination](06-multi-agent.md) — Orchestrate multiple agents working together.
 
 [← Back to Table of Contents](README.md)
+
+---
+
+**English** | [简体中文](../zh-CN/tutorial/05-tools.md)

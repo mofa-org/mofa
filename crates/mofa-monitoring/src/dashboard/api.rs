@@ -421,24 +421,38 @@ async fn get_overview(
         let total_tokens: u64 = snapshot.llm_metrics.iter().map(|l| l.total_tokens).sum();
         let total_errors: u64 = snapshot.llm_metrics.iter().map(|l| l.failed_requests).sum();
         let avg_latency = if !snapshot.llm_metrics.is_empty() {
-            snapshot.llm_metrics.iter().map(|l| l.avg_latency_ms).sum::<f64>()
+            snapshot
+                .llm_metrics
+                .iter()
+                .map(|l| l.avg_latency_ms)
+                .sum::<f64>()
                 / snapshot.llm_metrics.len() as f64
         } else {
             0.0
         };
         let avg_tps = if !snapshot.llm_metrics.is_empty() {
-            snapshot.llm_metrics
+            snapshot
+                .llm_metrics
                 .iter()
                 .filter_map(|l| l.tokens_per_second)
                 .sum::<f64>()
-                / snapshot.llm_metrics.iter().filter(|l| l.tokens_per_second.is_some()).count().max(1) as f64
+                / snapshot
+                    .llm_metrics
+                    .iter()
+                    .filter(|l| l.tokens_per_second.is_some())
+                    .count()
+                    .max(1) as f64
         } else {
             0.0
         };
 
         LLMSummary {
             total_plugins: snapshot.llm_metrics.len(),
-            active_models: snapshot.llm_metrics.iter().filter(|l| l.state == "running").count(),
+            active_models: snapshot
+                .llm_metrics
+                .iter()
+                .filter(|l| l.state == "running")
+                .count(),
             total_requests,
             total_tokens,
             avg_latency_ms: avg_latency,

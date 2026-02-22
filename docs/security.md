@@ -733,3 +733,7 @@ See [SECURITY.md](../SECURITY.md) for detailed information on responsible disclo
 **Last Updated**: 2025-02-20
 
 For questions or feedback about this security guide, please open an issue on [GitHub](https://github.com/mofa-org/mofa/issues).
+
+---
+
+**English** | [简体中文](zh-CN/security.md)

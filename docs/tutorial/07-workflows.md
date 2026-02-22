@@ -440,3 +440,7 @@ let result = executor.execute(&workflow, input).await?;
 **Next:** [Chapter 8: Plugins and Scripting](08-plugins-and-scripting.md) — Write a hot-reloadable Rhai plugin.
 
 [← Back to Table of Contents](README.md)
+
+---
+
+**English** | [简体中文](../zh-CN/tutorial/07-workflows.md)

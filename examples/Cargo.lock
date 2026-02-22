@@ -629,6 +629,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4bfbf56724aa9eca8afa4fcfadeb479e722935bb2a0900c2d37e0cc477af0688"
 
 [[package]]
+name = "cli_production_smoke"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "serde_json",
+ "tempfile",
+]
+
+[[package]]
 name = "cobs"
 version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2809,6 +2818,7 @@ dependencies = [
  "rust-embed",
  "serde",
  "serde_json",
+ "sysinfo",
  "thiserror 1.0.69",
  "tokio",
  "tower 0.4.13",
@@ -3035,6 +3045,15 @@ dependencies = [
  "serde",
  "walkdir",
  "windows-sys 0.48.0",
+]
+
+[[package]]
+name = "ntapi"
+version = "0.4.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c3b335231dfd352ffb0f8017f3b6027a4917f7df785ea2143d8af2adc66980ae"
+dependencies = [
+ "winapi",
 ]
 
 [[package]]
@@ -4144,6 +4163,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "runtime_message_bus_backpressure"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "mofa-sdk",
+ "tokio",
+]
+
+[[package]]
 name = "rust-embed"
 version = "8.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4991,6 +5019,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "sysinfo"
+version = "0.32.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4c33cd241af0f2e9e3b5c32163b873b29956890b5342e6745b917ce9d490f4af"
+dependencies = [
+ "core-foundation-sys",
+ "libc",
+ "memchr",
+ "ntapi",
+ "rayon",
+ "windows",
+]
+
+[[package]]
 name = "system-configuration"
 version = "0.6.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5347,10 +5389,12 @@ checksum = "ab16f14aed21ee8bfd8ec22513f7287cd4a91aa92e44edfe2c17ddd004e92607"
 name = "tool_routing"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
  "async-trait",
  "mofa-sdk",
  "serde",
  "serde_json",
+ "tokio",
 ]
 
 [[package]]
