@@ -14,7 +14,10 @@ pub async fn run(ctx: &CliContext, agent_id: Option<&str>) -> anyhow::Result<()>
             Some(metadata) => {
                 println!("  ID:           {}", metadata.id.cyan());
                 println!("  Name:         {}", metadata.name.white());
-                println!("  State:        {}", format!("{:?}", metadata.state).green());
+                println!(
+                    "  State:        {}",
+                    format!("{:?}", metadata.state).green()
+                );
                 if let Some(desc) = &metadata.description {
                     println!("  Description:  {}", desc.white());
                 }

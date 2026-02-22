@@ -34,11 +34,7 @@ pub async fn run(ctx: &CliContext, name: &str, force: bool) -> anyhow::Result<()
     if removed {
         println!("{} Plugin '{}' uninstalled", "✓".green(), name);
     } else {
-        println!(
-            "{} Plugin '{}' was not in the registry",
-            "!".yellow(),
-            name
-        );
+        println!("{} Plugin '{}' was not in the registry", "!".yellow(), name);
     }
 
     Ok(())

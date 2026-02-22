@@ -89,10 +89,7 @@ mod error_handling_tests {
 
         assert!(result.is_err());
         let error = result.unwrap_err();
-        assert!(
-            error.contains("UTF-8"),
-            "Error should mention UTF-8 issue"
-        );
+        assert!(error.contains("UTF-8"), "Error should mention UTF-8 issue");
     }
 
     #[tokio::test]
@@ -138,9 +135,9 @@ mod error_handling_tests {
     #[tokio::test]
     async fn test_stream_empty_text_error() {
         let tts = MockKokoroTTSForErrors::new();
-        let result =
-            tts.synthesize_stream_with_error_handling("", "default", |_| {})
-                .await;
+        let result = tts
+            .synthesize_stream_with_error_handling("", "default", |_| {})
+            .await;
 
         assert!(result.is_err());
     }
@@ -149,11 +146,7 @@ mod error_handling_tests {
     async fn test_stream_error_during_processing() {
         let tts = MockKokoroTTSForErrors::new();
         let result = tts
-            .synthesize_stream_with_error_handling(
-                "Test with STREAM_ERROR",
-                "default",
-                |_| {},
-            )
+            .synthesize_stream_with_error_handling("Test with STREAM_ERROR", "default", |_| {})
             .await;
 
         assert!(result.is_err());
@@ -170,13 +163,9 @@ mod error_handling_tests {
 
         // This should succeed without callbacks since we don't actually stream
         let _result = tts
-            .synthesize_stream_with_error_handling(
-                "Normal text",
-                "default",
-                move |_| {
-                    *call_count_clone.lock().unwrap() += 1;
-                },
-            )
+            .synthesize_stream_with_error_handling("Normal text", "default", move |_| {
+                *call_count_clone.lock().unwrap() += 1;
+            })
             .await;
 
         // In this mock, callbacks are never called unless we implement it
@@ -234,14 +223,8 @@ mod error_handling_tests {
             );
 
             // Check that error messages are human-readable
-            let upper_count = error_msg
-                .chars()
-                .filter(|c| c.is_uppercase())
-                .count();
-            let lower_count = error_msg
-                .chars()
-                .filter(|c| c.is_lowercase())
-                .count();
+            let upper_count = error_msg.chars().filter(|c| c.is_uppercase()).count();
+            let lower_count = error_msg.chars().filter(|c| c.is_lowercase()).count();
 
             assert!(
                 lower_count > 0,
@@ -260,9 +243,7 @@ mod error_handling_tests {
         let tts = MockKokoroTTSForErrors::new();
 
         // First call fails
-        let result1 = tts
-            .synthesize_with_error_handling("", "default")
-            .await;
+        let result1 = tts.synthesize_with_error_handling("", "default").await;
         assert!(result1.is_err());
 
         // Subsequent call should succeed (state not corrupted)
@@ -278,16 +259,12 @@ mod error_handling_tests {
 
         // Simulate transient error
         *tts.fail_submission.lock().unwrap() = true;
-        let result1 = tts
-            .synthesize_with_error_handling("Text", "default")
-            .await;
+        let result1 = tts.synthesize_with_error_handling("Text", "default").await;
         assert!(result1.is_err());
 
         // Recover by clearing the error condition
         *tts.fail_submission.lock().unwrap() = false;
-        let result2 = tts
-            .synthesize_with_error_handling("Text", "default")
-            .await;
+        let result2 = tts.synthesize_with_error_handling("Text", "default").await;
         assert!(result2.is_ok());
     }
 
@@ -323,14 +300,8 @@ mod error_handling_tests {
         let errors = results.iter().filter(|r| r.is_err()).count();
         let successes = results.iter().filter(|r| r.is_ok()).count();
 
-        assert_eq!(
-            errors, 1,
-            "Should have exactly 1 error (empty text)"
-        );
-        assert_eq!(
-            successes, 4,
-            "Should have 4 successful syntheses"
-        );
+        assert_eq!(errors, 1, "Should have exactly 1 error (empty text)");
+        assert_eq!(successes, 4, "Should have 4 successful syntheses");
     }
 
     // ========================================================================
@@ -348,16 +319,16 @@ mod error_handling_tests {
         ];
 
         for (text, expected_keyword) in error_cases {
-            let result = tts
-                .synthesize_with_error_handling(text, "default")
-                .await;
+            let result = tts.synthesize_with_error_handling(text, "default").await;
 
             assert!(result.is_err());
             let error = result.unwrap_err();
 
             // Error should mention the specific problem
             assert!(
-                error.to_lowercase().contains(&expected_keyword.to_lowercase())
+                error
+                    .to_lowercase()
+                    .contains(&expected_keyword.to_lowercase())
                     || error.to_lowercase().contains("failed"),
                 "Error '{}' should mention '{}' or indicate failure",
                 error,

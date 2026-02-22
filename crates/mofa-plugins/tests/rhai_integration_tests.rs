@@ -213,8 +213,16 @@ async fn test_call_script_function_with_object_return() {
 
     // Verify it's a map/object by checking its string representation
     let result_str = result_map.to_string();
-    assert!(result_str.contains("status"), "Expected 'status' in result: {}", result_str);
-    assert!(result_str.contains("message"), "Expected 'message' in result: {}", result_str);
+    assert!(
+        result_str.contains("status"),
+        "Expected 'status' in result: {}",
+        result_str
+    );
+    assert!(
+        result_str.contains("message"),
+        "Expected 'message' in result: {}",
+        result_str
+    );
 }
 
 // ============================================================================

@@ -16,11 +16,7 @@ pub async fn run(ctx: &CliContext, agent_id: &str) -> anyhow::Result<()> {
     if let Some(agent) = ctx.agent_registry.get(agent_id).await {
         let mut agent_guard = agent.write().await;
         if let Err(e) = agent_guard.shutdown().await {
-            println!(
-                "  {} Graceful shutdown failed: {}",
-                "!".yellow(),
-                e
-            );
+            println!("  {} Graceful shutdown failed: {}", "!".yellow(), e);
         }
     }
 
@@ -32,7 +28,11 @@ pub async fn run(ctx: &CliContext, agent_id: &str) -> anyhow::Result<()> {
         .map_err(|e| anyhow::anyhow!("Failed to unregister agent: {}", e))?;
 
     if removed {
-        println!("{} Agent '{}' stopped and unregistered", "✓".green(), agent_id);
+        println!(
+            "{} Agent '{}' stopped and unregistered",
+            "✓".green(),
+            agent_id
+        );
     } else {
         println!(
             "{} Agent '{}' was not in the registry",

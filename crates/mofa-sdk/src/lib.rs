@@ -430,9 +430,9 @@ pub mod prelude {
         AgentCapabilities, AgentCapabilitiesBuilder, AgentContext, AgentError, AgentInput,
         AgentMetadata, AgentOutput, AgentResult, AgentState, MoFAAgent,
     };
-    pub use crate::runtime::{AgentBuilder, AgentRunner, run_agents};
     #[cfg(not(feature = "dora"))]
     pub use crate::runtime::SimpleRuntime;
+    pub use crate::runtime::{AgentBuilder, AgentRunner, run_agents};
     pub use async_trait::async_trait;
 }
 
@@ -782,9 +782,9 @@ pub mod persistence {
         use std::sync::Arc;
 
         // 1. 初始化数据库
-        let store_arc = PostgresStore::from_env().await.map_err(|e| {
-            crate::llm::LLMError::Other(format!("数据库连接失败: {}", e))
-        })?;
+        let store_arc = PostgresStore::from_env()
+            .await
+            .map_err(|e| crate::llm::LLMError::Other(format!("数据库连接失败: {}", e)))?;
 
         // 2. 从环境变量获取或生成 IDs
         let user_id = std::env::var("USER_ID")

@@ -115,7 +115,10 @@ mod kokoro_tts_tests {
         let test_cases = vec![
             ("Hi", "short text"),
             ("Hello world, this is a test.", "medium text"),
-            ("This is a much longer text that should generate more audio data and take longer to synthesize.", "long text"),
+            (
+                "This is a much longer text that should generate more audio data and take longer to synthesize.",
+                "long text",
+            ),
         ];
 
         let mut previous_size = 0;
@@ -215,9 +218,7 @@ mod kokoro_tts_tests {
         let tts = MockKokoroTTS::new();
         let callback = Box::new(|_audio: Vec<u8>| {});
 
-        let result = tts
-            .synthesize_stream_mock("", "default", callback)
-            .await;
+        let result = tts.synthesize_stream_mock("", "default", callback).await;
 
         assert!(result.is_err(), "Should reject empty text for streaming");
     }
@@ -281,9 +282,7 @@ mod kokoro_tts_tests {
         for i in 0..3 {
             let text = format!("Stream test {}", i);
             let callback = Box::new(|_audio: Vec<u8>| {});
-            let _result = tts
-                .synthesize_stream_mock(&text, "default", callback)
-                .await;
+            let _result = tts.synthesize_stream_mock(&text, "default", callback).await;
         }
 
         assert_eq!(
@@ -307,13 +306,8 @@ mod kokoro_tts_tests {
         assert_eq!(&audio[12..16], b"fmt ");
 
         // Extract sample rate (offset 24, 4 bytes, little-endian)
-        let sample_rate = u32::from_le_bytes(
-            [audio[24], audio[25], audio[26], audio[27]],
-        );
-        assert_eq!(
-            sample_rate, 24000,
-            "Sample rate should be 24000 Hz"
-        );
+        let sample_rate = u32::from_le_bytes([audio[24], audio[25], audio[26], audio[27]]);
+        assert_eq!(sample_rate, 24000, "Sample rate should be 24000 Hz");
 
         // Extract number of channels (offset 20, 2 bytes, little-endian)
         let channels = u16::from_le_bytes([audio[20], audio[21]]);
@@ -321,9 +315,6 @@ mod kokoro_tts_tests {
 
         // Extract bits per sample (offset 34, 2 bytes, little-endian)
         let bits_per_sample = u16::from_le_bytes([audio[34], audio[35]]);
-        assert_eq!(
-            bits_per_sample, 16,
-            "Should be 16-bit PCM"
-        );
+        assert_eq!(bits_per_sample, 16, "Should be 16-bit PCM");
     }
 }

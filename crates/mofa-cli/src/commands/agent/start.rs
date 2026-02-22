@@ -45,10 +45,7 @@ pub async fn run(
                 mofa_kernel::agent::config::AgentConfig::new(agent_id, &cli_config.agent.name)
             }
             None => {
-                println!(
-                    "  {} No config file found, using defaults",
-                    "!".yellow()
-                );
+                println!("  {} No config file found, using defaults", "!".yellow());
                 mofa_kernel::agent::config::AgentConfig::new(agent_id, agent_id)
             }
         }
@@ -71,7 +68,11 @@ pub async fn run(
             .await
         {
             Ok(_) => {
-                println!("{} Agent '{}' created and registered", "✓".green(), agent_id);
+                println!(
+                    "{} Agent '{}' created and registered",
+                    "✓".green(),
+                    agent_id
+                );
             }
             Err(e) => {
                 println!(

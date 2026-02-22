@@ -17,11 +17,7 @@ pub async fn run(
         if let Some(agent) = ctx.agent_registry.get(agent_id).await {
             let mut agent_guard = agent.write().await;
             if let Err(e) = agent_guard.shutdown().await {
-                println!(
-                    "  {} Graceful shutdown failed: {}",
-                    "!".yellow(),
-                    e
-                );
+                println!("  {} Graceful shutdown failed: {}", "!".yellow(), e);
             }
         }
 
