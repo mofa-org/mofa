@@ -111,7 +111,7 @@ impl AgentProcessManager {
 
         #[cfg(unix)]
         {
-            use nix::process::{Signal, kill};
+            use nix::sys::signal::{kill, Signal};
             use nix::unistd::Pid;
 
             let nix_pid = Pid::from_raw(pid as i32);
@@ -166,7 +166,7 @@ impl AgentProcessManager {
     pub fn is_running(&self, pid: u32) -> bool {
         #[cfg(unix)]
         {
-            use nix::process::{Signal, kill};
+            use nix::sys::signal::kill;
             use nix::unistd::Pid;
 
             let nix_pid = Pid::from_raw(pid as i32);

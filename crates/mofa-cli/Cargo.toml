@@ -51,7 +51,7 @@ comfy-table = "7"
 dirs-next = "2"
 
 # Process management
-nix = { version = "0.29", features = ["process"] }
+nix = { version = "0.29", features = ["process", "signal"] }
 
 # Database (optional, for db init command)
 sqlx = { version = "0.8", features = ["runtime-tokio", "postgres", "mysql", "sqlite"], optional = true }
