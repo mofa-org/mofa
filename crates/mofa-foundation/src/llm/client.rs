@@ -744,7 +744,11 @@ impl ChatSession {
             tools: Vec::new(),   // Tools are not persisted yet
             tool_executor: None, // Tool executor is not persisted
             created_at: db_session.create_time,
-            metadata: db_session.metadata.into_iter().map(|(k, v)| (k, v.to_string())).collect(),
+            metadata: db_session
+                .metadata
+                .into_iter()
+                .map(|(k, v)| (k, v.to_string()))
+                .collect(),
             message_store,
             session_store,
             context_window_size,
@@ -754,7 +758,9 @@ impl ChatSession {
 
     /// 获取会话存活时长
     pub fn elapsed(&self) -> std::time::Duration {
-        (chrono::Utc::now() - self.created_at).to_std().unwrap_or_default()
+        (chrono::Utc::now() - self.created_at)
+            .to_std()
+            .unwrap_or_default()
     }
 
     /// 设置元数据

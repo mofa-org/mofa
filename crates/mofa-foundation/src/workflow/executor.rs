@@ -9,8 +9,8 @@
 use super::graph::WorkflowGraph;
 use super::node::{NodeType, WorkflowNode};
 use super::state::{
-    ExecutionCheckpoint, ExecutionRecord, NodeExecutionRecord, NodeResult, NodeStatus, WorkflowContext, WorkflowStatus,
-    WorkflowValue,
+    ExecutionCheckpoint, ExecutionRecord, NodeExecutionRecord, NodeResult, NodeStatus,
+    WorkflowContext, WorkflowStatus, WorkflowValue,
 };
 use mofa_kernel::workflow::telemetry::{DebugEvent, TelemetryEmitter};
 use std::collections::HashMap;
@@ -261,7 +261,7 @@ impl WorkflowExecutor {
     ) -> Result<ExecutionRecord, String> {
         let start_time = Instant::now();
         let mut ctx = WorkflowContext::new_with_id(&graph.id, checkpoint.execution_id.clone());
-        
+
         self.emit_event(ExecutionEvent::WorkflowStarted {
             workflow_id: graph.id.clone(),
             execution_id: ctx.execution_id.clone(),
@@ -308,7 +308,13 @@ impl WorkflowExecutor {
         };
 
         let result = self
-            .execute_from_node(graph, &ctx, start_node_id, WorkflowValue::Null, &mut execution_record)
+            .execute_from_node(
+                graph,
+                &ctx,
+                start_node_id,
+                WorkflowValue::Null,
+                &mut execution_record,
+            )
             .await;
 
         let duration = start_time.elapsed();
@@ -322,7 +328,10 @@ impl WorkflowExecutor {
         match result {
             Ok(_) => {
                 execution_record.status = WorkflowStatus::Completed;
-                info!("Workflow {} resumed and completed in {:?}", graph.name, duration);
+                info!(
+                    "Workflow {} resumed and completed in {:?}",
+                    graph.name, duration
+                );
             }
             Err(ref e) => {
                 execution_record.status = WorkflowStatus::Failed(e.clone());
@@ -359,7 +368,8 @@ impl WorkflowExecutor {
                 .get_node(&current_node_id)
                 .ok_or_else(|| format!("Node {} not found", current_node_id))?;
 
-            let is_completed = ctx.get_node_status(&current_node_id).await == Some(NodeStatus::Completed);
+            let is_completed =
+                ctx.get_node_status(&current_node_id).await == Some(NodeStatus::Completed);
 
             // Emit debug telemetry: NodeStart
             self.emit_debug(DebugEvent::NodeStart {
@@ -376,7 +386,10 @@ impl WorkflowExecutor {
 
             let result = if is_completed {
                 info!("Skipping already completed node: {}", current_node_id);
-                Ok(ctx.get_node_output(&current_node_id).await.unwrap_or(WorkflowValue::Null))
+                Ok(ctx
+                    .get_node_output(&current_node_id)
+                    .await
+                    .unwrap_or(WorkflowValue::Null))
             } else {
                 ctx.set_node_status(&current_node_id, NodeStatus::Running)
                     .await;
@@ -711,7 +724,11 @@ impl WorkflowExecutor {
 
         // 获取子工作流的最终输出
         let output = if let Some(end_node) = sub_graph.end_nodes().first() {
-            sub_record.outputs.get(end_node).cloned().unwrap_or(WorkflowValue::Null)
+            sub_record
+                .outputs
+                .get(end_node)
+                .cloned()
+                .unwrap_or(WorkflowValue::Null)
         } else {
             WorkflowValue::Null
         };
@@ -806,7 +823,9 @@ impl WorkflowExecutor {
                         info!("Skipping already completed node: {}", node_id);
                         NodeResult::success(
                             &node_id,
-                            ctx.get_node_output(&node_id).await.unwrap_or(WorkflowValue::Null),
+                            ctx.get_node_output(&node_id)
+                                .await
+                                .unwrap_or(WorkflowValue::Null),
                             0,
                         )
                     } else {
@@ -868,7 +887,7 @@ impl WorkflowExecutor {
                 .unwrap_or_default()
                 .as_millis() as u64,
         );
-        
+
         execution_record.outputs = ctx.get_all_outputs().await;
 
         info!(
@@ -960,8 +979,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_checkpoint_resume() {
-        use std::sync::atomic::{AtomicUsize, Ordering};
         use std::sync::Arc;
+        use std::sync::atomic::{AtomicUsize, Ordering};
 
         let mut graph = WorkflowGraph::new("test", "Checkpoint Workflow");
 
@@ -972,20 +991,28 @@ mod tests {
         let step2_count_clone = Arc::clone(&step2_count);
 
         graph.add_node(WorkflowNode::start("start"));
-        graph.add_node(WorkflowNode::task("step1", "Step 1", move |_ctx, _input| {
-            let count = Arc::clone(&step1_count_clone);
-            async move {
-                count.fetch_add(1, Ordering::SeqCst);
-                Ok(WorkflowValue::String("step1_done".to_string()))
-            }
-        }));
-        graph.add_node(WorkflowNode::task("step2", "Step 2", move |_ctx, _input| {
-            let count = Arc::clone(&step2_count_clone);
-            async move {
-                count.fetch_add(1, Ordering::SeqCst);
-                Ok(WorkflowValue::String("step2_done".to_string()))
-            }
-        }));
+        graph.add_node(WorkflowNode::task(
+            "step1",
+            "Step 1",
+            move |_ctx, _input| {
+                let count = Arc::clone(&step1_count_clone);
+                async move {
+                    count.fetch_add(1, Ordering::SeqCst);
+                    Ok(WorkflowValue::String("step1_done".to_string()))
+                }
+            },
+        ));
+        graph.add_node(WorkflowNode::task(
+            "step2",
+            "Step 2",
+            move |_ctx, _input| {
+                let count = Arc::clone(&step2_count_clone);
+                async move {
+                    count.fetch_add(1, Ordering::SeqCst);
+                    Ok(WorkflowValue::String("step2_done".to_string()))
+                }
+            },
+        ));
         graph.add_node(WorkflowNode::end("end"));
 
         graph.connect("start", "step1");
@@ -997,7 +1024,10 @@ mod tests {
         //simulate crashing after step1
         let mut node_outputs = HashMap::new();
         node_outputs.insert("start".to_string(), WorkflowValue::Null);
-        node_outputs.insert("step1".to_string(), WorkflowValue::String("step1_done".to_string()));
+        node_outputs.insert(
+            "step1".to_string(),
+            WorkflowValue::String("step1_done".to_string()),
+        );
 
         let checkpoint = ExecutionCheckpoint {
             execution_id: "test-exec-id".to_string(),
@@ -1008,11 +1038,22 @@ mod tests {
             timestamp: 0,
         };
 
-        let result2 = executor.resume_from_checkpoint(&graph, checkpoint).await.unwrap();
+        let result2 = executor
+            .resume_from_checkpoint(&graph, checkpoint)
+            .await
+            .unwrap();
         assert!(matches!(result2.status, WorkflowStatus::Completed));
 
-        assert_eq!(step1_count.load(Ordering::SeqCst), 0, "Step1 should be skipped");
-        assert_eq!(step2_count.load(Ordering::SeqCst), 1, "Step2 should be executed");
+        assert_eq!(
+            step1_count.load(Ordering::SeqCst),
+            0,
+            "Step1 should be skipped"
+        );
+        assert_eq!(
+            step2_count.load(Ordering::SeqCst),
+            1,
+            "Step2 should be executed"
+        );
     }
 
     #[tokio::test]
