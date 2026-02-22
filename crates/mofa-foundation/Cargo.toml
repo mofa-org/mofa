@@ -9,7 +9,7 @@ repository.workspace = true
 homepage.workspace = true
 documentation = "https://docs.rs/mofa-foundation"
 readme = "README.md"
-keywords = ["ai", "agent", "llm", "persistence", "implementation", "storage"]
+keywords = ["ai", "agent", "llm", "persistence", "storage"]
 categories = ["development-tools", "asynchronous"]
 publish = true
 
@@ -25,6 +25,8 @@ persistence-sqlite = ["dep:sqlx"]
 persistence-all = ["persistence-postgres", "persistence-mysql", "persistence-sqlite"]
 # Enable Kokoro TTS support
 kokoro = ["mofa-plugins/kokoro"]
+# Enable MCP (Model Context Protocol) client support
+mcp = ["dep:rmcp"]
 
 [dependencies]
 # Workspace dependencies
@@ -59,6 +61,9 @@ async-openai = { version = "0.27" }
 
 # Actor framework for ReAct agents
 ractor.workspace = true
+
+# MCP (Model Context Protocol) client support
+rmcp = { version = "0.16", features = ["client", "transport-child-process", "transport-io"], optional = true }
 
 # Datetime support for persistence
 chrono.workspace = true

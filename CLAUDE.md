@@ -111,6 +111,14 @@ Human-in-the-loop workflow management with 5 phases:
 
 ## Development Notes
 
+### Code and Documentation Language
+
+**English is the primary language for all code comments and documentation.**
+- Use English for inline comments, doc comments (`///`, `//!`), and README files
+- Variable, function, and type names should be in English
+- Commit messages should be written in English
+- This ensures consistency and accessibility for international contributors
+
 ### Feature Flags
 
 The workspace uses feature flags extensively:

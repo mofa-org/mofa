@@ -129,16 +129,10 @@ impl Reducer for ExtendReducer {
 /// // Update: { "config": { "b": 3, "c": 4 } }
 /// // After (shallow): { "config": { "a": 1, "b": 3, "c": 4 } }
 /// ```
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct MergeReducer {
     /// Whether to perform deep merge on nested objects
     pub deep: bool,
-}
-
-impl Default for MergeReducer {
-    fn default() -> Self {
-        Self { deep: false }
-    }
 }
 
 impl MergeReducer {
@@ -162,14 +156,13 @@ impl Reducer for MergeReducer {
 
                 for (key, value) in update_map {
                     // If deep merge and both values are objects, recurse
-                    if self.deep {
-                        if let (Some(Value::Object(existing)), Value::Object(new_obj)) =
+                    if self.deep
+                        && let (Some(Value::Object(existing)), Value::Object(new_obj)) =
                             (result.get(key), value)
-                        {
-                            let merged = merge_objects_deep(existing.clone(), new_obj.clone());
-                            result.insert(key.clone(), Value::Object(merged));
-                            continue;
-                        }
+                    {
+                        let merged = merge_objects_deep(existing.clone(), new_obj.clone());
+                        result.insert(key.clone(), Value::Object(merged));
+                        continue;
                     }
                     result.insert(key.clone(), value.clone());
                 }
@@ -183,11 +176,7 @@ impl Reducer for MergeReducer {
     }
 
     fn name(&self) -> &str {
-        if self.deep {
-            "merge_deep"
-        } else {
-            "merge"
-        }
+        if self.deep { "merge_deep" } else { "merge" }
     }
 
     fn reducer_type(&self) -> ReducerType {
@@ -451,10 +440,7 @@ mod tests {
         assert_eq!(result, json!([1, 2, 3, 4]));
 
         // Single item extends
-        let result = reducer
-            .reduce(Some(&json!([1])), &json!(2))
-            .await
-            .unwrap();
+        let result = reducer.reduce(Some(&json!([1])), &json!(2)).await.unwrap();
         assert_eq!(result, json!([1, 2]));
     }
 
@@ -560,17 +546,12 @@ mod tests {
     #[tokio::test]
     async fn test_custom_reducer() {
         let reducer = CustomReducer::new("sum", |current, update| {
-            let curr = current
-                .and_then(|v| v.as_i64())
-                .unwrap_or(0);
+            let curr = current.and_then(|v| v.as_i64()).unwrap_or(0);
             let upd = update.as_i64().unwrap_or(0);
             Ok(json!(curr + upd))
         });
 
-        let result = reducer
-            .reduce(Some(&json!(10)), &json!(5))
-            .await
-            .unwrap();
+        let result = reducer.reduce(Some(&json!(10)), &json!(5)).await.unwrap();
         assert_eq!(result, json!(15));
 
         assert_eq!(reducer.name(), "sum");

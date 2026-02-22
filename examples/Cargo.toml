@@ -23,6 +23,8 @@ members = [
     "agent_from_database_streaming",
     "workflow_dsl",
     "reflection_agent",
+    "tool_routing",
+    "runtime_message_bus_backpressure"
 ]
 
 [workspace.package]

@@ -152,7 +152,11 @@ pub trait StateGraph: Send + Sync {
     /// # Arguments
     /// * `id` - Unique node identifier
     /// * `node` - Node function implementation
-    fn add_node(&mut self, id: impl Into<String>, node: Box<dyn NodeFunc<Self::State>>) -> &mut Self;
+    fn add_node(
+        &mut self,
+        id: impl Into<String>,
+        node: Box<dyn NodeFunc<Self::State>>,
+    ) -> &mut Self;
 
     /// Add an edge between two nodes
     ///
@@ -256,10 +260,7 @@ pub trait CompiledGraph<S: GraphState>: Send + Sync {
 #[derive(Debug, Clone)]
 pub enum StreamEvent<S: GraphState> {
     /// A node started executing
-    NodeStart {
-        node_id: String,
-        state: S,
-    },
+    NodeStart { node_id: String, state: S },
     /// A node finished executing
     NodeEnd {
         node_id: String,
@@ -267,9 +268,7 @@ pub enum StreamEvent<S: GraphState> {
         command: Command,
     },
     /// Graph execution completed
-    End {
-        final_state: S,
-    },
+    End { final_state: S },
     /// Error occurred
     Error {
         node_id: Option<String>,

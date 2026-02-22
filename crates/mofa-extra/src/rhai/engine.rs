@@ -696,7 +696,23 @@ pub fn dynamic_to_json(value: &Dynamic) -> serde_json::Value {
         serde_json::Value::Bool(b)
     } else if let Some(i) = value.clone().try_cast::<i64>() {
         serde_json::json!(i)
+    } else if let Some(i) = value.clone().try_cast::<i32>() {
+        serde_json::json!(i)
+    } else if let Some(i) = value.clone().try_cast::<i16>() {
+        serde_json::json!(i)
+    } else if let Some(i) = value.clone().try_cast::<i8>() {
+        serde_json::json!(i)
+    } else if let Some(u) = value.clone().try_cast::<u64>() {
+        serde_json::json!(u)
+    } else if let Some(u) = value.clone().try_cast::<u32>() {
+        serde_json::json!(u)
+    } else if let Some(u) = value.clone().try_cast::<u16>() {
+        serde_json::json!(u)
+    } else if let Some(u) = value.clone().try_cast::<u8>() {
+        serde_json::json!(u)
     } else if let Some(f) = value.clone().try_cast::<f64>() {
+        serde_json::json!(f)
+    } else if let Some(f) = value.clone().try_cast::<f32>() {
         serde_json::json!(f)
     } else if let Some(s) = value.clone().try_cast::<String>() {
         serde_json::Value::String(s)

@@ -1,3 +1,6 @@
 .idea
 /target/
 .DS_Store
+
+.worktrees/
+/docs/mofa-doc/book/

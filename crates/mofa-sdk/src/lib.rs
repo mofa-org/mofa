@@ -83,10 +83,10 @@
 /// }
 /// ```
 pub mod kernel {
-    //! Core abstractions and infrastructure from `mofa-kernel`.
-    //!
-    //! This module is a normalized, comprehensive facade over `mofa-kernel` with
-    //! structured submodules and curated top-level re-exports.
+    // Core abstractions and infrastructure from `mofa-kernel`.
+    //
+    // This module is a normalized, comprehensive facade over `mofa-kernel` with
+    // structured submodules and curated top-level re-exports.
 
     // ---------------------------------------------------------------------
     // Structured submodules (full coverage)
@@ -184,7 +184,8 @@ pub mod runtime {
     // Agent builder
     pub use mofa_runtime::AgentBuilder;
 
-    // Simple runtime (non-dora)
+    // Simple runtime (non-dora mode only)
+    #[cfg(not(feature = "dora"))]
     pub use mofa_runtime::SimpleRuntime;
 
     // Agent registry (runtime implementation)
@@ -380,9 +381,9 @@ pub mod workflow {
 
     // Re-export kernel workflow types
     pub use mofa_kernel::workflow::{
-        Command, CompiledGraph, ControlFlow, EdgeTarget, GraphConfig, GraphState, JsonState,
-        NodeFunc, Reducer, ReducerType, RemainingSteps, RuntimeContext, SendCommand, StateSchema,
-        StateUpdate, StreamEvent, StepResult, END, START,
+        Command, CompiledGraph, ControlFlow, END, EdgeTarget, GraphConfig, GraphState, JsonState,
+        NodeFunc, Reducer, ReducerType, RemainingSteps, RuntimeContext, START, SendCommand,
+        StateSchema, StateUpdate, StepResult, StreamEvent,
     };
 
     // Re-export kernel StateGraph trait
@@ -390,11 +391,19 @@ pub mod workflow {
 
     // Foundation layer implementations
     pub use mofa_foundation::workflow::{
-        // StateGraph implementation
-        CompiledGraphImpl, StateGraphImpl,
         // Reducers
-        AppendReducer, ExtendReducer, FirstReducer, LastNReducer, LastReducer,
-        MergeReducer, OverwriteReducer, CustomReducer, create_reducer,
+        AppendReducer,
+        // StateGraph implementation
+        CompiledGraphImpl,
+        CustomReducer,
+        ExtendReducer,
+        FirstReducer,
+        LastNReducer,
+        LastReducer,
+        MergeReducer,
+        OverwriteReducer,
+        StateGraphImpl,
+        create_reducer,
     };
 
     // Legacy workflow API
@@ -421,7 +430,9 @@ pub mod prelude {
         AgentCapabilities, AgentCapabilitiesBuilder, AgentContext, AgentError, AgentInput,
         AgentMetadata, AgentOutput, AgentResult, AgentState, MoFAAgent,
     };
-    pub use crate::runtime::{AgentBuilder, AgentRunner, SimpleRuntime, run_agents};
+    pub use crate::runtime::{AgentBuilder, AgentRunner, run_agents};
+    #[cfg(not(feature = "dora"))]
+    pub use crate::runtime::SimpleRuntime;
     pub use async_trait::async_trait;
 }
 
@@ -468,6 +479,7 @@ pub mod llm {
     pub use crate::llm_tools::ToolPluginExecutor;
     pub use mofa_foundation::llm::anthropic::{AnthropicConfig, AnthropicProvider};
     pub use mofa_foundation::llm::google::{GeminiConfig, GeminiProvider};
+    pub use mofa_foundation::llm::ollama::{OllamaConfig, OllamaProvider};
     pub use mofa_foundation::llm::openai::{OpenAIConfig, OpenAIProvider};
     pub use mofa_foundation::llm::*;
 
@@ -503,6 +515,15 @@ pub mod llm {
         }
 
         Ok(OpenAIProvider::with_config(config))
+    }
+
+    /// Create an Ollama provider from environment variables (no API key required).
+    ///
+    /// Reads:
+    /// - `OLLAMA_BASE_URL`: base URL without `/v1` suffix, e.g. `http://localhost:11434` (optional)
+    /// - `OLLAMA_MODEL`: model name, e.g. `llama3` (optional)
+    pub fn ollama_from_env() -> Result<OllamaProvider, crate::llm::LLMError> {
+        Ok(crate::llm::OllamaProvider::from_env())
     }
 }
 
@@ -754,7 +775,7 @@ pub mod persistence {
     ///     Ok(())
     /// }
     /// ```
-    #[cfg(all(feature = "persistence-postgres"))]
+    #[cfg(feature = "persistence-postgres")]
     pub async fn quick_agent_with_postgres(
         system_prompt: &str,
     ) -> Result<crate::llm::LLMAgentBuilder, crate::llm::LLMError> {
@@ -762,7 +783,7 @@ pub mod persistence {
 
         // 1. 初始化数据库
         let store_arc = PostgresStore::from_env().await.map_err(|e| {
-            crate::llm::LLMError::Other(format!("数据库连接失败: {}", e.to_string()))
+            crate::llm::LLMError::Other(format!("数据库连接失败: {}", e))
         })?;
 
         // 2. 从环境变量获取或生成 IDs

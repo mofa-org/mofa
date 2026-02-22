@@ -189,3 +189,7 @@ go get github.com/mofa-org/mofa-go@v0.1.0
 - **Publishing Order**: Rust → Python → Java → Go (Go doesn't depend on others)
 - **Go Modules**: Auto-discovered via git tags, no manual registry needed
 - **PyPI**: Supports test.pypi.org for pre-release testing
+
+---
+
+**English** | [简体中文](zh-CN/MULTI_LANGUAGE_PUBLISHING.md)

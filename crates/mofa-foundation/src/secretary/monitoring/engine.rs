@@ -27,6 +27,12 @@ pub struct EventHandlingEngine {
     semaphore: Arc<Semaphore>,
 }
 
+impl Default for EventHandlingEngine {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl EventHandlingEngine {
     /// Create a new event handling engine
     pub fn new() -> Self {
@@ -115,7 +121,7 @@ impl EventHandlingEngine {
                     plugin.metadata().name
                 );
 
-                // Process the event - call handle_event directly on the trait object
+                // Process the event
                 let processed_event = plugin.handle_event(event).await?;
 
                 println!(

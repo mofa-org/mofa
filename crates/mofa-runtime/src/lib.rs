@@ -75,7 +75,7 @@ use std::sync::Arc;
 #[cfg(feature = "dora")]
 use tokio::sync::RwLock;
 #[cfg(feature = "dora")]
-use tracing::{debug, info};
+use ::tracing::{debug, info};
 
 // Private import for internal use
 use mofa_kernel::message::StreamType;
@@ -519,7 +519,7 @@ impl<A: MoFAAgent> SimpleAgentRuntime<A> {
         self.agent.initialize(&context).await?;
         // 初始化插件
         self.init_plugins().await?;
-        tracing::info!("SimpleAgentRuntime {} started", self.metadata.id);
+        ::tracing::info!("SimpleAgentRuntime {} started", self.metadata.id);
         Ok(())
     }
 
@@ -529,7 +529,7 @@ impl<A: MoFAAgent> SimpleAgentRuntime<A> {
         // 中断处理需要由 Agent 内部自行处理或通过 AgentMessaging 扩展
         if self.interrupt.check() {
             // 中断信号，可以选择停止或通知 agent
-            tracing::debug!("Interrupt signal received for {}", self.metadata.id);
+            ::tracing::debug!("Interrupt signal received for {}", self.metadata.id);
             self.interrupt.reset();
         }
 
@@ -542,7 +542,7 @@ impl<A: MoFAAgent> SimpleAgentRuntime<A> {
         let input = match event {
             AgentEvent::TaskReceived(task) => AgentInput::text(task.content),
             AgentEvent::Shutdown => {
-                tracing::info!("Shutdown event received for {}", self.metadata.id);
+                ::tracing::info!("Shutdown event received for {}", self.metadata.id);
                 return Ok(());
             }
             AgentEvent::Custom(data, _) => AgentInput::text(data),
@@ -572,14 +572,14 @@ impl<A: MoFAAgent> SimpleAgentRuntime<A> {
         loop {
             // 检查中断
             if self.interrupt.check() {
-                tracing::debug!("Interrupt signal received for {}", self.metadata.id);
+                ::tracing::debug!("Interrupt signal received for {}", self.metadata.id);
                 self.interrupt.reset();
             }
 
             // 等待事件
             match tokio::time::timeout(Duration::from_millis(100), event_rx.recv()).await {
                 Ok(Some(AgentEvent::Shutdown)) => {
-                    tracing::info!("Received shutdown event");
+                    ::tracing::info!("Received shutdown event");
                     break;
                 }
                 Ok(Some(event)) => {
@@ -606,7 +606,7 @@ impl<A: MoFAAgent> SimpleAgentRuntime<A> {
     pub async fn stop(&mut self) -> anyhow::Result<()> {
         self.interrupt.trigger();
         self.agent.shutdown().await?;
-        tracing::info!("SimpleAgentRuntime {} stopped", self.metadata.id);
+        ::tracing::info!("SimpleAgentRuntime {} stopped", self.metadata.id);
         Ok(())
     }
 
@@ -929,7 +929,7 @@ impl SimpleRuntime {
         let mut roles = self.agent_roles.write().await;
         roles.insert(agent_id.clone(), role.to_string());
 
-        tracing::info!("Agent {} registered with role {}", agent_id, role);
+        ::tracing::info!("Agent {} registered with role {}", agent_id, role);
         Ok(rx)
     }
 
@@ -1031,7 +1031,7 @@ impl SimpleRuntime {
     /// 停止所有智能体
     pub async fn stop_all(&self) -> anyhow::Result<()> {
         self.message_bus.broadcast(AgentEvent::Shutdown).await?;
-        tracing::info!("SimpleRuntime stopped");
+        ::tracing::info!("SimpleRuntime stopped");
         Ok(())
     }
 }

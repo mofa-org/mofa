@@ -10,8 +10,6 @@
 //! - Configuration merging from multiple sources
 //! - Support for all major configuration formats
 
-#![cfg(feature = "config")]
-
 use config::{Config as Cfg, Environment, File, FileFormat};
 use regex::Regex;
 use serde::de::DeserializeOwned;
@@ -319,7 +317,6 @@ mod unit_tests {
         assert_eq!(detect_format("config.json5").unwrap(), FileFormat::Json5);
         assert!(detect_format("config.txt").is_err());
     }
-
 
     #[test]
     fn test_from_str_toml() {

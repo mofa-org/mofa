@@ -174,7 +174,6 @@ mod tests {
 
     #[test]
     fn test_resolve_env_value() {
-        // SAFETY: set_var/remove_var are safe for test environment variables
         unsafe { std::env::set_var("TEST_VAR", "test_value") };
 
         assert_eq!(resolve_env_value("${TEST_VAR}").unwrap(), "test_value");
