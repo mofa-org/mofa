@@ -4,16 +4,53 @@ use crate::context::CliContext;
 use crate::output::Table;
 use colored::Colorize;
 use serde::Serialize;
+use std::collections::BTreeMap;
 
 /// Execute the `mofa agent list` command
 pub async fn run(ctx: &CliContext, running_only: bool, _show_all: bool) -> anyhow::Result<()> {
     println!("{} Listing agents", "→".green());
     println!();
 
-    // Load all agents from persistent storage
-    let all_agents = ctx.persistent_agents.list().await;
+    let agents_metadata = ctx.agent_registry.list().await;
+    let persisted_agents = ctx
+        .agent_store
+        .list()
+        .map_err(|e| anyhow::anyhow!("Failed to list persisted agents: {}", e))?;
 
-    if all_agents.is_empty() {
+    let mut merged: BTreeMap<String, AgentInfo> = BTreeMap::new();
+    for m in &agents_metadata {
+        let status = format!("{:?}", m.state);
+        let is_running = is_running_state(&status);
+        merged.insert(
+            m.id.clone(),
+            AgentInfo {
+                id: m.id.clone(),
+                name: m.name.clone(),
+                status,
+                is_running,
+                description: m.description.clone(),
+            },
+        );
+    }
+
+    for (_, entry) in persisted_agents {
+        merged.entry(entry.id.clone()).or_insert_with(|| {
+            let status = if is_running_state(&entry.state) {
+                format!("{} (persisted)", entry.state)
+            } else {
+                entry.state
+            };
+            AgentInfo {
+                id: entry.id,
+                name: entry.name,
+                status,
+                is_running: false,
+                description: entry.description,
+            }
+        });
+    }
+
+    if merged.is_empty() {
         println!("  No agents registered.");
         println!();
         println!(
@@ -23,50 +60,29 @@ pub async fn run(ctx: &CliContext, running_only: bool, _show_all: bool) -> anyho
         return Ok(());
     }
 
-    // Filter agents based on flags
-    let agents: Vec<AgentInfo> = all_agents
-        .iter()
-        .filter(|a| {
-            if running_only {
-                a.last_state == crate::state::AgentProcessState::Running
-            } else {
-                true
-            }
-        })
-        .map(|m| {
-            let status = m.last_state.to_string();
-            let process_id = m.process_id.map(|pid| pid.to_string());
+    let agents: Vec<AgentInfo> = merged.into_values().collect();
 
-            AgentInfo {
-                id: m.id.clone(),
-                name: m.name.clone(),
-                status,
-                process_id,
-                starts: m.start_count,
-                last_started: m.last_started.map(format_timestamp),
-                description: m.description.clone(),
-            }
-        })
-        .collect();
+    // Filter based on flags
+    let filtered: Vec<_> = if running_only {
+        agents.into_iter().filter(|a| a.is_running).collect()
+    } else {
+        agents
+    };
 
-    if agents.is_empty() {
-        if running_only {
-            println!("  No running agents found.");
-        } else {
-            println!("  No agents found.");
-        }
+    if filtered.is_empty() {
+        println!("  No agents found matching criteria.");
         return Ok(());
     }
 
     // Display as table
-    let json = serde_json::to_value(&agents)?;
+    let json = serde_json::to_value(&filtered)?;
     if let Some(arr) = json.as_array() {
         let table = Table::from_json_array(arr);
         println!("{}", table);
     }
 
     println!();
-    println!("  Total: {} agent(s)", agents.len());
+    println!("  Total: {} agent(s)", filtered.len());
 
     Ok(())
 }
@@ -86,11 +102,12 @@ struct AgentInfo {
     id: String,
     name: String,
     status: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    process_id: Option<String>,
-    starts: u32,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    last_started: Option<String>,
+    #[serde(skip_serializing)]
+    is_running: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     description: Option<String>,
+}
+
+fn is_running_state(status: &str) -> bool {
+    status == "Running" || status == "Ready"
 }

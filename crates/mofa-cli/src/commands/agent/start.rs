@@ -1,17 +1,17 @@
 //! `mofa agent start` command implementation
 
 use crate::config::loader::ConfigLoader;
-use crate::context::CliContext;
-use crate::state::AgentMetadata;
+use crate::context::{AgentConfigEntry, CliContext};
 use colored::Colorize;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use tracing::info;
 
 /// Execute the `mofa agent start` command
 pub async fn run(
     ctx: &CliContext,
     agent_id: &str,
-    config_path: Option<&Path>,
+    config_path: Option<&std::path::Path>,
+    factory_type: Option<&str>,
     daemon: bool,
 ) -> anyhow::Result<()> {
     println!("{} Starting agent: {}", "→".green(), agent_id.cyan());
@@ -43,10 +43,7 @@ pub async fn run(
         println!("  Config: {}", path.display().to_string().cyan());
         ctx.process_manager.validate_config(path)?;
 
-        // Try to load name from config
-        let name = load_agent_name_from_config(path).unwrap_or_else(|| agent_id.to_string());
-
-        (path.to_path_buf(), name)
+        (path.to_path_buf(), agent_id.to_string())
     } else {
         // Try to auto-discover configuration
         let loader = ConfigLoader::new();
@@ -58,64 +55,152 @@ pub async fn run(
                 );
                 ctx.process_manager.validate_config(&found_path)?;
 
-                let name = load_agent_name_from_config(&found_path)
-                    .unwrap_or_else(|| agent_id.to_string());
-
-                (found_path, name)
+                (found_path, agent_id.to_string())
             }
             None => {
+                println!("  {} No config file found, using defaults", "!".yellow());
+                (PathBuf::new(), agent_id.to_string())
+            }
+        }
+    };
+
+    // Create agent config
+    let agent_config = mofa_kernel::agent::config::AgentConfig::new(agent_id, &agent_name);
+
+    // Check if a matching factory type is available
+    let mut factory_types = ctx.agent_registry.list_factory_types().await;
+    if factory_types.is_empty() {
+        anyhow::bail!(
+            "No agent factories registered. Cannot start agent '{}'",
+            agent_id
+        );
+    }
+    factory_types.sort();
+
+    let selected_factory = select_factory_type(&factory_types, factory_type)?;
+    println!("  Factory: {}", selected_factory.cyan());
+    if factory_type.is_none() && factory_types.len() > 1 {
+        println!(
+            "  {} Multiple factories available, defaulted to '{}'. Use --type to choose.",
+            "!".yellow(),
+            selected_factory
+        );
+    }
+
+    // Check if agent already exists
+    if ctx.agent_registry.contains(agent_id).await {
+        anyhow::bail!("Agent '{}' is already registered", agent_id);
+    }
+
+    // Try to create via factory
+    ctx.agent_registry
+        .create_and_register(&selected_factory, agent_config.clone())
+        .await
+        .map_err(|e| anyhow::anyhow!("Failed to start agent '{}': {}", agent_id, e))?;
+
+    let entry = AgentConfigEntry {
+        id: agent_id.to_string(),
+        name: agent_config.name.clone(),
+        state: "Running".to_string(),
+        description: agent_config.description.clone(),
+    };
+    if let Err(e) = ctx.agent_store.save(agent_id, &entry) {
+        let rollback_result = ctx.agent_registry.unregister(agent_id).await;
+        match rollback_result {
+            Ok(_) => {
                 anyhow::bail!(
-                    "No configuration found for agent '{}'. Specify with --config or create a mofa.yaml file.",
-                    agent_id
+                    "Failed to persist agent '{}': {}. Rolled back in-memory registration.",
+                    agent_id,
+                    e
+                );
+            }
+            Err(rollback_err) => {
+                anyhow::bail!(
+                    "Failed to persist agent '{}': {}. Rollback failed: {}",
+                    agent_id,
+                    e,
+                    rollback_err
                 );
             }
         }
-    };
-
-    println!("  Agent:  {}", agent_name.white());
-
-    // Start the agent process
-    println!("  {} Spawning process...", "→".green());
-    let pid = match ctx
-        .process_manager
-        .start_agent(agent_id, Some(&config_file), daemon)
-    {
-        Ok(p) => {
-            println!("  PID:    {}", p.to_string().cyan());
-            p
-        }
-        Err(e) => {
-            println!("  {} Failed to start process: {}", "✗".red(), e);
-            anyhow::bail!("Failed to start agent process: {}", e);
-        }
-    };
-
-    // Create and persist agent metadata
-    let mut metadata = AgentMetadata::new(agent_id.to_string(), agent_name);
-    metadata = metadata.with_config(config_file);
-    metadata.mark_started(pid);
-
-    ctx.persistent_agents.register(metadata).await?;
+    }
 
     println!("{} Agent '{}' started successfully", "✓".green(), agent_id);
-    println!("  PID: {}", pid.to_string().cyan());
-
-    info!("Agent '{}' started with PID: {}", agent_id, pid);
 
     Ok(())
 }
 
-/// Load agent name from configuration file
-fn load_agent_name_from_config(path: &Path) -> Option<String> {
-    match std::fs::read_to_string(path) {
-        Ok(content) => match serde_yaml::from_str::<serde_yaml::Value>(&content) {
-            Ok(doc) => doc
-                .get("agent")
-                .and_then(|agent| agent.get("name"))
-                .and_then(|name| name.as_str())
-                .map(|s| s.to_string()),
-            Err(_) => None,
-        },
-        Err(_) => None,
+fn select_factory_type(
+    factory_types: &[String],
+    requested_factory: Option<&str>,
+) -> anyhow::Result<String> {
+    if let Some(requested) = requested_factory {
+        if factory_types.iter().any(|factory| factory == requested) {
+            return Ok(requested.to_string());
+        }
+        anyhow::bail!(
+            "Factory '{}' is not registered. Available factories: {}",
+            requested,
+            factory_types.join(", ")
+        );
+    }
+
+    Ok(factory_types
+        .first()
+        .expect("factory_types must be non-empty")
+        .clone())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::context::CliContext;
+    use tempfile::TempDir;
+
+    #[tokio::test]
+    async fn test_start_succeeds_with_default_factory() {
+        let temp = TempDir::new().unwrap();
+        let ctx = CliContext::with_temp_dir(temp.path()).await.unwrap();
+
+        let result = run(&ctx, "test-agent", None, None, false).await;
+        assert!(result.is_ok());
+        assert!(ctx.agent_registry.contains("test-agent").await);
+    }
+
+    #[tokio::test]
+    async fn test_start_returns_err_for_duplicate_agent() {
+        let temp = TempDir::new().unwrap();
+        let ctx = CliContext::with_temp_dir(temp.path()).await.unwrap();
+
+        run(&ctx, "dup-agent", None, None, false).await.unwrap();
+        let result = run(&ctx, "dup-agent", None, None, false).await;
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_start_returns_err_for_unknown_factory_type() {
+        let temp = TempDir::new().unwrap();
+        let ctx = CliContext::with_temp_dir(temp.path()).await.unwrap();
+
+        let result = run(&ctx, "typed-agent", None, Some("missing-factory"), false).await;
+        assert!(result.is_err());
+        assert!(!ctx.agent_registry.contains("typed-agent").await);
+    }
+
+    #[tokio::test]
+    async fn test_start_succeeds_with_explicit_factory_type() {
+        let temp = TempDir::new().unwrap();
+        let ctx = CliContext::with_temp_dir(temp.path()).await.unwrap();
+        let factory = ctx
+            .agent_registry
+            .list_factory_types()
+            .await
+            .into_iter()
+            .next()
+            .unwrap();
+
+        let result = run(&ctx, "typed-agent-ok", None, Some(&factory), false).await;
+        assert!(result.is_ok());
+        assert!(ctx.agent_registry.contains("typed-agent-ok").await);
     }
 }

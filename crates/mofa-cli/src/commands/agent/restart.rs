@@ -13,28 +13,42 @@ pub async fn run(
 
     // Stop the agent if it's running
     if ctx.agent_registry.contains(agent_id).await {
-        // Attempt graceful shutdown
-        if let Some(agent) = ctx.agent_registry.get(agent_id).await {
-            let mut agent_guard = agent.write().await;
-            if let Err(e) = agent_guard.shutdown().await {
-                println!("  {} Graceful shutdown failed: {}", "!".yellow(), e);
-            }
-        }
-
-        ctx.agent_registry
-            .unregister(agent_id)
-            .await
-            .map_err(|e| anyhow::anyhow!("Failed to unregister agent: {}", e))?;
-
-        println!("  Agent stopped");
+        super::stop::run(ctx, agent_id).await?;
     } else {
         println!("  Agent was not running");
     }
 
     // Start it again
-    super::start::run(ctx, agent_id, config, false).await?;
+    super::start::run(ctx, agent_id, config, None, false).await?;
 
     println!("{} Agent '{}' restarted", "✓".green(), agent_id);
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::commands::agent::{list, start, stop};
+    use crate::context::CliContext;
+    use tempfile::TempDir;
+
+    #[tokio::test]
+    async fn test_restart_chain_start_stop_restart_list() {
+        let temp = TempDir::new().unwrap();
+        let ctx = CliContext::with_temp_dir(temp.path()).await.unwrap();
+
+        start::run(&ctx, "chain-agent", None, None, false)
+            .await
+            .unwrap();
+        stop::run(&ctx, "chain-agent").await.unwrap();
+        run(&ctx, "chain-agent", None).await.unwrap();
+
+        assert!(ctx.agent_registry.contains("chain-agent").await);
+        let persisted = ctx.agent_store.get("chain-agent").unwrap().unwrap();
+        assert_eq!(persisted.state, "Running");
+
+        list::run(&ctx, false, false).await.unwrap();
+        list::run(&ctx, true, false).await.unwrap();
+    }
 }

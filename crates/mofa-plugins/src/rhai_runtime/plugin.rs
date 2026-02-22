@@ -321,7 +321,12 @@ impl RhaiPlugin {
         let context = mofa_extra::rhai::ScriptContext::new();
 
         // Execute the script to define global variables
-        if self.engine.execute_compiled(&script_id, &context).await.is_ok() {
+        if self
+            .engine
+            .execute_compiled(&script_id, &context)
+            .await
+            .is_ok()
+        {
             // Now try to extract variables by calling a snippet that returns them
             // Try to extract plugin_name
             if let Ok(result) = self.engine.execute("plugin_name", &context).await
