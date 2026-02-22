@@ -17,7 +17,9 @@ pub mod plugins;
 pub mod registry;
 
 // 重新导出常用类型
-pub use crate::runner::{AgentRunner, AgentRunnerBuilder, RunnerState, RunnerStats, run_agents};
+pub use crate::runner::{
+    AgentRunner, AgentRunnerBuilder, PeriodicRunConfig, RunnerState, RunnerStats, run_agents,
+};
 pub use execution::{ExecutionEngine, ExecutionOptions, ExecutionResult, ExecutionStatus};
 pub use mofa_kernel::agent::registry::AgentFactory;
 pub use registry::{AgentRegistry, RegistryStats};
