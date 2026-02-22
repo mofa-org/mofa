@@ -263,3 +263,7 @@ let response = agent.ask("你好！").await?;
 **下一章：** [第 5 章：工具与函数调用](05-tools_cn.md) — 赋予你的智能体调用函数的能力。
 
 [← 返回目录](README_cn.md)
+
+---
+
+**English** | [简体中文](../zh-CN/tutorial/04-llm-agent_cn.md)

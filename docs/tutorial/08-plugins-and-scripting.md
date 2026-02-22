@@ -381,3 +381,7 @@ WASM plugins are compiled from Rust (or any language that targets WASM) and run 
 **Next:** [Chapter 9: What's Next](09-whats-next.md) — Contributing, GSoC ideas, and advanced topics.
 
 [← Back to Table of Contents](README.md)
+
+---
+
+**English** | [简体中文](../zh-CN/tutorial/08-plugins-and-scripting.md)

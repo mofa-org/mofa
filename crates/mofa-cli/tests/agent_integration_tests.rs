@@ -1,250 +1,169 @@
-//! Integration tests for agent management CLI commands
-//!
-//! Tests the mofa agent list, start, and stop commands using the public API
+//! Integration tests for agent registry behavior used by CLI workflows.
 
 #![cfg(test)]
 
-use mofa_cli::commands::agent::state::{AgentRegistry, AgentState, AgentStatus};
+use async_trait::async_trait;
+use mofa_kernel::agent::config::AgentConfig;
+use mofa_runtime::agent::capabilities::{AgentCapabilities, AgentRequirements};
+use mofa_runtime::agent::context::AgentContext;
+use mofa_runtime::agent::core::MoFAAgent;
+use mofa_runtime::agent::error::AgentResult;
+use mofa_runtime::agent::types::{AgentInput, AgentOutput, AgentState};
+use mofa_runtime::agent::{AgentFactory, AgentRegistry};
+use std::sync::Arc;
+use tokio::sync::RwLock;
 
-use std::env;
-use tempfile::TempDir;
-
-// Note: These are integration tests that verify the CLI commands work correctly.
-// They use a temporary directory to avoid interfering with the actual CLI state.
-
-#[test]
-fn test_agent_state_module_integration() {
-    // This test verifies the agent state module is properly integrated and accessible
-    assert!(true); // Compilation of the module is the real test
+struct TestAgent {
+    id: String,
+    name: String,
+    state: AgentState,
+    capabilities: AgentCapabilities,
 }
 
-#[tokio::test]
-async fn test_agent_state_persistence() {
-    let temp_dir = TempDir::new().unwrap();
-    unsafe { env::set_var("MOFA_HOME", temp_dir.path()); }
-
-    let registry = AgentRegistry::new().unwrap();
-
-    // Create and save an agent
-    let mut agent = AgentState::new("test-agent".to_string(), "TestAgent".to_string());
-    agent.start_running(1234, Some("/path/to/config.yml".to_string()));
-
-    registry.save_agent(&agent).unwrap();
-
-    // Load it back
-    let loaded = registry.load_agent("test-agent").unwrap();
-    assert!(loaded.is_some());
-
-    let loaded_agent = loaded.unwrap();
-    assert_eq!(loaded_agent.id, "test-agent");
-    assert_eq!(loaded_agent.name, "TestAgent");
-    assert_eq!(loaded_agent.status, AgentStatus::Running);
-    assert_eq!(loaded_agent.pid, Some(1234));
-}
-
-#[tokio::test]
-async fn test_agent_list_empty() {
-    let temp_dir = TempDir::new().unwrap();
-    unsafe { env::set_var("MOFA_HOME", temp_dir.path()); }
-
-    let registry = AgentRegistry::new().unwrap();
-    let agents = registry.list_all().unwrap();
-
-    assert_eq!(agents.len(), 0);
-}
-
-#[tokio::test]
-async fn test_agent_list_multiple() {
-    let temp_dir = TempDir::new().unwrap();
-    unsafe { env::set_var("MOFA_HOME", temp_dir.path()); }
-
-    let registry = AgentRegistry::new().unwrap();
-
-    // Create multiple agents
-    for i in 1..=3 {
-        let mut agent = AgentState::new(format!("agent-{}", i), format!("Agent {}", i));
-        if i % 2 == 0 {
-            agent.start_running(1000 + i as u32, None);
+impl TestAgent {
+    fn new(id: &str, name: &str, capabilities: AgentCapabilities) -> Self {
+        Self {
+            id: id.to_string(),
+            name: name.to_string(),
+            state: AgentState::Created,
+            capabilities,
         }
-        registry.save_agent(&agent).unwrap();
+    }
+}
+
+#[async_trait]
+impl MoFAAgent for TestAgent {
+    fn id(&self) -> &str {
+        &self.id
     }
 
-    let all_agents = registry.list_all().unwrap();
-    assert_eq!(all_agents.len(), 3);
+    fn name(&self) -> &str {
+        &self.name
+    }
 
-    let running = registry.list_running().unwrap();
-    assert_eq!(running.len(), 1); // Only agent-2 is running
-    assert_eq!(running[0].id, "agent-2");
-    assert_eq!(running[0].status, AgentStatus::Running);
+    fn capabilities(&self) -> &AgentCapabilities {
+        &self.capabilities
+    }
+
+    fn state(&self) -> AgentState {
+        self.state.clone()
+    }
+
+    async fn initialize(&mut self, _ctx: &AgentContext) -> AgentResult<()> {
+        self.state = AgentState::Ready;
+        Ok(())
+    }
+
+    async fn execute(
+        &mut self,
+        _input: AgentInput,
+        _ctx: &AgentContext,
+    ) -> AgentResult<AgentOutput> {
+        Ok(AgentOutput::text("ok"))
+    }
+
+    async fn shutdown(&mut self) -> AgentResult<()> {
+        self.state = AgentState::Shutdown;
+        Ok(())
+    }
+}
+
+struct TestAgentFactory;
+
+#[async_trait]
+impl AgentFactory for TestAgentFactory {
+    async fn create(&self, config: AgentConfig) -> AgentResult<Arc<RwLock<dyn MoFAAgent>>> {
+        let capabilities = AgentCapabilities::builder().with_tag("factory").build();
+        let agent = TestAgent::new(&config.id, &config.name, capabilities);
+        Ok(Arc::new(RwLock::new(agent)))
+    }
+
+    fn type_id(&self) -> &str {
+        "test-factory"
+    }
+
+    fn default_capabilities(&self) -> AgentCapabilities {
+        AgentCapabilities::builder().with_tag("factory").build()
+    }
 }
 
 #[tokio::test]
-async fn test_agent_status_transitions() {
-    let temp_dir = TempDir::new().unwrap();
-    unsafe { env::set_var("MOFA_HOME", temp_dir.path()); }
+async fn test_registry_register_and_query() {
+    let registry = AgentRegistry::new();
+    let caps = AgentCapabilities::builder()
+        .with_tag("cli")
+        .with_tag("integration")
+        .build();
+    let agent = Arc::new(RwLock::new(TestAgent::new("agent-1", "Agent One", caps)));
 
-    let registry = AgentRegistry::new().unwrap();
+    registry.register(agent).await.unwrap();
 
-    let mut agent = AgentState::new("test-agent".to_string(), "TestAgent".to_string());
+    assert!(registry.contains("agent-1").await);
+    assert_eq!(registry.count().await, 1);
+    assert_eq!(registry.list().await.len(), 1);
 
-    // Initial state: stopped
-    assert_eq!(agent.status, AgentStatus::Stopped);
-    registry.save_agent(&agent).unwrap();
-
-    // Transition to running
-    agent.start_running(1234, None);
-    assert_eq!(agent.status, AgentStatus::Running);
-    registry.save_agent(&agent).unwrap();
-
-    // Verify persistence
-    let loaded = registry.load_agent("test-agent").unwrap().unwrap();
-    assert_eq!(loaded.status, AgentStatus::Running);
-
-    // Transition to stopped
-    agent.stop();
-    assert_eq!(agent.status, AgentStatus::Stopped);
-    registry.save_agent(&agent).unwrap();
-
-    // Verify persistence
-    let loaded = registry.load_agent("test-agent").unwrap().unwrap();
-    assert_eq!(loaded.status, AgentStatus::Stopped);
-    assert_eq!(loaded.pid, None);
+    let tagged = registry.find_by_tag("cli").await;
+    assert_eq!(tagged.len(), 1);
+    assert_eq!(tagged[0].id, "agent-1");
 }
 
 #[tokio::test]
-async fn test_agent_error_status() {
-    let temp_dir = TempDir::new().unwrap();
-    unsafe { env::set_var("MOFA_HOME", temp_dir.path()); }
+async fn test_registry_find_by_capabilities() {
+    let registry = AgentRegistry::new();
 
-    let registry = AgentRegistry::new().unwrap();
+    let caps_a = AgentCapabilities::builder().with_tag("planner").build();
+    let caps_b = AgentCapabilities::builder().with_tag("writer").build();
+    let agent_a = Arc::new(RwLock::new(TestAgent::new("agent-a", "Planner", caps_a)));
+    let agent_b = Arc::new(RwLock::new(TestAgent::new("agent-b", "Writer", caps_b)));
 
-    let mut agent = AgentState::new("error-agent".to_string(), "ErrorAgent".to_string());
-    agent.set_error("Failed to initialize".to_string());
+    registry.register(agent_a).await.unwrap();
+    registry.register(agent_b).await.unwrap();
 
-    assert_eq!(agent.status, AgentStatus::Error);
-    assert_eq!(agent.error, Some("Failed to initialize".to_string()));
-
-    registry.save_agent(&agent).unwrap();
-
-    let loaded = registry.load_agent("error-agent").unwrap().unwrap();
-    assert_eq!(loaded.status, AgentStatus::Error);
-    assert_eq!(loaded.error, Some("Failed to initialize".to_string()));
+    let requirements = AgentRequirements::builder().require_tag("writer").build();
+    let matched = registry.find_by_capabilities(&requirements).await;
+    assert_eq!(matched.len(), 1);
+    assert_eq!(matched[0].id, "agent-b");
 }
 
 #[tokio::test]
-async fn test_agent_uptime_calculation() {
-    let mut agent = AgentState::new("test".to_string(), "Test".to_string());
+async fn test_registry_factory_create() {
+    let registry = AgentRegistry::new();
+    registry
+        .register_factory(Arc::new(TestAgentFactory))
+        .await
+        .unwrap();
 
-    // No uptime when stopped
-    assert_eq!(agent.uptime_string(), None);
+    let created = registry
+        .create("test-factory", AgentConfig::new("factory-agent", "Factory Agent"))
+        .await
+        .unwrap();
+    let guard = created.read().await;
 
-    // Start the agent
-    let now = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap()
-        .as_secs();
-
-    agent.start_time = Some(now);
-
-    // Should have uptime
-    let uptime = agent.uptime_string();
-    assert!(uptime.is_some());
-    let uptime_str = uptime.unwrap();
-    assert!(uptime_str.contains("s"));
+    assert_eq!(guard.id(), "factory-agent");
+    assert_eq!(guard.name(), "Factory Agent");
 }
 
 #[tokio::test]
-async fn test_agent_metadata_storage() {
-    let temp_dir = TempDir::new().unwrap();
-    unsafe { env::set_var("MOFA_HOME", temp_dir.path()); }
+async fn test_registry_concurrent_register() {
+    let registry = Arc::new(AgentRegistry::new());
+    let mut handles = Vec::new();
 
-    let registry = AgentRegistry::new().unwrap();
-
-    let mut agent = AgentState::new("meta-agent".to_string(), "MetaAgent".to_string());
-    agent
-        .metadata
-        .insert("version".to_string(), "1.0.0".to_string());
-    agent
-        .metadata
-        .insert("provider".to_string(), "openai".to_string());
-
-    registry.save_agent(&agent).unwrap();
-
-    let loaded = registry.load_agent("meta-agent").unwrap().unwrap();
-    assert_eq!(loaded.metadata.get("version"), Some(&"1.0.0".to_string()));
-    assert_eq!(loaded.metadata.get("provider"), Some(&"openai".to_string()));
-}
-
-#[tokio::test]
-async fn test_agent_registry_delete() {
-    let temp_dir = TempDir::new().unwrap();
-    unsafe { env::set_var("MOFA_HOME", temp_dir.path()); }
-
-    let registry = AgentRegistry::new().unwrap();
-
-    let agent = AgentState::new("delete-agent".to_string(), "DeleteAgent".to_string());
-    registry.save_agent(&agent).unwrap();
-
-    // Verify it exists
-    assert!(registry.exists("delete-agent").unwrap());
-
-    // Delete it
-    registry.delete_agent("delete-agent").unwrap();
-
-    // Verify it's gone
-    assert!(!registry.exists("delete-agent").unwrap());
-}
-
-#[tokio::test]
-async fn test_agent_registry_concurrent_access() {
-    use std::sync::Arc;
-
-    let temp_dir = TempDir::new().unwrap();
-    unsafe { env::set_var("MOFA_HOME", temp_dir.path()); }
-
-    let registry = Arc::new(AgentRegistry::new().unwrap());
-
-    let mut handles = vec![];
-
-    // Create multiple agents concurrently
     for i in 0..5 {
         let reg = Arc::clone(&registry);
-        let handle = tokio::spawn(async move {
-            let mut agent = AgentState::new(
-                format!("concurrent-agent-{}", i),
-                format!("ConcurrentAgent{}", i),
-            );
-            agent.start_running(2000 + i as u32, None);
-            reg.save_agent(&agent).unwrap();
-            agent
-        });
-        handles.push(handle);
+        handles.push(tokio::spawn(async move {
+            let caps = AgentCapabilities::builder().with_tag("batch").build();
+            let agent = Arc::new(RwLock::new(TestAgent::new(
+                &format!("batch-{i}"),
+                &format!("Batch Agent {i}"),
+                caps,
+            )));
+            reg.register(agent).await.unwrap();
+        }));
     }
 
     for handle in handles {
-        let _ = handle.await;
+        handle.await.unwrap();
     }
 
-    // Verify all were saved
-    let agents = registry.list_all().unwrap();
-    assert_eq!(agents.len(), 5);
-}
-
-#[test]
-fn test_agent_status_display() {
-    assert_eq!(AgentStatus::Running.display(), "running");
-    assert_eq!(AgentStatus::Stopped.display(), "stopped");
-    assert_eq!(AgentStatus::Error.display(), "error");
-}
-
-#[test]
-fn test_agent_status_colored_display() {
-    let running_display = AgentStatus::Running.colored_display();
-    assert!(!running_display.is_empty());
-
-    let stopped_display = AgentStatus::Stopped.colored_display();
-    assert!(!stopped_display.is_empty());
-
-    let error_display = AgentStatus::Error.colored_display();
-    assert!(!error_display.is_empty());
+    assert_eq!(registry.count().await, 5);
 }
