@@ -419,7 +419,11 @@ pub fn extract_json_payload(output: &CommandOutput) -> Result<Value> {
         .find('{')
         .ok_or_else(|| anyhow::anyhow!("Could not find JSON object in output"))?;
     let payload = &output.stdout[start..];
-    serde_json::from_str(payload).context("Invalid JSON payload")
+    // Use a streaming deserializer so any trailing text after the JSON object is ignored.
+    let mut iter = serde_json::Deserializer::from_str(payload).into_iter::<Value>();
+    iter.next()
+        .ok_or_else(|| anyhow::anyhow!("Empty JSON stream in output"))?
+        .context("Invalid JSON payload")
 }
 
 pub fn resolve_mofa_bin() -> Result<PathBuf> {
@@ -467,9 +471,35 @@ fn binary_name(base: &str) -> String {
 }
 
 pub fn workspace_root() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .ancestors()
-        .nth(2)
-        .expect("workspace root should exist")
-        .to_path_buf()
+    // Allow explicit override (e.g. from tests or CI pipelines).
+    if let Ok(root) = std::env::var("MOFA_WORKSPACE_ROOT") {
+        return PathBuf::from(root);
+    }
+
+    // Walk upward from CARGO_MANIFEST_DIR and keep the outermost ancestor whose Cargo.toml
+    // declares `[workspace]`.  This is more robust than a hardcoded ancestor depth: the crate
+    // can be moved inside the repo without breaking the search.
+    let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let mut outermost_workspace: Option<PathBuf> = None;
+    for ancestor in manifest_dir.ancestors() {
+        let cargo_toml = ancestor.join("Cargo.toml");
+        if cargo_toml.is_file() {
+            if let Ok(text) = std::fs::read_to_string(&cargo_toml) {
+                // Match only a bare `[workspace]` section header (not inside a comment or
+                // string literal), to avoid false positives from `workspace = true` lines.
+                if text.lines().any(|line| line.trim() == "[workspace]") {
+                    outermost_workspace = Some(ancestor.to_path_buf());
+                }
+            }
+        }
+    }
+
+    // Fall back to the original hardcoded depth if the search finds nothing.
+    outermost_workspace.unwrap_or_else(|| {
+        manifest_dir
+            .ancestors()
+            .nth(2)
+            .expect("workspace root should exist")
+            .to_path_buf()
+    })
 }

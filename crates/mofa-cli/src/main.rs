@@ -269,36 +269,68 @@ fn normalize_legacy_output_flags(args: &mut [String]) {
         .map(|(idx, _)| idx);
 
     let top_command = top_command_index.and_then(|idx| args.get(idx).map(String::as_str));
-    let allows_global_after_command = matches!(
-        top_command,
+
+    // Determine the subcommand: the token immediately after the top-level command that is not
+    // a flag. Used to guard against normalising -o for subcommands with their own local -o flag.
+    let sub_command = top_command_index.and_then(|cmd_idx| {
+        args.get(cmd_idx + 1)
+            .filter(|s| !s.starts_with('-'))
+            .map(String::as_str)
+    });
+
+    let allows_global_after_command = match top_command {
         Some("info")
-            | Some("agent")
-            | Some("plugin")
-            | Some("tool")
-            | Some("config")
-            | Some("build")
-            | Some("run")
-            | Some("init")
-    );
+        | Some("agent")
+        | Some("plugin")
+        | Some("tool")
+        | Some("config")
+        | Some("build")
+        | Some("run")
+        | Some("init") => true,
+        // `session show` and `session export` both define their own local -o flag, so skip
+        // normalisation for those subcommands.  All other `session` subcommands (e.g. `list`)
+        // use the global output-format flag and should be normalised.
+        Some("session") => !matches!(sub_command, Some("show") | Some("export")),
+        _ => false,
+    };
 
     let mut i = 1;
-    while i + 1 < args.len() {
-        let is_legacy_output_flag = args[i] == "-o" || args[i] == "--output";
-        let looks_like_output_format = matches!(args[i + 1].as_str(), "text" | "json" | "table");
+    while i < args.len() {
+        let before_command = match top_command_index {
+            Some(cmd_idx) => i < cmd_idx,
+            None => true,
+        };
+        let should_normalize = before_command || allows_global_after_command;
 
-        if is_legacy_output_flag && looks_like_output_format {
-            let before_command = match top_command_index {
-                Some(cmd_idx) => i < cmd_idx,
-                None => true,
-            };
+        // Handle --output=<format> and -o=<format> (single-token equals form).
+        let equals_format = ["--output=", "-o="].iter().find_map(|prefix| {
+            args[i]
+                .strip_prefix(prefix)
+                .filter(|v| is_output_format_value(v))
+                .map(str::to_owned)
+        });
+        if let Some(fmt) = equals_format {
+            if should_normalize {
+                args[i] = format!("--output-format={fmt}");
+            }
+        } else if i + 1 < args.len() {
+            // Handle --output <format> and -o <format> (space-separated form).
+            let is_legacy_output_flag = args[i] == "-o" || args[i] == "--output";
+            let looks_like_output_format = is_output_format_value(&args[i + 1]);
 
-            if before_command || allows_global_after_command {
+            if is_legacy_output_flag && looks_like_output_format && should_normalize {
                 args[i] = "--output-format".to_string();
             }
         }
 
         i += 1;
     }
+}
+
+/// Returns `true` if `s` is a recognised global output-format value.
+#[inline]
+fn is_output_format_value(s: &str) -> bool {
+    matches!(s, "text" | "json" | "table")
 }
 
 #[cfg(test)]
@@ -372,5 +404,120 @@ mod tests {
         ];
         normalize_legacy_output_flags(&mut args);
         assert_eq!(args[4], "-o");
+    }
+
+    // --- Fix 1: equals-sign form ---
+
+    #[test]
+    fn test_normalize_equals_form_before_command() {
+        let mut args = vec![
+            "mofa".to_string(),
+            "--output=json".to_string(),
+            "info".to_string(),
+        ];
+        normalize_legacy_output_flags(&mut args);
+        assert_eq!(args[1], "--output-format=json");
+    }
+
+    #[test]
+    fn test_normalize_short_equals_form_before_command() {
+        let mut args = vec![
+            "mofa".to_string(),
+            "-o=table".to_string(),
+            "info".to_string(),
+        ];
+        normalize_legacy_output_flags(&mut args);
+        assert_eq!(args[1], "--output-format=table");
+    }
+
+    #[test]
+    fn test_normalize_equals_form_after_agent_command() {
+        let mut args = vec![
+            "mofa".to_string(),
+            "agent".to_string(),
+            "list".to_string(),
+            "--output=json".to_string(),
+        ];
+        normalize_legacy_output_flags(&mut args);
+        assert_eq!(args[3], "--output-format=json");
+    }
+
+    #[test]
+    fn test_do_not_normalize_equals_form_unknown_value() {
+        // An unrecognised format value must not be touched.
+        let mut args = vec![
+            "mofa".to_string(),
+            "--output=csv".to_string(),
+            "info".to_string(),
+        ];
+        normalize_legacy_output_flags(&mut args);
+        assert_eq!(args[1], "--output=csv");
+    }
+
+    // --- Fix 2: session list normalisation ---
+
+    #[test]
+    fn test_normalize_session_list_short_output_flag() {
+        let mut args = vec![
+            "mofa".to_string(),
+            "session".to_string(),
+            "list".to_string(),
+            "-o".to_string(),
+            "json".to_string(),
+        ];
+        normalize_legacy_output_flags(&mut args);
+        assert_eq!(args[3], "--output-format");
+    }
+
+    #[test]
+    fn test_normalize_session_list_long_output_flag() {
+        let mut args = vec![
+            "mofa".to_string(),
+            "session".to_string(),
+            "list".to_string(),
+            "--output".to_string(),
+            "table".to_string(),
+        ];
+        normalize_legacy_output_flags(&mut args);
+        assert_eq!(args[3], "--output-format");
+    }
+
+    #[test]
+    fn test_normalize_session_list_equals_form() {
+        let mut args = vec![
+            "mofa".to_string(),
+            "session".to_string(),
+            "list".to_string(),
+            "--output=json".to_string(),
+        ];
+        normalize_legacy_output_flags(&mut args);
+        assert_eq!(args[3], "--output-format=json");
+    }
+
+    #[test]
+    fn test_do_not_normalize_session_show_equals_form() {
+        let mut args = vec![
+            "mofa".to_string(),
+            "session".to_string(),
+            "show".to_string(),
+            "s1".to_string(),
+            "--output=json".to_string(),
+        ];
+        normalize_legacy_output_flags(&mut args);
+        // session show has a local -o alias; the equals form must not be rewritten.
+        assert_eq!(args[4], "--output=json");
+    }
+
+    #[test]
+    fn test_do_not_normalize_session_export_equals_form() {
+        let mut args = vec![
+            "mofa".to_string(),
+            "session".to_string(),
+            "export".to_string(),
+            "s1".to_string(),
+            "-o=json".to_string(),
+        ];
+        normalize_legacy_output_flags(&mut args);
+        assert_eq!(args[4], "-o=json");
     }
 }
