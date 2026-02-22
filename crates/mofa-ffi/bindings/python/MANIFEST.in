@@ -1,0 +1,12 @@
+include README.md
+include LICENSE
+include LICENSE.APACHE
+include LICENSE.MIT
+include pyproject.toml
+recursive-include mofa *.py *.pyi
+recursive-include mofa *.so *.dylib *.dll *.pyd
+global-exclude __pycache__
+global-exclude *.py[cod]
+global-exclude *.so.*
+global-exclude *.dylib.*
+global-exclude *.dll.*

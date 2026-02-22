@@ -1,0 +1,111 @@
+# Parallel Agents Workflow Example
+#
+# This workflow demonstrates:
+# - Parallel execution of multiple LLM agents
+# - Join node to aggregate results
+# - Transform node for combining outputs
+
+metadata:
+  id: parallel_analysis
+  name: Parallel Analysis Workflow
+  description: Analyzes content using multiple agents in parallel
+  version: "1.0.0"
+
+agents:
+  sentiment_analyzer:
+    model: gpt-4
+    system_prompt: "Analyze the sentiment of the text. Respond with: positive, negative, or neutral."
+    temperature: 0.3
+    max_tokens: 20
+
+  keyword_extractor:
+    model: gpt-4
+    system_prompt: "Extract the top 5 keywords from the text. Return as a comma-separated list."
+    temperature: 0.3
+    max_tokens: 100
+
+  summary_generator:
+    model: gpt-4
+    system_prompt: "Generate a brief 1-2 sentence summary of the text."
+    temperature: 0.5
+    max_tokens: 100
+
+nodes:
+  - type: start
+    id: start
+
+  - type: parallel
+    id: fork
+    name: Fork Analysis
+
+  # Parallel analysis branches
+  - type: llm_agent
+    id: sentiment
+    name: Sentiment Analysis
+    agent:
+      agent_id: sentiment_analyzer
+    prompt_template: "Text: {{ input }}"
+
+  - type: llm_agent
+    id: keywords
+    name: Keyword Extraction
+    agent:
+      agent_id: keyword_extractor
+    prompt_template: "Text: {{ input }}"
+
+  - type: llm_agent
+    id: summary
+    name: Summary Generation
+    agent:
+      agent_id: summary_generator
+    prompt_template: "Text: {{ input }}"
+
+  # Join all parallel branches
+  - type: join
+    id: merge
+    name: Merge Results
+    wait_for:
+      - sentiment
+      - keywords
+      - summary
+
+  - type: transform
+    id: format
+    name: Format Output
+    transform_type: template
+    template: |
+      Analysis Results:
+      - Sentiment: {{ sentiment }}
+      - Keywords: {{ keywords }}
+      - Summary: {{ summary }}
+
+  - type: end
+    id: end
+
+edges:
+  - from: start
+    to: fork
+
+  # Fork to parallel branches
+  - from: fork
+    to: sentiment
+  - from: fork
+    to: keywords
+  - from: fork
+    to: summary
+
+  # Parallel branches to merge
+  - from: sentiment
+    to: merge
+  - from: keywords
+    to: merge
+  - from: summary
+    to: merge
+
+  # Merge to format
+  - from: merge
+    to: format
+
+  # Format to end
+  - from: format
+    to: end

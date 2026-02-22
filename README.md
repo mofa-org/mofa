@@ -1,326 +1,438 @@
-# MoFA (Modular Framework for AI Agents) 开发框架
+# MoFA Agent Framework
 
-[English](README_en.md) | [简体中文](README.md)
+[English](README.md) | [简体中文](README_cn.md)
 
 <p align="center">
-    <img src="documents/images/mofa-logo.png" width="30%"/>
+    <img src="docs/images/mofa-logo.png" width="30%"/>
 </p>
 
+
 <div align="center">
+  <a href="https://crates.io/crates/mofa-sdk">
+    <img src="https://img.shields.io/crates/v/mofa-sdk.svg" alt="crates.io"/>
+  </a>
   <a href="https://pypi.org/project/mofa-core/">
-    <img src="https://img.shields.io/pypi/v/mofa-core.svg" alt="PyPI 最新版本"/>
+    <img src="https://img.shields.io/pypi/v/mofa-core.svg" alt="PyPI"/>
   </a>
   <a href="https://github.com/mofa-org/mofa/blob/main/LICENSE">
-    <img src="https://img.shields.io/github/license/mofa-org/mofa" alt="许可证"/>
+    <img src="https://img.shields.io/github/license/mofa-org/mofa" alt="License"/>
+  </a>
+  <a href="https://docs.rs/mofa-sdk">
+    <img src="https://img.shields.io/badge/built_with-Rust-dca282.svg?logo=rust" alt="docs"/>
   </a>
   <a href="https://github.com/mofa-org/mofa/stargazers">
-    <img src="https://img.shields.io/github/stars/mofa-org/mofa" alt="GitHub 星标数"/>
+    <img src="https://img.shields.io/github/stars/mofa-org/mofa" alt="GitHub Stars"/>
+  </a>
+  <a href="https://discord.com/invite/hKJZzDMMm9">
+    <img src="https://img.shields.io/discord/1345678901234567890?color=5865F2&logo=discord&logoColor=white&label=Discord" alt="Discord"/>
+  </a>
+  <a href="https://docs.rs/mofa-sdk">
+    <img src="https://img.shields.io/docsrs/mofa-sdk" alt="docs.rs"/>
   </a>
 </div>
 
 <h2 align="center">
-  <a href="https://mofa.ai/">官网</a>
+  <a href="https://mofa.ai/">Website</a>
   |
-  <a href="https://mofa.ai/docs/0overview/">快速入门</a>
+  <a href="https://mofa.ai/docs/0overview/">Quick Start</a>
   |
   <a href="https://github.com/mofa-org/mofa">GitHub</a>
   |
-  <a href="https://hackathon.mofa.ai/">比赛</a>
+  <a href="https://hackathon.mofa.ai/">Hackathon</a>
   |
-  <a href="https://discord.com/invite/hKJZzDMMm9">社区</a>
+  <a href="https://discord.com/invite/hKJZzDMMm9">Community</a>
 </h2>
 
----
-
-## 1. 设计理念
-
-MoFA（Modular Framework for AI Agents）是一个用于构建可组合 AI 智能体的软件框架。通过 MoFA，开发者可以通过模板创建智能体（Agent），并以堆叠方式组合形成更强大的超级智能体（Super Agent）。
-
-### 1.1 核心设计哲学
-
-- **让普通人做非凡事**：AI 不应是精英专属，MoFA 让每个人都能开发和应用 AI，将不可能变为可能。
-- **组合式 AI**：受 Unix 哲学启发，以"组合"为核心，像搭积木一样构建、连接智能体与工具，让 AI 简单、灵活且强大。
-- **万物皆智能体**：在 MoFA 生态中，智能体是 AI 时代的应用载体——不仅是大语言模型，还可以是代码、脚本、API 甚至 MoFA 本身。
-- **数据流驱动**：摒弃复杂工作流，采用更直观的数据流模式，使智能体可自由组合、拆解与复用。
-
-### 1.2 技术架构图
-
 <p align="center">
-  <img src="documents/images/Organizational_Chart_cn.png" width="60%">
+ <img src="https://img.shields.io/badge/Performance-Extreme-red?style=for-the-badge" />
+ <img src="https://img.shields.io/badge/Extensibility-Unlimited-orange?style=for-the-badge" />
+ <img src="https://img.shields.io/badge/Languages-Multi_platform-yellow?style=for-the-badge" />
+ <img src="https://img.shields.io/badge/Runtime-Programmable-green?style=for-the-badge" />
 </p>
 
----
+## 📋 Table of Contents
 
-## 2. 核心特性
+- [Overview](#overview)
+- [Why MoFA?](#why-mofa)
+- [Core Architecture](#core-architecture)
+- [Core Features](#core-features)
+- [Quick Start](#quick-start)
+- [Roadmap](#roadmap)
+- [Ecosystem & Related Repos](#-ecosystem--related-repos)
+- [Documentation](#documentation)
+- [Security](#security)
+- [Contributing](#contributing)
+- [Community](#community)
+- [License](#license)
 
-- **composable AI 架构**：通过模块化 Agent 堆叠组合，快速构建复杂智能体系统，支持多模型、多工具协同工作。
-- **数据流驱动**：采用直观的数据流（DataFlow）模式替代传统工作流（Workflow），实现 Agent 间灵活解耦与动态重组。
-- **全栈 Python 支持**：从 Agent 开发到数据流配置均提供 Python 友好接口，同时兼容 Rust 高性能节点扩展。
-- **丰富的节点生态**：内置终端交互、LLM 调用、工具集成等基础节点，支持自定义节点快速接入。
-- **多框架兼容**：基于 Dora-rs runtime 构建，支持与 ROS2、OpenTelemetry 等系统无缝集成。
-- **MoFA Stage 可视化工具**：提供图形化界面，支持 Dataflow 和 Node 的可视化创建、管理与调试。
+## Overview
+MoFA (Modular Framework for Agents) is not just another entry in the crowded agent framework landscape.
+It is the first production-grade framework to achieve **"write once, run everywhere"** across languages, built for **extreme performance, boundless extensibility, and runtime programmability**.
+Through its revolutionary microkernel architecture and innovative **dual-layer plugin system** (compile-time + runtime), MoFA strikes the elusive balance between raw performance and dynamic flexibility.
 
----
+What Sets MoFA Apart:</br>
+✅ **Rust Core + UniFFI**: Blazing performance with native multi-language interoperability</br>
+✅ **Dual-Layer Plugins**: Zero-cost compile-time extensions meet hot-swappable runtime scripts</br>
+✅ **Microkernel Architecture**: Clean separation of concerns, effortless to extend</br>
+✅ **Cloud-Native by Design**: First-class support for distributed and edge deployments</br>
 
-## 3. 支持矩阵
+## Why MoFA?
 
-| 特性 | 支持程度 |
-|------|----------|
-| **API 支持** | Python 3.10+ [完全支持] <br> Rust 扩展 [实验性] |
-| **操作系统** | Linux (Ubuntu 22.04) [完全支持] <br> macOS (ARM/x86) [完全支持] <br> WSL2 [完全支持] <br> Windows [暂不支持] |
-| **通信方式** | 共享内存（本地）[完全支持] <br> TCP 网络（分布式）[实验性] |
-| **消息格式** | JSON [完全支持] <br> Apache Arrow [实验性] |
-| **LLM 集成** | OpenAI 系列 [完全支持] <br> Qwen 系列 [完全支持] <br> 本地模型（llama.cpp）[实验性] |
-| **配置方式** | YAML 数据流定义 [完全支持] <br> Python 代码生成 [实验性] <br> MoFA Stage 图形化配置 [完全支持] |
-| **包管理** | pip（Python 节点）[完全支持] <br> cargo（Rust 节点）[实验性] |
+### **Performance**
 
-> 说明：
-> - [完全支持] = 稳定可用的功能
-> - [实验性] = 实验性支持（欢迎贡献）
-> - [暂不支持] = 尚未支持
+- Zero-cost abstractions in Rust
+- Memory safety without garbage collection
+- Orders of magnitude faster than Python-based frameworks
 
----
+### **Polyglot by Design**
 
-## 4. 快速开始
+- Auto-generated bindings for Python, Java, Go, Kotlin, Swift via UniFFI
+- Call Rust core logic natively from any supported language
+- Near-zero overhead compared to traditional FFI
 
-### 4.1 环境要求
+### **Runtime Programmability**
 
-**必需环境**：
-- Python 3.10 或 3.11
-- 操作系统：WSL（Ubuntu 22.04）、macOS、Linux
-- 暂不支持 Windows 系统
+- Embedded Rhai scripting engine
+- Hot-reload business logic without recompilation
+- Runtime configuration and rule adjustments
+- User-defined extensions on the fly
 
-**可选环境**（用于 Rust 节点开发）：
-- Rust 工具链（rustc、cargo）
+### **Dual-Layer Plugin Architecture**
 
-### 4.2 安装 MoFA
+- **Compile-time plugins**: Extreme performance, native integration
+- **Runtime plugins**: Dynamic loading, instant effect
+- Support plugin hot loading and version management
 
-#### 方式 1：使用 pip 安装
+### **Distributed by Nature**
 
-```bash
-# 创建虚拟环境（推荐）
-python3 -m venv .mofa
-source .mofa/bin/activate
+- Built on Dora-rs for distributed dataflow
+- Seamless cross-process, cross-machine agent communication
+- Edge computing ready
 
-# 从 PyPI 安装
-pip install mofa-core
+### **Actor-Model Concurrency**
 
-# 验证安装
-mofa --help
+- Isolated agent processes via Ractor
+- Message-passing architecture
+- Battle-tested for high-concurrency workloads
+
+## Core Architecture
+
+### Microkernel + Dual-Layer Plugin System
+
+MoFA adopts a **layered microkernel architecture**, achieving extreme extensibility through a **dual-layer plugin system**:
+
+```mermaid
+block-beta
+    columns 1
+    block:business["🧩 Business Layer"]
+        A["User-defined Agents, Workflows, Rules"]
+    end
+    space
+    block:runtime["⚡ Runtime Plugin Layer (Rhai Scripts)"]
+        B["Dynamic tool registration"]
+        C["Rule engine & Scripts"]
+        D["Hot-load logic"]
+    end
+    space
+    block:compile["🔧 Compile-time Plugin Layer (Rust/WASM)"]
+        E["LLM plugins"]
+        F["Tool plugins"]
+        G["Storage & Protocol"]
+    end
+    space
+    block:kernel["🏗️ Microkernel (mofa-kernel)"]
+        H["Lifecycle management"]
+        I["Metadata & Communication"]
+        J["Task scheduling"]
+    end
+
+    business --> runtime
+    runtime --> compile
+    compile --> kernel
 ```
 
-#### 方式 2：使用 uv 安装（更快）
+#### Advantages of Dual-Layer Plugin System
 
-```bash
-# 在虚拟环境中安装
-uv venv .mofa
-source .mofa/bin/activate
-uv pip install mofa-core
+**Compile-time Plugins (Rust/WASM)**
 
-# 或全局安装为独立工具
-uv tool install mofa-core
+- Extreme performance, zero runtime overhead
+- Type safety, compile-time error checking
+- Support complex system calls and native integration
+- WASM sandbox provides secure isolation
 
-# 验证安装
-mofa --help
+**Runtime Plugins (Rhai Scripts)**
+
+- No recompilation needed, instant effect
+- Business logic hot updates
+- User-defined extensions
+- Secure sandbox execution with configurable resource limits
+
+**Combined Power**
+
+- Use Rust plugins for performance-critical paths (e.g., LLM inference, data processing)
+- Use Rhai scripts for business logic (e.g., rule engines, workflow orchestration)
+- Seamless interoperability between both, covering 99% of extension scenarios
+
+## Core Features
+
+### 1. Microkernel Architecture
+MoFA adopts a **layered microkernel architecture** with `mofa-kernel` at its core. All other features (including plugin system, LLM capabilities, multi-agent collaboration, etc.) are built as modular components on top of the microkernel.
+
+#### Core Design Principles
+- **Core Simplicity**: The microkernel contains only the most basic functions: agent lifecycle management, metadata system, and dynamic management
+- **High Extensibility**: All advanced features are extended through modular components and plugins, keeping the kernel stable
+- **Loose Coupling**: Components communicate through standardized interfaces, easy to replace and upgrade
+
+#### Integration with Plugin System
+- The plugin system is developed based on the `Plugin` interface of the microkernel. All plugins (including LLM plugins, tool plugins, etc.) are integrated through the `AgentPlugin` standard interface
+- The microkernel provides plugin registration center and lifecycle management, supporting plugin hot loading and version control
+- LLM capabilities are implemented through `LLMPlugin`, encapsulating LLM providers as plugins compliant with microkernel specifications
+
+#### Integration with LLM
+- LLM exists as a plugin component of the microkernel, providing standard LLM access capabilities through the `LLMCapability` interface
+- All agent collaboration patterns (chain, parallel, debate, etc.) are built on the microkernel's workflow engine and interact with LLMs through standardized LLM plugin interfaces
+- Secretary mode is also implemented based on the microkernel's A2A communication protocol and task scheduling system
+
+### 2. Dual-Layer Plugins
+- **Compile-time plugins**: Extreme performance, native integration
+- **Runtime plugins**: Dynamic loading, instant effect
+- Seamless collaboration between both, covering all scenarios
+
+### 3. Agent Coordination
+- **Priority Scheduling**: Task scheduling system based on priority levels
+- **Communication Bus**: Built-in inter-agent communication bus
+- **Workflow Engine**: Visual workflow builder and executor
+
+### 4. LLM and AI Capabilities
+- **LLM Abstraction Layer**: Standardized LLM integration interface
+- **OpenAI Support**: Built-in OpenAI API integration
+- **ReAct Pattern**: Agent framework based on reasoning and action
+- **Multi-Agent Collaboration**: LLM-driven agent coordination, supporting multiple collaboration modes:
+  - **Request-Response**: One-to-one deterministic tasks with synchronous replies
+  - **Publish-Subscribe**: One-to-many broadcast tasks with multiple receivers
+  - **Consensus**: Multi-round negotiation and voting for decision-making
+  - **Debate**: Agents alternate speaking to iteratively refine results
+  - **Parallel**: Simultaneous execution with automatic result aggregation
+  - **Sequential**: Pipeline execution where output flows to the next agent
+  - **Custom**: User-defined modes interpreted by the LLM
+- **Secretary Mode**: Provides end-to-end task closed-loop management, including 5 core phases: receive ideas → record todos, clarify requirements → convert to project documents, schedule dispatch → call execution agents, monitor feedback → push key decisions to humans, acceptance report → update todos
+  </br>**Features**:
+    - 🧠 Autonomous task planning and decomposition
+    - 🔄 Intelligent agent scheduling and orchestration
+    - 👤 Human intervention at key nodes
+    - 📊 Full process observability and traceability
+    - 🔁 Closed-loop feedback and continuous optimization
+
+### 5. Persistence Layer
+- **Multiple Backends**: Support PostgreSQL, MySQL, and SQLite
+- **Session Management**: Persistent agent session storage
+- **Memory System**: Stateful agent memory management
+
+### 6. Monitoring & Observability
+- **Dashboard**: Built-in web dashboard with real-time metrics
+- **Metrics System**: Prometheus-compatible metrics system
+- **Tracing Framework**: Distributed tracing system
+
+### 7. Rhai Script Engine
+
+MoFA integrates the [Rhai](https://github.com/rhaiscript/rhai) embedded scripting language, providing **runtime programmability** without recompilation.
+
+#### Script Engine Core
+- **Safe Sandbox Execution**: Configurable operation limits, call stack depth, loop control
+- **Script Compilation Cache**: Pre-compile scripts for improved repeated execution performance
+- **Rich Built-in Functions**: String manipulation, math functions, JSON processing, time utilities
+- **Bidirectional JSON Conversion**: Seamless conversion between JSON and Rhai Dynamic types
+
+#### Scripted Workflow Nodes
+- **Script Task Nodes**: Execute business logic via scripts
+- **Script Condition Nodes**: Dynamic branch decisions
+- **Script Transform Nodes**: Data format transformation
+- **YAML/JSON Workflow Loading**: Define workflows through configuration files
+
+#### Dynamic Tool System
+- **Script-based Tool Definition**: Register tools at runtime
+- **Parameter Validation**: Type checking, range validation, enum constraints
+- **Auto JSON Schema Generation**: Compatible with LLM Function Calling
+- **Hot Loading**: Dynamically load tools from directories
+
+#### Rule Engine
+- **Priority Rules**: Critical > High > Normal > Low
+- **Multiple Match Modes**: First match, all match, ordered match
+- **Composite Actions**: Set variables, trigger events, goto rules
+- **Rule Group Management**: Support default fallback actions
+
+#### Typical Application Scenarios
+| Scenario | Description |
+|----------|-------------|
+| **Dynamic Business Rules** | Discount strategies, content moderation rules, no redeployment needed |
+| **Configurable Workflows** | User-defined data processing pipelines |
+| **LLM Tool Extensions** | Register new tools at runtime for LLM calls |
+| **A/B Testing** | Control experiment logic through scripts |
+| **Expression Evaluation** | Dynamic condition checking, formula calculation |
+
+## Roadmap
+
+### Short-term Goals
+- [ ] Dora-rs runtime support for distributed dataflow
+- [ ] Complete distributed tracing implementation
+- [ ] Python binding generation
+- [ ] More LLM provider integrations
+
+### Long-term Goals
+- [ ] Visual workflow designer UI
+- [ ] Cloud-native deployment support
+- [ ] Advanced agent coordination algorithms
+- [ ] Agent platform
+- [ ] Cross-process/cross-machine distributed agent collaboration
+- [ ] Multi-agent collaboration standard protocol
+- [ ] Cross-platform mobile support
+- [ ] Evolve into agent operating system
+
+## Quick Start
+
+### Installation
+
+Add MoFA to your Cargo.toml:
+
+```toml
+[dependencies]
+mofa-sdk = "0.1.0"
 ```
 
-> **提示**：uv 是更快的 Python 包管理器。安装方法：[github.com/astral-sh/uv](https://github.com/astral-sh/uv)
+See [Quick Start](/docs/QuickStart.md) for the full guide!
 
-#### 方式 3：从源码安装
+The runtime mode is most suitable for scenarios that require building complete agent workflows, specifically including:
 
-```bash
-pip install git+https://github.com/mofa-org/mofa.git
-```
+  ---
+1. Multi-agent collaboration scenarios
 
-### 4.3 运行 Hello World 示例
+The runtime provides a message bus (SimpleMessageBus/DoraChannel) and agent registration system, supporting communication between agents:
+- Point-to-point communication (send_to_agent)
+- Broadcast messages (broadcast)
+- Topic pub/sub (publish_to_topic/subscribe_topic)
+- Role management (get_agents_by_role)
 
-```bash
-# 克隆代码仓库
-git clone https://github.com/mofa-org/mofa.git
-cd mofa/dataflows/hello_world
+When you need multiple agents to collaborate on complex tasks (such as master-slave architecture, division of labor), the runtime's communication mechanism can significantly simplify development.
 
-# 运行数据流
-mofa run-flow hello_world_dataflow.yml
-```
+  ---
+2. Event-driven agent applications
 
-**示例输出**：
-```
-Send Your Task: 你好
--------------hello_world_result---------------
-你好
-```
+The runtime has a built-in event loop (run_with_receiver/run_event_loop) and interrupt handling system, automatically managing:
+- Event reception and dispatch
+- Agent state lifecycle
+- Timeout and interrupt handling
 
-### 4.4 可选：安装 Rust 环境
+Suitable for building applications that need to respond to external events or timers (such as real-time dialogue systems, event response robots).
 
-如果需要开发或使用 Rust 节点：
+  ---
+3. Distributed agent systems
 
-```bash
-# 安装 Rust 工具链
-curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
-# 安装过程中保持默认配置（直接按 Enter）
+When the dora feature is enabled, the runtime provides Dora adapters (DoraAgentNode/DoraDataflow), supporting:
+- Distributed node deployment
+- Cross-node agent communication
+- Data flow management
 
-# 验证安装
-rustc --version
-cargo --version
-```
+Suitable for production scenarios requiring large-scale deployment and low-latency communication.
 
----
+  ---
+4. Structured agent building
 
-## 5. MoFA Stage 可视化工具
+The runtime provides AgentBuilder fluent API, simplifying agent:
+- Configuration management
+- Plugin integration
+- Capability declaration
+- Port configuration
 
-MoFA Stage 是 MoFA 生态的图形化控制中心，支持在可视化界面中快速创建、管理和调试 Dataflow 与 Node。
+Suitable for scenarios where you need to quickly build standardized agents, especially when you need to uniformly manage multiple agent configurations.
 
-### 5.1 核心功能
+  ---
+5. Production-grade applications
 
-- **node/dataflow 模板库**：提供丰富的智能体模板，一键生成 node 项目
-- **Dataflow 可视化创建**：通过拖拽式界面定义数据流，直观配置节点间的消息传递关系
-- **Node 管理**：统一管理自定义节点与官方节点，支持快速接入新功能
-- **智能体生命周期管理**：在图形化界面中启动、停止、监控智能体运行状态
+The runtime provides comprehensive:
+- Health checks and state management
+- Logging and monitoring integration
+- Error handling mechanisms
 
-### 5.2 界面预览
+Suitable for building production applications that need stable operation, rather than simple plugin testing or prototype development.
 
-<p align="center">
-  <img src="documents/images/mofastage-hub.png" alt="MoFA Hub 界面" width="80%"/>
-  <br/>
-  <i>Node Hub 界面</i>
-</p>
+## Documentation
 
-<p align="center">
-  <img src="documents/images/mofastage-dataflow.png" alt="创建 Agent 界面" width="80%"/>
-  <br/>
-  <i>Dataflow 界面</i>
-</p>
+- [API Documentation](https://docs.rs/mofa-sdk)
+- [Security Guide](docs/security.md) - Comprehensive security documentation
+- [GitHub Repository](https://github.com/mofa-org/mofa)
+- [Examples](examples/)
 
----
+## Security
 
-## 6. 开发指南
+MoFA is designed with security-first principles. Key security features include:
 
-### 6.1 快速开发指南
+- **WASM Sandboxing**: Strong isolation for compile-time plugins
+- **Rhai Script Limits**: Configurable resource limits for runtime scripts (memory, CPU, operations)
+- **Type Safety**: Rust's memory safety and type system prevent entire classes of vulnerabilities
+- **Credential Management**: Environment variable support for secure credential handling
+- **Plugin Verification**: Version tracking and integrity checks for plugins
 
-参考 [6分钟开发指南](https://mofa.ai/docs/2-getting-started/your-first-application/)，快速构建基于大语言模型的智能体，包含环境变量配置、项目初始化、逻辑实现、数据流定义全流程。
+For comprehensive security documentation, including:
+- Credential management best practices
+- Runtime scripting security configuration
+- Plugin security guidelines
+- Production deployment security checklist
+- Threat model and attack surface analysis
 
-### 6.2 示例与文档
+Please see our [Security Guide](docs/security.md) and [Security Policy](SECURITY.md).
 
-| 类型 | 名称 | 描述 | 最后更新 |
-|------|------|------|----------|
-| 入门 | [Hello World](https://github.com/mofa-org/mofa/tree/main/dataflows/hello_world) | 基础数据流交互示例 | ![更新时间](https://img.shields.io/github/last-commit/mofa-org/mofa?path=dataflows%2Fhello_world&label=Last%20Commit) |
-| LLM | [Qwen 智能体](https://github.com/nanana2002/mofa-node-hub/tree/main/node-hub/QwenAgent) | 调用 Qwen API 的对话智能体 | ![更新时间](https://img.shields.io/github/last-commit/nanana2002/mofa-node-hub?path=node-hub%2FQwenAgent&label=Last%20Commit) |
-| 工具集成 | [天气查询](https://github.com/nanana2002/mofa-node-hub/tree/main/node-hub/WeatherForecastNode) | 查询 IP 所在地天气的智能体 | ![更新时间](https://img.shields.io/github/last-commit/nanana2002/mofa-node-hub?path=node-hub%2FWeatherForecastNode&label=Last%20Commit) |
+**Reporting Vulnerabilities**: If you discover a security vulnerability, please report it privately through our [Security Policy](SECURITY.md).
 
-更多文档请参考 [MoFA 官方文档](https://docs.mofa-org.com)。
+## Contributing
 
----
+We welcome contributions! Please check out our [contributing guide](CONTRIBUTING.md) for more details.
 
-## 7. 常见问题
+We ❤️ first-time contributors! Check out our [`good-first-issue`](https://github.com/mofa-org/mofa/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22) labels to get started.
 
-### 7.1 mofa 命令找不到
+## 🌐 Ecosystem & Related Repos
 
-**问题描述**：安装 mofa-core 后，运行 `mofa` 命令提示找不到命令。
+| Repository | Description | Status |
+|---|---|---|
+| [mofa-studio](https://github.com/mofa-org/mofa-studio) | GPU-accelerated desktop voice-chat & model management app (Makepad) | 🚧 Prototype |
+| [GSoC](https://github.com/mofa-org/GSoC) | Google Summer of Code 2026 ideas & proposal guide | ✅ Active |
+| [mofa-input](https://github.com/mofa-org/mofa-input) | High-performance local AI voice input | ✅ Active |
+| [mofa-local-llm](https://github.com/mofa-org/mofa-local-llm) | Local LLM inference prototype for edge | 🚧 Experimental |
+| [makepad-chart](https://github.com/mofa-org/makepad-chart) | GPU-accelerated chart widgets for Makepad | ✅ Active |
+| [makepad-flow](https://github.com/mofa-org/makepad-flow) | Flow chart widget for visual workflow editing | ✅ Active |
+| [makepad-d3](https://github.com/mofa-org/makepad-d3) | D3-style data visualization for Makepad | ✅ Active |
+| [dora](https://github.com/mofa-org/dora) | Distributed dataflow middleware (fork of dora-rs) | ✅ Active |
 
-```bash
-$ mofa --help
-Command 'mofa' not found
-```
+## 🎓 GSoC 2026
 
-**原因分析**：当使用 `pip install --user` 或系统 Python 进行用户级安装时，可执行文件会被安装到 `~/.local/bin` 目录，但该目录可能不在系统的 PATH 环境变量中。
+MoFA is participating in **Google Summer of Code 2026** as a first-time organization! We have **6 exciting project ideas** covering plugin systems, observability dashboards, edge orchestrators, time-travel debuggers, and more.
 
-**解决方法**：
+👉 **[Check out our GSoC Ideas List](https://github.com/mofa-org/GSoC/blob/main/ideas-list.md)**
 
-#### 方案 1：添加 ~/.local/bin 到 PATH（推荐）
+## Community
 
-Bash 用户：
-```bash
-echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc
-source ~/.bashrc
-```
+- GitHub Discussions: [https://github.com/mofa-org/mofa/discussions](https://github.com/mofa-org/mofa/discussions)
+- Discord: [https://discord.com/invite/hKJZzDMMm9](https://discord.com/invite/hKJZzDMMm9)
 
-Zsh 用户：
-```bash
-echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.zshrc
-source ~/.zshrc
-```
-
-#### 方案 2：使用完整路径运行
-
-```bash
-~/.local/bin/mofa --help
-```
-
-#### 方案 3：在虚拟环境中安装（推荐）
-
-使用 venv：
-```bash
-python3 -m venv .mofa
-source .mofa/bin/activate
-pip install mofa-core
-mofa --help
-```
-
-使用 uv（更快）：
-```bash
-uv venv .mofa
-source .mofa/bin/activate
-uv pip install mofa-core
-mofa --help
-```
-
-#### 验证 PATH 配置
-
-```bash
-# 检查 ~/.local/bin 是否在 PATH 中
-echo $PATH | grep ".local/bin"
-
-# 确认 mofa 安装位置
-which mofa
-```
-
-### 7.2 依赖安装缓慢
-
-**问题描述**：`pip install mofa-core` 下载速度很慢或超时。
-
-**解决方法**：
-
-使用国内镜像源加速安装：
-```bash
-# 使用清华镜像源
-pip install -i https://pypi.tuna.tsinghua.edu.cn/simple mofa-core
-
-# 或使用阿里云镜像源
-pip install -i https://mirrors.aliyun.com/pypi/simple/ mofa-core
-```
-
-永久配置镜像源：
-```bash
-pip config set global.index-url https://pypi.tuna.tsinghua.edu.cn/simple
-```
-
----
-
-## 8. 贡献指南
-
-我们欢迎所有开发者参与贡献，无论您的经验水平如何。请参考[贡献指南](https://github.com/mofa-org/mofa/tree/main/documents)了解如何参与项目开发。
-
----
-
-## 9. 社区交流
-
-- [GitHub Discussions](https://github.com/mofa-org/mofa/discussions)
-- [Discord 服务器](https://discord.com/invite/hKJZzDMMm9)
-
----
-
-## 10. 许可证
-
-本项目采用 Apache-2.0 许可证，详情参见 [LICENSE](LICENSE)。
-
----
-
-## 11. 相关资源
-
-- [Dora-rs 文档](https://dora-rs.ai/docs/guides/)
-
----
-
-## 12. 星标历史
+## Star History
 
 [![Star History Chart](https://api.star-history.com/svg?repos=mofa-org/mofa&type=Date)](https://www.star-history.com/#mofa-org/mofa&Date)
+
+## 🙏 Acknowledgments
+
+MoFA stands on the shoulders of giants:
+
+- [Rust](https://www.rust-lang.org/) - Perfect combination of performance and safety
+- [UniFFI](https://mozilla.github.io/uniffi-rs/) - Mozilla's multi-language binding magic
+- [Rhai](https://rhai.rs/) - Powerful embedded scripting engine
+- [Tokio](https://tokio.rs/) - Async runtime cornerstone
+- [Ractor](https://github.com/slawlor/ractor) - Actor model concurrency framework
+- [Dora](https://github.com/dora-rs/dora) - Distributed dataflow runtime
+- [Wasmtime](https://wasmtime.dev/) - WebAssembly runtime
+
+## Support
+
+源起之道支持｜Supported by Upstream Labs
+
+## License
+
+[Apache License 2.0](./LICENSE)

@@ -1,0 +1,113 @@
+// MoFA UniFFI Interface Definition
+//
+// Clean, minimal API for cross-language bindings (Python, Kotlin, Swift, Java)
+// This file defines only the core interfaces that have actual Rust implementations.
+
+namespace mofa {};
+
+// ============================================================================
+// Error Types
+// ============================================================================
+
+[Error]
+enum MoFaError {
+    "ConfigError",
+    "RuntimeError",
+    "LLMError",
+    "IoError",
+    "InvalidArgument",
+};
+
+// ============================================================================
+// LLM Types
+// ============================================================================
+
+// LLM provider type
+enum LLMProviderType {
+    "OpenAI",
+    "Ollama",
+    "Azure",
+    "Compatible",
+    "Anthropic",
+    "Gemini",
+};
+
+// Chat message role
+enum ChatRole {
+    "System",
+    "User",
+    "Assistant",
+};
+
+// Chat message
+dictionary ChatMessage {
+    ChatRole role;
+    string content;
+};
+
+// ============================================================================
+// LLM Agent Builder Interface
+// ============================================================================
+
+// LLM Agent Builder - fluent builder for creating LLMAgent instances
+interface LLMAgentBuilder {
+    // Set agent ID
+    LLMAgentBuilder set_id(string id);
+
+    // Set agent name
+    LLMAgentBuilder set_name(string name);
+
+    // Set system prompt
+    LLMAgentBuilder set_system_prompt(string prompt);
+
+    // Set temperature
+    LLMAgentBuilder set_temperature(float temperature);
+
+    // Set max tokens
+    LLMAgentBuilder set_max_tokens(u32 max_tokens);
+
+    // Set initial session ID
+    LLMAgentBuilder set_session_id(string session_id);
+
+    // Set user ID
+    LLMAgentBuilder set_user_id(string user_id);
+
+    // Set tenant ID
+    LLMAgentBuilder set_tenant_id(string tenant_id);
+
+    // Set context window size (in rounds)
+    LLMAgentBuilder set_context_window_size(u32 size);
+
+    // Build the LLMAgent synchronously
+    [Throws=MoFaError]
+    LLMAgent build();
+};
+
+// ============================================================================
+// LLM Agent Interface
+// ============================================================================
+
+// LLM Agent - the main interface for LLM interactions
+interface LLMAgent {
+    // Get agent ID
+    [Throws=MoFaError]
+    string agent_id();
+
+    // Get agent name
+    [Throws=MoFaError]
+    string name();
+
+    // Simple Q&A (no context retention)
+    [Throws=MoFaError]
+    string ask(string question);
+
+    // Multi-turn chat (with context retention)
+    [Throws=MoFaError]
+    string chat(string message);
+
+    // Clear conversation history
+    void clear_history();
+
+    // Get conversation history
+    sequence<ChatMessage> get_history();
+};

@@ -1,0 +1,43 @@
+# MoFA LLM Agent Configuration
+# This file configures the LLM agent. Edit the values below to customize.
+
+agent:
+  id: "my-project-001"
+  name: "my-project"
+  description: "A helpful LLM-powered assistant"
+  capabilities:
+    - llm
+    - chat
+
+# LLM Provider Configuration
+# Supported providers: openai, ollama, azure, compatible
+llm:
+  # Provider type (openai, ollama, azure, compatible)
+  provider: openai
+
+  # Model to use
+  # OpenAI: gpt-4o, gpt-4o-mini, gpt-3.5-turbo
+  # Ollama: llama2, mistral, codellama, etc.
+  model: glm-4.6v-flash
+
+  # API Key - use ${ENV_VAR} syntax to read from environment
+  # For OpenAI: set OPENAI_API_KEY environment variable
+  # Or specify directly (not recommended for production)
+  api_key: XXXXXXX
+
+  # Optional: Custom API endpoint (for self-hosted or compatible APIs)
+  base_url: https://open.bigmodel.cn/api/paas/v4
+
+  # Generation parameters
+  temperature: 0.7
+  max_tokens: 4096
+
+  # System prompt - defines the agent's personality and behavior
+  system_prompt: |
+    You are a helpful AI assistant. Be concise, accurate, and friendly.
+    When you don't know something, say so rather than making up information.
+
+# Runtime configuration
+runtime:
+  max_concurrent_tasks: 10
+  default_timeout_secs: 60

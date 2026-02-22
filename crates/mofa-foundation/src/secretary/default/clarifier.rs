@@ -1,0 +1,443 @@
+//! 需求澄清器 - 阶段2: 澄清需求，转换为项目文档
+
+use super::types::*;
+use std::collections::HashMap;
+use std::sync::Arc;
+
+/// Type alias for clarifier function
+pub type ClarifierFn = Arc<dyn Fn(&str) -> Vec<ClarificationQuestion> + Send + Sync>;
+
+/// 需求澄清策略
+#[derive(Debug, Clone)]
+pub enum ClarificationStrategy {
+    /// 自动澄清（使用LLM分析）
+    Automatic,
+    /// 交互式澄清（需要人类确认）
+    Interactive,
+    /// 模板化澄清（使用预定义模板）
+    Template(String),
+}
+
+/// 澄清问题
+#[derive(Debug, Clone)]
+pub struct ClarificationQuestion {
+    /// 问题ID
+    pub id: String,
+    /// 问题内容
+    pub question: String,
+    /// 问题类型
+    pub question_type: QuestionType,
+    /// 可选答案（如果是选择题）
+    pub options: Option<Vec<String>>,
+    /// 默认答案
+    pub default_answer: Option<String>,
+    /// 是否必答
+    pub required: bool,
+}
+
+/// 问题类型
+#[derive(Debug, Clone)]
+pub enum QuestionType {
+    /// 开放性问题
+    OpenEnded,
+    /// 单选
+    SingleChoice,
+    /// 多选
+    MultipleChoice,
+    /// 确认（是/否）
+    Confirmation,
+    /// 数值范围
+    NumericRange { min: i64, max: i64 },
+}
+
+/// 澄清会话
+pub struct ClarificationSession {
+    /// 会话ID
+    pub session_id: String,
+    /// 关联的Todo ID
+    pub todo_id: String,
+    /// 原始想法
+    pub raw_idea: String,
+    /// 已回答的问题
+    pub answered_questions: Vec<(ClarificationQuestion, String)>,
+    /// 待回答的问题
+    pub pending_questions: Vec<ClarificationQuestion>,
+    /// 澄清后的需求（最终产出）
+    pub clarified_requirement: Option<ProjectRequirement>,
+}
+
+/// 需求澄清器
+pub struct RequirementClarifier {
+    /// 澄清策略
+    strategy: ClarificationStrategy,
+    /// LLM提示词模板
+    prompt_templates: HashMap<String, String>,
+    /// 自定义澄清处理器
+    clarifier_fn: Option<ClarifierFn>,
+}
+
+impl RequirementClarifier {
+    /// 创建新的需求澄清器
+    pub fn new(strategy: ClarificationStrategy) -> Self {
+        let mut prompt_templates = HashMap::new();
+
+        prompt_templates.insert(
+            "analyze_requirement".to_string(),
+            r#"分析以下用户需求，提取关键信息：
+
+用户需求：{raw_idea}
+
+请回答以下问题：
+1. 核心目标是什么？
+2. 有哪些具体的功能要求？
+3. 有哪些约束条件或限制？
+4. 成功的验收标准是什么？
+5. 是否有依赖项或前置条件？
+
+请以JSON格式返回分析结果。"#
+                .to_string(),
+        );
+
+        Self {
+            strategy,
+            prompt_templates,
+            clarifier_fn: None,
+        }
+    }
+
+    /// 设置自定义澄清处理器
+    pub fn with_custom_clarifier<F>(mut self, clarifier: F) -> Self
+    where
+        F: Fn(&str) -> Vec<ClarificationQuestion> + Send + Sync + 'static,
+    {
+        self.clarifier_fn = Some(Arc::new(clarifier));
+        self
+    }
+
+    /// 添加或更新提示词模板
+    pub fn add_prompt_template(&mut self, name: &str, template: &str) {
+        self.prompt_templates
+            .insert(name.to_string(), template.to_string());
+    }
+
+    /// 开始澄清会话
+    pub async fn start_session(&self, todo_id: &str, raw_idea: &str) -> ClarificationSession {
+        let session_id = format!(
+            "clarify_{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_millis()
+        );
+
+        let pending_questions = self.generate_questions(raw_idea).await;
+
+        ClarificationSession {
+            session_id,
+            todo_id: todo_id.to_string(),
+            raw_idea: raw_idea.to_string(),
+            answered_questions: Vec::new(),
+            pending_questions,
+            clarified_requirement: None,
+        }
+    }
+
+    /// 生成澄清问题
+    async fn generate_questions(&self, raw_idea: &str) -> Vec<ClarificationQuestion> {
+        if let Some(ref clarifier) = self.clarifier_fn {
+            return clarifier(raw_idea);
+        }
+
+        match &self.strategy {
+            ClarificationStrategy::Automatic => self.generate_automatic_questions(raw_idea),
+            ClarificationStrategy::Interactive => self.generate_interactive_questions(raw_idea),
+            ClarificationStrategy::Template(template_name) => {
+                self.generate_template_questions(raw_idea, template_name)
+            }
+        }
+    }
+
+    fn generate_automatic_questions(&self, _raw_idea: &str) -> Vec<ClarificationQuestion> {
+        vec![
+            ClarificationQuestion {
+                id: "scope".to_string(),
+                question: "请描述这个需求的具体范围和边界？".to_string(),
+                question_type: QuestionType::OpenEnded,
+                options: None,
+                default_answer: None,
+                required: true,
+            },
+            ClarificationQuestion {
+                id: "priority".to_string(),
+                question: "这个需求的紧急程度如何？".to_string(),
+                question_type: QuestionType::SingleChoice,
+                options: Some(vec![
+                    "紧急（今天完成）".to_string(),
+                    "高优先级（本周完成）".to_string(),
+                    "中优先级（本月完成）".to_string(),
+                    "低优先级（有空再做）".to_string(),
+                ]),
+                default_answer: Some("中优先级（本月完成）".to_string()),
+                required: true,
+            },
+            ClarificationQuestion {
+                id: "acceptance".to_string(),
+                question: "如何判断这个需求已经完成？有什么验收标准？".to_string(),
+                question_type: QuestionType::OpenEnded,
+                options: None,
+                default_answer: None,
+                required: true,
+            },
+            ClarificationQuestion {
+                id: "dependencies".to_string(),
+                question: "完成这个需求是否需要其他前置条件或依赖？".to_string(),
+                question_type: QuestionType::OpenEnded,
+                options: None,
+                default_answer: Some("无特殊依赖".to_string()),
+                required: false,
+            },
+        ]
+    }
+
+    fn generate_interactive_questions(&self, _raw_idea: &str) -> Vec<ClarificationQuestion> {
+        vec![
+            ClarificationQuestion {
+                id: "confirm_understanding".to_string(),
+                question: "我理解您想要...，这个理解正确吗？".to_string(),
+                question_type: QuestionType::Confirmation,
+                options: None,
+                default_answer: None,
+                required: true,
+            },
+            ClarificationQuestion {
+                id: "additional_details".to_string(),
+                question: "是否有其他需要补充的细节？".to_string(),
+                question_type: QuestionType::OpenEnded,
+                options: None,
+                default_answer: None,
+                required: false,
+            },
+        ]
+    }
+
+    fn generate_template_questions(
+        &self,
+        _raw_idea: &str,
+        template_name: &str,
+    ) -> Vec<ClarificationQuestion> {
+        match template_name {
+            "software_feature" => vec![
+                ClarificationQuestion {
+                    id: "user_story".to_string(),
+                    question: "请用「作为...我希望...以便...」的格式描述需求".to_string(),
+                    question_type: QuestionType::OpenEnded,
+                    options: None,
+                    default_answer: None,
+                    required: true,
+                },
+                ClarificationQuestion {
+                    id: "affected_modules".to_string(),
+                    question: "这个功能会影响哪些模块或组件？".to_string(),
+                    question_type: QuestionType::MultipleChoice,
+                    options: Some(vec![
+                        "前端UI".to_string(),
+                        "后端API".to_string(),
+                        "数据库".to_string(),
+                        "第三方集成".to_string(),
+                    ]),
+                    default_answer: None,
+                    required: true,
+                },
+            ],
+            _ => self.generate_automatic_questions(_raw_idea),
+        }
+    }
+
+    /// 回答问题
+    pub async fn answer_question(
+        &self,
+        session: &mut ClarificationSession,
+        question_id: &str,
+        answer: &str,
+    ) -> anyhow::Result<()> {
+        let idx = session
+            .pending_questions
+            .iter()
+            .position(|q| q.id == question_id);
+
+        if let Some(idx) = idx {
+            let question = session.pending_questions.remove(idx);
+            session
+                .answered_questions
+                .push((question, answer.to_string()));
+            Ok(())
+        } else {
+            Err(anyhow::anyhow!("Question not found: {}", question_id))
+        }
+    }
+
+    /// 完成澄清，生成需求文档
+    pub async fn finalize_requirement(
+        &self,
+        session: &mut ClarificationSession,
+    ) -> anyhow::Result<ProjectRequirement> {
+        let requirement = self.synthesize_requirement(session).await?;
+        session.clarified_requirement = Some(requirement.clone());
+        Ok(requirement)
+    }
+
+    async fn synthesize_requirement(
+        &self,
+        session: &ClarificationSession,
+    ) -> anyhow::Result<ProjectRequirement> {
+        let mut acceptance_criteria = Vec::new();
+        for (question, answer) in &session.answered_questions {
+            if question.id == "acceptance" {
+                for line in answer.lines() {
+                    let line = line.trim();
+                    if !line.is_empty() {
+                        acceptance_criteria.push(line.to_string());
+                    }
+                }
+            }
+        }
+
+        if acceptance_criteria.is_empty() {
+            acceptance_criteria.push("功能按预期工作".to_string());
+            acceptance_criteria.push("无明显错误".to_string());
+        }
+
+        let subtasks = self.decompose_into_subtasks(&session.raw_idea);
+
+        let mut dependencies = Vec::new();
+        for (question, answer) in &session.answered_questions {
+            if question.id == "dependencies" && answer != "无特殊依赖" {
+                dependencies.push(answer.clone());
+            }
+        }
+
+        Ok(ProjectRequirement {
+            title: self.generate_title(&session.raw_idea),
+            description: session.raw_idea.clone(),
+            acceptance_criteria,
+            subtasks,
+            dependencies,
+            estimated_effort: None,
+            resources: Vec::new(),
+        })
+    }
+
+    fn generate_title(&self, raw_idea: &str) -> String {
+        let title: String = raw_idea.chars().take(50).collect();
+        if raw_idea.len() > 50 {
+            format!("{}...", title)
+        } else {
+            title
+        }
+    }
+
+    fn decompose_into_subtasks(&self, raw_idea: &str) -> Vec<Subtask> {
+        let mut subtasks = Vec::new();
+        let idea_lower = raw_idea.to_lowercase();
+
+        if idea_lower.contains("api") || idea_lower.contains("接口") {
+            subtasks.push(Subtask {
+                id: "subtask_api_design".to_string(),
+                description: "设计API接口规范".to_string(),
+                required_capabilities: vec!["api_design".to_string()],
+                order: 1,
+                depends_on: Vec::new(),
+            });
+            subtasks.push(Subtask {
+                id: "subtask_api_impl".to_string(),
+                description: "实现API接口".to_string(),
+                required_capabilities: vec!["backend".to_string()],
+                order: 2,
+                depends_on: vec!["subtask_api_design".to_string()],
+            });
+        }
+
+        if idea_lower.contains("ui") || idea_lower.contains("界面") || idea_lower.contains("前端")
+        {
+            subtasks.push(Subtask {
+                id: "subtask_ui_design".to_string(),
+                description: "设计UI界面".to_string(),
+                required_capabilities: vec!["ui_design".to_string()],
+                order: 1,
+                depends_on: Vec::new(),
+            });
+            subtasks.push(Subtask {
+                id: "subtask_ui_impl".to_string(),
+                description: "实现UI界面".to_string(),
+                required_capabilities: vec!["frontend".to_string()],
+                order: 2,
+                depends_on: vec!["subtask_ui_design".to_string()],
+            });
+        }
+
+        if subtasks.is_empty() {
+            subtasks.push(Subtask {
+                id: "subtask_main".to_string(),
+                description: raw_idea.to_string(),
+                required_capabilities: vec!["general".to_string()],
+                order: 1,
+                depends_on: Vec::new(),
+            });
+        }
+
+        subtasks
+    }
+
+    /// 快速澄清（跳过交互，直接生成需求）
+    pub async fn quick_clarify(
+        &self,
+        todo_id: &str,
+        raw_idea: &str,
+    ) -> anyhow::Result<ProjectRequirement> {
+        let mut session = self.start_session(todo_id, raw_idea).await;
+
+        let pending = session.pending_questions.clone();
+        for question in pending {
+            let answer = question
+                .default_answer
+                .clone()
+                .unwrap_or_else(|| "待定".to_string());
+            self.answer_question(&mut session, &question.id, &answer)
+                .await?;
+        }
+
+        self.finalize_requirement(&mut session).await
+    }
+}
+
+impl Default for RequirementClarifier {
+    fn default() -> Self {
+        Self::new(ClarificationStrategy::Automatic)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn test_start_session() {
+        let clarifier = RequirementClarifier::new(ClarificationStrategy::Automatic);
+        let session = clarifier.start_session("todo_1", "Build a REST API").await;
+
+        assert_eq!(session.todo_id, "todo_1");
+        assert!(!session.pending_questions.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_quick_clarify() {
+        let clarifier = RequirementClarifier::new(ClarificationStrategy::Automatic);
+        let requirement = clarifier
+            .quick_clarify("todo_1", "Build a REST API")
+            .await
+            .unwrap();
+
+        assert!(!requirement.title.is_empty());
+        assert!(!requirement.acceptance_criteria.is_empty());
+    }
+}

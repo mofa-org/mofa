@@ -1,0 +1,118 @@
+# Customer Support Workflow Example
+#
+# This workflow demonstrates:
+# - LLM agent nodes with registry references
+# - Task nodes for data processing
+# - Sequential execution
+#
+# Usage:
+#   1. Build agents and register them
+#   2. Parse this YAML file
+#   3. Build and execute the workflow
+
+metadata:
+  id: customer_support
+  name: Customer Support Workflow
+  description: Routes customer queries to appropriate handlers
+  version: "1.0.0"
+
+# Agent definitions (can be built programmatically)
+agents:
+  classifier:
+    model: gpt-4
+    system_prompt: "You are a query classifier. Categorize queries into: billing, technical, general. Respond with just the category name."
+    temperature: 0.3
+    max_tokens: 50
+
+  billing_handler:
+    model: gpt-4
+    system_prompt: "You are a billing support specialist. Help customers with billing inquiries."
+    temperature: 0.7
+
+  technical_handler:
+    model: gpt-4
+    system_prompt: "You are a technical support specialist. Help customers with technical issues."
+    temperature: 0.7
+
+  general_handler:
+    model: gpt-4
+    system_prompt: "You are a customer service representative. Help customers with general inquiries."
+    temperature: 0.7
+
+nodes:
+  # Start node
+  - type: start
+    id: start
+
+  # Classify the query
+  - type: llm_agent
+    id: classify
+    name: Classify Query
+    agent:
+      agent_id: classifier
+    config:
+      timeout_ms: 30000
+
+  # Route based on classification (simplified - uses task node)
+  - type: task
+    id: route
+    name: Route Query
+    executor_type: none
+    config:
+      metadata:
+        purpose: "routing"
+
+  # Handle billing queries
+  - type: llm_agent
+    id: handle_billing
+    name: Handle Billing
+    agent:
+      agent_id: billing_handler
+    prompt_template: "Customer query: {{ input }}"
+    config:
+      timeout_ms: 60000
+
+  # Handle technical queries
+  - type: llm_agent
+    id: handle_technical
+    name: Handle Technical
+    agent:
+      agent_id: technical_handler
+    prompt_template: "Customer query: {{ input }}"
+    config:
+      timeout_ms: 60000
+
+  # Handle general queries
+  - type: llm_agent
+    id: handle_general
+    name: Handle General
+    agent:
+      agent_id: general_handler
+    prompt_template: "Customer query: {{ input }}"
+    config:
+      timeout_ms: 60000
+
+  # End node
+  - type: end
+    id: end
+
+edges:
+  # Start -> classify
+  - from: start
+    to: classify
+
+  # Classify -> route
+  - from: classify
+    to: route
+
+  # Route -> handlers (conditional routing would be implemented with more complex logic)
+  - from: route
+    to: handle_billing
+
+  # Handlers -> end
+  - from: handle_billing
+    to: end
+  - from: handle_technical
+    to: end
+  - from: handle_general
+    to: end

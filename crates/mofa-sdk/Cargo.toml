@@ -1,0 +1,56 @@
+[package]
+name = "mofa-sdk"
+version.workspace = true
+edition.workspace = true
+description = "MoFA SDK - Modular Framework for Agents. A standard development toolkit for building AI agents with Rust"
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+documentation = "https://docs.rs/mofa-sdk"
+readme = "README.md"
+keywords = ["ai", "agent", "sdk", "framework", "llm"]
+categories = ["development-tools", "asynchronous"]
+publish = true
+
+[features]
+default = []
+# Enable dora-rs runtime support (distributed dataflow)
+dora = ["mofa-runtime/dora"]
+# Enable persistence support
+persistence-postgres = ["mofa-foundation/persistence-postgres", "sqlx"]
+persistence-mysql = ["mofa-foundation/persistence-mysql", "sqlx"]
+persistence-sqlite = ["mofa-foundation/persistence-sqlite", "sqlx"]
+persistence-all = ["mofa-foundation/persistence-all", "sqlx"]
+# Enable TTS audio playback support (via rodio)
+rodio = ["mofa-plugins/rodio"]
+# Enable Kokoro TTS support
+kokoro = ["mofa-plugins/kokoro", "mofa-foundation/kokoro"]
+# Enable monitoring support
+monitoring = ["mofa-runtime/monitoring", "dep:mofa-monitoring"]
+
+[dependencies]
+# Core dependencies
+mofa-runtime = { path = "../mofa-runtime", version = "0.1" }
+mofa-foundation = { path = "../mofa-foundation", version = "0.1" }
+mofa-kernel = { path = "../mofa-kernel", version = "0.1", features = ["config"] }
+mofa-plugins = { path = "../mofa-plugins", version = "0.1" }
+mofa-extra = { path = "../mofa-extra", version = "0.1", features = ["rhai-scripting"] }
+mofa-monitoring = { path = "../mofa-monitoring", version = "0.1", optional = true }
+sqlx = { version = "0.8", features = ["runtime-tokio", "postgres", "mysql", "sqlite", "uuid", "chrono", "json"], optional = true }
+async-trait = "0.1"
+tokio = { version = "1", features = ["full"] }
+anyhow.workspace = true
+uuid.workspace = true
+tracing.workspace = true
+serde_json.workspace = true
+
+[dev-dependencies]
+# For tests
+tempfile.workspace = true
+
+[lib]
+crate-type = ["lib"]
+
+[lints]
+workspace = true

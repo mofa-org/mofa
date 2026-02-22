@@ -1,0 +1,86 @@
+[package]
+name = "mofa-ffi"
+version.workspace = true
+edition.workspace = true
+description = "MoFA FFI Bindings - Cross-language bindings (UniFFI, PyO3)"
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+documentation = "https://docs.rs/mofa-ffi"
+readme = "README.md"
+keywords = ["ai", "agent", "bindings", "uniffi", "multi-language"]
+categories = ["development-tools::ffi", "api-bindings"]
+publish = true
+
+[features]
+default = []
+# Enable UniFFI cross-language bindings (Python, Kotlin, Swift, Java)
+uniffi = ["dep:uniffi", "dep:thiserror"]
+# Enable PyO3 Python bindings (native Python extension)
+python = ["dep:pyo3", "dep:pyo3-async-runtimes"]
+# Enable all FFI bindings
+all = ["uniffi", "python"]
+# Forward dora feature from mofa-sdk
+dora = ["mofa-sdk/dora"]
+# Forward persistence features from mofa-sdk
+persistence-postgres = ["mofa-sdk/persistence-postgres"]
+persistence-mysql = ["mofa-sdk/persistence-mysql"]
+persistence-sqlite = ["mofa-sdk/persistence-sqlite"]
+persistence-all = ["mofa-sdk/persistence-all"]
+
+[dependencies]
+# Core SDK dependency
+mofa-sdk = { path = "../mofa-sdk", version = "0.1" }
+mofa-foundation = { path = "../mofa-foundation", version = "0.1" }
+
+# Async runtime
+tokio = { version = "1", features = ["full"] }
+
+# Common dependencies
+uuid.workspace = true
+async-trait = "0.1"
+
+# UniFFI dependencies (optional)
+uniffi = { version = "0.29", features = ["bindgen"], optional = true }
+thiserror = { version = "1.0", optional = true }
+
+# PyO3 dependencies (optional)
+# Note: extension-module is only for building Python wheels, not for tests
+# auto-initialize is needed for tests to work
+pyo3 = { version = "0.28", features = ["auto-initialize"], optional = true }
+pyo3-async-runtimes = { version = "0.28", features = ["tokio-runtime"], optional = true }
+
+[build-dependencies]
+uniffi = { version = "0.29", features = ["build"] }
+
+[dev-dependencies]
+# For generating bindings
+uniffi = { version = "0.29", features = ["bindgen-tests"] }
+# For tests
+tempfile.workspace = true
+
+[lib]
+crate-type = ["lib", "cdylib"]
+name = "mofa_ffi"
+
+[package.metadata.maturin]
+name = "mofa"
+module-name = "mofa"
+
+# UniFFI bindgen configuration
+[package.metadata.uniffi.bindings]
+# Python bindings output
+[package.metadata.uniffi.bindings.python]
+cdylib_name = "mofa_ffi"
+
+# Kotlin bindings output
+[package.metadata.uniffi.bindings.kotlin]
+package_name = "org.mofa"
+
+# Swift bindings output
+[package.metadata.uniffi.bindings.swift]
+module_name = "MoFA"
+
+[lints]
+workspace = true

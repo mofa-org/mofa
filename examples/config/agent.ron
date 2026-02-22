@@ -1,0 +1,47 @@
+// Agent Configuration (RON format)
+// This is an example configuration file showing all supported formats
+
+(
+    agent: (
+        id: "my-agent-001",
+        name: "My LLM Agent",
+        description: "A helpful AI assistant powered by MoFA",
+        capabilities: ["llm", "tools", "memory"],
+    ),
+
+    llm: Some((
+        provider: "openai",
+        model: "gpt-4o",
+        api_key: Some("${OPENAI_API_KEY}"),
+        base_url: None,
+        temperature: Some(0.7),
+        max_tokens: Some(4096),
+        system_prompt: Some("You are a helpful assistant with access to various tools."),
+    )),
+
+    tools: Some([
+        (
+            name: "web_search",
+            enabled: true,
+            config: {"max_results": "5"},
+        ),
+        (
+            name: "calculator",
+            enabled: true,
+            config: {},
+        ),
+        (
+            name: "file_reader",
+            enabled: false,
+            config: {},
+        ),
+    ]),
+
+    runtime: Some((
+        max_concurrent_tasks: 10,
+        default_timeout_secs: 30,
+    )),
+
+    inputs: Some(["user_input", "context_data"]),
+    outputs: Some(["response", "action_taken"]),
+)

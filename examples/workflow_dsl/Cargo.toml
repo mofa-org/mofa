@@ -1,0 +1,13 @@
+[package]
+name = "workflow_dsl"
+version.workspace = true
+edition.workspace = true
+publish = false
+
+[dependencies]
+mofa-sdk = { path = "../../crates/mofa-sdk"}
+
+anyhow.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
