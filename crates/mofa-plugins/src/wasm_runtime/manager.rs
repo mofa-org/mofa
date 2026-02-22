@@ -55,6 +55,8 @@ pub struct LoadedPlugin {
     pub last_activity: u64,
     /// Execution metrics
     pub metrics: PluginMetrics,
+    /// Registration timestamp (Unix seconds)
+    pub registered_at: Option<u64>,
 }
 
 /// Plugin event
@@ -213,6 +215,10 @@ pub struct ManagerStats {
     pub failed_calls: u64,
     /// Total execution time in milliseconds
     pub total_execution_time_ms: u64,
+    /// Earliest registration timestamp (Unix seconds)
+    pub earliest_registration: Option<u64>,
+    /// Latest registration timestamp (Unix seconds)
+    pub latest_registration: Option<u64>,
 }
 
 impl WasmPluginManager {
@@ -459,6 +465,13 @@ impl WasmPluginManager {
     /// Get plugin info
     pub async fn get_info(&self, handle: &PluginHandle) -> WasmResult<LoadedPlugin> {
         let plugin = self.get_plugin(handle).await?;
+        let registered_at = self
+            .registry
+            .plugins
+            .read()
+            .await
+            .get(handle.id())
+            .map(|info| info.registered_at);
 
         Ok(LoadedPlugin {
             id: plugin.id().to_string(),
@@ -467,6 +480,7 @@ impl WasmPluginManager {
             loaded_at: now_secs(),
             last_activity: now_secs(),
             metrics: plugin.metrics().await,
+            registered_at,
         })
     }
 
@@ -494,6 +508,21 @@ impl WasmPluginManager {
     pub async fn stats(&self) -> ManagerStats {
         let mut stats = self.stats.read().await.clone();
         stats.active_plugins = self.plugins.read().await.len();
+
+        let registry_plugins = self.registry.plugins.read().await;
+        let mut earliest_registration: Option<u64> = None;
+        let mut latest_registration: Option<u64> = None;
+
+        for info in registry_plugins.values() {
+            earliest_registration = Some(
+                earliest_registration.map_or(info.registered_at, |e| e.min(info.registered_at)),
+            );
+            latest_registration =
+                Some(latest_registration.map_or(info.registered_at, |l| l.max(info.registered_at)));
+        }
+
+        stats.earliest_registration = earliest_registration;
+        stats.latest_registration = latest_registration;
         stats
     }
 

@@ -139,6 +139,7 @@ impl AgentBuilder {
             version: None,
             capabilities: agent_capabilities,
             state: AgentState::Created,
+            registered_at: None,
         }
     }
 

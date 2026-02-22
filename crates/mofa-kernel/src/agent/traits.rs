@@ -66,6 +66,8 @@ pub struct AgentMetadata {
     pub capabilities: crate::agent::capabilities::AgentCapabilities,
     /// Agent 状态
     pub state: AgentState,
+    /// 注册时间戳 (Unix milliseconds, populated by registry)
+    pub registered_at: Option<u64>,
 }
 
 impl AgentMetadata {
@@ -78,6 +80,7 @@ impl AgentMetadata {
             version: None,
             capabilities: agent.capabilities().clone(),
             state: agent.state(),
+            registered_at: None,
         }
     }
 }

@@ -181,6 +181,7 @@ impl AgentRegistry {
             version: None,
             capabilities: capabilities.clone(),
             state,
+            registered_at: Some(now),
         };
 
         let entry = AgentEntry {
@@ -434,6 +435,10 @@ pub struct RegistryStats {
     pub by_tag: HashMap<String, usize>,
     /// 工厂类型数
     pub factory_count: usize,
+    /// 最早注册时间戳 (Unix milliseconds)
+    pub earliest_registration: Option<u64>,
+    /// 最新注册时间戳 (Unix milliseconds)
+    pub latest_registration: Option<u64>,
 }
 
 impl AgentRegistry {
@@ -444,6 +449,8 @@ impl AgentRegistry {
 
         let mut by_state: HashMap<String, usize> = HashMap::new();
         let mut by_tag: HashMap<String, usize> = HashMap::new();
+        let mut earliest_registration: Option<u64> = None;
+        let mut latest_registration: Option<u64> = None;
 
         for entry in agents.values() {
             // 统计状态
@@ -454,6 +461,12 @@ impl AgentRegistry {
             for tag in &entry.metadata.capabilities.tags {
                 *by_tag.entry(tag.clone()).or_insert(0) += 1;
             }
+
+            // 统计注册时间
+            if let Some(ts) = entry.registered_at.checked_sub(0) {
+                earliest_registration = Some(earliest_registration.map_or(ts, |e| e.min(ts)));
+                latest_registration = Some(latest_registration.map_or(ts, |l| l.max(ts)));
+            }
         }
 
         RegistryStats {
@@ -461,6 +474,8 @@ impl AgentRegistry {
             by_state,
             by_tag,
             factory_count: factories.len(),
+            earliest_registration,
+            latest_registration,
         }
     }
 }
