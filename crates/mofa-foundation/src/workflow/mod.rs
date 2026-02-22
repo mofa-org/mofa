@@ -8,6 +8,7 @@
 //! - 错误处理与重试
 //! - 检查点与恢复
 //! - DSL (YAML/TOML) 配置支持
+//! - Time-Travel Debugger telemetry and session recording
 //!
 //! # StateGraph API (LangGraph-inspired)
 //!
@@ -32,16 +33,23 @@ mod executor;
 mod graph;
 mod node;
 mod reducers;
+pub mod session_recorder;
 mod state;
 mod state_graph;
+pub mod telemetry;
 
 pub mod dsl;
 
 // Re-export kernel workflow types for convenience
 pub use mofa_kernel::workflow::{
-    Command, CompiledGraph, ControlFlow, GraphConfig, GraphState, JsonState, NodeFunc,
-    Reducer, ReducerType, RemainingSteps, RuntimeContext, SendCommand, StateSchema, StateUpdate,
-    END, START,
+    Command, CompiledGraph, ControlFlow, END, GraphConfig, GraphState, JsonState, NodeFunc,
+    Reducer, ReducerType, RemainingSteps, RuntimeContext, START, SendCommand, StateSchema,
+    StateUpdate,
+};
+
+// Re-export kernel telemetry types
+pub use mofa_kernel::workflow::telemetry::{
+    DebugEvent, DebugSession, SessionRecorder, TelemetryEmitter,
 };
 
 // Re-export kernel StateGraph trait
@@ -54,5 +62,7 @@ pub use executor::*;
 pub use graph::*;
 pub use node::*;
 pub use reducers::*;
+pub use session_recorder::InMemorySessionRecorder;
 pub use state::*;
 pub use state_graph::{CompiledGraphImpl, StateGraphImpl};
+pub use telemetry::{ChannelTelemetryEmitter, RecordingTelemetryEmitter};

@@ -271,6 +271,7 @@ pub mod agent_workflow;
 pub mod anthropic;
 pub mod google;
 pub mod multi_agent;
+pub mod ollama;
 pub mod openai;
 pub mod pipeline;
 
@@ -309,6 +310,8 @@ pub use openai::{OpenAIConfig, OpenAIProvider};
 pub use anthropic::{AnthropicConfig, AnthropicProvider};
 // Re-export Google Gemini Provider
 pub use google::{GeminiConfig, GeminiProvider};
+// Re-export Ollama Provider
+pub use ollama::{OllamaConfig, OllamaProvider};
 
 // Re-export 高级 API
 pub use agent_workflow::{

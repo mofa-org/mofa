@@ -124,11 +124,7 @@ impl StateSchema {
     }
 
     /// Add a simple field
-    pub fn field(
-        mut self,
-        name: impl Into<String>,
-        type_name: impl Into<String>,
-    ) -> Self {
+    pub fn field(mut self, name: impl Into<String>, type_name: impl Into<String>) -> Self {
         self.fields.push(StateField {
             name: name.into(),
             type_name: type_name.into(),

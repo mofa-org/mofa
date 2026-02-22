@@ -3,8 +3,10 @@ mod tool_definitions;
 mod tool_routing_plugin;
 mod tool_executor;
 
-use mofa_sdk::llm::{simple_llm_agent, ChatCompletionRequest, ChatMessage, MockLLMProvider};
-use route_rules::{RouteRule, RouteRuleManager};
+use mofa_sdk::llm::{simple_llm_agent, MockLLMProvider};
+use mofa_sdk::kernel::AgentPlugin;
+use route_rules::RouteRule;
+use std::sync::Arc;
 use tool_definitions::{create_calculator_tool, create_news_tool, create_stock_tool, create_weather_tool};
 use tool_executor::ExampleToolExecutor;
 use tool_routing_plugin::ToolRoutingPlugin;
@@ -129,4 +131,3 @@ async fn main() -> anyhow::Result<()> {
     println!("🎉 上下文感知工具路由示例演示完成！");
     Ok(())
 }
-

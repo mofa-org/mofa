@@ -1,13 +1,13 @@
 use std::sync::Arc;
 
-use mofa_kernel::plugin::{
-    AgentPlugin, PluginContext, PluginMetadata, PluginPriority, PluginResult, PluginState,
-    PluginType,
+use mofa_sdk::kernel::{
+    AgentPlugin, PluginContext, PluginMetadata, PluginResult, PluginState, PluginType,
 };
-use std::collections::HashMap;
+use mofa_sdk::kernel::plugin::PluginPriority;
 use std::any::Any;
+use std::collections::HashMap;
 
-use crate::route_rules::{RouteRuleManager, create_default_rules, RouteRule};
+use crate::route_rules::{RouteRuleManager, create_default_rules};
 
 /// 工具路由插件
 pub struct ToolRoutingPlugin {
@@ -132,5 +132,8 @@ impl AgentPlugin for ToolRoutingPlugin {
     fn as_any_mut(&mut self) -> &mut dyn Any {
         self
     }
-}
 
+    fn into_any(self: Box<Self>) -> Box<dyn Any> {
+        self
+    }
+}

@@ -60,7 +60,7 @@ pub struct Table {
 
 impl Table {
     /// Create a new table from builder
-    pub fn new() -> TableBuilder {
+    pub fn builder() -> TableBuilder {
         TableBuilder::new()
     }
 
@@ -107,11 +107,6 @@ impl Table {
     pub fn with_width(mut self, width: usize) -> Self {
         let _ = self.inner.set_width(width as u16);
         self
-    }
-
-    /// Convert to string
-    pub fn to_string(&self) -> String {
-        self.inner.to_string()
     }
 }
 
@@ -176,7 +171,7 @@ mod tests {
 
     #[test]
     fn test_table_builder() {
-        let table = Table::new()
+        let table = Table::builder()
             .headers(&["Name", "Value"])
             .add_row(&["foo", "bar"])
             .build();

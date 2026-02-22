@@ -11,9 +11,9 @@
 //!
 //! ## 核心组件
 //!
-//! - [`SecretaryBehavior`]: 秘书行为trait，开发者实现此trait定义秘书逻辑
-//! - [`SecretaryContext`]: 秘书上下文
-//! - [`UserConnection`]: 用户连接抽象
+//! - [`SecretaryBehavior`][]: 秘书行为trait，开发者实现此trait定义秘书逻辑
+//! - [`SecretaryContext`][]: 秘书上下文
+//! - [`UserConnection`][]: 用户连接抽象
 //!
 //! ## 使用方式
 //!

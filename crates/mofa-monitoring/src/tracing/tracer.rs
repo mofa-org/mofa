@@ -32,7 +32,7 @@ impl SamplingStrategy {
         &self,
         parent_context: Option<&SpanContext>,
         trace_id: &TraceId,
-        name: &str,
+        _name: &str,
     ) -> bool {
         match self {
             SamplingStrategy::AlwaysOn => true,
@@ -53,7 +53,7 @@ impl SamplingStrategy {
                 if let Some(parent) = parent_context {
                     parent.is_sampled()
                 } else {
-                    root.should_sample(None, trace_id, name)
+                    root.should_sample(None, trace_id, _name)
                 }
             }
         }

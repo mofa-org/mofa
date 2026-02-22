@@ -1,257 +1,258 @@
-# MoFA 架构文档
+# MoFA Architecture
 
-## 概述
+## Overview
 
-MoFA (Model-based Framework for Agents) 是一个生产级 AI 智能体框架，采用**微内核 + 双层插件系统**架构设计。本文档描述 MoFA 的层次架构、职责划分和设计原则。
+MoFA (Model-based Framework for Agents) is a production-grade AI agent framework built with a **microkernel + dual-layer plugin system** architecture. This document describes MoFA's layered architecture, responsibilities, and design principles.
 
-## 微内核架构原则
+## Microkernel Architecture Principles
 
-MoFA 严格遵循以下微内核架构设计原则：
+MoFA strictly follows these microkernel design principles:
 
-1. **核心最小化**：内核只提供最基本的抽象和能力
-2. **插件化扩展**：所有非核心功能通过插件机制提供
-3. **清晰的层次**：每一层有明确的职责边界
-4. **统一接口**：同类组件使用统一的抽象接口
-5. **正确的依赖方向**：上层依赖下层，下层不依赖上层
+1. **Minimal Core**: The kernel provides only the most basic abstractions and capabilities
+2. **Plugin-based Extension**: All non-core functionality is provided through plugin mechanisms
+3. **Clear Layers**: Each layer has well-defined responsibility boundaries
+4. **Unified Interfaces**: Components of the same type use unified abstract interfaces
+5. **Correct Dependency Direction**: Upper layers depend on lower layers, not the reverse
 
-## 层次架构
-
-```
-┌─────────────────────────────────────────────────────────────────────────┐
-│                        用户层 (User Code)                                │
-│                                                                          │
-│  用户代码：直接使用高级 API 构建 Agent                                   │
-│  - 用户实现 MoFAAgent trait                                            │
-│  - 使用 AgentBuilder 构建 Agent                                         │
-│  - 使用 Runtime 管理 Agent 生命周期                                     │
-└─────────────────────────────────────────────────────────────────────────┘
-                                  ↓
-┌─────────────────────────────────────────────────────────────────────────┐
-│                    SDK层 (mofa-sdk)                                      │
-│  统一API入口：重新导出各层类型，提供跨语言绑定                            │
-│                                                                          │
-│  模块组织：                                                              │
-│  - kernel: 核心抽象层 (MoFAAgent, AgentContext, etc.)                        │
-│  - runtime: 运行时层 (AgentBuilder, SimpleRuntime, etc.)                │
-│  - foundation: 业务层 (llm, secretary, react, etc.)                    │
-│  - 顶层便捷导出：常用类型直接导入                                         │
-│                                                                          │
-│  特性：                                                                  │
-│  - 模块化入口 (use mofa_sdk::kernel::*, runtime::*, etc.)             │
-│  - Feature flags 控制可选能力                                           │
-│  - 跨语言绑定 (UniFFI, PyO3)                                            │
-│  - 模块化命名空间                                                       │
-└─────────────────────────────────────────────────────────────────────────┘
-                                  ↓
-┌─────────────────────────────────────────────────────────────────────────┐
-│                 业务层 (mofa-foundation)                                 │
-│  业务功能和具体实现                                                      │
-│                                                                          │
-│  核心模块：                                                              │
-│  - llm: LLM 集成 (OpenAI provider)                                      │
-│  - secretary: 秘书 Agent 模式                                           │
-│  - react: ReAct 模式实现                                                │
-│  - workflow: 工作流编排                                                 │
-│  - coordination: 多 Agent 协调                                          │
-│  - collaboration: 自适应协作协议                                         │
-│  - persistence: 持久化层                                                │
-│  - prompt: 提示词工程                                                   │
-│                                                                          │
-│  职责：                                                                  │
-│  - 提供生产就绪的 Agent 实现                                            │
-│  - 实现业务逻辑和协作模式                                                │
-│  - 集成外部服务 (LLM, 数据库等)                                         │
-└─────────────────────────────────────────────────────────────────────────┘
-                                  ↓
-┌─────────────────────────────────────────────────────────────────────────┐
-│                运行时层 (mofa-runtime)                                    │
-│  Agent 生命周期和执行管理                                                 │
-│                                                                          │
-│  核心组件：                                                              │
-│  - AgentBuilder: 构建器模式                                             │
-│  - AgentRunner: 执行器                                                  │
-│  - SimpleRuntime: 多 Agent 协调 (非 dora 模式)                           │
-│  - AgentRuntime: Dora-rs 集成 (可选)                                    │
-│  - 消息总线和事件路由                                                   │
-│                                                                          │
-│  职责：                                                                  │
-│  - 管理 Agent 生命周期 (初始化、启动、停止、销毁)                        │
-│  - 提供 Agent 执行环境                                                  │
-│  - 处理 Agent 间通信                                                    │
-│  - 支持插件系统                                                         │
-│                                                                          │
-│  依赖：                                                                  │
-│  - mofa-kernel: 核心抽象                                                │
-│  - mofa-plugins: 插件系统                                               │
-│  - (可选) mofa-monitoring: 监控功能                                     │
-└─────────────────────────────────────────────────────────────────────────┘
-                                  ↓
-┌─────────────────────────────────────────────────────────────────────────┐
-│              抽象层 (mofa-kernel/agent/)                                  │
-│  核心抽象和扩展                                                           │
-│                                                                          │
-│  核心 Trait：                                                            │
-│  - MoFAAgent: 核心 trait (id, name, capabilities, execute, etc.)        │
-│                                                                          │
-│  扩展 Trait (可选)：                                                     │
-│  - AgentLifecycle: pause, resume, interrupt                            │
-│  - AgentMessaging: handle_message, handle_event                         │
-│  - AgentPluginSupport: 插件管理                                         │
-│                                                                          │
-│  核心类型：                                                              │
-│  - AgentContext: 执行上下文                                                  │
-│  - AgentInput/AgentOutput: 输入输出                                      │
-│  - AgentState: Agent 状态                                               │
-│  - AgentCapabilities: 能力描述                                          │
-│  - AgentMetadata: 元数据                                                │
-│  - AgentError/AgentResult: 错误处理                                     │
-│                                                                          │
-│  职责：                                                                  │
-│  - 定义统一的 Agent 接口                                                 │
-│  - 提供核心类型和抽象                                                    │
-│  - 支持通过 trait 组合扩展功能                                           │
-└─────────────────────────────────────────────────────────────────────────┘
-                                  ↓
-┌─────────────────────────────────────────────────────────────────────────┐
-│              核心层 (mofa-kernel)                                         │
-│  最小化核心基础设施 - 无业务逻辑                                         │
-│                                                                          │
-│  核心模块：                                                              │
-│  - context: 上下文管理                                                  │
-│  - plugin: 插件系统接口                                                 │
-│  - bus: 事件总线                                                        │
-│  - message: 消息类型                                                    │
-│  - core: 核心类型                                                       │
-│  - logging: 日志系统                                                    │
-│                                                                          │
-│  职责：                                                                  │
-│  - 提供最基础的数据结构                                                 │
-│  - 实现事件总线和消息传递                                               │
-│  - 定义插件接口                                                         │
-│  - 无任何业务逻辑                                                       │
-└─────────────────────────────────────────────────────────────────────────┘
-                                  ↓
-┌─────────────────────────────────────────────────────────────────────────┐
-│              插件系统 (mofa-plugins)                                      │
-│  双层插件架构                                                            │
-│                                                                          │
-│  编译时插件：                                                            │
-│  - Rust/WASM 插件                                                       │
-│  - 零成本抽象                                                           │
-│  - 性能关键路径                                                         │
-│                                                                          │
-│  运行时插件：                                                            │
-│  - Rhai 脚本引擎                                                        │
-│  - 热重载支持                                                           │
-│  - 业务逻辑扩展                                                         │
-└─────────────────────────────────────────────────────────────────────────┘
-                                  ↓
-┌─────────────────────────────────────────────────────────────────────────┐
-│              监控层 (mofa-monitoring) [可选]                              │
-│  可观测性和指标                                                          │
-│  - Web 仪表板                                                           │
-│  - 指标收集                                                             │
-│  - 分布式追踪                                                           │
-└─────────────────────────────────────────────────────────────────────────┘
-```
-
-## 依赖关系
+## Layered Architecture
 
 ```
-用户代码
+┌─────────────────────────────────────────────────────────────────────────┐
+│                        User Layer (User Code)                            │
+│                                                                          │
+│  User code: Build agents using high-level APIs directly                 │
+│  - Users implement the MoFAAgent trait                                   │
+│  - Use AgentBuilder to construct Agents                                  │
+│  - Use Runtime to manage Agent lifecycle                                 │
+└─────────────────────────────────────────────────────────────────────────┘
+                                  ↓
+┌─────────────────────────────────────────────────────────────────────────┐
+│                    SDK Layer (mofa-sdk)                                  │
+│  Unified API entry point: Re-exports types from all layers,             │
+│  provides cross-language bindings                                        │
+│                                                                          │
+│  Module organization:                                                    │
+│  - kernel: Core abstraction layer (MoFAAgent, AgentContext, etc.)        │
+│  - runtime: Runtime layer (AgentBuilder, SimpleRuntime, etc.)            │
+│  - foundation: Business layer (llm, secretary, react, etc.)              │
+│  - Top-level convenience exports: Direct imports for common types        │
+│                                                                          │
+│  Features:                                                               │
+│  - Modular entry points (use mofa_sdk::kernel::*, runtime::*, etc.)      │
+│  - Feature flags to control optional capabilities                        │
+│  - Cross-language bindings (UniFFI, PyO3)                                │
+│  - Modular namespaces                                                    │
+└─────────────────────────────────────────────────────────────────────────┘
+                                  ↓
+┌─────────────────────────────────────────────────────────────────────────┐
+│                 Business Layer (mofa-foundation)                         │
+│  Business functionality and concrete implementations                     │
+│                                                                          │
+│  Core modules:                                                           │
+│  - llm: LLM integration (OpenAI provider)                                │
+│  - secretary: Secretary Agent pattern                                    │
+│  - react: ReAct pattern implementation                                   │
+│  - workflow: Workflow orchestration                                      │
+│  - coordination: Multi-agent coordination                                │
+│  - collaboration: Adaptive collaboration protocols                       │
+│  - persistence: Persistence layer                                        │
+│  - prompt: Prompt engineering                                            │
+│                                                                          │
+│  Responsibilities:                                                       │
+│  - Provide production-ready Agent implementations                        │
+│  - Implement business logic and collaboration patterns                   │
+│  - Integrate external services (LLM, databases, etc.)                    │
+└─────────────────────────────────────────────────────────────────────────┘
+                                  ↓
+┌─────────────────────────────────────────────────────────────────────────┐
+│                Runtime Layer (mofa-runtime)                              │
+│  Agent lifecycle and execution management                                │
+│                                                                          │
+│  Core components:                                                        │
+│  - AgentBuilder: Builder pattern                                         │
+│  - AgentRunner: Executor                                                 │
+│  - SimpleRuntime: Multi-agent coordination (non-dora mode)               │
+│  - AgentRuntime: Dora-rs integration (optional)                          │
+│  - Message bus and event routing                                         │
+│                                                                          │
+│  Responsibilities:                                                       │
+│  - Manage Agent lifecycle (init, start, stop, destroy)                   │
+│  - Provide Agent execution environment                                   │
+│  - Handle inter-agent communication                                      │
+│  - Support plugin system                                                 │
+│                                                                          │
+│  Dependencies:                                                           │
+│  - mofa-kernel: Core abstractions                                        │
+│  - mofa-plugins: Plugin system                                           │
+│  - (optional) mofa-monitoring: Monitoring capabilities                   │
+└─────────────────────────────────────────────────────────────────────────┘
+                                  ↓
+┌─────────────────────────────────────────────────────────────────────────┐
+│              Abstraction Layer (mofa-kernel/agent/)                      │
+│  Core abstractions and extensions                                        │
+│                                                                          │
+│  Core Traits:                                                            │
+│  - MoFAAgent: Core trait (id, name, capabilities, execute, etc.)         │
+│                                                                          │
+│  Extension Traits (optional):                                            │
+│  - AgentLifecycle: pause, resume, interrupt                              │
+│  - AgentMessaging: handle_message, handle_event                          │
+│  - AgentPluginSupport: Plugin management                                 │
+│                                                                          │
+│  Core Types:                                                             │
+│  - AgentContext: Execution context                                       │
+│  - AgentInput/AgentOutput: Input/Output                                  │
+│  - AgentState: Agent state                                               │
+│  - AgentCapabilities: Capability description                             │
+│  - AgentMetadata: Metadata                                               │
+│  - AgentError/AgentResult: Error handling                                │
+│                                                                          │
+│  Responsibilities:                                                       │
+│  - Define unified Agent interface                                        │
+│  - Provide core types and abstractions                                   │
+│  - Support trait composition for feature extension                       │
+└─────────────────────────────────────────────────────────────────────────┘
+                                  ↓
+┌─────────────────────────────────────────────────────────────────────────┐
+│              Core Layer (mofa-kernel)                                    │
+│  Minimal core infrastructure - No business logic                         │
+│                                                                          │
+│  Core modules:                                                           │
+│  - context: Context management                                           │
+│  - plugin: Plugin system interface                                       │
+│  - bus: Event bus                                                        │
+│  - message: Message types                                                │
+│  - core: Core types                                                      │
+│  - logging: Logging system                                               │
+│                                                                          │
+│  Responsibilities:                                                       │
+│  - Provide basic data structures                                         │
+│  - Implement event bus and message passing                               │
+│  - Define plugin interfaces                                              │
+│  - No business logic                                                     │
+└─────────────────────────────────────────────────────────────────────────┘
+                                  ↓
+┌─────────────────────────────────────────────────────────────────────────┐
+│              Plugin System (mofa-plugins)                                │
+│  Dual-layer plugin architecture                                          │
+│                                                                          │
+│  Compile-time plugins:                                                   │
+│  - Rust/WASM plugins                                                     │
+│  - Zero-cost abstraction                                                 │
+│  - Performance-critical paths                                            │
+│                                                                          │
+│  Runtime plugins:                                                        │
+│  - Rhai scripting engine                                                 │
+│  - Hot-reload support                                                    │
+│  - Business logic extension                                              │
+└─────────────────────────────────────────────────────────────────────────┘
+                                  ↓
+┌─────────────────────────────────────────────────────────────────────────┐
+│              Monitoring Layer (mofa-monitoring) [Optional]               │
+│  Observability and metrics                                               │
+│  - Web dashboard                                                         │
+│  - Metrics collection                                                    │
+│  - Distributed tracing                                                   │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+## Dependency Relationships
+
+```
+User Code
     ↓
-SDK层 (mofa-sdk)
+SDK Layer (mofa-sdk)
     ↓
-├──→ 业务层 (mofa-foundation)
+├──→ Business Layer (mofa-foundation)
 │        ↓
-│   ├──→ 运行时层 (mofa-runtime)
+│   ├──→ Runtime Layer (mofa-runtime)
 │   │        ↓
-│   │    └──→ 抽象层 (mofa-kernel/agent/)
+│   │    └──→ Abstraction Layer (mofa-kernel/agent/)
 │   │             ↓
-│   │          └──→ 核心层 (mofa-kernel)
+│   │          └──→ Core Layer (mofa-kernel)
 │   │
-│   └──→ 抽象层 (mofa-kernel/agent/)
+│   └──→ Abstraction Layer (mofa-kernel/agent/)
 │          ↓
-│       核心层 (mofa-kernel)
+│       Core Layer (mofa-kernel)
 │
-└──→ 运行时层 (mofa-runtime)
+└──→ Runtime Layer (mofa-runtime)
          ↓
-      ├──→ 抽象层 (mofa-kernel/agent/)
+      ├──→ Abstraction Layer (mofa-kernel/agent/)
       │        ↓
-      │     核心层 (mofa-kernel)
+      │     Core Layer (mofa-kernel)
       │
-      └──→ 插件系统 (mofa-plugins)
+      └──→ Plugin System (mofa-plugins)
                ↓
-            核心层 (mofa-kernel)
+            Core Layer (mofa-kernel)
 ```
 
-**关键规则**：上层依赖下层，下层不依赖上层。
+**Key Rule**: Upper layers depend on lower layers, lower layers do not depend on upper layers.
 
-## 各层职责
+## Layer Responsibilities
 
-### 用户层
-- 实现 Agent 业务逻辑
-- 使用 SDK 提供的 API
+### User Layer
+- Implement Agent business logic
+- Use APIs provided by the SDK
 
-### SDK层
-- 统一 API 入口
-- 重新导出各层功能
-- 提供跨语言绑定
-- 模块化命名空间
+### SDK Layer
+- Unified API entry point
+- Re-export functionality from all layers
+- Provide cross-language bindings
+- Modular namespaces
 
-### 业务层
-- LLM 集成
-- Agent 模式实现 (ReAct, Secretary, etc.)
-- 工作流编排
-- 协作协议
-- 持久化
+### Business Layer
+- LLM integration
+- Agent pattern implementations (ReAct, Secretary, etc.)
+- Workflow orchestration
+- Collaboration protocols
+- Persistence
 
-### 运行时层
-- Agent 生命周期管理
-- 执行环境
-- 事件路由
-- 插件支持
+### Runtime Layer
+- Agent lifecycle management
+- Execution environment
+- Event routing
+- Plugin support
 
-### 抽象层
-- MoFAAgent 核心接口
-- 扩展 trait
-- 核心类型定义
+### Abstraction Layer
+- MoFAAgent core interface
+- Extension traits
+- Core type definitions
 
-### 核心层
-- 基础数据结构
-- 事件总线
-- 消息传递
-- 插件接口
+### Core Layer
+- Basic data structures
+- Event bus
+- Message passing
+- Plugin interfaces
 
-### 插件系统
-- 编译时插件 (Rust/WASM)
-- 运行时插件 (Rhai 脚本)
+### Plugin System
+- Compile-time plugins (Rust/WASM)
+- Runtime plugins (Rhai scripts)
 
-### 监控层
-- 可观测性
-- 指标收集
-- 分布式追踪
+### Monitoring Layer
+- Observability
+- Metrics collection
+- Distributed tracing
 
-## 渐进式披露 Skills 机制
+## Progressive Disclosure Skills Mechanism
 
-MoFA 支持基于 `SKILL.md` 的技能体系，并采用渐进式披露策略以控制上下文长度与成本。
+MoFA supports a skill system based on `SKILL.md` files with progressive disclosure strategy to control context length and cost.
 
-- 第 1 层：仅注入技能元数据摘要（名称、描述、可用性）
-- 第 2 层：按需加载指定技能的完整内容（当任务需要时）
-- 支持 always skills 与多目录搜索（workspace > builtin > system）
+- Layer 1: Inject only skill metadata summary (name, description, availability)
+- Layer 2: On-demand loading of complete skill content (when task requires)
+- Supports always skills and multi-directory search (workspace > builtin > system)
 
 ```rust
 use mofa_sdk::skills::SkillsManager;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    // 扫描 skills 目录
+    // Scan skills directory
     let skills = SkillsManager::new("./skills")?;
 
-    // 仅注入摘要（metadata）
+    // Inject summary only (metadata)
     let summary = skills.build_skills_summary().await;
 
-    // 按需加载技能内容（SKILL.md）
+    // On-demand load skill content (SKILL.md)
     let requested = vec!["pdf_processing".to_string()];
     let content = skills.load_skills_for_context(&requested).await;
 
@@ -264,9 +265,9 @@ async fn main() -> anyhow::Result<()> {
 }
 ```
 
-## 使用示例
+## Usage Examples
 
-### 自定义 Agent（结合 Skills 与运行时）
+### Custom Agent (with Skills and Runtime)
 
 ```rust
 use mofa_sdk::kernel::{
@@ -359,7 +360,7 @@ async fn main() -> anyhow::Result<()> {
 }
 ```
 
-### 批量执行
+### Batch Execution
 
 ```rust
 use mofa_sdk::kernel::{AgentCapabilities, AgentCapabilitiesBuilder, AgentContext, AgentInput, AgentOutput, AgentResult, AgentState, MoFAAgent};
@@ -417,11 +418,11 @@ async fn main() -> anyhow::Result<()> {
 }
 ```
 
-### LLMAgentBuilder（核心构建器）
+### LLMAgentBuilder (Core Builder)
 
-`LLMAgentBuilder` 位于 foundation 层，负责把 LLM provider、提示词、会话、插件与持久化等能力组装为 `LLMAgent`。`LLMAgent` 实现了 `MoFAAgent`，因此可以被运行时执行引擎或 `AgentRunner` 直接运行。
+`LLMAgentBuilder` is located in the foundation layer and is responsible for assembling LLM provider, prompts, sessions, plugins, and persistence capabilities into an `LLMAgent`. `LLMAgent` implements `MoFAAgent`, so it can be run directly by the runtime execution engine or `AgentRunner`.
 
-#### 端到端：从构建到运行（最佳实践）
+#### End-to-End: From Build to Run (Best Practice)
 
 ```rust
 use mofa_sdk::kernel::AgentContext;
@@ -434,7 +435,7 @@ use uuid::Uuid;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    // 1) 持久化插件（可选，但推荐用于生产）
+    // 1) Persistence plugin (optional, but recommended for production)
     let store = Arc::new(PostgresStore::connect("postgres://localhost/mofa").await?);
     let user_id = Uuid::now_v7();
     let tenant_id = Uuid::now_v7();
@@ -449,10 +450,10 @@ async fn main() -> anyhow::Result<()> {
         session_id,
     );
 
-    // 2) 提示词模板（可热重载）
+    // 2) Prompt template (hot-reloadable)
     let prompt = HotReloadableRhaiPromptPlugin::new("./prompts/template.rhai").await;
 
-    // 3) 构建 LLM Agent（配置 + 会话 + 插件）
+    // 3) Build LLM Agent (config + session + plugins)
     let mut agent = LLMAgentBuilder::from_env()?
         .with_id("support-agent")
         .with_name("Support Agent")
@@ -464,15 +465,15 @@ async fn main() -> anyhow::Result<()> {
         .build_async()
         .await;
 
-    // 4) Session 管理（可在运行前创建/切换）
+    // 4) Session management (can create/switch before running)
     let session_id = agent.create_session().await;
     agent.switch_session(&session_id).await?;
 
-    // 5) 运行时上下文（执行态元数据）
+    // 5) Runtime context (execution metadata)
     let ctx = AgentContext::with_session("exec-001", session_id.clone());
     ctx.set("user_id", user_id.to_string()).await;
 
-    // 6) 通过 AgentRunner 运行（MoFAAgent 生命周期）
+    // 6) Run via AgentRunner (MoFAAgent lifecycle)
     let mut runner = AgentRunner::with_context(agent, ctx).await?;
     let output = runner.execute(AgentInput::text("Hello")).await?;
     println!("{}", output.to_text());
@@ -480,139 +481,7 @@ async fn main() -> anyhow::Result<()> {
 }
 ```
 
-#### Agent 上下文管理
-
-```rust
-use mofa_sdk::kernel::AgentContext;
-use mofa_sdk::runtime::AgentRunner;
-use mofa_sdk::llm::LLMAgentBuilder;
-use mofa_sdk::kernel::AgentInput;
-
-#[tokio::main]
-async fn main() -> anyhow::Result<()> {
-    let agent = LLMAgentBuilder::from_env()?
-        .with_system_prompt("You are a helpful assistant.")
-        .build();
-
-    let ctx = AgentContext::with_session("exec-001", "session-001");
-    ctx.set("user_id", "user-123").await;
-
-    let mut runner = AgentRunner::with_context(agent, ctx).await?;
-    let output = runner.execute(AgentInput::text("Hello")).await?;
-    println!("{}", output.to_text());
-    Ok(())
-}
-```
-
-#### 插件上下文与配置传递（LLM Plugin Context）
-
-LLMAgent 初始化时会为每个 `AgentPlugin` 构造 `PluginContext`，并注入：
-`custom_config`、`user_id`、`tenant_id`、`session_id`。插件可在 `load` 阶段读取这些配置。
-
-```rust
-use mofa_sdk::plugins::{
-    AgentPlugin, PluginContext, PluginMetadata, PluginResult, PluginState, PluginType,
-};
-
-struct MyPlugin;
-
-#[async_trait::async_trait]
-impl AgentPlugin for MyPlugin {
-    fn metadata(&self) -> &PluginMetadata {
-        static META: std::sync::OnceLock<PluginMetadata> = std::sync::OnceLock::new();
-        META.get_or_init(|| {
-            PluginMetadata::new("my-plugin", "My Plugin", PluginType::Custom("example".to_string()))
-        })
-    }
-    fn state(&self) -> PluginState { PluginState::Unloaded }
-    async fn load(&mut self, ctx: &PluginContext) -> PluginResult<()> {
-        if let Some(model) = ctx.config.get_string("model") {
-            println!("model = {}", model);
-        }
-        Ok(())
-    }
-    async fn init_plugin(&mut self) -> PluginResult<()> { Ok(()) }
-    async fn start(&mut self) -> PluginResult<()> { Ok(()) }
-    async fn stop(&mut self) -> PluginResult<()> { Ok(()) }
-    async fn unload(&mut self) -> PluginResult<()> { Ok(()) }
-    async fn execute(&mut self, input: String) -> PluginResult<String> { Ok(input) }
-    fn as_any(&self) -> &dyn std::any::Any { self }
-    fn as_any_mut(&mut self) -> &mut dyn std::any::Any { self }
-    fn into_any(self: Box<Self>) -> Box<dyn std::any::Any> { self }
-}
-
-// 通过 LLMAgentBuilder 传递自定义配置：
-// LLMAgentBuilder::new().with_config("model", "gpt-4o-mini").with_plugin(MyPlugin)
-```
-
-#### 提示词管理（模板/热重载）
-
-```rust
-use mofa_sdk::llm::{LLMAgentBuilder, HotReloadableRhaiPromptPlugin};
-
-#[tokio::main]
-async fn main() -> anyhow::Result<()> {
-    let prompt = HotReloadableRhaiPromptPlugin::new("./prompts/template.rhai").await;
-
-    let _agent = LLMAgentBuilder::from_env()?
-        .with_hot_reload_prompt_plugin(prompt)
-        .build();
-    Ok(())
-}
-```
-
-#### Session 管理
-
-```rust
-use mofa_sdk::llm::LLMAgentBuilder;
-
-#[tokio::main]
-async fn main() -> anyhow::Result<()> {
-    let agent = LLMAgentBuilder::from_env()?
-        .with_session_id("user-session-001")
-        .build();
-
-    let session_id = agent.create_session().await;
-    let reply = agent.chat_with_session(&session_id, "Hello").await?;
-    println!("{}", reply);
-    Ok(())
-}
-```
-
-#### 持久化管理
-
-```rust
-use mofa_sdk::llm::LLMAgentBuilder;
-use mofa_sdk::persistence::{PersistencePlugin, PostgresStore};
-use std::sync::Arc;
-use uuid::Uuid;
-
-#[tokio::main]
-async fn main() -> anyhow::Result<()> {
-    let store = Arc::new(PostgresStore::connect("postgres://localhost/mofa").await?);
-    let user_id = Uuid::now_v7();
-    let tenant_id = Uuid::now_v7();
-    let agent_id = Uuid::now_v7();
-    let session_id = Uuid::now_v7();
-
-    let plugin = PersistencePlugin::new(
-        "persistence-plugin",
-        store,
-        user_id,
-        tenant_id,
-        agent_id,
-        session_id,
-    );
-
-    let _agent = LLMAgentBuilder::from_env()?
-        .with_persistence_plugin(plugin)
-        .build_async()
-        .await;
-    Ok(())
-}
-```
-
-### 使用 LLM
+### Using LLM
 
 ```rust
 use mofa_sdk::llm::{LLMClient, openai_from_env};
@@ -627,7 +496,7 @@ async fn main() -> anyhow::Result<()> {
 }
 ```
 
-### 多 Agent 协调
+### Multi-Agent Coordination
 
 ```rust
 use mofa_sdk::runtime::{SimpleRuntime, AgentBuilder};
@@ -637,56 +506,60 @@ use mofa_sdk::kernel::MoFAAgent;
 async fn main() -> anyhow::Result<()> {
     let runtime = SimpleRuntime::new();
 
-    // 注册多个 agent
+    // Register multiple agents
     let agent1 = MyAgent1::new();
     let agent2 = MyAgent2::new();
 
     runtime.register_agent(agent1.metadata(), agent1.config(), "worker").await?;
     runtime.register_agent(agent2.metadata(), agent2.config(), "worker").await?;
 
-    // 启动运行时
+    // Start runtime
     runtime.start().await?;
 
     Ok(())
 }
 ```
 
-## 设计决策
+## Design Decisions
 
-### 为什么采用微内核架构？
+### Why Microkernel Architecture?
 
-1. **可扩展性**：通过插件系统轻松扩展功能
-2. **灵活性**：用户可以只依赖需要的层
-3. **可维护性**：清晰的层次边界使代码易于维护
-4. **可测试性**：每层可以独立测试
+1. **Extensibility**: Easily extend functionality through plugin system
+2. **Flexibility**: Users can depend only on the layers they need
+3. **Maintainability**: Clear layer boundaries make code easy to maintain
+4. **Testability**: Each layer can be tested independently
 
-### 为什么 SDK 不只依赖 Foundation？
+### Why Doesn't SDK Only Depend on Foundation?
 
-虽然微内核架构强调分层，但 SDK 作为统一的 API 入口，需要：
+While microkernel architecture emphasizes layering, SDK as a unified API entry point needs to:
 
-1. 暴露 Runtime 的运行时管理功能
-2. 暴露 Kernel 的核心抽象
-3. 暴露 Foundation 的业务功能
+1. Expose Runtime's runtime management functionality
+2. Expose Kernel's core abstractions
+3. Expose Foundation's business functionality
 
-因此 SDK 作为 **facade**，重新导出各层的功能，而不是逐层依赖。
+Therefore, SDK acts as a **facade**, re-exporting functionality from all layers rather than depending layer by layer.
 
-### 为什么 Foundation 和 Runtime 是平级关系？
+### Why Are Foundation and Runtime Peer Relationships?
 
-- Foundation 提供**业务能力**（LLM、持久化、模式等）
-- Runtime 提供**执行环境**（生命周期管理、事件路由等）
+- Foundation provides **business capabilities** (LLM, persistence, patterns, etc.)
+- Runtime provides **execution environment** (lifecycle management, event routing, etc.)
 
-两者职责不同，互不依赖，都依赖 Kernel 提供的核心抽象。
+Both have different responsibilities, don't depend on each other, and both depend on the core abstractions provided by Kernel.
 
-## 未来改进
+## Future Improvements
 
-1. **更严格的依赖检查**：使用 `cargo deny` 等工具防止错误的依赖方向
-2. **更细粒度的 feature flags**：减少编译时间
-3. **更完整的文档**：每个模块都有详细的文档和示例
-4. **性能优化**：优化关键路径的性能
-5. **更好的错误处理**：统一的错误处理机制
+1. **Stricter Dependency Checking**: Use tools like `cargo deny` to prevent incorrect dependency directions
+2. **Finer-grained Feature Flags**: Reduce compilation time
+3. **More Complete Documentation**: Detailed documentation and examples for each module
+4. **Performance Optimization**: Optimize performance of critical paths
+5. **Better Error Handling**: Unified error handling mechanism
 
-## 参考资料
+## References
 
-- [Agent 重构提案](./agent_refactoring_proposal.md)
-- [秘书 Agent 使用指南](./secretary_agent_usage.md)
-- [自适应协作协议](./adaptive_collaboration.md)
+- [Agent Refactoring Proposal](./specs/agent_refactoring_proposal.md)
+- [Secretary Agent Usage Guide](./specs/secretary_agent_usage.md)
+- [Adaptive Collaboration Protocol](./specs/adaptive_collaboration.md)
+
+---
+
+**English** | [简体中文](zh-CN/architecture.md)
