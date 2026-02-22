@@ -16,16 +16,12 @@ pub async fn run(
     println!("  Output: {}", output.display().to_string().cyan());
     println!();
 
-    let session = ctx.session_manager.get_or_create(session_id).await;
-
-    if session.is_empty() {
-        println!(
-            "{} Session '{}' has no messages to export",
-            "!".yellow(),
-            session_id
-        );
-        return Ok(());
-    }
+    let session = ctx
+        .session_manager
+        .get(session_id)
+        .await
+        .map_err(|e| anyhow::anyhow!("Failed to load session: {}", e))?
+        .ok_or_else(|| anyhow::anyhow!("Session '{}' not found", session_id))?;
 
     let session_data = serde_json::json!({
         "session_id": session.key,

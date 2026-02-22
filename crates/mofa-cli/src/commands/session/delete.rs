@@ -8,7 +8,10 @@ use dialoguer::Confirm;
 pub async fn run(ctx: &CliContext, session_id: &str, force: bool) -> anyhow::Result<()> {
     if !force {
         let confirmed = Confirm::new()
-            .with_prompt(format!("Delete session '{}'? This cannot be undone", session_id))
+            .with_prompt(format!(
+                "Delete session '{}'? This cannot be undone",
+                session_id
+            ))
             .default(false)
             .interact()?;
 
@@ -29,11 +32,7 @@ pub async fn run(ctx: &CliContext, session_id: &str, force: bool) -> anyhow::Res
     if deleted {
         println!("{} Session '{}' deleted", "✓".green(), session_id);
     } else {
-        println!(
-            "{} Session '{}' not found",
-            "!".yellow(),
-            session_id
-        );
+        println!("{} Session '{}' not found", "!".yellow(), session_id);
     }
 
     Ok(())

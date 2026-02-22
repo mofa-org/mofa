@@ -77,10 +77,7 @@ pub async fn run(ctx: &CliContext, name: &str) -> anyhow::Result<()> {
         None => {
             println!("  Tool '{}' not found in registry", name);
             println!();
-            println!(
-                "  Use {} to see available tools.",
-                "mofa tool list".cyan()
-            );
+            println!("  Use {} to see available tools.", "mofa tool list".cyan());
         }
     }
 
