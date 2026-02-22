@@ -845,9 +845,9 @@ pub mod persistence {
 
         // 1. 初始化数据库
         // 1. Initialize database
-        let store_arc = PostgresStore::from_env().await.map_err(|e| {
-            crate::llm::LLMError::Other(format!("数据库连接失败: {}", e))
-        })?;
+        let store_arc = PostgresStore::from_env()
+            .await
+            .map_err(|e| crate::llm::LLMError::Other(format!("数据库连接失败: {}", e)))?;
 
         // 2. 从环境变量获取或生成 IDs
         // 2. Get from env or generate IDs

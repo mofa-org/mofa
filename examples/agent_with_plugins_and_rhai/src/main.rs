@@ -108,7 +108,7 @@ fn execute(prompt) {
 
     // 创建上下文
     // Create context
-    let ctx = mofa_sdk::plugins::PluginContext::new("rules_engine_agent");
+    let ctx = PluginContext::new("rules_engine_agent");
 
     // 加载并启动插件
     // Load and start the plugin
