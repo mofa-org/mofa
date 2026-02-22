@@ -390,11 +390,9 @@ impl RhaiPlugin {
             }
             Err(e) => {
                 let err_str = e.to_string();
+                let err_lower = err_str.to_lowercase();
                 // Check if error indicates function not found
-                if err_str.contains("not found")
-                    || err_str.contains("cannot find")
-                    || err_str.contains("invalid function call")
-                {
+                if err_lower.contains("function not found") || err_lower.contains("cannot find") {
                     // Function doesn't exist - return None instead of error
                     // This allows optional functions like init, start, stop
                     Ok(None)
@@ -899,11 +897,8 @@ mod tests {
     #[tokio::test]
     async fn test_call_script_function_multiple_sequential_calls() {
         let script = r#"
-            let counter = 0;
-
-            fn increment() {
-                counter = counter + 1;
-                counter
+            fn increment(value) {
+                value + 1
             }
         "#;
 
@@ -911,11 +906,15 @@ mod tests {
             .await
             .unwrap();
 
-        // Make multiple calls - note that script state may or may not persist
-        // depending on implementation
-        for _ in 0..3 {
-            let result = plugin.call_script_function("increment", &[]).await.unwrap();
+        // Make multiple calls to verify repeated invocation works.
+        for i in 0..3 {
+            let args = vec![Dynamic::from(i)];
+            let result = plugin
+                .call_script_function("increment", &args)
+                .await
+                .unwrap();
             assert!(result.is_some());
+            assert_eq!(result.unwrap().as_int().unwrap(), (i + 1) as i64);
         }
     }
 
