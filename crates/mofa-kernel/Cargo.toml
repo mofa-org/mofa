@@ -29,7 +29,7 @@ futures.workspace = true
 
 
 # Config parsing
-toml = { version = "0.8", optional = true }
+toml = { version = "0.9", optional = true }
 config = { workspace = true, optional = true }
 regex = { workspace = true, optional = true }
 

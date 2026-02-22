@@ -31,13 +31,13 @@ chrono = { workspace = true }
 
 # CLI
 clap = { version = "4", features = ["derive", "env"] }
-colored = "2"
+colored = "3"
 
 # Serialization
 serde = { workspace = true }
 serde_json = { workspace = true }
 serde_yaml = "0.9"
-toml = "0.8"
+toml = "0.9"
 
 
 # Utilities
@@ -45,8 +45,8 @@ tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
 
 # CLI enhancements
-dialoguer = "0.11"
-indicatif = "0.17"
+dialoguer = "0.12"
+indicatif = "0.18"
 comfy-table = "7"
 dirs-next = "2"
 
