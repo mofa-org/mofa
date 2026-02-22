@@ -46,16 +46,17 @@ pub async fn run(ctx: &CliContext, name: &str, force: bool) -> anyhow::Result<()
         .unregister(name)
         .map_err(|e| anyhow::anyhow!("Failed to unregister plugin: {}", e))?;
 
-    if !removed && persisted_updated {
-        if let Some(previous) = previous_spec {
-            ctx.plugin_store.save(name, &previous).map_err(|e| {
-                anyhow::anyhow!(
-                    "Plugin '{}' remained registered and failed to restore persisted state: {}",
-                    name,
-                    e
-                )
-            })?;
-        }
+    if !removed
+        && persisted_updated
+        && let Some(previous) = previous_spec
+    {
+        ctx.plugin_store.save(name, &previous).map_err(|e| {
+            anyhow::anyhow!(
+                "Plugin '{}' remained registered and failed to restore persisted state: {}",
+                name,
+                e
+            )
+        })?;
     }
 
     if removed {
