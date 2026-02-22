@@ -1,6 +1,7 @@
 [workspace]
 resolver = "3"
 members = [
+    "cli_production_smoke",
     "plugin_system",
     "workflow_orchestration",
     "wasm_plugin",
