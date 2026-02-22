@@ -3,6 +3,7 @@ use serde_json::json;
 use tokio::fs;
 
 /// 文件系统工具 - 读写文件、列出目录
+/// File system utilities - Read/write files, list directories
 pub struct FileSystemTool {
     definition: ToolDefinition,
     allowed_paths: Vec<String>,

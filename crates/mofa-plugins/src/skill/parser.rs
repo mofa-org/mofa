@@ -1,4 +1,5 @@
 //! SKILL.md 文件解析器
+//! SKILL.md file parser
 
 use crate::skill::metadata::SkillMetadata;
 use anyhow::Result;
@@ -7,10 +8,12 @@ use std::fs;
 use std::path::Path;
 
 /// SKILL.md 解析器
+/// SKILL.md parser
 pub struct SkillParser;
 
 impl SkillParser {
     /// 解析 YAML frontmatter
+    /// Parse YAML frontmatter
     pub fn parse_frontmatter(content: &str) -> Result<(SkillMetadata, String)> {
         // Use [\s\S]*? instead of .*? to match newlines in YAML content
         let frontmatter_regex = Regex::new(r"^---\s*\n([\s\S]*?)\n---\s*\n([\s\S]*)$").unwrap();
@@ -29,6 +32,7 @@ impl SkillParser {
     }
 
     /// 从 SKILL.md 文件解析元数据
+    /// Parse metadata from SKILL.md file
     pub fn parse_from_file(skill_md_path: impl AsRef<Path>) -> Result<(SkillMetadata, String)> {
         let content = fs::read_to_string(skill_md_path.as_ref())?;
         Self::parse_frontmatter(&content)

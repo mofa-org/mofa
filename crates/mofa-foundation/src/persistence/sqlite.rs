@@ -1,6 +1,8 @@
 //! SQLite 存储后端
+//! SQLite storage backend
 //!
 //! 提供基于 SQLite 的持久化实现，适用于轻量级部署和本地存储
+//! Provides SQLite-based persistence, suitable for lightweight deployment and local storage
 
 use super::entities::*;
 use super::traits::*;
@@ -13,6 +15,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use uuid::Uuid;
 
 /// SQLite 存储
+/// SQLite storage
 pub struct SqliteStore {
     pool: SqlitePool,
     connected: AtomicBool,

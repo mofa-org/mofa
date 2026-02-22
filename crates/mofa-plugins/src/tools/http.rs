@@ -3,6 +3,7 @@ use reqwest::Client;
 use serde_json::json;
 
 /// HTTP 请求工具 - 发送网络请求
+/// HTTP request utilities - Send network requests
 pub struct HttpRequestTool {
     definition: ToolDefinition,
     client: Client,

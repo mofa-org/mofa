@@ -81,6 +81,7 @@ use ::tracing::{debug, info};
 use mofa_kernel::message::StreamType;
 
 /// 智能体构建器 - 提供流式 API
+/// Agent Builder - Provides a fluent API
 pub struct AgentBuilder {
     agent_id: String,
     name: String,
@@ -95,12 +96,14 @@ pub struct AgentBuilder {
 }
 // ------------------------------
 // 简化的 SDK API
+// Simplified SDK API
 // ------------------------------
 
 pub use crate::runner::run_agents;
 
 impl AgentBuilder {
     /// 创建新的 AgentBuilder
+    /// Creates a new AgentBuilder
     pub fn new(agent_id: &str, name: &str) -> Self {
         Self {
             agent_id: agent_id.to_string(),
@@ -117,12 +120,14 @@ impl AgentBuilder {
     }
 
     /// 添加能力
+    /// Adds a capability
     pub fn with_capability(mut self, capability: &str) -> Self {
         self.capabilities.push(capability.to_string());
         self
     }
 
     /// 添加多个能力
+    /// Adds multiple capabilities
     pub fn with_capabilities(mut self, capabilities: Vec<&str>) -> Self {
         for cap in capabilities {
             self.capabilities.push(cap.to_string());
@@ -131,48 +136,56 @@ impl AgentBuilder {
     }
 
     /// 添加依赖
+    /// Adds a dependency
     pub fn with_dependency(mut self, dependency: &str) -> Self {
         self.dependencies.push(dependency.to_string());
         self
     }
 
     /// 添加插件
+    /// Adds a plugin
     pub fn with_plugin(mut self, plugin: Box<dyn AgentPlugin>) -> Self {
         self.plugins.push(plugin);
         self
     }
 
     /// 添加输入端口
+    /// Adds an input port
     pub fn with_input(mut self, input: &str) -> Self {
         self.inputs.push(input.to_string());
         self
     }
 
     /// 添加输出端口
+    /// Adds an output port
     pub fn with_output(mut self, output: &str) -> Self {
         self.outputs.push(output.to_string());
         self
     }
 
     /// 设置最大并发任务数
+    /// Sets max concurrent tasks
     pub fn with_max_concurrent_tasks(mut self, max: usize) -> Self {
         self.max_concurrent_tasks = max;
         self
     }
 
     /// 设置默认超时
+    /// Sets default timeout
     pub fn with_timeout(mut self, timeout: Duration) -> Self {
         self.default_timeout = timeout;
         self
     }
 
     /// 添加自定义配置
+    /// Adds custom configuration
     pub fn with_config(mut self, key: &str, value: &str) -> Self {
         self.node_config.insert(key.to_string(), value.to_string());
         self
     }
 
     /// 构建智能体配置
+    /// Builds agent configuration
     pub fn build_config(&self) -> AgentConfig {
         AgentConfig {
             agent_id: self.agent_id.clone(),
@@ -182,11 +195,13 @@ impl AgentBuilder {
     }
 
     /// 构建元数据
+    /// Builds metadata
     pub fn build_metadata(&self) -> AgentMetadata {
         use mofa_kernel::agent::AgentCapabilities;
         use mofa_kernel::agent::AgentState;
 
         // 将 Vec<String> 转换为 AgentCapabilities
+        // Convert Vec<String> to AgentCapabilities
         let agent_capabilities = AgentCapabilities::builder()
             .tags(self.capabilities.clone())
             .build();
@@ -202,6 +217,7 @@ impl AgentBuilder {
     }
 
     /// 构建 DoraNodeConfig
+    /// Builds DoraNodeConfig
     #[cfg(feature = "dora")]
     pub fn build_node_config(&self) -> DoraNodeConfig {
         DoraNodeConfig {
@@ -216,6 +232,7 @@ impl AgentBuilder {
     }
 
     /// 使用提供的 MoFAAgent 实现构建运行时
+    /// Builds runtime with provided MoFAAgent implementation
     #[cfg(feature = "dora")]
     pub async fn with_agent<A: MoFAAgent>(self, agent: A) -> DoraResult<AgentRuntime<A>> {
         let node_config = self.build_node_config();
@@ -236,6 +253,7 @@ impl AgentBuilder {
     }
 
     /// 构建并启动智能体（需要提供 MoFAAgent 实现）
+    /// Builds and starts the agent (requires MoFAAgent implementation)
     #[cfg(feature = "dora")]
     pub async fn build_and_start<A: MoFAAgent>(self, agent: A) -> DoraResult<AgentRuntime<A>> {
         let runtime: AgentRuntime<A> = self.with_agent(agent).await?;
@@ -244,6 +262,7 @@ impl AgentBuilder {
     }
 
     /// 使用提供的 MoFAAgent 实现构建简单运行时（非 dora 模式）
+    /// Builds simple runtime with MoFAAgent implementation (non-dora mode)
     #[cfg(not(feature = "dora"))]
     pub async fn with_agent<A: MoFAAgent>(self, agent: A) -> anyhow::Result<SimpleAgentRuntime<A>> {
         let metadata = self.build_metadata();
@@ -251,6 +270,7 @@ impl AgentBuilder {
         let interrupt = AgentInterrupt::new();
 
         // 创建事件通道
+        // Creates event channel
         let (event_tx, event_rx) = tokio::sync::mpsc::channel(100);
 
         Ok(SimpleAgentRuntime {
@@ -269,6 +289,7 @@ impl AgentBuilder {
     }
 
     /// 构建并启动智能体（非 dora 模式）
+    /// Builds and starts the agent (non-dora mode)
     #[cfg(not(feature = "dora"))]
     pub async fn build_and_start<A: MoFAAgent>(
         self,
@@ -281,6 +302,7 @@ impl AgentBuilder {
 }
 
 /// 智能体运行时
+/// Agent Runtime
 #[cfg(feature = "dora")]
 pub struct AgentRuntime<A: MoFAAgent> {
     agent: A,
@@ -294,36 +316,43 @@ pub struct AgentRuntime<A: MoFAAgent> {
 #[cfg(feature = "dora")]
 impl<A: MoFAAgent> AgentRuntime<A> {
     /// 获取智能体引用
+    /// Gets agent reference
     pub fn agent(&self) -> &A {
         &self.agent
     }
 
     /// 获取可变智能体引用
+    /// Gets mutable agent reference
     pub fn agent_mut(&mut self) -> &mut A {
         &mut self.agent
     }
 
     /// 获取节点
+    /// Gets node reference
     pub fn node(&self) -> &Arc<DoraAgentNode> {
         &self.node
     }
 
     /// 获取元数据
+    /// Gets metadata reference
     pub fn metadata(&self) -> &AgentMetadata {
         &self.metadata
     }
 
     /// 获取配置
+    /// Gets configuration reference
     pub fn config(&self) -> &AgentConfig {
         &self.config
     }
 
     /// 获取中断句柄
+    /// Gets interrupt handle
     pub fn interrupt(&self) -> &AgentInterrupt {
         &self.interrupt
     }
 
     /// 初始化插件
+    /// Initializes plugins
     pub async fn init_plugins(&mut self) -> DoraResult<()> {
         for plugin in &mut self.plugins {
             plugin
@@ -335,6 +364,7 @@ impl<A: MoFAAgent> AgentRuntime<A> {
     }
 
     /// 启动运行时
+    /// Starts the runtime
     pub async fn start(&self) -> DoraResult<()> {
         self.node.init().await?;
         info!("AgentRuntime {} started", self.metadata.id);
@@ -342,8 +372,10 @@ impl<A: MoFAAgent> AgentRuntime<A> {
     }
 
     /// 运行事件循环
+    /// Runs the event loop
     pub async fn run_event_loop(&mut self) -> DoraResult<()> {
         // 创建 CoreAgentContext 并初始化智能体
+        // Create CoreAgentContext and initialize agent
         let context = mofa_kernel::agent::AgentContext::new(self.metadata.id.clone());
         self.agent
             .initialize(&context)
@@ -351,18 +383,21 @@ impl<A: MoFAAgent> AgentRuntime<A> {
             .map_err(|e| DoraError::Internal(e.to_string()))?;
 
         // 初始化插件
+        // Initialize plugins
         self.init_plugins().await?;
 
         let event_loop = self.node.create_event_loop();
 
         loop {
             // 检查中断
+            // Check for interrupts
             if event_loop.should_interrupt() {
                 debug!("Interrupt signal received for {}", self.metadata.id);
                 self.interrupt.reset();
             }
 
             // 获取下一个事件
+            // Get the next event
             match event_loop.next_event().await {
                 Some(AgentEvent::Shutdown) => {
                     info!("Received shutdown event");
@@ -370,12 +405,14 @@ impl<A: MoFAAgent> AgentRuntime<A> {
                 }
                 Some(event) => {
                     // 处理事件前检查中断
+                    // Check for interrupts before processing event
                     if self.interrupt.check() {
                         debug!("Interrupt signal received for {}", self.metadata.id);
                         self.interrupt.reset();
                     }
 
                     // 将事件转换为输入并使用 execute
+                    // Convert event to input and call execute
                     use mofa_kernel::agent::types::AgentInput;
                     use mofa_kernel::message::TaskRequest;
 
@@ -392,12 +429,14 @@ impl<A: MoFAAgent> AgentRuntime<A> {
                 }
                 None => {
                     // 无事件，继续等待
+                    // No events, continue waiting
                     tokio::time::sleep(Duration::from_millis(10)).await;
                 }
             }
         }
 
         // 关闭智能体
+        // Shut down the agent
         self.agent
             .shutdown()
             .await
@@ -407,6 +446,7 @@ impl<A: MoFAAgent> AgentRuntime<A> {
     }
 
     /// 停止运行时
+    /// Stops the runtime
     pub async fn stop(&self) -> DoraResult<()> {
         self.interrupt.trigger();
         self.node.stop().await?;
@@ -415,11 +455,13 @@ impl<A: MoFAAgent> AgentRuntime<A> {
     }
 
     /// 发送消息到输出
+    /// Sends message to output
     pub async fn send_output(&self, output_id: &str, message: &AgentMessage) -> DoraResult<()> {
         self.node.send_message(output_id, message).await
     }
 
     /// 注入事件
+    /// Injects an event
     pub async fn inject_event(&self, event: AgentEvent) -> DoraResult<()> {
         self.node.inject_event(event).await
     }
@@ -427,9 +469,11 @@ impl<A: MoFAAgent> AgentRuntime<A> {
 
 // ============================================================================
 // 非 dora 运行时实现 - SimpleAgentRuntime
+// Non-dora runtime implementation - SimpleAgentRuntime
 // ============================================================================
 
 /// 简单智能体运行时 - 不依赖 dora-rs 的轻量级运行时
+/// Simple Agent Runtime - Lightweight runtime not dependent on dora-rs
 #[cfg(not(feature = "dora"))]
 pub struct SimpleAgentRuntime<A: MoFAAgent> {
     agent: A,
@@ -442,6 +486,7 @@ pub struct SimpleAgentRuntime<A: MoFAAgent> {
     max_concurrent_tasks: usize,
     default_timeout: Duration,
     // 添加事件通道
+    // Add event channel
     event_tx: tokio::sync::mpsc::Sender<AgentEvent>,
     event_rx: Option<tokio::sync::mpsc::Receiver<AgentEvent>>,
 }
@@ -450,6 +495,7 @@ pub struct SimpleAgentRuntime<A: MoFAAgent> {
 impl<A: MoFAAgent> SimpleAgentRuntime<A> {
     pub async fn inject_event(&self, event: AgentEvent) {
         // 将事件发送到事件通道
+        // Sends event to the event channel
         let _ = self.event_tx.send(event).await;
     }
 }
@@ -458,51 +504,61 @@ impl<A: MoFAAgent> SimpleAgentRuntime<A> {
 #[cfg(not(feature = "dora"))]
 impl<A: MoFAAgent> SimpleAgentRuntime<A> {
     /// 获取智能体引用
+    /// Gets agent reference
     pub fn agent(&self) -> &A {
         &self.agent
     }
 
     /// 获取可变智能体引用
+    /// Gets mutable agent reference
     pub fn agent_mut(&mut self) -> &mut A {
         &mut self.agent
     }
 
     /// 获取元数据
+    /// Gets metadata reference
     pub fn metadata(&self) -> &AgentMetadata {
         &self.metadata
     }
 
     /// 获取配置
+    /// Gets configuration reference
     pub fn config(&self) -> &AgentConfig {
         &self.config
     }
 
     /// 获取中断句柄
+    /// Gets interrupt handle
     pub fn interrupt(&self) -> &AgentInterrupt {
         &self.interrupt
     }
 
     /// 获取输入端口列表
+    /// Gets list of input ports
     pub fn inputs(&self) -> &[String] {
         &self.inputs
     }
 
     /// 获取输出端口列表
+    /// Gets list of output ports
     pub fn outputs(&self) -> &[String] {
         &self.outputs
     }
 
     /// 获取最大并发任务数
+    /// Gets max concurrent tasks
     pub fn max_concurrent_tasks(&self) -> usize {
         self.max_concurrent_tasks
     }
 
     /// 获取默认超时时间
+    /// Gets default timeout duration
     pub fn default_timeout(&self) -> Duration {
         self.default_timeout
     }
 
     /// 初始化插件
+    /// Initializes plugins
     pub async fn init_plugins(&mut self) -> anyhow::Result<()> {
         for plugin in &mut self.plugins {
             plugin.init_plugin().await?;
@@ -511,34 +567,44 @@ impl<A: MoFAAgent> SimpleAgentRuntime<A> {
     }
 
     /// 启动运行时
+    /// Starts the runtime
     pub async fn start(&mut self) -> anyhow::Result<()> {
         // 创建 CoreAgentContext
+        // Create CoreAgentContext
         let context = mofa_kernel::agent::AgentContext::new(self.metadata.id.clone());
 
         // 初始化智能体 - 使用 MoFAAgent 的 initialize 方法
+        // Initialize agent - using MoFAAgent's initialize method
         self.agent.initialize(&context).await?;
         // 初始化插件
+        // Initialize plugins
         self.init_plugins().await?;
         ::tracing::info!("SimpleAgentRuntime {} started", self.metadata.id);
         Ok(())
     }
 
     /// 处理单个事件
+    /// Processes a single event
     pub async fn handle_event(&mut self, event: AgentEvent) -> anyhow::Result<()> {
         // 检查中断 - 注意：MoFAAgent 没有 on_interrupt 方法
+        // Check interrupt - Note: MoFAAgent lacks on_interrupt method
         // 中断处理需要由 Agent 内部自行处理或通过 AgentMessaging 扩展
+        // Interrupts must be handled internally or via AgentMessaging extensions
         if self.interrupt.check() {
             // 中断信号，可以选择停止或通知 agent
+            // Interrupt signal; can choose to stop or notify the agent
             ::tracing::debug!("Interrupt signal received for {}", self.metadata.id);
             self.interrupt.reset();
         }
 
         // 将事件转换为输入并使用 execute
+        // Convert event to input and call execute
         use mofa_kernel::agent::types::AgentInput;
 
         let context = mofa_kernel::agent::AgentContext::new(self.metadata.id.clone());
 
         // 尝试将事件转换为输入
+        // Try to convert event to input
         let input = match event {
             AgentEvent::TaskReceived(task) => AgentInput::text(task.content),
             AgentEvent::Shutdown => {
@@ -554,8 +620,10 @@ impl<A: MoFAAgent> SimpleAgentRuntime<A> {
     }
 
     /// 运行事件循环（使用内部事件接收器）
+    /// Runs event loop (using internal event receiver)
     pub async fn run(&mut self) -> anyhow::Result<()> {
         // 获取内部事件接收器
+        // Get internal event receiver
         let event_rx = self
             .event_rx
             .take()
@@ -565,18 +633,21 @@ impl<A: MoFAAgent> SimpleAgentRuntime<A> {
     }
 
     /// 运行事件循环（使用事件通道）
+    /// Runs event loop (using event channel)
     pub async fn run_with_receiver(
         &mut self,
         mut event_rx: tokio::sync::mpsc::Receiver<AgentEvent>,
     ) -> anyhow::Result<()> {
         loop {
             // 检查中断
+            // Check for interrupts
             if self.interrupt.check() {
                 ::tracing::debug!("Interrupt signal received for {}", self.metadata.id);
                 self.interrupt.reset();
             }
 
             // 等待事件
+            // Wait for event
             match tokio::time::timeout(Duration::from_millis(100), event_rx.recv()).await {
                 Ok(Some(AgentEvent::Shutdown)) => {
                     ::tracing::info!("Received shutdown event");
@@ -584,25 +655,30 @@ impl<A: MoFAAgent> SimpleAgentRuntime<A> {
                 }
                 Ok(Some(event)) => {
                     // 使用 handle_event 方法（它会将事件转换为 execute 调用）
+                    // Use handle_event (converts event to execute call)
                     self.handle_event(event).await?;
                 }
                 Ok(None) => {
                     // 通道关闭
+                    // Channel closed
                     break;
                 }
                 Err(_) => {
                     // 超时，继续等待
+                    // Timeout, continue waiting
                     continue;
                 }
             }
         }
 
         // 关闭智能体 - 使用 shutdown 而不是 destroy
+        // Shut down agent - use shutdown instead of destroy
         self.agent.shutdown().await?;
         Ok(())
     }
 
     /// 停止运行时
+    /// Stops the runtime
     pub async fn stop(&mut self) -> anyhow::Result<()> {
         self.interrupt.trigger();
         self.agent.shutdown().await?;
@@ -611,6 +687,7 @@ impl<A: MoFAAgent> SimpleAgentRuntime<A> {
     }
 
     /// 触发中断
+    /// Triggers an interrupt
     pub fn trigger_interrupt(&self) {
         self.interrupt.trigger();
     }
@@ -618,9 +695,11 @@ impl<A: MoFAAgent> SimpleAgentRuntime<A> {
 
 // ============================================================================
 // 简单多智能体运行时 - SimpleRuntime
+// Simple Multi-Agent Runtime - SimpleRuntime
 // ============================================================================
 
 /// 简单运行时 - 管理多个智能体的协同运行（非 dora 版本）
+/// Simple Runtime - Manages collaborative operation of multiple agents (non-dora version)
 #[cfg(not(feature = "dora"))]
 pub struct SimpleRuntime {
     agents: std::sync::Arc<tokio::sync::RwLock<HashMap<String, SimpleAgentInfo>>>,
@@ -629,6 +708,7 @@ pub struct SimpleRuntime {
 }
 
 /// 智能体信息
+/// Agent Information
 #[cfg(not(feature = "dora"))]
 pub struct SimpleAgentInfo {
     pub metadata: AgentMetadata,
@@ -637,6 +717,7 @@ pub struct SimpleAgentInfo {
 }
 
 /// 流状态信息
+/// Stream Status Information
 #[cfg(not(feature = "dora"))]
 #[derive(Debug, Clone)]
 pub struct StreamInfo {
@@ -649,11 +730,13 @@ pub struct StreamInfo {
 }
 
 /// 简单消息总线
+/// Simple Message Bus
 #[cfg(not(feature = "dora"))]
 pub struct SimpleMessageBus {
     subscribers: tokio::sync::RwLock<HashMap<String, Vec<tokio::sync::mpsc::Sender<AgentEvent>>>>,
     topic_subscribers: tokio::sync::RwLock<HashMap<String, Vec<String>>>,
     // 流支持
+    // Stream support
     streams: tokio::sync::RwLock<HashMap<String, StreamInfo>>,
 }
 
@@ -669,6 +752,7 @@ impl SimpleMessageBus {
     }
 
     /// 注册智能体
+    /// Register an agent
     pub async fn register(&self, agent_id: &str, tx: tokio::sync::mpsc::Sender<AgentEvent>) {
         let mut subs = self.subscribers.write().await;
         subs.entry(agent_id.to_string())
@@ -677,6 +761,7 @@ impl SimpleMessageBus {
     }
 
     /// 订阅主题
+    /// Subscribe to a topic
     pub async fn subscribe(&self, agent_id: &str, topic: &str) {
         let mut topics = self.topic_subscribers.write().await;
         topics
@@ -686,6 +771,7 @@ impl SimpleMessageBus {
     }
 
     /// 发送点对点消息
+    /// Send point-to-point message
     pub async fn send_to(&self, target_id: &str, event: AgentEvent) -> anyhow::Result<()> {
         let subs = self.subscribers.read().await;
         if let Some(senders) = subs.get(target_id) {
@@ -697,6 +783,7 @@ impl SimpleMessageBus {
     }
 
     /// 广播消息给所有智能体
+    /// Broadcast message to all agents
     pub async fn broadcast(&self, event: AgentEvent) -> anyhow::Result<()> {
         let subs = self.subscribers.read().await;
         for senders in subs.values() {
@@ -708,6 +795,7 @@ impl SimpleMessageBus {
     }
 
     /// 发布到主题
+    /// Publish to a topic
     pub async fn publish(&self, topic: &str, event: AgentEvent) -> anyhow::Result<()> {
         let topics = self.topic_subscribers.read().await;
         if let Some(agent_ids) = topics.get(topic) {
@@ -725,9 +813,11 @@ impl SimpleMessageBus {
 
     // ---------------------------------
     // 流支持方法
+    // Stream support methods
     // ---------------------------------
 
     /// 创建流
+    /// Create a stream
     pub async fn create_stream(
         &self,
         stream_id: &str,
@@ -740,6 +830,7 @@ impl SimpleMessageBus {
         }
 
         // 创建流信息
+        // Create stream information
         let stream_info = StreamInfo {
             stream_id: stream_id.to_string(),
             stream_type: stream_type.clone(),
@@ -752,6 +843,7 @@ impl SimpleMessageBus {
         streams.insert(stream_id.to_string(), stream_info.clone());
 
         // 广播流创建事件
+        // Broadcast stream creation event
         self.broadcast(AgentEvent::StreamCreated {
             stream_id: stream_id.to_string(),
             stream_type,
@@ -761,16 +853,19 @@ impl SimpleMessageBus {
     }
 
     /// 关闭流
+    /// Close a stream
     pub async fn close_stream(&self, stream_id: &str, reason: &str) -> anyhow::Result<()> {
         let mut streams = self.streams.write().await;
         if let Some(stream_info) = streams.remove(stream_id) {
             // 广播流关闭事件
+            // Broadcast stream closure event
             let event = AgentEvent::StreamClosed {
                 stream_id: stream_id.to_string(),
                 reason: reason.to_string(),
             };
 
             // 通知所有订阅者
+            // Notify all subscribers
             let subs = self.subscribers.read().await;
             for agent_id in &stream_info.subscribers {
                 if let Some(senders) = subs.get(agent_id) {
@@ -784,14 +879,17 @@ impl SimpleMessageBus {
     }
 
     /// 订阅流
+    /// Subscribe to a stream
     pub async fn subscribe_stream(&self, agent_id: &str, stream_id: &str) -> anyhow::Result<()> {
         let mut streams = self.streams.write().await;
         if let Some(stream_info) = streams.get_mut(stream_id) {
             // 检查是否已订阅
+            // Check if already subscribed
             if !stream_info.subscribers.contains(&agent_id.to_string()) {
                 stream_info.subscribers.push(agent_id.to_string());
 
                 // 广播订阅事件
+                // Broadcast subscription event
                 self.broadcast(AgentEvent::StreamSubscription {
                     stream_id: stream_id.to_string(),
                     subscriber_id: agent_id.to_string(),
@@ -803,14 +901,17 @@ impl SimpleMessageBus {
     }
 
     /// 取消订阅流
+    /// Unsubscribe from a stream
     pub async fn unsubscribe_stream(&self, agent_id: &str, stream_id: &str) -> anyhow::Result<()> {
         let mut streams = self.streams.write().await;
         if let Some(stream_info) = streams.get_mut(stream_id) {
             // 移除订阅者
+            // Remove subscriber
             if let Some(pos) = stream_info.subscribers.iter().position(|id| id == agent_id) {
                 stream_info.subscribers.remove(pos);
 
                 // 广播取消订阅事件
+                // Broadcast unsubscription event
                 self.broadcast(AgentEvent::StreamUnsubscription {
                     stream_id: stream_id.to_string(),
                     subscriber_id: agent_id.to_string(),
@@ -822,6 +923,7 @@ impl SimpleMessageBus {
     }
 
     /// 发送流消息
+    /// Send stream message
     pub async fn send_stream_message(
         &self,
         stream_id: &str,
@@ -830,15 +932,18 @@ impl SimpleMessageBus {
         let mut streams = self.streams.write().await;
         if let Some(stream_info) = streams.get_mut(stream_id) {
             // 如果流被暂停，直接返回
+            // If stream is paused, return immediately
             if stream_info.is_paused {
                 return Ok(());
             }
 
             // 生成序列号
+            // Generate sequence number
             let sequence = stream_info.sequence;
             stream_info.sequence += 1;
 
             // 构造流消息事件
+            // Construct stream message event
             let event = AgentEvent::StreamMessage {
                 stream_id: stream_id.to_string(),
                 message,
@@ -846,6 +951,7 @@ impl SimpleMessageBus {
             };
 
             // 发送给所有订阅者
+            // Send to all subscribers
             let subs = self.subscribers.read().await;
             for agent_id in &stream_info.subscribers {
                 if let Some(senders) = subs.get(agent_id) {
@@ -859,6 +965,7 @@ impl SimpleMessageBus {
     }
 
     /// 暂停流
+    /// Pause a stream
     pub async fn pause_stream(&self, stream_id: &str) -> anyhow::Result<()> {
         let mut streams = self.streams.write().await;
         if let Some(stream_info) = streams.get_mut(stream_id) {
@@ -868,6 +975,7 @@ impl SimpleMessageBus {
     }
 
     /// 恢复流
+    /// Resume a stream
     pub async fn resume_stream(&self, stream_id: &str) -> anyhow::Result<()> {
         let mut streams = self.streams.write().await;
         if let Some(stream_info) = streams.get_mut(stream_id) {
@@ -877,6 +985,7 @@ impl SimpleMessageBus {
     }
 
     /// 获取流信息
+    /// Get stream information
     pub async fn get_stream_info(&self, stream_id: &str) -> anyhow::Result<Option<StreamInfo>> {
         let streams = self.streams.read().await;
         Ok(streams.get(stream_id).cloned())
@@ -893,6 +1002,7 @@ impl Default for SimpleMessageBus {
 #[cfg(not(feature = "dora"))]
 impl SimpleRuntime {
     /// 创建新的简单运行时
+    /// Create a new simple runtime
     pub fn new() -> Self {
         Self {
             agents: std::sync::Arc::new(tokio::sync::RwLock::new(HashMap::new())),
@@ -902,6 +1012,7 @@ impl SimpleRuntime {
     }
 
     /// 注册智能体
+    /// Register an agent
     pub async fn register_agent(
         &self,
         metadata: AgentMetadata,
@@ -912,9 +1023,11 @@ impl SimpleRuntime {
         let (tx, rx) = tokio::sync::mpsc::channel(100);
 
         // 注册到消息总线
+        // Register to the message bus
         self.message_bus.register(&agent_id, tx.clone()).await;
 
         // 添加智能体信息
+        // Add agent information
         let mut agents = self.agents.write().await;
         agents.insert(
             agent_id.clone(),
@@ -926,6 +1039,7 @@ impl SimpleRuntime {
         );
 
         // 记录角色
+        // Record role
         let mut roles = self.agent_roles.write().await;
         roles.insert(agent_id.clone(), role.to_string());
 
@@ -934,11 +1048,13 @@ impl SimpleRuntime {
     }
 
     /// 获取消息总线
+    /// Get the message bus
     pub fn message_bus(&self) -> &std::sync::Arc<SimpleMessageBus> {
         &self.message_bus
     }
 
     /// 获取指定角色的智能体列表
+    /// Get list of agents by specific role
     pub async fn get_agents_by_role(&self, role: &str) -> Vec<String> {
         let roles = self.agent_roles.read().await;
         roles
@@ -949,21 +1065,25 @@ impl SimpleRuntime {
     }
 
     /// 发送消息给指定智能体
+    /// Send message to a specific agent
     pub async fn send_to_agent(&self, target_id: &str, event: AgentEvent) -> anyhow::Result<()> {
         self.message_bus.send_to(target_id, event).await
     }
 
     /// 广播消息给所有智能体
+    /// Broadcast message to all agents
     pub async fn broadcast(&self, event: AgentEvent) -> anyhow::Result<()> {
         self.message_bus.broadcast(event).await
     }
 
     /// 发布到主题
+    /// Publish to a topic
     pub async fn publish_to_topic(&self, topic: &str, event: AgentEvent) -> anyhow::Result<()> {
         self.message_bus.publish(topic, event).await
     }
 
     /// 订阅主题
+    /// Subscribe to a topic
     pub async fn subscribe_topic(&self, agent_id: &str, topic: &str) -> anyhow::Result<()> {
         self.message_bus.subscribe(agent_id, topic).await;
         Ok(())
@@ -971,9 +1091,12 @@ impl SimpleRuntime {
 
     // ---------------------------------
     // 流支持方法
+    // Stream support methods
     // ---------------------------------
 
+
     /// 创建流
+    /// Create stream
     pub async fn create_stream(
         &self,
         stream_id: &str,
@@ -986,16 +1109,19 @@ impl SimpleRuntime {
     }
 
     /// 关闭流
+    /// Close stream
     pub async fn close_stream(&self, stream_id: &str, reason: &str) -> anyhow::Result<()> {
         self.message_bus.close_stream(stream_id, reason).await
     }
 
     /// 订阅流
+    /// Subscribe to stream
     pub async fn subscribe_stream(&self, agent_id: &str, stream_id: &str) -> anyhow::Result<()> {
         self.message_bus.subscribe_stream(agent_id, stream_id).await
     }
 
     /// 取消订阅流
+    /// Unsubscribe from stream
     pub async fn unsubscribe_stream(&self, agent_id: &str, stream_id: &str) -> anyhow::Result<()> {
         self.message_bus
             .unsubscribe_stream(agent_id, stream_id)
@@ -1003,6 +1129,7 @@ impl SimpleRuntime {
     }
 
     /// 发送流消息
+    /// Send stream message
     pub async fn send_stream_message(
         &self,
         stream_id: &str,
@@ -1014,21 +1141,25 @@ impl SimpleRuntime {
     }
 
     /// 暂停流
+    /// Pause stream
     pub async fn pause_stream(&self, stream_id: &str) -> anyhow::Result<()> {
         self.message_bus.pause_stream(stream_id).await
     }
 
     /// 恢复流
+    /// Resume stream
     pub async fn resume_stream(&self, stream_id: &str) -> anyhow::Result<()> {
         self.message_bus.resume_stream(stream_id).await
     }
 
     /// 获取流信息
+    /// Get stream info
     pub async fn get_stream_info(&self, stream_id: &str) -> anyhow::Result<Option<StreamInfo>> {
         self.message_bus.get_stream_info(stream_id).await
     }
 
     /// 停止所有智能体
+    /// Stop all agents
     pub async fn stop_all(&self) -> anyhow::Result<()> {
         self.message_bus.broadcast(AgentEvent::Shutdown).await?;
         ::tracing::info!("SimpleRuntime stopped");
@@ -1044,10 +1175,12 @@ impl Default for SimpleRuntime {
 }
 
 /// 智能体节点存储类型
+/// Storage type for agent nodes
 #[cfg(feature = "dora")]
 type AgentNodeMap = HashMap<String, Arc<DoraAgentNode>>;
 
 /// MoFA 运行时 - 管理多个智能体的协同运行
+/// MoFA Runtime - Manages collaborative operation of multiple agents
 #[cfg(feature = "dora")]
 pub struct MoFARuntime {
     dataflow: Option<DoraDataflow>,
@@ -1059,6 +1192,7 @@ pub struct MoFARuntime {
 #[cfg(feature = "dora")]
 impl MoFARuntime {
     /// 创建新的运行时
+    /// Create new runtime
     pub async fn new() -> Self {
         let channel_config = ChannelConfig::default();
         Self {
@@ -1070,6 +1204,7 @@ impl MoFARuntime {
     }
 
     /// 使用 Dataflow 配置创建运行时
+    /// Create runtime with Dataflow configuration
     pub async fn with_dataflow(dataflow_config: DataflowConfig) -> Self {
         let dataflow = DoraDataflow::new(dataflow_config);
         let channel_config = ChannelConfig::default();
@@ -1082,13 +1217,16 @@ impl MoFARuntime {
     }
 
     /// 注册智能体节点
+    /// Register agent node
     pub async fn register_agent(&self, node: DoraAgentNode, role: &str) -> DoraResult<()> {
         let agent_id = node.config().node_id.clone();
 
         // 注册到通道
+        // Register to channel
         self.channel.register_agent(&agent_id).await?;
 
         // 添加到 dataflow（如果存在）
+        // Add to dataflow (if it exists)
         if let Some(ref dataflow) = self.dataflow {
             dataflow.add_node(node).await?;
         } else {
@@ -1098,6 +1236,7 @@ impl MoFARuntime {
         }
 
         // 记录角色
+        // Record role
         let mut roles = self.agent_roles.write().await;
         roles.insert(agent_id.clone(), role.to_string());
 
@@ -1106,6 +1245,7 @@ impl MoFARuntime {
     }
 
     /// 连接两个智能体
+    /// Connect two agents
     pub async fn connect_agents(
         &self,
         source_id: &str,
@@ -1122,11 +1262,13 @@ impl MoFARuntime {
     }
 
     /// 获取通道
+    /// Get channel
     pub fn channel(&self) -> &Arc<DoraChannel> {
         &self.channel
     }
 
     /// 获取指定角色的智能体列表
+    /// Get agent list by specific role
     pub async fn get_agents_by_role(&self, role: &str) -> Vec<String> {
         let roles = self.agent_roles.read().await;
         roles
@@ -1137,6 +1279,7 @@ impl MoFARuntime {
     }
 
     /// 发送消息给指定智能体
+    /// Send message to specific agent
     pub async fn send_to_agent(
         &self,
         sender_id: &str,
@@ -1148,12 +1291,14 @@ impl MoFARuntime {
     }
 
     /// 广播消息给所有智能体
+    /// Broadcast message to all agents
     pub async fn broadcast(&self, sender_id: &str, message: &AgentMessage) -> DoraResult<()> {
         let envelope = MessageEnvelope::from_agent_message(sender_id, message)?;
         self.channel.broadcast(envelope).await
     }
 
     /// 发布到主题
+    /// Publish to topic
     pub async fn publish_to_topic(
         &self,
         sender_id: &str,
@@ -1165,17 +1310,20 @@ impl MoFARuntime {
     }
 
     /// 订阅主题
+    /// Subscribe to topic
     pub async fn subscribe_topic(&self, agent_id: &str, topic: &str) -> DoraResult<()> {
         self.channel.subscribe(agent_id, topic).await
     }
 
     /// 构建并启动运行时
+    /// Build and start runtime
     pub async fn build_and_start(&self) -> DoraResult<()> {
         if let Some(ref dataflow) = self.dataflow {
             dataflow.build().await?;
             dataflow.start().await?;
         } else {
             // 初始化所有独立注册的智能体
+            // Initialize all independently registered agents
             let agents: tokio::sync::RwLockReadGuard<'_, AgentNodeMap> = self.agents.read().await;
             for (id, node) in agents.iter() {
                 node.init().await?;
@@ -1187,6 +1335,7 @@ impl MoFARuntime {
     }
 
     /// 停止运行时
+    /// Stop runtime
     pub async fn stop(&self) -> DoraResult<()> {
         if let Some(ref dataflow) = self.dataflow {
             dataflow.stop().await?;
@@ -1201,6 +1350,7 @@ impl MoFARuntime {
     }
 
     /// 暂停运行时
+    /// Pause runtime
     pub async fn pause(&self) -> DoraResult<()> {
         if let Some(ref dataflow) = self.dataflow {
             dataflow.pause().await?;
@@ -1209,6 +1359,7 @@ impl MoFARuntime {
     }
 
     /// 恢复运行时
+    /// Resume runtime
     pub async fn resume(&self) -> DoraResult<()> {
         if let Some(ref dataflow) = self.dataflow {
             dataflow.resume().await?;

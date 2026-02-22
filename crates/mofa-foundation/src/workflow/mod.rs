@@ -1,18 +1,27 @@
 //! Graph-based Workflow Orchestration
 //!
 //! 提供基于有向图的工作流编排系统，支持：
+//! Provides a workflow orchestration system based on directed graphs, supporting:
 //! - 多种节点类型（任务、条件、并行、聚合、循环）
+//! - Multiple node types (task, condition, parallel, join, loop)
 //! - DAG 拓扑排序执行
+//! - DAG topological sort execution
 //! - 并行执行与同步
+//! - Parallel execution and synchronization
 //! - 状态管理与数据传递
+//! - State management and data transfer
 //! - 错误处理与重试
+//! - Error handling and retries
 //! - 检查点与恢复
+//! - Checkpoints and recovery
 //! - DSL (YAML/TOML) 配置支持
+//! - DSL (YAML/TOML) configuration support
 //! - Time-Travel Debugger telemetry and session recording
 //!
 //! # StateGraph API (LangGraph-inspired)
 //!
 //! 新的 StateGraph API 提供了更直观的工作流构建方式：
+//! The new StateGraph API provides a more intuitive way to build workflows:
 //!
 //! ```rust,ignore
 //! use mofa_foundation::workflow::{StateGraphImpl, AppendReducer, OverwriteReducer};
