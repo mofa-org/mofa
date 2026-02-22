@@ -363,7 +363,7 @@ pub enum SessionCommands {
         session_id: String,
 
         /// Output format
-        #[arg(short = 'f', long, visible_short_alias = 'o')]
+        #[arg(short = 'f', long, short_alias = 'o')]
         format: Option<SessionFormat>,
     },
 
