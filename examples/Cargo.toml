@@ -24,7 +24,8 @@ members = [
     "agent_from_database_streaming",
     "workflow_dsl",
     "tool_routing",
-    "runtime_message_bus_backpressure"
+    "runtime_message_bus_backpressure",
+    "rag_pipeline"
 ]
 
 [workspace.package]
