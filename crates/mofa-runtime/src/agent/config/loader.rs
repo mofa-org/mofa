@@ -567,7 +567,6 @@ model = "gpt-4"
 
         let overlay = AgentConfig {
             id: String::new(), // Empty, should use base
-            id: String::new(), // Empty, should use base
             name: "Override Name".to_string(),
             description: Some("Override description".to_string()),
             ..Default::default()
