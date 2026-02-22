@@ -296,6 +296,47 @@ pub struct PluginMetrics {
     pub reload_count: u32,
 }
 
+/// LLM Metrics - specialized metrics for LLM inference
+///
+/// Separate from PluginMetrics because LLM-specific metrics (tokens/s, TTFT, etc.)
+/// are fundamentally different from generic plugin metrics and require
+/// their own collection and reporting pipeline.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct LLMMetrics {
+    /// Plugin ID
+    pub plugin_id: String,
+    /// LLM Provider name (e.g., "OpenAI", "Anthropic")
+    pub provider_name: String,
+    /// Model name (e.g., "gpt-4", "claude-3-opus")
+    pub model_name: String,
+    /// Current state
+    pub state: String,
+    /// Total requests made
+    pub total_requests: u64,
+    /// Successful requests
+    pub successful_requests: u64,
+    /// Failed requests
+    pub failed_requests: u64,
+    /// Total tokens processed
+    pub total_tokens: u64,
+    /// Prompt tokens
+    pub prompt_tokens: u64,
+    /// Completion/generation tokens
+    pub completion_tokens: u64,
+    /// Average latency in milliseconds
+    pub avg_latency_ms: f64,
+    /// Tokens per second (generation speed)
+    pub tokens_per_second: Option<f64>,
+    /// Time to first token in ms (for streaming)
+    pub time_to_first_token_ms: Option<f64>,
+    /// Requests per minute (throughput)
+    pub requests_per_minute: f64,
+    /// Error rate percentage
+    pub error_rate: f64,
+    /// Last request timestamp
+    pub last_request_timestamp: u64,
+}
+
 /// Metrics snapshot
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct MetricsSnapshot {
@@ -305,8 +346,10 @@ pub struct MetricsSnapshot {
     pub agents: Vec<AgentMetrics>,
     /// Workflow metrics
     pub workflows: Vec<WorkflowMetrics>,
-    /// Plugin metrics
+    /// Plugin metrics (generic)
     pub plugins: Vec<PluginMetrics>,
+    /// LLM metrics (model-specific inference metrics)
+    pub llm_metrics: Vec<LLMMetrics>,
     /// Snapshot timestamp
     pub timestamp: u64,
     /// Custom metrics
@@ -328,6 +371,8 @@ pub struct MetricsConfig {
     pub enable_workflow_metrics: bool,
     /// Enable plugin metrics
     pub enable_plugin_metrics: bool,
+    /// Enable LLM metrics (model inference metrics)
+    pub enable_llm_metrics: bool,
 }
 
 impl Default for MetricsConfig {
@@ -339,6 +384,7 @@ impl Default for MetricsConfig {
             enable_agent_metrics: true,
             enable_workflow_metrics: true,
             enable_plugin_metrics: true,
+            enable_llm_metrics: true,
         }
     }
 }
@@ -434,6 +480,8 @@ pub struct MetricsCollector {
     workflow_metrics: Arc<RwLock<HashMap<String, WorkflowMetrics>>>,
     /// Plugin metrics storage
     plugin_metrics: Arc<RwLock<HashMap<String, PluginMetrics>>>,
+    /// LLM metrics storage (model-specific inference metrics)
+    llm_metrics: Arc<RwLock<HashMap<String, LLMMetrics>>>,
 }
 
 impl MetricsCollector {
@@ -447,6 +495,7 @@ impl MetricsCollector {
             agent_metrics: Arc::new(RwLock::new(HashMap::new())),
             workflow_metrics: Arc::new(RwLock::new(HashMap::new())),
             plugin_metrics: Arc::new(RwLock::new(HashMap::new())),
+            llm_metrics: Arc::new(RwLock::new(HashMap::new())),
         }
     }
 
@@ -458,6 +507,18 @@ impl MetricsCollector {
     pub async fn update_agent(&self, metrics: AgentMetrics) {
         let mut agents = self.agent_metrics.write().await;
         agents.insert(metrics.agent_id.clone(), metrics);
+    }
+
+    /// Update LLM metrics
+    pub async fn update_llm(&self, metrics: LLMMetrics) {
+        let mut llm = self.llm_metrics.write().await;
+        llm.insert(metrics.plugin_id.clone(), metrics);
+    }
+
+    /// Remove LLM metrics
+    pub async fn remove_llm(&self, plugin_id: &str) {
+        let mut llm = self.llm_metrics.write().await;
+        llm.remove(plugin_id);
     }
 
     /// Update workflow metrics
@@ -486,7 +547,7 @@ impl MetricsCollector {
             .as_secs();
 
         SystemMetrics {
-            cpu_usage: 0.0, // Would need system-specific implementation
+            cpu_usage: 0.0,
             memory_used: 0,
             memory_total: 0,
             uptime_secs: self.start_time.elapsed().as_secs(),
@@ -531,6 +592,12 @@ impl MetricsCollector {
             Vec::new()
         };
 
+        let llm_metrics: Vec<LLMMetrics> = if self.config.enable_llm_metrics {
+            self.llm_metrics.read().await.values().cloned().collect()
+        } else {
+            Vec::new()
+        };
+
         let custom = self.registry.collect_all().await;
 
         let snapshot = MetricsSnapshot {
@@ -538,6 +605,7 @@ impl MetricsCollector {
             agents,
             workflows,
             plugins,
+            llm_metrics,
             timestamp: now,
             custom,
         };
