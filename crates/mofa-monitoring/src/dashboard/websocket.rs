@@ -51,6 +51,22 @@ pub enum WebSocketMessage {
         call_count: u64,
     },
 
+    /// LLM model inference update - real-time metrics for model performance
+    ///
+    /// Aligns with GSoC Idea 2 - Studio Observability Dashboard
+    /// for per-model inference monitoring (tokens/s, TTFT, etc.)
+    #[serde(rename = "llm_update")]
+    LLMUpdate {
+        plugin_id: String,
+        provider_name: String,
+        model_name: String,
+        total_requests: u64,
+        successful_requests: u64,
+        avg_latency_ms: f64,
+        tokens_per_second: Option<f64>,
+        error_rate: f64,
+    },
+
     /// System alert
     #[serde(rename = "alert")]
     Alert {

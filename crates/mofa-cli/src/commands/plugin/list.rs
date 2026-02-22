@@ -1,62 +1,44 @@
 //! `mofa plugin list` command implementation
 
+use crate::context::CliContext;
 use crate::output::Table;
 use colored::Colorize;
+use mofa_kernel::agent::plugins::PluginRegistry;
 use serde::Serialize;
 
 /// Execute the `mofa plugin list` command
-pub fn run(installed_only: bool, available: bool) -> anyhow::Result<()> {
+pub async fn run(ctx: &CliContext, _installed_only: bool, _available: bool) -> anyhow::Result<()> {
     println!("{} Listing plugins", "→".green());
-
-    if installed_only {
-        println!("  Showing installed plugins");
-    } else if available {
-        println!("  Showing available plugins");
-    }
-
     println!();
 
-    // TODO: Implement actual plugin discovery from plugin registry
+    let plugins = ctx.plugin_registry.list();
 
-    let plugins = vec![
-        PluginInfo {
-            name: "http-server".to_string(),
-            version: "0.1.0".to_string(),
-            description: "HTTP server plugin for exposing agents via REST API".to_string(),
-            installed: true,
-        },
-        PluginInfo {
-            name: "postgres-persistence".to_string(),
-            version: "0.1.0".to_string(),
-            description: "PostgreSQL persistence plugin for session storage".to_string(),
-            installed: true,
-        },
-        PluginInfo {
-            name: "web-scraper".to_string(),
-            version: "0.2.0".to_string(),
-            description: "Web scraping tool for content extraction".to_string(),
-            installed: false,
-        },
-        PluginInfo {
-            name: "code-interpreter".to_string(),
-            version: "0.1.0".to_string(),
-            description: "Sandboxed code execution environment".to_string(),
-            installed: false,
-        },
-    ];
-
-    let filtered: Vec<_> = if installed_only {
-        plugins.iter().filter(|p| p.installed).cloned().collect()
-    } else {
-        plugins
-    };
-
-    if filtered.is_empty() {
-        println!("  No plugins found.");
+    if plugins.is_empty() {
+        println!("  No plugins registered.");
+        println!();
+        println!("  Plugins can be registered programmatically via the SDK.");
         return Ok(());
     }
 
-    let json = serde_json::to_value(&filtered)?;
+    let infos: Vec<PluginInfo> = plugins
+        .iter()
+        .map(|p| {
+            let metadata = p.metadata();
+            PluginInfo {
+                name: p.name().to_string(),
+                version: metadata.version.clone(),
+                description: p.description().to_string(),
+                stages: metadata
+                    .stages
+                    .iter()
+                    .map(|s| format!("{:?}", s))
+                    .collect::<Vec<_>>()
+                    .join(", "),
+            }
+        })
+        .collect();
+
+    let json = serde_json::to_value(&infos)?;
     if let Some(arr) = json.as_array() {
         let table = Table::from_json_array(arr);
         println!("{}", table);
@@ -70,5 +52,5 @@ struct PluginInfo {
     name: String,
     version: String,
     description: String,
-    installed: bool,
+    stages: String,
 }

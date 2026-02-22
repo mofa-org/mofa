@@ -14,12 +14,12 @@ pub fn mofa(m: &Bound<'_, PyModule>) -> PyResult<()> {
     Ok(())
 }
 
-/// Run a Python agent
+/// Run a Python agent (placeholder)
 #[pyfunction]
-fn run_agents_py(py: Python<'_>, _agent: PyObject) -> PyResult<Bound<'_, PyAny>> {
+fn run_agents_py(py: Python<'_>) -> PyResult<Bound<'_, PyAny>> {
     // Placeholder implementation - will be reimplemented with MoFAAgent support
     pyo3_async_runtimes::tokio::future_into_py(py, async move {
         // TODO: Implement proper Python agent wrapper
-        Ok(Python::with_gil(|py| py.None()))
+        Ok(())
     })
 }

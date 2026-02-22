@@ -10,7 +10,7 @@ use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::{RwLock, broadcast, mpsc};
 use tokio::time::timeout;
-use tracing::{debug, info};
+use ::tracing::{debug, info};
 
 /// 通道配置
 #[derive(Debug, Clone, Serialize, Deserialize)]

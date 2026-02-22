@@ -31,6 +31,12 @@ pub struct RuleManager {
     default_rules: HashMap<String, HashMap<String, serde_json::Value>>,
 }
 
+impl Default for RuleManager {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl RuleManager {
     /// Create a new rule manager
     pub fn new() -> Self {

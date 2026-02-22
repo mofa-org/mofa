@@ -170,7 +170,7 @@ impl PromptContext {
         }
 
         // 3. Memory context (lazy init)
-        if let Err(_) = self.init_memory().await {
+        if self.init_memory().await.is_err() {
             // Memory is optional, continue without it
         } else if let Some(memory) = &self.memory
             && let Ok(memory_context) = memory.get_memory_context().await
