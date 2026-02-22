@@ -53,4 +53,4 @@ Ready? Let's start with [Chapter 1: Introduction](01-introduction.md).
 
 ---
 
-[中文版本](README_cn.md)
+**English** | [简体中文](../zh-CN/tutorial/README.md)

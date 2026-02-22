@@ -135,3 +135,7 @@ Each chapter builds on the previous one, but the code examples are self-containe
 **Next:** [Chapter 2: Setup](02-setup.md) — Get your development environment ready.
 
 [← Back to Table of Contents](README.md)
+
+---
+
+**English** | [简体中文](../zh-CN/tutorial/01-introduction.md)

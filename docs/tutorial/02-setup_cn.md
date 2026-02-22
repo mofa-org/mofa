@@ -168,3 +168,7 @@ mofa/
 **下一章：** [第 3 章：你的第一个智能体](03-first-agent_cn.md) — 从零实现 `MoFAAgent` trait。
 
 [← 返回目录](README_cn.md)
+
+---
+
+**English** | [简体中文](../zh-CN/tutorial/02-setup_cn.md)

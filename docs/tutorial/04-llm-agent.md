@@ -264,3 +264,7 @@ let response = agent.ask("Hello!").await?;
 **Next:** [Chapter 5: Tools and Function Calling](05-tools.md) — Give your agent the ability to call functions.
 
 [← Back to Table of Contents](README.md)
+
+---
+
+**English** | [简体中文](../zh-CN/tutorial/04-llm-agent.md)

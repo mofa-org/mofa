@@ -331,3 +331,7 @@ async fn execute(
 **Next:** [Chapter 4: LLM-Powered Agent](04-llm-agent.md) — Connect your agent to a real LLM.
 
 [← Back to Table of Contents](README.md)
+
+---
+
+**English** | [简体中文](../zh-CN/tutorial/03-first-agent.md)
