@@ -17,7 +17,13 @@ use colored::Colorize;
 use context::CliContext;
 
 fn main() -> anyhow::Result<()> {
-    let cli = Cli::parse();
+    let mut args: Vec<String> = std::env::args().collect();
+    normalize_legacy_output_flags(&mut args);
+    let cli = Cli::parse_from(args);
+
+    if cli.output_legacy.is_some() {
+        eprintln!("Warning: '--output' is deprecated. Use '--output-format' instead.");
+    }
 
     // Initialize logging
     if cli.verbose {
@@ -135,8 +141,11 @@ async fn run_command(cli: Cli) -> anyhow::Result<()> {
                     )
                     .await?;
                 }
-                cli::AgentCommands::Stop { agent_id } => {
-                    commands::agent::stop::run(ctx, &agent_id).await?;
+                cli::AgentCommands::Stop {
+                    agent_id,
+                    force_persisted_stop,
+                } => {
+                    commands::agent::stop::run(ctx, &agent_id, force_persisted_stop).await?;
                 }
                 cli::AgentCommands::Restart { agent_id, config } => {
                     commands::agent::restart::run(ctx, &agent_id, config.as_deref()).await?;
@@ -198,23 +207,24 @@ async fn run_command(cli: Cli) -> anyhow::Result<()> {
                     commands::session::list::run(ctx, agent.as_deref(), limit).await?;
                 }
                 cli::SessionCommands::Show { session_id, format } => {
-                    commands::session::show::run(
-                        ctx,
-                        &session_id,
-                        format.map(|f| f.to_string()).as_deref(),
-                    )
-                    .await?;
+                    let show_format = format.map(|f| f.to_string());
+                    commands::session::show::run(ctx, &session_id, show_format.as_deref()).await?;
                 }
                 cli::SessionCommands::Delete { session_id, force } => {
                     commands::session::delete::run(ctx, &session_id, force).await?;
                 }
                 cli::SessionCommands::Export {
                     session_id,
-                    output,
+                    output_path,
                     format,
                 } => {
-                    commands::session::export::run(ctx, &session_id, output, &format.to_string())
-                        .await?;
+                    commands::session::export::run(
+                        ctx,
+                        &session_id,
+                        output_path,
+                        &format.to_string(),
+                    )
+                    .await?;
                 }
             }
         }
@@ -243,4 +253,124 @@ async fn run_command(cli: Cli) -> anyhow::Result<()> {
     }
 
     Ok(())
+}
+
+fn normalize_legacy_output_flags(args: &mut [String]) {
+    const TOP_LEVEL_COMMANDS: &[&str] = &[
+        "new", "init", "build", "run", "dataflow", "generate", "info", "db", "agent", "config",
+        "plugin", "session", "tool",
+    ];
+
+    let top_command_index = args
+        .iter()
+        .enumerate()
+        .skip(1)
+        .find(|(_, arg)| TOP_LEVEL_COMMANDS.contains(&arg.as_str()))
+        .map(|(idx, _)| idx);
+
+    let top_command = top_command_index.and_then(|idx| args.get(idx).map(String::as_str));
+    let allows_global_after_command = matches!(
+        top_command,
+        Some("info")
+            | Some("agent")
+            | Some("plugin")
+            | Some("tool")
+            | Some("config")
+            | Some("build")
+            | Some("run")
+            | Some("init")
+    );
+
+    let mut i = 1;
+    while i + 1 < args.len() {
+        let is_legacy_output_flag = args[i] == "-o" || args[i] == "--output";
+        let looks_like_output_format = matches!(args[i + 1].as_str(), "text" | "json" | "table");
+
+        if is_legacy_output_flag && looks_like_output_format {
+            let before_command = match top_command_index {
+                Some(cmd_idx) => i < cmd_idx,
+                None => true,
+            };
+
+            if before_command || allows_global_after_command {
+                args[i] = "--output-format".to_string();
+            }
+        }
+
+        i += 1;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::normalize_legacy_output_flags;
+
+    #[test]
+    fn test_normalize_legacy_output_before_command() {
+        let mut args = vec![
+            "mofa".to_string(),
+            "--output".to_string(),
+            "json".to_string(),
+            "info".to_string(),
+        ];
+        normalize_legacy_output_flags(&mut args);
+        assert_eq!(args[1], "--output-format");
+    }
+
+    #[test]
+    fn test_normalize_legacy_output_before_command_with_option_value_prefix() {
+        let mut args = vec![
+            "mofa".to_string(),
+            "--config".to_string(),
+            "/tmp/mofa.toml".to_string(),
+            "--output".to_string(),
+            "json".to_string(),
+            "info".to_string(),
+        ];
+        normalize_legacy_output_flags(&mut args);
+        assert_eq!(args[3], "--output-format");
+    }
+
+    #[test]
+    fn test_normalize_legacy_output_after_agent_command() {
+        let mut args = vec![
+            "mofa".to_string(),
+            "agent".to_string(),
+            "list".to_string(),
+            "-o".to_string(),
+            "table".to_string(),
+        ];
+        normalize_legacy_output_flags(&mut args);
+        assert_eq!(args[3], "--output-format");
+    }
+
+    #[test]
+    fn test_do_not_normalize_session_export_output_path() {
+        let mut args = vec![
+            "mofa".to_string(),
+            "session".to_string(),
+            "export".to_string(),
+            "s1".to_string(),
+            "-o".to_string(),
+            "/tmp/s1.json".to_string(),
+            "--format".to_string(),
+            "json".to_string(),
+        ];
+        normalize_legacy_output_flags(&mut args);
+        assert_eq!(args[4], "-o");
+    }
+
+    #[test]
+    fn test_do_not_normalize_session_show_local_output_alias() {
+        let mut args = vec![
+            "mofa".to_string(),
+            "session".to_string(),
+            "show".to_string(),
+            "s1".to_string(),
+            "-o".to_string(),
+            "json".to_string(),
+        ];
+        normalize_legacy_output_flags(&mut args);
+        assert_eq!(args[4], "-o");
+    }
 }

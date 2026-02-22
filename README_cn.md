@@ -326,6 +326,46 @@ mofa-sdk = "0.1.0"
 - 错误处理机制
 
 适合构建需要稳定运行的生产级应用，而不是简单的插件测试或原型开发。
+
+## CLI 生产级冒烟示例
+
+为了从用户视角验证 CLI 是否可用于生产，MoFA 提供了黑盒冒烟示例：
+
+- 路径：`examples/cli_production_smoke`
+- 方式：在隔离的 `XDG_*` 目录中调用已构建的 `mofa` 二进制
+- 校验：基于退出码与稳定输出关键字（不做脆弱的全量快照）
+
+当前覆盖命令：
+
+- 顶层命令：`info`、`config path`、`config list`
+- Agent：`start`、`status`、`list`、`restart`、`stop`
+- Session：`list`、`show`、`export`、`delete`
+- Plugin：`list`、`info`、`uninstall`
+- Tool：`list`、`info`
+
+运行方式：
+
+```bash
+# 仓库根目录
+cargo build -p mofa-cli
+
+# examples 工作区
+cd examples
+cargo run -p cli_production_smoke
+cargo test -p cli_production_smoke
+```
+
+可选：覆盖二进制路径
+
+```bash
+export MOFA_BIN=/absolute/path/to/mofa
+```
+
+说明：
+
+- 本次 PR 中该冒烟流程为手动验证（尚未接入 CI 必选项）。
+- 断言重点是行为与持久化效果，而不是固定输出格式。
+
 ## 文档
 
 - [API 文档](https://docs.rs/mofa-sdk)
