@@ -2,6 +2,7 @@
 
 use crate::context::CliContext;
 use crate::output::Table;
+use chrono::Utc;
 use colored::Colorize;
 use serde::Serialize;
 use std::collections::BTreeMap;
@@ -18,6 +19,8 @@ pub async fn run(ctx: &CliContext, running_only: bool, _show_all: bool) -> anyho
         .map_err(|e| anyhow::anyhow!("Failed to list persisted agents: {}", e))?;
 
     let mut merged: BTreeMap<String, AgentInfo> = BTreeMap::new();
+
+    // Process live agents from the registry first
     for m in &agents_metadata {
         let status = format!("{:?}", m.state);
         let is_running = is_running_state(&status);
@@ -28,23 +31,26 @@ pub async fn run(ctx: &CliContext, running_only: bool, _show_all: bool) -> anyho
                 name: m.name.clone(),
                 status,
                 is_running,
+                uptime: None, // Live registry currently doesn't provide start time easily
+                provider: None,
+                model: None,
                 description: m.description.clone(),
             },
         );
     }
 
+    // Merge in persisted agents
     for (_, entry) in persisted_agents {
         merged.entry(entry.id.clone()).or_insert_with(|| {
-            let status = if is_running_state(&entry.state) {
-                format!("{} (persisted)", entry.state)
-            } else {
-                entry.state
-            };
+            let status = entry.state.clone();
             AgentInfo {
                 id: entry.id,
                 name: entry.name,
-                status,
-                is_running: false,
+                status: status.clone(),
+                is_running: is_running_state(&status),
+                uptime: Some(format_duration(Utc::now() - entry.started_at)),
+                provider: entry.provider,
+                model: entry.model,
                 description: entry.description,
             }
         });
@@ -84,6 +90,24 @@ pub async fn run(ctx: &CliContext, running_only: bool, _show_all: bool) -> anyho
     Ok(())
 }
 
+/// Formats a duration into a human-readable string (e.g., "2h 15m", "45s").
+fn format_duration(duration: chrono::Duration) -> String {
+    let seconds = duration.num_seconds();
+    if seconds <= 0 {
+        return "0s".to_string();
+    }
+    if seconds < 60 {
+        format!("{}s", seconds)
+    } else if seconds < 3600 {
+        format!("{}m {}s", seconds / 60, seconds % 60)
+    } else {
+        let hours = seconds / 3600;
+        let mins = (seconds % 3600) / 60;
+        format!("{}h {}m", hours, mins)
+    }
+}
+
+/// Agent information for display purposes.
 #[derive(Debug, Clone, Serialize)]
 struct AgentInfo {
     id: String,
@@ -91,10 +115,20 @@ struct AgentInfo {
     status: String,
     #[serde(skip_serializing)]
     is_running: bool,
+    uptime: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    provider: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    model: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     description: Option<String>,
 }
 
+/// Checks if a status string represents a running or ready agent.
 fn is_running_state(status: &str) -> bool {
-    status == "Running" || status == "Ready"
+    let s = status.to_lowercase();
+    matches!(
+        s.as_str(),
+        "running" | "ready" | "executing" | "initializing" | "paused"
+    )
 }

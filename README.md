@@ -355,6 +355,46 @@ The runtime provides comprehensive:
 
 Suitable for building production applications that need stable operation, rather than simple plugin testing or prototype development.
 
+## CLI Production Smoke Example
+
+To verify CLI production readiness from a user perspective, MoFA includes a
+black-box smoke example:
+
+- Path: `examples/cli_production_smoke`
+- Runner: invokes the built `mofa` binary in isolated `XDG_*` directories
+- Validation: exit codes + stable output tokens (no brittle full snapshots)
+
+Coverage in this smoke run:
+
+- Top-level commands: `info`, `config path`, `config list`
+- Agent commands: `start`, `status`, `list`, `restart`, `stop`
+- Session commands: `list`, `show`, `export`, `delete`
+- Plugin commands: `list`, `info`, `uninstall`
+- Tool commands: `list`, `info`
+
+Run it:
+
+```bash
+# repo root
+cargo build -p mofa-cli
+
+# examples workspace
+cd examples
+cargo run -p cli_production_smoke
+cargo test -p cli_production_smoke
+```
+
+Optional binary override:
+
+```bash
+export MOFA_BIN=/absolute/path/to/mofa
+```
+
+Limitations:
+
+- This smoke flow is manually run (not CI-gated in this PR).
+- Assertions focus on behavior and persistence effects, not exact formatting.
+
 ## Documentation
 
 - [API Documentation](https://docs.rs/mofa-sdk)

@@ -13,7 +13,7 @@ pub async fn run(
 
     // Stop the agent if it's running
     if ctx.agent_registry.contains(agent_id).await {
-        super::stop::run(ctx, agent_id).await?;
+        super::stop::run(ctx, agent_id, false).await?;
     } else {
         println!("  Agent was not running");
     }
@@ -41,7 +41,7 @@ mod tests {
         start::run(&ctx, "chain-agent", None, None, false)
             .await
             .unwrap();
-        stop::run(&ctx, "chain-agent").await.unwrap();
+        stop::run(&ctx, "chain-agent", false).await.unwrap();
         run(&ctx, "chain-agent", None).await.unwrap();
 
         assert!(ctx.agent_registry.contains("chain-agent").await);

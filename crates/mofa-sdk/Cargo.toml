@@ -28,6 +28,8 @@ rodio = ["mofa-plugins/rodio"]
 kokoro = ["mofa-plugins/kokoro", "mofa-foundation/kokoro"]
 # Enable monitoring support
 monitoring = ["mofa-runtime/monitoring", "dep:mofa-monitoring"]
+# Enable Qdrant vector database support
+qdrant = ["mofa-foundation/qdrant"]
 
 [dependencies]
 # Core dependencies
