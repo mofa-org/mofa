@@ -339,4 +339,4 @@ impl PersistencePlugin {
 
 - [Rhai 脚本指南](../api-reference/plugins/rhai.md) — 详细 Rhai 文档
 - [WASM 插件](../api-reference/plugins/wasm.md) — WASM 插件开发
-- [示例: 插件](../examples/plugins.md) — 插件示例
+- [示例: 插件](../examples/插件.md) — 插件示例

@@ -298,4 +298,4 @@ let dot = workflow.to_dot();
 
 - [多智能体指南](../guides/multi-agent.md) — 详细协调指南
 - [秘书智能体](../guides/secretary-agent.md) — 人在回路工作流
-- [示例: 工作流](../examples/core-agents.md) — 工作流示例
+- [示例: 工作流](../examples/核心智能体.md) — 工作流示例
