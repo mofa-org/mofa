@@ -2,6 +2,7 @@
 
 use crate::config::loader::ConfigLoader;
 use crate::context::{AgentConfigEntry, CliContext};
+use chrono::Utc;
 use colored::Colorize;
 
 /// Execute the `mofa agent start` command
@@ -82,8 +83,12 @@ pub async fn run(
         id: agent_id.to_string(),
         name: agent_config.name.clone(),
         state: "Running".to_string(),
+        started_at: Utc::now(),
+        provider: None, // Could be extracted from agent_config in the future
+        model: None,    // Could be extracted from agent_config in the future
         description: agent_config.description.clone(),
     };
+
     if let Err(e) = ctx.agent_store.save(agent_id, &entry) {
         let rollback_result = ctx.agent_registry.unregister(agent_id).await;
         match rollback_result {
@@ -105,7 +110,11 @@ pub async fn run(
         }
     }
 
-    println!("{} Agent '{}' started", "✓".green(), agent_id);
+    println!(
+        "{} Agent '{}' started (state persisted)",
+        "√".green(),
+        agent_id
+    );
 
     Ok(())
 }
