@@ -35,10 +35,12 @@
 //!     to: end
 //! ```
 
+mod advanced;
 mod env;
 mod parser;
 mod schema;
 
+pub use advanced::*;
 pub use parser::*;
 pub use schema::*;
 
