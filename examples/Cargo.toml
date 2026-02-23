@@ -23,8 +23,10 @@ members = [
     "llm_tts_streaming",
     "agent_from_database_streaming",
     "workflow_dsl",
+    "reflection_agent",
     "tool_routing",
-    "runtime_message_bus_backpressure"
+    "runtime_message_bus_backpressure",
+    "rag_pipeline"
 ]
 
 [workspace.package]

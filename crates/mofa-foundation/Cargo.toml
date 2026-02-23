@@ -27,6 +27,8 @@ persistence-all = ["persistence-postgres", "persistence-mysql", "persistence-sql
 kokoro = ["mofa-plugins/kokoro"]
 # Enable MCP (Model Context Protocol) client support
 mcp = ["dep:rmcp"]
+# Enable Qdrant vector database support
+qdrant = ["dep:qdrant-client"]
 
 [dependencies]
 # Workspace dependencies
@@ -78,6 +80,9 @@ mofa-plugins = { path = "../mofa-plugins", version = "0.1" }
 once_cell = "1.21.3"
 rhai = { version = "1", features = ["sync", "serde"] }
 lazy_static = "1.4"
+
+# Qdrant vector database client (optional)
+qdrant-client = { version = "1.17", optional = true }
 
 # Image encoding and MIME detection
 base64 = "0.22"

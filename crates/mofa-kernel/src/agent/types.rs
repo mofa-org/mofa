@@ -120,7 +120,13 @@ impl AgentState {
                 | (Initializing, Error(_))
                 | (Initializing, Failed)
                 | (Ready, Executing)
+                | (Ready, Running)
                 | (Ready, ShuttingDown)
+                | (Running, Paused)
+                | (Running, Executing)
+                | (Running, ShuttingDown)
+                | (Running, Error(_))
+                | (Running, Failed)
                 | (Executing, Ready)
                 | (Executing, Paused)
                 | (Executing, Interrupted)
@@ -142,7 +148,10 @@ impl AgentState {
     /// 是否为活动状态
     /// Whether it is in active state
     pub fn is_active(&self) -> bool {
-        matches!(self, AgentState::Ready | AgentState::Executing)
+        matches!(
+            self,
+            AgentState::Ready | AgentState::Running | AgentState::Executing
+        )
     }
 
     /// 是否为终止状态
@@ -834,6 +843,49 @@ mod tests {
         let state = AgentState::Created;
         assert!(state.can_transition_to(&AgentState::Initializing));
         assert!(!state.can_transition_to(&AgentState::Executing));
+    }
+
+    #[test]
+    fn test_agent_state_running_transitions() {
+        // Ready -> Running should be valid
+        let ready = AgentState::Ready;
+        assert!(ready.can_transition_to(&AgentState::Running));
+
+        // Running -> valid targets
+        let running = AgentState::Running;
+        assert!(running.can_transition_to(&AgentState::Paused));
+        assert!(running.can_transition_to(&AgentState::Executing));
+        assert!(running.can_transition_to(&AgentState::ShuttingDown));
+        assert!(running.can_transition_to(&AgentState::Error("test".to_string())));
+        assert!(running.can_transition_to(&AgentState::Failed));
+
+        // Running -> invalid targets
+        assert!(!running.can_transition_to(&AgentState::Created));
+        assert!(!running.can_transition_to(&AgentState::Ready));
+        assert!(!running.can_transition_to(&AgentState::Initializing));
+        assert!(!running.can_transition_to(&AgentState::Running));
+
+        // transition_to should return Ok for valid transitions
+        let result = ready.transition_to(AgentState::Running);
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), AgentState::Running);
+
+        // transition_to should return Err for invalid transitions
+        let result = running.transition_to(AgentState::Created);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_agent_state_is_active() {
+        assert!(AgentState::Ready.is_active());
+        assert!(AgentState::Running.is_active());
+        assert!(AgentState::Executing.is_active());
+
+        assert!(!AgentState::Created.is_active());
+        assert!(!AgentState::Paused.is_active());
+        assert!(!AgentState::Shutdown.is_active());
+        assert!(!AgentState::Failed.is_active());
+        assert!(!AgentState::Error("err".to_string()).is_active());
     }
 
     #[test]

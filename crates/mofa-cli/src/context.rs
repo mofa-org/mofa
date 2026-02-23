@@ -3,6 +3,7 @@
 use crate::store::PersistedStore;
 use crate::utils::paths;
 use async_trait::async_trait;
+use chrono::{DateTime, Utc};
 use mofa_foundation::agent::base::BaseAgent;
 use mofa_foundation::agent::components::tool::EchoTool;
 use mofa_foundation::agent::session::SessionManager;
@@ -25,11 +26,24 @@ const BUILTIN_HTTP_PLUGIN_KIND: &str = "builtin:http";
 const BUILTIN_ECHO_TOOL_KIND: &str = "builtin:echo";
 const CLI_BASE_FACTORY_KIND: &str = "cli-base";
 
+/// Persistent entry for agent configuration and state metadata.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AgentConfigEntry {
+    /// Unique identifier for the agent.
     pub id: String,
+    /// Human-readable name of the agent.
     pub name: String,
+    /// Last known execution state (e.g., "Running", "Ready").
     pub state: String,
+    /// Timestamp when the agent was last started.
+    pub started_at: DateTime<Utc>,
+    /// Optional AI provider used by the agent (e.g., "openai", "anthropic").
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub provider: Option<String>,
+    /// Optional AI model name (e.g., "gpt-4", "claude-3").
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub model: Option<String>,
+    /// Optional description of the agent's purpose.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
 }
@@ -340,6 +354,9 @@ mod tests {
             id: "persisted-agent".to_string(),
             name: "Persisted Agent".to_string(),
             state: "Running".to_string(),
+            started_at: Utc::now(),
+            provider: None,
+            model: None,
             description: None,
         };
         ctx1.agent_store.save("persisted-agent", &entry).unwrap();

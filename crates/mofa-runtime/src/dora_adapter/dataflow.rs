@@ -10,7 +10,8 @@ use ::tracing::{debug, error, info};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
-use tokio::sync::{RwLock, mpsc};
+use tokio::sync::{Mutex, RwLock, mpsc};
+use tokio::task::JoinHandle;
 
 /// Dataflow 配置
 /// Dataflow Configuration
@@ -91,7 +92,10 @@ pub struct DoraDataflow {
     /// 内部消息路由通道
     /// Internal Message Routing Channel
     router_tx: mpsc::Sender<RouterMessage>,
-    router_rx: Arc<RwLock<mpsc::Receiver<RouterMessage>>>,
+    /// Receiver is taken (via Option::take) exactly once by start_router().
+    router_rx: Mutex<Option<mpsc::Receiver<RouterMessage>>>,
+    /// Handle for the background router task; aborted in stop().
+    router_handle: Mutex<Option<JoinHandle<()>>>,
 }
 
 /// 路由消息
@@ -114,7 +118,8 @@ impl DoraDataflow {
             nodes: Arc::new(RwLock::new(HashMap::new())),
             connections: Arc::new(RwLock::new(Vec::new())),
             router_tx,
-            router_rx: Arc::new(RwLock::new(router_rx)),
+            router_rx: Mutex::new(Some(router_rx)),
+            router_handle: Mutex::new(None),
         }
     }
 
@@ -269,12 +274,20 @@ impl DoraDataflow {
     /// 启动消息路由器
     /// Start message router
     async fn start_router(&self) {
+        // Transfer ownership of the receiver into the task — mpsc::Receiver is
+        // single-consumer and must not be shared via a lock across .await points.
+        let mut rx = match self.router_rx.lock().await.take() {
+            Some(rx) => rx,
+            None => {
+                error!("Router receiver already consumed; start_router called twice");
+                return;
+            }
+        };
+
         let connections = self.connections.clone();
         let nodes = self.nodes.clone();
-        let router_rx = self.router_rx.clone();
 
-        tokio::spawn(async move {
-            let mut rx = router_rx.write().await;
+        let handle = tokio::spawn(async move {
             while let Some(msg) = rx.recv().await {
                 let conns = connections.read().await;
                 let node_map = nodes.read().await;
@@ -296,6 +309,8 @@ impl DoraDataflow {
                 }
             }
         });
+
+        *self.router_handle.lock().await = Some(handle);
     }
 
     /// 获取节点
@@ -357,6 +372,15 @@ impl DoraDataflow {
         let nodes = self.nodes.read().await;
         for node in nodes.values() {
             node.stop().await?;
+        }
+        drop(nodes);
+
+        // Abort the background router task. Without this, the task would keep
+        // running (and retaining Arcs to nodes/connections) until DoraDataflow
+        // itself is dropped, and a second start() call would deadlock trying to
+        // take() a receiver that has already been consumed.
+        if let Some(handle) = self.router_handle.lock().await.take() {
+            handle.abort();
         }
 
         *state = DataflowState::Stopped;
@@ -473,6 +497,7 @@ impl DataflowBuilder {
 #[cfg(test)]
 mod tests {
     use super::{DataflowBuilder, DataflowState, DoraNodeConfig};
+    use std::time::Duration;
 
     #[tokio::test]
     async fn test_dataflow_builder() {
@@ -522,5 +547,38 @@ mod tests {
 
         dataflow.stop().await.unwrap();
         assert_eq!(dataflow.state().await, DataflowState::Stopped);
+    }
+
+    /// Regression test: stop() must abort the router task so that resources are
+    /// released promptly and a second start() does not deadlock.
+    #[tokio::test]
+    async fn test_stop_aborts_router_task_without_deadlock() {
+        let node_config = DoraNodeConfig {
+            node_id: "test_node".to_string(),
+            ..Default::default()
+        };
+
+        let dataflow = DataflowBuilder::new("abort_test")
+            .add_node_config(node_config)
+            .build_and_start()
+            .await
+            .unwrap();
+
+        assert_eq!(dataflow.state().await, DataflowState::Running);
+
+        // stop() must complete within a short deadline — if the router task is
+        // not aborted this would previously block until the struct was dropped.
+        tokio::time::timeout(Duration::from_secs(2), dataflow.stop())
+            .await
+            .expect("stop() timed out — router task was not aborted")
+            .expect("stop() returned an error");
+
+        assert_eq!(dataflow.state().await, DataflowState::Stopped);
+
+        // The router handle must have been taken (aborted) by stop().
+        assert!(
+            dataflow.router_handle.lock().await.is_none(),
+            "router_handle should be None after stop()"
+        );
     }
 }

@@ -103,11 +103,13 @@
 mod actor;
 mod core;
 pub mod patterns;
+pub mod reflection;
 pub mod tools;
 
 pub use actor::*;
 pub use core::*;
 pub use patterns::*;
+pub use reflection::*;
 pub use tools::*;
 
 /// 便捷 prelude 模块
@@ -117,6 +119,9 @@ pub mod prelude {
         AgentOutput, AgentUnit, AggregationStrategy, ChainAgent, ChainResult, ChainStepResult,
         MapReduceAgent, MapReduceResult, ParallelAgent, ParallelResult, ParallelStepResult,
         chain_agents, parallel_agents, parallel_agents_with_summarizer,
+    };
+    pub use super::reflection::{
+        ReflectionAgent, ReflectionAgentBuilder, ReflectionConfig, ReflectionResult, ReflectionStep,
     };
     pub use super::tools::prelude::*;
 }

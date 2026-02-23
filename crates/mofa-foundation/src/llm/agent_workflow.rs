@@ -440,6 +440,8 @@ pub struct AgentWorkflowContext {
     /// 变量存储
     /// Variable storage
     variables: Arc<RwLock<HashMap<String, String>>>,
+    /// Maximum number of execution steps before aborting (prevents infinite loops)
+    pub max_steps: usize,
 }
 
 impl AgentWorkflowContext {
@@ -450,7 +452,14 @@ impl AgentWorkflowContext {
             node_outputs: Arc::new(RwLock::new(HashMap::new())),
             shared_session_id: None,
             variables: Arc::new(RwLock::new(HashMap::new())),
+            max_steps: 25, // Default limit matching LangGraph convention
         }
+    }
+
+    /// Set the maximum number of execution steps
+    pub fn with_max_steps(mut self, max_steps: usize) -> Self {
+        self.max_steps = max_steps;
+        self
     }
 
     pub fn with_shared_session(mut self, session_id: impl Into<String>) -> Self {
@@ -495,6 +504,7 @@ impl Clone for AgentWorkflowContext {
             node_outputs: self.node_outputs.clone(),
             shared_session_id: self.shared_session_id.clone(),
             variables: self.variables.clone(),
+            max_steps: self.max_steps,
         }
     }
 }
@@ -543,8 +553,19 @@ impl AgentWorkflow {
         let input = input.into();
         let mut current_node_id = "start".to_string();
         let mut current_input = input;
+        let mut step_count: usize = 0;
 
         loop {
+            step_count += 1;
+            if step_count > ctx.max_steps {
+                return Err(LLMError::Other(format!(
+                    "Workflow '{}' exceeded maximum step limit of {}. \
+                     Possible infinite loop detected. \
+                     Use AgentWorkflowContext::with_max_steps() to increase the limit if needed.",
+                    self.id, ctx.max_steps
+                )));
+            }
+
             let node = self
                 .nodes
                 .get(&current_node_id)
