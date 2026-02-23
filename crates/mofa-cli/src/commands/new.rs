@@ -637,7 +637,7 @@ List all active sessions.
 ]
 ```
 
-### DELETE /api/sessions/{id}
+### DELETE /api/sessions/{{id}}
 
 Delete a specific session.
 
