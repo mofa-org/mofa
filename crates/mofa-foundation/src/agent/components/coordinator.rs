@@ -1,6 +1,8 @@
 //! 协调组件
+//! Coordination component
 //!
 //! 从 kernel 层导入 Coordinator trait，提供具体实现
+//! Imports Coordinator trait from kernel layer, providing concrete implementations
 
 use async_trait::async_trait;
 use mofa_kernel::agent::AgentResult;
@@ -12,17 +14,21 @@ use mofa_kernel::agent::types::AgentOutput;
 
 // ============================================================================
 // 具体协调器实现
+// Concrete coordinator implementations
 // ============================================================================
 
 /// 顺序协调器
+/// Sequential coordinator
 ///
 /// 按顺序将任务分发给多个 Agent
+/// Distributes tasks to multiple agents in sequential order
 pub struct SequentialCoordinator {
     agent_ids: Vec<String>,
 }
 
 impl SequentialCoordinator {
     /// 创建新的顺序协调器
+    /// Creates a new sequential coordinator
     pub fn new(agent_ids: Vec<String>) -> Self {
         Self { agent_ids }
     }
@@ -32,6 +38,7 @@ impl SequentialCoordinator {
 impl Coordinator for SequentialCoordinator {
     async fn dispatch(&self, task: Task, _ctx: &AgentContext) -> AgentResult<Vec<DispatchResult>> {
         // 简化实现：为每个 agent 创建待处理结果
+        // Simplified implementation: create pending results for each agent
         let mut results = Vec::new();
         for agent_id in &self.agent_ids {
             results.push(DispatchResult::pending(&task.id, agent_id));
@@ -58,14 +65,17 @@ impl Coordinator for SequentialCoordinator {
 }
 
 /// 并行协调器
+/// Parallel coordinator
 ///
 /// 并行将任务分发给多个 Agent
+/// Distributes tasks to multiple agents in parallel
 pub struct ParallelCoordinator {
     agent_ids: Vec<String>,
 }
 
 impl ParallelCoordinator {
     /// 创建新的并行协调器
+    /// Creates a new parallel coordinator
     pub fn new(agent_ids: Vec<String>) -> Self {
         Self { agent_ids }
     }

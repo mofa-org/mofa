@@ -3,6 +3,7 @@ use serde_json::json;
 use tokio::process::Command;
 
 /// Shell 命令工具 - 执行系统命令（受限）
+/// Shell command tool - Execute system commands (restricted)
 pub struct ShellCommandTool {
     definition: ToolDefinition,
     allowed_commands: Vec<String>,
