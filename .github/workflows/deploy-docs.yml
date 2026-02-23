@@ -30,21 +30,21 @@ jobs:
         working-directory: docs/mofa-doc
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
 
       - name: Install mdBook
         run: |
-          cargo install mdbook
-          cargo install mdbook-mermaid
+          cargo install mdbook --version 0.5.2 --locked
+          cargo install mdbook-mermaid --version 0.17.0 --locked
 
       - name: Build mdBook (EN + ZH)
         run: ./scripts/build-docs.sh
 
       - name: Upload artifact
-        uses: actions/upload-pages-artifact@v3
+        uses: actions/upload-pages-artifact@v4
         with:
           path: docs/mofa-doc/book
 

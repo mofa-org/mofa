@@ -1,14 +1,18 @@
 //! 核心类型定义
+//! Core type definitions
 //!
 //! 此模块包含 Agent 相关的核心配置和元数据类型。
+//! This module contains core configuration and metadata types related to the Agent.
 
 pub use crate::agent::{
     AgentContext, AgentEvent, AgentInput, AgentOutput, AgentState, types::InterruptResult,
 };
 
 /// AgentConfig - Agent 配置
+/// AgentConfig - Agent Configuration
 ///
 /// 定义 Agent 的基本配置信息。
+/// Defines the basic configuration information of the Agent.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, Default)]
 pub struct AgentConfig {
     pub agent_id: String,

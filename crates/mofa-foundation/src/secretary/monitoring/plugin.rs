@@ -102,8 +102,11 @@ impl BaseEventResponsePlugin {
     }
 
     /// Set the max impact scope
-    pub fn with_max_impact_scope(self, _scope: &str) -> Self {
-        // Max impact scope is now stored in config, update via update_config
+    pub fn with_max_impact_scope(mut self, scope: &str) -> Self {
+        // Note: max_impact_scope is stored here for when decision logic reads it.
+        // Plugins that override config independently should also set this field
+        // in their own EventResponseConfig.
+        self.config.max_impact_scope = scope.to_string();
         self
     }
 }

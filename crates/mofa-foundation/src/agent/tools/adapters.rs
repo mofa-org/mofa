@@ -1,6 +1,8 @@
 //! 工具适配器
+//! Tool adapters
 //!
 //! 提供便捷的工具创建方式
+//! Providing convenient ways to create tools
 
 use async_trait::async_trait;
 use mofa_kernel::agent::Tool;
@@ -10,8 +12,10 @@ use std::future::Future;
 use std::pin::Pin;
 
 /// 函数工具
+/// Function Tool
 ///
 /// 从函数创建工具
+/// Create tools from functions
 ///
 /// # 示例
 ///
@@ -55,6 +59,7 @@ where
         + Sync,
 {
     /// 创建新的函数工具
+    /// Create a new function tool
     pub fn new(
         name: impl Into<String>,
         description: impl Into<String>,
@@ -71,6 +76,7 @@ where
     }
 
     /// 设置元数据
+    /// Set metadata
     pub fn with_metadata(mut self, metadata: ToolMetadata) -> Self {
         self.metadata = metadata;
         self
@@ -106,8 +112,10 @@ where
 }
 
 /// 闭包工具
+/// Closure Tool
 ///
 /// 使用闭包创建简单工具
+/// Create simple tools using closures
 ///
 /// # 示例
 ///
@@ -140,6 +148,7 @@ where
     F: Fn(ToolInput) -> ToolResult + Send + Sync,
 {
     /// 创建新的闭包工具
+    /// Create a new closure tool
     pub fn new(name: impl Into<String>, description: impl Into<String>, handler: F) -> Self {
         Self {
             name: name.into(),
@@ -154,12 +163,14 @@ where
     }
 
     /// 设置参数 Schema
+    /// Set parameters Schema
     pub fn with_schema(mut self, schema: serde_json::Value) -> Self {
         self.parameters_schema = schema;
         self
     }
 
     /// 设置元数据
+    /// Set metadata
     pub fn with_metadata(mut self, metadata: ToolMetadata) -> Self {
         self.metadata = metadata;
         self
@@ -194,9 +205,11 @@ where
 
 // ============================================================================
 // 便捷工具创建宏
+// Macro for convenient tool creation
 // ============================================================================
 
 /// 创建简单同步工具
+/// Create simple synchronous tools
 #[macro_export]
 macro_rules! simple_tool {
     ($name:expr, $desc:expr, $handler:expr) => {
@@ -209,13 +222,16 @@ macro_rules! simple_tool {
 
 // ============================================================================
 // 内置工具集合
+// Built-in tools collection
 // ============================================================================
 
 /// 内置工具集合
+/// Built-in tools collection
 pub struct BuiltinTools;
 
 impl BuiltinTools {
     /// 创建计算器工具
+    /// Create a calculator tool
     pub fn calculator() -> impl Tool {
         ClosureTool::new(
             "calculator",
@@ -263,6 +279,7 @@ impl BuiltinTools {
     }
 
     /// 创建当前时间工具
+    /// Create a current time tool
     pub fn current_time() -> impl Tool {
         ClosureTool::new("current_time", "Get the current date and time", |_input| {
             let now = std::time::SystemTime::now()
@@ -278,6 +295,7 @@ impl BuiltinTools {
     }
 
     /// 创建 JSON 解析工具
+    /// Create a JSON parser tool
     pub fn json_parser() -> impl Tool {
         ClosureTool::new(
             "json_parser",
@@ -307,6 +325,7 @@ impl BuiltinTools {
     }
 
     /// 创建字符串处理工具
+    /// Create a string processing tool
     pub fn string_utils() -> impl Tool {
         ClosureTool::new("string_utils", "String manipulation utilities", |input| {
             let operation = input.get_str("operation").unwrap_or("length");
@@ -369,6 +388,7 @@ mod tests {
         let ctx = AgentContext::new("test");
 
         // Test addition
+        // Test addition
         let input = ToolInput::from_json(serde_json::json!({
             "operation": "add",
             "a": 5,
@@ -378,6 +398,7 @@ mod tests {
         assert!(result.success);
         assert_eq!(result.as_text(), Some("8"));
 
+        // Test division by zero
         // Test division by zero
         let input = ToolInput::from_json(serde_json::json!({
             "operation": "div",

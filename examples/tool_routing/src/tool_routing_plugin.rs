@@ -10,6 +10,7 @@ use std::collections::HashMap;
 use crate::route_rules::{RouteRuleManager, create_default_rules};
 
 /// 工具路由插件
+/// Tool routing plugin
 pub struct ToolRoutingPlugin {
     metadata: PluginMetadata,
     state: PluginState,
@@ -18,6 +19,7 @@ pub struct ToolRoutingPlugin {
 
 impl ToolRoutingPlugin {
     /// 创建新的工具路由插件
+    /// Create a new tool routing plugin
     pub fn new() -> Self {
         let metadata = PluginMetadata::new("tool_routing", "Tool Routing Plugin", PluginType::Tool)
             .with_description("Context-aware tool routing plugin")
@@ -31,17 +33,20 @@ impl ToolRoutingPlugin {
         };
 
         // 添加默认规则
+        // Add default rules
         plugin.add_default_rules();
 
         plugin
     }
 
     /// 获取规则管理器
+    /// Get the rule manager
     pub fn rule_manager(&self) -> Arc<RouteRuleManager> {
         self.rule_manager.clone()
     }
 
     /// 添加默认规则
+    /// Add default rules
     fn add_default_rules(&self) {
         let default_rules = create_default_rules();
         for rule in default_rules {
@@ -50,11 +55,14 @@ impl ToolRoutingPlugin {
     }
 
     /// 路由分析：根据用户输入和上下文选择合适的工具
+    /// Route analysis: select appropriate tools based on user input and context
     pub async fn route_analysis(&self, user_input: &str, context: &str) -> Option<String> {
         // 合并用户输入和上下文进行分析
+        // Merge user input and context for analysis
         let combined_text = format!("{}\n{}", context, user_input);
 
         // 查找匹配的规则
+        // Find matching rules
         if let Some(rule) = self.rule_manager.find_match(&combined_text) {
             println!("Route rule matched: {} -> {}", rule.name, rule.target_tool);
             Some(rule.target_tool)
@@ -78,12 +86,14 @@ impl AgentPlugin for ToolRoutingPlugin {
     async fn load(&mut self, _ctx: &PluginContext) -> PluginResult<()> {
         self.state = PluginState::Loading;
         // 加载插件资源
+        // Load plugin resources
         self.state = PluginState::Loaded;
         Ok(())
     }
 
     async fn init_plugin(&mut self) -> PluginResult<()> {
         // 初始化插件配置
+        // Initialize plugin configuration
         Ok(())
     }
 
@@ -104,6 +114,7 @@ impl AgentPlugin for ToolRoutingPlugin {
 
     async fn execute(&mut self, input: String) -> PluginResult<String> {
         // 执行路由分析
+        // Execute route analysis
         if let Some(tool) = self.route_analysis(&input, "").await {
             Ok(format!("ROUTE_TOOL:{}", tool))
         } else {

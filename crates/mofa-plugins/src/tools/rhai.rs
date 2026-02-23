@@ -3,6 +3,7 @@ use mofa_extra::rhai::{RhaiScriptEngine, ScriptContext, ScriptEngineConfig};
 use serde_json::json;
 
 /// Rhai 脚本执行工具 - 执行 Rhai 脚本
+/// Rhai script execution tool - Execute Rhai scripts
 pub struct RhaiScriptTool {
     definition: ToolDefinition,
     engine: RhaiScriptEngine,
