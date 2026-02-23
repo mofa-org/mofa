@@ -4394,9 +4394,11 @@ version = "0.1.0"
 dependencies = [
  "async-trait",
  "mofa-foundation",
+ "mofa-kernel",
  "mofa-sdk",
  "pyo3",
  "pyo3-async-runtimes",
+ "serde_json",
  "tempfile",
  "thiserror 1.0.69",
  "tokio",
