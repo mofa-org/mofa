@@ -100,8 +100,7 @@ impl AgentRegistry {
     pub fn save_agent(&self, agent: &AgentState) -> Result<()> {
         let path = self.agent_path(&agent.id);
         let json = serde_json::to_string_pretty(agent)?;
-        fs::write(&path, json)
-            .with_context(|| format!("failed to write {}", path.display()))?;
+        fs::write(&path, json).with_context(|| format!("failed to write {}", path.display()))?;
         Ok(())
     }
 

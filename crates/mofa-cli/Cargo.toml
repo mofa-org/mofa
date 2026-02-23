@@ -17,6 +17,10 @@ publish = true
 name = "mofa"
 path = "src/main.rs"
 
+[lib]
+name = "mofa_cli"
+path = "src/lib.rs"
+
 [dependencies]
 # Core
 mofa-sdk = { path = "../mofa-sdk", version = "0.1" }
