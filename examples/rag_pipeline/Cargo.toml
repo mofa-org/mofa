@@ -1,0 +1,16 @@
+[package]
+name = "rag_pipeline"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+mofa-foundation = { path = "../../crates/mofa-foundation", features = ["qdrant"] }
+mofa-kernel = { path = "../../crates/mofa-kernel" }
+
+tokio.workspace = true
+anyhow.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+
+[lints]
+workspace = true
