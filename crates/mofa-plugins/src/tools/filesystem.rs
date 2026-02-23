@@ -49,11 +49,17 @@ impl FileSystemTool {
 
     fn is_path_allowed(&self, path: &str) -> bool {
         if self.allowed_paths.is_empty() {
-            return true;
+            return false; // Default deny if no paths specified
         }
-        let path = std::path::Path::new(path);
+        let path = match std::path::Path::new(path).canonicalize() {
+            Ok(p) => p,
+            Err(_) => return false, // Deny if path cannot be resolved
+        };
         self.allowed_paths.iter().any(|allowed| {
-            let allowed_path = std::path::Path::new(allowed);
+            let allowed_path = match std::path::Path::new(allowed).canonicalize() {
+                Ok(p) => p,
+                Err(_) => return false,
+            };
             path.starts_with(allowed_path)
         })
     }
