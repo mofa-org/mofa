@@ -282,11 +282,11 @@ impl SessionStorage for JsonlSessionStorage {
                 let mut header = String::new();
                 if reader.read_line(&mut header).await.is_ok() {
                     let header = header.trim_end();
-                    if let Ok(header_data) = serde_json::from_str::<Value>(header) {
-                        if let Some(key) = header_data.get("key").and_then(|v| v.as_str()) {
-                            keys.push(key.to_string());
-                            continue;
-                        }
+                    if let Ok(header_data) = serde_json::from_str::<Value>(header)
+                        && let Some(key) = header_data.get("key").and_then(|v| v.as_str())
+                    {
+                        keys.push(key.to_string());
+                        continue;
                     }
                 }
             }
