@@ -156,9 +156,11 @@ async fn run_command(cli: Cli) -> anyhow::Result<()> {
                 cli::AgentCommands::List { running, all } => {
                     commands::agent::list::run(ctx, running, all).await?;
                 }
+                cli::AgentCommands::Logs { agent_id, tail } => {
+                    commands::agent::logs::run(ctx, &agent_id, tail).await?;
+                }
             }
         }
-
         Some(Commands::Config { action }) => match action {
             cli::ConfigCommands::Value(value_cmd) => match value_cmd {
                 cli::ConfigValueCommands::Get { key } => {
@@ -193,6 +195,9 @@ async fn run_command(cli: Cli) -> anyhow::Result<()> {
                 }
                 cli::PluginCommands::Info { name } => {
                     commands::plugin::info::run(ctx, &name).await?;
+                }
+                cli::PluginCommands::Install { name } => {
+                    commands::plugin::install::run(ctx, &name).await?;
                 }
                 cli::PluginCommands::Uninstall { name, force } => {
                     commands::plugin::uninstall::run(ctx, &name, force).await?;
