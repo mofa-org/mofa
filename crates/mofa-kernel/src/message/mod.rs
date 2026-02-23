@@ -142,20 +142,11 @@ impl PartialOrd for TaskPriority {
 
 impl Ord for TaskPriority {
     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        match (self, other) {
-            (TaskPriority::Critical, _) => std::cmp::Ordering::Greater,
-            (_, TaskPriority::Critical) => std::cmp::Ordering::Less,
-            (TaskPriority::High, TaskPriority::Medium | TaskPriority::Low) => {
-                std::cmp::Ordering::Greater
-            }
-            (TaskPriority::Medium, TaskPriority::Low) => std::cmp::Ordering::Greater,
-            (TaskPriority::Low, TaskPriority::Medium | TaskPriority::High) => {
-                std::cmp::Ordering::Less
-            }
-            (TaskPriority::Medium, TaskPriority::High) => std::cmp::Ordering::Less,
-            (a, b) if a == b => std::cmp::Ordering::Equal,
-            _ => unreachable!("All cases should be covered"),
-        }
+        // Lower discriminant = higher priority (Critical=0 is highest).
+        // Reverse the natural ordering so that higher-priority sorts Greater.
+        let lhs = self.clone() as u8;
+        let rhs = other.clone() as u8;
+        lhs.cmp(&rhs).reverse()
     }
 }
 
