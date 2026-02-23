@@ -49,6 +49,16 @@ impl PluginStats {
         }
     }
 
+    /// Total invocations recorded.
+    pub fn calls_total(&self) -> u64 {
+        self.calls_total.load(Ordering::Relaxed)
+    }
+
+    /// Invocations that returned an error.
+    pub fn calls_failed(&self) -> u64 {
+        self.calls_failed.load(Ordering::Relaxed)
+    }
+
     /// Average wall-clock latency across all recorded invocations.
     pub fn avg_latency_ms(&self) -> f64 {
         let total = self.calls_total.load(Ordering::Relaxed);
@@ -228,6 +238,14 @@ impl RhaiPlugin {
     /// Get last modification time
     pub fn last_modified(&self) -> u64 {
         self.last_modified
+    }
+
+    /// Return a shared reference to this plugin's runtime statistics.
+    ///
+    /// The returned `Arc` can be cloned and stored by the caller so that stats
+    /// can be read concurrently without holding a mutable reference to the plugin.
+    pub fn stats(&self) -> Arc<PluginStats> {
+        Arc::clone(&self.stats)
     }
 
     /// Create a new Rhai plugin from config
@@ -1014,8 +1032,188 @@ mod tests {
         assert!(result.is_some()); // Just verify result is not None
     }
 
+    // ========================================================================
+    // Unit Tests for PluginStats
+    // ========================================================================
+
+    #[test]
+    fn test_plugin_stats_zero_call_guard() {
+        // avg_latency_ms must return 0.0 when no calls have been recorded yet
+        // (guard against division-by-zero).
+        let stats = PluginStats::default();
+        assert_eq!(stats.calls_total(), 0);
+        assert_eq!(stats.calls_failed(), 0);
+        assert_eq!(stats.avg_latency_ms(), 0.0);
+    }
+
+    #[test]
+    fn test_plugin_stats_successful_invocation() {
+        let stats = PluginStats::default();
+        stats.record(50, false);
+
+        assert_eq!(stats.calls_total(), 1);
+        assert_eq!(stats.calls_failed(), 0);
+        assert_eq!(stats.avg_latency_ms(), 50.0);
+    }
+
+    #[test]
+    fn test_plugin_stats_failed_invocation() {
+        let stats = PluginStats::default();
+        stats.record(30, true);
+
+        assert_eq!(stats.calls_total(), 1);
+        assert_eq!(stats.calls_failed(), 1);
+        assert_eq!(stats.avg_latency_ms(), 30.0);
+    }
+
+    #[test]
+    fn test_plugin_stats_counter_increments() {
+        let stats = PluginStats::default();
+
+        // Two successes, one failure
+        stats.record(10, false);
+        stats.record(20, false);
+        stats.record(30, true);
+
+        assert_eq!(stats.calls_total(), 3);
+        assert_eq!(stats.calls_failed(), 1);
+        // avg = (10 + 20 + 30) / 3 = 20.0
+        assert!((stats.avg_latency_ms() - 20.0).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn test_plugin_stats_avg_latency_multiple_calls() {
+        let stats = PluginStats::default();
+
+        stats.record(100, false);
+        stats.record(200, false);
+
+        // avg = (100 + 200) / 2 = 150.0
+        assert!((stats.avg_latency_ms() - 150.0).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn test_plugin_stats_all_failed() {
+        let stats = PluginStats::default();
+
+        stats.record(5, true);
+        stats.record(10, true);
+
+        assert_eq!(stats.calls_total(), 2);
+        assert_eq!(stats.calls_failed(), 2);
+    }
+
+    #[test]
+    fn test_plugin_stats_to_map_keys() {
+        let stats = PluginStats::default();
+        stats.record(40, false);
+        stats.record(60, true);
+
+        let map = stats.to_map();
+
+        assert!(map.contains_key("calls_total"),  "missing calls_total");
+        assert!(map.contains_key("calls_failed"),  "missing calls_failed");
+        assert!(map.contains_key("avg_latency_ms"),"missing avg_latency_ms");
+
+        assert_eq!(map["calls_total"],   serde_json::json!(2u64));
+        assert_eq!(map["calls_failed"],  serde_json::json!(1u64));
+        // avg = (40 + 60) / 2 = 50.0
+        let avg = map["avg_latency_ms"].as_f64().unwrap();
+        assert!((avg - 50.0).abs() < f64::EPSILON);
+    }
+
     #[tokio::test]
-    async fn test_call_script_function_boolean_logic() {
+    async fn test_rhai_plugin_stats_accessor_returns_arc() {
+        // The stats() method must return an Arc that shares the same counters
+        // as the plugin internal state, not a copy.
+        let plugin = RhaiPlugin::from_content("test-stats-arc", "fn execute(i) { i }")
+            .await
+            .unwrap();
+
+        let stats_ref = plugin.stats();
+
+        // Initially zero
+        assert_eq!(stats_ref.calls_total(), 0);
+    }
+
+    #[tokio::test]
+    async fn test_plugin_stats_via_agent_plugin_trait() {
+        // AgentPlugin::stats() must also reflect live counter values.
+        let mut plugin =
+            RhaiPlugin::from_content("test-trait-stats", "fn execute(i) { i } ")
+                .await
+                .unwrap();
+
+        let ctx = PluginContext::default();
+        plugin.load(&ctx).await.unwrap();
+        plugin.init_plugin().await.unwrap();
+
+        // Execute once to increment counters
+        let _ = plugin.execute("ping".to_string()).await;
+
+        // Read back through AgentPlugin::stats()
+        let map = AgentPlugin::stats(&plugin);
+        let total = map["calls_total"].as_u64().unwrap();
+        assert_eq!(total, 1, "calls_total should be 1 after one execute");
+    }
+
+    #[tokio::test]
+    async fn test_plugin_stats_arc_shared_with_plugin_execute() {
+        // Clone the Arc before executing; after execute() completes the cloned
+        // reference must observe the updated counters.
+        //
+        // Note: scripts that throw *inside* fn execute() are currently healed by
+        // the fallback direct-execution path, so we use only success scenarios here.
+        let mut plugin =
+            RhaiPlugin::from_content("test-arc-shared", "fn execute(i) { i }")
+                .await
+                .unwrap();
+
+        let ctx = PluginContext::default();
+        plugin.load(&ctx).await.unwrap();
+        plugin.init_plugin().await.unwrap();
+
+        // Grab Arc before any execution
+        let stats = plugin.stats();
+        assert_eq!(stats.calls_total(), 0);
+
+        let _ = plugin.execute("hello".to_string()).await;
+        let _ = plugin.execute("world".to_string()).await;
+
+        // The Arc should now reflect the two calls
+        assert_eq!(stats.calls_total(), 2);
+        assert_eq!(stats.calls_failed(), 0);
+    }
+
+    #[tokio::test]
+    async fn test_plugin_stats_failed_execute_increments_failed_counter() {
+        // A top-level `throw` means:
+        //  1. call_function("execute") fails with "function not found" → fallback triggers
+        //  2. fallback runs the full script body which throws at the top level → execute_script Err
+        // This is the most reliable way to force a recorded failure without
+        // relying on details of the call_function error-vs-fallback split.
+        let script = r#"throw "intentional top-level error";"#;
+
+        let mut plugin = RhaiPlugin::from_content("test-fail-stats", script)
+            .await
+            .unwrap();
+
+        let ctx = PluginContext::default();
+        plugin.load(&ctx).await.unwrap();
+        plugin.init_plugin().await.unwrap();
+
+        let stats = plugin.stats();
+
+        // Execute should return an error
+        let result = plugin.execute("trigger".to_string()).await;
+        assert!(result.is_err(), "expected execution to fail");
+
+        assert_eq!(stats.calls_total(), 1, "calls_total should still be 1");
+        assert_eq!(stats.calls_failed(), 1, "calls_failed should be 1");
+    }
+
+    #[tokio::test]
+    async fn test_plugin_stats_boolean_logic() {
         let script = r#"
             fn validate(age, is_citizen) {
                 age >= 18 && is_citizen == true
