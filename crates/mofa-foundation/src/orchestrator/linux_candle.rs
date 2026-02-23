@@ -222,37 +222,27 @@ impl LinuxCandleProvider {
             )));
         }
 
-        // For demonstration, we'll create a minimal Llama model
-        // In production, use:
-        // - `candle_transformers::models::llama::Llama::load()` for safetensors
-        // - GGUF support via `candle-transformers` GGUF loader
-        
-        tracing::info!(
-            "Loading Llama model from {} on device {:?}",
+        // NOTE:
+        // The current LinuxCandleProvider does not yet implement real model weight loading.
+        // Previously this function attempted to construct a Llama model via `Llama::load_dummy`,
+        // but that implementation always returns an error and cannot be used for inference.
+        //
+        // To avoid misleading, guaranteed failures from a dummy loader, we now explicitly
+        // return a clear ModelLoadFailed error indicating that this provider is not yet
+        // functional for model loading. When implementing real loading, replace this with
+        // a call to the appropriate `Llama::load(...)` / GGUF loader using `model_path`.
+        tracing::warn!(
+            "LinuxCandleProvider model loading is not yet implemented; \
+             cannot load model from {} on device {:?}",
             self.config.model_path,
             device
         );
 
-        // Create a minimal config for demonstration
-        // The bool parameter is for use_flash_attn
-        let config = model_llama::Config::config_7b_v2(false);
-        
-        // In production, load actual weights:
-        // let vb = unsafe {
-        //     VarBuilder::from_mmaped_safetensors(&[model_path], DType::F32, device)?
-        // };
-        // let model = Llama::load(vb, &config)?;
-
-        // For now, create an empty model (this won't actually work for inference)
-        // Replace this with actual model loading in production
-        let cache = model_llama::Cache::new(true, DType::F32, &config, device)
-            .map_err(|e| OrchestratorError::ModelLoadFailed(e.to_string()))?;
-            
-        // This is a placeholder - in production, load actual weights
-        let model = model_llama::Llama::load_dummy(config, cache, device)
-            .map_err(|e| OrchestratorError::ModelLoadFailed(e.to_string()))?;
-
-        Ok(model)
+        Err(OrchestratorError::ModelLoadFailed(
+            "LinuxCandleProvider: model loading is not yet implemented; \
+             this provider is currently non-functional for inference."
+                .to_string(),
+        ))
     }
 
     /// Estimate memory usage of the loaded model
