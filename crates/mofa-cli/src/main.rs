@@ -115,6 +115,9 @@ fn run_command(cli: Cli) -> anyhow::Result<()> {
             cli::AgentCommands::List { running, all } => {
                 commands::agent::list::run(running, all)?;
             }
+            cli::AgentCommands::Logs { agent_id, tail } => {
+                commands::agent::logs::run(&agent_id, tail)?;
+            }
         },
 
         Some(Commands::Config { action }) => match action {
@@ -149,6 +152,9 @@ fn run_command(cli: Cli) -> anyhow::Result<()> {
             }
             cli::PluginCommands::Info { name } => {
                 commands::plugin::info::run(&name)?;
+            }
+            cli::PluginCommands::Install { name } => {
+                commands::plugin::install::run(&name)?;
             }
             cli::PluginCommands::Uninstall { name, force } => {
                 commands::plugin::uninstall::run(&name, force)?;
