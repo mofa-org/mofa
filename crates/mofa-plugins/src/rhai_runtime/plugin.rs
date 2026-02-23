@@ -397,7 +397,7 @@ impl RhaiPlugin {
         let context = ScriptContext::new();
 
         // Convert Dynamic args to serde_json::Value for call_function
-        let json_args: Vec<serde_json::Value> = args.iter().map(|d| dynamic_to_json(d)).collect();
+        let json_args: Vec<serde_json::Value> = args.iter().map(dynamic_to_json).collect();
 
         // Try to call the function, using serde_json::Value as the return type
         // This is flexible and won't fail on deserialization
