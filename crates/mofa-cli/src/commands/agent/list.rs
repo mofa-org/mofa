@@ -103,16 +103,6 @@ fn format_timestamp(millis: u64) -> String {
     datetime.format("%Y-%m-%d %H:%M:%S").to_string()
 }
 
-/// Format timestamp as human-readable string
-fn format_timestamp(millis: u64) -> String {
-    use chrono::{DateTime, Local};
-    use std::time::UNIX_EPOCH;
-
-    let duration = std::time::Duration::from_millis(millis);
-    let datetime = DateTime::<Local>::from(UNIX_EPOCH + duration);
-    datetime.format("%Y-%m-%d %H:%M:%S").to_string()
-}
-
 /// Formats a duration into a human-readable string (e.g., "2h 15m", "45s").
 fn format_duration(duration: chrono::Duration) -> String {
     let seconds = duration.num_seconds();
