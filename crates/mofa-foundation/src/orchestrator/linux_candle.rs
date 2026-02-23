@@ -49,8 +49,8 @@
 //! ```
 
 use super::traits::{
-    ModelOrchestrator, ModelProvider, ModelProviderConfig, OrchestratorError, OrchestratorResult,
-    PoolStatistics,
+    DegradationLevel, ModelOrchestrator, ModelProvider, ModelProviderConfig, ModelType,
+    OrchestratorError, OrchestratorResult, PoolStatistics,
 };
 use async_trait::async_trait;
 use candle_core::{Device, DType, Tensor};
@@ -59,10 +59,10 @@ use candle_transformers::models::llama as model_llama;
 use serde_json::Value;
 use std::collections::HashMap;
 use std::path::PathBuf;
-use std::sync::Arc;
+use std::sync::{Arc, RwLock};
 use std::time::{Duration, Instant};
 use sysinfo::{MemoryRefreshKind, RefreshKind, System};
-use tokio::sync::RwLock;
+use tokio::sync::RwLock as AsyncRwLock;
 use tokio::time::sleep;
 
 // ============================================================================
@@ -296,6 +296,10 @@ impl ModelProvider for LinuxCandleProvider {
         &self.model_id
     }
 
+    fn model_type(&self) -> &ModelType {
+        &self.config.model_type
+    }
+
     async fn load(&mut self) -> OrchestratorResult<()> {
         if self.loaded {
             tracing::debug!("Model '{}' is already loaded", self.model_id);
@@ -494,46 +498,74 @@ struct ModelEntry {
 /// }
 /// ```
 pub struct ModelPool {
-    /// Pool of registered models
-    models: Arc<RwLock<HashMap<String, ModelEntry>>>,
-    
-    /// Maximum memory threshold (bytes)
-    /// When exceeded, automatic LRU eviction is triggered
+    /// Pool of registered models — uses async RwLock because load/unload are long async operations
+    models: Arc<AsyncRwLock<HashMap<String, ModelEntry>>>,
+
+    /// Maximum memory threshold (bytes) — std RwLock for sync access in trait methods
     memory_threshold: Arc<RwLock<u64>>,
-    
-    /// Idle timeout in seconds
-    /// Models unused for longer than this are candidates for eviction
+
+    /// Idle timeout in seconds — std RwLock for sync access in trait methods
     idle_timeout_secs: Arc<RwLock<u64>>,
-    
-    /// System information provider (for memory monitoring)
-    system: Arc<RwLock<System>>,
 }
+
 
 impl ModelPool {
     /// Create a new model pool with default settings
     pub fn new() -> Self {
         let mut system = System::new_with_specifics(
-            RefreshKind::new().with_memory(MemoryRefreshKind::everything())
+            RefreshKind::new().with_memory(MemoryRefreshKind::everything()),
         );
         system.refresh_memory();
-        
+
         // Default threshold: 80% of total system memory
-        let total_memory = system.total_memory() * 1024; // Convert KB to bytes
+        // sysinfo returns bytes directly — no multiplication needed
+        let total_memory = system.total_memory();
         let default_threshold = (total_memory as f64 * DEFAULT_MEMORY_THRESHOLD_PERCENT) as u64;
-        
+
         Self {
-            models: Arc::new(RwLock::new(HashMap::new())),
+            models: Arc::new(AsyncRwLock::new(HashMap::new())),
             memory_threshold: Arc::new(RwLock::new(default_threshold)),
             idle_timeout_secs: Arc::new(RwLock::new(DEFAULT_IDLE_TIMEOUT_SECS)),
-            system: Arc::new(RwLock::new(system)),
         }
     }
 
-    /// Get current available system memory in bytes
+    /// Get current available system memory in bytes.
+    /// Runs sysinfo on a blocking thread so it never stalls the async runtime.
     async fn get_available_memory(&self) -> u64 {
-        let mut sys = self.system.write().await;
-        sys.refresh_memory();
-        sys.available_memory() * 1024 // Convert KB to bytes
+        tokio::task::spawn_blocking(|| {
+            let mut sys = System::new_with_specifics(
+                RefreshKind::new().with_memory(MemoryRefreshKind::everything()),
+            );
+            sys.refresh_memory();
+            sys.available_memory() // sysinfo returns bytes
+        })
+        .await
+        .unwrap_or(0)
+    }
+
+    /// Async helper for pool statistics — used by both the public sync trait method
+    /// (via `block_in_place`) and internal async callers.
+    async fn collect_statistics(&self) -> OrchestratorResult<PoolStatistics> {
+        let available_memory = self.get_available_memory().await;
+
+        let (loaded_count, total_memory) = {
+            let models = self.models.read().await;
+            let loaded: Vec<_> = models
+                .values()
+                .filter(|e| e.provider.is_loaded())
+                .collect();
+            let count = loaded.len();
+            let mem: u64 = loaded.iter().map(|e| e.provider.memory_usage_bytes()).sum();
+            (count, mem)
+        };
+
+        Ok(PoolStatistics {
+            loaded_models_count: loaded_count,
+            total_memory_usage: total_memory,
+            available_memory,
+            queued_models_count: 0,
+            timestamp: chrono::Utc::now(),
+        })
     }
 
     /// Get total memory used by all loaded models
@@ -546,11 +578,86 @@ impl ModelPool {
             .sum()
     }
 
+    /// Route a request to the best available model for the given task type.
+    ///
+    /// Selection priority:
+    /// 1. A currently *loaded* model of the matching type (ready immediately)
+    /// 2. A *registered* (but unloaded) model of the matching type (will be loaded on demand)
+    pub async fn route_by_type_inner(&self, task: &ModelType) -> OrchestratorResult<String> {
+        let models = self.models.read().await;
+
+        // Pass 1: prefer a model that is already loaded
+        for (id, entry) in models.iter() {
+            if entry.config.model_type == *task && entry.provider.is_loaded() {
+                return Ok(id.clone());
+            }
+        }
+
+        // Pass 2: fall back to a registered but unloaded model
+        for (id, entry) in models.iter() {
+            if entry.config.model_type == *task {
+                return Ok(id.clone());
+            }
+        }
+
+        Err(OrchestratorError::NoModelForType(format!("{:?}", task)))
+    }
+
+    /// Apply dynamic precision degradation to the model with the worst LRU score.
+    ///
+    /// When memory is constrained and no model can be evicted, the heaviest loaded
+    /// model is upgraded to the next degradation level (`q8 → q4`). The model must
+    /// be re-loaded by the caller after this call returns.
+    pub async fn apply_precision_degradation(&self) -> OrchestratorResult<Option<String>> {
+        let mut models = self.models.write().await;
+
+        // Find the loaded model with the highest memory footprint
+        let candidate = models
+            .iter_mut()
+            .filter(|(_, entry)| entry.provider.is_loaded())
+            .max_by_key(|(_, entry)| entry.provider.memory_usage_bytes());
+
+        if let Some((id, entry)) = candidate {
+            let current_q = entry
+                .config
+                .quantization
+                .as_deref()
+                .unwrap_or("f32");
+
+            // Map current quantization string → DegradationLevel
+            let current_level = match current_q {
+                "f32" => DegradationLevel::Full,
+                "f16" => DegradationLevel::Half,
+                "q8_0" => DegradationLevel::Int8,
+                _ => DegradationLevel::Int4,
+            };
+
+            if let Some(next_level) = current_level.next_level() {
+                let next_q = next_level.as_quantization_str().to_string();
+                let model_id = id.clone();
+
+                tracing::warn!(
+                    "Memory pressure: degrading model '{}' from {} → {}",
+                    model_id,
+                    current_q,
+                    next_q
+                );
+
+                // Update the quantization config — the model must be reloaded
+                entry.config.quantization = Some(next_q);
+
+                return Ok(Some(model_id));
+            }
+        }
+
+        Ok(None) // Nothing could be degraded further
+    }
+
     /// Check if loading a model would exceed memory constraints
     async fn check_memory_pressure(&self, estimated_model_size: u64) -> OrchestratorResult<()> {
         let available = self.get_available_memory().await;
         let current_usage = self.get_total_model_memory().await;
-        let threshold = *self.memory_threshold.read().await;
+        let threshold = *self.memory_threshold.read().expect("threshold lock poisoned");
 
         let projected_usage = current_usage + estimated_model_size;
 
@@ -587,7 +694,8 @@ impl ModelPool {
     /// Find the least recently used (LRU) loaded model
     async fn find_lru_candidate(&self) -> Option<String> {
         let models = self.models.read().await;
-        let idle_timeout = Duration::from_secs(*self.idle_timeout_secs.read().await);
+        let idle_timeout =
+            Duration::from_secs(*self.idle_timeout_secs.read().expect("idle_timeout lock poisoned"));
         let now = Instant::now();
 
         models
@@ -778,13 +886,17 @@ impl ModelOrchestrator for ModelPool {
     }
 
     fn is_model_loaded(&self, model_id: &str) -> bool {
-        // Note: This is a blocking check, which is acceptable for a simple boolean query
-        // In a fully async context, you might want to use `tokio::task::block_in_place`
-        let models = self.models.blocking_read();
-        models
-            .get(model_id)
-            .map(|entry| entry.provider.is_loaded())
-            .unwrap_or(false)
+        // Safe: models uses AsyncRwLock. We use try_read() here so this sync method
+        // never blocks the async thread. If the lock is held, we conservatively
+        // return false (caller will retry via the async load_model path).
+        if let Ok(models) = self.models.try_read() {
+            models
+                .get(model_id)
+                .map(|entry| entry.provider.is_loaded())
+                .unwrap_or(false)
+        } else {
+            false
+        }
     }
 
     async fn infer(&self, model_id: &str, input: &str) -> OrchestratorResult<String> {
@@ -809,45 +921,36 @@ impl ModelOrchestrator for ModelPool {
     }
 
     fn get_statistics(&self) -> OrchestratorResult<PoolStatistics> {
-        let models = self.models.blocking_read();
-        
-        let loaded_models: Vec<_> = models
-            .values()
-            .filter(|entry| entry.provider.is_loaded())
-            .collect();
-
-        let loaded_count = loaded_models.len();
-        let total_memory: u64 = loaded_models
-            .iter()
-            .map(|entry| entry.provider.memory_usage_bytes())
-            .sum();
-
-        // Get available memory
-        let mut sys = self.system.blocking_write();
-        sys.refresh_memory();
-        let available_memory = sys.available_memory() * 1024;
-
-        Ok(PoolStatistics {
-            loaded_models_count: loaded_count,
-            total_memory_usage: total_memory,
-            available_memory,
-            queued_models_count: 0, // Not implemented in this version
-            timestamp: chrono::Utc::now(),
+        // We need async operations for memory (spawn_blocking) and the models lock.
+        // `block_in_place` moves us to a blocking thread so we can run async work
+        // without stalling the runtime's event loop.
+        tokio::task::block_in_place(|| {
+            tokio::runtime::Handle::current().block_on(self.collect_statistics())
         })
     }
 
     fn list_models(&self) -> Vec<String> {
-        let models = self.models.blocking_read();
-        models.keys().cloned().collect()
+        if let Ok(models) = self.models.try_read() {
+            models.keys().cloned().collect()
+        } else {
+            vec![]
+        }
     }
 
     fn list_loaded_models(&self) -> Vec<String> {
-        let models = self.models.blocking_read();
-        models
-            .iter()
-            .filter(|(_, entry)| entry.provider.is_loaded())
-            .map(|(id, _)| id.clone())
-            .collect()
+        if let Ok(models) = self.models.try_read() {
+            models
+                .iter()
+                .filter(|(_, entry)| entry.provider.is_loaded())
+                .map(|(id, _)| id.clone())
+                .collect()
+        } else {
+            vec![]
+        }
+    }
+
+    async fn route_by_type(&self, task: &ModelType) -> OrchestratorResult<String> {
+        self.route_by_type_inner(task).await
     }
 
     async fn trigger_eviction(&self, target_bytes: u64) -> OrchestratorResult<usize> {
@@ -887,25 +990,37 @@ impl ModelOrchestrator for ModelPool {
     }
 
     async fn set_memory_threshold(&self, bytes: u64) -> OrchestratorResult<()> {
-        let mut threshold = self.memory_threshold.write().await;
+        let mut threshold = self
+            .memory_threshold
+            .write()
+            .expect("threshold lock poisoned");
         *threshold = bytes;
         tracing::info!("Memory threshold set to {} MB", bytes / 1024 / 1024);
         Ok(())
     }
 
     fn get_memory_threshold(&self) -> u64 {
-        *self.memory_threshold.blocking_read()
+        *self
+            .memory_threshold
+            .read()
+            .expect("threshold lock poisoned")
     }
 
     async fn set_idle_timeout_secs(&self, secs: u64) -> OrchestratorResult<()> {
-        let mut timeout = self.idle_timeout_secs.write().await;
+        let mut timeout = self
+            .idle_timeout_secs
+            .write()
+            .expect("idle_timeout lock poisoned");
         *timeout = secs;
         tracing::info!("Idle timeout set to {} seconds", secs);
         Ok(())
     }
 
     fn get_idle_timeout_secs(&self) -> u64 {
-        *self.idle_timeout_secs.blocking_read()
+        *self
+            .idle_timeout_secs
+            .read()
+            .expect("idle_timeout lock poisoned")
     }
 }
 
@@ -940,17 +1055,23 @@ mod tests {
 
     /// Helper to create a test model config
     fn create_test_config(name: &str) -> ModelProviderConfig {
+        create_test_config_with_type(name, ModelType::Llm)
+    }
+
+    /// Helper to create a test model config with explicit type
+    fn create_test_config_with_type(name: &str, model_type: ModelType) -> ModelProviderConfig {
         ModelProviderConfig {
             model_name: name.to_string(),
             model_path: format!("/tmp/test_{}.gguf", name),
             device: "cpu".to_string(),
+            model_type,
             max_context_length: Some(2048),
             quantization: Some("q4_0".to_string()),
             extra_config: HashMap::new(),
         }
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     async fn test_provider_creation() {
         let config = create_test_config("test_model");
         let provider = LinuxCandleProvider::new(config);
@@ -961,7 +1082,7 @@ mod tests {
         assert_eq!(provider.memory_usage_bytes(), 0);
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     async fn test_device_selection_cpu_fallback() {
         let config = create_test_config("test_cpu");
         let provider = LinuxCandleProvider::new(config);
@@ -972,14 +1093,14 @@ mod tests {
         assert!(matches!(device, Device::Cpu));
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     async fn test_pool_creation() {
         let pool = ModelPool::new();
         assert_eq!(pool.name(), "ModelPool");
         assert_eq!(pool.list_models().len(), 0);
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     async fn test_register_and_unregister() {
         let pool = ModelPool::new();
         let config = create_test_config("model1");
@@ -994,14 +1115,14 @@ mod tests {
         assert_eq!(pool.list_models().len(), 0);
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     async fn test_unregister_nonexistent_model() {
         let pool = ModelPool::new();
         let result = pool.unregister_model("nonexistent").await;
         assert!(matches!(result, Err(OrchestratorError::ModelNotFound(_))));
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     async fn test_pool_statistics() {
         let pool = ModelPool::new();
         
@@ -1017,7 +1138,7 @@ mod tests {
         assert!(stats.available_memory > 0);
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     async fn test_idle_timeout_configuration() {
         let pool = ModelPool::new();
         
@@ -1029,7 +1150,7 @@ mod tests {
         assert_eq!(pool.get_idle_timeout_secs(), 60);
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     async fn test_memory_threshold_configuration() {
         let pool = ModelPool::new();
         
@@ -1043,7 +1164,7 @@ mod tests {
         assert_eq!(pool.get_memory_threshold(), custom_threshold);
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     async fn test_list_loaded_models() {
         let pool = ModelPool::new();
         
@@ -1065,7 +1186,7 @@ mod tests {
     /// 3. Verify memory tracking
     /// 4. Trigger manual eviction
     /// 5. Verify eviction freed memory
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     async fn test_multi_model_pipeline_with_eviction() {
         let pool = Arc::new(ModelPool::new());
 
@@ -1094,7 +1215,7 @@ mod tests {
     }
 
     /// Test: Manual eviction trigger
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     async fn test_manual_eviction_trigger() {
         let pool = ModelPool::new();
 
@@ -1113,7 +1234,7 @@ mod tests {
     }
 
     /// Test: Memory pressure detection
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     async fn test_memory_pressure_detection() {
         let pool = ModelPool::new();
 
