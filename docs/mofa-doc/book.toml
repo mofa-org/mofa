@@ -16,6 +16,8 @@ command = "mdbook-mermaid"
 
 # HTML output configuration
 [output.html]
+smart-punctuation = true
+mathjax-support = true
 default-theme = "rust"
 preferred-dark-theme = "navy"
 git-repository-url = "https://github.com/mofa-org/mofa"
@@ -23,6 +25,14 @@ edit-url-template = "https://github.com/mofa-org/mofa/edit/main/docs/mofa-doc/sr
 no-section-label = false
 site-url = "/mofa/"
 cname = ""
+hash-files = true
+
+[output.html.playground]
+editable = true
+line-numbers = true
+
+[output.html.code.hidelines]
+python = "~"
 
 # Folding configuration
 [output.html.fold]
