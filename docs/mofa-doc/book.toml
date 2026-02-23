@@ -1,12 +1,12 @@
 [book]
-title = "MoFA 文档"
+title = "MoFA Documentation"
 authors = ["MoFA Contributors"]
-language = "zh-CN"
-description = "MoFA（Modular Framework for Agents）中文文档"
-src = "src/zh"
+language = "en"
+description = "MoFA (Modular Framework for Agents) - A production-grade AI agent framework built in Rust"
+src = "src"
 
 [build]
-build-dir = "book/zh"
+build-dir = "book"
 create-missing = false
 
 [preprocessor.mermaid]
@@ -18,7 +18,7 @@ preferred-dark-theme = "navy"
 git-repository-url = "https://github.com/mofa-org/mofa"
 edit-url-template = "https://github.com/mofa-org/mofa/edit/main/docs/mofa-doc/{path}"
 no-section-label = false
-site-url = "/mofa/zh/"
+site-url = "/mofa/"
 cname = ""
 
 [output.html.fold]
