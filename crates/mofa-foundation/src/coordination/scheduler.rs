@@ -39,12 +39,9 @@ pub struct PriorityScheduler {
     task_status: Arc<RwLock<HashMap<String, SchedulingStatus>>>, // 任务状态跟踪
     // Task status tracking
     role_mapping: Arc<RwLock<HashMap<String, Vec<String>>>>,     // 角色-智能体映射
-<<<<<<< accessibility-enhancement
     // Role-to-agent mapping
-=======
     agent_tasks: Arc<RwLock<HashMap<String, Vec<String>>>>,      // Agent-to-task mapping
     task_priorities: Arc<RwLock<HashMap<String, TaskPriority>>>, // Task priority tracking
->>>>>>> main
 }
 
 impl PriorityScheduler {
@@ -178,8 +175,6 @@ impl PriorityScheduler {
         if let Some(&load) = agent_load.get(agent_id)
             && load > 0
         {
-<<<<<<< accessibility-enhancement
-=======
             // Get the task list for this specific agent
             let tasks_on_agent = match agent_tasks.get(agent_id) {
                 Some(tasks) => tasks,
@@ -213,7 +208,6 @@ impl PriorityScheduler {
                     )
                     .await?;
             }
->>>>>>> main
         }
         Ok(())
     }
