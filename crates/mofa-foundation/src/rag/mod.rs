@@ -3,9 +3,15 @@
 //! Provides concrete implementations of the vector store trait defined
 //! in mofa-kernel, along with utilities for document chunking.
 
+pub mod advanced;
 pub mod chunker;
 pub mod similarity;
 pub mod vector_store;
+
+pub use advanced::{
+    AdaptiveChunkingConfig, AdvancedRagConfig, FusionMethod, HybridSearchConfig, MultiVectorConfig,
+    QueryExpansionConfig, RerankConfig, RepresentationType,
+};
 
 #[cfg(feature = "qdrant")]
 pub mod qdrant_store;
