@@ -1,9 +1,10 @@
 //! `mofa agent logs` command implementation
 
+use crate::context::CliContext;
 use colored::Colorize;
 
 /// Execute the `mofa agent logs` command
-pub fn run(agent_id: &str, tail: bool) -> anyhow::Result<()> {
+pub async fn run(_ctx: &CliContext, agent_id: &str, tail: bool) -> anyhow::Result<()> {
     if tail {
         println!("{} Tailing logs for agent: {}", "→".green(), agent_id.cyan());
         println!("  (Press Ctrl+C to exit)\n");

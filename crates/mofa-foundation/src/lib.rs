@@ -4,6 +4,12 @@
     non_camel_case_types,
     ambiguous_glob_reexports
 )]
+// orchestrator module - Model Lifecycle & Allocation
+pub mod orchestrator;
+
+// hardware discovery module
+pub mod hardware;
+
 // prompt module
 pub mod prompt;
 
@@ -34,6 +40,9 @@ pub mod secretary;
 // collaboration module - 自适应协作协议
 pub mod agent;
 pub mod collaboration;
+
+// RAG module - vector store and document chunking
+pub mod rag;
 
 // Re-export config types
 pub use config::{AgentInfo, AgentYamlConfig, LLMYamlConfig, RuntimeConfig, ToolConfig};

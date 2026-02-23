@@ -474,8 +474,10 @@ impl PluginRegistry {
     pub async fn stats(&self) -> RegistryStats {
         let plugins = self.plugins.read().await;
 
-        let mut stats = RegistryStats::default();
-        stats.total_plugins = plugins.len();
+        let mut stats = RegistryStats {
+            total_plugins: plugins.len(),
+            ..Default::default()
+        };
 
         for info in plugins.values() {
             match info.state {

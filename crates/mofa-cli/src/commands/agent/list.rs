@@ -1,56 +1,82 @@
 //! `mofa agent list` command implementation
 
+use crate::context::CliContext;
 use crate::output::Table;
+use chrono::Utc;
 use colored::Colorize;
 use serde::Serialize;
+use std::collections::BTreeMap;
 
 /// Execute the `mofa agent list` command
-pub fn run(running_only: bool, show_all: bool) -> anyhow::Result<()> {
+pub async fn run(ctx: &CliContext, running_only: bool, _show_all: bool) -> anyhow::Result<()> {
     println!("{} Listing agents", "→".green());
-
-    if running_only {
-        println!("  Showing running agents only");
-    } else if show_all {
-        println!("  Showing all agents");
-    }
-
     println!();
 
-    // TODO: Implement actual agent listing from state store
-    // For now, show example output
+    let agents_metadata = ctx.agent_registry.list().await;
+    let persisted_agents = ctx
+        .agent_store
+        .list()
+        .map_err(|e| anyhow::anyhow!("Failed to list persisted agents: {}", e))?;
 
-    let agents = vec![
-        AgentInfo {
-            id: "agent-001".to_string(),
-            name: "MyAgent".to_string(),
-            status: "running".to_string(),
-            uptime: Some("5m 32s".to_string()),
-            provider: Some("openai".to_string()),
-            model: Some("gpt-4o".to_string()),
-        },
-        AgentInfo {
-            id: "agent-002".to_string(),
-            name: "TestAgent".to_string(),
-            status: "stopped".to_string(),
-            uptime: None,
-            provider: None,
-            model: None,
-        },
-    ];
+    let mut merged: BTreeMap<String, AgentInfo> = BTreeMap::new();
+
+    // Process live agents from the registry first
+    for m in &agents_metadata {
+        let status = format!("{:?}", m.state);
+        let is_running = is_running_state(&status);
+        merged.insert(
+            m.id.clone(),
+            AgentInfo {
+                id: m.id.clone(),
+                name: m.name.clone(),
+                status,
+                is_running,
+                uptime: None, // Live registry currently doesn't provide start time easily
+                provider: None,
+                model: None,
+                description: m.description.clone(),
+            },
+        );
+    }
+
+    // Merge in persisted agents
+    for (_, entry) in persisted_agents {
+        merged.entry(entry.id.clone()).or_insert_with(|| {
+            let status = entry.state.clone();
+            AgentInfo {
+                id: entry.id,
+                name: entry.name,
+                status: status.clone(),
+                is_running: is_running_state(&status),
+                uptime: Some(format_duration(Utc::now() - entry.started_at)),
+                provider: entry.provider,
+                model: entry.model,
+                description: entry.description,
+            }
+        });
+    }
+
+    if merged.is_empty() {
+        println!("  No agents registered.");
+        println!();
+        println!(
+            "  Use {} to start an agent.",
+            "mofa agent start <agent_id>".cyan()
+        );
+        return Ok(());
+    }
+
+    let agents: Vec<AgentInfo> = merged.into_values().collect();
 
     // Filter based on flags
     let filtered: Vec<_> = if running_only {
-        agents
-            .iter()
-            .filter(|a| a.status == "running")
-            .cloned()
-            .collect()
+        agents.into_iter().filter(|a| a.is_running).collect()
     } else {
         agents
     };
 
     if filtered.is_empty() {
-        println!("  No agents found.");
+        println!("  No agents found matching criteria.");
         return Ok(());
     }
 
@@ -64,15 +90,45 @@ pub fn run(running_only: bool, show_all: bool) -> anyhow::Result<()> {
     Ok(())
 }
 
+/// Formats a duration into a human-readable string (e.g., "2h 15m", "45s").
+fn format_duration(duration: chrono::Duration) -> String {
+    let seconds = duration.num_seconds();
+    if seconds <= 0 {
+        return "0s".to_string();
+    }
+    if seconds < 60 {
+        format!("{}s", seconds)
+    } else if seconds < 3600 {
+        format!("{}m {}s", seconds / 60, seconds % 60)
+    } else {
+        let hours = seconds / 3600;
+        let mins = (seconds % 3600) / 60;
+        format!("{}h {}m", hours, mins)
+    }
+}
+
+/// Agent information for display purposes.
 #[derive(Debug, Clone, Serialize)]
 struct AgentInfo {
     id: String,
     name: String,
     status: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(skip_serializing)]
+    is_running: bool,
     uptime: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     provider: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     model: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    description: Option<String>,
+}
+
+/// Checks if a status string represents a running or ready agent.
+fn is_running_state(status: &str) -> bool {
+    let s = status.to_lowercase();
+    matches!(
+        s.as_str(),
+        "running" | "ready" | "executing" | "initializing" | "paused"
+    )
 }

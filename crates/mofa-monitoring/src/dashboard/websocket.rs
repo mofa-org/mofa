@@ -51,6 +51,22 @@ pub enum WebSocketMessage {
         call_count: u64,
     },
 
+    /// LLM model inference update - real-time metrics for model performance
+    ///
+    /// Aligns with GSoC Idea 2 - Studio Observability Dashboard
+    /// for per-model inference monitoring (tokens/s, TTFT, etc.)
+    #[serde(rename = "llm_update")]
+    LLMUpdate {
+        plugin_id: String,
+        provider_name: String,
+        model_name: String,
+        total_requests: u64,
+        successful_requests: u64,
+        avg_latency_ms: f64,
+        tokens_per_second: Option<f64>,
+        error_rate: f64,
+    },
+
     /// System alert
     #[serde(rename = "alert")]
     Alert {
@@ -368,5 +384,67 @@ mod tests {
         let handler = WebSocketHandler::new(collector);
 
         assert_eq!(handler.client_count().await, 0);
+    }
+
+    /// Integration test: verifies that a WebSocket client connected to the
+    /// real server receives live metric updates via the broadcast channel.
+    #[tokio::test]
+    async fn test_websocket_receives_updates() {
+        use crate::dashboard::server::DashboardServer;
+        use futures_util::StreamExt;
+
+        let config = crate::dashboard::server::DashboardConfig::new()
+            .with_host("127.0.0.1")
+            .with_port(0); // OS picks a free port
+
+        let mut server = DashboardServer::new(config);
+        let router = server.build_router();
+        let ws_handler = server
+            .ws_handler()
+            .expect("ws_handler should be set after build_router");
+
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("failed to bind");
+        let addr = listener.local_addr().unwrap();
+
+        // Serve in background
+        tokio::spawn(async move {
+            axum::serve(listener, router).await.unwrap();
+        });
+
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+
+        let ws_url = format!("ws://{}/ws", addr);
+        let (mut ws_stream, _response) = tokio_tungstenite::connect_async(&ws_url)
+            .await
+            .expect("failed to connect WebSocket");
+
+        // Start broadcasting updates
+        let ws_for_updates = Arc::clone(&ws_handler);
+        let update_handle = tokio::spawn(async move {
+            ws_for_updates.start_updates();
+        });
+
+        let received =
+            tokio::time::timeout(std::time::Duration::from_secs(5), ws_stream.next()).await;
+
+        assert!(received.is_ok(), "Timed out waiting for WebSocket message");
+        let frame = received.unwrap();
+        assert!(frame.is_some(), "WebSocket stream ended unexpectedly");
+
+        let msg = frame.unwrap().expect("WebSocket error");
+        let text = msg.into_text().expect("expected text frame");
+
+        // Verify it deserializes as a Metrics message
+        let parsed: WebSocketMessage =
+            serde_json::from_str(&text).expect("failed to parse WebSocket message");
+        assert!(
+            matches!(parsed, WebSocketMessage::Metrics(_)),
+            "Expected Metrics message, got: {:?}",
+            parsed
+        );
+
+        update_handle.abort();
     }
 }

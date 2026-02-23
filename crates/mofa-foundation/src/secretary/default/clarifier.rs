@@ -4,6 +4,9 @@ use super::types::*;
 use std::collections::HashMap;
 use std::sync::Arc;
 
+/// Type alias for clarifier function
+pub type ClarifierFn = Arc<dyn Fn(&str) -> Vec<ClarificationQuestion> + Send + Sync>;
+
 /// 需求澄清策略
 #[derive(Debug, Clone)]
 pub enum ClarificationStrategy {
@@ -70,7 +73,7 @@ pub struct RequirementClarifier {
     /// LLM提示词模板
     prompt_templates: HashMap<String, String>,
     /// 自定义澄清处理器
-    clarifier_fn: Option<Arc<dyn Fn(&str) -> Vec<ClarificationQuestion> + Send + Sync>>,
+    clarifier_fn: Option<ClarifierFn>,
 }
 
 impl RequirementClarifier {

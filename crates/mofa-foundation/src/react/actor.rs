@@ -149,17 +149,15 @@ impl Actor for ReActActor {
     type State = ReActActorState;
     type Arguments = (Arc<LLMAgent>, ReActConfig, Vec<Arc<dyn ReActTool>>);
 
-    fn pre_start(
+    async fn pre_start(
         &self,
         _myself: ActorRef<Self::Msg>,
         args: Self::Arguments,
-    ) -> impl Future<Output = Result<Self::State, ActorProcessingErr>> + Send {
-        async move {
-            let (llm, config, tools) = args;
-            let mut state = ReActActorState::new(llm, config);
-            state.pending_tools = tools;
-            Ok(state)
-        }
+    ) -> Result<Self::State, ActorProcessingErr> {
+        let (llm, config, tools) = args;
+        let mut state = ReActActorState::new(llm, config);
+        state.pending_tools = tools;
+        Ok(state)
     }
 
     fn handle(

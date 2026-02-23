@@ -83,10 +83,10 @@
 /// }
 /// ```
 pub mod kernel {
-    //! Core abstractions and infrastructure from `mofa-kernel`.
-    //!
-    //! This module is a normalized, comprehensive facade over `mofa-kernel` with
-    //! structured submodules and curated top-level re-exports.
+    // Core abstractions and infrastructure from `mofa-kernel`.
+    //
+    // This module is a normalized, comprehensive facade over `mofa-kernel` with
+    // structured submodules and curated top-level re-exports.
 
     // ---------------------------------------------------------------------
     // Structured submodules (full coverage)
@@ -184,7 +184,8 @@ pub mod runtime {
     // Agent builder
     pub use mofa_runtime::AgentBuilder;
 
-    // Simple runtime (non-dora)
+    // Simple runtime (non-dora mode only)
+    #[cfg(not(feature = "dora"))]
     pub use mofa_runtime::SimpleRuntime;
 
     // Agent registry (runtime implementation)
@@ -429,7 +430,9 @@ pub mod prelude {
         AgentCapabilities, AgentCapabilitiesBuilder, AgentContext, AgentError, AgentInput,
         AgentMetadata, AgentOutput, AgentResult, AgentState, MoFAAgent,
     };
-    pub use crate::runtime::{AgentBuilder, AgentRunner, SimpleRuntime, run_agents};
+    #[cfg(not(feature = "dora"))]
+    pub use crate::runtime::SimpleRuntime;
+    pub use crate::runtime::{AgentBuilder, AgentRunner, run_agents};
     pub use async_trait::async_trait;
 }
 
@@ -772,16 +775,16 @@ pub mod persistence {
     ///     Ok(())
     /// }
     /// ```
-    #[cfg(all(feature = "persistence-postgres"))]
+    #[cfg(feature = "persistence-postgres")]
     pub async fn quick_agent_with_postgres(
         system_prompt: &str,
     ) -> Result<crate::llm::LLMAgentBuilder, crate::llm::LLMError> {
         use std::sync::Arc;
 
         // 1. 初始化数据库
-        let store_arc = PostgresStore::from_env().await.map_err(|e| {
-            crate::llm::LLMError::Other(format!("数据库连接失败: {}", e.to_string()))
-        })?;
+        let store_arc = PostgresStore::from_env()
+            .await
+            .map_err(|e| crate::llm::LLMError::Other(format!("数据库连接失败: {}", e)))?;
 
         // 2. 从环境变量获取或生成 IDs
         let user_id = std::env::var("USER_ID")

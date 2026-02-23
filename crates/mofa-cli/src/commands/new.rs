@@ -1,7 +1,7 @@
 //! `mofa new` command implementation
 
 use colored::Colorize;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 /// Execute the `mofa new` command
 pub fn run(name: &str, template: &str, output: Option<&std::path::Path>) -> anyhow::Result<()> {
@@ -43,7 +43,7 @@ pub fn run(name: &str, template: &str, output: Option<&std::path::Path>) -> anyh
     Ok(())
 }
 
-fn generate_basic_template(name: &str, project_dir: &PathBuf) -> anyhow::Result<()> {
+fn generate_basic_template(name: &str, project_dir: &Path) -> anyhow::Result<()> {
     // Create Cargo.toml
     let cargo_toml = format!(
         r#"[package]
@@ -90,7 +90,7 @@ OPENAI_MODEL=gpt-4o
     Ok(())
 }
 
-fn generate_llm_template(name: &str, project_dir: &PathBuf) -> anyhow::Result<()> {
+fn generate_llm_template(name: &str, project_dir: &Path) -> anyhow::Result<()> {
     // Create Cargo.toml with LLM dependencies
     let cargo_toml = format!(
         r#"[package]
@@ -191,7 +191,7 @@ OPENAI_MODEL=gpt-4o
     Ok(())
 }
 
-fn generate_axum_llm_template(name: &str, project_dir: &PathBuf) -> anyhow::Result<()> {
+fn generate_axum_llm_template(name: &str, project_dir: &Path) -> anyhow::Result<()> {
     // Create Cargo.toml with axum dependencies
     let cargo_toml = format!(
         r#"[package]
@@ -249,7 +249,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use tower_http::cors::{Any, CorsLayer};
+use tower_http::cors::CorsLayer;
 use tower_http::trace::TraceLayer;
 use uuid::Uuid;
 
@@ -294,7 +294,7 @@ struct SessionInfo {
 #[derive(Debug, Serialize)]
 struct HealthResponse {
     status: String,
-    version: env!("CARGO_PKG_VERSION"),
+    version: String,
 }
 
 /// Error response
@@ -491,11 +491,16 @@ async fn main() -> anyhow::Result<()> {
         .with_state(state)
         // Middleware
         .layer(TraceLayer::new_for_http())
+        // CORS configuration — restricted to localhost for development.
+        // IMPORTANT: Update allowed origins before deploying to production.
         .layer(
             CorsLayer::new()
-                .allow_origin(Any)
-                .allow_methods(Any)
-                .allow_headers(Any),
+                .allow_origin([
+                    "http://localhost:3000".parse().unwrap(),
+                    "http://127.0.0.1:3000".parse().unwrap(),
+                ])
+                .allow_methods([axum::http::Method::GET, axum::http::Method::POST, axum::http::Method::DELETE])
+                .allow_headers([axum::http::header::CONTENT_TYPE]),
         );
 
     // Get server configuration from environment
@@ -781,7 +786,7 @@ Thumbs.db
     Ok(())
 }
 
-fn generate_python_template(name: &str, project_dir: &PathBuf) -> anyhow::Result<()> {
+fn generate_python_template(name: &str, project_dir: &Path) -> anyhow::Result<()> {
     // Create main.py using mofa SDK
     let main_py = r#"#!/usr/bin/env python3
 """

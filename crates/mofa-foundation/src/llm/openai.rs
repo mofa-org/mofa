@@ -195,6 +195,11 @@ impl OpenAIProvider {
         Self::with_config(config)
     }
 
+    /// 创建 Ollama Provider (通过 OpenAI 兼容 API)
+    pub fn ollama(model: impl Into<String>) -> Self {
+        Self::local("http://localhost:11434/v1", model)
+    }
+
     /// 创建兼容 OpenAI API 的本地服务 Provider
     pub fn local(base_url: impl Into<String>, model: impl Into<String>) -> Self {
         let config = OpenAIConfig::new("not-needed")

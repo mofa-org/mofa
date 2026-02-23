@@ -3,8 +3,10 @@
 mod cli;
 mod commands;
 mod config;
+mod context;
 mod output;
 mod render;
+mod store;
 mod tui;
 mod utils;
 mod widgets;
@@ -12,9 +14,16 @@ mod widgets;
 use clap::Parser;
 use cli::Cli;
 use colored::Colorize;
+use context::CliContext;
 
 fn main() -> anyhow::Result<()> {
-    let cli = Cli::parse();
+    let mut args: Vec<String> = std::env::args().collect();
+    normalize_legacy_output_flags(&mut args);
+    let cli = Cli::parse_from(args);
+
+    if cli.output_legacy.is_some() {
+        eprintln!("Warning: '--output' is deprecated. Use '--output-format' instead.");
+    }
 
     // Initialize logging
     if cli.verbose {
@@ -23,19 +32,38 @@ fn main() -> anyhow::Result<()> {
         tracing_subscriber::fmt().with_env_filter("info").init();
     }
 
+    let rt = tokio::runtime::Runtime::new()?;
+
     // Launch TUI if requested or no command provided
     if cli.tui || cli.command.is_none() {
         // Run TUI mode
-        tokio::runtime::Runtime::new()?.block_on(tui::run())?;
+        rt.block_on(tui::run())?;
         Ok(())
     } else {
-        // Run CLI command as usual
-        run_command(cli)
+        // Run CLI command
+        rt.block_on(run_command(cli))
     }
 }
 
-fn run_command(cli: Cli) -> anyhow::Result<()> {
+async fn run_command(cli: Cli) -> anyhow::Result<()> {
     use cli::Commands;
+
+    // Initialize context for commands that need backend services
+    let needs_context = matches!(
+        &cli.command,
+        Some(
+            Commands::Agent(_)
+                | Commands::Plugin { .. }
+                | Commands::Session { .. }
+                | Commands::Tool { .. }
+        )
+    );
+
+    let ctx = if needs_context {
+        Some(CliContext::new().await?)
+    } else {
+        None
+    };
 
     match cli.command {
         Some(Commands::New {
@@ -89,37 +117,50 @@ fn run_command(cli: Cli) -> anyhow::Result<()> {
             }
         },
 
-        Some(Commands::Agent(agent_cmd)) => match agent_cmd {
-            cli::AgentCommands::Create {
-                non_interactive,
-                config,
-            } => {
-                commands::agent::create::run(non_interactive, config)?;
+        Some(Commands::Agent(agent_cmd)) => {
+            let ctx = ctx.as_ref().unwrap();
+            match agent_cmd {
+                cli::AgentCommands::Create {
+                    non_interactive,
+                    config,
+                } => {
+                    commands::agent::create::run(non_interactive, config)?;
+                }
+                cli::AgentCommands::Start {
+                    agent_id,
+                    config,
+                    factory_type,
+                    daemon,
+                } => {
+                    commands::agent::start::run(
+                        ctx,
+                        &agent_id,
+                        config.as_deref(),
+                        factory_type.as_deref(),
+                        daemon,
+                    )
+                    .await?;
+                }
+                cli::AgentCommands::Stop {
+                    agent_id,
+                    force_persisted_stop,
+                } => {
+                    commands::agent::stop::run(ctx, &agent_id, force_persisted_stop).await?;
+                }
+                cli::AgentCommands::Restart { agent_id, config } => {
+                    commands::agent::restart::run(ctx, &agent_id, config.as_deref()).await?;
+                }
+                cli::AgentCommands::Status { agent_id } => {
+                    commands::agent::status::run(ctx, agent_id.as_deref()).await?;
+                }
+                cli::AgentCommands::List { running, all } => {
+                    commands::agent::list::run(ctx, running, all).await?;
+                }
+                cli::AgentCommands::Logs { agent_id, tail } => {
+                    commands::agent::logs::run(ctx, &agent_id, tail).await?;
+                }
             }
-            cli::AgentCommands::Start {
-                agent_id,
-                config,
-                daemon,
-            } => {
-                commands::agent::start::run(&agent_id, config.as_deref(), daemon)?;
-            }
-            cli::AgentCommands::Stop { agent_id } => {
-                commands::agent::stop::run(&agent_id)?;
-            }
-            cli::AgentCommands::Restart { agent_id, config } => {
-                commands::agent::restart::run(&agent_id, config.as_deref())?;
-            }
-            cli::AgentCommands::Status { agent_id } => {
-                commands::agent::status::run(agent_id.as_deref())?;
-            }
-            cli::AgentCommands::List { running, all } => {
-                commands::agent::list::run(running, all)?;
-            }
-            cli::AgentCommands::Logs { agent_id, tail } => {
-                commands::agent::logs::run(&agent_id, tail)?;
-            }
-        },
-
+        }
         Some(Commands::Config { action }) => match action {
             cli::ConfigCommands::Value(value_cmd) => match value_cmd {
                 cli::ConfigValueCommands::Get { key } => {
@@ -143,54 +184,67 @@ fn run_command(cli: Cli) -> anyhow::Result<()> {
             }
         },
 
-        Some(Commands::Plugin { action }) => match action {
-            cli::PluginCommands::List {
-                installed,
-                available,
-            } => {
-                commands::plugin::list::run(installed, available)?;
+        Some(Commands::Plugin { action }) => {
+            let ctx = ctx.as_ref().unwrap();
+            match action {
+                cli::PluginCommands::List {
+                    installed,
+                    available,
+                } => {
+                    commands::plugin::list::run(ctx, installed, available).await?;
+                }
+                cli::PluginCommands::Info { name } => {
+                    commands::plugin::info::run(ctx, &name).await?;
+                }
+                cli::PluginCommands::Install { name } => {
+                    commands::plugin::install::run(ctx, &name).await?;
+                }
+                cli::PluginCommands::Uninstall { name, force } => {
+                    commands::plugin::uninstall::run(ctx, &name, force).await?;
+                }
             }
-            cli::PluginCommands::Info { name } => {
-                commands::plugin::info::run(&name)?;
-            }
-            cli::PluginCommands::Install { name } => {
-                commands::plugin::install::run(&name)?;
-            }
-            cli::PluginCommands::Uninstall { name, force } => {
-                commands::plugin::uninstall::run(&name, force)?;
-            }
-        },
+        }
 
-        Some(Commands::Session { action }) => match action {
-            cli::SessionCommands::List { agent, limit } => {
-                commands::session::list::run(agent.as_deref(), limit)?;
+        Some(Commands::Session { action }) => {
+            let ctx = ctx.as_ref().unwrap();
+            match action {
+                cli::SessionCommands::List { agent, limit } => {
+                    commands::session::list::run(ctx, agent.as_deref(), limit).await?;
+                }
+                cli::SessionCommands::Show { session_id, format } => {
+                    let show_format = format.map(|f| f.to_string());
+                    commands::session::show::run(ctx, &session_id, show_format.as_deref()).await?;
+                }
+                cli::SessionCommands::Delete { session_id, force } => {
+                    commands::session::delete::run(ctx, &session_id, force).await?;
+                }
+                cli::SessionCommands::Export {
+                    session_id,
+                    output_path,
+                    format,
+                } => {
+                    commands::session::export::run(
+                        ctx,
+                        &session_id,
+                        output_path,
+                        &format.to_string(),
+                    )
+                    .await?;
+                }
             }
-            cli::SessionCommands::Show { session_id, format } => {
-                commands::session::show::run(
-                    &session_id,
-                    format.map(|f| f.to_string()).as_deref(),
-                )?;
-            }
-            cli::SessionCommands::Delete { session_id, force } => {
-                commands::session::delete::run(&session_id, force)?;
-            }
-            cli::SessionCommands::Export {
-                session_id,
-                output,
-                format,
-            } => {
-                commands::session::export::run(&session_id, output, &format.to_string())?;
-            }
-        },
+        }
 
-        Some(Commands::Tool { action }) => match action {
-            cli::ToolCommands::List { available, enabled } => {
-                commands::tool::list::run(available, enabled)?;
+        Some(Commands::Tool { action }) => {
+            let ctx = ctx.as_ref().unwrap();
+            match action {
+                cli::ToolCommands::List { available, enabled } => {
+                    commands::tool::list::run(ctx, available, enabled).await?;
+                }
+                cli::ToolCommands::Info { name } => {
+                    commands::tool::info::run(ctx, &name).await?;
+                }
             }
-            cli::ToolCommands::Info { name } => {
-                commands::tool::info::run(&name)?;
-            }
-        },
+        }
 
         None => {
             // Should have been handled by TUI check above
@@ -204,4 +258,271 @@ fn run_command(cli: Cli) -> anyhow::Result<()> {
     }
 
     Ok(())
+}
+
+fn normalize_legacy_output_flags(args: &mut [String]) {
+    const TOP_LEVEL_COMMANDS: &[&str] = &[
+        "new", "init", "build", "run", "dataflow", "generate", "info", "db", "agent", "config",
+        "plugin", "session", "tool",
+    ];
+
+    let top_command_index = args
+        .iter()
+        .enumerate()
+        .skip(1)
+        .find(|(_, arg)| TOP_LEVEL_COMMANDS.contains(&arg.as_str()))
+        .map(|(idx, _)| idx);
+
+    let top_command = top_command_index.and_then(|idx| args.get(idx).map(String::as_str));
+
+    // Determine the subcommand: the token immediately after the top-level command that is not
+    // a flag. Used to guard against normalising -o for subcommands with their own local -o flag.
+    let sub_command = top_command_index.and_then(|cmd_idx| {
+        args.get(cmd_idx + 1)
+            .filter(|s| !s.starts_with('-'))
+            .map(String::as_str)
+    });
+
+    let allows_global_after_command = match top_command {
+        Some("info")
+        | Some("agent")
+        | Some("plugin")
+        | Some("tool")
+        | Some("config")
+        | Some("build")
+        | Some("run")
+        | Some("init") => true,
+        // `session show` and `session export` both define their own local -o flag, so skip
+        // normalisation for those subcommands.  All other `session` subcommands (e.g. `list`)
+        // use the global output-format flag and should be normalised.
+        Some("session") => !matches!(sub_command, Some("show") | Some("export")),
+        _ => false,
+    };
+
+    let mut i = 1;
+    while i < args.len() {
+        let before_command = match top_command_index {
+            Some(cmd_idx) => i < cmd_idx,
+            None => true,
+        };
+        let should_normalize = before_command || allows_global_after_command;
+
+        // Handle --output=<format> and -o=<format> (single-token equals form).
+        let equals_format = ["--output=", "-o="].iter().find_map(|prefix| {
+            args[i]
+                .strip_prefix(prefix)
+                .filter(|v| is_output_format_value(v))
+                .map(str::to_owned)
+        });
+        if let Some(fmt) = equals_format {
+            if should_normalize {
+                args[i] = format!("--output-format={fmt}");
+            }
+        } else if i + 1 < args.len() {
+            // Handle --output <format> and -o <format> (space-separated form).
+            let is_legacy_output_flag = args[i] == "-o" || args[i] == "--output";
+            let looks_like_output_format = is_output_format_value(&args[i + 1]);
+
+            if is_legacy_output_flag && looks_like_output_format && should_normalize {
+                args[i] = "--output-format".to_string();
+            }
+        }
+
+        i += 1;
+    }
+}
+
+/// Returns `true` if `s` is a recognised global output-format value.
+#[inline]
+fn is_output_format_value(s: &str) -> bool {
+    matches!(s, "text" | "json" | "table")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::normalize_legacy_output_flags;
+
+    #[test]
+    fn test_normalize_legacy_output_before_command() {
+        let mut args = vec![
+            "mofa".to_string(),
+            "--output".to_string(),
+            "json".to_string(),
+            "info".to_string(),
+        ];
+        normalize_legacy_output_flags(&mut args);
+        assert_eq!(args[1], "--output-format");
+    }
+
+    #[test]
+    fn test_normalize_legacy_output_before_command_with_option_value_prefix() {
+        let mut args = vec![
+            "mofa".to_string(),
+            "--config".to_string(),
+            "/tmp/mofa.toml".to_string(),
+            "--output".to_string(),
+            "json".to_string(),
+            "info".to_string(),
+        ];
+        normalize_legacy_output_flags(&mut args);
+        assert_eq!(args[3], "--output-format");
+    }
+
+    #[test]
+    fn test_normalize_legacy_output_after_agent_command() {
+        let mut args = vec![
+            "mofa".to_string(),
+            "agent".to_string(),
+            "list".to_string(),
+            "-o".to_string(),
+            "table".to_string(),
+        ];
+        normalize_legacy_output_flags(&mut args);
+        assert_eq!(args[3], "--output-format");
+    }
+
+    #[test]
+    fn test_do_not_normalize_session_export_output_path() {
+        let mut args = vec![
+            "mofa".to_string(),
+            "session".to_string(),
+            "export".to_string(),
+            "s1".to_string(),
+            "-o".to_string(),
+            "/tmp/s1.json".to_string(),
+            "--format".to_string(),
+            "json".to_string(),
+        ];
+        normalize_legacy_output_flags(&mut args);
+        assert_eq!(args[4], "-o");
+    }
+
+    #[test]
+    fn test_do_not_normalize_session_show_local_output_alias() {
+        let mut args = vec![
+            "mofa".to_string(),
+            "session".to_string(),
+            "show".to_string(),
+            "s1".to_string(),
+            "-o".to_string(),
+            "json".to_string(),
+        ];
+        normalize_legacy_output_flags(&mut args);
+        assert_eq!(args[4], "-o");
+    }
+
+    // --- Fix 1: equals-sign form ---
+
+    #[test]
+    fn test_normalize_equals_form_before_command() {
+        let mut args = vec![
+            "mofa".to_string(),
+            "--output=json".to_string(),
+            "info".to_string(),
+        ];
+        normalize_legacy_output_flags(&mut args);
+        assert_eq!(args[1], "--output-format=json");
+    }
+
+    #[test]
+    fn test_normalize_short_equals_form_before_command() {
+        let mut args = vec![
+            "mofa".to_string(),
+            "-o=table".to_string(),
+            "info".to_string(),
+        ];
+        normalize_legacy_output_flags(&mut args);
+        assert_eq!(args[1], "--output-format=table");
+    }
+
+    #[test]
+    fn test_normalize_equals_form_after_agent_command() {
+        let mut args = vec![
+            "mofa".to_string(),
+            "agent".to_string(),
+            "list".to_string(),
+            "--output=json".to_string(),
+        ];
+        normalize_legacy_output_flags(&mut args);
+        assert_eq!(args[3], "--output-format=json");
+    }
+
+    #[test]
+    fn test_do_not_normalize_equals_form_unknown_value() {
+        // An unrecognised format value must not be touched.
+        let mut args = vec![
+            "mofa".to_string(),
+            "--output=csv".to_string(),
+            "info".to_string(),
+        ];
+        normalize_legacy_output_flags(&mut args);
+        assert_eq!(args[1], "--output=csv");
+    }
+
+    // --- Fix 2: session list normalisation ---
+
+    #[test]
+    fn test_normalize_session_list_short_output_flag() {
+        let mut args = vec![
+            "mofa".to_string(),
+            "session".to_string(),
+            "list".to_string(),
+            "-o".to_string(),
+            "json".to_string(),
+        ];
+        normalize_legacy_output_flags(&mut args);
+        assert_eq!(args[3], "--output-format");
+    }
+
+    #[test]
+    fn test_normalize_session_list_long_output_flag() {
+        let mut args = vec![
+            "mofa".to_string(),
+            "session".to_string(),
+            "list".to_string(),
+            "--output".to_string(),
+            "table".to_string(),
+        ];
+        normalize_legacy_output_flags(&mut args);
+        assert_eq!(args[3], "--output-format");
+    }
+
+    #[test]
+    fn test_normalize_session_list_equals_form() {
+        let mut args = vec![
+            "mofa".to_string(),
+            "session".to_string(),
+            "list".to_string(),
+            "--output=json".to_string(),
+        ];
+        normalize_legacy_output_flags(&mut args);
+        assert_eq!(args[3], "--output-format=json");
+    }
+
+    #[test]
+    fn test_do_not_normalize_session_show_equals_form() {
+        let mut args = vec![
+            "mofa".to_string(),
+            "session".to_string(),
+            "show".to_string(),
+            "s1".to_string(),
+            "--output=json".to_string(),
+        ];
+        normalize_legacy_output_flags(&mut args);
+        // session show has a local -o alias; the equals form must not be rewritten.
+        assert_eq!(args[4], "--output=json");
+    }
+
+    #[test]
+    fn test_do_not_normalize_session_export_equals_form() {
+        let mut args = vec![
+            "mofa".to_string(),
+            "session".to_string(),
+            "export".to_string(),
+            "s1".to_string(),
+            "-o=json".to_string(),
+        ];
+        normalize_legacy_output_flags(&mut args);
+        assert_eq!(args[4], "-o=json");
+    }
 }

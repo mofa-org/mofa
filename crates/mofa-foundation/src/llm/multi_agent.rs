@@ -142,8 +142,8 @@ pub struct AgentTeam {
 }
 
 impl AgentTeam {
-    /// 创建新的 Agent 团队
-    pub fn new(id: impl Into<String>) -> AgentTeamBuilder {
+    /// 创建新的 Agent 团队构建器
+    pub fn builder(id: impl Into<String>) -> AgentTeamBuilder {
         AgentTeamBuilder::new(id)
     }
 

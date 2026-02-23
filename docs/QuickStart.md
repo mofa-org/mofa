@@ -264,3 +264,7 @@ For a full list see [examples/README.md](../examples/README.md).
 | Build a WASM plugin | `examples/wasm_plugin/` |
 | Contribute a fix or feature | [CONTRIBUTING.md](../CONTRIBUTING.md) |
 | Ask a question | [GitHub Discussions](https://github.com/mofa-org/mofa/discussions) · [Discord](https://discord.com/invite/hKJZzDMMm9) |
+
+---
+
+**English** | [简体中文](zh-CN/QuickStart.md)

@@ -1,50 +1,94 @@
 //! `mofa session show` command implementation
 
+use crate::context::CliContext;
 use colored::Colorize;
 
 /// Execute the `mofa session show` command
-pub fn run(session_id: &str, format: Option<&str>) -> anyhow::Result<()> {
+pub async fn run(ctx: &CliContext, session_id: &str, format: Option<&str>) -> anyhow::Result<()> {
     println!("{} Session details: {}", "→".green(), session_id.cyan());
     println!();
 
-    // TODO: Implement actual session retrieval from persistence layer
-
+    let session = ctx
+        .session_manager
+        .get(session_id)
+        .await
+        .map_err(|e| anyhow::anyhow!("Failed to load session: {}", e))?
+        .ok_or_else(|| anyhow::anyhow!("Session '{}' not found", session_id))?;
     let output_format = format.unwrap_or("text");
 
     match output_format {
         "json" => {
             let json = serde_json::json!({
-                "session_id": session_id,
-                "agent_id": "agent-001",
-                "created_at": "2024-01-15T10:30:00Z",
-                "messages": [
-                    {"role": "user", "content": "Hello!"},
-                    {"role": "assistant", "content": "Hi there! How can I help you?"}
-                ],
-                "status": "active"
+                "session_id": session.key,
+                "created_at": session.created_at.to_rfc3339(),
+                "updated_at": session.updated_at.to_rfc3339(),
+                "message_count": session.len(),
+                "metadata": session.metadata,
+                "messages": session.messages.iter().map(|m| {
+                    serde_json::json!({
+                        "role": m.role,
+                        "content": m.content,
+                        "timestamp": m.timestamp.to_rfc3339(),
+                    })
+                }).collect::<Vec<_>>(),
             });
             println!("{}", serde_json::to_string_pretty(&json)?);
         }
         "yaml" => {
-            println!("session_id: {}", session_id);
-            println!("agent_id: agent-001");
-            println!("created_at: 2024-01-15T10:30:00Z");
-            println!("messages:");
-            println!("  - role: user");
-            println!("    content: Hello!");
-            println!("  - role: assistant");
-            println!("    content: Hi there! How can I help you?");
-            println!("status: active");
+            let yaml = serde_json::json!({
+                "session_id": session.key,
+                "created_at": session.created_at.to_rfc3339(),
+                "updated_at": session.updated_at.to_rfc3339(),
+                "message_count": session.len(),
+                "metadata": session.metadata,
+                "messages": session.messages.iter().map(|m| {
+                    serde_json::json!({
+                        "role": m.role,
+                        "content": m.content,
+                        "timestamp": m.timestamp.to_rfc3339(),
+                    })
+                }).collect::<Vec<_>>(),
+            });
+            println!("{}", serde_yaml::to_string(&yaml)?);
         }
         _ => {
-            println!("  Session ID:    {}", session_id.cyan());
-            println!("  Agent ID:      {}", "agent-001".white());
-            println!("  Created:       {}", "2024-01-15 10:30:00".white());
-            println!("  Status:        {}", "active".green());
+            println!("  Session ID:    {}", session.key.cyan());
+            println!(
+                "  Created:       {}",
+                session
+                    .created_at
+                    .format("%Y-%m-%d %H:%M:%S")
+                    .to_string()
+                    .white()
+            );
+            println!(
+                "  Updated:       {}",
+                session
+                    .updated_at
+                    .format("%Y-%m-%d %H:%M:%S")
+                    .to_string()
+                    .white()
+            );
+            println!("  Messages:      {}", session.len());
+            if !session.metadata.is_empty() {
+                println!("  Metadata:      {:?}", session.metadata);
+            }
             println!();
-            println!("  Messages:");
-            println!("    User:      Hello!");
-            println!("    Assistant: Hi there! How can I help you?");
+
+            if session.is_empty() {
+                println!("  (no messages)");
+            } else {
+                println!("  Messages:");
+                for msg in &session.messages {
+                    let role_display = match msg.role.as_str() {
+                        "user" => "User".green(),
+                        "assistant" => "Assistant".cyan(),
+                        "system" => "System".yellow(),
+                        other => other.white(),
+                    };
+                    println!("    {}: {}", role_display, msg.content);
+                }
+            }
         }
     }
 

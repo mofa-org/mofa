@@ -1,9 +1,10 @@
 //! `mofa plugin install` command implementation
 
+use crate::context::CliContext;
 use colored::Colorize;
 
 /// Execute the `mofa plugin install` command
-pub fn run(name: &str) -> anyhow::Result<()> {
+pub async fn run(_ctx: &CliContext, name: &str) -> anyhow::Result<()> {
     println!("{} Installing plugin: {}", "→".green(), name.cyan());
 
     // TODO: Implement actual plugin installation logic
