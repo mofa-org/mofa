@@ -618,7 +618,7 @@ impl LLMAgent {
                 sess_store,
                 config.context_window_size,
             )
-            .await
+                .await
             {
                 Ok(loaded_session) => {
                     tracing::info!(
@@ -651,7 +651,7 @@ impl LLMAgent {
                         sess_store_clone,
                         config.context_window_size,
                     )
-                    .await
+                        .await
                     {
                         Ok(mut new_session) => {
                             if let Some(ref prompt) = config.system_prompt {
@@ -1160,7 +1160,89 @@ impl LLMAgent {
         }
     }
 
-/// 检查是否配置了 TTS 插件
+    /// Stream multiple sentences through a single TTS stream
+    ///
+    /// This is more efficient than calling tts_speak_f32_stream multiple times
+    /// because it reuses the same stream for all sentences, following the kokoro-tts
+    /// streaming pattern: ONE stream, multiple synth calls, continuous audio output.
+    ///
+    /// # Arguments
+    /// - `sentences`: Vector of text sentences to synthesize
+    /// - `callback`: Function to call with each audio chunk (Vec<f32>)
+    ///
+    /// # Example
+    /// ```rust,ignore
+    /// use rodio::buffer::SamplesBuffer;
+    ///
+    /// let sentences = vec!["Hello".to_string(), "World".to_string()];
+    /// agent.tts_speak_f32_stream_batch(
+    ///     sentences,
+    ///     Box::new(|audio_f32| {
+    ///         sink.append(SamplesBuffer::new(1, 24000, audio_f32));
+    ///     }),
+    /// ).await?;
+    /// ```
+    pub async fn tts_speak_f32_stream_batch(
+        &self,
+        sentences: Vec<String>,
+        callback: Box<dyn Fn(Vec<f32>) + Send + Sync>,
+    ) -> LLMResult<()> {
+        let tts = self
+            .tts_plugin
+            .as_ref()
+            .ok_or_else(|| LLMError::Other("TTS plugin not configured".to_string()))?;
+
+        let tts_guard = tts.lock().await;
+
+        #[cfg(feature = "kokoro")]
+        {
+            use mofa_plugins::tts::kokoro_wrapper::KokoroTTS;
+
+            let engine = tts_guard
+                .engine()
+                .ok_or_else(|| LLMError::Other("TTS engine not initialized".to_string()))?;
+
+            if let Some(kokoro) = engine.as_any().downcast_ref::<KokoroTTS>() {
+                let voice = tts_guard
+                    .stats()
+                    .get("default_voice")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("default")
+                    .to_string();
+
+                // Create ONE stream for all sentences
+                let (mut sink, mut stream) = kokoro
+                    .create_stream(&voice)
+                    .await
+                    .map_err(|e| LLMError::Other(format!("Failed to create TTS stream: {}", e)))?;
+
+                // Spawn a task to consume the stream continuously
+                tokio::spawn(async move {
+                    while let Some((audio, _took)) = stream.next().await {
+                        callback(audio);
+                    }
+                });
+
+                // Submit all sentences to the same sink
+                for sentence in sentences {
+                    sink.synth(sentence)
+                        .await
+                        .map_err(|e| LLMError::Other(format!("Failed to submit text: {}", e)))?;
+                }
+
+                return Ok(());
+            }
+
+            Err(LLMError::Other("TTS engine is not KokoroTTS".to_string()))
+        }
+
+        #[cfg(not(feature = "kokoro"))]
+        {
+            Err(LLMError::Other("Kokoro feature not enabled".to_string()))
+        }
+    }
+
+    /// 检查是否配置了 TTS 插件
     /// Check if the TTS plugin is configured
     pub fn has_tts(&self) -> bool {
         self.tts_plugin.is_some()
@@ -1445,9 +1527,9 @@ impl LLMAgent {
                 tokio::time::Duration::from_secs(30),
                 tts_handle._stream_handle,
             )
-            .await
-            .map_err(|_| LLMError::Other("TTS stream processing timeout".to_string()))
-            .and_then(|r| r.map_err(|e| LLMError::Other(format!("TTS stream task failed: {}", e))));
+                .await
+                .map_err(|_| LLMError::Other("TTS stream processing timeout".to_string()))
+                .and_then(|r| r.map_err(|e| LLMError::Other(format!("TTS stream task failed: {}", e))));
 
             Ok(())
         }
@@ -1690,7 +1772,7 @@ impl LLMAgent {
         }
     }
 
-/// 清空对话历史（当前活动会话）
+    /// 清空对话历史（当前活动会话）
     /// Clear conversation history (for the current active session)
     pub async fn clear_history(&self) {
         let session_id = self.active_session_id.read().await.clone();
@@ -2074,7 +2156,7 @@ impl LLMAgent {
     // Internal Helper Methods
     // ========================================================================
 
-/// 将 chunk stream 转换为纯文本 stream
+    /// 将 chunk stream 转换为纯文本 stream
     /// Convert chunk stream into a plain text stream
     fn chunk_stream_to_text_stream(chunk_stream: ChatStream) -> TextStream {
         use futures::StreamExt;
@@ -2896,7 +2978,7 @@ impl LLMAgentBuilder {
             persistence_tenant_id,
             self.persistence_agent_id,
         )
-        .await;
+            .await;
 
         // 设置Prompt模板插件
         // Set Prompt template plugin
@@ -2948,9 +3030,9 @@ impl LLMAgentBuilder {
                 // Identify persistence plugin via metadata
                 if plugin.metadata().plugin_type == PluginType::Storage
                     && plugin
-                        .metadata()
-                        .capabilities
-                        .contains(&"message_persistence".to_string())
+                    .metadata()
+                    .capabilities
+                    .contains(&"message_persistence".to_string())
                 {
                     // 这里我们无法直接调用泛型 PersistencePlugin 的 load_history
                     // We cannot directly call the generic PersistencePlugin's load_history
@@ -3038,7 +3120,7 @@ impl LLMAgentBuilder {
     // Database loading methods
     // ========================================================================
 
-/// 从数据库加载 agent 配置（全局查找）
+    /// 从数据库加载 agent 配置（全局查找）
     /// Load agent configuration from the database (global lookup).
     ///
     /// 根据 agent_code 从数据库加载 agent 配置及其关联的 provider。
