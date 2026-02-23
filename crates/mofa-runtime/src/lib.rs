@@ -448,15 +448,6 @@ pub struct SimpleAgentRuntime<A: MoFAAgent> {
 
 #[cfg(not(feature = "dora"))]
 impl<A: MoFAAgent> SimpleAgentRuntime<A> {
-    pub async fn inject_event(&self, event: AgentEvent) {
-        // 将事件发送到事件通道
-        let _ = self.event_tx.send(event).await;
-    }
-}
-
-#[cfg(not(feature = "dora"))]
-#[cfg(not(feature = "dora"))]
-impl<A: MoFAAgent> SimpleAgentRuntime<A> {
     /// 获取智能体引用
     pub fn agent(&self) -> &A {
         &self.agent
@@ -500,6 +491,11 @@ impl<A: MoFAAgent> SimpleAgentRuntime<A> {
     /// 获取默认超时时间
     pub fn default_timeout(&self) -> Duration {
         self.default_timeout
+    }
+
+    /// 注入事件
+    pub async fn inject_event(&self, event: AgentEvent) {
+        let _ = self.event_tx.send(event).await;
     }
 
     /// 初始化插件
