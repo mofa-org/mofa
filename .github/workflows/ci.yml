@@ -71,6 +71,9 @@ jobs:
       - name: Run tests
         run: cargo test --workspace --all-features
 
+      - name: Run runtime tests (non-dora)
+        run: cargo test -p mofa-runtime --no-default-features
+
       - name: Build examples
         run: cargo build --examples
 
