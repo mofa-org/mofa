@@ -1,4 +1,5 @@
 //! ReAct 核心类型和逻辑
+//! ReAct core types and logic
 
 use crate::llm::{LLMAgent, LLMError, LLMResult, Tool};
 use serde::{Deserialize, Serialize};
@@ -7,34 +8,46 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 
 /// ReAct 步骤类型
+/// ReAct step types
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum ReActStepType {
     /// 思考步骤
+    /// Reasoning step
     Thought,
     /// 行动步骤
+    /// Execution step
     Action,
     /// 观察步骤 (工具执行结果)
+    /// Observation step (tool execution result)
     Observation,
     /// 最终答案
+    /// Final answer
     FinalAnswer,
 }
 
 /// ReAct 执行步骤
+/// ReAct execution step
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ReActStep {
     /// 步骤类型
+    /// Type of the step
     pub step_type: ReActStepType,
     /// 步骤内容
+    /// Content of the step
     pub content: String,
     /// 使用的工具名称 (仅 Action 步骤)
+    /// Used tool name (Action steps only)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tool_name: Option<String>,
     /// 工具输入 (仅 Action 步骤)
+    /// Tool input (Action steps only)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tool_input: Option<String>,
     /// 步骤序号
+    /// Step sequence number
     pub step_number: usize,
     /// 时间戳 (毫秒)
+    /// Timestamp (milliseconds)
     pub timestamp: u64,
 }
 
@@ -98,24 +111,33 @@ impl ReActStep {
 }
 
 /// ReAct 执行结果
+/// ReAct execution result
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ReActResult {
     /// 任务 ID
+    /// Task ID
     pub task_id: String,
     /// 原始任务
+    /// Original task
     pub task: String,
     /// 最终答案
+    /// Final answer
     pub answer: String,
     /// 执行步骤
+    /// Execution steps
     pub steps: Vec<ReActStep>,
     /// 是否成功
+    /// Whether successful
     pub success: bool,
     /// 错误信息 (如果失败)
+    /// Error message (if failed)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub error: Option<String>,
     /// 总迭代次数
+    /// Total iterations
     pub iterations: usize,
     /// 总耗时 (毫秒)
+    /// Total duration (ms)
     pub duration_ms: u64,
 }
 
@@ -162,31 +184,42 @@ impl ReActResult {
 }
 
 /// ReAct 工具 trait
+/// ReAct tool trait
 ///
 /// 实现此 trait 以创建自定义工具
+/// Implement this trait to create custom tools
 #[async_trait::async_trait]
 pub trait ReActTool: Send + Sync {
     /// 工具名称 (用于 LLM 调用)
+    /// Tool name (for LLM calling)
     fn name(&self) -> &str;
 
     /// 工具描述 (用于 LLM 理解工具功能)
+    /// Tool description (for LLM understanding)
     fn description(&self) -> &str;
 
     /// 参数 JSON Schema (可选)
+    /// Parameter JSON Schema (optional)
     fn parameters_schema(&self) -> Option<serde_json::Value> {
         None
     }
 
     /// 执行工具
+    /// Execute the tool
     ///
     /// # 参数
+    /// # Parameters
     /// - `input`: 工具输入 (可以是 JSON 字符串或普通文本)
+    /// - `input`: Tool input (can be JSON or plain text)
     ///
     /// # 返回
+    /// # Returns
     /// 工具执行结果
+    /// Tool execution result
     async fn execute(&self, input: &str) -> Result<String, String>;
 
     /// 转换为 LLM Tool 定义
+    /// Convert to LLM Tool definition
     fn to_llm_tool(&self) -> Tool {
         let params = self.parameters_schema().unwrap_or_else(|| {
             serde_json::json!({
@@ -206,19 +239,26 @@ pub trait ReActTool: Send + Sync {
 }
 
 /// ReAct 配置
+/// ReAct configuration
 #[derive(Debug, Clone)]
 pub struct ReActConfig {
     /// 最大迭代次数
+    /// Maximum iterations
     pub max_iterations: usize,
     /// 是否启用流式输出
+    /// Enable streaming output
     pub stream_output: bool,
     /// 思考温度
+    /// Thinking temperature
     pub temperature: f32,
     /// 自定义系统提示词
+    /// Custom system prompt
     pub system_prompt: Option<String>,
     /// 是否在思考过程中显示详细信息
+    /// Show verbose info during reasoning
     pub verbose: bool,
     /// 每步最大 token 数
+    /// Max tokens per step
     pub max_tokens_per_step: Option<u32>,
 }
 
@@ -267,22 +307,28 @@ impl ReActConfig {
 }
 
 /// ReAct Agent 核心实现
+/// ReAct Agent core implementation
 pub struct ReActAgent {
+    /// LLM Agent
     /// LLM Agent
     llm: Arc<LLMAgent>,
     /// 工具注册表
+    /// Tool registry
     tools: Arc<RwLock<HashMap<String, Arc<dyn ReActTool>>>>,
     /// 配置
+    /// Configuration
     config: ReActConfig,
 }
 
 impl ReActAgent {
     /// 创建构建器
+    /// Create builder
     pub fn builder() -> ReActAgentBuilder {
         ReActAgentBuilder::new()
     }
 
     /// 使用 LLM 和配置创建
+    /// Create with LLM and config
     pub fn new(llm: Arc<LLMAgent>, config: ReActConfig) -> Self {
         Self {
             llm,
@@ -292,18 +338,21 @@ impl ReActAgent {
     }
 
     /// 注册工具
+    /// Register tool
     pub async fn register_tool(&self, tool: Arc<dyn ReActTool>) {
         let mut tools = self.tools.write().await;
         tools.insert(tool.name().to_string(), tool);
     }
 
     /// 获取所有工具
+    /// Get all tools
     pub async fn get_tools(&self) -> Vec<Arc<dyn ReActTool>> {
         let tools = self.tools.read().await;
         tools.values().cloned().collect()
     }
 
     /// 执行任务
+    /// Execute task
     pub async fn run(&self, task: impl Into<String>) -> LLMResult<ReActResult> {
         let task = task.into();
         let task_id = uuid::Uuid::now_v7().to_string();
@@ -313,19 +362,23 @@ impl ReActAgent {
         let mut step_number = 0;
 
         // 构建系统提示词
+        // Build system prompt
         let system_prompt = self.build_system_prompt().await;
 
         // 构建初始消息
+        // Build initial messages
         let mut conversation = vec![format!("Task: {}", task)];
 
         for iteration in 0..self.config.max_iterations {
             step_number += 1;
 
             // 获取 LLM 响应
+            // Get LLM response
             let prompt = self.build_prompt(&system_prompt, &conversation).await;
             let response = self.llm.ask(&prompt).await?;
 
             // 解析响应
+            // Parse response
             let parsed = self.parse_response(&response);
 
             match parsed {
@@ -346,6 +399,7 @@ impl ReActAgent {
                     }
 
                     // 执行工具
+                    // Execute tool
                     step_number += 1;
                     let observation = self.execute_tool(&tool, &input).await;
                     steps.push(ReActStep::observation(&observation, step_number));
@@ -385,6 +439,7 @@ impl ReActAgent {
         }
 
         // 达到最大迭代次数
+        // Max iterations reached
         Ok(ReActResult::failed(
             task_id,
             &task,
@@ -396,6 +451,7 @@ impl ReActAgent {
     }
 
     /// 构建系统提示词
+    /// Build system prompt
     async fn build_system_prompt(&self) -> String {
         if let Some(ref custom_prompt) = self.config.system_prompt {
             return custom_prompt.clone();
@@ -435,20 +491,24 @@ Rules:
     }
 
     /// 构建完整提示词
+    /// Build complete prompt
     async fn build_prompt(&self, system_prompt: &str, conversation: &[String]) -> String {
         format!("{}\n\n{}", system_prompt, conversation.join("\n"))
     }
 
     /// 解析 LLM 响应
+    /// Parse LLM response
     fn parse_response(&self, response: &str) -> ParsedResponse {
         let response = response.trim();
 
         // 检查 Final Answer
+        // Check Final Answer
         if let Some(answer) = response.strip_prefix("Final Answer:") {
             return ParsedResponse::FinalAnswer(answer.trim().to_string());
         }
 
         // 检查 Action
+        // Check Action
         if let Some(action_part) = response.strip_prefix("Action:") {
             let action_part = action_part.trim();
             if let Some(bracket_start) = action_part.find('[')
@@ -464,11 +524,13 @@ Rules:
         }
 
         // 检查 Thought
+        // Check Thought
         if let Some(thought) = response.strip_prefix("Thought:") {
             return ParsedResponse::Thought(thought.trim().to_string());
         }
 
         // 尝试从混合响应中提取
+        // Try extracting from mixed response
         for line in response.lines() {
             let line = line.trim();
             if line.starts_with("Final Answer:") {
@@ -499,10 +561,12 @@ Rules:
         }
 
         // 默认作为 Thought 处理
+        // Handle as Thought by default
         ParsedResponse::Thought(response.to_string())
     }
 
     /// 执行工具
+    /// Execute tool
     async fn execute_tool(&self, tool_name: &str, input: &str) -> String {
         let tools = self.tools.read().await;
 
@@ -521,6 +585,7 @@ Rules:
 }
 
 /// 解析后的响应
+/// Parsed response
 enum ParsedResponse {
     Thought(String),
     Action { tool: String, input: String },
@@ -529,6 +594,7 @@ enum ParsedResponse {
 }
 
 /// ReAct Agent 构建器
+/// ReAct Agent builder
 pub struct ReActAgentBuilder {
     llm: Option<Arc<LLMAgent>>,
     tools: Vec<Arc<dyn ReActTool>>,
@@ -545,54 +611,63 @@ impl ReActAgentBuilder {
     }
 
     /// 设置 LLM Agent
+    /// Set LLM Agent
     pub fn with_llm(mut self, llm: Arc<LLMAgent>) -> Self {
         self.llm = Some(llm);
         self
     }
 
     /// 添加工具
+    /// Add tool
     pub fn with_tool(mut self, tool: Arc<dyn ReActTool>) -> Self {
         self.tools.push(tool);
         self
     }
 
     /// 添加多个工具
+    /// Add multiple tools
     pub fn with_tools(mut self, tools: Vec<Arc<dyn ReActTool>>) -> Self {
         self.tools.extend(tools);
         self
     }
 
     /// 设置最大迭代次数
+    /// Set max iterations
     pub fn with_max_iterations(mut self, max: usize) -> Self {
         self.config.max_iterations = max;
         self
     }
 
     /// 设置温度
+    /// Set temperature
     pub fn with_temperature(mut self, temp: f32) -> Self {
         self.config.temperature = temp;
         self
     }
 
     /// 设置系统提示词
+    /// Set system prompt
     pub fn with_system_prompt(mut self, prompt: impl Into<String>) -> Self {
         self.config.system_prompt = Some(prompt.into());
         self
     }
 
     /// 设置是否详细输出
+    /// Set verbose output
     pub fn with_verbose(mut self, verbose: bool) -> Self {
         self.config.verbose = verbose;
         self
     }
 
     /// 设置完整配置
+    /// Set full config
     pub fn with_config(mut self, config: ReActConfig) -> Self {
         self.config = config;
         self
     }
 
     /// 构建 ReAct Agent
+    /// Build ReAct Agent
     pub fn build(self) -> LLMResult<ReActAgent> {
         let llm = self
             .llm
@@ -601,6 +676,7 @@ impl ReActAgentBuilder {
         let agent = ReActAgent::new(llm, self.config);
 
         // 在运行时注册工具
+        // Register tools at runtime
         let tools = self.tools;
         let agent_tools = agent.tools.clone();
 
@@ -615,6 +691,7 @@ impl ReActAgentBuilder {
     }
 
     /// 异步构建 (确保工具已注册)
+    /// Async build (ensure tools are registered)
     pub async fn build_async(self) -> LLMResult<ReActAgent> {
         let llm = self
             .llm
@@ -623,6 +700,7 @@ impl ReActAgentBuilder {
         let agent = ReActAgent::new(llm, self.config);
 
         // 注册工具
+        // Register tools
         for tool in self.tools {
             agent.register_tool(tool).await;
         }

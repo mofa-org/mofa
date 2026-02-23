@@ -16,6 +16,7 @@ use mofa_kernel::agent::error::{AgentError, AgentResult};
 
 // ============================================================================
 // Session 数据类型
+// Session Data Types
 // ============================================================================
 
 /// Session message
@@ -99,6 +100,7 @@ impl Session {
 
 // ============================================================================
 // SessionStorage trait - 多种后端支持
+// SessionStorage trait - Multiple backend support
 // ============================================================================
 
 /// Session storage backend trait
@@ -125,6 +127,7 @@ pub trait SessionStorage: Send + Sync {
 
 // ============================================================================
 // JSONL 文件存储实现
+// JSONL file storage implementation
 // ============================================================================
 
 /// JSONL file-based session storage
@@ -302,6 +305,7 @@ impl SessionStorage for JsonlSessionStorage {
 
 // ============================================================================
 // 内存存储实现（用于测试）
+// Memory storage implementation (for testing)
 // ============================================================================
 
 /// In-memory session storage (for testing)
@@ -349,6 +353,7 @@ impl SessionStorage for MemorySessionStorage {
 
 // ============================================================================
 // SessionManager - 统一会话管理接口
+// SessionManager - Unified session management interface
 // ============================================================================
 
 /// Session manager with pluggable storage backend

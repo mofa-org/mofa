@@ -35,6 +35,7 @@ async fn main() -> anyhow::Result<()> {
             .with_session_id(Uuid::new_v4().to_string())
             .with_provider(Arc::new(openai_from_env()?))
             .with_system_prompt("你是一个友好的AI助手。")
+            // You are a friendly AI assistant.
             .with_temperature(0.7)
             .with_plugin(TTSPlugin::with_engine("tts", kokoro_engine, Some("zf_088")))
             .build()
@@ -52,6 +53,7 @@ async fn main() -> anyhow::Result<()> {
 
     loop {
         println!("\n请输入问题: ");
+        // Please enter your question: 
         let mut input = String::new();
         std::io::stdin().read_line(&mut input)?;
         let input = input.trim();
@@ -74,8 +76,10 @@ async fn main() -> anyhow::Result<()> {
         print!("AI: ");
 
         // 中断现有播放并清空音频队列
+        // Interrupt current playback and clear the audio queue
         agent.interrupt_tts().await?;
         audio_sink.stop();  // 停止当前播放并清空队列
+        // Stop the current playback and clear the queue
 
         let sink_clone = audio_sink.clone();
         agent.chat_with_tts_callback(
@@ -87,8 +91,10 @@ async fn main() -> anyhow::Result<()> {
         ).await?;
 
         // 启动播放（非阻塞）
+        // Start playback (non-blocking)
         audio_sink.play();
         // 不再使用 sleep_until_end()，让音频在后台播放
+        // No longer using sleep_until_end(), let audio play in the background
     }
     agent.remove_session(&session_id).await?;
     Ok(())
