@@ -826,8 +826,7 @@ impl SessionManager {
     /// Create a new in-memory session manager
     pub fn new_in_memory() -> Self {
         let runtime = tokio::runtime::Runtime::new().unwrap();
-        let storage =
-            Box::new(mofa_foundation::agent::session::MemorySessionStorage::new());
+        let storage = Box::new(mofa_foundation::agent::session::MemorySessionStorage::new());
         let manager = mofa_foundation::agent::session::SessionManager::with_storage(storage);
 
         Self {
@@ -842,9 +841,9 @@ impl SessionManager {
             tokio::runtime::Runtime::new().map_err(|e| MoFaError::RuntimeError(e.to_string()))?;
 
         let manager = runtime
-            .block_on(
-                mofa_foundation::agent::session::SessionManager::with_jsonl(&workspace_path),
-            )
+            .block_on(mofa_foundation::agent::session::SessionManager::with_jsonl(
+                &workspace_path,
+            ))
             .map_err(|e| MoFaError::SessionError(e.to_string()))?;
 
         Ok(Self {
@@ -997,9 +996,7 @@ impl ToolRegistry {
             .lock()
             .unwrap()
             .register(tool_arc)
-            .map_err(|e: mofa_kernel::agent::error::AgentError| {
-                MoFaError::ToolError(e.to_string())
-            })
+            .map_err(|e: mofa_kernel::agent::error::AgentError| MoFaError::ToolError(e.to_string()))
     }
 
     /// Unregister a tool by name
@@ -1009,9 +1006,7 @@ impl ToolRegistry {
             .lock()
             .unwrap()
             .unregister(&name)
-            .map_err(|e: mofa_kernel::agent::error::AgentError| {
-                MoFaError::ToolError(e.to_string())
-            })
+            .map_err(|e: mofa_kernel::agent::error::AgentError| MoFaError::ToolError(e.to_string()))
     }
 
     /// List all registered tools
@@ -1061,16 +1056,14 @@ impl ToolRegistry {
             .get(&name)
             .ok_or_else(|| MoFaError::ToolError(format!("Tool not found: {}", name)))?;
 
-        let arguments: serde_json::Value =
-            serde_json::from_str(&arguments_json).map_err(|e| {
-                MoFaError::InvalidArgument(format!("Invalid JSON arguments: {}", e))
-            })?;
+        let arguments: serde_json::Value = serde_json::from_str(&arguments_json)
+            .map_err(|e| MoFaError::InvalidArgument(format!("Invalid JSON arguments: {}", e)))?;
 
         let input = mofa_kernel::agent::components::tool::ToolInput::from_json(arguments);
 
         // Execute synchronously using a runtime
-        let runtime = tokio::runtime::Runtime::new()
-            .map_err(|e| MoFaError::RuntimeError(e.to_string()))?;
+        let runtime =
+            tokio::runtime::Runtime::new().map_err(|e| MoFaError::RuntimeError(e.to_string()))?;
 
         let ctx = mofa_kernel::agent::context::AgentContext::new("ffi-execution");
         let result = runtime.block_on(tool.execute(input, &ctx));

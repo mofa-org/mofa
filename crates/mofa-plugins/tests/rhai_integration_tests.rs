@@ -527,9 +527,21 @@ async fn test_stats_start_at_zero() {
         .expect("create plugin");
 
     let stats = plugin.stats();
-    assert_eq!(stats.calls_total(), 0, "calls_total must be 0 before any execute");
-    assert_eq!(stats.calls_failed(), 0, "calls_failed must be 0 before any execute");
-    assert_eq!(stats.avg_latency_ms(), 0.0, "avg_latency_ms must be 0.0 before any execute");
+    assert_eq!(
+        stats.calls_total(),
+        0,
+        "calls_total must be 0 before any execute"
+    );
+    assert_eq!(
+        stats.calls_failed(),
+        0,
+        "calls_failed must be 0 before any execute"
+    );
+    assert_eq!(
+        stats.avg_latency_ms(),
+        0.0,
+        "avg_latency_ms must be 0.0 before any execute"
+    );
 }
 
 #[tokio::test]
@@ -573,8 +585,16 @@ async fn test_stats_failed_executions_counted() {
         assert!(res.is_err(), "expected execution error");
     }
 
-    assert_eq!(stats.calls_total(), 2, "total should count failed calls too");
-    assert_eq!(stats.calls_failed(), 2, "both calls should be marked failed");
+    assert_eq!(
+        stats.calls_total(),
+        2,
+        "total should count failed calls too"
+    );
+    assert_eq!(
+        stats.calls_failed(),
+        2,
+        "both calls should be marked failed"
+    );
 }
 
 #[tokio::test]
@@ -588,23 +608,29 @@ async fn test_stats_mixed_success_and_failure() {
     "#;
     let fail_script = r#"throw "top-level failure";"#;
 
-    let mut ok_plugin   = create_running_plugin(ok_script,   "stats-mixed-ok").await;
+    let mut ok_plugin = create_running_plugin(ok_script, "stats-mixed-ok").await;
     let mut fail_plugin = create_running_plugin(fail_script, "stats-mixed-fail").await;
 
-    let ok_stats   = ok_plugin.stats();
+    let ok_stats = ok_plugin.stats();
     let fail_stats = fail_plugin.stats();
 
     // 2 successful executions
-    ok_plugin.execute("good".to_string()).await.expect("should succeed");
-    ok_plugin.execute("good".to_string()).await.expect("should succeed");
+    ok_plugin
+        .execute("good".to_string())
+        .await
+        .expect("should succeed");
+    ok_plugin
+        .execute("good".to_string())
+        .await
+        .expect("should succeed");
 
     // 1 failing execution
     let _ = fail_plugin.execute("any".to_string()).await;
 
-    assert_eq!(ok_stats.calls_total(),   2, "ok plugin: 2 total");
-    assert_eq!(ok_stats.calls_failed(),  0, "ok plugin: 0 failures");
+    assert_eq!(ok_stats.calls_total(), 2, "ok plugin: 2 total");
+    assert_eq!(ok_stats.calls_failed(), 0, "ok plugin: 0 failures");
     assert_eq!(fail_stats.calls_total(), 1, "fail plugin: 1 total");
-    assert_eq!(fail_stats.calls_failed(),1, "fail plugin: 1 failure");
+    assert_eq!(fail_stats.calls_failed(), 1, "fail plugin: 1 failure");
 }
 
 #[tokio::test]
@@ -661,7 +687,11 @@ async fn test_stats_arc_clone_observes_live_updates() {
     }
 
     // The cloned handle sees all updates because it shares the same Atomics
-    assert_eq!(stats_handle.calls_total(), 5, "Arc clone must see live counter");
+    assert_eq!(
+        stats_handle.calls_total(),
+        5,
+        "Arc clone must see live counter"
+    );
     assert_eq!(stats_handle.calls_failed(), 0);
     assert!(stats_handle.avg_latency_ms() >= 0.0);
 }
@@ -680,9 +710,15 @@ async fn test_stats_to_map_snapshot_is_consistent() {
 
     let snapshot = plugin.stats().to_map();
 
-    let total = snapshot["calls_total"].as_u64().expect("calls_total is u64");
-    let failed = snapshot["calls_failed"].as_u64().expect("calls_failed is u64");
-    let avg = snapshot["avg_latency_ms"].as_f64().expect("avg_latency_ms is f64");
+    let total = snapshot["calls_total"]
+        .as_u64()
+        .expect("calls_total is u64");
+    let failed = snapshot["calls_failed"]
+        .as_u64()
+        .expect("calls_failed is u64");
+    let avg = snapshot["avg_latency_ms"]
+        .as_f64()
+        .expect("avg_latency_ms is f64");
 
     assert_eq!(total, 1);
     assert_eq!(failed, 0);

@@ -24,11 +24,7 @@ pub struct DocumentChunk {
 
 impl DocumentChunk {
     /// Create a new document chunk
-    pub fn new(
-        id: impl Into<String>,
-        text: impl Into<String>,
-        embedding: Vec<f32>,
-    ) -> Self {
+    pub fn new(id: impl Into<String>, text: impl Into<String>, embedding: Vec<f32>) -> Self {
         Self {
             id: id.into(),
             text: text.into(),
