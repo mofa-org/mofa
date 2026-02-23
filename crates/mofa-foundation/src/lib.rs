@@ -7,6 +7,9 @@
 // orchestrator module - Model Lifecycle & Allocation
 pub mod orchestrator;
 
+// hardware discovery module
+pub mod hardware;
+
 // prompt module
 pub mod prompt;
 

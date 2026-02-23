@@ -1,6 +1,8 @@
 //! Tracing 导出器
+//! Tracing Exporter
 //!
 //! 支持多种导出格式：Console、Jaeger、OTLP
+//! Supports multiple export formats: Console, Jaeger, OTLP
 
 use super::span::SpanData;
 use async_trait::async_trait;
@@ -9,15 +11,20 @@ use tokio::sync::{RwLock, mpsc};
 use tracing::{debug, error, info};
 
 /// 导出器配置
+/// Exporter configuration
 #[derive(Debug, Clone)]
 pub struct ExporterConfig {
     /// 服务名称
+    /// Service name
     pub service_name: String,
     /// 批量大小
+    /// Batch size
     pub batch_size: usize,
     /// 导出间隔（毫秒）
+    /// Export interval (milliseconds)
     pub export_interval_ms: u64,
     /// 最大队列大小
+    /// Maximum queue size
     pub max_queue_size: usize,
 }
 
@@ -57,24 +64,31 @@ impl ExporterConfig {
 }
 
 /// 追踪导出器 trait
+/// Tracing exporter trait
 #[async_trait]
 pub trait TracingExporter: Send + Sync {
     /// 导出 spans
+    /// Export spans
     async fn export(&self, spans: Vec<SpanData>) -> Result<(), String>;
 
     /// 关闭导出器
+    /// Shutdown exporter
     async fn shutdown(&self) -> Result<(), String>;
 
     /// 强制刷新
+    /// Force flush
     async fn force_flush(&self) -> Result<(), String>;
 }
 
 /// Console 导出器 - 输出到控制台
+/// Console Exporter - Outputs to the console
 pub struct ConsoleExporter {
     config: ExporterConfig,
     /// 是否使用 JSON 格式
+    /// Whether to use JSON format
     json_format: bool,
     /// 是否只输出摘要
+    /// Whether to output summary only
     summary_only: bool,
 }
 
@@ -174,15 +188,20 @@ impl TracingExporter for ConsoleExporter {
 }
 
 /// Jaeger 导出器配置
+/// Jaeger exporter configuration
 #[derive(Debug, Clone)]
 pub struct JaegerConfig {
     /// Agent 地址
+    /// Agent endpoint address
     pub agent_endpoint: String,
     /// Collector 地址（可选，优先于 agent）
+    /// Collector endpoint (optional, takes priority over agent)
     pub collector_endpoint: Option<String>,
     /// 用户名（collector 认证）
+    /// Username (collector authentication)
     pub username: Option<String>,
     /// 密码（collector 认证）
+    /// Password (collector authentication)
     pub password: Option<String>,
 }
 
@@ -198,6 +217,7 @@ impl Default for JaegerConfig {
 }
 
 /// Jaeger 导出器
+/// Jaeger Exporter
 pub struct JaegerExporter {
     config: ExporterConfig,
     jaeger_config: JaegerConfig,
@@ -214,6 +234,7 @@ impl JaegerExporter {
     }
 
     /// 将 SpanData 转换为 Jaeger Thrift 格式
+    /// Convert SpanData to Jaeger Thrift format
     fn to_jaeger_span(&self, span: &SpanData) -> serde_json::Value {
         let duration_us = span
             .end_time
@@ -271,7 +292,9 @@ impl JaegerExporter {
             );
 
             // 这里简化处理，实际应该使用 HTTP 客户端发送
+            // Simplified here; actual implementation should use an HTTP client
             // 在生产环境中，应该使用 opentelemetry-jaeger crate
+            // In production environment, opentelemetry-jaeger crate should be used
             info!("Would send {} spans to Jaeger: {}", spans.len(), endpoint);
             Ok(())
         } else {
@@ -288,11 +311,13 @@ impl TracingExporter for JaegerExporter {
         }
 
         // 添加到缓冲区
+        // Add to buffer
         {
             let mut buffer = self.buffer.write().await;
             buffer.extend(spans);
 
             // 如果缓冲区达到批量大小，则导出
+            // If buffer reaches batch size, export
             if buffer.len() >= self.config.batch_size {
                 let to_export: Vec<_> = buffer.drain(..).collect();
                 drop(buffer);
@@ -324,15 +349,20 @@ impl TracingExporter for JaegerExporter {
 }
 
 /// OTLP 导出器配置
+/// OTLP exporter configuration
 #[derive(Debug, Clone)]
 pub struct OtlpConfig {
     /// Endpoint
+    /// Endpoint
     pub endpoint: String,
     /// 协议 (grpc 或 http)
+    /// Protocol (grpc or http)
     pub protocol: OtlpProtocol,
+    /// Headers
     /// Headers
     pub headers: std::collections::HashMap<String, String>,
     /// 超时（毫秒）
+    /// Timeout (milliseconds)
     pub timeout_ms: u64,
 }
 
@@ -355,6 +385,7 @@ impl Default for OtlpConfig {
 }
 
 /// OTLP 导出器
+/// OTLP Exporter
 pub struct OtlpExporter {
     config: ExporterConfig,
     otlp_config: OtlpConfig,
@@ -371,6 +402,7 @@ impl OtlpExporter {
     }
 
     /// 将 SpanData 转换为 OTLP 格式
+    /// Convert SpanData to OTLP format
     fn to_otlp_span(&self, span: &SpanData) -> serde_json::Value {
         let _duration_ns = span
             .end_time
@@ -451,6 +483,7 @@ impl OtlpExporter {
         );
 
         // 这里简化处理，实际应该使用 HTTP/gRPC 客户端发送
+        // Simplified here; actual implementation should use an HTTP/gRPC client
         info!(
             "Would send {} spans to OTLP: {} (protocol: {:?})",
             spans.len(),
@@ -504,6 +537,7 @@ impl TracingExporter for OtlpExporter {
 }
 
 /// 复合导出器 - 同时导出到多个目标
+/// Composite Exporter - Exports to multiple targets simultaneously
 pub struct CompositeExporter {
     exporters: Vec<Arc<dyn TracingExporter>>,
 }
@@ -570,6 +604,7 @@ impl TracingExporter for CompositeExporter {
 }
 
 /// 异步批处理导出器
+/// Asynchronous batch exporter
 pub struct BatchExporter {
     exporter: Arc<dyn TracingExporter>,
     sender: mpsc::Sender<SpanData>,
@@ -584,6 +619,7 @@ impl BatchExporter {
         let exporter_clone = exporter.clone();
 
         // 启动后台导出任务
+        // Start background export task
         tokio::spawn(async move {
             let mut buffer = Vec::with_capacity(batch_size);
             let mut interval = tokio::time::interval(export_interval);

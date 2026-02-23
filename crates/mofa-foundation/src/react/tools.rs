@@ -1,6 +1,8 @@
 //! ReAct 内置工具实现
+//! ReAct Built-in Tool Implementations
 //!
 //! 提供常用工具的实现示例
+//! Provides implementation examples for common tools
 
 use super::core::ReActTool;
 use async_trait::async_trait;
@@ -11,8 +13,10 @@ use serde_json::Value;
 pub type ToolHandler = Box<dyn Fn(&str) -> Result<String, String> + Send + Sync>;
 
 /// 计算器工具
+/// Calculator Tool
 ///
 /// 支持基本的数学表达式计算
+/// Supports basic mathematical expression evaluation
 pub struct CalculatorTool;
 
 #[async_trait]
@@ -40,6 +44,7 @@ impl ReActTool for CalculatorTool {
 
     async fn execute(&self, input: &str) -> Result<String, String> {
         // 尝试解析 JSON 输入
+        // Attempt to parse JSON input
         let expression = if let Ok(json) = serde_json::from_str::<Value>(input) {
             json.get("expression")
                 .and_then(|v| v.as_str())
@@ -50,6 +55,7 @@ impl ReActTool for CalculatorTool {
         };
 
         // 简单的表达式计算 (仅支持基本运算)
+        // Simple expression calculation (only supports basic operations)
         match evaluate_expression(&expression) {
             Ok(result) => Ok(format!("{}", result)),
             Err(e) => Err(format!("Calculation error: {}", e)),
@@ -58,12 +64,15 @@ impl ReActTool for CalculatorTool {
 }
 
 /// 简单的表达式求值器
+/// Simple expression evaluator
 fn evaluate_expression(expr: &str) -> Result<f64, String> {
     let expr = expr.trim();
 
     // 处理括号
+    // Handle parentheses
     if expr.starts_with('(') && expr.ends_with(')') {
         // 检查是否是完整的括号表达式
+        // Check if it is a complete parenthetical expression
         let inner = &expr[1..expr.len() - 1];
         if is_balanced(inner) {
             return evaluate_expression(inner);
@@ -71,6 +80,7 @@ fn evaluate_expression(expr: &str) -> Result<f64, String> {
     }
 
     // 查找最低优先级的运算符 (从右向左，处理左结合性)
+    // Find the lowest priority operator (right-to-left for left-associativity)
     let mut paren_depth = 0;
     let mut last_add_sub = None;
     let mut last_mul_div = None;
@@ -82,6 +92,7 @@ fn evaluate_expression(expr: &str) -> Result<f64, String> {
             ')' => paren_depth -= 1,
             '+' | '-' if paren_depth == 0 && i > 0 => {
                 // 确保不是负号
+                // Ensure it is not a negative sign
                 let prev = chars.get(i.saturating_sub(1)).copied().unwrap_or(' ');
                 if !matches!(prev, '+' | '-' | '*' | '/' | '(') {
                     last_add_sub = Some(i);
@@ -95,6 +106,7 @@ fn evaluate_expression(expr: &str) -> Result<f64, String> {
     }
 
     // 先处理加减，再处理乘除
+    // Handle addition/subtraction first, then multiplication/division
     if let Some(pos) = last_add_sub {
         let left = evaluate_expression(&expr[..pos])?;
         let right = evaluate_expression(&expr[pos + 1..])?;
@@ -122,11 +134,13 @@ fn evaluate_expression(expr: &str) -> Result<f64, String> {
     }
 
     // 尝试解析为数字
+    // Try to parse as a number
     expr.parse::<f64>()
         .map_err(|_| format!("Invalid expression: {}", expr))
 }
 
 /// 检查括号是否平衡
+/// Check if parentheses are balanced
 fn is_balanced(s: &str) -> bool {
     let mut depth = 0;
     for c in s.chars() {
@@ -145,8 +159,10 @@ fn is_balanced(s: &str) -> bool {
 }
 
 /// 字符串工具
+/// String Tool
 ///
 /// 提供字符串处理功能
+/// Provides string processing functionality
 pub struct StringTool;
 
 #[async_trait]
@@ -190,10 +206,12 @@ impl ReActTool for StringTool {
         }
 
         // 尝试解析 JSON
+        // Attempt to parse JSON
         let params: StringInput = if let Ok(p) = serde_json::from_str(input) {
             p
         } else {
             // 简单格式: operation:text
+            // Simple format: operation:text
             let parts: Vec<&str> = input.splitn(2, ':').collect();
             if parts.len() < 2 {
                 return Err("Invalid input format. Use JSON or 'operation:text'".to_string());
@@ -220,8 +238,10 @@ impl ReActTool for StringTool {
 }
 
 /// JSON 工具
+/// JSON Tool
 ///
 /// 提供 JSON 解析和查询功能
+/// Provides JSON parsing and querying functionality
 pub struct JsonTool;
 
 #[async_trait]
@@ -299,8 +319,10 @@ impl ReActTool for JsonTool {
 }
 
 /// 日期时间工具
+/// DateTime Tool
 ///
 /// 提供日期和时间相关功能
+/// Provides date and time related functionality
 pub struct DateTimeTool;
 
 #[async_trait]
@@ -326,6 +348,7 @@ impl ReActTool for DateTimeTool {
             "now" | "current" => {
                 let secs = now.as_secs();
                 // 简单的 UTC 时间格式化
+                // Simple UTC time formatting
                 let days_since_epoch = secs / 86400;
                 let time_of_day = secs % 86400;
                 let hours = time_of_day / 3600;
@@ -333,6 +356,7 @@ impl ReActTool for DateTimeTool {
                 let seconds = time_of_day % 60;
 
                 // 简化的日期计算 (从 1970-01-01 开始)
+                // Simplified date calculation (starting from 1970-01-01)
                 let (year, month, day) = days_to_date(days_since_epoch);
 
                 Ok(format!(
@@ -351,8 +375,10 @@ impl ReActTool for DateTimeTool {
 }
 
 /// 简化的日期计算
+/// Simplified date calculation
 fn days_to_date(days: u64) -> (u64, u64, u64) {
     // 从 1970-01-01 计算
+    // Calculate from 1970-01-01
     let mut remaining = days as i64;
     let mut year = 1970i64;
 
@@ -388,8 +414,10 @@ fn is_leap_year(year: i64) -> bool {
 }
 
 /// Echo 工具 (测试用)
+/// Echo Tool (for testing)
 ///
 /// 简单地回显输入
+/// Simply echoes the input back
 pub struct EchoTool;
 
 #[async_trait]
@@ -408,36 +436,43 @@ impl ReActTool for EchoTool {
 }
 
 /// 工具注册表便捷函数
+/// Convenience functions for tool registry
 pub mod prelude {
     use super::*;
     use std::sync::Arc;
 
     /// 创建计算器工具
+    /// Creates a calculator tool
     pub fn calculator() -> Arc<dyn ReActTool> {
         Arc::new(CalculatorTool)
     }
 
     /// 创建字符串工具
+    /// Creates a string tool
     pub fn string_tool() -> Arc<dyn ReActTool> {
         Arc::new(StringTool)
     }
 
     /// 创建 JSON 工具
+    /// Creates a JSON tool
     pub fn json_tool() -> Arc<dyn ReActTool> {
         Arc::new(JsonTool)
     }
 
     /// 创建日期时间工具
+    /// Creates a datetime tool
     pub fn datetime_tool() -> Arc<dyn ReActTool> {
         Arc::new(DateTimeTool)
     }
 
     /// 创建 Echo 工具
+    /// Creates an echo tool
     pub fn echo_tool() -> Arc<dyn ReActTool> {
         Arc::new(EchoTool)
     }
 
     /// 获取所有内置工具
+    /// Gets all built-in tools
     pub fn all_builtin_tools() -> Vec<Arc<dyn ReActTool>> {
         vec![
             calculator(),
@@ -450,8 +485,10 @@ pub mod prelude {
 }
 
 /// 自定义工具构建器
+/// Custom Tool Builder
 ///
 /// 方便创建简单的自定义工具
+/// Facilitates the creation of simple custom tools
 pub struct CustomToolBuilder {
     name: String,
     description: String,
@@ -498,6 +535,7 @@ impl CustomToolBuilder {
 }
 
 /// 自定义工具
+/// Custom Tool
 pub struct CustomTool {
     name: String,
     description: String,

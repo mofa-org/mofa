@@ -1,4 +1,5 @@
 //! 任务监控器 - 阶段4: 监控反馈，推送关键决策给人类
+//! Task Monitor - Phase 4: Monitor feedback, push critical decisions to humans
 
 use super::types::*;
 use std::collections::HashMap;
@@ -6,58 +7,77 @@ use std::sync::Arc;
 use tokio::sync::{RwLock, mpsc};
 
 /// 监控事件
+/// Monitoring events
 #[derive(Debug, Clone)]
 pub enum MonitorEvent {
     /// 任务开始
+    /// Task started
     TaskStarted { task_id: String, agent_id: String },
     /// 任务进度更新
+    /// Task progress update
     TaskProgress {
         task_id: String,
         progress: u32,
         message: Option<String>,
     },
     /// 任务完成
+    /// Task completed
     TaskCompleted {
         task_id: String,
         result: ExecutionResult,
     },
     /// 任务失败
+    /// Task failed
     TaskFailed { task_id: String, error: String },
     /// 需要决策
+    /// Decision required
     DecisionRequired { decision: CriticalDecision },
 }
 
 /// 任务快照
+/// Task snapshot
 #[derive(Debug, Clone)]
 pub struct TaskSnapshot {
     /// 任务ID
+    /// Task ID
     pub task_id: String,
     /// 执行Agent ID
+    /// Execution Agent ID
     pub agent_id: String,
     /// 当前状态
+    /// Current status
     pub status: TaskExecutionStatus,
     /// 进度（0-100）
+    /// Progress (0-100)
     pub progress: u32,
     /// 最后更新时间
+    /// Last updated time
     pub last_updated: u64,
     /// 执行结果（如果已完成）
+    /// Execution result (if completed)
     pub result: Option<ExecutionResult>,
 }
 
 /// 任务监控器
+/// Task monitor
 pub struct TaskMonitor {
     /// 任务快照
+    /// Task snapshots
     snapshots: Arc<RwLock<HashMap<String, TaskSnapshot>>>,
     /// 待处理的决策
+    /// Pending decisions
     pending_decisions: Arc<RwLock<HashMap<String, CriticalDecision>>>,
     /// 决策响应通道
+    /// Decision response channels
     decision_responses: Arc<RwLock<HashMap<String, mpsc::Sender<HumanResponse>>>>,
     /// 事件发送器
+    /// Event transmitter
     event_tx: Option<mpsc::Sender<MonitorEvent>>,
 }
 
 impl TaskMonitor {
     /// 创建新的任务监控器
+    /// Create a new task monitor
     pub fn new() -> Self {
         Self {
             snapshots: Arc::new(RwLock::new(HashMap::new())),
@@ -68,12 +88,14 @@ impl TaskMonitor {
     }
 
     /// 设置事件发送器
+    /// Set event transmitter
     pub fn with_event_sender(mut self, tx: mpsc::Sender<MonitorEvent>) -> Self {
         self.event_tx = Some(tx);
         self
     }
 
     /// 开始监控任务
+    /// Start monitoring task
     pub async fn start_monitoring(&self, task_id: &str, agent_id: &str) {
         let now = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
@@ -104,6 +126,7 @@ impl TaskMonitor {
     }
 
     /// 更新任务状态
+    /// Update task status
     pub async fn update_task_status(
         &self,
         task_id: &str,
@@ -134,6 +157,7 @@ impl TaskMonitor {
     }
 
     /// 任务完成
+    /// Task completed
     pub async fn complete_task(&self, task_id: &str, result: ExecutionResult) {
         let now = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
@@ -160,6 +184,7 @@ impl TaskMonitor {
     }
 
     /// 任务失败
+    /// Task failed
     pub async fn fail_task(&self, task_id: &str, error: &str) {
         let now = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
@@ -184,18 +209,21 @@ impl TaskMonitor {
     }
 
     /// 获取任务快照
+    /// Get task snapshot
     pub async fn get_task_snapshot(&self, task_id: &str) -> Option<TaskSnapshot> {
         let snapshots = self.snapshots.read().await;
         snapshots.get(task_id).cloned()
     }
 
     /// 获取所有任务快照
+    /// Get all task snapshots
     pub async fn get_all_snapshots(&self) -> Vec<TaskSnapshot> {
         let snapshots = self.snapshots.read().await;
         snapshots.values().cloned().collect()
     }
 
     /// 创建决策请求
+    /// Create decision request
     pub async fn create_decision(
         &self,
         todo_id: &str,
@@ -226,6 +254,7 @@ impl TaskMonitor {
     }
 
     /// 请求人类决策
+    /// Request human decision
     pub async fn request_decision(
         &self,
         decision: CriticalDecision,
@@ -245,12 +274,14 @@ impl TaskMonitor {
             .await;
 
         // 等待人类响应
+        // Wait for human response
         rx.recv()
             .await
             .ok_or_else(|| anyhow::anyhow!("Decision channel closed"))
     }
 
     /// 提交人类响应
+    /// Submit human response
     pub async fn submit_human_response(
         &self,
         decision_id: &str,
@@ -269,6 +300,7 @@ impl TaskMonitor {
         };
 
         // 更新决策
+        // Update decision
         {
             let mut pending = self.pending_decisions.write().await;
             if let Some(decision) = pending.get_mut(decision_id) {
@@ -277,6 +309,7 @@ impl TaskMonitor {
         }
 
         // 发送响应
+        // Send response
         {
             let mut responses = self.decision_responses.write().await;
             if let Some(tx) = responses.remove(decision_id) {
@@ -287,6 +320,7 @@ impl TaskMonitor {
         }
 
         // 清理
+        // Cleanup
         {
             let mut pending = self.pending_decisions.write().await;
             pending.remove(decision_id);
@@ -297,12 +331,14 @@ impl TaskMonitor {
     }
 
     /// 获取待处理的决策
+    /// Get pending decisions
     pub async fn get_pending_decisions(&self) -> Vec<CriticalDecision> {
         let pending = self.pending_decisions.read().await;
         pending.values().cloned().collect()
     }
 
     /// 处理来自执行Agent的消息
+    /// Handle messages from execution agents
     pub async fn handle_agent_message(&self, message: SecretaryMessage) -> anyhow::Result<()> {
         match message {
             SecretaryMessage::TaskStatusReport {
@@ -330,6 +366,7 @@ impl TaskMonitor {
     }
 
     /// 发送监控事件
+    /// Emit monitoring event
     async fn emit_event(&self, event: MonitorEvent) {
         if let Some(ref tx) = self.event_tx {
             let _ = tx.send(event).await;
@@ -337,6 +374,7 @@ impl TaskMonitor {
     }
 
     /// 获取统计信息
+    /// Get statistics
     pub async fn get_statistics(&self) -> HashMap<String, usize> {
         let snapshots = self.snapshots.read().await;
         let mut stats = HashMap::new();

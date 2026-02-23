@@ -249,7 +249,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use tower_http::cors::{Any, CorsLayer};
+use tower_http::cors::CorsLayer;
 use tower_http::trace::TraceLayer;
 use uuid::Uuid;
 
@@ -294,7 +294,7 @@ struct SessionInfo {
 #[derive(Debug, Serialize)]
 struct HealthResponse {
     status: String,
-    version: env!("CARGO_PKG_VERSION"),
+    version: String,
 }
 
 /// Error response
@@ -485,17 +485,22 @@ async fn main() -> anyhow::Result<()> {
         .route("/api/chat", post(chat_handler))
         .route("/api/chat/session", post(session_chat_handler))
         .route("/api/sessions", get(list_sessions_handler))
-        .route("/api/sessions/:id", delete(delete_session_handler))
+        .route("/api/sessions/{id}", delete(delete_session_handler))
         // Health check
         .route("/api/health", get(health_check))
         .with_state(state)
         // Middleware
         .layer(TraceLayer::new_for_http())
+        // CORS configuration — restricted to localhost for development.
+        // IMPORTANT: Update allowed origins before deploying to production.
         .layer(
             CorsLayer::new()
-                .allow_origin(Any)
-                .allow_methods(Any)
-                .allow_headers(Any),
+                .allow_origin([
+                    "http://localhost:3000".parse().unwrap(),
+                    "http://127.0.0.1:3000".parse().unwrap(),
+                ])
+                .allow_methods([axum::http::Method::GET, axum::http::Method::POST, axum::http::Method::DELETE])
+                .allow_headers([axum::http::header::CONTENT_TYPE]),
         );
 
     // Get server configuration from environment
@@ -510,7 +515,7 @@ async fn main() -> anyhow::Result<()> {
     tracing::info!("  POST   /api/chat          - Single-turn chat");
     tracing::info!("  POST   /api/chat/session  - Multi-turn session chat");
     tracing::info!("  GET    /api/sessions      - List all sessions");
-    tracing::info!("  DELETE /api/sessions/:id  - Delete a session");
+    tracing::info!("  DELETE /api/sessions/{id}  - Delete a session");
     tracing::info!("  GET    /api/health        - Health check");
 
     let listener = tokio::net::TcpListener::bind(&addr).await?;
@@ -632,7 +637,7 @@ List all active sessions.
 ]
 ```
 
-### DELETE /api/sessions/:id
+### DELETE /api/sessions/{{id}}
 
 Delete a specific session.
 

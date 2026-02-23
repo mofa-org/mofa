@@ -1,6 +1,8 @@
 //! LLM Plugin Adapter
+//! LLM Plugin Adapter
 //!
 //! 将 LLM Provider 封装为 MoFA 插件
+//! Encapsulate LLM Provider as a MoFA plugin
 
 use super::provider::{LLMConfig, LLMProvider};
 use super::types::*;
@@ -14,18 +16,23 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 
 /// LLM 插件
+/// LLM Plugin
 ///
 /// 将 LLM Provider 封装为 MoFA 框架的插件
+/// Encapsulates the LLM Provider as a plugin for the MoFA framework
 ///
 /// # 示例
+/// # Example
 ///
 /// ```rust,ignore
 /// use mofa_foundation::llm::{LLMPlugin, LLMConfig};
 ///
 /// // 创建 LLM 插件
+/// // Create LLM plugin
 /// let plugin = LLMPlugin::new("my-llm", provider);
 ///
 /// // 作为 AgentPlugin 使用
+/// // Use as an AgentPlugin
 /// agent.add_plugin(Box::new(plugin));
 /// ```
 pub struct LLMPlugin {
@@ -37,6 +44,7 @@ pub struct LLMPlugin {
 }
 
 /// LLM 统计信息
+/// LLM statistics information
 #[derive(Debug, Default)]
 struct LLMStats {
     total_requests: u64,
@@ -49,6 +57,7 @@ struct LLMStats {
 
 impl LLMPlugin {
     /// 创建新的 LLM 插件
+    /// Create a new LLM plugin
     pub fn new(id: &str, provider: Arc<dyn LLMProvider>) -> Self {
         let metadata = PluginMetadata::new(id, provider.name(), PluginType::LLM)
             .with_description(&format!("LLM provider: {}", provider.name()))
@@ -66,6 +75,7 @@ impl LLMPlugin {
     }
 
     /// 使用配置创建插件
+    /// Create plugin with configuration
     pub fn with_config(id: &str, provider: Arc<dyn LLMProvider>, config: LLMConfig) -> Self {
         let mut plugin = Self::new(id, provider);
         plugin.config = config;
@@ -73,22 +83,26 @@ impl LLMPlugin {
     }
 
     /// 获取 Provider
+    /// Get the Provider
     pub fn provider(&self) -> &Arc<dyn LLMProvider> {
         &self.provider
     }
 
     /// 获取配置
+    /// Get configuration
     pub fn llm_config(&self) -> &LLMConfig {
         &self.config
     }
 
     /// 发送 Chat 请求
+    /// Send Chat request
     pub async fn chat(&self, request: ChatCompletionRequest) -> LLMResult<ChatCompletionResponse> {
         let start = std::time::Instant::now();
 
         let result = self.provider.chat(request).await;
 
         // 更新统计
+        // Update statistics
         let mut stats = self.stats.write().await;
         stats.total_requests += 1;
 
@@ -113,6 +127,7 @@ impl LLMPlugin {
     }
 
     /// 简单问答
+    /// Simple Q&A
     pub async fn ask(&self, question: &str) -> LLMResult<String> {
         let model = self
             .config
@@ -148,6 +163,7 @@ impl AgentPlugin for LLMPlugin {
         self.state = PluginState::Loading;
 
         // 从上下文配置中读取 LLM 配置
+        // Read LLM configuration from plugin context
         if let Some(api_key) = ctx.config.get_string("api_key") {
             self.config.api_key = Some(api_key);
         }
@@ -164,6 +180,7 @@ impl AgentPlugin for LLMPlugin {
 
     async fn init_plugin(&mut self) -> PluginResult<()> {
         // 健康检查
+        // Health check
         self.provider.health_check().await.map_err(|e| {
             self.state = PluginState::Error(e.to_string());
             anyhow::anyhow!("LLM health check failed: {}", e)
@@ -189,6 +206,7 @@ impl AgentPlugin for LLMPlugin {
 
     async fn execute(&mut self, input: String) -> PluginResult<String> {
         // 简单模式：直接将输入作为用户消息
+        // Simple mode: treat input directly as a user message
         self.ask(&input)
             .await
             .map_err(|e| anyhow::anyhow!("LLM execution failed: {}", e))
@@ -196,6 +214,7 @@ impl AgentPlugin for LLMPlugin {
 
     fn stats(&self) -> HashMap<String, serde_json::Value> {
         // 注意：这里使用 try_read 避免阻塞
+        // Note: use try_read here to avoid blocking
         let stats = match self.stats.try_read() {
             Ok(s) => s,
             Err(_) => return HashMap::new(),
@@ -244,17 +263,22 @@ impl AgentPlugin for LLMPlugin {
 
 // ============================================================================
 // LLM 能力扩展
+// LLM Capability Extension
 // ============================================================================
 
 /// LLM 能力 trait
+/// LLM Capability trait
 ///
 /// 为 Agent 提供 LLM 交互能力
+/// Provides LLM interaction capabilities for the Agent
 #[async_trait::async_trait]
 pub trait LLMCapability: Send + Sync {
     /// 获取 LLM 提供商
+    /// Get the LLM provider
     fn llm_provider(&self) -> Option<&Arc<dyn LLMProvider>>;
 
     /// 简单问答
+    /// Simple Q&A
     async fn llm_ask(&self, question: &str) -> LLMResult<String> {
         let provider = self
             .llm_provider()
@@ -271,6 +295,7 @@ pub trait LLMCapability: Send + Sync {
     }
 
     /// 带系统提示的问答
+    /// Q&A with system prompt
     async fn llm_ask_with_system(&self, system: &str, question: &str) -> LLMResult<String> {
         let provider = self
             .llm_provider()
@@ -289,6 +314,7 @@ pub trait LLMCapability: Send + Sync {
     }
 
     /// 发送完整的 Chat 请求
+    /// Send complete Chat request
     async fn llm_chat(&self, request: ChatCompletionRequest) -> LLMResult<ChatCompletionResponse> {
         let provider = self
             .llm_provider()
@@ -300,9 +326,11 @@ pub trait LLMCapability: Send + Sync {
 
 // ============================================================================
 // Mock Provider（用于测试）
+// Mock Provider (for testing)
 // ============================================================================
 
 /// Mock LLM Provider（用于测试）
+/// Mock LLM Provider (for testing)
 pub struct MockLLMProvider {
     name: String,
     responses: RwLock<Vec<String>>,
@@ -311,6 +339,7 @@ pub struct MockLLMProvider {
 
 impl MockLLMProvider {
     /// 创建 Mock Provider
+    /// Create Mock Provider
     pub fn new(name: &str) -> Self {
         Self {
             name: name.to_string(),
@@ -320,12 +349,14 @@ impl MockLLMProvider {
     }
 
     /// 设置默认响应
+    /// Set default response
     pub fn with_default_response(mut self, response: impl Into<String>) -> Self {
         self.default_response = response.into();
         self
     }
 
     /// 添加预设响应（按顺序返回）
+    /// Add preset responses (returned in order)
     pub async fn add_response(&self, response: impl Into<String>) {
         let mut responses = self.responses.write().await;
         responses.push(response.into());
@@ -387,3 +418,5 @@ impl LLMProvider for MockLLMProvider {
         })
     }
 }
+
+// Would you like me to add similar English comments to other files in your MoFA project?

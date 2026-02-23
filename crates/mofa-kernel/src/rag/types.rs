@@ -76,20 +76,15 @@ impl SearchResult {
 }
 
 /// Similarity metric used for comparing embedding vectors.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub enum SimilarityMetric {
     /// Cosine similarity (measures angle between vectors, range 0.0 to 1.0 for normalized vectors)
+    #[default]
     Cosine,
     /// Euclidean distance (L2 distance, lower is more similar)
     Euclidean,
     /// Dot product (higher is more similar)
     DotProduct,
-}
-
-impl Default for SimilarityMetric {
-    fn default() -> Self {
-        Self::Cosine
-    }
 }
 
 #[cfg(test)]

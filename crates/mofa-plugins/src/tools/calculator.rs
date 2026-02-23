@@ -2,6 +2,7 @@ use super::*;
 use serde_json::json;
 
 /// 计算器工具 - 数学表达式计算
+/// Calculator tool - Mathematical expression calculation
 pub struct CalculatorTool {
     definition: ToolDefinition,
 }
