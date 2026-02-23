@@ -38,3 +38,7 @@ pub use storage::Storage;
 // Workflow traits (工作流接口)
 pub mod workflow;
 pub use workflow::*;
+
+// Metrics traits for monitoring integration
+pub mod metrics;
+pub use metrics::*;

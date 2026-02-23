@@ -123,11 +123,13 @@
 
 mod entities;
 mod memory;
+mod metrics_source;
 mod plugin;
 mod traits;
 
 pub use entities::*;
 pub use memory::*;
+pub use metrics_source::*;
 pub use plugin::*;
 pub use traits::*;
 
