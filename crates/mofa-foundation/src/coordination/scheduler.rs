@@ -33,6 +33,8 @@ pub struct PriorityScheduler {
     bus: Arc<AgentBus>,
     task_status: Arc<RwLock<HashMap<String, SchedulingStatus>>>, // 任务状态跟踪
     role_mapping: Arc<RwLock<HashMap<String, Vec<String>>>>,     // 角色-智能体映射
+    agent_tasks: Arc<RwLock<HashMap<String, Vec<String>>>>,      // Agent-to-task mapping
+    task_priorities: Arc<RwLock<HashMap<String, TaskPriority>>>, // Task priority tracking
 }
 
 impl PriorityScheduler {
@@ -43,6 +45,8 @@ impl PriorityScheduler {
             bus,
             task_status: Arc::new(RwLock::new(HashMap::new())),
             role_mapping: Arc::new(RwLock::new(HashMap::new())),
+            agent_tasks: Arc::new(RwLock::new(HashMap::new())),
+            task_priorities: Arc::new(RwLock::new(HashMap::new())),
         }
     }
 
@@ -54,6 +58,10 @@ impl PriorityScheduler {
             submit_time: std::time::Instant::now(),
         };
         self.task_queue.write().await.push(priority_task);
+        self.task_priorities
+            .write()
+            .await
+            .insert(task.task_id.clone(), task.priority.clone());
         self.task_status
             .write()
             .await
@@ -68,6 +76,7 @@ impl PriorityScheduler {
         let mut task_queue = self.task_queue.write().await;
         let mut agent_load = self.agent_load.write().await;
         let mut task_status = self.task_status.write().await;
+        let mut agent_tasks = self.agent_tasks.write().await;
 
         while let Some(priority_task) = task_queue.pop() {
             let task = priority_task.task.clone(); // Clone instead of moving
@@ -105,8 +114,12 @@ impl PriorityScheduler {
                 .await?;
 
             // 更新状态和负载
-            task_status.insert(task_id, SchedulingStatus::Running);
-            *agent_load.entry(target_agent).or_insert(0) += 1;
+            task_status.insert(task_id.clone(), SchedulingStatus::Running);
+            *agent_load.entry(target_agent.clone()).or_insert(0) += 1;
+            agent_tasks
+                .entry(target_agent)
+                .or_default()
+                .push(task_id);
         }
         Ok(())
     }
@@ -129,33 +142,51 @@ impl PriorityScheduler {
     async fn preempt_low_priority_task(
         &self,
         agent_id: &str,
-        _high_priority_task: &TaskRequest,
+        high_priority_task: &TaskRequest,
     ) -> anyhow::Result<()> {
         // 简化实现：直接发送抢占事件
         let agent_load = self.agent_load.read().await;
         let task_status = self.task_status.read().await;
+        let agent_tasks = self.agent_tasks.read().await;
+        let task_priorities = self.task_priorities.read().await;
 
         // 检查目标智能体当前运行的任务
         if let Some(&load) = agent_load.get(agent_id)
             && load > 0
         {
-            // 找到该智能体上优先级最低的运行中任务
-            let low_priority_task_id = task_status
-                .iter()
-                .find(|(_, status_ref)| **status_ref == SchedulingStatus::Running)
-                .map(|(task_id, _)| task_id.clone())
-                .ok_or_else(|| anyhow::anyhow!("No running task on agent: {}", agent_id))?;
+            // Get the task list for this specific agent
+            let tasks_on_agent = match agent_tasks.get(agent_id) {
+                Some(tasks) => tasks,
+                None => return Ok(()), // No task records, skip
+            };
 
-            // 发送抢占指令，标记低优先级任务为 Preempted
-            let preempt_msg =
-                AgentMessage::Event(AgentEvent::TaskPreempted(low_priority_task_id.clone()));
-            self.bus
-                .send_message(
-                    "scheduler",
-                    CommunicationMode::PointToPoint(agent_id.to_string()),
-                    &preempt_msg,
-                )
-                .await?;
+            // Find a running task on this agent with lower priority than the new task
+            let preemptable_task = tasks_on_agent
+                .iter()
+                .filter(|tid| task_status.get(*tid) == Some(&SchedulingStatus::Running))
+                .filter(|tid| {
+                    // Only preempt tasks with lower priority than the new task
+                    if let Some(task_priority) = task_priorities.get(*tid) {
+                        high_priority_task.priority > *task_priority
+                    } else {
+                        false
+                    }
+                })
+                .min_by_key(|tid| task_priorities.get(*tid).cloned())
+                .cloned();
+
+            if let Some(low_priority_task_id) = preemptable_task {
+                // 发送抢占指令，标记低优先级任务为 Preempted
+                let preempt_msg =
+                    AgentMessage::Event(AgentEvent::TaskPreempted(low_priority_task_id.clone()));
+                self.bus
+                    .send_message(
+                        "scheduler",
+                        CommunicationMode::PointToPoint(agent_id.to_string()),
+                        &preempt_msg,
+                    )
+                    .await?;
+            }
         }
         Ok(())
     }
@@ -164,11 +195,17 @@ impl PriorityScheduler {
     pub async fn on_task_completed(&self, agent_id: &str, task_id: &str) -> anyhow::Result<()> {
         let mut agent_load = self.agent_load.write().await;
         let mut task_status = self.task_status.write().await;
+        let mut agent_tasks = self.agent_tasks.write().await;
 
         agent_load
             .entry(agent_id.to_string())
-            .and_modify(|count| *count -= 1);
+            .and_modify(|count| *count = count.saturating_sub(1));
         task_status.insert(task_id.to_string(), SchedulingStatus::Completed);
+
+        // Remove completed task from agent's task list
+        if let Some(tasks) = agent_tasks.get_mut(agent_id) {
+            tasks.retain(|t| t != task_id);
+        }
 
         // 任务完成后再次触发调度，处理队列中的下一个任务
         self.schedule().await?;

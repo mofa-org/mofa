@@ -140,7 +140,7 @@ impl DashboardServer {
             .route("/index.html", get(serve_index))
             .route("/styles.css", get(serve_styles))
             .route("/app.js", get(serve_app_js))
-            .route("/assets/*path", get(serve_static))
+            .route("/assets/{*path}", get(serve_static))
             // API routes
             .nest("/api", api_router)
             // WebSocket
@@ -180,9 +180,9 @@ impl DashboardServer {
 
         // Start WebSocket updates
         if let Some(ws_handler) = &self.ws_handler {
-            let handler = ws_handler.clone();
+            let handler_for_task = Arc::clone(ws_handler);
             tokio::spawn(async move {
-                handler.start_updates();
+                handler_for_task.start_updates();
             });
         }
 

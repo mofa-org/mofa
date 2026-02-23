@@ -12,7 +12,6 @@ use mofa_kernel::plugin::{
 use serde::{Deserialize, Serialize};
 use std::any::Any;
 use std::collections::HashMap;
-use tokio::sync::RwLock;
 
 /// Event response plugin configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -64,7 +63,7 @@ pub trait EventResponsePlugin: AgentPlugin {
 pub struct BaseEventResponsePlugin {
     metadata: PluginMetadata,
     state: PluginState,
-    config: RwLock<EventResponseConfig>,
+    config: EventResponseConfig,
     /// Cached handled event types for synchronous access
     handled_event_types: Vec<EventType>,
     workflow_steps: Vec<String>,
@@ -90,7 +89,7 @@ impl BaseEventResponsePlugin {
         Self {
             metadata,
             state: PluginState::Unloaded,
-            config: RwLock::new(config),
+            config,
             handled_event_types,
             workflow_steps,
         }
@@ -103,8 +102,11 @@ impl BaseEventResponsePlugin {
     }
 
     /// Set the max impact scope
-    pub fn with_max_impact_scope(self, _scope: &str) -> Self {
-        // Max impact scope is now stored in config, update via update_config
+    pub fn with_max_impact_scope(mut self, scope: &str) -> Self {
+        // Note: max_impact_scope is stored here for when decision logic reads it.
+        // Plugins that override config independently should also set this field
+        // in their own EventResponseConfig.
+        self.config.get_mut().max_impact_scope = scope.to_string();
         self
     }
 }
@@ -184,12 +186,11 @@ impl AgentPlugin for BaseEventResponsePlugin {
 #[async_trait]
 impl EventResponsePlugin for BaseEventResponsePlugin {
     fn config(&self) -> &EventResponseConfig {
-        panic!("config() should be implemented by concrete plugin");
+        &self.config
     }
 
     async fn update_config(&mut self, config: EventResponseConfig) -> PluginResult<()> {
-        let mut current_config = self.config.write().await;
-        *current_config = config;
+        self.config = config;
         Ok(())
     }
 

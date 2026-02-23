@@ -204,7 +204,7 @@ async fn generate_demo_data(collector: Arc<MetricsCollector>) {
         }
 
         // Log progress occasionally
-        if tick.is_multiple_of(60) {
+        if tick % 60 == 0 {
             info!("📊 Demo data tick: {} (agents: {}, workflows: {}, plugins: {})",
                 tick, agents.len(), workflows.len(), plugins.len());
         }

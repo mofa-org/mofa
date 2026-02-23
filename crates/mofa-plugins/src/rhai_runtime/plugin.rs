@@ -309,7 +309,7 @@ impl RhaiPlugin {
             RhaiPluginSource::File(path) => std::fs::metadata(path)?
                 .modified()?
                 .duration_since(std::time::UNIX_EPOCH)
-                .expect("时间转换失败")
+                .unwrap_or_default()
                 .as_secs(),
             _ => std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
