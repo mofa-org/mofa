@@ -749,6 +749,14 @@ impl ApiCallStore for SqliteStore {
             sql.push_str(" AND agent_id = ?");
             binds.push(agent_id.to_string());
         }
+        if let Some(status) = filter.status {
+            sql.push_str(" AND status = ?");
+            binds.push(status.to_string());
+        }
+        if let Some(ref model_name) = filter.model_name {
+            sql.push_str(" AND model_name = ?");
+            binds.push(model_name.clone());
+        }
         if let Some(start_time) = filter.start_time {
             sql.push_str(" AND create_time >= ?");
             binds.push(start_time.to_rfc3339());
@@ -1489,5 +1497,9 @@ mod tests {
         let boundary_calls = store.query_api_calls(&boundary_filter).await.unwrap();
         assert_eq!(boundary_calls.len(), 1);
         assert_eq!(boundary_calls[0].id, new_call.id);
+
+        let boundary_stats = store.get_statistics(&boundary_filter).await.unwrap();
+        assert_eq!(boundary_stats.total_calls, 1);
+        assert_eq!(boundary_stats.total_tokens, 150);
     }
 }
