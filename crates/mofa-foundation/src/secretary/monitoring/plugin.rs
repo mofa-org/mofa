@@ -106,7 +106,7 @@ impl BaseEventResponsePlugin {
         // Note: max_impact_scope is stored here for when decision logic reads it.
         // Plugins that override config independently should also set this field
         // in their own EventResponseConfig.
-        self.config.get_mut().max_impact_scope = scope.to_string();
+        self.config.max_impact_scope = scope.to_string();
         self
     }
 }
