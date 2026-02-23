@@ -4,9 +4,16 @@
 
 - [快速开始](getting-started/README.md)
   - [安装](getting-started/installation.md)
+  - [LLM 配置](getting-started/llm-setup.md)
+  - [第一个智能体](getting-started/first-agent.md)
 
 - [核心概念](concepts/README.md)
   - [架构概览](concepts/architecture.md)
+  - [微内核设计](concepts/microkernel.md)
+  - [智能体](concepts/agents.md)
+  - [工具](concepts/tools.md)
+  - [插件](concepts/plugins.md)
+  - [工作流](concepts/workflows.md)
 
 - [教程](tutorial/README.md)
   - [第一章：简介](tutorial/01-introduction.md)
