@@ -36,8 +36,8 @@ hex.workspace = true
 lazy_static.workspace = true
 # HTTP server dependencies
 axum = { workspace = true, features = ["macros", "ws"] }
-tower = { version = "0.4", features = ["util", "timeout"] }
-tower-http = { version = "0.5", features = ["fs", "cors", "trace"] }
+tower = { version = "0.5", features = ["util", "timeout"] }
+tower-http = { version = "0.6", features = ["fs", "cors", "trace"] }
 
 # Static file embedding
 rust-embed = { version = "8.0", features = ["compression"] }
