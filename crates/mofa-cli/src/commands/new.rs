@@ -294,7 +294,7 @@ struct SessionInfo {
 #[derive(Debug, Serialize)]
 struct HealthResponse {
     status: String,
-    version: env!("CARGO_PKG_VERSION"),
+    version: String,
 }
 
 /// Error response
