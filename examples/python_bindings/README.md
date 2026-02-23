@@ -4,19 +4,19 @@ This directory contains Python examples demonstrating how to use the MoFA SDK th
 
 ## Prerequisites
 
-1. Build the MoFA SDK library with UniFFI support:
+1. Build the MoFA FFI library with UniFFI support:
 ```bash
 cd /path/to/mofa
-cargo build --release --features "uniffi,openai" -p mofa-sdk
+cargo build --release --features "uniffi" -p mofa-ffi
 ```
 
 2. Generate Python bindings:
 ```bash
-cd crates/mofa-sdk
+cd crates/mofa-ffi
 ./generate-bindings.sh python
 ```
 
-3. Set your OpenAI API key:
+3. For LLM examples, set your OpenAI API key:
 ```bash
 export OPENAI_API_KEY=your-key-here
 ```
@@ -34,71 +34,118 @@ export OPENAI_MODEL=gpt-3.5-turbo                   # Model to use
 python 01_llm_agent.py
 ```
 
-Demonstrates:
-- Creating an LLM agent using the builder pattern
-- Simple Q&A (ask method)
-- Multi-turn chat with context retention
-- Getting conversation history
-- Clearing history
+Demonstrates creating an LLM agent, simple Q&A, multi-turn chat with context retention, and history management. Requires an API key.
 
 ### Example 2: Version Information
 ```bash
 python 02_version_info.py
 ```
 
-Demonstrates:
-- Getting SDK version
-- Checking Dora runtime availability
+Demonstrates getting the SDK version and checking feature availability.
 
-## Code Example
-
-```python
-from mofa import LLMAgentBuilder
-import os
-
-# Create an agent
-builder = LLMAgentBuilder.create()
-builder = builder.set_id("my-agent")
-builder = builder.set_name("Python Agent")
-builder = builder.set_system_prompt("You are a helpful assistant.")
-builder = builder.set_openai_provider(
-    os.environ["OPENAI_API_KEY"],
-    base_url=os.environ.get("OPENAI_BASE_URL"),
-    model=os.environ.get("OPENAI_MODEL", "gpt-3.5-turbo")
-)
-
-agent = builder.build()
-
-# Use the agent
-response = agent.ask("What is Python?")
-print(response)
-
-# Multi-turn chat
-r1 = agent.chat("My name is Alice.")
-r2 = agent.chat("What's my name?")  # Remembers context
+### Example 3: Session Management
+```bash
+python 03_session_management.py
 ```
 
-## Available Functions
+Demonstrates creating sessions, adding messages, retrieving history, storing metadata, and using both in-memory and standalone sessions. No API key required.
 
-- `get_version()` - Get SDK version string
-- `is_dora_available()` - Check if Dora runtime is enabled
-- `new_llm_agent_builder()` - Create a new LLMAgentBuilder
+### Example 4: Tool Registration
+```bash
+python 04_tool_registration.py
+```
 
-## LLMAgentBuilder Methods
+Demonstrates defining custom tools in Python using the FfiToolCallback interface, registering them in a ToolRegistry, and executing them. No API key required.
 
-- `set_id(id)` - Set agent ID
-- `set_name(name)` - Set agent name
-- `set_system_prompt(prompt)` - Set system prompt
-- `set_temperature(temp)` - Set temperature (0.0-1.0)
-- `set_max_tokens(tokens)` - Set max tokens
-- `set_openai_provider(key, url, model)` - Configure OpenAI provider
-- `build()` - Build the agent
+### Example 5: Integration Test
+```bash
+python 05_integration_test.py
+```
 
-## LLMAgent Methods
+End-to-end test that exercises sessions, tools, version info, and error handling. No API key required. Returns exit code 0 on success.
 
-- `agent_id()` - Get agent ID
-- `name()` - Get agent name
-- `ask(question)` - Simple Q&A (no context)
-- `chat(message)` - Multi-turn chat (with context)
-- `clear_history()` - Clear conversation history
-- `get_history()` - Get conversation history
+## API Reference
+
+### Namespace Functions
+
+| Function | Description |
+|---|---|
+| `get_version()` | Get SDK version string |
+| `is_dora_available()` | Check if Dora runtime is compiled in |
+| `new_llm_agent_builder()` | Create a new LLMAgentBuilder |
+
+### LLMAgentBuilder
+
+| Method | Description |
+|---|---|
+| `set_id(id)` | Set agent ID |
+| `set_name(name)` | Set agent name |
+| `set_system_prompt(prompt)` | Set system prompt |
+| `set_temperature(temp)` | Set temperature (0.0 to 1.0) |
+| `set_max_tokens(tokens)` | Set max tokens |
+| `set_session_id(id)` | Set initial session ID |
+| `set_user_id(id)` | Set user ID |
+| `set_tenant_id(id)` | Set tenant ID |
+| `set_context_window_size(size)` | Set context window (in rounds) |
+| `set_openai_provider(key, url, model)` | Configure OpenAI provider |
+| `build()` | Build the LLMAgent |
+
+### LLMAgent
+
+| Method | Description |
+|---|---|
+| `agent_id()` | Get agent ID |
+| `name()` | Get agent name |
+| `ask(question)` | Simple Q&A (no context retention) |
+| `chat(message)` | Multi-turn chat (with context) |
+| `clear_history()` | Clear conversation history |
+| `get_history()` | Get conversation history as list of ChatMessage |
+| `get_last_output()` | Get structured output from last execution |
+
+### SessionManager
+
+| Method | Description |
+|---|---|
+| `SessionManager.new_in_memory()` | Create in-memory session manager |
+| `SessionManager.new_with_storage(path)` | Create file-backed session manager |
+| `get_or_create(key)` | Get or create a session by key |
+| `get_session(key)` | Get session (returns None if missing) |
+| `save_session(session)` | Persist a session |
+| `delete_session(key)` | Delete a session |
+| `list_sessions()` | List all session keys |
+
+### Session
+
+| Method | Description |
+|---|---|
+| `Session(key)` | Create a standalone session |
+| `get_key()` | Get session key |
+| `add_message(role, content)` | Add a message |
+| `get_history(max_messages)` | Get recent messages |
+| `clear()` | Clear all messages |
+| `message_count()` | Get message count |
+| `is_empty()` | Check if empty |
+| `set_metadata(key, value_json)` | Set metadata (JSON value) |
+| `get_metadata(key)` | Get metadata (returns None if missing) |
+
+### ToolRegistry
+
+| Method | Description |
+|---|---|
+| `ToolRegistry()` | Create empty registry |
+| `register_tool(callback)` | Register a tool (FfiToolCallback) |
+| `unregister_tool(name)` | Remove a tool |
+| `list_tools()` | List all tools as ToolInfo objects |
+| `list_tool_names()` | List tool names |
+| `has_tool(name)` | Check if tool exists |
+| `tool_count()` | Get number of tools |
+| `execute_tool(name, args_json)` | Execute a tool with JSON arguments |
+
+### FfiToolCallback (implement this for custom tools)
+
+| Method | Description |
+|---|---|
+| `name()` | Return tool name |
+| `description()` | Return tool description |
+| `parameters_schema_json()` | Return JSON Schema for parameters |
+| `execute(arguments_json)` | Execute and return FfiToolResult |
