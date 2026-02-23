@@ -249,7 +249,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use tower_http::cors::{Any, CorsLayer};
+use tower_http::cors::CorsLayer;
 use tower_http::trace::TraceLayer;
 use uuid::Uuid;
 
@@ -491,11 +491,16 @@ async fn main() -> anyhow::Result<()> {
         .with_state(state)
         // Middleware
         .layer(TraceLayer::new_for_http())
+        // CORS configuration — restricted to localhost for development.
+        // IMPORTANT: Update allowed origins before deploying to production.
         .layer(
             CorsLayer::new()
-                .allow_origin(Any)
-                .allow_methods(Any)
-                .allow_headers(Any),
+                .allow_origin([
+                    "http://localhost:3000".parse().unwrap(),
+                    "http://127.0.0.1:3000".parse().unwrap(),
+                ])
+                .allow_methods([axum::http::Method::GET, axum::http::Method::POST, axum::http::Method::DELETE])
+                .allow_headers([axum::http::header::CONTENT_TYPE]),
         );
 
     // Get server configuration from environment
