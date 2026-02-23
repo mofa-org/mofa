@@ -10,6 +10,9 @@ pub mod orchestrator;
 // hardware discovery module
 pub mod hardware;
 
+// inference backend abstraction
+pub mod inference_backend;
+
 // prompt module
 pub mod prompt;
 
