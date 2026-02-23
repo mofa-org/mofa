@@ -56,10 +56,10 @@ config.workspace = true
 regex = "1.11"
 
 # TOML parsing for DSL
-toml = "0.8"
+toml = "0.9"
 
 # OpenAI / compatible APIs
-async-openai = { version = "0.27" }
+async-openai = { version = "0.33" }
 
 # Actor framework for ReAct agents
 ractor.workspace = true
@@ -86,7 +86,7 @@ qdrant-client = { version = "1.17", optional = true }
 
 # Image encoding and MIME detection
 base64 = "0.22"
-infer = "0.16"
+infer = "0.19"
 
 [lints]
 workspace = true
