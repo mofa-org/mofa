@@ -202,6 +202,9 @@ impl<S: GraphState + 'static> mofa_kernel::workflow::StateGraph for StateGraphIm
             None => {
                 self.edges.insert(from_id, EdgeTarget::single(to_id));
             }
+            _ => {
+                warn!("Unhandled EdgeTarget variant for '{}'", from_id);
+            }
         }
 
         self
@@ -333,8 +336,10 @@ impl<S: GraphState> CompiledGraphImpl<S> {
                             .unwrap_or_default()
                     }
                     None => vec![],
+                    _ => vec![],
                 }
             }
+            _ => vec![],
         }
     }
 
@@ -492,8 +497,10 @@ impl<S: GraphState + 'static> CompiledGraph<S> for CompiledGraphImpl<S> {
                                     .unwrap_or_default()
                             }
                             None => vec![],
+                            _ => vec![],
                         }
                     }
+                    _ => vec![],
                 }
             };
 
