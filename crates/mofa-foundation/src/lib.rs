@@ -13,6 +13,9 @@ pub mod hardware;
 // adapter registry module - Runtime model adapter discovery
 pub mod adapter;
 
+// inference orchestration module - Unified Inference Routing & Lifecycle
+pub mod inference;
+
 // prompt module
 pub mod prompt;
 
@@ -76,9 +79,6 @@ pub use orchestrator::{
 
 // Re-export secretary types for convenience
 pub use secretary::{
-    // Core types
-    extract_json_block,
-    parse_llm_json,
     Artifact,
     ChannelConnection,
     ChatMessage,
@@ -117,4 +117,7 @@ pub use secretary::{
     TodoStatus,
     UserConnection,
     WorkPhase,
+    // Core types
+    extract_json_block,
+    parse_llm_json,
 };
