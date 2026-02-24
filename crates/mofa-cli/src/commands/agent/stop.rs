@@ -136,17 +136,25 @@ mod tests {
     async fn test_stop_errors_when_registry_missing_even_if_persisted_exists() -> anyhow::Result<()>
     {
         let temp = TempDir::new().expect("failed to create temporary directory");
-        let first_ctx = CliContext::with_temp_dir(temp.path()).await?;
+        let first_ctx = CliContext::with_temp_dir(temp.path())
+            .await
+            .expect("Failed to initialize test CLI context");
         start::run(&first_ctx, "persisted-agent", None, None, false).await?;
 
         // Simulate a new CLI process: persisted entry remains, runtime registry is empty.
-        let second_ctx = CliContext::with_temp_dir(temp.path()).await?;
+        let second_ctx = CliContext::with_temp_dir(temp.path())
+            .await
+            .expect("Failed to initialize test CLI context");
         assert!(!second_ctx.agent_registry.contains("persisted-agent").await);
 
         let result = run(&second_ctx, "persisted-agent", false).await;
         assert!(result.is_err());
 
-        let persisted = second_ctx.agent_store.get("persisted-agent")?.unwrap();
+        let persisted = second_ctx
+            .agent_store
+            .get("persisted-agent")
+            .expect("Request to agent_store failed")
+            .expect("Agent 'persisted-agent' should exist in store");
         assert_eq!(persisted.state, "Running");
         Ok(())
     }
@@ -155,10 +163,14 @@ mod tests {
     async fn test_stop_force_persisted_stop_updates_state_when_registry_missing()
     -> anyhow::Result<()> {
         let temp = TempDir::new().expect("failed to create temporary directory");
-        let first_ctx = CliContext::with_temp_dir(temp.path()).await?;
+        let first_ctx = CliContext::with_temp_dir(temp.path())
+            .await
+            .expect("Failed to initialize test CLI context");
         start::run(&first_ctx, "persisted-agent-force", None, None, false).await?;
 
-        let second_ctx = CliContext::with_temp_dir(temp.path()).await?;
+        let second_ctx = CliContext::with_temp_dir(temp.path())
+            .await
+            .expect("Failed to initialize test CLI context");
         assert!(
             !second_ctx
                 .agent_registry
