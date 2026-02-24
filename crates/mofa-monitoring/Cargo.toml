@@ -9,7 +9,14 @@ repository.workspace = true
 homepage.workspace = true
 documentation = "https://docs.rs/mofa-monitoring"
 readme = "README.md"
-keywords = ["ai", "agent", "monitoring", "dashboard", "metrics"]
+keywords = [
+    "ai",
+    "agent",
+    "monitoring",
+    "observability",
+    "dashboard",
+    "metrics",
+]
 categories = ["development-tools"]
 publish = true
 
@@ -21,16 +28,17 @@ serde_json.workspace = true
 tokio.workspace = true
 anyhow.workspace = true
 tracing.workspace = true
-uuid = {workspace = true, features = ["serde", "v4"]}
+uuid = { workspace = true, features = ["serde", "v4"] }
 chrono.workspace = true
 thiserror.workspace = true
 rand.workspace = true
 hex.workspace = true
 lazy_static.workspace = true
 # HTTP server dependencies
-axum = {workspace = true, features = ["macros","ws"]}
-tower = { version = "0.4", features = ["util", "timeout"] }
-tower-http = { version = "0.5", features = ["fs", "cors", "trace"] }
+axum = { workspace = true, features = ["macros", "ws"] }
+tower = { version = "0.5", features = ["util", "timeout"] }
+reqwest = { version = "0.11", features = ["json", "rustls-tls"] }
+tower-http = { version = "0.6", features = ["fs", "cors", "trace"] }
 
 # Static file embedding
 rust-embed = { version = "8.0", features = ["compression"] }
@@ -42,6 +50,10 @@ futures = "0.3.31"
 
 # System metrics
 sysinfo = "0.32"
+
+[dev-dependencies]
+tokio-tungstenite = "0.24"
+futures-util = "0.3"
 
 [lints]
 workspace = true

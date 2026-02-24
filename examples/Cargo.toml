@@ -1,6 +1,7 @@
 [workspace]
 resolver = "3"
 members = [
+    "cli_production_smoke",
     "plugin_system",
     "workflow_orchestration",
     "wasm_plugin",
@@ -11,6 +12,7 @@ members = [
     "secretary_agent",
     "react_agent",
     "rhai_scripting",
+    "runtime_periodic_runner",
     "runtime_example",
     "hitl_secretary",
     "streaming_persistence",
@@ -22,7 +24,10 @@ members = [
     "llm_tts_streaming",
     "agent_from_database_streaming",
     "workflow_dsl",
-    "tool_routing"
+    "reflection_agent",
+    "tool_routing",
+    "runtime_message_bus_backpressure",
+    "rag_pipeline"
 ]
 
 [workspace.package]

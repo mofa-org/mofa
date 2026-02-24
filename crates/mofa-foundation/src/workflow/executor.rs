@@ -1,6 +1,8 @@
 //! 工作流执行器
+//! Workflow Executor
 //!
 //! 负责工作流的执行调度
+//! Responsible for workflow execution scheduling
 //!
 //! Supports optional telemetry emission for the time-travel debugger.
 //! When a `TelemetryEmitter` is attached via `with_telemetry()`, the
@@ -20,17 +22,23 @@ use tokio::sync::{RwLock, Semaphore, mpsc, oneshot};
 use tracing::{error, info, warn};
 
 /// 执行器配置
+/// Executor Configuration
 #[derive(Debug, Clone)]
 pub struct ExecutorConfig {
     /// 最大并行度
+    /// Maximum parallelism
     pub max_parallelism: usize,
     /// 是否在失败时停止
+    /// Whether to stop on failure
     pub stop_on_failure: bool,
     /// 是否启用检查点
+    /// Whether to enable checkpoints
     pub enable_checkpoints: bool,
     /// 检查点间隔（节点数）
+    /// Checkpoint interval (number of nodes)
     pub checkpoint_interval: usize,
     /// 执行超时（毫秒）
+    /// Execution timeout (milliseconds)
     pub execution_timeout_ms: Option<u64>,
 }
 
@@ -47,28 +55,36 @@ impl Default for ExecutorConfig {
 }
 
 /// 执行事件
+/// Execution Event
 #[derive(Debug, Clone)]
 pub enum ExecutionEvent {
     /// 工作流开始
+    /// Workflow started
     WorkflowStarted {
         workflow_id: String,
         execution_id: String,
     },
     /// 工作流完成
+    /// Workflow completed
     WorkflowCompleted {
         workflow_id: String,
         execution_id: String,
         status: WorkflowStatus,
     },
     /// 节点开始
+    /// Node started
     NodeStarted { node_id: String },
     /// 节点完成
+    /// Node completed
     NodeCompleted { node_id: String, result: NodeResult },
     /// 节点失败
+    /// Node failed
     NodeFailed { node_id: String, error: String },
     /// 检查点创建
+    /// Checkpoint created
     CheckpointCreated { label: String },
     /// 外部事件
+    /// External event
     ExternalEvent {
         event_type: String,
         data: WorkflowValue,
@@ -76,18 +92,24 @@ pub enum ExecutionEvent {
 }
 
 /// 工作流执行器
+/// Workflow Executor
 pub struct WorkflowExecutor {
     /// 执行器配置
+    /// Executor configuration
     config: ExecutorConfig,
     /// 事件发送器
+    /// Event transmitter
     event_tx: Option<mpsc::Sender<ExecutionEvent>>,
     /// Telemetry emitter for the time-travel debugger (optional)
     telemetry: Option<Arc<dyn TelemetryEmitter>>,
     /// 子工作流注册表
+    /// Sub-workflow registry
     sub_workflows: Arc<RwLock<HashMap<String, Arc<WorkflowGraph>>>>,
     /// 外部事件等待器
+    /// External event waiters
     event_waiters: Arc<RwLock<HashMap<String, Vec<oneshot::Sender<WorkflowValue>>>>>,
     /// 并行执行信号量
+    /// Parallel execution semaphore
     semaphore: Arc<Semaphore>,
 }
 
@@ -105,6 +127,7 @@ impl WorkflowExecutor {
     }
 
     /// 设置事件发送器
+    /// Set event transmitter
     pub fn with_event_sender(mut self, tx: mpsc::Sender<ExecutionEvent>) -> Self {
         self.event_tx = Some(tx);
         self
@@ -129,12 +152,14 @@ impl WorkflowExecutor {
     }
 
     /// 注册子工作流
+    /// Register sub-workflow
     pub async fn register_sub_workflow(&self, id: &str, graph: WorkflowGraph) {
         let mut workflows = self.sub_workflows.write().await;
         workflows.insert(id.to_string(), Arc::new(graph));
     }
 
     /// 发送执行事件
+    /// Emit execution event
     async fn emit_event(&self, event: ExecutionEvent) {
         if let Some(ref tx) = self.event_tx {
             let _ = tx.send(event).await;
@@ -142,6 +167,7 @@ impl WorkflowExecutor {
     }
 
     /// 发送外部事件
+    /// Send external event
     pub async fn send_external_event(&self, event_type: &str, data: WorkflowValue) {
         let mut waiters = self.event_waiters.write().await;
         if let Some(senders) = waiters.remove(event_type) {
@@ -152,6 +178,7 @@ impl WorkflowExecutor {
     }
 
     /// 执行工作流
+    /// Execute workflow
     pub async fn execute(
         &self,
         graph: &WorkflowGraph,
@@ -162,6 +189,7 @@ impl WorkflowExecutor {
         ctx.set_input(input.clone()).await;
 
         // 发送开始事件
+        // Emit start event
         self.emit_event(ExecutionEvent::WorkflowStarted {
             workflow_id: graph.id.clone(),
             execution_id: ctx.execution_id.clone(),
@@ -182,6 +210,7 @@ impl WorkflowExecutor {
         );
 
         // 验证图
+        // Validate graph
         if let Err(errors) = graph.validate() {
             let error_msg = errors.join("; ");
             error!("Workflow validation failed: {}", error_msg);
@@ -189,11 +218,13 @@ impl WorkflowExecutor {
         }
 
         // 获取开始节点
+        // Get start node
         let start_node_id = graph
             .start_node()
             .ok_or_else(|| "No start node".to_string())?;
 
         // 执行工作流
+        // Execute workflow
         let mut execution_record = ExecutionRecord {
             execution_id: ctx.execution_id.clone(),
             workflow_id: graph.id.clone(),
@@ -208,6 +239,7 @@ impl WorkflowExecutor {
         };
 
         // 使用基于依赖的执行
+        // Use dependency-based execution
         let result = self
             .execute_from_node(graph, &ctx, start_node_id, input, &mut execution_record)
             .await;
@@ -235,6 +267,7 @@ impl WorkflowExecutor {
         execution_record.outputs = ctx.get_all_outputs().await;
 
         // 发送完成事件
+        // Emit completion event
         self.emit_event(ExecutionEvent::WorkflowCompleted {
             workflow_id: graph.id.clone(),
             execution_id: ctx.execution_id.clone(),
@@ -352,6 +385,7 @@ impl WorkflowExecutor {
     }
 
     /// 从指定节点开始执行（迭代版本，避免递归异步问题）
+    /// Execute from specified node (iterative version to avoid async recursion issues)
     async fn execute_from_node(
         &self,
         graph: &WorkflowGraph,
@@ -447,6 +481,7 @@ impl WorkflowExecutor {
             .await;
 
             // 记录节点执行
+            // Record node execution
             if !is_completed {
                 record.node_records.push(NodeExecutionRecord {
                     node_id: current_node_id.clone(),
@@ -461,10 +496,14 @@ impl WorkflowExecutor {
             }
 
             // 检查点
+            // Checkpoints
             if self.config.enable_checkpoints
                 && self.config.checkpoint_interval > 0
                 && !record.node_records.is_empty()
-                && record.node_records.len().is_multiple_of(self.config.checkpoint_interval)
+                && record
+                    .node_records
+                    .len()
+                    .is_multiple_of(self.config.checkpoint_interval)
             {
                 let label = format!("auto_checkpoint_{}", record.node_records.len());
                 ctx.create_checkpoint(&label).await;
@@ -473,26 +512,32 @@ impl WorkflowExecutor {
             }
 
             // 处理结果
+            // Handle result
             match result {
                 Ok(output) => {
                     // 确定下一个节点
+                    // Determine next node
                     let next = self.determine_next_node(graph, node, &output).await;
 
                     match next {
                         Some(next_node_id) => {
                             // 继续执行下一个节点
+                            // Continue executing next node
                             current_node_id = next_node_id;
                             current_input = output;
                             // 继续循环
+                            // Continue loop
                         }
                         None => {
                             // 没有下一个节点，返回当前输出
+                            // No next node, return current output
                             return Ok(output);
                         }
                     }
                 }
                 Err(e) => {
                     // 尝试错误处理
+                    // Attempt error handling
                     if let Some(error_handler) = graph.get_error_handler(&current_node_id) {
                         warn!(
                             "Node {} failed, executing error handler: {}",
@@ -510,15 +555,18 @@ impl WorkflowExecutor {
                         current_node_id = error_handler.to_string();
                         current_input = error_input;
                         // 继续循环执行错误处理器
+                        // Continue loop to execute error handler
                     } else if self.config.stop_on_failure {
                         return Err(e);
                     } else {
                         warn!("Node {} failed but continuing: {}", current_node_id, e);
                         // 尝试继续执行下一个节点
+                        // Attempt to continue to next node
                         if let Some(next_node_id) = graph.get_next_node(&current_node_id, None) {
                             current_node_id = next_node_id.to_string();
                             current_input = WorkflowValue::Null;
                             // 继续循环
+                            // Continue loop
                         } else {
                             return Err(e);
                         }
@@ -529,6 +577,7 @@ impl WorkflowExecutor {
     }
 
     /// 确定下一个节点
+    /// Determine the next node
     async fn determine_next_node(
         &self,
         graph: &WorkflowGraph,
@@ -540,6 +589,7 @@ impl WorkflowExecutor {
         match node.node_type() {
             NodeType::Condition => {
                 // 条件节点根据输出确定分支
+                // Condition nodes determine branches based on output
                 let condition = output.as_str().unwrap_or("false");
                 graph
                     .get_next_node(node_id, Some(condition))
@@ -547,16 +597,19 @@ impl WorkflowExecutor {
             }
             NodeType::End => {
                 // 结束节点没有后续
+                // End nodes have no subsequent nodes
                 None
             }
             _ => {
                 // 其他节点获取默认下一个
+                // Other nodes get the default next node
                 graph.get_next_node(node_id, None).map(|s| s.to_string())
             }
         }
     }
 
     /// 执行并行节点
+    /// Execute parallel nodes
     async fn execute_parallel(
         &self,
         graph: &WorkflowGraph,
@@ -569,6 +622,7 @@ impl WorkflowExecutor {
 
         if branches.is_empty() {
             // 如果没有指定分支，使用出边作为分支
+            // If no branches specified, use outgoing edges as branches
             let edges = graph.get_outgoing_edges(node.id());
             let branch_ids: Vec<String> = edges.iter().map(|e| e.to.clone()).collect();
 
@@ -586,7 +640,8 @@ impl WorkflowExecutor {
             return Ok(result);
         }
 
-        let result = self.execute_branches_parallel(graph, ctx, branches, input, record)
+        let result = self
+            .execute_branches_parallel(graph, ctx, branches, input, record)
             .await?;
         ctx.set_node_output(node.id(), result.clone()).await;
         ctx.set_node_status(node.id(), NodeStatus::Completed).await;
@@ -594,7 +649,9 @@ impl WorkflowExecutor {
     }
 
     /// 并行执行多个分支
+    /// Execute multiple branches in parallel
     /// 注意：由于节点包含闭包无法跨线程，这里使用顺序执行
+    /// Note: Nodes contain closures and cannot cross threads, so sequential execution is used here
     async fn execute_branches_parallel(
         &self,
         graph: &WorkflowGraph,
@@ -607,6 +664,7 @@ impl WorkflowExecutor {
         let mut errors = Vec::new();
 
         // 顺序执行各分支（节点包含闭包，无法跨线程共享）
+        // Execute branches sequentially (nodes contain closures, cannot be shared across threads)
         for branch_id in branches {
             if let Some(node) = graph.get_node(branch_id) {
                 if ctx.get_node_status(branch_id).await == Some(NodeStatus::Completed) {
@@ -642,6 +700,7 @@ impl WorkflowExecutor {
     }
 
     /// 执行聚合节点
+    /// Execute join nodes
     async fn execute_join(
         &self,
         _graph: &WorkflowGraph,
@@ -652,6 +711,7 @@ impl WorkflowExecutor {
         let wait_for = node.join_nodes();
 
         // 等待所有前置节点完成
+        // Wait for all predecessor nodes to complete
         let mut all_completed = false;
         let mut attempts = 0;
         const MAX_ATTEMPTS: u32 = 1000;
@@ -678,11 +738,13 @@ impl WorkflowExecutor {
         }
 
         // 收集所有前置节点的输出
+        // Collect outputs from all predecessor nodes
         let outputs = ctx
             .get_node_outputs(&wait_for.iter().map(|s| s.as_str()).collect::<Vec<_>>())
             .await;
 
         // 执行节点（可能有转换函数）
+        // Execute node (may contain transformation functions)
         let result = node.execute(ctx, WorkflowValue::Map(outputs)).await;
 
         ctx.set_node_output(node.id(), result.output.clone()).await;
@@ -696,7 +758,9 @@ impl WorkflowExecutor {
     }
 
     /// 执行子工作流
+    /// Execute sub-workflow
     /// 注意：子工作流执行使用独立的执行上下文
+    /// Note: Sub-workflow execution uses an independent execution context
     async fn execute_sub_workflow(
         &self,
         _graph: &WorkflowGraph,
@@ -719,10 +783,13 @@ impl WorkflowExecutor {
         info!("Executing sub-workflow: {}", sub_workflow_id);
 
         // 使用 execute_parallel_workflow 而不是 execute 来避免递归
+        // Use execute_parallel_workflow instead of execute to avoid recursion
         // 这样可以避免无限递归的 Future 大小问题
+        // This avoids Future size issues caused by infinite recursion
         let sub_record = self.execute_parallel_workflow(&sub_graph, input).await?;
 
         // 获取子工作流的最终输出
+        // Get the final output of the sub-workflow
         let output = if let Some(end_node) = sub_graph.end_nodes().first() {
             sub_record
                 .outputs
@@ -739,6 +806,7 @@ impl WorkflowExecutor {
     }
 
     /// 执行等待节点
+    /// Execute wait node
     async fn execute_wait(
         &self,
         ctx: &WorkflowContext,
@@ -752,6 +820,7 @@ impl WorkflowExecutor {
         info!("Waiting for event: {}", event_type);
 
         // 创建等待通道
+        // Create waiting channel
         let (tx, rx) = oneshot::channel();
 
         {
@@ -760,6 +829,7 @@ impl WorkflowExecutor {
         }
 
         // 等待事件或超时
+        // Wait for event or timeout
         let timeout = node.config.timeout.execution_timeout_ms;
         let result = if timeout > 0 {
             tokio::time::timeout(std::time::Duration::from_millis(timeout), rx)
@@ -777,8 +847,11 @@ impl WorkflowExecutor {
     }
 
     /// 基于拓扑层次执行工作流
+    /// Execute workflow based on topological layers
     /// 注意：由于节点包含闭包无法跨线程，这里按层次顺序执行
+    /// Note: Nodes contain closures and cannot cross threads, so execution follows layer order
     /// 同一层的节点理论上可以并行，但由于闭包限制，这里顺序执行
+    /// Nodes in the same layer could theoretically be parallel, but are sequential here due to closure limits
     pub async fn execute_parallel_workflow(
         &self,
         graph: &WorkflowGraph,
@@ -795,6 +868,7 @@ impl WorkflowExecutor {
         );
 
         // 获取并行组（按拓扑层次分组）
+        // Get parallel groups (grouped by topological layers)
         let groups = graph.get_parallel_groups();
 
         let mut execution_record = ExecutionRecord {
@@ -811,6 +885,7 @@ impl WorkflowExecutor {
         };
 
         // 按层次执行（同层节点顺序执行，因为闭包无法跨线程共享）
+        // Execute by layer (nodes in layer execute sequentially as closures cannot cross threads)
         for group in groups {
             for node_id in group {
                 let node_start_time = std::time::SystemTime::now()
@@ -970,6 +1045,7 @@ mod tests {
         let executor = WorkflowExecutor::new(ExecutorConfig::default());
 
         // 测试高路径
+        // Test high path
         let result = executor
             .execute(&graph, WorkflowValue::Int(20))
             .await
@@ -1065,9 +1141,7 @@ mod tests {
         sub_graph.add_node(WorkflowNode::task(
             "sub_task",
             "Sub Task",
-            |_ctx, _input| async move {
-                Ok(WorkflowValue::String("hello from sub".to_string()))
-            },
+            |_ctx, _input| async move { Ok(WorkflowValue::String("hello from sub".to_string())) },
         ));
         sub_graph.add_node(WorkflowNode::end("sub_end"));
         sub_graph.connect("sub_start", "sub_task");
@@ -1093,7 +1167,9 @@ mod tests {
 
         assert!(matches!(result.status, WorkflowStatus::Completed));
 
-        let sub_output = result.outputs.get("call_sub")
+        let sub_output = result
+            .outputs
+            .get("call_sub")
             .cloned()
             .unwrap_or(WorkflowValue::Null);
 

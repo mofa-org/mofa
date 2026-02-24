@@ -214,12 +214,14 @@ fn validate_config_file(path: &PathBuf) -> anyhow::Result<()> {
                         .map_err(|e| anyhow::anyhow!("JSON5 parsing error: {}", e))
                 }
                 "ini" => {
-                    // INI validation is more relaxed
-                    Ok(Value::Null)
+                    return Err(anyhow::anyhow!(
+                        "INI format validation is not yet supported. Please use YAML, TOML, or JSON format for validated configuration."
+                    ));
                 }
                 "ron" => {
-                    // RON validation (simplified)
-                    Ok(Value::Null)
+                    return Err(anyhow::anyhow!(
+                        "RON format validation is not yet supported. Please use YAML, TOML, or JSON format for validated configuration."
+                    ));
                 }
                 _ => {
                     return Err(anyhow::anyhow!("Unsupported config format: {}", ext));

@@ -1,17 +1,27 @@
 //! Agent 上下文定义
+//! Agent Context Definition
 //!
 //! 统一的执行上下文，用于在 Agent 及其组件间传递状态
+//! A unified execution context used to pass state between Agents and their components
 //!
 //! # 核心原则
+//! # Core Principles
 //!
 //! CoreAgentContext 只包含内核原语（kernel primitives）：
+//! CoreAgentContext only contains kernel primitives:
 //! - 基本的状态存储（K/V store）
+//! - Basic state storage (K/V store)
 //! - 中断信号
+//! - Interrupt signals
 //! - 事件总线
+//! - Event bus
 //! - 配置
+//! - Configuration
 //! - 父子上下文关系
+//! - Parent-child context relationships
 //!
 //! 业务逻辑（如指标收集、输出记录）应该在 foundation 层的 RichAgentContext 中实现。
+//! Business logic (e.g., metrics collection, output logging) should be implemented in RichAgentContext at the foundation layer.
 
 use serde::{Serialize, de::DeserializeOwned};
 use std::collections::HashMap;
@@ -21,19 +31,29 @@ use tokio::sync::{RwLock, mpsc};
 
 // ============================================================================
 // Agent 上下文
+// Agent Context
 // ============================================================================
 
 /// 核心执行上下文 (Core Agent Context)
+/// Core Execution Context (Core Agent Context)
 ///
 /// 提供最小的内核原语用于 Agent 执行：
+/// Provides minimal kernel primitives for Agent execution:
 /// - 执行 ID 和会话 ID
+/// - Execution ID and Session ID
 /// - 父子上下文关系（用于嵌套执行）
+/// - Parent-child context relationships (for nested execution)
 /// - 通用键值存储
+/// - General key-value storage
 /// - 中断信号
+/// - Interrupt signals
 /// - 事件总线
+/// - Event bus
 /// - 配置
+/// - Configuration
 ///
 /// # 示例
+/// # Example
 ///
 /// ```rust,ignore
 /// use mofa_kernel::agent::context::CoreAgentContext;
@@ -45,36 +65,49 @@ use tokio::sync::{RwLock, mpsc};
 #[derive(Clone)]
 pub struct AgentContext {
     /// 执行 ID (唯一标识本次执行)
+    /// Execution ID (unique identifier for this execution)
     pub execution_id: String,
     /// 会话 ID (用于多轮对话)
+    /// Session ID (used for multi-turn conversations)
     pub session_id: Option<String>,
     /// 父上下文 (用于层级执行)
+    /// Parent context (used for hierarchical execution)
     parent: Option<Arc<AgentContext>>,
     /// 共享状态 (通用键值存储)
+    /// Shared state (general key-value storage)
     state: Arc<RwLock<HashMap<String, serde_json::Value>>>,
     /// 中断信号
+    /// Interrupt signal
     interrupt: Arc<InterruptSignal>,
     /// 事件总线
+    /// Event bus
     event_bus: Arc<EventBus>,
     /// 配置
+    /// Configuration
     config: Arc<ContextConfig>,
 }
 
 /// 上下文配置
+/// Context Configuration
 #[derive(Debug, Clone, Default)]
 pub struct ContextConfig {
     /// 超时时间 (毫秒)
+    /// Timeout duration (milliseconds)
     pub timeout_ms: Option<u64>,
     /// 最大重试次数
+    /// Maximum retry attempts
     pub max_retries: u32,
     /// 是否启用追踪
+    /// Whether to enable tracing
     pub enable_tracing: bool,
     /// 自定义配置
+    /// Custom configuration
     pub custom: HashMap<String, serde_json::Value>,
 }
 
 impl AgentContext {
     /// 创建新的上下文
+    /// Create a new context
     pub fn new(execution_id: impl Into<String>) -> Self {
         Self {
             execution_id: execution_id.into(),
@@ -88,6 +121,7 @@ impl AgentContext {
     }
 
     /// 创建带会话 ID 的上下文
+    /// Create a context with a session ID
     pub fn with_session(execution_id: impl Into<String>, session_id: impl Into<String>) -> Self {
         let mut ctx = Self::new(execution_id);
         ctx.session_id = Some(session_id.into());
@@ -95,6 +129,7 @@ impl AgentContext {
     }
 
     /// 创建子上下文 (用于子任务执行)
+    /// Create a child context (for sub-task execution)
     pub fn child(&self, execution_id: impl Into<String>) -> Self {
         Self {
             execution_id: execution_id.into(),
@@ -102,18 +137,22 @@ impl AgentContext {
             parent: Some(Arc::new(self.clone())),
             state: Arc::new(RwLock::new(HashMap::new())),
             interrupt: self.interrupt.clone(), // 共享中断信号
+            // Shared interrupt signal
             event_bus: self.event_bus.clone(), // 共享事件总线
+            // Shared event bus
             config: self.config.clone(),
         }
     }
 
     /// 设置配置
+    /// Set configuration
     pub fn with_config(mut self, config: ContextConfig) -> Self {
         self.config = Arc::new(config);
         self
     }
 
     /// 获取值
+    /// Get a value
     pub async fn get<T: DeserializeOwned>(&self, key: &str) -> Option<T> {
         let state = self.state.read().await;
         state
@@ -122,6 +161,7 @@ impl AgentContext {
     }
 
     /// 设置值
+    /// Set a value
     pub async fn set<T: Serialize>(&self, key: &str, value: T) {
         if let Ok(v) = serde_json::to_value(value) {
             let mut state = self.state.write().await;
@@ -130,66 +170,79 @@ impl AgentContext {
     }
 
     /// 删除值
+    /// Remove a value
     pub async fn remove(&self, key: &str) -> Option<serde_json::Value> {
         let mut state = self.state.write().await;
         state.remove(key)
     }
 
     /// 检查是否存在值
+    /// Check if a value exists
     pub async fn contains(&self, key: &str) -> bool {
         let state = self.state.read().await;
         state.contains_key(key)
     }
 
     /// 获取所有键
+    /// Get all keys
     pub async fn keys(&self) -> Vec<String> {
         let state = self.state.read().await;
         state.keys().cloned().collect()
     }
 
     /// 检查是否被中断
+    /// Check if interrupted
     pub fn is_interrupted(&self) -> bool {
         self.interrupt.is_triggered()
     }
 
     /// 触发中断
+    /// Trigger an interrupt
     pub fn trigger_interrupt(&self) {
         self.interrupt.trigger();
     }
 
     /// 清除中断状态
+    /// Clear interrupt status
     pub fn clear_interrupt(&self) {
         self.interrupt.clear();
     }
 
     /// 获取配置
+    /// Get configuration
     pub fn config(&self) -> &ContextConfig {
         &self.config
     }
 
     /// 获取父上下文
+    /// Get parent context
     pub fn parent(&self) -> Option<&Arc<AgentContext>> {
         self.parent.as_ref()
     }
 
     /// 发送事件
+    /// Emit an event
     pub async fn emit_event(&self, event: AgentEvent) {
         self.event_bus.emit(event).await;
     }
 
     /// 订阅事件
+    /// Subscribe to events
     pub async fn subscribe(&self, event_type: &str) -> EventReceiver {
         self.event_bus.subscribe(event_type).await
     }
 
     /// 从父上下文查找值 (递归向上查找)
+    /// Find value from parent context (recursive lookup)
     pub async fn find<T: DeserializeOwned>(&self, key: &str) -> Option<T> {
         // 先在当前上下文查找
+        // Check current context first
         if let Some(value) = self.get::<T>(key).await {
             return Some(value);
         }
 
         // 递归查找父上下文
+        // Recursively look up parent context
         if let Some(parent) = &self.parent {
             return Box::pin(parent.find::<T>(key)).await;
         }
@@ -200,15 +253,18 @@ impl AgentContext {
 
 // ============================================================================
 // 中断信号
+// Interrupt Signal
 // ============================================================================
 
 /// 中断信号
+/// Interrupt Signal
 pub struct InterruptSignal {
     triggered: AtomicBool,
 }
 
 impl InterruptSignal {
     /// 创建新的中断信号
+    /// Create a new interrupt signal
     pub fn new() -> Self {
         Self {
             triggered: AtomicBool::new(false),
@@ -216,16 +272,19 @@ impl InterruptSignal {
     }
 
     /// 检查是否已触发
+    /// Check if already triggered
     pub fn is_triggered(&self) -> bool {
         self.triggered.load(Ordering::SeqCst)
     }
 
     /// 触发中断
+    /// Trigger the interrupt
     pub fn trigger(&self) {
         self.triggered.store(true, Ordering::SeqCst);
     }
 
     /// 清除中断状态
+    /// Clear the interrupt status
     pub fn clear(&self) {
         self.triggered.store(false, Ordering::SeqCst);
     }
@@ -239,23 +298,30 @@ impl Default for InterruptSignal {
 
 // ============================================================================
 // 事件总线
+// Event Bus
 // ============================================================================
 
 /// Agent 事件
+/// Agent Event
 #[derive(Debug, Clone)]
 pub struct AgentEvent {
     /// 事件类型
+    /// Event type
     pub event_type: String,
     /// 事件数据
+    /// Event data
     pub data: serde_json::Value,
     /// 时间戳
+    /// Timestamp
     pub timestamp_ms: u64,
     /// 来源
+    /// Source
     pub source: Option<String>,
 }
 
 impl AgentEvent {
     /// 创建新事件
+    /// Create a new event
     pub fn new(event_type: impl Into<String>, data: serde_json::Value) -> Self {
         let now = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
@@ -271,6 +337,7 @@ impl AgentEvent {
     }
 
     /// 设置来源
+    /// Set source
     pub fn with_source(mut self, source: impl Into<String>) -> Self {
         self.source = Some(source.into());
         self
@@ -278,15 +345,18 @@ impl AgentEvent {
 }
 
 /// 事件接收器
+/// Event Receiver
 pub type EventReceiver = mpsc::Receiver<AgentEvent>;
 
 /// 事件总线
+/// Event Bus
 pub struct EventBus {
     subscribers: RwLock<HashMap<String, Vec<mpsc::Sender<AgentEvent>>>>,
 }
 
 impl EventBus {
     /// 创建新的事件总线
+    /// Create a new event bus
     pub fn new() -> Self {
         Self {
             subscribers: RwLock::new(HashMap::new()),
@@ -294,10 +364,12 @@ impl EventBus {
     }
 
     /// 发送事件
+    /// Emit an event
     pub async fn emit(&self, event: AgentEvent) {
         let subscribers = self.subscribers.read().await;
 
         // 发送给类型特定订阅者
+        // Send to type-specific subscribers
         if let Some(senders) = subscribers.get(&event.event_type) {
             for sender in senders {
                 let _ = sender.send(event.clone()).await;
@@ -305,6 +377,7 @@ impl EventBus {
         }
 
         // 发送给通配订阅者
+        // Send to wildcard subscribers
         if let Some(senders) = subscribers.get("*") {
             for sender in senders {
                 let _ = sender.send(event.clone()).await;
@@ -313,6 +386,7 @@ impl EventBus {
     }
 
     /// 订阅事件
+    /// Subscribe to events
     pub async fn subscribe(&self, event_type: &str) -> EventReceiver {
         let (tx, rx) = mpsc::channel(100);
         let mut subscribers = self.subscribers.write().await;
@@ -336,6 +410,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_context_basic() {
+        /// 测试上下文基本功能
+        /// Test basic context functionality
         let ctx = AgentContext::new("test-execution");
 
         ctx.set("key1", "value1").await;
@@ -345,6 +421,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_context_child() {
+        /// 测试子上下文
+        /// Test child context
         let parent = AgentContext::new("parent");
         parent.set("parent_key", "parent_value").await;
 
@@ -352,16 +430,20 @@ mod tests {
         child.set("child_key", "child_value").await;
 
         // 子上下文可以访问自己的值
+        // Child context can access its own values
         let child_value: Option<String> = child.get("child_key").await;
         assert_eq!(child_value, Some("child_value".to_string()));
 
         // 子上下文不能直接访问父上下文的值 (需要用 find)
+        // Child context cannot access parent values directly (requires 'find')
         let parent_value: Option<String> = child.find("parent_key").await;
         assert_eq!(parent_value, Some("parent_value".to_string()));
     }
 
     #[tokio::test]
     async fn test_interrupt_signal() {
+        /// 测试中断信号
+        /// Test interrupt signal
         let ctx = AgentContext::new("test");
 
         assert!(!ctx.is_interrupted());
@@ -373,6 +455,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_event_bus() {
+        /// 测试事件总线
+        /// Test event bus
         let ctx = AgentContext::new("test");
 
         let mut rx = ctx.subscribe("test_event").await;

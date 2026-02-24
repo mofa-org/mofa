@@ -6,8 +6,8 @@ use mofa_kernel::metrics::LLMMetricsSource;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
-use std::sync::atomic::{AtomicI64, AtomicU64, Ordering};
 use std::sync::RwLock as StdRwLock;
+use std::sync::atomic::{AtomicI64, AtomicU64, Ordering};
 use std::time::{Duration, Instant};
 use sysinfo::{Pid, System};
 use tokio::sync::RwLock;
@@ -571,7 +571,13 @@ impl MetricsCollector {
         let pid = Pid::from_u32(std::process::id());
         let (cpu_usage, memory_used, thread_count) = system
             .process(pid)
-            .map(|p| (p.cpu_usage() as f64, p.memory(), p.tasks().iter().count() as u32))
+            .map(|p| {
+                (
+                    p.cpu_usage() as f64,
+                    p.memory(),
+                    p.tasks().iter().count() as u32,
+                )
+            })
             .unwrap_or((0.0, 0, 0));
 
         SystemMetrics {

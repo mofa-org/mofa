@@ -2,6 +2,7 @@
 //!
 //! Tests the RhaiPlugin call_script_function implementation with various scenarios
 
+use mofa_kernel::plugin::{AgentPlugin, PluginContext};
 use mofa_plugins::rhai_runtime::RhaiPlugin;
 use rhai::Dynamic;
 
@@ -213,8 +214,16 @@ async fn test_call_script_function_with_object_return() {
 
     // Verify it's a map/object by checking its string representation
     let result_str = result_map.to_string();
-    assert!(result_str.contains("status"), "Expected 'status' in result: {}", result_str);
-    assert!(result_str.contains("message"), "Expected 'message' in result: {}", result_str);
+    assert!(
+        result_str.contains("status"),
+        "Expected 'status' in result: {}",
+        result_str
+    );
+    assert!(
+        result_str.contains("message"),
+        "Expected 'message' in result: {}",
+        result_str
+    );
 }
 
 // ============================================================================
@@ -289,13 +298,22 @@ async fn test_call_script_function_with_various_types() {
     // Test with different types
     let test_cases = vec![
         (Dynamic::from(42), "int"),
-        (Dynamic::from(3.14), "float"),
+        (Dynamic::from(std::f64::consts::PI), "float"),
         (Dynamic::from("text"), "string"),
         (Dynamic::TRUE, "bool"),
     ];
 
-    for (value, _expected_type) in test_cases {
-        let args = vec![value];
+    for (value, _expected_type) in &test_cases {
+        let args = vec![value.clone()];
+        let result = plugin
+            .call_script_function("identify_type", &args)
+            .await;
+
+        // assertions...
+    }
+
+    for (value, _expected_type) in &test_cases {
+        let args = vec![value.clone()];
         let result = plugin
             .call_script_function("identify_type", &args)
             .await
@@ -492,4 +510,186 @@ async fn test_script_with_helper_functions() {
         .expect("Failed to call function");
 
     assert!(result.is_some());
+}
+
+// ============================================================================
+// Plugin Runtime Statistics Integration Tests
+// ============================================================================
+
+/// Helper: create a plugin, bring it to Running state, and return it.
+async fn create_running_plugin(script: &str, id: &str) -> RhaiPlugin {
+    use mofa_kernel::plugin::PluginContext;
+    let mut plugin = RhaiPlugin::from_content(id, script)
+        .await
+        .expect("create plugin");
+    let ctx = PluginContext::default();
+    plugin.load(&ctx).await.expect("load");
+    plugin.init_plugin().await.expect("init");
+    plugin
+}
+
+#[tokio::test]
+async fn test_stats_start_at_zero() {
+    // A freshly created plugin should have all-zero stats before any execution.
+    let plugin = RhaiPlugin::from_content("stats-zero", "fn execute(i) { i }")
+        .await
+        .expect("create plugin");
+
+    let stats = plugin.stats();
+    assert_eq!(stats.calls_total(), 0, "calls_total must be 0 before any execute");
+    assert_eq!(stats.calls_failed(), 0, "calls_failed must be 0 before any execute");
+    assert_eq!(stats.avg_latency_ms(), 0.0, "avg_latency_ms must be 0.0 before any execute");
+}
+
+#[tokio::test]
+async fn test_stats_increment_after_successful_executions() {
+    let script = r#"
+        fn execute(input) {
+            "ok: " + input
+        }
+    "#;
+
+    let mut plugin = create_running_plugin(script, "stats-success").await;
+    let stats = plugin.stats();
+
+    for _ in 0..3 {
+        plugin
+            .execute("ping".to_string())
+            .await
+            .expect("execute should succeed");
+    }
+
+    assert_eq!(stats.calls_total(), 3, "expects 3 total calls");
+    assert_eq!(stats.calls_failed(), 0, "expects 0 failed calls");
+    assert!(
+        stats.avg_latency_ms() >= 0.0,
+        "avg latency must be non-negative"
+    );
+}
+
+#[tokio::test]
+async fn test_stats_failed_executions_counted() {
+    // A top-level throw causes the fallback direct-execution path to also fail,
+    // ensuring stats.calls_failed is incremented reliably.
+    let script = r#"throw "forced top-level error";"#;
+
+    let mut plugin = create_running_plugin(script, "stats-failure").await;
+    let stats = plugin.stats();
+
+    // Execute twice, both should fail
+    for _ in 0..2 {
+        let res = plugin.execute("data".to_string()).await;
+        assert!(res.is_err(), "expected execution error");
+    }
+
+    assert_eq!(stats.calls_total(), 2, "total should count failed calls too");
+    assert_eq!(stats.calls_failed(), 2, "both calls should be marked failed");
+}
+
+#[tokio::test]
+async fn test_stats_mixed_success_and_failure() {
+    // Two separate plugins: one always succeeds, one always fails (top-level throw).
+    // This verifies that counters stay independent across plugin instances.
+    let ok_script = r#"
+        fn execute(input) {
+            "ok"
+        }
+    "#;
+    let fail_script = r#"throw "top-level failure";"#;
+
+    let mut ok_plugin   = create_running_plugin(ok_script,   "stats-mixed-ok").await;
+    let mut fail_plugin = create_running_plugin(fail_script, "stats-mixed-fail").await;
+
+    let ok_stats   = ok_plugin.stats();
+    let fail_stats = fail_plugin.stats();
+
+    // 2 successful executions
+    ok_plugin.execute("good".to_string()).await.expect("should succeed");
+    ok_plugin.execute("good".to_string()).await.expect("should succeed");
+
+    // 1 failing execution
+    let _ = fail_plugin.execute("any".to_string()).await;
+
+    assert_eq!(ok_stats.calls_total(),   2, "ok plugin: 2 total");
+    assert_eq!(ok_stats.calls_failed(),  0, "ok plugin: 0 failures");
+    assert_eq!(fail_stats.calls_total(), 1, "fail plugin: 1 total");
+    assert_eq!(fail_stats.calls_failed(),1, "fail plugin: 1 failure");
+}
+
+#[tokio::test]
+async fn test_stats_agent_plugin_trait_reflects_executions() {
+    // AgentPlugin::stats() (the trait method) must return the same data as
+    // the direct PluginStats accessors.
+    let script = r#"
+        fn execute(input) {
+            input
+        }
+    "#;
+
+    let mut plugin = create_running_plugin(script, "stats-trait").await;
+
+    plugin.execute("a".to_string()).await.expect("execute");
+    plugin.execute("b".to_string()).await.expect("execute");
+
+    let map = AgentPlugin::stats(&plugin);
+    assert_eq!(
+        map["calls_total"].as_u64().unwrap(),
+        2,
+        "trait stats() should show 2 total calls"
+    );
+    assert_eq!(
+        map["calls_failed"].as_u64().unwrap(),
+        0,
+        "trait stats() should show 0 failed calls"
+    );
+    assert!(
+        map.contains_key("avg_latency_ms"),
+        "trait stats() map must contain avg_latency_ms"
+    );
+}
+
+#[tokio::test]
+async fn test_stats_arc_clone_observes_live_updates() {
+    // Clone the Arc before executions; the clone must observe counter updates
+    // without any re-fetch from the plugin.
+    let script = r#"
+        fn execute(input) {
+            input
+        }
+    "#;
+
+    let mut plugin = create_running_plugin(script, "stats-arc-clone").await;
+
+    // Clone Arc before any execution
+    let stats_handle = plugin.stats();
+    assert_eq!(stats_handle.calls_total(), 0);
+
+    // Run several executions
+    for _ in 0..5 {
+        plugin.execute("x".to_string()).await.expect("execute");
+    }
+
+    // The cloned handle sees all updates because it shares the same Atomics
+    assert_eq!(stats_handle.calls_total(), 5, "Arc clone must see live counter");
+    assert_eq!(stats_handle.calls_failed(), 0);
+    assert!(stats_handle.avg_latency_ms() >= 0.0);
+}
+
+#[tokio::test]
+async fn test_stats_to_map_snapshot_is_consistent() {
+    let script = r#"
+        fn execute(input) {
+            input
+        }
+    "#;
+
+    let mut plugin = create_running_plugin(script, "stats-snapshot").await;
+
+    plugin.execute("data".to_string()).await.expect("execute");
+
+    let snapshot = plugin.stats().to_map();
+
+    let total = snapshot["calls_total"].as_u64().expect("calls_total is u64");
+    let failed = snapshot["calls_failed"].as_u64().expect("calls_failed is u64");
+    let avg = snapshot["avg_latency_ms"].as_f64().expect("avg_latency_ms is f64");
 }

@@ -1,20 +1,25 @@
 //! 统一工具注册中心
+//! Unified Tool Registry
 //!
 //! 整合内置工具、MCP 工具、自定义工具的注册中心
+//! A registry that integrates builtin, MCP, and custom tools
 
 use async_trait::async_trait;
 use mofa_kernel::agent::components::tool::{
     Tool, ToolDescriptor, ToolRegistry as ToolRegistryTrait,
 };
-use mofa_kernel::agent::error::AgentResult;
+use mofa_kernel::agent::error::{AgentResult, AgentError};
 use std::collections::HashMap;
 use std::sync::Arc;
 
 /// 统一工具注册中心
+/// Unified Tool Registry
 ///
 /// 整合多种工具来源的注册中心
+/// A registry integrating multiple tool sources
 ///
 /// # 示例
+/// # Example
 ///
 /// ```rust,ignore
 /// use mofa_foundation::agent::tools::ToolRegistry;
@@ -23,43 +28,56 @@ use std::sync::Arc;
 /// let mut registry = ToolRegistry::new();
 ///
 /// // 注册内置工具
+/// // Register builtin tool
 /// registry.register(Arc::new(EchoTool)).unwrap();
 ///
 /// // 注册 MCP 服务器的工具
+/// // Register tools from MCP server
 /// registry.load_mcp_server("http://localhost:8080").await?;
 ///
 /// // 列出所有工具
+/// // List all tools
 /// for tool in registry.list() {
 ///     info!("{}: {}", tool.name, tool.description);
 /// }
 /// ```
 pub struct ToolRegistry {
     /// 工具存储
+    /// Tool storage
     tools: HashMap<String, Arc<dyn Tool>>,
     /// 工具来源
+    /// Tool sources
     sources: HashMap<String, ToolSource>,
     /// MCP 端点列表
+    /// MCP endpoint list
     mcp_endpoints: Vec<String>,
     /// MCP 客户端管理器 (仅在 mcp feature 启用时使用)
+    /// MCP client manager (only used when mcp feature is enabled)
     #[cfg(feature = "mcp")]
     mcp_client: Option<std::sync::Arc<tokio::sync::RwLock<super::mcp::McpClientManager>>>,
 }
 
 /// 工具来源
+/// Tool source
 #[derive(Debug, Clone)]
 pub enum ToolSource {
     /// 内置工具
+    /// Builtin tool
     Builtin,
     /// MCP 服务器
+    /// MCP server
     Mcp { endpoint: String },
     /// 自定义插件
+    /// Custom plugin
     Plugin { path: String },
     /// 动态注册
+    /// Dynamic registration
     Dynamic,
 }
 
 impl ToolRegistry {
     /// 创建新的统一注册中心
+    /// Create a new unified registry
     pub fn new() -> Self {
         Self {
             tools: HashMap::new(),
@@ -71,6 +89,7 @@ impl ToolRegistry {
     }
 
     /// 注册工具并记录来源
+    /// Register tool and record source
     pub fn register_with_source(
         &mut self,
         tool: Arc<dyn Tool>,
@@ -83,18 +102,25 @@ impl ToolRegistry {
     }
 
     /// 加载 MCP 服务器的工具
+    /// Load MCP server tools
     ///
     /// 连接到 MCP 服务器，发现可用工具，并注册到工具注册中心。
+    /// Connect to MCP server, discover available tools, and register them.
     ///
     /// # 参数
+    /// # Parameters
     ///
     /// - `config`: MCP 服务器配置
+    /// - `config`: MCP server configuration
     ///
     /// # 返回
+    /// # Returns
     ///
     /// 成功注册的工具名称列表
+    /// List of successfully registered tool names
     ///
     /// # 示例
+    /// # Example
     ///
     /// ```rust,ignore
     /// use mofa_kernel::agent::components::mcp::McpServerConfig;
@@ -162,6 +188,7 @@ impl ToolRegistry {
     }
 
     /// 加载 MCP 服务器的工具 (存根 - 需要启用 `mcp` feature)
+    /// Load MCP tools (Stub - requires `mcp` feature)
     #[cfg(not(feature = "mcp"))]
     pub async fn load_mcp_server(&mut self, endpoint: &str) -> AgentResult<Vec<String>> {
         self.mcp_endpoints.push(endpoint.to_string());
@@ -170,10 +197,12 @@ impl ToolRegistry {
     }
 
     /// 卸载 MCP 服务器的工具
+    /// Unload MCP server tools
     pub async fn unload_mcp_server(&mut self, endpoint: &str) -> AgentResult<Vec<String>> {
         self.mcp_endpoints.retain(|e| e != endpoint);
 
         // 移除该服务器的工具
+        // Remove tools of this server
         let to_remove: Vec<String> = self
             .sources
             .iter()
@@ -196,17 +225,23 @@ impl ToolRegistry {
     }
 
     /// 热加载插件 (TODO: 实际插件系统实现)
+    /// Hot reload plugin (TODO: actual implementation)
     pub async fn hot_reload_plugin(&mut self, _path: &str) -> AgentResult<Vec<String>> {
         // TODO: 实际插件热加载实现
-        Ok(vec![])
+        // TODO: actual hot reload implementation
+        Err(mofa_kernel::agent::error::AgentError::Other(
+            "Plugin hot reloading is not yet implemented".to_string(),
+        ))
     }
 
     /// 获取工具来源
+    /// Get tool source
     pub fn get_source(&self, name: &str) -> Option<&ToolSource> {
         self.sources.get(name)
     }
 
     /// 按来源过滤工具
+    /// Filter tools by source
     pub fn filter_by_source(&self, source_type: &str) -> Vec<ToolDescriptor> {
         self.tools
             .iter()
@@ -227,6 +262,7 @@ impl ToolRegistry {
     }
 
     /// 获取 MCP 端点列表
+    /// Get list of MCP endpoints
     pub fn mcp_endpoints(&self) -> &[String] {
         &self.mcp_endpoints
     }
@@ -275,20 +311,24 @@ impl ToolRegistryTrait for ToolRegistry {
 
 // ============================================================================
 // 工具搜索
+// Tool Search
 // ============================================================================
 
 /// 工具搜索器
+/// Tool searcher
 pub struct ToolSearcher<'a> {
     registry: &'a ToolRegistry,
 }
 
 impl<'a> ToolSearcher<'a> {
     /// 创建搜索器
+    /// Create searcher
     pub fn new(registry: &'a ToolRegistry) -> Self {
         Self { registry }
     }
 
     /// 按名称模糊搜索
+    /// Fuzzy search by name
     pub fn search_by_name(&self, pattern: &str) -> Vec<ToolDescriptor> {
         let pattern_lower = pattern.to_lowercase();
         self.registry
@@ -300,6 +340,7 @@ impl<'a> ToolSearcher<'a> {
     }
 
     /// 按描述搜索
+    /// Search by description
     pub fn search_by_description(&self, query: &str) -> Vec<ToolDescriptor> {
         let query_lower = query.to_lowercase();
         self.registry
@@ -311,6 +352,7 @@ impl<'a> ToolSearcher<'a> {
     }
 
     /// 按标签搜索
+    /// Search by tag
     pub fn search_by_tag(&self, tag: &str) -> Vec<ToolDescriptor> {
         self.registry
             .tools
@@ -324,6 +366,7 @@ impl<'a> ToolSearcher<'a> {
     }
 
     /// 搜索需要确认的工具
+    /// Search for tools requiring confirmation
     pub fn search_dangerous(&self) -> Vec<ToolDescriptor> {
         self.registry
             .tools

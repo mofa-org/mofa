@@ -430,9 +430,9 @@ pub mod prelude {
         AgentCapabilities, AgentCapabilitiesBuilder, AgentContext, AgentError, AgentInput,
         AgentMetadata, AgentOutput, AgentResult, AgentState, MoFAAgent,
     };
-    pub use crate::runtime::{AgentBuilder, AgentRunner, run_agents};
     #[cfg(not(feature = "dora"))]
     pub use crate::runtime::SimpleRuntime;
+    pub use crate::runtime::{AgentBuilder, AgentRunner, run_agents};
     pub use async_trait::async_trait;
 }
 
@@ -484,13 +484,19 @@ pub mod llm {
     pub use mofa_foundation::llm::*;
 
     /// 从环境变量创建 OpenAI 提供器
+    /// Create OpenAI provider from environment variables
     ///
     /// 自动读取以下环境变量:
+    /// Automatically reads the following environment variables:
     /// - OPENAI_API_KEY: API 密钥
+    /// - OPENAI_API_KEY: API Key
     /// - OPENAI_BASE_URL: 可选的 API 基础 URL
+    /// - OPENAI_BASE_URL: Optional API Base URL
     /// - OPENAI_MODEL: 可选的默认模型
+    /// - OPENAI_MODEL: Optional default model
     ///
     /// # 示例
+    /// # Example
     ///
     /// ```rust,ignore
     /// use mofa_sdk::llm::openai_from_env;
@@ -528,11 +534,16 @@ pub mod llm {
 }
 
 /// 从环境变量创建 Anthropic 提供器
+/// Create Anthropic provider from environment variables
 ///
 /// 读取环境变量:
+/// Reads environment variables:
 /// - ANTHROPIC_API_KEY (必需)
+/// - ANTHROPIC_API_KEY (Required)
 /// - ANTHROPIC_BASE_URL (可选)
+/// - ANTHROPIC_BASE_URL (Optional)
 /// - ANTHROPIC_MODEL (可选)
+/// - ANTHROPIC_MODEL (Optional)
 pub fn anthropic_from_env() -> Result<crate::llm::AnthropicProvider, crate::llm::LLMError> {
     let api_key = std::env::var("ANTHROPIC_API_KEY").map_err(|_| {
         crate::llm::LLMError::ConfigError(
@@ -552,11 +563,16 @@ pub fn anthropic_from_env() -> Result<crate::llm::AnthropicProvider, crate::llm:
 }
 
 /// 从环境变量创建 Google Gemini 提供器
+/// Create Google Gemini provider from environment variables
 ///
 /// 读取环境变量:
+/// Reads environment variables:
 /// - GEMINI_API_KEY (必需)
+/// - GEMINI_API_KEY (Required)
 /// - GEMINI_BASE_URL (可选)
+/// - GEMINI_BASE_URL (Optional)
 /// - GEMINI_MODEL (可选)
+/// - GEMINI_MODEL (Optional)
 pub fn gemini_from_env() -> Result<crate::llm::GeminiProvider, crate::llm::LLMError> {
     let api_key = std::env::var("GEMINI_API_KEY").map_err(|_| {
         crate::llm::LLMError::ConfigError("Gemini API key not found in GEMINI_API_KEY".to_string())
@@ -576,17 +592,26 @@ pub fn gemini_from_env() -> Result<crate::llm::GeminiProvider, crate::llm::LLMEr
 // Re-export Secretary module from mofa-foundation (always available)
 pub mod secretary {
     //! 秘书Agent模式 - 基于事件循环的智能助手
+    //! Secretary Agent Mode - Intelligent assistant based on event loop
     //!
     //! 秘书Agent是一个面向用户的智能助手，通过与LLM交互完成个人助理工作。
+    //! Secretary Agent is a user-facing smart assistant completing personal aid tasks via LLM interaction.
     //! 设计为与长连接配合使用，实现持续的交互式服务。
+    //! Designed to work with long-lived connections for continuous interactive services.
     //!
     //! ## 工作循环（5阶段事件循环）
+    //! ## Work Cycle (5-phase event loop)
     //!
     //! 1. **接收想法** → 记录并生成TODO
+    //! 1. **Receive Ideas** → Log and generate TODOs
     //! 2. **澄清需求** → 与用户交互，转换为项目文档
+    //! 2. **Clarify Requirements** → Interact with user, convert to project docs
     //! 3. **调度分配** → 调用对应的执行Agent
+    //! 3. **Schedule & Allocate** → Invoke corresponding execution Agents
     //! 4. **监控反馈** → 推送关键决策给人类
+    //! 4. **Monitor Feedback** → Push critical decisions to humans
     //! 5. **验收汇报** → 更新TODO，生成报告
+    //! 5. **Acceptance & Reporting** → Update TODOs, generate reports
     //!
     //! # Quick Start
     //!
@@ -600,6 +625,7 @@ pub mod secretary {
     //! #[tokio::main]
     //! async fn main() -> anyhow::Result<()> {
     //!     // 1. 创建秘书Agent
+    //!     // 1. Create Secretary Agent
     //!     let mut backend_agent = AgentInfo::new("backend_agent", "后端Agent");
     //!     backend_agent.capabilities = vec!["backend".to_string()];
     //!     backend_agent.current_load = 0;
@@ -615,12 +641,15 @@ pub mod secretary {
     //!         .await;
     //!
     //!     // 2. 创建通道连接
+    //!     // 2. Create channel connection
     //!     let (conn, input_tx, mut output_rx) = ChannelConnection::new_pair(32);
     //!
     //!     // 3. 启动事件循环
+    //!     // 3. Start event loop
     //!     let handle = secretary.start(conn).await;
     //!
     //!     // 4. 发送用户输入
+    //!     // 4. Send user input
     //!     input_tx.send(DefaultInput::Idea {
     //!         content: "开发一个REST API".to_string(),
     //!         priority: Some(TodoPriority::High),
@@ -628,6 +657,7 @@ pub mod secretary {
     //!     }).await?;
     //!
     //!     // 5. 处理秘书输出
+    //!     // 5. Handle secretary output
     //!     while let Some(output) = output_rx.recv().await {
     //!         match output {
     //!             SecretaryOutput::Acknowledgment { message } => {
@@ -636,6 +666,7 @@ pub mod secretary {
     //!             SecretaryOutput::DecisionRequired { decision } => {
     //!                 info!("需要决策: {}", decision.description);
     //!                 // 处理决策...
+    //!                 // Handle decision...
     //!             }
     //!             SecretaryOutput::Report { report } => {
     //!                 info!("汇报: {}", report.content);
@@ -650,6 +681,7 @@ pub mod secretary {
     //! ```
     //!
     //! # 自定义LLM Provider
+    //! # Custom LLM Provider
     //!
     //! ```rust,ignore
     //! use mofa_sdk::secretary::{LLMProvider, ChatMessage};
@@ -665,11 +697,13 @@ pub mod secretary {
     //!
     //!     async fn chat(&self, messages: Vec<ChatMessage>) -> anyhow::Result<String> {
     //!         // 调用你的LLM API
+    //!         // Call your LLM API
     //!         Ok("LLM响应".to_string())
     //!     }
     //! }
     //!
     //! // 使用自定义LLM
+    //! // Use custom LLM
     //! let llm = Arc::new(MyLLMProvider { api_key: "...".to_string() });
     //! let secretary = DefaultSecretaryBuilder::new()
     //!     .with_llm(llm)
@@ -683,9 +717,12 @@ pub mod secretary {
 // Re-export React module from mofa-foundation (always available)
 pub mod react {
     //! ReAct (Reasoning + Acting) 框架
+    //! ReAct (Reasoning + Acting) Framework
     //!
     //! ReAct 是一种将推理和行动相结合的智能代理架构。
+    //! ReAct is an intelligent agent architecture that combines reasoning and acting.
     //! 代理通过"思考-行动-观察"循环来解决问题。
+    //! Agents solve problems through a "Think-Act-Observe" cycle.
 
     pub use mofa_foundation::react::*;
 }
@@ -693,18 +730,27 @@ pub mod react {
 // Re-export collaboration module from mofa-foundation (always available)
 pub mod collaboration {
     //! 自适应协作协议模块
+    //! Adaptive Collaboration Protocol Module
     //!
     //! 提供多 Agent 自适应协作的标准协议实现，支持根据任务描述动态切换协作模式。
+    //! Provides standard protocol implementations for multi-agent adaptive collaboration, supporting dynamic switching based on task descriptions.
     //!
     //! # 标准协议
+    //! # Standard Protocols
     //!
     //! - `RequestResponseProtocol`: 请求-响应模式，适合数据处理任务
+    //! - `RequestResponseProtocol`: Request-Response mode, suitable for data processing tasks
     //! - `PublishSubscribeProtocol`: 发布-订阅模式，适合创意生成任务
+    //! - `PublishSubscribeProtocol`: Publish-Subscribe mode, suitable for creative generation tasks
     //! - `ConsensusProtocol`: 共识机制模式，适合决策制定任务
+    //! - `ConsensusProtocol`: Consensus mechanism mode, suitable for decision-making tasks
     //! - `DebateProtocol`: 辩论模式，适合审查任务
+    //! - `DebateProtocol`: Debate mode, suitable for review tasks
     //! - `ParallelProtocol`: 并行模式，适合分析任务
+    //! - `ParallelProtocol`: Parallel mode, suitable for analysis tasks
     //!
     //! # 快速开始
+    //! # Quick Start
     //!
     //! ```rust,ignore
     //! use mofa_sdk::collaboration::{
@@ -718,11 +764,13 @@ pub mod collaboration {
     //!     let manager = LLMDrivenCollaborationManager::new("agent_001");
     //!
     //!     // 注册标准协议
+    //!     // Register standard protocols
     //!     manager.register_protocol(Arc::new(RequestResponseProtocol::new("agent_001"))).await?;
     //!     manager.register_protocol(Arc::new(PublishSubscribeProtocol::new("agent_001"))).await?;
     //!     manager.register_protocol(Arc::new(ConsensusProtocol::new("agent_001"))).await?;
     //!
     //!     // 执行任务（使用自然语言描述，系统自动选择合适的协议）
+    //!     // Execute task (describe in natural language, system auto-selects protocol)
     //!     let result = manager.execute_task(
     //!         "处理数据: [1, 2, 3]",  // 任务描述
     //!         serde_json::json!({"data": [1, 2, 3]})
@@ -745,22 +793,36 @@ pub mod persistence {
     pub use mofa_foundation::persistence::*;
 
     /// 快速创建带 PostgreSQL 持久化的 LLM Agent
+    /// Quickly create LLM Agent with PostgreSQL persistence
     ///
     /// 自动处理：
+    /// Automatic handling:
     /// - 数据库连接（从 DATABASE_URL）
+    /// - DB Connection (from DATABASE_URL)
     /// - OpenAI Provider（从 OPENAI_API_KEY）
+    /// - OpenAI Provider (from OPENAI_API_KEY)
     /// - 持久化插件
+    /// - Persistence plugin
     /// - 自动生成 user_id、tenant_id、agent_id 和 session_id
+    /// - Auto-generate user_id, tenant_id, agent_id, and session_id
     ///
     /// # 环境变量
+    /// # Environment Variables
     /// - DATABASE_URL: PostgreSQL 连接字符串
+    /// - DATABASE_URL: PostgreSQL connection string
     /// - OPENAI_API_KEY: OpenAI API 密钥
+    /// - OPENAI_API_KEY: OpenAI API Key
     /// - USER_ID: 用户 ID（可选）
+    /// - USER_ID: User ID (optional)
     /// - TENANT_ID: 租户 ID（可选）
+    /// - TENANT_ID: Tenant ID (optional)
     /// - AGENT_ID: Agent ID（可选）
+    /// - AGENT_ID: Agent ID (optional)
     /// - SESSION_ID: 会话 ID（可选）
+    /// - SESSION_ID: Session ID (optional)
     ///
     /// # 示例
+    /// # Example
     ///
     /// ```rust,ignore
     /// use mofa_sdk::persistence::quick_agent_with_postgres;
@@ -782,11 +844,13 @@ pub mod persistence {
         use std::sync::Arc;
 
         // 1. 初始化数据库
-        let store_arc = PostgresStore::from_env().await.map_err(|e| {
-            crate::llm::LLMError::Other(format!("数据库连接失败: {}", e))
-        })?;
+        // 1. Initialize database
+        let store_arc = PostgresStore::from_env()
+            .await
+            .map_err(|e| crate::llm::LLMError::Other(format!("数据库连接失败: {}", e)))?;
 
         // 2. 从环境变量获取或生成 IDs
+        // 2. Get from env or generate IDs
         let user_id = std::env::var("USER_ID")
             .ok()
             .and_then(|s| uuid::Uuid::parse_str(&s).ok())
@@ -808,6 +872,7 @@ pub mod persistence {
             .unwrap_or_else(uuid::Uuid::now_v7);
 
         // 3. 创建持久化插件（直接使用 Arc<PostgresStore> 作为存储）
+        // 3. Create persistence plugin (using Arc<PostgresStore> directly)
         let plugin = PersistencePlugin::new(
             "persistence-plugin",
             store_arc.clone(),
@@ -819,19 +884,25 @@ pub mod persistence {
         );
 
         // 4. 返回预配置的 builder
+        // 4. Return pre-configured builder
         Ok(crate::llm::LLMAgentBuilder::from_env()?
             .with_system_prompt(system_prompt)
             .with_plugin(plugin))
     }
 
     /// 快速创建带内存持久化的 LLM Agent
+    /// Quickly create LLM Agent with memory persistence
     ///
     /// 使用内存存储，适合测试和开发环境。
+    /// Uses memory storage, suitable for test and dev environments.
     ///
     /// # 环境变量
+    /// # Environment Variables
     /// - OPENAI_API_KEY: OpenAI API 密钥
+    /// - OPENAI_API_KEY: OpenAI API Key
     ///
     /// # 示例
+    /// # Example
     ///
     /// ```rust,ignore
     /// use mofa_sdk::persistence::quick_agent_with_memory;
@@ -852,6 +923,7 @@ pub mod persistence {
         let store = InMemoryStore::new();
 
         // 生成 IDs
+        // Generate IDs
         let user_id = uuid::Uuid::now_v7();
         let tenant_id = uuid::Uuid::now_v7();
         let agent_id = uuid::Uuid::now_v7();

@@ -27,16 +27,17 @@ The output will be in:
 ### Serve Locally
 
 ```bash
-# English docs (default)
-mdbook serve book.toml
-
-# Chinese docs
-mdbook serve book.zh.toml -p 3001
+# Build EN + ZH and serve as one site (recommended)
+./scripts/preview-docs.sh 3000
 ```
 
 Open:
 - English: `http://localhost:3000`
-- Chinese: `http://localhost:3001`
+- Chinese: `http://localhost:3000/zh/`
+
+Notes:
+- `mdbook serve` only serves one mdBook config at a time, so `mdbook serve` (English) does not include `/zh/*`.
+- If you only need English live-reload while writing docs, use `mdbook serve` separately.
 
 ## Structure
 
@@ -73,8 +74,8 @@ Workflow:
 ### Chinese Site Deployment (GitHub Pages)
 
 The Chinese site is deployed as a subpath of the same Pages site:
-- English: `https://mofa-org.github.io/mofa/`
-- Chinese: `https://mofa-org.github.io/mofa/zh/`
+- English: `https://mofa.ai/mofa/`
+- Chinese: `https://mofa.ai/mofa/zh/`
 
 Build output requirements before publishing:
 - English pages exist under `book/`
@@ -85,9 +86,18 @@ Quick verification:
 
 ```bash
 cd docs/mofa-doc
+./scripts/check-internal-links.sh
 ./scripts/build-docs.sh
 test -f book/index.html && echo "EN OK"
 test -f book/zh/index.html && echo "ZH OK"
+```
+
+Recommended pre-PR validation:
+
+```bash
+cd docs/mofa-doc
+./scripts/check-internal-links.sh
+./scripts/build-docs.sh
 ```
 
 ### Manual Deployment

@@ -1,6 +1,8 @@
 //! Prompt 注册中心
+//! Prompt Registry
 //!
 //! 提供全局和局部的 Prompt 模板管理
+//! Provides global and local Prompt template management
 
 use super::template::{PromptComposition, PromptError, PromptResult, PromptTemplate};
 use serde::{Deserialize, Serialize};
@@ -9,29 +11,37 @@ use std::path::Path;
 use std::sync::{Arc, RwLock};
 
 /// Prompt 注册中心
+/// Prompt Registry
 ///
 /// 管理所有 Prompt 模板，支持注册、查询、删除和从文件加载
+/// Manages all Prompt templates, supporting registration, query, deletion, and loading from files
 #[derive(Default)]
 pub struct PromptRegistry {
     /// 模板存储
+    /// Template storage
     templates: HashMap<String, PromptTemplate>,
     /// 组合存储
+    /// Composition storage
     compositions: HashMap<String, PromptComposition>,
     /// 分类索引 (tag -> template_ids)
+    /// Category index (tag -> template_ids)
     tag_index: HashMap<String, Vec<String>>,
 }
 
 impl PromptRegistry {
     /// 创建新的注册中心
+    /// Create a new registry
     pub fn new() -> Self {
         Self::default()
     }
 
     /// 注册模板
+    /// Register a template
     pub fn register(&mut self, template: PromptTemplate) {
         let id = template.id.clone();
 
         // 更新标签索引
+        // Update tag index
         for tag in &template.tags {
             self.tag_index
                 .entry(tag.clone())
@@ -43,12 +53,14 @@ impl PromptRegistry {
     }
 
     /// 注册组合
+    /// Register a composition
     pub fn register_composition(&mut self, composition: PromptComposition) {
         self.compositions
             .insert(composition.id.clone(), composition);
     }
 
     /// 获取模板
+    /// Get a template
     pub fn get(&self, id: &str) -> PromptResult<&PromptTemplate> {
         self.templates
             .get(id)
@@ -56,6 +68,7 @@ impl PromptRegistry {
     }
 
     /// 获取可变模板引用
+    /// Get a mutable template reference
     pub fn get_mut(&mut self, id: &str) -> PromptResult<&mut PromptTemplate> {
         self.templates
             .get_mut(id)
@@ -63,6 +76,7 @@ impl PromptRegistry {
     }
 
     /// 获取组合
+    /// Get a composition
     pub fn get_composition(&self, id: &str) -> PromptResult<&PromptComposition> {
         self.compositions
             .get(id)
@@ -70,14 +84,17 @@ impl PromptRegistry {
     }
 
     /// 检查模板是否存在
+    /// Check if a template exists
     pub fn contains(&self, id: &str) -> bool {
         self.templates.contains_key(id)
     }
 
     /// 删除模板
+    /// Remove a template
     pub fn remove(&mut self, id: &str) -> Option<PromptTemplate> {
         if let Some(template) = self.templates.remove(id) {
             // 清理标签索引
+            // Clean up tag index
             for tag in &template.tags {
                 if let Some(ids) = self.tag_index.get_mut(tag) {
                     ids.retain(|i| i != id);
@@ -90,11 +107,13 @@ impl PromptRegistry {
     }
 
     /// 获取所有模板 ID
+    /// Get all template IDs
     pub fn list_ids(&self) -> Vec<&str> {
         self.templates.keys().map(|s| s.as_str()).collect()
     }
 
     /// 按标签查找模板
+    /// Find templates by tag
     pub fn find_by_tag(&self, tag: &str) -> Vec<&PromptTemplate> {
         self.tag_index
             .get(tag)
@@ -103,6 +122,7 @@ impl PromptRegistry {
     }
 
     /// 搜索模板（按名称或描述）
+    /// Search templates (by name or description)
     pub fn search(&self, query: &str) -> Vec<&PromptTemplate> {
         let query_lower = query.to_lowercase();
         self.templates
@@ -120,16 +140,19 @@ impl PromptRegistry {
     }
 
     /// 获取所有标签
+    /// List all tags
     pub fn list_tags(&self) -> Vec<&str> {
         self.tag_index.keys().map(|s| s.as_str()).collect()
     }
 
     /// 渲染模板
+    /// Render a template
     pub fn render(&self, id: &str, vars: &[(&str, &str)]) -> PromptResult<String> {
         self.get(id)?.render(vars)
     }
 
     /// 渲染组合
+    /// Render a composition
     pub fn render_composition(
         &self,
         composition_id: &str,
@@ -147,8 +170,10 @@ impl PromptRegistry {
     }
 
     /// 从 YAML 文件加载
+    /// Load from a YAML file
     ///
     /// # YAML 格式
+    /// # YAML Format
     ///
     /// ```yaml
     /// templates:
@@ -183,11 +208,13 @@ impl PromptRegistry {
     }
 
     /// 从 YAML 字符串加载
+    /// Load from a YAML string
     pub fn load_from_yaml(&mut self, yaml: &str) -> PromptResult<()> {
         let config: PromptYamlConfig =
             serde_yaml::from_str(yaml).map_err(|e| PromptError::YamlError(e.to_string()))?;
 
         // 加载模板
+        // Load templates
         if let Some(templates) = config.templates {
             for template in templates {
                 self.register(template);
@@ -195,6 +222,7 @@ impl PromptRegistry {
         }
 
         // 加载组合
+        // Load compositions
         if let Some(compositions) = config.compositions {
             for composition in compositions {
                 self.register_composition(composition);
@@ -205,6 +233,7 @@ impl PromptRegistry {
     }
 
     /// 导出为 YAML
+    /// Export to YAML
     pub fn export_to_yaml(&self) -> PromptResult<String> {
         let config = PromptYamlConfig {
             templates: Some(self.templates.values().cloned().collect()),
@@ -215,6 +244,7 @@ impl PromptRegistry {
     }
 
     /// 合并另一个注册中心
+    /// Merge another registry
     pub fn merge(&mut self, other: PromptRegistry) {
         for (id, template) in other.templates {
             self.templates.insert(id, template);
@@ -223,10 +253,12 @@ impl PromptRegistry {
             self.compositions.insert(id, composition);
         }
         // 重建标签索引
+        // Rebuild tag index
         self.rebuild_tag_index();
     }
 
     /// 重建标签索引
+    /// Rebuild tag index
     fn rebuild_tag_index(&mut self) {
         self.tag_index.clear();
         for (id, template) in &self.templates {
@@ -240,16 +272,19 @@ impl PromptRegistry {
     }
 
     /// 模板数量
+    /// Number of templates
     pub fn len(&self) -> usize {
         self.templates.len()
     }
 
     /// 是否为空
+    /// Whether it is empty
     pub fn is_empty(&self) -> bool {
         self.templates.is_empty()
     }
 
     /// 清空所有模板
+    /// Clear all templates
     pub fn clear(&mut self) {
         self.templates.clear();
         self.compositions.clear();
@@ -258,6 +293,7 @@ impl PromptRegistry {
 }
 
 /// YAML 配置结构
+/// YAML configuration structure
 #[derive(Debug, Serialize, Deserialize)]
 struct PromptYamlConfig {
     #[serde(default)]
@@ -267,6 +303,7 @@ struct PromptYamlConfig {
 }
 
 /// 线程安全的全局注册中心
+/// Thread-safe global registry
 #[derive(Clone, Default)]
 pub struct GlobalPromptRegistry {
     inner: Arc<RwLock<PromptRegistry>>,
@@ -274,46 +311,55 @@ pub struct GlobalPromptRegistry {
 
 impl GlobalPromptRegistry {
     /// 创建新的全局注册中心
+    /// Create a new global registry
     pub fn new() -> Self {
         Self::default()
     }
 
     /// 注册模板
+    /// Register a template
     pub fn register(&self, template: PromptTemplate) {
         self.inner.write().unwrap().register(template);
     }
 
     /// 获取模板（克隆）
+    /// Get a template (cloned)
     pub fn get(&self, id: &str) -> PromptResult<PromptTemplate> {
         self.inner.read().unwrap().get(id).cloned()
     }
 
     /// 渲染模板
+    /// Render a template
     pub fn render(&self, id: &str, vars: &[(&str, &str)]) -> PromptResult<String> {
         self.inner.read().unwrap().render(id, vars)
     }
 
     /// 检查是否包含
+    /// Check if it contains
     pub fn contains(&self, id: &str) -> bool {
         self.inner.read().unwrap().contains(id)
     }
 
     /// 删除模板
+    /// Remove a template
     pub fn remove(&self, id: &str) -> Option<PromptTemplate> {
         self.inner.write().unwrap().remove(id)
     }
 
     /// 从文件加载
+    /// Load from a file
     pub fn load_from_file(&self, path: impl AsRef<Path>) -> PromptResult<()> {
         self.inner.write().unwrap().load_from_file(path)
     }
 
     /// 从 YAML 加载
+    /// Load from YAML
     pub fn load_from_yaml(&self, yaml: &str) -> PromptResult<()> {
         self.inner.write().unwrap().load_from_yaml(yaml)
     }
 
     /// 获取所有模板 ID
+    /// Get all template IDs
     pub fn list_ids(&self) -> Vec<String> {
         self.inner
             .read()
@@ -325,6 +371,7 @@ impl GlobalPromptRegistry {
     }
 
     /// 按标签查找
+    /// Find by tag
     pub fn find_by_tag(&self, tag: &str) -> Vec<PromptTemplate> {
         self.inner
             .read()
@@ -336,6 +383,7 @@ impl GlobalPromptRegistry {
     }
 
     /// 搜索模板
+    /// Search templates
     pub fn search(&self, query: &str) -> Vec<PromptTemplate> {
         self.inner
             .read()
@@ -347,16 +395,19 @@ impl GlobalPromptRegistry {
     }
 
     /// 模板数量
+    /// Number of templates
     pub fn len(&self) -> usize {
         self.inner.read().unwrap().len()
     }
 
     /// 是否为空
+    /// Whether it is empty
     pub fn is_empty(&self) -> bool {
         self.inner.read().unwrap().is_empty()
     }
 
     /// 清空
+    /// Clear
     pub fn clear(&self) {
         self.inner.write().unwrap().clear();
     }
@@ -480,14 +531,17 @@ compositions:
         assert!(registry.contains("farewell"));
 
         // 测试渲染
+        // Test rendering
         let greeting = registry.render("greeting", &[("name", "Alice")]).unwrap();
         assert_eq!(greeting, "Hello, Alice!");
 
         // 测试默认值
+        // Test default values
         let farewell = registry.render("farewell", &[]).unwrap();
         assert_eq!(farewell, "Goodbye, friend!");
 
         // 测试组合
+        // Test composition
         let composition = registry
             .render_composition("full-conversation", &[("name", "Bob")])
             .unwrap();

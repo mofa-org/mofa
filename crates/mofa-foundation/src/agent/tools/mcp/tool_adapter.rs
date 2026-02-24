@@ -1,6 +1,8 @@
 //! MCP 工具适配器
+//! MCP Tool Adapter
 //!
 //! 将 MCP 服务器上的工具包装为内核 `Tool` trait 实现。
+//! Wrap tools from MCP servers as kernel `Tool` trait implementations.
 
 use async_trait::async_trait;
 use mofa_kernel::agent::components::mcp::McpToolInfo;
@@ -13,11 +15,15 @@ use tokio::sync::RwLock;
 use super::McpClientManager;
 
 /// MCP 工具适配器
+/// MCP Tool Adapter
 ///
 /// 将 MCP 服务器上的单个工具包装为内核 `Tool` trait。
+/// Wraps a single tool on an MCP server into the kernel `Tool` trait.
 /// 当 Agent 调用此工具时，它会通过 `McpClientManager` 转发到 MCP 服务器。
+/// When the Agent calls this tool, it is forwarded to the MCP server via `McpClientManager`.
 ///
 /// # 示例
+/// # Example
 ///
 /// ```rust,ignore
 /// let adapter = McpToolAdapter::new(
@@ -27,19 +33,24 @@ use super::McpClientManager;
 /// );
 ///
 /// // 作为普通 Tool 使用
+/// // Use as a standard Tool
 /// let result = adapter.execute(input, &ctx).await;
 /// ```
 pub struct McpToolAdapter {
     /// MCP 服务器名称
+    /// MCP server name
     server_name: String,
     /// 工具元信息
+    /// Tool metadata info
     tool_info: McpToolInfo,
     /// MCP 客户端管理器 (共享引用)
+    /// MCP client manager (shared reference)
     client: Arc<RwLock<McpClientManager>>,
 }
 
 impl McpToolAdapter {
     /// 创建新的 MCP 工具适配器
+    /// Create a new MCP tool adapter
     pub fn new(
         server_name: impl Into<String>,
         tool_info: McpToolInfo,
@@ -53,6 +64,7 @@ impl McpToolAdapter {
     }
 
     /// 获取服务器名称
+    /// Get server name
     pub fn server_name(&self) -> &str {
         &self.server_name
     }

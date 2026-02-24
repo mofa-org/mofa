@@ -14,7 +14,10 @@ pub async fn run(ctx: &CliContext, agent_id: Option<&str>) -> anyhow::Result<()>
             Some(metadata) => {
                 println!("  ID:           {}", metadata.id.cyan());
                 println!("  Name:         {}", metadata.name.white());
-                println!("  State:        {}", format!("{:?}", metadata.state).green());
+                println!(
+                    "  State:        {}",
+                    format!("{:?}", metadata.state).green()
+                );
                 if let Some(desc) = &metadata.description {
                     println!("  Description:  {}", desc.white());
                 }
@@ -28,12 +31,29 @@ pub async fn run(ctx: &CliContext, agent_id: Option<&str>) -> anyhow::Result<()>
                 }
             }
             None => {
-                println!("  Agent '{}' not found in registry", id);
-                println!();
-                println!(
-                    "  Use {} to see available agents.",
-                    "mofa agent list".cyan()
-                );
+                let persisted = ctx.agent_store.get(id).map_err(|e| {
+                    anyhow::anyhow!("Failed to load persisted agent '{}': {}", id, e)
+                })?;
+
+                if let Some(entry) = persisted {
+                    println!("  ID:           {}", entry.id.cyan());
+                    println!("  Name:         {}", entry.name.white());
+                    println!(
+                        "  State:        {}",
+                        format!("{} (persisted)", entry.state).yellow()
+                    );
+                    if let Some(desc) = entry.description {
+                        println!("  Description:  {}", desc.white());
+                    }
+                    println!("  Source:       persisted store (not active in runtime)");
+                } else {
+                    println!("  Agent '{}' not found in registry or persisted store", id);
+                    println!();
+                    println!(
+                        "  Use {} to see available agents.",
+                        "mofa agent list".cyan()
+                    );
+                }
             }
         }
     } else {

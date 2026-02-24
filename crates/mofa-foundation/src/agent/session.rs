@@ -9,12 +9,14 @@ use serde_json::Value;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use tokio::fs;
+use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::sync::RwLock;
 
 use mofa_kernel::agent::error::{AgentError, AgentResult};
 
 // ============================================================================
 // Session 数据类型
+// Session Data Types
 // ============================================================================
 
 /// Session message
@@ -98,6 +100,7 @@ impl Session {
 
 // ============================================================================
 // SessionStorage trait - 多种后端支持
+// SessionStorage trait - Multiple backend support
 // ============================================================================
 
 /// Session storage backend trait
@@ -124,6 +127,7 @@ pub trait SessionStorage: Send + Sync {
 
 // ============================================================================
 // JSONL 文件存储实现
+// JSONL file storage implementation
 // ============================================================================
 
 /// JSONL file-based session storage
@@ -271,10 +275,27 @@ impl SessionStorage for JsonlSessionStorage {
             .await
             .map_err(|e| AgentError::IoError(format!("Failed to read entry: {}", e)))?
         {
-            if let Some(name) = entry.path().file_stem().and_then(|s| s.to_str()) {
-                // Convert back the safe filename to original key
-                let key = name.replace('_', ":");
-                keys.push(key);
+            let path = entry.path();
+            if path.extension().and_then(|s| s.to_str()) != Some("jsonl") {
+                continue;
+            }
+
+            if let Ok(file) = fs::File::open(&path).await {
+                let mut reader = BufReader::new(file);
+                let mut header = String::new();
+                if reader.read_line(&mut header).await.is_ok() {
+                    let header = header.trim_end();
+                    if let Ok(header_data) = serde_json::from_str::<Value>(header)
+                        && let Some(key) = header_data.get("key").and_then(|v| v.as_str())
+                    {
+                        keys.push(key.to_string());
+                        continue;
+                    }
+                }
+            }
+
+            if let Some(name) = path.file_stem().and_then(|s| s.to_str()) {
+                keys.push(name.to_string());
             }
         }
 
@@ -284,6 +305,7 @@ impl SessionStorage for JsonlSessionStorage {
 
 // ============================================================================
 // 内存存储实现（用于测试）
+// Memory storage implementation (for testing)
 // ============================================================================
 
 /// In-memory session storage (for testing)
@@ -331,6 +353,7 @@ impl SessionStorage for MemorySessionStorage {
 
 // ============================================================================
 // SessionManager - 统一会话管理接口
+// SessionManager - Unified session management interface
 // ============================================================================
 
 /// Session manager with pluggable storage backend
@@ -355,6 +378,18 @@ impl SessionManager {
             storage,
             cache: RwLock::new(HashMap::new()),
         }
+    }
+
+    /// Get a session by key without creating a new one
+    pub async fn get(&self, key: &str) -> AgentResult<Option<Session>> {
+        {
+            let cache = self.cache.read().await;
+            if let Some(session) = cache.get(key) {
+                return Ok(Some(session.clone()));
+            }
+        }
+
+        self.storage.load(key).await
     }
 
     /// Get or create a session
@@ -468,5 +503,89 @@ mod tests {
         // Reload
         let loaded = manager.get_or_create("test:manager").await;
         assert_eq!(loaded.key, "test:manager");
+    }
+
+    #[tokio::test]
+    async fn test_session_get_returns_none_for_missing() {
+        let temp_dir = TempDir::new().unwrap();
+        let manager = SessionManager::with_jsonl(temp_dir.path()).await.unwrap();
+
+        let result = manager.get("nonexistent").await.unwrap();
+        assert!(result.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_session_get_returns_some_for_existing() {
+        let temp_dir = TempDir::new().unwrap();
+        let manager = SessionManager::with_jsonl(temp_dir.path()).await.unwrap();
+
+        let mut session = Session::new("exists");
+        session.add_message("user", "hello");
+        manager.save(&session).await.unwrap();
+
+        let result = manager.get("exists").await.unwrap();
+        assert!(result.is_some());
+        assert_eq!(result.unwrap().len(), 1);
+    }
+
+    #[tokio::test]
+    async fn test_session_get_does_not_create() {
+        let temp_dir = TempDir::new().unwrap();
+        let manager = SessionManager::with_jsonl(temp_dir.path()).await.unwrap();
+
+        let _ = manager.get("phantom").await.unwrap();
+        let keys = manager.list().await.unwrap();
+        assert!(!keys.contains(&"phantom".to_string()));
+    }
+
+    #[tokio::test]
+    async fn test_session_storage_path_no_double_nesting() {
+        let temp_dir = TempDir::new().unwrap();
+        let manager = SessionManager::with_jsonl(temp_dir.path()).await.unwrap();
+
+        let mut session = Session::new("nesting-test");
+        session.add_message("user", "hello");
+        manager.save(&session).await.unwrap();
+
+        assert!(
+            temp_dir
+                .path()
+                .join("sessions")
+                .join("nesting-test.jsonl")
+                .exists()
+        );
+        assert!(!temp_dir.path().join("sessions").join("sessions").exists());
+    }
+
+    #[tokio::test]
+    async fn test_session_list_preserves_underscore_keys() {
+        let temp_dir = TempDir::new().unwrap();
+        let manager = SessionManager::with_jsonl(temp_dir.path()).await.unwrap();
+
+        let mut session = Session::new("team_alpha");
+        session.add_message("user", "hello");
+        manager.save(&session).await.unwrap();
+
+        let keys = manager.list().await.unwrap();
+        assert!(keys.contains(&"team_alpha".to_string()));
+        assert!(!keys.contains(&"team:alpha".to_string()));
+    }
+
+    #[tokio::test]
+    async fn test_session_list_prefers_header_key_without_loading_whole_file() {
+        let temp_dir = TempDir::new().unwrap();
+        let manager = SessionManager::with_jsonl(temp_dir.path()).await.unwrap();
+
+        let sessions_dir = temp_dir.path().join("sessions");
+        tokio::fs::write(
+            sessions_dir.join("alias.jsonl"),
+            "{\"key\":\"canonical:key\"}\n{\"role\":\"user\",\"content\":\"hello\"}\n",
+        )
+        .await
+        .unwrap();
+
+        let keys = manager.list().await.unwrap();
+        assert!(keys.contains(&"canonical:key".to_string()));
+        assert!(!keys.contains(&"alias".to_string()));
     }
 }

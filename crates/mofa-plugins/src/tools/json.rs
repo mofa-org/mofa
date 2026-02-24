@@ -2,6 +2,7 @@ use super::*;
 use serde_json::json;
 
 /// JSON 处理工具 - JSON 解析和操作
+/// JSON processing utilities - JSON parsing and manipulation
 pub struct JsonTool {
     definition: ToolDefinition,
 }

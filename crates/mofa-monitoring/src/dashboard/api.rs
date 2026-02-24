@@ -333,16 +333,13 @@ pub fn create_api_router(collector: Arc<MetricsCollector>) -> Router {
         .route("/metrics/custom", get(get_custom_metrics))
         // Agents
         .route("/agents", get(get_agents))
-        .route("/agents/:id", get(get_agent))
+        .route("/agents/{id}", get(get_agent))
         // Workflows
         .route("/workflows", get(get_workflows))
-        .route("/workflows/:id", get(get_workflow))
+        .route("/workflows/{id}", get(get_workflow))
         // Plugins
         .route("/plugins", get(get_plugins))
-        .route("/plugins/:id", get(get_plugin))
-        // LLM (model inference metrics)
-        .route("/llm", get(get_llm_metrics))
-        .route("/llm/:id", get(get_llm_plugin))
+        .route("/plugins/{id}", get(get_plugin))
         // System
         .route("/system", get(get_system_status))
         .route("/health", get(health_check))
@@ -421,24 +418,38 @@ async fn get_overview(
         let total_tokens: u64 = snapshot.llm_metrics.iter().map(|l| l.total_tokens).sum();
         let total_errors: u64 = snapshot.llm_metrics.iter().map(|l| l.failed_requests).sum();
         let avg_latency = if !snapshot.llm_metrics.is_empty() {
-            snapshot.llm_metrics.iter().map(|l| l.avg_latency_ms).sum::<f64>()
+            snapshot
+                .llm_metrics
+                .iter()
+                .map(|l| l.avg_latency_ms)
+                .sum::<f64>()
                 / snapshot.llm_metrics.len() as f64
         } else {
             0.0
         };
         let avg_tps = if !snapshot.llm_metrics.is_empty() {
-            snapshot.llm_metrics
+            snapshot
+                .llm_metrics
                 .iter()
                 .filter_map(|l| l.tokens_per_second)
                 .sum::<f64>()
-                / snapshot.llm_metrics.iter().filter(|l| l.tokens_per_second.is_some()).count().max(1) as f64
+                / snapshot
+                    .llm_metrics
+                    .iter()
+                    .filter(|l| l.tokens_per_second.is_some())
+                    .count()
+                    .max(1) as f64
         } else {
             0.0
         };
 
         LLMSummary {
             total_plugins: snapshot.llm_metrics.len(),
-            active_models: snapshot.llm_metrics.iter().filter(|l| l.state == "running").count(),
+            active_models: snapshot
+                .llm_metrics
+                .iter()
+                .filter(|l| l.state == "running")
+                .count(),
             total_requests,
             total_tokens,
             avg_latency_ms: avg_latency,
