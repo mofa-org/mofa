@@ -24,11 +24,10 @@ pub enum ResolutionError {
     #[error("No compatible adapter found for the given requirements")]
     NoCompatibleAdapter,
 
-    #[error("Multiple compatible adapters found with equal score: {0}")]
+    #[error("Multiple compatible adapters found with equal score: {0:?}")]
     AmbiguousSelection(Vec<String>),
 
     #[error("Hardware requirements not met: {0}")]
-    HardwareNotSupported(String),
 
     #[error("Format not supported: {0}")]
     FormatNotSupported(String),

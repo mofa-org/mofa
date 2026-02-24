@@ -212,12 +212,6 @@ impl AdapterRegistry {
             .collect();
 
         if valid_candidates.is_empty() {
-            // Collect all rejection reasons for debugging
-            let all_rejections: HashMap<String, Vec<RejectionReason>> = candidates
-                .into_iter()
-                .map(|(adapter, reasons)| (adapter.id, reasons))
-                .collect();
-
             return Err(ResolutionError::NoCompatibleAdapter);
         }
 
@@ -238,10 +232,13 @@ impl AdapterRegistry {
 
         let (best_adapter, _) = sorted_candidates[0];
 
+        // Get the best adapter ID before moving candidates
+        let best_adapter_id = best_adapter.id.clone();
+
         // Collect rejection reasons for all other candidates
         let rejection_reasons: HashMap<String, Vec<RejectionReason>> = candidates
             .into_iter()
-            .filter(|(adapter, _)| adapter.id != best_adapter.id)
+            .filter(|(adapter, _)| adapter.id != best_adapter_id)
             .map(|(adapter, reasons)| (adapter.id, reasons))
             .collect();
 
