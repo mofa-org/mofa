@@ -14,6 +14,7 @@ pub mod logging;
 
 // error module
 pub mod error;
+pub use error::{KernelError, KernelResult};
 
 // core module
 pub mod core;
