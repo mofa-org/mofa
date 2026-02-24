@@ -10,6 +10,9 @@ pub mod orchestrator;
 // model_pool module - Model lifecycle management with LRU cache
 pub mod model_pool;
 
+// routing module - Smart routing policy engine
+pub mod routing;
+
 // hardware discovery module
 pub mod hardware;
 
