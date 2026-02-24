@@ -23,6 +23,7 @@ pub mod config;
 pub mod interrupt;
 pub mod runner;
 
+
 // Dora adapter module (only compiled when dora feature is enabled)
 #[cfg(feature = "dora")]
 pub mod dora_adapter;
@@ -38,33 +39,21 @@ pub mod dora_adapter;
 // - AgentEvent, AgentMessage: Event and message types
 // - AgentPlugin: Plugin trait for extensibility
 //
+
 // These are re-exported for user convenience when working with runtime APIs.
 // =============================================================================
 
 pub use interrupt::*;
-
-// Core agent trait - runtime executes agents implementing this trait
 pub use mofa_kernel::agent::MoFAAgent;
-
 pub use mofa_kernel::agent::AgentMetadata;
-// Core types needed for runtime operations
 pub use mofa_kernel::core::AgentConfig;
 pub use mofa_kernel::message::{AgentEvent, AgentMessage};
-
-// Plugin system - runtime supports plugins
 pub use mofa_kernel::plugin::AgentPlugin;
 
-// Import from mofa-foundation
-// Import from mofa-kernel
-
-// Import from mofa-plugins
 use mofa_plugins::AgentPlugin as PluginAgent;
-
-// External dependencies
 use std::collections::HashMap;
 use std::time::Duration;
 
-// Dora feature dependencies
 #[cfg(feature = "dora")]
 use crate::dora_adapter::{
     ChannelConfig, DataflowConfig, DoraAgentNode, DoraChannel, DoraDataflow, DoraError,
@@ -77,8 +66,9 @@ use std::sync::Arc;
 #[cfg(feature = "dora")]
 use tokio::sync::RwLock;
 
-// Private import for internal use
 use mofa_kernel::message::StreamType;
+
+// Expose SimpleMessageBus and SimpleRuntime for examples
 
 /// 智能体构建器 - 提供流式 API
 /// Agent Builder - Provides a fluent API
