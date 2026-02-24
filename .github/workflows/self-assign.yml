@@ -1,4 +1,4 @@
-name: Self-Assign via /assign
+name: MoFA Self-Assign via /assign
 
 on:
   issue_comment:
