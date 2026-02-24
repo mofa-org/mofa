@@ -10,7 +10,7 @@
 //! # Example
 //!
 //! ```rust
-//! use mofa_foundation::adapter::{AdapterDescriptor, AdapterRegistry, ModelConfig, Modality, ModelFormat};
+//! use mofa_foundation::adapter::{AdapterDescriptor, AdapterRegistry, ModelConfig, Modality, ModelFormat, HardwareProfile};
 //! use mofa_foundation::hardware::{HardwareCapability, GpuType, OsClassification, CpuFamily};
 //!
 //! // Create a registry
@@ -22,7 +22,7 @@
 //!     .name("Llama.cpp Backend")
 //!     .supported_modality(Modality::LLM)
 //!     .supported_format(ModelFormat::Safetensors)
-//!     .supported_quantization(vec!["q4_k".to_string(), "q8_0".to_string()])
+//!     .supported_quantization("q4_k".to_string())
 //!     .priority(100)
 //!     .build();
 //! registry.register(descriptor);
@@ -31,18 +31,20 @@
 //! let config = ModelConfig::builder()
 //!     .model_id("llama-3-8b")
 //!     .required_modality(Modality::LLM)
-//!     .required_format(ModelFormat::Safetensors)
+//!     .required_format("safetensors")
 //!     .build();
 //!
-//! let hardware = HardwareCapability {
+//! let hw_capability = HardwareCapability {
 //!     os: OsClassification::Linux,
 //!     cpu_family: CpuFamily::X86_64,
 //!     gpu_available: true,
 //!     gpu_type: Some(GpuType::Cuda),
 //! };
 //!
+//! let hardware = HardwareProfile::from(hw_capability);
+//!
 //! let result = registry.resolve(&config, &hardware);
-//! assert!(result.is_some());
+//! assert!(result.is_ok());
 //! ```
 
 pub mod registry;
