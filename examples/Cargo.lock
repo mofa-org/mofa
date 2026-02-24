@@ -3600,6 +3600,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "memory_scheduler_demo"
+version = "0.1.0"
+dependencies = [
+ "mofa-foundation",
+]
+
+[[package]]
 name = "message_graph_executor_runtime"
 version = "0.1.0"
 dependencies = [
