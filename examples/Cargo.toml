@@ -27,7 +27,8 @@ members = [
     "reflection_agent",
     "tool_routing",
     "runtime_message_bus_backpressure",
-    "rag_pipeline"
+    "rag_pipeline",
+    "hitl_v2"
 ]
 
 [workspace.package]

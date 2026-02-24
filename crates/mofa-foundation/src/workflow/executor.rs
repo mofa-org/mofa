@@ -236,6 +236,8 @@ impl WorkflowExecutor {
             status: WorkflowStatus::Running,
             node_records: Vec::new(),
             outputs: HashMap::new(),
+            total_wait_time_ms: 0,
+            context: None,
         };
 
         // 使用基于依赖的执行
@@ -254,9 +256,15 @@ impl WorkflowExecutor {
 
         let final_status = match result {
             Ok(_) => {
-                execution_record.status = WorkflowStatus::Completed;
-                info!("Workflow {} completed in {:?}", graph.name, duration);
-                "completed".to_string()
+                if execution_record.status != WorkflowStatus::Paused {
+                    execution_record.status = WorkflowStatus::Completed;
+                    info!("Workflow {} completed in {:?}", graph.name, duration);
+                    "completed".to_string()
+                } else {
+                    info!("Workflow {} paused after {:?}", graph.name, duration);
+                    execution_record.context = Some(ctx.clone());
+                    "paused".to_string()
+                }
             }
             Err(ref e) => {
                 execution_record.status = WorkflowStatus::Failed(e.clone());
@@ -276,6 +284,107 @@ impl WorkflowExecutor {
         .await;
 
         // Emit debug telemetry: WorkflowEnd
+        self.emit_debug(DebugEvent::WorkflowEnd {
+            workflow_id: graph.id.clone(),
+            execution_id: ctx.execution_id.clone(),
+            timestamp_ms: DebugEvent::now_ms(),
+            status: final_status,
+        })
+        .await;
+
+        Ok(execution_record)
+    }
+
+    pub async fn resume_with_human_input(
+        &self,
+        graph: &WorkflowGraph,
+        ctx: WorkflowContext,
+        waiting_node_id: &str,
+        human_input: WorkflowValue,
+    ) -> Result<ExecutionRecord, String> {
+        info!(
+            "Resuming workflow {} from node {} with human input",
+            graph.id, waiting_node_id
+        );
+
+        // Calculate wait time
+        if let Some(paused_at) = *ctx.paused_at.read().await {
+            let duration = chrono::Utc::now().signed_duration_since(paused_at);
+            let wait_duration_ms = duration.num_milliseconds().max(0) as u64;
+            *ctx.total_wait_time_ms.write().await += wait_duration_ms;  // ← accumulate
+        }
+
+        ctx.set_node_output(waiting_node_id, human_input).await;
+        ctx.set_node_status(waiting_node_id, NodeStatus::Completed)
+            .await;
+        *ctx.paused_at.write().await = None;
+        *ctx.last_waiting_node.write().await = None;
+
+        let start_time = Instant::now();
+
+        let mut execution_record = ExecutionRecord {
+            execution_id: ctx.execution_id.clone(),
+            workflow_id: graph.id.clone(),
+            started_at: std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_millis() as u64,
+            ended_at: None,
+            status: WorkflowStatus::Running,
+            node_records: Vec::new(),
+            outputs: HashMap::new(),
+            // total_wait_time_ms: wait_duration_ms,
+            total_wait_time_ms: *ctx.total_wait_time_ms.read().await,
+            context: None,
+        };
+
+        let start_node_id = graph
+            .start_node()
+            .ok_or_else(|| "No start node".to_string())?;
+
+        let result = self
+            .execute_from_node(
+                graph,
+                &ctx,
+                start_node_id,
+                WorkflowValue::Null,
+                &mut execution_record,
+            )
+            .await;
+
+        let duration = start_time.elapsed();
+        execution_record.ended_at = Some(
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_millis() as u64,
+        );
+
+        let final_status = match result {
+            Ok(_) => {
+                if execution_record.status != WorkflowStatus::Paused {
+                    execution_record.status = WorkflowStatus::Completed;
+                    info!("Workflow {} completed in {:?}", graph.name, duration);
+                    "completed".to_string()
+                } else {
+                    "paused".to_string()
+                }
+            }
+            Err(ref e) => {
+                execution_record.status = WorkflowStatus::Failed(e.clone());
+                error!("Workflow {} failed: {}", graph.name, e);
+                format!("failed: {}", e)
+            }
+        };
+        execution_record.outputs = ctx.get_all_outputs().await;
+
+        self.emit_event(ExecutionEvent::WorkflowCompleted {
+            workflow_id: graph.id.clone(),
+            execution_id: ctx.execution_id.clone(),
+            status: execution_record.status.clone(),
+        })
+        .await;
+
         self.emit_debug(DebugEvent::WorkflowEnd {
             workflow_id: graph.id.clone(),
             execution_id: ctx.execution_id.clone(),
@@ -338,6 +447,8 @@ impl WorkflowExecutor {
             status: WorkflowStatus::Running,
             node_records: Vec::new(),
             outputs: HashMap::new(),
+            total_wait_time_ms: 0,
+            context: None,
         };
 
         let result = self
@@ -384,6 +495,30 @@ impl WorkflowExecutor {
         Ok(execution_record)
     }
 
+    /// 尝试跳过已完成节点
+    /// Try to skip completed node
+    async fn try_skip_completed_node(
+        &self,
+        graph: &WorkflowGraph,
+        ctx: &WorkflowContext,
+        node_id: &str,
+    ) -> Option<(Option<String>, WorkflowValue)> {
+        if ctx.get_node_status(node_id).await != Some(NodeStatus::Completed) {
+            return None;
+        }
+
+        info!("Node {} already completed, skipping...", node_id);
+        let output = ctx
+            .get_node_output(node_id)
+            .await
+            .unwrap_or(WorkflowValue::Null);
+
+        let node = graph.get_node(node_id)?;
+        let next_node = self.determine_next_node(graph, node, &output).await;
+
+        Some((next_node, output))
+    }
+
     /// 从指定节点开始执行（迭代版本，避免递归异步问题）
     /// Execute from specified node (iterative version to avoid async recursion issues)
     async fn execute_from_node(
@@ -402,9 +537,34 @@ impl WorkflowExecutor {
                 .get_node(&current_node_id)
                 .ok_or_else(|| format!("Node {} not found", current_node_id))?;
 
-            let is_completed =
-                ctx.get_node_status(&current_node_id).await == Some(NodeStatus::Completed);
+            // 1. Try to skip completed node
+            if let Some((next_opt, output)) = self
+                .try_skip_completed_node(graph, ctx, &current_node_id)
+                .await
+            {
+                if let Some(next_id) = next_opt {
+                    current_node_id = next_id;
+                    current_input = output;
+                    continue;
+                } else {
+                    info!("Workflow completed at node {}", current_node_id);
+                    return Ok(output);
+                }
+            }
 
+            // 2. Check for HITL "wait_for_human" node
+            if node.config.node_type == NodeType::Wait {
+                info!("Pausing workflow at node: {}", current_node_id);
+                *ctx.paused_at.write().await = Some(chrono::Utc::now());
+                *ctx.last_waiting_node.write().await = Some(current_node_id.clone());
+
+                ctx.set_node_status(&current_node_id, NodeStatus::Waiting)
+                    .await;
+                record.status = WorkflowStatus::Paused;
+                return Ok(WorkflowValue::Null);
+            }
+
+            // 3. Execute new node
             // Emit debug telemetry: NodeStart
             self.emit_debug(DebugEvent::NodeStart {
                 node_id: current_node_id.clone(),
@@ -418,47 +578,39 @@ impl WorkflowExecutor {
                 .unwrap_or_default()
                 .as_millis() as u64;
 
-            let result = if is_completed {
-                info!("Skipping already completed node: {}", current_node_id);
-                Ok(ctx
-                    .get_node_output(&current_node_id)
-                    .await
-                    .unwrap_or(WorkflowValue::Null))
-            } else {
-                ctx.set_node_status(&current_node_id, NodeStatus::Running)
-                    .await;
-                self.emit_event(ExecutionEvent::NodeStarted {
-                    node_id: current_node_id.clone(),
-                })
+            ctx.set_node_status(&current_node_id, NodeStatus::Running)
                 .await;
+            self.emit_event(ExecutionEvent::NodeStarted {
+                node_id: current_node_id.clone(),
+            })
+            .await;
 
-                match node.node_type() {
-                    NodeType::Parallel => {
-                        self.execute_parallel(graph, ctx, node, current_input.clone(), record)
-                            .await
-                    }
-                    NodeType::Join => self.execute_join(graph, ctx, node, record).await,
-                    NodeType::SubWorkflow => {
-                        self.execute_sub_workflow(graph, ctx, node, current_input.clone(), record)
-                            .await
-                    }
-                    NodeType::Wait => self.execute_wait(ctx, node, current_input.clone()).await,
-                    _ => {
-                        let result = node.execute(ctx, current_input.clone()).await;
-                        ctx.set_node_output(&current_node_id, result.output.clone())
-                            .await;
-                        ctx.set_node_status(&current_node_id, result.status.clone())
-                            .await;
-                        self.emit_event(ExecutionEvent::NodeCompleted {
-                            node_id: current_node_id.clone(),
-                            result: result.clone(),
-                        })
+            let result = match node.node_type() {
+                NodeType::Parallel => {
+                    self.execute_parallel(graph, ctx, node, current_input.clone(), record)
+                        .await
+                }
+                NodeType::Join => self.execute_join(graph, ctx, node, record).await,
+                NodeType::SubWorkflow => {
+                    self.execute_sub_workflow(graph, ctx, node, current_input.clone(), record)
+                        .await
+                }
+                NodeType::Wait => self.execute_wait(ctx, node, current_input.clone()).await,
+                _ => {
+                    let result = node.execute(ctx, current_input.clone()).await;
+                    ctx.set_node_output(&current_node_id, result.output.clone())
                         .await;
-                        if result.status.is_success() {
-                            Ok(result.output)
-                        } else {
-                            Err(result.error.unwrap_or_else(|| "Unknown error".to_string()))
-                        }
+                    ctx.set_node_status(&current_node_id, result.status.clone())
+                        .await;
+                    self.emit_event(ExecutionEvent::NodeCompleted {
+                        node_id: current_node_id.clone(),
+                        result: result.clone(),
+                    })
+                    .await;
+                    if result.status.is_success() {
+                        Ok(result.output)
+                    } else {
+                        Err(result.error.unwrap_or_else(|| "Unknown error".to_string()))
                     }
                 }
             };
@@ -480,20 +632,17 @@ impl WorkflowExecutor {
             })
             .await;
 
-            // 记录节点执行
             // Record node execution
-            if !is_completed {
-                record.node_records.push(NodeExecutionRecord {
-                    node_id: current_node_id.clone(),
-                    started_at: start_time,
-                    ended_at: end_time,
-                    status: ctx
-                        .get_node_status(&current_node_id)
-                        .await
-                        .unwrap_or(NodeStatus::Pending),
-                    retry_count: 0,
-                });
-            }
+            record.node_records.push(NodeExecutionRecord {
+                node_id: current_node_id.clone(),
+                started_at: start_time,
+                ended_at: end_time,
+                status: ctx
+                    .get_node_status(&current_node_id)
+                    .await
+                    .unwrap_or(NodeStatus::Pending),
+                retry_count: 0,
+            });
 
             // 检查点
             // Checkpoints
@@ -882,6 +1031,8 @@ impl WorkflowExecutor {
             status: WorkflowStatus::Running,
             node_records: Vec::new(),
             outputs: HashMap::new(),
+            total_wait_time_ms: 0,
+            context: None,
         };
 
         // 按层次执行（同层节点顺序执行，因为闭包无法跨线程共享）
