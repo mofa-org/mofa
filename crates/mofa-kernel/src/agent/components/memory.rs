@@ -95,6 +95,7 @@ pub trait Memory: Send + Sync {
 /// 记忆值类型
 /// Memory value type
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[non_exhaustive]
 pub enum MemoryValue {
     /// 文本
     /// Text
@@ -322,6 +323,7 @@ impl Message {
 /// 消息角色
 /// Message role
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub enum MessageRole {
     /// 系统消息
     /// System message

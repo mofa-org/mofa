@@ -72,6 +72,7 @@ pub trait NodeFunc<S: GraphState>: Send + Sync {
 
 /// Edge target definition
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[non_exhaustive]
 pub enum EdgeTarget {
     /// Single target node
     Single(String),
@@ -258,6 +259,7 @@ pub trait CompiledGraph<S: GraphState>: Send + Sync {
 
 /// Stream event from graph execution
 #[derive(Debug, Clone)]
+#[non_exhaustive]
 pub enum StreamEvent<S: GraphState> {
     /// A node started executing
     NodeStart { node_id: String, state: S },

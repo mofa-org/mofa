@@ -82,6 +82,7 @@ pub trait Coordinator: Send + Sync {
 /// 协调模式
 /// Coordination patterns
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+#[non_exhaustive]
 pub enum CoordinationPattern {
     /// 顺序执行
     /// Sequential execution
@@ -216,6 +217,7 @@ impl Task {
 /// 任务类型
 /// Task type
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub enum TaskType {
     /// 通用任务
     /// General task
@@ -243,6 +245,7 @@ pub enum TaskType {
 /// 任务优先级
 /// Task priority
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, Default)]
+#[non_exhaustive]
 pub enum TaskPriority {
     Low = 0,
     #[default]
@@ -329,6 +332,7 @@ impl DispatchResult {
 /// 分发状态
 /// Dispatch status
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub enum DispatchStatus {
     /// 待处理
     /// Pending
@@ -358,6 +362,7 @@ pub enum DispatchStatus {
 /// 结果聚合策略
 /// Result aggregation strategy
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[non_exhaustive]
 pub enum AggregationStrategy {
     /// 连接所有结果
     /// Concatenate all results

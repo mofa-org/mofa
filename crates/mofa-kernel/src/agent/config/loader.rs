@@ -16,6 +16,7 @@ use serde::{Deserialize, Serialize};
 /// 配置格式
 /// Configuration format
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub enum ConfigFormat {
     /// YAML 格式
     /// YAML format

@@ -56,6 +56,7 @@ use crate::agent::error::AgentResult;
 /// };
 /// ```
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[non_exhaustive]
 pub enum DebugEvent {
     /// Workflow execution started
     WorkflowStart {

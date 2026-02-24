@@ -183,6 +183,7 @@ impl AgentConfig {
 /// Agent Type
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
+#[non_exhaustive]
 pub enum AgentType {
     /// LLM Agent
     /// LLM Agent
@@ -460,6 +461,7 @@ pub struct ToolConfig {
 /// Tool Type
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[non_exhaustive]
 pub enum ToolType {
     /// 内置工具
     /// Built-in Tool
@@ -561,6 +563,7 @@ pub struct WorkflowStep {
 /// Error Handling Strategy
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[non_exhaustive]
 pub enum ErrorStrategy {
     /// 快速失败
     /// Fail Fast
@@ -666,6 +669,7 @@ fn default_weight() -> f32 {
 /// Coordination Mode
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[non_exhaustive]
 pub enum CoordinationMode {
     /// 顺序执行
     /// Sequential Execution
@@ -692,6 +696,7 @@ pub enum CoordinationMode {
 /// Task Dispatch Strategy
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[non_exhaustive]
 pub enum DispatchStrategy {
     /// 广播 (所有成员)
     /// Broadcast (All members)
@@ -755,6 +760,7 @@ pub struct ReasonerConfig {
 /// Reasoning Strategy
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[non_exhaustive]
 pub enum ReasonerStrategy {
     #[default]
     Direct,
@@ -788,6 +794,7 @@ pub struct MemoryConfig {
 /// Memory Type
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[non_exhaustive]
 pub enum MemoryType {
     #[default]
     InMemory,

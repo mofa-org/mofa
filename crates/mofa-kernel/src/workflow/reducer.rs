@@ -44,6 +44,7 @@ pub trait Reducer: Send + Sync {
 
 /// Built-in reducer types
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+#[non_exhaustive]
 pub enum ReducerType {
     /// Overwrite the current value with the update (default)
     #[default]
