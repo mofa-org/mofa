@@ -1,4 +1,4 @@
-name: Duplicate Issue Detection
+name: MoFA Duplicate Issue Detection
 
 on:
   issues:
