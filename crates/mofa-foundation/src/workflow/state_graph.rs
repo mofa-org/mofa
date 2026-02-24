@@ -333,12 +333,14 @@ impl<S: GraphState> CompiledGraphImpl<S> {
                 .get(node_id)
                 .ok_or_else(|| AgentError::NotFound(format!("Node '{}'", node_id)))?
                 .clone();
-            let mut node_state = base_state.clone();
+            // Each parallel node runs against an isolated snapshot. Node-side mutations are
+            // intentionally sandboxed; shared-state changes must be expressed via Command updates.
+            let mut isolated_state = base_state.clone();
             let node_ctx = Self::build_node_context(base_ctx, node_id);
             let node_id = node_id.clone();
 
             join_set.spawn(async move {
-                let command = node.call(&mut node_state, &node_ctx).await?;
+                let command = node.call(&mut isolated_state, &node_ctx).await?;
                 Ok::<(usize, String, Command), AgentError>((index, node_id, command))
             });
         }
@@ -481,7 +483,7 @@ impl<S: GraphState + 'static> CompiledGraph<S> for CompiledGraphImpl<S> {
                 .await?;
 
                 for (node_id, command) in parallel_results {
-                    debug!("Executing node '{}' (parallel)", node_id);
+                    debug!("Applying updates from parallel node '{}'", node_id);
 
                     // Apply updates only after all parallel nodes have completed.
                     self.apply_updates(&mut state, &command.updates).await?;
