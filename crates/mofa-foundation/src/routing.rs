@@ -216,7 +216,7 @@ impl Default for RouterConfig {
 }
 
 /// Router statistics
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Default)]
 pub struct RouterStats {
     pub total_requests: AtomicU64,
     pub local_requests: AtomicU64,
@@ -224,6 +224,19 @@ pub struct RouterStats {
     pub rejected_requests: AtomicU64,
     pub deferred_requests: AtomicU64,
     pub failed_requests: AtomicU64,
+}
+
+impl Clone for RouterStats {
+    fn clone(&self) -> Self {
+        Self {
+            total_requests: AtomicU64::new(self.total_requests.load(Ordering::SeqCst)),
+            local_requests: AtomicU64::new(self.local_requests.load(Ordering::SeqCst)),
+            cloud_requests: AtomicU64::new(self.cloud_requests.load(Ordering::SeqCst)),
+            rejected_requests: AtomicU64::new(self.rejected_requests.load(Ordering::SeqCst)),
+            deferred_requests: AtomicU64::new(self.deferred_requests.load(Ordering::SeqCst)),
+            failed_requests: AtomicU64::new(self.failed_requests.load(Ordering::SeqCst)),
+        }
+    }
 }
 
 impl SmartRouter {
