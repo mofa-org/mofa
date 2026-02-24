@@ -1089,7 +1089,6 @@ impl SimpleRuntime {
     // Stream support methods
     // ---------------------------------
 
-
     /// 创建流
     /// Create stream
     pub async fn create_stream(

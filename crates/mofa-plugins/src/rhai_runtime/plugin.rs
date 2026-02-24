@@ -1111,12 +1111,12 @@ mod tests {
 
         let map = stats.to_map();
 
-        assert!(map.contains_key("calls_total"),  "missing calls_total");
-        assert!(map.contains_key("calls_failed"),  "missing calls_failed");
-        assert!(map.contains_key("avg_latency_ms"),"missing avg_latency_ms");
+        assert!(map.contains_key("calls_total"), "missing calls_total");
+        assert!(map.contains_key("calls_failed"), "missing calls_failed");
+        assert!(map.contains_key("avg_latency_ms"), "missing avg_latency_ms");
 
-        assert_eq!(map["calls_total"],   serde_json::json!(2u64));
-        assert_eq!(map["calls_failed"],  serde_json::json!(1u64));
+        assert_eq!(map["calls_total"], serde_json::json!(2u64));
+        assert_eq!(map["calls_failed"], serde_json::json!(1u64));
         // avg = (40 + 60) / 2 = 50.0
         let avg = map["avg_latency_ms"].as_f64().unwrap();
         assert!((avg - 50.0).abs() < f64::EPSILON);
@@ -1139,10 +1139,9 @@ mod tests {
     #[tokio::test]
     async fn test_plugin_stats_via_agent_plugin_trait() {
         // AgentPlugin::stats() must also reflect live counter values.
-        let mut plugin =
-            RhaiPlugin::from_content("test-trait-stats", "fn execute(i) { i } ")
-                .await
-                .unwrap();
+        let mut plugin = RhaiPlugin::from_content("test-trait-stats", "fn execute(i) { i } ")
+            .await
+            .unwrap();
 
         let ctx = PluginContext::default();
         plugin.load(&ctx).await.unwrap();
@@ -1164,10 +1163,9 @@ mod tests {
         //
         // Note: scripts that throw *inside* fn execute() are currently healed by
         // the fallback direct-execution path, so we use only success scenarios here.
-        let mut plugin =
-            RhaiPlugin::from_content("test-arc-shared", "fn execute(i) { i }")
-                .await
-                .unwrap();
+        let mut plugin = RhaiPlugin::from_content("test-arc-shared", "fn execute(i) { i }")
+            .await
+            .unwrap();
 
         let ctx = PluginContext::default();
         plugin.load(&ctx).await.unwrap();

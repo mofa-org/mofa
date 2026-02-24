@@ -5,7 +5,7 @@
 
 use crate::rag::similarity::compute_similarity;
 use async_trait::async_trait;
-use mofa_kernel::agent::error::AgentResult;
+use mofa_kernel::agent::error::{AgentError, AgentResult};
 use mofa_kernel::rag::{DocumentChunk, SearchResult, SimilarityMetric, VectorStore};
 use std::collections::HashMap;
 
@@ -30,6 +30,7 @@ use std::collections::HashMap;
 pub struct InMemoryVectorStore {
     chunks: HashMap<String, DocumentChunk>,
     metric: SimilarityMetric,
+    embedding_dimensions: Option<usize>,
 }
 
 impl InMemoryVectorStore {
@@ -38,6 +39,7 @@ impl InMemoryVectorStore {
         Self {
             chunks: HashMap::new(),
             metric,
+            embedding_dimensions: None,
         }
     }
 
@@ -56,13 +58,14 @@ impl Default for InMemoryVectorStore {
 #[async_trait]
 impl VectorStore for InMemoryVectorStore {
     async fn upsert(&mut self, chunk: DocumentChunk) -> AgentResult<()> {
+        self.validate_chunk_embedding(&chunk)?;
         self.chunks.insert(chunk.id.clone(), chunk);
         Ok(())
     }
 
     async fn upsert_batch(&mut self, chunks: Vec<DocumentChunk>) -> AgentResult<()> {
         for chunk in chunks {
-            self.chunks.insert(chunk.id.clone(), chunk);
+            self.upsert(chunk).await?;
         }
         Ok(())
     }
@@ -73,6 +76,22 @@ impl VectorStore for InMemoryVectorStore {
         top_k: usize,
         threshold: Option<f32>,
     ) -> AgentResult<Vec<SearchResult>> {
+        if query_embedding.is_empty() {
+            return Err(AgentError::InvalidInput(
+                "query embedding must not be empty".to_string(),
+            ));
+        }
+
+        if let Some(expected_dimensions) = self.embedding_dimensions
+            && query_embedding.len() != expected_dimensions
+        {
+            return Err(AgentError::InvalidInput(format!(
+                "query embedding dimension mismatch: expected {}, got {}",
+                expected_dimensions,
+                query_embedding.len()
+            )));
+        }
+
         let mut scored: Vec<SearchResult> = self
             .chunks
             .values()
@@ -114,6 +133,33 @@ impl VectorStore for InMemoryVectorStore {
 
     fn similarity_metric(&self) -> SimilarityMetric {
         self.metric
+    }
+}
+
+impl InMemoryVectorStore {
+    fn validate_chunk_embedding(&mut self, chunk: &DocumentChunk) -> AgentResult<()> {
+        if chunk.embedding.is_empty() {
+            return Err(AgentError::InvalidInput(format!(
+                "chunk '{}' has empty embedding",
+                chunk.id
+            )));
+        }
+
+        match self.embedding_dimensions {
+            Some(expected) if expected != chunk.embedding.len() => {
+                Err(AgentError::InvalidInput(format!(
+                    "chunk '{}' embedding dimension mismatch: expected {}, got {}",
+                    chunk.id,
+                    expected,
+                    chunk.embedding.len()
+                )))
+            }
+            Some(_) => Ok(()),
+            None => {
+                self.embedding_dimensions = Some(chunk.embedding.len());
+                Ok(())
+            }
+        }
     }
 }
 
@@ -176,6 +222,33 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_rejects_empty_embedding() {
+        let mut store = InMemoryVectorStore::cosine();
+        let err = store
+            .upsert(make_chunk("bad", "no vector", vec![]))
+            .await
+            .expect_err("empty embedding should fail");
+
+        assert!(matches!(err, AgentError::InvalidInput(_)));
+    }
+
+    #[tokio::test]
+    async fn test_rejects_mixed_embedding_dimensions() {
+        let mut store = InMemoryVectorStore::cosine();
+        store
+            .upsert(make_chunk("ok", "dim2", vec![1.0, 0.0]))
+            .await
+            .unwrap();
+
+        let err = store
+            .upsert(make_chunk("bad", "dim3", vec![1.0, 0.0, 0.5]))
+            .await
+            .expect_err("dimension mismatch should fail");
+
+        assert!(matches!(err, AgentError::InvalidInput(_)));
+    }
+
+    #[tokio::test]
     async fn test_search_returns_most_similar() {
         let mut store = InMemoryVectorStore::cosine();
 
@@ -215,6 +288,66 @@ mod tests {
         let results = store.search(&[1.0, 0.0], 10, Some(0.9)).await.unwrap();
         assert_eq!(results.len(), 1);
         assert_eq!(results[0].id, "close");
+    }
+
+    #[tokio::test]
+    async fn test_search_rejects_empty_query_embedding() {
+        let store = InMemoryVectorStore::cosine();
+        let err = store
+            .search(&[], 5, None)
+            .await
+            .expect_err("empty query embedding should fail");
+        assert!(matches!(err, AgentError::InvalidInput(_)));
+    }
+
+    #[tokio::test]
+    async fn test_search_rejects_dimension_mismatch() {
+        let mut store = InMemoryVectorStore::cosine();
+        store
+            .upsert(make_chunk("a", "hello", vec![1.0, 0.0]))
+            .await
+            .unwrap();
+
+        let err = store
+            .search(&[1.0, 0.0, 1.0], 5, None)
+            .await
+            .expect_err("query dimension mismatch should fail");
+        assert!(matches!(err, AgentError::InvalidInput(_)));
+    }
+
+    #[tokio::test]
+    async fn test_real_world_support_ticket_ranking() {
+        let mut store = InMemoryVectorStore::cosine();
+
+        let docs = vec![
+            make_chunk(
+                "kb-billing",
+                "Billing retries happen when card validation fails and invoice remains unpaid",
+                vec![1.0, 0.0, 0.0],
+            )
+            .with_metadata("domain", "billing"),
+            make_chunk(
+                "kb-auth",
+                "Reset MFA and recover account login with backup codes",
+                vec![0.0, 1.0, 0.0],
+            )
+            .with_metadata("domain", "auth"),
+            make_chunk(
+                "kb-deploy",
+                "Blue green deployment rollback steps for production incident",
+                vec![0.0, 0.0, 1.0],
+            )
+            .with_metadata("domain", "ops"),
+        ];
+
+        store.upsert_batch(docs).await.unwrap();
+
+        let results = store.search(&[1.0, 0.0, 0.0], 2, None).await.unwrap();
+        assert_eq!(results[0].id, "kb-billing");
+        assert_eq!(
+            results[0].metadata.get("domain").map(String::as_str),
+            Some("billing")
+        );
     }
 
     #[tokio::test]

@@ -556,8 +556,8 @@ pub struct LLMAgentBuilder {
 impl LLMAgentBuilder {
     /// Create a new builder
     pub fn create() -> Result<Arc<Self>, MoFaError> {
-        let runtime = tokio::runtime::Runtime::new()
-            .map_err(|e| MoFaError::RuntimeError(e.to_string()))?;
+        let runtime =
+            tokio::runtime::Runtime::new().map_err(|e| MoFaError::RuntimeError(e.to_string()))?;
         Ok(Arc::new(Self {
             state: Arc::new(StdMutex::new(BuilderState::default())),
             runtime: Arc::new(runtime),
@@ -824,8 +824,8 @@ impl SessionManager {
     /// Create a new in-memory session manager
     /// Internal fallible constructor
     pub(crate) fn try_new_in_memory() -> Result<Self, MoFaError> {
-        let runtime = tokio::runtime::Runtime::new()
-            .map_err(|e| MoFaError::RuntimeError(e.to_string()))?;
+        let runtime =
+            tokio::runtime::Runtime::new().map_err(|e| MoFaError::RuntimeError(e.to_string()))?;
         let storage = Box::new(mofa_foundation::agent::session::MemorySessionStorage::new());
         let manager = mofa_foundation::agent::session::SessionManager::with_storage(storage);
         Ok(Self {
@@ -839,7 +839,10 @@ impl SessionManager {
         match Self::try_new_in_memory() {
             Ok(manager) => manager,
             Err(e) => {
-                eprintln!("SessionManager::new_in_memory: failed to create in-memory session manager: {}", e);
+                eprintln!(
+                    "SessionManager::new_in_memory: failed to create in-memory session manager: {}",
+                    e
+                );
                 std::process::abort();
             }
         }
@@ -851,9 +854,9 @@ impl SessionManager {
             tokio::runtime::Runtime::new().map_err(|e| MoFaError::RuntimeError(e.to_string()))?;
 
         let manager = runtime
-            .block_on(
-                mofa_foundation::agent::session::SessionManager::with_jsonl(&workspace_path),
-            )
+            .block_on(mofa_foundation::agent::session::SessionManager::with_jsonl(
+                &workspace_path,
+            ))
             .map_err(|e| MoFaError::SessionError(e.to_string()))?;
 
         Ok(Self {
@@ -1006,9 +1009,7 @@ impl ToolRegistry {
             .lock()
             .unwrap()
             .register(tool_arc)
-            .map_err(|e: mofa_kernel::agent::error::AgentError| {
-                MoFaError::ToolError(e.to_string())
-            })
+            .map_err(|e: mofa_kernel::agent::error::AgentError| MoFaError::ToolError(e.to_string()))
     }
 
     /// Unregister a tool by name
@@ -1018,9 +1019,7 @@ impl ToolRegistry {
             .lock()
             .unwrap()
             .unregister(&name)
-            .map_err(|e: mofa_kernel::agent::error::AgentError| {
-                MoFaError::ToolError(e.to_string())
-            })
+            .map_err(|e: mofa_kernel::agent::error::AgentError| MoFaError::ToolError(e.to_string()))
     }
 
     /// List all registered tools
@@ -1070,16 +1069,14 @@ impl ToolRegistry {
             .get(&name)
             .ok_or_else(|| MoFaError::ToolError(format!("Tool not found: {}", name)))?;
 
-        let arguments: serde_json::Value =
-            serde_json::from_str(&arguments_json).map_err(|e| {
-                MoFaError::InvalidArgument(format!("Invalid JSON arguments: {}", e))
-            })?;
+        let arguments: serde_json::Value = serde_json::from_str(&arguments_json)
+            .map_err(|e| MoFaError::InvalidArgument(format!("Invalid JSON arguments: {}", e)))?;
 
         let input = mofa_kernel::agent::components::tool::ToolInput::from_json(arguments);
 
         // Execute synchronously using a runtime
-        let runtime = tokio::runtime::Runtime::new()
-            .map_err(|e| MoFaError::RuntimeError(e.to_string()))?;
+        let runtime =
+            tokio::runtime::Runtime::new().map_err(|e| MoFaError::RuntimeError(e.to_string()))?;
 
         let ctx = mofa_kernel::agent::context::AgentContext::new("ffi-execution");
         let result = runtime.block_on(tool.execute(input, &ctx));
