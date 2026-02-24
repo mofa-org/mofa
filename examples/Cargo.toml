@@ -39,6 +39,7 @@ members = [
     "message_graph_executor_runtime",
     "agent_builder",
     "context_compression",
+    "context_window_demo",
 ]
 
 [workspace.package]
