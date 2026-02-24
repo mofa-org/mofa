@@ -559,10 +559,7 @@ impl ReasoningStep {
         content: impl Into<String>,
         step_number: usize,
     ) -> Self {
-        let now = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_millis() as u64;
+        let now = crate::utils::now_ms();
 
         Self {
             step_type,

@@ -217,10 +217,7 @@ impl MemoryItem {
     /// 创建新的记忆项
     /// Create a new memory item
     pub fn new(key: impl Into<String>, value: MemoryValue) -> Self {
-        let now = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_millis() as u64;
+        let now = crate::utils::now_ms();
 
         Self {
             key: key.into(),
@@ -269,10 +266,7 @@ impl Message {
     /// 创建新消息
     /// Create new message
     pub fn new(role: MessageRole, content: impl Into<String>) -> Self {
-        let now = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_millis() as u64;
+        let now = crate::utils::now_ms();
 
         Self {
             role,
