@@ -1,0 +1,10 @@
+[package]
+name = "message_graph_validation"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+
+# Local dependencies
+mofa-kernel = { path = "../../crates/mofa-kernel" }
