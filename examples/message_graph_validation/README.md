@@ -10,6 +10,9 @@ Practical Phase-1 validation example for Task 19 (MessageGraph).
 2. Pre-runtime safety:
    - Builds an intentionally invalid graph
    - Confirms compile-time validation rejects missing node references
+3. StateGraph-friendly message state:
+   - Uses `MessageState` with canonical `messages` key semantics
+   - Appends message updates through helper APIs
 
 ## Run
 

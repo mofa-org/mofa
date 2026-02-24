@@ -1,11 +1,23 @@
 //! MessageGraph module
 //!
-//! Defines a graph contract for message-routing topologies.
-//! This is a kernel-level abstraction only; concrete runtime execution
-//! lives in runtime/foundation layers.
+//! Defines message-related graph contracts and state types.
+//!
+//! This module intentionally supports two complementary layers:
+//! - `MessageGraph`: message-routing topology (transport-level routing contracts)
+//! - `MessageState`: workflow state model for `StateGraph` where `messages` is the primary key
+//!
+//! For developer-facing workflow composition, prefer `MessageState` with `StateGraph`.
+//! Use `MessageGraph` when you need explicit transport/routing topology contracts.
 
+use crate::agent::error::{AgentError, AgentResult};
+use crate::workflow::{GraphState, StateUpdate};
+use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use std::collections::{HashMap, HashSet, VecDeque};
+
+/// Canonical messages key for StateGraph-based message state.
+pub const MESSAGES_KEY: &str = "messages";
 
 /// Error type for MessageGraph construction/validation.
 #[derive(Debug, thiserror::Error, PartialEq, Eq)]
@@ -64,6 +76,156 @@ impl MessageEnvelope {
     pub fn with_header(mut self, key: impl Into<String>, value: impl Into<String>) -> Self {
         self.headers.insert(key.into(), value.into());
         self
+    }
+}
+
+/// StateGraph-friendly message state.
+///
+/// This mirrors the LangGraph-style pattern where state stores a `messages` key
+/// and nodes append one-or-more messages during execution.
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq)]
+pub struct MessageState {
+    #[serde(default)]
+    pub messages: Vec<MessageEnvelope>,
+    #[serde(flatten)]
+    pub data: serde_json::Map<String, Value>,
+}
+
+impl MessageState {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn from_messages(messages: Vec<MessageEnvelope>) -> Self {
+        Self {
+            messages,
+            data: serde_json::Map::new(),
+        }
+    }
+
+    pub fn push_message(&mut self, message: MessageEnvelope) {
+        self.messages.push(message);
+    }
+
+    pub fn messages(&self) -> &[MessageEnvelope] {
+        &self.messages
+    }
+
+    pub fn with_value(mut self, key: impl Into<String>, value: Value) -> Self {
+        self.data.insert(key.into(), value);
+        self
+    }
+}
+
+/// Build a `StateUpdate` for appending one message to the `messages` key.
+pub fn single_message_update(message: &MessageEnvelope) -> AgentResult<StateUpdate> {
+    StateUpdate::from_serializable(MESSAGES_KEY, message)
+}
+
+/// Build a `StateUpdate` for appending multiple messages to the `messages` key.
+pub fn messages_update(messages: &[MessageEnvelope]) -> AgentResult<StateUpdate> {
+    StateUpdate::from_serializable(MESSAGES_KEY, &messages.to_vec())
+}
+
+#[async_trait]
+impl GraphState for MessageState {
+    async fn apply_update(&mut self, key: &str, value: Value) -> AgentResult<()> {
+        if key != MESSAGES_KEY {
+            self.data.insert(key.to_string(), value);
+            return Ok(());
+        }
+
+        match value {
+            Value::Null => Ok(()),
+            Value::Array(items) => {
+                let mut parsed = Vec::with_capacity(items.len());
+                for item in items {
+                    parsed.push(
+                        serde_json::from_value::<MessageEnvelope>(item).map_err(|e| {
+                            AgentError::InvalidInput(format!(
+                                "`messages` update contains invalid message envelope: {e}"
+                            ))
+                        })?,
+                    );
+                }
+                self.messages.extend(parsed);
+                Ok(())
+            }
+            Value::Object(_) => {
+                let msg = serde_json::from_value::<MessageEnvelope>(value).map_err(|e| {
+                    AgentError::InvalidInput(format!(
+                        "`messages` update contains invalid message envelope: {e}"
+                    ))
+                })?;
+                self.messages.push(msg);
+                Ok(())
+            }
+            other => Err(AgentError::InvalidInput(format!(
+                "`messages` update must be an envelope object or array, got: {other}"
+            ))),
+        }
+    }
+
+    fn get_value(&self, key: &str) -> Option<Value> {
+        if key == MESSAGES_KEY {
+            return serde_json::to_value(&self.messages).ok();
+        }
+        self.data.get(key).cloned()
+    }
+
+    fn keys(&self) -> Vec<&str> {
+        let mut keys = vec![MESSAGES_KEY];
+        keys.extend(
+            self.data
+                .keys()
+                .filter(|k| k.as_str() != MESSAGES_KEY)
+                .map(|k| k.as_str()),
+        );
+        keys
+    }
+
+    fn to_json(&self) -> AgentResult<Value> {
+        let mut map = self.data.clone();
+        map.insert(
+            MESSAGES_KEY.to_string(),
+            serde_json::to_value(&self.messages)?,
+        );
+        Ok(Value::Object(map))
+    }
+
+    fn from_json(value: Value) -> AgentResult<Self> {
+        let Value::Object(mut map) = value else {
+            return Err(AgentError::InvalidInput(
+                "MessageState must be a JSON object".to_string(),
+            ));
+        };
+
+        let messages = match map.remove(MESSAGES_KEY) {
+            Some(Value::Array(items)) => {
+                let mut parsed = Vec::with_capacity(items.len());
+                for item in items {
+                    parsed.push(
+                        serde_json::from_value::<MessageEnvelope>(item).map_err(|e| {
+                            AgentError::InvalidInput(format!(
+                                "MessageState `messages` field contains invalid envelope: {e}"
+                            ))
+                        })?,
+                    );
+                }
+                parsed
+            }
+            Some(Value::Null) | None => Vec::new(),
+            Some(other) => {
+                return Err(AgentError::InvalidInput(format!(
+                    "MessageState `messages` field must be an array, got: {other}"
+                )));
+            }
+        };
+
+        Ok(Self {
+            messages,
+            data: map,
+        })
     }
 }
 
@@ -428,6 +590,72 @@ impl CompiledMessageGraph {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use futures::executor::block_on;
+    use serde_json::json;
+
+    fn sample_envelope(kind: &str) -> MessageEnvelope {
+        MessageEnvelope::new(kind, br#"{"sample":true}"#.to_vec()).with_header("k", "v")
+    }
+
+    #[test]
+    fn message_state_uses_messages_key() {
+        let state = MessageState::from_messages(vec![sample_envelope("m1")])
+            .with_value("foo", json!(1))
+            .with_value("bar", json!("x"));
+
+        assert!(state.keys().contains(&MESSAGES_KEY));
+        assert!(state.keys().contains(&"foo"));
+        assert_eq!(state.messages().len(), 1);
+    }
+
+    #[test]
+    fn message_state_applies_single_and_batch_updates() {
+        let mut state = MessageState::new();
+        let first = sample_envelope("a");
+        let second = sample_envelope("b");
+
+        block_on(state.apply_update(MESSAGES_KEY, serde_json::to_value(&first).unwrap())).unwrap();
+        block_on(state.apply_update(
+            MESSAGES_KEY,
+            serde_json::to_value(vec![second.clone()]).unwrap(),
+        ))
+        .unwrap();
+
+        assert_eq!(state.messages().len(), 2);
+        assert_eq!(state.messages()[0].message_type, "a");
+        assert_eq!(state.messages()[1].message_type, "b");
+    }
+
+    #[test]
+    fn message_state_rejects_invalid_messages_updates() {
+        let mut state = MessageState::new();
+        let err = block_on(state.apply_update(MESSAGES_KEY, json!("not-an-envelope"))).unwrap_err();
+        assert!(
+            err.to_string()
+                .contains("must be an envelope object or array")
+        );
+    }
+
+    #[test]
+    fn message_state_json_roundtrip_preserves_messages() {
+        let state = MessageState::from_messages(vec![sample_envelope("m1"), sample_envelope("m2")])
+            .with_value("tenant", json!("acme"));
+
+        let json = state.to_json().unwrap();
+        let restored = MessageState::from_json(json).unwrap();
+
+        assert_eq!(restored.messages().len(), 2);
+        assert_eq!(restored.get_value("tenant"), Some(json!("acme")));
+    }
+
+    #[test]
+    fn message_update_helpers_target_messages_key() {
+        let update = single_message_update(&sample_envelope("m")).unwrap();
+        assert_eq!(update.key, MESSAGES_KEY);
+
+        let batch = messages_update(&[sample_envelope("a"), sample_envelope("b")]).unwrap();
+        assert_eq!(batch.key, MESSAGES_KEY);
+    }
 
     fn build_valid_graph() -> MessageGraph {
         let mut graph = MessageGraph::new("task19_message_graph");

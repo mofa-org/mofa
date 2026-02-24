@@ -1,8 +1,9 @@
 use anyhow::Result;
 use mofa_kernel::{
     DeliveryMode, DeliveryPolicy, MessageEnvelope, MessageGraph, MessageGraphError, MessageNode,
-    MessageNodeKind, RouteRule,
+    MessageNodeKind, MessageState, RouteRule, single_message_update, GraphState,
 };
+use serde_json::json;
 
 fn build_order_routing_graph() -> Result<MessageGraph> {
     let mut graph = MessageGraph::new("order-routing").with_max_hops(8);
@@ -116,6 +117,16 @@ fn main() -> Result<()> {
         }
         Err(other) => println!("Validation failed with unexpected error: {other}"),
     }
+
+    // Use case 3: StateGraph-style message state with `messages` key semantics.
+    let mut state = MessageState::new().with_value("session_id", json!("sess-01"));
+    state.push_message(high_risk_order.clone());
+    let update = single_message_update(&MessageEnvelope::new(
+        "order.acknowledged",
+        br#"{"id":"A-100"}"#.to_vec(),
+    ))?;
+    futures::executor::block_on(state.apply_updates(&[update]))?;
+    println!("MessageState count after updates: {}", state.messages().len());
 
     Ok(())
 }
