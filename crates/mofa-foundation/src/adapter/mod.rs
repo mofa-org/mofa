@@ -52,8 +52,20 @@ pub mod descriptor;
 pub mod config;
 pub mod resolver;
 pub mod error;
+pub mod scheduler;
 
 pub use registry::AdapterRegistry;
 pub use descriptor::{AdapterDescriptor, Modality, ModelFormat, QuantizationProfile};
 pub use config::{ModelConfig, HardwareProfile};
 pub use error::{AdapterError, ResolutionError, RejectionReason};
+pub use scheduler::{
+    AdmissionDecision,
+    AdmissionReason,
+    MemoryThresholds,
+    MemoryBudget,
+    SchedulerPolicy,
+    Scheduler,
+    DeferredQueue,
+    DeferredRequest,
+    StabilityControl,
+};
