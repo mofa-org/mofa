@@ -4,7 +4,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use super::descriptor::Modality;
+use super::descriptor::{Modality, ModelFormat};
 use crate::hardware::{CpuFamily, GpuType, HardwareCapability, OsClassification};
 
 /// Configuration for a model request
@@ -66,6 +66,12 @@ impl ModelConfigBuilder {
 
     pub fn required_format(mut self, format: impl Into<String>) -> Self {
         self.config.required_format = Some(format.into());
+        self
+    }
+
+    /// Set required format using ModelFormat enum
+    pub fn required_format_model(mut self, format: ModelFormat) -> Self {
+        self.config.required_format = Some(format.to_string());
         self
     }
 

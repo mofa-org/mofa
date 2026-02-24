@@ -10,7 +10,7 @@
 //! # Example
 //!
 //! ```rust
-//! use mofa_foundation::adapter::{AdapterDescriptor, AdapterRegistry, ModelConfig, Modality, HardwareProfile};
+//! use mofa_foundation::adapter::{AdapterDescriptor, AdapterRegistry, ModelConfig, Modality, ModelFormat, HardwareProfile};
 //! use mofa_foundation::hardware::{HardwareCapability, GpuType, OsClassification, CpuFamily};
 //!
 //! // Create a registry
@@ -21,7 +21,7 @@
 //!     .id("llama-cpp-backend")
 //!     .name("Llama.cpp Backend")
 //!     .supported_modality(Modality::LLM)
-//!     .supported_format("safetensors")
+//!     .supported_format(ModelFormat::Safetensors)
 //!     .supported_quantization("q4_k".to_string())
 //!     .priority(100)
 //!     .build();
@@ -31,7 +31,7 @@
 //! let config = ModelConfig::builder()
 //!     .model_id("llama-3-8b")
 //!     .required_modality(Modality::LLM)
-//!     .required_format("safetensors")
+//!     .required_format_model(ModelFormat::Safetensors)
 //!     .build();
 //!
 //! let hw_capability = HardwareCapability {
