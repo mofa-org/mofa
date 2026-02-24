@@ -7,7 +7,7 @@ use tokio::sync::mpsc;
 
 use mofa_foundation::workflow::session_recorder::InMemorySessionRecorder;
 use mofa_kernel::workflow::telemetry::{DebugEvent, DebugSession, SessionRecorder};
-use mofa_monitoring::dashboard::{DashboardConfig, DashboardServer};
+use mofa_monitoring::{DashboardConfig, DashboardServer};
 
 /// Creates a simple 3-node workflow for testing
 fn create_test_workflow_events(execution_id: &str) -> Vec<DebugEvent> {
