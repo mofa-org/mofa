@@ -55,6 +55,21 @@ pub enum KernelError {
     Internal(String),
 }
 
+impl From<crate::agent::types::error::GlobalError> for KernelError {
+    fn from(err: crate::agent::types::error::GlobalError) -> Self {
+        use crate::agent::types::error::GlobalError;
+        match err {
+            GlobalError::Agent(e) => KernelError::Agent(e),
+            GlobalError::Io(e) => KernelError::Io(e),
+            GlobalError::Serialization(e) => KernelError::Serialization(e),
+            GlobalError::LLM(msg)
+            | GlobalError::Plugin(msg)
+            | GlobalError::Runtime(msg)
+            | GlobalError::Other(msg) => KernelError::Internal(msg),
+        }
+    }
+}
+
 /// Convenience result alias using [`error_stack::Report`].
 ///
 /// Equivalent to `Result<T, error_stack::Report<KernelError>>`.
@@ -119,5 +134,21 @@ mod tests {
 
         assert!(matches!(kernel_err, KernelError::Config(_)));
         assert!(kernel_err.to_string().contains("xml"));
+    }
+
+    #[test]
+    fn global_error_converts_via_from() {
+        use crate::agent::types::error::GlobalError;
+
+        // AgentError variant
+        let global_err = GlobalError::Agent(AgentError::NotFound("test".into()));
+        let kernel_err: KernelError = global_err.into();
+        assert!(matches!(kernel_err, KernelError::Agent(_)));
+
+        // String variant
+        let global_err = GlobalError::LLM("connection failed".into());
+        let kernel_err: KernelError = global_err.into();
+        assert!(matches!(kernel_err, KernelError::Internal(_)));
+        assert!(kernel_err.to_string().contains("connection failed"));
     }
 }
