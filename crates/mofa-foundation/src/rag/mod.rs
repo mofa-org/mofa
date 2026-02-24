@@ -4,6 +4,7 @@
 //! in mofa-kernel, along with utilities for document chunking.
 
 pub mod chunker;
+pub mod pipeline_adapters;
 pub mod similarity;
 pub mod vector_store;
 
@@ -11,6 +12,7 @@ pub mod vector_store;
 pub mod qdrant_store;
 
 pub use chunker::{ChunkConfig, TextChunker};
+pub use pipeline_adapters::{IdentityReranker, InMemoryRetriever, SimpleGenerator};
 pub use similarity::compute_similarity;
 pub use vector_store::InMemoryVectorStore;
 
@@ -18,4 +20,7 @@ pub use vector_store::InMemoryVectorStore;
 pub use qdrant_store::{QdrantConfig, QdrantVectorStore};
 
 // Re-export kernel types for convenience
-pub use mofa_kernel::rag::{DocumentChunk, SearchResult, SimilarityMetric, VectorStore};
+pub use mofa_kernel::rag::{
+    Document, DocumentChunk, GenerateInput, Generator, RagPipeline, RagPipelineOutput, Reranker,
+    Retriever, ScoredDocument, SearchResult, SimilarityMetric, VectorStore,
+};
