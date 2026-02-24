@@ -230,9 +230,8 @@ impl AdapterRegistry {
             }
         });
 
-        let (best_adapter, _) = sorted_candidates[0];
-
-        // Get the best adapter ID before moving candidates
+        // Clone the best adapter to avoid borrow issues
+        let best_adapter = sorted_candidates[0].0.clone();
         let best_adapter_id = best_adapter.id.clone();
 
         // Collect rejection reasons for all other candidates
@@ -242,7 +241,7 @@ impl AdapterRegistry {
             .map(|(adapter, reasons)| (adapter.id, reasons))
             .collect();
 
-        Ok((best_adapter.clone(), rejection_reasons))
+        Ok((best_adapter, rejection_reasons))
     }
 
     /// Find all adapters that support a given modality
