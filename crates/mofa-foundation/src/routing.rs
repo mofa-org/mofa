@@ -29,11 +29,12 @@ use tokio::sync::RwLock;
 use tracing::{debug, error, info, warn};
 
 /// Type of inference task
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Default)]
 pub enum TaskType {
     /// Automatic Speech Recognition
     Asr,
     /// Large Language Model
+    #[default]
     Llm,
     /// Text-to-Speech
     Tts,
@@ -129,7 +130,7 @@ pub struct ProviderInfo {
 }
 
 /// Request for routing
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct RoutingRequest {
     pub task_type: TaskType,
     pub preferred_policy: Option<RoutingPolicy>,
