@@ -295,7 +295,7 @@ impl TracePropagator for B3Propagator {
                 Some("1") | Some("true") => TraceFlags::SAMPLED,
                 Some("0") | Some("false") => TraceFlags::NONE,
                 _ => TraceFlags::SAMPLED, // 默认采样
-                // Default sampled
+                                          // Default sampled
             }
         };
 

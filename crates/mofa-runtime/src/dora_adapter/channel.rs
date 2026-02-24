@@ -311,12 +311,9 @@ impl DoraChannel {
     pub async fn receive_p2p(&self, agent_id: &str) -> DoraResult<Option<MessageEnvelope>> {
         let rx = {
             let receivers = self.receivers.read().await;
-            receivers
-                .get(agent_id)
-                .cloned()
-                .ok_or_else(|| {
-                    DoraError::AgentNotFound(format!("Agent {} not registered", agent_id))
-                })?
+            receivers.get(agent_id).cloned().ok_or_else(|| {
+                DoraError::AgentNotFound(format!("Agent {} not registered", agent_id))
+            })?
         };
 
         let mut rx_guard = rx.lock().await;
@@ -332,12 +329,9 @@ impl DoraChannel {
     pub async fn try_receive_p2p(&self, agent_id: &str) -> DoraResult<Option<MessageEnvelope>> {
         let rx = {
             let receivers = self.receivers.read().await;
-            receivers
-                .get(agent_id)
-                .cloned()
-                .ok_or_else(|| {
-                    DoraError::AgentNotFound(format!("Agent {} not registered", agent_id))
-                })?
+            receivers.get(agent_id).cloned().ok_or_else(|| {
+                DoraError::AgentNotFound(format!("Agent {} not registered", agent_id))
+            })?
         };
 
         let mut rx_guard = rx.lock().await;
@@ -542,4 +536,3 @@ mod tests {
         );
     }
 }
-

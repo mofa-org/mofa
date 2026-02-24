@@ -755,24 +755,40 @@ impl SimpleMessageBus {
             .push(tx);
     }
 
+    /// Unregister an agent and clean up its topic subscriptions
+    pub async fn unregister(&self, agent_id: &str) {
+        {
+            let mut subs = self.subscribers.write().await;
+            subs.remove(agent_id);
+        }
+
+        let mut topics = self.topic_subscribers.write().await;
+        for subscriber_ids in topics.values_mut() {
+            subscriber_ids.retain(|id| id != agent_id);
+        }
+        topics.retain(|_, subscriber_ids| !subscriber_ids.is_empty());
+    }
+
     /// 订阅主题
     /// Subscribe to a topic
     pub async fn subscribe(&self, agent_id: &str, topic: &str) {
         let mut topics = self.topic_subscribers.write().await;
-        topics
-            .entry(topic.to_string())
-            .or_insert_with(Vec::new)
-            .push(agent_id.to_string());
+        let subscriber_ids = topics.entry(topic.to_string()).or_insert_with(Vec::new);
+        if !subscriber_ids.iter().any(|id| id == agent_id) {
+            subscriber_ids.push(agent_id.to_string());
+        }
     }
 
     /// 发送点对点消息
     /// Send point-to-point message
     pub async fn send_to(&self, target_id: &str, event: AgentEvent) -> anyhow::Result<()> {
-        let subs = self.subscribers.read().await;
-        if let Some(senders) = subs.get(target_id) {
-            for tx in senders {
-                let _ = tx.send(event.clone()).await;
-            }
+        let senders = {
+            let subs = self.subscribers.read().await;
+            subs.get(target_id).cloned().unwrap_or_default()
+        };
+
+        for tx in senders {
+            let _ = tx.send(event.clone()).await;
         }
         Ok(())
     }
@@ -780,11 +796,15 @@ impl SimpleMessageBus {
     /// 广播消息给所有智能体
     /// Broadcast message to all agents
     pub async fn broadcast(&self, event: AgentEvent) -> anyhow::Result<()> {
-        let subs = self.subscribers.read().await;
-        for senders in subs.values() {
-            for tx in senders {
-                let _ = tx.send(event.clone()).await;
-            }
+        let senders = {
+            let subs = self.subscribers.read().await;
+            subs.values()
+                .flat_map(|agent_senders| agent_senders.iter().cloned())
+                .collect::<Vec<_>>()
+        };
+
+        for tx in senders {
+            let _ = tx.send(event.clone()).await;
         }
         Ok(())
     }
@@ -792,16 +812,22 @@ impl SimpleMessageBus {
     /// 发布到主题
     /// Publish to a topic
     pub async fn publish(&self, topic: &str, event: AgentEvent) -> anyhow::Result<()> {
-        let topics = self.topic_subscribers.read().await;
-        if let Some(agent_ids) = topics.get(topic) {
+        let agent_ids = {
+            let topics = self.topic_subscribers.read().await;
+            topics.get(topic).cloned().unwrap_or_default()
+        };
+
+        let senders = {
             let subs = self.subscribers.read().await;
-            for agent_id in agent_ids {
-                if let Some(senders) = subs.get(agent_id) {
-                    for tx in senders {
-                        let _ = tx.send(event.clone()).await;
-                    }
-                }
-            }
+            agent_ids
+                .iter()
+                .filter_map(|agent_id| subs.get(agent_id))
+                .flat_map(|agent_senders| agent_senders.iter().cloned())
+                .collect::<Vec<_>>()
+        };
+
+        for tx in senders {
+            let _ = tx.send(event.clone()).await;
         }
         Ok(())
     }
@@ -1014,8 +1040,22 @@ impl SimpleRuntime {
         config: AgentConfig,
         role: &str,
     ) -> anyhow::Result<tokio::sync::mpsc::Receiver<AgentEvent>> {
+        self.register_agent_with_capacity(metadata, config, role, 100)
+            .await
+    }
+
+    /// 注册智能体（可配置事件队列容量）
+    /// Register an agent with configurable event queue capacity
+    pub async fn register_agent_with_capacity(
+        &self,
+        metadata: AgentMetadata,
+        config: AgentConfig,
+        role: &str,
+        queue_capacity: usize,
+    ) -> anyhow::Result<tokio::sync::mpsc::Receiver<AgentEvent>> {
         let agent_id = metadata.id.clone();
-        let (tx, rx) = tokio::sync::mpsc::channel(100);
+        let capacity = queue_capacity.max(1);
+        let (tx, rx) = tokio::sync::mpsc::channel(capacity);
 
         // 注册到消息总线
         // Register to the message bus
@@ -1040,6 +1080,26 @@ impl SimpleRuntime {
 
         ::tracing::info!("Agent {} registered with role {}", agent_id, role);
         Ok(rx)
+    }
+
+    /// 注销智能体并清理其路由信息
+    /// Unregister an agent and clean up its routing entries
+    pub async fn unregister_agent(&self, agent_id: &str) -> anyhow::Result<bool> {
+        let removed = {
+            let mut agents = self.agents.write().await;
+            agents.remove(agent_id).is_some()
+        };
+
+        if removed {
+            {
+                let mut roles = self.agent_roles.write().await;
+                roles.remove(agent_id);
+            }
+            self.message_bus.unregister(agent_id).await;
+            ::tracing::info!("Agent {} unregistered", agent_id);
+        }
+
+        Ok(removed)
     }
 
     /// 获取消息总线
@@ -1088,7 +1148,6 @@ impl SimpleRuntime {
     // 流支持方法
     // Stream support methods
     // ---------------------------------
-
 
     /// 创建流
     /// Create stream
@@ -1166,6 +1225,146 @@ impl SimpleRuntime {
 impl Default for SimpleRuntime {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+#[cfg(all(test, not(feature = "dora")))]
+mod tests {
+    use super::SimpleRuntime;
+    use crate::AgentBuilder;
+    use mofa_kernel::message::AgentEvent;
+    use tokio::time::{Duration, timeout};
+
+    #[tokio::test]
+    async fn topic_subscription_is_idempotent() {
+        let runtime = SimpleRuntime::new();
+        let builder = AgentBuilder::new("billing-agent", "BillingAgent");
+
+        let mut billing_rx = runtime
+            .register_agent_with_capacity(
+                builder.build_metadata(),
+                builder.build_config(),
+                "billing",
+                8,
+            )
+            .await
+            .unwrap();
+
+        runtime
+            .subscribe_topic("billing-agent", "billing.incidents")
+            .await
+            .unwrap();
+        runtime
+            .subscribe_topic("billing-agent", "billing.incidents")
+            .await
+            .unwrap();
+
+        runtime
+            .publish_to_topic(
+                "billing.incidents",
+                AgentEvent::Custom("incident-1".to_string(), vec![]),
+            )
+            .await
+            .unwrap();
+
+        let first = timeout(Duration::from_millis(200), billing_rx.recv())
+            .await
+            .expect("first delivery should arrive");
+        assert!(matches!(first, Some(AgentEvent::Custom(_, _))));
+
+        let second = timeout(Duration::from_millis(100), billing_rx.recv()).await;
+        assert!(second.is_err(), "should not receive duplicate delivery");
+    }
+
+    #[tokio::test]
+    async fn unregister_removes_routing_paths() {
+        let runtime = SimpleRuntime::new();
+        let builder = AgentBuilder::new("ops-agent", "OpsAgent");
+
+        let _ops_rx = runtime
+            .register_agent_with_capacity(
+                builder.build_metadata(),
+                builder.build_config(),
+                "ops",
+                8,
+            )
+            .await
+            .unwrap();
+
+        runtime
+            .subscribe_topic("ops-agent", "ops.alerts")
+            .await
+            .unwrap();
+
+        let removed = runtime.unregister_agent("ops-agent").await.unwrap();
+        assert!(removed);
+
+        runtime
+            .publish_to_topic(
+                "ops.alerts",
+                AgentEvent::Custom("incident-after-removal".to_string(), vec![]),
+            )
+            .await
+            .unwrap();
+
+        let agents = runtime.get_agents_by_role("ops").await;
+        assert!(agents.is_empty());
+    }
+
+    #[tokio::test]
+    async fn real_world_incident_routing_is_topic_scoped() {
+        let runtime = SimpleRuntime::new();
+
+        let billing_builder = AgentBuilder::new("billing", "BillingTeam");
+        let auth_builder = AgentBuilder::new("auth", "AuthTeam");
+
+        let mut billing_rx = runtime
+            .register_agent_with_capacity(
+                billing_builder.build_metadata(),
+                billing_builder.build_config(),
+                "team",
+                8,
+            )
+            .await
+            .unwrap();
+
+        let mut auth_rx = runtime
+            .register_agent_with_capacity(
+                auth_builder.build_metadata(),
+                auth_builder.build_config(),
+                "team",
+                8,
+            )
+            .await
+            .unwrap();
+
+        runtime
+            .subscribe_topic("billing", "incident.billing")
+            .await
+            .unwrap();
+        runtime
+            .subscribe_topic("auth", "incident.auth")
+            .await
+            .unwrap();
+
+        runtime
+            .publish_to_topic(
+                "incident.billing",
+                AgentEvent::Custom("invoice-failed".to_string(), vec![]),
+            )
+            .await
+            .unwrap();
+
+        let billing_msg = timeout(Duration::from_millis(200), billing_rx.recv())
+            .await
+            .expect("billing should receive billing incident");
+        assert!(matches!(billing_msg, Some(AgentEvent::Custom(_, _))));
+
+        let auth_msg = timeout(Duration::from_millis(100), auth_rx.recv()).await;
+        assert!(
+            auth_msg.is_err(),
+            "auth should not receive billing-topic events"
+        );
     }
 }
 
