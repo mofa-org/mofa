@@ -4449,6 +4449,7 @@ dependencies = [
  "mofa-kernel",
  "mofa-runtime",
  "mofa-sdk",
+ "nix 0.29.0",
  "predicates",
  "ratatui",
  "serde",
