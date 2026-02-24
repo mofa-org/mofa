@@ -1,0 +1,57 @@
+//! Runtime Model Adapter Registry with Capability/Format Negotiation
+//!
+//! This module provides:
+//! - [`AdapterDescriptor`]: Describes adapter capabilities (modalities, formats, quantization, hardware)
+//! - [`AdapterRegistry`]: Runtime adapter registration and discovery
+//! - [`ModelConfig`]: Configuration for model selection
+//! - [`HardwareProfile`]: Hardware requirements for model execution
+//! - Deterministic resolver with hard constraints and stable tie-break rules
+//!
+//! # Example
+//!
+//! ```rust
+//! use mofa_foundation::adapter::{AdapterDescriptor, AdapterRegistry, ModelConfig, Modality, ModelFormat};
+//! use mofa_foundation::hardware::{HardwareCapability, GpuType, OsClassification, CpuFamily};
+//!
+//! // Create a registry
+//! let mut registry = AdapterRegistry::new();
+//!
+//! // Register an adapter for LLM with safetensors format
+//! let descriptor = AdapterDescriptor::builder()
+//!     .id("llama-cpp-backend")
+//!     .name("Llama.cpp Backend")
+//!     .supported_modality(Modality::LLM)
+//!     .supported_format(ModelFormat::Safetensors)
+//!     .supported_quantization(vec!["q4_k".to_string(), "q8_0".to_string()])
+//!     .priority(100)
+//!     .build();
+//! registry.register(descriptor);
+//!
+//! // Resolve adapter for a given model config and hardware
+//! let config = ModelConfig::builder()
+//!     .model_id("llama-3-8b")
+//!     .required_modality(Modality::LLM)
+//!     .required_format(ModelFormat::Safetensors)
+//!     .build();
+//!
+//! let hardware = HardwareCapability {
+//!     os: OsClassification::Linux,
+//!     cpu_family: CpuFamily::X86_64,
+//!     gpu_available: true,
+//!     gpu_type: Some(GpuType::Cuda),
+//! };
+//!
+//! let result = registry.resolve(&config, &hardware);
+//! assert!(result.is_some());
+//! ```
+
+pub mod registry;
+pub mod descriptor;
+pub mod config;
+pub mod resolver;
+pub mod error;
+
+pub use registry::AdapterRegistry;
+pub use descriptor::{AdapterDescriptor, Modality, ModelFormat, QuantizationProfile};
+pub use config::{ModelConfig, HardwareProfile};
+pub use error::{AdapterError, ResolutionError, RejectionReason};
