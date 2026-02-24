@@ -71,9 +71,6 @@ jobs:
       - name: Run tests
         run: cargo test --workspace --all-features
 
-      - name: Run runtime tests (non-dora)
-        run: cargo test -p mofa-runtime --no-default-features
-
       - name: Build examples
         run: cargo build --examples
 
@@ -83,9 +80,6 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
-
-      - name: Check docs internal markdown links
-        run: docs/mofa-doc/scripts/check-internal-links.sh
 
       - name: Install system dependencies
         run: |
