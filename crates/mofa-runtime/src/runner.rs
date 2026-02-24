@@ -88,9 +88,11 @@ use crate::agent::context::{AgentContext, AgentEvent};
 use crate::agent::core::{AgentLifecycle, AgentMessage, AgentMessaging, MoFAAgent};
 use crate::agent::error::{AgentError, AgentResult};
 use crate::agent::types::{AgentInput, AgentOutput, AgentState, InterruptResult};
+use chrono::Utc;
+use croner::Cron;
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use tokio::time::{Duration, MissedTickBehavior};
+use tokio::time::{Duration, MissedTickBehavior, sleep};
 
 /// 运行器状态
 /// Runner state
@@ -140,33 +142,77 @@ pub struct RunnerStats {
     pub last_execution_time_ms: Option<u64>,
 }
 
+/// 执行计划
+#[derive(Debug, Clone)]
+pub enum Schedule {
+    /// 固定间隔
+    Interval(Duration),
+    /// Cron 表达式
+    Cron(String),
+}
+
+/// 错误处理策略
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum ErrorPolicy {
+    /// 继续执行下一轮
+    #[default]
+    Continue,
+    /// 停止后续执行
+    Stop,
+    /// 重试
+    Retry {
+        /// 最大重试次数
+        max_retries: u32,
+        /// 重试退避时间
+        backoff: Duration,
+    },
+}
+
 /// 周期执行配置
 #[derive(Debug, Clone)]
 pub struct PeriodicRunConfig {
-    /// 执行间隔
-    pub interval: Duration,
+    /// 执行计划
+    pub schedule: Schedule,
     /// 最大执行次数（必须大于 0）
     pub max_runs: u64,
-    /// 是否立即执行第一轮（true: 立即执行；false: 等待一个间隔后执行）
+    /// 是否立即执行第一轮（仅对 Interval 有效）
     pub run_immediately: bool,
+    /// 错误处理策略
+    pub error_policy: ErrorPolicy,
 }
 
 impl Default for PeriodicRunConfig {
     fn default() -> Self {
         Self {
-            interval: Duration::from_secs(60),
+            schedule: Schedule::Interval(Duration::from_secs(60)),
             max_runs: 1,
             run_immediately: true,
+            error_policy: ErrorPolicy::default(),
         }
     }
 }
 
 impl PeriodicRunConfig {
     fn validate(&self) -> AgentResult<()> {
-        if self.interval.is_zero() {
-            return Err(AgentError::ValidationFailed(
-                "Periodic interval must be greater than 0".to_string(),
-            ));
+        match &self.schedule {
+            Schedule::Interval(duration) => {
+                if duration.is_zero() {
+                    return Err(AgentError::ValidationFailed(
+                        "Periodic interval must be greater than 0".to_string(),
+                    ));
+                }
+            }
+            Schedule::Cron(expression) => {
+                if expression.is_empty() {
+                    return Err(AgentError::ValidationFailed(
+                        "Cron expression cannot be empty".to_string(),
+                    ));
+                }
+                // 验证 Cron 表达式
+                Cron::new(expression).parse().map_err(|e| {
+                    AgentError::ValidationFailed(format!("Invalid cron expression: {}", e))
+                })?;
+            }
         }
         if self.max_runs == 0 {
             return Err(AgentError::ValidationFailed(
@@ -365,11 +411,11 @@ impl<T: MoFAAgent> AgentRunner<T> {
         results
     }
 
-    /// 按固定间隔周期执行同一输入
+    /// 按固定间隔或 Cron 表达式周期执行
     ///
     /// 说明：
-    /// - 使用 `MissedTickBehavior::Skip` 避免执行落后时“补跑风暴”
     /// - 执行串行进行，不允许同一 runner 内部重叠执行
+    /// - 错误处理遵循 `ErrorPolicy`
     pub async fn run_periodic(
         &mut self,
         input: AgentInput,
@@ -378,20 +424,87 @@ impl<T: MoFAAgent> AgentRunner<T> {
         config.validate()?;
 
         let mut outputs = Vec::with_capacity(config.max_runs as usize);
-        let mut ticker = tokio::time::interval(config.interval);
-        ticker.set_missed_tick_behavior(MissedTickBehavior::Skip);
 
-        // interval 首次 tick 立即返回。若不希望立即执行，先消费这次即时 tick。
-        if !config.run_immediately {
-            ticker.tick().await;
-        }
+        match &config.schedule {
+            Schedule::Interval(interval) => {
+                let mut ticker = tokio::time::interval(*interval);
+                ticker.set_missed_tick_behavior(MissedTickBehavior::Skip);
 
-        for _ in 0..config.max_runs {
-            ticker.tick().await;
-            outputs.push(self.execute(input.clone()).await?);
+                if !config.run_immediately {
+                    ticker.tick().await;
+                }
+
+                for _ in 0..config.max_runs {
+                    ticker.tick().await;
+                    let result = self
+                        .execute_with_policy(input.clone(), config.error_policy)
+                        .await;
+                    match result {
+                        Ok(output) => outputs.push(output),
+                        Err(e) => {
+                            if matches!(config.error_policy, ErrorPolicy::Stop) {
+                                return Err(e);
+                            }
+                        }
+                    }
+                }
+            }
+            Schedule::Cron(expression) => {
+                let cron = Cron::new(expression).parse().unwrap();
+                for _ in 0..config.max_runs {
+                    let now = Utc::now();
+                    if let Some(next) = cron.find_next_occurrence(&now, false).ok() {
+                        let delay = next
+                            .signed_duration_since(now)
+                            .to_std()
+                            .unwrap_or(Duration::ZERO);
+                        sleep(delay).await;
+
+                        let result = self
+                            .execute_with_policy(input.clone(), config.error_policy)
+                            .await;
+                        match result {
+                            Ok(output) => outputs.push(output),
+                            Err(e) => {
+                                if matches!(config.error_policy, ErrorPolicy::Stop) {
+                                    return Err(e);
+                                }
+                            }
+                        }
+                    } else {
+                        break;
+                    }
+                }
+            }
         }
 
         Ok(outputs)
+    }
+
+    async fn execute_with_policy(
+        &mut self,
+        input: AgentInput,
+        policy: ErrorPolicy,
+    ) -> AgentResult<AgentOutput> {
+        match policy {
+            ErrorPolicy::Retry {
+                max_retries,
+                backoff,
+            } => {
+                let mut last_err = None;
+                for _ in 0..=max_retries {
+                    match self.execute(input.clone()).await {
+                        Ok(output) => return Ok(output),
+                        Err(e) => {
+                            last_err = Some(e);
+                            sleep(backoff).await;
+                        }
+                    }
+                }
+                Err(last_err.unwrap())
+            }
+            _ => self.execute(input).await,
+        }
     }
 
     /// 暂停运行器
@@ -692,9 +805,10 @@ mod tests {
             .run_periodic(
                 AgentInput::text("Tick"),
                 PeriodicRunConfig {
-                    interval: Duration::from_millis(10),
+                    schedule: Schedule::Interval(Duration::from_millis(10)),
                     max_runs: 3,
                     run_immediately: true,
+                    error_policy: ErrorPolicy::Continue,
                 },
             )
             .await
@@ -718,9 +832,10 @@ mod tests {
             .run_periodic(
                 AgentInput::text("Delayed"),
                 PeriodicRunConfig {
-                    interval: Duration::from_millis(40),
+                    schedule: Schedule::Interval(Duration::from_millis(40)),
                     max_runs: 1,
                     run_immediately: false,
+                    error_policy: ErrorPolicy::Continue,
                 },
             )
             .await
@@ -739,9 +854,10 @@ mod tests {
             .run_periodic(
                 AgentInput::text("x"),
                 PeriodicRunConfig {
-                    interval: Duration::ZERO,
+                    schedule: Schedule::Interval(Duration::ZERO),
                     max_runs: 1,
                     run_immediately: true,
+                    error_policy: ErrorPolicy::Continue,
                 },
             )
             .await
@@ -752,13 +868,141 @@ mod tests {
             .run_periodic(
                 AgentInput::text("x"),
                 PeriodicRunConfig {
-                    interval: Duration::from_millis(10),
+                    schedule: Schedule::Interval(Duration::from_millis(10)),
                     max_runs: 0,
                     run_immediately: true,
+                    error_policy: ErrorPolicy::Continue,
                 },
             )
             .await
             .unwrap_err();
         assert!(matches!(err, AgentError::ValidationFailed(_)));
+    }
+
+    #[tokio::test]
+    async fn test_agent_runner_run_periodic_cron() {
+        let agent = TestAgent::new("test-007", "Cron Agent");
+        let mut runner = AgentRunner::new(agent).await.unwrap();
+
+        // Every second (standard cron)
+        let outputs = runner
+            .run_periodic(
+                AgentInput::text("Cron"),
+                PeriodicRunConfig {
+                    schedule: Schedule::Cron("* * * * * *".to_string()),
+                    max_runs: 2,
+                    run_immediately: false,
+                    error_policy: ErrorPolicy::Continue,
+                },
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(outputs.len(), 2);
+    }
+
+    #[tokio::test]
+    async fn test_agent_runner_error_policy_stop() {
+        struct ErrorAgent;
+        #[async_trait::async_trait]
+        impl MoFAAgent for ErrorAgent {
+            fn id(&self) -> &str {
+                "err"
+            }
+            fn name(&self) -> &str {
+                "ErrorAgent"
+            }
+            fn capabilities(&self) -> &AgentCapabilities {
+                static CAPS: std::sync::OnceLock<AgentCapabilities> = std::sync::OnceLock::new();
+                CAPS.get_or_init(|| AgentCapabilitiesBuilder::new().build())
+            }
+            async fn initialize(&mut self, _ctx: &AgentContext) -> AgentResult<()> {
+                Ok(())
+            }
+            async fn execute(
+                &mut self,
+                _i: AgentInput,
+                _ctx: &AgentContext,
+            ) -> AgentResult<AgentOutput> {
+                Err(AgentError::Other("fail".to_string()))
+            }
+            fn state(&self) -> AgentState {
+                AgentState::Error
+            }
+        }
+
+        let mut runner = AgentRunner::new(ErrorAgent).await.unwrap();
+        let result = runner
+            .run_periodic(
+                AgentInput::text("x"),
+                PeriodicRunConfig {
+                    schedule: Schedule::Interval(Duration::from_millis(10)),
+                    max_runs: 5,
+                    run_immediately: true,
+                    error_policy: ErrorPolicy::Stop,
+                },
+            )
+            .await;
+
+        assert!(result.is_err());
+        assert_eq!(runner.stats().await.total_executions, 1);
+    }
+
+    #[tokio::test]
+    async fn test_agent_runner_error_policy_retry() {
+        struct RetryAgent {
+            count: u32,
+        }
+        #[async_trait::async_trait]
+        impl MoFAAgent for RetryAgent {
+            fn id(&self) -> &str {
+                "retry"
+            }
+            fn name(&self) -> &str {
+                "RetryAgent"
+            }
+            fn capabilities(&self) -> &AgentCapabilities {
+                static CAPS: std::sync::OnceLock<AgentCapabilities> = std::sync::OnceLock::new();
+                CAPS.get_or_init(|| AgentCapabilitiesBuilder::new().build())
+            }
+            async fn initialize(&mut self, _ctx: &AgentContext) -> AgentResult<()> {
+                Ok(())
+            }
+            async fn execute(
+                &mut self,
+                _i: AgentInput,
+                _ctx: &AgentContext,
+            ) -> AgentResult<AgentOutput> {
+                self.count += 1;
+                if self.count < 3 {
+                    Err(AgentError::Other("fail".to_string()))
+                } else {
+                    Ok(AgentOutput::text("success"))
+                }
+            }
+            fn state(&self) -> AgentState {
+                AgentState::Ready
+            }
+        }
+
+        let mut runner = AgentRunner::new(RetryAgent { count: 0 }).await.unwrap();
+        let outputs = runner
+            .run_periodic(
+                AgentInput::text("x"),
+                PeriodicRunConfig {
+                    schedule: Schedule::Interval(Duration::from_millis(10)),
+                    max_runs: 1,
+                    run_immediately: true,
+                    error_policy: ErrorPolicy::Retry {
+                        max_retries: 3,
+                        backoff: Duration::from_millis(5),
+                    },
+                },
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(outputs.len(), 1);
+        assert_eq!(runner.stats().await.total_executions, 3);
     }
 }

@@ -40,6 +40,8 @@ dora-message = { version = "0", optional = true }
 
 serde_yaml = { workspace = true }
 toml = "0.8"
+croner = "2.0"
+chrono = { workspace = true }
 config.workspace = true
 regex.workspace = true
 
