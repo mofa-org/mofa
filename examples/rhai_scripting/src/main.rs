@@ -1,19 +1,28 @@
 //! Rhai 脚本引擎集成示例
+//! Rhai script engine integration example
 //!
 //! 本示例演示了 MoFA 框架中 Rhai 脚本引擎的多种应用场景：
+//! This example demonstrates multiple application scenarios of the Rhai script engine in the MoFA framework:
 //! 1. 基础脚本执行
+//! 1. Basic script execution
 //! 2. 脚本化工作流节点
+//! 2. Scripted workflow nodes
 //! 3. 动态工具定义
+//! 3. Dynamic tool definition
 //! 4. 规则引擎
+//! 4. Rule engine
 
 use anyhow::Result;
 use mofa_sdk::rhai::{
     // 脚本引擎
+    // Script engine
     condition_script, task_script, ParameterType, RhaiScriptEngine, RuleAction, RuleBuilder,
     RuleEngine, RuleGroupDefinition,
     // 工具
+    // Tools
     RuleMatchMode, RulePriority, ScriptContext, ScriptEngineConfig, ScriptSecurityConfig,
     // 规则引擎
+    // Rule engine
     ScriptToolDefinition, ScriptToolRegistry, ScriptWorkflowDefinition, ScriptWorkflowExecutor, ToolBuilder,
     ToolParameter,
 };
@@ -23,13 +32,16 @@ use tracing::{info, Level};
 #[tokio::main]
 async fn main() -> Result<()> {
     // 初始化日志
+    // Initialize logging
     tracing_subscriber::fmt()
         .with_max_level(Level::INFO)
         .init();
 
     info!("=== MoFA Rhai 脚本引擎集成示例 ===\n");
+    // === MoFA Rhai Script Engine Integration Example ===
 
     // 运行所有示例
+    // Run all examples
     demo_basic_script_execution().await?;
     demo_script_workflow().await?;
     demo_dynamic_tools().await?;
@@ -37,24 +49,33 @@ async fn main() -> Result<()> {
     demo_advanced_features().await?;
 
     info!("\n=== 所有示例执行完成 ===");
+    // === All examples completed ===
     Ok(())
 }
 
 /// 示例 1: 基础脚本执行
+/// Example 1: Basic script execution
 async fn demo_basic_script_execution() -> Result<()> {
     info!("\n--- 示例 1: 基础脚本执行 ---\n");
+    // --- Example 1: Basic script execution ---
 
     // 创建脚本引擎
+    // Create script engine
     let engine = RhaiScriptEngine::new(ScriptEngineConfig::default())?;
 
     // 1.1 简单表达式
+    // 1.1 Simple expression
     info!("1.1 简单表达式计算:");
+    // 1.1 Simple expression calculation:
     let context = ScriptContext::new();
     let result = engine.execute("(1 + 2) * 3 + 4", &context).await?;
     info!("  表达式: (1 + 2) * 3 + 4 = {}", result.value);
+    // Expression: (1 + 2) * 3 + 4 = {}
 
     // 1.2 使用变量
+    // 1.2 Using variables
     info!("\n1.2 使用变量:");
+    // 1.2 Using variables:
     let context = ScriptContext::new()
         .with_variable("name", "MoFA")?
         .with_variable("version", 1)?;
@@ -68,9 +89,12 @@ async fn demo_basic_script_execution() -> Result<()> {
         &context,
     ).await?;
     info!("  结果: {}", result.value);
+    // Result: {}
 
     // 1.3 使用函数
+    // 1.3 Using functions
     info!("\n1.3 定义和调用函数:");
+    // 1.3 Define and call functions:
     let result = engine.execute(
         r#"
             fn fibonacci(n) {
@@ -84,7 +108,9 @@ async fn demo_basic_script_execution() -> Result<()> {
     info!("  fibonacci(10) = {}", result.value);
 
     // 1.4 使用内置函数
+    // 1.4 Using built-in functions
     info!("\n1.4 内置函数:");
+    // 1.4 Built-in functions:
     let result = engine.execute(
         r#"
             let text = "  Hello World  ";
@@ -101,9 +127,12 @@ async fn demo_basic_script_execution() -> Result<()> {
         &context,
     ).await?;
     info!("  结果: {}", serde_json::to_string_pretty(&result.value)?);
+    // Result: {}
 
     // 1.5 编译和缓存脚本
+    // 1.5 Compile and cache script
     info!("\n1.5 编译缓存脚本:");
+    // 1.5 Compile and cache script:
     engine.compile_and_cache(
         "calculator",
         "Calculator",
@@ -132,17 +161,23 @@ async fn demo_basic_script_execution() -> Result<()> {
 }
 
 /// 示例 2: 脚本化工作流
+/// Example 2: Scripted workflow
 async fn demo_script_workflow() -> Result<()> {
     info!("\n--- 示例 2: 脚本化工作流 ---\n");
+    // --- Example 2: Scripted workflow ---
 
     // 2.1 简单线性工作流
+    // 2.1 Simple linear workflow
     info!("2.1 简单线性工作流 (数据处理管道):");
+    // 2.1 Simple linear workflow (data processing pipeline):
     let mut workflow = ScriptWorkflowDefinition::new("data_pipeline", "数据处理管道");
+    // ScriptWorkflowDefinition: data_pipeline, data processing pipeline
 
     workflow
         .add_node(task_script(
             "validate",
             "数据验证",
+            // Data validation
             r#"
                 log("验证输入数据...");
                 if input.value < 0 {
@@ -154,6 +189,7 @@ async fn demo_script_workflow() -> Result<()> {
         .add_node(task_script(
             "transform",
             "数据转换",
+            // Data transformation
             r#"
                 log("转换数据...");
                 #{
@@ -166,6 +202,7 @@ async fn demo_script_workflow() -> Result<()> {
         .add_node(task_script(
             "format",
             "格式化输出",
+            // Format output
             r#"
                 log("格式化输出...");
                 "处理结果: 原值=" + input.original +
@@ -183,17 +220,22 @@ async fn demo_script_workflow() -> Result<()> {
     info!("  {}", result);
 
     // 2.2 条件分支工作流
+    // 2.2 Conditional branching workflow
     info!("\n2.2 条件分支工作流 (用户评分系统):");
+    // 2.2 Conditional branching workflow (user rating system):
     let mut workflow = ScriptWorkflowDefinition::new("rating_system", "评分系统");
+    // ScriptWorkflowDefinition: rating_system, rating system
 
     workflow
         .add_node(condition_script(
             "check_score",
             "检查分数",
+            // Check score
             r#"
                 let score = input.score;
 
                 // 直接修改并返回新对象
+                // Modify directly and return new object
                 if score >= 90 { #{score: input.score, rating: "excellent"} }
                 else if score >= 70 { #{score: input.score, rating: "good"} }
                 else if score >= 60 { #{score: input.score, rating: "pass"} }
@@ -203,24 +245,29 @@ async fn demo_script_workflow() -> Result<()> {
         .add_node(task_script(
             "excellent",
             "优秀处理",
+            // Excellent grade processing
             r#"#{rating: "A", message: "优秀！成绩: " + to_string(input.score)}"#,
         ))
         .add_node(task_script(
             "good",
             "良好处理",
+            // Good grade processing
             r#"#{rating: "B", message: "良好！成绩: " + to_string(input.score)}"#,
         ))
         .add_node(task_script(
             "pass",
             "及格处理",
+            // Pass grade processing
             r#"#{rating: "C", message: "及格！成绩: " + to_string(input.score)}"#,
         ))
         .add_node(task_script(
             "fail",
             "不及格处理",
+            // Fail grade processing
             r#"#{rating: "D", message: "不及格！成绩: " + to_string(input.score)}"#,
         ))
         .add_node(task_script("end", "结束", "input"))
+        // Task script end
         .add_conditional_edge("check_score", "excellent", "rating == \"excellent\"")
         .add_conditional_edge("check_score", "good", "rating == \"good\"")
         .add_conditional_edge("check_score", "pass", "rating == \"pass\"")
@@ -238,24 +285,32 @@ async fn demo_script_workflow() -> Result<()> {
         executor.reset().await;
         let result = executor.execute(serde_json::json!({"score": score})).await?;
         info!("  分数 {}: {:?}", score, result);
+        // Score {}: {:?}
     }
 
     Ok(())
 }
 
 /// 示例 3: 动态工具定义
+/// Example 3: Dynamic tool definition
 async fn demo_dynamic_tools() -> Result<()> {
     info!("\n--- 示例 3: 动态工具定义 ---\n");
+    // --- Example 3: Dynamic tool definition ---
 
     let registry = ScriptToolRegistry::new(ScriptEngineConfig::default())?;
 
     // 3.1 注册计算器工具
+    // 3.1 Register calculator tool
     info!("3.1 注册计算器工具:");
+    // 3.1 Register calculator tool:
     let calc_tool = ToolBuilder::new("calculator", "高级计算器")
+        // Advanced calculator
         .description("执行数学运算")
+        // Perform mathematical operations
         .param(ToolParameter::new("operation", ParameterType::String)
             .required()
             .with_description("运算类型: add, sub, mul, div, pow")
+            // Operation type: add, sub, mul, div, pow
             .with_enum(vec![
                 serde_json::json!("add"),
                 serde_json::json!("sub"),
@@ -298,6 +353,7 @@ async fn demo_dynamic_tools() -> Result<()> {
     registry.register(calc_tool).await?;
 
     // 测试计算器
+    // Test calculator
     let operations = vec![
         ("add", 10.0, 5.0),
         ("sub", 10.0, 3.0),
@@ -317,10 +373,13 @@ async fn demo_dynamic_tools() -> Result<()> {
     }
 
     // 3.2 注册字符串处理工具
+    // 3.2 Register string processing tool
     info!("\n3.2 注册字符串处理工具:");
+    // 3.2 Register string processing tool:
     let string_tool = ScriptToolDefinition::new(
         "string_processor",
         "字符串处理器",
+        // String processor
         r#"
             let text = params.text;
             let ops = params.operations;
@@ -347,6 +406,7 @@ async fn demo_dynamic_tools() -> Result<()> {
         "#,
     )
     .with_description("对字符串执行多种操作")
+    // Perform multiple operations on strings
     .with_parameter(ToolParameter::new("text", ParameterType::String).required())
     .with_parameter(ToolParameter::new("operations", ParameterType::Array).required())
     .with_tag("string");
@@ -359,31 +419,43 @@ async fn demo_dynamic_tools() -> Result<()> {
 
     let result = registry.execute("string_processor", input).await?;
     info!("  原始: \"{}\"", result.result["original"]);
+    // Original: \"{}\"
     info!("  处理后: \"{}\"", result.result["processed"]);
+    // Processed: \"{}\"
 
     // 3.3 生成 JSON Schema（用于 LLM function calling）
+    // 3.3 Generate JSON Schema (for LLM function calling)
     info!("\n3.3 工具 JSON Schema (用于 LLM):");
+    // 3.3 Tool JSON Schema (for LLM):
     let schemas = registry.generate_tool_schemas().await;
     for schema in &schemas {
         info!("  工具: {}", schema["name"]);
+        // Tool: {}
     }
 
     Ok(())
 }
 
 /// 示例 4: 规则引擎
+/// Example 4: Rule engine
 async fn demo_rule_engine() -> Result<()> {
     info!("\n--- 示例 4: 规则引擎 ---\n");
+    // --- Example 4: Rule engine ---
 
     let engine = RuleEngine::new(ScriptEngineConfig::default())?;
 
     // 4.1 折扣规则系统
+    // 4.1 Discount rule system
     info!("4.1 电商折扣规则系统:");
+    // 4.1 E-commerce discount rule system:
 
     // VIP 会员折扣
+    // VIP member discount
     engine.register_rule(
         RuleBuilder::new("vip_discount", "VIP会员折扣")
+            // VIP member discount
             .description("VIP会员享受8折优惠")
+            // VIP members enjoy a 20% discount
             .priority(RulePriority::High)
             .condition("user.is_vip == true")
             .then_execute(r#"
@@ -402,9 +474,12 @@ async fn demo_rule_engine() -> Result<()> {
     ).await?;
 
     // 大额订单折扣
+    // Large order discount
     engine.register_rule(
         RuleBuilder::new("bulk_discount", "大额订单折扣")
+            // Large order discount
             .description("订单满1000减100")
+            // $100 off for orders over $1000
             .priority(RulePriority::Normal)
             .condition("order.total >= 1000")
             .then_execute(r#"
@@ -423,9 +498,12 @@ async fn demo_rule_engine() -> Result<()> {
     ).await?;
 
     // 新用户折扣
+    // New user discount
     engine.register_rule(
         RuleBuilder::new("new_user_discount", "新用户折扣")
+            // New user discount
             .description("新用户首单9折")
+            // 10% off for new user's first order
             .priority(RulePriority::Low)
             .condition("user.is_new == true && user.order_count == 0")
             .then_execute(r#"
@@ -444,33 +522,42 @@ async fn demo_rule_engine() -> Result<()> {
     ).await?;
 
     // 创建规则组
+    // Create rule group
     engine.register_group(
         RuleGroupDefinition::new("discount_rules", "折扣规则组")
+            // Discount rule group
             .with_match_mode(RuleMatchMode::FirstMatch)  // 只应用第一个匹配的规则
+            // Only apply the first matching rule
             .with_rules(vec!["vip_discount", "bulk_discount", "new_user_discount"])
             .with_default_action(RuleAction::ReturnValue {
                 value: serde_json::json!({
                     "rule": "no_discount",
                     "message": "无可用折扣"
+                    // No discount available
                 })
             })
     ).await?;
 
     // 测试不同场景
+    // Test different scenarios
     let test_cases = vec![
         ("VIP用户", serde_json::json!({
+            // VIP User
             "user": {"is_vip": true, "is_new": false, "order_count": 10},
             "order": {"total": 500}
         })),
         ("大额订单", serde_json::json!({
+            // Large order
             "user": {"is_vip": false, "is_new": false, "order_count": 5},
             "order": {"total": 1500}
         })),
         ("新用户", serde_json::json!({
+            // New user
             "user": {"is_vip": false, "is_new": true, "order_count": 0},
             "order": {"total": 300}
         })),
         ("普通用户小额订单", serde_json::json!({
+            // Regular user small order
             "user": {"is_vip": false, "is_new": false, "order_count": 3},
             "order": {"total": 200}
         })),
@@ -483,13 +570,17 @@ async fn demo_rule_engine() -> Result<()> {
 
         let result = engine.execute_group("discount_rules", &mut context).await?;
         info!("  场景: {} -> {:?}", scenario, result.final_result);
+        // Scenario: {} -> {:?}
     }
 
     // 4.2 内容审核规则
+    // 4.2 Content review rules
     info!("\n4.2 内容审核规则:");
+    // 4.2 Content review rules:
 
     engine.register_rule(
         RuleBuilder::new("spam_check", "垃圾信息检测")
+            // Spam check
             .priority(RulePriority::Critical)
             .condition(r#"
                 let content = lower(text);
@@ -500,42 +591,50 @@ async fn demo_rule_engine() -> Result<()> {
             .then_return(serde_json::json!({
                 "status": "rejected",
                 "reason": "疑似垃圾信息"
+                // Suspected spam
             }))
             .build()
     ).await?;
 
     engine.register_rule(
         RuleBuilder::new("length_check", "长度检查")
+            // Length check
             .priority(RulePriority::High)
             .condition("text.len() < 10 || text.len() > 1000")
             .then_return(serde_json::json!({
                 "status": "rejected",
                 "reason": "内容长度不符合要求（10-1000字符）"
+                // Content length requirement mismatch (10-1000 characters)
             }))
             .build()
     ).await?;
 
     engine.register_rule(
         RuleBuilder::new("pass_check", "通过审核")
+            // Review pass
             .priority(RulePriority::Lowest)
             .condition("true")
             .then_return(serde_json::json!({
                 "status": "approved",
                 "message": "内容审核通过"
+                // Content review passed
             }))
             .build()
     ).await?;
 
     engine.register_group(
         RuleGroupDefinition::new("content_review", "内容审核")
+            // Content review
             .with_match_mode(RuleMatchMode::FirstMatch)
             .with_rules(vec!["spam_check", "length_check", "pass_check"])
     ).await?;
 
     let contents = vec![
         "这是一条正常的评论，分享我的使用体验。",
+        // This is a normal comment, sharing my experience.
         "Buy now! Click here for free money!!!",
         "短",
+        // Short
     ];
 
     for content in contents {
@@ -545,17 +644,22 @@ async fn demo_rule_engine() -> Result<()> {
         info!("  内容: \"{}...\" -> {:?}",
             &content[..content.len().min(30)],
             result.final_result);
+        // Content: \"{}...\" -> {:?}
     }
 
     Ok(())
 }
 
 /// 示例 5: 高级功能
+/// Example 5: Advanced features
 async fn demo_advanced_features() -> Result<()> {
     info!("\n--- 示例 5: 高级功能 ---\n");
+    // --- Example 5: Advanced features ---
 
     // 5.1 安全配置
+    // 5.1 Security configuration
     info!("5.1 安全配置:");
+    // 5.1 Security configuration:
     let security_config = ScriptSecurityConfig {
         max_execution_time_ms: 1000,
         max_call_stack_depth: 32,
@@ -576,20 +680,27 @@ async fn demo_advanced_features() -> Result<()> {
 
     let engine = RhaiScriptEngine::new(config)?;
     info!("  已配置安全限制的脚本引擎");
+    // Script engine with security restrictions configured
 
     // 5.2 脚本验证
+    // 5.2 Script validation
     info!("\n5.2 脚本语法验证:");
+    // 5.2 Script syntax validation:
     let valid_script = "let x = 1 + 2; x * 3";
     let invalid_script = "let x = 1 + ; x * 3";
 
     let errors = engine.validate(valid_script)?;
     info!("  有效脚本: {} (错误数: {})", valid_script, errors.len());
+    // Valid script: {} (error count: {})
 
     let errors = engine.validate(invalid_script)?;
     info!("  无效脚本: {} (错误: {:?})", invalid_script, errors);
+    // Invalid script: {} (errors: {:?})
 
     // 5.3 脚本日志
+    // 5.3 Script logs
     info!("\n5.3 脚本日志收集:");
+    // 5.3 Script log collection:
     let context = ScriptContext::new();
     let result = engine.execute(
         r#"
@@ -602,10 +713,14 @@ async fn demo_advanced_features() -> Result<()> {
         &context,
     ).await?;
     info!("  结果: {}", result.value);
+    // Result: {}
     info!("  日志: {:?}", result.logs);
+    // Logs: {:?}
 
     // 5.4 复杂数据处理
+    // 5.4 Complex data processing
     info!("\n5.4 复杂数据处理:");
+    // 5.4 Complex data processing:
     let context = ScriptContext::new()
         .with_variable("data", serde_json::json!({
             "users": [
@@ -618,6 +733,7 @@ async fn demo_advanced_features() -> Result<()> {
     let result = engine.execute(
         r#"
             // 过滤活跃用户并计算统计信息
+            // Filter active users and calculate statistics
             let users = data.users;
             let active_users = [];
             let total_age = 0;
@@ -641,6 +757,7 @@ async fn demo_advanced_features() -> Result<()> {
         &context,
     ).await?;
     info!("  处理结果: {}", serde_json::to_string_pretty(&result.value)?);
+    // Processing result: {}
 
     Ok(())
 }

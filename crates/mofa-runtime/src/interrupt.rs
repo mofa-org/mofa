@@ -2,6 +2,7 @@ use std::sync::Arc;
 use tokio::sync::Notify;
 
 // 共享中断标记（用于外部触发中断）
+// Shared interrupt flag (for triggering interrupts externally)
 #[derive(Clone)]
 pub struct AgentInterrupt {
     pub notify: Arc<Notify>,
@@ -23,6 +24,7 @@ impl AgentInterrupt {
     }
 
     // 触发中断
+    // Trigger interrupt
     pub fn trigger(&self) {
         self.is_interrupted
             .store(true, std::sync::atomic::Ordering::SeqCst);
@@ -30,12 +32,14 @@ impl AgentInterrupt {
     }
 
     // 检查是否中断
+    // Check if interrupted
     pub fn check(&self) -> bool {
         self.is_interrupted
             .load(std::sync::atomic::Ordering::SeqCst)
     }
 
     // 重置中断状态
+    // Reset interrupt state
     pub fn reset(&self) {
         self.is_interrupted
             .store(false, std::sync::atomic::Ordering::SeqCst);

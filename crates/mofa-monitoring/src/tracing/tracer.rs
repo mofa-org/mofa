@@ -1,6 +1,8 @@
 //! Tracer 和 TracerProvider
+//! Tracer and TracerProvider
 //!
 //! 提供追踪器的创建和管理
+//! Provides creation and management of tracers
 
 use super::context::{SpanContext, SpanId, TraceFlags, TraceId};
 use super::exporter::TracingExporter;
@@ -11,23 +13,30 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 
 /// 采样策略
+/// Sampling strategy
 #[derive(Debug, Clone, Default)]
 pub enum SamplingStrategy {
     /// 始终采样
+    /// Always sample
     #[default]
     AlwaysOn,
     /// 从不采样
+    /// Never sample
     AlwaysOff,
     /// 按概率采样
+    /// Probabilistic sampling
     Probabilistic(f64),
     /// 基于速率限制采样
+    /// Rate-limiting based sampling
     RateLimiting { traces_per_second: f64 },
     /// 父级决定
+    /// Parent-based decision
     ParentBased { root: Box<SamplingStrategy> },
 }
 
 impl SamplingStrategy {
     /// 判断是否应该采样
+    /// Determine if sampling should occur
     pub fn should_sample(
         &self,
         parent_context: Option<&SpanContext>,
@@ -46,6 +55,7 @@ impl SamplingStrategy {
             }
             SamplingStrategy::RateLimiting { traces_per_second } => {
                 // 简化实现：使用概率近似
+                // Simplified implementation: using probability approximation
                 let probability = (*traces_per_second / 1000.0).min(1.0);
                 rand::random::<f64>() < probability
             }
@@ -61,21 +71,29 @@ impl SamplingStrategy {
 }
 
 /// Tracer 配置
+/// Tracer configuration
 #[derive(Debug, Clone)]
 pub struct TracerConfig {
     /// 服务名称
+    /// Service name
     pub service_name: String,
     /// 服务版本
+    /// Service version
     pub service_version: Option<String>,
     /// 环境
+    /// Environment
     pub environment: Option<String>,
     /// 采样策略
+    /// Sampling strategy
     pub sampling_strategy: SamplingStrategy,
     /// 最大属性数
+    /// Maximum number of attributes
     pub max_attributes: usize,
     /// 最大事件数
+    /// Maximum number of events
     pub max_events: usize,
     /// 最大链接数
+    /// Maximum number of links
     pub max_links: usize,
 }
 
@@ -118,19 +136,25 @@ impl TracerConfig {
 }
 
 /// Span 处理器 trait
+/// Span processor trait
 #[async_trait::async_trait]
 pub trait SpanProcessor: Send + Sync {
     /// Span 开始时调用
+    /// Called when a Span starts
     async fn on_start(&self, span: &Span, parent_context: Option<&SpanContext>);
     /// Span 结束时调用
+    /// Called when a Span ends
     async fn on_end(&self, span: SpanData);
     /// 关闭处理器
+    /// Shutdown the processor
     async fn shutdown(&self) -> Result<(), String>;
     /// 强制刷新
+    /// Force flush
     async fn force_flush(&self) -> Result<(), String>;
 }
 
 /// 简单 Span 处理器 - 直接导出
+/// Simple Span Processor - Export directly
 pub struct SimpleSpanProcessor {
     exporter: Arc<dyn TracingExporter>,
 }
@@ -145,6 +169,7 @@ impl SimpleSpanProcessor {
 impl SpanProcessor for SimpleSpanProcessor {
     async fn on_start(&self, _span: &Span, _parent_context: Option<&SpanContext>) {
         // 简单处理器不在开始时做任何事
+        // Simple processor does nothing on start
     }
 
     async fn on_end(&self, span: SpanData) {
@@ -163,6 +188,7 @@ impl SpanProcessor for SimpleSpanProcessor {
 }
 
 /// 批处理 Span 处理器
+/// Batch Span Processor
 pub struct BatchSpanProcessor {
     exporter: Arc<dyn TracingExporter>,
     buffer: Arc<RwLock<Vec<SpanData>>>,
@@ -206,6 +232,7 @@ impl BatchSpanProcessor {
 impl SpanProcessor for BatchSpanProcessor {
     async fn on_start(&self, _span: &Span, _parent_context: Option<&SpanContext>) {
         // 批处理器不在开始时做任何事
+        // Batch processor does nothing on start
     }
 
     async fn on_end(&self, span: SpanData) {
@@ -241,6 +268,7 @@ impl SpanProcessor for BatchSpanProcessor {
 }
 
 /// Tracer - 追踪器
+/// Tracer - Tracing component
 pub struct Tracer {
     config: TracerConfig,
     processor: Arc<dyn SpanProcessor>,
@@ -252,11 +280,13 @@ impl Tracer {
     }
 
     /// 创建新的根 Span
+    /// Create a new root Span
     pub fn start_span(&self, name: impl Into<String>) -> Span {
         self.start_span_with_kind(name, SpanKind::Internal, None)
     }
 
     /// 创建带类型的 Span
+    /// Create a Span with a specific kind
     pub fn start_span_with_kind(
         &self,
         name: impl Into<String>,
@@ -267,6 +297,7 @@ impl Tracer {
         let trace_id = parent.map(|p| p.trace_id).unwrap_or_default();
 
         // 检查是否应该采样
+        // Check if sampling should occur
         let should_sample = self
             .config
             .sampling_strategy
@@ -293,6 +324,7 @@ impl Tracer {
         );
 
         // 通知处理器
+        // Notify processor
         let processor = self.processor.clone();
         let span_clone = span.clone();
         let parent_clone = parent.cloned();
@@ -304,16 +336,19 @@ impl Tracer {
     }
 
     /// 创建子 Span
+    /// Create a child Span
     pub fn start_child_span(&self, name: impl Into<String>, parent: &SpanContext) -> Span {
         self.start_span_with_kind(name, SpanKind::Internal, Some(parent))
     }
 
     /// 使用 SpanBuilder 创建 Span
+    /// Create a Span using SpanBuilder
     pub fn span_builder(&self, name: impl Into<String>) -> SpanBuilder {
         SpanBuilder::new(name, &self.config.service_name)
     }
 
     /// 结束 Span 并导出
+    /// End Span and export
     pub async fn end_span(&self, span: &Span) {
         span.end().await;
         if span.is_recording().await {
@@ -323,22 +358,26 @@ impl Tracer {
     }
 
     /// 获取服务名称
+    /// Get service name
     pub fn service_name(&self) -> &str {
         &self.config.service_name
     }
 
     /// 关闭 Tracer
+    /// Shutdown Tracer
     pub async fn shutdown(&self) -> Result<(), String> {
         self.processor.shutdown().await
     }
 
     /// 强制刷新
+    /// Force flush
     pub async fn force_flush(&self) -> Result<(), String> {
         self.processor.force_flush().await
     }
 }
 
 /// Tracer Provider - 管理多个 Tracer
+/// Tracer Provider - Manages multiple Tracers
 pub struct TracerProvider {
     config: TracerConfig,
     processor: Arc<dyn SpanProcessor>,
@@ -364,6 +403,7 @@ impl TracerProvider {
     }
 
     /// 获取或创建 Tracer
+    /// Get or create a Tracer
     pub async fn tracer(&self, name: &str) -> Arc<Tracer> {
         {
             let tracers = self.tracers.read().await;
@@ -389,28 +429,33 @@ impl TracerProvider {
     }
 
     /// 获取默认 Tracer
+    /// Get default Tracer
     pub async fn default_tracer(&self) -> Arc<Tracer> {
         self.tracer(&self.config.service_name).await
     }
 
     /// 获取传播器
+    /// Get propagator
     pub fn propagator(&self) -> Arc<dyn TracePropagator> {
         self.propagator.clone()
     }
 
     /// 关闭 Provider
+    /// Shutdown Provider
     pub async fn shutdown(&self) -> Result<(), String> {
         self.processor.shutdown().await
     }
 }
 
 /// 全局 Tracer
+/// Global Tracer
 pub struct GlobalTracer {
     provider: Arc<RwLock<Option<Arc<TracerProvider>>>>,
 }
 
 impl GlobalTracer {
     /// 创建新的全局 Tracer 实例
+    /// Create a new GlobalTracer instance
     pub fn new() -> Self {
         Self {
             provider: Arc::new(RwLock::new(None)),
@@ -418,24 +463,28 @@ impl GlobalTracer {
     }
 
     /// 设置全局 TracerProvider
+    /// Set the global TracerProvider
     pub async fn set_provider(&self, provider: Arc<TracerProvider>) {
         let mut guard = self.provider.write().await;
         *guard = Some(provider);
     }
 
     /// 获取全局 TracerProvider
+    /// Get the global TracerProvider
     pub async fn provider(&self) -> Option<Arc<TracerProvider>> {
         let guard = self.provider.read().await;
         guard.clone()
     }
 
     /// 获取默认 Tracer
+    /// Get default Tracer
     pub async fn tracer(&self) -> Option<Arc<Tracer>> {
         let provider = self.provider().await?;
         Some(provider.default_tracer().await)
     }
 
     /// 获取指定名称的 Tracer
+    /// Get Tracer with specified name
     pub async fn tracer_with_name(&self, name: &str) -> Option<Arc<Tracer>> {
         let provider = self.provider().await?;
         Some(provider.tracer(name).await)
@@ -449,21 +498,25 @@ impl Default for GlobalTracer {
 }
 
 // 全局静态实例
+// Global static instance
 lazy_static::lazy_static! {
     static ref GLOBAL_TRACER: GlobalTracer = GlobalTracer::new();
 }
 
 /// 获取全局 Tracer
+/// Get the global Tracer
 pub fn global_tracer() -> &'static GlobalTracer {
     &GLOBAL_TRACER
 }
 
 /// 设置全局 TracerProvider
+/// Set global TracerProvider
 pub async fn set_global_tracer_provider(provider: Arc<TracerProvider>) {
     GLOBAL_TRACER.set_provider(provider).await;
 }
 
 /// 获取全局默认 Tracer
+/// Get global default Tracer
 pub async fn get_tracer() -> Option<Arc<Tracer>> {
     GLOBAL_TRACER.tracer().await
 }
@@ -502,6 +555,7 @@ mod tests {
         let tracer2 = provider.tracer("service-a").await;
 
         // 应该返回相同的 tracer
+        // Should return the same tracer
         assert_eq!(tracer1.service_name(), tracer2.service_name());
     }
 
@@ -530,6 +584,7 @@ mod tests {
         }
 
         // 应该大约有一半被采样
+        // Approximately half should be sampled
         let ratio = sampled_count as f64 / iterations as f64;
         assert!(ratio > 0.3 && ratio < 0.7);
     }
