@@ -89,7 +89,11 @@ impl VectorStore for InMemoryVectorStore {
             })
             .collect();
 
-        scored.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(std::cmp::Ordering::Equal));
+        scored.sort_by(|a, b| {
+            b.score
+                .partial_cmp(&a.score)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
         scored.truncate(top_k);
 
         Ok(scored)
@@ -188,10 +192,7 @@ mod tests {
             .await
             .unwrap();
 
-        let results = store
-            .search(&[1.0, 0.0, 0.0], 2, None)
-            .await
-            .unwrap();
+        let results = store.search(&[1.0, 0.0, 0.0], 2, None).await.unwrap();
 
         assert_eq!(results.len(), 2);
         assert_eq!(results[0].id, "a");
@@ -238,14 +239,8 @@ mod tests {
     async fn test_clear() {
         let mut store = InMemoryVectorStore::cosine();
 
-        store
-            .upsert(make_chunk("1", "a", vec![1.0]))
-            .await
-            .unwrap();
-        store
-            .upsert(make_chunk("2", "b", vec![2.0]))
-            .await
-            .unwrap();
+        store.upsert(make_chunk("1", "a", vec![1.0])).await.unwrap();
+        store.upsert(make_chunk("2", "b", vec![2.0])).await.unwrap();
         assert_eq!(store.count().await.unwrap(), 2);
 
         store.clear().await.unwrap();

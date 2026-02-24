@@ -1,6 +1,8 @@
 //! 内存存储后端
+//! Memory storage backend
 //!
 //! 提供基于内存的存储实现，适用于测试和开发环境
+//! Provides an in-memory storage implementation, suitable for testing and development environments
 
 use super::entities::*;
 use super::traits::*;
@@ -12,14 +14,21 @@ use tokio::sync::RwLock;
 use uuid::Uuid;
 
 /// 内存存储
+/// In-memory storage
 ///
 /// 线程安全的内存存储实现，所有数据存储在内存中。
+/// Thread-safe in-memory storage implementation, all data is stored in memory.
 /// 适用于：
+/// Suitable for:
 /// - 单元测试
+/// - Unit testing
 /// - 开发环境
+/// - Development environment
 /// - 短期会话（无需持久化）
+/// - Short-term sessions (no persistence required)
 ///
 /// # 示例
+/// # Example
 ///
 /// ```rust,ignore
 /// use mofa_foundation::persistence::InMemoryStore;
@@ -27,28 +36,37 @@ use uuid::Uuid;
 /// let store = InMemoryStore::new();
 ///
 /// // 保存消息
+/// // Save message
 /// store.save_message(&message).await?;
 ///
 /// // 查询消息
+/// // Query messages
 /// let messages = store.get_session_messages(session_id).await?;
 /// ```
 pub struct InMemoryStore {
     /// 消息存储
+    /// Message storage
     messages: Arc<RwLock<HashMap<Uuid, LLMMessage>>>,
     /// 会话消息索引 (session_id -> message_ids)
+    /// Session message index (session_id -> message_ids)
     session_messages: Arc<RwLock<HashMap<Uuid, Vec<Uuid>>>>,
     /// API 调用记录
+    /// API call records
     api_calls: Arc<RwLock<HashMap<Uuid, LLMApiCall>>>,
     /// 会话存储
+    /// Session storage
     sessions: Arc<RwLock<HashMap<Uuid, ChatSession>>>,
     /// 用户会话索引 (user_id -> session_ids)
+    /// User session index (user_id -> session_ids)
     user_sessions: Arc<RwLock<HashMap<Uuid, Vec<Uuid>>>>,
     /// 连接状态
+    /// Connection status
     connected: AtomicBool,
 }
 
 impl InMemoryStore {
     /// 创建新的内存存储
+    /// Create new in-memory store
     pub fn new() -> Self {
         Self {
             messages: Arc::new(RwLock::new(HashMap::new())),
@@ -61,11 +79,13 @@ impl InMemoryStore {
     }
 
     /// 创建共享的内存存储
+    /// Create shared in-memory store
     pub fn shared() -> Arc<Self> {
         Arc::new(Self::new())
     }
 
     /// 清空所有数据
+    /// Clear all data
     pub async fn clear(&self) {
         self.messages.write().await.clear();
         self.session_messages.write().await.clear();
@@ -75,16 +95,19 @@ impl InMemoryStore {
     }
 
     /// 获取消息总数
+    /// Get total message count
     pub async fn message_count(&self) -> usize {
         self.messages.read().await.len()
     }
 
     /// 获取 API 调用总数
+    /// Get total API call count
     pub async fn api_call_count(&self) -> usize {
         self.api_calls.read().await.len()
     }
 
     /// 获取会话总数
+    /// Get total session count
     pub async fn session_count(&self) -> usize {
         self.sessions.read().await.len()
     }
@@ -133,6 +156,7 @@ impl MessageStore for InMemoryStore {
         }
 
         // 按创建时间排序
+        // Sort by creation time
         result.sort_by(|a, b| a.create_time.cmp(&b.create_time));
 
         Ok(result)
@@ -216,6 +240,7 @@ impl ApiCallStore for InMemoryStore {
             .values()
             .filter(|call| {
                 // 用户过滤
+                // User filtering
                 if let Some(user_id) = filter.user_id
                     && call.user_id != user_id
                 {
@@ -223,6 +248,7 @@ impl ApiCallStore for InMemoryStore {
                 }
 
                 // 会话过滤
+                // Session filtering
                 if let Some(session_id) = filter.session_id
                     && call.chat_session_id != session_id
                 {
@@ -230,6 +256,7 @@ impl ApiCallStore for InMemoryStore {
                 }
 
                 // Agent 过滤
+                // Agent filtering
                 if let Some(agent_id) = filter.agent_id
                     && call.agent_id != agent_id
                 {
@@ -237,6 +264,7 @@ impl ApiCallStore for InMemoryStore {
                 }
 
                 // 时间范围过滤
+                // Time range filtering
                 if let Some(start) = filter.start_time
                     && call.create_time < start
                 {
@@ -249,6 +277,7 @@ impl ApiCallStore for InMemoryStore {
                 }
 
                 // 状态过滤
+                // Status filtering
                 if let Some(status) = filter.status
                     && call.status != status
                 {
@@ -256,6 +285,7 @@ impl ApiCallStore for InMemoryStore {
                 }
 
                 // 模型过滤
+                // Model filtering
                 if let Some(ref model) = filter.model_name
                     && &call.model_name != model
                 {
@@ -268,9 +298,11 @@ impl ApiCallStore for InMemoryStore {
             .collect();
 
         // 按创建时间降序排序
+        // Sort by creation time descending
         result.sort_by(|a, b| b.create_time.cmp(&a.create_time));
 
         // 分页
+        // Pagination
         let offset = filter.offset.unwrap_or(0) as usize;
         let limit = filter.limit.unwrap_or(100) as usize;
 
@@ -386,6 +418,7 @@ impl SessionStore for InMemoryStore {
         }
 
         // 按更新时间降序排序
+        // Sort by update time descending
         result.sort_by(|a, b| b.update_time.cmp(&a.update_time));
 
         Ok(result)
@@ -427,6 +460,7 @@ impl ProviderStore for InMemoryStore {
         _id: Uuid,
     ) -> PersistenceResult<Option<crate::persistence::entities::Provider>> {
         // Memory store doesn't support providers - return not found
+        // 内存存储不支持提供商 - 返回未找到
         Ok(None)
     }
 
@@ -436,6 +470,7 @@ impl ProviderStore for InMemoryStore {
         _name: &str,
     ) -> PersistenceResult<Option<crate::persistence::entities::Provider>> {
         // Memory store doesn't support providers - return not found
+        // 内存存储不支持提供商 - 返回未找到
         Ok(None)
     }
 
@@ -444,6 +479,7 @@ impl ProviderStore for InMemoryStore {
         _tenant_id: Uuid,
     ) -> PersistenceResult<Vec<crate::persistence::entities::Provider>> {
         // Memory store doesn't support providers - return empty list
+        // 内存存储不支持提供商 - 返回空列表
         Ok(Vec::new())
     }
 
@@ -452,6 +488,7 @@ impl ProviderStore for InMemoryStore {
         _tenant_id: Uuid,
     ) -> PersistenceResult<Vec<crate::persistence::entities::Provider>> {
         // Memory store doesn't support providers - return empty list
+        // 内存存储不支持提供商 - 返回空列表
         Ok(Vec::new())
     }
 }
@@ -463,6 +500,7 @@ impl AgentStore for InMemoryStore {
         _id: Uuid,
     ) -> PersistenceResult<Option<crate::persistence::entities::Agent>> {
         // Memory store doesn't support agents - return not found
+        // 内存存储不支持智能体 - 返回未找到
         Ok(None)
     }
 
@@ -471,6 +509,7 @@ impl AgentStore for InMemoryStore {
         _code: &str,
     ) -> PersistenceResult<Option<crate::persistence::entities::Agent>> {
         // Memory store doesn't support agents - return not found
+        // 内存存储不支持智能体 - 返回未找到
         Ok(None)
     }
 
@@ -480,6 +519,7 @@ impl AgentStore for InMemoryStore {
         _code: &str,
     ) -> PersistenceResult<Option<crate::persistence::entities::Agent>> {
         // Memory store doesn't support agents - return not found
+        // 内存存储不支持智能体 - 返回未找到
         Ok(None)
     }
 
@@ -488,6 +528,7 @@ impl AgentStore for InMemoryStore {
         _tenant_id: Uuid,
     ) -> PersistenceResult<Vec<crate::persistence::entities::Agent>> {
         // Memory store doesn't support agents - return empty list
+        // 内存存储不支持智能体 - 返回空列表
         Ok(Vec::new())
     }
 
@@ -496,6 +537,7 @@ impl AgentStore for InMemoryStore {
         _tenant_id: Uuid,
     ) -> PersistenceResult<Vec<crate::persistence::entities::Agent>> {
         // Memory store doesn't support agents - return empty list
+        // 内存存储不支持智能体 - 返回空列表
         Ok(Vec::new())
     }
 
@@ -504,6 +546,7 @@ impl AgentStore for InMemoryStore {
         _id: Uuid,
     ) -> PersistenceResult<Option<crate::persistence::entities::AgentConfig>> {
         // Memory store doesn't support agents - return not found
+        // 内存存储不支持智能体 - 返回未找到
         Ok(None)
     }
 
@@ -512,6 +555,7 @@ impl AgentStore for InMemoryStore {
         _code: &str,
     ) -> PersistenceResult<Option<crate::persistence::entities::AgentConfig>> {
         // Memory store doesn't support agents - return not found
+        // 内存存储不支持智能体 - 返回未找到
         Ok(None)
     }
 
@@ -521,6 +565,7 @@ impl AgentStore for InMemoryStore {
         _code: &str,
     ) -> PersistenceResult<Option<crate::persistence::entities::AgentConfig>> {
         // Memory store doesn't support agents - return not found
+        // 内存存储不支持智能体 - 返回未找到
         Ok(None)
     }
 }
@@ -541,19 +586,25 @@ impl PersistenceStore for InMemoryStore {
 }
 
 /// 带容量限制的内存存储
+/// Bounded in-memory store
 ///
 /// 当达到容量限制时，自动清理最旧的记录
+/// Automatically cleans up the oldest records when capacity limits are reached
 pub struct BoundedInMemoryStore {
     /// 内部存储
+    /// Inner storage
     inner: InMemoryStore,
     /// 消息容量限制
+    /// Message capacity limit
     max_messages: usize,
     /// API 调用容量限制
+    /// API call capacity limit
     max_api_calls: usize,
 }
 
 impl BoundedInMemoryStore {
     /// 创建带容量限制的内存存储
+    /// Create bounded in-memory store
     pub fn new(max_messages: usize, max_api_calls: usize) -> Self {
         Self {
             inner: InMemoryStore::new(),
@@ -563,16 +614,19 @@ impl BoundedInMemoryStore {
     }
 
     /// 创建共享实例
+    /// Create shared instance
     pub fn shared(max_messages: usize, max_api_calls: usize) -> Arc<Self> {
         Arc::new(Self::new(max_messages, max_api_calls))
     }
 
     /// 清理超出容量的消息
+    /// Cleanup messages exceeding capacity
     async fn cleanup_messages_if_needed(&self) {
         let mut messages = self.inner.messages.write().await;
 
         if messages.len() > self.max_messages {
             // 收集要删除的 ID
+            // Collect IDs to remove
             let mut sorted: Vec<_> = messages
                 .iter()
                 .map(|(id, msg)| (*id, msg.create_time))
@@ -592,11 +646,13 @@ impl BoundedInMemoryStore {
     }
 
     /// 清理超出容量的 API 调用记录
+    /// Cleanup API calls exceeding capacity
     async fn cleanup_api_calls_if_needed(&self) {
         let mut api_calls = self.inner.api_calls.write().await;
 
         if api_calls.len() > self.max_api_calls {
             // 收集要删除的 ID
+            // Collect IDs to remove
             let mut sorted: Vec<_> = api_calls
                 .iter()
                 .map(|(id, call)| (*id, call.create_time))

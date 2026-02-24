@@ -92,5 +92,6 @@
 - [Appendix](appendix/README.md)
   - [Feature Flags](appendix/feature-flags.md)
   - [Configuration](appendix/configuration.md)
+  - [Versioned Docs](appendix/versioned-docs.md)
   - [Contributing](appendix/contributing.md)
   - [Glossary](appendix/glossary.md)
