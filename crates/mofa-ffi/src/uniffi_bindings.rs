@@ -248,7 +248,7 @@ pub fn is_dora_available() -> bool {
 
 /// Create a new LLM Agent Builder
 pub fn new_llm_agent_builder() -> Result<std::sync::Arc<LLMAgentBuilder>, MoFaError> {
-    Ok(LLMAgentBuilder::create())
+    LLMAgentBuilder::create()
 }
 
 // =============================================================================
@@ -555,15 +555,13 @@ pub struct LLMAgentBuilder {
 
 impl LLMAgentBuilder {
     /// Create a new builder
-    pub fn create() -> Arc<Self> {
+    pub fn create() -> Result<Arc<Self>, MoFaError> {
         let runtime = tokio::runtime::Runtime::new()
-            .map_err(|e| MoFaError::RuntimeError(e.to_string()))
-            .unwrap();
-
-        Arc::new(Self {
+            .map_err(|e| MoFaError::RuntimeError(e.to_string()))?;
+        Ok(Arc::new(Self {
             state: Arc::new(StdMutex::new(BuilderState::default())),
             runtime: Arc::new(runtime),
-        })
+        }))
     }
 
     /// Set agent ID
@@ -824,14 +822,26 @@ pub struct SessionManager {
 
 impl SessionManager {
     /// Create a new in-memory session manager
-    pub fn new_in_memory() -> Self {
-        let runtime = tokio::runtime::Runtime::new().unwrap();
+    /// Internal fallible constructor
+    pub(crate) fn try_new_in_memory() -> Result<Self, MoFaError> {
+        let runtime = tokio::runtime::Runtime::new()
+            .map_err(|e| MoFaError::RuntimeError(e.to_string()))?;
         let storage = Box::new(mofa_foundation::agent::session::MemorySessionStorage::new());
         let manager = mofa_foundation::agent::session::SessionManager::with_storage(storage);
-
-        Self {
+        Ok(Self {
             inner: Arc::new(RwLock::new(manager)),
             runtime: Arc::new(runtime),
+        })
+    }
+
+    /// FFI-safe infallible constructor. Logs error and aborts if runtime creation fails.
+    pub fn new_in_memory() -> Self {
+        match Self::try_new_in_memory() {
+            Ok(manager) => manager,
+            Err(e) => {
+                eprintln!("SessionManager::new_in_memory: failed to create in-memory session manager: {}", e);
+                std::process::abort();
+            }
         }
     }
 

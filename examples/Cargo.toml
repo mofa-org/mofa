@@ -12,6 +12,7 @@ members = [
     "secretary_agent",
     "react_agent",
     "rhai_scripting",
+    "runtime_periodic_runner",
     "runtime_example",
     "hitl_secretary",
     "streaming_persistence",
