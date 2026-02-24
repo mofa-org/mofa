@@ -137,19 +137,10 @@ pub enum DeliveryMode {
 }
 
 /// Retry policy for delivery.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
 pub struct RetryPolicy {
     pub max_retries: u8,
     pub backoff_ms: u64,
-}
-
-impl Default for RetryPolicy {
-    fn default() -> Self {
-        Self {
-            max_retries: 0,
-            backoff_ms: 0,
-        }
-    }
 }
 
 /// Delivery policy for an edge.
@@ -517,6 +508,166 @@ mod tests {
         let compiled = graph.compile().unwrap();
         assert_eq!(compiled.id, "task19_message_graph");
         assert_eq!(compiled.max_hops, 32);
+    }
+
+    #[test]
+    fn compile_fails_when_graph_id_is_empty() {
+        let mut graph = MessageGraph::new("");
+        graph
+            .add_node(
+                "entry",
+                MessageNode::new(MessageNodeKind::Topic {
+                    topic: "topic.in".to_string(),
+                }),
+            )
+            .unwrap();
+        graph
+            .add_node(
+                "next",
+                MessageNode::new(MessageNodeKind::Topic {
+                    topic: "topic.out".to_string(),
+                }),
+            )
+            .unwrap();
+        graph.add_entry_point("entry").unwrap();
+        graph
+            .add_edge(
+                "entry",
+                "next",
+                RouteRule::Always,
+                DeliveryPolicy::default(),
+            )
+            .unwrap();
+
+        let err = graph.compile().unwrap_err();
+        assert_eq!(err, MessageGraphError::EmptyGraphId);
+    }
+
+    #[test]
+    fn compile_fails_when_no_nodes_exist() {
+        let graph = MessageGraph::new("no_nodes");
+        let err = graph.compile().unwrap_err();
+        assert_eq!(err, MessageGraphError::NoNodes);
+    }
+
+    #[test]
+    fn compile_fails_when_no_edges_exist() {
+        let mut graph = MessageGraph::new("no_edges");
+        graph
+            .add_node(
+                "entry",
+                MessageNode::new(MessageNodeKind::Topic {
+                    topic: "topic.in".to_string(),
+                }),
+            )
+            .unwrap();
+        graph.add_entry_point("entry").unwrap();
+
+        let err = graph.compile().unwrap_err();
+        assert_eq!(err, MessageGraphError::NoEdges);
+    }
+
+    #[test]
+    fn add_node_fails_when_node_id_is_empty() {
+        let mut graph = MessageGraph::new("g");
+        let err = graph
+            .add_node(
+                "",
+                MessageNode::new(MessageNodeKind::Topic {
+                    topic: "topic".to_string(),
+                }),
+            )
+            .unwrap_err();
+        assert_eq!(err, MessageGraphError::EmptyNodeId);
+    }
+
+    #[test]
+    fn add_node_fails_when_node_is_duplicate() {
+        let mut graph = MessageGraph::new("g");
+        graph
+            .add_node(
+                "entry",
+                MessageNode::new(MessageNodeKind::Topic {
+                    topic: "topic".to_string(),
+                }),
+            )
+            .unwrap();
+
+        let err = graph
+            .add_node(
+                "entry",
+                MessageNode::new(MessageNodeKind::Topic {
+                    topic: "topic2".to_string(),
+                }),
+            )
+            .unwrap_err();
+        assert_eq!(err, MessageGraphError::DuplicateNode("entry".to_string()));
+    }
+
+    #[test]
+    fn add_entry_point_fails_when_duplicate() {
+        let mut graph = MessageGraph::new("g");
+        graph
+            .add_node(
+                "entry",
+                MessageNode::new(MessageNodeKind::Topic {
+                    topic: "topic".to_string(),
+                }),
+            )
+            .unwrap();
+        graph.add_entry_point("entry").unwrap();
+
+        let err = graph.add_entry_point("entry").unwrap_err();
+        assert_eq!(
+            err,
+            MessageGraphError::DuplicateEntryPoint("entry".to_string())
+        );
+    }
+
+    #[test]
+    fn add_edge_fails_when_duplicate() {
+        let mut graph = MessageGraph::new("g");
+        graph
+            .add_node(
+                "entry",
+                MessageNode::new(MessageNodeKind::Topic {
+                    topic: "topic.in".to_string(),
+                }),
+            )
+            .unwrap();
+        graph
+            .add_node(
+                "next",
+                MessageNode::new(MessageNodeKind::Topic {
+                    topic: "topic.out".to_string(),
+                }),
+            )
+            .unwrap();
+
+        graph
+            .add_edge(
+                "entry",
+                "next",
+                RouteRule::Always,
+                DeliveryPolicy::default(),
+            )
+            .unwrap();
+
+        let err = graph
+            .add_edge(
+                "entry",
+                "next",
+                RouteRule::Always,
+                DeliveryPolicy::default(),
+            )
+            .unwrap_err();
+        assert_eq!(
+            err,
+            MessageGraphError::DuplicateEdge {
+                from: "entry".to_string(),
+                to: "next".to_string(),
+            }
+        );
     }
 
     #[test]
