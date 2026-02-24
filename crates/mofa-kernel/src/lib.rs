@@ -22,6 +22,10 @@ pub use core::*;
 // message module
 pub mod message;
 
+// MessageGraph module
+pub mod message_graph;
+pub use message_graph::*;
+
 // Agent Framework (统一 Agent 框架)
 pub mod agent;
 
