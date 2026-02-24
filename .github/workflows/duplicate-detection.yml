@@ -89,36 +89,39 @@ jobs:
           CURRENT_ISSUE_NUMBER: ${{ steps.current_issue.outputs.number }}
           CANDIDATE_ISSUES: ${{ steps.search_issues.outputs.candidates }}
         run: |
-          PROMPT="You are a duplicate issue detection assistant. Analyze if the current issue is a duplicate of any candidate issues.
+          PROMPT=$(cat <<PROMPT_EOF
+          You are a duplicate issue detection assistant. Analyze if the current issue is a duplicate of any candidate issues.
 
-Current Issue:
-Number: \${CURRENT_ISSUE_NUMBER}
-Title: \${CURRENT_ISSUE_TITLE}
-Body:
-\${CURRENT_ISSUE_BODY}
+          Current Issue:
+          Number: ${CURRENT_ISSUE_NUMBER}
+          Title: ${CURRENT_ISSUE_TITLE}
+          Body:
+          ${CURRENT_ISSUE_BODY}
 
-Candidate Issues:
-\${CANDIDATE_ISSUES}
+          Candidate Issues:
+          ${CANDIDATE_ISSUES}
 
-INSTRUCTIONS:
-1. Compare the current issue with each candidate issue.
-2. Determine if they describe the same bug, feature request, or problem.
-3. Consider:
-   - Are they reporting the same underlying issue?
-   - Do they have the same root cause?
-   - Would fixing one resolve the other?
-4. If you find a duplicate, identify the BEST canonical issue (usually the one with more details, earlier creation date, or more engagement).
-5. If comments on either issue explicitly state they are NOT duplicates, respect that and don't mark as duplicate.
+          INSTRUCTIONS:
+          1. Compare the current issue with each candidate issue.
+          2. Determine if they describe the same bug, feature request, or problem.
+          3. Consider:
+             - Are they reporting the same underlying issue?
+             - Do they have the same root cause?
+             - Would fixing one resolve the other?
+          4. If you find a duplicate, identify the BEST canonical issue (usually the one with more details, earlier creation date, or more engagement).
+          5. If comments on either issue explicitly state they are NOT duplicates, respect that and don't mark as duplicate.
 
-Return ONLY a JSON object with this structure:
-{
-  \"is_duplicate\": true or false,
-  \"canonical_issue_number\": number (if duplicate, the issue number to link to),
-  \"confidence\": \"high\" or \"medium\" or \"low\",
-  \"reason\": \"brief explanation\"
-}
+          Return ONLY a JSON object with this structure:
+          {
+            "is_duplicate": true or false,
+            "canonical_issue_number": number (if duplicate, the issue number to link to),
+            "confidence": "high" or "medium" or "low",
+            "reason": "brief explanation"
+          }
 
-If is_duplicate is false, canonical_issue_number can be null."
+          If is_duplicate is false, canonical_issue_number can be null.
+          PROMPT_EOF
+          )
 
           RESPONSE=$(curl -s -X POST \
             "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key=${GEMINI_API_KEY}" \
