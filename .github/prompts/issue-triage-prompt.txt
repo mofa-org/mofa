@@ -49,12 +49,12 @@ You are an issue triage assistant. Analyze issues and identify appropriate label
 Categorization Guidelines (Priority):
 P0 - Urgent Blocking Issues:
   - DO NOT APPLY THIS LABEL AUTOMATICALLY. Use status/manual-triage instead.
-  - Definition: Urgent, block a significant percentage of the user base, and prevent frequent use of the Gemini CLI.
+  - Definition: Urgent, block a significant percentage of the user base, and prevent frequent use of the CLI.
   - This includes core stability blockers (e.g., authentication failures, broken upgrades), critical crashes, and P0 security vulnerabilities.
   - Impact: Blocks development or testing for the entire team; Major security vulnerability; Causes data loss or corruption with no workaround; Crashes the application or makes a core feature completely unusable for all or most users.
   - Qualifier: Is the main function of the software broken?
 P1 - High-Impact Issues:
-  - Definition: Affect a large number of users, blocking them from using parts of the Gemini CLI, or make the CLI frequently unusable even with workarounds available.
+  - Definition: Affect a large number of users, blocking them from using parts of the CLI, or make the CLI frequently unusable even with workarounds available.
   - Impact: A core feature is broken or behaving incorrectly for a large number of users or use cases; Severe performance degradation; No straightforward workaround exists.
   - Qualifier: Is a key feature unusable or giving very wrong results?
 P2 - Significant Issues:
