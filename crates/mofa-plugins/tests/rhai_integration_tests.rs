@@ -305,9 +305,7 @@ async fn test_call_script_function_with_various_types() {
 
     for (value, _expected_type) in &test_cases {
         let args = vec![value.clone()];
-        let result = plugin
-            .call_script_function("identify_type", &args)
-            .await;
+        let result = plugin.call_script_function("identify_type", &args).await;
 
         // assertions...
     }
@@ -719,7 +717,13 @@ async fn test_stats_to_map_snapshot_is_consistent() {
 
     let snapshot = plugin.stats().to_map();
 
-    let total = snapshot["calls_total"].as_u64().expect("calls_total is u64");
-    let failed = snapshot["calls_failed"].as_u64().expect("calls_failed is u64");
-    let avg = snapshot["avg_latency_ms"].as_f64().expect("avg_latency_ms is f64");
+    let total = snapshot["calls_total"]
+        .as_u64()
+        .expect("calls_total is u64");
+    let failed = snapshot["calls_failed"]
+        .as_u64()
+        .expect("calls_failed is u64");
+    let avg = snapshot["avg_latency_ms"]
+        .as_f64()
+        .expect("avg_latency_ms is f64");
 }

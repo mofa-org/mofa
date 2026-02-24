@@ -556,8 +556,8 @@ pub struct LLMAgentBuilder {
 impl LLMAgentBuilder {
     /// Create a new builder
     pub fn create() -> Result<Arc<Self>, MoFaError> {
-        let runtime = tokio::runtime::Runtime::new()
-            .map_err(|e| MoFaError::RuntimeError(e.to_string()))?;
+        let runtime =
+            tokio::runtime::Runtime::new().map_err(|e| MoFaError::RuntimeError(e.to_string()))?;
         Ok(Arc::new(Self {
             state: Arc::new(StdMutex::new(BuilderState::default())),
             runtime: Arc::new(runtime),
@@ -824,8 +824,8 @@ impl SessionManager {
     /// Create a new in-memory session manager
     /// Internal fallible constructor
     pub(crate) fn try_new_in_memory() -> Result<Self, MoFaError> {
-        let runtime = tokio::runtime::Runtime::new()
-            .map_err(|e| MoFaError::RuntimeError(e.to_string()))?;
+        let runtime =
+            tokio::runtime::Runtime::new().map_err(|e| MoFaError::RuntimeError(e.to_string()))?;
         let storage = Box::new(mofa_foundation::agent::session::MemorySessionStorage::new());
         let manager = mofa_foundation::agent::session::SessionManager::with_storage(storage);
         Ok(Self {
@@ -839,7 +839,10 @@ impl SessionManager {
         match Self::try_new_in_memory() {
             Ok(manager) => manager,
             Err(e) => {
-                eprintln!("SessionManager::new_in_memory: failed to create in-memory session manager: {}", e);
+                eprintln!(
+                    "SessionManager::new_in_memory: failed to create in-memory session manager: {}",
+                    e
+                );
                 std::process::abort();
             }
         }
