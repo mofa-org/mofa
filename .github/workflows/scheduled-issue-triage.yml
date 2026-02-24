@@ -1,4 +1,4 @@
-name: Scheduled Issue Triage
+name: MoFA Scheduled Issue Triage
 
 on:
   schedule:
