@@ -31,6 +31,7 @@ pub enum ResolutionError {
     HardwareNotSupported(String),
 
     #[error("Format not supported: {0}")]
+    FormatNotSupported(String),
 
     #[error("Modality not supported: {0}")]
     ModalityNotSupported(String),
