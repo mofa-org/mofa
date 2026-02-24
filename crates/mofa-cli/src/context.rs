@@ -11,6 +11,7 @@ use mofa_foundation::agent::components::tool::EchoTool;
 use mofa_foundation::agent::session::SessionManager;
 use mofa_foundation::agent::tools::registry::{ToolRegistry, ToolSource};
 use mofa_kernel::agent::AgentCapabilities;
+use mofa_kernel::agent::components::tool::ToolExt;
 use mofa_kernel::agent::config::AgentConfig;
 use mofa_kernel::agent::core::MoFAAgent;
 use mofa_kernel::agent::error::{AgentError, AgentResult};
@@ -325,7 +326,7 @@ fn replay_persisted_tools(
         match spec.kind.as_str() {
             BUILTIN_ECHO_TOOL_KIND => {
                 tool_registry
-                    .register_with_source(Arc::new(EchoTool), ToolSource::Builtin)
+                    .register_with_source(EchoTool.into_dynamic(), ToolSource::Builtin)
                     .map_err(|e| anyhow::anyhow!("Failed to register tool '{}': {}", spec.id, e))?;
             }
             _ => {
