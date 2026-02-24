@@ -279,7 +279,7 @@ impl Pipeline {
         let mut current = input.into();
 
         for step in &self.steps {
-            current = self.execute_step(step, current).await?;
+            current = Self::execute_step(step, current).await?;
         }
 
         Ok(current)
@@ -288,7 +288,6 @@ impl Pipeline {
     /// 执行单个步骤
     /// Execute a single step
     fn execute_step<'a>(
-        &'a self,
         step: &'a PipelineStep,
         input: String,
     ) -> Pin<Box<dyn Future<Output = LLMResult<String>> + Send + 'a>> {
@@ -331,14 +330,14 @@ impl Pipeline {
                     if_false,
                 } => {
                     if condition(&input) {
-                        self.execute_step(if_true, input).await
+                        Self::execute_step(if_true, input).await
                     } else {
-                        self.execute_step(if_false, input).await
+                        Self::execute_step(if_false, input).await
                     }
                 }
 
                 PipelineStep::TryRecover { step, default } => {
-                    match self.execute_step(step, input).await {
+                    match Self::execute_step(step, input).await {
                         Ok(result) => Ok(result),
                         Err(_) => Ok(default.clone()),
                     }
@@ -347,7 +346,7 @@ impl Pipeline {
                 PipelineStep::Retry { step, max_retries } => {
                     let mut last_error = None;
                     for _ in 0..=*max_retries {
-                        match self.execute_step(step, input.clone()).await {
+                        match Self::execute_step(step, input.clone()).await {
                             Ok(result) => return Ok(result),
                             Err(e) => last_error = Some(e),
                         }
