@@ -348,6 +348,35 @@ impl std::fmt::Display for MessageRole {
     }
 }
 
+/// Trait for converting text into fixed-dimensional embedding vectors.
+///
+/// Implementations can use different strategies — hash-based (no external API),
+/// API-based (OpenAI embeddings), or local model-based — as long as they
+/// satisfy the `Send + Sync` bound required for use in async agent contexts.
+///
+/// # Example
+///
+/// ```rust,ignore
+/// use mofa_kernel::agent::components::memory::Embedder;
+///
+/// let embedder = MyEmbedder::new();
+/// let vec = embedder.embed("hello world").await?;
+/// assert_eq!(vec.len(), embedder.dimensions());
+/// ```
+#[async_trait]
+pub trait Embedder: Send + Sync {
+    /// Embed the given text into a fixed-dimensional vector.
+    async fn embed(&self, text: &str) -> AgentResult<Vec<f32>>;
+
+    /// The number of dimensions produced by this embedder.
+    fn dimensions(&self) -> usize;
+
+    /// Human-readable name for this embedder implementation.
+    fn name(&self) -> &str {
+        "embedder"
+    }
+}
+
 /// 记忆统计
 /// Memory statistics
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]

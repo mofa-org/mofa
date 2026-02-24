@@ -226,7 +226,7 @@ pub use types::{
 pub use components::{
     coordinator::{CoordinationPattern, Coordinator},
     mcp::{McpClient, McpServerConfig, McpServerInfo, McpToolInfo, McpTransportConfig},
-    memory::{Memory, MemoryItem, MemoryStats, MemoryValue, Message, MessageRole},
+    memory::{Embedder, Memory, MemoryItem, MemoryStats, MemoryValue, Message, MessageRole},
     reasoner::{Reasoner, ReasoningResult},
     tool::{Tool, ToolDescriptor, ToolInput, ToolMetadata, ToolResult},
 };

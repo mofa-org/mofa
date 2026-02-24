@@ -67,6 +67,12 @@ pub use components::{
     ToolRegistry,
     ToolResult,
     as_tool,
+    // Long-term memory implementations
+    Embedder,
+    Episode,
+    EpisodicMemory,
+    HashEmbedder,
+    SemanticMemory,
 };
 
 // Tool adapters and registries (Foundation implementations)

@@ -15,8 +15,10 @@
 //! - Foundation layer provides concrete implementations (DirectReasoner, SequentialCoordinator, SimpleToolRegistry, etc.)
 
 pub mod coordinator;
+pub mod episodic_memory;
 pub mod memory;
 pub mod reasoner;
+pub mod semantic_memory;
 pub mod tool;
 
 // Note: tool_registry was removed - SimpleToolRegistry and EchoTool are now in tool.rs
@@ -60,6 +62,13 @@ pub use memory::{
     FileBasedStorage, InMemoryStorage, Memory, MemoryItem, MemoryStats, MemoryValue, Message,
     MessageRole,
 };
+
+// Episodic and Semantic memory (new long-term memory implementations)
+pub use episodic_memory::{Episode, EpisodicMemory};
+pub use semantic_memory::{HashEmbedder, SemanticMemory};
+
+// Embedder trait from kernel (re-exported for convenience)
+pub use mofa_kernel::agent::components::memory::Embedder;
 
 // Reasoner 实现
 // Reasoner implementations
