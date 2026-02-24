@@ -1,4 +1,4 @@
-name: Automated Issue Triage
+name: MoFA Automated Issue Triage
 
 on:
   issues:
