@@ -3,6 +3,7 @@
 //! Provides concrete implementations of the vector store trait defined
 //! in mofa-kernel, along with utilities for document chunking.
 
+pub mod adapter;
 pub mod chunker;
 pub mod similarity;
 pub mod vector_store;
@@ -10,6 +11,7 @@ pub mod vector_store;
 #[cfg(feature = "qdrant")]
 pub mod qdrant_store;
 
+pub use adapter::{GeneratorExt, PassthroughStreamingGenerator};
 pub use chunker::{ChunkConfig, TextChunker};
 pub use similarity::compute_similarity;
 pub use vector_store::InMemoryVectorStore;

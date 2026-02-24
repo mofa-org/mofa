@@ -18,9 +18,11 @@
 
 use anyhow::Result;
 use mofa_foundation::rag::{
-    ChunkConfig, DocumentChunk, InMemoryVectorStore, QdrantConfig, QdrantVectorStore,
-    SimilarityMetric, TextChunker, VectorStore,
+    ChunkConfig, DocumentChunk, GeneratorExt, InMemoryVectorStore, PassthroughStreamingGenerator,
+    QdrantConfig, QdrantVectorStore, SimilarityMetric, TextChunker, VectorStore,
 };
+use mofa_kernel::rag::{Generator, GeneratorChunk, PipelineResult};
+use async_trait::async_trait;
 
 /// Generate a simple deterministic embedding from text.
 ///
@@ -255,6 +257,139 @@ fn truncate_text(text: &str, max_len: usize) -> String {
     }
 }
 
+/// A mock generator that simulates LLM generation for demonstration.
+///
+/// In production, this would be replaced with a real LLM provider.
+#[derive(Debug, Clone)]
+struct MockGenerator {
+    /// Simulated response delay in milliseconds
+    delay_ms: u64,
+}
+
+impl MockGenerator {
+    fn new() -> Self {
+        Self { delay_ms: 100 }
+    }
+
+    /// Simulate token-by-token streaming
+    fn simulate_streaming_tokens(&self, response: &str) -> Vec<GeneratorChunk> {
+        let words: Vec<&str> = response.split_whitespace().collect();
+        let mut chunks = Vec::new();
+        
+        for (i, word) in words.iter().enumerate() {
+            // Add space before word except for first
+            if i > 0 {
+                chunks.push(GeneratorChunk::text(" "));
+            }
+            chunks.push(GeneratorChunk::text(*word));
+        }
+        
+        chunks.push(GeneratorChunk::end());
+        chunks
+    }
+}
+
+#[async_trait]
+impl Generator for MockGenerator {
+    async fn generate(&self, context: &str, query: &str) -> PipelineResult<String> {
+        // Simulate some processing time
+        tokio::time::sleep(tokio::time::Duration::from_millis(self.delay_ms)).await;
+        
+        // Build a simulated response
+        let response = format!(
+            "Based on the context provided, here's what I found about '{}':\n\n{}",
+            query,
+            context.lines().next().unwrap_or("No relevant information found.")
+        );
+        
+        Ok(response)
+    }
+
+    async fn stream(
+        &self,
+        context: &str,
+        query: &str,
+    ) -> PipelineResult<mofa_kernel::rag::GeneratorStream> {
+        // Get the complete response first
+        let response = self.generate(context, query).await?;
+        
+        // Create streaming chunks
+        let chunks = self.simulate_streaming_tokens(&response);
+        
+        let stream = futures::stream::iter(
+            chunks.into_iter().map(Ok::<_, mofa_kernel::rag::PipelineError>)
+        );
+        
+        Ok(Box::pin(stream))
+    }
+
+    fn supports_streaming(&self) -> bool {
+        true
+    }
+}
+
+/// Demonstrates streaming generation with the RAG pipeline.
+async fn streaming_generation_demo() -> Result<()> {
+    println!("--- Streaming Generation Demo ---\n");
+    
+    // Create a mock generator (in production, use a real LLM provider)
+    let generator = MockGenerator::new();
+    
+    // Wrap it with streaming support using the adapter
+    let streaming_generator = generator.clone().with_streaming();
+    
+    // Sample context from retrieval
+    let context = "MoFA is a modular framework for building AI agents in Rust. It uses a microkernel architecture.";
+    let query = "What is MoFA?";
+    
+    // Demonstrate blocking generation
+    println!("1. Blocking generation:");
+    let blocking_result = generator.generate(context, query).await?;
+    println!("   Result: {}\n", truncate_text(&blocking_result, 80));
+    
+    // Demonstrate streaming generation
+    println!("2. Streaming generation:");
+    print!("   Streaming output: \"");
+    
+    let stream = generator.stream(context, query).await?;
+    use futures::stream::StreamExt;
+    let mut stream = stream;
+    
+    while let Some(chunk_result) = stream.next().await {
+        match chunk_result? {
+            GeneratorChunk::Text(text) => {
+                print!("{}", text);
+            }
+            GeneratorChunk::End => {
+                println!("\" (end)");
+            }
+        }
+    }
+    
+    // Demonstrate the passthrough adapter
+    println!("\n3. Using PassthroughStreamingGenerator adapter:");
+    print!("   Adapter output: \"");
+    
+    let stream = streaming_generator.stream(context, query).await?;
+    let mut stream = stream;
+    
+    while let Some(chunk_result) = stream.next().await {
+        match chunk_result? {
+            GeneratorChunk::Text(text) => {
+                print!("{}", text);
+            }
+            GeneratorChunk::End => {
+                println!("\" (end)");
+            }
+        }
+    }
+    
+    println!("\n4. Generator supports streaming: {}", generator.supports_streaming());
+    println!();
+    
+    Ok(())
+}
+
 #[tokio::main]
 async fn main() -> Result<()> {
     tracing_subscriber::fmt()
@@ -269,6 +404,9 @@ async fn main() -> Result<()> {
     // Always run in-memory demos
     basic_rag_pipeline().await?;
     document_ingestion_demo().await?;
+    
+    // Run streaming generation demo
+    streaming_generation_demo().await?;
 
     // Run Qdrant demo if requested
     if mode == "qdrant" {

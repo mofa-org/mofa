@@ -91,6 +91,43 @@ pub enum SimilarityMetric {
     DotProduct,
 }
 
+/// A chunk returned from a streaming generator.
+///
+/// This enum represents the individual chunks produced during streaming
+/// generation, including text content and end-of-stream markers.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum GeneratorChunk {
+    /// A text chunk containing a portion of the generated content.
+    Text(String),
+    /// Signal that generation is complete.
+    End,
+}
+
+impl GeneratorChunk {
+    /// Create a new text chunk
+    pub fn text(content: impl Into<String>) -> Self {
+        Self::Text(content.into())
+    }
+
+    /// Create an end chunk
+    pub fn end() -> Self {
+        Self::End
+    }
+
+    /// Check if this is an end chunk
+    pub fn is_end(&self) -> bool {
+        matches!(self, Self::End)
+    }
+
+    /// Extract text content if this is a text chunk
+    pub fn as_text(&self) -> Option<&str> {
+        match self {
+            Self::Text(s) => Some(s),
+            Self::End => None,
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -123,5 +160,26 @@ mod tests {
     #[test]
     fn test_similarity_metric_default() {
         assert_eq!(SimilarityMetric::default(), SimilarityMetric::Cosine);
+    }
+
+    #[test]
+    fn test_generator_chunk_text() {
+        let chunk = GeneratorChunk::text("hello");
+        assert!(!chunk.is_end());
+        assert_eq!(chunk.as_text(), Some("hello"));
+    }
+
+    #[test]
+    fn test_generator_chunk_end() {
+        let chunk = GeneratorChunk::end();
+        assert!(chunk.is_end());
+        assert_eq!(chunk.as_text(), None);
+    }
+
+    #[test]
+    fn test_generator_chunk_owned() {
+        let chunk = GeneratorChunk::text("world");
+        let text = chunk.as_text().map(|s| s.to_uppercase());
+        assert_eq!(text, Some("WORLD".to_string()));
     }
 }
