@@ -561,6 +561,74 @@ mod tests {
     }
 
     #[test]
+    fn compile_fails_when_max_hops_is_zero() {
+        let graph = build_valid_graph().with_max_hops(0);
+        let err = graph.compile().unwrap_err();
+        assert_eq!(err, MessageGraphError::InvalidMaxHops(0));
+    }
+
+    #[test]
+    fn compile_fails_when_edge_target_missing() {
+        let mut graph = MessageGraph::new("missing_edge_target");
+        graph
+            .add_node(
+                "entry",
+                MessageNode::new(MessageNodeKind::Topic {
+                    topic: "topic.in".to_string(),
+                }),
+            )
+            .unwrap();
+        graph.add_entry_point("entry").unwrap();
+        graph
+            .add_edge(
+                "entry",
+                "missing",
+                RouteRule::Always,
+                DeliveryPolicy::default(),
+            )
+            .unwrap();
+
+        let err = graph.compile().unwrap_err();
+        assert_eq!(err, MessageGraphError::MissingNode("missing".to_string()));
+    }
+
+    #[test]
+    fn compile_fails_when_route_rule_is_invalid() {
+        let mut graph = MessageGraph::new("invalid_route_rule");
+        graph
+            .add_node(
+                "entry",
+                MessageNode::new(MessageNodeKind::Topic {
+                    topic: "topic.in".to_string(),
+                }),
+            )
+            .unwrap();
+        graph
+            .add_node(
+                "next",
+                MessageNode::new(MessageNodeKind::Topic {
+                    topic: "topic.out".to_string(),
+                }),
+            )
+            .unwrap();
+        graph.add_entry_point("entry").unwrap();
+        graph
+            .add_edge(
+                "entry",
+                "next",
+                RouteRule::MessageType("".to_string()),
+                DeliveryPolicy::default(),
+            )
+            .unwrap();
+
+        let err = graph.compile().unwrap_err();
+        assert_eq!(
+            err,
+            MessageGraphError::InvalidRouteRule("message type cannot be empty".to_string())
+        );
+    }
+
+    #[test]
     fn route_rule_filters_edges() {
         let graph = build_valid_graph();
         let compiled = graph.compile().unwrap();
@@ -571,5 +639,15 @@ mod tests {
         assert_eq!(edges.len(), 2);
         assert!(edges.iter().any(|e| e.to == "critical_agent"));
         assert!(edges.iter().any(|e| e.to == "normal_agent"));
+    }
+
+    #[test]
+    fn next_edges_returns_error_for_unknown_node() {
+        let graph = build_valid_graph();
+        let compiled = graph.compile().unwrap();
+        let envelope = MessageEnvelope::new("task", vec![]);
+
+        let err = compiled.next_edges("unknown", &envelope).unwrap_err();
+        assert_eq!(err, MessageGraphError::MissingNode("unknown".to_string()));
     }
 }
