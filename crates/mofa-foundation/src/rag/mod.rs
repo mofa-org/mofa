@@ -5,6 +5,7 @@
 
 pub mod chunker;
 pub mod similarity;
+pub mod streaming_generator;
 pub mod vector_store;
 
 #[cfg(feature = "qdrant")]
@@ -12,10 +13,15 @@ pub mod qdrant_store;
 
 pub use chunker::{ChunkConfig, TextChunker};
 pub use similarity::compute_similarity;
+pub use streaming_generator::PassthroughStreamingGenerator;
 pub use vector_store::InMemoryVectorStore;
 
 #[cfg(feature = "qdrant")]
 pub use qdrant_store::{QdrantConfig, QdrantVectorStore};
 
 // Re-export kernel types for convenience
-pub use mofa_kernel::rag::{DocumentChunk, SearchResult, SimilarityMetric, VectorStore};
+pub use mofa_kernel::rag::{
+    DocumentChunk, Generator, GeneratorChunk, RagPipeline, RagPipelineOutput, RerankInput,
+    RerankOutput, Reranker, RetrieveInput, RetrieveOutput, Retriever, ScoredDocument, SearchResult,
+    SimilarityMetric, VectorStore,
+};
