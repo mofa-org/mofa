@@ -15,6 +15,7 @@ pub fn compute_similarity(a: &[f32], b: &[f32], metric: SimilarityMetric) -> f32
             1.0 / (1.0 + dist)
         }
         SimilarityMetric::DotProduct => dot_product(a, b),
+        _ => 0.0,
     }
 }
 

@@ -51,7 +51,11 @@ use std::sync::Arc;
 /// }
 /// ```
 #[async_trait]
-pub trait Tool: Send + Sync {
+pub trait Tool<Args = serde_json::Value, Out = serde_json::Value>: Send + Sync
+where
+    Args: serde::de::DeserializeOwned + Send + Sync + 'static,
+    Out: serde::Serialize + Send + Sync + 'static,
+{
     /// 工具名称 (唯一标识符)
     /// Tool name (unique identifier)
     fn name(&self) -> &str;
@@ -66,7 +70,7 @@ pub trait Tool: Send + Sync {
 
     /// 执行工具
     /// Execute tool
-    async fn execute(&self, input: ToolInput, ctx: &AgentContext) -> ToolResult;
+    async fn execute(&self, input: ToolInput<Args>, ctx: &AgentContext) -> ToolResult<Out>;
 
     /// 工具元数据
     /// Tool metadata
@@ -76,7 +80,7 @@ pub trait Tool: Send + Sync {
 
     /// 验证输入
     /// Validate input
-    fn validate_input(&self, input: &ToolInput) -> AgentResult<()> {
+    fn validate_input(&self, input: &ToolInput<Args>) -> AgentResult<()> {
         // 默认不做验证，子类可以覆盖
         // No validation by default, subclasses can override
         let _ = input;
@@ -103,16 +107,30 @@ pub trait Tool: Send + Sync {
 /// 工具输入
 /// Tool Input
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ToolInput {
+pub struct ToolInput<Args = serde_json::Value> {
     /// 结构化参数
     /// Structured arguments
-    pub arguments: serde_json::Value,
+    pub arguments: Args,
     /// 原始输入 (可选)
     /// Raw input (optional)
     pub raw_input: Option<String>,
 }
 
-impl ToolInput {
+impl<Args> ToolInput<Args> {
+    /// Create from structured arguments
+    pub fn new(arguments: Args) -> Self {
+        Self {
+            arguments,
+            raw_input: None,
+        }
+    }
+
+    pub fn args(&self) -> &Args {
+        &self.arguments
+    }
+}
+
+impl ToolInput<serde_json::Value> {
     /// 从 JSON 参数创建
     /// Create from JSON arguments
     pub fn from_json(arguments: serde_json::Value) -> Self {
@@ -159,19 +177,19 @@ impl ToolInput {
     }
 }
 
-impl From<serde_json::Value> for ToolInput {
+impl From<serde_json::Value> for ToolInput<serde_json::Value> {
     fn from(v: serde_json::Value) -> Self {
         Self::from_json(v)
     }
 }
 
-impl From<String> for ToolInput {
+impl From<String> for ToolInput<serde_json::Value> {
     fn from(s: String) -> Self {
         Self::from_raw(s)
     }
 }
 
-impl From<&str> for ToolInput {
+impl From<&str> for ToolInput<serde_json::Value> {
     fn from(s: &str) -> Self {
         Self::from_raw(s)
     }
@@ -180,13 +198,13 @@ impl From<&str> for ToolInput {
 /// 工具执行结果
 /// Tool Execution Result
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ToolResult {
+pub struct ToolResult<Out = serde_json::Value> {
     /// 是否成功
     /// Whether successful
     pub success: bool,
     /// 输出内容
     /// Output content
-    pub output: serde_json::Value,
+    pub output: Out,
     /// 错误信息 (如果失败)
     /// Error message (if failed)
     pub error: Option<String>,
@@ -195,10 +213,10 @@ pub struct ToolResult {
     pub metadata: HashMap<String, String>,
 }
 
-impl ToolResult {
+impl<Out> ToolResult<Out> {
     /// 创建成功结果
     /// Create success result
-    pub fn success(output: serde_json::Value) -> Self {
+    pub fn success(output: Out) -> Self {
         Self {
             success: true,
             output,
@@ -207,6 +225,14 @@ impl ToolResult {
         }
     }
 
+    /// Add metadata
+    pub fn with_metadata(mut self, key: impl Into<String>, value: impl Into<String>) -> Self {
+        self.metadata.insert(key.into(), value.into());
+        self
+    }
+}
+
+impl ToolResult<serde_json::Value> {
     /// 创建文本成功结果
     /// Create text success result
     pub fn success_text(text: impl Into<String>) -> Self {
@@ -222,13 +248,6 @@ impl ToolResult {
             error: Some(error.into()),
             metadata: HashMap::new(),
         }
-    }
-
-    /// 添加元数据
-    /// Add metadata
-    pub fn with_metadata(mut self, key: impl Into<String>, value: impl Into<String>) -> Self {
-        self.metadata.insert(key.into(), value.into());
-        self
     }
 
     /// 获取文本输出
@@ -342,7 +361,21 @@ pub struct ToolDescriptor {
 impl ToolDescriptor {
     /// 从 Tool 创建描述符
     /// Create descriptor from Tool
-    pub fn from_tool(tool: &dyn Tool) -> Self {
+    pub fn from_tool<Args, Out>(tool: &dyn Tool<Args, Out>) -> Self
+    where
+        Args: serde::de::DeserializeOwned + Send + Sync + 'static,
+        Out: serde::Serialize + Send + Sync + 'static,
+    {
+        Self {
+            name: tool.name().to_string(),
+            description: tool.description().to_string(),
+            parameters_schema: tool.parameters_schema(),
+            metadata: tool.metadata(),
+        }
+    }
+
+    /// Create descriptor from DynTool
+    pub fn from_dyn_tool(tool: &dyn DynTool) -> Self {
         Self {
             name: tool.name().to_string(),
             description: tool.description().to_string(),
@@ -372,17 +405,90 @@ pub struct LLMTool {
 // Tool Registry Trait (Interface defined here only)
 // ============================================================================
 
+/// Dynamic Tool Interface (for object safety and type erasure)
+#[async_trait]
+pub trait DynTool: Send + Sync {
+    fn name(&self) -> &str;
+    fn description(&self) -> &str;
+    fn parameters_schema(&self) -> serde_json::Value;
+    async fn execute_dynamic(&self, input: serde_json::Value, ctx: &AgentContext) -> AgentResult<serde_json::Value>;
+    fn metadata(&self) -> ToolMetadata;
+    fn validate_dynamic_input(&self, input: &serde_json::Value) -> AgentResult<()>;
+    fn requires_confirmation(&self) -> bool;
+    fn to_llm_tool(&self) -> LLMTool;
+}
+
+pub struct DynToolWrapper<T, Args, Out> {
+    tool: T,
+    _phantom: std::marker::PhantomData<(Args, Out)>,
+}
+
+pub trait ToolExt<Args, Out>: Tool<Args, Out> + Sized + Send + Sync + 'static
+where
+    Args: serde::de::DeserializeOwned + Send + Sync + 'static,
+    Out: serde::Serialize + Send + Sync + 'static,
+{
+    fn into_dynamic(self) -> std::sync::Arc<dyn DynTool> {
+        std::sync::Arc::new(DynToolWrapper {
+            tool: self,
+            _phantom: std::marker::PhantomData,
+        })
+    }
+}
+impl<T, Args, Out> ToolExt<Args, Out> for T
+where
+    T: Tool<Args, Out> + Send + Sync + 'static,
+    Args: serde::de::DeserializeOwned + Send + Sync + 'static,
+    Out: serde::Serialize + Send + Sync + 'static,
+{}
+
+#[async_trait]
+impl<T, Args, Out> DynTool for DynToolWrapper<T, Args, Out>
+where
+    T: Tool<Args, Out> + Send + Sync,
+    Args: serde::de::DeserializeOwned + Send + Sync + 'static,
+    Out: serde::Serialize + Send + Sync + 'static,
+{
+    fn name(&self) -> &str { Tool::name(&self.tool) }
+    fn description(&self) -> &str { Tool::description(&self.tool) }
+    fn parameters_schema(&self) -> serde_json::Value { Tool::parameters_schema(&self.tool) }
+    fn metadata(&self) -> ToolMetadata { Tool::metadata(&self.tool) }
+    fn requires_confirmation(&self) -> bool { Tool::requires_confirmation(&self.tool) }
+    fn to_llm_tool(&self) -> LLMTool { Tool::to_llm_tool(&self.tool) }
+
+    fn validate_dynamic_input(&self, input: &serde_json::Value) -> AgentResult<()> {
+        let args: Args = serde_json::from_value(input.clone())
+            .map_err(|e| AgentError::InvalidInput(format!("Tool {} args mapping error: {}", self.name(), e)))?;
+        self.tool.validate_input(&ToolInput::new(args))
+    }
+
+    async fn execute_dynamic(&self, input: serde_json::Value, ctx: &AgentContext) -> AgentResult<serde_json::Value> {
+        let args: Args = serde_json::from_value(input)
+            .map_err(|e| AgentError::InvalidInput(format!("Tool {} args mapping error: {}", self.name(), e)))?;
+        let tool_input = ToolInput::new(args);
+        let result = self.tool.execute(tool_input, ctx).await;
+        if !result.success {
+            return Err(AgentError::ToolExecutionFailed {
+                tool_name: self.name().to_string(),
+                message: result.error.unwrap_or_default(),
+            });
+        }
+        serde_json::to_value(result.output)
+            .map_err(|e| AgentError::ExecutionFailed(format!("Tool {} output serialize error: {}", self.name(), e)))
+    }
+}
+
 /// 定义工具注册的接口，具体实现在 foundation 层。
 /// Defines the tool registration interface, with concrete implementation in the foundation layer.
 #[async_trait]
 pub trait ToolRegistry: Send + Sync {
     /// 注册工具
     /// Register tool
-    fn register(&mut self, tool: Arc<dyn Tool>) -> AgentResult<()>;
+    fn register(&mut self, tool: Arc<dyn DynTool>) -> AgentResult<()>;
 
     /// 批量注册工具
     /// Batch register tools
-    fn register_all(&mut self, tools: Vec<Arc<dyn Tool>>) -> AgentResult<()> {
+    fn register_all(&mut self, tools: Vec<Arc<dyn DynTool>>) -> AgentResult<()> {
         for tool in tools {
             self.register(tool)?;
         }
@@ -391,7 +497,7 @@ pub trait ToolRegistry: Send + Sync {
 
     /// 获取工具
     /// Get tool
-    fn get(&self, name: &str) -> Option<Arc<dyn Tool>>;
+    fn get(&self, name: &str) -> Option<Arc<dyn DynTool>>;
 
     /// 移除工具
     /// Remove tool
@@ -415,17 +521,29 @@ pub trait ToolRegistry: Send + Sync {
 
     /// 执行工具
     /// Execute tool
-    async fn execute(
+    async fn execute<Args, Out>(
         &self,
         name: &str,
-        input: ToolInput,
+        input: ToolInput<Args>,
         ctx: &AgentContext,
-    ) -> AgentResult<ToolResult> {
+    ) -> AgentResult<ToolResult<Out>>
+    where
+        Args: serde::Serialize + Send + Sync + 'static,
+        Out: serde::de::DeserializeOwned + Send + Sync + 'static,
+    {
         let tool = self
             .get(name)
             .ok_or_else(|| AgentError::ToolNotFound(name.to_string()))?;
-        tool.validate_input(&input)?;
-        Ok(tool.execute(input, ctx).await)
+            
+        let json_input = serde_json::to_value(&input.arguments)
+            .map_err(|e| AgentError::InvalidInput(format!("Failed to serialize args for tool {}: {}", name, e)))?;
+            
+        let json_output = tool.execute_dynamic(json_input, ctx).await?;
+        
+        let output: Out = serde_json::from_value(json_output)
+            .map_err(|e| AgentError::ExecutionFailed(format!("Failed to deserialize output from tool {}: {}", name, e)))?;
+            
+        Ok(ToolResult::success(output))
     }
 
     /// 转换为 LLM Tools

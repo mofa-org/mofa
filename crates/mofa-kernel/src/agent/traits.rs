@@ -27,6 +27,7 @@ pub type DynAgent = Arc<RwLock<dyn MoFAAgent>>;
 /// Agent 健康状态
 /// Agent health status
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
+#[non_exhaustive]
 pub enum HealthStatus {
     /// 健康
     /// Healthy
