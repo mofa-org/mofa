@@ -248,7 +248,7 @@ pub fn is_dora_available() -> bool {
 
 /// Create a new LLM Agent Builder
 pub fn new_llm_agent_builder() -> Result<std::sync::Arc<LLMAgentBuilder>, MoFaError> {
-    Ok(LLMAgentBuilder::create())
+    LLMAgentBuilder::create()
 }
 
 // =============================================================================
@@ -555,15 +555,13 @@ pub struct LLMAgentBuilder {
 
 impl LLMAgentBuilder {
     /// Create a new builder
-    pub fn create() -> Arc<Self> {
+    pub fn create() -> Result<Arc<Self>, MoFaError> {
         let runtime = tokio::runtime::Runtime::new()
-            .map_err(|e| MoFaError::RuntimeError(e.to_string()))
-            .unwrap();
-
-        Arc::new(Self {
+            .map_err(|e| MoFaError::RuntimeError(e.to_string()))?;
+        Ok(Arc::new(Self {
             state: Arc::new(StdMutex::new(BuilderState::default())),
             runtime: Arc::new(runtime),
-        })
+        }))
     }
 
     /// Set agent ID
@@ -824,15 +822,26 @@ pub struct SessionManager {
 
 impl SessionManager {
     /// Create a new in-memory session manager
-    pub fn new_in_memory() -> Self {
-        let runtime = tokio::runtime::Runtime::new().unwrap();
-        let storage =
-            Box::new(mofa_foundation::agent::session::MemorySessionStorage::new());
+    /// Internal fallible constructor
+    pub(crate) fn try_new_in_memory() -> Result<Self, MoFaError> {
+        let runtime = tokio::runtime::Runtime::new()
+            .map_err(|e| MoFaError::RuntimeError(e.to_string()))?;
+        let storage = Box::new(mofa_foundation::agent::session::MemorySessionStorage::new());
         let manager = mofa_foundation::agent::session::SessionManager::with_storage(storage);
-
-        Self {
+        Ok(Self {
             inner: Arc::new(RwLock::new(manager)),
             runtime: Arc::new(runtime),
+        })
+    }
+
+    /// FFI-safe infallible constructor. Logs error and aborts if runtime creation fails.
+    pub fn new_in_memory() -> Self {
+        match Self::try_new_in_memory() {
+            Ok(manager) => manager,
+            Err(e) => {
+                eprintln!("SessionManager::new_in_memory: failed to create in-memory session manager: {}", e);
+                std::process::abort();
+            }
         }
     }
 
@@ -990,9 +999,9 @@ impl ToolRegistry {
 
     /// Register a foreign-language tool via callback
     pub fn register_tool(&self, tool: Box<dyn FfiToolCallback>) -> Result<(), MoFaError> {
-        use mofa_kernel::agent::components::tool::ToolRegistry as _;
+        use mofa_kernel::agent::components::tool::{ToolRegistry as _, ToolExt};
         let adapter = CallbackToolAdapter::new(tool);
-        let tool_arc: Arc<dyn mofa_kernel::agent::components::tool::Tool> = Arc::new(adapter);
+        let tool_arc = adapter.into_dynamic();
         self.inner
             .lock()
             .unwrap()
@@ -1066,19 +1075,24 @@ impl ToolRegistry {
                 MoFaError::InvalidArgument(format!("Invalid JSON arguments: {}", e))
             })?;
 
-        let input = mofa_kernel::agent::components::tool::ToolInput::from_json(arguments);
-
         // Execute synchronously using a runtime
         let runtime = tokio::runtime::Runtime::new()
             .map_err(|e| MoFaError::RuntimeError(e.to_string()))?;
 
         let ctx = mofa_kernel::agent::context::AgentContext::new("ffi-execution");
-        let result = runtime.block_on(tool.execute(input, &ctx));
+        let result = runtime.block_on(tool.execute_dynamic(arguments, &ctx));
 
-        Ok(FfiToolResult {
-            success: result.success,
-            output_json: result.output.to_string(),
-            error: result.error,
-        })
+        match result {
+            Ok(output) => Ok(FfiToolResult {
+                success: true,
+                output_json: output.to_string(),
+                error: None,
+            }),
+            Err(e) => Ok(FfiToolResult {
+                success: false,
+                output_json: "{}".to_string(),
+                error: Some(e.to_string()),
+            }),
+        }
     }
 }

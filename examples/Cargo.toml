@@ -7,11 +7,13 @@ members = [
     "wasm_plugin",
     "multi_agent_coordination",
     "monitoring_dashboard",
+    "visual_debugger_demo",
     "config",
     "chat_stream",
     "secretary_agent",
     "react_agent",
     "rhai_scripting",
+    "runtime_periodic_runner",
     "runtime_example",
     "hitl_secretary",
     "streaming_persistence",
@@ -26,7 +28,8 @@ members = [
     "reflection_agent",
     "tool_routing",
     "runtime_message_bus_backpressure",
-    "rag_pipeline"
+    "rag_pipeline",
+    "agent_builder"
 ]
 
 [workspace.package]

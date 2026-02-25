@@ -8,6 +8,7 @@ use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fmt;
+use base64::Engine;
 
 // 导出统一类型模块
 // Export unified type modules
@@ -30,6 +31,7 @@ pub use global::{GlobalMessage, MessageContent, MessageMetadata};
 /// Agent 状态机
 /// Agent state machine
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, Default)]
+#[non_exhaustive]
 pub enum AgentState {
     /// 已创建，未初始化
     /// Created, not initialized
@@ -172,6 +174,7 @@ impl AgentState {
 /// Agent 输入类型
 /// Agent input type
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[non_exhaustive]
 pub enum AgentInput {
     /// 文本输入
     /// Text input
@@ -257,7 +260,9 @@ impl AgentInput {
             Self::Json(v) => v.clone(),
             Self::Map(m) => serde_json::to_value(m).unwrap_or_default(),
             Self::Multimodal(parts) => serde_json::json!({ "parts": parts }),
-            Self::Binary(b) => serde_json::json!({ "binary": base64_encode(b) }),
+            Self::Binary(b) => {
+                serde_json::json!({ "binary": base64::engine::general_purpose::STANDARD.encode(b) })
+            }
             Self::Empty => serde_json::Value::Null,
         }
     }
@@ -431,6 +436,7 @@ impl AgentOutput {
 /// 输出内容类型
 /// Output content type
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[non_exhaustive]
 pub enum OutputContent {
     /// 文本输出
     /// Text output
@@ -564,10 +570,7 @@ impl ReasoningStep {
         content: impl Into<String>,
         step_number: usize,
     ) -> Self {
-        let now = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_millis() as u64;
+        let now = crate::utils::now_ms();
 
         Self {
             step_type,
@@ -581,6 +584,7 @@ impl ReasoningStep {
 /// 推理步骤类型
 /// Reasoning step type
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub enum ReasoningStepType {
     /// 思考
     /// Thought
@@ -746,6 +750,7 @@ pub trait LLMProvider: Send + Sync {
 /// 中断处理结果
 /// Interrupt handling result
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[non_exhaustive]
 pub enum InterruptResult {
     /// 中断已确认，继续执行
     /// Interrupt acknowledged, continue execution
@@ -780,6 +785,7 @@ pub enum InterruptResult {
 /// 支持的输入类型
 /// Supported input types
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[non_exhaustive]
 pub enum InputType {
     Text,
     Image,
@@ -792,6 +798,7 @@ pub enum InputType {
 /// 支持的输出类型
 /// Supported output types
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[non_exhaustive]
 pub enum OutputType {
     Text,
     Json,
@@ -799,44 +806,6 @@ pub enum OutputType {
     Stream,
     Binary,
     Multimodal,
-}
-
-// ============================================================================
-// 辅助函数
-// Helper functions
-// ============================================================================
-
-fn base64_encode(data: &[u8]) -> String {
-    const CHARS: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-    let mut result = Vec::new();
-
-    for chunk in data.chunks(3) {
-        let (n, _pad) = match chunk.len() {
-            1 => (((chunk[0] as u32) << 16), 2),
-            2 => (((chunk[0] as u32) << 16) | ((chunk[1] as u32) << 8), 1),
-            _ => (
-                ((chunk[0] as u32) << 16) | ((chunk[1] as u32) << 8) | (chunk[2] as u32),
-                0,
-            ),
-        };
-
-        result.push(CHARS[((n >> 18) & 0x3F) as usize]);
-        result.push(CHARS[((n >> 12) & 0x3F) as usize]);
-
-        if chunk.len() > 1 {
-            result.push(CHARS[((n >> 6) & 0x3F) as usize]);
-        } else {
-            result.push(b'=');
-        }
-
-        if chunk.len() > 2 {
-            result.push(CHARS[(n & 0x3F) as usize]);
-        } else {
-            result.push(b'=');
-        }
-    }
-
-    String::from_utf8(result).unwrap_or_default()
 }
 
 #[cfg(test)]

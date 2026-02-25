@@ -14,6 +14,7 @@ pub type AgentResult<T> = Result<T, AgentError>;
 /// Agent 错误类型
 /// Agent error types
 #[derive(Debug, Error)]
+#[non_exhaustive]
 pub enum AgentError {
     /// Agent 未找到
     /// Agent not found
@@ -184,6 +185,26 @@ impl From<anyhow::Error> for AgentError {
     }
 }
 
+#[cfg(feature = "config")]
+impl From<crate::config::ConfigError> for AgentError {
+    fn from(err: crate::config::ConfigError) -> Self {
+        match err {
+            crate::config::ConfigError::Io(e) => {
+                AgentError::ConfigError(format!("Failed to read config file: {}", e))
+            }
+            crate::config::ConfigError::Parse(e) => {
+                AgentError::ConfigError(format!("Failed to parse config: {}", e))
+            }
+            crate::config::ConfigError::UnsupportedFormat(e) => {
+                AgentError::ConfigError(format!("Unsupported config format: {}", e))
+            }
+            crate::config::ConfigError::Serialization(e) => {
+                AgentError::ConfigError(format!("Failed to deserialize config: {}", e))
+            }
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -203,5 +224,17 @@ mod tests {
         let err = AgentError::tool_execution_failed("calculator", "division by zero");
         assert!(err.to_string().contains("calculator"));
         assert!(err.to_string().contains("division by zero"));
+    }
+
+    #[cfg(feature = "config")]
+    #[test]
+    fn config_error_converts_via_from() {
+        let config_err = crate::config::ConfigError::Parse("bad yaml".into());
+        let agent_err: AgentError = config_err.into();
+
+        assert!(matches!(agent_err, AgentError::ConfigError(_)));
+        if let AgentError::ConfigError(msg) = agent_err {
+            assert!(msg.contains("bad yaml"));
+        }
     }
 }
