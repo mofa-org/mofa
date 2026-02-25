@@ -32,12 +32,17 @@ jobs:
 
       - name: Search for similar open issues
         id: search_issues
+        env:
+          CURRENT_ISSUE_TITLE: ${{ steps.current_issue.outputs.title }}
+          CURRENT_ISSUE_NUMBER: ${{ steps.current_issue.outputs.number }}
         uses: actions/github-script@v7
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
-            const currentTitle = `${{ steps.current_issue.outputs.title }}`;
-            const currentNumber = ${{ steps.current_issue.outputs.number }};
+            // Read values safely from environment to avoid breaking JS when
+            // titles contain backticks or other special characters.
+            const currentTitle = process.env.CURRENT_ISSUE_TITLE || '';
+            const currentNumber = parseInt(process.env.CURRENT_ISSUE_NUMBER || '0', 10);
             
             // Extract key words from title for search
             const searchTerms = currentTitle
