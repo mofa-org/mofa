@@ -216,6 +216,7 @@ def register_search_commands(cli_group):
 
         # Both local and remote (default)
         local_matches = [name for name in local_agents if keyword_lower in name.lower()]
+        remote_matches = []
 
         if local_matches:
             click.echo(f"Local agents matching '{keyword}' ({len(local_matches)}):")
@@ -242,14 +243,8 @@ def register_search_commands(cli_group):
         except Exception as e:
             click.echo(f"\nError searching remote agents: {e}", err=True)
 
-        if not local_matches:
-            try:
-                hub = HubClient()
-                remote_matches = hub.search_agents(keyword)
-                if not remote_matches:
-                    click.echo(f"No agents found matching '{keyword}'")
-            except:
-                pass
+        if not local_matches and not remote_matches:
+            click.echo(f"No agents found matching '{keyword}'")
 
     @search.command()
     @click.argument("keyword", required=True)
@@ -299,6 +294,7 @@ def register_search_commands(cli_group):
 
         # Both local and remote (default)
         local_matches = [name for name in local_flows if keyword_lower in name.lower()]
+        remote_matches = []
 
         if local_matches:
             click.echo(f"Local flows matching '{keyword}' ({len(local_matches)}):")
@@ -325,11 +321,5 @@ def register_search_commands(cli_group):
         except Exception as e:
             click.echo(f"\nError searching remote flows: {e}", err=True)
 
-        if not local_matches:
-            try:
-                hub = HubClient()
-                remote_matches = hub.search_flows(keyword)
-                if not remote_matches:
-                    click.echo(f"No flows found matching '{keyword}'")
-            except:
-                pass
+        if not local_matches and not remote_matches:
+            click.echo(f"No flows found matching '{keyword}'")
