@@ -202,6 +202,9 @@ impl<S: GraphState + 'static> mofa_kernel::workflow::StateGraph for StateGraphIm
             None => {
                 self.edges.insert(from_id, EdgeTarget::single(to_id));
             }
+            _ => {
+                warn!("Unhandled EdgeTarget variant for '{}'", from_id);
+            }
         }
 
         self
@@ -333,8 +336,10 @@ impl<S: GraphState> CompiledGraphImpl<S> {
                             .unwrap_or_default()
                     }
                     None => vec![],
+                    _ => vec![],
                 }
             }
+            _ => vec![],
         }
     }
 
@@ -358,7 +363,7 @@ impl<S: GraphState> CompiledGraphImpl<S> {
 }
 
 #[async_trait]
-impl<S: GraphState + 'static> CompiledGraph<S> for CompiledGraphImpl<S> {
+impl<S: GraphState + 'static> CompiledGraph<S, serde_json::Value> for CompiledGraphImpl<S> {
     fn id(&self) -> &str {
         &self.id
     }
@@ -440,11 +445,11 @@ impl<S: GraphState + 'static> CompiledGraph<S> for CompiledGraphImpl<S> {
         Ok(state)
     }
 
-    async fn stream(
+    fn stream(
         &self,
         input: S,
-        config: Option<RuntimeContext>,
-    ) -> AgentResult<Pin<Box<dyn Stream<Item = AgentResult<StreamEvent<S>>> + Send>>> {
+        config: Option<RuntimeContext<serde_json::Value>>,
+    ) -> mofa_kernel::workflow::graph::GraphStream<'_, S, serde_json::Value> {
         let ctx =
             config.unwrap_or_else(|| RuntimeContext::with_config(&self.id, self.config.clone()));
 
@@ -492,8 +497,10 @@ impl<S: GraphState + 'static> CompiledGraph<S> for CompiledGraphImpl<S> {
                                     .unwrap_or_default()
                             }
                             None => vec![],
+                            _ => vec![],
                         }
                     }
+                    _ => vec![],
                 }
             };
 
@@ -612,10 +619,14 @@ impl<S: GraphState + 'static> CompiledGraph<S> for CompiledGraphImpl<S> {
         });
 
         // Convert receiver to stream
-        Ok(Box::pin(tokio_stream::wrappers::ReceiverStream::new(rx)))
+        Box::pin(tokio_stream::wrappers::ReceiverStream::new(rx))
     }
 
-    async fn step(&self, input: S, config: Option<RuntimeContext>) -> AgentResult<StepResult<S>> {
+    async fn step(
+        &self,
+        input: S,
+        config: Option<RuntimeContext<serde_json::Value>>,
+    ) -> AgentResult<StepResult<S, serde_json::Value>> {
         let ctx =
             config.unwrap_or_else(|| RuntimeContext::with_config(&self.id, self.config.clone()));
 
