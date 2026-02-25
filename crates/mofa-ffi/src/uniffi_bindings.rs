@@ -999,9 +999,9 @@ impl ToolRegistry {
 
     /// Register a foreign-language tool via callback
     pub fn register_tool(&self, tool: Box<dyn FfiToolCallback>) -> Result<(), MoFaError> {
-        use mofa_kernel::agent::components::tool::ToolRegistry as _;
+        use mofa_kernel::agent::components::tool::{ToolRegistry as _, ToolExt};
         let adapter = CallbackToolAdapter::new(tool);
-        let tool_arc: Arc<dyn mofa_kernel::agent::components::tool::Tool> = Arc::new(adapter);
+        let tool_arc = adapter.into_dynamic();
         self.inner
             .lock()
             .unwrap()
@@ -1075,19 +1075,24 @@ impl ToolRegistry {
                 MoFaError::InvalidArgument(format!("Invalid JSON arguments: {}", e))
             })?;
 
-        let input = mofa_kernel::agent::components::tool::ToolInput::from_json(arguments);
-
         // Execute synchronously using a runtime
         let runtime = tokio::runtime::Runtime::new()
             .map_err(|e| MoFaError::RuntimeError(e.to_string()))?;
 
         let ctx = mofa_kernel::agent::context::AgentContext::new("ffi-execution");
-        let result = runtime.block_on(tool.execute(input, &ctx));
+        let result = runtime.block_on(tool.execute_dynamic(arguments, &ctx));
 
-        Ok(FfiToolResult {
-            success: result.success,
-            output_json: result.output.to_string(),
-            error: result.error,
-        })
+        match result {
+            Ok(output) => Ok(FfiToolResult {
+                success: true,
+                output_json: output.to_string(),
+                error: None,
+            }),
+            Err(e) => Ok(FfiToolResult {
+                success: false,
+                output_json: "{}".to_string(),
+                error: Some(e.to_string()),
+            }),
+        }
     }
 }

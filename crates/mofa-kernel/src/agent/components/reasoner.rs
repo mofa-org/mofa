@@ -158,10 +158,7 @@ impl ThoughtStep {
     /// 创建新的思考步骤
     /// Create a new thought step
     pub fn new(step_type: ThoughtStepType, content: impl Into<String>, step_number: usize) -> Self {
-        let now = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_millis() as u64;
+        let now = crate::utils::now_ms();
 
         Self {
             step_type,

@@ -28,7 +28,9 @@ thiserror.workspace = true
 eyre.workspace = true
 
 # Local dependencies
-mofa-kernel = { path = "../mofa-kernel", version = "0.1", features = ["config"] }
+mofa-kernel = { path = "../mofa-kernel", version = "0.1", features = [
+    "config",
+] }
 mofa-plugins = { path = "../mofa-plugins", version = "0.1" }
 mofa-monitoring = { path = "../mofa-monitoring", version = "0.1", optional = true }
 # Dora-rs dependencies
@@ -40,14 +42,20 @@ dora-message = { version = "0", optional = true }
 
 serde_yaml = { workspace = true }
 toml = "0.8"
-croner = "2.0"
 chrono = { workspace = true }
 config.workspace = true
 regex.workspace = true
+cron = "0.12"
 
 [lints]
 workspace = true
 
 [features]
-dora = ["dora-node-api", "dora-operator-api", "dora-daemon", "dora-core", "dora-message"]
+dora = [
+    "dora-node-api",
+    "dora-operator-api",
+    "dora-daemon",
+    "dora-core",
+    "dora-message",
+]
 monitoring = ["dep:mofa-monitoring"]

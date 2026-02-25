@@ -20,10 +20,10 @@ pub mod execution;
 pub mod plugins;
 pub mod registry;
 
-// 重新导出常用类型
 // Re-export commonly used types
 pub use crate::runner::{
-    AgentRunner, AgentRunnerBuilder, PeriodicRunConfig, RunnerState, RunnerStats, run_agents,
+    AgentRunner, AgentRunnerBuilder, CronMisfirePolicy, CronRunConfig, PeriodicMissedTickPolicy,
+    PeriodicRunConfig, RunnerState, RunnerStats, run_agents,
 };
 pub use execution::{ExecutionEngine, ExecutionOptions, ExecutionResult, ExecutionStatus};
 pub use mofa_kernel::agent::registry::AgentFactory;
