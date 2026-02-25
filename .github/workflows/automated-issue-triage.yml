@@ -21,6 +21,9 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Install jq
+        run: sudo apt-get update && sudo apt-get install -y jq
+
       - name: Determine issue number
         id: issue
         run: |
@@ -87,7 +90,9 @@ jobs:
       - name: Build issue context
         id: build_context
         run: |
-          ISSUE_NUMBER=${{ steps.issue.outputs.number }}
+          set -euo pipefail
+          
+          ISSUE_NUMBER="${{ steps.issue.outputs.number }}"
           ISSUE_TITLE="${{ steps.issue_details.outputs.title }}"
           ISSUE_BODY="${{ steps.issue_details.outputs.body }}"
           ISSUE_AUTHOR="${{ steps.issue_details.outputs.author }}"
@@ -97,12 +102,12 @@ jobs:
           
           # Create JSON for single issue
           ISSUE_JSON=$(jq -n \
-            --arg number "$ISSUE_NUMBER" \
-            --arg title "$ISSUE_TITLE" \
-            --arg body "$ISSUE_BODY" \
-            --arg author "$ISSUE_AUTHOR" \
-            --argjson labels "$ISSUE_LABELS" \
-            --argjson comments "$ISSUE_COMMENTS" \
+            --arg number "${ISSUE_NUMBER}" \
+            --arg title "${ISSUE_TITLE}" \
+            --arg body "${ISSUE_BODY}" \
+            --arg author "${ISSUE_AUTHOR}" \
+            --argjson labels "${ISSUE_LABELS}" \
+            --argjson comments "${ISSUE_COMMENTS}" \
             '[{
               "number": ($number | tonumber),
               "title": $title,
@@ -113,7 +118,7 @@ jobs:
             }]')
           
           echo "issues_json<<EOF" >> $GITHUB_OUTPUT
-          echo "$ISSUE_JSON" >> $GITHUB_OUTPUT
+          echo "${ISSUE_JSON}" >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
 
       - name: Triage issue with Gemini
