@@ -183,14 +183,14 @@ jobs:
               body: comment
             });
             
-            // Close the issue
-            await github.rest.issues.update({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: currentNumber,
-              state: 'closed',
-              state_reason: 'not_planned'
-            });
+            // Close the issue (disabled for manual confirmation flow)
+            // await github.rest.issues.update({
+            //   owner: context.repo.owner,
+            //   repo: context.repo.repo,
+            //   issue_number: currentNumber,
+            //   state: 'closed',
+            //   state_reason: 'not_planned'
+            // });
             
             // Add duplicate label if it exists
             try {
