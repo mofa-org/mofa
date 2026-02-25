@@ -455,6 +455,13 @@ def build_env(base_env: dict, venv_info: dict):
     return env
 
 
+def cleanup_existing_dora_processes():
+    """Best-effort cleanup for Dora daemon state without global process killing."""
+    click.echo("Cleaning up existing dora daemon state...")
+    destroy_dora_daemon()
+    time.sleep(1)
+
+
 def run_flow(dataflow_file: str, vibe_test_mode: bool = False, detach: bool = False, no_terminal: bool = False):
     """Execute a dataflow from the given YAML file.
 
@@ -534,18 +541,8 @@ def run_flow(dataflow_file: str, vibe_test_mode: bool = False, detach: bool = Fa
         click.echo("Please ensure dora-rs is installed correctly.")
         return
 
-    # Clean up any existing dora processes to avoid conflicts
-    click.echo("Cleaning up existing dora processes...")
-    try:
-        subprocess.run(["pkill", "-f", "dora"], capture_output=True, check=False)
-    except FileNotFoundError:
-        # pkill might not be available on all systems, try alternative
-        try:
-            subprocess.run(["killall", "dora"], capture_output=True, check=False)
-        except FileNotFoundError:
-            # If neither pkill nor killall is available, skip cleanup
-            pass
-    time.sleep(1)
+    # Clean up existing Dora daemon state before starting a new run.
+    cleanup_existing_dora_processes()
 
     env_info = None
     run_env = os.environ.copy()
