@@ -5,6 +5,7 @@
 //! Contains Agent capability descriptions and component trait definitions
 
 pub mod base;
+pub mod builder;
 pub mod components;
 pub mod context;
 pub mod executor;
@@ -88,6 +89,9 @@ pub use session::{
 
 // Re-export executor module
 pub use executor::{AgentExecutor, AgentExecutorConfig};
+
+// Re-export builder module
+pub use builder::{AgentBuilder, AgentProfile, AgentRegistry};
 
 // Re-export LLM types from kernel
 pub use mofa_kernel::agent::types::{
