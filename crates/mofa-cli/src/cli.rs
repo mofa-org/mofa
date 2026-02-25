@@ -338,6 +338,10 @@ pub enum PluginCommands {
         /// Show available plugins
         #[arg(long)]
         available: bool,
+
+        /// Refresh the catalog before listing available plugins
+        #[arg(long)]
+        refresh: bool,
     },
 
     /// Show plugin information
@@ -350,6 +354,17 @@ pub enum PluginCommands {
     Install {
         /// Plugin name or path
         name: String,
+    },
+
+    /// Sync plugin catalog from the remote repository
+    Sync {
+        /// Catalog URL override
+        #[arg(long)]
+        url: Option<String>,
+
+        /// Network timeout in seconds
+        #[arg(long)]
+        timeout: Option<u64>,
     },
 
     /// Uninstall a plugin
@@ -454,6 +469,22 @@ impl std::fmt::Display for ExportFormat {
 /// Tool management subcommands
 #[derive(Subcommand)]
 pub enum ToolCommands {
+    /// Enable a tool
+    Enable {
+        /// Tool name
+        name: String,
+    },
+
+    /// Disable a tool
+    Disable {
+        /// Tool name
+        name: String,
+
+        /// Skip confirmation prompt
+        #[arg(short, long)]
+        force: bool,
+    },
+
     /// List tools
     List {
         /// Show available tools

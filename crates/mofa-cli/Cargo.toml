@@ -38,6 +38,8 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 serde_yaml = "0.9"
 toml = "0.8"
+semver = "1"
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
 
 
 # Utilities

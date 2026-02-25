@@ -4473,6 +4473,8 @@ dependencies = [
  "nix 0.29.0",
  "predicates",
  "ratatui",
+ "reqwest 0.12.28",
+ "semver",
  "serde",
  "serde_json",
  "serde_yaml",
