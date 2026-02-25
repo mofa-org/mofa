@@ -128,6 +128,7 @@ jobs:
 
           set -euo pipefail
           
+          echo "Calling Gemini API..."
           RESPONSE=$(curl -s -X POST \
             "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key=${GEMINI_API_KEY}" \
             -H "Content-Type: application/json" \
@@ -138,6 +139,8 @@ jobs:
               }]
             }")
 
+          echo "API Response received (length: ${#RESPONSE})"
+          
           # Check for API errors
           if echo "$RESPONSE" | jq -e '.error' > /dev/null 2>&1; then
             echo "Error: Gemini API returned an error"
@@ -146,27 +149,31 @@ jobs:
           fi
 
           RESULT=$(echo "$RESPONSE" | jq -r '.candidates[0].content.parts[0].text // empty')
+          echo "Extracted result (length: ${#RESULT})"
           
           if [ -z "$RESULT" ]; then
             echo "Error: No response from Gemini API"
-            echo "Response: $RESPONSE"
+            echo "Full response: $RESPONSE"
+            # Set empty result so the next step can handle it
+            echo "result=" >> $GITHUB_OUTPUT
             exit 1
           fi
           
           # Extract JSON from markdown code blocks if present
           if echo "$RESULT" | grep -q '```'; then
+            echo "Extracting JSON from markdown code blocks..."
             RESULT=$(echo "$RESULT" | sed -n '/```json/,/```/p' | sed '1d;$d' || echo "$RESULT" | sed -n '/```/,/```/p' | sed '1d;$d')
           fi
           
+          echo "Final result: $RESULT"
           echo "result<<EOF" >> $GITHUB_OUTPUT
           echo "$RESULT" >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
           
-          # Log the result for debugging
-          echo "Analysis result: $RESULT"
+          echo "✅ Analysis complete. Result saved to output."
 
       - name: Close duplicate issue
-        if: steps.analyze_duplicates.outputs.result != ''
+        if: steps.analyze_duplicates.outcome == 'success' && steps.analyze_duplicates.outputs.result != ''
         uses: actions/github-script@v7
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
