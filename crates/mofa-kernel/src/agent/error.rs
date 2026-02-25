@@ -130,6 +130,11 @@ pub enum AgentError {
     /// Other errors
     #[error("{0}")]
     Other(String),
+
+    /// Circuit breaker open — the node is currently blocked due to repeated failures.
+    /// Route to a fallback or retry later.
+    #[error("circuit breaker open for node '{0}'")]
+    CircuitOpen(String),
 }
 
 impl AgentError {
