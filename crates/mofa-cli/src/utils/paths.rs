@@ -113,6 +113,13 @@ pub fn normalize_path<P: AsRef<Path>>(path: P) -> String {
     path.display().to_string()
 }
 
+/// Get the log file path for a given agent.
+///
+/// Logs are stored under `<data_dir>/logs/<agent_id>.log`.
+pub fn agent_log_path(data_dir: &Path, agent_id: &str) -> PathBuf {
+    data_dir.join("logs").join(format!("{}.log", agent_id))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
