@@ -292,6 +292,7 @@ where
 /// 阶段处理结果
 /// Phase processing result
 #[derive(Debug, Clone)]
+#[non_exhaustive]
 pub enum PhaseResult<T> {
     /// 继续下一阶段
     /// Continue to next phase
@@ -347,6 +348,7 @@ where
 /// 工作流执行结果
 /// Workflow execution result
 #[derive(Debug, Clone)]
+#[non_exhaustive]
 pub enum WorkflowResult<T> {
     /// 工作流完成
     /// Workflow completed
@@ -404,6 +406,7 @@ where
 /// 秘书内部事件
 /// Secretary internal event
 #[derive(Debug)]
+#[non_exhaustive]
 pub enum SecretaryEvent<State> {
     /// 秘书启动
     /// Secretary started

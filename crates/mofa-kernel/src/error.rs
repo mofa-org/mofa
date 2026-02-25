@@ -117,7 +117,7 @@ mod tests {
     #[test]
     fn report_carries_context() {
         let result: KernelResult<()> = Err(Report::new(KernelError::Internal("root cause".into())))
-            .attach_printable("while loading agent config");
+            .attach("while loading agent config");
 
         let report = result.unwrap_err();
         let display = format!("{report:?}");

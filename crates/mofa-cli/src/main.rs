@@ -157,8 +157,12 @@ async fn run_command(cli: Cli) -> anyhow::Result<()> {
                 cli::AgentCommands::List { running, all } => {
                     commands::agent::list::run(ctx, running, all).await?;
                 }
-                cli::AgentCommands::Logs { agent_id, tail } => {
-                    commands::agent::logs::run(ctx, &agent_id, tail).await?;
+                cli::AgentCommands::Logs {
+                    agent_id,
+                    tail,
+                    lines,
+                } => {
+                    commands::agent::logs::run(ctx, &agent_id, tail, lines).await?;
                 }
             }
         }

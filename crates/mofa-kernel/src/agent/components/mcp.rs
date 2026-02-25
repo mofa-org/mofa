@@ -55,6 +55,7 @@ use std::collections::HashMap;
 /// 定义如何连接到 MCP 服务器
 /// Defines how to connect to an MCP server
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[non_exhaustive]
 pub enum McpTransportConfig {
     /// 通过标准输入输出连接 (启动子进程)
     /// Connection via Standard Input/Output (spawning a sub-process)

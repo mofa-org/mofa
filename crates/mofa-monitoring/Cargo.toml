@@ -54,6 +54,8 @@ sysinfo = "0.32"
 [dev-dependencies]
 tokio-tungstenite = "0.24"
 futures-util = "0.3"
+mofa-foundation = { path = "../mofa-foundation" }
+mofa-kernel = { path = "../mofa-kernel" }
 
 [lints]
 workspace = true

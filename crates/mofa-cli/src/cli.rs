@@ -277,6 +277,10 @@ pub enum AgentCommands {
         /// Tail the logs
         #[arg(short, long)]
         tail: bool,
+
+        /// Number of recent lines to display
+        #[arg(short = 'n', long, default_value = "50")]
+        lines: usize,
     },
 }
 
