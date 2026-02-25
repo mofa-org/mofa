@@ -1,0 +1,68 @@
+name: MoFA Self-Assign via /assign
+
+on:
+  issue_comment:
+    types: [created]
+
+permissions:
+  issues: write
+
+jobs:
+  self_assign:
+    if: ${{ github.event.issue.pull_request == null }} # only issues, not PRs
+    runs-on: ubuntu-latest
+    steps:
+      - name: Handle /assign command
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const commentBody = context.payload.comment.body.trim();
+            if (commentBody !== '/assign') {
+              core.info('Not a /assign command, skipping.');
+              return;
+            }
+
+            const issue = context.payload.issue;
+            const issueNumber = issue.number;
+            const repo = context.repo;
+            const username = context.payload.comment.user.login;
+
+            // If already assigned, do nothing
+            const alreadyAssigned = (issue.assignees || []).some(a => a.login === username);
+            if (alreadyAssigned) {
+              core.info(`Issue #${issueNumber} is already assigned to ${username}.`);
+              return;
+            }
+
+            // Count open issues assigned to this user
+            const { data: assignedIssues } = await github.rest.issues.listForRepo({
+              owner: repo.owner,
+              repo: repo.repo,
+              state: 'open',
+              assignee: username,
+              per_page: 100
+            });
+
+            const openAssignedCount = assignedIssues.filter(i => !i.pull_request).length;
+
+            if (openAssignedCount >= 3) {
+              await github.rest.issues.createComment({
+                owner: repo.owner,
+                repo: repo.repo,
+                issue_number: issueNumber,
+                body: `Hi @${username}, you already have ${openAssignedCount} open issues assigned. Please finish one before taking on another.`
+              });
+              core.info(`User ${username} already has ${openAssignedCount} open issues.`);
+              return;
+            }
+
+            // Assign the issue
+            await github.rest.issues.addAssignees({
+              owner: repo.owner,
+              repo: repo.repo,
+              issue_number: issueNumber,
+              assignees: [username]
+            });
+            
+            core.info(`Assigned issue #${issueNumber} to ${username}.`);

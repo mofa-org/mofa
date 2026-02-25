@@ -10,7 +10,7 @@
 //! - 规则引擎
 //! - Rule engine
 //! - 脚本化工作流节点
-//! Scripted workflow nodes
+//! - Scripted workflow nodes
 
 #[cfg(feature = "rhai-scripting")]
 pub mod rhai;
