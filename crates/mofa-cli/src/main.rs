@@ -3,6 +3,7 @@
 mod cli;
 mod commands;
 mod config;
+mod plugin_catalog;
 mod context;
 mod output;
 mod render;
@@ -207,6 +208,24 @@ async fn run_command(cli: Cli) -> anyhow::Result<()> {
                 cli::PluginCommands::Uninstall { name, force } => {
                     commands::plugin::uninstall::run(ctx, &name, force).await?;
                 }
+                cli::PluginCommands::Repository { action } => match action {
+                    cli::PluginRepositoryCommands::List => {
+                        commands::plugin::repository::list(ctx).await?;
+                    }
+                    cli::PluginRepositoryCommands::Add {
+                        id,
+                        url,
+                        description,
+                    } => {
+                        commands::plugin::repository::add(
+                            ctx,
+                            &id,
+                            &url,
+                            description.as_deref(),
+                        )
+                        .await?;
+                    }
+                },
             }
         }
 
