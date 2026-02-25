@@ -157,8 +157,12 @@ async fn run_command(cli: Cli) -> anyhow::Result<()> {
                 cli::AgentCommands::List { running, all } => {
                     commands::agent::list::run(ctx, running, all).await?;
                 }
-                cli::AgentCommands::Logs { agent_id, tail } => {
-                    commands::agent::logs::run(ctx, &agent_id, tail).await?;
+                cli::AgentCommands::Logs {
+                    agent_id,
+                    tail,
+                    lines,
+                } => {
+                    commands::agent::logs::run(ctx, &agent_id, tail, lines).await?;
                 }
             }
         }
@@ -285,14 +289,8 @@ fn normalize_legacy_output_flags(args: &mut [String]) {
     });
 
     let allows_global_after_command = match top_command {
-        Some("info")
-        | Some("agent")
-        | Some("plugin")
-        | Some("tool")
-        | Some("config")
-        | Some("build")
-        | Some("run")
-        | Some("init") => true,
+        Some("info") | Some("agent") | Some("plugin") | Some("tool") | Some("config")
+        | Some("build") | Some("run") | Some("init") => true,
         // `session show` and `session export` both define their own local -o flag, so skip
         // normalisation for those subcommands.  All other `session` subcommands (e.g. `list`)
         // use the global output-format flag and should be normalised.

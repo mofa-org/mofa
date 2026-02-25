@@ -97,3 +97,17 @@ kind/docs - Documentation:
   - Documentation-only change requested
 kind/chore - Chore:
   - Maintenance, refactor, cleanup, technical debt
+
+Good First Issue Guidelines:
+Apply "good first issue" label when ALL of these conditions are met:
+  - The issue is well-defined with clear requirements
+  - The fix is isolated to one or two files
+  - No deep knowledge of the codebase is required
+  - The issue is priority/p3 or priority/p2 (never p0 or p1)
+  - Examples: typos, small UI fixes, adding tests, documentation improvements, simple bug fixes
+Do NOT apply "good first issue" for:
+  - Priority/p0 or priority/p1 issues
+  - Issues requiring architectural changes
+  - Issues affecting core functionality or critical paths
+  - Issues with unclear requirements or needing more information
+  - Complex features or enhancements

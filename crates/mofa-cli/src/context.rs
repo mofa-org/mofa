@@ -11,6 +11,7 @@ use mofa_foundation::agent::components::tool::EchoTool;
 use mofa_foundation::agent::session::SessionManager;
 use mofa_foundation::agent::tools::registry::{ToolRegistry, ToolSource};
 use mofa_kernel::agent::AgentCapabilities;
+use mofa_kernel::agent::components::tool::ToolExt;
 use mofa_kernel::agent::config::AgentConfig;
 use mofa_kernel::agent::core::MoFAAgent;
 use mofa_kernel::agent::error::{AgentError, AgentResult};
@@ -282,6 +283,26 @@ fn seed_default_specs(
     Ok(())
 }
 
+/// Instantiate a plugin from a persisted spec entry.
+///
+/// Returns `Some(plugin)` for recognised builtin kinds, or `None` for
+/// unknown kinds (forward-compatible).
+pub fn instantiate_plugin_from_spec(
+    spec: &PluginSpecEntry,
+) -> Option<Arc<dyn mofa_kernel::agent::plugins::Plugin>> {
+    match spec.kind.as_str() {
+        BUILTIN_HTTP_PLUGIN_KIND => {
+            let url = spec
+                .config
+                .get("url")
+                .and_then(|v| v.as_str())
+                .unwrap_or("https://example.com");
+            Some(Arc::new(HttpPlugin::new(url)))
+        }
+        _ => None,
+    }
+}
+
 fn replay_persisted_plugins(
     plugin_registry: &Arc<SimplePluginRegistry>,
     plugin_store: &PersistedStore<PluginSpecEntry>,
@@ -291,22 +312,10 @@ fn replay_persisted_plugins(
             continue;
         }
 
-        match spec.kind.as_str() {
-            BUILTIN_HTTP_PLUGIN_KIND => {
-                let url = spec
-                    .config
-                    .get("url")
-                    .and_then(|v| v.as_str())
-                    .unwrap_or("https://example.com");
-                plugin_registry
-                    .register(Arc::new(HttpPlugin::new(url)))
-                    .map_err(|e| {
-                        anyhow::anyhow!("Failed to register plugin '{}': {}", spec.id, e)
-                    })?;
-            }
-            _ => {
-                // Ignore unknown kinds for forward compatibility.
-            }
+        if let Some(plugin) = instantiate_plugin_from_spec(&spec) {
+            plugin_registry
+                .register(plugin)
+                .map_err(|e| anyhow::anyhow!("Failed to register plugin '{}': {}", spec.id, e))?;
         }
     }
 
@@ -325,7 +334,7 @@ fn replay_persisted_tools(
         match spec.kind.as_str() {
             BUILTIN_ECHO_TOOL_KIND => {
                 tool_registry
-                    .register_with_source(Arc::new(EchoTool), ToolSource::Builtin)
+                    .register_with_source(EchoTool.into_dynamic(), ToolSource::Builtin)
                     .map_err(|e| anyhow::anyhow!("Failed to register tool '{}': {}", spec.id, e))?;
             }
             _ => {

@@ -196,6 +196,7 @@ impl ThoughtStep {
 /// 思考步骤类型
 /// Thought step type
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub enum ThoughtStepType {
     /// 思考
     /// Thought
@@ -220,6 +221,7 @@ pub enum ThoughtStepType {
 /// 决策类型
 /// Decision type
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[non_exhaustive]
 pub enum Decision {
     /// 直接响应
     /// Direct response

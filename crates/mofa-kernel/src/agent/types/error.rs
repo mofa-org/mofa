@@ -30,6 +30,7 @@ use std::fmt;
 /// 整合所有层的错误类型，提供单一的错误抽象。
 /// Integrates error types from all layers, providing a single error abstraction.
 #[derive(Debug, thiserror::Error)]
+#[non_exhaustive]
 pub enum GlobalError {
     /// Agent 层错误
     /// Agent layer error
@@ -127,6 +128,7 @@ impl GlobalError {
 /// 用于错误统计和监控。
 /// Used for error statistics and monitoring.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[non_exhaustive]
 pub enum ErrorCategory {
     /// Agent 相关错误
     /// Agent related errors

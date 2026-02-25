@@ -4,20 +4,22 @@ use serde::{Deserialize, Serialize};
 // 流类型枚举
 // Stream type enumeration
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+#[non_exhaustive]
 pub enum StreamType {
     MessageStream, // 消息流 - 异步消息传递
     // Message stream - Asynchronous message passing
-    DataStream,    // 数据流 - 连续数据传递
+    DataStream, // 数据流 - 连续数据传递
     // Data stream - Continuous data transfer
-    EventStream,   // 事件流 - 离散事件传递
+    EventStream, // 事件流 - 离散事件传递
     // Event stream - Discrete event passing
     CommandStream, // 命令流 - 控制命令传递
-    // Command stream - Control command passing
+                   // Command stream - Control command passing
 }
 
 // 智能体通信消息协议
 // Agent communication message protocol
 #[derive(Debug, Serialize, Deserialize, Clone)]
+#[non_exhaustive]
 pub enum AgentMessage {
     TaskRequest {
         task_id: String,
@@ -42,18 +44,18 @@ pub enum AgentMessage {
         sequence: u64,
     }, // 流消息
     // Stream message
-
     StreamControl {
         stream_id: String,
         command: StreamControlCommand,
         metadata: std::collections::HashMap<String, String>,
     }, // 流控制消息
-    // Stream control message
+       // Stream control message
 }
 
 // 任务状态枚举
 // Task status enumeration
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+#[non_exhaustive]
 pub enum TaskStatus {
     Success,
     Failed,
@@ -63,14 +65,15 @@ pub enum TaskStatus {
 // Agent 可感知的事件类型
 // Event types perceivable by the Agent
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[non_exhaustive]
 pub enum AgentEvent {
     TaskReceived(TaskRequest), // 任务事件
     // Task event
-    TaskPreempted(String),     // 任务被抢占事件（参数：被抢占的任务ID）
+    TaskPreempted(String), // 任务被抢占事件（参数：被抢占的任务ID）
     // Task preempted event (Param: preempted task ID)
-    Shutdown,                  // 框架关闭事件
+    Shutdown, // 框架关闭事件
     // Framework shutdown event
-    Custom(String, Vec<u8>),   // 自定义事件
+    Custom(String, Vec<u8>), // 自定义事件
     // Custom event
 
     // 流相关事件
@@ -81,31 +84,27 @@ pub enum AgentEvent {
         sequence: u64,
     }, // 流消息事件
     // Stream message event
-
     StreamCreated {
         stream_id: String,
         stream_type: StreamType,
         metadata: std::collections::HashMap<String, String>,
     }, // 流创建事件
     // Stream creation event
-
     StreamClosed {
         stream_id: String,
         reason: String,
     }, // 流关闭事件
     // Stream closure event
-
     StreamSubscription {
         stream_id: String,
         subscriber_id: String,
     }, // 流订阅事件
     // Stream subscription event
-
     StreamUnsubscription {
         stream_id: String,
         subscriber_id: String,
     }, // 流取消订阅事件
-    // Stream unsubscription event
+       // Stream unsubscription event
 }
 
 // 扩展 TaskRequest，增加优先级和调度元数据
@@ -123,6 +122,7 @@ pub struct TaskRequest {
 // 任务优先级与调度元数据
 // Task priority and scheduling metadata
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum TaskPriority {
     Critical = 0,
     Highest = 1,
@@ -153,26 +153,28 @@ impl Ord for TaskPriority {
 // 流控制命令
 // Stream control commands
 #[derive(Debug, Serialize, Deserialize, Clone)]
+#[non_exhaustive]
 pub enum StreamControlCommand {
     Create(StreamType), // 创建流
     // Create stream
-    Close(String),      // 关闭流（原因）
+    Close(String), // 关闭流（原因）
     // Close stream (reason)
-    Subscribe,          // 订阅流
+    Subscribe, // 订阅流
     // Subscribe to stream
-    Unsubscribe,        // 取消订阅
+    Unsubscribe, // 取消订阅
     // Unsubscribe from stream
-    Pause,              // 暂停流
+    Pause, // 暂停流
     // Pause stream
-    Resume,             // 恢复流
+    Resume, // 恢复流
     // Resume stream
-    Seek(u64),          // 跳转到指定序列位置（仅适用于可重放流）
-    // Seek to sequence position (for replayable streams only)
+    Seek(u64), // 跳转到指定序列位置（仅适用于可重放流）
+               // Seek to sequence position (for replayable streams only)
 }
 
 // 调度状态，用于跟踪任务抢占情况
 // Scheduling status for tracking task preemption
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub enum SchedulingStatus {
     Pending,
     Running,
