@@ -116,16 +116,16 @@ async fn display_log_file(
         .with_context(|| format!("Failed to read log file: {}", log_path.display()))?
     {
         // Apply filters
-        if let Some(level_filter) = level {
-            if !matches_log_level(&line, level_filter) {
-                continue;
-            }
+        if let Some(level_filter) = level
+            && !matches_log_level(&line, level_filter)
+        {
+            continue;
         }
 
-        if let Some(pattern) = grep {
-            if !line.to_lowercase().contains(&pattern.to_lowercase()) {
-                continue;
-            }
+        if let Some(pattern) = grep
+            && !line.to_lowercase().contains(&pattern.to_lowercase())
+        {
+            continue;
         }
 
         // Apply limit
