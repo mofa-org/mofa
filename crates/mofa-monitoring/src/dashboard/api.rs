@@ -340,6 +340,9 @@ pub fn create_api_router(collector: Arc<MetricsCollector>) -> Router {
         // Plugins
         .route("/plugins", get(get_plugins))
         .route("/plugins/{id}", get(get_plugin))
+        // LLM
+        .route("/llm", get(get_llm_metrics))
+        .route("/llm/{id}", get(get_llm_plugin))
         // System
         .route("/system", get(get_system_status))
         .route("/health", get(health_check))
