@@ -683,6 +683,11 @@ impl WorkflowExecutor {
 
         // 执行各分支（使用 tokio::task::JoinSet concurrency）
         // Execute branches concurrently using tokio::task::JoinSet
+        tracing::debug!("Spawning {} parallel branches", branches.len());
+
+        // Optional limit on concurrent parallel tasks to prevent resource exhaustion
+        // const MAX_PARALLEL_BRANCHES: usize = 100;
+
         let mut join_set: tokio::task::JoinSet<Result<(String, WorkflowValue), String>> =
             tokio::task::JoinSet::new();
         for branch_id in branches {
@@ -692,6 +697,7 @@ impl WorkflowExecutor {
             let node_clone = graph.get_node(&b_id).cloned();
 
             join_set.spawn(async move {
+                let start_time = std::time::Instant::now();
                 if let Some(node) = node_clone {
                     if ctx_clone.get_node_status(&b_id).await == Some(NodeStatus::Completed) {
                         if let Some(output) = ctx_clone.get_node_output(&b_id).await {
@@ -709,8 +715,11 @@ impl WorkflowExecutor {
                         .await;
 
                     if result.status.is_success() {
+                        let duration = start_time.elapsed();
+                        tracing::debug!("Branch {} completed successfully in {:?}", b_id, duration);
                         Ok((b_id, result.output))
                     } else {
+                        tracing::debug!("Branch {} failed", b_id);
                         Err(format!(
                             "{}: {}",
                             b_id,
@@ -718,13 +727,15 @@ impl WorkflowExecutor {
                         ))
                     }
                 } else {
+                    tracing::debug!("Branch {} not found", b_id);
                     Err(format!("Node {} not found", b_id))
                 }
             });
         }
 
         // The result of parallel branches are merged into a single WorkflowValue::Map.
-        // If two branches return the same node ID (impossible by design), the last to finish overwrites.
+        // State merging: later branches overwrite earlier ones on key collision (last-write-wins)
+        // TODO: Consider configurable reducers for custom merge logic
         // If `stop_on_failure` is enabled, the first error cancels all remaining branches.
         while let Some(res_join) = join_set.join_next().await {
             let res = res_join.map_err(|e| format!("Join error or panic: {}", e))?;
@@ -937,6 +948,7 @@ impl WorkflowExecutor {
         // 按层次执行（同一层次的节点可以并发执行）
         // Execute by layer (nodes in same layer execute concurrently)
         for group in groups {
+            tracing::debug!("Spawning {} parallel branches in layer", group.len());
             let mut join_set: tokio::task::JoinSet<(NodeResult, NodeExecutionRecord)> =
                 tokio::task::JoinSet::new();
             for node_id in &group {
@@ -997,6 +1009,12 @@ impl WorkflowExecutor {
                         .duration_since(std::time::UNIX_EPOCH)
                         .unwrap_or_default()
                         .as_millis() as u64;
+
+                    tracing::debug!(
+                        "Branch {} completed in {}ms",
+                        n_id,
+                        node_end_time.saturating_sub(node_start_time)
+                    );
 
                     let record_entry = NodeExecutionRecord {
                         node_id: n_id,
