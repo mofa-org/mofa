@@ -118,17 +118,25 @@ def download_examples_from_github(target_dir: Path) -> bool:
             sparse_checkout_file.parent.mkdir(parents=True, exist_ok=True)
             sparse_checkout_file.write_text("agents/\nflows/\n")
 
-            # Pull the specified directories
-            result = subprocess.run(
-                ["git", "pull", "origin", "main"],
-                cwd=temp_path,
-                capture_output=True,
-                text=True,
-                timeout=120
-            )
+            # Pull the specified directories.
+            # The Python examples may live on main-python in newer layouts.
+            pull_error = ""
+            pulled = False
+            for branch in ("main", "main-python"):
+                result = subprocess.run(
+                    ["git", "pull", "origin", branch],
+                    cwd=temp_path,
+                    capture_output=True,
+                    text=True,
+                    timeout=120
+                )
+                if result.returncode == 0:
+                    pulled = True
+                    break
+                pull_error = result.stderr or result.stdout or f"pull failed on {branch}"
 
-            if result.returncode != 0:
-                console.print(f"[red]Failed to pull from GitHub: {result.stderr}[/red]")
+            if not pulled:
+                console.print(f"[red]Failed to pull examples from GitHub branches main/main-python: {pull_error}[/red]")
                 return False
 
             # Copy the downloaded directories
