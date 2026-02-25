@@ -670,8 +670,6 @@ impl WorkflowExecutor {
 
     /// 并行执行多个分支
     /// Execute multiple branches in parallel
-    /// 注意：由于节点包含闭包无法跨线程，这里使用顺序执行
-    /// Note: Nodes contain closures and cannot cross threads, so sequential execution is used here
     async fn execute_branches_parallel(
         &self,
         graph: &WorkflowGraph,
@@ -683,32 +681,64 @@ impl WorkflowExecutor {
         let mut results = HashMap::new();
         let mut errors = Vec::new();
 
-        // 顺序执行各分支（节点包含闭包，无法跨线程共享）
-        // Execute branches sequentially (nodes contain closures, cannot be shared across threads)
+        // 执行各分支（使用 tokio::task::JoinSet concurrency）
+        // Execute branches concurrently using tokio::task::JoinSet
+        let mut join_set: tokio::task::JoinSet<Result<(String, WorkflowValue), String>> =
+            tokio::task::JoinSet::new();
         for branch_id in branches {
-            if let Some(node) = graph.get_node(branch_id) {
-                if ctx.get_node_status(branch_id).await == Some(NodeStatus::Completed) {
-                    if let Some(output) = ctx.get_node_output(branch_id).await {
-                        results.insert(branch_id.clone(), output);
+            let input_clone = input.clone();
+            let b_id = branch_id.clone();
+            let ctx_clone = ctx.clone();
+            let node_clone = graph.get_node(&b_id).cloned();
+
+            join_set.spawn(async move {
+                if let Some(node) = node_clone {
+                    if ctx_clone.get_node_status(&b_id).await == Some(NodeStatus::Completed) {
+                        if let Some(output) = ctx_clone.get_node_output(&b_id).await {
+                            return Ok((b_id, output));
+                        }
+                        return Ok((b_id, WorkflowValue::Null));
                     }
-                    continue;
-                }
 
-                let result = node.execute(ctx, input.clone()).await;
-                ctx.set_node_output(branch_id, result.output.clone()).await;
-                ctx.set_node_status(branch_id, result.status.clone()).await;
+                    let result = node.execute(&ctx_clone, input_clone).await;
+                    ctx_clone
+                        .set_node_output(&b_id, result.output.clone())
+                        .await;
+                    ctx_clone
+                        .set_node_status(&b_id, result.status.clone())
+                        .await;
 
-                if result.status.is_success() {
-                    results.insert(branch_id.clone(), result.output);
+                    if result.status.is_success() {
+                        Ok((b_id, result.output))
+                    } else {
+                        Err(format!(
+                            "{}: {}",
+                            b_id,
+                            result.error.unwrap_or_else(|| "Unknown error".to_string())
+                        ))
+                    }
                 } else {
-                    errors.push(format!(
-                        "{}: {}",
-                        branch_id,
-                        result.error.unwrap_or_else(|| "Unknown error".to_string())
-                    ));
+                    Err(format!("Node {} not found", b_id))
                 }
-            } else {
-                errors.push(format!("Node {} not found", branch_id));
+            });
+        }
+
+        // The result of parallel branches are merged into a single WorkflowValue::Map.
+        // If two branches return the same node ID (impossible by design), the last to finish overwrites.
+        // If `stop_on_failure` is enabled, the first error cancels all remaining branches.
+        while let Some(res_join) = join_set.join_next().await {
+            let res = res_join.map_err(|e| format!("Join error or panic: {}", e))?;
+            match res {
+                Ok((id, output)) => {
+                    results.insert(id, output);
+                }
+                Err(e) => {
+                    errors.push(e);
+                    if self.config.stop_on_failure {
+                        join_set.abort_all();
+                        break;
+                    }
+                }
             }
         }
 
@@ -868,10 +898,8 @@ impl WorkflowExecutor {
 
     /// 基于拓扑层次执行工作流
     /// Execute workflow based on topological layers
-    /// 注意：由于节点包含闭包无法跨线程，这里按层次顺序执行
-    /// Note: Nodes contain closures and cannot cross threads, so execution follows layer order
-    /// 同一层的节点理论上可以并行，但由于闭包限制，这里顺序执行
-    /// Nodes in the same layer could theoretically be parallel, but are sequential here due to closure limits
+    /// 同一层的节点并行执行
+    /// Nodes in the same layer are executed in parallel
     pub async fn execute_parallel_workflow(
         &self,
         graph: &WorkflowGraph,
@@ -904,61 +932,104 @@ impl WorkflowExecutor {
             outputs: HashMap::new(),
         };
 
-        // 按层次执行（同层节点顺序执行，因为闭包无法跨线程共享）
-        // Execute by layer (nodes in layer execute sequentially as closures cannot cross threads)
+        let ctx_ref = &ctx;
+
+        // 按层次执行（同一层次的节点可以并发执行）
+        // Execute by layer (nodes in same layer execute concurrently)
         for group in groups {
-            for node_id in group {
-                let node_start_time = std::time::SystemTime::now()
-                    .duration_since(std::time::UNIX_EPOCH)
-                    .unwrap_or_default()
-                    .as_millis() as u64;
+            let mut join_set: tokio::task::JoinSet<(NodeResult, NodeExecutionRecord)> =
+                tokio::task::JoinSet::new();
+            for node_id in &group {
+                let n_id = node_id.clone();
+                let ctx_clone = ctx_ref.clone();
+                let node_clone = graph.get_node(&n_id).cloned();
+                let predecessors: Vec<String> = graph
+                    .get_predecessors(&n_id)
+                    .into_iter()
+                    .map(String::from)
+                    .collect();
 
-                let result = if let Some(node) = graph.get_node(&node_id) {
-                    if ctx.get_node_status(&node_id).await == Some(NodeStatus::Completed) {
-                        info!("Skipping already completed node: {}", node_id);
-                        NodeResult::success(
-                            &node_id,
-                            ctx.get_node_output(&node_id)
-                                .await
-                                .unwrap_or(WorkflowValue::Null),
-                            0,
-                        )
-                    } else {
-                        let predecessors = graph.get_predecessors(&node_id);
-                        let node_input = if predecessors.is_empty() {
-                            ctx.get_input().await
-                        } else if predecessors.len() == 1 {
-                            ctx.get_node_output(predecessors[0])
-                                .await
-                                .unwrap_or(WorkflowValue::Null)
+                join_set.spawn(async move {
+                    let node_start_time = std::time::SystemTime::now()
+                        .duration_since(std::time::UNIX_EPOCH)
+                        .unwrap_or_default()
+                        .as_millis() as u64;
+
+                    let result = if let Some(node) = node_clone {
+                        if ctx_clone.get_node_status(&n_id).await == Some(NodeStatus::Completed) {
+                            info!("Skipping already completed node: {}", n_id);
+                            NodeResult::success(
+                                &n_id,
+                                ctx_clone
+                                    .get_node_output(&n_id)
+                                    .await
+                                    .unwrap_or(WorkflowValue::Null),
+                                0,
+                            )
                         } else {
-                            let outputs = ctx.get_node_outputs(&predecessors).await;
-                            WorkflowValue::Map(outputs)
-                        };
-                        let result = node.execute(&ctx, node_input).await;
-                        ctx.set_node_output(&node_id, result.output.clone()).await;
-                        ctx.set_node_status(&node_id, result.status.clone()).await;
-                        result
-                    }
-                } else {
-                    NodeResult::failed(&node_id, "Node not found", 0)
-                };
+                            let node_input = if predecessors.is_empty() {
+                                ctx_clone.get_input().await
+                            } else if predecessors.len() == 1 {
+                                ctx_clone
+                                    .get_node_output(&predecessors[0])
+                                    .await
+                                    .unwrap_or(WorkflowValue::Null)
+                            } else {
+                                let pred_refs: Vec<&str> =
+                                    predecessors.iter().map(|s| s.as_str()).collect();
+                                let outputs = ctx_clone.get_node_outputs(&pred_refs).await;
+                                WorkflowValue::Map(outputs)
+                            };
+                            let result = node.execute(&ctx_clone, node_input).await;
+                            ctx_clone
+                                .set_node_output(&n_id, result.output.clone())
+                                .await;
+                            ctx_clone
+                                .set_node_status(&n_id, result.status.clone())
+                                .await;
+                            result
+                        }
+                    } else {
+                        NodeResult::failed(&n_id, "Node not found", 0)
+                    };
 
-                let node_end_time = std::time::SystemTime::now()
-                    .duration_since(std::time::UNIX_EPOCH)
-                    .unwrap_or_default()
-                    .as_millis() as u64;
+                    let node_end_time = std::time::SystemTime::now()
+                        .duration_since(std::time::UNIX_EPOCH)
+                        .unwrap_or_default()
+                        .as_millis() as u64;
 
-                let record_entry = NodeExecutionRecord {
-                    node_id: node_id.clone(),
-                    started_at: node_start_time,
-                    ended_at: node_end_time,
-                    status: result.status.clone(),
-                    retry_count: result.retry_count,
-                };
+                    let record_entry = NodeExecutionRecord {
+                        node_id: n_id,
+                        started_at: node_start_time,
+                        ended_at: node_end_time,
+                        status: result.status.clone(),
+                        retry_count: result.retry_count,
+                    };
+
+                    (result, record_entry)
+                });
+            }
+
+            // Wait for all nodes in this layer to finish.
+            // Node updates are written synchronously to the WorkflowContext as each task finishes.
+            // If `stop_on_failure` is enabled, any failure will abort remaining tasks in the layer.
+            while let Some(res_join) = join_set.join_next().await {
+                let (result, record_entry) = res_join.unwrap_or_else(|e| {
+                    (
+                        NodeResult::failed("unknown", &format!("Join error or panic: {}", e), 0),
+                        NodeExecutionRecord {
+                            node_id: "unknown".to_string(),
+                            started_at: 0,
+                            ended_at: 0,
+                            status: NodeStatus::Failed(format!("Join panic: {}", e)),
+                            retry_count: 0,
+                        },
+                    )
+                });
                 execution_record.node_records.push(record_entry);
 
                 if !result.status.is_success() && self.config.stop_on_failure {
+                    join_set.abort_all();
                     execution_record.status = WorkflowStatus::Failed(
                         result.error.unwrap_or_else(|| "Unknown error".to_string()),
                     );
@@ -968,7 +1039,7 @@ impl WorkflowExecutor {
                             .unwrap_or_default()
                             .as_millis() as u64,
                     );
-                    execution_record.outputs = ctx.get_all_outputs().await;
+                    execution_record.outputs = ctx_ref.get_all_outputs().await;
                     return Ok(execution_record);
                 }
             }
