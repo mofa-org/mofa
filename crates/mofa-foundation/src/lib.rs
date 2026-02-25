@@ -7,15 +7,14 @@
 // orchestrator module - Model Lifecycle & Allocation
 pub mod orchestrator;
 
+// adapter registry module - runtime model-adapter discovery & resolution
+pub mod adapter;
+
 // hardware discovery module
 pub mod hardware;
 
-// adapter registry module - Runtime model adapter discovery
-pub mod adapter;
-
 // inference orchestration module - Unified Inference Routing & Lifecycle
 pub mod inference;
-
 // prompt module
 pub mod prompt;
 
