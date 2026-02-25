@@ -31,22 +31,22 @@ jobs:
           echo '🔍 Finding issues missing area labels...'
           NO_AREA_ISSUES="$(gh issue list --repo "${GITHUB_REPOSITORY}" \
             --search 'is:open is:issue -label:area/ux -label:area/models -label:area/platform -label:area/cli -label:area/docs -label:area/integration -label:area/infra -label:area/unknown' \
-            --limit 100 --json number,title,body,labels,user)"
+            --limit 100 --json number,title,body,labels,author)"
           
           echo '🔍 Finding issues missing kind labels...'
           NO_KIND_ISSUES="$(gh issue list --repo "${GITHUB_REPOSITORY}" \
             --search 'is:open is:issue -label:kind/bug -label:kind/enhancement -label:kind/feature -label:kind/question -label:kind/docs -label:kind/chore' \
-            --limit 100 --json number,title,body,labels,user)"
+            --limit 100 --json number,title,body,labels,author)"
           
           echo '🏷️ Finding issues missing priority labels...'
           NO_PRIORITY_ISSUES="$(gh issue list --repo "${GITHUB_REPOSITORY}" \
             --search 'is:open is:issue -label:priority/p0 -label:priority/p1 -label:priority/p2 -label:priority/p3 -label:priority/unknown' \
-            --limit 100 --json number,title,body,labels,user)"
+            --limit 100 --json number,title,body,labels,author)"
           
           echo '🔍 Finding issues with status/need-triage label...'
           NEED_TRIAGE_ISSUES="$(gh issue list --repo "${GITHUB_REPOSITORY}" \
             --search 'is:open is:issue label:status/need-triage' \
-            --limit 100 --json number,title,body,labels,user)"
+            --limit 100 --json number,title,body,labels,author)"
           
           echo '🔄 Merging and deduplicating issues...'
           ISSUES="$(echo "${NO_AREA_ISSUES}" "${NO_KIND_ISSUES}" "${NO_PRIORITY_ISSUES}" "${NEED_TRIAGE_ISSUES}" | jq -c -s 'add | unique_by(.number)')"
@@ -106,7 +106,7 @@ jobs:
                   number: issue.number,
                   title: issue.title || '',
                   body: issue.body || '',
-                  author: issue.user?.login || '',
+                  author: issue.author?.login || '',
                   labels: issue.labels?.map(l => l.name) || [],
                   comments: comments.map(c => ({
                     author: c.user?.login,
@@ -151,7 +151,7 @@ jobs:
           
           # Make API call with error handling
           RESPONSE=$(curl -s -w "\n%{http_code}" -X POST \
-            "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_API_KEY}" \
+            "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}" \
             -H "Content-Type: application/json" \
             -d "{
               \"contents\": [{

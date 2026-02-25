@@ -35,6 +35,20 @@ jobs:
               return;
             }
 
+            // Check if issue is already assigned to someone else
+            const assignees = issue.assignees || [];
+            if (assignees.length > 0) {
+              const assignedUsers = assignees.map(a => a.login).join(', @');
+              await github.rest.issues.createComment({
+                owner: repo.owner,
+                repo: repo.repo,
+                issue_number: issueNumber,
+                body: `Thanks for your interest, @${username}! This issue is already assigned to @${assignedUsers}. We'd still love to have you contribute! Check out our [open issues](https://github.com/${repo.owner}/${repo.repo}/issues?q=is%3Aopen+is%3Aissue+no%3Aassignee) or look for issues labeled [good first issue](https://github.com/${repo.owner}/${repo.repo}/issues?q=is%3Aopen+is%3Aissue+label%3A%22good+first+issue%22) where we could use some extra help. 🚀`
+              });
+              core.info(`Issue #${issueNumber} is already assigned to ${assignedUsers}.`);
+              return;
+            }
+
             // Count open issues assigned to this user
             const { data: assignedIssues } = await github.rest.issues.listForRepo({
               owner: repo.owner,
