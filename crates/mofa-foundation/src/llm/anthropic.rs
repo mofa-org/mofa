@@ -146,22 +146,77 @@ impl AnthropicProvider {
                         Role::System => unreachable!(),
                     };
 
-                    let text = match &msg.content {
-                        Some(MessageContent::Text(t)) => t.clone(),
-                        Some(MessageContent::Parts(parts)) => parts
-                            .iter()
-                            .filter_map(|p| match p {
-                                ContentPart::Text { text } => Some(text.clone()),
-                                _ => None,
-                            })
-                            .collect::<Vec<_>>()
-                            .join("\n"),
-                        None => String::new(),
-                    };
+                    let mut contents = Vec::new();
+                    match &msg.content {
+                        Some(MessageContent::Text(t)) => {
+                            contents.push(serde_json::json!({
+                                "type": "text",
+                                "text": t.clone(),
+                            }));
+                        }
+                        Some(MessageContent::Parts(parts)) => {
+                            for part in parts {
+                                match part {
+                                    ContentPart::Text { text } => {
+                                        contents.push(serde_json::json!({
+                                            "type": "text",
+                                            "text": text.clone(),
+                                        }));
+                                    }
+                                    ContentPart::Image { image_url } => {
+                                        let media_type = if image_url.url.contains("data:image/jpeg") {
+                                            "image/jpeg"
+                                        } else if image_url.url.contains("data:image/png") {
+                                            "image/png"
+                                        } else if image_url.url.contains("data:image/webp") {
+                                            "image/webp"
+                                        } else {
+                                            "image/jpeg" // Default
+                                        };
+                                        let data = image_url.url.split(',').last().unwrap_or(&image_url.url);
+                                        contents.push(serde_json::json!({
+                                            "type": "image",
+                                            "source": {
+                                                "type": "base64",
+                                                "media_type": media_type,
+                                                "data": data,
+                                            }
+                                        }));
+                                    }
+                                    ContentPart::Audio { audio } => {
+                                        let media_type = format!("audio/{}", audio.format.to_lowercase());
+                                        let data = audio.data.split(',').last().unwrap_or(&audio.data);
+                                        // Some providers/models may not support this block, but this is the standard Anthropics structure if/when supported.
+                                        contents.push(serde_json::json!({
+                                            "type": "audio",
+                                            "source": {
+                                                "type": "base64",
+                                                "media_type": media_type,
+                                                "data": data,
+                                            }
+                                        }));
+                                    }
+                                    ContentPart::Video { video } => {
+                                        let media_type = format!("video/{}", video.format.to_lowercase());
+                                        let data = video.data.split(',').last().unwrap_or(&video.data);
+                                        contents.push(serde_json::json!({
+                                            "type": "video",
+                                            "source": {
+                                                "type": "base64",
+                                                "media_type": media_type,
+                                                "data": data,
+                                            }
+                                        }));
+                                    }
+                                }
+                            }
+                        }
+                        None => {}
+                    }
 
                     converted.push(serde_json::json!({
                         "role": role,
-                        "content": [{"type": "text", "text": text}],
+                        "content": contents,
                     }));
                 }
             }
