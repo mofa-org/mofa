@@ -105,6 +105,16 @@ async fn run_command(cli: Cli) -> anyhow::Result<()> {
             commands::generate::run_info();
         }
 
+        Some(Commands::Doctor {
+            path,
+            scenario,
+            json,
+            fix,
+            strict,
+        }) => {
+            commands::doctor::run(Some(path), scenario, strict, json, fix)?;
+        }
+
         Some(Commands::Db { action }) => match action {
             cli::DbCommands::Init {
                 db_type,
@@ -264,7 +274,7 @@ async fn run_command(cli: Cli) -> anyhow::Result<()> {
 fn normalize_legacy_output_flags(args: &mut [String]) {
     const TOP_LEVEL_COMMANDS: &[&str] = &[
         "new", "init", "build", "run", "dataflow", "generate", "info", "db", "agent", "config",
-        "plugin", "session", "tool",
+        "plugin", "session", "tool", "doctor",
     ];
 
     let top_command_index = args
@@ -285,14 +295,8 @@ fn normalize_legacy_output_flags(args: &mut [String]) {
     });
 
     let allows_global_after_command = match top_command {
-        Some("info")
-        | Some("agent")
-        | Some("plugin")
-        | Some("tool")
-        | Some("config")
-        | Some("build")
-        | Some("run")
-        | Some("init") => true,
+        Some("info") | Some("doctor") | Some("agent") | Some("plugin") | Some("tool")
+        | Some("config") | Some("build") | Some("run") | Some("init") => true,
         // `session show` and `session export` both define their own local -o flag, so skip
         // normalisation for those subcommands.  All other `session` subcommands (e.g. `list`)
         // use the global output-format flag and should be normalised.

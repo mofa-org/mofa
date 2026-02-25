@@ -1,5 +1,6 @@
 //! CLI command definitions using clap
 
+use crate::commands::doctor::DoctorScenario;
 use crate::output::OutputFormat;
 use clap::{Parser, Subcommand, ValueEnum};
 use std::path::PathBuf;
@@ -100,6 +101,28 @@ pub enum Commands {
     /// Show information about MoFA
     Info,
 
+    /// Diagnose environment and project readiness for practical workflows
+    Doctor {
+        /// Project directory to inspect
+        #[arg(short, long, default_value = ".")]
+        path: PathBuf,
+
+        /// Validation scenario profile
+        #[arg(long, value_enum, default_value_t = DoctorScenario::LocalDev)]
+        scenario: DoctorScenario,
+
+        /// Emit machine-readable JSON report
+        #[arg(long)]
+        json: bool,
+
+        /// Auto-create missing runtime directories
+        #[arg(long)]
+        fix: bool,
+
+        /// Return non-zero when any failing check exists
+        #[arg(long)]
+        strict: bool,
+    },
     /// Database management commands
     Db {
         #[command(subcommand)]
@@ -532,5 +555,26 @@ mod tests {
             "json",
         ]);
         assert!(parsed.is_ok(), "session export -o ... should still parse");
+    }
+
+    #[test]
+    fn test_doctor_parses_defaults() {
+        let parsed = Cli::try_parse_from(["mofa", "doctor"]);
+        assert!(parsed.is_ok(), "doctor should parse with defaults");
+    }
+
+    #[test]
+    fn test_doctor_parses_ci_strict_json() {
+        let parsed = Cli::try_parse_from([
+            "mofa",
+            "doctor",
+            "--scenario",
+            "ci",
+            "--strict",
+            "--json",
+            "--path",
+            ".",
+        ]);
+        assert!(parsed.is_ok(), "doctor ci strict json should parse");
     }
 }
