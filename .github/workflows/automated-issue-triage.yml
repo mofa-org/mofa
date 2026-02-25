@@ -89,16 +89,34 @@ jobs:
 
       - name: Build issue context
         id: build_context
+        env:
+          ISSUE_NUMBER: ${{ steps.issue.outputs.number }}
+          ISSUE_TITLE: ${{ steps.issue_details.outputs.title }}
+          ISSUE_BODY: ${{ steps.issue_details.outputs.body }}
+          ISSUE_AUTHOR: ${{ steps.issue_details.outputs.author }}
+          ISSUE_LABELS: ${{ steps.issue_details.outputs.labels }}
+          ISSUE_COMMENTS: ${{ steps.issue_details.outputs.comments }}
+          AVAILABLE_LABELS: ${{ steps.get_labels.outputs.available_labels }}
         run: |
           set -euo pipefail
           
-          ISSUE_NUMBER="${{ steps.issue.outputs.number }}"
-          ISSUE_TITLE="${{ steps.issue_details.outputs.title }}"
-          ISSUE_BODY="${{ steps.issue_details.outputs.body }}"
-          ISSUE_AUTHOR="${{ steps.issue_details.outputs.author }}"
-          ISSUE_LABELS="${{ steps.issue_details.outputs.labels }}"
-          ISSUE_COMMENTS="${{ steps.issue_details.outputs.comments }}"
-          AVAILABLE_LABELS="${{ steps.get_labels.outputs.available_labels }}"
+          # Validate and sanitize JSON variables
+          if [ -z "${ISSUE_LABELS}" ] || [ "${ISSUE_LABELS}" = "null" ]; then
+            ISSUE_LABELS="[]"
+          fi
+          if [ -z "${ISSUE_COMMENTS}" ] || [ "${ISSUE_COMMENTS}" = "null" ]; then
+            ISSUE_COMMENTS="[]"
+          fi
+          
+          # Validate JSON syntax before using with jq
+          if ! echo "${ISSUE_LABELS}" | jq . > /dev/null 2>&1; then
+            echo "Warning: Invalid JSON in ISSUE_LABELS, using empty array"
+            ISSUE_LABELS="[]"
+          fi
+          if ! echo "${ISSUE_COMMENTS}" | jq . > /dev/null 2>&1; then
+            echo "Warning: Invalid JSON in ISSUE_COMMENTS, using empty array"
+            ISSUE_COMMENTS="[]"
+          fi
           
           # Create JSON for single issue
           ISSUE_JSON=$(jq -n \
@@ -127,10 +145,9 @@ jobs:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           ISSUES_TO_TRIAGE: ${{ steps.build_context.outputs.issues_json }}
           AVAILABLE_LABELS: ${{ steps.get_labels.outputs.available_labels }}
+          PROMPT: ${{ steps.prompt.outputs.prompt }}
         run: |
           set -euo pipefail
-          
-          PROMPT="${{ steps.prompt.outputs.prompt }}"
           
           echo "Starting issue triage..."
           
@@ -151,7 +168,7 @@ jobs:
           
           # Make API call with error handling
           RESPONSE=$(curl -s -w "\n%{http_code}" -X POST \
-            "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key=${GEMINI_API_KEY}" \
+            "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_API_KEY}" \
             -H "Content-Type: application/json" \
             -d "{
               \"contents\": [{
