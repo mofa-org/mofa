@@ -331,7 +331,7 @@ pub struct AgentEvent<S = serde_json::Value> {
 
 impl<S> AgentEvent<S> {
     /// Create a new event
-    pub fn new(event_type: impl Into<String>, data: serde_json::Value) -> Self {
+    pub fn new(event_type: impl Into<String>, data: S) -> Self {
         let now = crate::utils::now_ms();
 
         Self {
@@ -467,7 +467,7 @@ mod tests {
 
         let mut rx = ctx.subscribe("test_event").await;
 
-        ctx.emit_event(AgentEvent::new(
+        ctx.emit_event(AgentEvent::<String>::new(
             "test_event",
             serde_json::json!({"msg": "hello"}).to_string(),
         ))

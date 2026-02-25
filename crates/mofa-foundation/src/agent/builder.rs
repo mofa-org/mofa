@@ -22,7 +22,7 @@
 //!     .name("analyst")
 //!     .system_prompt("You are a financial analyst.")
 //!     .llm(llm_provider)
-//!     .with_tool(Arc::new(HttpTool))
+//!     .with_tool(HttpTool::new())
 //!     .model("gpt-4o")
 //!     .build()
 //!     .await?;
@@ -43,7 +43,7 @@ use std::sync::Arc;
 
 use serde::{Deserialize, Serialize};
 
-use mofa_kernel::agent::components::tool::Tool;
+use mofa_kernel::agent::components::tool::{DynTool, ToolExt};
 use mofa_kernel::agent::error::{AgentError, AgentResult};
 use mofa_kernel::agent::types::LLMProvider;
 
@@ -73,7 +73,7 @@ pub struct AgentBuilder {
     /// LLM provider (required)
     llm: Option<Arc<dyn LLMProvider>>,
     /// Tools to register on the executor
-    tools: Vec<Arc<dyn Tool>>,
+    tools: Vec<Arc<dyn DynTool>>,
     /// Executor configuration (model, temperature, iterations, …)
     pub(crate) config: AgentExecutorConfig,
     /// Workspace directory for sessions and context files.
@@ -132,8 +132,13 @@ impl AgentBuilder {
     /// Register a tool on the resulting executor.
     ///
     /// Can be called multiple times to register several tools.
-    pub fn with_tool(mut self, tool: Arc<dyn Tool>) -> Self {
-        self.tools.push(tool);
+    pub fn with_tool<Args, Out, T>(mut self, tool: T) -> Self
+    where
+        T: ToolExt<Args, Out> + 'static,
+        Args: serde::de::DeserializeOwned + Send + Sync + 'static,
+        Out: serde::Serialize + Send + Sync + 'static,
+    {
+        self.tools.push(tool.into_dynamic());
         self
     }
 
@@ -475,7 +480,10 @@ max_iterations: 8
         assert!(builder.system_prompt.is_none());
         assert!(builder.config.default_model.is_none());
         // Default max_iterations should be preserved
-        assert_eq!(builder.config.max_iterations, AgentExecutorConfig::default().max_iterations);
+        assert_eq!(
+            builder.config.max_iterations,
+            AgentExecutorConfig::default().max_iterations
+        );
     }
 
     #[test]
