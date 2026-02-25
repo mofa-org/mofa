@@ -89,6 +89,12 @@ qdrant-client = { version = "1.17", optional = true }
 base64 = "0.22"
 infer = "0.16"
 
+# URL parsing for URL validation
+url = "2.5"
+
+# HTML escaping for XSS prevention
+html-escape = "0.2"
+
 [lints]
 workspace = true
 
