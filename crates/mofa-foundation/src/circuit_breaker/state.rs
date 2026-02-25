@@ -97,18 +97,15 @@ impl CircuitBreaker {
 
     /// Get the current state
     pub async fn state(&self) -> State {
-        let state = self.state.read().await;
-
         // Check if we need to transition from open to half-open
-        if *state == State::Open {
-            if let Some(opened_at) = *self.opened_at.read().await {
-                if opened_at.elapsed() >= self.config.timeout {
-                    self.transition_to_half_open().await;
-                }
+        if let Some(opened_at) = *self.opened_at.read().await {
+            let current_state = *self.state.read().await;
+            if current_state == State::Open && opened_at.elapsed() >= self.config.timeout {
+                self.transition_to_half_open().await;
             }
         }
 
-        *state
+        *self.state.read().await
     }
 
     /// Get the current state synchronously (without timeout check)
@@ -560,14 +557,16 @@ mod tests {
 
         // Wait for timeout to transition to half-open
         tokio::time::sleep(Duration::from_millis(100)).await;
-        assert_eq!(*cb.state.read().await, State::HalfOpen);
+        
+        // Use state() method which triggers transition
+        assert_eq!(cb.state().await, State::HalfOpen);
 
         // Record successes
         cb.record_success().await;
         cb.record_success().await;
 
         // Should be closed now
-        assert_eq!(*cb.state.read().await, State::Closed);
+        assert_eq!(cb.state().await, State::Closed);
     }
 
     #[tokio::test]
