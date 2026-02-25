@@ -56,6 +56,9 @@ pub mod validation;
 // Circuit breaker module - Retry and circuit breaker patterns
 pub mod circuit_breaker;
 
+// Metrics and telemetry module
+pub mod metrics;
+
 // Re-export circuit breaker types
 pub use circuit_breaker::{
     // Config
@@ -78,6 +81,29 @@ pub use circuit_breaker::{
     FallbackError,
     execute_fallback,
     FallbackBuilder,
+};
+
+// Re-export metrics types
+pub use metrics::{
+    AgentMetrics,
+    TokenUsage,
+    LatencyPercentiles,
+    ToolMetrics,
+    WorkflowMetrics,
+    StepTiming,
+    StepStatus,
+    RoutingMetrics,
+    ModelPoolMetrics,
+    CircuitBreakerMetrics as MetricsCircuitBreakerMetrics,
+    CircuitBreakerState,
+    SchedulerMetrics,
+    RetryMetrics,
+    BusinessMetrics,
+    MetricsBackend,
+    MetricsCollector,
+    ModelPoolEvent,
+    CircuitBreakerEvent,
+    MetricBuilder,
 };
 
 // Re-export validation types

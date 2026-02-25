@@ -8,30 +8,22 @@ Closes #354
 
 ## Context
 
-MoFA currently has limited support for retry logic and lacks circuit breaker patterns for resilient agent execution. This implementation adds:
-
-- Exponential backoff with jitter (already existed in LLM module)
-- Configurable retry counts and timeouts
-- Circuit breaker state machine (closed, open, half-open)
-- Fallback strategies when circuit is open
-- Per-agent and global circuit breaker configurations
-- Metrics for circuit breaker state transitions
+MoFA currently has limited support for retry logic and lacks circuit breaker patterns for resilient agent execution.
 
 ## Changes
 
-- Added new `circuit_breaker` module with:
-  - `config.rs`: Circuit breaker configuration types
-  - `state.rs`: Circuit breaker state machine implementation
-  - `metrics.rs`: Metrics collection and tracking
-  - `fallback.rs`: Fallback strategies
-  - `mod.rs`: Module exports
+- Added circuit breaker state machine (Closed → Open → Half-Open)
+- Per-agent and global circuit breaker configurations
+- Fallback strategies when circuit is open
+- Metrics for circuit breaker state transitions
+- Uses existing Exponential backoff with jitter from LLM module
+- Added new `circuit_breaker` module with config, state, metrics, and fallback
 
 ## How to Test
 
-1. The code compiles successfully with `cargo check -p mofa-foundation`
-2. Tests can be run with `cargo test -p mofa-foundation -- circuit_breaker`
-
-Example usage:
+1. Run `cargo check -p mofa-foundation` - should compile
+2. Run `cargo test -p mofa-foundation -- circuit_breaker` - tests should pass
+3. Example usage:
 ```rust
 use mofa_foundation::circuit_breaker::{CircuitBreaker, CircuitBreakerConfig};
 
@@ -45,15 +37,11 @@ if cb.can_execute().await {
 
 ## Breaking Changes
 
-- None
+- No breaking changes
 
 ## Checklist
 
-- [x] Code compiles
-- [x] Tests pass
 - [x] Code follows Rust idioms
+- [x] `cargo fmt` run
+- [x] Tests added
 - [x] Public APIs documented
-
-## Additional Notes
-
-The implementation leverages the existing `BackoffStrategy::ExponentialWithJitter` from the LLM module for exponential backoff with jitter support.
