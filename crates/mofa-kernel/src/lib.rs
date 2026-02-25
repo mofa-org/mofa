@@ -9,6 +9,9 @@ pub use plugin::*;
 pub mod bus;
 pub use bus::*;
 
+// utils module
+pub mod utils;
+
 // logging module
 pub mod logging;
 
