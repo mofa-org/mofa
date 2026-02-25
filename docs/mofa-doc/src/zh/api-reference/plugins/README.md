@@ -35,4 +35,4 @@ pub trait AgentPlugin: Send + Sync {
 ## 另见
 
 - [插件概念](../../concepts/plugins.md) — 插件架构
-- [插件示例](../../examples/plugins.md) — 示例
+- [插件示例](../../examples/插件.md) — 示例
