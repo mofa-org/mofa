@@ -45,6 +45,7 @@ mod reducers;
 pub mod session_recorder;
 mod state;
 mod state_graph;
+pub mod trace;
 pub mod telemetry;
 
 pub mod dsl;
@@ -75,3 +76,4 @@ pub use session_recorder::InMemorySessionRecorder;
 pub use state::*;
 pub use state_graph::{CompiledGraphImpl, StateGraphImpl};
 pub use telemetry::{ChannelTelemetryEmitter, RecordingTelemetryEmitter};
+pub use trace::{ExecutionStatus, NodeExecutionRecord, RetryAttempt, ToolInvocation, TraceMode, TraceStateUpdate, WorkflowTrace, WorkflowTraceHandle};

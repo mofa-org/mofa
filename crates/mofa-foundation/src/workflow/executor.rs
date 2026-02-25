@@ -14,6 +14,7 @@ use super::state::{
     ExecutionCheckpoint, ExecutionRecord, NodeExecutionRecord, NodeResult, NodeStatus,
     WorkflowContext, WorkflowStatus, WorkflowValue,
 };
+use super::trace::{ExecutionStatus as TraceExecutionStatus, ToolInvocation, TraceMode, WorkflowTraceHandle};
 use mofa_kernel::workflow::telemetry::{DebugEvent, TelemetryEmitter};
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -102,6 +103,8 @@ pub struct WorkflowExecutor {
     event_tx: Option<mpsc::Sender<ExecutionEvent>>,
     /// Telemetry emitter for the time-travel debugger (optional)
     telemetry: Option<Arc<dyn TelemetryEmitter>>,
+    /// Trace mode for deterministic replay capture (optional)
+    trace_mode: TraceMode,
     /// 子工作流注册表
     /// Sub-workflow registry
     sub_workflows: Arc<RwLock<HashMap<String, Arc<WorkflowGraph>>>>,
@@ -120,6 +123,7 @@ impl WorkflowExecutor {
             config,
             event_tx: None,
             telemetry: None,
+            trace_mode: TraceMode::Disabled,
             sub_workflows: Arc::new(RwLock::new(HashMap::new())),
             event_waiters: Arc::new(RwLock::new(HashMap::new())),
             semaphore,
@@ -140,6 +144,24 @@ impl WorkflowExecutor {
     pub fn with_telemetry(mut self, emitter: Arc<dyn TelemetryEmitter>) -> Self {
         self.telemetry = Some(emitter);
         self
+    }
+
+    /// Set trace mode for deterministic replay capture.
+    ///
+    /// When set to `TraceMode::Record`, the executor will capture all execution
+    /// events to a `WorkflowTrace` that can later be used for deterministic replay.
+    /// This is fully opt-in and adds minimal overhead when disabled.
+    pub fn with_trace_mode(mut self, mode: TraceMode) -> Self {
+        self.trace_mode = mode;
+        self
+    }
+
+    /// Get the trace handle if trace recording is enabled
+    fn trace_handle(&self) -> Option<&WorkflowTraceHandle> {
+        match &self.trace_mode {
+            TraceMode::Record(handle) => Some(handle),
+            TraceMode::Disabled => None,
+        }
     }
 
     /// Emit a debug telemetry event (no-op if no emitter is set).
@@ -203,6 +225,9 @@ impl WorkflowExecutor {
             timestamp_ms: DebugEvent::now_ms(),
         })
         .await;
+
+        // Record trace: workflow start (if tracing enabled)
+        let trace_handle = self.trace_handle();
 
         info!(
             "Starting workflow execution: {} ({})",
@@ -274,6 +299,19 @@ impl WorkflowExecutor {
             status: execution_record.status.clone(),
         })
         .await;
+
+        // Record trace: workflow end
+        if let Some(handle) = trace_handle {
+            let trace_status = match &execution_record.status {
+                WorkflowStatus::Completed => TraceExecutionStatus::Completed,
+                WorkflowStatus::Running => TraceExecutionStatus::Running,
+                WorkflowStatus::Failed(e) => TraceExecutionStatus::Failed(e.clone()),
+                WorkflowStatus::NotStarted => TraceExecutionStatus::Running,
+                WorkflowStatus::Paused => TraceExecutionStatus::Running,
+                WorkflowStatus::Cancelled => TraceExecutionStatus::Cancelled,
+            };
+            handle.finish(trace_status).await;
+        }
 
         // Emit debug telemetry: WorkflowEnd
         self.emit_debug(DebugEvent::WorkflowEnd {
@@ -397,6 +435,9 @@ impl WorkflowExecutor {
         let mut current_node_id = start_node_id.to_string();
         let mut current_input = initial_input;
 
+        // Get trace handle once for the entire execution
+        let trace_handle = self.trace_handle();
+
         loop {
             let node = graph
                 .get_node(&current_node_id)
@@ -412,6 +453,20 @@ impl WorkflowExecutor {
                 state_snapshot: serde_json::to_value(&current_input).unwrap_or_default(),
             })
             .await;
+
+            // Record trace: node start (if tracing enabled)
+            let node_type_str = format!("{:?}", node.node_type());
+            let execution_order = if let Some(handle) = &trace_handle {
+                handle
+                    .start_node(
+                        current_node_id.clone(),
+                        node_type_str,
+                        Some(serde_json::to_value(&current_input).unwrap_or_default()),
+                    )
+                    .await
+            } else {
+                0
+            };
 
             let start_time = std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
@@ -479,6 +534,21 @@ impl WorkflowExecutor {
                 duration_ms: end_time.saturating_sub(start_time),
             })
             .await;
+
+            // Record trace: node end
+            if let Some(handle) = &trace_handle {
+                let output_value = match &result {
+                    Ok(output) => Some(serde_json::to_value(output).unwrap_or_default()),
+                    Err(_) => None,
+                };
+                let trace_status = match &result {
+                    Ok(_) => super::trace::ExecutionStatus::Completed,
+                    Err(e) => super::trace::ExecutionStatus::Failed(e.clone()),
+                };
+                handle
+                    .complete_node(execution_order, output_value, trace_status)
+                    .await;
+            }
 
             // 记录节点执行
             // Record node execution
