@@ -126,6 +126,8 @@ jobs:
           PROMPT_EOF
           )
 
+          set -euo pipefail
+          
           RESPONSE=$(curl -s -X POST \
             "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key=${GEMINI_API_KEY}" \
             -H "Content-Type: application/json" \
@@ -136,7 +138,20 @@ jobs:
               }]
             }")
 
+          # Check for API errors
+          if echo "$RESPONSE" | jq -e '.error' > /dev/null 2>&1; then
+            echo "Error: Gemini API returned an error"
+            echo "$RESPONSE" | jq '.error'
+            exit 1
+          fi
+
           RESULT=$(echo "$RESPONSE" | jq -r '.candidates[0].content.parts[0].text // empty')
+          
+          if [ -z "$RESULT" ]; then
+            echo "Error: No response from Gemini API"
+            echo "Response: $RESPONSE"
+            exit 1
+          fi
           
           # Extract JSON from markdown code blocks if present
           if echo "$RESULT" | grep -q '```'; then
@@ -146,6 +161,9 @@ jobs:
           echo "result<<EOF" >> $GITHUB_OUTPUT
           echo "$RESULT" >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
+          
+          # Log the result for debugging
+          echo "Analysis result: $RESULT"
 
       - name: Close duplicate issue
         if: steps.analyze_duplicates.outputs.result != ''
@@ -165,8 +183,10 @@ jobs:
               return;
             }
             
+            core.info(`Analysis result: ${JSON.stringify(analysis)}`);
+            
             if (!analysis.is_duplicate || analysis.confidence === 'low') {
-              core.info(`Issue #${currentNumber} is not a duplicate (confidence: ${analysis.confidence})`);
+              core.info(`Issue #${currentNumber} is not a duplicate (is_duplicate: ${analysis.is_duplicate}, confidence: ${analysis.confidence})`);
               return;
             }
             
@@ -186,14 +206,14 @@ jobs:
               body: comment
             });
             
-            // Close the issue
-            await github.rest.issues.update({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: currentNumber,
-              state: 'closed',
-              state_reason: 'not_planned'
-            });
+            // Close the issue (disabled for manual confirmation flow)
+            // await github.rest.issues.update({
+            //   owner: context.repo.owner,
+            //   repo: context.repo.repo,
+            //   issue_number: currentNumber,
+            //   state: 'closed',
+            //   state_reason: 'not_planned'
+            // });
             
             // Add duplicate label if it exists
             try {
