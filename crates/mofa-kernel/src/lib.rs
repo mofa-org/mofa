@@ -9,11 +9,15 @@ pub use plugin::*;
 pub mod bus;
 pub use bus::*;
 
+// utils module
+pub mod utils;
+
 // logging module
 pub mod logging;
 
 // error module
 pub mod error;
+pub use error::{KernelError, KernelResult};
 
 // core module
 pub mod core;
@@ -46,3 +50,7 @@ pub use rag::{DocumentChunk, SearchResult, SimilarityMetric, VectorStore};
 // Workflow traits (工作流接口)
 pub mod workflow;
 pub use workflow::*;
+
+// Metrics traits for monitoring integration
+pub mod metrics;
+pub use metrics::*;
