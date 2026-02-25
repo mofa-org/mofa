@@ -86,9 +86,18 @@ Quick verification:
 
 ```bash
 cd docs/mofa-doc
+./scripts/check-internal-links.sh
 ./scripts/build-docs.sh
 test -f book/index.html && echo "EN OK"
 test -f book/zh/index.html && echo "ZH OK"
+```
+
+Recommended pre-PR validation:
+
+```bash
+cd docs/mofa-doc
+./scripts/check-internal-links.sh
+./scripts/build-docs.sh
 ```
 
 ### Manual Deployment

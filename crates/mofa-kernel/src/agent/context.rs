@@ -323,10 +323,7 @@ impl AgentEvent {
     /// 创建新事件
     /// Create a new event
     pub fn new(event_type: impl Into<String>, data: serde_json::Value) -> Self {
-        let now = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_millis() as u64;
+        let now = crate::utils::now_ms();
 
         Self {
             event_type: event_type.into(),

@@ -1,6 +1,8 @@
 //! CLI context providing access to backend services
 
+use crate::state::PersistentAgentRegistry;
 use crate::store::PersistedStore;
+use crate::utils::AgentProcessManager;
 use crate::utils::paths;
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
@@ -76,6 +78,10 @@ pub struct CliContext {
     pub plugin_store: PersistedStore<PluginSpecEntry>,
     /// Persistent tool source specifications
     pub tool_store: PersistedStore<ToolSpecEntry>,
+    /// Persistent agent state storage
+    pub persistent_agents: Arc<PersistentAgentRegistry>,
+    /// Agent process manager for spawning/managing processes
+    pub process_manager: AgentProcessManager,
     /// In-memory plugin registry
     pub plugin_registry: Arc<SimplePluginRegistry>,
     /// In-memory tool registry
@@ -108,12 +114,21 @@ impl CliContext {
         let mut tool_registry = ToolRegistry::new();
         replay_persisted_tools(&mut tool_registry, &tool_store)?;
 
+        let agents_dir = data_dir.join("agents");
+        let persistent_agents = Arc::new(PersistentAgentRegistry::new(agents_dir).await.map_err(
+            |e| anyhow::anyhow!("Failed to initialize persistent agent registry: {}", e),
+        )?);
+
+        let process_manager = AgentProcessManager::new(config_dir.clone());
+
         Ok(Self {
             session_manager,
             agent_registry,
             agent_store,
             plugin_store,
             tool_store,
+            persistent_agents,
+            process_manager,
             plugin_registry,
             tool_registry,
             data_dir,
@@ -146,12 +161,21 @@ impl CliContext {
         let mut tool_registry = ToolRegistry::new();
         replay_persisted_tools(&mut tool_registry, &tool_store)?;
 
+        let agents_dir = data_dir.join("agents");
+        let persistent_agents = Arc::new(PersistentAgentRegistry::new(agents_dir).await.map_err(
+            |e| anyhow::anyhow!("Failed to initialize persistent agent registry: {}", e),
+        )?);
+
+        let process_manager = AgentProcessManager::new(config_dir.clone());
+
         Ok(Self {
             session_manager,
             agent_registry,
             agent_store,
             plugin_store,
             tool_store,
+            persistent_agents,
+            process_manager,
             plugin_registry,
             tool_registry,
             data_dir,

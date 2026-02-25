@@ -159,10 +159,7 @@ impl Task {
     /// 创建新任务
     /// Create a new task
     pub fn new(id: impl Into<String>, content: impl Into<String>) -> Self {
-        let now = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_millis() as u64;
+        let now = crate::utils::now_ms();
 
         Self {
             id: id.into(),
