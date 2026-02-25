@@ -39,11 +39,6 @@ jobs:
             const assignees = issue.assignees || [];
             if (assignees.length > 0) {
               const assignedUsers = assignees.map(a => a.login).join(', @');
-              const { data: repoData } = await github.rest.repos.get({
-                owner: repo.owner,
-                repo: repo.repo
-              });
-              const defaultBranch = repoData.default_branch;
               await github.rest.issues.createComment({
                 owner: repo.owner,
                 repo: repo.repo,
