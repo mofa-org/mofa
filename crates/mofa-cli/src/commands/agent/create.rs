@@ -2,6 +2,7 @@
 
 use colored::Colorize;
 use dialoguer::{Confirm, Input, Select, theme::ColorfulTheme};
+use serde::Deserialize;
 use std::path::PathBuf;
 
 /// Agent configuration built from the interactive wizard
@@ -280,9 +281,72 @@ fn run_interactive_wizard() -> anyhow::Result<AgentConfigBuilder> {
 fn config_from_file_or_defaults(
     config_path: Option<PathBuf>,
 ) -> anyhow::Result<AgentConfigBuilder> {
-    if let Some(_path) = config_path {
-        // Load from file (would parse the file here)
-        anyhow::bail!("Config file loading not yet implemented for non-interactive mode");
+    if let Some(path) = config_path {
+        #[derive(Debug, Deserialize)]
+        struct FileAgentConfig {
+            id: String,
+            name: String,
+            #[serde(default)]
+            description: String,
+            #[serde(default)]
+            capabilities: Vec<String>,
+        }
+
+        #[derive(Debug, Deserialize)]
+        struct FileLlmConfig {
+            provider: Option<String>,
+            model: Option<String>,
+            api_key: Option<String>,
+            base_url: Option<String>,
+            temperature: Option<f32>,
+            max_tokens: Option<u32>,
+            #[serde(default)]
+            system_prompt: String,
+        }
+
+        #[derive(Debug, Deserialize)]
+        struct FileRootConfig {
+            agent: FileAgentConfig,
+            llm: FileLlmConfig,
+        }
+
+        let raw = std::fs::read_to_string(&path)
+            .map_err(|e| anyhow::anyhow!("Failed to read config file {}: {e}", path.display()))?;
+
+        let parsed: FileRootConfig = serde_yaml::from_str(&raw)
+            .map_err(|e| anyhow::anyhow!("Failed to parse config file {}: {e}", path.display()))?;
+
+        let provider_value = parsed
+            .llm
+            .provider
+            .ok_or_else(|| anyhow::anyhow!("Missing required config field: llm.provider"))?;
+
+        let provider = parse_provider(&provider_value)?;
+
+        let model = parsed
+            .llm
+            .model
+            .unwrap_or_else(|| provider.default_model().to_string());
+
+        let capabilities = if parsed.agent.capabilities.is_empty() {
+            vec!["llm".to_string()]
+        } else {
+            parsed.agent.capabilities
+        };
+
+        Ok(AgentConfigBuilder {
+            id: parsed.agent.id,
+            name: parsed.agent.name,
+            description: parsed.agent.description,
+            provider,
+            model,
+            api_key: parsed.llm.api_key,
+            base_url: parsed.llm.base_url,
+            temperature: parsed.llm.temperature.unwrap_or(0.7),
+            max_tokens: parsed.llm.max_tokens.unwrap_or(4096),
+            system_prompt: parsed.llm.system_prompt,
+            capabilities,
+        })
     } else {
         // Use defaults
         Ok(AgentConfigBuilder {
@@ -298,6 +362,18 @@ fn config_from_file_or_defaults(
             system_prompt: "You are a helpful AI assistant.".to_string(),
             capabilities: vec!["llm".to_string(), "chat".to_string()],
         })
+    }
+}
+
+fn parse_provider(value: &str) -> anyhow::Result<LLMProvider> {
+    match value.trim().to_ascii_lowercase().as_str() {
+        "openai" => Ok(LLMProvider::OpenAI),
+        "ollama" => Ok(LLMProvider::Ollama),
+        "azure" | "azure_openai" | "azure-openai" => Ok(LLMProvider::Azure),
+        "compatible" | "compatible_api" | "compatible-api" => Ok(LLMProvider::Compatible),
+        "anthropic" => Ok(LLMProvider::Anthropic),
+        "gemini" => Ok(LLMProvider::Gemini),
+        other => anyhow::bail!("Unsupported llm.provider value: {other}"),
     }
 }
 
@@ -409,4 +485,99 @@ fn multiline_input(default: &str) -> String {
     // For now, just use default value
     // In a full implementation, this would open a proper multiline editor
     default.to_string()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs;
+    use tempfile::TempDir;
+
+    fn write_config_file(temp: &TempDir, content: &str) -> PathBuf {
+        let path = temp.path().join("agent.yml");
+        fs::write(&path, content).expect("failed to write temp config");
+        path
+    }
+
+    #[test]
+    fn config_path_loads_into_builder_flow() {
+        let temp = TempDir::new().expect("failed to create tempdir");
+        let config_path = write_config_file(
+            &temp,
+            r#"
+agent:
+  id: "support-agent-001"
+  name: "Support Agent"
+  description: "Handles support requests"
+  capabilities:
+    - llm
+    - tool_call
+llm:
+  provider: anthropic
+  model: claude-3-5-sonnet-20241022
+  api_key: ${ANTHROPIC_API_KEY}
+  base_url: https://api.anthropic.com
+  temperature: 0.35
+  max_tokens: 2048
+  system_prompt: |
+    You are a support assistant.
+"#,
+        );
+
+        let config = config_from_file_or_defaults(Some(config_path)).expect("expected config");
+        assert_eq!(config.id, "support-agent-001");
+        assert_eq!(config.name, "Support Agent");
+        assert_eq!(config.description, "Handles support requests");
+        assert_eq!(config.provider, LLMProvider::Anthropic);
+        assert_eq!(config.model, "claude-3-5-sonnet-20241022");
+        assert_eq!(config.api_key.as_deref(), Some("${ANTHROPIC_API_KEY}"));
+        assert_eq!(
+            config.base_url.as_deref(),
+            Some("https://api.anthropic.com")
+        );
+        assert_eq!(config.temperature, 0.35);
+        assert_eq!(config.max_tokens, 2048);
+        assert_eq!(config.system_prompt.trim(), "You are a support assistant.");
+        assert_eq!(config.capabilities, vec!["llm", "tool_call"]);
+    }
+
+    #[test]
+    fn malformed_config_returns_clear_error() {
+        let temp = TempDir::new().expect("failed to create tempdir");
+        let config_path = write_config_file(
+            &temp,
+            r#"
+agent:
+  id: "bad-agent"
+  name: "Bad Agent"
+llm: [this is not valid
+"#,
+        );
+
+        let err =
+            config_from_file_or_defaults(Some(config_path)).expect_err("expected parse error");
+        let msg = err.to_string();
+        assert!(msg.contains("Failed to parse config file"));
+    }
+
+    #[test]
+    fn missing_required_fields_returns_useful_message() {
+        let temp = TempDir::new().expect("failed to create tempdir");
+        let config_path = write_config_file(
+            &temp,
+            r#"
+agent:
+  id: "missing-provider-agent"
+  name: "Missing Provider"
+llm:
+  model: gpt-4o
+"#,
+        );
+
+        let err = config_from_file_or_defaults(Some(config_path))
+            .expect_err("expected missing-required-field error");
+        let msg = err.to_string();
+        assert!(msg.contains("Missing required config field"));
+        assert!(msg.contains("llm.provider"));
+    }
 }
