@@ -177,6 +177,8 @@ mod tests {
             cpu_family: CpuFamily::AppleSilicon,
             gpu_available: true,
             gpu_type: Some(GpuType::Metal),
+            total_memory_bytes: 17_179_869_184,    // 16 GB
+            available_memory_bytes: 8_589_934_592, // 8 GB
         }
     }
 
@@ -302,6 +304,8 @@ mod tests {
             cpu_family: CpuFamily::X86_64,
             gpu_available: false,
             gpu_type: None,
+            total_memory_bytes: 17_179_869_184,    // 16 GB
+            available_memory_bytes: 8_589_934_592, // 8 GB
         };
         let decision = resolve(
             &RoutingPolicy::LatencyOptimized,
