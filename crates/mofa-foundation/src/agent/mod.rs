@@ -71,7 +71,10 @@ pub use components::{
 };
 
 // Tool adapters and registries (Foundation implementations)
-pub use tools::{BuiltinTools, ClosureTool, FunctionTool, ToolSearcher};
+pub use tools::{
+    BuiltinTools, ClosureTool, DateTimeTool, FileReadTool, FileWriteTool, FunctionTool, HttpTool,
+    JsonParseTool, ShellTool, ToolSearcher,
+};
 
 // Re-export context module
 pub use context::{
