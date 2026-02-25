@@ -53,4 +53,4 @@ impl AgentPlugin for MyPlugin {
 ## 另见
 
 - [插件](../concepts/plugins.md) — 插件概念
-- [示例](../examples/plugins.md) — 插件示例
+- [示例](../examples/插件.md) — 插件示例

@@ -4,6 +4,8 @@ use crate::config::loader::ConfigLoader;
 use crate::context::{AgentConfigEntry, CliContext};
 use chrono::Utc;
 use colored::Colorize;
+use std::path::{Path, PathBuf};
+use tracing::info;
 
 /// Execute the `mofa agent start` command
 pub async fn run(
@@ -19,20 +21,30 @@ pub async fn run(
         println!("  Mode: {}", "daemon".yellow());
     }
 
-    // Check if agent is already registered
-    if ctx.agent_registry.contains(agent_id).await {
-        anyhow::bail!("Agent '{}' is already registered", agent_id);
+    // Check if agent already exists
+    if ctx.persistent_agents.exists(agent_id).await {
+        let existing = ctx.persistent_agents.get(agent_id).await;
+        if let Some(agent) = existing {
+            if agent.last_state == crate::state::AgentProcessState::Running {
+                anyhow::bail!(
+                    "Agent '{}' is already running (PID: {})",
+                    agent_id,
+                    agent.process_id.unwrap_or(0)
+                );
+            }
+            println!(
+                "  {} Agent exists but is not running. Restarting...",
+                "!".yellow()
+            );
+        }
     }
 
-    // Load agent configuration
-    let agent_config = if let Some(path) = config_path {
+    // Load or discover agent configuration
+    let (config_file, agent_name) = if let Some(path) = config_path {
         println!("  Config: {}", path.display().to_string().cyan());
-        let loader = ConfigLoader::new();
-        let cli_config = loader.load(path)?;
-        println!("  Agent:  {}", cli_config.agent.name.white());
+        ctx.process_manager.validate_config(path)?;
 
-        // Convert CLI AgentConfig to kernel AgentConfig
-        mofa_kernel::agent::config::AgentConfig::new(agent_id, &cli_config.agent.name)
+        (path.to_path_buf(), agent_id.to_string())
     } else {
         // Try to auto-discover configuration
         let loader = ConfigLoader::new();
@@ -42,16 +54,19 @@ pub async fn run(
                     "  Config: {} (auto-discovered)",
                     found_path.display().to_string().cyan()
                 );
-                let cli_config = loader.load(&found_path)?;
-                println!("  Agent:  {}", cli_config.agent.name.white());
-                mofa_kernel::agent::config::AgentConfig::new(agent_id, &cli_config.agent.name)
+                ctx.process_manager.validate_config(&found_path)?;
+
+                (found_path, agent_id.to_string())
             }
             None => {
                 println!("  {} No config file found, using defaults", "!".yellow());
-                mofa_kernel::agent::config::AgentConfig::new(agent_id, agent_id)
+                (PathBuf::new(), agent_id.to_string())
             }
         }
     };
+
+    // Create agent config
+    let agent_config = mofa_kernel::agent::config::AgentConfig::new(agent_id, &agent_name);
 
     // Check if a matching factory type is available
     let mut factory_types = ctx.agent_registry.list_factory_types().await;
@@ -71,6 +86,11 @@ pub async fn run(
             "!".yellow(),
             selected_factory
         );
+    }
+
+    // Check if agent already exists
+    if ctx.agent_registry.contains(agent_id).await {
+        anyhow::bail!("Agent '{}' is already registered", agent_id);
     }
 
     // Try to create via factory
@@ -110,11 +130,7 @@ pub async fn run(
         }
     }
 
-    println!(
-        "{} Agent '{}' started (state persisted)",
-        "√".green(),
-        agent_id
-    );
+    println!("{} Agent '{}' started successfully", "✓".green(), agent_id);
 
     Ok(())
 }

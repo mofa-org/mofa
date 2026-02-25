@@ -345,4 +345,4 @@ mod tests {
 
 - [工具概念](../concepts/tools.md) — 工具概述
 - [智能体](../concepts/agents.md) — 在智能体中使用工具
-- [示例](../examples/core-agents.md) — 工具示例
+- [示例](../examples/核心智能体.md) — 工具示例
