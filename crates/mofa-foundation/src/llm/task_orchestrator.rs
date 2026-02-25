@@ -13,8 +13,9 @@ use tracing::Instrument;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use tokio::sync::{RwLock, broadcast};
+use tokio::task::JoinHandle;
 use uuid::Uuid;
 
 /// Where to route task results
@@ -187,12 +188,16 @@ impl Default for TaskOrchestratorConfig {
 pub struct TaskOrchestrator {
     /// LLM provider for tasks
     provider: Arc<dyn LLMProvider>,
-    /// Active tasks
+    /// Active tasks (Running and recently completed, for status polling)
     active_tasks: Arc<RwLock<HashMap<String, BackgroundTask>>>,
     /// Result sender
     result_sender: broadcast::Sender<TaskResult>,
     /// Configuration
     config: TaskOrchestratorConfig,
+    /// JoinHandles for all spawned tasks, keyed by task ID.
+    /// Stored so tasks can be aborted on shutdown instead of sleeping for
+    /// up to 300 seconds after the orchestrator is dropped.
+    task_handles: Mutex<HashMap<String, JoinHandle<()>>>,
 }
 
 impl TaskOrchestrator {
@@ -205,6 +210,7 @@ impl TaskOrchestrator {
             active_tasks: Arc::new(RwLock::new(HashMap::new())),
             result_sender,
             config,
+            task_handles: Mutex::new(HashMap::new()),
         }
     }
 
@@ -215,6 +221,12 @@ impl TaskOrchestrator {
 
     /// Spawn a background task
     pub async fn spawn(&self, prompt: &str, origin: TaskOrigin) -> GlobalResult<String> {
+        // Lazily prune handles for tasks that have already finished so the
+// handles map does not grow without bound over a long run.
+{
+    let mut handles = self.task_handles.lock().unwrap();
+    handles.retain(|_, h| !h.is_finished());
+}
         // Check concurrent limit
         let active_count = self.active_tasks.read().await.len();
         if active_count >= self.config.max_concurrent_tasks {
@@ -242,9 +254,26 @@ impl TaskOrchestrator {
         let model = self.config.default_model.clone();
         let prompt = prompt.to_string();
         let task_id_clone = task_id.clone();
+let span = tracing::info_span!("task_orchestrator.background", task_id = %task_id);
 
-        let span = tracing::info_span!("task_orchestrator.background", task_id = %task_id_clone);
-        tokio::spawn(async move {
+let handle = tokio::spawn(async move {
+    let _enter = span.enter();
+
+    let result = Self::run_task(&provider, &model, &prompt).await;
+
+    // Update task status
+    {
+        let mut tasks = active_tasks.write().await;
+        if let Some(task) = tasks.get_mut(&task_id_clone) {
+            match &result {
+                Ok(content) => task.mark_completed(content),
+                Err(e) => task.mark_failed(e.to_string()),
+            }
+        }
+    }
+
+    result
+});
             let result = Self::run_task(&provider, &model, &prompt).await;
 
             // Update task status
@@ -263,16 +292,34 @@ impl TaskOrchestrator {
                 Ok(content) => TaskResult::success(&task_id_clone, origin, content),
                 Err(e) => TaskResult::failure(&task_id_clone, origin, e.to_string()),
             };
-
             let _ = result_sender.send(task_result);
 
-            // Cleanup completed tasks after a delay
-            tokio::time::sleep(tokio::time::Duration::from_secs(300)).await;
+            // Short retention window so callers can still poll task status after
+            // completion.  30 s is ample; this sleep is cancelled immediately if
+            // shutdown() aborts the handle.
+            tokio::time::sleep(tokio::time::Duration::from_secs(30)).await;
             let mut tasks = active_tasks.write().await;
             tasks.remove(&task_id_clone);
         }.instrument(span));
 
+        // Store the handle so shutdown() can abort it.
+        self.task_handles
+            .lock()
+            .unwrap()
+            .insert(task_id.clone(), handle);
+
         Ok(task_id)
+    }
+
+    /// Abort all in-flight and sleeping tasks immediately.
+    ///
+    /// Call this before dropping the orchestrator when a prompt, clean
+    /// shutdown is required.  Also invoked automatically from `Drop`.
+    pub fn shutdown(&self) {
+        let mut handles = self.task_handles.lock().unwrap();
+        for (_, handle) in handles.drain() {
+            handle.abort();
+        }
     }
 
     /// Run a single task to completion
@@ -315,5 +362,11 @@ impl TaskOrchestrator {
     /// Get the configuration
     pub fn config(&self) -> &TaskOrchestratorConfig {
         &self.config
+    }
+}
+
+impl Drop for TaskOrchestrator {
+    fn drop(&mut self) {
+        self.shutdown();
     }
 }
