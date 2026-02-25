@@ -118,7 +118,7 @@ pub struct TraceStateUpdate {
 }
 
 /// Execution status transition
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum ExecutionStatus {
     /// Workflow/Node has started
     Started,
@@ -621,6 +621,118 @@ impl ReplayState {
 }
 
 // ============================================================================
+// Snapshot Consistency Validation
+// ============================================================================
+
+/// Result of comparing two traces for consistency
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct TraceComparisonResult {
+    pub identical: bool,
+    pub node_count_match: bool,
+    pub order_match: bool,
+    pub output_differences: Vec<OutputDifference>,
+    pub status_differences: Vec<StatusDifference>,
+}
+
+/// Represents a difference in node outputs
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct OutputDifference {
+    pub node_id: String,
+    pub expected_output: serde_json::Value,
+    pub actual_output: serde_json::Value,
+}
+
+/// Represents a difference in node status
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct StatusDifference {
+    pub node_id: String,
+    pub expected_status: ExecutionStatus,
+    pub actual_status: ExecutionStatus,
+}
+
+impl WorkflowTrace {
+    /// Compare this trace with another for consistency
+    /// Used for snapshot testing and regression validation
+    pub fn compare(&self, other: &WorkflowTrace) -> TraceComparisonResult {
+        let node_count_match = self.node_executions.len() == other.node_executions.len();
+        
+        // Check order match
+        let order_match = self.node_executions.iter()
+            .zip(other.node_executions.iter())
+            .all(|(a, b)| a.node_id == b.node_id);
+        
+        // Check output differences
+        let output_differences: Vec<OutputDifference> = self.node_executions.iter()
+            .zip(other.node_executions.iter())
+            .filter_map(|(a, b)| {
+                match (&a.output, &b.output) {
+                    (Some(exp), Some(act)) if exp != act => Some(OutputDifference {
+                        node_id: a.node_id.clone(),
+                        expected_output: exp.clone(),
+                        actual_output: act.clone(),
+                    }),
+                    _ => None,
+                }
+            })
+            .collect();
+        
+        // Check status differences
+        let status_differences: Vec<StatusDifference> = self.node_executions.iter()
+            .zip(other.node_executions.iter())
+            .filter(|(a, b)| a.status != b.status)
+            .map(|(a, b)| StatusDifference {
+                node_id: a.node_id.clone(),
+                expected_status: a.status.clone(),
+                actual_status: b.status.clone(),
+            })
+            .collect();
+        
+        let identical = node_count_match && order_match 
+            && output_differences.is_empty() 
+            && status_differences.is_empty();
+        
+        TraceComparisonResult {
+            identical,
+            node_count_match,
+            order_match,
+            output_differences,
+            status_differences,
+        }
+    }
+    
+    /// Validate that this trace matches expected snapshot
+    pub fn validate_snapshot(&self, expected: &WorkflowTrace) -> Result<(), TraceComparisonResult> {
+        let result = self.compare(expected);
+        if result.identical {
+            Ok(())
+        } else {
+            Err(result)
+        }
+    }
+    
+    /// Get trace fingerprint for quick comparison
+    pub fn fingerprint(&self) -> String {
+        use std::collections::hash_map::DefaultHasher;
+        use std::hash::{Hash, Hasher};
+        
+        let mut hasher = DefaultHasher::new();
+        self.workflow_id.hash(&mut hasher);
+        self.execution_id.hash(&mut hasher);
+        self.node_executions.len().hash(&mut hasher);
+        
+        for node in &self.node_executions {
+            node.node_id.hash(&mut hasher);
+            if let Some(ref output) = node.output {
+                output.hash(&mut hasher);
+            }
+            node.status.hash(&mut hasher);
+        }
+        
+        format!("{:016x}", hasher.finish())
+    }
+}
+
+// ============================================================================
 // Helper functions
 // ============================================================================
 
@@ -898,5 +1010,168 @@ mod tests {
         let output = replay_state.get_replayed_output();
         assert!(output.is_some());
         assert_eq!(output.unwrap(), &serde_json::json!({"result": "output-2"}));
+    }
+
+    // ============================================================================
+    // Phase 3: Deterministic Validation Tests
+    // ============================================================================
+
+    #[test]
+    fn test_trace_comparison_identical() {
+        // Create two identical traces
+        let mut trace1 = WorkflowTrace::new("workflow-1", "exec-1");
+        trace1.start_node("node-1".to_string(), "task".to_string(), Some(serde_json::json!({"input": 1})));
+        trace1.complete_node(0, Some(serde_json::json!({"result": "output-1"})), ExecutionStatus::Completed);
+        trace1.finish(ExecutionStatus::Completed);
+
+        let mut trace2 = WorkflowTrace::new("workflow-1", "exec-1");
+        trace2.start_node("node-1".to_string(), "task".to_string(), Some(serde_json::json!({"input": 1})));
+        trace2.complete_node(0, Some(serde_json::json!({"result": "output-1"})), ExecutionStatus::Completed);
+        trace2.finish(ExecutionStatus::Completed);
+
+        let result = trace1.compare(&trace2);
+        assert!(result.identical);
+        assert!(result.output_differences.is_empty());
+        assert!(result.status_differences.is_empty());
+    }
+
+    #[test]
+    fn test_trace_comparison_output_diff() {
+        // Create two traces with different outputs
+        let mut trace1 = WorkflowTrace::new("workflow-1", "exec-1");
+        trace1.start_node("node-1".to_string(), "task".to_string(), None);
+        trace1.complete_node(0, Some(serde_json::json!({"result": "output-a"})), ExecutionStatus::Completed);
+        trace1.finish(ExecutionStatus::Completed);
+
+        let mut trace2 = WorkflowTrace::new("workflow-1", "exec-1");
+        trace2.start_node("node-1".to_string(), "task".to_string(), None);
+        trace2.complete_node(0, Some(serde_json::json!({"result": "output-b"})), ExecutionStatus::Completed);
+        trace2.finish(ExecutionStatus::Completed);
+
+        let result = trace1.compare(&trace2);
+        assert!(!result.identical);
+        assert_eq!(result.output_differences.len(), 1);
+        assert_eq!(result.output_differences[0].node_id, "node-1");
+    }
+
+    #[test]
+    fn test_trace_comparison_order_diff() {
+        // Create two traces with different node order
+        let mut trace1 = WorkflowTrace::new("workflow-1", "exec-1");
+        trace1.start_node("node-1".to_string(), "task".to_string(), None);
+        trace1.complete_node(0, Some(serde_json::json!({})), ExecutionStatus::Completed);
+        trace1.start_node("node-2".to_string(), "task".to_string(), None);
+        trace1.complete_node(1, Some(serde_json::json!({})), ExecutionStatus::Completed);
+        trace1.finish(ExecutionStatus::Completed);
+
+        let mut trace2 = WorkflowTrace::new("workflow-1", "exec-1");
+        trace2.start_node("node-2".to_string(), "task".to_string(), None);
+        trace2.complete_node(0, Some(serde_json::json!({})), ExecutionStatus::Completed);
+        trace2.start_node("node-1".to_string(), "task".to_string(), None);
+        trace2.complete_node(1, Some(serde_json::json!({})), ExecutionStatus::Completed);
+        trace2.finish(ExecutionStatus::Completed);
+
+        let result = trace1.compare(&trace2);
+        assert!(!result.identical);
+        assert!(!result.order_match);
+    }
+
+    #[test]
+    fn test_trace_snapshot_validation() {
+        // Create expected snapshot
+        let mut expected = WorkflowTrace::new("workflow-1", "exec-1");
+        expected.start_node("node-1".to_string(), "task".to_string(), Some(serde_json::json!({"value": 42})));
+        expected.complete_node(0, Some(serde_json::json!({"result": "success", "data": [1, 2, 3]})), ExecutionStatus::Completed);
+        expected.finish(ExecutionStatus::Completed);
+
+        // Create identical actual trace (e.g., from replay)
+        let mut actual = WorkflowTrace::new("workflow-1", "exec-1");
+        actual.start_node("node-1".to_string(), "task".to_string(), Some(serde_json::json!({"value": 42})));
+        actual.complete_node(0, Some(serde_json::json!({"result": "success", "data": [1, 2, 3]})), ExecutionStatus::Completed);
+        actual.finish(ExecutionStatus::Completed);
+
+        // Validate snapshot - should pass
+        let validation_result = actual.validate_snapshot(&expected);
+        assert!(validation_result.is_ok());
+    }
+
+    #[test]
+    fn test_trace_fingerprint() {
+        let mut trace1 = WorkflowTrace::new("workflow-1", "exec-1");
+        trace1.start_node("node-1".to_string(), "task".to_string(), None);
+        trace1.complete_node(0, Some(serde_json::json!({})), ExecutionStatus::Completed);
+        trace1.finish(ExecutionStatus::Completed);
+
+        let fingerprint1 = trace1.fingerprint();
+        
+        // Same trace should have same fingerprint
+        let mut trace2 = WorkflowTrace::new("workflow-1", "exec-1");
+        trace2.start_node("node-1".to_string(), "task".to_string(), None);
+        trace2.complete_node(0, Some(serde_json::json!({})), ExecutionStatus::Completed);
+        trace2.finish(ExecutionStatus::Completed);
+
+        let fingerprint2 = trace2.fingerprint();
+        assert_eq!(fingerprint1, fingerprint2);
+
+        // Different trace should have different fingerprint
+        let mut trace3 = WorkflowTrace::new("workflow-1", "exec-1");
+        trace3.start_node("node-2".to_string(), "task".to_string(), None);
+        trace3.complete_node(0, Some(serde_json::json!({})), ExecutionStatus::Completed);
+        trace3.finish(ExecutionStatus::Completed);
+
+        let fingerprint3 = trace3.fingerprint();
+        assert_ne!(fingerprint1, fingerprint3);
+    }
+
+    #[test]
+    fn test_record_replay_identical_result() {
+        // Simulate: Record phase - create original trace
+        let mut recorded_trace = WorkflowTrace::new("test-workflow", "exec-123");
+        recorded_trace.start_node("fetch-data".to_string(), "task".to_string(), Some(serde_json::json!({"source": "api"})));
+        recorded_trace.complete_node(0, Some(serde_json::json!({"items": [1, 2, 3], "count": 3})), ExecutionStatus::Completed);
+        recorded_trace.start_node("process-data".to_string(), "task".to_string(), Some(serde_json::json!({"input": [1, 2, 3]})));
+        recorded_trace.complete_node(1, Some(serde_json::json!({"sum": 6, "avg": 2.0})), ExecutionStatus::Completed);
+        recorded_trace.finish(ExecutionStatus::Completed);
+
+        // Simulate: Replay phase - create replay trace (should match)
+        let mut replay_trace = WorkflowTrace::new("test-workflow", "exec-456");
+        replay_trace.start_node("fetch-data".to_string(), "task".to_string(), Some(serde_json::json!({"source": "api"})));
+        replay_trace.complete_node(0, Some(serde_json::json!({"items": [1, 2, 3], "count": 3})), ExecutionStatus::Completed);
+        replay_trace.start_node("process-data".to_string(), "task".to_string(), Some(serde_json::json!({"input": [1, 2, 3]})));
+        replay_trace.complete_node(1, Some(serde_json::json!({"sum": 6, "avg": 2.0})), ExecutionStatus::Completed);
+        replay_trace.finish(ExecutionStatus::Completed);
+
+        // Validate: Both traces should be identical
+        let result = recorded_trace.compare(&replay_trace);
+        assert!(result.identical, "Record → Replay should produce identical results");
+        assert!(result.node_count_match);
+        assert!(result.order_match);
+        assert!(result.output_differences.is_empty());
+        assert!(result.status_differences.is_empty());
+
+        // Snapshot validation should also pass
+        assert!(replay_trace.validate_snapshot(&recorded_trace).is_ok());
+    }
+
+    #[test]
+    fn test_replay_detects_divergence() {
+        // Create original trace
+        let mut original = WorkflowTrace::new("workflow", "exec-1");
+        original.start_node("node-1".to_string(), "task".to_string(), None);
+        original.complete_node(0, Some(serde_json::json!({"value": 100})), ExecutionStatus::Completed);
+        original.finish(ExecutionStatus::Completed);
+
+        // Create replay trace with different output (simulating divergence)
+        let mut replay = WorkflowTrace::new("workflow", "exec-2");
+        replay.start_node("node-1".to_string(), "task".to_string(), None);
+        replay.complete_node(0, Some(serde_json::json!({"value": 200})), ExecutionStatus::Completed); // Different!
+        replay.finish(ExecutionStatus::Completed);
+
+        // Should detect the divergence
+        let result = original.compare(&replay);
+        assert!(!result.identical);
+        assert_eq!(result.output_differences.len(), 1);
+        assert_eq!(result.output_differences[0].expected_output, serde_json::json!({"value": 100}));
+        assert_eq!(result.output_differences[0].actual_output, serde_json::json!({"value": 200}));
     }
 }
