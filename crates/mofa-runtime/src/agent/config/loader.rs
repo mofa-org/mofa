@@ -213,6 +213,7 @@ impl ConfigLoader {
             ConfigError::Parse(e) => AgentConfigError::Parse(e),
             ConfigError::Serialization(e) => AgentConfigError::Serialization(e),
             ConfigError::UnsupportedFormat(e) => AgentConfigError::UnsupportedFormat(e),
+            _ => AgentConfigError::Parse(e.to_string()),
         })?;
 
         // 验证配置
@@ -400,6 +401,7 @@ impl ConfigLoader {
             ConfigError::Parse(e) => AgentConfigError::Parse(e.to_string()),
             ConfigError::Serialization(e) => AgentConfigError::Serialization(e),
             ConfigError::UnsupportedFormat(e) => AgentConfigError::UnsupportedFormat(e),
+            _ => AgentConfigError::Parse(e.to_string()),
         })
     }
 }

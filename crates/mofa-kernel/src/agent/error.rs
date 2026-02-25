@@ -14,6 +14,7 @@ pub type AgentResult<T> = Result<T, AgentError>;
 /// Agent 错误类型
 /// Agent error types
 #[derive(Debug, Error)]
+#[non_exhaustive]
 pub enum AgentError {
     /// Agent 未找到
     /// Agent not found
