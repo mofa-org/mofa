@@ -143,7 +143,7 @@ jobs:
           
           # Make API call with error handling
           RESPONSE=$(curl -s -w "\n%{http_code}" -X POST \
-            "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key=${GEMINI_API_KEY}" \
+            "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_API_KEY}" \
             -H "Content-Type: application/json" \
             -d "{
               \"contents\": [{
@@ -210,11 +210,14 @@ jobs:
       - name: Close duplicate issue
         if: steps.analyze_duplicates.outcome == 'success' && steps.analyze_duplicates.outputs.result != ''
         uses: actions/github-script@v7
+        env:
+          DUPLICATE_RESULT: ${{ steps.analyze_duplicates.outputs.result }}
+          CURRENT_ISSUE_NUMBER: ${{ steps.current_issue.outputs.number }}
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
-            const result = `${{ steps.analyze_duplicates.outputs.result }}`;
-            const currentNumber = ${{ steps.current_issue.outputs.number }};
+            const result = process.env.DUPLICATE_RESULT;
+            const currentNumber = parseInt(process.env.CURRENT_ISSUE_NUMBER, 10);
             
             let analysis;
             try {
