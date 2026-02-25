@@ -190,6 +190,24 @@ pub fn smoke_tool_commands(env: &SmokeEnvironment) -> Result<()> {
     expect_stdout_contains(&info, "Tool information", "mofa tool info echo")?;
     expect_stdout_contains(&info, "echo", "mofa tool info echo")?;
 
+    let disable = env.run(&["tool", "disable", "echo", "--force"])?;
+    expect_ok(&disable, "mofa tool disable echo --force")?;
+
+    let list_after_disable = env.run(&["tool", "list", "--enabled"])?;
+    expect_ok(&list_after_disable, "mofa tool list (after disable)")?;
+    expect_stdout_not_contains(
+        &list_after_disable,
+        "echo",
+        "mofa tool list (after disable)",
+    )?;
+
+    let enable = env.run(&["tool", "enable", "echo"])?;
+    expect_ok(&enable, "mofa tool enable echo")?;
+
+    let list_after_enable = env.run(&["tool", "list"])?;
+    expect_ok(&list_after_enable, "mofa tool list (after enable)")?;
+    expect_stdout_contains(&list_after_enable, "echo", "mofa tool list (after enable)")?;
+
     Ok(())
 }
 
@@ -216,7 +234,11 @@ pub fn smoke_plugin_lifecycle(env: &SmokeEnvironment) -> Result<()> {
     // Re-install the plugin and verify it's back
     let install = env.run(&["plugin", "install", "http-plugin"])?;
     expect_ok(&install, "mofa plugin install http-plugin")?;
-    expect_stdout_contains(&install, "installed successfully", "mofa plugin install http-plugin")?;
+    expect_stdout_contains(
+        &install,
+        "installed successfully",
+        "mofa plugin install http-plugin",
+    )?;
 
     let after_install = env.run(&["plugin", "list"])?;
     expect_ok(&after_install, "mofa plugin list (after reinstall)")?;

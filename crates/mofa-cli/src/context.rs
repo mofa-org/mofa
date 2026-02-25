@@ -26,7 +26,7 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 
 const BUILTIN_HTTP_PLUGIN_KIND: &str = "builtin:http";
-const BUILTIN_ECHO_TOOL_KIND: &str = "builtin:echo";
+pub const BUILTIN_ECHO_TOOL_KIND: &str = "builtin:echo";
 const CLI_BASE_FACTORY_KIND: &str = "cli-base";
 
 /// Persistent entry for agent configuration and state metadata.
