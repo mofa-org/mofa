@@ -78,6 +78,7 @@ where
 
 /// Edge target definition
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[non_exhaustive]
 pub enum EdgeTarget {
     /// Single target node
     Single(String),
@@ -269,6 +270,7 @@ where
 
 /// Stream event from graph execution
 #[derive(Debug, Clone)]
+#[non_exhaustive]
 pub enum StreamEvent<S: GraphState, V = serde_json::Value> {
     /// A node started executing
     NodeStart { node_id: String, state: S },

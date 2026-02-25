@@ -44,7 +44,7 @@ use std::sync::Arc;
 use serde::{Deserialize, Serialize};
 use async_trait::async_trait;
 
-use mofa_kernel::agent::components::tool::{Tool, DynTool, ToolInput, ToolResult, ToolMetadata, LLMTool};
+use mofa_kernel::agent::components::tool::DynTool;
 use mofa_kernel::agent::error::{AgentError, AgentResult};
 use mofa_kernel::agent::types::LLMProvider;
 use mofa_kernel::agent::context::AgentContext;
@@ -135,7 +135,7 @@ pub struct AgentBuilder {
     /// LLM provider (required)
     llm: Option<Arc<dyn LLMProvider>>,
     /// Tools to register on the executor
-    tools: Vec<Arc<dyn Tool>>,
+    tools: Vec<Arc<dyn DynTool>>,
     /// Executor configuration (model, temperature, iterations, …)
     pub(crate) config: AgentExecutorConfig,
     /// Workspace directory for sessions and context files.
@@ -194,7 +194,7 @@ impl AgentBuilder {
     /// Register a tool on the resulting executor.
     ///
     /// Can be called multiple times to register several tools.
-    pub fn with_tool(mut self, tool: Arc<dyn Tool>) -> Self {
+    pub fn with_tool(mut self, tool: Arc<dyn DynTool>) -> Self {
         self.tools.push(tool);
         self
     }
