@@ -15,6 +15,9 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Install jq
+        run: sudo apt-get update && sudo apt-get install -y jq
+
       - name: Get current issue details
         id: current_issue
         uses: actions/github-script@v7
@@ -89,6 +92,13 @@ jobs:
           CURRENT_ISSUE_NUMBER: ${{ steps.current_issue.outputs.number }}
           CANDIDATE_ISSUES: ${{ steps.search_issues.outputs.candidates }}
         run: |
+          set -euo pipefail
+          
+          echo "Starting duplicate analysis..."
+          echo "Current issue: #${CURRENT_ISSUE_NUMBER}"
+          echo "Title: ${CURRENT_ISSUE_TITLE}"
+          echo "Candidates found: $(echo "${CANDIDATE_ISSUES}" | jq 'length')"
+          
           PROMPT=$(cat <<PROMPT_EOF
           You are a duplicate issue detection assistant. Analyze if the current issue is a duplicate of any candidate issues.
 
@@ -122,36 +132,92 @@ jobs:
           If is_duplicate is false, canonical_issue_number can be null.
           PROMPT_EOF
           )
-
-          RESPONSE=$(curl -s -X POST \
-            "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key=${GEMINI_API_KEY}" \
+          
+          echo "Prompt created (length: ${#PROMPT})"
+          
+          echo "Calling Gemini API..."
+          
+          # Encode prompt as JSON string
+          PROMPT_JSON=$(echo "$PROMPT" | jq -Rs .)
+          echo "Prompt JSON encoded (length: ${#PROMPT_JSON})"
+          
+          # Make API call with error handling
+          RESPONSE=$(curl -s -w "\n%{http_code}" -X POST \
+            "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_API_KEY}" \
             -H "Content-Type: application/json" \
             -d "{
               \"contents\": [{
                 \"role\": \"user\",
-                \"parts\": [{\"text\": $(echo "$PROMPT" | jq -Rs .)}]
+                \"parts\": [{\"text\": ${PROMPT_JSON}}]
               }]
-            }")
+            }" || echo "CURL_FAILED")
+          
+          # Extract HTTP status code (last line)
+          HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
+          RESPONSE_BODY=$(echo "$RESPONSE" | sed '$d')
+          
+          echo "HTTP Status: ${HTTP_CODE}"
+          echo "API Response received (length: ${#RESPONSE_BODY})"
+          
+          # Check for curl failure
+          if [ "$RESPONSE_BODY" = "CURL_FAILED" ] || [ -z "$RESPONSE_BODY" ]; then
+            echo "❌ Error: Failed to call Gemini API"
+            echo "result=" >> $GITHUB_OUTPUT
+            exit 1
+          fi
+          
+          # Check for HTTP errors
+          if [ "$HTTP_CODE" != "200" ]; then
+            echo "❌ Error: Gemini API returned HTTP $HTTP_CODE"
+            echo "Response: $RESPONSE_BODY"
+            echo "result=" >> $GITHUB_OUTPUT
+            exit 1
+          fi
+          
+          # Check for API errors in response
+          if echo "$RESPONSE_BODY" | jq -e '.error' > /dev/null 2>&1; then
+            echo "❌ Error: Gemini API returned an error"
+            echo "$RESPONSE_BODY" | jq '.error'
+            echo "result=" >> $GITHUB_OUTPUT
+            exit 1
+          fi
 
-          RESULT=$(echo "$RESPONSE" | jq -r '.candidates[0].content.parts[0].text // empty')
+          # Extract result
+          RESULT=$(echo "$RESPONSE_BODY" | jq -r '.candidates[0].content.parts[0].text // empty' 2>/dev/null || echo "")
+          echo "Extracted result (length: ${#RESULT})"
+          
+          if [ -z "$RESULT" ]; then
+            echo "❌ Error: No text content in API response"
+            echo "Response structure:"
+            echo "$RESPONSE_BODY" | jq '.' 2>/dev/null || echo "$RESPONSE_BODY"
+            echo "result=" >> $GITHUB_OUTPUT
+            exit 1
+          fi
           
           # Extract JSON from markdown code blocks if present
           if echo "$RESULT" | grep -q '```'; then
+            echo "Extracting JSON from markdown code blocks..."
             RESULT=$(echo "$RESULT" | sed -n '/```json/,/```/p' | sed '1d;$d' || echo "$RESULT" | sed -n '/```/,/```/p' | sed '1d;$d')
           fi
           
+          echo "Final result: $RESULT"
           echo "result<<EOF" >> $GITHUB_OUTPUT
           echo "$RESULT" >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
+          
+          echo "✅ Analysis complete. Result saved to output."
 
       - name: Close duplicate issue
-        if: steps.analyze_duplicates.outputs.result != ''
+        if: steps.analyze_duplicates.outcome == 'success' && steps.analyze_duplicates.outputs.result != ''
         uses: actions/github-script@v7
+        env:
+          DUPLICATE_RESULT: ${{ steps.analyze_duplicates.outputs.result }}
+          CURRENT_ISSUE_NUMBER: ${{ steps.current_issue.outputs.number }}
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
-            const result = `${{ steps.analyze_duplicates.outputs.result }}`;
-            const currentNumber = ${{ steps.current_issue.outputs.number }};
+            const result = process.env.DUPLICATE_RESULT;
+            const currentNumber = parseInt(process.env.CURRENT_ISSUE_NUMBER, 10);
             
             let analysis;
             try {
@@ -162,8 +228,10 @@ jobs:
               return;
             }
             
+            core.info(`Analysis result: ${JSON.stringify(analysis)}`);
+            
             if (!analysis.is_duplicate || analysis.confidence === 'low') {
-              core.info(`Issue #${currentNumber} is not a duplicate (confidence: ${analysis.confidence})`);
+              core.info(`Issue #${currentNumber} is not a duplicate (is_duplicate: ${analysis.is_duplicate}, confidence: ${analysis.confidence})`);
               return;
             }
             
