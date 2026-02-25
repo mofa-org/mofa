@@ -918,11 +918,20 @@ mod tests {
 
     #[tokio::test]
     async fn test_shell_echo() {
-        let result = ShellTool
-            .execute(ToolInput::from_json(json!({
+        let input = if cfg!(windows) {
+            json!({
+                "command": "cmd",
+                "args": ["/c", "echo hello shell"]
+            })
+        } else {
+            json!({
                 "command": "echo",
                 "args": ["hello shell"]
-            })))
+            })
+        };
+
+        let result = ShellTool
+            .execute(ToolInput::from_json(input))
             .await;
         assert!(result.success, "{:?}", result.error);
         assert!(result.output["stdout"]
@@ -933,11 +942,20 @@ mod tests {
 
     #[tokio::test]
     async fn test_shell_nonzero_exit() {
-        let result = ShellTool
-            .execute(ToolInput::from_json(json!({
+        let input = if cfg!(windows) {
+            json!({
+                "command": "cmd",
+                "args": ["/c", "exit 1"]
+            })
+        } else {
+            json!({
                 "command": "sh",
                 "args": ["-c", "exit 1"]
-            })))
+            })
+        };
+
+        let result = ShellTool
+            .execute(ToolInput::from_json(input))
             .await;
         assert!(!result.success);
         assert!(result.error.as_deref().unwrap().contains("exit"));
