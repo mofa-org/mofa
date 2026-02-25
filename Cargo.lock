@@ -2479,6 +2479,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "error-stack"
+version = "0.6.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b878b3fac9613c3c7f22eb70bc8a3c6ebdc03cc11479ee60fde1692d747fd45f"
+dependencies = [
+ "anyhow",
+ "rustc_version",
+]
+
+[[package]]
 name = "etcetera"
 version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4556,6 +4566,7 @@ dependencies = [
  "base64 0.22.1",
  "bincode 1.3.3",
  "config",
+ "error-stack",
  "futures",
  "regex",
  "serde",
