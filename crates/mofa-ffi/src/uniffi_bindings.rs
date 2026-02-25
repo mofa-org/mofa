@@ -68,6 +68,8 @@ impl From<&mofa_kernel::agent::types::AgentState> for AgentStatus {
             AgentState::Failed => AgentStatus::Failed,
             AgentState::Destroyed => AgentStatus::Destroyed,
             AgentState::Error(_) => AgentStatus::Error,
+            // Handle future variants of non-exhaustive enum
+            _ => AgentStatus::Error,
         }
     }
 }
@@ -114,6 +116,8 @@ impl From<&mofa_kernel::agent::types::AgentOutput> for AgentOutputInfo {
             OutputContent::Stream => ("[stream]".to_string(), "stream".to_string()),
             OutputContent::Error(e) => (e.clone(), "error".to_string()),
             OutputContent::Empty => (String::new(), "empty".to_string()),
+            // Handle future variants of non-exhaustive enum
+            _ => ("[unknown]".to_string(), "unknown".to_string()),
         };
 
         let tools_used = output

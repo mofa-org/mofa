@@ -100,6 +100,8 @@ impl QdrantVectorStore {
             SimilarityMetric::Cosine => Distance::Cosine,
             SimilarityMetric::Euclidean => Distance::Euclid,
             SimilarityMetric::DotProduct => Distance::Dot,
+            // Handle future variants of non-exhaustive enum, default to Cosine
+            _ => Distance::Cosine,
         }
     }
 
