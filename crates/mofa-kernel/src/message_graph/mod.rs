@@ -15,6 +15,7 @@ use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::{HashMap, HashSet, VecDeque};
+use serde::de::DeserializeOwned;
 
 /// Canonical messages key for StateGraph-based message state.
 pub const MESSAGES_KEY: &str = "messages";
@@ -129,13 +130,20 @@ pub fn messages_update(messages: &[MessageEnvelope]) -> AgentResult<StateUpdate>
 
 #[async_trait]
 impl GraphState for MessageState {
-    async fn apply_update(&mut self, key: &str, value: Value) -> AgentResult<()> {
+    async fn apply_update<V: Serialize + Send + Sync + 'static>(&mut self, key: &str, value: V) -> AgentResult<()> {
         if key != MESSAGES_KEY {
-            self.data.insert(key.to_string(), value);
+            let json_value = serde_json::to_value(&value).map_err(|e| {
+                AgentError::InvalidInput(format!("Failed to serialize value for key '{key}': {e}"))
+            })?;
+            self.data.insert(key.to_string(), json_value);
             return Ok(());
         }
 
-        match value {
+        let json_value = serde_json::to_value(&value).map_err(|e| {
+            AgentError::InvalidInput(format!("Failed to serialize messages update: {e}"))
+        })?;
+
+        match json_value {
             Value::Null => Ok(()),
             Value::Array(items) => {
                 let mut parsed = Vec::with_capacity(items.len());
@@ -152,7 +160,7 @@ impl GraphState for MessageState {
                 Ok(())
             }
             Value::Object(_) => {
-                let msg = serde_json::from_value::<MessageEnvelope>(value).map_err(|e| {
+                let msg = serde_json::from_value::<MessageEnvelope>(json_value).map_err(|e| {
                     AgentError::InvalidInput(format!(
                         "`messages` update contains invalid message envelope: {e}"
                     ))
@@ -166,11 +174,13 @@ impl GraphState for MessageState {
         }
     }
 
-    fn get_value(&self, key: &str) -> Option<Value> {
-        if key == MESSAGES_KEY {
-            return serde_json::to_value(&self.messages).ok();
-        }
-        self.data.get(key).cloned()
+    fn get_value<V: DeserializeOwned + Send + Sync + 'static>(&self, key: &str) -> Option<V> {
+        let json_value = if key == MESSAGES_KEY {
+            serde_json::to_value(&self.messages).ok()?
+        } else {
+            self.data.get(key).cloned()?
+        };
+        serde_json::from_value(json_value).ok()
     }
 
     fn keys(&self) -> Vec<&str> {
