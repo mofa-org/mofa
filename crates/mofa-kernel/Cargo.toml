@@ -27,6 +27,7 @@ error-stack.workspace = true
 uuid = {workspace = true,features = ["serde", "v4"]}
 tracing.workspace = true
 futures.workspace = true
+base64.workspace = true
 
 
 # Config parsing
