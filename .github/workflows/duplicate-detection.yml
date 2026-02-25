@@ -92,6 +92,13 @@ jobs:
           CURRENT_ISSUE_NUMBER: ${{ steps.current_issue.outputs.number }}
           CANDIDATE_ISSUES: ${{ steps.search_issues.outputs.candidates }}
         run: |
+          set -euo pipefail
+          
+          echo "Starting duplicate analysis..."
+          echo "Current issue: #${CURRENT_ISSUE_NUMBER}"
+          echo "Title: ${CURRENT_ISSUE_TITLE}"
+          echo "Candidates found: $(echo "${CANDIDATE_ISSUES}" | jq 'length')"
+          
           PROMPT=$(cat <<PROMPT_EOF
           You are a duplicate issue detection assistant. Analyze if the current issue is a duplicate of any candidate issues.
 
@@ -125,36 +132,64 @@ jobs:
           If is_duplicate is false, canonical_issue_number can be null.
           PROMPT_EOF
           )
-
-          set -euo pipefail
+          
+          echo "Prompt created (length: ${#PROMPT})"
           
           echo "Calling Gemini API..."
-          RESPONSE=$(curl -s -X POST \
+          
+          # Encode prompt as JSON string
+          PROMPT_JSON=$(echo "$PROMPT" | jq -Rs .)
+          echo "Prompt JSON encoded (length: ${#PROMPT_JSON})"
+          
+          # Make API call with error handling
+          RESPONSE=$(curl -s -w "\n%{http_code}" -X POST \
             "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key=${GEMINI_API_KEY}" \
             -H "Content-Type: application/json" \
             -d "{
               \"contents\": [{
                 \"role\": \"user\",
-                \"parts\": [{\"text\": $(echo "$PROMPT" | jq -Rs .)}]
+                \"parts\": [{\"text\": ${PROMPT_JSON}}]
               }]
-            }")
-
-          echo "API Response received (length: ${#RESPONSE})"
+            }" || echo "CURL_FAILED")
           
-          # Check for API errors
-          if echo "$RESPONSE" | jq -e '.error' > /dev/null 2>&1; then
-            echo "Error: Gemini API returned an error"
-            echo "$RESPONSE" | jq '.error'
+          # Extract HTTP status code (last line)
+          HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
+          RESPONSE_BODY=$(echo "$RESPONSE" | sed '$d')
+          
+          echo "HTTP Status: ${HTTP_CODE}"
+          echo "API Response received (length: ${#RESPONSE_BODY})"
+          
+          # Check for curl failure
+          if [ "$RESPONSE_BODY" = "CURL_FAILED" ] || [ -z "$RESPONSE_BODY" ]; then
+            echo "❌ Error: Failed to call Gemini API"
+            echo "result=" >> $GITHUB_OUTPUT
+            exit 1
+          fi
+          
+          # Check for HTTP errors
+          if [ "$HTTP_CODE" != "200" ]; then
+            echo "❌ Error: Gemini API returned HTTP $HTTP_CODE"
+            echo "Response: $RESPONSE_BODY"
+            echo "result=" >> $GITHUB_OUTPUT
+            exit 1
+          fi
+          
+          # Check for API errors in response
+          if echo "$RESPONSE_BODY" | jq -e '.error' > /dev/null 2>&1; then
+            echo "❌ Error: Gemini API returned an error"
+            echo "$RESPONSE_BODY" | jq '.error'
+            echo "result=" >> $GITHUB_OUTPUT
             exit 1
           fi
 
-          RESULT=$(echo "$RESPONSE" | jq -r '.candidates[0].content.parts[0].text // empty')
+          # Extract result
+          RESULT=$(echo "$RESPONSE_BODY" | jq -r '.candidates[0].content.parts[0].text // empty' 2>/dev/null || echo "")
           echo "Extracted result (length: ${#RESULT})"
           
           if [ -z "$RESULT" ]; then
-            echo "Error: No response from Gemini API"
-            echo "Full response: $RESPONSE"
-            # Set empty result so the next step can handle it
+            echo "❌ Error: No text content in API response"
+            echo "Response structure:"
+            echo "$RESPONSE_BODY" | jq '.' 2>/dev/null || echo "$RESPONSE_BODY"
             echo "result=" >> $GITHUB_OUTPUT
             exit 1
           fi
