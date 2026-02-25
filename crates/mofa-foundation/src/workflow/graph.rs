@@ -230,6 +230,16 @@ impl WorkflowGraph {
         &self.end_nodes
     }
 
+    /// Get all nodes (for visualization)
+    pub fn get_all_nodes(&self) -> &HashMap<String, WorkflowNode> {
+        &self.nodes
+    }
+
+    /// Get all edges (for visualization)
+    pub fn get_all_edges(&self) -> &HashMap<String, Vec<EdgeConfig>> {
+        &self.edges
+    }
+
     /// 获取节点的出边
     /// Get outgoing edges of a node
     pub fn get_outgoing_edges(&self, node_id: &str) -> &[EdgeConfig] {
