@@ -369,11 +369,11 @@ mod tests {
     #[test]
     fn test_export_simple_workflow() {
         let mut graph = WorkflowBuilder::new("test", "Test Workflow")
-            .with_task("start", "Start")
-            .with_task("process", "Process Data")
-            .with_task("end", "End")
-            .connect("start", "process")
-            .connect("process", "end")
+            .start()
+            .task("process", "Process Data", |_| async { Ok(()) })
+            .end()
+            .edge("start", "process")
+            .edge("process", "end")
             .build();
 
         let viz = graph.to_visualization();
@@ -386,9 +386,9 @@ mod tests {
     #[test]
     fn test_export_with_status() {
         let mut graph = WorkflowBuilder::new("test", "Test Workflow")
-            .with_task("start", "Start")
-            .with_task("end", "End")
-            .connect("start", "end")
+            .start()
+            .end()
+            .edge("start", "end")
             .build();
 
         let mut statuses = HashMap::new();
