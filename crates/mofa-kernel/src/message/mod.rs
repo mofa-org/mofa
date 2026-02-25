@@ -15,6 +15,15 @@ pub enum StreamType {
     // Command stream - Control command passing
 }
 
+// 消息优先级
+// Message priority
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq, PartialOrd, Ord)]
+pub enum MessagePriority {
+    Critical = 0,
+    High = 1,
+    Low = 2,
+}
+
 // 智能体通信消息协议
 // Agent communication message protocol
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -22,6 +31,7 @@ pub enum AgentMessage {
     TaskRequest {
         task_id: String,
         content: String,
+        priority: TaskPriority,
     },
     TaskResponse {
         task_id: String,
@@ -49,6 +59,33 @@ pub enum AgentMessage {
         metadata: std::collections::HashMap<String, String>,
     }, // 流控制消息
     // Stream control message
+}
+
+impl AgentMessage {
+    pub fn priority(&self) -> MessagePriority {
+        match self {
+            AgentMessage::TaskRequest { priority, .. } => {
+                match priority {
+                    TaskPriority::Critical | TaskPriority::Highest => MessagePriority::Critical,
+                    TaskPriority::High | TaskPriority::Medium => MessagePriority::High,
+                    TaskPriority::Normal | TaskPriority::Low => MessagePriority::Low,
+                }
+            }
+            AgentMessage::TaskResponse { .. } => MessagePriority::High,
+            AgentMessage::StateSync { .. } => MessagePriority::Low,
+            AgentMessage::Event(event) => match event {
+                AgentEvent::Shutdown => MessagePriority::Critical,
+                AgentEvent::TaskPreempted(_) => MessagePriority::Critical,
+                _ => MessagePriority::High,
+            },
+            AgentMessage::StreamControl { command, .. } => match command {
+                StreamControlCommand::Close(_) => MessagePriority::Critical,
+                StreamControlCommand::Pause | StreamControlCommand::Resume => MessagePriority::High,
+                _ => MessagePriority::High,
+            },
+            AgentMessage::StreamMessage { .. } => MessagePriority::Low,
+        }
+    }
 }
 
 // 任务状态枚举
