@@ -65,4 +65,12 @@ jobs:
               assignees: [username]
             });
             
+            // Add thank you message
+            await github.rest.issues.createComment({
+              owner: repo.owner,
+              repo: repo.repo,
+              issue_number: issueNumber,
+              body: `👋 @${username}, you've been assigned to this issue! Thank you for taking the time to contribute. Make sure to check out our [contributing guidelines](https://github.com/${repo.owner}/${repo.repo}/blob/main/CONTRIBUTING.md).`
+            });
+            
             core.info(`Assigned issue #${issueNumber} to ${username}.`);
