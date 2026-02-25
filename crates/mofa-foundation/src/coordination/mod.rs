@@ -127,6 +127,7 @@ impl AgentCoordinator {
                 Some(ref output) => AgentMessage::TaskRequest {
                     task_id: uuid::Uuid::now_v7().to_string(),
                     content: output.clone(),
+                    priority: mofa_kernel::message::TaskPriority::Medium,
                 },
                 None => task_msg.clone(),
             };

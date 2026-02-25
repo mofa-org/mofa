@@ -226,7 +226,7 @@ impl<T: SimpleTool + 'static> ToolExt for SimpleToolAdapter<T> {
     }
 }
 
-/// Convenience function to convert a SimpleTool into an Arc<dyn Tool>
+/// Convenience function to convert a SimpleTool into an Arc`<dyn Tool>`
 ///
 /// # Example
 ///

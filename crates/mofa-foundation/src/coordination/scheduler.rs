@@ -119,6 +119,7 @@ impl PriorityScheduler {
             let task_msg = AgentMessage::TaskRequest {
                 task_id: task.task_id.clone(),
                 content: task.content.clone(),
+                priority: task.priority.clone(),
             };
             self.bus
                 .send_message(

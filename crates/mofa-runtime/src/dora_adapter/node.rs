@@ -314,11 +314,11 @@ pub fn convert_dora_event(dora_event: &Event) -> Option<AgentEvent> {
                 // Try to deserialize into AgentMessage
                 match msg {
                     AgentMessage::Event(event) => Some(event),
-                    AgentMessage::TaskRequest { task_id, content } => {
+                    AgentMessage::TaskRequest { task_id, content, priority } => {
                         Some(AgentEvent::TaskReceived(TaskRequest {
                             task_id,
                             content,
-                            priority: TaskPriority::Medium,
+                            priority,
                             deadline: None,
                             metadata: HashMap::new(),
                         }))

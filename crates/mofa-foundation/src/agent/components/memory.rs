@@ -184,7 +184,7 @@ pub struct FileBasedStorage {
     /// In-memory data (key -> MemoryItem)
     data: Arc<RwLock<HashMap<String, MemoryItem>>>,
     /// 会话历史 (session_id -> Vec<Message>)
-    /// Session history (session_id -> Vec<Message>)
+    /// Session history (session_id -> Vec`RefCell<Message>`)
     sessions: Arc<RwLock<HashMap<String, Vec<Message>>>>,
 }
 
