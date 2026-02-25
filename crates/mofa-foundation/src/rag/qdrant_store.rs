@@ -100,6 +100,8 @@ impl QdrantVectorStore {
             SimilarityMetric::Cosine => Distance::Cosine,
             SimilarityMetric::Euclidean => Distance::Euclid,
             SimilarityMetric::DotProduct => Distance::Dot,
+            // SimilarityMetric is non_exhaustive; default to cosine for forward compatibility.
+            _ => Distance::Cosine,
         }
     }
 
