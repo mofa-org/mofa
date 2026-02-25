@@ -17,6 +17,8 @@ use std::time::Duration;
 use tokio::sync::{RwLock, broadcast, mpsc};
 use tracing::{debug, error, info};
 
+use mofa_kernel::workflow::telemetry::DebugEvent;
+
 use super::metrics::{MetricsCollector, MetricsSnapshot};
 
 /// WebSocket message types
@@ -66,6 +68,14 @@ pub enum WebSocketMessage {
         tokens_per_second: Option<f64>,
         error_rate: f64,
     },
+
+    /// Debug event from workflow execution
+    ///
+    /// Sent in real-time when a workflow emits telemetry events
+    /// during execution. Clients can subscribe to the "debug" topic
+    /// to receive these events for the visual debugger.
+    #[serde(rename = "debug")]
+    Debug(DebugEvent),
 
     /// System alert
     #[serde(rename = "alert")]
@@ -199,6 +209,34 @@ impl WebSocketHandler {
     /// Get client IDs
     pub async fn client_ids(&self) -> Vec<String> {
         self.clients.read().await.keys().cloned().collect()
+    }
+
+    /// Start a background task to forward debug events to connected WebSocket clients.
+    ///
+    /// This method spawns a task that receives `DebugEvent`s from the provided receiver
+    /// and broadcasts them to all WebSocket clients subscribed to the "debug" topic.
+    ///
+    /// # Arguments
+    /// * `rx` - The receiver for debug events to broadcast
+    ///
+    /// # Returns
+    /// A `JoinHandle` for the spawned task
+    pub fn start_debug_event_forwarder(
+        self: Arc<Self>,
+        mut rx: mpsc::Receiver<DebugEvent>,
+    ) -> tokio::task::JoinHandle<()> {
+        let broadcast_tx = self.broadcast_tx.clone();
+        info!("Starting debug event forwarder");
+
+        tokio::spawn(async move {
+            while let Some(event) = rx.recv().await {
+                let msg = WebSocketMessage::Debug(event);
+                if let Err(e) = broadcast_tx.send(msg) {
+                    debug!("Failed to broadcast debug event: {}", e);
+                }
+            }
+            info!("Debug event forwarder stopped");
+        })
     }
 
     /// Start background update task
