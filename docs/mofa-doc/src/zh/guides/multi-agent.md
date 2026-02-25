@@ -73,4 +73,4 @@ let result = debate.debide(&topic).await?;
 ## 相关链接
 
 - [工作流](../concepts/workflows.md) — 工作流概念
-- [示例](../examples/multi-agent-coordination.md) — 示例代码
+- [示例](../examples/多智能体协调.md) — 示例代码

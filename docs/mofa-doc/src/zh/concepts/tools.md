@@ -274,4 +274,4 @@ pub trait StreamingTool: Tool {
 
 - [工具开发指南](../guides/tool-development.md) — 创建工具的详细指南
 - [智能体](agents.md) — 在智能体中使用工具
-- [示例: 工具](../examples/core-agents.md) — 工具示例
+- [示例: 工具](../examples/核心智能体.md) — 工具示例
