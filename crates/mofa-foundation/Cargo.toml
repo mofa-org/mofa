@@ -95,6 +95,12 @@ url = "2.5"
 # HTML escaping for XSS prevention
 html-escape = "0.2"
 
+# CPU detection for Linux backend
+num_cpus = "1.16"
+
+# System info for Linux backend
+sys-info = "0.9"
+
 [lints]
 workspace = true
 

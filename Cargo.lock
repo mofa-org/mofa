@@ -4546,6 +4546,7 @@ dependencies = [
  "mofa-extra",
  "mofa-kernel",
  "mofa-plugins",
+ "num_cpus",
  "once_cell",
  "parking_lot",
  "qdrant-client",
@@ -4559,6 +4560,7 @@ dependencies = [
  "serde_json",
  "serde_yaml",
  "sqlx",
+ "sys-info",
  "tempfile",
  "thiserror 1.0.69",
  "tokio",
@@ -7925,6 +7927,16 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 2.0.117",
+]
+
+[[package]]
+name = "sys-info"
+version = "0.9.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0b3a0d0aba8bf96a0e1ddfdc352fc53b3df7f39318c71854910c3c4b024ae52c"
+dependencies = [
+ "cc",
+ "libc",
 ]
 
 [[package]]
