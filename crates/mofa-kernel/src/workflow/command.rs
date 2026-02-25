@@ -12,6 +12,7 @@ use super::StateUpdate;
 ///
 /// Determines what happens after a node completes execution.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+#[non_exhaustive]
 pub enum ControlFlow<V = Value> {
     /// Continue to the next node(s) based on graph edges
     #[default]
