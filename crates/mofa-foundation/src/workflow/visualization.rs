@@ -370,7 +370,7 @@ mod tests {
     fn test_export_simple_workflow() {
         let mut graph = WorkflowBuilder::new("test", "Test Workflow")
             .start()
-            .task("process", "Process Data", |_| async { Ok(()) })
+            .task("process", "Process Data", |_ctx, _input| async { Ok(()) })
             .end()
             .edge("start", "process")
             .edge("process", "end")
