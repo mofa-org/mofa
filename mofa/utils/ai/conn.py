@@ -1,21 +1,39 @@
 import os
 from typing import List
 from dotenv import load_dotenv
-import instructor
+try:
+    import instructor
+except ImportError:
+    instructor = None
 
-from openai import OpenAI
+try:
+    from openai import OpenAI
+except ImportError:
+    OpenAI = None
 
-def create_openai_client(api_key: str=os.getenv("OPENAI_API_KEY",None),env_file:str=os.getenv('ENV_FILE','.env.secret'),*args,**kwargs) -> OpenAI:
+
+def create_openai_client(api_key: str = None, env_file: str = None, *args, **kwargs):
+    if OpenAI is None:
+        raise ImportError("openai package is required to create an OpenAI client.")
+
+    env_file = env_file or os.getenv("ENV_FILE", ".env.secret")
     load_dotenv(env_file)
+
     if api_key is not None:
-        client = OpenAI(api_key=api_key,**kwargs)
+        resolved_api_key = api_key
+    elif os.getenv("LLM_API_KEY"):
+        resolved_api_key = os.getenv("LLM_API_KEY")
     else:
-        if os.getenv('LLM_API_KEY') is not None:
-            os.environ['OPENAI_API_KEY'] = os.getenv('LLM_API_KEY')
-        if os.getenv('LLM_BASE_URL', None) is None:
-            client =OpenAI(api_key=os.environ['OPENAI_API_KEY'])
-        else:
-            client =OpenAI(api_key=os.environ['OPENAI_API_KEY'], base_url=os.getenv('LLM_BASE_URL'), )
+        resolved_api_key = os.getenv("OPENAI_API_KEY")
+
+    if not resolved_api_key:
+        raise RuntimeError("No API key found. Set OPENAI_API_KEY or LLM_API_KEY.")
+
+    base_url = os.getenv("LLM_BASE_URL", None)
+    if base_url is None:
+        client = OpenAI(api_key=resolved_api_key, **kwargs)
+    else:
+        client = OpenAI(api_key=resolved_api_key, base_url=base_url, **kwargs)
     return client
 def generate_json_from_llm(client, prompt: str, format_class, messages: List[dict] = None, supplement_prompt: str = None, model_name: str = 'gpt-4o-mini') -> str:
 
@@ -35,6 +53,9 @@ def generate_json_from_llm(client, prompt: str, format_class, messages: List[dic
     return completion.choices[0].message.parsed
 
 def structor_llm(env_file:str,messages:list,response_model,model_name:str='gpt-4o',*args,**kwargs):
+
+    if OpenAI is None or instructor is None:
+        raise ImportError("openai and instructor packages are required for structor_llm.")
 
     load_dotenv(env_file)
     max_loop = 3
@@ -67,5 +88,4 @@ def structor_llm(env_file:str,messages:list,response_model,model_name:str='gpt-4
             except Exception as e:
                 print(f"Retrying... {i+1}/{max_loop} - Error: {e}")
     return response
-
 
