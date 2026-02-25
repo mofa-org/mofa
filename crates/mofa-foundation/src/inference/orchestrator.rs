@@ -87,8 +87,15 @@ impl InferenceOrchestrator {
     /// Create a new orchestrator with the given configuration.
     ///
     /// Hardware capabilities are auto-detected at construction time.
-    pub fn new(config: OrchestratorConfig) -> Self {
+    /// The memory capacity automatically defaults to the host machine's total unified/VRAM memory.
+    pub fn new(mut config: OrchestratorConfig) -> Self {
         let hardware = detect_hardware();
+
+        // Dynamically override memory capacity with actual unified memory (MB)
+        if config.memory_capacity_mb == 16384 {
+            config.memory_capacity_mb = (hardware.total_memory_bytes / 1_000_000) as usize;
+        }
+
         let model_pool = ModelPool::new(config.model_pool_capacity, config.idle_timeout);
 
         Self {
@@ -251,6 +258,8 @@ mod tests {
             cpu_family: CpuFamily::AppleSilicon,
             gpu_available: true,
             gpu_type: Some(GpuType::Metal),
+            total_memory_bytes: 32_000_000_000,
+            available_memory_bytes: 16_000_000_000,
         }
     }
 
