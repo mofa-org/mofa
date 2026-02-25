@@ -8,7 +8,7 @@ use async_trait::async_trait;
 use mofa_kernel::agent::components::tool::{
     Tool, ToolDescriptor, ToolRegistry as ToolRegistryTrait,
 };
-use mofa_kernel::agent::error::AgentResult;
+use mofa_kernel::agent::error::{AgentResult, AgentError};
 use std::collections::HashMap;
 use std::sync::Arc;
 
@@ -229,7 +229,9 @@ impl ToolRegistry {
     pub async fn hot_reload_plugin(&mut self, _path: &str) -> AgentResult<Vec<String>> {
         // TODO: 实际插件热加载实现
         // TODO: actual hot reload implementation
-        Ok(vec![])
+        Err(mofa_kernel::agent::error::AgentError::Other(
+            "Plugin hot reloading is not yet implemented".to_string(),
+        ))
     }
 
     /// 获取工具来源

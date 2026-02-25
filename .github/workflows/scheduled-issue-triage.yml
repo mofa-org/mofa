@@ -1,0 +1,227 @@
+name: MoFA Scheduled Issue Triage
+
+on:
+  schedule:
+    # Run every hour
+    - cron: '0 * * * *'
+  workflow_dispatch:
+
+permissions:
+  issues: write
+  contents: read
+
+jobs:
+  triage:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Find issues needing triage
+        id: find_issues
+        env:
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          
+          echo '🔍 Finding issues missing area labels...'
+          NO_AREA_ISSUES="$(gh issue list --repo "${GITHUB_REPOSITORY}" \
+            --search 'is:open is:issue -label:area/ux -label:area/models -label:area/platform -label:area/cli -label:area/docs -label:area/integration -label:area/infra -label:area/unknown' \
+            --limit 100 --json number,title,body,labels,user)"
+          
+          echo '🔍 Finding issues missing kind labels...'
+          NO_KIND_ISSUES="$(gh issue list --repo "${GITHUB_REPOSITORY}" \
+            --search 'is:open is:issue -label:kind/bug -label:kind/enhancement -label:kind/feature -label:kind/question -label:kind/docs -label:kind/chore' \
+            --limit 100 --json number,title,body,labels,user)"
+          
+          echo '🏷️ Finding issues missing priority labels...'
+          NO_PRIORITY_ISSUES="$(gh issue list --repo "${GITHUB_REPOSITORY}" \
+            --search 'is:open is:issue -label:priority/p0 -label:priority/p1 -label:priority/p2 -label:priority/p3 -label:priority/unknown' \
+            --limit 100 --json number,title,body,labels,user)"
+          
+          echo '🔍 Finding issues with status/need-triage label...'
+          NEED_TRIAGE_ISSUES="$(gh issue list --repo "${GITHUB_REPOSITORY}" \
+            --search 'is:open is:issue label:status/need-triage' \
+            --limit 100 --json number,title,body,labels,user)"
+          
+          echo '🔄 Merging and deduplicating issues...'
+          ISSUES="$(echo "${NO_AREA_ISSUES}" "${NO_KIND_ISSUES}" "${NO_PRIORITY_ISSUES}" "${NEED_TRIAGE_ISSUES}" | jq -c -s 'add | unique_by(.number)')"
+          
+          echo '📝 Setting output for GitHub Actions...'
+          echo "issues_to_triage=${ISSUES}" >> "${GITHUB_OUTPUT}"
+          
+          ISSUE_COUNT="$(echo "${ISSUES}" | jq 'length')"
+          echo "✅ Found ${ISSUE_COUNT} unique issues to triage! 🎯"
+
+      - name: Get repository labels
+        id: get_labels
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const { data: labels } = await github.rest.issues.listLabelsForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              per_page: 100,
+            });
+            core.setOutput('available_labels', JSON.stringify(labels.map(l => l.name)));
+
+      - name: Read triage prompt
+        id: prompt
+        run: |
+          if [ -f ".github/prompts/issue-triage-prompt.txt" ]; then
+            PROMPT=$(cat .github/prompts/issue-triage-prompt.txt)
+          else
+            echo "Warning: Prompt file not found, using default prompt"
+            PROMPT="Analyze these GitHub issues and apply appropriate labels"
+          fi
+          echo "prompt<<EOF" >> $GITHUB_OUTPUT
+          echo "$PROMPT" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: Get issue details with comments
+        id: issue_details
+        env:
+          ISSUES_JSON: ${{ steps.find_issues.outputs.issues_to_triage }}
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const issues = JSON.parse(process.env.ISSUES_JSON || '[]');
+            const enrichedIssues = [];
+            
+            for (const issue of issues) {
+              try {
+                const { data: comments } = await github.rest.issues.listComments({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: issue.number,
+                });
+                
+                enrichedIssues.push({
+                  number: issue.number,
+                  title: issue.title || '',
+                  body: issue.body || '',
+                  author: issue.user?.login || '',
+                  labels: issue.labels?.map(l => l.name) || [],
+                  comments: comments.map(c => ({
+                    author: c.user?.login,
+                    body: c.body
+                  }))
+                });
+              } catch (e) {
+                core.warning(`Failed to get details for issue #${issue.number}: ${e.message}`);
+              }
+            }
+            
+            core.setOutput('issues_json', JSON.stringify(enrichedIssues));
+
+      - name: Triage issues with Gemini
+        id: triage
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          ISSUES_TO_TRIAGE: ${{ steps.issue_details.outputs.issues_json }}
+          AVAILABLE_LABELS: ${{ steps.get_labels.outputs.available_labels }}
+        run: |
+          PROMPT="${{ steps.prompt.outputs.prompt }}"
+          
+          # Build the full prompt with issues context
+          FULL_PROMPT="${PROMPT}
+          
+          Issues to triage:
+          ${ISSUES_TO_TRIAGE}
+          
+          Available labels:
+          ${AVAILABLE_LABELS}
+          
+          Please analyze all issues and return JSON array as specified in the instructions."
+          
+          # Call Gemini API
+          RESPONSE=$(curl -s -X POST \
+            "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key=${GEMINI_API_KEY}" \
+            -H "Content-Type: application/json" \
+            -d "{
+              \"contents\": [{
+                \"role\": \"user\",
+                \"parts\": [{\"text\": $(echo "$FULL_PROMPT" | jq -Rs .)}]
+              }]
+            }")
+          
+          # Extract text from response
+          TRIAGE_RESULT=$(echo "$RESPONSE" | jq -r '.candidates[0].content.parts[0].text // empty')
+          
+          if [ -z "$TRIAGE_RESULT" ]; then
+            echo "Error: No response from Gemini API"
+            echo "Response: $RESPONSE"
+            exit 1
+          fi
+          
+          # Try to extract JSON from markdown code blocks if present
+          if echo "$TRIAGE_RESULT" | grep -q '```'; then
+            TRIAGE_RESULT=$(echo "$TRIAGE_RESULT" | sed -n '/```json/,/```/p' | sed '1d;$d' || echo "$TRIAGE_RESULT" | sed -n '/```/,/```/p' | sed '1d;$d')
+          fi
+          
+          echo "result<<EOF" >> $GITHUB_OUTPUT
+          echo "$TRIAGE_RESULT" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: Apply labels to issues
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const triageResult = `${{ steps.triage.outputs.result }}`;
+            
+            let triageData;
+            try {
+              triageData = JSON.parse(triageResult);
+              if (!Array.isArray(triageData)) {
+                triageData = [triageData];
+              }
+            } catch (e) {
+              core.error(`Failed to parse triage result: ${e.message}`);
+              core.error(`Raw result: ${triageResult.substring(0, 500)}`);
+              return;
+            }
+            
+            for (const issueTriage of triageData) {
+              const issueNumber = issueTriage.issue_number;
+              if (!issueNumber) {
+                core.warning('Skipping entry without issue_number');
+                continue;
+              }
+              
+              const labelsToAdd = issueTriage.labels_to_add || [];
+              const labelsToRemove = issueTriage.labels_to_remove || [];
+              
+              if (labelsToAdd.length > 0) {
+                try {
+                  await github.rest.issues.addLabels({
+                    owner: context.repo.owner,
+                    repo: context.repo.repo,
+                    issue_number: issueNumber,
+                    labels: labelsToAdd,
+                  });
+                  core.info(`Issue #${issueNumber}: Added labels: ${labelsToAdd.join(', ')}`);
+                } catch (e) {
+                  core.error(`Failed to add labels to issue #${issueNumber}: ${e.message}`);
+                }
+              }
+              
+              if (labelsToRemove.length > 0) {
+                for (const label of labelsToRemove) {
+                  try {
+                    await github.rest.issues.removeLabel({
+                      owner: context.repo.owner,
+                      repo: context.repo.repo,
+                      issue_number: issueNumber,
+                      name: label,
+                    });
+                  } catch (e) {
+                    // Label might not exist, ignore
+                  }
+                }
+                core.info(`Issue #${issueNumber}: Removed labels: ${labelsToRemove.join(', ')}`);
+              }
+            }

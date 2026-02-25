@@ -418,14 +418,23 @@ impl AgentRegistry {
     /// 初始化所有 Agent
     /// Initialize all Agents
     pub async fn initialize_all(&self, ctx: &AgentContext) -> AgentResult<Vec<String>> {
-        let agents = self.agents.read().await;
-        let mut initialized = Vec::new();
+        // Collect agent refs and drop the read lock before any .await to prevent
+        // deadlock when an agent's initialize() calls back into the registry
+        // (e.g., to register sub-agents).
+        let entries: Vec<(String, Arc<RwLock<dyn MoFAAgent>>)> = {
+            let agents = self.agents.read().await;
+            agents
+                .iter()
+                .map(|(id, entry)| (id.clone(), entry.agent.clone()))
+                .collect()
+        };
 
-        for (id, entry) in agents.iter() {
-            let mut agent = entry.agent.write().await;
+        let mut initialized = Vec::new();
+        for (id, agent_arc) in entries {
+            let mut agent = agent_arc.write().await;
             if agent.state() == AgentState::Created {
                 agent.initialize(ctx).await?;
-                initialized.push(id.clone());
+                initialized.push(id);
             }
         }
 
@@ -435,15 +444,24 @@ impl AgentRegistry {
     /// 关闭所有 Agent
     /// Shutdown all Agents
     pub async fn shutdown_all(&self) -> AgentResult<Vec<String>> {
-        let agents = self.agents.read().await;
-        let mut shutdown = Vec::new();
+        // Collect agent refs and drop the read lock before any .await to prevent
+        // deadlock when an agent's shutdown() calls back into the registry
+        // (e.g., to unregister sub-agents).
+        let entries: Vec<(String, Arc<RwLock<dyn MoFAAgent>>)> = {
+            let agents = self.agents.read().await;
+            agents
+                .iter()
+                .map(|(id, entry)| (id.clone(), entry.agent.clone()))
+                .collect()
+        };
 
-        for (id, entry) in agents.iter() {
-            let mut agent = entry.agent.write().await;
+        let mut shutdown = Vec::new();
+        for (id, agent_arc) in entries {
+            let mut agent = agent_arc.write().await;
             let state = agent.state();
             if state != AgentState::Shutdown && state != AgentState::Failed {
                 agent.shutdown().await?;
-                shutdown.push(id.clone());
+                shutdown.push(id);
             }
         }
 

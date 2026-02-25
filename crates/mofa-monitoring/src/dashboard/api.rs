@@ -354,6 +354,9 @@ pub fn create_api_router(
         .route("/debug/sessions", get(get_debug_sessions))
         .route("/debug/sessions/{id}", get(get_debug_session))
         .route("/debug/sessions/{id}/events", get(get_debug_session_events))
+        // LLM
+        .route("/llm", get(get_llm_metrics))
+        .route("/llm/{id}", get(get_llm_plugin))
         // System
         .route("/system", get(get_system_status))
         .route("/health", get(health_check))

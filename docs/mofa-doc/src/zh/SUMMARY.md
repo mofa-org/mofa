@@ -85,5 +85,6 @@
 - [附录](appendix/README.md)
   - [功能标志](appendix/feature-flags.md)
   - [配置](appendix/configuration.md)
+  - [版本化文档](appendix/versioned-docs.md)
   - [贡献](appendix/contributing.md)
   - [术语表](appendix/glossary.md)
