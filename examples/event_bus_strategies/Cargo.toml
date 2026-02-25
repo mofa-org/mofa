@@ -1,0 +1,10 @@
+[package]
+name = "event_bus_strategies"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+tokio.workspace = true
+mofa-kernel = { path = "../../crates/mofa-kernel" }
+tracing-subscriber.workspace = true
