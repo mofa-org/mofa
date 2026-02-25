@@ -294,7 +294,29 @@ mod tests {
             &self,
             _request: crate::llm::types::ChatCompletionRequest,
         ) -> crate::llm::types::LLMResult<crate::llm::types::ChatCompletionResponse> {
-            Ok(crate::llm::types::ChatCompletionResponse::default())
+            use crate::llm::types::{
+                ChatCompletionResponse, ChatMessage, Choice, MessageContent, Role,
+            };
+            Ok(ChatCompletionResponse {
+                id: "mock-id".to_string(),
+                object: "chat.completion".to_string(),
+                created: 0,
+                model: "mock".to_string(),
+                choices: vec![Choice {
+                    index: 0,
+                    message: ChatMessage {
+                        role: Role::Assistant,
+                        content: Some(MessageContent::Text("summary text".to_string())),
+                        name: None,
+                        tool_calls: None,
+                        tool_call_id: None,
+                    },
+                    finish_reason: None,
+                    logprobs: None,
+                }],
+                usage: None,
+                system_fingerprint: None,
+            })
         }
     }
 
