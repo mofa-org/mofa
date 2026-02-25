@@ -146,16 +146,18 @@ impl<E> AgentConfig<E> {
     }
 
     /// Get Custom Configuration (deserialize to target type)
-    pub fn get_custom<T: serde::de::DeserializeOwned>(&self, key: &str) -> Option<T>
+    pub fn get_custom<T: serde::de::DeserializeOwned>(&self, key: &str) -> Result<Option<T>, serde_json::Error>
     where
         E: serde::Serialize,
     {
-        self.custom
-            .get(key)
-            .and_then(|v| {
-                let json = serde_json::to_value(v).ok()?;
-                serde_json::from_value(json).ok()
-            })
+        match self.custom.get(key) {
+            None => Ok(None),
+            Some(v) => {
+                let json = serde_json::to_value(v)?;
+                let parsed = serde_json::from_value(json)?;
+                Ok(Some(parsed))
+            }
+        }
     }
 
     /// 验证配置
