@@ -154,37 +154,32 @@ impl AgentBus {
         id: &str,
         mode: CommunicationMode,
     ) -> anyhow::Result<Option<AgentMessage>> {
-        let agent_channels = self.agent_channels.read().await;
-
-        // 处理广播模式
-        // Handle broadcast mode
-        if matches!(mode, CommunicationMode::Broadcast) {
-            let mut receiver = self.broadcast_channel.subscribe();
-            match receiver.recv().await {
-                Ok(data) => {
-                    let message = bincode::deserialize(&data)?;
-                    Ok(Some(message))
-                }
-                Err(_) => Ok(None),
+        // Clone the receiver in a separate scope to ensure the read lock is dropped
+        let mut receiver = {
+            if matches!(mode, CommunicationMode::Broadcast) {
+                // 处理广播模式
+                // Handle broadcast mode
+                self.broadcast_channel.subscribe()
+            } else {
+                let agent_channels = self.agent_channels.read().await;
+                // 处理其他模式
+                // Handle other modes
+                let Some(channels) = agent_channels.get(id) else {
+                    return Ok(None);
+                };
+                let Some(channel) = channels.get(&mode) else {
+                    return Ok(None);
+                };
+                channel.subscribe()
             }
-        } else {
-            // 处理其他模式
-            // Handle other modes
-            let Some(channels) = agent_channels.get(id) else {
-                return Ok(None);
-            };
-            let Some(channel) = channels.get(&mode) else {
-                return Ok(None);
-            };
+        }; // The read lock (if acquired) is dropped here
 
-            let mut receiver = channel.subscribe();
-            match receiver.recv().await {
-                Ok(data) => {
-                    let message = bincode::deserialize(&data)?;
-                    Ok(Some(message))
-                }
-                Err(_) => Ok(None),
+        match receiver.recv().await {
+            Ok(data) => {
+                let message = bincode::deserialize(&data)?;
+                Ok(Some(message))
             }
+            Err(_) => Ok(None),
         }
     }
 
@@ -197,5 +192,73 @@ impl AgentBus {
             }
         }
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::time::Duration;
+    use tokio::time::timeout;
+
+    // Helper to create a dummy agent metadata
+    fn dummy_agent(id: &str) -> AgentMetadata {
+        AgentMetadata {
+            id: id.to_string(),
+            name: format!("Agent {}", id),
+            description: Some("A test agent".to_string()),
+            version: None,
+            capabilities: Default::default(),
+            state: Default::default(),
+        }
+    }
+
+    #[tokio::test]
+    async fn receive_message_point_to_point_does_not_block_register_channel() {
+        let bus = AgentBus::new().await.unwrap();
+        let agent_recv = dummy_agent("recv1");
+        let agent_new = dummy_agent("new1");
+        let mode_p2p = CommunicationMode::PointToPoint("sender1".to_string());
+
+        // Setup the initial channel
+        bus.register_channel(&agent_recv, mode_p2p.clone()).await.unwrap();
+
+        let bus_clone = bus.clone();
+        
+        // Spawn a task that blocks on receive_message (no sender will send)
+        let _recv_task = tokio::spawn(async move {
+            let _ = bus_clone.receive_message("recv1", mode_p2p).await;
+        });
+
+        // Yield to let the recv_task acquire the lock and block
+        tokio::time::sleep(Duration::from_millis(50)).await;
+
+        // Ensure that registering a new channel does not block
+        let register_future = bus.register_channel(&agent_new, CommunicationMode::PointToPoint("sender2".to_string()));
+        let result = timeout(Duration::from_millis(200), register_future).await;
+
+        assert!(result.is_ok(), "register_channel should not timeout and be blocked by receive_message");
+    }
+
+    #[tokio::test]
+    async fn receive_message_broadcast_does_not_block_register_channel() {
+        let bus = AgentBus::new().await.unwrap();
+        let agent_new = dummy_agent("new2");
+
+        let bus_clone = bus.clone();
+        
+        // Spawn a task that blocks on receive_message for Broadcast mode
+        let _recv_task = tokio::spawn(async move {
+            let _ = bus_clone.receive_message("any_id", CommunicationMode::Broadcast).await;
+        });
+
+        // Yield to let the recv_task acquire the lock and block
+        tokio::time::sleep(Duration::from_millis(50)).await;
+
+        // Ensure that registering a new channel does not block
+        let register_future = bus.register_channel(&agent_new, CommunicationMode::PointToPoint("sender3".to_string()));
+        let result = timeout(Duration::from_millis(200), register_future).await;
+
+        assert!(result.is_ok(), "register_channel should not timeout and be blocked by receive_message");
     }
 }

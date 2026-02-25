@@ -57,7 +57,12 @@ pub fn find_project_root() -> Option<PathBuf> {
 /// Platform-specific:
 /// - macOS/Linux: ~/.config/mofa
 /// - Windows: %APPDATA%\mofa
+/// - Overridable via `MOFA_CONFIG_DIR`
 pub fn mofa_config_dir() -> anyhow::Result<PathBuf> {
+    if let Ok(dir) = std::env::var("MOFA_CONFIG_DIR") {
+        return Ok(PathBuf::from(dir));
+    }
+
     let config_dir = dirs_next::config_dir()
         .ok_or_else(|| anyhow::anyhow!("Failed to determine config directory"))?;
 
@@ -69,7 +74,12 @@ pub fn mofa_config_dir() -> anyhow::Result<PathBuf> {
 /// - macOS: ~/Library/Application Support/mofa
 /// - Linux: ~/.local/share/mofa
 /// - Windows: %LOCALAPPDATA%\mofa
+/// - Overridable via `MOFA_DATA_DIR`
 pub fn mofa_data_dir() -> anyhow::Result<PathBuf> {
+    if let Ok(dir) = std::env::var("MOFA_DATA_DIR") {
+        return Ok(PathBuf::from(dir));
+    }
+
     let data_dir = dirs_next::data_local_dir()
         .ok_or_else(|| anyhow::anyhow!("Failed to determine data directory"))?;
 
@@ -77,7 +87,12 @@ pub fn mofa_data_dir() -> anyhow::Result<PathBuf> {
 }
 
 /// Get the MoFA cache directory
+/// Overridable via `MOFA_CACHE_DIR`
 pub fn mofa_cache_dir() -> anyhow::Result<PathBuf> {
+    if let Ok(dir) = std::env::var("MOFA_CACHE_DIR") {
+        return Ok(PathBuf::from(dir));
+    }
+
     let cache_dir = dirs_next::cache_dir()
         .ok_or_else(|| anyhow::anyhow!("Failed to determine cache directory"))?;
 

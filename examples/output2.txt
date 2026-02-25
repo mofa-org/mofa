@@ -1,0 +1,32 @@
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.23s
+     Running `target\debug\cli_production_smoke.exe`
+=== MoFA CLI Production Smoke Check ===
+
+[1/6] Top-level CLI commands ... OK
+[2/6] Tool commands ... OK
+[3/6] Plugin lifecycle ... FAIL
+  mofa plugin list output did not contain 'http-plugin'.
+  stdout:
+  → Listing plugins
+  
+    No plugins registered.
+  
+    Plugins can be registered programmatically via the SDK.
+  
+  stderr:
+  
+[4/6] Agent lifecycle ... OK
+[5/6] Session lifecycle ... FAIL
+  mofa session list output did not contain 'smoke-session-1'.
+  stdout:
+  → Listing sessions
+  
+    No sessions found.
+  
+  stderr:
+  
+[6/6] Negative checks ... OK
+
+Summary: 4 passed, 2 failed
+Error: CLI smoke checks failed
+error: process didn't exit successfully: `target\debug\cli_production_smoke.exe` (exit code: 1)
