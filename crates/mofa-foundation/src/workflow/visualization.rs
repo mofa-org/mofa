@@ -368,9 +368,11 @@ mod tests {
 
     #[test]
     fn test_export_simple_workflow() {
+        use crate::workflow::state::WorkflowValue;
+        
         let mut graph = WorkflowBuilder::new("test", "Test Workflow")
             .start()
-            .task("process", "Process Data", |_ctx, _input| async { Ok(()) })
+            .task("process", "Process Data", |_ctx, _input| async move { Ok(WorkflowValue::Null) })
             .end()
             .edge("start", "process")
             .edge("process", "end")
