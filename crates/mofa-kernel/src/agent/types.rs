@@ -31,6 +31,7 @@ pub use global::{GlobalMessage, MessageContent, MessageMetadata};
 /// Agent 状态机
 /// Agent state machine
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, Default)]
+#[non_exhaustive]
 pub enum AgentState {
     /// 已创建，未初始化
     /// Created, not initialized
@@ -173,6 +174,7 @@ impl AgentState {
 /// Agent 输入类型
 /// Agent input type
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[non_exhaustive]
 pub enum AgentInput {
     /// 文本输入
     /// Text input
@@ -429,6 +431,7 @@ impl AgentOutput {
 /// 输出内容类型
 /// Output content type
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[non_exhaustive]
 pub enum OutputContent {
     /// 文本输出
     /// Text output
@@ -576,6 +579,7 @@ impl ReasoningStep {
 /// 推理步骤类型
 /// Reasoning step type
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub enum ReasoningStepType {
     /// 思考
     /// Thought
@@ -741,6 +745,7 @@ pub trait LLMProvider: Send + Sync {
 /// 中断处理结果
 /// Interrupt handling result
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[non_exhaustive]
 pub enum InterruptResult {
     /// 中断已确认，继续执行
     /// Interrupt acknowledged, continue execution
@@ -775,6 +780,7 @@ pub enum InterruptResult {
 /// 支持的输入类型
 /// Supported input types
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[non_exhaustive]
 pub enum InputType {
     Text,
     Image,
@@ -787,6 +793,7 @@ pub enum InputType {
 /// 支持的输出类型
 /// Supported output types
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[non_exhaustive]
 pub enum OutputType {
     Text,
     Json,

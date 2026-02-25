@@ -16,6 +16,7 @@ use queue::EventQueue;
 /// 通信模式枚举
 /// Communication mode enumeration
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
+#[non_exhaustive]
 pub enum CommunicationMode {
     /// 点对点通信（单发送方 -> 单接收方）
     /// Point-to-point communication (Single sender -> Single receiver)

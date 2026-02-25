@@ -112,7 +112,15 @@ impl ContextExt for AgentContext {
     ) -> Option<T> {
         let type_name = std::any::type_name::<T>();
         let key = format!("__ext__:{}", type_name);
-        self.get(&key).await
+        self.get(&key).await.and_then(|v| {
+            match serde_json::from_value(v) {
+                Ok(val) => Some(val),
+                Err(e) => {
+                    tracing::warn!(key = %key, error = %e, "ContextExt::get_extension deserialization failed");
+                    None
+                }
+            }
+        })
     }
 
     async fn remove_extension<T: Send + Sync + serde::de::DeserializeOwned + 'static>(
@@ -122,7 +130,15 @@ impl ContextExt for AgentContext {
         let key = format!("__ext__:{}", type_name);
         self.remove(&key)
             .await
-            .and_then(|v| serde_json::from_value(v).ok())
+            .and_then(|v| {
+                match serde_json::from_value(v) {
+                    Ok(val) => Some(val),
+                    Err(e) => {
+                        tracing::warn!(key = %key, error = %e, "ContextExt::remove_extension deserialization failed");
+                        None
+                    }
+                }
+            })
     }
 
     async fn has_extension<T: Send + Sync + 'static>(&self) -> bool {

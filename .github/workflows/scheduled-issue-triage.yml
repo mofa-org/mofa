@@ -51,11 +51,22 @@ jobs:
           echo '🔄 Merging and deduplicating issues...'
           ISSUES="$(echo "${NO_AREA_ISSUES}" "${NO_KIND_ISSUES}" "${NO_PRIORITY_ISSUES}" "${NEED_TRIAGE_ISSUES}" | jq -c -s 'add | unique_by(.number)')"
           
-          echo '📝 Setting output for GitHub Actions...'
-          echo "issues_to_triage=${ISSUES}" >> "${GITHUB_OUTPUT}"
-          
           ISSUE_COUNT="$(echo "${ISSUES}" | jq 'length')"
           echo "✅ Found ${ISSUE_COUNT} unique issues to triage! 🎯"
+
+          # To avoid exceeding OS limits for environment size (which can cause
+          # \"Argument list too long\" when starting node), cap how many issues
+          # we pass through the outputs / env at once. The workflow runs
+          # regularly, so remaining issues will be handled in future runs.
+          MAX_ISSUES=50
+          ISSUES_TRUNCATED="$(echo "${ISSUES}" | jq -c ".[0:${MAX_ISSUES}]")"
+
+          if [ "${ISSUE_COUNT}" -gt "${MAX_ISSUES}" ]; then
+            echo "⚠️  Capping issues to first ${MAX_ISSUES} to keep payload size manageable."
+          fi
+
+          echo '📝 Setting output for GitHub Actions...'
+          echo "issues_to_triage=${ISSUES_TRUNCATED}" >> "${GITHUB_OUTPUT}"
 
       - name: Get repository labels
         id: get_labels

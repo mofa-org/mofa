@@ -6,7 +6,7 @@
 
 use async_trait::async_trait;
 use mofa_kernel::agent::components::tool::{
-    ToolDescriptor, ToolInput, ToolMetadata, ToolRegistry, ToolResult,
+    ToolDescriptor, ToolInput, ToolMetadata, ToolRegistry, ToolResult, DynTool, ToolExt as KernelToolExt,
 };
 use mofa_kernel::agent::context::AgentContext;
 use mofa_kernel::agent::error::AgentResult;
@@ -240,8 +240,8 @@ impl<T: SimpleTool + 'static> ToolExt for SimpleToolAdapter<T> {
 /// ```
 pub fn as_tool<T: SimpleTool + Send + Sync + 'static>(
     tool: T,
-) -> Arc<dyn mofa_kernel::agent::components::tool::Tool> {
-    Arc::new(SimpleToolAdapter::new(tool))
+) -> Arc<dyn mofa_kernel::agent::components::tool::DynTool> {
+    SimpleToolAdapter::new(tool).into_dynamic()
 }
 
 // ============================================================================
@@ -255,7 +255,7 @@ pub fn as_tool<T: SimpleTool + Send + Sync + 'static>(
 /// Foundation 层的具体实现
 /// Concrete implementation of the Foundation layer
 pub struct SimpleToolRegistry {
-    tools: HashMap<String, Arc<dyn mofa_kernel::agent::components::tool::Tool>>,
+    tools: HashMap<String, Arc<dyn mofa_kernel::agent::components::tool::DynTool>>,
 }
 
 impl SimpleToolRegistry {
@@ -278,13 +278,13 @@ impl Default for SimpleToolRegistry {
 impl ToolRegistry for SimpleToolRegistry {
     fn register(
         &mut self,
-        tool: Arc<dyn mofa_kernel::agent::components::tool::Tool>,
+        tool: Arc<dyn mofa_kernel::agent::components::tool::DynTool>,
     ) -> AgentResult<()> {
         self.tools.insert(tool.name().to_string(), tool);
         Ok(())
     }
 
-    fn get(&self, name: &str) -> Option<Arc<dyn mofa_kernel::agent::components::tool::Tool>> {
+    fn get(&self, name: &str) -> Option<Arc<dyn mofa_kernel::agent::components::tool::DynTool>> {
         self.tools.get(name).cloned()
     }
 
@@ -295,7 +295,7 @@ impl ToolRegistry for SimpleToolRegistry {
     fn list(&self) -> Vec<ToolDescriptor> {
         self.tools
             .values()
-            .map(|t| ToolDescriptor::from_tool(t.as_ref()))
+            .map(|t| ToolDescriptor::from_dyn_tool(t.as_ref()))
             .collect()
     }
 
@@ -399,13 +399,13 @@ mod tests {
     #[tokio::test]
     async fn test_simple_tool_registry() {
         let mut registry = SimpleToolRegistry::new();
-        registry.register(Arc::new(EchoTool)).unwrap();
+        registry.register(EchoTool.into_dynamic()).unwrap();
 
         assert!(registry.contains("echo"));
         assert_eq!(registry.count(), 1);
 
         let ctx = AgentContext::new("test");
-        let result = registry
+        let result: mofa_kernel::agent::components::tool::ToolResult<serde_json::Value> = registry
             .execute(
                 "echo",
                 ToolInput::from_json(json!({"message": "test"})),
@@ -499,7 +499,7 @@ mod tests {
         assert!(registry.contains("test_as_tool"));
 
         let ctx = AgentContext::new("test");
-        let result = registry
+        let result: mofa_kernel::agent::components::tool::ToolResult<serde_json::Value> = registry
             .execute(
                 "test_as_tool",
                 ToolInput::from_json(json!({"value": "test"})),
