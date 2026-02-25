@@ -126,10 +126,9 @@ jobs:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           ISSUES_TO_TRIAGE: ${{ steps.issue_details.outputs.issues_json }}
           AVAILABLE_LABELS: ${{ steps.get_labels.outputs.available_labels }}
+          PROMPT: ${{ steps.prompt.outputs.prompt }}
         run: |
           set -euo pipefail
-          
-          PROMPT="${{ steps.prompt.outputs.prompt }}"
           
           echo "Starting batch issue triage..."
           ISSUE_COUNT=$(echo "${ISSUES_TO_TRIAGE}" | jq 'length')
@@ -152,7 +151,7 @@ jobs:
           
           # Make API call with error handling
           RESPONSE=$(curl -s -w "\n%{http_code}" -X POST \
-            "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key=${GEMINI_API_KEY}" \
+            "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_API_KEY}" \
             -H "Content-Type: application/json" \
             -d "{
               \"contents\": [{
@@ -212,10 +211,12 @@ jobs:
 
       - name: Apply labels to issues
         uses: actions/github-script@v7
+        env:
+          TRIAGE_RESULT: ${{ steps.triage.outputs.result }}
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
-            const triageResult = `${{ steps.triage.outputs.result }}`;
+            const triageResult = process.env.TRIAGE_RESULT;
             
             let triageData;
             try {
