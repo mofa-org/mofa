@@ -139,18 +139,7 @@ impl ConfigLoader {
     /// 从字符串加载配置
     /// Load configuration from string
     pub fn from_str(content: &str, format: ConfigFormat) -> AgentResult<AgentConfig> {
-        from_str(content, format.to_file_format()).map_err(|e| match e {
-            ConfigError::Parse(e) => {
-                AgentError::ConfigError(format!("Failed to parse config: {}", e))
-            }
-            ConfigError::Serialization(e) => {
-                AgentError::ConfigError(format!("Failed to deserialize config: {}", e))
-            }
-            ConfigError::UnsupportedFormat(e) => {
-                AgentError::ConfigError(format!("Unsupported config format: {}", e))
-            }
-            _ => AgentError::ConfigError(format!("Config error: {}", e)),
-        })
+        Ok(from_str(content, format.to_file_format())?)
     }
 
     /// 从 YAML 字符串加载
@@ -192,22 +181,7 @@ impl ConfigLoader {
     /// 从文件加载配置 (自动检测格式)
     /// Load config from file (auto-detect format)
     pub fn load_file(path: &str) -> AgentResult<AgentConfig> {
-        let config: AgentConfig = load_config(path).map_err(|e| match e {
-            ConfigError::Io(e) => {
-                AgentError::ConfigError(format!("Failed to read config file '{}': {}", path, e))
-            }
-            ConfigError::Parse(e) => {
-                AgentError::ConfigError(format!("Failed to parse config file '{}': {}", path, e))
-            }
-            ConfigError::Serialization(e) => AgentError::ConfigError(format!(
-                "Failed to deserialize config file '{}': {}",
-                path, e
-            )),
-            ConfigError::UnsupportedFormat(e) => AgentError::ConfigError(format!(
-                "Unsupported config format for file '{}': {}",
-                path, e
-            )),
-        })?;
+        let config: AgentConfig = load_config(path)?;
 
         // 验证配置
         // Validate configuration
@@ -394,20 +368,7 @@ impl ConfigLoader {
     /// 从多个文件合并加载配置
     /// Load and merge config from multiple files
     pub fn load_merged_files(paths: &[&str]) -> AgentResult<AgentConfig> {
-        load_merged(paths).map_err(|e| match e {
-            ConfigError::Io(e) => {
-                AgentError::ConfigError(format!("Failed to read config file: {}", e))
-            }
-            ConfigError::Parse(e) => {
-                AgentError::ConfigError(format!("Failed to parse config: {}", e))
-            }
-            ConfigError::Serialization(e) => {
-                AgentError::ConfigError(format!("Failed to deserialize config: {}", e))
-            }
-            ConfigError::UnsupportedFormat(e) => {
-                AgentError::ConfigError(format!("Unsupported config format: {}", e))
-            }
-        })
+        Ok(load_merged(paths)?)
     }
 }
 

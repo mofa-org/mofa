@@ -366,10 +366,7 @@ impl Default for MessageMetadata {
     fn default() -> Self {
         Self {
             id: uuid::Uuid::new_v4().to_string(),
-            timestamp: std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_millis() as u64,
+            timestamp: crate::utils::now_ms(),
             properties: HashMap::new(),
         }
     }

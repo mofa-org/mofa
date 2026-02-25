@@ -352,6 +352,7 @@ impl RhaiPlugin {
                 && let Some(name) = result.value.as_str()
             {
                 self.metadata.name = name.to_string();
+                self.kernel_metadata.name = name.to_string();
             }
 
             // Try to extract plugin_version
@@ -360,6 +361,7 @@ impl RhaiPlugin {
                 && let Some(version) = result.value.as_str()
             {
                 self.metadata.version = version.to_string();
+                self.kernel_metadata.version = version.to_string();
             }
 
             // Try to extract plugin_description
@@ -368,6 +370,7 @@ impl RhaiPlugin {
                 && let Some(description) = result.value.as_str()
             {
                 self.metadata.description = description.to_string();
+                self.kernel_metadata.description = description.to_string();
             }
         }
 
