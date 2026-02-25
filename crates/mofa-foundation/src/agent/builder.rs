@@ -44,7 +44,7 @@ use std::sync::Arc;
 use serde::{Deserialize, Serialize};
 use async_trait::async_trait;
 
-use mofa_kernel::agent::components::tool::{Tool, DynTool, ToolInput, ToolResult, ToolMetadata, LLMTool};
+use mofa_kernel::agent::components::tool::{Tool, ToolExt, DynTool, ToolInput, ToolResult, ToolMetadata, LLMTool};
 use mofa_kernel::agent::error::{AgentError, AgentResult};
 use mofa_kernel::agent::types::LLMProvider;
 use mofa_kernel::agent::context::AgentContext;
@@ -52,65 +52,6 @@ use mofa_kernel::agent::context::AgentContext;
 use crate::agent::executor::{AgentExecutor, AgentExecutorConfig};
 
 // ============================================================================
-// Tool wrapper for converting Arc<dyn Tool> to Arc<dyn DynTool>
-// ============================================================================
-
-/// Wrapper to convert Arc<dyn Tool> to Arc<dyn DynTool>
-pub struct ToolToDynToolWrapper {
-    inner: Arc<dyn Tool>,
-}
-
-impl ToolToDynToolWrapper {
-    pub fn new(tool: Arc<dyn Tool>) -> Self {
-        Self { inner: tool }
-    }
-}
-
-#[async_trait]
-impl DynTool for ToolToDynToolWrapper {
-    fn name(&self) -> &str {
-        self.inner.name()
-    }
-
-    fn description(&self) -> &str {
-        self.inner.description()
-    }
-
-    fn parameters_schema(&self) -> serde_json::Value {
-        self.inner.parameters_schema()
-    }
-
-    async fn execute_dynamic(&self, input: serde_json::Value, ctx: &AgentContext) -> AgentResult<serde_json::Value> {
-        let tool_input = ToolInput::from_json(input);
-        let result = self.inner.execute(tool_input, ctx).await;
-        if result.success {
-            Ok(serde_json::to_value(result.output)?)
-        } else {
-            Err(AgentError::tool_execution_failed(
-                self.name(),
-                result.error.unwrap_or_else(|| "Tool execution failed".to_string())
-            ))
-        }
-    }
-
-    fn metadata(&self) -> ToolMetadata {
-        self.inner.metadata()
-    }
-
-    fn validate_dynamic_input(&self, input: &serde_json::Value) -> AgentResult<()> {
-        let tool_input = ToolInput::from_json(input.clone());
-        self.inner.validate_input(&tool_input)
-    }
-
-    fn requires_confirmation(&self) -> bool {
-        self.inner.requires_confirmation()
-    }
-
-    fn to_llm_tool(&self) -> LLMTool {
-        self.inner.to_llm_tool()
-    }
-}
-
 // ============================================================================
 // AgentBuilder
 // ============================================================================
@@ -135,7 +76,7 @@ pub struct AgentBuilder {
     /// LLM provider (required)
     llm: Option<Arc<dyn LLMProvider>>,
     /// Tools to register on the executor
-    tools: Vec<Arc<dyn Tool>>,
+    tools: Vec<Arc<dyn DynTool>>,
     /// Executor configuration (model, temperature, iterations, …)
     pub(crate) config: AgentExecutorConfig,
     /// Workspace directory for sessions and context files.
@@ -194,8 +135,11 @@ impl AgentBuilder {
     /// Register a tool on the resulting executor.
     ///
     /// Can be called multiple times to register several tools.
-    pub fn with_tool(mut self, tool: Arc<dyn Tool>) -> Self {
-        self.tools.push(tool);
+    pub fn with_tool<T>(mut self, tool: T) -> Self
+    where
+        T: Tool<serde_json::Value, serde_json::Value> + Send + Sync + 'static,
+    {
+        self.tools.push(tool.into_dynamic());
         self
     }
 
@@ -266,8 +210,7 @@ impl AgentBuilder {
         }
 
         for tool in self.tools {
-            let dyn_tool = Arc::new(ToolToDynToolWrapper::new(tool));
-            executor.register_tool(dyn_tool).await?;
+            executor.register_tool(tool).await?;
         }
 
         Ok(executor)
