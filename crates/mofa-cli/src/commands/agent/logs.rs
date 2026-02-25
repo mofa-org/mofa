@@ -6,7 +6,7 @@ use colored::Colorize;
 use std::io::SeekFrom;
 use tokio::fs::File;
 use tokio::io::{AsyncBufReadExt, AsyncSeekExt, BufReader};
-use tokio::time::{interval, Duration};
+use tokio::time::{Duration, interval};
 
 /// Execute the `mofa agent logs` command
 pub async fn run(
@@ -35,9 +35,12 @@ pub async fn run(
                 "  {}",
                 "Logs will appear here once the agent starts producing output.".bright_black()
             );
-            
+
             if tail {
-                println!("\n{} Waiting for logs... (Press Ctrl+C to exit)", "→".green());
+                println!(
+                    "\n{} Waiting for logs... (Press Ctrl+C to exit)",
+                    "→".green()
+                );
                 wait_for_file_and_tail(&log_file).await?;
             }
             return Ok(());
@@ -126,10 +129,10 @@ async fn display_log_file(
         }
 
         // Apply limit
-        if let Some(max) = limit {
-            if count >= max {
-                break;
-            }
+        if let Some(max) = limit
+            && count >= max
+        {
+            break;
         }
 
         output_lines.push(line);
@@ -199,7 +202,7 @@ async fn tail_log_file(
         .await
         .with_context(|| "Failed to get file metadata")?
         .len();
-    
+
     file.seek(SeekFrom::Start(file_len))
         .await
         .with_context(|| "Failed to seek to end of file")?;
@@ -304,14 +307,14 @@ mod tests {
 
         // Write test content
         let mut file = File::create(&log_file).await.unwrap();
-        file.write_all(b"Line 1\nLine 2\nLine 3\n")
-            .await
-            .unwrap();
+        file.write_all(b"Line 1\nLine 2\nLine 3\n").await.unwrap();
         file.flush().await.unwrap();
         drop(file);
 
         // Test reading
-        display_log_file(&log_file, &None, &None, None, false).await.unwrap();
+        display_log_file(&log_file, &None, &None, None, false)
+            .await
+            .unwrap();
     }
 
     #[tokio::test]

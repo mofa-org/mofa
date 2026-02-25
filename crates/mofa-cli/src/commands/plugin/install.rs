@@ -78,7 +78,11 @@ pub async fn run(
         .save(&plugin_id, &spec)
         .with_context(|| format!("Failed to persist plugin spec for '{}'", plugin_id))?;
 
-    println!("{} Plugin '{}' installed successfully", "✓".green(), plugin_id);
+    println!(
+        "{} Plugin '{}' installed successfully",
+        "✓".green(),
+        plugin_id
+    );
     println!(
         "  {} Location: {}",
         "•".bright_black(),
@@ -127,7 +131,12 @@ async fn install_from_local_path(
     if dest_dir.exists() {
         tokio::fs::remove_dir_all(&dest_dir)
             .await
-            .with_context(|| format!("Failed to remove existing plugin directory: {}", dest_dir.display()))?;
+            .with_context(|| {
+                format!(
+                    "Failed to remove existing plugin directory: {}",
+                    dest_dir.display()
+                )
+            })?;
     }
 
     // Copy plugin files
@@ -151,7 +160,7 @@ async fn install_from_url(
 
     // Download the file with progress bar
     println!("  {} Downloading from {}", "•".bright_black(), url.cyan());
-    
+
     let response = reqwest::get(url)
         .await
         .with_context(|| format!("Failed to download plugin from {}", url))?;
@@ -187,7 +196,7 @@ async fn install_from_url(
         hasher.update(&bytes);
         let computed = hasher.finalize();
         let computed_hex = hex::encode(computed);
-        
+
         if computed_hex.to_lowercase() != expected.to_lowercase() {
             anyhow::bail!(
                 "Checksum mismatch!\n  Expected: {}\n  Computed: {}\n\nPlugin may be corrupted or tampered with.",
@@ -199,7 +208,10 @@ async fn install_from_url(
     }
 
     if verify_signature {
-        println!("  {} Signature verification not yet implemented", "⚠".yellow());
+        println!(
+            "  {} Signature verification not yet implemented",
+            "⚠".yellow()
+        );
         println!("  {} Consider using --checksum for now", "•".bright_black());
     }
 
@@ -216,7 +228,7 @@ async fn install_from_url(
         extract_zip(&bytes, &dest_dir)?;
     } else {
         // Treat as single file, save it directly
-        let filename = url.split('/').last().unwrap_or("plugin");
+        let filename = url.split('/').next_back().unwrap_or("plugin");
         let file_path = dest_dir.join(filename);
         tokio::fs::write(&file_path, &bytes)
             .await
@@ -233,10 +245,7 @@ fn validate_plugin_structure(plugin_dir: &Path) -> Result<()> {
     }
 
     if !plugin_dir.is_dir() {
-        anyhow::bail!(
-            "Plugin path is not a directory: {}",
-            plugin_dir.display()
-        );
+        anyhow::bail!("Plugin path is not a directory: {}", plugin_dir.display());
     }
 
     // Check for at least one file (skip . and .. entries)
@@ -276,7 +285,10 @@ fn validate_plugin_structure(plugin_dir: &Path) -> Result<()> {
 }
 
 /// Recursively copy a directory
-fn copy_dir_recursive<'a>(src: &'a Path, dest: &'a Path) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<()>> + Send + 'a>> {
+fn copy_dir_recursive<'a>(
+    src: &'a Path,
+    dest: &'a Path,
+) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<()>> + Send + 'a>> {
     Box::pin(async move {
         tokio::fs::create_dir_all(dest)
             .await
@@ -320,7 +332,7 @@ fn extract_tar_gz(bytes: &[u8], dest_dir: &Path) -> Result<()> {
 
     let gz = GzDecoder::new(bytes);
     let mut archive = Archive::new(gz);
-    
+
     archive
         .unpack(dest_dir)
         .with_context(|| "Failed to extract tar.gz archive")?;
@@ -334,14 +346,13 @@ fn extract_zip(bytes: &[u8], dest_dir: &Path) -> Result<()> {
     use zip::ZipArchive;
 
     let cursor = Cursor::new(bytes);
-    let mut archive = ZipArchive::new(cursor)
-        .with_context(|| "Failed to read zip archive")?;
+    let mut archive = ZipArchive::new(cursor).with_context(|| "Failed to read zip archive")?;
 
     for i in 0..archive.len() {
         let mut file = archive
             .by_index(i)
             .with_context(|| format!("Failed to read zip entry {}", i))?;
-        
+
         let outpath = match file.enclosed_name() {
             Some(path) => dest_dir.join(path),
             None => continue,
@@ -352,8 +363,9 @@ fn extract_zip(bytes: &[u8], dest_dir: &Path) -> Result<()> {
                 .with_context(|| format!("Failed to create directory: {}", outpath.display()))?;
         } else {
             if let Some(parent) = outpath.parent() {
-                std::fs::create_dir_all(parent)
-                    .with_context(|| format!("Failed to create parent directory: {}", parent.display()))?;
+                std::fs::create_dir_all(parent).with_context(|| {
+                    format!("Failed to create parent directory: {}", parent.display())
+                })?;
             }
             let mut outfile = std::fs::File::create(&outpath)
                 .with_context(|| format!("Failed to create file: {}", outpath.display()))?;
@@ -420,13 +432,16 @@ mod tests {
         // Create a source plugin directory
         let source_plugin = temp.path().join("source-plugin");
         tokio::fs::create_dir_all(&source_plugin).await.unwrap();
-        tokio::fs::write(source_plugin.join("plugin.toml"), b"[plugin]\nname = \"test\"\n")
-            .await
-            .unwrap();
+        tokio::fs::write(
+            source_plugin.join("plugin.toml"),
+            b"[plugin]\nname = \"test\"\n",
+        )
+        .await
+        .unwrap();
         tokio::fs::write(source_plugin.join("main.rs"), b"fn main() {}\n")
             .await
             .unwrap();
-        
+
         // Ensure files are synced to disk
         tokio::fs::metadata(&source_plugin).await.unwrap();
 
@@ -441,7 +456,11 @@ mod tests {
         // Verify plugin was installed (plugin name is the full path, sanitized)
         let plugin_name = plugin_path_str.replace('/', "_").replace('\\', "_");
         let plugin_dir = ctx.data_dir.join("plugins").join(&plugin_name);
-        assert!(plugin_dir.exists(), "Plugin dir should exist at: {}", plugin_dir.display());
+        assert!(
+            plugin_dir.exists(),
+            "Plugin dir should exist at: {}",
+            plugin_dir.display()
+        );
         assert!(plugin_dir.join("plugin.toml").exists());
         assert!(plugin_dir.join("main.rs").exists());
 
@@ -459,8 +478,10 @@ mod tests {
         // Create a plugin directory and install it first
         let source_plugin = temp.path().join("test-plugin");
         tokio::fs::create_dir_all(&source_plugin).await.unwrap();
-        tokio::fs::write(source_plugin.join("file.txt"), b"test").await.unwrap();
-        
+        tokio::fs::write(source_plugin.join("file.txt"), b"test")
+            .await
+            .unwrap();
+
         // First installation should succeed
         let result1 = run(&ctx, source_plugin.to_str().unwrap(), None, false).await;
         assert!(result1.is_ok());
@@ -468,7 +489,12 @@ mod tests {
         // Try to install again - should fail because plugin already exists
         let result2 = run(&ctx, source_plugin.to_str().unwrap(), None, false).await;
         assert!(result2.is_err());
-        assert!(result2.unwrap_err().to_string().contains("already installed"));
+        assert!(
+            result2
+                .unwrap_err()
+                .to_string()
+                .contains("already installed")
+        );
     }
 
     #[tokio::test]
