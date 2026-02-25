@@ -159,7 +159,7 @@ impl WorkflowExecutor {
     /// Get the trace handle if trace recording is enabled
     fn trace_handle(&self) -> Option<&WorkflowTraceHandle> {
         match &self.trace_mode {
-            TraceMode::Record(handle) => Some(handle),
+            TraceMode::Record(handle) | TraceMode::Replay(handle) => Some(handle),
             TraceMode::Disabled => None,
         }
     }

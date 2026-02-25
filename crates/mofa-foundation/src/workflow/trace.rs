@@ -50,18 +50,25 @@ pub enum TraceMode {
     Disabled,
     /// Record mode - captures all execution events for later replay
     Record(Arc<WorkflowTraceHandle>),
+    /// Replay mode - executes workflow from recorded trace without external side effects
+    Replay(Arc<WorkflowTraceHandle>),
 }
 
 impl TraceMode {
     /// Check if tracing is enabled
     pub fn is_enabled(&self) -> bool {
-        matches!(self, TraceMode::Record(_))
+        matches!(self, TraceMode::Record(_) | TraceMode::Replay(_))
     }
 
-    /// Get the trace handle if in record mode
+    /// Check if in replay mode
+    pub fn is_replay(&self) -> bool {
+        matches!(self, TraceMode::Replay(_))
+    }
+
+    /// Get the trace handle if in record or replay mode
     pub fn trace(&self) -> Option<&WorkflowTraceHandle> {
         match self {
-            TraceMode::Record(handle) => Some(handle),
+            TraceMode::Record(handle) | TraceMode::Replay(handle) => Some(handle),
             TraceMode::Disabled => None,
         }
     }
@@ -111,7 +118,7 @@ pub struct TraceStateUpdate {
 }
 
 /// Execution status transition
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum ExecutionStatus {
     /// Workflow/Node has started
     Started,
@@ -374,6 +381,246 @@ impl WorkflowTraceHandle {
 }
 
 // ============================================================================
+// Replay Mismatch Error
+// ============================================================================
+
+/// Types of mismatch that can occur during replay
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum ReplayMismatchType {
+    /// Node execution order differs
+    NodeOrderMismatch {
+        expected: String,
+        actual: String,
+    },
+    /// Node input differs from recorded
+    InputMismatch {
+        node_id: String,
+        expected: serde_json::Value,
+        actual: serde_json::Value,
+    },
+    /// Node output differs from recorded
+    OutputMismatch {
+        node_id: String,
+        expected: serde_json::Value,
+        actual: serde_json::Value,
+    },
+    /// State transition differs from recorded
+    StateMismatch {
+        node_id: String,
+        key: String,
+        expected: serde_json::Value,
+        actual: serde_json::Value,
+    },
+    /// Execution status differs from recorded
+    StatusMismatch {
+        node_id: String,
+        expected: ExecutionStatus,
+        actual: ExecutionStatus,
+    },
+    /// Attempted to execute more nodes than recorded
+    ExcessExecution {
+        node_id: String,
+    },
+    /// Missing expected node execution
+    MissingExecution {
+        node_id: String,
+    },
+}
+
+/// Error emitted when replay diverges from recorded trace
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ReplayMismatch {
+    /// Type of mismatch
+    pub mismatch_type: ReplayMismatchType,
+    /// Timestamp when mismatch was detected
+    pub timestamp_ms: u64,
+    /// Whether this is a fatal mismatch (execution cannot continue)
+    pub fatal: bool,
+}
+
+impl ReplayMismatch {
+    /// Create a new replay mismatch
+    pub fn new(mismatch_type: ReplayMismatchType, fatal: bool) -> Self {
+        Self {
+            mismatch_type,
+            timestamp_ms: current_time_ms(),
+            fatal,
+        }
+    }
+
+    /// Create a fatal mismatch
+    pub fn fatal(mismatch_type: ReplayMismatchType) -> Self {
+        Self::new(mismatch_type, true)
+    }
+
+    /// Create a non-fatal mismatch (warning)
+    pub fn warning(mismatch_type: ReplayMismatchType) -> Self {
+        Self::new(mismatch_type, false)
+    }
+}
+
+// ============================================================================
+// Replay State Machine
+// ============================================================================
+
+/// State machine for tracking replay progress
+#[derive(Debug)]
+pub struct ReplayState {
+    /// The trace being replayed
+    trace: Arc<WorkflowTrace>,
+    /// Current node execution index
+    current_index: usize,
+    /// Mismatches detected during replay
+    mismatches: Vec<ReplayMismatch>,
+    /// Whether replay has completed
+    completed: bool,
+}
+
+impl ReplayState {
+    /// Create a new replay state from a trace
+    pub fn new(trace: WorkflowTrace) -> Self {
+        Self {
+            trace: Arc::new(trace),
+            current_index: 0,
+            mismatches: Vec::new(),
+            completed: false,
+        }
+    }
+
+    /// Get the expected next node execution
+    pub fn next_expected_node(&self) -> Option<&NodeExecutionRecord> {
+        if self.current_index < self.trace.node_executions.len() {
+            self.trace.node_executions.get(self.current_index)
+        } else {
+            None
+        }
+    }
+
+    /// Validate and advance to next node
+    pub fn validate_node_start(&mut self, node_id: &str, input: &serde_json::Value) -> Result<(), ReplayMismatch> {
+        if let Some(expected) = self.next_expected_node() {
+            if expected.node_id != node_id {
+                let mismatch = ReplayMismatch::fatal(ReplayMismatchType::NodeOrderMismatch {
+                    expected: expected.node_id.clone(),
+                    actual: node_id.to_string(),
+                });
+                self.mismatches.push(mismatch.clone());
+                return Err(mismatch);
+            }
+
+            // Check input matches
+            if let Some(ref exp_input) = expected.input {
+                if exp_input != input {
+                    let mismatch = ReplayMismatch::warning(ReplayMismatchType::InputMismatch {
+                        node_id: node_id.to_string(),
+                        expected: exp_input.clone(),
+                        actual: input.clone(),
+                    });
+                    self.mismatches.push(mismatch);
+                }
+            }
+
+            Ok(())
+        } else {
+            let mismatch = ReplayMismatch::fatal(ReplayMismatchType::ExcessExecution {
+                node_id: node_id.to_string(),
+            });
+            self.mismatches.push(mismatch.clone());
+            Err(mismatch)
+        }
+    }
+
+    /// Validate node completion
+    pub fn validate_node_end(
+        &mut self,
+        output: &serde_json::Value,
+        status: &ExecutionStatus,
+    ) -> Result<(), ReplayMismatch> {
+        if let Some(expected) = self.next_expected_node() {
+            // Extract needed data from expected to avoid borrow issues
+            let exp_output = expected.output.clone();
+            let node_id = expected.node_id.clone();
+            let exp_status = expected.status.clone();
+            
+            // Check output matches
+            if let Some(ref exp_out) = exp_output {
+                if exp_out != output {
+                    let mismatch = ReplayMismatch::warning(ReplayMismatchType::OutputMismatch {
+                        node_id: node_id.clone(),
+                        expected: exp_out.clone(),
+                        actual: output.clone(),
+                    });
+                    self.mismatches.push(mismatch);
+                }
+            }
+
+            // Check status matches
+            if exp_status != *status {
+                let mismatch = ReplayMismatch::warning(ReplayMismatchType::StatusMismatch {
+                    node_id,
+                    expected: exp_status,
+                    actual: status.clone(),
+                });
+                self.mismatches.push(mismatch);
+            }
+
+            // Advance to next node
+            self.current_index += 1;
+            Ok(())
+        } else {
+            Ok(()) // Already reported error in validate_node_start
+        }
+    }
+
+    /// Check if replay completed successfully (no fatal mismatches)
+    pub fn finish(&mut self) -> Result<(), Vec<ReplayMismatch>> {
+        self.completed = true;
+        
+        // Check for missing executions
+        if self.current_index < self.trace.node_executions.len() {
+            for remaining in self.trace.node_executions.iter().skip(self.current_index) {
+                self.mismatches.push(ReplayMismatch::warning(ReplayMismatchType::MissingExecution {
+                    node_id: remaining.node_id.clone(),
+                }));
+            }
+        }
+
+        // Return fatal errors if any
+        let fatal: Vec<_> = self.mismatches.iter()
+            .filter(|m| m.fatal)
+            .cloned()
+            .collect();
+
+        if fatal.is_empty() {
+            Ok(())
+        } else {
+            Err(fatal)
+        }
+    }
+
+    /// Get all mismatches (for debugging/analysis)
+    pub fn mismatches(&self) -> &[ReplayMismatch] {
+        &self.mismatches
+    }
+
+    /// Get the recorded output for current node (for replay)
+    pub fn get_replayed_output(&self) -> Option<&serde_json::Value> {
+        self.next_expected_node()
+            .and_then(|n| n.output.as_ref())
+    }
+
+    /// Check if more nodes are available
+    pub fn has_more_nodes(&self) -> bool {
+        self.current_index < self.trace.node_executions.len()
+    }
+
+    /// Get progress info
+    pub fn progress(&self) -> (usize, usize) {
+        (self.current_index, self.trace.node_executions.len())
+    }
+}
+
+// ============================================================================
 // Helper functions
 // ============================================================================
 
@@ -550,5 +797,106 @@ mod tests {
             let trace = handle.get_trace().await;
             assert_eq!(trace.node_executions.len(), 1);
         });
+    }
+
+    #[test]
+    fn test_replay_state_creation() {
+        // Create a trace with node executions
+        let mut trace = WorkflowTrace::new("workflow-1", "exec-1");
+        trace.start_node("node-1".to_string(), "task".to_string(), Some(serde_json::json!({"input": 1})));
+        trace.complete_node(0, Some(serde_json::json!({"result": "output-1"})), ExecutionStatus::Completed);
+        trace.start_node("node-2".to_string(), "task".to_string(), Some(serde_json::json!({"input": 2})));
+        trace.complete_node(1, Some(serde_json::json!({"result": "output-2"})), ExecutionStatus::Completed);
+        trace.finish(ExecutionStatus::Completed);
+
+        // Create replay state
+        let handle = Arc::new(WorkflowTraceHandle::new("workflow-1", "exec-1"));
+        futures::executor::block_on(async {
+            handle.get_trace().await;
+        });
+        
+        // Just test the basic struct exists and compiles
+        let _replay_state = ReplayState::new(trace);
+    }
+
+    #[test]
+    fn test_replay_mismatch_types() {
+        // Test output mismatch
+        let mismatch = ReplayMismatch::warning(ReplayMismatchType::OutputMismatch {
+            node_id: "node-1".to_string(),
+            expected: serde_json::json!({"result": "expected"}),
+            actual: serde_json::json!({"result": "actual"}),
+        });
+        assert!(!mismatch.fatal);
+
+        // Test fatal mismatch
+        let fatal_mismatch = ReplayMismatch::fatal(ReplayMismatchType::NodeOrderMismatch {
+            expected: "node-1".to_string(),
+            actual: "node-2".to_string(),
+        });
+        assert!(fatal_mismatch.fatal);
+    }
+
+    #[test]
+    fn test_trace_mode_replay() {
+        let handle = Arc::new(WorkflowTraceHandle::new("wf", "exec"));
+        let mode = TraceMode::Replay(handle.clone());
+
+        assert!(mode.is_enabled());
+        assert!(mode.trace().is_some());
+    }
+
+    #[test]
+    fn test_replay_state_validation() {
+        // Create a trace with known executions
+        let mut trace = WorkflowTrace::new("workflow-1", "exec-1");
+        trace.start_node("node-1".to_string(), "task".to_string(), Some(serde_json::json!({"input": 1})));
+        trace.complete_node(0, Some(serde_json::json!({"result": "output-1"})), ExecutionStatus::Completed);
+        trace.finish(ExecutionStatus::Completed);
+        
+        let mut replay_state = ReplayState::new(trace);
+
+        // Validate node start with correct node ID
+        let result = replay_state.validate_node_start("node-1", &serde_json::json!({"input": 1}));
+        assert!(result.is_ok());
+
+        // Validate node end with correct output
+        let result = replay_state.validate_node_end(
+            &serde_json::json!({"result": "output-1"}),
+            &ExecutionStatus::Completed,
+        );
+        assert!(result.is_ok());
+
+        // Check progress
+        let (current, total) = replay_state.progress();
+        assert_eq!(current, 1);
+        assert_eq!(total, 1); // One node in trace
+    }
+
+    #[test]
+    fn test_replay_output_retrieval() {
+        // Create a trace with node executions
+        let mut trace = WorkflowTrace::new("workflow-1", "exec-1");
+        trace.start_node("node-1".to_string(), "task".to_string(), Some(serde_json::json!({"input": 1})));
+        trace.complete_node(0, Some(serde_json::json!({"result": "output-1"})), ExecutionStatus::Completed);
+        trace.start_node("node-2".to_string(), "task".to_string(), Some(serde_json::json!({"input": 2})));
+        trace.complete_node(1, Some(serde_json::json!({"result": "output-2"})), ExecutionStatus::Completed);
+        trace.finish(ExecutionStatus::Completed);
+
+        let mut replay_state = ReplayState::new(trace);
+
+        // Get replayed output for first node
+        let output = replay_state.get_replayed_output();
+        assert!(output.is_some());
+        assert_eq!(output.unwrap(), &serde_json::json!({"result": "output-1"}));
+
+        // Advance to next node
+        let _ = replay_state.validate_node_start("node-1", &serde_json::json!({}));
+        let _ = replay_state.validate_node_end(&serde_json::json!({}), &ExecutionStatus::Completed);
+
+        // Get replayed output for second node
+        let output = replay_state.get_replayed_output();
+        assert!(output.is_some());
+        assert_eq!(output.unwrap(), &serde_json::json!({"result": "output-2"}));
     }
 }
