@@ -578,3 +578,7 @@ pub enum PluginEvent {
         data: Vec<u8>,
     },
 }
+
+#[cfg(test)]
+mod tests;
+
