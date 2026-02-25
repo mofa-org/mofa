@@ -154,10 +154,7 @@ impl DebugEvent {
 
     /// Get the current timestamp in milliseconds since epoch
     pub fn now_ms() -> u64 {
-        std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_millis() as u64
+        crate::utils::now_ms()
     }
 
     /// Returns a human-readable event type name
