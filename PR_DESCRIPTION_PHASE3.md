@@ -1,56 +1,47 @@
-## 📋 Summary
+# Deterministic Validation (Phase 3)
 
-This PR implements **Phase 3** of the Deterministic Workflow Execution Replay & Trace Engine feature (#458). It adds validation capabilities that enable snapshot consistency checks, trace comparison, and regression testing to ensure replay produces identical results to the original execution.
+## Summary
 
-## 🔗 Related Issues
+Implements Phase 3 of #458 - Deterministic Workflow Execution Replay & Trace Engine by adding validation utilities for workflow trace comparison and verification.
 
-Closes #458
+## Context
 
-Related to # (Phase 1 and Phase 2)
+As MoFA workflows grow in complexity, debugging and validating execution becomes increasingly difficult. This phase adds deterministic validation capabilities that enable:
+- Comparing two workflow traces for identical execution
+- Detecting output differences, status differences, and order mismatches
+- Generating deterministic fingerprints for trace identification
+- Quick snapshot validation for regression testing
 
----
+## Changes
 
-## 🧠 Context
+### New Module: `workflow::validation`
 
-Building on Phase 1 (Trace Capture) and Phase 2 (Replay Mode), Phase 3 adds deterministic validation to ensure that replayed workflow executions produce identical results to the original recordings. This is critical for:
-- Regression testing complex workflows
-- Ensuring deterministic behavior
-- Debugging workflow execution issues offline
-- Validating workflow behavior without external side effects
+Added comprehensive validation utilities:
 
----
+- **WorkflowTrace structures**: Core trace data structures including `ExecutionStatus`, `ToolInvocation`, `NodeExecution`, `WorkflowTrace`
+- **TraceComparisonResult**: Enum for comparison outcomes (Identical, OutputDifferences, StatusDifferences, OrderMismatch)
+- **Difference details**: `OutputDifference` and `StatusDifference` for detailed comparison reporting
+- **Comparison methods**:
+  - `compare()`: Compare two traces and return detailed differences
+  - `fingerprint()`: Generate deterministic hash for trace identification
+  - `validate_snapshot()`: Quick check for identical traces
 
-## 🛠️ Changes
+## How You Tested
 
-- Added `TraceComparisonResult` struct for comparing two traces
-- Added `OutputDifference` and `StatusDifference` types for structured diff reporting
-- Added `compare()` method to WorkflowTrace for consistency checking
-- Added `validate_snapshot()` method for regression testing
-- Added `fingerprint()` method for quick trace comparison
-- Added Hash derive to ExecutionStatus for fingerprinting support
-- Added 7 new validation tests covering all comparison scenarios
-
----
-
-## 🧪 How you Tested
-
-1. **All tests pass**: `cargo test --package mofa-foundation` - 256 tests pass
-2. **Validation tests added**:
-   - Trace comparison (identical, output diff, order diff)
+1. `cargo test --package mofa-foundation` - All 245 tests pass
+2. Unit tests cover:
+   - Identical traces comparison
+   - Different output detection
+   - Different status detection
+   - Order mismatch detection
    - Snapshot validation
-   - Fingerprint generation
-   - Record → Replay → Identical demonstration
-   - Divergence detection
+   - Fingerprint equality/inequality
 
----
+## Breaking Changes
 
-## ⚠️ Breaking Changes
+- [x] No breaking changes - fully backward compatible, opt-in functionality
 
-- [x] No breaking changes
-
----
-
-## 🧹 Checklist
+## Checklist
 
 ### Code Quality
 - [x] Code follows Rust idioms and project conventions
@@ -58,12 +49,12 @@ Building on Phase 1 (Trace Capture) and Phase 2 (Replay Mode), Phase 3 adds dete
 - [x] `cargo clippy` passes without warnings
 
 ### Testing
-- [x] Tests added/updated (7 new validation tests)
+- [x] Tests added/updated (7 new tests)
 - [x] `cargo test` passes locally without any error
 
 ### Documentation
-- [x] Public APIs documented (Rustdoc comments)
-- [ ] README / docs updated (not required for this phase)
+- [x] Public APIs documented with doc comments
+- [ ] README / docs updated (N/A - internal module)
 
 ### PR Hygiene
 - [x] PR is small and focused (one logical change)
@@ -71,19 +62,8 @@ Building on Phase 1 (Trace Capture) and Phase 2 (Replay Mode), Phase 3 adds dete
 - [x] No unrelated commits
 - [x] Commit messages explain **why**, not only **what**
 
----
+## Additional Notes
 
-## 🚀 Deployment Notes (if applicable)
-
-This is a feature addition with no deployment impact. Validation functionality is fully opt-in and non-breaking.
-
----
-
-## 🧩 Additional Notes for Reviewers
-
-This PR completes the three-phase implementation:
-- **Phase 1**: Trace Capture (record workflow execution)
-- **Phase 2**: Replay Mode (replay from recorded trace)
-- **Phase 3**: Deterministic Validation (validate replay matches original)
-
-The key test `test_record_replay_identical_result` demonstrates the complete flow: recording a workflow, replaying it, and validating that the results are identical.
+- Total diff: 836 lines (within 800-1000 line limit)
+- Part of the larger #458 feature implementation
+- This is Phase 3 of multi-phase implementation
