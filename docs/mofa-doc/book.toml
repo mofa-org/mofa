@@ -5,38 +5,32 @@ language = "en"
 description = "MoFA (Modular Framework for Agents) - A production-grade AI agent framework built in Rust"
 src = "src"
 
-# Build configuration
 [build]
 build-dir = "book"
 create-missing = false
 
-# Preprocessors
 [preprocessor.mermaid]
 command = "mdbook-mermaid"
 
-# HTML output configuration
 [output.html]
 default-theme = "rust"
 preferred-dark-theme = "navy"
 git-repository-url = "https://github.com/mofa-org/mofa"
-edit-url-template = "https://github.com/mofa-org/mofa/edit/main/docs/mofa-doc/src/{path}"
+edit-url-template = "https://github.com/mofa-org/mofa/edit/main/docs/mofa-doc/{path}"
 no-section-label = false
 site-url = "/mofa/"
 cname = ""
 
-# Folding configuration
 [output.html.fold]
 enable = true
 level = 2
 
-# Search configuration
 [output.html.search]
 enable = true
 limit-results = 30
 use-boolean-and = true
 heading-split-level = 3
 
-# Redirect configuration for backward compatibility
 [output.html.redirect]
 "QuickStart.html" = "getting-started/installation.html"
 "architecture.html" = "concepts/architecture.html"
@@ -46,39 +40,7 @@ heading-split-level = 3
 "api-reference/runtime/README.html" = "api-reference/runtime/index.html"
 "api-reference/foundation/README.html" = "api-reference/foundation/index.html"
 "api-reference/plugins/README.html" = "api-reference/plugins/index.html"
-"crates/mofa-sdk/README.html" = "crates/mofa-sdk.html"
-"zh-CN/tutorial/README.html" = "zh/tutorial/index.html"
-"zh-CN/tutorial/01-introduction.html" = "zh/tutorial/01-introduction.html"
-"zh-CN/tutorial/02-setup.html" = "zh/tutorial/02-setup.html"
-"zh-CN/tutorial/03-first-agent.html" = "zh/tutorial/03-first-agent.html"
-"zh-CN/tutorial/04-llm-agent.html" = "zh/tutorial/04-llm-agent.html"
-"zh-CN/tutorial/05-tools.html" = "zh/tutorial/05-tools.html"
-"zh-CN/tutorial/06-multi-agent.html" = "zh/tutorial/06-multi-agent.html"
-"zh-CN/tutorial/07-workflows.html" = "zh/tutorial/07-workflows.html"
-"zh-CN/tutorial/08-plugins-and-scripting.html" = "zh/tutorial/08-plugins-and-scripting.html"
-"zh-CN/tutorial/09-whats-next.html" = "zh/tutorial/09-whats-next.html"
 
-# Print configuration
 [output.html.print]
 enable = true
 page-break = true
-
-# PDF output (requires mdbook-pandoc and pandoc)
-[output.pandoc]
-optional = true
-hosted-html = "https://mofa-org.github.io/mofa/"
-
-# PDF configuration
-[output.pandoc.profile.pdf]
-output-file = "mofa-documentation.pdf"
-pdf-engine = "weasyprint"
-
-# Additional PDF options
-[output.pandoc.profile.pdf.variables]
-mainfont = "Inter"
-monofont = "JetBrains Mono"
-fontsize = "11pt"
-margin-top = "25mm"
-margin-bottom = "25mm"
-margin-left = "20mm"
-margin-right = "20mm"

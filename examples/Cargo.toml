@@ -12,6 +12,7 @@ members = [
     "secretary_agent",
     "react_agent",
     "rhai_scripting",
+    "runtime_periodic_runner",
     "runtime_example",
     "hitl_secretary",
     "streaming_persistence",
@@ -28,6 +29,7 @@ members = [
     "runtime_message_bus_backpressure",
     "rag_pipeline",
     "runtime_periodic_runner"
+    "agent_builder"
 ]
 
 [workspace.package]

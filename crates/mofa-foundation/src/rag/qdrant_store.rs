@@ -169,10 +169,10 @@ impl QdrantVectorStore {
 
         let mut metadata = HashMap::new();
         for (key, val) in payload {
-            if let Some(meta_key) = key.strip_prefix(PAYLOAD_KEY_METADATA_PREFIX) {
-                if let Some(s) = extract_string(val) {
-                    metadata.insert(meta_key.to_string(), s.to_string());
-                }
+            if let Some(meta_key) = key.strip_prefix(PAYLOAD_KEY_METADATA_PREFIX)
+                && let Some(s) = extract_string(val)
+            {
+                metadata.insert(meta_key.to_string(), s.to_string());
             }
         }
 
@@ -221,7 +221,7 @@ impl VectorStore for QdrantVectorStore {
         // Request extra results when using threshold filtering since
         // Qdrant QueryPoints does not support score thresholds natively.
         let limit = if threshold.is_some() {
-            (top_k * 2).max(100).min(1000) as u64
+            (top_k * 2).clamp(100, 1000) as u64
         } else {
             top_k as u64
         };

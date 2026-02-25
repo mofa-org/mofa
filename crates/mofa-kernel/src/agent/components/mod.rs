@@ -1,6 +1,8 @@
 //! Agent 组件模块
+//! Agent component module
 //!
 //! 定义 Agent 的可插拔组件接口
+//! Defines the pluggable component interfaces for the Agent
 
 pub mod coordinator;
 pub mod mcp;

@@ -1,18 +1,27 @@
 //! Agent路由器 - 阶段3扩展: 动态Agent注入与智能决策
+//! Agent Router - Phase 3 Extension: Dynamic Agent Injection & Intelligent Decision Making
 //!
 //! 支持SDK调用者自行决定注入哪些Agent，框架通过提示词或规则引擎进行动态决策。
+//! Supports SDK callers to inject agents, with dynamic decision-making via prompts or rule engines.
 //!
 //! ## 核心特性
+//! ## Core Features
 //!
 //! 1. **AgentProvider trait**: SDK调用者实现此trait来动态提供Agent
+//! 1. **AgentProvider trait**: Implemented by SDK callers to provide Agents dynamically
 //! 2. **AgentRouter trait**: 动态决策使用哪个Agent执行任务
+//! 2. **AgentRouter trait**: Dynamically decides which Agent to use for task execution
 //! 3. **LLMAgentRouter**: 基于LLM提示词的智能路由
+//! 3. **LLMAgentRouter**: Intelligent routing based on LLM prompts
 //! 4. **RuleBasedRouter**: 基于规则引擎的确定性路由
+//! 4. **RuleBasedRouter**: Deterministic routing based on a rule engine
 //!
 //! ## 使用示例
+//! ## Usage Example
 //!
 //! ```rust,ignore
 //! // 1. 实现AgentProvider提供动态Agent
+//! // 1. Implement AgentProvider to provide dynamic Agents
 //! struct MyAgentProvider {
 //!     agents: Vec<AgentInfo>,
 //! }
@@ -28,10 +37,12 @@
 //! }
 //!
 //! // 2. 配置路由策略
+//! // 2. Configure routing strategy
 //! let router = LLMAgentRouter::new(llm_provider)
 //!     .with_custom_prompt(my_prompt);
 //!
 //! // 3. 在SecretaryAgent中使用
+//! // 3. Use within SecretaryAgent
 //! let secretary = DefaultSecretaryBuilder::new()
 //!     .with_agent_provider(Arc::new(my_provider))
 //!     .with_agent_router(Arc::new(router))
@@ -48,35 +59,48 @@ use tokio::sync::RwLock;
 
 // =============================================================================
 // Agent信息与能力描述
+// Agent Information and Capability Description
 // =============================================================================
 
 /// Agent信息 - 描述一个可执行任务的Agent
+/// Agent Info - Describes an Agent capable of executing tasks
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AgentInfo {
     /// Agent唯一标识
+    /// Agent unique identifier
     pub id: String,
     /// Agent名称
+    /// Agent name
     pub name: String,
     /// Agent描述（用于LLM理解Agent能力）
+    /// Agent description (for LLM to understand capabilities)
     pub description: String,
     /// 能力标签列表
+    /// List of capability tags
     pub capabilities: Vec<String>,
     /// 支持的任务类型
+    /// Supported task types
     pub supported_task_types: Vec<String>,
     /// Agent的prompt模板（可选，用于调用时）
+    /// Agent's prompt template (optional, used during invocation)
     pub prompt_template: Option<String>,
     /// 当前负载（0-100）
+    /// Current load (0-100)
     pub current_load: u32,
     /// 是否可用
+    /// Whether available
     pub available: bool,
     /// 性能评分（历史表现）
+    /// Performance score (historical performance)
     pub performance_score: f32,
     /// 元数据
+    /// Metadata
     pub metadata: HashMap<String, String>,
 }
 
 impl AgentInfo {
     /// 创建新的AgentInfo
+    /// Create new AgentInfo
     pub fn new(id: impl Into<String>, name: impl Into<String>) -> Self {
         Self {
             id: id.into(),
@@ -93,36 +117,42 @@ impl AgentInfo {
     }
 
     /// 设置描述
+    /// Set description
     pub fn with_description(mut self, desc: impl Into<String>) -> Self {
         self.description = desc.into();
         self
     }
 
     /// 添加能力
+    /// Add capability
     pub fn with_capability(mut self, cap: impl Into<String>) -> Self {
         self.capabilities.push(cap.into());
         self
     }
 
     /// 批量添加能力
+    /// Batch add capabilities
     pub fn with_capabilities(mut self, caps: Vec<String>) -> Self {
         self.capabilities.extend(caps);
         self
     }
 
     /// 添加支持的任务类型
+    /// Add supported task type
     pub fn with_task_type(mut self, task_type: impl Into<String>) -> Self {
         self.supported_task_types.push(task_type.into());
         self
     }
 
     /// 设置prompt模板
+    /// Set prompt template
     pub fn with_prompt_template(mut self, template: impl Into<String>) -> Self {
         self.prompt_template = Some(template.into());
         self
     }
 
     /// 设置性能评分
+    /// Set performance score
     pub fn with_performance_score(mut self, score: f32) -> Self {
         self.performance_score = score;
         self
@@ -131,21 +161,28 @@ impl AgentInfo {
 
 // =============================================================================
 // AgentProvider Trait - 动态Agent注入
+// AgentProvider Trait - Dynamic Agent Injection
 // =============================================================================
 
 /// Agent提供者Trait
+/// Agent Provider Trait
 ///
 /// SDK调用者实现此trait来动态提供可用的Agent列表。
+/// SDK callers implement this trait to dynamically provide available Agents.
 /// 这允许在运行时动态添加、移除、更新Agent。
+/// This allows adding, removing, or updating Agents dynamically at runtime.
 #[async_trait::async_trait]
 pub trait AgentProvider: Send + Sync {
     /// 获取所有可用的Agent列表
+    /// Get all available Agents list
     async fn list_agents(&self) -> Vec<AgentInfo>;
 
     /// 根据ID获取特定Agent
+    /// Get specific Agent by ID
     async fn get_agent(&self, agent_id: &str) -> Option<AgentInfo>;
 
     /// 根据能力标签筛选Agent
+    /// Filter Agents by capability tags
     async fn filter_by_capabilities(&self, capabilities: &[String]) -> Vec<AgentInfo> {
         let agents = self.list_agents().await;
         agents
@@ -160,6 +197,7 @@ pub trait AgentProvider: Send + Sync {
     }
 
     /// 根据任务类型筛选Agent
+    /// Filter Agents by task type
     async fn filter_by_task_type(&self, task_type: &str) -> Vec<AgentInfo> {
         let agents = self.list_agents().await;
         agents
@@ -172,14 +210,17 @@ pub trait AgentProvider: Send + Sync {
     }
 
     /// 更新Agent状态
+    /// Update Agent status
     async fn update_agent_status(&self, agent_id: &str, load: u32, available: bool);
 
     /// 注册新Agent（可选实现）
+    /// Register new Agent (optional implementation)
     async fn register_agent(&self, _agent: AgentInfo) -> anyhow::Result<()> {
         Ok(())
     }
 
     /// 注销Agent（可选实现）
+    /// Unregister Agent (optional implementation)
     async fn unregister_agent(&self, _agent_id: &str) -> anyhow::Result<()> {
         Ok(())
     }
@@ -187,11 +228,14 @@ pub trait AgentProvider: Send + Sync {
 
 // =============================================================================
 // 默认AgentProvider实现
+// Default AgentProvider Implementation
 // =============================================================================
 
 /// 内存中的Agent提供者
+/// In-memory Agent Provider
 ///
 /// 简单的基于内存的AgentProvider实现
+/// A simple memory-based AgentProvider implementation
 #[derive(Clone)]
 pub struct InMemoryAgentProvider {
     agents: Arc<RwLock<HashMap<String, AgentInfo>>>,
@@ -205,12 +249,14 @@ impl InMemoryAgentProvider {
     }
 
     /// 添加Agent
+    /// Add Agent
     pub async fn add_agent(&self, agent: AgentInfo) {
         let mut agents = self.agents.write().await;
         agents.insert(agent.id.clone(), agent);
     }
 
     /// 移除Agent
+    /// Remove Agent
     pub async fn remove_agent(&self, agent_id: &str) {
         let mut agents = self.agents.write().await;
         agents.remove(agent_id);
@@ -256,22 +302,30 @@ impl AgentProvider for InMemoryAgentProvider {
 
 // =============================================================================
 // 路由决策上下文与结果
+// Routing Decision Context and Results
 // =============================================================================
 
 /// 路由决策上下文
+/// Routing decision context
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RoutingContext {
     /// 子任务信息
+    /// Subtask information
     pub subtask: Subtask,
+    /// Todo ID
     /// Todo ID
     pub todo_id: String,
     /// 原始需求
+    /// Raw requirement
     pub raw_idea: String,
     /// 项目需求（如果已澄清）
+    /// Project requirement (if clarified)
     pub requirement: Option<ProjectRequirement>,
     /// 上下文元数据
+    /// Context metadata
     pub metadata: HashMap<String, String>,
     /// 对话历史（用于LLM路由）
+    /// Conversation history (for LLM routing)
     pub conversation_history: Vec<String>,
 }
 
@@ -304,55 +358,76 @@ impl RoutingContext {
 }
 
 /// 路由决策结果
+/// Routing decision result
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RoutingDecision {
     /// 选中的Agent ID
+    /// Selected Agent ID
     pub agent_id: String,
     /// 决策理由
+    /// Decision reason
     pub reason: String,
     /// 匹配分数
+    /// Match score
     pub confidence: f32,
     /// 备选Agent列表（按优先级排序）
+    /// Alternative Agents list (sorted by priority)
     pub alternatives: Vec<String>,
     /// 决策类型
+    /// Decision type
     pub decision_type: RoutingDecisionType,
     /// 是否需要人类确认
+    /// Whether human confirmation is required
     pub needs_human_confirmation: bool,
     /// 额外的执行参数
+    /// Extra execution parameters
     pub execution_params: HashMap<String, String>,
 }
 
 /// 路由决策类型
+/// Routing decision type
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum RoutingDecisionType {
     /// 精确匹配
+    /// Exact match
     ExactMatch,
     /// 能力匹配
+    /// Capability match
     CapabilityMatch,
     /// LLM推理
+    /// LLM inference
     LLMInference,
     /// 规则匹配
+    /// Rule match
     RuleMatch,
     /// 默认分配
+    /// Default assignment
     Default,
     /// 人类指定
+    /// Human assigned
     HumanAssigned,
 }
 
 // =============================================================================
 // AgentRouter Trait - 动态路由决策
+// AgentRouter Trait - Dynamic Routing Decision
 // =============================================================================
 
 /// Agent路由器Trait
+/// Agent Router Trait
 ///
 /// 负责决定将任务分配给哪个Agent。
+/// Responsible for deciding which Agent to assign a task to.
 /// 可以基于LLM提示词、规则引擎或自定义逻辑。
+/// Can be based on LLM prompts, rule engines, or custom logic.
 #[async_trait::async_trait]
 pub trait AgentRouter: Send + Sync {
     /// 路由器名称
+    /// Router name
     fn name(&self) -> &str;
 
     /// 为子任务选择最合适的Agent
+    /// Select most suitable Agent for subtask
     async fn route(
         &self,
         context: &RoutingContext,
@@ -360,6 +435,7 @@ pub trait AgentRouter: Send + Sync {
     ) -> anyhow::Result<RoutingDecision>;
 
     /// 批量路由多个子任务
+    /// Batch route multiple subtasks
     async fn route_batch(
         &self,
         contexts: &[RoutingContext],
@@ -374,6 +450,7 @@ pub trait AgentRouter: Send + Sync {
     }
 
     /// 验证路由决策是否有效
+    /// Validate if routing decision is valid
     async fn validate_decision(
         &self,
         decision: &RoutingDecision,
@@ -385,21 +462,29 @@ pub trait AgentRouter: Send + Sync {
 
 // =============================================================================
 // 基于LLM的智能路由器
+// Intelligent Router based on LLM
 // =============================================================================
 
 /// LLM智能路由器
+/// LLM Intelligent Router
 ///
 /// 使用LLM分析任务需求，智能选择最合适的Agent。
+/// Uses LLM to analyze task requirements and intelligently select the most suitable Agent.
 pub struct LLMAgentRouter {
     /// LLM提供者
+    /// LLM provider
     llm: Arc<dyn LLMProvider>,
     /// 自定义系统提示词
+    /// Custom system prompt
     system_prompt: Option<String>,
     /// 自定义路由提示词模板
+    /// Custom routing prompt template
     routing_prompt_template: Option<String>,
     /// 是否详细解释决策
+    /// Whether to explain decisions in detail
     explain_decisions: bool,
     /// 置信度阈值（低于此值需要人类确认）
+    /// Confidence threshold (confirmation required if below this)
     confidence_threshold: f32,
 }
 
@@ -435,9 +520,11 @@ impl LLMAgentRouter {
     }
 
     /// 生成路由提示词
+    /// Generate routing prompt
     fn generate_routing_prompt(&self, context: &RoutingContext, agents: &[AgentInfo]) -> String {
         if let Some(ref template) = self.routing_prompt_template {
             // 使用自定义模板
+            // Use custom template
             template
                 .replace("{subtask_description}", &context.subtask.description)
                 .replace(
@@ -462,6 +549,7 @@ impl LLMAgentRouter {
                 )
         } else {
             // 默认模板
+            // Default template
             format!(
                 r#"请为以下任务选择最合适的执行Agent。
 
@@ -506,6 +594,7 @@ impl LLMAgentRouter {
     }
 
     /// 默认系统提示词
+    /// Default system prompt
     fn default_system_prompt(&self) -> &'static str {
         r#"你是一个任务路由专家，负责将任务分配给最合适的执行Agent。
 
@@ -539,6 +628,7 @@ impl AgentRouter for LLMAgentRouter {
         }
 
         // 构建消息
+        // Build message
         let messages = vec![
             ChatMessage::system(
                 self.system_prompt
@@ -549,9 +639,11 @@ impl AgentRouter for LLMAgentRouter {
         ];
 
         // 调用LLM
+        // Invoke LLM
         let response = self.llm.chat(messages).await?;
 
         // 解析响应
+        // Parse response
         #[derive(Deserialize)]
         struct LLMRoutingResponse {
             agent_id: String,
@@ -575,6 +667,7 @@ impl AgentRouter for LLMAgentRouter {
             }
             Err(_) => {
                 // 回退：选择第一个可用Agent
+                // Fallback: select the first available Agent
                 let fallback_agent = available_agents
                     .first()
                     .ok_or_else(|| anyhow::anyhow!("No available agents"))?;
@@ -582,6 +675,7 @@ impl AgentRouter for LLMAgentRouter {
                 Ok(RoutingDecision {
                     agent_id: fallback_agent.id.clone(),
                     reason: "LLM响应解析失败，使用默认分配".to_string(),
+                    // LLM response parsing failed, using default assignment
                     confidence: 0.5,
                     alternatives: available_agents
                         .iter()
@@ -599,94 +693,131 @@ impl AgentRouter for LLMAgentRouter {
 
 // =============================================================================
 // 基于规则的路由器
+// Rule-based Router
 // =============================================================================
 
 /// 路由规则
+/// Routing Rule
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RoutingRule {
     /// 规则ID
+    /// Rule ID
     pub id: String,
     /// 规则名称
+    /// Rule Name
     pub name: String,
     /// 规则优先级（数字越大优先级越高）
+    /// Rule priority (higher numbers mean higher priority)
     pub priority: i32,
     /// 匹配条件
+    /// Matching conditions
     pub conditions: Vec<RuleCondition>,
     /// 条件组合方式
+    /// Condition combination logic
     pub condition_logic: ConditionLogic,
     /// 目标Agent ID
+    /// Target Agent ID
     pub target_agent_id: String,
     /// 规则启用状态
+    /// Rule enabled status
     pub enabled: bool,
 }
 
 /// 规则条件
+/// Rule Condition
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RuleCondition {
     /// 条件字段
+    /// Condition field
     pub field: RuleField,
     /// 操作符
+    /// Operator
     pub operator: RuleOperator,
     /// 匹配值
+    /// Matching value
     pub value: String,
 }
 
 /// 规则字段
+/// Rule Field
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum RuleField {
     /// 子任务描述
+    /// Subtask description
     SubtaskDescription,
     /// 所需能力
+    /// Required capability
     RequiredCapability,
     /// 任务类型
+    /// Task type
     TaskType,
     /// 优先级
+    /// Priority
     Priority,
     /// 元数据字段
+    /// Metadata field
     Metadata(String),
     /// 原始需求
+    /// Raw requirement
     RawIdea,
 }
 
 /// 规则操作符
+/// Rule Operator
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum RuleOperator {
     /// 等于
+    /// Equals
     Equals,
     /// 不等于
+    /// Not equals
     NotEquals,
     /// 包含
+    /// Contains
     Contains,
     /// 不包含
+    /// Not contains
     NotContains,
     /// 以...开头
+    /// Starts with
     StartsWith,
     /// 以...结尾
+    /// Ends with
     EndsWith,
     /// 正则匹配
+    /// Regex match
     Regex,
     /// 在列表中
+    /// In list
     In,
     /// 不在列表中
+    /// Not in list
     NotIn,
 }
 
 /// 条件组合逻辑
+/// Condition Logic
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum ConditionLogic {
     /// 所有条件都满足
+    /// All conditions must be met
     All,
     /// 任一条件满足
+    /// Any condition is met
     Any,
 }
 
 /// 基于规则的路由器
+/// Rule-based Router
 pub struct RuleBasedRouter {
     /// 规则列表
+    /// Rule list
     rules: Arc<RwLock<Vec<RoutingRule>>>,
     /// 默认Agent ID（无规则匹配时使用）
+    /// Default Agent ID (used if no rule matches)
     default_agent_id: Option<String>,
     /// 是否需要人类确认规则匹配
+    /// Whether to require human confirmation on rule match
     confirm_on_match: bool,
 }
 
@@ -710,20 +841,24 @@ impl RuleBasedRouter {
     }
 
     /// 添加规则
+    /// Add rule
     pub async fn add_rule(&self, rule: RoutingRule) {
         let mut rules = self.rules.write().await;
         rules.push(rule);
         // 按优先级排序
+        // Sort by priority
         rules.sort_by(|a, b| b.priority.cmp(&a.priority));
     }
 
     /// 移除规则
+    /// Remove rule
     pub async fn remove_rule(&self, rule_id: &str) {
         let mut rules = self.rules.write().await;
         rules.retain(|r| r.id != rule_id);
     }
 
     /// 检查条件是否匹配
+    /// Check if condition matches
     fn check_condition(&self, condition: &RuleCondition, context: &RoutingContext) -> bool {
         let field_value = match &condition.field {
             RuleField::SubtaskDescription => context.subtask.description.clone(),
@@ -758,6 +893,7 @@ impl RuleBasedRouter {
     }
 
     /// 检查规则是否匹配
+    /// Check if rule matches
     fn check_rule(&self, rule: &RoutingRule, context: &RoutingContext) -> bool {
         if !rule.enabled {
             return false;
@@ -796,9 +932,11 @@ impl AgentRouter for RuleBasedRouter {
         let rules = self.rules.read().await;
 
         // 查找第一个匹配的规则
+        // Find the first matching rule
         for rule in rules.iter() {
             if self.check_rule(rule, context) {
                 // 验证目标Agent是否可用
+                // Validate if target Agent is available
                 if available_agents
                     .iter()
                     .any(|a| a.id == rule.target_agent_id)
@@ -806,6 +944,7 @@ impl AgentRouter for RuleBasedRouter {
                     return Ok(RoutingDecision {
                         agent_id: rule.target_agent_id.clone(),
                         reason: format!("匹配规则: {} ({})", rule.name, rule.id),
+                        // Matched rule: {name} ({id})
                         confidence: 1.0,
                         alternatives: Vec::new(),
                         decision_type: RoutingDecisionType::RuleMatch,
@@ -817,6 +956,7 @@ impl AgentRouter for RuleBasedRouter {
         }
 
         // 没有匹配的规则，使用默认Agent或第一个可用Agent
+        // No matching rule, use default Agent or first available Agent
         let agent_id = self
             .default_agent_id
             .clone()
@@ -826,6 +966,7 @@ impl AgentRouter for RuleBasedRouter {
         Ok(RoutingDecision {
             agent_id,
             reason: "无匹配规则，使用默认分配".to_string(),
+            // No matching rule, using default allocation
             confidence: 0.5,
             alternatives: available_agents.iter().map(|a| a.id.clone()).collect(),
             decision_type: RoutingDecisionType::Default,
@@ -837,17 +978,23 @@ impl AgentRouter for RuleBasedRouter {
 
 // =============================================================================
 // 能力匹配路由器
+// Capability Matching Router
 // =============================================================================
 
 /// 能力匹配路由器
+/// Capability Matching Router
 ///
 /// 基于能力标签进行简单的匹配路由
+/// Performs simple matching routing based on capability tags
 pub struct CapabilityRouter {
     /// 能力权重配置
+    /// Capability weight configuration
     capability_weights: HashMap<String, f32>,
     /// 是否启用负载均衡
+    /// Whether to enable load balancing
     load_balancing: bool,
     /// 性能权重
+    /// Performance weight
     performance_weight: f32,
 }
 
@@ -876,6 +1023,7 @@ impl CapabilityRouter {
     }
 
     /// 计算Agent与任务的匹配分数
+    /// Calculate match score between Agent and task
     fn calculate_match_score(&self, agent: &AgentInfo, required_caps: &[String]) -> f32 {
         if required_caps.is_empty() {
             return 1.0;
@@ -900,6 +1048,7 @@ impl CapabilityRouter {
         };
 
         // 加权计算
+        // Weighted calculation
         let load_score = if self.load_balancing {
             1.0 - (agent.current_load as f32 / 100.0)
         } else {
@@ -909,6 +1058,7 @@ impl CapabilityRouter {
         let performance_score = agent.performance_score;
 
         // 综合评分
+        // Integrated score
         capability_score * 0.5 + load_score * 0.2 + performance_score * self.performance_weight
     }
 }
@@ -937,12 +1087,14 @@ impl AgentRouter for CapabilityRouter {
         let required_caps = &context.subtask.required_capabilities;
 
         // 计算所有Agent的匹配分数
+        // Calculate match scores for all Agents
         let mut scored_agents: Vec<(&AgentInfo, f32)> = available_agents
             .iter()
             .map(|a| (a, self.calculate_match_score(a, required_caps)))
             .collect();
 
         // 按分数排序
+        // Sort by score
         scored_agents.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
 
         let (best_agent, best_score) = scored_agents[0];
@@ -951,6 +1103,7 @@ impl AgentRouter for CapabilityRouter {
             agent_id: best_agent.id.clone(),
             reason: format!(
                 "能力匹配得分最高 ({:.2})，匹配能力: {:?}",
+                // Highest capability match score ({:.2}), matched: {:?}
                 best_score,
                 required_caps
                     .iter()
@@ -972,15 +1125,20 @@ impl AgentRouter for CapabilityRouter {
 
 // =============================================================================
 // 复合路由器
+// Composite Router
 // =============================================================================
 
 /// 复合路由器
+/// Composite Router
 ///
 /// 组合多个路由器，按优先级顺序尝试
+/// Combines multiple routers, trying them in priority order
 pub struct CompositeRouter {
     /// 路由器列表（按优先级排序）
+    /// Router list (sorted by priority)
     routers: Vec<Arc<dyn AgentRouter>>,
     /// 回退路由器
+    /// Fallback router
     fallback_router: Option<Arc<dyn AgentRouter>>,
 }
 
@@ -993,12 +1151,14 @@ impl CompositeRouter {
     }
 
     /// 添加路由器
+    /// Add router
     pub fn add_router(mut self, router: Arc<dyn AgentRouter>) -> Self {
         self.routers.push(router);
         self
     }
 
     /// 设置回退路由器
+    /// Set fallback router
     pub fn with_fallback(mut self, router: Arc<dyn AgentRouter>) -> Self {
         self.fallback_router = Some(router);
         self
@@ -1023,6 +1183,7 @@ impl AgentRouter for CompositeRouter {
         available_agents: &[AgentInfo],
     ) -> anyhow::Result<RoutingDecision> {
         // 尝试每个路由器
+        // Try each router
         for router in &self.routers {
             match router.route(context, available_agents).await {
                 Ok(decision) if decision.confidence >= 0.5 => {
@@ -1033,11 +1194,13 @@ impl AgentRouter for CompositeRouter {
         }
 
         // 使用回退路由器
+        // Use fallback router
         if let Some(ref fallback) = self.fallback_router {
             return fallback.route(context, available_agents).await;
         }
 
         // 默认选择第一个Agent
+        // Select first Agent by default
         let agent = available_agents
             .first()
             .ok_or_else(|| anyhow::anyhow!("No available agents"))?;
@@ -1045,6 +1208,7 @@ impl AgentRouter for CompositeRouter {
         Ok(RoutingDecision {
             agent_id: agent.id.clone(),
             reason: "所有路由器均无高置信度匹配，使用默认分配".to_string(),
+            // No high-confidence matches from routers, using default assignment
             confidence: 0.3,
             alternatives: available_agents
                 .iter()
@@ -1060,6 +1224,7 @@ impl AgentRouter for CompositeRouter {
 
 // =============================================================================
 // 测试
+// Tests
 // =============================================================================
 
 #[cfg(test)]
@@ -1071,6 +1236,7 @@ mod tests {
         let provider = InMemoryAgentProvider::new();
 
         // 添加Agent
+        // Add Agent
         provider
             .add_agent(
                 AgentInfo::new("agent_1", "Test Agent 1")
@@ -1088,10 +1254,12 @@ mod tests {
             .await;
 
         // 列出所有Agent
+        // List all Agents
         let agents = provider.list_agents().await;
         assert_eq!(agents.len(), 2);
 
         // 按能力筛选
+        // Filter by capability
         let backend_agents = provider
             .filter_by_capabilities(&["backend".to_string()])
             .await;
@@ -1137,6 +1305,7 @@ mod tests {
         let router = RuleBasedRouter::new();
 
         // 添加规则
+        // Add rule
         router
             .add_rule(RoutingRule {
                 id: "rule_1".to_string(),

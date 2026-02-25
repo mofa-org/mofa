@@ -3,6 +3,7 @@ use chrono::{DateTime, Local, TimeZone, Utc};
 use serde_json::json;
 
 /// 日期时间工具 - 获取当前时间、格式化日期
+/// Date and time utilities - Get current time, format dates
 pub struct DateTimeTool {
     definition: ToolDefinition,
 }

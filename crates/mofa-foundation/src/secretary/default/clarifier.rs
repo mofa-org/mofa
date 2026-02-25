@@ -1,4 +1,5 @@
 //! 需求澄清器 - 阶段2: 澄清需求，转换为项目文档
+//! Requirement Clarifier - Phase 2: Clarify requirements and convert to project documents
 
 use super::types::*;
 use std::collections::HashMap;
@@ -8,76 +9,105 @@ use std::sync::Arc;
 pub type ClarifierFn = Arc<dyn Fn(&str) -> Vec<ClarificationQuestion> + Send + Sync>;
 
 /// 需求澄清策略
+/// Requirement clarification strategy
 #[derive(Debug, Clone)]
 pub enum ClarificationStrategy {
     /// 自动澄清（使用LLM分析）
+    /// Automatic clarification (using LLM analysis)
     Automatic,
     /// 交互式澄清（需要人类确认）
+    /// Interactive clarification (requires human confirmation)
     Interactive,
     /// 模板化澄清（使用预定义模板）
+    /// Templated clarification (using predefined templates)
     Template(String),
 }
 
 /// 澄清问题
+/// Clarification question
 #[derive(Debug, Clone)]
 pub struct ClarificationQuestion {
     /// 问题ID
+    /// Question ID
     pub id: String,
     /// 问题内容
+    /// Question content
     pub question: String,
     /// 问题类型
+    /// Question type
     pub question_type: QuestionType,
     /// 可选答案（如果是选择题）
+    /// Optional answers (if it is a multiple-choice question)
     pub options: Option<Vec<String>>,
     /// 默认答案
+    /// Default answer
     pub default_answer: Option<String>,
     /// 是否必答
+    /// Whether it is required
     pub required: bool,
 }
 
 /// 问题类型
+/// Question type
 #[derive(Debug, Clone)]
 pub enum QuestionType {
     /// 开放性问题
+    /// Open-ended question
     OpenEnded,
     /// 单选
+    /// Single choice
     SingleChoice,
     /// 多选
+    /// Multiple choice
     MultipleChoice,
     /// 确认（是/否）
+    /// Confirmation (Yes/No)
     Confirmation,
     /// 数值范围
+    /// Numeric range
     NumericRange { min: i64, max: i64 },
 }
 
 /// 澄清会话
+/// Clarification session
 pub struct ClarificationSession {
     /// 会话ID
+    /// Session ID
     pub session_id: String,
     /// 关联的Todo ID
+    /// Associated Todo ID
     pub todo_id: String,
     /// 原始想法
+    /// Raw idea
     pub raw_idea: String,
     /// 已回答的问题
+    /// Answered questions
     pub answered_questions: Vec<(ClarificationQuestion, String)>,
     /// 待回答的问题
+    /// Pending questions
     pub pending_questions: Vec<ClarificationQuestion>,
     /// 澄清后的需求（最终产出）
+    /// Clarified requirement (final output)
     pub clarified_requirement: Option<ProjectRequirement>,
 }
 
 /// 需求澄清器
+/// Requirement clarifier
 pub struct RequirementClarifier {
     /// 澄清策略
+    /// Clarification strategy
     strategy: ClarificationStrategy,
     /// LLM提示词模板
+    /// LLM prompt templates
     prompt_templates: HashMap<String, String>,
     /// 自定义澄清处理器
+    /// Custom clarification handler
     clarifier_fn: Option<ClarifierFn>,
 }
 
 impl RequirementClarifier {
     /// 创建新的需求澄清器
+    /// Create a new requirement clarifier
     pub fn new(strategy: ClarificationStrategy) -> Self {
         let mut prompt_templates = HashMap::new();
 
@@ -106,6 +136,7 @@ impl RequirementClarifier {
     }
 
     /// 设置自定义澄清处理器
+    /// Set custom clarification handler
     pub fn with_custom_clarifier<F>(mut self, clarifier: F) -> Self
     where
         F: Fn(&str) -> Vec<ClarificationQuestion> + Send + Sync + 'static,
@@ -115,12 +146,14 @@ impl RequirementClarifier {
     }
 
     /// 添加或更新提示词模板
+    /// Add or update prompt templates
     pub fn add_prompt_template(&mut self, name: &str, template: &str) {
         self.prompt_templates
             .insert(name.to_string(), template.to_string());
     }
 
     /// 开始澄清会话
+    /// Start clarification session
     pub async fn start_session(&self, todo_id: &str, raw_idea: &str) -> ClarificationSession {
         let session_id = format!(
             "clarify_{}",
@@ -143,6 +176,7 @@ impl RequirementClarifier {
     }
 
     /// 生成澄清问题
+    /// Generate clarification questions
     async fn generate_questions(&self, raw_idea: &str) -> Vec<ClarificationQuestion> {
         if let Some(ref clarifier) = self.clarifier_fn {
             return clarifier(raw_idea);
@@ -162,6 +196,7 @@ impl RequirementClarifier {
             ClarificationQuestion {
                 id: "scope".to_string(),
                 question: "请描述这个需求的具体范围和边界？".to_string(),
+                // Please describe the specific scope and boundaries of this requirement?
                 question_type: QuestionType::OpenEnded,
                 options: None,
                 default_answer: None,
@@ -170,19 +205,26 @@ impl RequirementClarifier {
             ClarificationQuestion {
                 id: "priority".to_string(),
                 question: "这个需求的紧急程度如何？".to_string(),
+                // How urgent is this requirement?
                 question_type: QuestionType::SingleChoice,
                 options: Some(vec![
                     "紧急（今天完成）".to_string(),
+                    // Urgent (complete today)
                     "高优先级（本周完成）".to_string(),
+                    // High priority (complete this week)
                     "中优先级（本月完成）".to_string(),
+                    // Medium priority (complete this month)
                     "低优先级（有空再做）".to_string(),
+                    // Low priority (do when available)
                 ]),
                 default_answer: Some("中优先级（本月完成）".to_string()),
+                // Medium priority (complete this month)
                 required: true,
             },
             ClarificationQuestion {
                 id: "acceptance".to_string(),
                 question: "如何判断这个需求已经完成？有什么验收标准？".to_string(),
+                // How to judge if this requirement is completed? What are the acceptance criteria?
                 question_type: QuestionType::OpenEnded,
                 options: None,
                 default_answer: None,
@@ -191,9 +233,11 @@ impl RequirementClarifier {
             ClarificationQuestion {
                 id: "dependencies".to_string(),
                 question: "完成这个需求是否需要其他前置条件或依赖？".to_string(),
+                // Are there any prerequisites or dependencies to complete this requirement?
                 question_type: QuestionType::OpenEnded,
                 options: None,
                 default_answer: Some("无特殊依赖".to_string()),
+                // No special dependencies
                 required: false,
             },
         ]
@@ -204,6 +248,7 @@ impl RequirementClarifier {
             ClarificationQuestion {
                 id: "confirm_understanding".to_string(),
                 question: "我理解您想要...，这个理解正确吗？".to_string(),
+                // I understand you want..., is this understanding correct?
                 question_type: QuestionType::Confirmation,
                 options: None,
                 default_answer: None,
@@ -212,6 +257,7 @@ impl RequirementClarifier {
             ClarificationQuestion {
                 id: "additional_details".to_string(),
                 question: "是否有其他需要补充的细节？".to_string(),
+                // Are there any other details that need to be added?
                 question_type: QuestionType::OpenEnded,
                 options: None,
                 default_answer: None,
@@ -230,6 +276,7 @@ impl RequirementClarifier {
                 ClarificationQuestion {
                     id: "user_story".to_string(),
                     question: "请用「作为...我希望...以便...」的格式描述需求".to_string(),
+                    // Please describe the requirement in the format "As a... I want... so that..."
                     question_type: QuestionType::OpenEnded,
                     options: None,
                     default_answer: None,
@@ -238,12 +285,17 @@ impl RequirementClarifier {
                 ClarificationQuestion {
                     id: "affected_modules".to_string(),
                     question: "这个功能会影响哪些模块或组件？".to_string(),
+                    // Which modules or components will this feature affect?
                     question_type: QuestionType::MultipleChoice,
                     options: Some(vec![
                         "前端UI".to_string(),
+                        // Frontend UI
                         "后端API".to_string(),
+                        // Backend API
                         "数据库".to_string(),
+                        // Database
                         "第三方集成".to_string(),
+                        // Third-party integration
                     ]),
                     default_answer: None,
                     required: true,
@@ -254,6 +306,7 @@ impl RequirementClarifier {
     }
 
     /// 回答问题
+    /// Answer question
     pub async fn answer_question(
         &self,
         session: &mut ClarificationSession,
@@ -277,6 +330,7 @@ impl RequirementClarifier {
     }
 
     /// 完成澄清，生成需求文档
+    /// Finalize clarification and generate requirement document
     pub async fn finalize_requirement(
         &self,
         session: &mut ClarificationSession,
@@ -304,7 +358,9 @@ impl RequirementClarifier {
 
         if acceptance_criteria.is_empty() {
             acceptance_criteria.push("功能按预期工作".to_string());
+            // Feature works as expected
             acceptance_criteria.push("无明显错误".to_string());
+            // No obvious errors
         }
 
         let subtasks = self.decompose_into_subtasks(&session.raw_idea);
@@ -344,6 +400,7 @@ impl RequirementClarifier {
             subtasks.push(Subtask {
                 id: "subtask_api_design".to_string(),
                 description: "设计API接口规范".to_string(),
+                // Design API interface specifications
                 required_capabilities: vec!["api_design".to_string()],
                 order: 1,
                 depends_on: Vec::new(),
@@ -351,6 +408,7 @@ impl RequirementClarifier {
             subtasks.push(Subtask {
                 id: "subtask_api_impl".to_string(),
                 description: "实现API接口".to_string(),
+                // Implement API interfaces
                 required_capabilities: vec!["backend".to_string()],
                 order: 2,
                 depends_on: vec!["subtask_api_design".to_string()],
@@ -362,6 +420,7 @@ impl RequirementClarifier {
             subtasks.push(Subtask {
                 id: "subtask_ui_design".to_string(),
                 description: "设计UI界面".to_string(),
+                // Design UI interface
                 required_capabilities: vec!["ui_design".to_string()],
                 order: 1,
                 depends_on: Vec::new(),
@@ -369,6 +428,7 @@ impl RequirementClarifier {
             subtasks.push(Subtask {
                 id: "subtask_ui_impl".to_string(),
                 description: "实现UI界面".to_string(),
+                // Implement UI interface
                 required_capabilities: vec!["frontend".to_string()],
                 order: 2,
                 depends_on: vec!["subtask_ui_design".to_string()],
@@ -389,6 +449,7 @@ impl RequirementClarifier {
     }
 
     /// 快速澄清（跳过交互，直接生成需求）
+    /// Quick clarification (skip interaction, generate requirements directly)
     pub async fn quick_clarify(
         &self,
         todo_id: &str,
@@ -402,6 +463,7 @@ impl RequirementClarifier {
                 .default_answer
                 .clone()
                 .unwrap_or_else(|| "待定".to_string());
+                // Pending
             self.answer_question(&mut session, &question.id, &answer)
                 .await?;
         }

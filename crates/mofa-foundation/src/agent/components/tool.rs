@@ -1,10 +1,12 @@
 //! 工具组件
+//! Tool components
 //!
 //! 从 kernel 层导入 Tool trait，提供具体实现和扩展
+//! Import Tool trait from the kernel layer, providing concrete implementations and extensions
 
 use async_trait::async_trait;
 use mofa_kernel::agent::components::tool::{
-    ToolDescriptor, ToolInput, ToolMetadata, ToolRegistry, ToolResult,
+    ToolDescriptor, ToolInput, ToolMetadata, ToolRegistry, ToolResult, DynTool, ToolExt as KernelToolExt,
 };
 use mofa_kernel::agent::context::AgentContext;
 use mofa_kernel::agent::error::AgentResult;
@@ -16,6 +18,7 @@ use std::sync::Arc;
 
 // ============================================================================
 // Foundation 层扩展类型
+// Foundation layer extension types
 // ============================================================================
 
 /// Tool categories for organization and discovery
@@ -73,13 +76,17 @@ impl ToolCategory {
 }
 
 /// 扩展的 Tool trait (Foundation 特有方法)
+/// Extended Tool trait (Foundation-specific methods)
 ///
 /// 注意：这是 Foundation 层提供的扩展 trait，不是 kernel 层的 Tool trait
+/// Note: This is an extension trait provided by the Foundation layer, not the kernel layer's Tool trait
 pub trait ToolExt: mofa_kernel::agent::components::tool::Tool {
     /// 工具分类
+    /// Tool category
     fn category(&self) -> ToolCategory;
 
     /// 转换为 OpenAI function schema 格式 (兼容性方法)
+    /// Convert to OpenAI function schema format (compatibility method)
     fn to_openai_schema(&self) -> Value {
         use mofa_kernel::agent::components::tool::Tool;
         json!({
@@ -233,23 +240,27 @@ impl<T: SimpleTool + 'static> ToolExt for SimpleToolAdapter<T> {
 /// ```
 pub fn as_tool<T: SimpleTool + Send + Sync + 'static>(
     tool: T,
-) -> Arc<dyn mofa_kernel::agent::components::tool::Tool> {
-    Arc::new(SimpleToolAdapter::new(tool))
+) -> Arc<dyn mofa_kernel::agent::components::tool::DynTool> {
+    SimpleToolAdapter::new(tool).into_dynamic()
 }
 
 // ============================================================================
 // 工具注册中心实现
+// Tool registry implementation
 // ============================================================================
 
 /// 简单工具注册中心实现
+/// Simple tool registry implementation
 ///
 /// Foundation 层的具体实现
+/// Concrete implementation of the Foundation layer
 pub struct SimpleToolRegistry {
-    tools: HashMap<String, Arc<dyn mofa_kernel::agent::components::tool::Tool>>,
+    tools: HashMap<String, Arc<dyn mofa_kernel::agent::components::tool::DynTool>>,
 }
 
 impl SimpleToolRegistry {
     /// 创建新的注册中心
+    /// Create a new registry
     pub fn new() -> Self {
         Self {
             tools: HashMap::new(),
@@ -267,13 +278,13 @@ impl Default for SimpleToolRegistry {
 impl ToolRegistry for SimpleToolRegistry {
     fn register(
         &mut self,
-        tool: Arc<dyn mofa_kernel::agent::components::tool::Tool>,
+        tool: Arc<dyn mofa_kernel::agent::components::tool::DynTool>,
     ) -> AgentResult<()> {
         self.tools.insert(tool.name().to_string(), tool);
         Ok(())
     }
 
-    fn get(&self, name: &str) -> Option<Arc<dyn mofa_kernel::agent::components::tool::Tool>> {
+    fn get(&self, name: &str) -> Option<Arc<dyn mofa_kernel::agent::components::tool::DynTool>> {
         self.tools.get(name).cloned()
     }
 
@@ -284,7 +295,7 @@ impl ToolRegistry for SimpleToolRegistry {
     fn list(&self) -> Vec<ToolDescriptor> {
         self.tools
             .values()
-            .map(|t| ToolDescriptor::from_tool(t.as_ref()))
+            .map(|t| ToolDescriptor::from_dyn_tool(t.as_ref()))
             .collect()
     }
 
@@ -303,9 +314,11 @@ impl ToolRegistry for SimpleToolRegistry {
 
 // ============================================================================
 // 内置工具
+// Built-in tools
 // ============================================================================
 
 /// Echo 工具 (用于测试)
+/// Echo tool (for testing)
 pub struct EchoTool;
 
 #[async_trait]
@@ -386,13 +399,13 @@ mod tests {
     #[tokio::test]
     async fn test_simple_tool_registry() {
         let mut registry = SimpleToolRegistry::new();
-        registry.register(Arc::new(EchoTool)).unwrap();
+        registry.register(EchoTool.into_dynamic()).unwrap();
 
         assert!(registry.contains("echo"));
         assert_eq!(registry.count(), 1);
 
         let ctx = AgentContext::new("test");
-        let result = registry
+        let result: mofa_kernel::agent::components::tool::ToolResult<serde_json::Value> = registry
             .execute(
                 "echo",
                 ToolInput::from_json(json!({"message": "test"})),
@@ -486,7 +499,7 @@ mod tests {
         assert!(registry.contains("test_as_tool"));
 
         let ctx = AgentContext::new("test");
-        let result = registry
+        let result: mofa_kernel::agent::components::tool::ToolResult<serde_json::Value> = registry
             .execute(
                 "test_as_tool",
                 ToolInput::from_json(json!({"value": "test"})),

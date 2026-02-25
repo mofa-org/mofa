@@ -1,8 +1,10 @@
 //! dora-rs 适配层错误类型定义
+//! Error type definitions for the dora-rs adapter layer
 
 use thiserror::Error;
 
 /// dora-rs 适配层错误类型
+/// Error types for the dora-rs adapter layer
 #[derive(Error, Debug)]
 pub enum DoraError {
     #[error("Node initialization failed: {0}")]
@@ -88,4 +90,5 @@ impl From<anyhow::Error> for DoraError {
 }
 
 /// dora-rs 适配层结果类型
+/// Result type for the dora-rs adapter layer
 pub type DoraResult<T> = Result<T, DoraError>;

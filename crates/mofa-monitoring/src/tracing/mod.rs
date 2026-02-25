@@ -1,10 +1,16 @@
 //! 分布式追踪模块
+//! Distributed tracing module
 //!
 //! 提供分布式追踪功能，支持:
+//! Provides distributed tracing functionality, supporting:
 //! - Trace Context 传播
+//! - Trace Context propagation
 //! - Span 管理
+//! - Span management
 //! - 多种导出器 (Console, Jaeger, OTLP)
+//! - Multiple exporters (Console, Jaeger, OTLP)
 //! - Agent 和 Workflow 的自动追踪
+//! - Automatic tracing for Agents and Workflows
 
 mod context;
 mod exporter;

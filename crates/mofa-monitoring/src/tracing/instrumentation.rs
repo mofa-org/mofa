@@ -1,6 +1,8 @@
 //! 自动追踪集成
+//! Automatic Tracing Integration
 //!
 //! 为 Agent 和 Workflow 提供自动追踪功能
+//! Providing automatic tracing functionality for Agents and Workflows
 
 use super::context::SpanContext;
 use super::exporter::{ConsoleExporter, ExporterConfig};
@@ -12,10 +14,12 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 
 /// Agent 追踪器
+/// Agent Tracer
 pub struct AgentTracer {
     tracer: Arc<Tracer>,
     propagator: Arc<dyn TracePropagator>,
     /// 当前活动的 spans
+    /// Currently active spans
     active_spans: Arc<RwLock<HashMap<String, Span>>>,
 }
 
@@ -34,6 +38,7 @@ impl AgentTracer {
     }
 
     /// 开始追踪 Agent 操作
+    /// Start tracing an Agent operation
     pub async fn start_operation(
         &self,
         agent_id: &str,
@@ -46,10 +51,12 @@ impl AgentTracer {
             .start_span_with_kind(&span_name, SpanKind::Internal, parent_context);
 
         // 设置 Agent 相关属性
+        // Set Agent related attributes
         span.set_attribute("agent.id", agent_id).await;
         span.set_attribute("agent.operation", operation).await;
 
         // 存储活动 span
+        // Store active span
         let span_id = span.span_id().await.to_hex();
         self.active_spans
             .write()
@@ -60,6 +67,7 @@ impl AgentTracer {
     }
 
     /// 追踪消息发送
+    /// Trace message sending
     pub async fn trace_message_send(
         &self,
         agent_id: &str,
@@ -84,6 +92,7 @@ impl AgentTracer {
     }
 
     /// 追踪消息接收
+    /// Trace message receiving
     pub async fn trace_message_receive(
         &self,
         agent_id: &str,
@@ -107,6 +116,7 @@ impl AgentTracer {
     }
 
     /// 追踪任务执行
+    /// Trace task execution
     pub async fn trace_task_execution(
         &self,
         agent_id: &str,
@@ -128,6 +138,7 @@ impl AgentTracer {
     }
 
     /// 结束 span 并导出
+    /// End span and export
     pub async fn end_span(&self, span: &Span) {
         let span_id = span.span_id().await.to_hex();
         self.active_spans.write().await.remove(&span_id);
@@ -135,27 +146,33 @@ impl AgentTracer {
     }
 
     /// 注入追踪上下文到 headers
+    /// Inject trace context into headers
     pub fn inject_context(&self, span_context: &SpanContext, carrier: &mut dyn HeaderCarrier) {
         self.propagator.inject(span_context, carrier);
     }
 
     /// 从 headers 提取追踪上下文
+    /// Extract trace context from headers
     pub fn extract_context(&self, carrier: &dyn HeaderCarrier) -> Option<SpanContext> {
         self.propagator.extract(carrier)
     }
 
     /// 获取 Tracer
+    /// Get Tracer
     pub fn tracer(&self) -> Arc<Tracer> {
         self.tracer.clone()
     }
 }
 
 /// Workflow 追踪器
+/// Workflow Tracer
 pub struct WorkflowTracer {
     tracer: Arc<Tracer>,
     /// 工作流执行的根 span
+    /// Root span of workflow execution
     workflow_spans: Arc<RwLock<HashMap<String, Span>>>,
     /// 节点执行的 spans
+    /// Spans of node execution
     node_spans: Arc<RwLock<HashMap<String, Span>>>,
 }
 
@@ -169,6 +186,7 @@ impl WorkflowTracer {
     }
 
     /// 开始追踪工作流执行
+    /// Start tracing workflow execution
     pub async fn start_workflow(
         &self,
         workflow_id: &str,
@@ -197,6 +215,7 @@ impl WorkflowTracer {
     }
 
     /// 追踪节点执行
+    /// Trace node execution
     pub async fn start_node(
         &self,
         execution_id: &str,
@@ -232,6 +251,7 @@ impl WorkflowTracer {
     }
 
     /// 结束节点执行
+    /// End node execution
     pub async fn end_node(
         &self,
         execution_id: &str,
@@ -257,6 +277,7 @@ impl WorkflowTracer {
     }
 
     /// 结束工作流执行
+    /// End workflow execution
     pub async fn end_workflow(&self, execution_id: &str, success: bool, error: Option<&str>) {
         if let Some(span) = self.workflow_spans.write().await.remove(execution_id) {
             if success {
@@ -275,6 +296,7 @@ impl WorkflowTracer {
     }
 
     /// 记录工作流事件
+    /// Record workflow event
     pub async fn record_event(&self, execution_id: &str, event_name: &str) {
         if let Some(span) = self.workflow_spans.read().await.get(execution_id) {
             span.add_event_with_name(event_name).await;
@@ -282,6 +304,7 @@ impl WorkflowTracer {
     }
 
     /// 设置工作流属性
+    /// Set workflow attribute
     pub async fn set_attribute(
         &self,
         execution_id: &str,
@@ -294,12 +317,14 @@ impl WorkflowTracer {
     }
 
     /// 获取 Tracer
+    /// Get Tracer
     pub fn tracer(&self) -> Arc<Tracer> {
         self.tracer.clone()
     }
 }
 
 /// 消息追踪器 - 用于追踪 Agent 间的消息传递
+/// Message Tracer - For tracing message passing between Agents
 pub struct MessageTracer {
     tracer: Arc<Tracer>,
     propagator: Arc<dyn TracePropagator>,
@@ -314,6 +339,7 @@ impl MessageTracer {
     }
 
     /// 追踪消息发送，返回包含追踪上下文的 headers
+    /// Trace message sending, returns headers containing trace context
     pub async fn trace_send(
         &self,
         message_type: &str,
@@ -336,6 +362,7 @@ impl MessageTracer {
             .await;
 
         // 注入追踪上下文
+        // Inject trace context
         let mut headers = HashMap::new();
         let span_context = span.span_context().await;
         self.propagator.inject(&span_context, &mut headers);
@@ -344,6 +371,7 @@ impl MessageTracer {
     }
 
     /// 追踪消息接收
+    /// Trace message receiving
     pub async fn trace_receive(
         &self,
         message_type: &str,
@@ -352,6 +380,7 @@ impl MessageTracer {
         headers: &HashMap<String, String>,
     ) -> Span {
         // 提取追踪上下文
+        // Extract trace context
         let parent_context = self.propagator.extract(headers);
 
         let span = self.tracer.start_span_with_kind(
@@ -372,12 +401,14 @@ impl MessageTracer {
     }
 
     /// 结束消息追踪
+    /// End message tracing
     pub async fn end_span(&self, span: &Span) {
         self.tracer.end_span(span).await;
     }
 }
 
 /// 追踪的 Agent 包装器
+/// Traced Agent Wrapper
 pub struct TracedAgent<A> {
     agent: A,
     tracer: Arc<AgentTracer>,
@@ -410,6 +441,7 @@ impl<A> TracedAgent<A> {
     }
 
     /// 执行带追踪的操作
+    /// Execute operation with tracing
     pub async fn traced_operation<F, Fut, R>(
         &self,
         operation: &str,
@@ -433,6 +465,7 @@ impl<A> TracedAgent<A> {
 }
 
 /// 追踪的 Workflow 包装器
+/// Traced Workflow Wrapper
 pub struct TracedWorkflow<W> {
     workflow: W,
     tracer: Arc<WorkflowTracer>,
@@ -469,6 +502,7 @@ impl<W> TracedWorkflow<W> {
 }
 
 /// 辅助函数：追踪 Agent 操作
+/// Helper function: trace Agent operation
 pub async fn trace_agent_operation<F, Fut, R>(
     tracer: &AgentTracer,
     agent_id: &str,
@@ -487,6 +521,7 @@ where
 }
 
 /// 辅助函数：追踪 Workflow 执行
+/// Helper function: trace Workflow execution
 pub async fn trace_workflow_execution<F, Fut, R>(
     tracer: &WorkflowTracer,
     workflow_id: &str,
@@ -507,6 +542,7 @@ where
 }
 
 /// 创建默认的追踪设置
+/// Create default tracing setup
 pub fn create_default_tracing(
     service_name: &str,
 ) -> (Arc<TracerProvider>, Arc<AgentTracer>, Arc<WorkflowTracer>) {
@@ -518,6 +554,7 @@ pub fn create_default_tracing(
     let provider = Arc::new(TracerProvider::new(tracer_config, processor));
 
     // 需要使用 futures 来同步获取 tracer
+    // Need to use futures to synchronously get the tracer
     let tracer = futures::executor::block_on(provider.default_tracer());
 
     let agent_tracer = Arc::new(AgentTracer::new(tracer.clone()));
@@ -589,19 +626,23 @@ mod tests {
         let message_tracer = MessageTracer::new(tracer);
 
         // 发送消息
+        // Send message
         let (send_span, headers) = message_tracer
             .trace_send("task_request", "agent-1", "agent-2", None)
             .await;
 
         // 验证 headers 包含追踪信息
+        // Verify headers contain trace information
         assert!(headers.contains_key("traceparent"));
 
         // 接收消息
+        // Receive message
         let receive_span = message_tracer
             .trace_receive("task_request", "agent-1", "agent-2", &headers)
             .await;
 
         // 验证 trace_id 相同
+        // Verify trace_id is the same
         assert_eq!(send_span.trace_id().await, receive_span.trace_id().await);
 
         message_tracer.end_span(&send_span).await;

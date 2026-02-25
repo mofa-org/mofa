@@ -4,17 +4,16 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "${ROOT_DIR}"
 
-EN_CONFIG="book.toml"
 ZH_CONFIG="book.zh.toml"
-BACKUP_CONFIG=".book.toml.en.backup"
+TMP_ZH_BUILD_DIR=""
 
-restore_config() {
-  if [[ -f "${BACKUP_CONFIG}" ]]; then
-    mv -f "${BACKUP_CONFIG}" "${EN_CONFIG}"
+cleanup() {
+  if [[ -n "${TMP_ZH_BUILD_DIR}" && -d "${TMP_ZH_BUILD_DIR}" ]]; then
+    rm -rf "${TMP_ZH_BUILD_DIR}"
   fi
 }
 
-trap restore_config EXIT
+trap cleanup EXIT
 
 rm -rf book
 
@@ -28,11 +27,24 @@ if [[ -d "book/html" ]]; then
 fi
 
 # Build Chinese docs at book/zh/
-cp "${EN_CONFIG}" "${BACKUP_CONFIG}"
-cp "${ZH_CONFIG}" "${EN_CONFIG}"
-mdbook build
-restore_config
-trap - EXIT
+# First, remove the empty zh directory created by English build (from src/zh).
+rm -rf book/zh
+
+# Build Chinese docs in an isolated temp directory to avoid mutating book.toml.
+TMP_ZH_BUILD_DIR="$(mktemp -d "${TMPDIR:-/tmp}/mofa-doc-zh-build.XXXXXX")"
+cp -a src "${TMP_ZH_BUILD_DIR}/src"
+if [[ -d theme ]]; then
+  cp -a theme "${TMP_ZH_BUILD_DIR}/theme"
+fi
+cp "${ZH_CONFIG}" "${TMP_ZH_BUILD_DIR}/book.toml"
+
+(
+  cd "${TMP_ZH_BUILD_DIR}"
+  mdbook build
+)
+
+mkdir -p book/zh
+cp -a "${TMP_ZH_BUILD_DIR}/book/zh/." book/zh/
 
 # Convenience redirect for /zh.html -> /zh/
 cat > book/zh.html <<'HTML'
@@ -49,6 +61,11 @@ cat > book/zh.html <<'HTML'
   </body>
 </html>
 HTML
+
+if [[ ! -f "book/zh/introduction.html" ]]; then
+  echo "Error: expected Chinese intro page at ${ROOT_DIR}/book/zh/introduction.html" >&2
+  exit 1
+fi
 
 echo "Built docs successfully:"
 echo "  - English: ${ROOT_DIR}/book"

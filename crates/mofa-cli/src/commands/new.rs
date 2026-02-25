@@ -485,7 +485,7 @@ async fn main() -> anyhow::Result<()> {
         .route("/api/chat", post(chat_handler))
         .route("/api/chat/session", post(session_chat_handler))
         .route("/api/sessions", get(list_sessions_handler))
-        .route("/api/sessions/:id", delete(delete_session_handler))
+        .route("/api/sessions/{id}", delete(delete_session_handler))
         // Health check
         .route("/api/health", get(health_check))
         .with_state(state)
@@ -515,7 +515,7 @@ async fn main() -> anyhow::Result<()> {
     tracing::info!("  POST   /api/chat          - Single-turn chat");
     tracing::info!("  POST   /api/chat/session  - Multi-turn session chat");
     tracing::info!("  GET    /api/sessions      - List all sessions");
-    tracing::info!("  DELETE /api/sessions/:id  - Delete a session");
+    tracing::info!("  DELETE /api/sessions/{id}  - Delete a session");
     tracing::info!("  GET    /api/health        - Health check");
 
     let listener = tokio::net::TcpListener::bind(&addr).await?;
@@ -637,7 +637,7 @@ List all active sessions.
 ]
 ```
 
-### DELETE /api/sessions/:id
+### DELETE /api/sessions/{{id}}
 
 Delete a specific session.
 

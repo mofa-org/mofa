@@ -2,6 +2,7 @@ use mofa_sdk::llm::{Tool, ToolExecutor};
 use std::sync::Arc;
 
 /// 示例工具执行器
+/// Example tool executor
 pub struct ExampleToolExecutor;
 
 #[async_trait::async_trait]
@@ -44,6 +45,7 @@ impl ExampleToolExecutor {
 
     async fn execute_calculator(&self, arguments: &str) -> String {
         // 简单的计算器实现，仅用于演示
+        // Simple calculator implementation, for demonstration only
         #[derive(serde::Deserialize)]
         struct CalculatorArgs {
             expression: String,
@@ -53,6 +55,7 @@ impl ExampleToolExecutor {
             let expression = args.expression.replace(" ", "");
 
             // 非常简单的计算逻辑，仅支持整数和+-*/
+            // Very simple calculation logic, only supports integers and +-*/
             if let Ok(result) = self.simple_eval(&expression) {
                 format!("Calculation result: {}", result)
             } else {
@@ -104,6 +107,7 @@ impl ExampleToolExecutor {
 
     fn simple_eval(&self, expr: &str) -> Result<i64, ()> {
         // 仅用于演示，实际项目应使用成熟的计算库
+        // For demonstration only, actual projects should use mature math libraries
         use std::str::FromStr;
 
         let mut chars = expr.chars().peekable();
