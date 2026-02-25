@@ -11,6 +11,7 @@ use std::collections::{HashMap, HashSet};
 /// 推理策略
 /// Reasoning Strategy
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, Default)]
+#[non_exhaustive]
 pub enum ReasoningStrategy {
     /// 直接 LLM 推理
     /// Direct LLM reasoning
