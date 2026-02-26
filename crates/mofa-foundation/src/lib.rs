@@ -34,6 +34,9 @@ pub mod coordination;
 // config module
 pub mod config;
 
+// security module
+pub mod security;
+
 // secretary module - 秘书Agent模式
 pub mod secretary;
 
