@@ -2,6 +2,11 @@
 resolver = "3"
 members = [
     "cli_production_smoke",
+    "cli_agent_logs_demo",
+    "cli_plugin_lifecycle",
+    "custom_plugin_install",
+    "log_rotation_handling",
+    "cli_cicd_integration",
     "plugin_system",
     "workflow_orchestration",
     "wasm_plugin",
