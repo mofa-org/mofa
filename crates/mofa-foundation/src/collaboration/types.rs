@@ -44,7 +44,7 @@
 //! use std::sync::Arc;
 //!
 //! #[tokio::main]
-//! async fn main() -> anyhow::Result<()> {
+//! async fn main() -> GlobalResult<()> {
 //!     // 创建 LLM 客户端
 //!     // Create LLM client
 //!     let provider = Arc::new(OpenAIProvider::with_config(openai_config));
@@ -77,6 +77,7 @@
 //! }
 //! ```
 
+use mofa_kernel::agent::types::error::{GlobalError, GlobalResult};
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -447,11 +448,11 @@ pub trait CollaborationProtocol: Send + Sync {
 
     /// 发送消息
     /// Send message
-    async fn send_message(&self, msg: CollaborationMessage) -> anyhow::Result<()>;
+    async fn send_message(&self, msg: CollaborationMessage) -> GlobalResult<()>;
 
     /// 接收消息
     /// Receive message
-    async fn receive_message(&self) -> anyhow::Result<Option<CollaborationMessage>>;
+    async fn receive_message(&self) -> GlobalResult<Option<CollaborationMessage>>;
 
     /// 处理消息并返回结果
     /// Process message and return result
@@ -465,7 +466,7 @@ pub trait CollaborationProtocol: Send + Sync {
     async fn process_message(
         &self,
         msg: CollaborationMessage,
-    ) -> anyhow::Result<CollaborationResult>;
+    ) -> GlobalResult<CollaborationResult>;
 
     /// 检查协议是否可用
     /// Check if protocol is available
@@ -560,7 +561,7 @@ impl ProtocolRegistry {
 
     /// 注册协作协议
     /// Register collaboration protocol
-    pub async fn register(&self, protocol: Arc<dyn CollaborationProtocol>) -> anyhow::Result<()> {
+    pub async fn register(&self, protocol: Arc<dyn CollaborationProtocol>) -> GlobalResult<()> {
         let name = protocol.name().to_string();
         let mut protocols = self.protocols.write().await;
         protocols.insert(name.clone(), protocol);
@@ -739,7 +740,7 @@ impl LLMDrivenCollaborationManager {
     pub async fn register_protocol(
         &self,
         protocol: Arc<dyn CollaborationProtocol>,
-    ) -> anyhow::Result<()> {
+    ) -> GlobalResult<()> {
         self.registry.register(protocol).await
     }
 
@@ -752,7 +753,7 @@ impl LLMDrivenCollaborationManager {
         &self,
         protocol_name: &str,
         content: impl Into<CollaborationContent>,
-    ) -> anyhow::Result<CollaborationResult> {
+    ) -> GlobalResult<CollaborationResult> {
         let start = std::time::Instant::now();
 
         // 更新统计
@@ -768,7 +769,7 @@ impl LLMDrivenCollaborationManager {
             .registry
             .get(protocol_name)
             .await
-            .ok_or_else(|| anyhow::anyhow!("Protocol not found: {}", protocol_name))?;
+            .ok_or_else(|| GlobalError::Other(format!("Protocol not found: {}", protocol_name)))?;
 
         // 更新当前协议
         // Update current protocol
@@ -826,7 +827,7 @@ impl LLMDrivenCollaborationManager {
 
     /// 发送协作消息
     /// Send collaboration message
-    pub async fn send_message(&self, msg: CollaborationMessage) -> anyhow::Result<()> {
+    pub async fn send_message(&self, msg: CollaborationMessage) -> GlobalResult<()> {
         let mut queue = self.message_queue.write().await;
         queue.push(msg);
         Ok(())
@@ -834,7 +835,7 @@ impl LLMDrivenCollaborationManager {
 
     /// 接收协作消息
     /// Receive collaboration message
-    pub async fn receive_message(&self) -> anyhow::Result<Option<CollaborationMessage>> {
+    pub async fn receive_message(&self) -> GlobalResult<Option<CollaborationMessage>> {
         let mut queue = self.message_queue.write().await;
         Ok(queue.pop())
     }

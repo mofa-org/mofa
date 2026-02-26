@@ -4,6 +4,7 @@
 //! 定义秘书与用户之间的通信接口，具体实现位于 mofa-foundation。
 //! Defines the communication interface between the secretary and users, with specific implementations in mofa-foundation.
 
+use super::error::ConnectionError;
 use async_trait::async_trait;
 
 // =============================================================================
@@ -40,14 +41,18 @@ use async_trait::async_trait;
 ///     type Input = UserMessage;
 ///     type Output = SecretaryResponse;
 ///
-///     async fn receive(&self) -> anyhow::Result<Self::Input> {
-///         let msg = self.ws.recv().await?;
-///         Ok(serde_json::from_str(&msg)?)
+///     async fn receive(&self) -> Result<Self::Input, ConnectionError> {
+///         let msg = self.ws.recv().await
+///             .map_err(|e| ConnectionError::ReceiveFailed(e.to_string()))?;
+///         serde_json::from_str(&msg)
+///             .map_err(|e| ConnectionError::Serialization(e.to_string()))
 ///     }
 ///
-///     async fn send(&self, output: Self::Output) -> anyhow::Result<()> {
-///         self.ws.send(serde_json::to_string(&output)?).await?;
-///         Ok(())
+///     async fn send(&self, output: Self::Output) -> Result<(), ConnectionError> {
+///         let json = serde_json::to_string(&output)
+///             .map_err(|e| ConnectionError::Serialization(e.to_string()))?;
+///         self.ws.send(json).await
+///             .map_err(|e| ConnectionError::SendFailed(e.to_string()))
 ///     }
 ///
 ///     fn is_connected(&self) -> bool {
@@ -67,7 +72,7 @@ pub trait UserConnection: Send + Sync {
 
     /// 接收用户输入（阻塞）
     /// Receive user input (blocking)
-    async fn receive(&self) -> anyhow::Result<Self::Input>;
+    async fn receive(&self) -> Result<Self::Input, ConnectionError>;
 
     /// 尝试接收用户输入（非阻塞）
     /// Try to receive user input (non-blocking)
@@ -78,11 +83,11 @@ pub trait UserConnection: Send + Sync {
     /// Returns `Ok(None)` indicating no available input
     /// 返回 `Err(e)` 表示发生错误
     /// Returns `Err(e)` indicating an error occurred
-    async fn try_receive(&self) -> anyhow::Result<Option<Self::Input>>;
+    async fn try_receive(&self) -> Result<Option<Self::Input>, ConnectionError>;
 
     /// 发送输出给用户
     /// Send output to the user
-    async fn send(&self, output: Self::Output) -> anyhow::Result<()>;
+    async fn send(&self, output: Self::Output) -> Result<(), ConnectionError>;
 
     /// 检查连接是否有效
     /// Check if the connection is valid
@@ -90,7 +95,7 @@ pub trait UserConnection: Send + Sync {
 
     /// 关闭连接
     /// Close the connection
-    async fn close(&self) -> anyhow::Result<()> {
+    async fn close(&self) -> Result<(), ConnectionError> {
         Ok(())
     }
 }
@@ -113,5 +118,5 @@ pub trait ConnectionFactory: Send + Sync {
 
     /// 创建连接
     /// Create connection
-    async fn create(&self) -> anyhow::Result<Self::Connection>;
+    async fn create(&self) -> Result<Self::Connection, ConnectionError>;
 }

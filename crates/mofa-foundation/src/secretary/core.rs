@@ -16,6 +16,7 @@
 //! - 连接抽象：支持多种连接方式（通道、WebSocket 等）
 //! - Connection abstraction: supports multiple connection methods (Channels, WebSocket, etc.)
 
+use mofa_kernel::agent::types::error::{GlobalError, GlobalResult};
 use tokio::sync::mpsc;
 
 // 使用 mofa-kernel 的核心抽象
@@ -266,7 +267,7 @@ where
     pub async fn start<C>(
         self,
         connection: C,
-    ) -> (SecretaryHandle, tokio::task::JoinHandle<anyhow::Result<()>>)
+    ) -> (SecretaryHandle, tokio::task::JoinHandle<GlobalResult<()>>)
     where
         C: UserConnection<Input = B::Input, Output = B::Output> + 'static,
     {
@@ -284,7 +285,7 @@ where
 
     /// 同步启动秘书（阻塞当前任务）
     /// Start secretary synchronously (blocking current task)
-    pub async fn run<C>(self, connection: C) -> anyhow::Result<()>
+    pub async fn run<C>(self, connection: C) -> GlobalResult<()>
     where
         C: UserConnection<Input = B::Input, Output = B::Output> + 'static,
     {
@@ -300,7 +301,7 @@ where
         connection: C,
         handle: SecretaryHandle,
         mut stop_rx: mpsc::Receiver<()>,
-    ) -> anyhow::Result<()>
+    ) -> GlobalResult<()>
     where
         C: UserConnection<Input = B::Input, Output = B::Output>,
     {
