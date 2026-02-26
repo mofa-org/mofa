@@ -7,6 +7,12 @@
 // orchestrator module - Model Lifecycle & Allocation
 pub mod orchestrator;
 
+// model_pool module - Model lifecycle management with LRU cache
+pub mod model_pool;
+
+// routing module - Smart routing policy engine
+pub mod routing;
+
 // hardware discovery module
 pub mod hardware;
 
@@ -43,6 +49,86 @@ pub mod collaboration;
 
 // RAG module - vector store and document chunking
 pub mod rag;
+
+// Validation middleware module
+pub mod validation;
+
+// Circuit breaker module - Retry and circuit breaker patterns
+pub mod circuit_breaker;
+
+// Metrics and telemetry module
+pub mod metrics;
+
+// Re-export circuit breaker types
+pub use circuit_breaker::{
+    // Config
+    CircuitBreakerConfig,
+    AgentCircuitBreakerConfig,
+    GlobalCircuitBreakerConfig,
+    // State
+    CircuitBreaker,
+    AsyncCircuitBreaker,
+    CircuitBreakerError,
+    State,
+    // Metrics
+    CircuitBreakerMetrics,
+    CircuitBreakerMetricsSnapshot,
+    StateTransition,
+    // Fallback
+    FallbackStrategy,
+    FallbackHandler,
+    FallbackContext,
+    FallbackError,
+    execute_fallback,
+    FallbackBuilder,
+};
+
+// Re-export metrics types
+pub use metrics::{
+    AgentMetrics,
+    TokenUsage,
+    LatencyPercentiles,
+    ToolMetrics,
+    WorkflowMetrics,
+    StepTiming,
+    StepStatus,
+    RoutingMetrics,
+    ModelPoolMetrics,
+    CircuitBreakerMetrics as MetricsCircuitBreakerMetrics,
+    CircuitBreakerState,
+    SchedulerMetrics,
+    RetryMetrics,
+    BusinessMetrics,
+    MetricsBackend,
+    MetricsCollector,
+    ModelPoolEvent,
+    CircuitBreakerEvent,
+    MetricBuilder,
+};
+
+// Re-export validation types
+pub use validation::{
+    create_middleware, create_strict_middleware,
+    EndpointValidationConfig,
+    RateLimitConfig,
+    RateLimitError,
+    RateLimitKeyType,
+    RateLimitResult,
+    RateLimitStatus,
+    RateLimiter,
+    RequestContext,
+    ResponseContext,
+    SanitizerConfig,
+    ValidationError,
+    ValidationErrorCollection,
+    ValidationMiddleware,
+    ValidationMiddlewareConfig,
+    ValidationOutcome,
+    ValidationResult,
+    ValidationRule,
+    ValidationRuleType,
+    SchemaValidator,
+};
 
 // Re-export config types
 pub use config::{AgentInfo, AgentYamlConfig, LLMYamlConfig, RuntimeConfig, ToolConfig};
