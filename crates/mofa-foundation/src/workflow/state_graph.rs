@@ -875,10 +875,7 @@ mod tests {
     #[async_trait]
     impl NodeFunc<JsonState> for FlagReaderNode {
         async fn call(&self, state: &mut JsonState, _ctx: &RuntimeContext) -> AgentResult<Command> {
-            let saw_flag = state
-                .get_value("flag")
-                .and_then(|v: Value| v.as_bool())
-                .unwrap_or(false);
+            let saw_flag = state.get_value::<bool>("flag").unwrap_or(false);
             Ok(Command::new()
                 .update("reader_saw_flag", json!(saw_flag))
                 .continue_())
@@ -1048,7 +1045,7 @@ mod tests {
         assert_eq!(final_state.get_value("reader_saw_flag"), Some(json!(false)));
 
         let mut stream = compiled.stream(JsonState::new(), None);
-        let mut stream_final_state = None;
+        let mut stream_final_state: Option<JsonState> = None;
         while let Some(event) = stream.next().await {
             if let StreamEvent::End { final_state } = event.unwrap() {
                 stream_final_state = Some(final_state);
