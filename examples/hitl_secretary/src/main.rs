@@ -20,6 +20,7 @@ use mofa_sdk::secretary::{
     DispatchStrategy, LLMProvider, QueryType, ReportType, SecretaryCommand,
     SecretaryCore, TodoPriority, TodoStatus,
 };
+use mofa_sdk::kernel::GlobalResult;
 use std::io::{BufRead, Write};
 use std::sync::Arc;
 use tokio::sync::mpsc;
@@ -37,7 +38,7 @@ impl LLMProvider for MockLLMProvider {
         "mock-llm"
     }
 
-    async fn chat(&self, messages: Vec<ChatMessage>) -> anyhow::Result<String> {
+    async fn chat(&self, messages: Vec<ChatMessage>) -> GlobalResult<String> {
         // 简单的mock响应，实际项目中调用真实LLM API
         // Simple mock response; call real LLM APIs in actual projects
         let last_message = messages.last().map(|m| m.content.as_str()).unwrap_or("");

@@ -4,6 +4,7 @@
 //! 提供与 LLMAgent 集成的持久化功能
 //! Provides persistence functionality integrated with LLMAgent
 
+use mofa_kernel::agent::types::error::{GlobalError, GlobalResult};
 use super::entities::*;
 use super::traits::*;
 use crate::llm::types::LLMResponseMetadata;
@@ -188,7 +189,7 @@ where
 /// use mofa_sdk::llm::LLMAgentBuilder;
 /// use uuid::Uuid;
 ///
-/// # async fn example() -> anyhow::Result<()> {
+/// # async fn example() -> GlobalResult<()> {
 /// let store = PostgresStore::connect("postgres://localhost/mofa").await?;
 /// let user_id = Uuid::now_v7();
 /// let tenant_id = Uuid::now_v7();
