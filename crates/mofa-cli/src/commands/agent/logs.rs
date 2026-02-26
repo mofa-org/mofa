@@ -1,50 +1,380 @@
 //! `mofa agent logs` command implementation
 
 use crate::context::CliContext;
+use anyhow::{Context, Result};
 use colored::Colorize;
+use std::io::SeekFrom;
+use tokio::fs::File;
+use tokio::io::{AsyncBufReadExt, AsyncSeekExt, BufReader};
+use tokio::time::{Duration, interval};
 
 /// Execute the `mofa agent logs` command
-pub async fn run(_ctx: &CliContext, agent_id: &str, tail: bool) -> anyhow::Result<()> {
+pub async fn run(
+    ctx: &CliContext,
+    agent_id: &str,
+    tail: bool,
+    level: Option<String>,
+    grep: Option<String>,
+    limit: Option<usize>,
+    json: bool,
+) -> Result<()> {
+    // Determine log file location
+    let log_file = get_agent_log_path(&ctx.data_dir, agent_id);
+
+    // Check if log file exists
+    if !log_file.exists() {
+        // Check if agent exists in registry
+        let agent_exists = ctx.persistent_agents.exists(agent_id).await;
+        if agent_exists {
+            println!(
+                "{} Agent '{}' exists but has no logs yet.",
+                "ℹ".yellow(),
+                agent_id.cyan()
+            );
+            println!(
+                "  {}",
+                "Logs will appear here once the agent starts producing output.".bright_black()
+            );
+
+            if tail {
+                println!(
+                    "\n{} Waiting for logs... (Press Ctrl+C to exit)",
+                    "→".green()
+                );
+                wait_for_file_and_tail(&log_file).await?;
+            }
+            return Ok(());
+        } else {
+            // Log file doesn't exist and agent isn't registered
+            anyhow::bail!(
+                "Agent '{}' not found in registry and no log file exists.\n  Log file location: {}",
+                agent_id,
+                log_file.display()
+            );
+        }
+    }
+
     if tail {
         println!(
             "{} Tailing logs for agent: {}",
             "→".green(),
             agent_id.cyan()
         );
+        if level.is_some() || grep.is_some() {
+            println!("  {} Filters active", "•".bright_black());
+        }
         println!("  (Press Ctrl+C to exit)\n");
+        tail_log_file(&log_file, &level, &grep).await?;
     } else {
         println!(
-            "{} Displaying recent logs for agent: {}\n",
+            "{} Displaying logs for agent: {}",
             "→".green(),
             agent_id.cyan()
         );
-    }
-
-    // TODO: Implement actual log viewing/tailing logic
-    // This would involve:
-    // 1. Locating the agent's log file (e.g., in ~/.mofa/logs/<agent_id>.log)
-    // 2. Reading the file content
-    // 3. Printing it to standard output
-    // 4. If tail=true, entering a loop that monitors the file for new appended lines
-
-    // Simulate some standard output for the stub
-    println!(
-        "[{}] INFO: Agent process started successfully.",
-        chrono::Local::now().format("%Y-%m-%d %H:%M:%S")
-    );
-    println!(
-        "[{}] INFO: Loaded configuration securely.",
-        chrono::Local::now().format("%Y-%m-%d %H:%M:%S")
-    );
-
-    if tail {
-        // Just a brief simulation before exiting so the command completes in tests
-        std::thread::sleep(std::time::Duration::from_secs(1));
-        println!(
-            "[{}] DEBUG: Connection established with registry.",
-            chrono::Local::now().format("%Y-%m-%d %H:%M:%S")
-        );
+        if let Some(lvl) = &level {
+            println!("  {} Level filter: {}", "•".bright_black(), lvl.cyan());
+        }
+        if let Some(pattern) = &grep {
+            println!("  {} Search: {}", "•".bright_black(), pattern.cyan());
+        }
+        if let Some(n) = limit {
+            println!("  {} Limit: {} lines", "•".bright_black(), n);
+        }
+        println!();
+        display_log_file(&log_file, &level, &grep, limit, json).await?;
     }
 
     Ok(())
+}
+
+/// Get the path to an agent's log file
+fn get_agent_log_path(data_dir: &std::path::Path, agent_id: &str) -> std::path::PathBuf {
+    data_dir.join("logs").join(format!("{}.log", agent_id))
+}
+
+/// Display entire log file contents with optional filtering
+async fn display_log_file(
+    log_path: &std::path::Path,
+    level: &Option<String>,
+    grep: &Option<String>,
+    limit: Option<usize>,
+    json: bool,
+) -> Result<()> {
+    let file = File::open(log_path)
+        .await
+        .with_context(|| format!("Failed to open log file: {}", log_path.display()))?;
+
+    let reader = BufReader::new(file);
+    let mut lines = reader.lines();
+    let mut count = 0;
+
+    let mut output_lines = Vec::new();
+
+    while let Some(line) = lines
+        .next_line()
+        .await
+        .with_context(|| format!("Failed to read log file: {}", log_path.display()))?
+    {
+        // Apply filters
+        if let Some(level_filter) = level
+            && !matches_log_level(&line, level_filter)
+        {
+            continue;
+        }
+
+        if let Some(pattern) = grep
+            && !line.to_lowercase().contains(&pattern.to_lowercase())
+        {
+            continue;
+        }
+
+        // Apply limit
+        if let Some(max) = limit
+            && count >= max
+        {
+            break;
+        }
+
+        output_lines.push(line);
+        count += 1;
+    }
+
+    // Output
+    if json {
+        let json_output = serde_json::json!({
+            "agent_id": log_path.file_stem().and_then(|s| s.to_str()),
+            "lines": output_lines,
+            "count": count
+        });
+        println!("{}", serde_json::to_string_pretty(&json_output)?);
+    } else {
+        for line in output_lines {
+            println!("{}", colorize_log_line(&line));
+        }
+    }
+
+    Ok(())
+}
+
+/// Colorize log line based on log level
+fn colorize_log_line(line: &str) -> String {
+    let upper = line.to_uppercase();
+    if upper.contains("ERROR") || upper.contains(" FATAL ") {
+        line.red().to_string()
+    } else if upper.contains("WARN") || upper.contains(" WARNING ") {
+        line.yellow().to_string()
+    } else if upper.contains("INFO") {
+        line.green().to_string()
+    } else if upper.contains("DEBUG") || upper.contains(" TRACE ") {
+        line.bright_black().to_string()
+    } else {
+        line.to_string()
+    }
+}
+
+/// Check if log line matches the specified level
+fn matches_log_level(line: &str, level: &str) -> bool {
+    let upper_line = line.to_uppercase();
+    let upper_level = level.to_uppercase();
+    match upper_level.as_str() {
+        "ERROR" | "FATAL" => upper_line.contains("ERROR") || upper_line.contains("FATAL"),
+        "WARN" | "WARNING" => upper_line.contains("WARN"),
+        "INFO" => upper_line.contains("INFO"),
+        "DEBUG" => upper_line.contains("DEBUG"),
+        "TRACE" => upper_line.contains("TRACE"),
+        _ => true, // Unknown level, show all
+    }
+}
+
+/// Tail log file, following new content as it appears
+async fn tail_log_file(
+    log_path: &std::path::Path,
+    level: &Option<String>,
+    grep: &Option<String>,
+) -> Result<()> {
+    let mut file = File::open(log_path)
+        .await
+        .with_context(|| format!("Failed to open log file: {}", log_path.display()))?;
+
+    // Start at the end of file
+    let file_len = file
+        .metadata()
+        .await
+        .with_context(|| "Failed to get file metadata")?
+        .len();
+
+    file.seek(SeekFrom::Start(file_len))
+        .await
+        .with_context(|| "Failed to seek to end of file")?;
+
+    let mut reader = BufReader::new(file);
+    let mut interval = interval(Duration::from_millis(100));
+    let mut last_pos = file_len;
+
+    loop {
+        interval.tick().await;
+
+        // Check if file has been rotated (size decreased or file recreated)
+        let current_metadata = match tokio::fs::metadata(log_path).await {
+            Ok(m) => m,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+                // File was deleted/rotated, wait for it to reappear
+                tokio::time::sleep(Duration::from_millis(500)).await;
+                continue;
+            }
+            Err(e) => {
+                return Err(e).with_context(|| "Failed to check log file status");
+            }
+        };
+
+        let current_size = current_metadata.len();
+
+        // Handle log rotation
+        if current_size < last_pos {
+            // File was truncated or rotated - reopen from beginning
+            drop(reader);
+            let new_file = File::open(log_path)
+                .await
+                .with_context(|| "Failed to reopen rotated log file")?;
+            reader = BufReader::new(new_file);
+            last_pos = 0;
+        }
+
+        // Read new lines
+        let mut line = String::new();
+        loop {
+            line.clear();
+            match reader.read_line(&mut line).await {
+                Ok(0) => break, // EOF
+                Ok(_) => {
+                    // Apply filters
+                    let should_show = {
+                        let level_match = if let Some(level_filter) = level {
+                            matches_log_level(&line, level_filter)
+                        } else {
+                            true
+                        };
+
+                        let grep_match = if let Some(pattern) = grep {
+                            line.to_lowercase().contains(&pattern.to_lowercase())
+                        } else {
+                            true
+                        };
+
+                        level_match && grep_match
+                    };
+
+                    if should_show {
+                        print!("{}", colorize_log_line(&line));
+                    }
+                    last_pos += line.len() as u64;
+                }
+                Err(e) => {
+                    return Err(e).with_context(|| "Failed to read from log file");
+                }
+            }
+        }
+    }
+}
+
+/// Wait for a log file to be created and then start tailing it
+async fn wait_for_file_and_tail(log_path: &std::path::Path) -> Result<()> {
+    let mut interval = interval(Duration::from_millis(500));
+
+    // Wait for file to exist
+    loop {
+        interval.tick().await;
+        if log_path.exists() {
+            break;
+        }
+    }
+
+    println!("{} Log file created, starting tail...\n", "✓".green());
+    tail_log_file(log_path, &None, &None).await
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::context::CliContext;
+    use tempfile::TempDir;
+    use tokio::io::AsyncWriteExt;
+
+    #[tokio::test]
+    async fn test_display_log_file() {
+        let temp_dir = TempDir::new().unwrap();
+        let log_file = temp_dir.path().join("test.log");
+
+        // Write test content
+        let mut file = File::create(&log_file).await.unwrap();
+        file.write_all(b"Line 1\nLine 2\nLine 3\n").await.unwrap();
+        file.flush().await.unwrap();
+        drop(file);
+
+        // Test reading
+        display_log_file(&log_file, &None, &None, None, false)
+            .await
+            .unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_get_agent_log_path() {
+        let data_dir = std::path::Path::new("/tmp/mofa");
+        let log_path = get_agent_log_path(data_dir, "agent-123");
+        assert_eq!(
+            log_path,
+            std::path::Path::new("/tmp/mofa/logs/agent-123.log")
+        );
+    }
+
+    #[tokio::test]
+    async fn test_logs_command_with_existing_file() {
+        let temp = TempDir::new().unwrap();
+        let ctx = CliContext::with_temp_dir(temp.path()).await.unwrap();
+
+        // Create an agent in registry
+        use crate::state::agent_state::AgentMetadata;
+        let metadata = AgentMetadata::new("test-agent".to_string(), "Test Agent".to_string());
+        ctx.persistent_agents.register(metadata).await.unwrap();
+
+        // Create log file with content
+        let log_file = get_agent_log_path(&ctx.data_dir, "test-agent");
+        tokio::fs::create_dir_all(log_file.parent().unwrap())
+            .await
+            .unwrap();
+        tokio::fs::write(&log_file, b"[2024-01-01 10:00:00] INFO: Agent started\n[2024-01-01 10:00:01] DEBUG: Processing request\n")
+            .await
+            .unwrap();
+
+        // Test reading logs
+        let result = run(&ctx, "test-agent", false, None, None, None, false).await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_logs_command_missing_agent() {
+        let temp = TempDir::new().unwrap();
+        let ctx = CliContext::with_temp_dir(temp.path()).await.unwrap();
+
+        // Try to read logs for non-existent agent
+        let result = run(&ctx, "nonexistent-agent", false, None, None, None, false).await;
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("not found"));
+    }
+
+    #[tokio::test]
+    async fn test_logs_command_no_logs_yet() {
+        let temp = TempDir::new().unwrap();
+        let ctx = CliContext::with_temp_dir(temp.path()).await.unwrap();
+
+        // Create an agent in registry
+        use crate::state::agent_state::AgentMetadata;
+        let metadata = AgentMetadata::new("new-agent".to_string(), "New Agent".to_string());
+        ctx.persistent_agents.register(metadata).await.unwrap();
+
+        // Try to read logs for agent with no logs yet
+        let result = run(&ctx, "new-agent", false, None, None, None, false).await;
+        // Should succeed but show message about no logs
+        assert!(result.is_ok());
+    }
 }

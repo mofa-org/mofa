@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 // 流类型枚举
 // Stream type enumeration
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+#[non_exhaustive]
 pub enum StreamType {
     MessageStream, // 消息流 - 异步消息传递
     // Message stream - Asynchronous message passing
@@ -18,6 +19,7 @@ pub enum StreamType {
 // 智能体通信消息协议
 // Agent communication message protocol
 #[derive(Debug, Serialize, Deserialize, Clone)]
+#[non_exhaustive]
 pub enum AgentMessage {
     TaskRequest {
         task_id: String,
@@ -53,6 +55,7 @@ pub enum AgentMessage {
 // 任务状态枚举
 // Task status enumeration
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+#[non_exhaustive]
 pub enum TaskStatus {
     Success,
     Failed,
@@ -62,6 +65,7 @@ pub enum TaskStatus {
 // Agent 可感知的事件类型
 // Event types perceivable by the Agent
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[non_exhaustive]
 pub enum AgentEvent {
     TaskReceived(TaskRequest), // 任务事件
     // Task event
@@ -118,6 +122,7 @@ pub struct TaskRequest {
 // 任务优先级与调度元数据
 // Task priority and scheduling metadata
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum TaskPriority {
     Critical = 0,
     Highest = 1,
@@ -148,6 +153,7 @@ impl Ord for TaskPriority {
 // 流控制命令
 // Stream control commands
 #[derive(Debug, Serialize, Deserialize, Clone)]
+#[non_exhaustive]
 pub enum StreamControlCommand {
     Create(StreamType), // 创建流
     // Create stream
@@ -168,6 +174,7 @@ pub enum StreamControlCommand {
 // 调度状态，用于跟踪任务抢占情况
 // Scheduling status for tracking task preemption
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub enum SchedulingStatus {
     Pending,
     Running,

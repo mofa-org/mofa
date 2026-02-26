@@ -28,20 +28,22 @@ pub async fn run(
 
     // When commands run in separate CLI invocations, runtime registry state can be absent.
     // In that case, if force_persisted_stop is true, update the persisted state.
-    if !in_registry && in_store && force_persisted_stop {
-        if let Some(mut entry) = previous_entry {
-            entry.state = "Stopped".to_string();
-            ctx.agent_store
-                .save(agent_id, &entry)
-                .map_err(|e| anyhow::anyhow!("Failed to update agent '{}': {}", agent_id, e))?;
+    if !in_registry
+        && in_store
+        && force_persisted_stop
+        && let Some(mut entry) = previous_entry
+    {
+        entry.state = "Stopped".to_string();
+        ctx.agent_store
+            .save(agent_id, &entry)
+            .map_err(|e| anyhow::anyhow!("Failed to update agent '{}': {}", agent_id, e))?;
 
-            println!(
-                "{} Agent '{}' persisted state updated to Stopped",
-                "✓".green(),
-                agent_id
-            );
-            return Ok(());
-        }
+        println!(
+            "{} Agent '{}' persisted state updated to Stopped",
+            "✓".green(),
+            agent_id
+        );
+        return Ok(());
     }
 
     // If not in registry and no force flag, error out
