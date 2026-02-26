@@ -195,14 +195,18 @@ async fn run_command(cli: Cli) -> anyhow::Result<()> {
                 cli::PluginCommands::List {
                     installed,
                     available,
+                    refresh,
                 } => {
-                    commands::plugin::list::run(ctx, installed, available).await?;
+                    commands::plugin::list::run(ctx, installed, available, refresh).await?;
                 }
                 cli::PluginCommands::Info { name } => {
                     commands::plugin::info::run(ctx, &name).await?;
                 }
                 cli::PluginCommands::Install { name } => {
                     commands::plugin::install::run(ctx, &name).await?;
+                }
+                cli::PluginCommands::Sync { url, timeout } => {
+                    commands::plugin::sync::run(ctx, url.as_deref(), timeout).await?;
                 }
                 cli::PluginCommands::Uninstall { name, force } => {
                     commands::plugin::uninstall::run(ctx, &name, force).await?;
@@ -240,13 +244,19 @@ async fn run_command(cli: Cli) -> anyhow::Result<()> {
         }
 
         Some(Commands::Tool { action }) => {
-            let ctx = ctx.as_ref().unwrap();
+            let mut ctx = ctx.unwrap();
             match action {
+                cli::ToolCommands::Enable { name } => {
+                    commands::tool::enable::run(&mut ctx, &name).await?;
+                }
+                cli::ToolCommands::Disable { name, force } => {
+                    commands::tool::disable::run(&mut ctx, &name, force).await?;
+                }
                 cli::ToolCommands::List { available, enabled } => {
-                    commands::tool::list::run(ctx, available, enabled).await?;
+                    commands::tool::list::run(&ctx, available, enabled).await?;
                 }
                 cli::ToolCommands::Info { name } => {
-                    commands::tool::info::run(ctx, &name).await?;
+                    commands::tool::info::run(&ctx, &name).await?;
                 }
             }
         }
