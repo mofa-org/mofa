@@ -7,9 +7,7 @@
 //! - Automated testing workflows
 
 use anyhow::Result;
-use std::process::Command;
 use tempfile::TempDir;
-use tokio::fs;
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -21,9 +19,11 @@ async fn main() -> Result<()> {
 
     println!("1. Setting up CI/CD workspace: {}", workspace.display());
 
-    // Simulate CI/CD environment
-    std::env::set_var("MOFA_DATA_DIR", workspace.join("data"));
-    std::env::set_var("MOFA_CONFIG_DIR", workspace.join("config"));
+    // simulate ci/cd environment (in real ci you'd export these)
+    let data_dir = workspace.join("data");
+    let config_dir = workspace.join("config");
+    println!("MOFA_DATA_DIR={}", data_dir.display());
+    println!("MOFA_CONFIG_DIR={}", config_dir.display());
 
     println!("\n2. Automated Plugin Installation with Security");
     println!("   In CI/CD, you'd run:");
