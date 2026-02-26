@@ -43,6 +43,7 @@ use super::agent::LLMAgent;
 use super::types::{LLMError, LLMResult};
 use std::collections::HashMap;
 use std::future::Future;
+use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::pin::Pin;
 use std::sync::Arc;
 use tokio::sync::RwLock;
@@ -434,8 +435,6 @@ pub struct AgentWorkflowContext {
     /// 节点输出
     /// Node outputs
     node_outputs: Arc<RwLock<HashMap<String, AgentValue>>>,
-    /// Cached router decisions keyed by router node ID
-    router_decisions: Arc<RwLock<HashMap<String, String>>>,
     /// 共享会话 ID（用于多 Agent 共享上下文）
     /// Shared session ID (for cross-agent context sharing)
     shared_session_id: Option<String>,
@@ -452,7 +451,6 @@ impl AgentWorkflowContext {
             workflow_id: workflow_id.into(),
             execution_id: uuid::Uuid::now_v7().to_string(),
             node_outputs: Arc::new(RwLock::new(HashMap::new())),
-            router_decisions: Arc::new(RwLock::new(HashMap::new())),
             shared_session_id: None,
             variables: Arc::new(RwLock::new(HashMap::new())),
             max_steps: 25, // Default limit matching LangGraph convention
@@ -488,16 +486,6 @@ impl AgentWorkflowContext {
             .collect()
     }
 
-    pub async fn set_router_decision(&self, node_id: &str, route: &str) {
-        let mut decisions = self.router_decisions.write().await;
-        decisions.insert(node_id.to_string(), route.to_string());
-    }
-
-    pub async fn get_router_decision(&self, node_id: &str) -> Option<String> {
-        let decisions = self.router_decisions.read().await;
-        decisions.get(node_id).cloned()
-    }
-
     pub async fn set_variable(&self, key: &str, value: &str) {
         let mut vars = self.variables.write().await;
         vars.insert(key.to_string(), value.to_string());
@@ -515,7 +503,6 @@ impl Clone for AgentWorkflowContext {
             workflow_id: self.workflow_id.clone(),
             execution_id: self.execution_id.clone(),
             node_outputs: self.node_outputs.clone(),
-            router_decisions: self.router_decisions.clone(),
             shared_session_id: self.shared_session_id.clone(),
             variables: self.variables.clone(),
             max_steps: self.max_steps,
@@ -596,7 +583,7 @@ impl AgentWorkflow {
 
             // 确定下一个节点
             // Determine next node
-            match self.get_next_node(ctx, &current_node_id, &output).await {
+            match self.get_next_node(&current_node_id, &output).await {
                 Some(next_id) => {
                     current_node_id = next_id;
                     current_input = output;
@@ -662,8 +649,19 @@ impl AgentWorkflow {
                     .router
                     .as_ref()
                     .ok_or_else(|| LLMError::Other("Router function not set".to_string()))?;
-                let route = router(input.clone()).await;
-                ctx.set_router_decision(&node.id, &route).await;
+                let router_clone = router.clone();
+                let input_clone = input.clone();
+                let future = match catch_unwind(AssertUnwindSafe(|| router_clone(input_clone))) {
+                    Ok(fut) => fut,
+                    Err(payload) => {
+                        let msg = extract_panic_message(payload);
+                        tracing::error!(node_id = %node.id, "Workflow node panicked during router invocation: {}", msg);
+                        return Err(LLMError::Other(format!(
+                            "Workflow node panic in router '{}': {}", node.id, msg
+                        )));
+                    }
+                };
+                let _route = future.await;
                 // 路由节点返回原输入，路由决策在 get_next_node 中使用
                 // Router returns original input; decision is used in get_next_node
                 Ok(input)
@@ -681,7 +679,18 @@ impl AgentWorkflow {
                 let outputs = ctx.get_outputs(&node.wait_for).await;
 
                 if let Some(ref join_fn) = node.join_fn {
-                    Ok(join_fn(outputs).await)
+                    let join_fn_clone = join_fn.clone();
+                    let future = match catch_unwind(AssertUnwindSafe(|| join_fn_clone(outputs))) {
+                        Ok(fut) => fut,
+                        Err(payload) => {
+                            let msg = extract_panic_message(payload);
+                            tracing::error!(node_id = %node.id, "Workflow node panicked during join invocation: {}", msg);
+                            return Err(LLMError::Other(format!(
+                                "Workflow node panic in join '{}': {}", node.id, msg
+                            )));
+                        }
+                    };
+                    Ok(future.await)
                 } else {
                     // 默认聚合：合并所有文本输出
                     // Default aggregation: merge all text outputs
@@ -695,19 +704,25 @@ impl AgentWorkflow {
                     .transform
                     .as_ref()
                     .ok_or_else(|| LLMError::Other("Transform function not set".to_string()))?;
-                Ok(transform(input).await)
+                let transform_clone = transform.clone();
+                let future = match catch_unwind(AssertUnwindSafe(|| transform_clone(input))) {
+                    Ok(fut) => fut,
+                    Err(payload) => {
+                        let msg = extract_panic_message(payload);
+                        tracing::error!(node_id = %node.id, "Workflow node panicked during transform invocation: {}", msg);
+                        return Err(LLMError::Other(format!(
+                            "Workflow node panic in transform '{}': {}", node.id, msg
+                        )));
+                    }
+                };
+                Ok(future.await)
             }
         }
     }
 
     /// 获取下一个节点
     /// Get the next node
-    async fn get_next_node(
-        &self,
-        ctx: &AgentWorkflowContext,
-        current_id: &str,
-        output: &AgentValue,
-    ) -> Option<String> {
+    async fn get_next_node(&self, current_id: &str, output: &AgentValue) -> Option<String> {
         let node = self.nodes.get(current_id)?;
 
         // 结束节点没有后续
@@ -721,17 +736,12 @@ impl AgentWorkflow {
         // 路由节点：根据路由函数结果选择边
         // Router node: select edge based on router function result
         if matches!(node.node_type, AgentNodeType::Router) {
-            let route = match ctx.get_router_decision(current_id).await {
-                Some(route) => route,
-                None => {
-                    let router = node.router.as_ref()?;
-                    router(output.clone()).await
-                }
-            };
-
-            for edge in edges {
-                if edge.condition.as_ref() == Some(&route) {
-                    return Some(edge.to.clone());
+            if let Some(ref router) = node.router {
+                let route = router(output.clone()).await;
+                for edge in edges {
+                    if edge.condition.as_ref() == Some(&route) {
+                        return Some(edge.to.clone());
+                    }
                 }
             }
             // 如果没有匹配的条件边，使用默认边（无条件）
@@ -1138,6 +1148,17 @@ pub fn agent_router<S: Into<String>>(
     builder.build()
 }
 
+/// Extracts a human-readable message from a panic payload.
+fn extract_panic_message(payload: Box<dyn std::any::Any + Send>) -> String {
+    if let Some(s) = payload.downcast_ref::<&str>() {
+        s.to_string()
+    } else if let Some(s) = payload.downcast_ref::<String>() {
+        s.clone()
+    } else {
+        "Unknown panic payload".to_string()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1229,6 +1250,25 @@ mod tests {
 
         assert_eq!(result.as_text(), Some("left:seed"));
         assert_eq!(invocations.load(Ordering::SeqCst), 1);
+    }
+
+    #[tokio::test]
+    async fn test_transform_panic_containment() {
+        let workflow = AgentWorkflowBuilder::new("panic-test")
+            .add_transform("panicking", |_input: AgentValue| -> Pin<Box<dyn Future<Output = AgentValue> + Send>> {
+                panic!("intentional test panic in transform");
+            })
+            .chain(["panicking"])
+            .build();
+
+        let result = workflow.run("hello").await;
+        assert!(result.is_err(), "Panicking transform must return Err, not crash");
+        let err_msg = format!("{}", result.unwrap_err());
+        assert!(
+            err_msg.contains("panic"),
+            "Error message should mention panic, got: {}",
+            err_msg
+        );
     }
 
     #[test]
