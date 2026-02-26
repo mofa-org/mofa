@@ -142,13 +142,13 @@ impl KokoroTTS {
             return Err(PluginError::Other(format!(
                 "Kokoro model file not found: {}",
                 model_path
-            ));
+            )));
         }
         if !Path::new(voice_path).exists() {
             return Err(PluginError::Other(format!(
                 "Kokoro voices file not found: {}",
                 voice_path
-            ));
+            )));
         }
 
         // Initialize Kokoro TTS
