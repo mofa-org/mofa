@@ -300,6 +300,22 @@ pub enum AgentCommands {
         /// Tail the logs
         #[arg(short, long)]
         tail: bool,
+
+        /// Filter by log level (INFO, DEBUG, ERROR, WARN)
+        #[arg(long)]
+        level: Option<String>,
+
+        /// Search for text in logs
+        #[arg(long)]
+        grep: Option<String>,
+
+        /// Limit number of lines to display
+        #[arg(long)]
+        limit: Option<usize>,
+
+        /// Output logs as JSON
+        #[arg(long)]
+        json: bool,
     },
 }
 
@@ -367,8 +383,16 @@ pub enum PluginCommands {
 
     /// Install a plugin
     Install {
-        /// Plugin name or path
+        /// Plugin name, path, or URL
         name: String,
+
+        /// Expected SHA256 checksum for verification
+        #[arg(long)]
+        checksum: Option<String>,
+
+        /// Verify plugin signature (if available)
+        #[arg(long)]
+        verify_signature: bool,
     },
 
     /// Uninstall a plugin

@@ -21,11 +21,12 @@ serde_json.workspace = true
 serde_yaml = { workspace = true, optional = true }
 tokio.workspace = true
 bincode.workspace = true
-anyhow.workspace = true
 thiserror.workspace = true
+error-stack.workspace = true
 uuid = {workspace = true,features = ["serde", "v4"]}
 tracing.workspace = true
 futures.workspace = true
+base64.workspace = true
 
 
 # Config parsing

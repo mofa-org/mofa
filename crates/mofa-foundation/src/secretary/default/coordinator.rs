@@ -1,6 +1,7 @@
 //! 任务协调器 - 阶段3: 调度分配，调用执行Agent
 //! Task Coordinator - Phase 3: Scheduling and allocation, invoking execution Agents
 
+use mofa_kernel::agent::types::error::{GlobalError, GlobalResult};
 use super::types::*;
 use crate::secretary::agent_router::{
     AgentInfo, AgentProvider, AgentRouter, CapabilityRouter, RoutingContext, RoutingDecision,
@@ -10,7 +11,7 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 
 /// Type alias for message sender function
-pub type MessageSenderFn = Arc<dyn Fn(SecretaryMessage, &str) -> anyhow::Result<()> + Send + Sync>;
+pub type MessageSenderFn = Arc<dyn Fn(SecretaryMessage, &str) -> GlobalResult<()> + Send + Sync>;
 
 /// 分配策略
 /// Dispatch Strategy
@@ -112,7 +113,7 @@ impl TaskCoordinator {
     /// Set message sender callback
     pub fn with_message_sender<F>(mut self, sender: F) -> Self
     where
-        F: Fn(SecretaryMessage, &str) -> anyhow::Result<()> + Send + Sync + 'static,
+        F: Fn(SecretaryMessage, &str) -> GlobalResult<()> + Send + Sync + 'static,
     {
         self.message_sender = Some(Arc::new(sender));
         self
@@ -199,7 +200,7 @@ impl TaskCoordinator {
 
     /// 为子任务分配执行Agent
     /// Allocate execution Agent for subtask
-    pub async fn dispatch_subtask(&self, subtask: &Subtask) -> anyhow::Result<DispatchResult> {
+    pub async fn dispatch_subtask(&self, subtask: &Subtask) -> GlobalResult<DispatchResult> {
         if matches!(self.strategy, DispatchStrategy::Dynamic) {
             return self.dispatch_subtask_dynamic(subtask, None).await;
         }
@@ -208,7 +209,7 @@ impl TaskCoordinator {
         let available: Vec<_> = executors.values().filter(|e| e.available).collect();
 
         if available.is_empty() {
-            return Err(anyhow::anyhow!("No available executors"));
+            return Err(GlobalError::Other("No available executors".to_string()));
         }
 
         let (selected, score): (&AgentInfo, f32) = match &self.strategy {
@@ -223,7 +224,7 @@ impl TaskCoordinator {
                     .iter()
                     .copied()
                     .min_by_key(|e| e.current_load)
-                    .ok_or_else(|| anyhow::anyhow!("No available executors"))?;
+                    .ok_or_else(|| GlobalError::Other("No available executors".to_string()))?;
                 let score = 1.0 - (selected.current_load as f32 / 100.0);
                 (selected, score)
             }
@@ -239,7 +240,7 @@ impl TaskCoordinator {
                             .partial_cmp(&b.performance_score)
                             .unwrap_or(std::cmp::Ordering::Equal)
                     })
-                    .ok_or_else(|| anyhow::anyhow!("No available executors"))?;
+                    .ok_or_else(|| GlobalError::Other("No available executors".to_string()))?;
                 (selected, selected.performance_score)
             }
             DispatchStrategy::Composite {
@@ -290,11 +291,11 @@ impl TaskCoordinator {
         &self,
         subtask: &Subtask,
         context: Option<&RoutingContext>,
-    ) -> anyhow::Result<DispatchResult> {
+    ) -> GlobalResult<DispatchResult> {
         let available_agents = self.get_available_agents().await?;
 
         if available_agents.is_empty() {
-            return Err(anyhow::anyhow!("No available agents"));
+            return Err(GlobalError::Other("No available agents".to_string()));
         }
 
         let routing_context = if let Some(ctx) = context {
@@ -343,7 +344,7 @@ impl TaskCoordinator {
 
     /// 获取可用Agent列表
     /// Get the list of available Agents
-    pub async fn get_available_agents(&self) -> anyhow::Result<Vec<AgentInfo>> {
+    pub async fn get_available_agents(&self) -> GlobalResult<Vec<AgentInfo>> {
         if let Some(ref provider) = self.agent_provider {
             return Ok(provider.list_agents().await);
         }
@@ -362,7 +363,7 @@ impl TaskCoordinator {
         &self,
         available: &[&'a AgentInfo],
         required_capabilities: &[String],
-    ) -> anyhow::Result<(&'a AgentInfo, f32)> {
+    ) -> GlobalResult<(&'a AgentInfo, f32)> {
         let mut best: Option<(&AgentInfo, f32)> = None;
 
         for executor in available {
@@ -382,7 +383,7 @@ impl TaskCoordinator {
             }
         }
 
-        best.ok_or_else(|| anyhow::anyhow!("No matching executor found"))
+        best.ok_or_else(|| GlobalError::Other("No matching executor found".to_string()))
     }
 
     fn select_composite<'a>(
@@ -392,7 +393,7 @@ impl TaskCoordinator {
         capability_weight: f32,
         load_weight: f32,
         performance_weight: f32,
-    ) -> anyhow::Result<(&'a AgentInfo, f32)> {
+    ) -> GlobalResult<(&'a AgentInfo, f32)> {
         let mut best: Option<(&AgentInfo, f32)> = None;
 
         for executor in available {
@@ -418,7 +419,7 @@ impl TaskCoordinator {
             }
         }
 
-        best.ok_or_else(|| anyhow::anyhow!("No matching executor found"))
+        best.ok_or_else(|| GlobalError::Other("No matching executor found".to_string()))
     }
 
     /// 为需求的所有子任务分配Agent
@@ -427,7 +428,7 @@ impl TaskCoordinator {
         &self,
         requirement: &ProjectRequirement,
         context: HashMap<String, String>,
-    ) -> anyhow::Result<Vec<DispatchResult>> {
+    ) -> GlobalResult<Vec<DispatchResult>> {
         let mut results = Vec::new();
         let mut pending_subtasks: Vec<&Subtask> = requirement.subtasks.iter().collect();
         pending_subtasks.sort_by_key(|s| s.order);
@@ -452,12 +453,12 @@ impl TaskCoordinator {
 
     /// 取消任务
     /// Cancel task
-    pub async fn cancel_task(&self, task_id: &str, reason: &str) -> anyhow::Result<()> {
+    pub async fn cancel_task(&self, task_id: &str, reason: &str) -> GlobalResult<()> {
         let records = self.dispatch_records.read().await;
         let record = records
             .iter()
             .find(|r| r.subtask_id == task_id)
-            .ok_or_else(|| anyhow::anyhow!("Task not found: {}", task_id))?;
+            .ok_or_else(|| GlobalError::Other(format!("Task not found: {}", task_id)))?;
 
         if let Some(ref sender) = self.message_sender {
             let message = SecretaryMessage::CancelTask {

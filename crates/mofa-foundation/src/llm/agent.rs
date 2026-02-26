@@ -13,7 +13,7 @@
 //! use mofa_sdk::llm::LLMAgentBuilder;
 //!
 //! #[tokio::main]
-//! async fn main() -> anyhow::Result<()> {
+//! async fn main() -> GlobalResult<()> {
 //!     let agent = LLMAgentBuilder::from_env()?
 //!         .with_id("my-llm-agent")
 //!         .with_system_prompt("You are a helpful assistant.")
@@ -25,6 +25,7 @@
 //! }
 //! ```
 
+use mofa_kernel::agent::types::error::{GlobalError, GlobalResult};
 use super::client::{ChatSession, LLMClient};
 use super::provider::{ChatStream, LLMProvider};
 use super::tool_executor::ToolExecutor;
@@ -2547,7 +2548,7 @@ impl LLMAgentBuilder {
     /// use std::sync::Arc;
     /// use uuid::Uuid;
     ///
-    /// # async fn example() -> anyhow::Result<()> {
+    /// # async fn example() -> GlobalResult<()> {
     /// let store = Arc::new(PostgresStore::connect("postgres://localhost/mofa").await?);
     /// let user_id = Uuid::now_v7();
     /// let tenant_id = Uuid::now_v7();

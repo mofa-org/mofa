@@ -78,14 +78,14 @@ impl ToolExecutor for ShellCommandTool {
     async fn execute(&self, arguments: serde_json::Value) -> PluginResult<serde_json::Value> {
         let command = arguments["command"]
             .as_str()
-            .ok_or_else(|| anyhow::anyhow!("Command is required"))?;
+            .ok_or_else(|| mofa_kernel::plugin::PluginError::ExecutionFailed(format!("Command is required")))?;
 
         if !self.is_command_allowed(command) {
-            return Err(anyhow::anyhow!(
+            return Err(mofa_kernel::plugin::PluginError::ExecutionFailed(format!(
                 "Command '{}' is not in the allowed commands list. Allowed: {:?}",
                 command,
                 self.allowed_commands
-            ));
+            )));
         }
 
         let args: Vec<String> = arguments

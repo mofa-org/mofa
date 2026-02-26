@@ -2,6 +2,7 @@
 //!
 //! Provides metrics collection for the monitoring dashboard
 
+use mofa_kernel::metrics::LLMMetricsSource;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -484,6 +485,10 @@ pub struct MetricsCollector {
     plugin_metrics: Arc<RwLock<HashMap<String, PluginMetrics>>>,
     /// LLM metrics storage (model-specific inference metrics)
     llm_metrics: Arc<RwLock<HashMap<String, LLMMetrics>>>,
+    /// LLM metrics source for pulling from persistence
+    llm_metrics_source: Option<Arc<dyn LLMMetricsSource>>,
+    /// Provider name for LLM metrics (e.g., "OpenAI", "Anthropic")
+    provider_name: String,
     /// Cached system info (using std sync RwLock for sync access)
     system: Arc<StdRwLock<System>>,
 }
@@ -500,8 +505,17 @@ impl MetricsCollector {
             workflow_metrics: Arc::new(RwLock::new(HashMap::new())),
             plugin_metrics: Arc::new(RwLock::new(HashMap::new())),
             llm_metrics: Arc::new(RwLock::new(HashMap::new())),
+            llm_metrics_source: None,
+            provider_name: "unknown".to_string(),
             system: Arc::new(StdRwLock::new(System::new_all())),
         }
+    }
+
+    /// Set LLM metrics source for pulling from persistence
+    pub fn with_llm_metrics_source(mut self, source: Arc<dyn LLMMetricsSource>, provider_name: String) -> Self {
+        self.llm_metrics_source = Some(source);
+        self.provider_name = provider_name;
+        self
     }
 
     pub fn registry(&self) -> Arc<MetricsRegistry> {
@@ -511,7 +525,7 @@ impl MetricsCollector {
     /// Update agent metrics
     pub async fn update_agent(&self, metrics: AgentMetrics) {
         let mut agents = self.agent_metrics.write().await;
-        agents.insert(metrics.agent_id.clone(), metrics);
+        agents.insert(metrics.agent_id.clone(), metrics);   
     }
 
     /// Update LLM metrics
@@ -545,35 +559,46 @@ impl MetricsCollector {
     }
 
     /// Collect current system metrics
-    fn collect_system_metrics(&self) -> SystemMetrics {
-        let now = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_secs();
+    ///
+    /// Offloads the blocking `sysinfo::System::refresh_all()` call to
+    /// Tokio's blocking thread pool via `spawn_blocking`, preventing it
+    /// from stalling the async worker threads every collection interval.
+    async fn collect_system_metrics(&self) -> SystemMetrics {
+        let system = self.system.clone();
+        let uptime_secs = self.start_time.elapsed().as_secs();
 
-        let mut system = self.system.write().unwrap();
-        system.refresh_all();
+        tokio::task::spawn_blocking(move || {
+            let now = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_secs();
 
-        let pid = Pid::from_u32(std::process::id());
-        let (cpu_usage, memory_used, thread_count) = system
-            .process(pid)
-            .map(|p| {
-                (
-                    p.cpu_usage() as f64,
-                    p.memory(),
-                    p.tasks().iter().count() as u32,
-                )
-            })
-            .unwrap_or((0.0, 0, 0));
+            let mut sys = system.write().unwrap();
+            sys.refresh_all();
 
-        SystemMetrics {
-            cpu_usage,
-            memory_used,
-            memory_total: system.total_memory(),
-            uptime_secs: self.start_time.elapsed().as_secs(),
-            thread_count,
-            timestamp: now,
-        }
+            let pid = Pid::from_u32(std::process::id());
+            let (cpu_usage, memory_used, thread_count) = sys
+                .process(pid)
+                .map(|p| {
+                    (
+                        p.cpu_usage() as f64,
+                        p.memory(),
+                        p.tasks().iter().count() as u32,
+                    )
+                })
+                .unwrap_or((0.0, 0, 0));
+
+            SystemMetrics {
+                cpu_usage,
+                memory_used,
+                memory_total: sys.total_memory(),
+                uptime_secs,
+                thread_count,
+                timestamp: now,
+            }
+        })
+        .await
+        .unwrap_or_default()
     }
 
     /// Collect a snapshot
@@ -584,7 +609,7 @@ impl MetricsCollector {
             .as_secs();
 
         let system = if self.config.enable_system_metrics {
-            self.collect_system_metrics()
+            self.collect_system_metrics().await
         } else {
             SystemMetrics::default()
         };
@@ -613,7 +638,38 @@ impl MetricsCollector {
         };
 
         let llm_metrics: Vec<LLMMetrics> = if self.config.enable_llm_metrics {
-            self.llm_metrics.read().await.values().cloned().collect()
+            if let Some(source) = &self.llm_metrics_source {
+                match source.get_llm_statistics().await {
+                    Ok(stats) => vec![LLMMetrics {
+                        plugin_id: "llm".to_string(),
+                        provider_name: self.provider_name.clone(),
+                        model_name: "default".to_string(),
+                        state: "running".to_string(),
+                        total_requests: stats.total_requests,
+                        successful_requests: stats.successful_requests,
+                        failed_requests: stats.failed_requests,
+                        total_tokens: stats.total_tokens,
+                        prompt_tokens: stats.prompt_tokens,
+                        completion_tokens: stats.completion_tokens,
+                        avg_latency_ms: stats.avg_latency_ms,
+                        tokens_per_second: stats.tokens_per_second,
+                        time_to_first_token_ms: None,
+                        requests_per_minute: 0.0,
+                        error_rate: if stats.total_requests > 0 {
+                            (stats.failed_requests as f64 / stats.total_requests as f64) * 100.0
+                        } else {
+                            0.0
+                        },
+                        last_request_timestamp: 0,
+                    }],
+                    Err(e) => {
+                        tracing::warn!("Failed to fetch LLM metrics from source: {}", e);
+                        self.llm_metrics.read().await.values().cloned().collect()
+                    }
+                }
+            } else {
+                self.llm_metrics.read().await.values().cloned().collect()
+            }
         } else {
             Vec::new()
         };

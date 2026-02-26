@@ -570,6 +570,65 @@ impl WorkflowGraph {
         dot.push_str("}\n");
         dot
     }
+
+    /// Export to JSON format (for web visualization)
+    pub fn to_json(&self) -> serde_json::Value {
+        let nodes: Vec<serde_json::Value> = self
+            .nodes
+            .iter()
+            .map(|(node_id, node)| {
+                let node_type_str = match node.node_type() {
+                    NodeType::Start => "start",
+                    NodeType::End => "end",
+                    NodeType::Task => "task",
+                    NodeType::Agent => "agent",
+                    NodeType::Condition => "condition",
+                    NodeType::Parallel => "parallel",
+                    NodeType::Join => "join",
+                    NodeType::Loop => "loop",
+                    NodeType::Wait => "wait",
+                    NodeType::Transform => "transform",
+                    NodeType::SubWorkflow => "sub_workflow",
+                };
+                serde_json::json!({
+                    "id": node_id,
+                    "name": node.config.name,
+                    "type": node_type_str,
+                    "description": node.config.description,
+                })
+            })
+            .collect();
+
+        let edges: Vec<serde_json::Value> = self
+            .edges
+            .values()
+            .flatten()
+            .map(|edge| {
+                let edge_type_str = match &edge.edge_type {
+                    EdgeType::Normal => "normal",
+                    EdgeType::Conditional(_) => "conditional",
+                    EdgeType::Error => "error",
+                    EdgeType::Default => "default",
+                };
+                serde_json::json!({
+                    "from": edge.from,
+                    "to": edge.to,
+                    "edge_type": edge_type_str,
+                    "label": edge.label,
+                })
+            })
+            .collect();
+
+        serde_json::json!({
+            "id": self.id,
+            "name": self.name,
+            "description": self.description,
+            "nodes": nodes,
+            "edges": edges,
+            "start_node": self.start_node,
+            "end_nodes": self.end_nodes,
+        })
+    }
 }
 
 #[cfg(test)]
@@ -692,5 +751,18 @@ mod tests {
         assert!(dot.contains("start"));
         assert!(dot.contains("end"));
         assert!(dot.contains("->"));
+    }
+
+    #[test]
+    fn test_to_json() {
+        let graph = create_test_graph();
+        let json = graph.to_json();
+
+        assert_eq!(json["id"], "test");
+        assert_eq!(json["name"], "Test Workflow");
+        assert!(json["nodes"].as_array().unwrap().len() == 4);
+        assert!(json["edges"].as_array().unwrap().len() == 3);
+        assert_eq!(json["start_node"], "start");
+        assert!(json["end_nodes"].as_array().unwrap().contains(&serde_json::json!("end")));
     }
 }

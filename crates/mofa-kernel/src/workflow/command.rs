@@ -12,7 +12,8 @@ use super::StateUpdate;
 ///
 /// Determines what happens after a node completes execution.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub enum ControlFlow {
+#[non_exhaustive]
+pub enum ControlFlow<V = Value> {
     /// Continue to the next node(s) based on graph edges
     #[default]
     Continue,
@@ -24,7 +25,7 @@ pub enum ControlFlow {
     Return,
 
     /// Dynamically create parallel execution branches (MapReduce pattern)
-    Send(Vec<SendCommand>),
+    Send(Vec<SendCommand<V>>),
 }
 
 /// Command returned by node functions
@@ -57,28 +58,37 @@ pub enum ControlFlow {
 ///     SendCommand::new("process", json!({"item": 2})),
 /// ]);
 /// ```
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct Command {
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Command<V = Value> {
     /// State updates to apply
-    pub updates: Vec<StateUpdate>,
+    pub updates: Vec<StateUpdate<V>>,
     /// Control flow directive
-    pub control: ControlFlow,
+    pub control: ControlFlow<V>,
 }
 
-impl Command {
+impl<V> Default for Command<V> {
+    fn default() -> Self {
+        Self {
+            updates: Vec::new(),
+            control: ControlFlow::default(),
+        }
+    }
+}
+
+impl<V> Command<V> {
     /// Create a new empty command
     pub fn new() -> Self {
         Self::default()
     }
 
     /// Add a state update
-    pub fn update(mut self, key: impl Into<String>, value: Value) -> Self {
+    pub fn update(mut self, key: impl Into<String>, value: V) -> Self {
         self.updates.push(StateUpdate::new(key, value));
         self
     }
 
     /// Add multiple state updates
-    pub fn updates(mut self, updates: Vec<StateUpdate>) -> Self {
+    pub fn updates(mut self, updates: Vec<StateUpdate<V>>) -> Self {
         self.updates.extend(updates);
         self
     }
@@ -102,7 +112,7 @@ impl Command {
     }
 
     /// Set control flow to create parallel branches (MapReduce)
-    pub fn send(targets: Vec<SendCommand>) -> Self {
+    pub fn send(targets: Vec<SendCommand<V>>) -> Self {
         Self {
             updates: Vec::new(),
             control: ControlFlow::Send(targets),
@@ -110,7 +120,7 @@ impl Command {
     }
 
     /// Create a command that just updates state (continues by default)
-    pub fn just_update(key: impl Into<String>, value: Value) -> Self {
+    pub fn just_update(key: impl Into<String>, value: V) -> Self {
         Self::new().update(key, value)
     }
 
@@ -148,18 +158,18 @@ impl Command {
 /// Represents a dynamic edge creation - sending execution to a target node
 /// with specific input state.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct SendCommand {
+pub struct SendCommand<V = Value> {
     /// Target node ID
     pub target: String,
     /// Input state for this branch
-    pub input: Value,
+    pub input: V,
     /// Optional branch identifier
     pub branch_id: Option<String>,
 }
 
-impl SendCommand {
+impl<V> SendCommand<V> {
     /// Create a new send command
-    pub fn new(target: impl Into<String>, input: Value) -> Self {
+    pub fn new(target: impl Into<String>, input: V) -> Self {
         Self {
             target: target.into(),
             input,
@@ -168,11 +178,7 @@ impl SendCommand {
     }
 
     /// Create a send command with a branch ID
-    pub fn with_branch(
-        target: impl Into<String>,
-        input: Value,
-        branch_id: impl Into<String>,
-    ) -> Self {
+    pub fn with_branch(target: impl Into<String>, input: V, branch_id: impl Into<String>) -> Self {
         Self {
             target: target.into(),
             input,
@@ -241,15 +247,15 @@ mod tests {
 
     #[test]
     fn test_just_helpers() {
-        let cmd = Command::just_update("key", json!("value"));
+        let cmd = Command::<serde_json::Value>::just_update("key", json!("value"));
         assert_eq!(cmd.updates.len(), 1);
         assert_eq!(cmd.control, ControlFlow::Continue);
 
-        let cmd = Command::just_goto("target");
+        let cmd = Command::<serde_json::Value>::just_goto("target");
         assert!(cmd.updates.is_empty());
         assert_eq!(cmd.goto_target(), Some("target"));
 
-        let cmd = Command::just_return();
+        let cmd = Command::<serde_json::Value>::just_return();
         assert!(cmd.is_return());
     }
 }
