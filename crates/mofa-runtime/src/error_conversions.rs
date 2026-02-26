@@ -11,8 +11,8 @@ use mofa_kernel::agent::types::error::GlobalError;
 // ============================================================================
 
 #[cfg(feature = "dora")]
-impl From<crate::dora_adapter::error::DoraError> for GlobalError {
-    fn from(err: crate::dora_adapter::error::DoraError) -> Self {
+impl From<crate::dora_adapter::DoraError> for GlobalError {
+    fn from(err: crate::dora_adapter::DoraError) -> Self {
         GlobalError::Dora(err.to_string())
     }
 }
