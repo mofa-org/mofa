@@ -4,6 +4,7 @@
 //! 提供一个开箱即用的秘书行为实现，包含完整的5阶段工作流程。
 //! Provides an out-of-the-box secretary behavior implementation with a complete 5-stage workflow.
 
+use mofa_kernel::agent::types::error::{GlobalError, GlobalResult};
 use super::clarifier::{ClarificationStrategy, RequirementClarifier};
 use super::coordinator::{DispatchStrategy, TaskCoordinator};
 use super::monitor::TaskMonitor;
@@ -235,7 +236,7 @@ impl DefaultSecretaryBehavior {
         priority: Option<TodoPriority>,
         metadata: Option<HashMap<String, String>>,
         ctx: &mut SecretaryContext<DefaultSecretaryState>,
-    ) -> anyhow::Result<Vec<DefaultOutput>> {
+    ) -> GlobalResult<Vec<DefaultOutput>> {
         let mut outputs = Vec::new();
 
         // 创建Todo
@@ -271,7 +272,7 @@ impl DefaultSecretaryBehavior {
         &self,
         todo_id: &str,
         ctx: &mut SecretaryContext<DefaultSecretaryState>,
-    ) -> anyhow::Result<Vec<DefaultOutput>> {
+    ) -> GlobalResult<Vec<DefaultOutput>> {
         let mut outputs = Vec::new();
 
         let todo = ctx
@@ -279,7 +280,7 @@ impl DefaultSecretaryBehavior {
             .todo_manager
             .get_todo(todo_id)
             .await
-            .ok_or_else(|| anyhow::anyhow!("Todo not found: {}", todo_id))?;
+            .ok_or_else(|| GlobalError::Other(format!("Todo not found: {}", todo_id)))?;
 
         ctx.state_mut()
             .todo_manager
@@ -352,7 +353,7 @@ impl DefaultSecretaryBehavior {
         &self,
         todo_id: &str,
         ctx: &mut SecretaryContext<DefaultSecretaryState>,
-    ) -> anyhow::Result<Vec<DefaultOutput>> {
+    ) -> GlobalResult<Vec<DefaultOutput>> {
         let mut outputs = Vec::new();
 
         let todo = ctx
@@ -360,11 +361,11 @@ impl DefaultSecretaryBehavior {
             .todo_manager
             .get_todo(todo_id)
             .await
-            .ok_or_else(|| anyhow::anyhow!("Todo not found: {}", todo_id))?;
+            .ok_or_else(|| GlobalError::Other(format!("Todo not found: {}", todo_id)))?;
 
         let requirement = todo
             .clarified_requirement
-            .ok_or_else(|| anyhow::anyhow!("Requirement not clarified for: {}", todo_id))?;
+            .ok_or_else(|| GlobalError::Other(format!("Requirement not clarified for: {}", todo_id)))?;
 
         // 检查可用执行器
         // Check available executors
@@ -431,7 +432,7 @@ impl DefaultSecretaryBehavior {
         selected_option: usize,
         comment: Option<String>,
         ctx: &mut SecretaryContext<DefaultSecretaryState>,
-    ) -> anyhow::Result<Vec<DefaultOutput>> {
+    ) -> GlobalResult<Vec<DefaultOutput>> {
         ctx.state()
             .monitor
             .submit_human_response(decision_id, selected_option, comment)
@@ -451,7 +452,7 @@ impl DefaultSecretaryBehavior {
         &self,
         query: QueryType,
         ctx: &mut SecretaryContext<DefaultSecretaryState>,
-    ) -> anyhow::Result<Vec<DefaultOutput>> {
+    ) -> GlobalResult<Vec<DefaultOutput>> {
         match query {
             QueryType::ListTodos { filter } => {
                 let todos = if let Some(status) = filter {
@@ -543,7 +544,7 @@ impl DefaultSecretaryBehavior {
         &self,
         cmd: SecretaryCommand,
         ctx: &mut SecretaryContext<DefaultSecretaryState>,
-    ) -> anyhow::Result<Vec<DefaultOutput>> {
+    ) -> GlobalResult<Vec<DefaultOutput>> {
         match cmd {
             SecretaryCommand::Clarify { todo_id } => {
                 self.clarify_requirement_internal(&todo_id, ctx).await
@@ -651,13 +652,14 @@ impl SecretaryBehavior for DefaultSecretaryBehavior {
         &self,
         input: Self::Input,
         ctx: &mut SecretaryContext<Self::State>,
-    ) -> anyhow::Result<Vec<Self::Output>> {
+    ) -> Result<Vec<Self::Output>, mofa_kernel::agent::secretary::SecretaryError> {
         match input {
             DefaultInput::Idea {
                 content,
                 priority,
                 metadata,
-            } => self.handle_idea(&content, priority, metadata, ctx).await,
+            } => self.handle_idea(&content, priority, metadata, ctx).await
+                .map_err(|e| mofa_kernel::agent::secretary::SecretaryError::InputHandlingFailed(e.to_string())),
             DefaultInput::Decision {
                 decision_id,
                 selected_option,
@@ -665,16 +667,19 @@ impl SecretaryBehavior for DefaultSecretaryBehavior {
             } => {
                 self.handle_decision(&decision_id, selected_option, comment, ctx)
                     .await
+                    .map_err(|e| mofa_kernel::agent::secretary::SecretaryError::InputHandlingFailed(e.to_string()))
             }
-            DefaultInput::Query(query) => self.handle_query(query, ctx).await,
-            DefaultInput::Command(cmd) => self.handle_command(cmd, ctx).await,
+            DefaultInput::Query(query) => self.handle_query(query, ctx).await
+                .map_err(|e| mofa_kernel::agent::secretary::SecretaryError::InputHandlingFailed(e.to_string())),
+            DefaultInput::Command(cmd) => self.handle_command(cmd, ctx).await
+                .map_err(|e| mofa_kernel::agent::secretary::SecretaryError::InputHandlingFailed(e.to_string())),
         }
     }
 
     async fn periodic_check(
         &self,
         ctx: &mut SecretaryContext<Self::State>,
-    ) -> anyhow::Result<Vec<Self::Output>> {
+    ) -> Result<Vec<Self::Output>, mofa_kernel::agent::secretary::SecretaryError> {
         // 检查待处理的决策
         // Check for pending decisions
         let pending_decisions = ctx.state().monitor.get_pending_decisions().await;
@@ -684,7 +689,7 @@ impl SecretaryBehavior for DefaultSecretaryBehavior {
             .collect())
     }
 
-    fn handle_error(&self, error: &anyhow::Error) -> Option<Self::Output> {
+    fn handle_error(&self, error: &mofa_kernel::agent::secretary::SecretaryError) -> Option<Self::Output> {
         Some(DefaultOutput::Error {
             message: format!("处理请求时出错: {}", error),
         })

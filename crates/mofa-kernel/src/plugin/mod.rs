@@ -4,9 +4,11 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
-/// 插件执行结果
-/// Plugin execution result
-pub type PluginResult<T> = anyhow::Result<T>;
+pub mod error;
+pub use error::PluginError;
+
+/// Plugin execution result type using the typed [`PluginError`].
+pub type PluginResult<T> = Result<T, PluginError>;
 
 // ============================================================================
 // 热加载相关定义 (Hot-reload related definitions)
@@ -530,11 +532,11 @@ impl PluginContext {
 
     /// 发送插件事件
     /// Emit plugin event
-    pub async fn emit_event(&self, event: PluginEvent) -> anyhow::Result<()> {
+    pub async fn emit_event(&self, event: PluginEvent) -> PluginResult<()> {
         if let Some(ref tx) = self.event_tx {
             tx.send(event)
                 .await
-                .map_err(|e| anyhow::anyhow!("Failed to send event: {}", e))?;
+                .map_err(|e| PluginError::Other(format!("Failed to send event: {}", e)))?;
         }
         Ok(())
     }

@@ -8,7 +8,7 @@
 //! - Rule hot-reloading
 
 use super::engine::{RhaiScriptEngine, ScriptContext, ScriptEngineConfig};
-use anyhow::{Result, anyhow};
+use super::error::{RhaiError, RhaiResult};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -321,7 +321,7 @@ pub struct RuleEngine {
 
 impl RuleEngine {
     /// Create a rule engine
-    pub fn new(engine_config: ScriptEngineConfig) -> Result<Self> {
+    pub fn new(engine_config: ScriptEngineConfig) -> RhaiResult<Self> {
         let engine = Arc::new(RhaiScriptEngine::new(engine_config)?);
         Ok(Self {
             engine,
@@ -342,7 +342,7 @@ impl RuleEngine {
     }
 
     /// Register a rule
-    pub async fn register_rule(&self, rule: RuleDefinition) -> Result<()> {
+    pub async fn register_rule(&self, rule: RuleDefinition) -> RhaiResult<()> {
         let mut rules = self.rules.write().await;
         info!("Registered rule: {} ({})", rule.name, rule.id);
         rules.insert(rule.id.clone(), rule);
@@ -350,7 +350,7 @@ impl RuleEngine {
     }
 
     /// Batch register rules
-    pub async fn register_rules(&self, rules: Vec<RuleDefinition>) -> Result<()> {
+    pub async fn register_rules(&self, rules: Vec<RuleDefinition>) -> RhaiResult<()> {
         for rule in rules {
             self.register_rule(rule).await?;
         }
@@ -358,7 +358,7 @@ impl RuleEngine {
     }
 
     /// Register a rule group
-    pub async fn register_group(&self, group: RuleGroupDefinition) -> Result<()> {
+    pub async fn register_group(&self, group: RuleGroupDefinition) -> RhaiResult<()> {
         let mut groups = self.groups.write().await;
         info!("Registered rule group: {} ({})", group.name, group.id);
         groups.insert(group.id.clone(), group);
@@ -366,7 +366,7 @@ impl RuleEngine {
     }
 
     /// Load rules from YAML
-    pub async fn load_rules_from_yaml(&self, path: &str) -> Result<Vec<String>> {
+    pub async fn load_rules_from_yaml(&self, path: &str) -> RhaiResult<Vec<String>> {
         let content = tokio::fs::read_to_string(path).await?;
         let rules: Vec<RuleDefinition> = serde_yaml::from_str(&content)?;
         let ids: Vec<String> = rules.iter().map(|r| r.id.clone()).collect();
@@ -375,7 +375,7 @@ impl RuleEngine {
     }
 
     /// Load rules from JSON
-    pub async fn load_rules_from_json(&self, path: &str) -> Result<Vec<String>> {
+    pub async fn load_rules_from_json(&self, path: &str) -> RhaiResult<Vec<String>> {
         let content = tokio::fs::read_to_string(path).await?;
         let rules: Vec<RuleDefinition> = serde_json::from_str(&content)?;
         let ids: Vec<String> = rules.iter().map(|r| r.id.clone()).collect();
@@ -388,7 +388,7 @@ impl RuleEngine {
         &self,
         rule: &RuleDefinition,
         context: &ScriptContext,
-    ) -> Result<bool> {
+    ) -> RhaiResult<bool> {
         if !rule.enabled {
             return Ok(false);
         }
@@ -419,7 +419,7 @@ impl RuleEngine {
         &'a self,
         action: &'a RuleAction,
         context: &'a mut ScriptContext,
-    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<RuleExecutionResult>> + Send + 'a>>
+    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = RhaiResult<RuleExecutionResult>> + Send + 'a>>
     {
         Box::pin(async move {
             let start_time = std::time::Instant::now();
@@ -543,7 +543,7 @@ impl RuleEngine {
         &self,
         action: &RuleAction,
         context: &mut ScriptContext,
-    ) -> Result<RuleExecutionResult> {
+    ) -> RhaiResult<RuleExecutionResult> {
         let start_time = std::time::Instant::now();
         let mut variable_updates = HashMap::new();
         let mut triggered_events = Vec::new();
@@ -631,7 +631,7 @@ impl RuleEngine {
 
             RuleAction::Composite { .. } => {
                 // Composite actions are not handled recursively here, return error
-                return Err(anyhow!("Nested composite actions are not supported"));
+                return Err(RhaiError::Other(format!("Nested composite actions are not supported")));
             }
         };
 
@@ -651,11 +651,11 @@ impl RuleEngine {
         &self,
         rule_id: &str,
         context: &mut ScriptContext,
-    ) -> Result<Option<RuleExecutionResult>> {
+    ) -> RhaiResult<Option<RuleExecutionResult>> {
         let rules = self.rules.read().await;
         let rule = rules
             .get(rule_id)
-            .ok_or_else(|| anyhow!("Rule not found: {}", rule_id))?
+            .ok_or_else(|| RhaiError::NotFound(format!("Rule not found: {}", rule_id)))?
             .clone();
         drop(rules);
 
@@ -675,13 +675,13 @@ impl RuleEngine {
         &self,
         group_id: &str,
         context: &mut ScriptContext,
-    ) -> Result<RuleGroupExecutionResult> {
+    ) -> RhaiResult<RuleGroupExecutionResult> {
         let start_time = std::time::Instant::now();
 
         let groups = self.groups.read().await;
         let group = groups
             .get(group_id)
-            .ok_or_else(|| anyhow!("Rule group not found: {}", group_id))?
+            .ok_or_else(|| RhaiError::NotFound(format!("Rule group not found: {}", group_id)))?
             .clone();
         drop(groups);
 
@@ -799,7 +799,7 @@ impl RuleEngine {
     pub async fn execute_all(
         &self,
         context: &mut ScriptContext,
-    ) -> Result<Vec<RuleExecutionResult>> {
+    ) -> RhaiResult<Vec<RuleExecutionResult>> {
         let rules = self.rules.read().await;
         let mut all_rules: Vec<_> = rules.values().cloned().collect();
         drop(rules);
@@ -853,24 +853,24 @@ impl RuleEngine {
     }
 
     /// Enable a rule
-    pub async fn enable_rule(&self, rule_id: &str) -> Result<()> {
+    pub async fn enable_rule(&self, rule_id: &str) -> RhaiResult<()> {
         let mut rules = self.rules.write().await;
         if let Some(rule) = rules.get_mut(rule_id) {
             rule.enabled = true;
             Ok(())
         } else {
-            Err(anyhow!("Rule not found: {}", rule_id))
+            Err(RhaiError::NotFound(format!("Rule not found: {}", rule_id)))
         }
     }
 
     /// Disable a rule
-    pub async fn disable_rule(&self, rule_id: &str) -> Result<()> {
+    pub async fn disable_rule(&self, rule_id: &str) -> RhaiResult<()> {
         let mut rules = self.rules.write().await;
         if let Some(rule) = rules.get_mut(rule_id) {
             rule.enabled = false;
             Ok(())
         } else {
-            Err(anyhow!("Rule not found: {}", rule_id))
+            Err(RhaiError::NotFound(format!("Rule not found: {}", rule_id)))
         }
     }
 

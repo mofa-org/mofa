@@ -13,7 +13,7 @@
 //! - Tool execution sandboxing
 
 use super::engine::{RhaiScriptEngine, ScriptContext, ScriptEngineConfig};
-use anyhow::{Result, anyhow};
+use super::error::{RhaiError, RhaiResult};
 #[allow(unused_imports)]
 use rhai::{Dynamic, Engine, Map, Scope};
 use serde::{Deserialize, Serialize};
@@ -130,7 +130,7 @@ impl ToolParameter {
 
     /// 验证参数值
     /// Validate parameter value
-    pub fn validate(&self, value: &serde_json::Value) -> Result<()> {
+    pub fn validate(&self, value: &serde_json::Value) -> RhaiResult<()> {
         // 检查类型
         // Check type
         match (&self.param_type, value) {
@@ -143,11 +143,11 @@ impl ToolParameter {
             (ParameterType::Any, _) => {}
             (ParameterType::String, serde_json::Value::Null) if !self.required => {}
             _ => {
-                return Err(anyhow!(
+                return Err(RhaiError::ValidationError(format!(
                     "Parameter '{}' has invalid type, expected {:?}",
                     self.name,
                     self.param_type
-                ));
+                )));
             }
         }
 
@@ -156,11 +156,11 @@ impl ToolParameter {
         if let Some(ref enum_values) = self.enum_values
             && !enum_values.contains(value)
         {
-            return Err(anyhow!(
+            return Err(RhaiError::ValidationError(format!(
                 "Parameter '{}' value must be one of {:?}",
                 self.name,
                 enum_values
-            ));
+            )));
         }
 
         // 检查数值范围
@@ -171,12 +171,12 @@ impl ToolParameter {
             if let Some(min) = self.minimum
                 && f < min
             {
-                return Err(anyhow!("Parameter '{}' must be >= {}", self.name, min));
+                return Err(RhaiError::ValidationError(format!("Parameter '{}' must be >= {}", self.name, min)));
             }
             if let Some(max) = self.maximum
                 && f > max
             {
-                return Err(anyhow!("Parameter '{}' must be <= {}", self.name, max));
+                return Err(RhaiError::ValidationError(format!("Parameter '{}' must be <= {}", self.name, max)));
             }
         }
 
@@ -186,32 +186,32 @@ impl ToolParameter {
             if let Some(min) = self.min_length
                 && s.len() < min
             {
-                return Err(anyhow!(
+                return Err(RhaiError::ValidationError(format!(
                     "Parameter '{}' length must be >= {}",
                     self.name,
                     min
-                ));
+                )));
             }
             if let Some(max) = self.max_length
                 && s.len() > max
             {
-                return Err(anyhow!(
+                return Err(RhaiError::ValidationError(format!(
                     "Parameter '{}' length must be <= {}",
                     self.name,
                     max
-                ));
+                )));
             }
             // 检查正则表达式
             // Check regex pattern
             if let Some(ref pattern) = self.pattern {
                 let re = regex::Regex::new(pattern)
-                    .map_err(|e| anyhow!("Invalid regex pattern: {}", e))?;
+                    .map_err(|e| RhaiError::ValidationError(format!("Invalid regex pattern: {}", e)))?;
                 if !re.is_match(s) {
-                    return Err(anyhow!(
+                    return Err(RhaiError::ValidationError(format!(
                         "Parameter '{}' does not match pattern: {}",
                         self.name,
                         pattern
-                    ));
+                    )));
                 }
             }
         }
@@ -222,20 +222,20 @@ impl ToolParameter {
             if let Some(min) = self.min_length
                 && arr.len() < min
             {
-                return Err(anyhow!(
+                return Err(RhaiError::ValidationError(format!(
                     "Parameter '{}' array length must be >= {}",
                     self.name,
                     min
-                ));
+                )));
             }
             if let Some(max) = self.max_length
                 && arr.len() > max
             {
-                return Err(anyhow!(
+                return Err(RhaiError::ValidationError(format!(
                     "Parameter '{}' array length must be <= {}",
                     self.name,
                     max
-                ));
+                )));
             }
         }
 
@@ -339,12 +339,12 @@ impl ScriptToolDefinition {
 
     /// 验证输入参数
     /// Validate input parameters
-    pub fn validate_input(&self, input: &HashMap<String, serde_json::Value>) -> Result<()> {
+    pub fn validate_input(&self, input: &HashMap<String, serde_json::Value>) -> RhaiResult<()> {
         for param in &self.parameters {
             if let Some(value) = input.get(&param.name) {
                 param.validate(value)?;
             } else if param.required && param.default.is_none() {
-                return Err(anyhow!("Required parameter '{}' is missing", param.name));
+                return Err(RhaiError::ValidationError(format!("Required parameter '{}' is missing", param.name)));
             }
         }
         Ok(())
@@ -465,7 +465,7 @@ pub struct ScriptToolRegistry {
 impl ScriptToolRegistry {
     /// 创建工具注册表
     /// Create tool registry
-    pub fn new(engine_config: ScriptEngineConfig) -> Result<Self> {
+    pub fn new(engine_config: ScriptEngineConfig) -> RhaiResult<Self> {
         let engine = Arc::new(RhaiScriptEngine::new(engine_config)?);
         Ok(Self {
             engine,
@@ -484,7 +484,7 @@ impl ScriptToolRegistry {
 
     /// 注册工具
     /// Register tool
-    pub async fn register(&self, tool: ScriptToolDefinition) -> Result<()> {
+    pub async fn register(&self, tool: ScriptToolDefinition) -> RhaiResult<()> {
         // 预编译脚本（如果启用缓存）
         // Pre-compile script (if caching enabled)
         if tool.enable_cache {
@@ -505,7 +505,7 @@ impl ScriptToolRegistry {
 
     /// 批量注册工具
     /// Batch register tools
-    pub async fn register_batch(&self, tools: Vec<ScriptToolDefinition>) -> Result<Vec<String>> {
+    pub async fn register_batch(&self, tools: Vec<ScriptToolDefinition>) -> RhaiResult<Vec<String>> {
         let mut registered = Vec::new();
         for tool in tools {
             let id = tool.id.clone();
@@ -517,7 +517,7 @@ impl ScriptToolRegistry {
 
     /// 从 YAML 文件加载工具
     /// Load tool from YAML file
-    pub async fn load_from_yaml(&self, path: &str) -> Result<String> {
+    pub async fn load_from_yaml(&self, path: &str) -> RhaiResult<String> {
         let content = tokio::fs::read_to_string(path).await?;
         let tool: ScriptToolDefinition = serde_yaml::from_str(&content)?;
         let id = tool.id.clone();
@@ -527,7 +527,7 @@ impl ScriptToolRegistry {
 
     /// 从 JSON 文件加载工具
     /// Load tool from JSON file
-    pub async fn load_from_json(&self, path: &str) -> Result<String> {
+    pub async fn load_from_json(&self, path: &str) -> RhaiResult<String> {
         let content = tokio::fs::read_to_string(path).await?;
         let tool: ScriptToolDefinition = serde_json::from_str(&content)?;
         let id = tool.id.clone();
@@ -537,7 +537,7 @@ impl ScriptToolRegistry {
 
     /// 从目录加载所有工具
     /// Load all tools from directory
-    pub async fn load_from_directory(&self, dir_path: &str) -> Result<Vec<String>> {
+    pub async fn load_from_directory(&self, dir_path: &str) -> RhaiResult<Vec<String>> {
         let mut loaded = Vec::new();
         let mut entries = tokio::fs::read_dir(dir_path).await?;
 
@@ -567,7 +567,7 @@ impl ScriptToolRegistry {
         &self,
         tool_id: &str,
         input: HashMap<String, serde_json::Value>,
-    ) -> Result<ToolExecutionResult> {
+    ) -> RhaiResult<ToolExecutionResult> {
         let start_time = std::time::Instant::now();
 
         // 获取工具定义
@@ -575,7 +575,7 @@ impl ScriptToolRegistry {
         let tools = self.tools.read().await;
         let tool = tools
             .get(tool_id)
-            .ok_or_else(|| anyhow!("Tool not found: {}", tool_id))?
+            .ok_or_else(|| RhaiError::NotFound(format!("Tool not found: {}", tool_id)))?
             .clone();
         drop(tools);
 
