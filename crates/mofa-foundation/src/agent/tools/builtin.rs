@@ -918,10 +918,15 @@ mod tests {
 
     #[tokio::test]
     async fn test_shell_echo() {
+        #[cfg(windows)]
+        let (command, args) = ("cmd", vec!["/C", "echo", "hello shell"]);
+        #[cfg(not(windows))]
+        let (command, args) = ("echo", vec!["hello shell"]);
+
         let result = ShellTool
             .execute(ToolInput::from_json(json!({
-                "command": "echo",
-                "args": ["hello shell"]
+                "command": command,
+                "args": args
             })))
             .await;
         assert!(result.success, "{:?}", result.error);

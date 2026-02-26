@@ -1255,7 +1255,7 @@ mod tests {
             if c == '\\' {
                 backslash_run += 1;
             } else {
-                if c == '"' && backslash_run % 2 == 0 {
+                if c == '"' && backslash_run.is_multiple_of(2) {
                     unescaped_quotes.push(i);
                 }
                 backslash_run = 0;
@@ -1294,7 +1294,7 @@ mod tests {
         assert_eq!(json_to_rhai_literal(&serde_json::json!(true)), "true");
         assert_eq!(json_to_rhai_literal(&serde_json::json!(false)), "false");
         assert_eq!(json_to_rhai_literal(&serde_json::json!(42)), "42");
-        assert_eq!(json_to_rhai_literal(&serde_json::json!(3.14)), "3.14");
+        assert_eq!(json_to_rhai_literal(&serde_json::json!(3.125)), "3.125");
     }
 
     #[test]
