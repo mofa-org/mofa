@@ -165,6 +165,22 @@ impl AgentError {
             available: available.into(),
         }
     }
+
+    /// Returns `true` for transient errors, `false` for permanent ones.
+    pub fn is_retryable(&self) -> bool {
+        matches!(
+            self,
+            AgentError::Timeout { .. }
+                | AgentError::ResourceUnavailable(_)
+                | AgentError::ExecutionFailed(_)
+                | AgentError::ToolExecutionFailed { .. }
+                | AgentError::CoordinationError(_)
+                | AgentError::Internal(_)
+                | AgentError::IoError(_)
+                | AgentError::ReasoningError(_)
+                | AgentError::MemoryError(_)
+        )
+    }
 }
 
 impl From<std::io::Error> for AgentError {

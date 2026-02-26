@@ -1038,7 +1038,7 @@ mod tests {
             .add_edge(START, "fan_out")
             .add_parallel_edges("fan_out", vec!["writer".to_string(), "reader".to_string()]);
 
-        let compiled = graph.compile().unwrap();
+        let compiled: CompiledGraphImpl<JsonState> = graph.compile().unwrap();
 
         let final_state = compiled.invoke(JsonState::new(), None).await.unwrap();
         assert_eq!(final_state.get_value("flag"), Some(json!(true)));
