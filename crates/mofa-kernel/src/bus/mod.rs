@@ -179,6 +179,38 @@ impl AgentBus {
             Ok(data) => {
                 let message = bincode::deserialize(&data)?;
                 Ok(Some(message))
+        // 处理广播模式
+        // Handle broadcast mode
+        if matches!(mode, CommunicationMode::Broadcast) {
+            let mut receiver = self.broadcast_channel.subscribe();
+            match receiver.recv().await {
+                Ok(data) => {
+                    let message = bincode::deserialize(&data)?;
+                    Ok(Some(message))
+                }
+                Err(_) => Ok(None),
+            }
+        } else {
+            // 处理其他模式
+            // Handle other modes
+            let channel = {
+                let agent_channels = self.agent_channels.read().await;
+                let Some(channels) = agent_channels.get(id) else {
+                    return Ok(None);
+                };
+                let Some(channel) = channels.get(&mode) else {
+                    return Ok(None);
+                };
+                channel.clone()
+            };
+
+            let mut receiver = channel.subscribe();
+            match receiver.recv().await {
+                Ok(data) => {
+                    let message = bincode::deserialize(&data)?;
+                    Ok(Some(message))
+                }
+                Err(_) => Ok(None),
             }
             Err(_) => Ok(None),
         }
@@ -211,6 +243,17 @@ mod tests {
             version: None,
             capabilities: Default::default(),
             state: Default::default(),
+    use crate::agent::{AgentCapabilities, AgentState};
+    use tokio::time::{Duration, sleep, timeout};
+
+    fn test_agent_metadata(id: &str) -> AgentMetadata {
+        AgentMetadata {
+            id: id.to_string(),
+            name: id.to_string(),
+            description: None,
+            version: None,
+            capabilities: AgentCapabilities::default(),
+            state: AgentState::Ready,
         }
     }
 
@@ -239,6 +282,63 @@ mod tests {
         let result = timeout(Duration::from_millis(200), register_future).await;
 
         assert!(result.is_ok(), "register_channel should not timeout and be blocked by receive_message");
+
+        let receiver = test_agent_metadata("receiver");
+        bus.register_channel(
+            &receiver,
+            CommunicationMode::PointToPoint("sender".to_string()),
+        )
+        .await
+        .unwrap();
+
+        let bus_for_receive = bus.clone();
+        let receive_task = tokio::spawn(async move {
+            bus_for_receive
+                .receive_message(
+                    "receiver",
+                    CommunicationMode::PointToPoint("sender".to_string()),
+                )
+                .await
+        });
+
+        // Give receive_message time to subscribe and park on recv().
+        sleep(Duration::from_millis(50)).await;
+
+        let writer_meta = test_agent_metadata("writer");
+        let register_res = timeout(
+            Duration::from_millis(300),
+            bus.register_channel(
+                &writer_meta,
+                CommunicationMode::PointToPoint("sender".to_string()),
+            ),
+        )
+        .await;
+        assert!(
+            register_res.is_ok(),
+            "register_channel should not be blocked by receive_message"
+        );
+        register_res.unwrap().unwrap();
+
+        bus.send_message(
+            "sender",
+            CommunicationMode::PointToPoint("receiver".to_string()),
+            &AgentMessage::TaskRequest {
+                task_id: "task-1".to_string(),
+                content: "payload".to_string(),
+            },
+        )
+        .await
+        .unwrap();
+
+        let received = timeout(Duration::from_secs(1), receive_task)
+            .await
+            .expect("receive task timed out")
+            .expect("receive task join failed")
+            .expect("receive_message returned error");
+        assert!(
+            received.is_some(),
+            "expected one received point-to-point message"
+        );
     }
 
     #[tokio::test]
@@ -261,5 +361,51 @@ mod tests {
         let result = timeout(Duration::from_millis(200), register_future).await;
 
         assert!(result.is_ok(), "register_channel should not timeout and be blocked by receive_message");
+
+        let bus_for_receive = bus.clone();
+        let receive_task = tokio::spawn(async move {
+            bus_for_receive
+                .receive_message("receiver", CommunicationMode::Broadcast)
+                .await
+        });
+
+        // Give receive_message time to subscribe and park on recv().
+        sleep(Duration::from_millis(50)).await;
+
+        let writer_meta = test_agent_metadata("writer");
+        let register_res = timeout(
+            Duration::from_millis(300),
+            bus.register_channel(
+                &writer_meta,
+                CommunicationMode::PointToPoint("sender".to_string()),
+            ),
+        )
+        .await;
+        assert!(
+            register_res.is_ok(),
+            "register_channel should not be blocked by broadcast receive_message"
+        );
+        register_res.unwrap().unwrap();
+
+        bus.send_message(
+            "sender",
+            CommunicationMode::Broadcast,
+            &AgentMessage::TaskRequest {
+                task_id: "task-2".to_string(),
+                content: "payload".to_string(),
+            },
+        )
+        .await
+        .unwrap();
+
+        let received = timeout(Duration::from_secs(1), receive_task)
+            .await
+            .expect("receive task timed out")
+            .expect("receive task join failed")
+            .expect("receive_message returned error");
+        assert!(
+            received.is_some(),
+            "expected one received broadcast message"
+        );
     }
 }

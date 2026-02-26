@@ -29,7 +29,9 @@ members = [
     "tool_routing",
     "runtime_message_bus_backpressure",
     "rag_pipeline",
-    "agent_builder"
+    "message_graph_validation",
+    "agent_builder",
+    "context_compression",
 ]
 
 [workspace.package]
