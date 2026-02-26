@@ -21,6 +21,7 @@ pub use mofa_monitoring::*;
 pub mod agent;
 pub mod builder;
 pub mod config;
+pub mod distributed;
 pub mod interrupt;
 pub mod runner;
 pub mod retry;
@@ -45,6 +46,7 @@ pub mod dora_adapter;
 // =============================================================================
 
 pub use interrupt::*;
+pub use distributed::*;
 
 // Core agent trait - runtime executes agents implementing this trait
 pub use mofa_kernel::agent::MoFAAgent;
