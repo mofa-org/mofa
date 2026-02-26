@@ -35,7 +35,8 @@ members = [
     "runtime_message_bus_backpressure",
     "rag_pipeline",
     "message_graph_validation",
-    "agent_builder"
+    "agent_builder",
+    "context_compression",
 ]
 
 [workspace.package]
