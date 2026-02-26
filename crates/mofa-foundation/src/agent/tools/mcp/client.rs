@@ -162,7 +162,11 @@ impl McpClient for McpClientManager {
                     "HTTP transport is not yet supported. Use Stdio transport instead.".to_string(),
                 ));
             }
-            _ => todo!(),
+            _ => {
+                return Err(AgentError::ConfigError(
+                    "Unsupported MCP transport configuration".to_string(),
+                ));
+            }
         };
 
         tracing::info!("Connected to MCP server '{}'", server_name);

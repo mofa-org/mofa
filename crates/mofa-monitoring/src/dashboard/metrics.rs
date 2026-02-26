@@ -559,35 +559,46 @@ impl MetricsCollector {
     }
 
     /// Collect current system metrics
-    fn collect_system_metrics(&self) -> SystemMetrics {
-        let now = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_secs();
+    ///
+    /// Offloads the blocking `sysinfo::System::refresh_all()` call to
+    /// Tokio's blocking thread pool via `spawn_blocking`, preventing it
+    /// from stalling the async worker threads every collection interval.
+    async fn collect_system_metrics(&self) -> SystemMetrics {
+        let system = self.system.clone();
+        let uptime_secs = self.start_time.elapsed().as_secs();
 
-        let mut system = self.system.write().unwrap();
-        system.refresh_all();
+        tokio::task::spawn_blocking(move || {
+            let now = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_secs();
 
-        let pid = Pid::from_u32(std::process::id());
-        let (cpu_usage, memory_used, thread_count) = system
-            .process(pid)
-            .map(|p| {
-                (
-                    p.cpu_usage() as f64,
-                    p.memory(),
-                    p.tasks().iter().count() as u32,
-                )
-            })
-            .unwrap_or((0.0, 0, 0));
+            let mut sys = system.write().unwrap();
+            sys.refresh_all();
 
-        SystemMetrics {
-            cpu_usage,
-            memory_used,
-            memory_total: system.total_memory(),
-            uptime_secs: self.start_time.elapsed().as_secs(),
-            thread_count,
-            timestamp: now,
-        }
+            let pid = Pid::from_u32(std::process::id());
+            let (cpu_usage, memory_used, thread_count) = sys
+                .process(pid)
+                .map(|p| {
+                    (
+                        p.cpu_usage() as f64,
+                        p.memory(),
+                        p.tasks().iter().count() as u32,
+                    )
+                })
+                .unwrap_or((0.0, 0, 0));
+
+            SystemMetrics {
+                cpu_usage,
+                memory_used,
+                memory_total: sys.total_memory(),
+                uptime_secs,
+                thread_count,
+                timestamp: now,
+            }
+        })
+        .await
+        .unwrap_or_default()
     }
 
     /// Collect a snapshot
@@ -598,7 +609,7 @@ impl MetricsCollector {
             .as_secs();
 
         let system = if self.config.enable_system_metrics {
-            self.collect_system_metrics()
+            self.collect_system_metrics().await
         } else {
             SystemMetrics::default()
         };
