@@ -875,7 +875,7 @@ mod tests {
     #[async_trait]
     impl NodeFunc<JsonState> for FlagReaderNode {
         async fn call(&self, state: &mut JsonState, _ctx: &RuntimeContext) -> AgentResult<Command> {
-            let saw_flag: bool = state.get_value("flag").unwrap_or(false);
+            let saw_flag = state.get_value::<bool>("flag").unwrap_or(false);
             Ok(Command::new()
                 .update("reader_saw_flag", json!(saw_flag))
                 .continue_())

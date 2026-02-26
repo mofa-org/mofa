@@ -317,7 +317,7 @@ impl AgentPlugin for LLMPlugin {
     }
 
     async fn stop(&mut self) -> PluginResult<()> {
-        self.state = PluginState::Paused;
+        self.state = PluginState::Loaded;
         info!("LLM plugin {} stopped", self.metadata.id);
         Ok(())
     }
@@ -562,7 +562,7 @@ impl AgentPlugin for ToolPlugin {
     }
 
     async fn stop(&mut self) -> PluginResult<()> {
-        self.state = PluginState::Paused;
+        self.state = PluginState::Loaded;
         info!("Tool plugin {} stopped", self.metadata.id);
         Ok(())
     }
@@ -802,7 +802,7 @@ impl AgentPlugin for StoragePlugin {
     }
 
     async fn stop(&mut self) -> PluginResult<()> {
-        self.state = PluginState::Paused;
+        self.state = PluginState::Loaded;
         info!("Storage plugin {} stopped", self.metadata.id);
         Ok(())
     }
@@ -1437,6 +1437,144 @@ mod tests {
         llm.stop().await.unwrap();
         llm.unload().await.unwrap();
 
+        assert_eq!(llm.state(), PluginState::Unloaded);
+    }
+
+    // ---- State-machine transition tests (fixes #448) -------------------------
+
+    /// Verifies the full lifecycle state sequence for LLMPlugin:
+    /// Unloaded → Loading → Loaded → Running → Loaded (stop) → Unloaded
+    #[tokio::test]
+    async fn test_llm_plugin_stop_sets_loaded_state() {
+        let mut llm = LLMPlugin::new("llm_state_test");
+        let ctx = PluginContext::new("test_agent");
+
+        // Initial state
+        assert_eq!(llm.state(), PluginState::Unloaded);
+
+        // After load: Loaded
+        llm.load(&ctx).await.unwrap();
+        assert_eq!(llm.state(), PluginState::Loaded);
+
+        // After init + start: Running
+        llm.init_plugin().await.unwrap();
+        llm.start().await.unwrap();
+        assert_eq!(llm.state(), PluginState::Running);
+
+        // After stop: must be Loaded, NOT Paused
+        llm.stop().await.unwrap();
+        assert_eq!(
+            llm.state(),
+            PluginState::Loaded,
+            "stop() must transition to Loaded, not Paused (see issue #448)"
+        );
+        assert_ne!(
+            llm.state(),
+            PluginState::Paused,
+            "stop() must NOT set Paused — that is reserved for pause()"
+        );
+
+        // After unload: Unloaded
+        llm.unload().await.unwrap();
+        assert_eq!(llm.state(), PluginState::Unloaded);
+    }
+
+    /// Verifies the full lifecycle state sequence for ToolPlugin:
+    /// Unloaded → Loading → Loaded → Running → Loaded (stop) → Unloaded
+    #[tokio::test]
+    async fn test_tool_plugin_stop_sets_loaded_state() {
+        let mut tool = ToolPlugin::new("tool_state_test");
+        let ctx = PluginContext::new("test_agent");
+
+        // Initial state
+        assert_eq!(tool.state(), PluginState::Unloaded);
+
+        // After load: Loaded
+        tool.load(&ctx).await.unwrap();
+        assert_eq!(tool.state(), PluginState::Loaded);
+
+        // After init + start: Running
+        tool.init_plugin().await.unwrap();
+        tool.start().await.unwrap();
+        assert_eq!(tool.state(), PluginState::Running);
+
+        // After stop: must be Loaded, NOT Paused
+        tool.stop().await.unwrap();
+        assert_eq!(
+            tool.state(),
+            PluginState::Loaded,
+            "stop() must transition to Loaded, not Paused (see issue #448)"
+        );
+        assert_ne!(
+            tool.state(),
+            PluginState::Paused,
+            "stop() must NOT set Paused — that is reserved for pause()"
+        );
+
+        // After unload: Unloaded
+        tool.unload().await.unwrap();
+        assert_eq!(tool.state(), PluginState::Unloaded);
+    }
+
+    /// Verifies the full lifecycle state sequence for StoragePlugin:
+    /// Unloaded → Loading → Loaded → Running → Loaded (stop) → Unloaded
+    #[tokio::test]
+    async fn test_storage_plugin_stop_sets_loaded_state() {
+        let mut storage = StoragePlugin::new("storage_state_test");
+        let ctx = PluginContext::new("test_agent");
+
+        // Initial state
+        assert_eq!(storage.state(), PluginState::Unloaded);
+
+        // After load: Loaded
+        storage.load(&ctx).await.unwrap();
+        assert_eq!(storage.state(), PluginState::Loaded);
+
+        // After init + start: Running
+        storage.init_plugin().await.unwrap();
+        storage.start().await.unwrap();
+        assert_eq!(storage.state(), PluginState::Running);
+
+        // After stop: must be Loaded, NOT Paused
+        storage.stop().await.unwrap();
+        assert_eq!(
+            storage.state(),
+            PluginState::Loaded,
+            "stop() must transition to Loaded, not Paused (see issue #448)"
+        );
+        assert_ne!(
+            storage.state(),
+            PluginState::Paused,
+            "stop() must NOT set Paused — that is reserved for pause()"
+        );
+
+        // After unload: Unloaded
+        storage.unload().await.unwrap();
+        assert_eq!(storage.state(), PluginState::Unloaded);
+    }
+
+    /// Verifies a plugin can be restarted after stop (start → stop → start cycle).
+    /// This is only valid if stop() correctly returns to Loaded (not Paused).
+    #[tokio::test]
+    async fn test_llm_plugin_can_restart_after_stop() {
+        let mut llm = LLMPlugin::new("llm_restart_test");
+        let ctx = PluginContext::new("test_agent");
+
+        llm.load(&ctx).await.unwrap();
+        llm.init_plugin().await.unwrap();
+
+        // First start → stop cycle
+        llm.start().await.unwrap();
+        assert_eq!(llm.state(), PluginState::Running);
+        llm.stop().await.unwrap();
+        assert_eq!(llm.state(), PluginState::Loaded);
+
+        // Second start: only possible if stop() returned to Loaded (not Paused or Unloaded)
+        llm.start().await.unwrap();
+        assert_eq!(llm.state(), PluginState::Running);
+
+        llm.stop().await.unwrap();
+        llm.unload().await.unwrap();
         assert_eq!(llm.state(), PluginState::Unloaded);
     }
 
