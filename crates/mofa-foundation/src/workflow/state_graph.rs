@@ -1052,7 +1052,7 @@ mod tests {
             }
         }
 
-        let stream_final_state =
+        let stream_final_state: JsonState =
             stream_final_state.expect("stream should emit a final end event with state");
         assert_eq!(stream_final_state.get_value("flag"), Some(json!(true)));
         assert_eq!(
