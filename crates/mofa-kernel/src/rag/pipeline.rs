@@ -1,279 +1,221 @@
-//! RAG pipeline orchestration traits
-//!
-//! Defines the core traits for retrieval, reranking, and generation
-//! in RAG pipelines. Concrete implementations live in mofa-foundation.
+//! RAG pipeline contracts and orchestration.
 
-use crate::agent::error::AgentResult;
-use crate::rag::types::{DocumentChunk, SearchResult};
+use crate::agent::error::{AgentError, AgentResult};
+use crate::rag::types::{GenerateInput, ScoredDocument};
 use async_trait::async_trait;
-use futures::Stream;
-use serde::{Deserialize, Serialize};
-use std::pin::Pin;
+use std::sync::Arc;
 
-/// Input to a retriever
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct RetrieveInput {
-    /// The query text to retrieve documents for
-    pub query: String,
-    /// Maximum number of documents to retrieve
-    pub top_k: usize,
-}
-
-/// Output from a retriever
-pub type RetrieveOutput = Vec<ScoredDocument>;
-
-/// A document with a relevance score
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ScoredDocument {
-    /// The document chunk
-    pub document: DocumentChunk,
-    /// Relevance score (higher is better)
-    pub score: f32,
-    /// Optional source label (e.g., "dense", "sparse", "hybrid")
-    pub source: Option<String>,
-}
-
-/// Input to a reranker
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct RerankInput {
-    /// The query text
-    pub query: String,
-    /// Documents to rerank
-    pub documents: Vec<ScoredDocument>,
-    /// Maximum number of documents to return after reranking
-    pub top_k: usize,
-}
-
-/// Output from a reranker
-pub type RerankOutput = Vec<ScoredDocument>;
-
-/// Input to a generator
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct GenerateInput {
-    /// The query text
-    pub query: String,
-    /// Retrieved and optionally reranked documents
-    pub documents: Vec<ScoredDocument>,
-}
-
-/// A chunk of generated text from a streaming generator
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum GeneratorChunk {
-    /// A piece of generated text
-    Text(String),
-    /// End of generation
-    End,
-}
-
-/// Output from a RAG pipeline run
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct RagPipelineOutput {
-    /// The generated response
-    pub response: String,
-    /// The documents used for generation
-    pub documents: Vec<ScoredDocument>,
-}
-
-/// Retriever trait for finding relevant documents
 #[async_trait]
 pub trait Retriever: Send + Sync {
-    async fn retrieve(&self, input: RetrieveInput) -> AgentResult<RetrieveOutput>;
+    async fn retrieve(&self, query: &str, top_k: usize) -> AgentResult<Vec<ScoredDocument>>;
 }
 
-/// Reranker trait for improving document ranking
 #[async_trait]
 pub trait Reranker: Send + Sync {
-    async fn rerank(&self, input: RerankInput) -> AgentResult<RerankOutput>;
+    async fn rerank(&self, query: &str, docs: Vec<ScoredDocument>) -> AgentResult<Vec<ScoredDocument>>;
 }
 
-/// Generator trait for producing text from documents
 #[async_trait]
 pub trait Generator: Send + Sync {
-    async fn generate(&self, input: GenerateInput) -> AgentResult<String>;
-
-    /// Stream generated text in chunks
-    async fn stream(
-        &self,
-        input: GenerateInput,
-    ) -> AgentResult<Pin<Box<dyn Stream<Item = AgentResult<GeneratorChunk>> + Send>>> {
-        // Default implementation: generate all at once and yield as single chunk
-        let result = self.generate(input).await?;
-        let stream = futures::stream::once(async move { Ok(GeneratorChunk::Text(result)) });
-        Ok(Box::pin(stream))
-    }
+    async fn generate(&self, input: &GenerateInput) -> AgentResult<String>;
 }
 
-/// Orchestrates retrieval, optional reranking, and generation
-pub struct RagPipeline<R, Re, G> {
-    retriever: R,
-    reranker: Option<Re>,
-    generator: G,
+#[derive(Debug, Clone)]
+pub struct RagPipelineOutput {
+    pub answer: String,
+    pub retrieved_docs: Vec<ScoredDocument>,
+    pub reranked_docs: Vec<ScoredDocument>,
 }
 
-impl<R, Re, G> RagPipeline<R, Re, G>
-where
-    R: Retriever,
-    Re: Reranker,
-    G: Generator,
-{
-    /// Create a new RAG pipeline
-    pub fn new(retriever: R, reranker: Option<Re>, generator: G) -> Self {
+pub struct RagPipeline {
+    retriever: Arc<dyn Retriever>,
+    reranker: Arc<dyn Reranker>,
+    generator: Arc<dyn Generator>,
+    default_top_k: usize,
+}
+
+impl RagPipeline {
+    pub fn new(
+        retriever: Arc<dyn Retriever>,
+        reranker: Arc<dyn Reranker>,
+        generator: Arc<dyn Generator>,
+    ) -> Self {
         Self {
             retriever,
             reranker,
             generator,
+            default_top_k: 5,
         }
     }
 
-    /// Run the full pipeline with default top_k
-    pub async fn run(&self, query: impl Into<String>) -> AgentResult<RagPipelineOutput> {
-        self.run_with_top_k(query, 5).await
+    pub fn with_default_top_k(mut self, top_k: usize) -> Self {
+        self.default_top_k = top_k;
+        self
     }
 
-    /// Run the full pipeline with specified top_k
-    pub async fn run_with_top_k(
-        &self,
-        query: impl Into<String>,
-        top_k: usize,
-    ) -> AgentResult<RagPipelineOutput> {
-        let query = query.into();
+    pub async fn run(&self, query: &str) -> AgentResult<RagPipelineOutput> {
+        self.run_with_top_k(query, self.default_top_k).await
+    }
 
-        // Retrieve
-        let retrieved = self
-            .retriever
-            .retrieve(RetrieveInput {
-                query: query.clone(),
-                top_k,
-            })
-            .await?;
+    pub async fn run_with_top_k(&self, query: &str, top_k: usize) -> AgentResult<RagPipelineOutput> {
+        if top_k == 0 {
+            return Err(AgentError::InvalidInput("top_k must be greater than 0".to_string()));
+        }
 
-        // Rerank if available
-        let documents = if let Some(reranker) = &self.reranker {
-            reranker
-                .rerank(RerankInput {
-                    query: query.clone(),
-                    documents: retrieved,
-                    top_k,
-                })
-                .await?
-        } else {
-            retrieved
-        };
+        let retrieved_docs = self.retriever.retrieve(query, top_k).await?;
+        let reranked_docs = self.reranker.rerank(query, retrieved_docs.clone()).await?;
 
-        // Generate
-        let response = self
-            .generator
-            .generate(GenerateInput {
-                query,
-                documents: documents.clone(),
-            })
-            .await?;
+        let context = reranked_docs
+            .iter()
+            .map(|doc| doc.document.clone())
+            .collect();
+
+        let generate_input = GenerateInput::new(query, context);
+        let answer = self.generator.generate(&generate_input).await?;
 
         Ok(RagPipelineOutput {
-            response,
-            documents,
+            answer,
+            retrieved_docs,
+            reranked_docs,
         })
-    }
-
-    /// Run the pipeline with streaming generation
-    pub async fn run_streaming(
-        &self,
-        query: impl Into<String>,
-        top_k: usize,
-    ) -> AgentResult<(
-        Vec<ScoredDocument>,
-        Pin<Box<dyn Stream<Item = AgentResult<GeneratorChunk>> + Send>>,
-    )> {
-        let query = query.into();
-
-        // Retrieve
-        let retrieved = self
-            .retriever
-            .retrieve(RetrieveInput {
-                query: query.clone(),
-                top_k,
-            })
-            .await?;
-
-        // Rerank if available
-        let documents = if let Some(reranker) = &self.reranker {
-            reranker
-                .rerank(RerankInput {
-                    query: query.clone(),
-                    documents: retrieved,
-                    top_k,
-                })
-                .await?
-        } else {
-            retrieved
-        };
-
-        // Stream generate
-        let stream = self
-            .generator
-            .stream(GenerateInput {
-                query,
-                documents: documents.clone(),
-            })
-            .await?;
-
-        Ok((documents, stream))
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use futures::StreamExt;
+    use crate::rag::types::Document;
+    use std::sync::{Arc, Mutex};
 
-    struct MockRetriever;
-    struct MockReranker;
-    struct MockGenerator;
+    struct FakeRetriever {
+        docs: Vec<ScoredDocument>,
+        last_top_k: Arc<Mutex<Option<usize>>>,
+    }
 
-    #[async_trait]
-    impl Retriever for MockRetriever {
-        async fn retrieve(&self, _input: RetrieveInput) -> AgentResult<RetrieveOutput> {
-            Ok(vec![ScoredDocument {
-                document: DocumentChunk::new("test", "test content", vec![1.0]),
-                score: 1.0,
-                source: None,
-            }])
+    impl FakeRetriever {
+        fn new(docs: Vec<ScoredDocument>) -> Self {
+            Self {
+                docs,
+                last_top_k: Arc::new(Mutex::new(None)),
+            }
         }
     }
 
     #[async_trait]
-    impl Reranker for MockReranker {
-        async fn rerank(&self, input: RerankInput) -> AgentResult<RerankOutput> {
-            Ok(input.documents)
+    impl Retriever for FakeRetriever {
+        async fn retrieve(&self, _query: &str, top_k: usize) -> AgentResult<Vec<ScoredDocument>> {
+            let mut guard = self.last_top_k.lock().unwrap();
+            *guard = Some(top_k);
+            Ok(self.docs.iter().take(top_k).cloned().collect())
         }
     }
 
+    struct IdentityReranker;
+
     #[async_trait]
-    impl Generator for MockGenerator {
-        async fn generate(&self, _input: GenerateInput) -> AgentResult<String> {
-            Ok("generated response".to_string())
+    impl Reranker for IdentityReranker {
+        async fn rerank(&self, _query: &str, docs: Vec<ScoredDocument>) -> AgentResult<Vec<ScoredDocument>> {
+            Ok(docs)
         }
+    }
+
+    struct ReverseReranker;
+
+    #[async_trait]
+    impl Reranker for ReverseReranker {
+        async fn rerank(&self, _query: &str, mut docs: Vec<ScoredDocument>) -> AgentResult<Vec<ScoredDocument>> {
+            docs.reverse();
+            Ok(docs)
+        }
+    }
+
+    struct FakeGenerator;
+
+    #[async_trait]
+    impl Generator for FakeGenerator {
+        async fn generate(&self, input: &GenerateInput) -> AgentResult<String> {
+            Ok(format!("Q: {} | ctx={}", input.query, input.context.len()))
+        }
+    }
+
+    struct FailingRetriever;
+
+    #[async_trait]
+    impl Retriever for FailingRetriever {
+        async fn retrieve(&self, _query: &str, _top_k: usize) -> AgentResult<Vec<ScoredDocument>> {
+            Err(AgentError::ExecutionFailed("retrieval failed".to_string()))
+        }
+    }
+
+    fn scored(id: &str, text: &str, score: f32) -> ScoredDocument {
+        ScoredDocument::new(Document::new(id, text), score, Some("sparse".to_string()))
     }
 
     #[tokio::test]
-    async fn test_pipeline_run() {
-        let pipeline = RagPipeline::new(MockRetriever, Some(MockReranker), MockGenerator);
-        let result = pipeline.run("test query").await.unwrap();
-        assert_eq!(result.response, "generated response");
-        assert_eq!(result.documents.len(), 1);
+    async fn pipeline_happy_path() {
+        let retriever = Arc::new(FakeRetriever::new(vec![scored("1", "a", 0.9)]));
+        let reranker = Arc::new(IdentityReranker);
+        let generator = Arc::new(FakeGenerator);
+        let pipeline = RagPipeline::new(retriever, reranker, generator);
+
+        let output = pipeline.run_with_top_k("hello", 1).await.unwrap();
+
+        assert_eq!(output.retrieved_docs.len(), 1);
+        assert_eq!(output.reranked_docs.len(), 1);
+        assert!(output.answer.contains("Q: hello"));
     }
 
     #[tokio::test]
-    async fn test_pipeline_run_streaming() {
-        let pipeline = RagPipeline::new(MockRetriever, Some(MockReranker), MockGenerator);
-        let (documents, mut stream) = pipeline.run_streaming("test query", 5).await.unwrap();
-        assert_eq!(documents.len(), 1);
+    async fn pipeline_passes_top_k() {
+        let retriever = Arc::new(FakeRetriever::new(vec![
+            scored("1", "a", 0.9),
+            scored("2", "b", 0.8),
+            scored("3", "c", 0.7),
+        ]));
+        let top_k_ref = Arc::clone(&retriever.last_top_k);
 
-        let chunks: Vec<_> = stream.collect().await;
-        assert_eq!(chunks.len(), 1);
-        match &chunks[0] {
-            Ok(GeneratorChunk::Text(text)) => assert_eq!(text, "generated response"),
-            _ => panic!("Expected text chunk"),
+        let pipeline = RagPipeline::new(retriever, Arc::new(IdentityReranker), Arc::new(FakeGenerator));
+        let _ = pipeline.run_with_top_k("hello", 2).await.unwrap();
+
+        let seen = *top_k_ref.lock().unwrap();
+        assert_eq!(seen, Some(2));
+    }
+
+    #[tokio::test]
+    async fn pipeline_reranker_changes_order() {
+        let retriever = Arc::new(FakeRetriever::new(vec![
+            scored("a", "first", 0.9),
+            scored("b", "second", 0.8),
+        ]));
+        let pipeline = RagPipeline::new(retriever, Arc::new(ReverseReranker), Arc::new(FakeGenerator));
+
+        let output = pipeline.run_with_top_k("hello", 2).await.unwrap();
+        assert_eq!(output.retrieved_docs[0].document.id, "a");
+        assert_eq!(output.reranked_docs[0].document.id, "b");
+    }
+
+    #[tokio::test]
+    async fn pipeline_empty_retrieval_still_generates() {
+        let retriever = Arc::new(FakeRetriever::new(vec![]));
+        let pipeline = RagPipeline::new(retriever, Arc::new(IdentityReranker), Arc::new(FakeGenerator));
+
+        let output = pipeline.run_with_top_k("hello", 1).await.unwrap();
+        assert_eq!(output.retrieved_docs.len(), 0);
+        assert!(output.answer.contains("ctx=0"));
+    }
+
+    #[tokio::test]
+    async fn pipeline_propagates_errors() {
+        let pipeline = RagPipeline::new(
+            Arc::new(FailingRetriever),
+            Arc::new(IdentityReranker),
+            Arc::new(FakeGenerator),
+        );
+
+        let err = pipeline.run_with_top_k("hello", 1).await.unwrap_err();
+        match err {
+            AgentError::ExecutionFailed(msg) => assert!(msg.contains("retrieval failed")),
+            other => panic!("unexpected error: {other:?}"),
         }
     }
 }

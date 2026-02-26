@@ -14,6 +14,7 @@ pub type AgentResult<T> = Result<T, AgentError>;
 /// Agent 错误类型
 /// Agent error types
 #[derive(Debug, Error)]
+#[non_exhaustive]
 pub enum AgentError {
     /// Agent 未找到
     /// Agent not found
@@ -163,6 +164,22 @@ impl AgentError {
             required: required.into(),
             available: available.into(),
         }
+    }
+
+    /// Returns `true` for transient errors, `false` for permanent ones.
+    pub fn is_retryable(&self) -> bool {
+        matches!(
+            self,
+            AgentError::Timeout { .. }
+                | AgentError::ResourceUnavailable(_)
+                | AgentError::ExecutionFailed(_)
+                | AgentError::ToolExecutionFailed { .. }
+                | AgentError::CoordinationError(_)
+                | AgentError::Internal(_)
+                | AgentError::IoError(_)
+                | AgentError::ReasoningError(_)
+                | AgentError::MemoryError(_)
+        )
     }
 }
 

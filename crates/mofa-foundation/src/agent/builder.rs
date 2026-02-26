@@ -72,7 +72,7 @@ pub struct AgentBuilder {
     pub(crate) system_prompt: Option<String>,
     /// LLM provider (required)
     llm: Option<Arc<dyn LLMProvider>>,
-    /// Tools to register on the executor
+    /// Tools to register on the executor (dynamic tool objects)
     tools: Vec<Arc<dyn DynTool>>,
     /// Executor configuration (model, temperature, iterations, …)
     pub(crate) config: AgentExecutorConfig,

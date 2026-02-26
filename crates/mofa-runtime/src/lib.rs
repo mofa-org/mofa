@@ -22,6 +22,8 @@ pub mod builder;
 pub mod config;
 pub mod interrupt;
 pub mod runner;
+pub mod retry;
+pub mod fallback;
 
 // Dora adapter module (only compiled when dora feature is enabled)
 #[cfg(feature = "dora")]
@@ -768,11 +770,13 @@ impl SimpleMessageBus {
     /// 发送点对点消息
     /// Send point-to-point message
     pub async fn send_to(&self, target_id: &str, event: AgentEvent) -> anyhow::Result<()> {
-        let subs = self.subscribers.read().await;
-        if let Some(senders) = subs.get(target_id) {
-            for tx in senders {
-                let _ = tx.send(event.clone()).await;
-            }
+        let senders = {
+            let subs = self.subscribers.read().await;
+            subs.get(target_id).cloned().unwrap_or_default()
+        };
+
+        for tx in senders {
+            let _ = tx.send(event.clone()).await;
         }
         Ok(())
     }
@@ -780,11 +784,15 @@ impl SimpleMessageBus {
     /// 广播消息给所有智能体
     /// Broadcast message to all agents
     pub async fn broadcast(&self, event: AgentEvent) -> anyhow::Result<()> {
-        let subs = self.subscribers.read().await;
-        for senders in subs.values() {
-            for tx in senders {
-                let _ = tx.send(event.clone()).await;
-            }
+        let senders = {
+            let subs = self.subscribers.read().await;
+            subs.values()
+                .flat_map(|agent_senders| agent_senders.iter().cloned())
+                .collect::<Vec<_>>()
+        };
+
+        for tx in senders {
+            let _ = tx.send(event.clone()).await;
         }
         Ok(())
     }
@@ -792,17 +800,28 @@ impl SimpleMessageBus {
     /// 发布到主题
     /// Publish to a topic
     pub async fn publish(&self, topic: &str, event: AgentEvent) -> anyhow::Result<()> {
-        let topics = self.topic_subscribers.read().await;
-        if let Some(agent_ids) = topics.get(topic) {
+        let agent_ids = {
+            let topics = self.topic_subscribers.read().await;
+            topics.get(topic).cloned().unwrap_or_default()
+        };
+
+        let senders = {
             let subs = self.subscribers.read().await;
-            for agent_id in agent_ids {
-                if let Some(senders) = subs.get(agent_id) {
-                    for tx in senders {
-                        let _ = tx.send(event.clone()).await;
+            let mut senders = Vec::new();
+            for agent_id in &agent_ids {
+                if let Some(agent_senders) = subs.get(agent_id) {
+                    for tx in agent_senders {
+                        senders.push(tx.clone());
                     }
                 }
             }
+            senders
+        };
+
+        for tx in senders {
+            let _ = tx.send(event.clone()).await;
         }
+
         Ok(())
     }
 
@@ -819,23 +838,25 @@ impl SimpleMessageBus {
         stream_type: StreamType,
         metadata: HashMap<String, String>,
     ) -> anyhow::Result<()> {
-        let mut streams = self.streams.write().await;
-        if streams.contains_key(stream_id) {
-            return Err(anyhow::anyhow!("Stream {} already exists", stream_id));
+        {
+            let mut streams = self.streams.write().await;
+            if streams.contains_key(stream_id) {
+                return Err(anyhow::anyhow!("Stream {} already exists", stream_id));
+            }
+
+            // 创建流信息
+            // Create stream information
+            let stream_info = StreamInfo {
+                stream_id: stream_id.to_string(),
+                stream_type: stream_type.clone(),
+                metadata: metadata.clone(),
+                subscribers: Vec::new(),
+                sequence: 0,
+                is_paused: false,
+            };
+
+            streams.insert(stream_id.to_string(), stream_info);
         }
-
-        // 创建流信息
-        // Create stream information
-        let stream_info = StreamInfo {
-            stream_id: stream_id.to_string(),
-            stream_type: stream_type.clone(),
-            metadata: metadata.clone(),
-            subscribers: Vec::new(),
-            sequence: 0,
-            is_paused: false,
-        };
-
-        streams.insert(stream_id.to_string(), stream_info.clone());
 
         // 广播流创建事件
         // Broadcast stream creation event
@@ -850,47 +871,72 @@ impl SimpleMessageBus {
     /// 关闭流
     /// Close a stream
     pub async fn close_stream(&self, stream_id: &str, reason: &str) -> anyhow::Result<()> {
-        let mut streams = self.streams.write().await;
-        if let Some(stream_info) = streams.remove(stream_id) {
-            // 广播流关闭事件
-            // Broadcast stream closure event
-            let event = AgentEvent::StreamClosed {
-                stream_id: stream_id.to_string(),
-                reason: reason.to_string(),
-            };
+        let subscribers = {
+            let mut streams = self.streams.write().await;
+            streams
+                .remove(stream_id)
+                .map(|stream_info| stream_info.subscribers)
+                .unwrap_or_default()
+        };
 
-            // 通知所有订阅者
-            // Notify all subscribers
+        if subscribers.is_empty() {
+            return Ok(());
+        }
+
+        // 广播流关闭事件
+        // Broadcast stream closure event
+        let event = AgentEvent::StreamClosed {
+            stream_id: stream_id.to_string(),
+            reason: reason.to_string(),
+        };
+
+        let senders = {
             let subs = self.subscribers.read().await;
-            for agent_id in &stream_info.subscribers {
-                if let Some(senders) = subs.get(agent_id) {
-                    for tx in senders {
-                        let _ = tx.send(event.clone()).await;
+            let mut senders = Vec::new();
+            for agent_id in &subscribers {
+                if let Some(agent_senders) = subs.get(agent_id) {
+                    for tx in agent_senders {
+                        senders.push(tx.clone());
                     }
                 }
             }
+            senders
+        };
+
+        for tx in senders {
+            let _ = tx.send(event.clone()).await;
         }
+
         Ok(())
     }
 
     /// 订阅流
     /// Subscribe to a stream
     pub async fn subscribe_stream(&self, agent_id: &str, stream_id: &str) -> anyhow::Result<()> {
-        let mut streams = self.streams.write().await;
-        if let Some(stream_info) = streams.get_mut(stream_id) {
-            // 检查是否已订阅
-            // Check if already subscribed
-            if !stream_info.subscribers.contains(&agent_id.to_string()) {
-                stream_info.subscribers.push(agent_id.to_string());
-
-                // 广播订阅事件
-                // Broadcast subscription event
-                self.broadcast(AgentEvent::StreamSubscription {
-                    stream_id: stream_id.to_string(),
-                    subscriber_id: agent_id.to_string(),
-                })
-                .await?;
+        let should_broadcast = {
+            let mut streams = self.streams.write().await;
+            if let Some(stream_info) = streams.get_mut(stream_id) {
+                // 检查是否已订阅
+                // Check if already subscribed
+                if !stream_info.subscribers.contains(&agent_id.to_string()) {
+                    stream_info.subscribers.push(agent_id.to_string());
+                    true
+                } else {
+                    false
+                }
+            } else {
+                false
             }
+        };
+
+        if should_broadcast {
+            // 广播订阅事件
+            // Broadcast subscription event
+            self.broadcast(AgentEvent::StreamSubscription {
+                stream_id: stream_id.to_string(),
+                subscriber_id: agent_id.to_string(),
+            })
+            .await?;
         }
         Ok(())
     }
@@ -898,21 +944,30 @@ impl SimpleMessageBus {
     /// 取消订阅流
     /// Unsubscribe from a stream
     pub async fn unsubscribe_stream(&self, agent_id: &str, stream_id: &str) -> anyhow::Result<()> {
-        let mut streams = self.streams.write().await;
-        if let Some(stream_info) = streams.get_mut(stream_id) {
-            // 移除订阅者
-            // Remove subscriber
-            if let Some(pos) = stream_info.subscribers.iter().position(|id| id == agent_id) {
-                stream_info.subscribers.remove(pos);
-
-                // 广播取消订阅事件
-                // Broadcast unsubscription event
-                self.broadcast(AgentEvent::StreamUnsubscription {
-                    stream_id: stream_id.to_string(),
-                    subscriber_id: agent_id.to_string(),
-                })
-                .await?;
+        let should_broadcast = {
+            let mut streams = self.streams.write().await;
+            if let Some(stream_info) = streams.get_mut(stream_id) {
+                // 移除订阅者
+                // Remove subscriber
+                if let Some(pos) = stream_info.subscribers.iter().position(|id| id == agent_id) {
+                    stream_info.subscribers.remove(pos);
+                    true
+                } else {
+                    false
+                }
+            } else {
+                false
             }
+        };
+
+        if should_broadcast {
+            // 广播取消订阅事件
+            // Broadcast unsubscription event
+            self.broadcast(AgentEvent::StreamUnsubscription {
+                stream_id: stream_id.to_string(),
+                subscriber_id: agent_id.to_string(),
+            })
+            .await?;
         }
         Ok(())
     }
@@ -924,38 +979,55 @@ impl SimpleMessageBus {
         stream_id: &str,
         message: Vec<u8>,
     ) -> anyhow::Result<()> {
-        let mut streams = self.streams.write().await;
-        if let Some(stream_info) = streams.get_mut(stream_id) {
-            // 如果流被暂停，直接返回
-            // If stream is paused, return immediately
-            if stream_info.is_paused {
-                return Ok(());
+        let stream_delivery = {
+            let mut streams = self.streams.write().await;
+            if let Some(stream_info) = streams.get_mut(stream_id) {
+                // 如果流被暂停，直接返回
+                // If stream is paused, return immediately
+                if stream_info.is_paused {
+                    None
+                } else {
+                    // 生成序列号
+                    // Generate sequence number
+                    let sequence = stream_info.sequence;
+                    stream_info.sequence += 1;
+
+                    // 构造流消息事件
+                    // Construct stream message event
+                    let event = AgentEvent::StreamMessage {
+                        stream_id: stream_id.to_string(),
+                        message,
+                        sequence,
+                    };
+
+                    Some((event, stream_info.subscribers.clone()))
+                }
+            } else {
+                None
             }
+        };
 
-            // 生成序列号
-            // Generate sequence number
-            let sequence = stream_info.sequence;
-            stream_info.sequence += 1;
+        let Some((event, subscribers)) = stream_delivery else {
+            return Ok(());
+        };
 
-            // 构造流消息事件
-            // Construct stream message event
-            let event = AgentEvent::StreamMessage {
-                stream_id: stream_id.to_string(),
-                message,
-                sequence,
-            };
-
-            // 发送给所有订阅者
-            // Send to all subscribers
+        let senders = {
             let subs = self.subscribers.read().await;
-            for agent_id in &stream_info.subscribers {
-                if let Some(senders) = subs.get(agent_id) {
-                    for tx in senders {
-                        let _ = tx.send(event.clone()).await;
+            let mut senders = Vec::new();
+            for agent_id in &subscribers {
+                if let Some(agent_senders) = subs.get(agent_id) {
+                    for tx in agent_senders {
+                        senders.push(tx.clone());
                     }
                 }
             }
+            senders
+        };
+
+        for tx in senders {
+            let _ = tx.send(event.clone()).await;
         }
+
         Ok(())
     }
 
@@ -1165,6 +1237,71 @@ impl SimpleRuntime {
 impl Default for SimpleRuntime {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+#[cfg(all(test, not(feature = "dora")))]
+mod tests {
+    use super::SimpleMessageBus;
+    use mofa_kernel::message::{AgentEvent, StreamType};
+    use std::collections::HashMap;
+    use std::sync::Arc;
+    use tokio::sync::mpsc;
+    use tokio::time::{Duration, timeout};
+
+    #[tokio::test]
+    async fn send_to_does_not_block_register_on_backpressure() {
+        let bus = Arc::new(SimpleMessageBus::new());
+        let (slow_tx, mut slow_rx) = mpsc::channel(1);
+        bus.register("slow", slow_tx.clone()).await;
+
+        slow_tx.send(AgentEvent::Shutdown).await.unwrap();
+
+        let bus_for_send = Arc::clone(&bus);
+        let send_task =
+            tokio::spawn(async move { bus_for_send.send_to("slow", AgentEvent::Shutdown).await });
+
+        tokio::time::sleep(Duration::from_millis(50)).await;
+
+        let (new_tx, _new_rx) = mpsc::channel(1);
+        timeout(Duration::from_millis(200), bus.register("new", new_tx))
+            .await
+            .expect("register should not block while send_to waits");
+
+        let _ = slow_rx.recv().await;
+        send_task.await.unwrap().unwrap();
+    }
+
+    #[tokio::test]
+    async fn send_stream_message_does_not_block_pause_on_backpressure() {
+        let bus = Arc::new(SimpleMessageBus::new());
+        bus.create_stream("stream-a", StreamType::DataStream, HashMap::new())
+            .await
+            .unwrap();
+
+        let (slow_tx, mut slow_rx) = mpsc::channel(1);
+        bus.register("slow", slow_tx.clone()).await;
+        bus.subscribe_stream("slow", "stream-a").await.unwrap();
+        let _ = slow_rx.recv().await;
+
+        slow_tx.send(AgentEvent::Shutdown).await.unwrap();
+
+        let bus_for_send = Arc::clone(&bus);
+        let send_task = tokio::spawn(async move {
+            bus_for_send
+                .send_stream_message("stream-a", b"data".to_vec())
+                .await
+        });
+
+        tokio::time::sleep(Duration::from_millis(50)).await;
+
+        timeout(Duration::from_millis(200), bus.pause_stream("stream-a"))
+            .await
+            .expect("pause_stream should not block while send_stream_message waits")
+            .unwrap();
+
+        let _ = slow_rx.recv().await;
+        send_task.await.unwrap().unwrap();
     }
 }
 

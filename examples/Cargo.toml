@@ -2,11 +2,17 @@
 resolver = "3"
 members = [
     "cli_production_smoke",
+    "cli_agent_logs_demo",
+    "cli_plugin_lifecycle",
+    "custom_plugin_install",
+    "log_rotation_handling",
+    "cli_cicd_integration",
     "plugin_system",
     "workflow_orchestration",
     "wasm_plugin",
     "multi_agent_coordination",
     "monitoring_dashboard",
+    "visual_debugger_demo",
     "config",
     "chat_stream",
     "secretary_agent",
@@ -28,7 +34,10 @@ members = [
     "tool_routing",
     "runtime_message_bus_backpressure",
     "rag_pipeline",
-    "agent_builder"
+    "workflow_viz",
+    "message_graph_validation",
+    "agent_builder",
+    "context_compression",
 ]
 
 [workspace.package]
