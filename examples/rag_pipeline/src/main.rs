@@ -19,11 +19,25 @@
 use anyhow::Result;
 use futures::StreamExt;
 use mofa_foundation::rag::{
-    ChunkConfig, DocumentChunk, InMemoryVectorStore, PassthroughStreamingGenerator,
+    ChunkConfig, Document, DocumentChunk, IdentityReranker, InMemoryVectorStore, PassthroughStreamingGenerator,
     QdrantConfig, QdrantVectorStore, RagPipeline, ScoredDocument, SimilarityMetric,
     TextChunker, VectorStore,
 };
-use mofa_kernel::rag::pipeline::{GenerateInput, Generator, RetrieveInput, Retriever};
+use mofa_kernel::rag::pipeline::{Generator, Retriever};
+use mofa_kernel::rag::types::GenerateInput;
+use std::sync::Arc;
+
+/// Generate a simple topic label for a document
+fn get_document_topic(doc_idx: usize) -> String {
+    match doc_idx {
+        0 => "architecture".to_string(),
+        1 => "performance".to_string(),
+        2 => "extensibility".to_string(),
+        3 => "deployment".to_string(),
+        4 => "examples".to_string(),
+        _ => "general".to_string(),
+    }
+}
 
 /// Generate a simple deterministic embedding from text.
 ///
@@ -59,13 +73,13 @@ impl SimpleRetriever {
 
 #[async_trait::async_trait]
 impl Retriever for SimpleRetriever {
-    async fn retrieve(&self, input: RetrieveInput) -> mofa_kernel::agent::error::AgentResult<Vec<ScoredDocument>> {
-        let query_embedding = simple_embedding(&input.query, self.dimensions);
-        let results = self.store.search(&query_embedding, input.top_k, None).await?;
+    async fn retrieve(&self, query: &str, top_k: usize) -> mofa_kernel::agent::error::AgentResult<Vec<ScoredDocument>> {
+        let query_embedding = simple_embedding(query, self.dimensions);
+        let results = self.store.search(&query_embedding, top_k, None).await?;
         Ok(results
             .into_iter()
             .map(|r| ScoredDocument {
-                document: DocumentChunk::new(r.id, r.text, vec![]), // embedding not needed here
+                document: Document::new(r.id, r.text),
                 score: r.score,
                 source: Some("vector_search".to_string()),
             })
@@ -78,11 +92,11 @@ struct SimpleGenerator;
 
 #[async_trait::async_trait]
 impl Generator for SimpleGenerator {
-    async fn generate(&self, input: GenerateInput) -> mofa_kernel::agent::error::AgentResult<String> {
+    async fn generate(&self, input: &GenerateInput) -> mofa_kernel::agent::error::AgentResult<String> {
         let context = input
-            .documents
+            .context
             .iter()
-            .map(|d| d.document.text.clone())
+            .map(|d| d.text.clone())
             .collect::<Vec<_>>()
             .join("\n\n");
 
@@ -254,9 +268,10 @@ async fn streaming_rag_pipeline() -> Result<()> {
     store.upsert_batch(all_chunks).await?;
 
     // Create pipeline components
-    let retriever = SimpleRetriever::new(store, dimensions);
-    let generator = PassthroughStreamingGenerator::new(SimpleGenerator);
-    let pipeline = RagPipeline::new(retriever, None::<SimpleRetriever>, generator);
+    let retriever = Arc::new(SimpleRetriever::new(store, dimensions));
+    let reranker = Arc::new(IdentityReranker);
+    let generator = Arc::new(PassthroughStreamingGenerator::new(SimpleGenerator));
+    let pipeline = RagPipeline::new(retriever, reranker, generator);
 
     // Test multiple realistic queries
     let test_queries = vec![
@@ -305,7 +320,7 @@ async fn streaming_rag_pipeline() -> Result<()> {
                         tokio::time::sleep(std::time::Duration::from_millis(10)).await;
                     }
                 }
-                mofa_kernel::rag::pipeline::GeneratorChunk::End => break,
+                mofa_kernel::rag::pipeline::GeneratorChunk::Done => break,
             }
         }
 
@@ -367,14 +382,16 @@ async fn streaming_edge_cases_test() -> Result<()> {
 
     store.upsert_batch(all_chunks).await?;
 
-    let retriever = SimpleRetriever::new(store, dimensions);
-    let generator = PassthroughStreamingGenerator::new(SimpleGenerator);
-    let pipeline = RagPipeline::new(retriever, None::<SimpleRetriever>, generator);
+    let retriever = Arc::new(SimpleRetriever::new(store, dimensions));
+    let reranker = Arc::new(IdentityReranker);
+    let generator = Arc::new(PassthroughStreamingGenerator::new(SimpleGenerator));
+    let pipeline = RagPipeline::new(retriever, reranker.clone(), generator.clone());
 
     // Test cases
+    let long_query = "What is the meaning of life? ".repeat(100);
     let test_cases = vec![
         ("Empty query", "", 3, "Should handle empty queries gracefully"),
-        ("Very long query", &"What is the meaning of life? ".repeat(100), 3, "Should handle very long queries"),
+        ("Very long query", &long_query, 3, "Should handle very long queries"),
         ("Special characters", "Query with @#$%^&*() symbols!", 3, "Should handle special characters"),
         ("Unicode content", "Query with émojis 🚀 and 中文 characters", 3, "Should handle Unicode content"),
         ("Single character", "A", 1, "Should work with minimal input"),
@@ -399,7 +416,7 @@ async fn streaming_edge_cases_test() -> Result<()> {
                                 chunk_count += 1;
                                 total_chars += text.len();
                             }
-                            mofa_kernel::rag::pipeline::GeneratorChunk::End => break,
+                            mofa_kernel::rag::pipeline::GeneratorChunk::Done => break,
                         },
                         Err(e) => {
                             println!("  ✗ Stream error: {}", e);
@@ -422,7 +439,8 @@ async fn streaming_edge_cases_test() -> Result<()> {
 
     // Test pipeline with no retriever (should fail gracefully)
     println!("Testing pipeline with missing retriever...");
-    let broken_pipeline = RagPipeline::new(retriever, Some(SimpleRetriever::new(InMemoryVectorStore::cosine(), dimensions)), generator);
+    let broken_retriever = Arc::new(SimpleRetriever::new(InMemoryVectorStore::cosine(), dimensions));
+    let broken_pipeline = RagPipeline::new(broken_retriever, reranker.clone(), generator.clone());
 
     match broken_pipeline.run_streaming("test query", 3).await {
         Ok(_) => println!("  ✗ Expected error but succeeded"),
@@ -486,9 +504,10 @@ async fn streaming_memory_test() -> Result<()> {
 
     println!("Indexing completed in {:.2}ms", index_time.as_millis());
 
-    let retriever = SimpleRetriever::new(store, dimensions);
-    let generator = PassthroughStreamingGenerator::new(SimpleGenerator);
-    let pipeline = RagPipeline::new(retriever, None::<SimpleRetriever>, generator);
+    let retriever = Arc::new(SimpleRetriever::new(store, dimensions));
+    let reranker = Arc::new(IdentityReranker);
+    let generator = Arc::new(PassthroughStreamingGenerator::new(SimpleGenerator));
+    let pipeline = RagPipeline::new(retriever, reranker, generator);
 
     // Test concurrent streaming operations
     println!("\nTesting concurrent streaming operations...");
@@ -510,7 +529,7 @@ async fn streaming_memory_test() -> Result<()> {
                         // Simulate processing time
                         tokio::time::sleep(std::time::Duration::from_millis(5)).await;
                     }
-                    mofa_kernel::rag::pipeline::GeneratorChunk::End => break,
+                    mofa_kernel::rag::pipeline::GeneratorChunk::Done => break,
                 }
             }
 
@@ -596,9 +615,10 @@ async fn streaming_performance_benchmark() -> Result<()> {
     println!("Benchmark setup: {} chunks from {} documents", all_chunks.len(), documents.len());
     store.upsert_batch(all_chunks).await?;
 
-    let retriever = SimpleRetriever::new(store, dimensions);
-    let generator = PassthroughStreamingGenerator::new(SimpleGenerator);
-    let pipeline = RagPipeline::new(retriever, None::<SimpleRetriever>, generator);
+    let retriever = Arc::new(SimpleRetriever::new(store, dimensions));
+    let reranker = Arc::new(IdentityReranker);
+    let generator = Arc::new(PassthroughStreamingGenerator::new(SimpleGenerator));
+    let pipeline = RagPipeline::new(retriever, reranker, generator);
 
     // Benchmark different scenarios
     let scenarios = vec![
@@ -615,7 +635,7 @@ async fn streaming_performance_benchmark() -> Result<()> {
         let mut total_retrieval_time = std::time::Duration::new(0, 0);
         let mut total_streaming_time = std::time::Duration::new(0, 0);
         let mut total_chars = 0;
-        let mut runs = 5; // Run each scenario multiple times
+        let runs = 5; // Run each scenario multiple times
 
         for run in 0..runs {
             let start_time = std::time::Instant::now();
@@ -634,7 +654,7 @@ async fn streaming_performance_benchmark() -> Result<()> {
                         // Small delay to simulate realistic streaming
                         tokio::time::sleep(std::time::Duration::from_millis(1)).await;
                     }
-                    mofa_kernel::rag::pipeline::GeneratorChunk::End => break,
+                    mofa_kernel::rag::pipeline::GeneratorChunk::Done => break,
                 }
             }
 

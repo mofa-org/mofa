@@ -49,6 +49,7 @@ pub struct RagPipelineOutput {
     pub reranked_docs: Vec<ScoredDocument>,
 }
 
+#[derive(Clone)]
 pub struct RagPipeline {
     retriever: Arc<dyn Retriever>,
     reranker: Arc<dyn Reranker>,
@@ -100,6 +101,32 @@ impl RagPipeline {
             retrieved_docs,
             reranked_docs,
         })
+    }
+
+    pub async fn run_streaming(
+        &self,
+        query: &str,
+        top_k: usize,
+    ) -> AgentResult<(
+        Vec<ScoredDocument>,
+        Pin<Box<dyn Stream<Item = AgentResult<GeneratorChunk>> + Send>>,
+    )> {
+        if top_k == 0 {
+            return Err(AgentError::InvalidInput("top_k must be greater than 0".to_string()));
+        }
+
+        let retrieved_docs = self.retriever.retrieve(query, top_k).await?;
+        let reranked_docs = self.reranker.rerank(query, retrieved_docs.clone()).await?;
+
+        let context = reranked_docs
+            .iter()
+            .map(|doc| doc.document.clone())
+            .collect();
+
+        let generate_input = GenerateInput::new(query, context);
+        let stream = self.generator.stream(generate_input).await?;
+
+        Ok((reranked_docs, stream))
     }
 }
 
