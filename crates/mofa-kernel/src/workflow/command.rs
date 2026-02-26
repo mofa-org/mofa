@@ -97,6 +97,12 @@ impl<V> Command<V> {
         self
     }
 
+    /// Set a route for conditional branching (alias for route)
+    pub fn with_route(mut self, route: impl Into<String>) -> Self {
+        self.route = Some(route.into());
+        self
+    }
+
     /// Provide an explicit routing decision for conditional edges
     pub fn route(mut self, decision: impl Into<String>) -> Self {
         self.route = Some(decision.into());
@@ -284,5 +290,25 @@ mod tests {
 
         let cmd = Command::<serde_json::Value>::just_return();
         assert!(cmd.is_return());
+    }
+
+    #[test]
+    fn test_with_route_builder() {
+        let cmd = Command::<serde_json::Value>::new()
+            .with_route("approve")
+            .continue_();
+        assert_eq!(cmd.route.as_deref(), Some("approve"));
+        assert_eq!(cmd.control, ControlFlow::Continue);
+    }
+
+    #[test]
+    fn test_route_chain_builder() {
+        let cmd = Command::new()
+            .update("status", json!("pending"))
+            .route("reject")
+            .continue_();
+        assert_eq!(cmd.route.as_deref(), Some("reject"));
+        assert_eq!(cmd.updates.len(), 1);
+        assert_eq!(cmd.control, ControlFlow::Continue);
     }
 }
