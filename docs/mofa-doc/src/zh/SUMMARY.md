@@ -35,6 +35,9 @@
   - [技能系统](guides/skills.md)
   - [监控与可观测性](guides/monitoring.md)
 
+- [开发规范](coding-standards/README.md)
+  - [Rust 开发规范](coding-standards/spec.md)
+
 - [API 参考](api-reference/README.md)
   - [内核](api-reference/kernel/README.md)
     - [智能体 Trait](api-reference/kernel/agent.md)
@@ -85,5 +88,6 @@
 - [附录](appendix/README.md)
   - [功能标志](appendix/feature-flags.md)
   - [配置](appendix/configuration.md)
+  - [版本化文档](appendix/versioned-docs.md)
   - [贡献](appendix/contributing.md)
   - [术语表](appendix/glossary.md)

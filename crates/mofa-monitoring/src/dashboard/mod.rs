@@ -17,7 +17,8 @@ mod server;
 mod websocket;
 
 pub use api::{
-    AgentStatus, ApiError, ApiResponse, LLMStatus, LLMSummary, PluginStatus, SystemStatus,
+    AgentStatus, ApiError, ApiResponse, DebugSessionResponse, LLMStatus, LLMSummary, PluginStatus,
+    SystemStatus,
 };
 pub use metrics::{
     AgentMetrics, Gauge, Histogram, LLMMetrics, MetricType, MetricValue, MetricsCollector,

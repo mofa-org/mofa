@@ -6,6 +6,7 @@ Reference materials and additional resources.
 
 - **Feature Flags** — Cargo feature flags reference
 - **Configuration** — Configuration file formats
+- **Versioned Docs** — How to access documentation for specific releases
 - **Contributing** — How to contribute to MoFA
 - **Glossary** — Terms and definitions
 

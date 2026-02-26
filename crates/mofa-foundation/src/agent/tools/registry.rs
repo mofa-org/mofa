@@ -6,9 +6,9 @@
 
 use async_trait::async_trait;
 use mofa_kernel::agent::components::tool::{
-    Tool, ToolDescriptor, ToolRegistry as ToolRegistryTrait,
+    Tool, ToolDescriptor, ToolRegistry as ToolRegistryTrait, DynTool, ToolExt,
 };
-use mofa_kernel::agent::error::AgentResult;
+use mofa_kernel::agent::error::{AgentResult, AgentError};
 use std::collections::HashMap;
 use std::sync::Arc;
 
@@ -44,7 +44,7 @@ use std::sync::Arc;
 pub struct ToolRegistry {
     /// 工具存储
     /// Tool storage
-    tools: HashMap<String, Arc<dyn Tool>>,
+    tools: HashMap<String, Arc<dyn DynTool>>,
     /// 工具来源
     /// Tool sources
     sources: HashMap<String, ToolSource>,
@@ -92,7 +92,7 @@ impl ToolRegistry {
     /// Register tool and record source
     pub fn register_with_source(
         &mut self,
-        tool: Arc<dyn Tool>,
+        tool: Arc<dyn DynTool>,
         source: ToolSource,
     ) -> AgentResult<()> {
         let name = tool.name().to_string();
@@ -170,7 +170,7 @@ impl ToolRegistry {
             let adapter =
                 super::mcp::McpToolAdapter::new(endpoint.clone(), tool_info, client.clone());
             self.register_with_source(
-                std::sync::Arc::new(adapter),
+                adapter.into_dynamic(),
                 ToolSource::Mcp {
                     endpoint: endpoint.clone(),
                 },
@@ -229,7 +229,9 @@ impl ToolRegistry {
     pub async fn hot_reload_plugin(&mut self, _path: &str) -> AgentResult<Vec<String>> {
         // TODO: 实际插件热加载实现
         // TODO: actual hot reload implementation
-        Ok(vec![])
+        Err(mofa_kernel::agent::error::AgentError::Other(
+            "Plugin hot reloading is not yet implemented".to_string(),
+        ))
     }
 
     /// 获取工具来源
@@ -255,7 +257,7 @@ impl ToolRegistry {
                     false
                 }
             })
-            .map(|(_, tool)| ToolDescriptor::from_tool(tool.as_ref()))
+            .map(|(_, tool)| ToolDescriptor::from_dyn_tool(tool.as_ref()))
             .collect()
     }
 
@@ -274,11 +276,11 @@ impl Default for ToolRegistry {
 
 #[async_trait]
 impl ToolRegistryTrait for ToolRegistry {
-    fn register(&mut self, tool: Arc<dyn Tool>) -> AgentResult<()> {
+    fn register(&mut self, tool: Arc<dyn DynTool>) -> AgentResult<()> {
         self.register_with_source(tool, ToolSource::Dynamic)
     }
 
-    fn get(&self, name: &str) -> Option<Arc<dyn Tool>> {
+    fn get(&self, name: &str) -> Option<Arc<dyn DynTool>> {
         self.tools.get(name).cloned()
     }
 
@@ -290,7 +292,7 @@ impl ToolRegistryTrait for ToolRegistry {
     fn list(&self) -> Vec<ToolDescriptor> {
         self.tools
             .values()
-            .map(|t| ToolDescriptor::from_tool(t.as_ref()))
+            .map(|t| ToolDescriptor::from_dyn_tool(t.as_ref()))
             .collect()
     }
 
@@ -333,7 +335,7 @@ impl<'a> ToolSearcher<'a> {
             .tools
             .iter()
             .filter(|(name, _)| name.to_lowercase().contains(&pattern_lower))
-            .map(|(_, tool)| ToolDescriptor::from_tool(tool.as_ref()))
+            .map(|(_, tool)| ToolDescriptor::from_dyn_tool(tool.as_ref()))
             .collect()
     }
 
@@ -345,7 +347,7 @@ impl<'a> ToolSearcher<'a> {
             .tools
             .values()
             .filter(|tool| tool.description().to_lowercase().contains(&query_lower))
-            .map(|tool| ToolDescriptor::from_tool(tool.as_ref()))
+            .map(|tool| ToolDescriptor::from_dyn_tool(tool.as_ref()))
             .collect()
     }
 
@@ -359,7 +361,7 @@ impl<'a> ToolSearcher<'a> {
                 let metadata = tool.metadata();
                 metadata.tags.iter().any(|t| t == tag)
             })
-            .map(|tool| ToolDescriptor::from_tool(tool.as_ref()))
+            .map(|tool| ToolDescriptor::from_dyn_tool(tool.as_ref()))
             .collect()
     }
 
@@ -370,7 +372,7 @@ impl<'a> ToolSearcher<'a> {
             .tools
             .values()
             .filter(|tool| tool.metadata().is_dangerous || tool.requires_confirmation())
-            .map(|tool| ToolDescriptor::from_tool(tool.as_ref()))
+            .map(|tool| ToolDescriptor::from_dyn_tool(tool.as_ref()))
             .collect()
     }
 }

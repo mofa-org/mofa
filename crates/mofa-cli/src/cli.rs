@@ -268,6 +268,20 @@ pub enum AgentCommands {
         #[arg(long)]
         all: bool,
     },
+
+    /// View agent logs
+    Logs {
+        /// Agent ID
+        agent_id: String,
+
+        /// Tail the logs
+        #[arg(short, long)]
+        tail: bool,
+
+        /// Number of recent lines to display
+        #[arg(short = 'n', long, default_value = "50")]
+        lines: usize,
+    },
 }
 
 /// Configuration management subcommands
@@ -329,6 +343,12 @@ pub enum PluginCommands {
     /// Show plugin information
     Info {
         /// Plugin name
+        name: String,
+    },
+
+    /// Install a plugin
+    Install {
+        /// Plugin name or path
         name: String,
     },
 

@@ -6,6 +6,7 @@
 
 use super::span::SpanData;
 use async_trait::async_trait;
+use reqwest::Client;
 use std::sync::Arc;
 use tokio::sync::{RwLock, mpsc};
 use tracing::{debug, error, info};
@@ -291,41 +292,30 @@ impl JaegerExporter {
                 endpoint
             );
 
-            // 这里简化处理，实际应该使用 HTTP 客户端发送
-            // Simplified here; actual implementation should use an HTTP client
-            // 在生产环境中，应该使用 opentelemetry-jaeger crate
-            // In production environment, opentelemetry-jaeger crate should be used
-            info!("Would send {} spans to Jaeger: {}", spans.len(), endpoint);
+            let client = Client::new();
+
+            let url = format!("{}/api/traces", endpoint.trim_end_matches('/'));
+
+            let response = client
+                .post(&url)
+                .json(&batch)
+                .send()
+                .await
+                .map_err(|e| format!("Failed to send spans to Jaeger: {}", e))?;
+
+            if !response.status().is_success() {
+                return Err(format!(
+                    "Jaeger collector returned non-success status: {}",
+                    response.status()
+                ));
+            }
+
+            info!("Successfully sent {} spans to Jaeger", batch.len());
+
             Ok(())
         } else {
             Err("No collector endpoint configured".to_string())
         }
-    }
-}
-
-#[async_trait]
-impl TracingExporter for JaegerExporter {
-    async fn export(&self, spans: Vec<SpanData>) -> Result<(), String> {
-        if spans.is_empty() {
-            return Ok(());
-        }
-
-        // 添加到缓冲区
-        // Add to buffer
-        {
-            let mut buffer = self.buffer.write().await;
-            buffer.extend(spans);
-
-            // 如果缓冲区达到批量大小，则导出
-            // If buffer reaches batch size, export
-            if buffer.len() >= self.config.batch_size {
-                let to_export: Vec<_> = buffer.drain(..).collect();
-                drop(buffer);
-                return self.send_to_collector(&to_export).await;
-            }
-        }
-
-        Ok(())
     }
 
     async fn shutdown(&self) -> Result<(), String> {
@@ -458,7 +448,7 @@ impl OtlpExporter {
     }
 
     async fn send_to_otlp(&self, spans: &[SpanData]) -> Result<(), String> {
-        let _resource_spans = serde_json::json!({
+        let resource_spans = serde_json::json!({
             "resourceSpans": [{
                 "resource": {
                     "attributes": [{
@@ -476,20 +466,34 @@ impl OtlpExporter {
             }]
         });
 
-        debug!(
-            "Sending {} spans to OTLP endpoint at {}",
-            spans.len(),
-            self.otlp_config.endpoint
-        );
+        let endpoint = &self.otlp_config.endpoint;
+        let client = Client::new();
 
-        // 这里简化处理，实际应该使用 HTTP/gRPC 客户端发送
-        // Simplified here; actual implementation should use an HTTP/gRPC client
-        info!(
-            "Would send {} spans to OTLP: {} (protocol: {:?})",
-            spans.len(),
-            self.otlp_config.endpoint,
-            self.otlp_config.protocol
-        );
+        let url = format!("{}/v1/traces", endpoint.trim_end_matches('/'));
+
+        let mut request = client.post(&url).json(&resource_spans);
+
+        for (key, value) in &self.otlp_config.headers {
+            request = request.header(key, value);
+        }
+
+        let request = request.timeout(std::time::Duration::from_millis(
+            self.otlp_config.timeout_ms,
+        ));
+
+        let response = request
+            .send()
+            .await
+            .map_err(|e| format!("Failed to send spans to OTLP endpoint: {}", e))?;
+
+        if !response.status().is_success() {
+            return Err(format!(
+                "OTLP endpoint returned non-success status: {}",
+                response.status()
+            ));
+        }
+
+        info!("Successfully sent {} spans to OTLP endpoint", spans.len());
 
         Ok(())
     }

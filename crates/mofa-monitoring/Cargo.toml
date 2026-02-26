@@ -37,6 +37,7 @@ lazy_static.workspace = true
 # HTTP server dependencies
 axum = { workspace = true, features = ["macros", "ws"] }
 tower = { version = "0.5", features = ["util", "timeout"] }
+reqwest = { version = "0.11", features = ["json", "rustls-tls"] }
 tower-http = { version = "0.6", features = ["fs", "cors", "trace"] }
 
 # Static file embedding
@@ -53,6 +54,8 @@ sysinfo = "0.32"
 [dev-dependencies]
 tokio-tungstenite = "0.24"
 futures-util = "0.3"
+mofa-foundation = { path = "../mofa-foundation" }
+mofa-kernel = { path = "../mofa-kernel" }
 
 [lints]
 workspace = true
