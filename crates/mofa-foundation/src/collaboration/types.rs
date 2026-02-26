@@ -912,16 +912,11 @@ mod tests {
         assert!(json_content.to_text().contains("key"));
     }
 
-    #[test]
-    fn test_protocol_registry() {
+    #[tokio::test]
+    async fn test_protocol_registry() {
         let registry = ProtocolRegistry::new();
-
-        #[tokio::test]
-        async fn test_empty_registry() {
-            let registry = ProtocolRegistry::new();
-            assert_eq!(registry.count().await, 0);
-            assert!(registry.list_names().await.is_empty());
-        }
+        assert_eq!(registry.count().await, 0);
+        assert!(registry.list_names().await.is_empty());
     }
 
     #[tokio::test]

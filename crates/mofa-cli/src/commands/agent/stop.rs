@@ -28,7 +28,9 @@ pub async fn run(
 
     // When commands run in separate CLI invocations, runtime registry state can be absent.
     // In that case, if force_persisted_stop is true, update the persisted state.
-    if !in_registry && in_store && force_persisted_stop
+    if !in_registry
+        && in_store
+        && force_persisted_stop
         && let Some(mut entry) = previous_entry
     {
         entry.state = "Stopped".to_string();
