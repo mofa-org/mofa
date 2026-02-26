@@ -877,7 +877,7 @@ mod tests {
         async fn call(&self, state: &mut JsonState, _ctx: &RuntimeContext) -> AgentResult<Command> {
             let saw_flag = state
                 .get_value("flag")
-                .and_then(|v: &serde_json::Value| v.as_bool())
+                .and_then(|v: &Value| v.as_bool())
                 .unwrap_or(false);
             Ok(Command::new()
                 .update("reader_saw_flag", json!(saw_flag))
@@ -1044,11 +1044,114 @@ mod tests {
         let compiled = graph.compile().unwrap();
 
         let final_state = compiled.invoke(JsonState::new(), None).await.unwrap();
+        let compiled = graph.compile().unwrap();
+
+        let final_state = compiled.invoke(JsonState::new(), None).await.unwrap();
+        let compiled = graph.compile().unwrap();
+
+        let final_state = compiled.invoke(JsonState::new(), None).await.unwrap();
+        let compiled = graph.compile().unwrap();
+
+        let final_state = compiled.invoke(JsonState::new(), None).await.unwrap();
+        let compiled = graph.compile().unwrap();
+
+        let final_state = compiled.invoke(JsonState::new(), None).await.unwrap();
+        let compiled = graph.compile().unwrap();
+
+        let final_state = compiled.invoke(JsonState::new(), None).await.unwrap();
+        let compiled = graph.compile().unwrap();
+
+        let final_state = compiled.invoke(JsonState::new(), None).await.unwrap();
+        let compiled = graph.compile().unwrap();
+
+        let final_state = compiled.invoke(JsonState::new(), None).await.unwrap();
+        let compiled = graph.compile().unwrap();
+
+        let final_state = compiled.invoke(JsonState::new(), None).await.unwrap();
+        let compiled = graph.compile().unwrap();
+
+        let final_state = compiled.invoke(JsonState::new(), None).await.unwrap();
+        let compiled = graph.compile().unwrap();
+
+        let final_state = compiled.invoke(JsonState::new(), None).await.unwrap();
+        let compiled = graph.compile().unwrap();
+
+        let final_state = compiled.invoke(JsonState::new(), None).await.unwrap();
+        let compiled = graph.compile().unwrap();
+
+        let final_state = compiled.invoke(JsonState::new(), None).await.unwrap();
+        let compiled = graph.compile().unwrap();
+
+        let final_state = compiled.invoke(JsonState::new(), None).await.unwrap();
+        let compiled = graph.compile().unwrap();
+
+        let final_state = compiled.invoke(JsonState::new(), None).await.unwrap();
+        let compiled = graph.compile().unwrap();
+
+        let final_state = compiled.invoke(JsonState::new(), None).await.unwrap();
+        let compiled = graph.compile().unwrap();
+
+        let final_state = compiled.invoke(JsonState::new(), None).await.unwrap();
+        let compiled = graph.compile().unwrap();
+
+        let final_state = compiled.invoke(JsonState::new(), None).await.unwrap();
+        let compiled = graph.compile().unwrap();
+
+        let final_state = compiled.invoke(JsonState::new(), None).await.unwrap();
+        let compiled = graph.compile().unwrap();
+
+        let final_state = compiled.invoke(JsonState::new(), None).await.unwrap();
+        let compiled = graph.compile().unwrap();
+
+        let final_state = compiled.invoke(JsonState::new(), None).await.unwrap();
+        let compiled = graph.compile().unwrap();
+
+        let final_state = compiled.invoke(JsonState::new(), None).await.unwrap();
+        let compiled = graph.compile().unwrap();
+
+        let final_state = compiled.invoke(JsonState::new(), None).await.unwrap();
+        let compiled = graph.compile().unwrap();
+
+        let final_state = compiled.invoke(JsonState::new(), None).await.unwrap();
+        let compiled = graph.compile().unwrap();
+
+        let final_state = compiled.invoke(JsonState::new(), None).await.unwrap();
+        let compiled = graph.compile().unwrap();
+
+        let final_state = compiled.invoke(JsonState::new(), None).await.unwrap();
+        let compiled = graph.compile().unwrap();
+
+        let final_state = compiled.invoke(JsonState::new(), None).await.unwrap();
+        let compiled = graph.compile().unwrap();
+
+        let final_state = compiled.invoke(JsonState::new(), None).await.unwrap();
+        let compiled = graph.compile().unwrap();
+
+        let final_state = compiled.invoke(JsonState::new(), None).await.unwrap();
+        let compiled = graph.compile().unwrap();
+
+        let final_state = compiled.invoke(JsonState::new(), None).await.unwrap();
+        let compiled = graph.compile().unwrap();
+
+        let final_state = compiled.invoke(JsonState::new(), None).await.unwrap();
+        let compiled = graph.compile().unwrap();
+
+        let final_state = compiled.invoke(JsonState::new(), None).await.unwrap();
+        let compiled = graph.compile().unwrap();
+
+        let final_state = compiled.invoke(JsonState::new(), None).await.unwrap();
+        let compiled = graph.compile().unwrap();
+
+        let final_state = compiled.invoke(JsonState::new(), None).await.unwrap();
         assert_eq!(final_state.get_value("flag"), Some(json!(true)));
         assert_eq!(final_state.get_value("reader_saw_flag"), Some(json!(false)));
 
         let mut stream = compiled.stream(JsonState::new(), None);
+<<<<<<< HEAD
         let mut stream_final_state: Option<JsonState> = None;
+=======
+        let mut stream_final_state = None;
+>>>>>>> upstream/main
         while let Some(event) = stream.next().await {
             if let StreamEvent::End { final_state } = event.unwrap() {
                 stream_final_state = Some(final_state);
