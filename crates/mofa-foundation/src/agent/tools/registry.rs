@@ -6,11 +6,13 @@
 
 use async_trait::async_trait;
 use mofa_kernel::agent::components::tool::{
-    Tool, ToolDescriptor, ToolRegistry as ToolRegistryTrait,
+    DynTool, Tool, ToolDescriptor, ToolExt, ToolRegistry as ToolRegistryTrait,
 };
-use mofa_kernel::agent::error::AgentResult;
+use mofa_kernel::agent::error::{AgentError, AgentResult};
 use std::collections::HashMap;
 use std::sync::Arc;
+
+type PluginLoader = Arc<dyn Fn(&str) -> AgentResult<Vec<Arc<dyn DynTool>>> + Send + Sync>;
 
 /// 统一工具注册中心
 /// Unified Tool Registry
@@ -44,7 +46,7 @@ use std::sync::Arc;
 pub struct ToolRegistry {
     /// 工具存储
     /// Tool storage
-    tools: HashMap<String, Arc<dyn Tool>>,
+    tools: HashMap<String, Arc<dyn DynTool>>,
     /// 工具来源
     /// Tool sources
     sources: HashMap<String, ToolSource>,
@@ -55,6 +57,9 @@ pub struct ToolRegistry {
     /// MCP client manager (only used when mcp feature is enabled)
     #[cfg(feature = "mcp")]
     mcp_client: Option<std::sync::Arc<tokio::sync::RwLock<super::mcp::McpClientManager>>>,
+    /// 插件加载器（按路径映射）
+    /// Plugin loaders keyed by plugin path
+    plugin_loaders: HashMap<String, PluginLoader>,
 }
 
 /// 工具来源
@@ -85,6 +90,7 @@ impl ToolRegistry {
             mcp_endpoints: Vec::new(),
             #[cfg(feature = "mcp")]
             mcp_client: None,
+            plugin_loaders: HashMap::new(),
         }
     }
 
@@ -92,7 +98,7 @@ impl ToolRegistry {
     /// Register tool and record source
     pub fn register_with_source(
         &mut self,
-        tool: Arc<dyn Tool>,
+        tool: Arc<dyn DynTool>,
         source: ToolSource,
     ) -> AgentResult<()> {
         let name = tool.name().to_string();
@@ -170,7 +176,7 @@ impl ToolRegistry {
             let adapter =
                 super::mcp::McpToolAdapter::new(endpoint.clone(), tool_info, client.clone());
             self.register_with_source(
-                std::sync::Arc::new(adapter),
+                adapter.into_dynamic(),
                 ToolSource::Mcp {
                     endpoint: endpoint.clone(),
                 },
@@ -224,12 +230,73 @@ impl ToolRegistry {
         Ok(to_remove)
     }
 
+    /// 注册插件加载器
+    /// Register plugin loader callback for a path
+    pub fn register_plugin_loader<F>(&mut self, path: impl Into<String>, loader: F)
+    where
+        F: Fn(&str) -> AgentResult<Vec<Arc<dyn DynTool>>> + Send + Sync + 'static,
+    {
+        self.plugin_loaders.insert(path.into(), Arc::new(loader));
+    }
+
     /// 热加载插件 (TODO: 实际插件系统实现)
-    /// Hot reload plugin (TODO: actual implementation)
-    pub async fn hot_reload_plugin(&mut self, _path: &str) -> AgentResult<Vec<String>> {
-        // TODO: 实际插件热加载实现
-        // TODO: actual hot reload implementation
-        Ok(vec![])
+    /// Hot reload plugin
+    pub async fn hot_reload_plugin(&mut self, path: &str) -> AgentResult<Vec<String>> {
+        let loader = self.plugin_loaders.get(path).cloned().ok_or_else(|| {
+            AgentError::NotFound(format!("Plugin loader not registered for path: {path}"))
+        })?;
+
+        let tools_backup = self.tools.clone();
+        let sources_backup = self.sources.clone();
+
+        let to_remove: Vec<String> = self
+            .sources
+            .iter()
+            .filter_map(|(name, source)| {
+                if let ToolSource::Plugin { path: plugin_path } = source
+                    && plugin_path == path
+                {
+                    return Some(name.clone());
+                }
+                None
+            })
+            .collect();
+
+        for name in to_remove {
+            self.tools.remove(&name);
+            self.sources.remove(&name);
+        }
+
+        let loaded_tools = match loader(path) {
+            Ok(tools) => tools,
+            Err(err) => {
+                self.tools = tools_backup;
+                self.sources = sources_backup;
+                return Err(err);
+            }
+        };
+
+        let mut reloaded_names = Vec::new();
+        for tool in loaded_tools {
+            let name = tool.name().to_string();
+            if self.sources.contains_key(&name) {
+                self.tools = tools_backup;
+                self.sources = sources_backup;
+                return Err(AgentError::RegistrationFailed(format!(
+                    "Tool '{name}' already exists and cannot be replaced during plugin hot reload",
+                )));
+            }
+
+            self.register_with_source(
+                tool,
+                ToolSource::Plugin {
+                    path: path.to_string(),
+                },
+            )?;
+            reloaded_names.push(name);
+        }
+
+        Ok(reloaded_names)
     }
 
     /// 获取工具来源
@@ -255,7 +322,7 @@ impl ToolRegistry {
                     false
                 }
             })
-            .map(|(_, tool)| ToolDescriptor::from_tool(tool.as_ref()))
+            .map(|(_, tool)| ToolDescriptor::from_dyn_tool(tool.as_ref()))
             .collect()
     }
 
@@ -274,11 +341,11 @@ impl Default for ToolRegistry {
 
 #[async_trait]
 impl ToolRegistryTrait for ToolRegistry {
-    fn register(&mut self, tool: Arc<dyn Tool>) -> AgentResult<()> {
+    fn register(&mut self, tool: Arc<dyn DynTool>) -> AgentResult<()> {
         self.register_with_source(tool, ToolSource::Dynamic)
     }
 
-    fn get(&self, name: &str) -> Option<Arc<dyn Tool>> {
+    fn get(&self, name: &str) -> Option<Arc<dyn DynTool>> {
         self.tools.get(name).cloned()
     }
 
@@ -290,7 +357,7 @@ impl ToolRegistryTrait for ToolRegistry {
     fn list(&self) -> Vec<ToolDescriptor> {
         self.tools
             .values()
-            .map(|t| ToolDescriptor::from_tool(t.as_ref()))
+            .map(|t| ToolDescriptor::from_dyn_tool(t.as_ref()))
             .collect()
     }
 
@@ -333,7 +400,7 @@ impl<'a> ToolSearcher<'a> {
             .tools
             .iter()
             .filter(|(name, _)| name.to_lowercase().contains(&pattern_lower))
-            .map(|(_, tool)| ToolDescriptor::from_tool(tool.as_ref()))
+            .map(|(_, tool)| ToolDescriptor::from_dyn_tool(tool.as_ref()))
             .collect()
     }
 
@@ -345,7 +412,7 @@ impl<'a> ToolSearcher<'a> {
             .tools
             .values()
             .filter(|tool| tool.description().to_lowercase().contains(&query_lower))
-            .map(|tool| ToolDescriptor::from_tool(tool.as_ref()))
+            .map(|tool| ToolDescriptor::from_dyn_tool(tool.as_ref()))
             .collect()
     }
 
@@ -359,7 +426,7 @@ impl<'a> ToolSearcher<'a> {
                 let metadata = tool.metadata();
                 metadata.tags.iter().any(|t| t == tag)
             })
-            .map(|tool| ToolDescriptor::from_tool(tool.as_ref()))
+            .map(|tool| ToolDescriptor::from_dyn_tool(tool.as_ref()))
             .collect()
     }
 
@@ -370,7 +437,139 @@ impl<'a> ToolSearcher<'a> {
             .tools
             .values()
             .filter(|tool| tool.metadata().is_dangerous || tool.requires_confirmation())
-            .map(|tool| ToolDescriptor::from_tool(tool.as_ref()))
+            .map(|tool| ToolDescriptor::from_dyn_tool(tool.as_ref()))
             .collect()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use mofa_kernel::agent::components::tool::{ToolInput, ToolResult};
+    use mofa_kernel::agent::context::AgentContext;
+
+    struct TestTool {
+        name: &'static str,
+    }
+
+    impl TestTool {
+        fn new(name: &'static str) -> Self {
+            Self { name }
+        }
+    }
+
+    #[async_trait]
+    impl Tool for TestTool {
+        fn name(&self) -> &str {
+            self.name
+        }
+
+        fn description(&self) -> &str {
+            "test tool"
+        }
+
+        fn parameters_schema(&self) -> serde_json::Value {
+            serde_json::json!({
+                "type": "object",
+                "properties": {}
+            })
+        }
+
+        async fn execute(
+            &self,
+            _input: ToolInput<serde_json::Value>,
+            _ctx: &AgentContext,
+        ) -> ToolResult<serde_json::Value> {
+            ToolResult::success(serde_json::json!({"ok": true}))
+        }
+    }
+
+    #[tokio::test]
+    async fn hot_reload_plugin_replaces_existing_plugin_tools() {
+        let mut registry = ToolRegistry::new();
+        let path = "/plugins/sample.rhai";
+
+        registry
+            .register_with_source(
+                TestTool::new("old_plugin_tool").into_dynamic(),
+                ToolSource::Plugin {
+                    path: path.to_string(),
+                },
+            )
+            .unwrap();
+        registry
+            .register_with_source(
+                TestTool::new("keep_dynamic").into_dynamic(),
+                ToolSource::Dynamic,
+            )
+            .unwrap();
+
+        registry.register_plugin_loader(path, |_plugin_path| {
+            Ok(vec![
+                TestTool::new("new_plugin_tool_a").into_dynamic(),
+                TestTool::new("new_plugin_tool_b").into_dynamic(),
+            ])
+        });
+
+        let reloaded = registry.hot_reload_plugin(path).await.unwrap();
+        assert_eq!(reloaded.len(), 2);
+        assert!(reloaded.iter().any(|n| n == "new_plugin_tool_a"));
+        assert!(reloaded.iter().any(|n| n == "new_plugin_tool_b"));
+
+        assert!(!registry.contains("old_plugin_tool"));
+        assert!(registry.contains("keep_dynamic"));
+        assert!(registry.contains("new_plugin_tool_a"));
+        assert!(registry.contains("new_plugin_tool_b"));
+
+        assert!(matches!(
+            registry.get_source("new_plugin_tool_a"),
+            Some(ToolSource::Plugin { path: p }) if p == path
+        ));
+    }
+
+    #[tokio::test]
+    async fn hot_reload_plugin_rolls_back_on_loader_error() {
+        let mut registry = ToolRegistry::new();
+        let path = "/plugins/fail.rhai";
+
+        registry
+            .register_with_source(
+                TestTool::new("existing_plugin_tool").into_dynamic(),
+                ToolSource::Plugin {
+                    path: path.to_string(),
+                },
+            )
+            .unwrap();
+
+        registry.register_plugin_loader(path, |_plugin_path| {
+            Err(AgentError::Other(
+                "simulated plugin load failure".to_string(),
+            ))
+        });
+
+        let err = registry
+            .hot_reload_plugin(path)
+            .await
+            .expect_err("reload should fail");
+        assert!(err.to_string().contains("simulated plugin load failure"));
+
+        assert!(registry.contains("existing_plugin_tool"));
+        assert!(matches!(
+            registry.get_source("existing_plugin_tool"),
+            Some(ToolSource::Plugin { path: p }) if p == path
+        ));
+    }
+
+    #[tokio::test]
+    async fn hot_reload_plugin_fails_without_registered_loader() {
+        let mut registry = ToolRegistry::new();
+        let path = "/plugins/missing_loader.rhai";
+
+        let err = registry
+            .hot_reload_plugin(path)
+            .await
+            .expect_err("reload should fail");
+        assert!(matches!(err, AgentError::NotFound(_)));
+        assert!(err.to_string().contains("Plugin loader not registered"));
     }
 }

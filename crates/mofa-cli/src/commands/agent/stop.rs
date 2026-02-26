@@ -2,6 +2,7 @@
 
 use crate::context::CliContext;
 use colored::Colorize;
+use tracing::info;
 
 /// Execute the `mofa agent stop` command
 pub async fn run(
@@ -11,37 +12,42 @@ pub async fn run(
 ) -> anyhow::Result<()> {
     println!("{} Stopping agent: {}", "→".green(), agent_id.cyan());
 
+    // Check if agent exists in registry or store
+    let in_registry = ctx.agent_registry.contains(agent_id).await;
+
     let previous_entry = ctx
         .agent_store
         .get(agent_id)
         .map_err(|e| anyhow::anyhow!("Failed to load persisted agent '{}': {}", agent_id, e))?;
 
+    let in_store = previous_entry.is_some();
+
+    if !in_registry && !in_store {
+        anyhow::bail!("Agent '{}' not found", agent_id);
+    }
+
     // When commands run in separate CLI invocations, runtime registry state can be absent.
-    // In that case, treat stop as a persisted-state transition if the agent exists on disk.
-    if !ctx.agent_registry.contains(agent_id).await {
-        if let Some(mut entry) = previous_entry.clone() {
-            if !force_persisted_stop {
-                anyhow::bail!(
-                    "Agent '{}' is not active in runtime registry. Use --force-persisted-stop to mark persisted state as Stopped.",
-                    agent_id
-                );
-            }
+    // In that case, if force_persisted_stop is true, update the persisted state.
+    if !in_registry && in_store && force_persisted_stop
+        && let Some(mut entry) = previous_entry
+    {
+        entry.state = "Stopped".to_string();
+        ctx.agent_store
+            .save(agent_id, &entry)
+            .map_err(|e| anyhow::anyhow!("Failed to update agent '{}': {}", agent_id, e))?;
 
-            entry.state = "Stopped".to_string();
-            ctx.agent_store
-                .save(agent_id, &entry)
-                .map_err(|e| anyhow::anyhow!("Failed to update agent '{}': {}", agent_id, e))?;
+        println!(
+            "{} Agent '{}' persisted state updated to Stopped",
+            "✓".green(),
+            agent_id
+        );
+        return Ok(());
+    }
 
-            println!(
-                "{} Agent '{}' was not running; updated persisted state to Stopped",
-                "!".yellow(),
-                agent_id
-            );
-            return Ok(());
-        }
-
+    // If not in registry and no force flag, error out
+    if !in_registry {
         anyhow::bail!(
-            "Agent '{}' not found in registry or persisted store",
+            "Agent '{}' is not active in runtime registry. Use --force-persisted-stop to update persisted state.",
             agent_id
         );
     }
@@ -91,12 +97,12 @@ pub async fn run(
             agent_id
         );
     } else {
-        println!(
-            "{} Agent '{}' was not in the registry",
-            "!".yellow(),
-            agent_id
-        );
+        println!("  {} Agent is not running", "!".yellow());
     }
+
+    println!("{} Agent '{}' stopped", "✓".green(), agent_id);
+
+    info!("Agent '{}' stopped", agent_id);
 
     Ok(())
 }

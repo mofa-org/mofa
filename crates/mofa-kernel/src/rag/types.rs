@@ -10,6 +10,79 @@ use std::collections::HashMap;
 /// This is the basic unit stored in a vector store. Documents are split
 /// into chunks, each chunk is embedded into a vector, and stored along
 /// with its text content and metadata for later retrieval.
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Document {
+    /// Unique identifier for the entire document.
+    pub id: String,
+    /// Text content of the entire document.
+    pub text: String,
+    /// Arbitrary metadata (source file, page number, section title, etc.)
+    pub metadata: HashMap<String, String>,
+}
+
+impl Document {
+    pub fn new(
+        id: impl Into<String>,
+        text: impl Into<String>,
+    ) -> Self {
+        Self {
+            id: id.into(),
+            text: text.into(),
+            metadata: HashMap::new(),
+        }
+    }
+
+    /// Add a metadata entry
+    pub fn with_metadata(mut self, key: impl Into<String>, value: impl Into<String>) -> Self {
+        self.metadata.insert(key.into(), value.into());
+        self
+    }
+}
+
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ScoredDocument {
+    /// Retrieved document.
+    pub document: Document,
+    /// Relevance score (higher is better).
+    pub score: f32,
+    /// Optional retrieval stage/source label (e.g. sparse, dense, hybrid).
+    pub source: Option<String>,
+}
+
+impl ScoredDocument {
+    pub fn new(document: Document, score: f32, source: Option<String>) -> Self {
+        Self {
+            document,
+            score,
+            source,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct GenerateInput {
+    /// User query.
+    pub query: String,
+    /// RAG context passed to generator.
+    pub context: Vec<Document>,
+    /// Additional generation metadata.
+    pub metadata: HashMap<String, String>,
+}
+
+impl GenerateInput {
+    pub fn new(query: impl Into<String>, context: Vec<Document>) -> Self {
+        Self { query: query.into(), context, metadata: HashMap::new() }
+    }
+
+    pub fn with_metadata(mut self, key: impl Into<String>, value: impl Into<String>) -> Self {
+        self.metadata.insert(key.into(), value.into());
+        self
+    }
+}
+
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DocumentChunk {
     /// Unique identifier for this chunk
@@ -24,11 +97,7 @@ pub struct DocumentChunk {
 
 impl DocumentChunk {
     /// Create a new document chunk
-    pub fn new(
-        id: impl Into<String>,
-        text: impl Into<String>,
-        embedding: Vec<f32>,
-    ) -> Self {
+    pub fn new(id: impl Into<String>, text: impl Into<String>, embedding: Vec<f32>) -> Self {
         Self {
             id: id.into(),
             text: text.into(),
@@ -81,6 +150,7 @@ impl SearchResult {
 
 /// Similarity metric used for comparing embedding vectors.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[non_exhaustive]
 pub enum SimilarityMetric {
     /// Cosine similarity (measures angle between vectors, range 0.0 to 1.0 for normalized vectors)
     #[default]
@@ -123,5 +193,16 @@ mod tests {
     #[test]
     fn test_similarity_metric_default() {
         assert_eq!(SimilarityMetric::default(), SimilarityMetric::Cosine);
+    }
+
+    #[test]
+    fn test_generate_input_with_metadata() {
+        let doc = Document::new("doc-1", "hello");
+        let input = GenerateInput::new("what is this?", vec![doc])
+            .with_metadata("language", "en");
+
+        assert_eq!(input.query, "what is this?");
+        assert_eq!(input.context.len(), 1);
+        assert_eq!(input.metadata.get("language").unwrap(), "en");
     }
 }
