@@ -864,23 +864,22 @@ kbd {
   opacity: 0;
 }
 
-/* animations */
-@keyframes fade-up {
+/* IMPORTANT: Do NOT animate CSS 'transform' on SVG elements —
+   it overrides the SVG 'transform' attribute that positions nodes! */
+@keyframes fade-in {
   from {
     opacity: 0;
-    transform: translateY(4px);
   }
 
   to {
     opacity: 1;
-    transform: translateY(0);
   }
 }
 
 .node-group {
-  animation: fade-up .25s ease-out both;
+  animation: fade-in .3s ease-out both;
 }
 
 .edge-line {
-  animation: fade-up .25s ease-out both;
+  animation: fade-in .3s ease-out both;
 }

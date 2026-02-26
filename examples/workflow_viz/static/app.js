@@ -76,13 +76,9 @@
       graphTitle.textContent = currentGraph.name;
       statsBar.classList.remove('hidden');
     } catch (e) { console.error(e); }
-    // Wait for DOM to settle, then layout
-    requestAnimationFrame(() => {
-      requestAnimationFrame(() => {
-        doLayout();
-        loading.classList.add('hidden');
-      });
-    });
+    // Layout immediately — viewBox approach doesn't need DOM timing
+    doLayout();
+    loading.classList.add('hidden');
   }
 
   // ── Layout (Kahn's topo sort + longest path) ──
@@ -157,7 +153,7 @@
     statL.textContent = layoutLayers;
 
     renderGraph();
-    fitView();
+    fitView(); // sets SVG viewBox — always works, no DOM dependency
     updateMinimap();
   }
 
@@ -232,7 +228,7 @@
       gGroup.appendChild(g);
     });
 
-    applyTx();
+    // viewBox will be set by fitView() called after renderGraph()
   }
 
   function makeShape(type, m) {
@@ -349,13 +345,152 @@
   // ── Export ──
   function exportSVG() {
     if (!currentGraph) return;
-    const c = svg.cloneNode(true), bb = gGroup.getBBox(), m = 40;
-    c.setAttribute('viewBox', `${bb.x - m} ${bb.y - m} ${bb.width + m * 2} ${bb.height + m * 2}`);
-    c.setAttribute('width', bb.width + m * 2); c.setAttribute('height', bb.height + m * 2);
-    const g = c.querySelector('#graph-group'); if (g) g.removeAttribute('transform');
-    const b = new Blob([new XMLSerializer().serializeToString(c)], { type: 'image/svg+xml' });
-    const u = URL.createObjectURL(b), a = document.createElement('a');
-    a.href = u; a.download = `${currentGraph.id || 'wf'}.svg`; a.click(); URL.revokeObjectURL(u);
+    const bb = gGroup.getBBox();
+    const m = 50;
+    const vx = bb.x - m, vy = bb.y - m;
+    const vw = bb.width + m * 2, vh = bb.height + m * 2;
+
+    // Build a clean SVG from scratch with inlined styles
+    const ns = 'http://www.w3.org/2000/svg';
+    const out = document.createElementNS(ns, 'svg');
+    out.setAttribute('xmlns', ns);
+    out.setAttribute('viewBox', `${vx} ${vy} ${vw} ${vh}`);
+    out.setAttribute('width', vw);
+    out.setAttribute('height', vh);
+
+    // Embedded style for fonts
+    const style = document.createElementNS(ns, 'style');
+    style.textContent = `
+      @import url('https://fonts.googleapis.com/css2?family=Inter:wght@500;600;700&family=JetBrains+Mono:wght@500;600&display=swap');
+      text { font-family: 'Inter', system-ui, sans-serif; }
+    `;
+    out.appendChild(style);
+
+    // White background
+    const bg = document.createElementNS(ns, 'rect');
+    bg.setAttribute('x', vx); bg.setAttribute('y', vy);
+    bg.setAttribute('width', vw); bg.setAttribute('height', vh);
+    bg.setAttribute('fill', '#f4f5f8');
+    out.appendChild(bg);
+
+    // Re-create defs (markers)
+    const defs = document.createElementNS(ns, 'defs');
+    const markers = [
+      { id: 'exp-arrow', fill: '#c0c4cc' },
+      { id: 'exp-arrow-cond', fill: '#F1C40F' },
+      { id: 'exp-arrow-err', fill: '#E74C3C' },
+    ];
+    markers.forEach(mk => {
+      const marker = document.createElementNS(ns, 'marker');
+      setA(marker, { id: mk.id, markerWidth: 10, markerHeight: 7, refX: 10, refY: 3.5, orient: 'auto', markerUnits: 'strokeWidth' });
+      const poly = document.createElementNS(ns, 'polygon');
+      poly.setAttribute('points', '0 0, 10 3.5, 0 7');
+      poly.setAttribute('fill', mk.fill);
+      marker.appendChild(poly);
+      defs.appendChild(marker);
+    });
+    out.appendChild(defs);
+
+    const g = document.createElementNS(ns, 'g');
+    const nm = {};
+    layoutNodes.forEach(n => { nm[n.id] = n; });
+
+    // Draw edges with inline styles
+    currentGraph.edges.forEach(e => {
+      const f = nm[e.from], t = nm[e.to];
+      if (!f || !t) return;
+      const x1 = f.x, y1 = f.y + NODE_H / 2, x2 = t.x, y2 = t.y - NODE_H / 2;
+      const cp = Math.max(Math.abs(y2 - y1) * 0.4, 20);
+      const p = document.createElementNS(ns, 'path');
+      p.setAttribute('d', `M${x1} ${y1} C${x1} ${y1 + cp},${x2} ${y2 - cp},${x2} ${y2}`);
+      p.setAttribute('fill', 'none');
+      if (e.edge_type === 'conditional') {
+        p.setAttribute('stroke', '#F1C40F');
+        p.setAttribute('stroke-width', '1.8');
+        p.setAttribute('stroke-dasharray', '8 5');
+        p.setAttribute('marker-end', 'url(#exp-arrow-cond)');
+      } else if (e.edge_type === 'error') {
+        p.setAttribute('stroke', '#E74C3C');
+        p.setAttribute('stroke-width', '1.5');
+        p.setAttribute('stroke-dasharray', '4 4');
+        p.setAttribute('marker-end', 'url(#exp-arrow-err)');
+      } else {
+        p.setAttribute('stroke', '#c0c4cc');
+        p.setAttribute('stroke-width', '1.5');
+        p.setAttribute('marker-end', 'url(#exp-arrow)');
+      }
+      g.appendChild(p);
+
+      // Edge label
+      if (e.label) {
+        const mx = (x1 + x2) / 2, my = (y1 + y2) / 2;
+        const tw = e.label.length * 6.5 + 12;
+        const lbg = document.createElementNS(ns, 'rect');
+        setA(lbg, { x: mx - tw / 2, y: my - 8, width: tw, height: 16, rx: 3 });
+        lbg.setAttribute('fill', '#f4f5f8');
+        g.appendChild(lbg);
+        const lt = document.createElementNS(ns, 'text');
+        setA(lt, { x: mx, y: my + 1 });
+        lt.setAttribute('fill', '#5a6a7a');
+        lt.setAttribute('font-family', "'JetBrains Mono', monospace");
+        lt.setAttribute('font-size', '9');
+        lt.setAttribute('font-weight', '500');
+        lt.setAttribute('text-anchor', 'middle');
+        lt.setAttribute('dominant-baseline', 'central');
+        lt.textContent = e.label;
+        g.appendChild(lt);
+      }
+    });
+
+    // Draw nodes with inline styles
+    layoutNodes.forEach(n => {
+      const ng = document.createElementNS(ns, 'g');
+      ng.setAttribute('transform', `translate(${n.x - NODE_W / 2},${n.y - NODE_H / 2})`);
+      const meta = TYPE_META[n.type] || TYPE_META.task;
+
+      // Shape
+      const shape = makeShape(n.type, meta);
+      shape.setAttribute('fill', meta.fill);
+      shape.setAttribute('stroke', meta.stroke);
+      shape.setAttribute('stroke-width', '2');
+      ng.appendChild(shape);
+
+      // Label
+      const lb = document.createElementNS(ns, 'text');
+      setA(lb, { x: NODE_W / 2, y: NODE_H / 2 - 5 });
+      lb.setAttribute('fill', '#2c3e50');
+      lb.setAttribute('font-family', "'Inter', sans-serif");
+      lb.setAttribute('font-size', '11');
+      lb.setAttribute('font-weight', '600');
+      lb.setAttribute('text-anchor', 'middle');
+      lb.setAttribute('dominant-baseline', 'central');
+      lb.textContent = n.name.length > 18 ? n.name.slice(0, 17) + '…' : n.name;
+      ng.appendChild(lb);
+
+      // Type badge
+      const bd = document.createElementNS(ns, 'text');
+      setA(bd, { x: NODE_W / 2, y: NODE_H / 2 + 9 });
+      bd.setAttribute('fill', '#8e99a4');
+      bd.setAttribute('font-family', "'JetBrains Mono', monospace");
+      bd.setAttribute('font-size', '8');
+      bd.setAttribute('font-weight', '500');
+      bd.setAttribute('text-anchor', 'middle');
+      bd.setAttribute('dominant-baseline', 'hanging');
+      bd.setAttribute('letter-spacing', '0.06em');
+      bd.textContent = meta.label;
+      ng.appendChild(bd);
+
+      g.appendChild(ng);
+    });
+
+    out.appendChild(g);
+
+    const svgStr = new XMLSerializer().serializeToString(out);
+    const blob = new Blob([svgStr], { type: 'image/svg+xml' });
+    const u = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = u; a.download = `${currentGraph.id || 'wf'}.svg`; a.click();
+    URL.revokeObjectURL(u);
   }
 
   // ── Search ──
@@ -392,46 +527,61 @@
     ctx.globalAlpha = 1;
     const rect = wrap.getBoundingClientRect();
     if (rect.width > 0 && rect.height > 0) {
-      const vx = (-viewX / scale) * s + ox, vy = (-viewY / scale) * s + oy;
-      const vw = (rect.width / scale) * s, vh = (rect.height / scale) * s;
+      // Map the current viewBox to minimap space
+      const vx = (vbX - mnX) * s + (cw - gw * s) / 2;
+      const vy = (vbY - mnY) * s + (ch - gh * s) / 2;
+      const vw = vbW * s, vh = vbH * s;
       mmVp.style.left = Math.max(0, vx) + 'px'; mmVp.style.top = Math.max(0, vy) + 'px';
       mmVp.style.width = Math.min(vw, cw) + 'px'; mmVp.style.height = Math.min(vh, ch) + 'px';
     }
   }
 
-  // ── Transform ──
+  // ── ViewBox-based camera system ──
+  // viewBox = [vbX, vbY, vbW, vbH] — defines visible area in graph coordinates
+  let vbX = 0, vbY = 0, vbW = 800, vbH = 600;
+
   function applyTx() {
-    gGroup.setAttribute('transform', `translate(${viewX},${viewY}) scale(${scale})`);
+    // Remove any transform on the group — viewBox handles everything
+    gGroup.removeAttribute('transform');
+    svg.setAttribute('viewBox', `${vbX} ${vbY} ${vbW} ${vbH}`);
+    svg.setAttribute('preserveAspectRatio', 'xMidYMid meet');
+    // Compute effective scale for display
+    const rect = wrap.getBoundingClientRect();
+    if (rect.width > 0) scale = rect.width / vbW;
     zPct.textContent = Math.round(scale * 100) + '%';
     updateMinimap();
   }
 
   function fitView() {
     if (!layoutNodes.length) return;
-    const rect = wrap.getBoundingClientRect();
-    // Guard: if container has no size yet, bail
-    if (rect.width < 10 || rect.height < 10) return;
     const xs = layoutNodes.map(n => n.x), ys = layoutNodes.map(n => n.y);
-    const x0 = Math.min(...xs) - NODE_W / 2 - PAD, x1 = Math.max(...xs) + NODE_W / 2 + PAD;
-    const y0 = Math.min(...ys) - NODE_H / 2 - PAD, y1 = Math.max(...ys) + NODE_H / 2 + PAD;
-    const gw = x1 - x0 || 1, gh = y1 - y0 || 1;
-    scale = Math.min(rect.width / gw, rect.height / gh, 1.0);
-    const cx = (x0 + x1) / 2, cy = (y0 + y1) / 2;
-    viewX = rect.width / 2 - cx * scale;
-    viewY = rect.height / 2 - cy * scale;
+    vbX = Math.min(...xs) - NODE_W / 2 - PAD;
+    const x1 = Math.max(...xs) + NODE_W / 2 + PAD;
+    vbY = Math.min(...ys) - NODE_H / 2 - PAD;
+    const y1 = Math.max(...ys) + NODE_H / 2 + PAD;
+    vbW = (x1 - vbX) || 1;
+    vbH = (y1 - vbY) || 1;
     applyTx();
   }
 
   function panTo(n) {
-    const rect = wrap.getBoundingClientRect();
-    scale = Math.max(scale, 0.7);
-    viewX = rect.width / 2 - n.x * scale; viewY = rect.height / 2 - n.y * scale;
+    // Center the viewBox on node n
+    vbX = n.x - vbW / 2;
+    vbY = n.y - vbH / 2;
     applyTx();
   }
   function zoom(f, cx, cy) {
-    const ns = Math.min(Math.max(scale * f, .1), 4);
-    if (cx !== undefined) { viewX = cx - (cx - viewX) * (ns / scale); viewY = cy - (cy - viewY) * (ns / scale); }
-    scale = ns; applyTx();
+    // cx, cy are in screen pixels — convert to graph coords
+    const rect = wrap.getBoundingClientRect();
+    const gx = vbX + (cx !== undefined ? (cx / rect.width) * vbW : vbW / 2);
+    const gy = vbY + (cy !== undefined ? (cy / rect.height) * vbH : vbH / 2);
+    const nw = vbW / f, nh = vbH / f;
+    // Clamp zoom
+    if (nw < 50 || nw > 10000) return;
+    vbX = gx - (gx - vbX) * (nw / vbW);
+    vbY = gy - (gy - vbY) * (nh / vbH);
+    vbW = nw; vbH = nh;
+    applyTx();
   }
 
   // ── Tooltip ──
@@ -443,8 +593,8 @@
     bZI.onclick = () => zoom(1.25); bZO.onclick = () => zoom(1 / 1.25);
     bFit.onclick = fitView; bSim.onclick = toggleSim; bExp.onclick = exportSVG;
     wrap.addEventListener('wheel', e => { e.preventDefault(); const r = wrap.getBoundingClientRect(); zoom(e.deltaY < 0 ? 1.08 : 1 / 1.08, e.clientX - r.left, e.clientY - r.top); }, { passive: false });
-    wrap.onmousedown = e => { if (e.target.closest('.node-group')) return; isPanning = true; panSX = e.clientX - viewX; panSY = e.clientY - viewY; wrap.style.cursor = 'grabbing'; };
-    window.onmousemove = e => { if (!isPanning) return; viewX = e.clientX - panSX; viewY = e.clientY - panSY; applyTx(); };
+    wrap.onmousedown = e => { if (e.target.closest('.node-group')) return; isPanning = true; panSX = e.clientX; panSY = e.clientY; wrap.style.cursor = 'grabbing'; };
+    window.onmousemove = e => { if (!isPanning) return; const rect = wrap.getBoundingClientRect(); const dx = (e.clientX - panSX) * (vbW / rect.width); const dy = (e.clientY - panSY) * (vbH / rect.height); vbX -= dx; vbY -= dy; panSX = e.clientX; panSY = e.clientY; applyTx(); };
     window.onmouseup = () => { if (isPanning) { isPanning = false; wrap.style.cursor = ''; } };
     wrap.onclick = e => { if (!e.target.closest('.node-group')) closeDetail(); };
     dClose.onclick = closeDetail;
