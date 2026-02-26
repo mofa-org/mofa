@@ -988,6 +988,7 @@ impl AgentWorkflowBuilder {
 
     /// 构建工作流
     /// Build the workflow
+    #[must_use]
     pub fn build(self) -> AgentWorkflow {
         // 构建邻接表
         // Build adjacency list
