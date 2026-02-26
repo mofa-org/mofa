@@ -27,6 +27,12 @@ pub use mofa_kernel::agent::types::AgentInput;
 // 重新导出组件 (从 components 模块统一导入)
 // Re-export components (unified import from components module)
 pub use components::{
+    // Context compressor trait and implementations
+    CompressionStrategy,
+    ContextCompressor,
+    SlidingWindowCompressor,
+    SummarizingCompressor,
+    TokenCounter,
     CoordinationPattern,
     // Kernel traits 和类型 (通过 components 重导出)
     // Kernel traits and types (re-exported via components)
