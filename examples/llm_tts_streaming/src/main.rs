@@ -8,10 +8,12 @@
 
 use mofa_sdk::llm::{LLMAgentBuilder, openai_from_env};
 use mofa_sdk::plugins::{KokoroTTS, TTSPlugin};
-use rodio::{OutputStream, Sink, buffer::SamplesBuffer};
 use std::env;
 use std::sync::Arc;
 use uuid::Uuid;
+
+#[cfg(feature = "audio-playback")]
+use rodio::{OutputStream, Sink, buffer::SamplesBuffer};
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -40,8 +42,13 @@ async fn main() -> anyhow::Result<()> {
             .with_plugin(TTSPlugin::with_engine("tts", kokoro_engine, Some("zf_088")))
             .build()
     );
+    #[cfg(feature = "audio-playback")]
     let (_output_stream, stream_handle) = OutputStream::try_default()?;
+    #[cfg(feature = "audio-playback")]
     let audio_sink = Arc::new(Sink::try_new(&stream_handle)?);
+
+    #[cfg(not(feature = "audio-playback"))]
+    println!("Audio playback disabled. Rebuild with --features audio-playback to hear output.");
 
     let session_id = agent.current_session_id().await;
     println!("Using session: {}", session_id);
@@ -78,23 +85,32 @@ async fn main() -> anyhow::Result<()> {
         // 中断现有播放并清空音频队列
         // Interrupt current playback and clear the audio queue
         agent.interrupt_tts().await?;
+        #[cfg(feature = "audio-playback")]
         audio_sink.stop();  // 停止当前播放并清空队列
         // Stop the current playback and clear the queue
 
-        let sink_clone = audio_sink.clone();
-        agent.chat_with_tts_callback(
-            &session_id,
-            input,
-            move |audio_f32| {
-                sink_clone.append(SamplesBuffer::new(1, 24000, audio_f32));
-            }
-        ).await?;
+        #[cfg(feature = "audio-playback")]
+        {
+            let sink_clone = audio_sink.clone();
+            agent.chat_with_tts_callback(
+                &session_id,
+                input,
+                move |audio_f32| {
+                    sink_clone.append(SamplesBuffer::new(1, 24000, audio_f32));
+                }
+            ).await?;
 
-        // 启动播放（非阻塞）
-        // Start playback (non-blocking)
-        audio_sink.play();
-        // 不再使用 sleep_until_end()，让音频在后台播放
-        // No longer using sleep_until_end(), let audio play in the background
+            // 启动播放（非阻塞）
+            // Start playback (non-blocking)
+            audio_sink.play();
+            // 不再使用 sleep_until_end()，让音频在后台播放
+            // No longer using sleep_until_end(), let audio play in the background
+        }
+
+        #[cfg(not(feature = "audio-playback"))]
+        {
+            agent.chat_with_tts_callback(&session_id, input, |_audio_f32| {}).await?;
+        }
     }
     agent.remove_session(&session_id).await?;
     Ok(())
