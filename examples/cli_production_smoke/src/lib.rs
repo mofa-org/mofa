@@ -213,6 +213,23 @@ pub fn smoke_plugin_lifecycle(env: &SmokeEnvironment) -> Result<()> {
         "mofa plugin list (after uninstall)",
     )?;
 
+    // Re-install the plugin and verify it's back
+    let install = env.run(&["plugin", "install", "http-plugin"])?;
+    expect_ok(&install, "mofa plugin install http-plugin")?;
+    expect_stdout_contains(&install, "installed successfully", "mofa plugin install http-plugin")?;
+
+    let after_install = env.run(&["plugin", "list"])?;
+    expect_ok(&after_install, "mofa plugin list (after reinstall)")?;
+    expect_stdout_contains(
+        &after_install,
+        "http-plugin",
+        "mofa plugin list (after reinstall)",
+    )?;
+
+    // Installing a duplicate should fail
+    let dup_install = env.run(&["plugin", "install", "http-plugin"])?;
+    expect_fail(&dup_install, "mofa plugin install http-plugin (duplicate)")?;
+
     Ok(())
 }
 

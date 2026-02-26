@@ -1,6 +1,7 @@
 //! 需求澄清器 - 阶段2: 澄清需求，转换为项目文档
 //! Requirement Clarifier - Phase 2: Clarify requirements and convert to project documents
 
+use mofa_kernel::agent::types::error::{GlobalError, GlobalResult};
 use super::types::*;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -312,7 +313,7 @@ impl RequirementClarifier {
         session: &mut ClarificationSession,
         question_id: &str,
         answer: &str,
-    ) -> anyhow::Result<()> {
+    ) -> GlobalResult<()> {
         let idx = session
             .pending_questions
             .iter()
@@ -325,7 +326,7 @@ impl RequirementClarifier {
                 .push((question, answer.to_string()));
             Ok(())
         } else {
-            Err(anyhow::anyhow!("Question not found: {}", question_id))
+            Err(GlobalError::Other(format!("Question not found: {}", question_id)))
         }
     }
 
@@ -334,7 +335,7 @@ impl RequirementClarifier {
     pub async fn finalize_requirement(
         &self,
         session: &mut ClarificationSession,
-    ) -> anyhow::Result<ProjectRequirement> {
+    ) -> GlobalResult<ProjectRequirement> {
         let requirement = self.synthesize_requirement(session).await?;
         session.clarified_requirement = Some(requirement.clone());
         Ok(requirement)
@@ -343,7 +344,7 @@ impl RequirementClarifier {
     async fn synthesize_requirement(
         &self,
         session: &ClarificationSession,
-    ) -> anyhow::Result<ProjectRequirement> {
+    ) -> GlobalResult<ProjectRequirement> {
         let mut acceptance_criteria = Vec::new();
         for (question, answer) in &session.answered_questions {
             if question.id == "acceptance" {
@@ -454,7 +455,7 @@ impl RequirementClarifier {
         &self,
         todo_id: &str,
         raw_idea: &str,
-    ) -> anyhow::Result<ProjectRequirement> {
+    ) -> GlobalResult<ProjectRequirement> {
         let mut session = self.start_session(todo_id, raw_idea).await;
 
         let pending = session.pending_questions.clone();

@@ -60,6 +60,7 @@ impl ConfigLoader {
             mofa_kernel::config::ConfigError::UnsupportedFormat(e) => {
                 ConfigError::UnsupportedFormat(e)
             }
+            _ => ConfigError::Parse(e.to_string()),
         })?;
 
         Ok(Self { config })

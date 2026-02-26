@@ -39,7 +39,6 @@ uuid.workspace = true
 thiserror.workspace = true
 tokio.workspace = true
 futures.workspace = true
-anyhow.workspace = true
 tokio-stream = { workspace = true }
 tracing.workspace = true
 rand.workspace = true
@@ -87,6 +86,14 @@ qdrant-client = { version = "1.17", optional = true }
 # Image encoding and MIME detection
 base64 = "0.22"
 infer = "0.16"
+
+# Candle ML framework for local model inference
+# Note: CUDA support can be enabled with features = ["cuda"] if CUDA toolkit is available
+candle-core = { version = "0.8" }
+candle-transformers = { version = "0.8" }
+
+# System information for memory monitoring
+sysinfo = "0.31"
 
 [lints]
 workspace = true

@@ -63,7 +63,7 @@
 //!         &self,
 //!         input: Self::Input,
 //!         ctx: &mut SecretaryContext<Self::State>,
-//!     ) -> anyhow::Result<Vec<Self::Output>> {
+//!     ) -> GlobalResult<Vec<Self::Output>> {
 //!         // 自定义处理逻辑
 //!         // Custom processing logic
 //!     }
@@ -79,6 +79,7 @@
 // Implementation Modules
 // =============================================================================
 
+use mofa_kernel::agent::types::error::{GlobalError, GlobalResult};
 mod agent_router;
 mod connection;
 mod core;
