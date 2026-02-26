@@ -1,6 +1,8 @@
 #[cfg(feature = "monitoring")]
 pub use mofa_monitoring::*;
 
+// Unified error conversions (GlobalError <-> runtime errors)
+pub mod error_conversions;
 // =============================================================================
 // MoFA Runtime - Agent Lifecycle and Execution Management
 // =============================================================================
