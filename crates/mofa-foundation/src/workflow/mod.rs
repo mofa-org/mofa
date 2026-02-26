@@ -39,6 +39,7 @@
 
 mod builder;
 mod executor;
+mod fault_tolerance;
 mod graph;
 mod node;
 mod profiler;
@@ -69,6 +70,7 @@ pub use mofa_kernel::workflow::StateGraph;
 pub use builder::*;
 pub use dsl::*;
 pub use executor::*;
+pub use fault_tolerance::{NodePolicy, RetryBackoff};
 pub use graph::*;
 pub use node::*;
 pub use profiler::*;

@@ -181,6 +181,29 @@ impl AgentError {
                 | AgentError::MemoryError(_)
         )
     }
+
+    /// 此错误是否为瞬态错误，操作可能在重试时成功
+    /// Whether this error is transient and the operation may succeed on retry.
+    ///
+    /// 瞬态错误包括超时、资源不可用、IO 失败和通用执行失败。
+    /// 永久错误（配置、未找到、无效输入、中断、验证）应快速失败。
+    /// Transient errors include timeouts, resource unavailability, IO failures,
+    /// and generic execution failures. Permanent errors (config, not-found,
+    /// invalid input, interruption, validation) should fail fast.
+    ///
+    /// NOTE: This is stricter than [`is_retryable`] — it excludes `Internal`,
+    /// `ToolExecutionFailed`, `ReasoningError`, and `MemoryError` which may
+    /// indicate bugs rather than transient infrastructure issues.
+    pub fn is_transient(&self) -> bool {
+        matches!(
+            self,
+            Self::Timeout { .. }
+                | Self::ResourceUnavailable(_)
+                | Self::IoError(_)
+                | Self::ExecutionFailed(_)
+                | Self::CoordinationError(_)
+        )
+    }
 }
 
 impl From<std::io::Error> for AgentError {
@@ -252,5 +275,23 @@ mod tests {
         if let AgentError::ConfigError(msg) = agent_err {
             assert!(msg.contains("bad yaml"));
         }
+    }
+
+    #[test]
+    fn test_is_transient_classification() {
+        // Transient errors — should be retried
+        assert!(AgentError::Timeout { duration_ms: 5000 }.is_transient());
+        assert!(AgentError::ResourceUnavailable("gpu".into()).is_transient());
+        assert!(AgentError::IoError("connection reset".into()).is_transient());
+        assert!(AgentError::ExecutionFailed("LLM timeout".into()).is_transient());
+        assert!(AgentError::CoordinationError("peer unreachable".into()).is_transient());
+
+        // Permanent errors — should NOT be retried
+        assert!(!AgentError::ConfigError("bad yaml".into()).is_transient());
+        assert!(!AgentError::NotFound("agent-x".into()).is_transient());
+        assert!(!AgentError::InvalidInput("missing field".into()).is_transient());
+        assert!(!AgentError::Interrupted.is_transient());
+        assert!(!AgentError::ValidationFailed("schema".into()).is_transient());
+        assert!(!AgentError::Internal("panic".into()).is_transient());
     }
 }
