@@ -15,6 +15,7 @@ use base64::Engine;
 pub mod error;
 pub mod event;
 pub mod global;
+pub mod recovery;
 
 pub use error::{ErrorCategory, ErrorContext, GlobalError, GlobalResult};
 pub use event::{EventBuilder, GlobalEvent};
@@ -22,6 +23,7 @@ pub use event::{execution, lifecycle, message, plugin, state};
 // 重新导出常用类型
 // Re-export common types
 pub use global::{GlobalMessage, MessageContent, MessageMetadata};
+pub use recovery::{Backoff, CircuitBreaker, CircuitBreakerConfig, CircuitState, RetryPolicy, retry, fallback_chain, ErrorRecovery};
 
 // ============================================================================
 // Agent 状态
