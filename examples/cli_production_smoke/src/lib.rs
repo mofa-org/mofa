@@ -168,6 +168,9 @@ pub fn smoke_top_level_commands(env: &SmokeEnvironment) -> Result<()> {
     let info = env.run(&["info"])?;
     expect_ok(&info, "mofa info")?;
     expect_stdout_contains(&info, "MoFA", "mofa info")?;
+    expect_stdout_contains(&info, "Commands", "mofa info (commands section)")?;
+    expect_stdout_contains(&info, "agent", "mofa info (agent command)")?;
+    expect_stdout_contains(&info, "Runtime", "mofa info (runtime section)")?;
 
     let config_path = env.run(&["config", "path"])?;
     expect_ok(&config_path, "mofa config path")?;
@@ -216,7 +219,11 @@ pub fn smoke_plugin_lifecycle(env: &SmokeEnvironment) -> Result<()> {
     // Re-install the plugin and verify it's back
     let install = env.run(&["plugin", "install", "http-plugin"])?;
     expect_ok(&install, "mofa plugin install http-plugin")?;
-    expect_stdout_contains(&install, "installed successfully", "mofa plugin install http-plugin")?;
+    expect_stdout_contains(
+        &install,
+        "installed successfully",
+        "mofa plugin install http-plugin",
+    )?;
 
     let after_install = env.run(&["plugin", "list"])?;
     expect_ok(&after_install, "mofa plugin list (after reinstall)")?;
@@ -254,7 +261,7 @@ pub fn smoke_agent_lifecycle(env: &SmokeEnvironment, agent_id: &str) -> Result<(
     let stop = env.run(&["agent", "stop", agent_id, "--force-persisted-stop"])?;
     expect_ok(&stop, "mofa agent stop --force-persisted-stop")?;
     if !(stop.stdout.contains("stopped and unregistered")
-        || stop.stdout.contains("updated persisted state to Stopped"))
+        || stop.stdout.contains("persisted state updated to Stopped"))
     {
         bail!(
             "mofa agent stop output did not confirm stopped transition.\nstdout:\n{}\nstderr:\n{}",
@@ -265,7 +272,28 @@ pub fn smoke_agent_lifecycle(env: &SmokeEnvironment, agent_id: &str) -> Result<(
 
     let running_only = env.run(&["agent", "list", "--running"])?;
     expect_ok(&running_only, "mofa agent list --running")?;
-    expect_stdout_not_contains(&running_only, agent_id, "mofa agent list --running")?;
+    // Filter out tracing log lines (start with ISO timestamp) so WARN noise
+    // about unparseable agent metadata files doesn't cause a false positive.
+    let table_output: String = running_only
+        .stdout
+        .lines()
+        .filter(|line| {
+            let trimmed = line.trim();
+            // Tracing lines look like: 2026-02-26T07:30:39.024831Z  WARN ...
+            !(trimmed.len() > 20
+                && trimmed.as_bytes().first().is_some_and(|b| b.is_ascii_digit())
+                && trimmed.contains("WARN"))
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+    if table_output.contains(agent_id) {
+        bail!(
+            "mofa agent list --running table output unexpectedly contained '{}'.\nfiltered stdout:\n{}\nraw stdout:\n{}",
+            agent_id,
+            table_output,
+            running_only.stdout
+        );
+    }
 
     Ok(())
 }

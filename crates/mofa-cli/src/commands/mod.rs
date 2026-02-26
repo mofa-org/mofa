@@ -5,6 +5,7 @@ pub mod build;
 pub mod config_cmd;
 pub mod db;
 pub mod generate;
+pub mod info;
 pub mod init;
 pub mod new;
 pub mod plugin;
