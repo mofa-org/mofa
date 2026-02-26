@@ -70,15 +70,23 @@
     empty.classList.add('hidden');
     loading.classList.remove('hidden');
     stopSim(); closeDetail();
+    currentGraph = null;
     try {
       const r = await fetch(`/api/workflows/${id}`);
       currentGraph = await r.json();
       graphTitle.textContent = currentGraph.name;
       statsBar.classList.remove('hidden');
-    } catch (e) { console.error(e); }
+    } catch (e) {
+      console.error(e);
+      graphTitle.textContent = '';
+      statsBar.classList.add('hidden');
+      empty.classList.remove('hidden');
+      return;
+    } finally {
+      loading.classList.add('hidden');
+    }
     // Layout immediately — viewBox approach doesn't need DOM timing
     doLayout();
-    loading.classList.add('hidden');
   }
 
   // ── Layout (Kahn's topo sort + longest path) ──
@@ -99,7 +107,8 @@
     // Kahn's BFS
     const topo = [], q = [], dc = { ...inDeg };
     nodes.forEach(n => { if (dc[n.id] === 0) q.push(n.id); });
-    while (q.length) { const c = q.shift(); topo.push(c); for (const nx of adj[c]) { dc[nx]--; if (dc[nx] === 0) q.push(nx); } }
+    let qi = 0;
+    while (qi < q.length) { const c = q[qi++]; topo.push(c); for (const nx of adj[c]) { dc[nx]--; if (dc[nx] === 0) q.push(nx); } }
     nodes.forEach(n => { if (!topo.includes(n.id)) topo.push(n.id); });
 
     // Longest-path layers

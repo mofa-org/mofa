@@ -1,8 +1,7 @@
 //! Workflow Visualization Web UI
 //!
-//! An axum-based web server that loads YAML workflow definitions,
-//! serves an interactive graph visualization, and streams simulated
-//! telemetry events via WebSocket.
+//! An axum-based web server that loads YAML workflow definitions and
+//! serves an interactive graph visualization backed by a simple REST API.
 //!
 //! Run with:  cargo run -p workflow_viz
 //! Then open: http://127.0.0.1:3030
@@ -81,9 +80,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         .route("/", get(serve_index))
         .route("/style.css", get(serve_css))
         .route("/app.js", get(serve_js))
+        .route("/logo.png", get(serve_logo))
         // REST API
         .route("/api/workflows", get(list_workflows))
-        .route("/api/workflows/:id", get(get_workflow))
+        .route("/api/workflows/{id}", get(get_workflow))
         .with_state(state)
         .layer(
             tower_http::cors::CorsLayer::new()
@@ -110,46 +110,89 @@ fn static_dir() -> std::path::PathBuf {
     std::path::PathBuf::from(manifest).join("static")
 }
 
-async fn serve_index() -> Html<String> {
+async fn serve_index() -> Response {
     let path = static_dir().join("index.html");
-    Html(std::fs::read_to_string(&path).unwrap_or_else(|e| format!("Error loading index.html: {e}")))
+    match tokio::fs::read_to_string(&path).await {
+        Ok(body) => Html(body).into_response(),
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("Error loading index.html: {e}"),
+        )
+            .into_response(),
+    }
 }
 
 async fn serve_css() -> Response {
     let path = static_dir().join("style.css");
-    let body = std::fs::read_to_string(&path).unwrap_or_else(|e| format!("/* Error: {e} */"));
-    (
-        StatusCode::OK,
-        [(header::CONTENT_TYPE, HeaderValue::from_static("text/css"))],
-        body,
-    )
-        .into_response()
+    match tokio::fs::read_to_string(&path).await {
+        Ok(body) => (
+            StatusCode::OK,
+            [(header::CONTENT_TYPE, HeaderValue::from_static("text/css"))],
+            body,
+        )
+            .into_response(),
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            [(header::CONTENT_TYPE, HeaderValue::from_static("text/css"))],
+            format!("/* Error loading style.css: {e} */"),
+        )
+            .into_response(),
+    }
 }
 
 async fn serve_js() -> Response {
     let path = static_dir().join("app.js");
-    let body = std::fs::read_to_string(&path).unwrap_or_else(|e| format!("// Error: {e}"));
-    (
-        StatusCode::OK,
-        [(
-            header::CONTENT_TYPE,
-            HeaderValue::from_static("application/javascript"),
-        )],
-        body,
-    )
-        .into_response()
+    match tokio::fs::read_to_string(&path).await {
+        Ok(body) => (
+            StatusCode::OK,
+            [(
+                header::CONTENT_TYPE,
+                HeaderValue::from_static("application/javascript"),
+            )],
+            body,
+        )
+            .into_response(),
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            [(
+                header::CONTENT_TYPE,
+                HeaderValue::from_static("application/javascript"),
+            )],
+            format!("// Error loading app.js: {e}"),
+        )
+            .into_response(),
+    }
+}
+
+async fn serve_logo() -> Response {
+    let path = static_dir().join("logo.png");
+    match tokio::fs::read(&path).await {
+        Ok(body) => (
+            StatusCode::OK,
+            [(header::CONTENT_TYPE, HeaderValue::from_static("image/png"))],
+            body,
+        )
+            .into_response(),
+        Err(e) => (
+            StatusCode::NOT_FOUND,
+            format!("Logo not found: {e}"),
+        )
+            .into_response(),
+    }
 }
 
 // ---------------------------------------------------------------------------
 // REST API handlers
 // ---------------------------------------------------------------------------
 
-/// GET /api/workflows — list all loaded workflows
+/// GET /api/workflows — list all loaded workflows (sorted by ID for deterministic order)
 async fn list_workflows(State(state): State<SharedState>) -> Json<Value> {
     let s = state.read().await;
-    let items: Vec<Value> = s
-        .definitions
-        .values()
+    // Collect definitions into a vector and sort by ID for deterministic ordering
+    let mut defs: Vec<&WorkflowDefinition> = s.definitions.values().collect();
+    defs.sort_by(|a, b| a.metadata.id.cmp(&b.metadata.id));
+    let items: Vec<Value> = defs
+        .iter()
         .map(|def| {
             json!({
                 "id": def.metadata.id,
@@ -163,7 +206,7 @@ async fn list_workflows(State(state): State<SharedState>) -> Json<Value> {
     Json(json!({ "workflows": items }))
 }
 
-/// GET /api/workflows/:id — return graph JSON for a single workflow
+/// GET /api/workflows/{id} — return graph JSON for a single workflow
 async fn get_workflow(
     State(state): State<SharedState>,
     Path(id): Path<String>,
@@ -183,7 +226,7 @@ fn definition_to_json(def: &WorkflowDefinition) -> Value {
     use mofa_foundation::workflow::dsl::NodeDefinition;
     use mofa_foundation::workflow::NodeType;
 
-    let nodes: Vec<Value> = def
+    let mut nodes: Vec<Value> = def
         .nodes
         .iter()
         .map(|n| {
@@ -224,8 +267,12 @@ fn definition_to_json(def: &WorkflowDefinition) -> Value {
             })
         })
         .collect();
+    // Sort nodes by ID for deterministic JSON output
+    nodes.sort_by(|a, b| {
+        a["id"].as_str().unwrap_or("").cmp(b["id"].as_str().unwrap_or(""))
+    });
 
-    let edges: Vec<Value> = def
+    let mut edges: Vec<Value> = def
         .edges
         .iter()
         .map(|e| {
@@ -242,6 +289,14 @@ fn definition_to_json(def: &WorkflowDefinition) -> Value {
             })
         })
         .collect();
+    // Sort edges by (from, to) for deterministic JSON output
+    edges.sort_by(|a, b| {
+        let af = a["from"].as_str().unwrap_or("");
+        let bf = b["from"].as_str().unwrap_or("");
+        af.cmp(bf).then_with(|| {
+            a["to"].as_str().unwrap_or("").cmp(b["to"].as_str().unwrap_or(""))
+        })
+    });
 
     // Derive start_node / end_nodes from the definitions
     let start_node = def.nodes.iter().find_map(|n| {
@@ -273,4 +328,3 @@ fn definition_to_json(def: &WorkflowDefinition) -> Value {
         "end_nodes": end_nodes,
     })
 }
-

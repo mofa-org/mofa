@@ -7277,7 +7277,6 @@ version = "0.1.0"
 dependencies = [
  "axum 0.8.8",
  "mofa-foundation",
- "mofa-kernel",
  "serde",
  "serde_json",
  "serde_yaml",
