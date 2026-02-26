@@ -1052,6 +1052,9 @@ mod tests {
         while let Some(event) = StreamExt::next(&mut stream).await {
             let ev: StreamEvent<JsonState> = event.unwrap();
             if let StreamEvent::End { final_state } = ev {
+        let mut stream_final_state = None;
+        while let Some(event) = stream.next().await {
+            if let StreamEvent::End { final_state } = event.unwrap() {
                 stream_final_state = Some(final_state);
             }
         }

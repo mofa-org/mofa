@@ -12,11 +12,11 @@
 //!
 //! fn load_agent() -> KernelResult<()> {
 //!     // Errors from sub-modules convert automatically via From impls.
-//!     // Attach extra context with .change_context() / .attach_printable().
+//!     // Attach extra context with .change_context() / .attach().
 //!     let config = std::fs::read_to_string("agent.toml")
 //!         .map_err(KernelError::from)
 //!         .map_err(error_stack::Report::new)
-//!         .attach_printable("loading agent.toml")?;
+//!         .attach("loading agent.toml")?;
 //!     Ok(())
 //! }
 //! ```
