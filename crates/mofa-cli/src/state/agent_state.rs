@@ -12,9 +12,10 @@ use tokio::sync::RwLock;
 use tracing::{debug, info, warn};
 
 /// Agent runtime state (in-memory process tracking)
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub enum AgentProcessState {
     /// Agent is not running
+    #[default]
     Stopped,
     /// Agent is starting up
     Starting,
@@ -50,18 +51,25 @@ pub struct AgentMetadata {
     /// Path to agent configuration file
     pub config_path: Option<PathBuf>,
     /// Last known state
+    #[serde(default)]
     pub last_state: AgentProcessState,
     /// Timestamp when agent was registered (ms since epoch)
+    #[serde(default)]
     pub registered_at: u64,
     /// Timestamp when agent was last started (ms since epoch)
+    #[serde(default)]
     pub last_started: Option<u64>,
     /// Timestamp when agent was last stopped (ms since epoch)
+    #[serde(default)]
     pub last_stopped: Option<u64>,
     /// Process ID if running
+    #[serde(default)]
     pub process_id: Option<u32>,
     /// Number of times agent has been started
+    #[serde(default)]
     pub start_count: u32,
     /// Custom metadata
+    #[serde(default)]
     pub tags: Vec<String>,
 }
 
@@ -170,6 +178,55 @@ impl PersistentAgentRegistry {
                                 metadata_cache.insert(metadata.id.clone(), metadata);
                             }
                             Err(e) => {
+                                // Fallback: Parse as a generic JSON payload to tolerate missing or extra fields
+                                if let Ok(json_value) =
+                                    serde_json::from_str::<serde_json::Value>(&content)
+                                    && let (Some(id), Some(name)) = (
+                                        json_value.get("id").and_then(|v| v.as_str()),
+                                        json_value.get("name").and_then(|v| v.as_str()),
+                                    )
+                                {
+                                    let description = json_value
+                                        .get("description")
+                                        .and_then(|v| v.as_str())
+                                        .map(|s| s.to_string());
+
+                                    // Try to extract started_at if it's there
+                                    let last_started = json_value
+                                        .get("started_at")
+                                        .and_then(|v| v.as_str())
+                                        .and_then(|s| chrono::DateTime::parse_from_rfc3339(s).ok())
+                                        .map(|dt| dt.timestamp_millis() as u64);
+
+                                    let metadata = AgentMetadata {
+                                        id: id.to_string(),
+                                        name: name.to_string(),
+                                        description,
+                                        config_path: None,
+                                        last_state: AgentProcessState::Stopped,
+                                        registered_at: json_value
+                                            .get("registered_at")
+                                            .and_then(|v| v.as_u64())
+                                            .unwrap_or(0),
+                                        last_started,
+                                        last_stopped: json_value
+                                            .get("last_stopped")
+                                            .and_then(|v| v.as_u64()),
+                                        process_id: json_value
+                                            .get("process_id")
+                                            .and_then(|v| v.as_u64())
+                                            .map(|v| v as u32),
+                                        start_count: json_value
+                                            .get("start_count")
+                                            .and_then(|v| v.as_u64())
+                                            .map(|v| v as u32)
+                                            .unwrap_or(0),
+                                        tags: vec![],
+                                    };
+                                    metadata_cache.insert(metadata.id.clone(), metadata);
+                                    continue;
+                                }
+
                                 warn!(
                                     "Failed to parse agent metadata from {}: {}",
                                     path.display(),

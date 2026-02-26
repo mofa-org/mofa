@@ -216,7 +216,11 @@ pub fn smoke_plugin_lifecycle(env: &SmokeEnvironment) -> Result<()> {
     // Re-install the plugin and verify it's back
     let install = env.run(&["plugin", "install", "http-plugin"])?;
     expect_ok(&install, "mofa plugin install http-plugin")?;
-    expect_stdout_contains(&install, "installed successfully", "mofa plugin install http-plugin")?;
+    expect_stdout_contains(
+        &install,
+        "installed successfully",
+        "mofa plugin install http-plugin",
+    )?;
 
     let after_install = env.run(&["plugin", "list"])?;
     expect_ok(&after_install, "mofa plugin list (after reinstall)")?;
@@ -254,7 +258,7 @@ pub fn smoke_agent_lifecycle(env: &SmokeEnvironment, agent_id: &str) -> Result<(
     let stop = env.run(&["agent", "stop", agent_id, "--force-persisted-stop"])?;
     expect_ok(&stop, "mofa agent stop --force-persisted-stop")?;
     if !(stop.stdout.contains("stopped and unregistered")
-        || stop.stdout.contains("updated persisted state to Stopped"))
+        || stop.stdout.contains("persisted state updated to Stopped"))
     {
         bail!(
             "mofa agent stop output did not confirm stopped transition.\nstdout:\n{}\nstderr:\n{}",
@@ -266,6 +270,18 @@ pub fn smoke_agent_lifecycle(env: &SmokeEnvironment, agent_id: &str) -> Result<(
     let running_only = env.run(&["agent", "list", "--running"])?;
     expect_ok(&running_only, "mofa agent list --running")?;
     expect_stdout_not_contains(&running_only, agent_id, "mofa agent list --running")?;
+
+    let delete = env.run(&["agent", "delete", agent_id, "--force"])?;
+    expect_ok(&delete, "mofa agent delete --force")?;
+    expect_output_contains(&delete, "deleted", "mofa agent delete --force")?;
+
+    let after_delete_list = env.run(&["agent", "list"])?;
+    expect_ok(&after_delete_list, "mofa agent list (after delete)")?;
+    expect_stdout_not_contains(
+        &after_delete_list,
+        agent_id,
+        "mofa agent list (after delete)",
+    )?;
 
     Ok(())
 }

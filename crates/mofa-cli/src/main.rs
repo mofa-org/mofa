@@ -151,6 +151,9 @@ async fn run_command(cli: Cli) -> anyhow::Result<()> {
                 cli::AgentCommands::Restart { agent_id, config } => {
                     commands::agent::restart::run(ctx, &agent_id, config.as_deref()).await?;
                 }
+                cli::AgentCommands::Delete { agent_id, force } => {
+                    commands::agent::delete::run(ctx, &agent_id, force).await?;
+                }
                 cli::AgentCommands::Status { agent_id } => {
                     commands::agent::status::run(ctx, agent_id.as_deref()).await?;
                 }
