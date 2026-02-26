@@ -7,7 +7,6 @@
 //! 4. Tests log rotation handling
 
 use anyhow::Result;
-use std::path::PathBuf;
 use std::time::Duration;
 use tempfile::TempDir;
 use tokio::fs;
