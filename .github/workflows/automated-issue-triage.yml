@@ -275,8 +275,8 @@ jobs:
               });
               
               const suggestionPayload = JSON.stringify({
-                add: labelsToAdd,
-                remove: labelsToRemove,
+                labels_to_add: labelsToAdd,
+                labels_to_remove: labelsToRemove,
                 explanation: issueTriage.explanation || 'No explanation provided.',
                 confidence,
                 issue_number: issueNumber,
