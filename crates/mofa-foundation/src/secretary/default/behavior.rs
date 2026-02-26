@@ -791,6 +791,7 @@ impl DefaultSecretaryBuilder {
 
     /// 构建秘书行为
     /// Build secretary behavior
+    #[must_use]
     pub fn build(self) -> DefaultSecretaryBehavior {
         let mut behavior = DefaultSecretaryBehavior::new(self.config);
 
