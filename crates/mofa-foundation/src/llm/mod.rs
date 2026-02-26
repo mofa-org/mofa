@@ -398,3 +398,11 @@ pub use tool_executor::ToolExecutor as AgentLoopToolExecutor;
 pub use transcription::{
     GroqTranscriptionProvider, OpenAITranscriptionProvider, TranscriptionProvider,
 };
+
+// Re-export inference module
+pub mod inference;
+pub use inference::{
+    BackendHealth, HardwareRequirements, InferenceBackend, InferenceChunk, InferenceError,
+    InferenceRequest, InferenceResponse, InferenceResult, InferenceStream, ModelCapability,
+    ModelHandle, ModelMetadata, ModelType, QuantizationType, TokenUsage, ToolDefinition,
+};
