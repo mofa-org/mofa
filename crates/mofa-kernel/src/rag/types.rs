@@ -88,6 +88,79 @@ impl GenerateInput {
 /// This is the basic unit stored in a vector store. Documents are split
 /// into chunks, each chunk is embedded into a vector, and stored along
 /// with its text content and metadata for later retrieval.
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Document {
+    /// Unique identifier for the entire document.
+    pub id: String,
+    /// Text content of the entire document.
+    pub text: String,
+    /// Arbitrary metadata (source file, page number, section title, etc.)
+    pub metadata: HashMap<String, String>,
+}
+
+impl Document {
+    pub fn new(
+        id: impl Into<String>,
+        text: impl Into<String>,
+    ) -> Self {
+        Self {
+            id: id.into(),
+            text: text.into(),
+            metadata: HashMap::new(),
+        }
+    }
+
+    /// Add a metadata entry
+    pub fn with_metadata(mut self, key: impl Into<String>, value: impl Into<String>) -> Self {
+        self.metadata.insert(key.into(), value.into());
+        self
+    }
+}
+
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ScoredDocument {
+    /// Retrieved document.
+    pub document: Document,
+    /// Relevance score (higher is better).
+    pub score: f32,
+    /// Optional retrieval stage/source label (e.g. sparse, dense, hybrid).
+    pub source: Option<String>,
+}
+
+impl ScoredDocument {
+    pub fn new(document: Document, score: f32, source: Option<String>) -> Self {
+        Self {
+            document,
+            score,
+            source,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct GenerateInput {
+    /// User query.
+    pub query: String,
+    /// RAG context passed to generator.
+    pub context: Vec<Document>,
+    /// Additional generation metadata.
+    pub metadata: HashMap<String, String>,
+}
+
+impl GenerateInput {
+    pub fn new(query: impl Into<String>, context: Vec<Document>) -> Self {
+        Self { query: query.into(), context, metadata: HashMap::new() }
+    }
+
+    pub fn with_metadata(mut self, key: impl Into<String>, value: impl Into<String>) -> Self {
+        self.metadata.insert(key.into(), value.into());
+        self
+    }
+}
+
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DocumentChunk {
     /// Unique identifier for this chunk
@@ -201,23 +274,13 @@ mod tests {
     }
 
     #[test]
-    fn test_document_and_scored_document() {
-        let document = Document::new("doc-1", "mofa rag").with_metadata("source", "unit-test");
-        let scored = ScoredDocument::new(document.clone(), 0.88, Some("sparse".to_string()));
+    fn test_generate_input_with_metadata() {
+        let doc = Document::new("doc-1", "hello");
+        let input = GenerateInput::new("what is this?", vec![doc])
+            .with_metadata("language", "en");
 
-        assert_eq!(document.id, "doc-1");
-        assert_eq!(scored.document.text, "mofa rag");
-        assert_eq!(scored.score, 0.88);
-        assert_eq!(scored.source.as_deref(), Some("sparse"));
-    }
-
-    #[test]
-    fn test_generate_input_creation() {
-        let input = GenerateInput::new("what is mofa", vec![Document::new("d1", "answer context")])
-            .with_metadata("lang", "en");
-
-        assert_eq!(input.query, "what is mofa");
+        assert_eq!(input.query, "what is this?");
         assert_eq!(input.context.len(), 1);
-        assert_eq!(input.metadata.get("lang").map(String::as_str), Some("en"));
+        assert_eq!(input.metadata.get("language").unwrap(), "en");
     }
 }

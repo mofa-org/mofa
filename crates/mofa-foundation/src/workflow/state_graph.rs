@@ -875,10 +875,7 @@ mod tests {
     #[async_trait]
     impl NodeFunc<JsonState> for FlagReaderNode {
         async fn call(&self, state: &mut JsonState, _ctx: &RuntimeContext) -> AgentResult<Command> {
-            let saw_flag = state
-                .get_value("flag")
-                .and_then(|v| v.as_bool())
-                .unwrap_or(false);
+            let saw_flag = state.get_value::<bool>("flag").unwrap_or(false);
             Ok(Command::new()
                 .update("reader_saw_flag", json!(saw_flag))
                 .continue_())
@@ -1041,21 +1038,21 @@ mod tests {
             .add_edge(START, "fan_out")
             .add_parallel_edges("fan_out", vec!["writer".to_string(), "reader".to_string()]);
 
-        let compiled = graph.compile().unwrap();
+        let compiled: CompiledGraphImpl<JsonState> = graph.compile().unwrap();
 
         let final_state = compiled.invoke(JsonState::new(), None).await.unwrap();
         assert_eq!(final_state.get_value("flag"), Some(json!(true)));
         assert_eq!(final_state.get_value("reader_saw_flag"), Some(json!(false)));
 
-        let mut stream = compiled.stream(JsonState::new(), None).await.unwrap();
-        let mut stream_final_state = None;
+        let mut stream = compiled.stream(JsonState::new(), None);
+        let mut stream_final_state: Option<JsonState> = None;
         while let Some(event) = stream.next().await {
             if let StreamEvent::End { final_state } = event.unwrap() {
                 stream_final_state = Some(final_state);
             }
         }
 
-        let stream_final_state =
+        let stream_final_state: JsonState =
             stream_final_state.expect("stream should emit a final end event with state");
         assert_eq!(stream_final_state.get_value("flag"), Some(json!(true)));
         assert_eq!(

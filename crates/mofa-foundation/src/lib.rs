@@ -58,8 +58,24 @@ pub use prompt::{
     PromptRegistry, PromptResult, PromptTemplate, PromptVariable, VariableType,
 };
 
+// Re-export orchestrator types (GSoC 2026 Edge Model Orchestrator)
+pub use orchestrator::{
+    DegradationLevel, ModelOrchestrator, ModelProvider, ModelProviderConfig, ModelType,
+    OrchestratorError, OrchestratorResult, PoolStatistics,
+};
+
+// Re-export Linux implementation and pipeline when available
+#[cfg(target_os = "linux")]
+pub use orchestrator::{
+    InferencePipeline, LinuxCandleProvider, ModelPool, PipelineBuilder, PipelineOutput,
+    PipelineStage,
+};
+
 // Re-export secretary types for convenience
 pub use secretary::{
+    // Core types
+    extract_json_block,
+    parse_llm_json,
     Artifact,
     ChannelConnection,
     ChatMessage,
@@ -98,7 +114,4 @@ pub use secretary::{
     TodoStatus,
     UserConnection,
     WorkPhase,
-    // Core types
-    extract_json_block,
-    parse_llm_json,
 };
