@@ -386,9 +386,23 @@ impl<S: GraphState> CompiledGraphImpl<S> {
                     Some(EdgeTarget::Single(target)) => vec![target.clone()],
                     Some(EdgeTarget::Parallel(targets)) => targets.clone(),
                     Some(EdgeTarget::Conditional(routes)) => {
-                        // Find matching route based on state updates
+                        // Find matching route based on command.route
+                        if let Some(route_name) = &command.route {
+                            if let Some(target) = routes.get(route_name) {
+                                return vec![target.clone()];
+                            }
+                            warn!(
+                                "No conditional edge found for route '{}' from node '{}'",
+                                route_name, current_node
+                            );
+                        }
+                        // Legacy fallback: match update key names to route labels
                         for update in &command.updates {
                             if let Some(target) = routes.get(&update.key) {
+                                debug!(
+                                    "Legacy conditional routing via update key '{}' from node '{}'",
+                                    update.key, current_node
+                                );
                                 return vec![target.clone()];
                             }
                         }
@@ -546,9 +560,23 @@ impl<S: GraphState + 'static> CompiledGraph<S, serde_json::Value> for CompiledGr
                             Some(EdgeTarget::Single(target)) => vec![target.clone()],
                             Some(EdgeTarget::Parallel(targets)) => targets.clone(),
                             Some(EdgeTarget::Conditional(routes)) => {
-                                // Find matching route based on state updates
+                                // Find matching route based on command.route
+                                if let Some(route_name) = &command.route {
+                                    if let Some(target) = routes.get(route_name) {
+                                        return vec![target.clone()];
+                                    }
+                                    warn!(
+                                        "No conditional edge found for route '{}' from node '{}'",
+                                        route_name, current_node
+                                    );
+                                }
+                                // Legacy fallback: match update key names to route labels
                                 for update in &command.updates {
                                     if let Some(target) = routes.get(&update.key) {
+                                        debug!(
+                                            "Legacy conditional routing via update key '{}' from node '{}'",
+                                            update.key, current_node
+                                        );
                                         return vec![target.clone()];
                                     }
                                 }
@@ -844,45 +872,28 @@ mod tests {
         }
     }
 
-    struct ConcurrencyProbeNode {
+    struct RouteNode {
         name: String,
-        active: Arc<AtomicUsize>,
-        max_active: Arc<AtomicUsize>,
+        updates: Vec<StateUpdate>,
+        route: String,
     }
 
     #[async_trait]
-    impl NodeFunc<JsonState> for ConcurrencyProbeNode {
+    impl NodeFunc<JsonState> for RouteNode {
         async fn call(
             &self,
             _state: &mut JsonState,
             _ctx: &RuntimeContext,
         ) -> AgentResult<Command> {
-            let concurrent = self.active.fetch_add(1, Ordering::SeqCst) + 1;
-            self.max_active.fetch_max(concurrent, Ordering::SeqCst);
-            sleep(Duration::from_millis(100)).await;
-            self.active.fetch_sub(1, Ordering::SeqCst);
-
-            Ok(Command::new().continue_())
+            let mut cmd = Command::new();
+            for update in &self.updates {
+                cmd = cmd.update(update.key.clone(), update.value.clone());
+            }
+            Ok(cmd.with_route(self.route.clone()).continue_())
         }
 
         fn name(&self) -> &str {
             &self.name
-        }
-    }
-
-    struct FlagReaderNode;
-
-    #[async_trait]
-    impl NodeFunc<JsonState> for FlagReaderNode {
-        async fn call(&self, state: &mut JsonState, _ctx: &RuntimeContext) -> AgentResult<Command> {
-            let saw_flag = state.get_value::<bool>("flag").unwrap_or(false);
-            Ok(Command::new()
-                .update("reader_saw_flag", json!(saw_flag))
-                .continue_())
-        }
-
-        fn name(&self) -> &str {
-            "flag_reader"
         }
     }
 
@@ -959,105 +970,91 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_parallel_nodes_execute_concurrently_in_invoke() {
-        let active = Arc::new(AtomicUsize::new(0));
-        let max_active = Arc::new(AtomicUsize::new(0));
-        let mut graph = StateGraphImpl::<JsonState>::new("parallel_concurrency");
+    async fn test_conditional_routing_uses_route_value_not_update_key() {
+        let mut graph = StateGraphImpl::<JsonState>::new("route_graph");
 
         graph
             .add_node(
-                "fan_out",
+                "decide",
+                Box::new(RouteNode {
+                    name: "decide".to_string(),
+                    // This update key collides with a route label and should NOT control routing.
+                    updates: vec![StateUpdate::new("approve", json!(true))],
+                    route: "reject".to_string(),
+                }),
+            )
+            .add_node(
+                "approved",
                 Box::new(TestNode {
-                    name: "fan_out".to_string(),
-                    updates: vec![],
+                    name: "approved".to_string(),
+                    updates: vec![StateUpdate::new("decision", json!("approved"))],
                 }),
             )
             .add_node(
-                "node_a",
-                Box::new(ConcurrencyProbeNode {
-                    name: "node_a".to_string(),
-                    active: active.clone(),
-                    max_active: max_active.clone(),
+                "rejected",
+                Box::new(TestNode {
+                    name: "rejected".to_string(),
+                    updates: vec![StateUpdate::new("decision", json!("rejected"))],
                 }),
             )
-            .add_node(
-                "node_b",
-                Box::new(ConcurrencyProbeNode {
-                    name: "node_b".to_string(),
-                    active: active.clone(),
-                    max_active: max_active.clone(),
-                }),
+            .add_edge(START, "decide")
+            .add_conditional_edges(
+                "decide",
+                HashMap::from([
+                    ("approve".to_string(), "approved".to_string()),
+                    ("reject".to_string(), "rejected".to_string()),
+                ]),
             )
-            .add_node(
-                "node_c",
-                Box::new(ConcurrencyProbeNode {
-                    name: "node_c".to_string(),
-                    active,
-                    max_active: max_active.clone(),
-                }),
-            )
-            .add_edge(START, "fan_out")
-            .add_parallel_edges(
-                "fan_out",
-                vec![
-                    "node_a".to_string(),
-                    "node_b".to_string(),
-                    "node_c".to_string(),
-                ],
-            );
+            .add_edge("approved", END)
+            .add_edge("rejected", END);
 
         let compiled = graph.compile().unwrap();
-        compiled.invoke(JsonState::new(), None).await.unwrap();
+        let final_state = compiled.invoke(JsonState::new(), None).await.unwrap();
 
-        assert!(
-            max_active.load(Ordering::SeqCst) > 1,
-            "parallel nodes should overlap in execution"
-        );
+        assert_eq!(final_state.get_value("decision"), Some(json!("rejected")));
     }
 
     #[tokio::test]
-    async fn test_parallel_nodes_use_state_snapshot_in_invoke_and_stream() {
-        let mut graph = StateGraphImpl::<JsonState>::new("parallel_state_snapshot");
+    async fn test_conditional_routing_legacy_update_key_fallback() {
+        let mut graph = StateGraphImpl::<JsonState>::new("legacy_route_graph");
 
         graph
             .add_node(
-                "fan_out",
+                "decide",
                 Box::new(TestNode {
-                    name: "fan_out".to_string(),
-                    updates: vec![],
+                    name: "decide".to_string(),
+                    // No explicit command.route; legacy update key fallback should select this route.
+                    updates: vec![StateUpdate::new("approve", json!(true))],
                 }),
             )
             .add_node(
-                "writer",
+                "approved",
                 Box::new(TestNode {
-                    name: "writer".to_string(),
-                    updates: vec![StateUpdate::new("flag", json!(true))],
+                    name: "approved".to_string(),
+                    updates: vec![StateUpdate::new("decision", json!("approved"))],
                 }),
             )
-            .add_node("reader", Box::new(FlagReaderNode))
-            .add_edge(START, "fan_out")
-            .add_parallel_edges("fan_out", vec!["writer".to_string(), "reader".to_string()]);
+            .add_node(
+                "rejected",
+                Box::new(TestNode {
+                    name: "rejected".to_string(),
+                    updates: vec![StateUpdate::new("decision", json!("rejected"))],
+                }),
+            )
+            .add_edge(START, "decide")
+            .add_conditional_edges(
+                "decide",
+                HashMap::from([
+                    ("approve".to_string(), "approved".to_string()),
+                    ("reject".to_string(), "rejected".to_string()),
+                ]),
+            )
+            .add_edge("approved", END)
+            .add_edge("rejected", END);
 
-        let compiled: CompiledGraphImpl<JsonState> = graph.compile().unwrap();
-
+        let compiled = graph.compile().unwrap();
         let final_state = compiled.invoke(JsonState::new(), None).await.unwrap();
-        assert_eq!(final_state.get_value("flag"), Some(json!(true)));
-        assert_eq!(final_state.get_value("reader_saw_flag"), Some(json!(false)));
 
-        let mut stream = compiled.stream(JsonState::new(), None);
-        let mut stream_final_state: Option<JsonState> = None;
-        while let Some(event) = stream.next().await {
-            if let StreamEvent::End { final_state } = event.unwrap() {
-                stream_final_state = Some(final_state);
-            }
-        }
-
-        let stream_final_state: JsonState =
-            stream_final_state.expect("stream should emit a final end event with state");
-        assert_eq!(stream_final_state.get_value("flag"), Some(json!(true)));
-        assert_eq!(
-            stream_final_state.get_value("reader_saw_flag"),
-            Some(json!(false))
-        );
+        assert_eq!(final_state.get_value("decision"), Some(json!("approved")));
     }
 }

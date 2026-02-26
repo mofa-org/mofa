@@ -64,6 +64,8 @@ pub struct Command<V = Value> {
     pub updates: Vec<StateUpdate<V>>,
     /// Control flow directive
     pub control: ControlFlow<V>,
+    /// Optional route name for conditional branching
+    pub route: Option<String>,
 }
 
 impl<V> Default for Command<V> {
@@ -71,6 +73,7 @@ impl<V> Default for Command<V> {
         Self {
             updates: Vec::new(),
             control: ControlFlow::default(),
+            route: None,
         }
     }
 }
@@ -90,6 +93,18 @@ impl<V> Command<V> {
     /// Add multiple state updates
     pub fn updates(mut self, updates: Vec<StateUpdate<V>>) -> Self {
         self.updates.extend(updates);
+        self
+    }
+
+    /// Set a route for conditional branching
+    pub fn with_route(mut self, route: impl Into<String>) -> Self {
+        self.route = Some(route.into());
+        self
+    }
+
+    /// Set or override the route on an existing command
+    pub fn route(mut self, route: impl Into<String>) -> Self {
+        self.route = Some(route.into());
         self
     }
 
@@ -116,6 +131,7 @@ impl<V> Command<V> {
         Self {
             updates: Vec::new(),
             control: ControlFlow::Send(targets),
+            route: None,
         }
     }
 
@@ -257,5 +273,25 @@ mod tests {
 
         let cmd = Command::<serde_json::Value>::just_return();
         assert!(cmd.is_return());
+    }
+
+    #[test]
+    fn test_with_route_builder() {
+        let cmd = Command::<serde_json::Value>::new()
+            .with_route("approve")
+            .continue_();
+        assert_eq!(cmd.route.as_deref(), Some("approve"));
+        assert_eq!(cmd.control, ControlFlow::Continue);
+    }
+
+    #[test]
+    fn test_route_chain_builder() {
+        let cmd = Command::new()
+            .update("status", json!("pending"))
+            .route("reject")
+            .continue_();
+        assert_eq!(cmd.route.as_deref(), Some("reject"));
+        assert_eq!(cmd.updates.len(), 1);
+        assert_eq!(cmd.control, ControlFlow::Continue);
     }
 }
