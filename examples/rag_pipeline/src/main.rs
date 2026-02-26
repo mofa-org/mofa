@@ -433,6 +433,8 @@ async fn streaming_edge_cases_test() -> Result<()> {
 
     Ok(())
 }
+
+async fn streaming_memory_test() -> Result<()> {
     println!("--- Streaming Memory Usage Test ---\n");
 
     // Note: This is a basic memory test. In production, you'd use proper memory profiling tools.
@@ -550,6 +552,8 @@ async fn streaming_edge_cases_test() -> Result<()> {
 
     Ok(())
 }
+
+async fn streaming_performance_benchmark() -> Result<()> {
     println!("--- Streaming RAG Performance Benchmark ---\n");
 
     let mut store = InMemoryVectorStore::cosine();
