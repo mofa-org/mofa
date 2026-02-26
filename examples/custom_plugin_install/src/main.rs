@@ -6,7 +6,6 @@
 //! 3. How to install via `mofa plugin install`
 
 use anyhow::Result;
-use std::path::PathBuf;
 use tempfile::TempDir;
 use tokio::fs;
 
