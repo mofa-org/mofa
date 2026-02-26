@@ -400,6 +400,9 @@ impl HotReloadManager {
                                             std::time::Instant::now() + Duration::from_secs(5),
                                         );
                                     }
+                                    _ => {
+                                        debug!("Unhandled reload strategy");
+                                    }
                                 }
                             }
 

@@ -155,6 +155,7 @@ impl SearchResult {
 
 /// Similarity metric used for comparing embedding vectors.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[non_exhaustive]
 pub enum SimilarityMetric {
     /// Cosine similarity (measures angle between vectors, range 0.0 to 1.0 for normalized vectors)
     #[default]
