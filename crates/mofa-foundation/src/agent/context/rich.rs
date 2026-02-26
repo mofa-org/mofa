@@ -207,13 +207,24 @@ impl RichAgentContext {
     /// 获取值
     /// Get value
     pub async fn get<T: DeserializeOwned>(&self, key: &str) -> Option<T> {
-        self.inner.get(key).await
+        self.inner.get(key).await.and_then(|v| {
+            match serde_json::from_value(v) {
+                Ok(val) => Some(val),
+                Err(e) => {
+                    tracing::warn!(key = key, error = %e, "RichAgentContext::get deserialization failed");
+                    None
+                }
+            }
+        })
     }
 
     /// 设置值
     /// Set value
     pub async fn set<T: Serialize>(&self, key: &str, value: T) {
-        self.inner.set(key, value).await
+        match serde_json::to_value(value) {
+            Ok(v) => self.inner.set(key, v).await,
+            Err(e) => tracing::warn!(key = key, error = %e, "RichAgentContext::set serialization failed"),
+        }
     }
 
     /// 删除值
@@ -237,7 +248,15 @@ impl RichAgentContext {
     /// 从父上下文查找值
     /// Find value from parent context
     pub async fn find<T: DeserializeOwned>(&self, key: &str) -> Option<T> {
-        self.inner.find(key).await
+        self.inner.find(key).await.and_then(|v| {
+            match serde_json::from_value(v) {
+                Ok(val) => Some(val),
+                Err(e) => {
+                    tracing::warn!(key = key, error = %e, "RichAgentContext::find deserialization failed");
+                    None
+                }
+            }
+        })
     }
 
     /// 获取执行 ID

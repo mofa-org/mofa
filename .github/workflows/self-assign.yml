@@ -60,7 +60,7 @@ jobs:
 
             const openAssignedCount = assignedIssues.filter(i => !i.pull_request).length;
 
-            if (openAssignedCount >= 3) {
+            if (openAssignedCount >= 6) {
               await github.rest.issues.createComment({
                 owner: repo.owner,
                 repo: repo.repo,
