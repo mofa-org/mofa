@@ -32,6 +32,9 @@ members = [
     "event_bus_strategies"
     "message_graph_validation"
     "agent_builder"
+    "message_graph_validation",
+    "agent_builder",
+    "context_compression",
 ]
 
 [workspace.package]
