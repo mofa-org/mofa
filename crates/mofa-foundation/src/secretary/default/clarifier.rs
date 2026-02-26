@@ -195,8 +195,8 @@ impl RequirementClarifier {
         vec![
             ClarificationQuestion {
                 id: "scope".to_string(),
-                question: "请描述这个需求的具体范围和边界？".to_string(),
-                // Please describe the specific scope and boundaries of this requirement?
+                question: "Please describe the specific scope and boundaries of this requirement.".to_string(),
+                // Please describe the specific scope and boundaries of this requirement.
                 question_type: QuestionType::OpenEnded,
                 options: None,
                 default_answer: None,
@@ -204,27 +204,27 @@ impl RequirementClarifier {
             },
             ClarificationQuestion {
                 id: "priority".to_string(),
-                question: "这个需求的紧急程度如何？".to_string(),
+                question: "How urgent is this requirement?".to_string(),
                 // How urgent is this requirement?
                 question_type: QuestionType::SingleChoice,
                 options: Some(vec![
-                    "紧急（今天完成）".to_string(),
+                    "Urgent (complete today)".to_string(),
                     // Urgent (complete today)
-                    "高优先级（本周完成）".to_string(),
+                    "High priority (complete this week)".to_string(),
                     // High priority (complete this week)
-                    "中优先级（本月完成）".to_string(),
+                    "Medium priority (complete this month)".to_string(),
                     // Medium priority (complete this month)
-                    "低优先级（有空再做）".to_string(),
+                    "Low priority (do when available)".to_string(),
                     // Low priority (do when available)
                 ]),
-                default_answer: Some("中优先级（本月完成）".to_string()),
+                default_answer: Some("Medium priority (complete this month)".to_string()),
                 // Medium priority (complete this month)
                 required: true,
             },
             ClarificationQuestion {
                 id: "acceptance".to_string(),
-                question: "如何判断这个需求已经完成？有什么验收标准？".to_string(),
-                // How to judge if this requirement is completed? What are the acceptance criteria?
+                question: "How will you determine that this requirement is complete? What are the acceptance criteria?".to_string(),
+                // How will you determine that this requirement is complete? What are the acceptance criteria?
                 question_type: QuestionType::OpenEnded,
                 options: None,
                 default_answer: None,
@@ -232,11 +232,11 @@ impl RequirementClarifier {
             },
             ClarificationQuestion {
                 id: "dependencies".to_string(),
-                question: "完成这个需求是否需要其他前置条件或依赖？".to_string(),
-                // Are there any prerequisites or dependencies to complete this requirement?
+                question: "Are there any prerequisites or dependencies required to complete this requirement?".to_string(),
+                // Are there any prerequisites or dependencies required to complete this requirement?
                 question_type: QuestionType::OpenEnded,
                 options: None,
-                default_answer: Some("无特殊依赖".to_string()),
+                default_answer: Some("No special dependencies".to_string()),
                 // No special dependencies
                 required: false,
             },
@@ -247,8 +247,8 @@ impl RequirementClarifier {
         vec![
             ClarificationQuestion {
                 id: "confirm_understanding".to_string(),
-                question: "我理解您想要...，这个理解正确吗？".to_string(),
-                // I understand you want..., is this understanding correct?
+                question: "I understand you want ...; is this understanding correct?".to_string(),
+                // I understand you want ..., is this understanding correct?
                 question_type: QuestionType::Confirmation,
                 options: None,
                 default_answer: None,
@@ -256,8 +256,8 @@ impl RequirementClarifier {
             },
             ClarificationQuestion {
                 id: "additional_details".to_string(),
-                question: "是否有其他需要补充的细节？".to_string(),
-                // Are there any other details that need to be added?
+                question: "Are there any additional details that should be added?".to_string(),
+                // Are there any additional details that should be added?
                 question_type: QuestionType::OpenEnded,
                 options: None,
                 default_answer: None,
@@ -275,8 +275,8 @@ impl RequirementClarifier {
             "software_feature" => vec![
                 ClarificationQuestion {
                     id: "user_story".to_string(),
-                    question: "请用「作为...我希望...以便...」的格式描述需求".to_string(),
-                    // Please describe the requirement in the format "As a... I want... so that..."
+                    question: "Please describe the requirement in the format \"As a ... I want ... so that ...\"".to_string(),
+                    // Please describe the requirement in the format "As a ... I want ... so that ..."
                     question_type: QuestionType::OpenEnded,
                     options: None,
                     default_answer: None,
@@ -284,17 +284,17 @@ impl RequirementClarifier {
                 },
                 ClarificationQuestion {
                     id: "affected_modules".to_string(),
-                    question: "这个功能会影响哪些模块或组件？".to_string(),
+                    question: "Which modules or components will this feature affect?".to_string(),
                     // Which modules or components will this feature affect?
                     question_type: QuestionType::MultipleChoice,
                     options: Some(vec![
-                        "前端UI".to_string(),
+                        "Frontend UI".to_string(),
                         // Frontend UI
-                        "后端API".to_string(),
+                        "Backend API".to_string(),
                         // Backend API
-                        "数据库".to_string(),
+                        "Database".to_string(),
                         // Database
-                        "第三方集成".to_string(),
+                        "Third-party integration".to_string(),
                         // Third-party integration
                     ]),
                     default_answer: None,
@@ -357,9 +357,9 @@ impl RequirementClarifier {
         }
 
         if acceptance_criteria.is_empty() {
-            acceptance_criteria.push("功能按预期工作".to_string());
+            acceptance_criteria.push("The feature works as expected".to_string());
             // Feature works as expected
-            acceptance_criteria.push("无明显错误".to_string());
+            acceptance_criteria.push("No obvious errors".to_string());
             // No obvious errors
         }
 
@@ -367,7 +367,7 @@ impl RequirementClarifier {
 
         let mut dependencies = Vec::new();
         for (question, answer) in &session.answered_questions {
-            if question.id == "dependencies" && answer != "无特殊依赖" {
+            if question.id == "dependencies" && answer != "No special dependencies" {
                 dependencies.push(answer.clone());
             }
         }
@@ -396,10 +396,10 @@ impl RequirementClarifier {
         let mut subtasks = Vec::new();
         let idea_lower = raw_idea.to_lowercase();
 
-        if idea_lower.contains("api") || idea_lower.contains("接口") {
+        if idea_lower.contains("api") || idea_lower.contains("interface") {
             subtasks.push(Subtask {
                 id: "subtask_api_design".to_string(),
-                description: "设计API接口规范".to_string(),
+                description: "Design API interface specifications".to_string(),
                 // Design API interface specifications
                 required_capabilities: vec!["api_design".to_string()],
                 order: 1,
@@ -407,7 +407,7 @@ impl RequirementClarifier {
             });
             subtasks.push(Subtask {
                 id: "subtask_api_impl".to_string(),
-                description: "实现API接口".to_string(),
+                description: "Implement API interfaces".to_string(),
                 // Implement API interfaces
                 required_capabilities: vec!["backend".to_string()],
                 order: 2,
@@ -415,11 +415,11 @@ impl RequirementClarifier {
             });
         }
 
-        if idea_lower.contains("ui") || idea_lower.contains("界面") || idea_lower.contains("前端")
+        if idea_lower.contains("ui") || idea_lower.contains("interface") || idea_lower.contains("frontend")
         {
             subtasks.push(Subtask {
                 id: "subtask_ui_design".to_string(),
-                description: "设计UI界面".to_string(),
+                description: "Design UI interface".to_string(),
                 // Design UI interface
                 required_capabilities: vec!["ui_design".to_string()],
                 order: 1,
@@ -427,7 +427,7 @@ impl RequirementClarifier {
             });
             subtasks.push(Subtask {
                 id: "subtask_ui_impl".to_string(),
-                description: "实现UI界面".to_string(),
+                description: "Implement UI interface".to_string(),
                 // Implement UI interface
                 required_capabilities: vec!["frontend".to_string()],
                 order: 2,

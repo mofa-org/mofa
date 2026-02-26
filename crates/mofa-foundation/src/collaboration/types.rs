@@ -137,12 +137,12 @@ pub enum CollaborationMode {
 impl std::fmt::Display for CollaborationMode {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            CollaborationMode::RequestResponse => write!(f, "请求-响应模式"),
-            CollaborationMode::PublishSubscribe => write!(f, "发布-订阅模式"),
-            CollaborationMode::Consensus => write!(f, "共识机制模式"),
-            CollaborationMode::Debate => write!(f, "辩论模式"),
-            CollaborationMode::Parallel => write!(f, "并行处理模式"),
-            CollaborationMode::Sequential => write!(f, "顺序执行模式"),
+            CollaborationMode::RequestResponse => write!(f, "Request-Response Mode"),
+            CollaborationMode::PublishSubscribe => write!(f, "Publish-Subscribe Mode"),
+            CollaborationMode::Consensus => write!(f, "Consensus Mode"),
+            CollaborationMode::Debate => write!(f, "Debate Mode"),
+            CollaborationMode::Parallel => write!(f, "Parallel Processing Mode"),
+            CollaborationMode::Sequential => write!(f, "Sequential Execution Mode"),
             CollaborationMode::Custom(s) => write!(f, "{}", s),
         }
     }
@@ -219,13 +219,15 @@ impl CollaborationContent {
         match self {
             CollaborationContent::Text(s) => s.clone(),
             CollaborationContent::Data(v) => v.to_string(),
-            CollaborationContent::Mixed { text, data } => format!("{}\n\n数据: {}", text, data),
+            CollaborationContent::Mixed { text, data } => {
+                format!("{text}\n\nData: {data}")
+            }
             CollaborationContent::LLMResponse {
                 reasoning,
                 conclusion,
                 ..
             } => {
-                format!("推理: {}\n\n结论: {}", reasoning, conclusion)
+                format!("Reasoning: {reasoning}\n\nConclusion: {conclusion}")
             }
         }
     }
@@ -493,33 +495,33 @@ pub trait CollaborationProtocol: Send + Sync {
 pub fn scenario_to_mode_suggestions() -> HashMap<String, Vec<CollaborationMode>> {
     HashMap::from([
         (
-            "数据处理".to_string(),
+            "Data Processing".to_string(),
             vec![
                 CollaborationMode::RequestResponse,
                 CollaborationMode::Parallel,
             ],
         ),
         (
-            "创意生成".to_string(),
+            "Creative Generation".to_string(),
             vec![
                 CollaborationMode::PublishSubscribe,
                 CollaborationMode::Debate,
             ],
         ),
         (
-            "决策制定".to_string(),
+            "Decision Making".to_string(),
             vec![CollaborationMode::Consensus, CollaborationMode::Debate],
         ),
         (
-            "分析任务".to_string(),
+            "Analysis Tasks".to_string(),
             vec![CollaborationMode::Parallel, CollaborationMode::Sequential],
         ),
         (
-            "审查任务".to_string(),
+            "Review Tasks".to_string(),
             vec![CollaborationMode::Debate, CollaborationMode::Consensus],
         ),
         (
-            "搜索任务".to_string(),
+            "Search Tasks".to_string(),
             vec![
                 CollaborationMode::Parallel,
                 CollaborationMode::RequestResponse,
@@ -879,13 +881,16 @@ mod tests {
     fn test_collaboration_mode_display() {
         assert_eq!(
             CollaborationMode::RequestResponse.to_string(),
-            "请求-响应模式"
+            "Request-Response Mode"
         );
         assert_eq!(
             CollaborationMode::PublishSubscribe.to_string(),
-            "发布-订阅模式"
+            "Publish-Subscribe Mode"
         );
-        assert_eq!(CollaborationMode::Consensus.to_string(), "共识机制模式");
+        assert_eq!(
+            CollaborationMode::Consensus.to_string(),
+            "Consensus Mode"
+        );
     }
 
     #[test]
