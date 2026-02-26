@@ -1,4 +1,7 @@
+mod advanced;
 mod scheduler;
+
+pub use advanced::{AdvancedCoordination, ConsensusConfig, FederatedConfig, HierarchicalConfig, MarketConfig, SwarmConfig};
 use mofa_kernel::message::{AgentMessage, TaskRequest, TaskStatus};
 use mofa_kernel::{AgentBus, CommunicationMode};
 use std::collections::HashMap;
