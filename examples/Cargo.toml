@@ -29,7 +29,7 @@ members = [
     "tool_routing",
     "runtime_message_bus_backpressure",
     "rag_pipeline",
-    "message_graph_validation"
+    "message_graph_validation",
     "agent_builder"
 ]
 
