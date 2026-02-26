@@ -4,6 +4,7 @@ use super::AgentConfig;
 use std::collections::HashSet;
 
 /// Configuration validation result
+#[must_use]
 #[derive(Debug, Clone)]
 pub struct ConfigValidationResult {
     /// Whether validation passed
@@ -153,6 +154,7 @@ impl ConfigValidator {
     }
 
     /// Validate a configuration
+    #[must_use]
     pub fn validate(&self, config: &AgentConfig) -> ConfigValidationResult {
         let mut result = ConfigValidationResult::valid();
 
