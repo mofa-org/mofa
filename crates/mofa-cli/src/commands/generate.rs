@@ -58,25 +58,3 @@ nodes:
     println!("{} Dataflow generated!", "✓".green());
     Ok(())
 }
-
-/// Execute the `mofa info` command
-pub fn run_info() {
-    println!();
-    println!("  {}  MoFA - Model-based Framework for Agents", "🤖".cyan());
-    println!();
-    println!("  Version:  {}", env!("CARGO_PKG_VERSION").yellow());
-    println!("  Repo:     {}", "https://github.com/mofa-org/mofa".blue());
-    println!();
-    println!("  Features:");
-    println!("    • Build AI agents with Rust");
-    println!("    • Distributed dataflow with dora-rs");
-    println!("    • Cross-language bindings (Python, Kotlin, Swift)");
-    println!();
-    println!("  Commands:");
-    println!("    mofa new <name>      Create a new project");
-    println!("    mofa build           Build the project");
-    println!("    mofa run             Run the agent");
-    println!("    mofa generate        Generate config files");
-    println!("    mofa db init         Initialize database tables");
-    println!();
-}

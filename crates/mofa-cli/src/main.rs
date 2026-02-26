@@ -53,7 +53,8 @@ async fn run_command(cli: Cli) -> anyhow::Result<()> {
     let needs_context = matches!(
         &cli.command,
         Some(
-            Commands::Agent(_)
+            Commands::Info
+                | Commands::Agent(_)
                 | Commands::Plugin { .. }
                 | Commands::Session { .. }
                 | Commands::Tool { .. }
@@ -102,7 +103,8 @@ async fn run_command(cli: Cli) -> anyhow::Result<()> {
         },
 
         Some(Commands::Info) => {
-            commands::generate::run_info();
+            let ctx = ctx.as_ref().unwrap();
+            commands::info::run(ctx).await?;
         }
 
         Some(Commands::Db { action }) => match action {
