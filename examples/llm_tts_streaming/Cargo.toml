@@ -11,5 +11,4 @@ tracing.workspace = true
 tracing-subscriber.workspace = true
 anyhow.workspace = true
 futures.workspace = true
-rodio = "0.17"
 uuid = { version = "1.19.0", features = ["v4"] }

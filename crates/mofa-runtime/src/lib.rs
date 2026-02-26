@@ -1101,8 +1101,22 @@ impl SimpleRuntime {
         config: AgentConfig,
         role: &str,
     ) -> GlobalResult<tokio::sync::mpsc::Receiver<AgentEvent>> {
+        self.register_agent_with_capacity(metadata, config, role, 100)
+            .await
+    }
+
+    /// 注册智能体并指定事件队列容量
+    /// Register an agent with explicit event queue capacity
+    pub async fn register_agent_with_capacity(
+        &self,
+        metadata: AgentMetadata,
+        config: AgentConfig,
+        role: &str,
+        queue_capacity: usize,
+    ) -> GlobalResult<tokio::sync::mpsc::Receiver<AgentEvent>> {
         let agent_id = metadata.id.clone();
-        let (tx, rx) = tokio::sync::mpsc::channel(100);
+        let capacity = queue_capacity.max(1);
+        let (tx, rx) = tokio::sync::mpsc::channel(capacity);
 
         // 注册到消息总线
         // Register to the message bus
