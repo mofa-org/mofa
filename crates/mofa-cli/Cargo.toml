@@ -50,6 +50,9 @@ indicatif = "0.17"
 comfy-table = "7"
 dirs-next = "2"
 
+# Atomic file writes
+tempfile = "3"
+
 # Process management
 nix = { version = "0.29", features = ["process", "signal"] }
 
@@ -78,7 +81,6 @@ tokio-stream = "0.1"
 [dev-dependencies]
 assert_cmd = "2"
 predicates = "3"
-tempfile = "3"
 
 [features]
 default = []
