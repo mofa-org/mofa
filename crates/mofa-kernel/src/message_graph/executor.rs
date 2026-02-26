@@ -71,6 +71,7 @@ pub struct DeadLetterRecord {
     pub reason: DeadLetterReason,
     pub envelope: MessageEnvelope,
     pub delivered: bool,
+    pub delivery_error: Option<String>,
 }
 
 /// Final runtime report for a message execution.
@@ -106,6 +107,10 @@ pub enum MessageGraphExecutorError {
     MissingDeadLetterNode { graph_id: String },
     #[error("node '{node_id}' is backpressured")]
     NodeBackpressured { node_id: String },
+    #[error("backpressure is not configurable for router node '{node_id}'")]
+    RouterCapacityUnsupported { node_id: String },
+    #[error("cannot update node '{node_id}' capacity while permits are outstanding")]
+    CapacityUpdateInUse { node_id: String },
     #[error("failed to serialize envelope for node '{node_id}': {source}")]
     EnvelopeSerialization {
         node_id: String,
@@ -114,6 +119,12 @@ pub enum MessageGraphExecutorError {
     },
     #[error("executor task join failed: {0}")]
     TaskJoin(String),
+}
+
+#[derive(Debug, Clone)]
+struct NodeLimit {
+    semaphore: Arc<Semaphore>,
+    capacity: usize,
 }
 
 #[derive(Debug, Clone)]
@@ -142,7 +153,7 @@ pub struct MessageGraphExecutor {
     graph: Arc<CompiledMessageGraph>,
     bus: Arc<AgentBus>,
     config: MessageGraphExecutorConfig,
-    node_limits: Arc<RwLock<HashMap<String, Arc<Semaphore>>>>,
+    node_limits: Arc<RwLock<HashMap<String, NodeLimit>>>,
 }
 
 impl MessageGraphExecutor {
@@ -170,10 +181,16 @@ impl MessageGraphExecutor {
         }
 
         let mut node_limits = HashMap::new();
-        for node_id in graph.nodes.keys() {
+        for (node_id, node) in &graph.nodes {
+            if matches!(node.kind, MessageNodeKind::Router) {
+                continue;
+            }
             node_limits.insert(
                 node_id.clone(),
-                Arc::new(Semaphore::new(config.default_node_capacity)),
+                NodeLimit {
+                    semaphore: Arc::new(Semaphore::new(config.default_node_capacity)),
+                    capacity: config.default_node_capacity,
+                },
             );
         }
 
@@ -191,11 +208,31 @@ impl MessageGraphExecutor {
         capacity: usize,
     ) -> Result<(), MessageGraphExecutorError> {
         let node_id = node_id.as_ref();
-        if !self.graph.nodes.contains_key(node_id) {
-            return Err(MessageGraphError::MissingNode(node_id.to_string()).into());
+        let node = self
+            .graph
+            .nodes
+            .get(node_id)
+            .ok_or_else(|| MessageGraphError::MissingNode(node_id.to_string()))?;
+        if matches!(node.kind, MessageNodeKind::Router) {
+            return Err(MessageGraphExecutorError::RouterCapacityUnsupported {
+                node_id: node_id.to_string(),
+            });
         }
         let mut guard = self.node_limits.write().await;
-        guard.insert(node_id.to_string(), Arc::new(Semaphore::new(capacity)));
+        if let Some(current) = guard.get(node_id)
+            && current.semaphore.available_permits() != current.capacity
+        {
+            return Err(MessageGraphExecutorError::CapacityUpdateInUse {
+                node_id: node_id.to_string(),
+            });
+        }
+        guard.insert(
+            node_id.to_string(),
+            NodeLimit {
+                semaphore: Arc::new(Semaphore::new(capacity)),
+                capacity,
+            },
+        );
         Ok(())
     }
 
@@ -304,13 +341,14 @@ impl MessageGraphExecutor {
         next_envelope.hop_count = next_envelope.hop_count.saturating_add(1);
 
         if next_envelope.hop_count > self.graph.max_hops {
+            let attempted_hops = next_envelope.hop_count;
             let dead_letter = self
                 .route_to_dead_letter(
                     &edge.from,
                     next_envelope,
                     DeadLetterReason::MaxHopsExceeded {
                         max_hops: self.graph.max_hops,
-                        attempted_hops: self.graph.max_hops.saturating_add(1),
+                        attempted_hops,
                     },
                 )
                 .await?;
@@ -384,12 +422,19 @@ impl MessageGraphExecutor {
             .headers
             .insert("x-mofa-dead-letter-from".to_string(), from.to_string());
 
-        let delivered = if dead_letter_node == from {
-            false
+        let (delivered, delivery_error) = if dead_letter_node == from {
+            (
+                false,
+                Some("dead-letter source is dead-letter node".to_string()),
+            )
         } else {
-            self.dispatch_to_node(&dead_letter_node, &DeliveryMode::Direct, &envelope)
+            match self
+                .dispatch_to_node(&dead_letter_node, &DeliveryMode::Direct, &envelope)
                 .await
-                .is_ok()
+            {
+                Ok(_) => (true, None),
+                Err(err) => (false, Some(err.to_string())),
+            }
         };
 
         Ok(DeadLetterRecord {
@@ -398,6 +443,7 @@ impl MessageGraphExecutor {
             reason,
             envelope,
             delivered,
+            delivery_error,
         })
     }
 
@@ -484,7 +530,7 @@ impl MessageGraphExecutor {
             let guard = self.node_limits.read().await;
             guard
                 .get(node_id)
-                .cloned()
+                .map(|entry| entry.semaphore.clone())
                 .ok_or_else(|| MessageGraphError::MissingNode(node_id.to_string()))?
         };
         semaphore
@@ -745,6 +791,7 @@ mod tests {
             DeadLetterReason::NoRouteMatch
         ));
         assert!(report.dead_letters[0].delivered);
+        assert!(report.dead_letters[0].delivery_error.is_none());
 
         let dead_letter_message = timeout(Duration::from_secs(1), dlq_receiver)
             .await
@@ -854,6 +901,7 @@ mod tests {
             DeadLetterReason::Backpressure
         ));
         assert!(report.dead_letters[0].delivered);
+        assert!(report.dead_letters[0].delivery_error.is_none());
 
         let dead_letter_message = timeout(Duration::from_secs(1), dlq_receiver)
             .await
@@ -868,6 +916,45 @@ mod tests {
                 .get("x-mofa-dead-letter-reason")
                 .map(String::as_str),
             Some("node_backpressure")
+        );
+    }
+
+    #[tokio::test]
+    async fn executor_rejects_router_capacity_configuration() {
+        let bus = Arc::new(AgentBus::new());
+        let compiled = build_runtime_graph();
+        let executor = MessageGraphExecutor::new(compiled, bus).unwrap();
+
+        let err = executor.set_node_capacity("router", 1).await.unwrap_err();
+        assert!(matches!(
+            err,
+            MessageGraphExecutorError::RouterCapacityUnsupported { .. }
+        ));
+    }
+
+    #[tokio::test]
+    async fn executor_reports_dead_letter_delivery_errors() {
+        let bus = Arc::new(AgentBus::new());
+        let compiled = build_runtime_graph();
+        let executor = MessageGraphExecutor::new(compiled, bus).unwrap();
+
+        // No subscriber is registered for orders.dlq, so DLQ dispatch should fail and be reported.
+        let report = executor
+            .execute(MessageEnvelope::new(
+                "order.cancelled",
+                br#"{"id":"A-201"}"#.to_vec(),
+            ))
+            .await
+            .unwrap();
+
+        assert_eq!(report.total_dead_letters(), 1);
+        assert!(!report.dead_letters[0].delivered);
+        assert!(
+            report.dead_letters[0]
+                .delivery_error
+                .as_deref()
+                .unwrap_or_default()
+                .contains("No subscribers for topic")
         );
     }
 }
