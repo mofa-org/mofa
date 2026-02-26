@@ -6,7 +6,6 @@
 //! 3. Shows how tail command handles rotation gracefully
 
 use anyhow::Result;
-use std::path::PathBuf;
 use std::time::Duration;
 use tempfile::TempDir;
 use tokio::fs;
