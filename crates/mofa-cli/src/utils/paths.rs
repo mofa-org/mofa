@@ -58,6 +58,14 @@ pub fn find_project_root() -> Option<PathBuf> {
 /// - macOS/Linux: ~/.config/mofa
 /// - Windows: %APPDATA%\mofa
 pub fn mofa_config_dir() -> anyhow::Result<PathBuf> {
+    // Respect XDG_CONFIG_HOME when explicitly set (dirs_next ignores it on macOS)
+    if let Ok(xdg) = std::env::var("XDG_CONFIG_HOME") {
+        let xdg = xdg.trim();
+        if !xdg.is_empty() {
+            return Ok(PathBuf::from(xdg).join("mofa"));
+        }
+    }
+
     let config_dir = dirs_next::config_dir()
         .ok_or_else(|| anyhow::anyhow!("Failed to determine config directory"))?;
 
@@ -70,6 +78,14 @@ pub fn mofa_config_dir() -> anyhow::Result<PathBuf> {
 /// - Linux: ~/.local/share/mofa
 /// - Windows: %LOCALAPPDATA%\mofa
 pub fn mofa_data_dir() -> anyhow::Result<PathBuf> {
+    // Respect XDG_DATA_HOME when explicitly set (dirs_next ignores it on macOS)
+    if let Ok(xdg) = std::env::var("XDG_DATA_HOME") {
+        let xdg = xdg.trim();
+        if !xdg.is_empty() {
+            return Ok(PathBuf::from(xdg).join("mofa"));
+        }
+    }
+
     let data_dir = dirs_next::data_local_dir()
         .ok_or_else(|| anyhow::anyhow!("Failed to determine data directory"))?;
 
@@ -78,6 +94,14 @@ pub fn mofa_data_dir() -> anyhow::Result<PathBuf> {
 
 /// Get the MoFA cache directory
 pub fn mofa_cache_dir() -> anyhow::Result<PathBuf> {
+    // Respect XDG_CACHE_HOME when explicitly set (dirs_next ignores it on macOS)
+    if let Ok(xdg) = std::env::var("XDG_CACHE_HOME") {
+        let xdg = xdg.trim();
+        if !xdg.is_empty() {
+            return Ok(PathBuf::from(xdg).join("mofa"));
+        }
+    }
+
     let cache_dir = dirs_next::cache_dir()
         .ok_or_else(|| anyhow::anyhow!("Failed to determine cache directory"))?;
 

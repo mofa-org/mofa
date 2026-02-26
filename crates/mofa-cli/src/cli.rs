@@ -252,6 +252,17 @@ pub enum AgentCommands {
         config: Option<PathBuf>,
     },
 
+    /// Delete an agent
+    #[command(alias = "rm")]
+    Delete {
+        /// Agent ID
+        agent_id: String,
+
+        /// Force deletion without confirmation
+        #[arg(short, long)]
+        force: bool,
+    },
+
     /// Show agent status
     Status {
         /// Agent ID (omit to list all)
