@@ -7,7 +7,6 @@
 //! 4. Demonstrates uninstall process
 
 use anyhow::Result;
-use std::path::PathBuf;
 use tempfile::TempDir;
 use tokio::fs;
 
