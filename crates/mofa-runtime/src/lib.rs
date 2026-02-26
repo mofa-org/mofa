@@ -1102,8 +1102,7 @@ impl SimpleRuntime {
         role: &str,
     ) -> GlobalResult<tokio::sync::mpsc::Receiver<AgentEvent>> {
         let agent_id = metadata.id.clone();
-        let capacity = queue_capacity.max(1);
-        let (tx, rx) = tokio::sync::mpsc::channel(capacity);
+        let (tx, rx) = tokio::sync::mpsc::channel(100);
 
         // 注册到消息总线
         // Register to the message bus
@@ -1132,7 +1131,7 @@ impl SimpleRuntime {
 
     /// 注销智能体并清理其路由信息
     /// Unregister an agent and clean up its routing entries
-    pub async fn unregister_agent(&self, agent_id: &str) -> anyhow::Result<bool> {
+    pub async fn unregister_agent(&self, agent_id: &str) -> GlobalResult<bool> {
         let removed = {
             let mut agents = self.agents.write().await;
             agents.remove(agent_id).is_some()
