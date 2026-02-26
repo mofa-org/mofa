@@ -550,6 +550,7 @@ impl AgentWorkflow {
         ctx: &AgentWorkflowContext,
         input: impl Into<AgentValue>,
     ) -> LLMResult<AgentValue> {
+        tracing::info!(workflow_id = %self.id, execution_id = %ctx.execution_id, "Agent workflow execution started");
         let input = input.into();
         let mut current_node_id = "start".to_string();
         let mut current_input = input;
@@ -603,6 +604,7 @@ impl AgentWorkflow {
         node: &AgentNode,
         input: AgentValue,
     ) -> LLMResult<AgentValue> {
+        tracing::info!(workflow_id = %self.id, node_id = %node.id, node_type = ?node.node_type, "Executing workflow node");
         match node.node_type {
             AgentNodeType::Start | AgentNodeType::End => Ok(input),
 
@@ -1137,6 +1139,26 @@ mod tests {
             .build();
 
         assert_eq!(workflow.node_ids().len(), 3); // start, uppercase, end
+    }
+
+    #[tokio::test]
+    async fn test_trace_propagation_across_workflow_nodes() {
+        // Build a multi-node workflow: start -> step1 -> step2 -> end
+        // Each step transforms the input, exercising the tracing::info! instrumentation
+        // in run_with_context and execute_node.
+        let workflow = AgentWorkflowBuilder::new("trace-test")
+            .add_transform("step1", |input: AgentValue| async move {
+                AgentValue::Text(format!("{}-step1", input.into_text()))
+            })
+            .add_transform("step2", |input: AgentValue| async move {
+                AgentValue::Text(format!("{}-step2", input.into_text()))
+            })
+            .chain(["step1", "step2"])
+            .build();
+
+        let result = workflow.run("init").await.expect("workflow should succeed");
+        // Verify execution correctness — tracing instrumentation must not alter behavior
+        assert_eq!(result.as_text(), Some("init-step1-step2"));
     }
 
     #[test]
