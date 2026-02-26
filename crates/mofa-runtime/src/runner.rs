@@ -755,6 +755,93 @@ pub async fn run_agents<T: MoFAAgent>(
 }
 
 // ============================================================================
+// GlobalResult-based APIs (Phase 4 unified error handling)
+// ============================================================================
+
+use mofa_kernel::agent::types::error::{GlobalError, GlobalResult};
+use mofa_kernel::agent::types::recovery::RetryPolicy;
+
+impl<T: MoFAAgent> AgentRunner<T> {
+    /// Execute a task returning `GlobalResult` (unified error type).
+    ///
+    /// This is the recommended entry point for new code that wants to use
+    /// the unified error handling strategy. Errors are automatically
+    /// converted from `AgentError` to `GlobalError::Agent`.
+    pub async fn execute_global(&mut self, input: AgentInput) -> GlobalResult<AgentOutput> {
+        self.execute(input).await.map_err(GlobalError::from)
+    }
+
+    /// Execute with automatic retry on retryable errors.
+    ///
+    /// Uses the kernel-level `RetryPolicy` for backoff and retry decisions.
+    /// Only retries when `GlobalError::is_retryable()` returns true
+    /// (e.g., LLM timeouts, runtime errors, WASM/Rhai errors).
+    ///
+    /// # Example
+    ///
+    /// ```rust,ignore
+    /// let policy = RetryPolicy::builder()
+    ///     .max_attempts(3)
+    ///     .backoff(Backoff::exponential(100, 5000))
+    ///     .build();
+    ///
+    /// let output = runner.execute_with_retry(input, policy).await?;
+    /// ```
+    pub async fn execute_with_retry(
+        &mut self,
+        input: AgentInput,
+        policy: RetryPolicy,
+    ) -> GlobalResult<AgentOutput> {
+        let mut last_error = None;
+
+        for attempt in 0..policy.max_attempts {
+            // Backoff delay on retries
+            if attempt > 0 {
+                let delay = policy.backoff.delay_for(attempt - 1);
+                if !delay.is_zero() {
+                    tokio::time::sleep(delay).await;
+                }
+            }
+
+            match self.execute(input.clone()).await {
+                Ok(output) => return Ok(output),
+                Err(agent_err) => {
+                    let global_err = GlobalError::from(agent_err);
+                    let is_last = attempt + 1 >= policy.max_attempts;
+                    if is_last || !policy.should_retry(&global_err) {
+                        return Err(global_err);
+                    }
+                    last_error = Some(global_err);
+                }
+            }
+        }
+
+        Err(last_error.unwrap_or_else(|| GlobalError::Other("retry loop exhausted".to_string())))
+    }
+}
+
+/// Create and run Agent with unified `GlobalResult` return type.
+///
+/// Same as [`run_agents`] but returns `GlobalResult` instead of `AgentResult`,
+/// enabling seamless integration with the unified error handling system.
+pub async fn run_agents_global<T: MoFAAgent>(
+    agent: T,
+    inputs: Vec<AgentInput>,
+) -> GlobalResult<Vec<AgentOutput>> {
+    let mut runner = AgentRunner::new(agent)
+        .await
+        .map_err(GlobalError::from)?;
+
+    let mut outputs = Vec::with_capacity(inputs.len());
+    for input in inputs {
+        outputs.push(runner.execute_global(input).await?);
+    }
+
+    runner.shutdown().await.map_err(GlobalError::from)?;
+    Ok(outputs)
+}
+
+// ============================================================================
 // 测试
 // Tests
 // ============================================================================
