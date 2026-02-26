@@ -27,9 +27,7 @@ fn is_valid_rhai_identifier(name: &str) -> bool {
             .chars()
             .next()
             .is_some_and(|c| c.is_ascii_alphabetic() || c == '_')
-        && name
-            .chars()
-            .all(|c| c.is_ascii_alphanumeric() || c == '_')
+        && name.chars().all(|c| c.is_ascii_alphanumeric() || c == '_')
 }
 
 /// Escape a string so it is safe inside a Rhai double-quoted string literal.
@@ -52,7 +50,7 @@ fn json_to_rhai_literal(value: &serde_json::Value) -> String {
         serde_json::Value::String(s) => {
             // Escape characters that could break out of the Rhai string literal
             let escaped = escape_rhai_string(s);
-            format!("\"{}\"" , escaped)
+            format!("\"{}\"", escaped)
         }
         // For complex types, serialize to a JSON string literal that the
         // script can parse if needed.  This is safe because the outer
@@ -60,7 +58,7 @@ fn json_to_rhai_literal(value: &serde_json::Value) -> String {
         other => {
             let json_str = other.to_string();
             let escaped = escape_rhai_string(&json_str);
-            format!("\"{}\"" , escaped)
+            format!("\"{}\"", escaped)
         }
     }
 }

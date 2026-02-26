@@ -252,6 +252,17 @@ pub enum AgentCommands {
         config: Option<PathBuf>,
     },
 
+    /// Delete an agent
+    #[command(alias = "rm")]
+    Delete {
+        /// Agent ID
+        agent_id: String,
+
+        /// Force deletion without confirmation
+        #[arg(short, long)]
+        force: bool,
+    },
+
     /// Show agent status
     Status {
         /// Agent ID (omit to list all)
@@ -278,21 +289,9 @@ pub enum AgentCommands {
         #[arg(short, long)]
         tail: bool,
 
-        /// Filter by log level (INFO, DEBUG, ERROR, WARN)
-        #[arg(long)]
-        level: Option<String>,
-
-        /// Search for text in logs
-        #[arg(long)]
-        grep: Option<String>,
-
-        /// Limit number of lines to display
-        #[arg(long)]
-        limit: Option<usize>,
-
-        /// Output logs as JSON
-        #[arg(long)]
-        json: bool,
+        /// Number of recent lines to display
+        #[arg(short = 'n', long, default_value = "50")]
+        lines: usize,
     },
 }
 
@@ -360,16 +359,8 @@ pub enum PluginCommands {
 
     /// Install a plugin
     Install {
-        /// Plugin name, path, or URL
+        /// Plugin name or path
         name: String,
-
-        /// Expected SHA256 checksum for verification
-        #[arg(long)]
-        checksum: Option<String>,
-
-        /// Verify plugin signature (if available)
-        #[arg(long)]
-        verify_signature: bool,
     },
 
     /// Uninstall a plugin

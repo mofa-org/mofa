@@ -73,9 +73,6 @@ pub use orchestrator::{
 
 // Re-export secretary types for convenience
 pub use secretary::{
-    // Core types
-    extract_json_block,
-    parse_llm_json,
     Artifact,
     ChannelConnection,
     ChatMessage,
@@ -114,4 +111,7 @@ pub use secretary::{
     TodoStatus,
     UserConnection,
     WorkPhase,
+    // Core types
+    extract_json_block,
+    parse_llm_json,
 };

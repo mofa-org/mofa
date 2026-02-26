@@ -62,6 +62,8 @@ pub enum ControlFlow<V = Value> {
 pub struct Command<V = Value> {
     /// State updates to apply
     pub updates: Vec<StateUpdate<V>>,
+    /// Optional explicit route decision for conditional edges
+    pub route: Option<String>,
     /// Control flow directive
     pub control: ControlFlow<V>,
 }
@@ -70,6 +72,7 @@ impl<V> Default for Command<V> {
     fn default() -> Self {
         Self {
             updates: Vec::new(),
+            route: None,
             control: ControlFlow::default(),
         }
     }
@@ -90,6 +93,12 @@ impl<V> Command<V> {
     /// Add multiple state updates
     pub fn updates(mut self, updates: Vec<StateUpdate<V>>) -> Self {
         self.updates.extend(updates);
+        self
+    }
+
+    /// Provide an explicit routing decision for conditional edges
+    pub fn route(mut self, decision: impl Into<String>) -> Self {
+        self.route = Some(decision.into());
         self
     }
 
@@ -115,6 +124,7 @@ impl<V> Command<V> {
     pub fn send(targets: Vec<SendCommand<V>>) -> Self {
         Self {
             updates: Vec::new(),
+            route: None,
             control: ControlFlow::Send(targets),
         }
     }
@@ -151,6 +161,11 @@ impl<V> Command<V> {
             _ => None,
         }
     }
+
+    /// Get the explicit routing decision if set
+    pub fn route_value(&self) -> Option<&str> {
+        self.route.as_deref()
+    }
 }
 
 /// Send command for MapReduce pattern
@@ -161,7 +176,10 @@ impl<V> Command<V> {
 pub struct SendCommand<V = Value> {
     /// Target node ID
     pub target: String,
-    /// Input state for this branch
+    /// Input state for this branch.
+    ///
+    /// In `StateGraphImpl`, this is merged as a shallow object overlay onto the
+    /// branch-local state snapshot. Non-object payloads are rejected.
     pub input: V,
     /// Optional branch identifier
     pub branch_id: Option<String>,
@@ -201,6 +219,7 @@ mod tests {
 
         assert_eq!(cmd.updates.len(), 2);
         assert_eq!(cmd.updates[0].key, "key1");
+        assert_eq!(cmd.route, None);
         assert_eq!(cmd.goto_target(), Some("next_node"));
     }
 
@@ -232,6 +251,17 @@ mod tests {
         } else {
             panic!("Expected Send control flow");
         }
+    }
+
+    #[test]
+    fn test_command_route_decision() {
+        let cmd = Command::new()
+            .update("status", json!("pending"))
+            .route("approve")
+            .continue_();
+
+        assert_eq!(cmd.route_value(), Some("approve"));
+        assert_eq!(cmd.control, ControlFlow::Continue);
     }
 
     #[test]

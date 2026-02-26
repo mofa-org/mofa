@@ -475,7 +475,10 @@ max_iterations: 8
         assert!(builder.system_prompt.is_none());
         assert!(builder.config.default_model.is_none());
         // Default max_iterations should be preserved
-        assert_eq!(builder.config.max_iterations, AgentExecutorConfig::default().max_iterations);
+        assert_eq!(
+            builder.config.max_iterations,
+            AgentExecutorConfig::default().max_iterations
+        );
     }
 
     #[test]

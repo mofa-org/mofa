@@ -172,7 +172,10 @@ mod tests {
         assert_eq!(meta.name, "My Agent");
         assert_eq!(meta.plugin_type, PluginType::Tool);
         assert_eq!(meta.version, "1.0.0", "default version must be 1.0.0");
-        assert!(meta.description.is_empty(), "default description must be empty");
+        assert!(
+            meta.description.is_empty(),
+            "default description must be empty"
+        );
         assert_eq!(meta.priority, PluginPriority::Normal);
         assert!(meta.dependencies.is_empty());
         assert!(meta.capabilities.is_empty());
@@ -194,7 +197,10 @@ mod tests {
         assert_eq!(meta.description, "Retrieval-Augmented Generation plugin");
         assert_eq!(meta.priority, PluginPriority::High);
         assert_eq!(meta.dependencies, vec!["embed-001", "store-001"]);
-        assert_eq!(meta.capabilities, vec!["semantic-search", "chunk-retrieval"]);
+        assert_eq!(
+            meta.capabilities,
+            vec!["semantic-search", "chunk-retrieval"]
+        );
     }
 
     #[test]

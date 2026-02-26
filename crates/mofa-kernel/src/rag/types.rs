@@ -22,10 +22,7 @@ pub struct Document {
 }
 
 impl Document {
-    pub fn new(
-        id: impl Into<String>,
-        text: impl Into<String>,
-    ) -> Self {
+    pub fn new(id: impl Into<String>, text: impl Into<String>) -> Self {
         Self {
             id: id.into(),
             text: text.into(),
@@ -39,7 +36,6 @@ impl Document {
         self
     }
 }
-
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ScoredDocument {
@@ -73,7 +69,11 @@ pub struct GenerateInput {
 
 impl GenerateInput {
     pub fn new(query: impl Into<String>, context: Vec<Document>) -> Self {
-        Self { query: query.into(), context, metadata: HashMap::new() }
+        Self {
+            query: query.into(),
+            context,
+            metadata: HashMap::new(),
+        }
     }
 
     pub fn with_metadata(mut self, key: impl Into<String>, value: impl Into<String>) -> Self {
@@ -81,7 +81,6 @@ impl GenerateInput {
         self
     }
 }
-
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DocumentChunk {
@@ -198,8 +197,7 @@ mod tests {
     #[test]
     fn test_generate_input_with_metadata() {
         let doc = Document::new("doc-1", "hello");
-        let input = GenerateInput::new("what is this?", vec![doc])
-            .with_metadata("language", "en");
+        let input = GenerateInput::new("what is this?", vec![doc]).with_metadata("language", "en");
 
         assert_eq!(input.query, "what is this?");
         assert_eq!(input.context.len(), 1);

@@ -80,7 +80,9 @@ impl HttpRequestTool {
         }
 
         // Resolve hostname and check all resulting IPs
-        let port = parsed.port().unwrap_or(if parsed.scheme() == "https" { 443 } else { 80 });
+        let port = parsed
+            .port()
+            .unwrap_or(if parsed.scheme() == "https" { 443 } else { 80 });
         let socket_addrs = format!("{}:{}", host, port);
         let addrs: Vec<_> = match socket_addrs.to_socket_addrs() {
             Ok(a) => a.collect(),
@@ -124,8 +126,7 @@ impl HttpRequestTool {
             std::net::IpAddr::V6(ipv6) => {
                 // Block unique local (fc00::/7) and link-local (fe80::/10)
                 let segments = ipv6.segments();
-                (segments[0] & 0xfe00) == 0xfc00
-                    || (segments[0] & 0xffc0) == 0xfe80
+                (segments[0] & 0xfe00) == 0xfc00 || (segments[0] & 0xffc0) == 0xfe80
             }
         }
     }

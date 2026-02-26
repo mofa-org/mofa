@@ -95,7 +95,9 @@ impl ExecutionOptions {
         self.retry_delay_ms = retry_delay_ms;
         self.retry_config = Some(RetryConfig {
             max_attempts: max_retries + 1,
-            policy: RetryPolicy::Fixed { delay_ms: retry_delay_ms },
+            policy: RetryPolicy::Fixed {
+                delay_ms: retry_delay_ms,
+            },
         });
         self
     }
@@ -409,10 +411,8 @@ impl ExecutionEngine {
             Err(e) => {
                 // Try graceful degradation before giving up.
                 let attempts = retry_cfg.max_attempts;
-                if let Some(fallback_output) = self
-                    .fallback
-                    .on_failure(agent_id, &e, attempts)
-                    .await
+                if let Some(fallback_output) =
+                    self.fallback.on_failure(agent_id, &e, attempts).await
                 {
                     let mut r = ExecutionResult::success(
                         execution_id,

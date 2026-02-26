@@ -728,7 +728,7 @@ mod tests {
         graph.connect("a", "b");
         graph.connect("b", "c");
         graph.connect("c", "a"); // 形成环
-                                 // forms a cycle
+        // forms a cycle
 
         assert!(graph.has_cycle());
     }
@@ -763,6 +763,11 @@ mod tests {
         assert!(json["nodes"].as_array().unwrap().len() == 4);
         assert!(json["edges"].as_array().unwrap().len() == 3);
         assert_eq!(json["start_node"], "start");
-        assert!(json["end_nodes"].as_array().unwrap().contains(&serde_json::json!("end")));
+        assert!(
+            json["end_nodes"]
+                .as_array()
+                .unwrap()
+                .contains(&serde_json::json!("end"))
+        );
     }
 }

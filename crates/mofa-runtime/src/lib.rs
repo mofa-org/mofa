@@ -20,10 +20,10 @@ pub use mofa_monitoring::*;
 pub mod agent;
 pub mod builder;
 pub mod config;
-pub mod interrupt;
-pub mod runner;
-pub mod retry;
 pub mod fallback;
+pub mod interrupt;
+pub mod retry;
+pub mod runner;
 
 // Dora adapter module (only compiled when dora feature is enabled)
 #[cfg(feature = "dora")]
@@ -1160,7 +1160,6 @@ impl SimpleRuntime {
     // 流支持方法
     // Stream support methods
     // ---------------------------------
-
 
     /// 创建流
     /// Create stream

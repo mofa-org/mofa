@@ -12,10 +12,10 @@
 use crate::agent::error::{AgentError, AgentResult};
 use crate::workflow::{GraphState, StateUpdate};
 use async_trait::async_trait;
+use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::{HashMap, HashSet, VecDeque};
-use serde::de::DeserializeOwned;
 
 /// Canonical messages key for StateGraph-based message state.
 pub const MESSAGES_KEY: &str = "messages";
@@ -130,7 +130,11 @@ pub fn messages_update(messages: &[MessageEnvelope]) -> AgentResult<StateUpdate>
 
 #[async_trait]
 impl GraphState for MessageState {
-    async fn apply_update<V: Serialize + Send + Sync + 'static>(&mut self, key: &str, value: V) -> AgentResult<()> {
+    async fn apply_update<V: Serialize + Send + Sync + 'static>(
+        &mut self,
+        key: &str,
+        value: V,
+    ) -> AgentResult<()> {
         if key != MESSAGES_KEY {
             let json_value = serde_json::to_value(&value).map_err(|e| {
                 AgentError::InvalidInput(format!("Failed to serialize value for key '{key}': {e}"))

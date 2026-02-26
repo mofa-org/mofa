@@ -46,20 +46,9 @@ pub use storage::Storage;
 // RAG traits (向量存储接口)
 pub mod rag;
 pub use rag::{
-	Document,
-	DocumentChunk,
-	GenerateInput,
-	Generator,
-	RagPipeline,
-	RagPipelineOutput,
-	Reranker,
-	Retriever,
-	ScoredDocument,
-	SearchResult,
-	SimilarityMetric,
-	VectorStore,
+    Document, DocumentChunk, GenerateInput, Generator, RagPipeline, RagPipelineOutput, Reranker,
+    Retriever, ScoredDocument, SearchResult, SimilarityMetric, VectorStore,
 };
-
 
 // Workflow traits (工作流接口)
 pub mod workflow;

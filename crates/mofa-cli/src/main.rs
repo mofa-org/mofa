@@ -65,6 +65,10 @@ async fn run_command(cli: Cli) -> anyhow::Result<()> {
     } else {
         None
     };
+    let require_ctx = || -> anyhow::Result<&CliContext> {
+        ctx.as_ref()
+            .ok_or_else(|| anyhow::anyhow!("Internal error: command context was not initialized"))
+    };
 
     match cli.command {
         Some(Commands::New {
@@ -119,7 +123,7 @@ async fn run_command(cli: Cli) -> anyhow::Result<()> {
         },
 
         Some(Commands::Agent(agent_cmd)) => {
-            let ctx = ctx.as_ref().unwrap();
+            let ctx = require_ctx()?;
             match agent_cmd {
                 cli::AgentCommands::Create {
                     non_interactive,
@@ -151,6 +155,9 @@ async fn run_command(cli: Cli) -> anyhow::Result<()> {
                 cli::AgentCommands::Restart { agent_id, config } => {
                     commands::agent::restart::run(ctx, &agent_id, config.as_deref()).await?;
                 }
+                cli::AgentCommands::Delete { agent_id, force } => {
+                    commands::agent::delete::run(ctx, &agent_id, force).await?;
+                }
                 cli::AgentCommands::Status { agent_id } => {
                     commands::agent::status::run(ctx, agent_id.as_deref()).await?;
                 }
@@ -160,19 +167,16 @@ async fn run_command(cli: Cli) -> anyhow::Result<()> {
                 cli::AgentCommands::Logs {
                     agent_id,
                     tail,
-                    level,
-                    grep,
-                    limit,
-                    json,
+                    lines,
                 } => {
                     commands::agent::logs::run(
                         ctx,
                         &agent_id,
                         tail,
-                        level.clone(),
-                        grep.clone(),
-                        limit,
-                        json,
+                        None,
+                        None,
+                        Some(lines),
+                        false,
                     )
                     .await?;
                 }
@@ -202,7 +206,7 @@ async fn run_command(cli: Cli) -> anyhow::Result<()> {
         },
 
         Some(Commands::Plugin { action }) => {
-            let ctx = ctx.as_ref().unwrap();
+            let ctx = require_ctx()?;
             match action {
                 cli::PluginCommands::List {
                     installed,
@@ -213,18 +217,8 @@ async fn run_command(cli: Cli) -> anyhow::Result<()> {
                 cli::PluginCommands::Info { name } => {
                     commands::plugin::info::run(ctx, &name).await?;
                 }
-                cli::PluginCommands::Install {
-                    name,
-                    checksum,
-                    verify_signature,
-                } => {
-                    commands::plugin::install::run(
-                        ctx,
-                        &name,
-                        checksum.as_deref(),
-                        verify_signature,
-                    )
-                    .await?;
+                cli::PluginCommands::Install { name } => {
+                    commands::plugin::install::run(ctx, &name, None, false).await?;
                 }
                 cli::PluginCommands::Uninstall { name, force } => {
                     commands::plugin::uninstall::run(ctx, &name, force).await?;
@@ -233,7 +227,7 @@ async fn run_command(cli: Cli) -> anyhow::Result<()> {
         }
 
         Some(Commands::Session { action }) => {
-            let ctx = ctx.as_ref().unwrap();
+            let ctx = require_ctx()?;
             match action {
                 cli::SessionCommands::List { agent, limit } => {
                     commands::session::list::run(ctx, agent.as_deref(), limit).await?;
@@ -262,7 +256,7 @@ async fn run_command(cli: Cli) -> anyhow::Result<()> {
         }
 
         Some(Commands::Tool { action }) => {
-            let ctx = ctx.as_ref().unwrap();
+            let ctx = require_ctx()?;
             match action {
                 cli::ToolCommands::List { available, enabled } => {
                     commands::tool::list::run(ctx, available, enabled).await?;
