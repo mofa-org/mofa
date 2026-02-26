@@ -179,38 +179,6 @@ impl AgentBus {
             Ok(data) => {
                 let message = bincode::deserialize(&data)?;
                 Ok(Some(message))
-        // 处理广播模式
-        // Handle broadcast mode
-        if matches!(mode, CommunicationMode::Broadcast) {
-            let mut receiver = self.broadcast_channel.subscribe();
-            match receiver.recv().await {
-                Ok(data) => {
-                    let message = bincode::deserialize(&data)?;
-                    Ok(Some(message))
-                }
-                Err(_) => Ok(None),
-            }
-        } else {
-            // 处理其他模式
-            // Handle other modes
-            let channel = {
-                let agent_channels = self.agent_channels.read().await;
-                let Some(channels) = agent_channels.get(id) else {
-                    return Ok(None);
-                };
-                let Some(channel) = channels.get(&mode) else {
-                    return Ok(None);
-                };
-                channel.clone()
-            };
-
-            let mut receiver = channel.subscribe();
-            match receiver.recv().await {
-                Ok(data) => {
-                    let message = bincode::deserialize(&data)?;
-                    Ok(Some(message))
-                }
-                Err(_) => Ok(None),
             }
             Err(_) => Ok(None),
         }
@@ -231,9 +199,6 @@ impl AgentBus {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::time::Duration;
-    use tokio::time::timeout;
-
     // Helper to create a dummy agent metadata
     fn dummy_agent(id: &str) -> AgentMetadata {
         AgentMetadata {
@@ -243,6 +208,8 @@ mod tests {
             version: None,
             capabilities: Default::default(),
             state: Default::default(),
+        }
+    }
     use crate::agent::{AgentCapabilities, AgentState};
     use tokio::time::{Duration, sleep, timeout};
 
