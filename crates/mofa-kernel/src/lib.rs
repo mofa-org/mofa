@@ -68,3 +68,7 @@ pub use workflow::*;
 // Metrics traits for monitoring integration
 pub mod metrics;
 pub use metrics::*;
+
+// Async runtime abstraction
+pub mod async_runtime;
+pub use async_runtime::*;
