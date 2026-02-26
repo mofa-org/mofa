@@ -1,0 +1,377 @@
+//! Model Orchestrator Traits
+//!
+//! Core traits for managing and orchestrating edge ML models:
+//! - `ModelProvider`: Loads, queries, and manages a single model instance
+//! - `ModelOrchestrator`: Orchestrates multiple models with lifecycle, scheduling, and pipeline routing
+
+use async_trait::async_trait;
+use serde_json::Value;
+use std::collections::HashMap;
+use std::sync::Arc;
+use thiserror::Error;
+
+// ============================================================================
+// Model Type — Task-based routing
+// ============================================================================
+
+/// The functional type of an ML model — used to route requests to the right model
+///
+/// When multiple models are registered, the orchestrator uses `ModelType` to pick
+/// the correct one for each pipeline stage automatically.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum ModelType {
+    /// Automatic Speech Recognition (e.g., FunASR, Whisper)
+    Asr,
+    /// Large Language Model (e.g., Qwen, Llama)
+    Llm,
+    /// Text-to-Speech synthesis (e.g., GPT-SoVITS, Kokoro)
+    Tts,
+    /// Text/audio embedding model
+    Embedding,
+    /// General-purpose or undefined model type
+    Other(String),
+}
+
+// ============================================================================
+// Degradation — Dynamic precision switching under memory pressure
+// ============================================================================
+
+/// Quantization precision levels for dynamic degradation
+///
+/// When memory is constrained and LRU eviction cannot free enough space,
+/// the orchestrator can reduce model precision to lower memory footprint.
+///
+/// Order of degradation: `Full` → `Half` → `Int8` → `Int4`
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+pub enum DegradationLevel {
+    /// FP32 — highest quality, highest memory (~4 bytes/param)
+    Full,
+    /// FP16 — half precision (~2 bytes/param)
+    Half,
+    /// INT8 quantized (~1 byte/param)
+    Int8,
+    /// INT4 quantized (~0.5 bytes/param) — maximum compression
+    Int4,
+}
+
+impl DegradationLevel {
+    /// Returns the quantization string identifier used in model configs
+    pub fn as_quantization_str(&self) -> &'static str {
+        match self {
+            DegradationLevel::Full => "f32",
+            DegradationLevel::Half => "f16",
+            DegradationLevel::Int8 => "q8_0",
+            DegradationLevel::Int4 => "q4_0",
+        }
+    }
+
+    /// Returns the next (more compressed) degradation level, or `None` if already at maximum compression
+    pub fn next_level(&self) -> Option<DegradationLevel> {
+        match self {
+            DegradationLevel::Full => Some(DegradationLevel::Half),
+            DegradationLevel::Half => Some(DegradationLevel::Int8),
+            DegradationLevel::Int8 => Some(DegradationLevel::Int4),
+            DegradationLevel::Int4 => None, // Already at maximum compression
+        }
+    }
+}
+
+// ============================================================================
+// Error Types
+// ============================================================================
+
+/// Model orchestrator error types
+#[derive(Debug, Clone, Error)]
+pub enum OrchestratorError {
+    /// Model loading failed
+    #[error("Model load failed: {0}")]
+    ModelLoadFailed(String),
+
+    /// Model inference failed
+    #[error("Model inference failed: {0}")]
+    InferenceFailed(String),
+
+    /// Model not found
+    #[error("Model not found: {0}")]
+    ModelNotFound(String),
+
+    /// No model registered for the requested task type
+    #[error("No model available for task type: {0}")]
+    NoModelForType(String),
+
+    /// Memory constrained — insufficient available system memory
+    #[error("Memory constrained: {0}")]
+    MemoryConstrained(String),
+
+    /// Device error (GPU unavailable, etc.)
+    #[error("Device error: {0}")]
+    DeviceError(String),
+
+    /// Configuration error
+    #[error("Configuration error: {0}")]
+    ConfigError(String),
+
+    /// Pool is at capacity and cannot accept more models
+    #[error("Pool at capacity: {0}")]
+    PoolCapacityExceeded(String),
+
+    /// LRU eviction failed
+    #[error("LRU eviction failed: {0}")]
+    EvictionFailed(String),
+
+    /// Serialization error
+    #[error("Serialization error: {0}")]
+    SerializationError(String),
+
+    /// Pipeline execution failed
+    #[error("Pipeline error: {0}")]
+    PipelineError(String),
+
+    /// Other errors
+    #[error("Orchestrator error: {0}")]
+    Other(String),
+}
+
+/// Result type for orchestrator operations
+pub type OrchestratorResult<T> = Result<T, OrchestratorError>;
+
+// ============================================================================
+// Model Provider Configuration
+// ============================================================================
+
+/// Configuration for initializing a model provider
+#[derive(Debug, Clone)]
+pub struct ModelProviderConfig {
+    /// Human-readable name of the model (used as ID)
+    pub model_name: String,
+    /// Path to the model weights on disk (or HuggingFace repo ID)
+    pub model_path: String,
+    /// Device type: `"cuda"` or `"cpu"`
+    pub device: String,
+    /// The functional type of this model — used for task-based routing
+    pub model_type: ModelType,
+    /// Maximum context window (tokens)
+    pub max_context_length: Option<usize>,
+    /// Quantization level (e.g., `"q4_0"`, `"q8_0"`, `"f16"`, `"f32"`)
+    pub quantization: Option<String>,
+    /// Custom configuration options (arbitrary key-value pairs)
+    pub extra_config: HashMap<String, Value>,
+}
+
+// ============================================================================
+// Model Provider Trait — single model lifecycle
+// ============================================================================
+
+/// Model provider trait — handles loading and inference for a single model
+///
+/// Implementers manage:
+/// - Loading models from disk or HuggingFace Hub
+/// - Running inference (synchronously or via streaming)
+/// - Reporting current memory usage
+/// - Graceful cleanup on unload
+#[async_trait]
+pub trait ModelProvider: Send + Sync {
+    /// Provider name (e.g., `"LinuxCandleProvider"`)
+    fn name(&self) -> &str;
+
+    /// The model's unique identifier
+    fn model_id(&self) -> &str;
+
+    /// The functional type of this model
+    fn model_type(&self) -> &ModelType;
+
+    /// Load the model into memory
+    async fn load(&mut self) -> OrchestratorResult<()>;
+
+    /// Unload the model from memory, freeing resources
+    async fn unload(&mut self) -> OrchestratorResult<()>;
+
+    /// Whether the model is currently loaded and ready for inference
+    fn is_loaded(&self) -> bool;
+
+    /// Run inference with the given input string, return response string
+    async fn infer(&self, input: &str) -> OrchestratorResult<String>;
+
+    /// Current memory usage in bytes
+    fn memory_usage_bytes(&self) -> u64;
+
+    /// Key-value metadata about the model (model_id, device, quantization, etc.)
+    fn get_metadata(&self) -> HashMap<String, Value>;
+
+    /// Verify the model is functioning correctly
+    async fn health_check(&self) -> OrchestratorResult<bool>;
+}
+
+// ============================================================================
+// Pool Statistics
+// ============================================================================
+
+/// Real-time statistics about the model pool state
+#[derive(Debug, Clone)]
+pub struct PoolStatistics {
+    /// Number of currently loaded models
+    pub loaded_models_count: usize,
+    /// Total memory used by all loaded models (bytes)
+    pub total_memory_usage: u64,
+    /// Available system memory (bytes)
+    pub available_memory: u64,
+    /// Number of models queued for loading
+    pub queued_models_count: usize,
+    /// Timestamp of collection
+    pub timestamp: chrono::DateTime<chrono::Utc>,
+}
+
+// ============================================================================
+// Model Orchestrator Trait — multi-model pool management
+// ============================================================================
+
+/// Model orchestrator trait — manages multiple models with lifecycle and scheduling
+///
+/// Implementers handle:
+/// - A concurrent pool of models with LRU eviction
+/// - Memory usage monitoring and admission control
+/// - Task-type based routing (route ASR requests to ASR models, etc.)
+/// - Dynamic precision degradation under memory pressure
+#[async_trait]
+pub trait ModelOrchestrator: Send + Sync {
+    /// Orchestrator name (e.g., `"ModelPool"`)
+    fn name(&self) -> &str;
+
+    // -------------------------------------------------------------------------
+    // Model registration
+    // -------------------------------------------------------------------------
+
+    /// Register a model in the pool (does not load it into memory)
+    async fn register_model(&self, config: ModelProviderConfig) -> OrchestratorResult<()>;
+
+    /// Unregister and unload a model from the pool
+    async fn unregister_model(&self, model_id: &str) -> OrchestratorResult<()>;
+
+    // -------------------------------------------------------------------------
+    // Lifecycle
+    // -------------------------------------------------------------------------
+
+    /// Load a model into memory, triggering LRU eviction if memory is constrained
+    async fn load_model(&self, model_id: &str) -> OrchestratorResult<()>;
+
+    /// Unload a model from memory
+    async fn unload_model(&self, model_id: &str) -> OrchestratorResult<()>;
+
+    /// Whether the given model is currently loaded
+    fn is_model_loaded(&self, model_id: &str) -> bool;
+
+    // -------------------------------------------------------------------------
+    // Inference
+    // -------------------------------------------------------------------------
+
+    /// Run inference on a model, automatically loading it if needed
+    async fn infer(&self, model_id: &str, input: &str) -> OrchestratorResult<String>;
+
+    /// Route a request to the best available model for the given task type.
+    ///
+    /// Returns the ID of the selected model. The caller can then call `infer()`.
+    /// Selection priority: loaded model of matching type → registered model of matching type.
+    async fn route_by_type(&self, task: &ModelType) -> OrchestratorResult<String>;
+
+    // -------------------------------------------------------------------------
+    // Introspection
+    // -------------------------------------------------------------------------
+
+    /// Current pool statistics (memory, loaded count, etc.)
+    fn get_statistics(&self) -> OrchestratorResult<PoolStatistics>;
+
+    /// IDs of all registered models
+    fn list_models(&self) -> Vec<String>;
+
+    /// IDs of currently loaded models
+    fn list_loaded_models(&self) -> Vec<String>;
+
+    // -------------------------------------------------------------------------
+    // Memory management
+    // -------------------------------------------------------------------------
+
+    /// Manually trigger LRU eviction to free at least `target_bytes`
+    ///
+    /// Returns the number of models evicted.
+    async fn trigger_eviction(&self, target_bytes: u64) -> OrchestratorResult<usize>;
+
+    /// Set the memory threshold (bytes). When total model memory exceeds this, auto-eviction triggers.
+    async fn set_memory_threshold(&self, bytes: u64) -> OrchestratorResult<()>;
+
+    /// Get the current memory threshold (bytes)
+    fn get_memory_threshold(&self) -> u64;
+
+    /// Set the idle timeout. Models unused for longer than this are candidates for LRU eviction.
+    async fn set_idle_timeout_secs(&self, secs: u64) -> OrchestratorResult<()>;
+
+    /// Get the current idle timeout (seconds)
+    fn get_idle_timeout_secs(&self) -> u64;
+}
+
+// ============================================================================
+// Tests
+// ============================================================================
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_error_display() {
+        let err = OrchestratorError::ModelNotFound("gpt2".to_string());
+        assert_eq!(err.to_string(), "Model not found: gpt2");
+
+        let err = OrchestratorError::MemoryConstrained("Need 8GB, have 2GB".to_string());
+        assert!(err.to_string().contains("Memory constrained"));
+
+        let err = OrchestratorError::NoModelForType("Asr".to_string());
+        assert!(err.to_string().contains("No model available"));
+    }
+
+    #[test]
+    fn test_config_creation() {
+        let config = ModelProviderConfig {
+            model_name: "Llama-2-7B".to_string(),
+            model_path: "/models/llama-2-7b.gguf".to_string(),
+            device: "cuda".to_string(),
+            model_type: ModelType::Llm,
+            max_context_length: Some(4096),
+            quantization: Some("q4_0".to_string()),
+            extra_config: HashMap::new(),
+        };
+
+        assert_eq!(config.model_name, "Llama-2-7B");
+        assert_eq!(config.device, "cuda");
+        assert_eq!(config.model_type, ModelType::Llm);
+    }
+
+    #[test]
+    fn test_degradation_level_ordering() {
+        assert!(DegradationLevel::Full < DegradationLevel::Half);
+        assert!(DegradationLevel::Half < DegradationLevel::Int8);
+        assert!(DegradationLevel::Int8 < DegradationLevel::Int4);
+    }
+
+    #[test]
+    fn test_degradation_level_next() {
+        assert_eq!(DegradationLevel::Full.next_level(), Some(DegradationLevel::Half));
+        assert_eq!(DegradationLevel::Half.next_level(), Some(DegradationLevel::Int8));
+        assert_eq!(DegradationLevel::Int8.next_level(), Some(DegradationLevel::Int4));
+        assert_eq!(DegradationLevel::Int4.next_level(), None);
+    }
+
+    #[test]
+    fn test_degradation_quantization_strings() {
+        assert_eq!(DegradationLevel::Full.as_quantization_str(), "f32");
+        assert_eq!(DegradationLevel::Half.as_quantization_str(), "f16");
+        assert_eq!(DegradationLevel::Int8.as_quantization_str(), "q8_0");
+        assert_eq!(DegradationLevel::Int4.as_quantization_str(), "q4_0");
+    }
+
+    #[test]
+    fn test_model_type_equality() {
+        assert_eq!(ModelType::Llm, ModelType::Llm);
+        assert_ne!(ModelType::Asr, ModelType::Tts);
+        assert_eq!(ModelType::Other("custom".into()), ModelType::Other("custom".into()));
+    }
+}

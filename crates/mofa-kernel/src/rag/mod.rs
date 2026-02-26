@@ -5,6 +5,8 @@
 
 pub mod types;
 pub mod vector_store;
+pub mod pipeline;
 
-pub use types::{DocumentChunk, SearchResult, SimilarityMetric};
+pub use types::{DocumentChunk, SearchResult, SimilarityMetric, Document, ScoredDocument, GenerateInput};
 pub use vector_store::VectorStore;
+pub use pipeline::{Generator, RagPipeline, RagPipelineOutput, Reranker, Retriever};
