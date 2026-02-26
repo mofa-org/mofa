@@ -22,6 +22,5 @@ mod tests {
     #[test]
     fn test_module_structure() {
         // Just verify the module structure compiles
-        assert!(true);
     }
 }

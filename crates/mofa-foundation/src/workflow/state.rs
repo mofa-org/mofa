@@ -614,7 +614,7 @@ mod tests {
         let v: WorkflowValue = true.into();
         assert_eq!(v.as_bool(), Some(true));
 
-        let v: WorkflowValue = 3.14f64.into();
-        assert_eq!(v.as_f64(), Some(3.14));
+        let v: WorkflowValue = 42.5f64.into();
+        assert_eq!(v.as_f64(), Some(42.5));
     }
 }
