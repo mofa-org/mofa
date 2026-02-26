@@ -6,7 +6,7 @@
 use async_trait::async_trait;
 use futures::stream::{self, Stream};
 use mofa_kernel::agent::error::AgentResult;
-use mofa_kernel::rag::pipeline::{GenerateInput, Generator, GeneratorChunk};
+use mofa_kernel::rag::{GenerateInput, Generator, GeneratorChunk};
 use std::pin::Pin;
 
 /// A streaming generator that wraps an existing generator and yields the full
@@ -29,7 +29,7 @@ impl<G> Generator for PassthroughStreamingGenerator<G>
 where
     G: Generator,
 {
-    async fn generate(&self, input: GenerateInput) -> AgentResult<String> {
+    async fn generate(&self, input: &GenerateInput) -> AgentResult<String> {
         self.inner.generate(input).await
     }
 
@@ -37,7 +37,7 @@ where
         &self,
         input: GenerateInput,
     ) -> AgentResult<Pin<Box<dyn Stream<Item = AgentResult<GeneratorChunk>> + Send>>> {
-        let result = self.inner.generate(input).await?;
+        let result = self.inner.generate(&input).await?;
         let stream = stream::once(async move { Ok(GeneratorChunk::Text(result)) });
         Ok(Box::pin(stream))
     }
@@ -53,7 +53,7 @@ mod tests {
 
     #[async_trait]
     impl Generator for MockGenerator {
-        async fn generate(&self, _input: GenerateInput) -> AgentResult<String> {
+        async fn generate(&self, _input: &GenerateInput) -> AgentResult<String> {
             Ok("mock response".to_string())
         }
     }
@@ -63,9 +63,10 @@ mod tests {
         let generator = PassthroughStreamingGenerator::new(MockGenerator);
         let input = GenerateInput {
             query: "test".to_string(),
-            documents: vec![],
+            context: vec![],
+            metadata: std::collections::HashMap::new(),
         };
-        let result = generator.generate(input).await.unwrap();
+        let result = generator.generate(&input).await.unwrap();
         assert_eq!(result, "mock response");
     }
 
@@ -74,7 +75,8 @@ mod tests {
         let generator = PassthroughStreamingGenerator::new(MockGenerator);
         let input = GenerateInput {
             query: "test".to_string(),
-            documents: vec![],
+            context: vec![],
+            metadata: std::collections::HashMap::new(),
         };
         let mut stream = generator.stream(input).await.unwrap();
         let chunks: Vec<_> = stream.collect().await;

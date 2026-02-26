@@ -21,7 +21,6 @@ pub use qdrant_store::{QdrantConfig, QdrantVectorStore};
 
 // Re-export kernel types for convenience
 pub use mofa_kernel::rag::{
-    DocumentChunk, Generator, GeneratorChunk, RagPipeline, RagPipelineOutput, RerankInput,
-    RerankOutput, Reranker, RetrieveInput, RetrieveOutput, Retriever, ScoredDocument, SearchResult,
-    SimilarityMetric, VectorStore,
+    Document, DocumentChunk, GenerateInput, Generator, GeneratorChunk, RagPipeline, RagPipelineOutput,
+    Reranker, Retriever, ScoredDocument, SearchResult, SimilarityMetric, VectorStore,
 };
