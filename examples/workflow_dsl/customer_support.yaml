@@ -105,9 +105,19 @@ edges:
   - from: classify
     to: route
 
-  # Route -> handlers (conditional routing would be implemented with more complex logic)
+  # Route -> handlers (conditional routing)
   - from: route
     to: handle_billing
+    condition: "category == 'billing'"
+    label: billing
+  - from: route
+    to: handle_technical
+    condition: "category == 'technical'"
+    label: technical
+  - from: route
+    to: handle_general
+    condition: "category == 'general'"
+    label: general
 
   # Handlers -> end
   - from: handle_billing
@@ -116,3 +126,4 @@ edges:
     to: end
   - from: handle_general
     to: end
+
