@@ -1048,10 +1048,6 @@ mod tests {
         assert_eq!(final_state.get_value("reader_saw_flag"), Some(json!(false)));
 
         let mut stream = compiled.stream(JsonState::new(), None);
-        let mut stream_final_state: Option<JsonState> = None;
-        while let Some(event) = StreamExt::next(&mut stream).await {
-            let ev: StreamEvent<JsonState> = event.unwrap();
-            if let StreamEvent::End { final_state } = ev {
         let mut stream_final_state = None;
         while let Some(event) = stream.next().await {
             if let StreamEvent::End { final_state } = event.unwrap() {
