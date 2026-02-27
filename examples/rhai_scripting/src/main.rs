@@ -29,7 +29,7 @@ use std::collections::HashMap;
 use tracing::{info, Level};
 
 #[tokio::main]
-async fn main() -> Result<()> {
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // 初始化日志
     // Initialize logging
     tracing_subscriber::fmt()

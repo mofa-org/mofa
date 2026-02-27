@@ -199,7 +199,7 @@ impl MasterAgent {
 
     /// 使用 LLM 进行智能任务分配
     /// Perform intelligent task assignment using LLM
-    async fn assign_task_with_llm(&self, task: &TaskRequest) -> Result<String> {
+    async fn assign_task_with_llm(&self, task: &TaskRequest) -> Result<String, Box<dyn std::error::Error>> {
         let workers_map = self.worker_states.read().await;
         let workers: Vec<_> = workers_map.iter().collect();
 
@@ -209,7 +209,7 @@ impl MasterAgent {
 
         // 构建 worker 列表描述
         // Build worker list description
-        let worker_info: Vec<String, Box<dyn std::error::Error>> = workers
+        let worker_info: Vec<String> = workers
             .iter()
             .map(|(id, state)| {
                 format!(
@@ -317,7 +317,7 @@ impl MasterAgent {
 
     /// 处理任务请求事件
     /// Handle task request event
-    async fn handle_task_request(&self, task: TaskRequest) -> Result<(String, TaskRequest)> {
+    async fn handle_task_request(&self, task: TaskRequest) -> Result<(String, TaskRequest), Box<dyn std::error::Error>> {
         // 使用 LLM 分配任务
         // Allocate task using LLM
         let worker_id = self.assign_task_with_llm(&task).await?;

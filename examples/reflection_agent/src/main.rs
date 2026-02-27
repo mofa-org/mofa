@@ -20,7 +20,7 @@ use mofa_sdk::react::{ReflectionAgent, ReflectionConfig};
 use std::sync::Arc;
 use tracing::info;
 
-fn create_llm_agent() -> Result<mofa_sdk::llm::LLMAgent> {
+fn create_llm_agent() -> Result<mofa_sdk::llm::LLMAgent, Box<dyn std::error::Error>> {
     let api_key = std::env::var("OPENAI_API_KEY")
         .unwrap_or_else(|_| "demo-key".to_owned());
     let base_url = std::env::var("OPENAI_BASE_URL").ok();

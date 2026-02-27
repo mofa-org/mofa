@@ -102,7 +102,7 @@ async fn run_parallel_agents() -> Result<(), Box<dyn std::error::Error>> {
 /// configured providers. This creates simple mock agents for demonstration.
 async fn build_mock_agents(
     definition: &WorkflowDefinition,
-) -> Result<HashMap<String, Arc<LLMAgent, Box<dyn std::error::Error>>>> {
+) -> Result<HashMap<String, Arc<LLMAgent>>, Box<dyn std::error::Error>> {
     let mut registry = HashMap::new();
 
     // Check if we have an OpenAI API key
@@ -160,7 +160,7 @@ async fn build_mock_agents(
 async fn build_mock_agent(
     agent_id: &str,
     config: &LlmAgentConfig,
-) -> Result<Arc<LLMAgent, Box<dyn std::error::Error>>> {
+) -> Result<Arc<LLMAgent>, Box<dyn std::error::Error>> {
     info!(
         "Building mock agent: {} with model: {}",
         agent_id,

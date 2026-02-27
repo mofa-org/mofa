@@ -31,7 +31,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let response = agent
         .ask("Hello! What can you help me with?")
         .await
-        .map_err(|e| format!("LLM error: {e}").into())?;
+        .map_err(|e| -> Box<dyn std::error::Error> { format!("LLM error: {e}").into() })?;
     info!("Q: Hello! What can you help me with?");
     info!("A: {response}\n");
 
@@ -41,14 +41,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let r1 = agent
         .chat("My favorite programming language is Rust.")
         .await
-        .map_err(|e| format!("LLM error: {e}").into())?;
+        .map_err(|e| -> Box<dyn std::error::Error> { format!("LLM error: {e}").into() })?;
     info!("User: My favorite programming language is Rust.");
     info!("AI: {r1}\n");
 
     let r2 = agent
         .chat("What's my favorite language?")
         .await
-        .map_err(|e| format!("LLM error: {e}").into())?;
+        .map_err(|e| -> Box<dyn std::error::Error> { format!("LLM error: {e}").into() })?;
     info!("User: What's my favorite language?");
     info!("AI: {r2}\n");
 

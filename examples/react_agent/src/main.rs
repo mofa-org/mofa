@@ -806,7 +806,7 @@ fn print_result(result: &ReActResult) {
     }
 }
 
-fn create_llm_agent() -> Result<LLMAgent> {
+fn create_llm_agent() -> Result<LLMAgent, Box<dyn std::error::Error>> {
     // 从环境变量获取配置
     // Get configuration from environment variables
     let api_key = std::env::var("OPENAI_API_KEY")

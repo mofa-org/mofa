@@ -6,6 +6,31 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, ExitStatus};
 use tempfile::TempDir;
 
+pub type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
+
+macro_rules! bail {
+    ($($arg:tt)*) => {
+        return Err(format!($($arg)*).into())
+    };
+}
+
+pub trait ContextExt<T, E> {
+    fn with_context<C, F>(self, f: F) -> Result<T>
+    where
+        C: std::fmt::Display + Send + Sync + 'static,
+        F: FnOnce() -> C;
+}
+
+impl<T, E: std::error::Error + 'static> ContextExt<T, E> for std::result::Result<T, E> {
+    fn with_context<C, F>(self, f: F) -> Result<T>
+    where
+        C: std::fmt::Display + Send + Sync + 'static,
+        F: FnOnce() -> C,
+    {
+        self.map_err(|e| -> Box<dyn std::error::Error> { format!("{}: {}", f(), e).into() })
+    }
+}
+
 pub const DEFAULT_AGENT_ID: &str = "smoke-agent-1";
 pub const DEFAULT_SESSION_ID: &str = "smoke-session-1";
 
@@ -42,10 +67,12 @@ impl SmokeEnvironment {
         Self::new_with_bin(mofa_bin)
     }
 
-    pub fn new_with_bin(mofa_bin: PathBuf) -> Result<Self, Box<dyn std::error::Error>> {
+    pub fn new_with_bin(mofa_bin: PathBuf) -> Result<Self> {
         validate_mofa_bin(&mofa_bin)?;
 
-        let temp_dir = TempDir::new().map_err(|e| format!("Failed to create temp directory for smoke run: {}", e).into())?;
+        let temp_dir = TempDir::new().map_err(|e| -> Box<dyn std::error::Error> {
+            format!("Failed to create temp directory for smoke run: {}", e).into()
+        })?;
         let xdg_config_home = temp_dir.path().join("xdg-config");
         let xdg_data_home = temp_dir.path().join("xdg-data");
         let xdg_cache_home = temp_dir.path().join("xdg-cache");
@@ -74,7 +101,7 @@ impl SmokeEnvironment {
         self.xdg_data_home.join("mofa")
     }
 
-    pub fn run(&self, args: &[&str]) -> Result<CommandOutput, Box<dyn std::error::Error>> {
+    pub fn run(&self, args: &[&str]) -> Result<CommandOutput> {
         let output = Command::new(&self.mofa_bin)
             .args(args)
             .current_dir(workspace_root())
@@ -141,7 +168,7 @@ pub fn run_full_smoke() -> Result<SmokeReport> {
     Ok(run_full_smoke_with_env(&env))
 }
 
-pub fn run_full_smoke_with_env(env: &SmokeEnvironment) -, Box<dyn std::error::Error>> SmokeReport {
+pub fn run_full_smoke_with_env(env: &SmokeEnvironment) -> SmokeReport {
     let mut report = SmokeReport::default();
 
     report.record_step("Top-level CLI commands", smoke_top_level_commands(env));
@@ -163,7 +190,7 @@ pub fn run_full_smoke_with_env(env: &SmokeEnvironment) -, Box<dyn std::error::Er
     report
 }
 
-pub fn smoke_top_level_commands(env: &SmokeEnvironment) -> Result<(), Box<dyn std::error::Error>> {
+pub fn smoke_top_level_commands(env: &SmokeEnvironment) -> Result<()> {
     let info = env.run(&["info"])?;
     expect_ok(&info, "mofa info")?;
     expect_stdout_contains(&info, "MoFA", "mofa info")?;
@@ -179,7 +206,7 @@ pub fn smoke_top_level_commands(env: &SmokeEnvironment) -> Result<(), Box<dyn st
     Ok(())
 }
 
-pub fn smoke_tool_commands(env: &SmokeEnvironment) -> Result<(), Box<dyn std::error::Error>> {
+pub fn smoke_tool_commands(env: &SmokeEnvironment) -> Result<()> {
     let list = env.run(&["tool", "list"])?;
     expect_ok(&list, "mofa tool list")?;
     expect_stdout_contains(&list, "echo", "mofa tool list")?;
@@ -192,7 +219,7 @@ pub fn smoke_tool_commands(env: &SmokeEnvironment) -> Result<(), Box<dyn std::er
     Ok(())
 }
 
-pub fn smoke_plugin_lifecycle(env: &SmokeEnvironment) -> Result<(), Box<dyn std::error::Error>> {
+pub fn smoke_plugin_lifecycle(env: &SmokeEnvironment) -> Result<()> {
     let initial_list = env.run(&["plugin", "list"])?;
     expect_ok(&initial_list, "mofa plugin list")?;
     expect_stdout_contains(&initial_list, "http-plugin", "mofa plugin list")?;
@@ -215,7 +242,11 @@ pub fn smoke_plugin_lifecycle(env: &SmokeEnvironment) -> Result<(), Box<dyn std:
     // Re-install the plugin and verify it's back
     let install = env.run(&["plugin", "install", "http-plugin"])?;
     expect_ok(&install, "mofa plugin install http-plugin")?;
-    expect_stdout_contains(&install, "installed successfully", "mofa plugin install http-plugin")?;
+    expect_stdout_contains(
+        &install,
+        "installed successfully",
+        "mofa plugin install http-plugin",
+    )?;
 
     let after_install = env.run(&["plugin", "list"])?;
     expect_ok(&after_install, "mofa plugin list (after reinstall)")?;
@@ -232,7 +263,7 @@ pub fn smoke_plugin_lifecycle(env: &SmokeEnvironment) -> Result<(), Box<dyn std:
     Ok(())
 }
 
-pub fn smoke_agent_lifecycle(env: &SmokeEnvironment, agent_id: &str) -> Result<(), Box<dyn std::error::Error>> {
+pub fn smoke_agent_lifecycle(env: &SmokeEnvironment, agent_id: &str) -> Result<()> {
     let start = env.run(&["agent", "start", agent_id, "--type", "cli-base"])?;
     expect_ok(&start, "mofa agent start")?;
     expect_output_contains(&start, "started", "mofa agent start")?;
@@ -255,11 +286,11 @@ pub fn smoke_agent_lifecycle(env: &SmokeEnvironment, agent_id: &str) -> Result<(
     if !(stop.stdout.contains("stopped and unregistered")
         || stop.stdout.contains("updated persisted state to Stopped"))
     {
-        bail!(
+        return Err(format!(
             "mofa agent stop output did not confirm stopped transition.\nstdout:\n{}\nstderr:\n{}",
-            stop.stdout,
-            stop.stderr
-        );
+            stop.stdout, stop.stderr
+        )
+        .into());
     }
 
     let running_only = env.run(&["agent", "list", "--running"])?;
@@ -269,7 +300,7 @@ pub fn smoke_agent_lifecycle(env: &SmokeEnvironment, agent_id: &str) -> Result<(
     Ok(())
 }
 
-pub fn smoke_session_lifecycle(env: &SmokeEnvironment, session_id: &str) -> Result<(), Box<dyn std::error::Error>> {
+pub fn smoke_session_lifecycle(env: &SmokeEnvironment, session_id: &str) -> Result<()> {
     write_session_fixture(env, session_id)?;
 
     let list = env.run(&["session", "list"])?;
@@ -278,16 +309,17 @@ pub fn smoke_session_lifecycle(env: &SmokeEnvironment, session_id: &str) -> Resu
 
     let show = env.run(&["session", "show", session_id, "--format", "json"])?;
     expect_ok(&show, "mofa session show --format json")?;
-    let shown_json =
-        extract_json_payload(&show).map_err(|e| format!("Failed to parse session show JSON output: {}", e).into())?;
+    let shown_json = extract_json_payload(&show).map_err(|e| -> Box<dyn std::error::Error> {
+        format!("Failed to parse session show JSON output: {}", e).into()
+    })?;
     let shown_id = shown_json
         .get("session_id")
         .and_then(Value::as_str)
         .unwrap_or_default();
     if shown_id != session_id {
-        bail!(
+        return Err(format!(
             "mofa session show returned unexpected session_id: expected '{session_id}', got '{shown_id}'"
-        );
+        ).into());
     }
 
     let export_file = env.temp_root().join("session-export.json");
@@ -312,9 +344,9 @@ pub fn smoke_session_lifecycle(env: &SmokeEnvironment, session_id: &str) -> Resu
         .and_then(Value::as_str)
         .unwrap_or_default();
     if exported_id != session_id {
-        bail!(
+        return Err(format!(
             "mofa session export returned unexpected session_id: expected '{session_id}', got '{exported_id}'"
-        );
+        ).into());
     }
 
     let delete = env.run(&["session", "delete", session_id, "--force"])?;
@@ -323,7 +355,7 @@ pub fn smoke_session_lifecycle(env: &SmokeEnvironment, session_id: &str) -> Resu
     Ok(())
 }
 
-pub fn smoke_deleted_session_show_fails(env: &SmokeEnvironment, session_id: &str) -> Result<(), Box<dyn std::error::Error>> {
+pub fn smoke_deleted_session_show_fails(env: &SmokeEnvironment, session_id: &str) -> Result<()> {
     let deleted_show = env.run(&["session", "show", session_id])?;
     expect_fail(&deleted_show, "mofa session show (after delete)")?;
     expect_output_contains(
@@ -334,7 +366,7 @@ pub fn smoke_deleted_session_show_fails(env: &SmokeEnvironment, session_id: &str
     Ok(())
 }
 
-pub fn write_session_fixture(env: &SmokeEnvironment, session_id: &str) -> Result<PathBuf, Box<dyn std::error::Error>> {
+pub fn write_session_fixture(env: &SmokeEnvironment, session_id: &str) -> Result<PathBuf> {
     let sessions_dir = env.mofa_data_dir().join("sessions");
     fs::create_dir_all(&sessions_dir)
         .with_context(|| format!("Failed to create {}", sessions_dir.display()))?;
@@ -355,94 +387,102 @@ pub fn write_session_fixture(env: &SmokeEnvironment, session_id: &str) -> Result
     Ok(fixture_path)
 }
 
-pub fn expect_ok(output: &CommandOutput, label: &str) -> Result<(), Box<dyn std::error::Error>> {
+pub fn expect_ok(output: &CommandOutput, label: &str) -> Result<()> {
     if output.success() {
         return Ok(());
     }
 
-    bail!(
+    return Err(format!(
         "{label} failed unexpectedly (cmd: {}).\nstdout:\n{}\nstderr:\n{}",
         output.command_line(),
         output.stdout,
         output.stderr
     )
+    .into());
 }
 
-pub fn expect_fail(output: &CommandOutput, label: &str) -> Result<(), Box<dyn std::error::Error>> {
+pub fn expect_fail(output: &CommandOutput, label: &str) -> Result<()> {
     if !output.success() {
         return Ok(());
     }
 
-    bail!(
+    return Err(format!(
         "{label} succeeded unexpectedly (cmd: {}).\nstdout:\n{}\nstderr:\n{}",
         output.command_line(),
         output.stdout,
         output.stderr
     )
+    .into());
 }
 
-pub fn expect_stdout_contains(output: &CommandOutput, needle: &str, label: &str) -> Result<(), Box<dyn std::error::Error>> {
+pub fn expect_stdout_contains(output: &CommandOutput, needle: &str, label: &str) -> Result<()> {
     if output.stdout.contains(needle) {
         return Ok(());
     }
 
-    bail!(
+    return Err(format!(
         "{label} output did not contain '{needle}'.\nstdout:\n{}\nstderr:\n{}",
-        output.stdout,
-        output.stderr
+        output.stdout, output.stderr
     )
+    .into());
 }
 
-pub fn expect_stdout_not_contains(output: &CommandOutput, needle: &str, label: &str) -> Result<(), Box<dyn std::error::Error>> {
+pub fn expect_stdout_not_contains(output: &CommandOutput, needle: &str, label: &str) -> Result<()> {
     if !output.stdout.contains(needle) {
         return Ok(());
     }
 
-    bail!(
+    return Err(format!(
         "{label} output unexpectedly contained '{needle}'.\nstdout:\n{}\nstderr:\n{}",
-        output.stdout,
-        output.stderr
+        output.stdout, output.stderr
     )
+    .into());
 }
 
-pub fn expect_output_contains(output: &CommandOutput, needle: &str, label: &str) -> Result<(), Box<dyn std::error::Error>> {
+pub fn expect_output_contains(output: &CommandOutput, needle: &str, label: &str) -> Result<()> {
     if output.stdout.contains(needle) || output.stderr.contains(needle) {
         return Ok(());
     }
 
-    bail!(
+    return Err(format!(
         "{label} output did not contain '{needle}' in stdout/stderr.\nstdout:\n{}\nstderr:\n{}",
-        output.stdout,
-        output.stderr
+        output.stdout, output.stderr
     )
+    .into());
 }
 
-pub fn expect_output_not_contains(output: &CommandOutput, needle: &str, label: &str) -> Result<(), Box<dyn std::error::Error>> {
+pub fn expect_output_not_contains(output: &CommandOutput, needle: &str, label: &str) -> Result<()> {
     if !output.stdout.contains(needle) && !output.stderr.contains(needle) {
         return Ok(());
     }
 
-    bail!(
+    return Err(format!(
         "{label} output unexpectedly contained '{needle}' in stdout/stderr.\nstdout:\n{}\nstderr:\n{}",
         output.stdout,
         output.stderr
-    )
+    ).into());
 }
 
 pub fn extract_json_payload(output: &CommandOutput) -> Result<Value> {
     let start = output
         .stdout
         .find('{')
-        .ok_or_else(|| format!("Could not find JSON object in output").into())?;
+        .ok_or_else(|| -> Box<dyn std::error::Error> {
+            format!("Could not find JSON object in output").into()
+        })?;
     let payload = &output.stdout[start..];
     // Use a streaming deserializer so any trailing text after the JSON object is ignored.
     let mut iter = serde_json::Deserializer::from_str(payload).into_iter::<Value>();
     iter.next()
-        .ok_or_else(|| format!("Empty JSON stream in output").into())?
-        .map_err(|e| format!("Invalid JSON payload: {}", e).into())
+        .ok_or_else(|| -> Box<dyn std::error::Error> {
+            format!("Empty JSON stream in output").into()
+        })?
+        .map_err(|e| -> Box<dyn std::error::Error> {
+            format!("Invalid JSON payload: {}", e).into()
+        })
 }
 
-pub fn resolve_mofa_bin() -> Result<PathBuf, Box<dyn std::error::Error>> {
+pub fn resolve_mofa_bin() -> Result<PathBuf> {
     if let Ok(raw) = std::env::var("MOFA_BIN") {
         let raw = raw.trim();
         if !raw.is_empty() {
@@ -459,23 +499,24 @@ pub fn resolve_mofa_bin() -> Result<PathBuf, Box<dyn std::error::Error>> {
         return Ok(fallback);
     }
 
-    bail!(
+    return Err(format!(
         "Could not find mofa binary. Build it with `cargo build -p mofa-cli` from repo root, \
          or set MOFA_BIN to the binary path. Expected fallback: {}",
         fallback.display()
     )
+    .into());
 }
 
-fn validate_mofa_bin(path: impl AsRef<Path>) -> Result<PathBuf, Box<dyn std::error::Error>> {
+fn validate_mofa_bin(path: impl AsRef<Path>) -> Result<PathBuf> {
     let path = path.as_ref();
     if path.is_file() {
         return Ok(path.to_path_buf());
     }
 
-    bail!(
+    return Err(format!(
         "Could not find mofa binary at '{}'. Build with `cargo build -p mofa-cli` or set MOFA_BIN to a valid binary path.",
         path.display()
-    )
+    ).into());
 }
 
 fn binary_name(base: &str) -> String {

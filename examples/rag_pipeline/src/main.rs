@@ -518,11 +518,11 @@ async fn streaming_memory_test() -> Result<(), Box<dyn std::error::Error>> {
             let query = format!("What are the key features of document {}?", i);
             let start = std::time::Instant::now();
 
-            let (docs, mut stream) = pipeline_clone.run_streaming(&query, 3).await?;
+            let (docs, mut stream) = pipeline_clone.run_streaming(&query, 3).await.map_err(|e| -> Box<dyn std::error::Error + Send + Sync> { format!("{}", e).into() })?;
             let mut char_count = 0;
 
             while let Some(chunk_result) = stream.next().await {
-                match chunk_result? {
+                match chunk_result.map_err(|e| -> Box<dyn std::error::Error + Send + Sync> { format!("{}", e).into() })? {
                     mofa_kernel::rag::pipeline::GeneratorChunk::Text(text) => {
                         char_count += text.len();
                         // Simulate processing time
@@ -533,7 +533,7 @@ async fn streaming_memory_test() -> Result<(), Box<dyn std::error::Error>> {
             }
 
             let duration = start.elapsed();
-            Ok::<_, anyhow::Error>((docs.len(), char_count, duration))
+            Ok::<_, Box<dyn std::error::Error + Send + Sync>>((docs.len(), char_count, duration))
         });
         handles.push(handle);
     }
@@ -544,7 +544,11 @@ async fn streaming_memory_test() -> Result<(), Box<dyn std::error::Error>> {
     let mut max_duration = std::time::Duration::new(0, 0);
 
     for handle in handles {
-        let (docs, chars, duration) = handle.await??;
+        let (docs, chars, duration) = match handle.await {
+            Ok(Ok(val)) => val,
+            Ok(Err(e)) => return Err(format!("Task error: {}", e).into()),
+            Err(e) => return Err(format!("Join error: {}", e).into()),
+        };
         total_docs += docs;
         total_chars += chars;
         if duration > max_duration {
@@ -812,12 +816,12 @@ fn truncate_text(text: &str, max_len: usize) -> String {
 }
 
 #[tokio::main]
-async fn main() -> Result<()> {
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
     tracing_subscriber::fmt()
         .with_env_filter("info")
         .init();
 
-    let args: Vec<String, Box<dyn std::error::Error>> = std::env::args().collect();
+    let args: Vec<String> = std::env::args().collect();
     let mode = args.get(1).map(|s| s.as_str()).unwrap_or("memory");
 
     println!("=== MoFA RAG Pipeline Example ===\n");

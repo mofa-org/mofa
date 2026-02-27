@@ -260,7 +260,7 @@ async fn list_workflows(State(state): State<SharedState>) -> Json<Value> {
 async fn get_workflow(
     State(state): State<SharedState>,
     Path(id): Path<String>,
-) -> Result<Json<Value, Box<dyn std::error::Error>>, StatusCode> {
+) -> Result<Json<Value>, StatusCode> {
     let s = state.read().await;
     let def = s.definitions.get(&id).ok_or(StatusCode::NOT_FOUND)?;
     Ok(Json(definition_to_json(def)))
@@ -375,7 +375,7 @@ struct SimParams {
 async fn simulate_execution(
     State(state): State<SharedState>,
     Query(params): Query<SimParams>,
-) -> Result<Json<Value, Box<dyn std::error::Error>>, (StatusCode, Json<Value>)> {
+) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
     // Get the workflow definition and atomically check-and-set sim_running
     let (def_json, event_tx, node_states_arc, sim_running_arc) = {
         let s = state.read().await;

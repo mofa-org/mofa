@@ -339,7 +339,7 @@ fn execute(llm_response) {
 // ============================================================================
 
 #[tokio::main]
-async fn main() -> Result<()> {
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // 初始化日志
     // Initialize logging
     tracing_subscriber::fmt()
@@ -352,7 +352,7 @@ async fn main() -> Result<()> {
     // 演示 4: 基于文件的动态插件 - 支持运行时修改和自动重载
     // Demo 4: File-based dynamic plugins - supporting runtime modification and auto-reloading
     match demo_file_based_dynamic_plugin().await {
-        Ok(_) =, Box<dyn std::error::Error>> info!("演示 4 完成"),
+        Ok(_) => info!("演示 4 完成"),
         // Ok(_) => info!("Demo 4 completed"),
         Err(e) => warn!("演示 4 跳过或失败: {}", e),
         // Err(e) => warn!("Demo 4 skipped or failed: {}", e),

@@ -6,7 +6,6 @@ version = 4
 name = "adaptive_collaboration_agent"
 version = "0.1.0"
 dependencies = [
- "anyhow",
  "async-trait",
  "mofa-sdk",
  "serde",
@@ -53,7 +52,6 @@ dependencies = [
 name = "agent_builder"
 version = "0.1.0"
 dependencies = [
- "anyhow",
  "async-trait",
  "mofa-sdk",
  "tokio",
@@ -65,7 +63,6 @@ dependencies = [
 name = "agent_from_database_streaming"
 version = "0.1.0"
 dependencies = [
- "anyhow",
  "futures",
  "mofa-sdk",
  "tokio",
@@ -78,7 +75,6 @@ dependencies = [
 name = "agent_with_plugins_and_rhai"
 version = "0.1.0"
 dependencies = [
- "anyhow",
  "async-trait",
  "chrono",
  "futures",
@@ -861,7 +857,6 @@ dependencies = [
 name = "chat_stream"
 version = "0.1.0"
 dependencies = [
- "anyhow",
  "mofa-sdk",
  "tokio",
  "tokio-stream",
@@ -972,7 +967,6 @@ checksum = "4bfbf56724aa9eca8afa4fcfadeb479e722935bb2a0900c2d37e0cc477af0688"
 name = "cli_agent_logs_demo"
 version = "0.1.0"
 dependencies = [
- "anyhow",
  "chrono",
  "mofa-cli",
  "tempfile",
@@ -985,7 +979,6 @@ dependencies = [
 name = "cli_cicd_integration"
 version = "0.1.0"
 dependencies = [
- "anyhow",
  "mofa-cli",
  "serde_json",
  "tempfile",
@@ -996,7 +989,6 @@ dependencies = [
 name = "cli_plugin_lifecycle"
 version = "0.1.0"
 dependencies = [
- "anyhow",
  "mofa-cli",
  "serde_json",
  "tempfile",
@@ -1007,7 +999,6 @@ dependencies = [
 name = "cli_production_smoke"
 version = "0.1.0"
 dependencies = [
- "anyhow",
  "serde_json",
  "tempfile",
 ]
@@ -1178,7 +1169,6 @@ checksum = "7c74b8349d32d297c9134b8c88677813a227df8f779daa29bfc29c183fe3dca6"
 name = "context_compression"
 version = "0.1.0"
 dependencies = [
- "anyhow",
  "mofa-foundation",
  "mofa-kernel",
  "tempfile",
@@ -1575,7 +1565,6 @@ dependencies = [
 name = "custom_plugin_install"
 version = "0.1.0"
 dependencies = [
- "anyhow",
  "mofa-cli",
  "serde_json",
  "tempfile",
@@ -2159,7 +2148,6 @@ dependencies = [
 name = "financial_compliance_agent"
 version = "0.1.0"
 dependencies = [
- "anyhow",
  "mofa-sdk",
  "notify",
  "serde_json",
@@ -2851,7 +2839,6 @@ dependencies = [
 name = "hitl_secretary"
 version = "0.1.0"
 dependencies = [
- "anyhow",
  "async-trait",
  "mofa-sdk",
  "serde_json",
@@ -3737,7 +3724,6 @@ checksum = "11d3d7f243d5c5a8b9bb5d6dd2b1602c0cb0b9db1621bafc7ed66e35ff9fe092"
 name = "llm_tts_streaming"
 version = "0.1.0"
 dependencies = [
- "anyhow",
  "futures",
  "mofa-sdk",
  "rodio",
@@ -3766,7 +3752,6 @@ checksum = "5e5032e24019045c762d3c0f28f5b6b8bbf38563a65908389bf7978758920897"
 name = "log_rotation_handling"
 version = "0.1.0"
 dependencies = [
- "anyhow",
  "chrono",
  "mofa-cli",
  "tempfile",
@@ -3924,7 +3909,6 @@ dependencies = [
 name = "message_graph_executor_runtime"
 version = "0.1.0"
 dependencies = [
- "anyhow",
  "mofa-kernel",
  "serde_json",
  "tokio",
@@ -3934,7 +3918,6 @@ dependencies = [
 name = "message_graph_validation"
 version = "0.1.0"
 dependencies = [
- "anyhow",
  "futures",
  "mofa-kernel",
  "serde_json",
@@ -4000,7 +3983,6 @@ dependencies = [
 name = "mofa-cli"
 version = "0.1.0"
 dependencies = [
- "anyhow",
  "async-trait",
  "chrono",
  "clap",
@@ -4026,6 +4008,7 @@ dependencies = [
  "serde_yaml",
  "sha2",
  "tar",
+ "thiserror 1.0.69",
  "tokio",
  "tokio-stream",
  "toml 0.8.23",
@@ -4232,7 +4215,6 @@ dependencies = [
 name = "multi_agent_coordination"
 version = "0.1.0"
 dependencies = [
- "anyhow",
  "async-trait",
  "chrono",
  "mofa-sdk",
@@ -4983,7 +4965,6 @@ checksum = "7edddbd0b52d732b21ad9a5fab5c704c14cd949e5e9a1ec5929a24fded1b904c"
 name = "plugin_system"
 version = "0.1.0"
 dependencies = [
- "anyhow",
  "async-trait",
  "mofa-sdk",
  "serde_json",
@@ -5282,7 +5263,6 @@ dependencies = [
 name = "rag_pipeline"
 version = "0.1.0"
 dependencies = [
- "anyhow",
  "async-trait",
  "futures",
  "mofa-foundation",
@@ -5532,7 +5512,6 @@ dependencies = [
 name = "react_agent"
 version = "0.1.0"
 dependencies = [
- "anyhow",
  "async-trait",
  "mofa-sdk",
  "serde_json",
@@ -5591,7 +5570,6 @@ dependencies = [
 name = "reflection_agent"
 version = "0.1.0"
 dependencies = [
- "anyhow",
  "async-trait",
  "mofa-sdk",
  "serde_json",
@@ -5801,7 +5779,6 @@ dependencies = [
 name = "rhai_hot_reload"
 version = "0.1.0"
 dependencies = [
- "anyhow",
  "mofa-sdk",
  "tokio",
  "tracing",
@@ -5812,7 +5789,6 @@ dependencies = [
 name = "rhai_scripting"
 version = "0.1.0"
 dependencies = [
- "anyhow",
  "mofa-sdk",
  "serde",
  "serde_json",
@@ -5891,7 +5867,6 @@ dependencies = [
 name = "runtime_example"
 version = "0.1.0"
 dependencies = [
- "anyhow",
  "async-trait",
  "mofa-sdk",
  "tokio",
@@ -5903,7 +5878,6 @@ dependencies = [
 name = "runtime_message_bus_backpressure"
 version = "0.1.0"
 dependencies = [
- "anyhow",
  "mofa-sdk",
  "tokio",
 ]
@@ -5912,7 +5886,6 @@ dependencies = [
 name = "runtime_periodic_runner"
 version = "0.1.0"
 dependencies = [
- "anyhow",
  "async-trait",
  "cron",
  "mofa-runtime",
@@ -6156,7 +6129,6 @@ dependencies = [
 name = "secretary_agent"
 version = "0.1.0"
 dependencies = [
- "anyhow",
  "async-trait",
  "mofa-sdk",
  "serde_json",
@@ -6742,7 +6714,6 @@ dependencies = [
 name = "streaming_persistence"
 version = "0.1.0"
 dependencies = [
- "anyhow",
  "async-trait",
  "futures",
  "mofa-sdk",
@@ -7499,7 +7470,6 @@ dependencies = [
 name = "tool_routing"
 version = "0.1.0"
 dependencies = [
- "anyhow",
  "async-trait",
  "mofa-sdk",
  "serde",
@@ -9125,7 +9095,6 @@ dependencies = [
 name = "workflow_dsl"
 version = "0.1.0"
 dependencies = [
- "anyhow",
  "mofa-sdk",
  "tokio",
  "tracing",

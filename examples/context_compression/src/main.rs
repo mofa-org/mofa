@@ -190,13 +190,13 @@ async fn demo_agent_executor() -> Result<(), Box<dyn std::error::Error>> {
 // Demo 4: Summarizing compressor (requires OPENAI_API_KEY)
 // ============================================================================
 
-async fn demo_summarizing_compressor() -> Result<()> {
+async fn demo_summarizing_compressor() -> Result<(), Box<dyn std::error::Error>> {
     println!("\n========================================");
     println!("  Demo 4: Summarizing Compressor");
     println!("========================================\n");
 
     let api_key = match std::env::var("OPENAI_API_KEY") {
-        Ok(k) if !k.is_empty() =, Box<dyn std::error::Error>> k,
+        Ok(k) if !k.is_empty() => k,
         _ => {
             println!("OPENAI_API_KEY not set. Skipping live summarization demo.");
             println!(

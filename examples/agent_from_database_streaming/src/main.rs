@@ -135,7 +135,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     info!("正在连接数据库...");
     // Connecting to database...
     let store = PostgresStore::connect(&database_url).await
-        .map_err(|e| format!("数据库连接失败: {}", e).into())?;
+        .map_err(|e| -> Box<dyn std::error::Error> { format!("数据库连接失败: {}", e).into() })?;
         // Database connection failed: {}
     info!("数据库连接成功");
     // Database connection successful
@@ -173,7 +173,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         // .with_title("New Conversation")
 
     store.create_session(&chat_session).await
-        .map_err(|e| format!("创建会话失败: {}", e).into())?;
+        .map_err(|e| -> Box<dyn std::error::Error> { format!("创建会话失败: {}", e).into() })?;
         // Failed to create session: {}
     info!("会话创建成功: {}", session_id);
     // Session created successfully: {}

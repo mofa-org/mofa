@@ -150,10 +150,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let fraud_msg = timeout(Duration::from_secs(1), fraud_recv)
         .await
-        .map_err(|e| format!("timed out waiting for fraud target message: {}", e).into())?
-        .map_err(|e| format!("fraud receiver task failed: {}", e).into())?
-        .map_err(|e| format!("fraud receive failed: {}", e).into())?
-        .map_err(|e| format!("fraud receiver got no message: {}", e).into())?;
+        .map_err(|e| -> Box<dyn std::error::Error> { format!("timed out waiting for fraud target message: {}", e).into() })?
+        .map_err(|e| -> Box<dyn std::error::Error> { format!("fraud receiver task failed: {}", e).into() })?
+        .map_err(|e| -> Box<dyn std::error::Error> { format!("fraud receive failed: {}", e).into() })?
+        .ok_or_else(|| -> Box<dyn std::error::Error> { format!("fraud receiver got no message").into() })?;
     let routed = decode_event_envelope(fraud_msg)?;
     println!(
         "fraud target received type='{}' hop_count={}",
@@ -162,10 +162,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let stream_msg = timeout(Duration::from_secs(1), stream_recv)
         .await
-        .map_err(|e| format!("timed out waiting for stream target message: {}", e).into())?
-        .map_err(|e| format!("stream receiver task failed: {}", e).into())?
-        .map_err(|e| format!("stream receive failed: {}", e).into())?
-        .map_err(|e| format!("stream receiver got no message: {}", e).into())?;
+        .map_err(|e| -> Box<dyn std::error::Error> { format!("timed out waiting for stream target message: {}", e).into() })?
+        .map_err(|e| -> Box<dyn std::error::Error> { format!("stream receiver task failed: {}", e).into() })?
+        .map_err(|e| -> Box<dyn std::error::Error> { format!("stream receive failed: {}", e).into() })?
+        .ok_or_else(|| -> Box<dyn std::error::Error> { format!("stream receiver got no message").into() })?;
     match stream_msg {
         AgentMessage::StreamMessage {
             stream_id,
@@ -198,10 +198,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let dlq_msg = timeout(Duration::from_secs(1), dlq_recv)
         .await
-        .map_err(|e| format!("timed out waiting for dlq message: {}", e).into())?
-        .map_err(|e| format!("dlq receiver task failed: {}", e).into())?
-        .map_err(|e| format!("dlq receive failed: {}", e).into())?
-        .map_err(|e| format!("dlq receiver got no message: {}", e).into())?;
+        .map_err(|e| -> Box<dyn std::error::Error> { format!("timed out waiting for dlq message: {}", e).into() })?
+        .map_err(|e| -> Box<dyn std::error::Error> { format!("dlq receiver task failed: {}", e).into() })?
+        .map_err(|e| -> Box<dyn std::error::Error> { format!("dlq receive failed: {}", e).into() })?
+        .ok_or_else(|| -> Box<dyn std::error::Error> { format!("dlq receiver got no message").into() })?;
     let dlq_envelope = decode_event_envelope(dlq_msg)?;
     let reason = dlq_envelope
         .headers
