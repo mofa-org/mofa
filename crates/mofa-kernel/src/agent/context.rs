@@ -467,7 +467,7 @@ mod tests {
 
         let mut rx = ctx.subscribe("test_event").await;
 
-        ctx.emit_event(AgentEvent::new(
+        ctx.emit_event(AgentEvent::<String>::new(
             "test_event",
             "hello".to_string(),
         ))

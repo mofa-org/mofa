@@ -488,9 +488,7 @@ impl SimpleTool for JsonParseTool {
                     current = match current.get(key) {
                         Some(v) => v,
                         None => {
-                            return ToolResult::failure(format!(
-                                "key not found at path '{path}'"
-                            ))
+                            return ToolResult::failure(format!("key not found at path '{path}'"));
                         }
                     };
                 }
@@ -760,9 +758,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_datetime_missing_operation() {
-        let result = DateTimeTool
-            .execute(ToolInput::from_json(json!({})))
-            .await;
+        let result = DateTimeTool.execute(ToolInput::from_json(json!({}))).await;
         assert!(!result.success);
     }
 
@@ -875,7 +871,9 @@ mod tests {
         let path = dir.path().join("append.txt").to_string_lossy().to_string();
 
         let w1 = FileWriteTool
-            .execute(ToolInput::from_json(json!({"path": path, "content": "line1\n"})))
+            .execute(ToolInput::from_json(
+                json!({"path": path, "content": "line1\n"}),
+            ))
             .await;
         assert!(w1.success, "{:?}", w1.error);
 
@@ -930,14 +928,14 @@ mod tests {
             })
         };
 
-        let result = ShellTool
-            .execute(ToolInput::from_json(input))
-            .await;
+        let result = ShellTool.execute(ToolInput::from_json(input)).await;
         assert!(result.success, "{:?}", result.error);
-        assert!(result.output["stdout"]
-            .as_str()
-            .unwrap()
-            .contains("hello shell"));
+        assert!(
+            result.output["stdout"]
+                .as_str()
+                .unwrap()
+                .contains("hello shell")
+        );
     }
 
     #[tokio::test]
@@ -954,9 +952,7 @@ mod tests {
             })
         };
 
-        let result = ShellTool
-            .execute(ToolInput::from_json(input))
-            .await;
+        let result = ShellTool.execute(ToolInput::from_json(input)).await;
         assert!(!result.success);
         assert!(result.error.as_deref().unwrap().contains("exit"));
     }
@@ -973,9 +969,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_shell_missing_command() {
-        let result = ShellTool
-            .execute(ToolInput::from_json(json!({})))
-            .await;
+        let result = ShellTool.execute(ToolInput::from_json(json!({}))).await;
         assert!(!result.success);
         assert!(result.error.as_deref().unwrap().contains("command"));
     }

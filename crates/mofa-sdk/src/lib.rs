@@ -305,6 +305,7 @@ pub mod plugins {
         // Kernel plugin primitives
         PluginConfig,
         PluginContext,
+        PluginError,
         PluginEvent,
         PluginManager,
         PluginMetadata,
