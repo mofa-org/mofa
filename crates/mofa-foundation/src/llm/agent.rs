@@ -13,7 +13,7 @@
 //! use mofa_sdk::llm::LLMAgentBuilder;
 //!
 //! #[tokio::main]
-//! async fn main() -> anyhow::Result<()> {
+//! async fn main() -> GlobalResult<()> {
 //!     let agent = LLMAgentBuilder::from_env()?
 //!         .with_id("my-llm-agent")
 //!         .with_system_prompt("You are a helpful assistant.")
@@ -25,6 +25,7 @@
 //! }
 //! ```
 
+use mofa_kernel::agent::types::error::{GlobalError, GlobalResult};
 use super::client::{ChatSession, LLMClient};
 use super::provider::{ChatStream, LLMProvider};
 use super::tool_executor::ToolExecutor;
@@ -601,7 +602,10 @@ impl LLMAgent {
             let sess_store_clone = sess_store.clone();
 
             let session_uuid = uuid::Uuid::parse_str(&sid).unwrap_or_else(|_| {
-                tracing::warn!("⚠️ 无效的 session_id 格式 '{}', 将生成新的 UUID", sid);
+                tracing::warn!(
+                    "⚠️ Invalid session_id format '{}', generating a new UUID",
+                    sid
+                );
                 // ⚠️ Invalid session_id format '{}', will generate new UUID
                 uuid::Uuid::now_v7()
             });
@@ -622,7 +626,7 @@ impl LLMAgent {
             {
                 Ok(loaded_session) => {
                     tracing::info!(
-                        "✅ 从数据库加载会话: {} ({} 条消息)",
+                        "✅ Session loaded from database: {} ({} messages)",
                         // ✅ Session loaded from database: {} ({} messages)
                         sid,
                         loaded_session.messages().len()
@@ -632,7 +636,11 @@ impl LLMAgent {
                 Err(e) => {
                     // 会话不存在，创建新会话（使用用户指定的ID和从persistence获取的user_id/agent_id）
                     // Session not found; create new session (using specified ID and user_id/agent_id from persistence)
-                    tracing::info!("📝 创建新会话并持久化: {} (数据库中不存在: {})", sid, e);
+                    tracing::info!(
+                        "📝 Creating new session and persisting: {} (not found in DB: {})",
+                        sid,
+                        e
+                    );
                     // 📝 Creating new session and persisting: {} (doesn't exist in DB: {})
 
                     // Clone stores again for the fallback case
@@ -660,7 +668,10 @@ impl LLMAgent {
                             new_session
                         }
                         Err(persist_err) => {
-                            tracing::error!("❌ 持久化会话失败: {}, 降级为内存会话", persist_err);
+                            tracing::error!(
+                                "❌ Failed to persist session: {}, falling back to in-memory session",
+                                persist_err
+                            );
                             // ❌ Persisting session failed: {}, falling back to in-memory session
                             // 降级：如果持久化失败，创建内存会话
                             // Fallback: If persistence fails, create in-memory session
@@ -2547,7 +2558,7 @@ impl LLMAgentBuilder {
     /// use std::sync::Arc;
     /// use uuid::Uuid;
     ///
-    /// # async fn example() -> anyhow::Result<()> {
+    /// # async fn example() -> GlobalResult<()> {
     /// let store = Arc::new(PostgresStore::connect("postgres://localhost/mofa").await?);
     /// let user_id = Uuid::now_v7();
     /// let tenant_id = Uuid::now_v7();
@@ -2772,6 +2783,7 @@ impl LLMAgentBuilder {
     /// # Panics
     /// 如果未设置 provider 则 panic
     /// Panics if the provider is not set
+    #[must_use]
     pub fn build(self) -> LLMAgent {
         let provider = self
             .provider

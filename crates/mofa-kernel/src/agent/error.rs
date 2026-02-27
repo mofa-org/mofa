@@ -195,8 +195,26 @@ impl From<serde_json::Error> for AgentError {
     }
 }
 
-impl From<anyhow::Error> for AgentError {
-    fn from(err: anyhow::Error) -> Self {
+impl From<crate::plugin::PluginError> for AgentError {
+    fn from(err: crate::plugin::PluginError) -> Self {
+        AgentError::Internal(err.to_string())
+    }
+}
+
+impl From<crate::bus::BusError> for AgentError {
+    fn from(err: crate::bus::BusError) -> Self {
+        AgentError::Internal(err.to_string())
+    }
+}
+
+impl From<crate::agent::secretary::ConnectionError> for AgentError {
+    fn from(err: crate::agent::secretary::ConnectionError) -> Self {
+        AgentError::Internal(err.to_string())
+    }
+}
+
+impl From<crate::agent::secretary::SecretaryError> for AgentError {
+    fn from(err: crate::agent::secretary::SecretaryError) -> Self {
         AgentError::Internal(err.to_string())
     }
 }
