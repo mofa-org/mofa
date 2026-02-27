@@ -24,6 +24,7 @@ use mofa_sdk::plugins::{
     PluginManager, PluginMetadata, PluginResult, PluginState, PluginType, StoragePlugin,
     ToolDefinition, ToolExecutor, ToolPlugin,
 };
+use mofa_sdk::kernel::plugin::PluginError;
 use std::any::Any;
 use std::collections::HashMap;
 use tracing::{info, warn};
@@ -78,11 +79,11 @@ impl ToolExecutor for CalculatorTool {
             "multiply" => a * b,
             "divide" => {
                 if b == 0.0 {
-                    return Err(anyhow::anyhow!("Division by zero"));
+                    return Err(PluginError::ExecutionFailed("Division by zero".to_string()));
                 }
                 a / b
             }
-            _ => return Err(anyhow::anyhow!("Unknown operation: {}", op)),
+            _ => return Err(PluginError::ExecutionFailed(format!("Unknown operation: {}", op))),
         };
 
         Ok(serde_json::json!({
@@ -251,7 +252,7 @@ impl AgentPlugin for MonitorPlugin {
             ["list"] => {
                 Ok(serde_json::to_string(&self.all_metrics())?)
             }
-            _ => Err(anyhow::anyhow!("Invalid command. Use: record <name> <value>, get <name>, list")),
+            _ => Err(PluginError::ExecutionFailed("Invalid command. Use: record <name> <value>, get <name>, list".to_string())),
         }
     }
 
