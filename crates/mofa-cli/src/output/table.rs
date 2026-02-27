@@ -2,6 +2,7 @@
 
 use comfy_table::{Cell, Color, ContentArrangement, Table as ComfyTable};
 use serde_json::Value;
+use std::collections::HashSet;
 
 /// Table builder for CLI output
 #[derive(Debug, Clone)]
@@ -73,25 +74,47 @@ impl Table {
             return Self { inner: table };
         }
 
-        // Extract headers from first object
-        if let Some(first) = arr.first()
-            && let Some(obj) = first.as_object()
-        {
-            let headers: Vec<String> = obj.keys().cloned().collect();
-            table.set_header(&headers);
+        // Collect headers from all object rows in first-seen order.
+        let mut headers = Vec::<String>::new();
+        let mut seen = HashSet::<String>::new();
+        for item in arr {
+            if let Some(obj) = item.as_object() {
+                for key in obj.keys() {
+                    if seen.insert(key.clone()) {
+                        headers.push(key.clone());
+                    }
+                }
+            }
         }
+
+        if headers.is_empty() {
+            headers.push("value".to_string());
+            table.set_header(&headers);
+            for item in arr {
+                table.add_row(vec![Self::value_to_cell(item)]);
+            }
+            table
+                .set_content_arrangement(ContentArrangement::Dynamic)
+                .set_width(120);
+            return Self { inner: table };
+        }
+
+        table.set_header(&headers);
 
         // Add rows
         for item in arr {
             if let Some(obj) = item.as_object() {
-                let row: Vec<String> = obj
-                    .values()
-                    .map(|v| match v {
-                        Value::String(s) => s.clone(),
-                        Value::Null => "".to_string(),
-                        _ => v.to_string(),
+                let row: Vec<String> = headers
+                    .iter()
+                    .map(|header| {
+                        obj.get(header)
+                            .map_or_else(String::new, Self::value_to_cell)
                     })
                     .collect();
+                table.add_row(row);
+            } else {
+                let mut row = vec![String::new(); headers.len()];
+                row[0] = Self::value_to_cell(item);
                 table.add_row(row);
             }
         }
@@ -108,6 +131,14 @@ impl Table {
     pub fn with_width(mut self, width: usize) -> Self {
         let _ = self.inner.set_width(width as u16);
         self
+    }
+
+    fn value_to_cell(value: &Value) -> String {
+        match value {
+            Value::String(s) => s.clone(),
+            Value::Null => String::new(),
+            _ => value.to_string(),
+        }
     }
 }
 
@@ -199,5 +230,35 @@ mod tests {
         assert!(output.contains("age"));
         assert!(output.contains("Alice"));
         assert!(output.contains("Bob"));
+    }
+
+    #[test]
+    fn test_from_json_array_collects_all_headers() {
+        let json = serde_json::json!([
+            {"name": "Alice", "age": "30"},
+            {"age": "25", "name": "Bob", "city": "Rome"}
+        ]);
+
+        let arr = json.as_array().unwrap();
+        let table = Table::from_json_array(arr);
+        let output = table.to_string();
+
+        assert!(output.contains("name"));
+        assert!(output.contains("age"));
+        assert!(output.contains("city"));
+        assert!(output.contains("Rome"));
+    }
+
+    #[test]
+    fn test_from_json_array_handles_scalar_rows() {
+        let json = serde_json::json!(["ok", 42, null]);
+
+        let arr = json.as_array().unwrap();
+        let table = Table::from_json_array(arr);
+        let output = table.to_string();
+
+        assert!(output.contains("value"));
+        assert!(output.contains("ok"));
+        assert!(output.contains("42"));
     }
 }
