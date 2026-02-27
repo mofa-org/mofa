@@ -498,6 +498,7 @@ where
 
     /// 构建秘书核心
     /// Build secretary core
+    #[must_use]
     pub fn build(self) -> SecretaryCore<B> {
         SecretaryCore::with_config(self.behavior, self.config)
     }

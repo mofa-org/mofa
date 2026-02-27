@@ -2773,6 +2773,7 @@ impl LLMAgentBuilder {
     /// # Panics
     /// 如果未设置 provider 则 panic
     /// Panics if the provider is not set
+    #[must_use]
     pub fn build(self) -> LLMAgent {
         let provider = self
             .provider
