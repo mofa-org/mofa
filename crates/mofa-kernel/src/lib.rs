@@ -46,20 +46,9 @@ pub use storage::Storage;
 // RAG traits (向量存储接口)
 pub mod rag;
 pub use rag::{
-	Document,
-	DocumentChunk,
-	GenerateInput,
-	Generator,
-	RagPipeline,
-	RagPipelineOutput,
-	Reranker,
-	Retriever,
-	ScoredDocument,
-	SearchResult,
-	SimilarityMetric,
-	VectorStore,
+    Document, DocumentChunk, GenerateInput, Generator, RagPipeline, RagPipelineOutput, Reranker,
+    Retriever, ScoredDocument, SearchResult, SimilarityMetric, VectorStore,
 };
-
 
 // Workflow traits (工作流接口)
 pub mod workflow;
@@ -68,3 +57,7 @@ pub use workflow::*;
 // Metrics traits for monitoring integration
 pub mod metrics;
 pub use metrics::*;
+
+// Async runtime abstraction
+pub mod async_runtime;
+pub use async_runtime::{AsyncRuntime, JoinHandle, SleepFuture, TimeoutError, TimeoutFuture};
