@@ -202,7 +202,7 @@ impl HttpPlugin {
     pub fn new(url: impl Into<String>) -> Self {
         Self {
             name: "http-plugin".to_string(),
-            description: "HTTP请求插件".to_string(),
+            description: "HTTP Request Plugin".to_string(),
             // HTTP Request Plugin
             url: url.into(),
         }
@@ -234,7 +234,8 @@ impl Plugin for HttpPlugin {
         // HTTP request logic can be implemented here, storing results in context
         // 示例：将固定内容存入上下文
         // Example: store fixed content into the context
-        ctx.set("http_response", "示例HTTP响应内容".into()).await;
+        ctx.set("http_response", "Example HTTP response content".into())
+            .await;
         // Example HTTP response content
         Ok(())
     }

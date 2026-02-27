@@ -809,6 +809,7 @@ impl ToolBuilder {
         self
     }
 
+    #[must_use]
     pub fn build(self) -> ScriptToolDefinition {
         self.definition
     }

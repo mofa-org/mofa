@@ -404,6 +404,32 @@ pub enum PluginCommands {
         #[arg(long)]
         force: bool,
     },
+
+    /// Manage plugin repositories
+    Repository {
+        #[command(subcommand)]
+        action: PluginRepositoryCommands,
+    },
+}
+
+/// Plugin repository management subcommands
+#[derive(Subcommand)]
+pub enum PluginRepositoryCommands {
+    /// List configured plugin repositories
+    List,
+
+    /// Add a plugin repository
+    Add {
+        /// Repository identifier
+        id: String,
+
+        /// Repository URL
+        url: String,
+
+        /// Optional description for the repository
+        #[arg(short, long)]
+        description: Option<String>,
+    },
 }
 
 /// Session management subcommands
