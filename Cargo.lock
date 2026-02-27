@@ -4931,7 +4931,6 @@ dependencies = [
 name = "mofa-extra"
 version = "0.1.0"
 dependencies = [
- "anyhow",
  "async-trait",
  "regex",
  "rhai",
@@ -4966,7 +4965,6 @@ dependencies = [
 name = "mofa-foundation"
 version = "0.1.0"
 dependencies = [
- "anyhow",
  "async-openai",
  "async-trait",
  "base64 0.22.1",
@@ -5006,7 +5004,6 @@ dependencies = [
 name = "mofa-kernel"
 version = "0.1.0"
 dependencies = [
- "anyhow",
  "async-trait",
  "base64 0.22.1",
  "bincode 1.3.3",
@@ -5033,7 +5030,6 @@ version = "0.1.0"
 name = "mofa-monitoring"
 version = "0.1.0"
 dependencies = [
- "anyhow",
  "async-trait",
  "axum 0.8.8",
  "chrono",
@@ -5063,7 +5059,6 @@ dependencies = [
 name = "mofa-plugins"
 version = "0.1.0"
 dependencies = [
- "anyhow",
  "async-trait",
  "backoff",
  "chrono",
@@ -5104,7 +5099,6 @@ dependencies = [
 name = "mofa-runtime"
 version = "0.1.0"
 dependencies = [
- "anyhow",
  "async-trait",
  "bincode 1.3.3",
  "chrono",
@@ -5135,7 +5129,6 @@ dependencies = [
 name = "mofa-sdk"
 version = "0.1.0"
 dependencies = [
- "anyhow",
  "async-trait",
  "mofa-extra",
  "mofa-foundation",

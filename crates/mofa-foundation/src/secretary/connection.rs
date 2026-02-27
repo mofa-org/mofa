@@ -5,7 +5,7 @@
 //! Kernel only defines the `UserConnection` abstraction; specific implementations are placed in the Foundation layer.
 
 use async_trait::async_trait;
-use mofa_kernel::agent::secretary::UserConnection;
+use mofa_kernel::agent::secretary::{ConnectionError, UserConnection};
 use tokio::sync::mpsc;
 
 // =============================================================================
@@ -74,14 +74,14 @@ where
     type Input = I;
     type Output = O;
 
-    async fn receive(&self) -> anyhow::Result<Self::Input> {
+    async fn receive(&self) -> Result<Self::Input, ConnectionError> {
         let mut rx = self.input_rx.lock().await;
         rx.recv()
             .await
-            .ok_or_else(|| anyhow::anyhow!("Channel closed"))
+            .ok_or(ConnectionError::Closed)
     }
 
-    async fn try_receive(&self) -> anyhow::Result<Option<Self::Input>> {
+    async fn try_receive(&self) -> Result<Option<Self::Input>, ConnectionError> {
         let mut rx = self.input_rx.lock().await;
         match rx.try_recv() {
             Ok(input) => Ok(Some(input)),
@@ -89,23 +89,23 @@ where
             Err(mpsc::error::TryRecvError::Disconnected) => {
                 self.connected
                     .store(false, std::sync::atomic::Ordering::SeqCst);
-                Err(anyhow::anyhow!("Channel disconnected"))
+                Err(ConnectionError::Closed)
             }
         }
     }
 
-    async fn send(&self, output: Self::Output) -> anyhow::Result<()> {
+    async fn send(&self, output: Self::Output) -> Result<(), ConnectionError> {
         self.output_tx
             .send(output)
             .await
-            .map_err(|_| anyhow::anyhow!("Failed to send output"))
+            .map_err(|_| ConnectionError::SendFailed("Failed to send output".into()))
     }
 
     fn is_connected(&self) -> bool {
         self.connected.load(std::sync::atomic::Ordering::SeqCst) && !self.output_tx.is_closed()
     }
 
-    async fn close(&self) -> anyhow::Result<()> {
+    async fn close(&self) -> Result<(), ConnectionError> {
         self.connected
             .store(false, std::sync::atomic::Ordering::SeqCst);
         Ok(())
@@ -151,33 +151,33 @@ where
     type Input = C::Input;
     type Output = C::Output;
 
-    async fn receive(&self) -> anyhow::Result<Self::Input> {
+    async fn receive(&self) -> Result<Self::Input, ConnectionError> {
         tokio::time::timeout(
             tokio::time::Duration::from_millis(self.receive_timeout_ms),
             self.inner.receive(),
         )
         .await
-        .map_err(|_| anyhow::anyhow!("Receive timeout"))?
+        .map_err(|_| ConnectionError::Timeout)?
     }
 
-    async fn try_receive(&self) -> anyhow::Result<Option<Self::Input>> {
+    async fn try_receive(&self) -> Result<Option<Self::Input>, ConnectionError> {
         self.inner.try_receive().await
     }
 
-    async fn send(&self, output: Self::Output) -> anyhow::Result<()> {
+    async fn send(&self, output: Self::Output) -> Result<(), ConnectionError> {
         tokio::time::timeout(
             tokio::time::Duration::from_millis(self.send_timeout_ms),
             self.inner.send(output),
         )
         .await
-        .map_err(|_| anyhow::anyhow!("Send timeout"))?
+        .map_err(|_| ConnectionError::Timeout)?
     }
 
     fn is_connected(&self) -> bool {
         self.inner.is_connected()
     }
 
-    async fn close(&self) -> anyhow::Result<()> {
+    async fn close(&self) -> Result<(), ConnectionError> {
         self.inner.close().await
     }
 }

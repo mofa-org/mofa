@@ -18,6 +18,7 @@ use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::RwLock;
 use tokio::time::timeout;
+use tracing::Instrument;
 
 /// 执行选项
 /// Execution options
@@ -319,6 +320,7 @@ impl ExecutionEngine {
     ) -> AgentResult<ExecutionResult> {
         let execution_id = uuid::Uuid::now_v7().to_string();
         let start_time = std::time::Instant::now();
+        tracing::info!(agent_id = %agent_id, execution_id = %execution_id, "Agent execution started");
 
         // 获取 Agent
         // Get Agent
@@ -477,12 +479,17 @@ impl ExecutionEngine {
         let mut last_error = None;
 
         for attempt in 0..max_attempts {
+            let attempt_span = tracing::info_span!("agent.attempt", attempt = attempt, max_attempts = max_attempts);
             if attempt > 0 {
                 let delay = retry_cfg.policy.delay_for(attempt - 1);
                 tokio::time::sleep(delay).await;
             }
 
-            let result = self.execute_once(agent, input.clone(), ctx, options).await;
+            let result = async {
+                self.execute_once(agent, input.clone(), ctx, options).await
+            }
+            .instrument(attempt_span)
+            .await;
 
             match result {
                 Ok(output) => return Ok((output, attempt)),
@@ -567,10 +574,14 @@ impl ExecutionEngine {
             let registry = self.registry.clone();
             let opts = options.clone();
 
-            let handle = tokio::spawn(async move {
-                let engine = ExecutionEngine::new(registry);
-                engine.execute(&agent_id, input, opts).await
-            });
+            let span = tracing::info_span!("agent.parallel", agent_id = %agent_id);
+            let handle = tokio::spawn(
+                async move {
+                    let engine = ExecutionEngine::new(registry);
+                    engine.execute(&agent_id, input, opts).await
+                }
+                .instrument(span),
+            );
 
             handles.push(handle);
         }
@@ -697,6 +708,8 @@ impl ExecutionEngine {
         initial_input: AgentInput,
         options: ExecutionOptions,
     ) -> AgentResult<HashMap<String, ExecutionResult>> {
+        let _workflow_span = tracing::info_span!("workflow.execute", workflow_id = %workflow.id, workflow_name = %workflow.name);
+        tracing::info!(parent: &_workflow_span, "Workflow execution started");
         let mut results: HashMap<String, ExecutionResult> = HashMap::new();
         let mut completed: Vec<String> = Vec::new();
 

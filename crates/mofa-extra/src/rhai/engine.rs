@@ -4,7 +4,7 @@
 //! 提供安全的、可扩展的脚本执行环境
 //! Provides a secure and extensible script execution environment
 
-use anyhow::{Result, anyhow};
+use super::error::{RhaiError, RhaiResult};
 use rhai::{AST, Dynamic, Engine, Map, Scope};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -133,13 +133,13 @@ impl ScriptContext {
         self
     }
 
-    pub fn with_variable<T: Serialize>(mut self, key: &str, value: T) -> Result<Self> {
+    pub fn with_variable<T: Serialize>(mut self, key: &str, value: T) -> RhaiResult<Self> {
         let json_value = serde_json::to_value(value)?;
         self.variables.insert(key.to_string(), json_value);
         Ok(self)
     }
 
-    pub fn set_variable<T: Serialize>(&mut self, key: &str, value: T) -> Result<()> {
+    pub fn set_variable<T: Serialize>(&mut self, key: &str, value: T) -> RhaiResult<()> {
         let json_value = serde_json::to_value(value)?;
         self.variables.insert(key.to_string(), json_value);
         Ok(())
@@ -206,13 +206,13 @@ impl ScriptResult {
 
     /// 转换为指定类型
     /// Convert to specified type
-    pub fn into_typed<T: for<'de> Deserialize<'de>>(self) -> Result<T> {
+    pub fn into_typed<T: for<'de> Deserialize<'de>>(self) -> RhaiResult<T> {
         if !self.success {
-            return Err(anyhow!(
+            return Err(RhaiError::ExecutionError(
                 self.error.unwrap_or_else(|| "Unknown error".into())
             ));
         }
-        serde_json::from_value(self.value).map_err(|e| anyhow!("Failed to deserialize: {}", e))
+        serde_json::from_value(self.value).map_err(|e| RhaiError::Serialization(e.to_string()))
     }
 
     /// 获取布尔值
@@ -313,7 +313,7 @@ pub struct RhaiScriptEngine {
 impl RhaiScriptEngine {
     /// 创建新的脚本引擎
     /// Create a new script engine
-    pub fn new(config: ScriptEngineConfig) -> Result<Self> {
+    pub fn new(config: ScriptEngineConfig) -> RhaiResult<Self> {
         let mut engine = Engine::new();
 
         // 应用安全限制
@@ -492,18 +492,18 @@ impl RhaiScriptEngine {
 
     /// 编译脚本
     /// Compile script
-    pub fn compile(&self, id: &str, name: &str, source: &str) -> Result<CompiledScript> {
+    pub fn compile(&self, id: &str, name: &str, source: &str) -> RhaiResult<CompiledScript> {
         let ast = self
             .engine
             .compile(source)
-            .map_err(|e| anyhow!("Compile error: {}", e))?;
+            .map_err(|e| RhaiError::CompileError(e.to_string()))?;
 
         Ok(CompiledScript::new(id, name, ast, source.to_string()))
     }
 
     /// 编译并缓存脚本
     /// Compile and cache script
-    pub async fn compile_and_cache(&self, id: &str, name: &str, source: &str) -> Result<()> {
+    pub async fn compile_and_cache(&self, id: &str, name: &str, source: &str) -> RhaiResult<()> {
         let compiled = self.compile(id, name, source)?;
         let mut cache = self.script_cache.write().await;
         cache.insert(id.to_string(), compiled);
@@ -513,7 +513,7 @@ impl RhaiScriptEngine {
 
     /// 从文件加载脚本
     /// Load script from file
-    pub async fn load_from_file(&self, path: &Path) -> Result<String> {
+    pub async fn load_from_file(&self, path: &Path) -> RhaiResult<String> {
         let source = tokio::fs::read_to_string(path).await?;
         let id = path
             .file_stem()
@@ -530,7 +530,7 @@ impl RhaiScriptEngine {
 
     /// 执行脚本
     /// Execute script
-    pub async fn execute(&self, source: &str, context: &ScriptContext) -> Result<ScriptResult> {
+    pub async fn execute(&self, source: &str, context: &ScriptContext) -> RhaiResult<ScriptResult> {
         let start_time = std::time::Instant::now();
 
         // 清空日志
@@ -581,11 +581,11 @@ impl RhaiScriptEngine {
         &self,
         script_id: &str,
         context: &ScriptContext,
-    ) -> Result<ScriptResult> {
+    ) -> RhaiResult<ScriptResult> {
         let cache = self.script_cache.read().await;
         let compiled = cache
             .get(script_id)
-            .ok_or_else(|| anyhow!("Script not found: {}", script_id))?;
+            .ok_or_else(|| RhaiError::NotFound(format!("Script not found: {}", script_id)))?;
 
         let start_time = std::time::Instant::now();
 
@@ -641,11 +641,11 @@ impl RhaiScriptEngine {
         function_name: &str,
         args: Vec<serde_json::Value>,
         context: &ScriptContext,
-    ) -> Result<T> {
+    ) -> RhaiResult<T> {
         let cache = self.script_cache.read().await;
         let compiled = cache
             .get(script_id)
-            .ok_or_else(|| anyhow!("Script not found: {}", script_id))?;
+            .ok_or_else(|| RhaiError::NotFound(format!("Script not found: {}", script_id)))?;
 
         // 准备作用域
         // Prepare scope
@@ -661,12 +661,12 @@ impl RhaiScriptEngine {
         let result: Dynamic = self
             .engine
             .call_fn(&mut scope, &compiled.ast, function_name, dynamic_args)
-            .map_err(|e| anyhow!("Function call error: {}", e))?;
+            .map_err(|e| RhaiError::ExecutionError(e.to_string()))?;
 
         // 转换结果
         // Convert result
         let json_value = dynamic_to_json(&result);
-        serde_json::from_value(json_value).map_err(|e| anyhow!("Result conversion error: {}", e))
+        serde_json::from_value(json_value).map_err(|e| RhaiError::Serialization(e.to_string()))
     }
 
     /// 准备执行作用域
@@ -705,7 +705,7 @@ impl RhaiScriptEngine {
 
     /// 验证脚本语法
     /// Validate script syntax
-    pub fn validate(&self, source: &str) -> Result<Vec<String>> {
+    pub fn validate(&self, source: &str) -> RhaiResult<Vec<String>> {
         match self.engine.compile(source) {
             Ok(_) => Ok(Vec::new()),
             Err(e) => {
