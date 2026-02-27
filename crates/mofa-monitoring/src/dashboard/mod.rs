@@ -13,6 +13,7 @@
 mod api;
 mod assets;
 mod metrics;
+mod prometheus;
 mod server;
 mod websocket;
 
@@ -24,5 +25,6 @@ pub use metrics::{
     AgentMetrics, Gauge, Histogram, LLMMetrics, MetricType, MetricValue, MetricsCollector,
     MetricsConfig, MetricsRegistry, MetricsSnapshot, PluginMetrics, SystemMetrics, WorkflowMetrics,
 };
+pub use prometheus::{CardinalityLimits, PrometheusExportConfig, PrometheusExporter};
 pub use server::{DashboardConfig, DashboardServer, ServerState};
 pub use websocket::{WebSocketClient, WebSocketHandler, WebSocketMessage};
