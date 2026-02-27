@@ -55,10 +55,10 @@ config.workspace = true
 regex = "1.11"
 
 # TOML parsing for DSL
-toml = "0.8"
+toml = "0.9"
 
 # OpenAI / compatible APIs
-async-openai = { version = "0.27" }
+async-openai = { version = "0.33" }
 
 # Actor framework for ReAct agents
 ractor.workspace = true
@@ -85,15 +85,15 @@ qdrant-client = { version = "1.17", optional = true }
 
 # Image encoding and MIME detection
 base64 = "0.22"
-infer = "0.16"
+infer = "0.19"
 
 # Candle ML framework for local model inference
 # Note: CUDA support can be enabled with features = ["cuda"] if CUDA toolkit is available
-candle-core = { version = "0.8" }
-candle-transformers = { version = "0.8" }
+candle-core = { version = "0.9" }
+candle-transformers = { version = "0.9" }
 
 # System information for memory monitoring
-sysinfo = "0.31"
+sysinfo = "0.36"
 
 [lints]
 workspace = true
