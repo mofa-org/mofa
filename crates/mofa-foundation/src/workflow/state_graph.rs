@@ -367,6 +367,81 @@ impl<S: GraphState> CompiledGraphImpl<S> {
             .collect()
     }
 
+    /// Resolve conditional routing.
+    ///
+    /// Route selection priority:
+    /// 1. `command.route` when non-empty and present in `routes`
+    /// 2. Legacy fallback by matching `command.updates[*].key` to route labels
+    /// 3. Default fallback to the first configured conditional route
+    ///
+    /// An empty route string is treated as "no explicit route" and falls back to legacy behavior.
+    fn resolve_conditional_next_nodes(
+        current_node: &str,
+        command: &Command,
+        routes: &HashMap<String, String>,
+    ) -> Vec<String> {
+        debug!(
+            "Routing from '{}': route={:?}, updates={:?}",
+            current_node,
+            command.route,
+            command
+                .updates
+                .iter()
+                .map(|u| u.key.as_str())
+                .collect::<Vec<_>>()
+        );
+
+        if let Some(route_name) = command.route.as_deref() {
+            if route_name.is_empty() {
+                debug!(
+                    "Empty conditional route from node '{}'; falling back to legacy update-key routing",
+                    current_node
+                );
+            } else if let Some(target) = routes.get(route_name) {
+                return vec![target.clone()];
+            } else {
+                warn!(
+                    "No conditional edge found for route '{}' from node '{}'",
+                    route_name, current_node
+                );
+            }
+        }
+
+        for update in &command.updates {
+            if let Some(target) = routes.get(&update.key) {
+                debug!(
+                    "Legacy conditional routing via update key '{}' from node '{}'",
+                    update.key, current_node
+                );
+                if command
+                    .route
+                    .as_deref()
+                    .map(|route| route.is_empty())
+                    .unwrap_or(true)
+                {
+                    debug!(
+                        "Legacy routing used for node '{}'. Consider using Command::with_route() for explicit routing.",
+                        current_node
+                    );
+                }
+                return vec![target.clone()];
+            }
+        }
+
+        warn!(
+            "No conditional edge matched for node '{}'. Route={:?}, Available routes={:?}",
+            current_node,
+            command.route,
+            routes.keys().collect::<Vec<_>>()
+        );
+
+        routes
+            .values()
+            .next()
+            .map(|target| vec![target.clone()])
+            .unwrap_or_default()
+    }
+
     /// Get the next node(s) based on the current node and command
     fn get_next_nodes(&self, current_node: &str, command: &Command) -> Vec<String> {
         match &command.control {
@@ -386,48 +461,7 @@ impl<S: GraphState> CompiledGraphImpl<S> {
                     Some(EdgeTarget::Single(target)) => vec![target.clone()],
                     Some(EdgeTarget::Parallel(targets)) => targets.clone(),
                     Some(EdgeTarget::Conditional(routes)) => {
-                        debug!(
-                            "Routing from '{}': route={:?}, updates={:?}",
-                            current_node,
-                            command.route,
-                            command
-                                .updates
-                                .iter()
-                                .map(|u| u.key.as_str())
-                                .collect::<Vec<_>>()
-                        );
-                        // Find matching route based on command.route
-                        if let Some(route_name) = &command.route {
-                            if let Some(target) = routes.get(route_name) {
-                                return vec![target.clone()];
-                            }
-                            warn!(
-                                "No conditional edge found for route '{}' from node '{}'",
-                                route_name, current_node
-                            );
-                        }
-                        // Legacy fallback: match update key names to route labels
-                        for update in &command.updates {
-                            if let Some(target) = routes.get(&update.key) {
-                                debug!(
-                                    "Legacy conditional routing via update key '{}' from node '{}'",
-                                    update.key, current_node
-                                );
-                                if command.route.is_none() {
-                                    debug!(
-                                        "Legacy routing used for node '{}'. Consider using Command::with_route() for explicit routing.",
-                                        current_node
-                                    );
-                                }
-                                return vec![target.clone()];
-                            }
-                        }
-                        // Default to first route if no match
-                        routes
-                            .values()
-                            .next()
-                            .map(|t: &String| vec![t.clone()])
-                            .unwrap_or_default()
+                        Self::resolve_conditional_next_nodes(current_node, command, routes)
                     }
                     None => vec![],
                     _ => vec![],
@@ -576,48 +610,7 @@ impl<S: GraphState + 'static> CompiledGraph<S, serde_json::Value> for CompiledGr
                             Some(EdgeTarget::Single(target)) => vec![target.clone()],
                             Some(EdgeTarget::Parallel(targets)) => targets.clone(),
                             Some(EdgeTarget::Conditional(routes)) => {
-                                debug!(
-                                    "Routing from '{}': route={:?}, updates={:?}",
-                                    current_node,
-                                    command.route,
-                                    command
-                                        .updates
-                                        .iter()
-                                        .map(|u| u.key.as_str())
-                                        .collect::<Vec<_>>()
-                                );
-                                // Find matching route based on command.route
-                                if let Some(route_name) = &command.route {
-                                    if let Some(target) = routes.get(route_name) {
-                                        return vec![target.clone()];
-                                    }
-                                    warn!(
-                                        "No conditional edge found for route '{}' from node '{}'",
-                                        route_name, current_node
-                                    );
-                                }
-                                // Legacy fallback: match update key names to route labels
-                                for update in &command.updates {
-                                    if let Some(target) = routes.get(&update.key) {
-                                        debug!(
-                                            "Legacy conditional routing via update key '{}' from node '{}'",
-                                            update.key, current_node
-                                        );
-                                        if command.route.is_none() {
-                                            debug!(
-                                                "Legacy routing used for node '{}'. Consider using Command::with_route() for explicit routing.",
-                                                current_node
-                                            );
-                                        }
-                                        return vec![target.clone()];
-                                    }
-                                }
-                                // Default to first route if no match
-                                routes
-                                    .values()
-                                    .next()
-                                    .map(|t: &String| vec![t.clone()])
-                                    .unwrap_or_default()
+                                Self::resolve_conditional_next_nodes(current_node, command, routes)
                             }
                             None => vec![],
                             _ => vec![],
@@ -1128,6 +1121,39 @@ mod tests {
             )
             .add_edge("approved", END)
             .add_edge("rejected", END);
+
+        let compiled = graph.compile().unwrap();
+        let final_state = compiled.invoke(JsonState::new(), None).await.unwrap();
+
+        assert_eq!(final_state.get_value("decision"), Some(json!("approved")));
+    }
+
+    #[tokio::test]
+    async fn test_conditional_routing_no_match_defaults_to_first_route() {
+        let mut graph = StateGraphImpl::<JsonState>::new("no_match_route_graph");
+
+        graph
+            .add_node(
+                "decide",
+                Box::new(RouteNode {
+                    name: "decide".to_string(),
+                    updates: vec![],
+                    route: "does_not_exist".to_string(),
+                }),
+            )
+            .add_node(
+                "approved",
+                Box::new(TestNode {
+                    name: "approved".to_string(),
+                    updates: vec![StateUpdate::new("decision", json!("approved"))],
+                }),
+            )
+            .add_edge(START, "decide")
+            .add_conditional_edges(
+                "decide",
+                HashMap::from([("approve".to_string(), "approved".to_string())]),
+            )
+            .add_edge("approved", END);
 
         let compiled = graph.compile().unwrap();
         let final_state = compiled.invoke(JsonState::new(), None).await.unwrap();
