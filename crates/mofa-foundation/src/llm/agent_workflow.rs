@@ -1187,70 +1187,6 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_trace_propagation_across_workflow_nodes() {
-        // Build a multi-node workflow: start -> step1 -> step2 -> end
-        // Each step transforms the input, exercising the tracing::info! instrumentation
-        // in run_with_context and execute_node.
-        let workflow = AgentWorkflowBuilder::new("trace-test")
-            .add_transform("step1", |input: AgentValue| async move {
-                AgentValue::Text(format!("{}-step1", input.into_text()))
-            })
-            .add_transform("step2", |input: AgentValue| async move {
-                AgentValue::Text(format!("{}-step2", input.into_text()))
-            })
-            .chain(["step1", "step2"])
-            .build();
-
-        let result = workflow.run("init").await.expect("workflow should succeed");
-        // Verify execution correctness — tracing instrumentation must not alter behavior
-        assert_eq!(result.as_text(), Some("init-step1-step2"));
-    }
-
-    #[tokio::test]
-    async fn test_router_node_reuses_cached_route_decision() {
-        use std::sync::{
-            Arc,
-            atomic::{AtomicUsize, Ordering},
-        };
-
-        let invocations = Arc::new(AtomicUsize::new(0));
-        let router_invocations = invocations.clone();
-
-        let workflow = AgentWorkflowBuilder::new("router-caching-test")
-            .add_router("router", move |_input: AgentValue| {
-                let router_invocations = router_invocations.clone();
-                async move {
-                    if router_invocations.fetch_add(1, Ordering::SeqCst) == 0 {
-                        "left".to_string()
-                    } else {
-                        "right".to_string()
-                    }
-                }
-            })
-            .add_transform("left", |input: AgentValue| async move {
-                AgentValue::Text(format!("left:{}", input.into_text()))
-            })
-            .add_transform("right", |input: AgentValue| async move {
-                AgentValue::Text(format!("right:{}", input.into_text()))
-            })
-            .connect("start", "router")
-            .connect_on("router", "left", "left")
-            .connect_on("router", "right", "right");
-
-        let mut workflow = workflow;
-        workflow.nodes.insert("end".to_string(), AgentNode::end());
-        let workflow = workflow
-            .connect("left", "end")
-            .connect("right", "end")
-            .build();
-
-        let result = workflow.run("seed").await.expect("workflow should succeed");
-
-        assert_eq!(result.as_text(), Some("left:seed"));
-        assert_eq!(invocations.load(Ordering::SeqCst), 1);
-    }
-
-    #[tokio::test]
     async fn test_transform_panic_containment() {
         let workflow = AgentWorkflowBuilder::new("panic-test")
             .add_transform("panicking", |_input: AgentValue| -> Pin<Box<dyn Future<Output = AgentValue> + Send>> {
@@ -1328,6 +1264,50 @@ mod tests {
         let result = workflow.run("init").await.expect("workflow should succeed");
         // Verify execution correctness — tracing instrumentation must not alter behavior
         assert_eq!(result.as_text(), Some("init-step1-step2"));
+    }
+
+    #[tokio::test]
+    async fn test_router_node_reuses_cached_route_decision() {
+        use std::sync::{
+            Arc,
+            atomic::{AtomicUsize, Ordering},
+        };
+
+        let invocations = Arc::new(AtomicUsize::new(0));
+        let router_invocations = invocations.clone();
+
+        let workflow = AgentWorkflowBuilder::new("router-caching-test")
+            .add_router("router", move |_input: AgentValue| {
+                let router_invocations = router_invocations.clone();
+                async move {
+                    if router_invocations.fetch_add(1, Ordering::SeqCst) == 0 {
+                        "left".to_string()
+                    } else {
+                        "right".to_string()
+                    }
+                }
+            })
+            .add_transform("left", |input: AgentValue| async move {
+                AgentValue::Text(format!("left:{}", input.into_text()))
+            })
+            .add_transform("right", |input: AgentValue| async move {
+                AgentValue::Text(format!("right:{}", input.into_text()))
+            })
+            .connect("start", "router")
+            .connect_on("router", "left", "left")
+            .connect_on("router", "right", "right");
+
+        let mut workflow = workflow;
+        workflow.nodes.insert("end".to_string(), AgentNode::end());
+        let workflow = workflow
+            .connect("left", "end")
+            .connect("right", "end")
+            .build();
+
+        let result = workflow.run("seed").await.expect("workflow should succeed");
+
+        assert_eq!(result.as_text(), Some("left:seed"));
+        assert_eq!(invocations.load(Ordering::SeqCst), 1);
     }
 
     #[test]
