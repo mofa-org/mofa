@@ -279,7 +279,7 @@ MoFA integrates the [Rhai](https://github.com/rhaiscript/rhai) embedded scriptin
 - [ ] More LLM provider integrations
 
 ### Long-term Goals
-- [ ] Visual workflow designer UI
+- [x] [Workflow Visualizer](examples/workflow_viz/) — interactive graph visualization with client-side simulation (live execution monitoring planned)
 - [ ] Cloud-native deployment support
 - [ ] Advanced agent coordination algorithms
 - [ ] Agent platform
