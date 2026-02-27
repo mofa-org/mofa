@@ -883,3 +883,301 @@ kbd {
 .edge-line {
   animation: fade-in .3s ease-out both;
 }
+
+/* ================================================================
+   Phase 2: Live Execution Monitoring
+   ================================================================ */
+
+/* ── Connection status ── */
+.status-dot.connected {
+  background: var(--teal);
+  box-shadow: 0 0 4px var(--teal);
+}
+
+.status-dot.reconnecting {
+  background: var(--gold);
+  box-shadow: 0 0 4px var(--gold);
+  animation: reconnect-pulse 1s infinite;
+}
+
+.status-dot.disconnected {
+  background: var(--coral);
+  box-shadow: 0 0 4px var(--coral);
+}
+
+@keyframes reconnect-pulse {
+
+  0%,
+  100% {
+    opacity: 1
+  }
+
+  50% {
+    opacity: .3
+  }
+}
+
+/* ── Execute button ── */
+#btn-execute {
+  background: var(--teal-dim);
+  color: var(--teal);
+  border-color: rgba(26, 188, 156, .25);
+  font-weight: 600;
+}
+
+#btn-execute:hover {
+  background: rgba(26, 188, 156, .15);
+}
+
+#btn-execute.running {
+  background: var(--coral-dim);
+  color: var(--coral);
+  border-color: rgba(231, 76, 60, .25);
+  animation: sim-pulse 1s ease-in-out infinite;
+}
+
+/* ── Auto-pan toggle ── */
+.btn-toggle {
+  transition: all var(--transition);
+}
+
+.btn-toggle.active {
+  background: var(--blue-dim) !important;
+  color: var(--blue) !important;
+  border-color: rgba(52, 152, 219, .3) !important;
+}
+
+/* ── Node execution states ── */
+.node-group.status-running .node-shape {
+  stroke: var(--teal) !important;
+  stroke-width: 3px !important;
+  filter: url(#glow-strong);
+  animation: exec-pulse 1.2s ease-in-out infinite;
+}
+
+.node-group.status-completed .node-shape {
+  stroke: var(--blue) !important;
+  stroke-width: 2.5px !important;
+  filter: url(#drop-shadow);
+}
+
+.node-group.status-failed .node-shape {
+  stroke: var(--coral) !important;
+  stroke-width: 3px !important;
+  filter: url(#glow);
+}
+
+.node-group.status-pending {
+  opacity: 0.5;
+  transition: opacity .3s;
+}
+
+.node-group.status-running,
+.node-group.status-completed,
+.node-group.status-failed {
+  opacity: 1;
+  transition: opacity .3s;
+}
+
+@keyframes exec-pulse {
+
+  0%,
+  100% {
+    stroke-width: 2.5px;
+  }
+
+  50% {
+    stroke-width: 4px;
+  }
+}
+
+/* Status badge overlay */
+.node-status-badge {
+  font-family: var(--mono);
+  font-size: 8px;
+  font-weight: 700;
+  text-anchor: end;
+  dominant-baseline: hanging;
+  pointer-events: none;
+}
+
+/* Duration badge */
+.node-duration-badge {
+  font-family: var(--mono);
+  font-size: 7.5px;
+  font-weight: 600;
+  fill: var(--text-muted);
+  text-anchor: middle;
+  dominant-baseline: hanging;
+  pointer-events: none;
+}
+
+/* ── Execution Log Panel ── */
+.exec-log {
+  flex-shrink: 0;
+  background: var(--bg-toolbar);
+  border-top: 1px solid var(--border);
+  transition: height .3s ease;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.exec-log.collapsed {
+  height: 32px;
+}
+
+.exec-log.expanded {
+  height: 220px;
+}
+
+.exec-log-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 14px;
+  height: 32px;
+  flex-shrink: 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.log-toggle-btn {
+  background: none;
+  border: none;
+  font-family: var(--font);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  cursor: pointer;
+  padding: 2px 0;
+}
+
+.log-toggle-btn:hover {
+  color: var(--text-primary);
+}
+
+.exec-log.collapsed .log-toggle-btn::before {
+  content: '▼ ';
+}
+
+.exec-log.expanded .log-toggle-btn::before {
+  content: '▲ ';
+}
+
+.log-toggle-btn::before {
+  content: '';
+}
+
+.log-filters {
+  display: flex;
+  gap: 4px;
+  margin-left: auto;
+}
+
+.log-filter {
+  height: 22px;
+  padding: 0 8px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: #fff;
+  font-family: var(--mono);
+  font-size: 9px;
+  font-weight: 600;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all var(--transition);
+}
+
+.log-filter:hover {
+  border-color: var(--blue);
+  color: var(--blue);
+}
+
+.log-filter.active {
+  background: var(--blue-dim);
+  border-color: rgba(52, 152, 219, .3);
+  color: var(--blue);
+}
+
+.log-clear-btn {
+  height: 22px;
+  padding: 0 8px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: #fff;
+  font-family: var(--mono);
+  font-size: 9px;
+  font-weight: 600;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.log-clear-btn:hover {
+  border-color: var(--coral);
+  color: var(--coral);
+}
+
+.log-list {
+  list-style: none;
+  overflow-y: auto;
+  flex: 1;
+  padding: 4px 0;
+  font-size: 11px;
+  font-family: var(--mono);
+}
+
+.log-list li {
+  padding: 3px 14px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  transition: background var(--transition);
+  border-bottom: 1px solid rgba(0, 0, 0, .02);
+}
+
+.log-list li:hover {
+  background: var(--bg-hover);
+}
+
+.log-list li.hidden {
+  display: none;
+}
+
+.log-time {
+  color: var(--text-faint);
+  font-size: 10px;
+  white-space: nowrap;
+}
+
+.log-node {
+  color: var(--text-primary);
+  font-weight: 500;
+}
+
+.log-arrow {
+  color: var(--text-faint);
+}
+
+.log-status {
+  font-weight: 600;
+  font-size: 10px;
+}
+
+.log-status.running {
+  color: var(--teal);
+}
+
+.log-status.completed {
+  color: var(--blue);
+}
+
+.log-status.failed {
+  color: var(--coral);
+}
+
+.log-dur {
+  color: var(--text-muted);
+  font-size: 10px;
+  margin-left: auto;
+}

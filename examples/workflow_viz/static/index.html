@@ -5,7 +5,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>MoFA — Workflow Visualizer</title>
-  <meta name="description" content="Interactive workflow graph visualization for MoFA agent orchestration framework" />
+  <meta name="description" content="Interactive workflow graph visualization with live execution monitoring" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link
     href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap"
@@ -21,7 +21,7 @@
         <img src="/logo.png" alt="MoFA" class="logo-img" />
         <div class="logo-text">
           <span>MoFA</span>
-          <small>Workflow Viz</small>
+          <small>Live Monitor</small>
         </div>
       </div>
     </div>
@@ -45,15 +45,17 @@
         <kbd>-</kbd><span>Zoom out</span>
         <kbd>0</kbd><span>Fit view</span>
         <kbd>/</kbd><span>Search</span>
-        <kbd>S</kbd><span>Simulate</span>
+        <kbd>X</kbd><span>Execute</span>
         <kbd>E</kbd><span>Export SVG</span>
+        <kbd>A</kbd><span>Auto-pan</span>
+        <kbd>L</kbd><span>Toggle log</span>
         <kbd>Esc</kbd><span>Close panel</span>
       </div>
     </div>
 
     <div class="sidebar-footer">
-      <span class="status-dot"></span>
-      <span id="status-text">Connecting…</span>
+      <span id="ws-dot" class="status-dot disconnected"></span>
+      <span id="ws-status">Disconnected</span>
     </div>
   </aside>
 
@@ -62,7 +64,6 @@
     <!-- toolbar -->
     <div id="toolbar">
       <span id="graph-title">Select a workflow</span>
-      <!-- stats bar -->
       <div id="stats-bar" class="hidden">
         <span class="stat"><b id="stat-nodes">0</b> nodes</span>
         <span class="stat-sep">·</span>
@@ -71,8 +72,10 @@
         <span class="stat"><b id="stat-layers">0</b> layers</span>
       </div>
       <div class="toolbar-actions">
-        <button id="btn-simulate" title="Simulate execution (S)">▶ Simulate</button>
+        <button id="btn-execute" title="Execute workflow (X)">▶ Execute</button>
         <button id="btn-export" title="Export SVG (E)">⤓ Export</button>
+        <span class="toolbar-divider"></span>
+        <button id="btn-autopan" title="Auto-pan to active node (A)" class="btn-toggle">⊕ Auto-pan</button>
         <span class="toolbar-divider"></span>
         <button id="btn-zoom-in" title="Zoom in (+)">＋</button>
         <span id="zoom-pct" class="zoom-pct">100%</span>
@@ -85,7 +88,6 @@
     <div id="canvas-wrap">
       <svg id="canvas" xmlns="http://www.w3.org/2000/svg">
         <defs>
-          <!-- arrow markers -->
           <marker id="arrow" markerWidth="10" markerHeight="7" refX="10" refY="3.5" orient="auto"
             markerUnits="strokeWidth">
             <polygon points="0 0, 10 3.5, 0 7" fill="#c0c4cc" />
@@ -102,7 +104,6 @@
             markerUnits="strokeWidth">
             <polygon points="0 0, 10 3.5, 0 7" fill="#3498DB" />
           </marker>
-          <!-- glow filters -->
           <filter id="glow">
             <feGaussianBlur stdDeviation="3" result="blur" />
             <feMerge>
@@ -124,15 +125,14 @@
         <g id="graph-group"></g>
       </svg>
       <!-- minimap -->
-      <div id="minimap">
-        <canvas id="minimap-canvas" width="180" height="120"></canvas>
+      <div id="minimap"><canvas id="minimap-canvas" width="180" height="120"></canvas>
         <div id="minimap-viewport"></div>
       </div>
       <!-- empty state -->
       <div id="empty-state">
         <div class="empty-icon">⬡</div>
         <p>Select a workflow from the sidebar to visualize its graph.</p>
-        <p class="empty-hint">Press <kbd>/</kbd> to search nodes in the current workflow</p>
+        <p class="empty-hint">Press <kbd>/</kbd> to search, <kbd>X</kbd> to execute</p>
       </div>
       <!-- loading overlay -->
       <div id="loading-overlay" class="hidden">
@@ -140,9 +140,24 @@
         <p>Loading graph…</p>
       </div>
     </div>
+
+    <!-- ── Execution Log Panel ── -->
+    <div id="exec-log" class="exec-log collapsed">
+      <div class="exec-log-header">
+        <button id="log-toggle" class="log-toggle-btn">Execution Log</button>
+        <div class="log-filters">
+          <button class="log-filter active" data-filter="all">All</button>
+          <button class="log-filter" data-filter="running">Running</button>
+          <button class="log-filter" data-filter="completed">Completed</button>
+          <button class="log-filter" data-filter="failed">Failed</button>
+        </div>
+        <button id="log-clear" class="log-clear-btn">Clear</button>
+      </div>
+      <ul id="log-list" class="log-list"></ul>
+    </div>
   </main>
 
-  <!-- ── detail panel ── -->
+  <!-- ── detail panel (inspector) ── -->
   <aside id="detail-panel" class="hidden">
     <button id="detail-close" title="Close (Esc)">✕</button>
     <h2 id="detail-title">Node</h2>
