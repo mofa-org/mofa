@@ -23,7 +23,7 @@ use mofa_sdk::plugins::PluginPriority;
 use mofa_sdk::plugins::{
     AgentPlugin, LLMPlugin, LLMPluginConfig, MemoryPlugin, MemoryStorage, PluginContext,
     PluginManager, PluginMetadata, PluginResult, PluginState, PluginType, StoragePlugin,
-    ToolDefinition, ToolExecutor, ToolPlugin,
+    ToolDefinition, ToolExecutor, ToolPlugin,PluginError,
 };
 use std::any::Any;
 use std::collections::HashMap;
@@ -79,6 +79,7 @@ impl ToolExecutor for CalculatorTool {
             "multiply" => a * b,
             "divide" => {
                 if b == 0.0 {
+<<<<<<< HEAD
                     return Err(PluginError::ExecutionFailed("Division by zero".into()));
                 }
                 a / b
@@ -89,6 +90,13 @@ impl ToolExecutor for CalculatorTool {
                     op
                 )))
             }
+=======
+                    return Err(PluginError::Other("Division by zero".to_string()));
+                }
+                a / b
+            }
+            _ => return Err(PluginError::Other(format!("Unknown operation: {}", op))),
+>>>>>>> 3a7a2794 (fix(examples): align plugin_system errors with PluginError)
         };
 
         Ok(serde_json::json!({
