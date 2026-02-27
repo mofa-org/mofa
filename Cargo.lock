@@ -5001,6 +5001,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "mofa-gateway"
+version = "0.1.0"
+
+[[package]]
 name = "mofa-kernel"
 version = "0.1.0"
 dependencies = [
@@ -5143,6 +5147,10 @@ dependencies = [
  "tracing",
  "uuid",
 ]
+
+[[package]]
+name = "mofa-smith"
+version = "0.1.0"
 
 [[package]]
 name = "nanorand"
