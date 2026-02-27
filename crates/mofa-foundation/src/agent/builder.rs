@@ -22,7 +22,7 @@
 //!     .name("analyst")
 //!     .system_prompt("You are a financial analyst.")
 //!     .llm(llm_provider)
-//!     .with_tool(Arc::new(HttpTool))
+//!     .with_tool(HttpTool::new())
 //!     .model("gpt-4o")
 //!     .build()
 //!     .await?;
