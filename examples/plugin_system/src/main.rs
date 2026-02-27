@@ -19,7 +19,6 @@
 // Rhai scripting
 use mofa_sdk::rhai::{RhaiScriptEngine, ScriptContext, ScriptEngineConfig};
 use mofa_sdk::plugins::PluginPriority;
-use mofa_sdk::plugins::PluginError;
 use mofa_sdk::plugins::{
     AgentPlugin, LLMPlugin, LLMPluginConfig, MemoryPlugin, MemoryStorage, PluginContext,
     PluginManager, PluginMetadata, PluginResult, PluginState, PluginType, StoragePlugin,

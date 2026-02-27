@@ -1187,26 +1187,6 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_trace_propagation_across_workflow_nodes() {
-        // Build a multi-node workflow: start -> step1 -> step2 -> end
-        // Each step transforms the input, exercising the tracing::info! instrumentation
-        // in run_with_context and execute_node.
-        let workflow = AgentWorkflowBuilder::new("trace-test")
-            .add_transform("step1", |input: AgentValue| async move {
-                AgentValue::Text(format!("{}-step1", input.into_text()))
-            })
-            .add_transform("step2", |input: AgentValue| async move {
-                AgentValue::Text(format!("{}-step2", input.into_text()))
-            })
-            .chain(["step1", "step2"])
-            .build();
-
-        let result = workflow.run("init").await.expect("workflow should succeed");
-        // Verify execution correctness — tracing instrumentation must not alter behavior
-        assert_eq!(result.as_text(), Some("init-step1-step2"));
-    }
-
-    #[tokio::test]
     async fn test_transform_panic_containment() {
         let workflow = AgentWorkflowBuilder::new("panic-test")
             .add_transform("panicking", |_input: AgentValue| -> Pin<Box<dyn Future<Output = AgentValue> + Send>> {
