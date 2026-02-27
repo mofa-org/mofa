@@ -209,6 +209,7 @@ impl PipelineBuilder {
     }
 
     /// Build the configured pipeline
+    #[must_use]
     pub fn build(self) -> InferencePipeline {
         InferencePipeline {
             stages: self.stages,

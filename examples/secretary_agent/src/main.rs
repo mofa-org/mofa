@@ -33,17 +33,17 @@ async fn main() -> anyhow::Result<()> {
         .init();
 
     info!("╔══════════════════════════════════════════════════════════════╗");
-    info!("║           秘书Agent模式 - 基于LLM交互的工作循环演示          ║");
+    info!("║   Secretary Agent Mode - LLM-based Work Cycle Demonstration  ║");
     info!("╚══════════════════════════════════════════════════════════════╝\n");
 
     // 创建LLM提供者
     // Create LLM provider
     let llm_provider = llm_integration::create_llm_provider();
-    info!("✅ LLM提供者已创建: {}\n", llm_provider.name());
+    info!("✅ LLM provider created: {}\n", llm_provider.name());
 
     // 创建执行Agent信息
     // Create Execution Agent information
-    let mut frontend_agent = AgentInfo::new("frontend_agent", "前端开发Agent");
+    let mut frontend_agent = AgentInfo::new("frontend_agent", "Frontend Development Agent");
     // Frontend Development Agent
     frontend_agent.capabilities = vec![
         "frontend".to_string(),
@@ -54,7 +54,7 @@ async fn main() -> anyhow::Result<()> {
     frontend_agent.available = true;
     frontend_agent.performance_score = 0.85;
 
-    let mut backend_agent = AgentInfo::new("backend_agent", "后端开发Agent");
+    let mut backend_agent = AgentInfo::new("backend_agent", "Backend Development Agent");
     // Backend Development Agent
     backend_agent.capabilities = vec![
         "backend".to_string(),
@@ -65,7 +65,7 @@ async fn main() -> anyhow::Result<()> {
     backend_agent.available = true;
     backend_agent.performance_score = 0.9;
 
-    let mut test_agent = AgentInfo::new("test_agent", "测试Agent");
+    let mut test_agent = AgentInfo::new("test_agent", "Testing Agent");
     // Testing Agent
     test_agent.capabilities = vec!["testing".to_string(), "qa".to_string()];
     test_agent.current_load = 10;
@@ -75,7 +75,7 @@ async fn main() -> anyhow::Result<()> {
     // 创建秘书Agent并注册执行Agent和LLM
     // Create Secretary Agent and register Execution Agents and LLM
     let secretary_behavior = DefaultSecretaryBuilder::new()
-        .with_name("基于LLM的开发项目秘书")
+        .with_name("LLM-based Development Project Secretary")
         // LLM-based development project secretary
         .with_dispatch_strategy(DispatchStrategy::CapabilityFirst)
         .with_auto_clarify(true)  // 自动澄清
@@ -94,7 +94,7 @@ async fn main() -> anyhow::Result<()> {
         .with_executor(test_agent)
         .build();
 
-    info!("✅ 秘书Agent已创建，使用最新API\n");
+    info!("✅ Secretary Agent created using the latest API\n");
 
     // 创建通道连接
     // Create channel connection
@@ -106,15 +106,15 @@ async fn main() -> anyhow::Result<()> {
         .start(connection)
         .await;
 
-    info!("✅ 秘书Agent核心引擎已启动\n");
+    info!("✅ Secretary Agent core engine started\n");
 
     // 发送测试想法
     // Send test idea
-    info!("📥 发送想法给秘书Agent:");
-    info!("   '开发一个包含注册、登录、权限管理功能的用户管理系统'\n");
+    info!("📥 Sending idea to Secretary Agent:");
+    info!("   'Develop a user management system with registration, login, and role-based access control'\n");
 
     let idea = DefaultInput::Idea {
-        content: "开发一个包含注册、登录、权限管理功能的用户管理系统".to_string(),
+        content: "Develop a user management system with registration, login, and role-based access control".to_string(),
         priority: None,
         metadata: None,
     };
@@ -123,7 +123,7 @@ async fn main() -> anyhow::Result<()> {
 
     // 接收响应
     // Receive response
-    info!("📤 接收秘书Agent响应:");
+    info!("📤 Receiving Secretary Agent response:");
 
     // 创建一个重复计时器
     // Create a repeating interval timer
@@ -140,7 +140,7 @@ async fn main() -> anyhow::Result<()> {
     loop {
         tokio::select! {
             _ = &mut timeout => {
-                info!("   ⏰ 超时未收到完整响应");
+                info!("   ⏰ Timeout reached without receiving complete response");
                 // Timeout reached without receiving complete response
                 break;
             },
@@ -151,32 +151,32 @@ async fn main() -> anyhow::Result<()> {
                     Ok(result) => {
                         match result {
                             DefaultOutput::Message { content } => {
-                                if content.contains("您好！我是") {
-                                    info!("   💬 欢迎消息: {}", content);
+                                if content.contains("Welcome") || content.contains("您好！我是") {
+                                    info!("   💬 Welcome message: {}", content);
                                     // Welcome message
                                     received_welcome = true;
                                 } else {
-                                    info!("   💬 消息: {}", content);
+                                    info!("   💬 Message: {}", content);
                                     // Message
                                 }
                             },
                             DefaultOutput::Acknowledgment { message } => {
-                                info!("   ✅ 确认: {}", message);
+                                info!("   ✅ Acknowledgment: {}", message);
                                 // Acknowledgment
                                 received_response = true;
                             },
                             DefaultOutput::Error { message } => {
-                                info!("   ❌ 错误: {}", message);
+                                info!("   ❌ Error: {}", message);
                                 // Error
                                 received_response = true;
                             },
                             DefaultOutput::DecisionRequired { decision } => {
-                                info!("   ⏸️ 需要决策: {}", decision.description);
+                                info!("   ⏸️ Decision required: {}", decision.description);
                                 // Decision Required
                                 received_response = true;
                             },
                             DefaultOutput::Report { report } => {
-                                info!("   📊 汇报: {}", report.content);
+                                info!("   📊 Report: {}", report.content);
                                 // Report
                                 received_response = true;
                             },
@@ -185,7 +185,7 @@ async fn main() -> anyhow::Result<()> {
                         }
                     },
                     Err(tokio::sync::mpsc::error::TryRecvError::Disconnected) => {
-                        info!("   🔚 连接已关闭");
+                        info!("   🔚 Connection closed");
                         // Connection closed
                         break;
                     },
@@ -209,7 +209,7 @@ async fn main() -> anyhow::Result<()> {
     handle.stop().await;
     join_handle.abort();
 
-    info!("\n✅ 所有示例运行完成！");
+    info!("\n✅ All examples finished running!");
     // All examples finished running!
 
     Ok(())

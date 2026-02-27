@@ -465,6 +465,7 @@ impl AgentTeamBuilder {
 
     /// 构建团队
     /// Build team
+    #[must_use]
     pub fn build(self) -> AgentTeam {
         let member_map: HashMap<String, usize> = self
             .members

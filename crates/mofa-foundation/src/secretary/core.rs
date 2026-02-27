@@ -18,6 +18,7 @@
 
 use mofa_kernel::agent::types::error::{GlobalError, GlobalResult};
 use tokio::sync::mpsc;
+use tracing::Instrument;
 
 // 使用 mofa-kernel 的核心抽象
 // Use core abstractions from mofa-kernel
@@ -275,9 +276,11 @@ where
         let handle = SecretaryHandle::new(stop_tx);
         let handle_clone = handle.clone();
 
+        let span = tracing::info_span!("secretary.event_loop");
         let join_handle =
             tokio::spawn(
-                async move { self.run_event_loop(connection, handle_clone, stop_rx).await },
+                async move { self.run_event_loop(connection, handle_clone, stop_rx).await }
+                    .instrument(span),
             );
 
         (handle, join_handle)
@@ -498,6 +501,7 @@ where
 
     /// 构建秘书核心
     /// Build secretary core
+    #[must_use]
     pub fn build(self) -> SecretaryCore<B> {
         SecretaryCore::with_config(self.behavior, self.config)
     }

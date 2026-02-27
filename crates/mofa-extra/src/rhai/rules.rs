@@ -990,6 +990,7 @@ impl RuleBuilder {
         self
     }
 
+    #[must_use]
     pub fn build(self) -> RuleDefinition {
         self.rule
     }
