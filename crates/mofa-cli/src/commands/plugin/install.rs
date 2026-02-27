@@ -1,6 +1,7 @@
 //! `mofa plugin install` command implementation
 
-use crate::context::{CliContext, PluginSpecEntry};
+use crate::context::{CliContext, PluginSpecEntry, instantiate_plugin_from_spec};
+use crate::plugin_catalog::{DEFAULT_PLUGIN_REPO_ID, find_catalog_entry};
 use anyhow::{Context, Result};
 use colored::Colorize;
 use futures::StreamExt;
@@ -15,54 +16,86 @@ pub async fn run(
     checksum: Option<&str>,
     verify_signature: bool,
 ) -> Result<()> {
-    println!("{} Installing plugin: {}", "→".green(), name.cyan());
+    let normalized = name.trim();
+    if normalized.is_empty() {
+        anyhow::bail!("Plugin name cannot be empty");
+    }
 
-    // Determine plugin source type
-    let plugin_source = determine_plugin_source(name)?;
+    println!("{} Installing plugin: {}", "→".green(), normalized.cyan());
 
-    // Derive a stable plugin identifier used for storage.
-    // For local paths we normalize the path into a filesystem-safe ID so
-    // `/tmp/foo/bar` becomes `_tmp_foo_bar`, matching the expectations in tests
-    // and keeping the actual plugins directory layout sane.
+    let plugin_source = determine_plugin_source(normalized)?;
+
+    if let PluginSource::Registry(_) = plugin_source {
+        let (repo_id, plugin_id) = parse_plugin_reference(normalized)?;
+        let entry = find_catalog_entry(&repo_id, &plugin_id).ok_or_else(|| {
+            anyhow::anyhow!("Plugin '{}' not found in repository '{}'", plugin_id, repo_id)
+        })?;
+
+        if ctx.plugin_registry.contains(&entry.id) {
+            anyhow::bail!("Plugin '{}' is already installed", entry.id);
+        }
+
+        if let Ok(Some(existing)) = ctx.plugin_store.get(&entry.id) {
+            if existing.enabled {
+                anyhow::bail!(
+                    "Plugin '{}' is already persisted as enabled. Use `mofa plugin uninstall` first if you want to reinstall.",
+                    entry.id
+                );
+            }
+        }
+
+        let spec = PluginSpecEntry {
+            id: entry.id.clone(),
+            kind: entry.kind.clone(),
+            enabled: true,
+            config: entry.config.clone(),
+            description: Some(entry.description.clone()),
+            repo_id: Some(entry.repo_id.clone()),
+        };
+
+        let plugin = instantiate_plugin_from_spec(&spec).ok_or_else(|| {
+            anyhow::anyhow!("CLI installer does not support plugin kind '{}'", spec.kind)
+        })?;
+
+        ctx.plugin_registry.register(plugin)
+            .map_err(|e| anyhow::anyhow!("Failed to register plugin '{}': {}", entry.id, e))?;
+
+        if let Err(e) = ctx.plugin_store.save(&spec.id, &spec) {
+            let _ = ctx.plugin_registry.unregister(&spec.id);
+            anyhow::bail!("Failed to persist plugin '{}': {}. Rolled back in-memory registration.", spec.id, e);
+        }
+
+        println!("{} Installed plugin '{}' from repository '{}'", "✓".green(), spec.id, repo_id);
+        return Ok(());
+    }
+
+    // Determine plugin source type natively (Local / Url)
     use std::path::Path as StdPath;
-    let mut plugin_id = name.to_string();
+    let mut plugin_id = normalized.to_string();
     if let PluginSource::LocalPath(path) = &plugin_source {
-        // If the user passed an absolute or relative path, normalize it.
-        if StdPath::new(name) == path {
-            plugin_id = name.replace(['/', '\\'], "_");
+        if StdPath::new(normalized) == path {
+            plugin_id = normalized.replace(['/', '\\'], "_");
         }
     }
 
-    // Check if plugin is already installed (based on persisted specs)
     if ctx.plugin_store.get(&plugin_id)?.is_some() {
         anyhow::bail!("Plugin '{}' is already installed", plugin_id);
     }
 
-    // Handle installation based on source type
     let plugin_dir = match plugin_source {
         PluginSource::LocalPath(path) => {
             println!("  {} Source: Local path", "•".bright_black());
-            // Copy plugin files into the managed plugins directory; validation happens afterward
             install_from_local_path(&ctx.data_dir, &plugin_id, &path).await?
         }
         PluginSource::Url(url) => {
             println!("  {} Source: URL", "•".bright_black());
             install_from_url(&ctx.data_dir, &plugin_id, &url, checksum, verify_signature).await?
         }
-        PluginSource::Registry(registry_name) => {
-            println!("  {} Source: Registry", "•".bright_black());
-            // For now, treat registry names as potential URLs or fail gracefully
-            anyhow::bail!(
-                "Plugin registry support not yet implemented. \
-                 Please provide a local path or URL instead."
-            );
-        }
+        PluginSource::Registry(_) => unreachable!(),
     };
 
-    // Validate plugin structure in its final location
     validate_plugin_structure(&plugin_dir)?;
 
-    // Create plugin spec entry
     let spec = PluginSpecEntry {
         id: plugin_id.clone(),
         kind: "external".to_string(),
@@ -71,30 +104,33 @@ pub async fn run(
             "path": plugin_dir.to_string_lossy(),
             "installed_at": chrono::Utc::now().to_rfc3339(),
         }),
+        description: None,
+        repo_id: None,
     };
 
-    // Save to plugin store
-    ctx.plugin_store
-        .save(&plugin_id, &spec)
+    ctx.plugin_store.save(&plugin_id, &spec)
         .with_context(|| format!("Failed to persist plugin spec for '{}'", plugin_id))?;
 
-    println!(
-        "{} Plugin '{}' installed successfully",
-        "✓".green(),
-        plugin_id
-    );
-    println!(
-        "  {} Location: {}",
-        "•".bright_black(),
-        plugin_dir.display().to_string().cyan()
-    );
-    println!(
-        "  {} Use {} to activate it",
-        "•".bright_black(),
-        "mofa plugin enable".yellow()
-    );
+    println!("{} Plugin '{}' installed successfully", "✓".green(), plugin_id);
+    println!("  {} Location: {}", "•".bright_black(), plugin_dir.display().to_string().cyan());
+    println!("  {} Use {} to activate it", "•".bright_black(), "mofa plugin enable".yellow());
 
     Ok(())
+}
+
+fn parse_plugin_reference(value: &str) -> anyhow::Result<(String, String)> {
+    if let Some((repo, plugin)) = value.split_once('/') {
+        let repo = repo.trim();
+        let plugin = plugin.trim();
+
+        if repo.is_empty() || plugin.is_empty() {
+            anyhow::bail!("Plugin reference must be '<repo>/<plugin>'");
+        }
+
+        Ok((repo.to_string(), plugin.to_string()))
+    } else {
+        Ok((DEFAULT_PLUGIN_REPO_ID.to_string(), value.to_string()))
+    }
 }
 
 /// Determine the source type of a plugin
@@ -384,10 +420,41 @@ enum PluginSource {
     Registry(String),
 }
 
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::context::CliContext;
+    use crate::plugin_catalog::DEFAULT_PLUGIN_REPO_ID;
+    use mofa_kernel::agent::plugins::PluginRegistry as PluginRegistryTrait;
     use tempfile::TempDir;
+
+    fn disable_default_http_plugin(ctx: &CliContext) {
+        let _ = ctx.plugin_registry.unregister("http-plugin");
+        if let Ok(Some(mut spec)) = ctx.plugin_store.get("http-plugin") {
+            spec.enabled = false;
+            ctx.plugin_store.save("http-plugin", &spec).unwrap();
+        }
+    }
+
+    #[tokio::test]
+    async fn test_install_registers_and_persists_builtin_plugin() {
+        let temp = TempDir::new().unwrap();
+        let ctx = CliContext::with_temp_dir(temp.path()).await.unwrap();
+
+        disable_default_http_plugin(&ctx);
+
+        run(&ctx, "http-plugin", None, false).await.unwrap();
+
+        assert!(PluginRegistryTrait::contains(
+            ctx.plugin_registry.as_ref(),
+            "http-plugin"
+        ));
+
+        let spec = ctx.plugin_store.get("http-plugin").unwrap().unwrap();
+        assert!(spec.enabled);
+        assert_eq!(spec.repo_id.as_deref(), Some(DEFAULT_PLUGIN_REPO_ID));
+    }
 
     #[test]
     fn test_determine_plugin_source_url() {
@@ -429,6 +496,46 @@ mod tests {
         let temp = TempDir::new().unwrap();
         let ctx = CliContext::with_temp_dir(temp.path()).await.unwrap();
 
+        let err = run(&ctx, "http-plugin", None, false).await.unwrap_err();
+        assert!(err.to_string().contains("already installed"));
+    }
+
+    #[tokio::test]
+    async fn test_install_rejects_empty_name() {
+        let temp = TempDir::new().unwrap();
+        let ctx = CliContext::with_temp_dir(temp.path()).await.unwrap();
+
+        let err = run(&ctx, "   ", None, false).await.unwrap_err();
+        assert!(err.to_string().contains("cannot be empty"));
+    }
+
+    #[tokio::test]
+    async fn test_install_supports_repo_prefixed_reference() {
+        let temp = TempDir::new().unwrap();
+        let ctx = CliContext::with_temp_dir(temp.path()).await.unwrap();
+
+        disable_default_http_plugin(&ctx);
+
+        run(&ctx, "official/http-plugin", None, false).await.unwrap();
+
+        let spec = ctx.plugin_store.get("http-plugin").unwrap().unwrap();
+        assert_eq!(spec.repo_id.as_deref(), Some(DEFAULT_PLUGIN_REPO_ID));
+        assert!(spec.enabled);
+    }
+
+    #[tokio::test]
+    async fn test_install_rejects_unknown_catalog_entry() {
+        let temp = TempDir::new().unwrap();
+        let ctx = CliContext::with_temp_dir(temp.path()).await.unwrap();
+
+        let err = run(&ctx, "official/not-real", None, false).await.unwrap_err();
+        assert!(err.to_string().contains("not found in repository"));
+    }
+
+    #[tokio::test]
+    async fn test_install_from_local_path2() {
+        let temp = TempDir::new().unwrap();
+        let ctx = CliContext::with_temp_dir(temp.path()).await.unwrap();
         // Create a source plugin directory
         let source_plugin = temp.path().join("source-plugin");
         tokio::fs::create_dir_all(&source_plugin).await.unwrap();
