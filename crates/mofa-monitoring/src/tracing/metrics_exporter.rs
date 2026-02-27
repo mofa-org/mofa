@@ -61,6 +61,16 @@ impl OtlpMetricsExporterConfig {
         self.service_name = service_name.into();
         self
     }
+
+    pub fn with_batch_size(mut self, batch_size: usize) -> Self {
+        self.batch_size = batch_size;
+        self
+    }
+
+    pub fn with_max_queue_size(mut self, max_queue_size: usize) -> Self {
+        self.max_queue_size = max_queue_size;
+        self
+    }
 }
 
 #[derive(Debug)]
@@ -81,7 +91,16 @@ pub struct OtlpMetricsExporter {
 }
 
 impl OtlpMetricsExporter {
-    pub fn new(collector: Arc<MetricsCollector>, config: OtlpMetricsExporterConfig) -> Self {
+    pub fn new(collector: Arc<MetricsCollector>, mut config: OtlpMetricsExporterConfig) -> Self {
+        if config.max_queue_size == 0 {
+            warn!("OtlpMetricsExporterConfig.max_queue_size=0 is invalid; clamping to 1");
+            config.max_queue_size = 1;
+        }
+        if config.batch_size == 0 {
+            warn!("OtlpMetricsExporterConfig.batch_size=0 is invalid; clamping to 1");
+            config.batch_size = 1;
+        }
+
         let (sender, receiver) = mpsc::channel(config.max_queue_size);
         Self {
             collector,
@@ -204,6 +223,7 @@ async fn flush_batch(exporter: &OtlpMetricsExporter, batch: &mut Vec<MetricsSnap
             "exported {} snapshot(s) to OTLP metrics endpoint",
             payload.len()
         );
+        *exporter.last_error.write().await = None;
     }
 }
 
@@ -219,71 +239,89 @@ fn build_otlp_payload(
     limits: &CardinalityLimits,
     service_name: &str,
 ) -> serde_json::Value {
-    let snapshot = if let Some(snapshot) = batch.last() {
-        snapshot
-    } else {
+    if batch.is_empty() {
         return json!({"resourceMetrics": []});
-    };
+    }
 
-    let now_nanos = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_nanos() as u64;
+    let mut system_cpu_points = Vec::with_capacity(batch.len());
+    let mut system_memory_points = Vec::with_capacity(batch.len());
+    let mut agent_points = Vec::new();
+    let mut workflow_points = Vec::new();
+    let mut tool_points = Vec::new();
+    let mut llm_points = Vec::new();
 
-    let agent_points = cap_points(
-        snapshot
-            .agents
-            .iter()
-            .map(|agent| LabeledPoint {
-                labels: vec![("agent_id".to_string(), agent.agent_id.clone())],
-                rank: agent.tasks_completed as f64,
-                value: agent.tasks_completed as f64,
-            })
-            .collect(),
-        limits.agent_id,
-    );
+    for snapshot in batch {
+        let ts_nanos = snapshot_time_nanos(snapshot);
+        system_cpu_points.push(point(ts_nanos, vec![], snapshot.system.cpu_usage));
+        system_memory_points.push(point(ts_nanos, vec![], snapshot.system.memory_used as f64));
 
-    let workflow_points = cap_points(
-        snapshot
-            .workflows
-            .iter()
-            .map(|workflow| LabeledPoint {
-                labels: vec![("workflow_id".to_string(), workflow.workflow_id.clone())],
-                rank: workflow.total_executions as f64,
-                value: workflow.total_executions as f64,
-            })
-            .collect(),
-        limits.workflow_id,
-    );
+        agent_points.extend(otlp_points(
+            ts_nanos,
+            cap_points(
+                snapshot
+                    .agents
+                    .iter()
+                    .map(|agent| LabeledPoint {
+                        labels: vec![("agent_id".to_string(), agent.agent_id.clone())],
+                        rank: agent.tasks_completed as f64,
+                        value: agent.tasks_completed as f64,
+                    })
+                    .collect(),
+                limits.agent_id,
+            ),
+        ));
 
-    let tool_points = cap_points(
-        snapshot
-            .plugins
-            .iter()
-            .map(|plugin| LabeledPoint {
-                labels: vec![("tool_name".to_string(), plugin.name.clone())],
-                rank: plugin.call_count as f64,
-                value: plugin.call_count as f64,
-            })
-            .collect(),
-        limits.plugin_or_tool,
-    );
+        workflow_points.extend(otlp_points(
+            ts_nanos,
+            cap_points(
+                snapshot
+                    .workflows
+                    .iter()
+                    .map(|workflow| LabeledPoint {
+                        labels: vec![("workflow_id".to_string(), workflow.workflow_id.clone())],
+                        rank: workflow.total_executions as f64,
+                        value: workflow.total_executions as f64,
+                    })
+                    .collect(),
+                limits.workflow_id,
+            ),
+        ));
 
-    let llm_points = cap_points(
-        snapshot
-            .llm_metrics
-            .iter()
-            .map(|llm| LabeledPoint {
-                labels: vec![
-                    ("provider".to_string(), llm.provider_name.clone()),
-                    ("model".to_string(), llm.model_name.clone()),
-                ],
-                rank: llm.total_requests as f64,
-                value: llm.total_requests as f64,
-            })
-            .collect(),
-        limits.provider_model,
-    );
+        tool_points.extend(otlp_points(
+            ts_nanos,
+            cap_points(
+                snapshot
+                    .plugins
+                    .iter()
+                    .map(|plugin| LabeledPoint {
+                        labels: vec![("tool_name".to_string(), plugin.name.clone())],
+                        rank: plugin.call_count as f64,
+                        value: plugin.call_count as f64,
+                    })
+                    .collect(),
+                limits.plugin_or_tool,
+            ),
+        ));
+
+        llm_points.extend(otlp_points(
+            ts_nanos,
+            cap_points(
+                snapshot
+                    .llm_metrics
+                    .iter()
+                    .map(|llm| LabeledPoint {
+                        labels: vec![
+                            ("provider".to_string(), llm.provider_name.clone()),
+                            ("model".to_string(), llm.model_name.clone()),
+                        ],
+                        rank: llm.total_requests as f64,
+                        value: llm.total_requests as f64,
+                    })
+                    .collect(),
+                limits.provider_model,
+            ),
+        ));
+    }
 
     json!({
         "resourceMetrics": [{
@@ -298,20 +336,28 @@ fn build_otlp_payload(
             "scopeMetrics": [{
                 "scope": { "name": "mofa-monitoring.metrics-exporter" },
                 "metrics": [
-                    metric_gauge("mofa.system.cpu.percent", vec![
-                        point(now_nanos, vec![], snapshot.system.cpu_usage),
-                    ]),
-                    metric_gauge("mofa.system.memory.bytes", vec![
-                        point(now_nanos, vec![], snapshot.system.memory_used as f64),
-                    ]),
-                    metric_gauge("mofa.agent.tasks.total", otlp_points(now_nanos, agent_points)),
-                    metric_gauge("mofa.workflow.executions.total", otlp_points(now_nanos, workflow_points)),
-                    metric_gauge("mofa.tool.calls.total", otlp_points(now_nanos, tool_points)),
-                    metric_gauge("mofa.llm.requests.total", otlp_points(now_nanos, llm_points)),
+                    metric_gauge("mofa.system.cpu.percent", system_cpu_points),
+                    metric_gauge("mofa.system.memory.bytes", system_memory_points),
+                    metric_gauge("mofa.agent.tasks.total", agent_points),
+                    metric_gauge("mofa.workflow.executions.total", workflow_points),
+                    metric_gauge("mofa.tool.calls.total", tool_points),
+                    metric_gauge("mofa.llm.requests.total", llm_points),
                 ]
             }]
         }]
     })
+}
+
+fn snapshot_time_nanos(snapshot: &MetricsSnapshot) -> u64 {
+    if snapshot.timestamp > 0 {
+        return snapshot.timestamp.saturating_mul(1_000_000_000);
+    }
+
+    let now_nanos_u128 = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_nanos();
+    u64::try_from(now_nanos_u128).unwrap_or(u64::MAX)
 }
 
 fn cap_points(mut points: Vec<LabeledPoint>, limit: usize) -> Vec<LabeledPoint> {
@@ -476,6 +522,24 @@ mod tests {
         assert!(payload_str.contains("__other__"));
     }
 
+    #[test]
+    fn payload_includes_all_batch_snapshots() {
+        let mut first = sample_snapshot();
+        first.timestamp = 1;
+        first.system.cpu_usage = 10.0;
+        let mut second = sample_snapshot();
+        second.timestamp = 2;
+        second.system.cpu_usage = 20.0;
+
+        let payload = build_otlp_payload(&[first, second], &CardinalityLimits::default(), "mofa");
+        let payload_str = payload.to_string();
+
+        assert!(payload_str.contains("\"timeUnixNano\":1000000000"));
+        assert!(payload_str.contains("\"timeUnixNano\":2000000000"));
+    }
+
+    // macOS CI/sandbox intermittently fails constructing network-backed HTTP client stacks
+    // in this failure-path test; keep coverage on other targets where behavior is stable.
     #[cfg(not(target_os = "macos"))]
     #[tokio::test]
     async fn export_failure_surfaces_error_without_panic() {
