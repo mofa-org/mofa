@@ -8,6 +8,7 @@
 //! - [`PluginConfig`] typed getters/setters
 //! - [`HotReloadConfig`] builder and defaults
 //! - [`ReloadStrategy`] default value
+#![allow(clippy::module_inception)]
 
 #[cfg(test)]
 mod tests {
