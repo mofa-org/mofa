@@ -15,7 +15,7 @@ pub struct MockAgentBus {
 impl MockAgentBus {
     pub async fn new() -> Result<Self> {
         Ok(Self {
-            inner: AgentBus::new().await?,
+            inner: AgentBus::new(),
             captured_messages: Arc::new(RwLock::new(Vec::new())),
         })
     }
@@ -32,7 +32,7 @@ impl MockAgentBus {
             .await
             .push((sender_id.to_string(), mode.clone(), message.clone()));
 
-        self.inner.send_message(sender_id, mode, &message).await
+        self.inner.send_message(sender_id, mode, &message).await.map_err(|e| anyhow::anyhow!(e))
     }
 
     /// Clears the captured message history.

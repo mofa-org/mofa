@@ -12,11 +12,11 @@
 //!
 //! fn load_agent() -> KernelResult<()> {
 //!     // Errors from sub-modules convert automatically via From impls.
-//!     // Attach extra context with .change_context() / .attach_printable().
+//!     // Attach extra context with .change_context() / .attach().
 //!     let config = std::fs::read_to_string("agent.toml")
 //!         .map_err(KernelError::from)
 //!         .map_err(error_stack::Report::new)
-//!         .attach_printable("loading agent.toml")?;
+//!         .attach("loading agent.toml")?;
 //!     Ok(())
 //! }
 //! ```
@@ -53,6 +53,22 @@ pub enum KernelError {
     /// An internal / untyped error described by a message string.
     #[error("{0}")]
     Internal(String),
+
+    /// A plugin sub-system error.
+    #[error("Plugin error: {0}")]
+    Plugin(#[from] crate::plugin::PluginError),
+
+    /// A bus communication error.
+    #[error("Bus error: {0}")]
+    Bus(#[from] crate::bus::BusError),
+
+    /// A connection-layer error.
+    #[error("Connection error: {0}")]
+    Connection(#[from] crate::agent::secretary::ConnectionError),
+
+    /// A secretary-layer error.
+    #[error("Secretary error: {0}")]
+    Secretary(#[from] crate::agent::secretary::SecretaryError),
 }
 
 impl From<crate::agent::types::error::GlobalError> for KernelError {

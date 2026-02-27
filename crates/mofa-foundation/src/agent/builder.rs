@@ -22,7 +22,7 @@
 //!     .name("analyst")
 //!     .system_prompt("You are a financial analyst.")
 //!     .llm(llm_provider)
-//!     .with_tool(Arc::new(HttpTool))
+//!     .with_tool(HttpTool::new())
 //!     .model("gpt-4o")
 //!     .build()
 //!     .await?;
@@ -72,7 +72,7 @@ pub struct AgentBuilder {
     pub(crate) system_prompt: Option<String>,
     /// LLM provider (required)
     llm: Option<Arc<dyn LLMProvider>>,
-    /// Tools to register on the executor
+    /// Tools to register on the executor (dynamic tool objects)
     tools: Vec<Arc<dyn DynTool>>,
     /// Executor configuration (model, temperature, iterations, …)
     pub(crate) config: AgentExecutorConfig,
@@ -475,7 +475,10 @@ max_iterations: 8
         assert!(builder.system_prompt.is_none());
         assert!(builder.config.default_model.is_none());
         // Default max_iterations should be preserved
-        assert_eq!(builder.config.max_iterations, AgentExecutorConfig::default().max_iterations);
+        assert_eq!(
+            builder.config.max_iterations,
+            AgentExecutorConfig::default().max_iterations
+        );
     }
 
     #[test]

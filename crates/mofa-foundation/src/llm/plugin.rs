@@ -183,7 +183,7 @@ impl AgentPlugin for LLMPlugin {
         // Health check
         self.provider.health_check().await.map_err(|e| {
             self.state = PluginState::Error(e.to_string());
-            anyhow::anyhow!("LLM health check failed: {}", e)
+            mofa_kernel::plugin::PluginError::InitFailed(format!("LLM health check failed: {}", e))
         })?;
 
         Ok(())
@@ -209,7 +209,7 @@ impl AgentPlugin for LLMPlugin {
         // Simple mode: treat input directly as a user message
         self.ask(&input)
             .await
-            .map_err(|e| anyhow::anyhow!("LLM execution failed: {}", e))
+            .map_err(|e| mofa_kernel::plugin::PluginError::ExecutionFailed(format!("LLM execution failed: {}", e)))
     }
 
     fn stats(&self) -> HashMap<String, serde_json::Value> {

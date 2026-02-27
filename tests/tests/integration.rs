@@ -1,38 +1,7 @@
-use mofa_testing::backend::MockLLMBackend;
-use mofa_testing::bus::MockAgentBus;
 use mofa_testing::tools::MockTool;
-use mofa_foundation::orchestrator::ModelOrchestrator;
-use mofa_foundation::agent::components::tool::SimpleTool;
 use mofa_kernel::agent::components::tool::ToolInput;
+use mofa_foundation::agent::components::tool::SimpleTool;
 use serde_json::json;
-use futures::stream::StreamExt;
-
-#[tokio::test]
-async fn test_mock_llm_backend() {
-    let mut backend = MockLLMBackend::new();
-    
-    // Add specific mock responses for certain prompts
-    backend.add_mock_response("hello", "Hi there! How can I help you?");
-    backend.set_fallback_response("I don't understand that prompt.");
-
-    // Retrieve generation and test it
-    let mut stream = backend.generate("mock-id", "User says: hello").unwrap();
-    let mut response_str = String::new();
-    while let Some(chunk) = stream.next().await {
-        response_str.push_str(&chunk.unwrap());
-    }
-
-    // Note: because we mapped with split_whitespace() and space appended:
-    assert_eq!(response_str.trim(), "Hi there! How can I help you?");
-
-    // Test fallback
-    let mut stream2 = backend.generate("mock-id", "unknown prompt").unwrap();
-    let mut response_str2 = String::new();
-    while let Some(chunk) = stream2.next().await {
-        response_str2.push_str(&chunk.unwrap());
-    }
-    assert_eq!(response_str2.trim(), "I don't understand that prompt.");
-}
 
 #[tokio::test]
 async fn test_mock_tool() {

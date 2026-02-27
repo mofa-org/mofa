@@ -7,8 +7,9 @@
 //! - Result streaming via channels
 
 use crate::llm::LLMProvider;
-use anyhow::Result;
+use mofa_kernel::agent::types::error::{GlobalError, GlobalResult};
 use chrono::{DateTime, Utc};
+use tracing::Instrument;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
@@ -213,14 +214,14 @@ impl TaskOrchestrator {
     }
 
     /// Spawn a background task
-    pub async fn spawn(&self, prompt: &str, origin: TaskOrigin) -> Result<String> {
+    pub async fn spawn(&self, prompt: &str, origin: TaskOrigin) -> GlobalResult<String> {
         // Check concurrent limit
         let active_count = self.active_tasks.read().await.len();
         if active_count >= self.config.max_concurrent_tasks {
-            return Err(anyhow::anyhow!(
+            return Err(GlobalError::Other(format!(
                 "Maximum concurrent tasks ({}) reached",
                 self.config.max_concurrent_tasks
-            ));
+            )));
         }
 
         // Create task
@@ -242,6 +243,7 @@ impl TaskOrchestrator {
         let prompt = prompt.to_string();
         let task_id_clone = task_id.clone();
 
+        let span = tracing::info_span!("task_orchestrator.background", task_id = %task_id_clone);
         tokio::spawn(async move {
             let result = Self::run_task(&provider, &model, &prompt).await;
 
@@ -268,7 +270,7 @@ impl TaskOrchestrator {
             tokio::time::sleep(tokio::time::Duration::from_secs(300)).await;
             let mut tasks = active_tasks.write().await;
             tasks.remove(&task_id_clone);
-        });
+        }.instrument(span));
 
         Ok(task_id)
     }
@@ -278,7 +280,7 @@ impl TaskOrchestrator {
         provider: &Arc<dyn LLMProvider>,
         model: &str,
         prompt: &str,
-    ) -> Result<String> {
+    ) -> GlobalResult<String> {
         use crate::llm::types::ChatCompletionRequest;
 
         let request = ChatCompletionRequest::new(model)
@@ -287,12 +289,12 @@ impl TaskOrchestrator {
             )
             .user(prompt);
 
-        let response = provider.chat(request).await?;
+        let response = provider.chat(request).await.map_err(|e| GlobalError::Other(e.to_string()))?;
 
         response
             .content()
             .map(|s| s.to_string())
-            .ok_or_else(|| anyhow::anyhow!("No response content"))
+            .ok_or_else(|| GlobalError::Other("No response content".to_string()))
     }
 
     /// Subscribe to task results

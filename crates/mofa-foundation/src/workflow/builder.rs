@@ -388,6 +388,7 @@ impl WorkflowBuilder {
 
     /// 构建工作流图
     /// Build workflow graph
+    #[must_use]
     pub fn build(self) -> WorkflowGraph {
         self.graph
     }

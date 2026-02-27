@@ -11,7 +11,7 @@ mofa-foundation = { path = "../crates/mofa-foundation" }
 tokio = { workspace = true }
 async-trait = { workspace = true }
 tracing = { workspace = true }
-anyhow = { workspace = true }
+anyhow.workspace = true
 serde = { workspace = true }
 serde_json = { workspace = true }
 futures = { workspace = true }

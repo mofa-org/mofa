@@ -3,6 +3,7 @@
 mod cli;
 mod commands;
 mod config;
+mod plugin_catalog;
 mod context;
 mod output;
 mod render;
@@ -160,9 +161,21 @@ async fn run_command(cli: Cli) -> anyhow::Result<()> {
                 cli::AgentCommands::Logs {
                     agent_id,
                     tail,
-                    lines,
+                    level,
+                    grep,
+                    limit,
+                    json,
                 } => {
-                    commands::agent::logs::run(ctx, &agent_id, tail, lines).await?;
+                    commands::agent::logs::run(
+                        ctx,
+                        &agent_id,
+                        tail,
+                        level.clone(),
+                        grep.clone(),
+                        limit,
+                        json,
+                    )
+                    .await?;
                 }
             }
         }
@@ -201,12 +214,40 @@ async fn run_command(cli: Cli) -> anyhow::Result<()> {
                 cli::PluginCommands::Info { name } => {
                     commands::plugin::info::run(ctx, &name).await?;
                 }
-                cli::PluginCommands::Install { name } => {
-                    commands::plugin::install::run(ctx, &name).await?;
+                cli::PluginCommands::Install {
+                    name,
+                    checksum,
+                    verify_signature,
+                } => {
+                    commands::plugin::install::run(
+                        ctx,
+                        &name,
+                        checksum.as_deref(),
+                        verify_signature,
+                    )
+                    .await?;
                 }
                 cli::PluginCommands::Uninstall { name, force } => {
                     commands::plugin::uninstall::run(ctx, &name, force).await?;
                 }
+                cli::PluginCommands::Repository { action } => match action {
+                    cli::PluginRepositoryCommands::List => {
+                        commands::plugin::repository::list(ctx).await?;
+                    }
+                    cli::PluginRepositoryCommands::Add {
+                        id,
+                        url,
+                        description,
+                    } => {
+                        commands::plugin::repository::add(
+                            ctx,
+                            &id,
+                            &url,
+                            description.as_deref(),
+                        )
+                        .await?;
+                    }
+                },
             }
         }
 
