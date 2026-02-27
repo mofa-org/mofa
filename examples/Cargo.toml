@@ -38,6 +38,7 @@ members = [
     "message_graph_validation",
     "agent_builder",
     "context_compression",
+    "structured_output",
 ]
 
 [workspace.package]
