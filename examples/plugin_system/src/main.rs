@@ -79,16 +79,11 @@ impl ToolExecutor for CalculatorTool {
             "multiply" => a * b,
             "divide" => {
                 if b == 0.0 {
-                    return Err(PluginError::ExecutionFailed("Division by zero".into()));
+                    return Err(std::io::Error::other("Division by zero").into());
                 }
                 a / b
             }
-            _ => {
-                return Err(PluginError::ExecutionFailed(format!(
-                    "Unknown operation: {}",
-                    op
-                )))
-            }
+            _ => return Err(std::io::Error::other(format!("Unknown operation: {}", op)).into()),
         };
 
         Ok(serde_json::json!({
@@ -257,9 +252,12 @@ impl AgentPlugin for MonitorPlugin {
             ["list"] => {
                 Ok(serde_json::to_string(&self.all_metrics())?)
             }
-            _ => Err(PluginError::ExecutionFailed(
-                "Invalid command. Use: record <name> <value>, get <name>, list".into(),
-            )),
+            _ => Err(
+                std::io::Error::other(
+                    "Invalid command. Use: record <name> <value>, get <name>, list",
+                )
+                .into(),
+            ),
         }
     }
 

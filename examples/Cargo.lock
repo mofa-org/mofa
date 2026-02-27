@@ -3921,6 +3921,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "message_graph_executor_runtime"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "mofa-kernel",
+ "serde_json",
+ "tokio",
+]
+
+[[package]]
 name = "message_graph_validation"
 version = "0.1.0"
 dependencies = [
@@ -5273,6 +5283,8 @@ name = "rag_pipeline"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "async-trait",
+ "futures",
  "mofa-foundation",
  "mofa-kernel",
  "tokio",
