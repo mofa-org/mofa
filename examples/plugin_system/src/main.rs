@@ -79,7 +79,7 @@ impl ToolExecutor for CalculatorTool {
             "multiply" => a * b,
             "divide" => {
                 if b == 0.0 {
-                    return Err(PluginError::ExecutionFailed("Division by zero".to_string()));
+                    return Err(PluginError::ExecutionFailed("Division by zero".into()));
                 }
                 a / b
             }
@@ -87,7 +87,7 @@ impl ToolExecutor for CalculatorTool {
                 return Err(PluginError::ExecutionFailed(format!(
                     "Unknown operation: {}",
                     op
-                )));
+                )))
             }
         };
 
@@ -258,7 +258,7 @@ impl AgentPlugin for MonitorPlugin {
                 Ok(serde_json::to_string(&self.all_metrics())?)
             }
             _ => Err(PluginError::ExecutionFailed(
-                "Invalid command. Use: record <name> <value>, get <name>, list".to_string(),
+                "Invalid command. Use: record <name> <value>, get <name>, list".into(),
             )),
         }
     }

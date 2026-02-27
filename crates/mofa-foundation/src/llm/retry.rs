@@ -7,6 +7,7 @@ use super::provider::LLMProvider;
 use super::types::*;
 use std::sync::Arc;
 use tracing::{debug, info, warn};
+use tracing::Instrument;
 
 /// Retry executor for LLM calls
 ///
@@ -35,6 +36,8 @@ impl RetryExecutor {
         let mut error_history = Vec::new();
 
         for attempt in 0..max_attempts {
+            let attempt_span = tracing::info_span!("llm.retry_attempt", attempt, max_attempts);
+
             // Apply backoff delay if this is a retry attempt
             if attempt > 0 {
                 let delay = self.policy.backoff.delay(attempt - 1);
@@ -44,11 +47,11 @@ impl RetryExecutor {
                     max_attempts,
                     delay.as_millis()
                 );
-                tokio::time::sleep(delay).await;
+                tokio::time::sleep(delay).instrument(attempt_span.clone()).await;
             }
 
             // Try to execute the request
-            match self.provider.chat(request.clone()).await {
+            match self.provider.chat(request.clone()).instrument(attempt_span).await {
                 Ok(response) => {
                     // Validate JSON if in JSON mode
                     if let Some(json_error) = self.validate_json_response(&request, &response) {
