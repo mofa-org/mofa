@@ -47,8 +47,8 @@ fn main() {
     ];
 
     for (user_msg, assistant_msg) in &exchanges {
-        messages.push(ChatMessage::user(user_msg));
-        messages.push(ChatMessage::assistant(assistant_msg));
+        messages.push(ChatMessage::user(*user_msg));
+        messages.push(ChatMessage::assistant(*assistant_msg));
     }
 
     // Current user message (always preserved)
