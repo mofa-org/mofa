@@ -20,6 +20,10 @@ keywords = [
 categories = ["development-tools"]
 publish = true
 
+[features]
+default = []
+otlp-metrics = []
+
 [dependencies]
 # Workspace dependencies
 async-trait.workspace = true

@@ -24,6 +24,8 @@ use super::assets::{INDEX_HTML, serve_asset};
 use super::metrics::{MetricsCollector, MetricsConfig};
 use super::prometheus::{PrometheusExportConfig, PrometheusExporter};
 use super::websocket::{WebSocketHandler, create_websocket_handler};
+#[cfg(feature = "otlp-metrics")]
+use crate::tracing::{OtlpExporterHandles, OtlpMetricsExporter, OtlpMetricsExporterConfig};
 use tokio::sync::mpsc;
 
 /// Dashboard server configuration
@@ -43,6 +45,9 @@ pub struct DashboardConfig {
     pub enable_tracing: bool,
     /// Prometheus export configuration
     pub prometheus_export_config: PrometheusExportConfig,
+    /// Optional OTLP metrics exporter configuration
+    #[cfg(feature = "otlp-metrics")]
+    pub otlp_metrics_exporter: Option<OtlpMetricsExporterConfig>,
 }
 
 impl Default for DashboardConfig {
@@ -55,6 +60,8 @@ impl Default for DashboardConfig {
             ws_update_interval: Duration::from_secs(1),
             enable_tracing: true,
             prometheus_export_config: PrometheusExportConfig::default(),
+            #[cfg(feature = "otlp-metrics")]
+            otlp_metrics_exporter: None,
         }
     }
 }
@@ -94,6 +101,12 @@ impl DashboardConfig {
         self
     }
 
+    #[cfg(feature = "otlp-metrics")]
+    pub fn with_otlp_metrics_exporter(mut self, config: OtlpMetricsExporterConfig) -> Self {
+        self.otlp_metrics_exporter = Some(config);
+        self
+    }
+
     pub fn socket_addr(&self) -> SocketAddr {
         format!("{}:{}", self.host, self.port)
             .parse()
@@ -116,6 +129,10 @@ pub struct DashboardServer {
     ws_handler: Option<Arc<WebSocketHandler>>,
     prometheus_exporter: Option<Arc<PrometheusExporter>>,
     prometheus_worker: Option<tokio::task::JoinHandle<()>>,
+    #[cfg(feature = "otlp-metrics")]
+    otlp_metrics_exporter: Option<Arc<OtlpMetricsExporter>>,
+    #[cfg(feature = "otlp-metrics")]
+    otlp_metrics_handles: Option<OtlpExporterHandles>,
     session_recorder: Option<Arc<dyn SessionRecorder>>,
     debug_event_rx: Option<mpsc::Receiver<DebugEvent>>,
 }
@@ -131,6 +148,10 @@ impl DashboardServer {
             ws_handler: None,
             prometheus_exporter: None,
             prometheus_worker: None,
+            #[cfg(feature = "otlp-metrics")]
+            otlp_metrics_exporter: None,
+            #[cfg(feature = "otlp-metrics")]
+            otlp_metrics_handles: None,
             session_recorder: None,
             debug_event_rx: None,
         }
@@ -149,6 +170,11 @@ impl DashboardServer {
     /// Get the Prometheus exporter (if initialized)
     pub fn prometheus_exporter(&self) -> Option<Arc<PrometheusExporter>> {
         self.prometheus_exporter.clone()
+    }
+
+    #[cfg(feature = "otlp-metrics")]
+    pub fn otlp_metrics_exporter(&self) -> Option<Arc<OtlpMetricsExporter>> {
+        self.otlp_metrics_exporter.clone()
     }
 
     /// Get the session recorder (if configured)
@@ -255,6 +281,21 @@ impl DashboardServer {
                 warn!("initial /metrics cache refresh failed: {}", err);
             }
             self.prometheus_worker = Some(exporter.clone().start());
+        }
+
+        #[cfg(feature = "otlp-metrics")]
+        if let Some(config) = &self.config.otlp_metrics_exporter {
+            let otlp_exporter = Arc::new(OtlpMetricsExporter::new(
+                self.collector.clone(),
+                config.clone(),
+            ));
+            match otlp_exporter.clone().start().await {
+                Ok(handles) => {
+                    self.otlp_metrics_exporter = Some(otlp_exporter);
+                    self.otlp_metrics_handles = Some(handles);
+                }
+                Err(err) => warn!("failed to start OTLP metrics exporter: {}", err),
+            }
         }
 
         // Start WebSocket updates
