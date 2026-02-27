@@ -1,6 +1,7 @@
 // 为了演示，我们实现一个简单的模拟LLM提供者
 // For demonstration, we implement a simple mock LLM provider
 use mofa_sdk::secretary::{ChatMessage, LLMProvider, ModelInfo};
+use mofa_sdk::kernel::GlobalResult;
 use std::sync::Arc;
 use tracing::info;
 
@@ -25,7 +26,7 @@ impl LLMProvider for MockLLMProvider {
         "mock-llm"
     }
 
-    async fn chat(&self, messages: Vec<ChatMessage>) -> anyhow::Result<String> {
+    async fn chat(&self, messages: Vec<ChatMessage>) -> GlobalResult<String> {
         // 模拟LLM响应，实际上这里应该调用真实的LLM API
         // Mock LLM response, in practice this should call a real LLM API
         info!("模拟LLM接收消息: {:?}", messages);
@@ -36,7 +37,7 @@ impl LLMProvider for MockLLMProvider {
         if last_message.content.contains("用户需求") {
             // 模拟需求分析的JSON响应
             // Mock requirement analysis JSON response
-            Ok(r#"{
+            return Ok(r#"{
                 "title": "用户管理系统开发",
                 "description": "开发一个包含注册、登录、权限管理功能的用户管理系统",
                 "acceptance_criteria": ["用户可以成功注册", "用户可以登录", "权限可以正确分配", "系统稳定可靠"],
@@ -77,7 +78,7 @@ impl LLMProvider for MockLLMProvider {
         } else if last_message.content.contains("分析用户需求") {
             // 模拟需求分析的JSON响应
             // Mock requirement analysis JSON response
-            Ok(r#"{
+            return Ok(r#"{
                 "core_objective": "开发一个功能完整的用户管理系统",
                 "functional_requirements": ["注册", "登录", "权限管理", "密码重置"],
                 "constraints": ["支持1000并发", "数据加密传输"],
@@ -87,7 +88,7 @@ impl LLMProvider for MockLLMProvider {
         } else {
             // 默认响应 - 对于需求澄清场景，我们也需要返回JSON格式
             // Default response - For requirement clarification scenarios, we also need to return JSON format
-            Ok(r#"{
+            return Ok(r#"{
                 "title": "默认需求",
                 "description": "默认需求描述",
                 "acceptance_criteria": ["功能按预期工作"],

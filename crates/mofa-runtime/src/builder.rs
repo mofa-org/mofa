@@ -21,6 +21,7 @@ use crate::{AgentConfig, AgentMetadata, MoFAAgent};
 #[cfg(feature = "dora")]
 use ::tracing::{debug, info};
 use mofa_kernel::AgentPlugin;
+use mofa_kernel::agent::types::error::{GlobalError, GlobalResult};
 use mofa_kernel::message::AgentEvent;
 #[cfg(feature = "dora")]
 use mofa_kernel::message::AgentMessage;
@@ -209,7 +210,7 @@ impl AgentBuilder {
     /// 使用提供的 MoFAAgent 实现构建简单运行时（非 dora 模式）
     /// Build simple runtime with provided MoFAAgent implementation (non-dora mode)
     #[cfg(not(feature = "dora"))]
-    pub async fn with_agent<A: MoFAAgent>(self, agent: A) -> anyhow::Result<SimpleAgentRuntime<A>> {
+    pub async fn with_agent<A: MoFAAgent>(self, agent: A) -> GlobalResult<SimpleAgentRuntime<A>> {
         let metadata = self.build_metadata();
         let config = self.build_config();
         let interrupt = AgentInterrupt::new();
@@ -233,7 +234,7 @@ impl AgentBuilder {
     pub async fn build_and_start<A: MoFAAgent>(
         self,
         agent: A,
-    ) -> anyhow::Result<SimpleAgentRuntime<A>> {
+    ) -> GlobalResult<SimpleAgentRuntime<A>> {
         let mut runtime = self.with_agent(agent).await?;
         runtime.start().await?;
         Ok(runtime)
@@ -484,16 +485,16 @@ impl<A: MoFAAgent> SimpleAgentRuntime<A> {
 
     /// 初始化插件
     /// Initialize plugins
-    pub async fn init_plugins(&mut self) -> anyhow::Result<()> {
+    pub async fn init_plugins(&mut self) -> GlobalResult<()> {
         for plugin in &mut self.plugins {
-            plugin.init_plugin().await?;
+            plugin.init_plugin().await.map_err(|e| GlobalError::Other(e.to_string()))?;
         }
         Ok(())
     }
 
     /// 启动运行时
     /// Start runtime
-    pub async fn start(&mut self) -> anyhow::Result<()> {
+    pub async fn start(&mut self) -> GlobalResult<()> {
         // 创建 CoreAgentContext 并初始化智能体
         // Create CoreAgentContext and initialize agent
         let context = mofa_kernel::agent::AgentContext::new(self.metadata.id.clone());
@@ -507,7 +508,7 @@ impl<A: MoFAAgent> SimpleAgentRuntime<A> {
 
     /// 处理单个事件
     /// Process single event
-    pub async fn handle_event(&mut self, event: AgentEvent) -> anyhow::Result<()> {
+    pub async fn handle_event(&mut self, event: AgentEvent) -> GlobalResult<()> {
         // 检查中断
         // Check for interruption
         if self.interrupt.check() {
@@ -539,7 +540,7 @@ impl<A: MoFAAgent> SimpleAgentRuntime<A> {
     pub async fn run_with_receiver(
         &mut self,
         mut event_rx: tokio::sync::mpsc::Receiver<AgentEvent>,
-    ) -> anyhow::Result<()> {
+    ) -> GlobalResult<()> {
         loop {
             // 检查中断
             // Check for interruption
@@ -591,7 +592,7 @@ impl<A: MoFAAgent> SimpleAgentRuntime<A> {
 
     /// 停止运行时
     /// Stop runtime
-    pub async fn stop(&mut self) -> anyhow::Result<()> {
+    pub async fn stop(&mut self) -> GlobalResult<()> {
         self.interrupt.trigger();
         self.agent.shutdown().await?;
         tracing::info!("SimpleAgentRuntime {} stopped", self.metadata.id);
@@ -668,7 +669,7 @@ impl SimpleMessageBus {
 
     /// 发送点对点消息
     /// Send point-to-point message
-    pub async fn send_to(&self, target_id: &str, event: AgentEvent) -> anyhow::Result<()> {
+    pub async fn send_to(&self, target_id: &str, event: AgentEvent) -> GlobalResult<()> {
         let senders = {
             let subs = self.subscribers.read().await;
             subs.get(target_id).cloned().unwrap_or_default()
@@ -682,7 +683,7 @@ impl SimpleMessageBus {
 
     /// 广播消息给所有智能体
     /// Broadcast message to all agents
-    pub async fn broadcast(&self, event: AgentEvent) -> anyhow::Result<()> {
+    pub async fn broadcast(&self, event: AgentEvent) -> GlobalResult<()> {
         let senders = {
             let subs = self.subscribers.read().await;
             subs.values()
@@ -698,7 +699,7 @@ impl SimpleMessageBus {
 
     /// 发布到主题
     /// Publish to topic
-    pub async fn publish(&self, topic: &str, event: AgentEvent) -> anyhow::Result<()> {
+    pub async fn publish(&self, topic: &str, event: AgentEvent) -> GlobalResult<()> {
         let agent_ids = {
             let topics = self.topic_subscribers.read().await;
             topics.get(topic).cloned().unwrap_or_default()
@@ -750,7 +751,7 @@ impl SimpleRuntime {
         metadata: AgentMetadata,
         config: AgentConfig,
         role: &str,
-    ) -> anyhow::Result<tokio::sync::mpsc::Receiver<AgentEvent>> {
+    ) -> GlobalResult<tokio::sync::mpsc::Receiver<AgentEvent>> {
         let agent_id = metadata.id.clone();
         let (tx, rx) = tokio::sync::mpsc::channel(100);
 
@@ -798,32 +799,32 @@ impl SimpleRuntime {
 
     /// 发送消息给指定智能体
     /// Send message to specific agent
-    pub async fn send_to_agent(&self, target_id: &str, event: AgentEvent) -> anyhow::Result<()> {
+    pub async fn send_to_agent(&self, target_id: &str, event: AgentEvent) -> GlobalResult<()> {
         self.message_bus.send_to(target_id, event).await
     }
 
     /// 广播消息给所有智能体
     /// Broadcast message to all agents
-    pub async fn broadcast(&self, event: AgentEvent) -> anyhow::Result<()> {
+    pub async fn broadcast(&self, event: AgentEvent) -> GlobalResult<()> {
         self.message_bus.broadcast(event).await
     }
 
     /// 发布到主题
     /// Publish to topic
-    pub async fn publish_to_topic(&self, topic: &str, event: AgentEvent) -> anyhow::Result<()> {
+    pub async fn publish_to_topic(&self, topic: &str, event: AgentEvent) -> GlobalResult<()> {
         self.message_bus.publish(topic, event).await
     }
 
     /// 订阅主题
     /// Subscribe to topic
-    pub async fn subscribe_topic(&self, agent_id: &str, topic: &str) -> anyhow::Result<()> {
+    pub async fn subscribe_topic(&self, agent_id: &str, topic: &str) -> GlobalResult<()> {
         self.message_bus.subscribe(agent_id, topic).await;
         Ok(())
     }
 
     /// 停止所有智能体
     /// Stop all agents
-    pub async fn stop_all(&self) -> anyhow::Result<()> {
+    pub async fn stop_all(&self) -> GlobalResult<()> {
         self.message_bus.broadcast(AgentEvent::Shutdown).await?;
         tracing::info!("SimpleRuntime stopped");
         Ok(())

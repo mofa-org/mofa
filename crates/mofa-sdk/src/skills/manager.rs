@@ -3,6 +3,7 @@
 
 use super::{DisclosureController, RequirementCheck, SkillMetadata};
 use std::path::{Path, PathBuf};
+use mofa_kernel::agent::types::error::{GlobalError, GlobalResult};
 
 /// Skills Manager - SDK 层统一 API
 /// Skills Manager - SDK Layer Unified API
@@ -30,14 +31,14 @@ impl SkillsManager {
     ///
     /// let manager = SkillsManager::new("./skills").unwrap();
     /// ```
-    pub fn new(skills_dir: impl AsRef<Path>) -> anyhow::Result<Self> {
+    pub fn new(skills_dir: impl AsRef<Path>) -> GlobalResult<Self> {
         let skills_dir = skills_dir.as_ref();
 
         // 不要求目录必须存在（支持空目录）
         // Directory existence not required (supports empty directories)
         let mut controller = DisclosureController::new(skills_dir);
         if skills_dir.exists() {
-            controller.scan_metadata()?;
+            controller.scan_metadata().map_err(|e| GlobalError::Other(e.to_string()))?;
         }
 
         Ok(Self { controller })
@@ -64,7 +65,7 @@ impl SkillsManager {
     ///     let manager = SkillsManager::with_search_dirs(vec![workspace_skills, builtin]).unwrap();
     /// }
     /// ```
-    pub fn with_search_dirs(search_dirs: Vec<PathBuf>) -> anyhow::Result<Self> {
+    pub fn with_search_dirs(search_dirs: Vec<PathBuf>) -> GlobalResult<Self> {
         let controller = DisclosureController::with_search_dirs(search_dirs);
         let mut manager = Self { controller };
         manager.rescan()?;
@@ -309,13 +310,13 @@ impl SkillsManager {
 
     /// 重新扫描 Skills 目录
     /// Rescan Skills directory
-    pub fn rescan(&mut self) -> anyhow::Result<usize> {
-        self.controller.scan_metadata()
+    pub fn rescan(&mut self) -> GlobalResult<usize> {
+        self.controller.scan_metadata().map_err(|e| GlobalError::Other(e.to_string()))
     }
 
     /// 重新扫描 Skills 目录（异步版本）
     /// Rescan Skills directory (Async version)
-    pub async fn rescan_async(&mut self) -> anyhow::Result<usize> {
+    pub async fn rescan_async(&mut self) -> GlobalResult<usize> {
         self.rescan()
     }
 

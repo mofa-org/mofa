@@ -13,7 +13,7 @@
 //! - Loop control logic
 
 use super::engine::{RhaiScriptEngine, ScriptContext, ScriptEngineConfig, ScriptResult};
-use anyhow::{Result, anyhow};
+use super::error::{RhaiError, RhaiResult};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -181,7 +181,7 @@ pub struct ScriptWorkflowNode {
 impl ScriptWorkflowNode {
     /// 创建脚本节点
     /// Create script node
-    pub async fn new(config: ScriptNodeConfig, engine: Arc<RhaiScriptEngine>) -> Result<Self> {
+    pub async fn new(config: ScriptNodeConfig, engine: Arc<RhaiScriptEngine>) -> RhaiResult<Self> {
         let mut node = Self {
             config,
             engine,
@@ -199,7 +199,7 @@ impl ScriptWorkflowNode {
 
     /// 编译脚本
     /// Compile script
-    async fn compile_script(&mut self) -> Result<()> {
+    async fn compile_script(&mut self) -> RhaiResult<()> {
         let source = self.get_script_source().await?;
         let script_id = format!("node_{}", self.config.id);
 
@@ -213,21 +213,21 @@ impl ScriptWorkflowNode {
 
     /// 获取脚本源代码
     /// Get script source code
-    async fn get_script_source(&self) -> Result<String> {
+    async fn get_script_source(&self) -> RhaiResult<String> {
         if let Some(ref source) = self.config.script_source {
             Ok(source.clone())
         } else if let Some(ref path) = self.config.script_path {
             tokio::fs::read_to_string(path)
                 .await
-                .map_err(|e| anyhow!("Failed to read script file: {}", e))
+                .map_err(RhaiError::from)
         } else {
-            Err(anyhow!("No script source or path specified"))
+            Err(RhaiError::Other(format!("No script source or path specified")))
         }
     }
 
     /// 执行节点
     /// Execute node
-    pub async fn execute(&self, input: serde_json::Value) -> Result<ScriptNodeResult> {
+    pub async fn execute(&self, input: serde_json::Value) -> RhaiResult<ScriptNodeResult> {
         let start_time = std::time::Instant::now();
         let mut last_error = None;
         let mut retry_count = 0;
@@ -291,7 +291,7 @@ impl ScriptWorkflowNode {
 
     /// 执行一次（不重试）
     /// Execute once (no retry)
-    async fn execute_once(&self, context: &ScriptContext) -> Result<ScriptResult> {
+    async fn execute_once(&self, context: &ScriptContext) -> RhaiResult<ScriptResult> {
         // 使用缓存的脚本或直接执行
         // Use cached script or execute directly
         if let Some(ref script_id) = self.cached_script_id {
@@ -319,11 +319,11 @@ impl ScriptWorkflowNode {
 
     /// 作为条件节点执行（返回布尔值）
     /// Execute as condition node (returns boolean)
-    pub async fn execute_as_condition(&self, input: serde_json::Value) -> Result<bool> {
+    pub async fn execute_as_condition(&self, input: serde_json::Value) -> RhaiResult<bool> {
         let result = self.execute(input).await?;
 
         if !result.success {
-            return Err(anyhow!(
+            return Err(RhaiError::ExecutionError(
                 result
                     .error
                     .unwrap_or_else(|| "Condition execution failed".into())
@@ -412,16 +412,16 @@ impl ScriptWorkflowDefinition {
 
     /// 从 YAML 文件加载
     /// Load from YAML file
-    pub async fn from_yaml(path: &str) -> Result<Self> {
+    pub async fn from_yaml(path: &str) -> RhaiResult<Self> {
         let content = tokio::fs::read_to_string(path).await?;
-        serde_yaml::from_str(&content).map_err(|e| anyhow!("Failed to parse YAML: {}", e))
+        serde_yaml::from_str(&content).map_err(RhaiError::from)
     }
 
     /// 从 JSON 文件加载
     /// Load from JSON file
-    pub async fn from_json(path: &str) -> Result<Self> {
+    pub async fn from_json(path: &str) -> RhaiResult<Self> {
         let content = tokio::fs::read_to_string(path).await?;
-        serde_json::from_str(&content).map_err(|e| anyhow!("Failed to parse JSON: {}", e))
+        serde_json::from_str(&content).map_err(RhaiError::from)
     }
 
     /// 添加节点
@@ -465,7 +465,7 @@ impl ScriptWorkflowDefinition {
 
     /// 验证工作流定义
     /// Validate workflow definition
-    pub fn validate(&self) -> Result<Vec<String>> {
+    pub fn validate(&self) -> RhaiResult<Vec<String>> {
         let mut errors = Vec::new();
 
         if self.id.is_empty() {
@@ -563,7 +563,7 @@ impl ScriptWorkflowExecutor {
     pub async fn new(
         definition: ScriptWorkflowDefinition,
         engine_config: ScriptEngineConfig,
-    ) -> Result<Self> {
+    ) -> RhaiResult<Self> {
         let engine = Arc::new(RhaiScriptEngine::new(engine_config)?);
         let mut nodes = HashMap::new();
 
@@ -591,7 +591,7 @@ impl ScriptWorkflowExecutor {
 
     /// 执行工作流
     /// Execute workflow
-    pub async fn execute(&self, input: serde_json::Value) -> Result<serde_json::Value> {
+    pub async fn execute(&self, input: serde_json::Value) -> RhaiResult<serde_json::Value> {
         let mut state = self.state.write().await;
         state.current_node = Some(self.definition.start_node.clone());
         state.variables.insert("input".to_string(), input.clone());
@@ -604,7 +604,7 @@ impl ScriptWorkflowExecutor {
             let node = self
                 .nodes
                 .get(node_id)
-                .ok_or_else(|| anyhow!("Node not found: {}", node_id))?;
+                .ok_or_else(|| RhaiError::NotFound(format!("Node not found: {}", node_id)))?;
 
             // 检查是否为结束节点
             // Check if it's an end node
@@ -615,7 +615,7 @@ impl ScriptWorkflowExecutor {
 
                 if !result.success {
                     state.error = result.error;
-                    return Err(anyhow!("Node {} execution failed", node_id));
+                    return Err(RhaiError::ExecutionError(format!("Node {} execution failed", node_id)));
                 }
 
                 // 保存节点输出
@@ -641,11 +641,11 @@ impl ScriptWorkflowExecutor {
                 let error = result.error.clone(); // Clone the error before moving it
                 state.error = error.clone();
                 let error_detail = error.unwrap_or_else(|| "unknown error".to_string());
-                return Err(anyhow!(
+                return Err(RhaiError::ExecutionError(format!(
                     "Node {} execution failed: {}",
                     node_id,
                     error_detail
-                ));
+                )));
             }
 
             // 保存节点输出
@@ -673,7 +673,7 @@ impl ScriptWorkflowExecutor {
         &self,
         current_node_id: &str,
         output: &serde_json::Value,
-    ) -> Result<Option<String>> {
+    ) -> RhaiResult<Option<String>> {
         // 查找从当前节点出发的边
         // Find edges starting from the current node
         let candidate_edges: Vec<_> = self

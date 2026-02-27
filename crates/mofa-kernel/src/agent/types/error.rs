@@ -184,12 +184,6 @@ pub type GlobalResult<T> = Result<T, GlobalError>;
 // Conversion from other error types
 // ============================================================================
 
-impl From<anyhow::Error> for GlobalError {
-    fn from(err: anyhow::Error) -> Self {
-        Self::Other(err.to_string())
-    }
-}
-
 impl From<String> for GlobalError {
     fn from(s: String) -> Self {
         Self::Other(s)

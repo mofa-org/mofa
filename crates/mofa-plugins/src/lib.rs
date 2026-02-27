@@ -25,8 +25,8 @@ pub mod tts;
 pub mod wasm_runtime;
 
 pub use mofa_kernel::{
-    AgentPlugin, PluginConfig, PluginContext, PluginEvent, PluginMetadata, PluginResult,
-    PluginState, PluginType,
+    AgentPlugin, PluginConfig, PluginContext, PluginError, PluginEvent, PluginMetadata,
+    PluginResult, PluginState, PluginType,
 };
 use serde::{Deserialize, Serialize};
 use std::any::Any;
@@ -255,7 +255,7 @@ impl LLMPlugin {
         let client = self
             .client
             .as_ref()
-            .ok_or_else(|| anyhow::anyhow!("LLM client not initialized"))?;
+            .ok_or_else(|| PluginError::InitFailed("LLM client not initialized".into()))?;
         self.call_count += 1;
         client.chat(messages).await
     }
@@ -266,7 +266,7 @@ impl LLMPlugin {
         let client = self
             .client
             .as_ref()
-            .ok_or_else(|| anyhow::anyhow!("LLM client not initialized"))?;
+            .ok_or_else(|| PluginError::InitFailed("LLM client not initialized".into()))?;
         client.embedding(text).await
     }
 }
@@ -333,7 +333,7 @@ impl AgentPlugin for LLMPlugin {
         let client = self
             .client
             .as_ref()
-            .ok_or_else(|| anyhow::anyhow!("LLM client not initialized"))?;
+            .ok_or_else(|| PluginError::InitFailed("LLM client not initialized".into()))?;
         self.call_count += 1;
         client.generate(&input).await
     }
@@ -500,7 +500,7 @@ impl ToolPlugin {
         let tool = self
             .tools
             .get(&call.name)
-            .ok_or_else(|| anyhow::anyhow!("Tool not found: {}", call.name))?;
+            .ok_or_else(|| PluginError::ExecutionFailed(format!("Tool not found: {}", call.name)))?;
 
         // 验证参数
         // Validate arguments
@@ -578,10 +578,10 @@ impl AgentPlugin for ToolPlugin {
         // 解析输入为工具调用
         // Parse input as tool call
         let call: ToolCall = serde_json::from_str(&input)
-            .map_err(|e| anyhow::anyhow!("Invalid tool call format: {}", e))?;
+            .map_err(|e| PluginError::ExecutionFailed(format!("Invalid tool call format: {}", e)))?;
         let result = self.call_tool(call).await?;
         serde_json::to_string(&result)
-            .map_err(|e| anyhow::anyhow!("Failed to serialize result: {}", e))
+            .map_err(|e| PluginError::ExecutionFailed(format!("Failed to serialize result: {}", e)))
     }
 
     fn stats(&self) -> HashMap<String, serde_json::Value> {
@@ -729,7 +729,7 @@ impl StoragePlugin {
         let backend = self
             .backend
             .as_ref()
-            .ok_or_else(|| anyhow::anyhow!("Storage backend not initialized"))?;
+            .ok_or_else(|| PluginError::InitFailed("Storage backend not initialized".into()))?;
         self.read_count += 1;
         backend.get(key).await
     }
@@ -740,7 +740,7 @@ impl StoragePlugin {
         let backend = self
             .backend
             .as_ref()
-            .ok_or_else(|| anyhow::anyhow!("Storage backend not initialized"))?;
+            .ok_or_else(|| PluginError::InitFailed("Storage backend not initialized".into()))?;
         self.write_count += 1;
         backend.set(key, value).await
     }
@@ -751,7 +751,7 @@ impl StoragePlugin {
         let backend = self
             .backend
             .as_ref()
-            .ok_or_else(|| anyhow::anyhow!("Storage backend not initialized"))?;
+            .ok_or_else(|| PluginError::InitFailed("Storage backend not initialized".into()))?;
         self.write_count += 1;
         backend.delete(key).await
     }
@@ -831,8 +831,8 @@ impl AgentPlugin for StoragePlugin {
                 let deleted = self.delete(key).await?;
                 Ok(if deleted { "1" } else { "0" }.to_string())
             }
-            _ => Err(anyhow::anyhow!(
-                "Invalid command. Use: get <key>, set <key> <value>, delete <key>"
+            _ => Err(PluginError::ExecutionFailed(
+                "Invalid command. Use: get <key>, set <key> <value>, delete <key>".into(),
             )),
         }
     }
@@ -1044,14 +1044,16 @@ impl AgentPlugin for MemoryPlugin {
             ["search", query] => {
                 let results = self.retrieve(query, 5);
                 let contents: Vec<&str> = results.iter().map(|m| m.content.as_str()).collect();
-                Ok(serde_json::to_string(&contents)?)
+                let json = serde_json::to_string(&contents)
+                    .map_err(|e| PluginError::ExecutionFailed(e.to_string()))?;
+                Ok(json)
             }
             ["count"] => Ok(self.memories.len().to_string()),
             ["clear"] => {
                 self.clear();
                 Ok("Cleared".to_string())
             }
-            _ => Err(anyhow::anyhow!("Invalid command")),
+            _ => Err(PluginError::ExecutionFailed("Invalid command".into())),
         }
     }
 
@@ -1148,7 +1150,7 @@ impl PluginManager {
         let mut plugins = self.plugins.write().await;
 
         if plugins.contains_key(&plugin_id) {
-            return Err(anyhow::anyhow!("Plugin {} already registered", plugin_id));
+            return Err(PluginError::Other(format!("Plugin {} already registered", plugin_id)));
         }
 
         let entry = PluginEntry {
@@ -1305,7 +1307,7 @@ impl PluginManager {
         let mut plugins = self.plugins.write().await;
         let entry = plugins
             .get_mut(plugin_id)
-            .ok_or_else(|| anyhow::anyhow!("Plugin {} not found", plugin_id))?;
+            .ok_or_else(|| PluginError::Other(format!("Plugin {} not found", plugin_id)))?;
         entry.plugin.execute(input).await
     }
 
