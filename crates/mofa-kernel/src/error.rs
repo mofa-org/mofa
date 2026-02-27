@@ -53,6 +53,22 @@ pub enum KernelError {
     /// An internal / untyped error described by a message string.
     #[error("{0}")]
     Internal(String),
+
+    /// A plugin sub-system error.
+    #[error("Plugin error: {0}")]
+    Plugin(#[from] crate::plugin::PluginError),
+
+    /// A bus communication error.
+    #[error("Bus error: {0}")]
+    Bus(#[from] crate::bus::BusError),
+
+    /// A connection-layer error.
+    #[error("Connection error: {0}")]
+    Connection(#[from] crate::agent::secretary::ConnectionError),
+
+    /// A secretary-layer error.
+    #[error("Secretary error: {0}")]
+    Secretary(#[from] crate::agent::secretary::SecretaryError),
 }
 
 impl From<crate::agent::types::error::GlobalError> for KernelError {
