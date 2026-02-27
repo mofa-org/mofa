@@ -6,8 +6,8 @@ authors.workspace = true
 license.workspace = true
 
 [dependencies]
-mofa-kernel = { path = "../mofa-kernel" }
-mofa-foundation = { path = "../mofa-foundation" }
+mofa-kernel = { path = "../crates/mofa-kernel" }
+mofa-foundation = { path = "../crates/mofa-foundation" }
 tokio = { workspace = true }
 async-trait = { workspace = true }
 tracing = { workspace = true }
