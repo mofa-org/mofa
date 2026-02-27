@@ -174,10 +174,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         // Lock and reload the plugin
                         let mut plugin = plugin_arc_clone.lock().await;
                         match plugin.reload().await {
-                            Ok(_) => info!("规则插件重载成功"),
-                            Ok(_) => info!("Rule plugin reloaded successfully"),
-                            Err(e) => warn!("规则插件重载失败: {}", e),
-                            Err(e) => warn!("Rule plugin reload failed: {}", e),
+                            Ok(_) => {
+                                info!("规则插件重载成功");
+                                info!("Rule plugin reloaded successfully");
+                            }
+                            Err(e) => {
+                                warn!("规则插件重载失败: {}", e);
+                                warn!("Rule plugin reload failed: {}", e);
+                            }
                         }
                     }
                 },

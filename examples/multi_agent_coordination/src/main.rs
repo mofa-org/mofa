@@ -39,6 +39,7 @@
 //! cargo run --example multi_agent_coordination -- --scenario diagnosis
 //! ```
 
+use anyhow::Result;
 use async_trait::async_trait;
 use chrono::Utc;
 use mofa_sdk::kernel::{
@@ -130,6 +131,7 @@ pub struct TaskExecutionResult {
 /// - `AgentEvent` - Event handling
 /// - 消息总线通信
 /// - Message bus communication
+#[allow(dead_code)]
 pub struct MasterAgent {
     /// Agent ID
     /// Agent ID
@@ -157,6 +159,7 @@ pub struct MasterAgent {
 impl MasterAgent {
     /// 创建新的 Master Agent
     /// Create a new Master Agent
+    #[allow(dead_code)]
     pub fn new(config: AgentConfig, llm_client: Arc<LLMClient>) -> Self {
         let capabilities = AgentCapabilities::builder()
             .tag("task_scheduling")
@@ -199,12 +202,13 @@ impl MasterAgent {
 
     /// 使用 LLM 进行智能任务分配
     /// Perform intelligent task assignment using LLM
-    async fn assign_task_with_llm(&self, task: &TaskRequest) -> Result<String, Box<dyn std::error::Error>> {
+    #[allow(dead_code)]
+    async fn assign_task_with_llm(&self, task: &TaskRequest) -> Result<String> {
         let workers_map = self.worker_states.read().await;
         let workers: Vec<_> = workers_map.iter().collect();
 
         if workers.is_empty() {
-            return Err(format!("No workers available").into());
+            return Err(anyhow::anyhow!("No workers available"));
         }
 
         // 构建 worker 列表描述
@@ -275,11 +279,12 @@ impl MasterAgent {
 
     /// 解析 LLM 返回的 worker ID
     /// Parse worker ID returned by LLM
+    #[allow(dead_code)]
     async fn parse_worker_id(
         &self,
         response: &str,
         workers: &HashMap<String, WorkerState>,
-    ) -> Result<String, Box<dyn std::error::Error>> {
+    ) -> Result<String> {
         // 尝试直接匹配
         // Try direct matching
         let trimmed = response.trim();
@@ -312,12 +317,13 @@ impl MasterAgent {
             }
         }
 
-        Err(format!("Could not parse worker ID from: {}", response).into())
+        Err(anyhow::anyhow!("Could not parse worker ID from: {}", response))
     }
 
     /// 处理任务请求事件
     /// Handle task request event
-    async fn handle_task_request(&self, task: TaskRequest) -> Result<(String, TaskRequest), Box<dyn std::error::Error>> {
+    #[allow(dead_code)]
+    async fn handle_task_request(&self, task: TaskRequest) -> Result<(String, TaskRequest)> {
         // 使用 LLM 分配任务
         // Allocate task using LLM
         let worker_id = self.assign_task_with_llm(&task).await?;
@@ -352,6 +358,7 @@ impl MasterAgent {
 
     /// 处理任务完成事件
     /// Handle task completion event
+    #[allow(dead_code)]
     async fn handle_task_completion(&self, worker_id: String, task_id: String) {
         // 减少 worker 负载
         // Decrease worker load
@@ -517,7 +524,7 @@ impl WorkerAgent {
 
     /// 处理任务
     /// Process Task
-    async fn process_task(&mut self, task: &TaskRequest) -> Result<TaskExecutionResult, Box<dyn std::error::Error>> {
+    async fn process_task(&mut self, task: &TaskRequest) -> Result<TaskExecutionResult> {
         let start_time = std::time::Instant::now();
         self.current_task = Some(task.task_id.clone());
 
@@ -647,7 +654,7 @@ async fn scenario_code_review(
     master: &mut MasterAgent,
     _workers: &mut Vec<WorkerAgent>,
     runtime: &SimpleRuntime,
-) -> Result<(), Box<dyn std::error::Error>> {
+) -> Result<()> {
     info!("\n{}", "=".repeat(70));
     info!("场景 1: 代码审查协同 (基于消息总线通信)");
     // Scenario 1: Code Review Collaboration (Based on message bus communication)
@@ -708,7 +715,7 @@ async fn scenario_doc_generation(
     _master: &mut MasterAgent,
     _workers: &mut Vec<WorkerAgent>,
     runtime: &SimpleRuntime,
-) -> Result<(), Box<dyn std::error::Error>> {
+) -> Result<()> {
     info!("\n{}", "=".repeat(70));
     info!("场景 2: 文档生成 (使用 AgentCoordinator 协调)");
     // Scenario 2: Document Generation (Coordinated by AgentCoordinator)
@@ -752,7 +759,7 @@ async fn scenario_diagnosis(
     _master: &mut MasterAgent,
     _workers: &mut Vec<WorkerAgent>,
     runtime: &SimpleRuntime,
-) -> Result<(), Box<dyn std::error::Error>> {
+) -> Result<()> {
     info!("\n{}", "=".repeat(70));
     info!("场景 3: 问题诊断 (并行处理)");
     // Scenario 3: Problem Diagnosis (Parallel Processing)
@@ -788,7 +795,7 @@ Panic: called `Result::unwrap()` on an `Err` value: ParseIntError { kind: Invali
 // ============================================================================
 
 #[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
+async fn main() -> Result<()> {
     // 初始化日志
     // Initialize logging
     tracing_subscriber::fmt()
