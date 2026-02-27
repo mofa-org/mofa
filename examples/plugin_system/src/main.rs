@@ -23,8 +23,9 @@ use mofa_sdk::plugins::PluginPriority;
 use mofa_sdk::plugins::{
     AgentPlugin, LLMPlugin, LLMPluginConfig, MemoryPlugin, MemoryStorage, PluginContext,
     PluginManager, PluginMetadata, PluginResult, PluginState, PluginType, StoragePlugin,
-    ToolDefinition, ToolExecutor, ToolPlugin,PluginError,
+    ToolDefinition, ToolExecutor, ToolPlugin,
 };
+use mofa_sdk::kernel::plugin::PluginError;
 use std::any::Any;
 use std::collections::HashMap;
 use tracing::{info, warn};
