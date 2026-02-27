@@ -22,6 +22,8 @@ pub mod builder;
 pub mod config;
 pub mod interrupt;
 pub mod runner;
+pub mod retry;
+pub mod fallback;
 
 // Dora adapter module (only compiled when dora feature is enabled)
 #[cfg(feature = "dora")]

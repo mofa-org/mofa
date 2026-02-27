@@ -511,17 +511,9 @@ impl LLMAgent {
 
     /// Get structured output info (placeholder until agent tracks last output)
     pub fn get_last_output(&self) -> Result<AgentOutputInfo, MoFaError> {
-        // Return a default output since the LLM agent doesn't currently
-        // track structured AgentOutput. This will be enhanced when the
-        // agent execution pipeline exposes richer output data.
-        Ok(AgentOutputInfo {
-            content: String::new(),
-            content_type: "empty".to_string(),
-            tools_used: Vec::new(),
-            duration_ms: 0,
-            token_usage: None,
-            metadata_json: "{}".to_string(),
-        })
+        Err(MoFaError::RuntimeError(
+            "get_last_output is not yet supported: LLMAgent does not persist structured output in this API".to_string(),
+        ))
     }
 }
 
@@ -1004,7 +996,7 @@ impl ToolRegistry {
 
     /// Register a foreign-language tool via callback
     pub fn register_tool(&self, tool: Box<dyn FfiToolCallback>) -> Result<(), MoFaError> {
-        use mofa_kernel::agent::components::tool::{ToolRegistry as _, ToolExt};
+        use mofa_kernel::agent::components::tool::{ToolExt, ToolRegistry as _};
         let adapter = CallbackToolAdapter::new(tool);
         let tool_arc = adapter.into_dynamic();
         self.inner
@@ -1093,5 +1085,39 @@ impl ToolRegistry {
                 error: Some(e.to_string()),
             }),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn get_last_output_returns_explicit_runtime_error() {
+        let config = LLMConfig {
+            provider: LLMProviderType::Ollama,
+            model: Some("llama2".to_string()),
+            api_key: None,
+            base_url: None,
+            deployment: None,
+            temperature: Some(0.2),
+            max_tokens: Some(128),
+            system_prompt: Some("You are a test agent".to_string()),
+        };
+
+        let agent = LLMAgent::from_config(
+            config,
+            "ffi-test-agent".to_string(),
+            "FFI Test Agent".to_string(),
+        )
+        .expect("ollama config should build without network calls");
+
+        let err = agent
+            .get_last_output()
+            .expect_err("get_last_output should return explicit unsupported error");
+
+        let msg = err.to_string();
+        assert!(msg.contains("Runtime error:"));
+        assert!(msg.contains("get_last_output is not yet supported"));
     }
 }

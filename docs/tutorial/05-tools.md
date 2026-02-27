@@ -109,8 +109,8 @@ Write `src/main.rs`:
 
 ```rust
 use async_trait::async_trait;
-use mofa_sdk::kernel::{
-    AgentContext, Tool, ToolInput, ToolResult, ToolMetadata, LLMTool,
+use mofa_sdk::agent::{
+    AgentContext, Tool, ToolInput, ToolResult, LLMTool,
 };
 use std::sync::Arc;
 use serde_json::json;
