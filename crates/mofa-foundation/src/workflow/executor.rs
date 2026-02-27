@@ -680,13 +680,11 @@ impl WorkflowExecutor {
     ) -> Result<WorkflowValue, String> {
         let mut results = HashMap::new();
         let mut errors = Vec::new();
+        let semaphore = Arc::clone(&self.semaphore);
 
         // 执行各分支（使用 tokio::task::JoinSet concurrency）
         // Execute branches concurrently using tokio::task::JoinSet
         tracing::debug!("Spawning {} parallel branches", branches.len());
-
-        // Optional limit on concurrent parallel tasks to prevent resource exhaustion
-        // const MAX_PARALLEL_BRANCHES: usize = 100;
 
         let mut join_set: tokio::task::JoinSet<Result<(String, WorkflowValue), String>> =
             tokio::task::JoinSet::new();
@@ -695,9 +693,14 @@ impl WorkflowExecutor {
             let b_id = branch_id.clone();
             let ctx_clone = ctx.clone();
             let node_clone = graph.get_node(&b_id).cloned();
+            let semaphore = Arc::clone(&semaphore);
 
             join_set.spawn(async move {
                 let start_time = std::time::Instant::now();
+                let _permit = semaphore
+                    .acquire_owned()
+                    .await
+                    .map_err(|_| "parallel execution semaphore closed".to_string())?;
                 if let Some(node) = node_clone {
                     if ctx_clone.get_node_status(&b_id).await == Some(NodeStatus::Completed) {
                         if let Some(output) = ctx_clone.get_node_output(&b_id).await {
@@ -944,6 +947,7 @@ impl WorkflowExecutor {
         };
 
         let ctx_ref = &ctx;
+        let semaphore = Arc::clone(&self.semaphore);
 
         // 按层次执行（同一层次的节点可以并发执行）
         // Execute by layer (nodes in same layer execute concurrently)
@@ -955,6 +959,7 @@ impl WorkflowExecutor {
                 let n_id = node_id.clone();
                 let ctx_clone = ctx_ref.clone();
                 let node_clone = graph.get_node(&n_id).cloned();
+                let semaphore = Arc::clone(&semaphore);
                 let predecessors: Vec<String> = graph
                     .get_predecessors(&n_id)
                     .into_iter()
@@ -966,6 +971,24 @@ impl WorkflowExecutor {
                         .duration_since(std::time::UNIX_EPOCH)
                         .unwrap_or_default()
                         .as_millis() as u64;
+                    let _permit = match semaphore.acquire_owned().await {
+                        Ok(permit) => permit,
+                        Err(e) => {
+                            let result = NodeResult::failed(
+                                &n_id,
+                                &format!("Parallel semaphore closed: {}", e),
+                                0,
+                            );
+                            let record_entry = NodeExecutionRecord {
+                                node_id: n_id,
+                                started_at: node_start_time,
+                                ended_at: node_start_time,
+                                status: result.status.clone(),
+                                retry_count: result.retry_count,
+                            };
+                            return (result, record_entry);
+                        }
+                    };
 
                     let result = if let Some(node) = node_clone {
                         if ctx_clone.get_node_status(&n_id).await == Some(NodeStatus::Completed) {
@@ -1086,6 +1109,7 @@ impl WorkflowExecutor {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use tokio::time::{Duration, Instant, sleep};
 
     #[tokio::test]
     async fn test_simple_workflow_execution() {
@@ -1347,5 +1371,124 @@ mod tests {
             Some("result_from_b"),
             "Parallel node output missing branch B"
         );
+    }
+
+    #[tokio::test]
+    async fn test_parallel_branches_execute_concurrently() {
+        let executor = WorkflowExecutor::new(ExecutorConfig::default());
+        let mut graph = WorkflowGraph::new("parallel_timing_wf", "Parallel Timing Workflow");
+
+        graph.add_node(WorkflowNode::start("start"));
+        graph.add_node(WorkflowNode::parallel(
+            "parallel_split",
+            "Split execution",
+            vec!["branch_a", "branch_b"],
+        ));
+        graph.add_node(WorkflowNode::task(
+            "branch_a",
+            "Branch A",
+            |_ctx, _input| async move {
+                sleep(Duration::from_millis(300)).await;
+                Ok(WorkflowValue::String("a_done".to_string()))
+            },
+        ));
+        graph.add_node(WorkflowNode::task(
+            "branch_b",
+            "Branch B",
+            |_ctx, _input| async move {
+                sleep(Duration::from_millis(300)).await;
+                Ok(WorkflowValue::String("b_done".to_string()))
+            },
+        ));
+        graph.add_node(WorkflowNode::end("end"));
+
+        graph.connect("start", "parallel_split");
+        graph.connect("parallel_split", "branch_a");
+        graph.connect("parallel_split", "branch_b");
+        graph.connect("branch_a", "end");
+        graph.connect("branch_b", "end");
+
+        let started = Instant::now();
+        let result = executor
+            .execute(&graph, WorkflowValue::Null)
+            .await
+            .expect("Workflow execution failed");
+        let elapsed = started.elapsed();
+
+        assert!(matches!(result.status, WorkflowStatus::Completed));
+        assert!(
+            elapsed < Duration::from_millis(500),
+            "Expected parallel execution under 500ms, got {:?}",
+            elapsed
+        );
+    }
+
+    #[tokio::test]
+    async fn test_parallel_branch_input_isolation() {
+        let executor = WorkflowExecutor::new(ExecutorConfig::default());
+        let mut graph =
+            WorkflowGraph::new("parallel_input_wf", "Parallel Input Isolation Workflow");
+
+        graph.add_node(WorkflowNode::start("start"));
+        graph.add_node(WorkflowNode::parallel(
+            "parallel_split",
+            "Split execution",
+            vec!["branch_a", "branch_b"],
+        ));
+
+        graph.add_node(WorkflowNode::task(
+            "branch_a",
+            "Branch A",
+            |_ctx, input| async move {
+                let mut map = input.as_map().cloned().unwrap_or_default();
+                map.insert("branch".to_string(), WorkflowValue::String("a".to_string()));
+                Ok(WorkflowValue::Map(map))
+            },
+        ));
+        graph.add_node(WorkflowNode::task(
+            "branch_b",
+            "Branch B",
+            |_ctx, input| async move { Ok(input) },
+        ));
+        graph.add_node(WorkflowNode::end("end"));
+
+        graph.connect("start", "parallel_split");
+        graph.connect("parallel_split", "branch_a");
+        graph.connect("parallel_split", "branch_b");
+        graph.connect("branch_a", "end");
+        graph.connect("branch_b", "end");
+
+        let mut input = HashMap::new();
+        input.insert("seed".to_string(), WorkflowValue::Int(7));
+
+        let result = executor
+            .execute(&graph, WorkflowValue::Map(input))
+            .await
+            .expect("Workflow execution failed");
+
+        let split_map = result
+            .outputs
+            .get("parallel_split")
+            .and_then(|v| v.as_map())
+            .cloned()
+            .expect("parallel_split output must be map");
+
+        let branch_a = split_map
+            .get("branch_a")
+            .and_then(|v| v.as_map())
+            .cloned()
+            .expect("branch_a output must be map");
+        let branch_b = split_map
+            .get("branch_b")
+            .and_then(|v| v.as_map())
+            .cloned()
+            .expect("branch_b output must be map");
+
+        assert_eq!(branch_a.get("branch").and_then(|v| v.as_str()), Some("a"));
+        assert!(
+            !branch_b.contains_key("branch"),
+            "branch_b should not observe branch_a input mutation"
+        );
+        assert_eq!(branch_b.get("seed").and_then(|v| v.as_i64()), Some(7));
     }
 }
