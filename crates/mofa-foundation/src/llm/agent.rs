@@ -602,7 +602,10 @@ impl LLMAgent {
             let sess_store_clone = sess_store.clone();
 
             let session_uuid = uuid::Uuid::parse_str(&sid).unwrap_or_else(|_| {
-                tracing::warn!("⚠️ 无效的 session_id 格式 '{}', 将生成新的 UUID", sid);
+                tracing::warn!(
+                    "⚠️ Invalid session_id format '{}', generating a new UUID",
+                    sid
+                );
                 // ⚠️ Invalid session_id format '{}', will generate new UUID
                 uuid::Uuid::now_v7()
             });
@@ -623,7 +626,7 @@ impl LLMAgent {
             {
                 Ok(loaded_session) => {
                     tracing::info!(
-                        "✅ 从数据库加载会话: {} ({} 条消息)",
+                        "✅ Session loaded from database: {} ({} messages)",
                         // ✅ Session loaded from database: {} ({} messages)
                         sid,
                         loaded_session.messages().len()
@@ -633,7 +636,11 @@ impl LLMAgent {
                 Err(e) => {
                     // 会话不存在，创建新会话（使用用户指定的ID和从persistence获取的user_id/agent_id）
                     // Session not found; create new session (using specified ID and user_id/agent_id from persistence)
-                    tracing::info!("📝 创建新会话并持久化: {} (数据库中不存在: {})", sid, e);
+                    tracing::info!(
+                        "📝 Creating new session and persisting: {} (not found in DB: {})",
+                        sid,
+                        e
+                    );
                     // 📝 Creating new session and persisting: {} (doesn't exist in DB: {})
 
                     // Clone stores again for the fallback case
@@ -661,7 +668,10 @@ impl LLMAgent {
                             new_session
                         }
                         Err(persist_err) => {
-                            tracing::error!("❌ 持久化会话失败: {}, 降级为内存会话", persist_err);
+                            tracing::error!(
+                                "❌ Failed to persist session: {}, falling back to in-memory session",
+                                persist_err
+                            );
                             // ❌ Persisting session failed: {}, falling back to in-memory session
                             // 降级：如果持久化失败，创建内存会话
                             // Fallback: If persistence fails, create in-memory session
