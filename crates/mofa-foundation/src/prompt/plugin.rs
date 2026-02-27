@@ -141,10 +141,12 @@ impl PromptTemplatePlugin for RhaiScriptPromptPlugin {
         }
 
         // Read all .rhai files from the directory
-        let entries = fs::read_dir(&self.script_path)?;
+        let entries = fs::read_dir(&self.script_path)
+            .map_err(|e| mofa_kernel::plugin::PluginError::Other(e.to_string()))?;
 
         for entry in entries {
-            let entry = entry?;
+            let entry = entry
+                .map_err(|e| mofa_kernel::plugin::PluginError::Other(e.to_string()))?;
             let path = entry.path();
 
             // Process only Rhai files
@@ -152,7 +154,8 @@ impl PromptTemplatePlugin for RhaiScriptPromptPlugin {
                 tracing::info!("Loading prompt template from: {:?}", path);
 
                 // Read the script content
-                let script = fs::read_to_string(&path)?;
+                let script = fs::read_to_string(&path)
+                    .map_err(|e| mofa_kernel::plugin::PluginError::Other(e.to_string()))?;
 
                 // Create a Rhai engine
                 let engine = Engine::new();
@@ -262,21 +265,24 @@ impl mofa_kernel::plugin::AgentPlugin for RhaiScriptPromptPlugin {
         if input.starts_with("set_scenario:") {
             let scenario = input
                 .strip_prefix("set_scenario:")
-                .ok_or_else(|| anyhow::anyhow!("Invalid scenario"))?;
+                .ok_or_else(|| mofa_kernel::plugin::PluginError::ExecutionFailed("Invalid scenario".into()))?;
             self.set_active_scenario(scenario).await;
             Ok(format!("Successfully switched to scenario: {}", scenario))
         } else if input.starts_with("get_template:") {
             let scenario = input
                 .strip_prefix("get_template:")
-                .ok_or_else(|| anyhow::anyhow!("Invalid scenario"))?;
+                .ok_or_else(|| mofa_kernel::plugin::PluginError::ExecutionFailed("Invalid scenario".into()))?;
             if let Some(template) = self.get_prompt_template(scenario).await {
-                Ok(serde_json::to_string(&template)?)
+                Ok(serde_json::to_string(&template)
+                    .map_err(|e| mofa_kernel::plugin::PluginError::ExecutionFailed(e.to_string()))?)
             } else {
                 Ok(format!("Template not found: {}", scenario))
             }
         } else if input == "list_scenarios" {
             let scenarios = self.get_available_scenarios().await;
-            Ok(serde_json::to_string(&scenarios)?)
+            let scenarios_json = serde_json::to_string(&scenarios)
+                .map_err(|e| mofa_kernel::plugin::PluginError::ExecutionFailed(e.to_string()))?;
+            Ok(scenarios_json)
         } else if input == "refresh_templates" {
             self.refresh_templates().await?;
             Ok("Successfully refreshed templates".to_string())

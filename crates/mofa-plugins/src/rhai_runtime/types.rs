@@ -2,7 +2,6 @@
 //!
 //! Type definitions for Rhai runtime plugins
 
-use anyhow::Result;
 use rhai::Dynamic;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -70,7 +69,7 @@ impl PluginMetadata {
     }
 
     /// Load metadata from Rhai global variables
-    pub fn from_rhai_vars(_vars: &HashMap<String, Dynamic>) -> Result<Self> {
+    pub fn from_rhai_vars(_vars: &HashMap<String, Dynamic>) -> RhaiPluginResult<Self> {
         // Simplified for now - will implement properly later
         Ok(Self::default())
     }
@@ -113,7 +112,13 @@ pub enum RhaiPluginError {
 
     /// Other error
     #[error("Other: {0}")]
-    Other(#[from] anyhow::Error),
+    Other(String),
+}
+
+impl From<mofa_extra::rhai::RhaiError> for RhaiPluginError {
+    fn from(err: mofa_extra::rhai::RhaiError) -> Self {
+        RhaiPluginError::RhaiError(err.to_string())
+    }
 }
 
 /// Rhai plugin result type

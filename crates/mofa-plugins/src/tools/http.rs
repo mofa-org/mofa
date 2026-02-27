@@ -142,14 +142,14 @@ impl ToolExecutor for HttpRequestTool {
         let method = arguments["method"].as_str().unwrap_or("GET");
         let url = arguments["url"]
             .as_str()
-            .ok_or_else(|| anyhow::anyhow!("URL is required"))?;
+            .ok_or_else(|| mofa_kernel::plugin::PluginError::ExecutionFailed(format!("URL is required")))?;
 
         // Validate URL to prevent SSRF attacks
         if !Self::is_url_allowed(url) {
-            return Err(anyhow::anyhow!(
+            return Err(mofa_kernel::plugin::PluginError::ExecutionFailed(format!(
                 "Access denied: URL '{}' targets a blocked address (private/internal network or disallowed scheme)",
                 url
-            ));
+            )));
         }
 
         let mut request = match method {
@@ -157,7 +157,7 @@ impl ToolExecutor for HttpRequestTool {
             "POST" => self.client.post(url),
             "PUT" => self.client.put(url),
             "DELETE" => self.client.delete(url),
-            _ => return Err(anyhow::anyhow!("Unsupported HTTP method: {}", method)),
+            _ => return Err(mofa_kernel::plugin::PluginError::ExecutionFailed(format!("Unsupported HTTP method: {}", method))),
         };
 
         // Add headers if provided
@@ -174,7 +174,8 @@ impl ToolExecutor for HttpRequestTool {
             request = request.body(body.to_string());
         }
 
-        let response = request.send().await?;
+        let response = request.send().await
+            .map_err(|e| mofa_kernel::plugin::PluginError::ExecutionFailed(e.to_string()))?;
         let status = response.status().as_u16();
         let headers: std::collections::HashMap<String, String> = response
             .headers()
@@ -182,7 +183,8 @@ impl ToolExecutor for HttpRequestTool {
             .map(|(k, v)| (k.to_string(), v.to_str().unwrap_or("").to_string()))
             .collect();
 
-        let body = response.text().await?;
+        let body = response.text().await
+            .map_err(|e| mofa_kernel::plugin::PluginError::ExecutionFailed(e.to_string()))?;
 
         // Truncate body if too long
         let truncated_body = if body.len() > 5000 {

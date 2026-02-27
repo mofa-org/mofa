@@ -16,7 +16,7 @@ use std::pin::Pin;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use tokio::task::JoinSet;
-use tracing::{debug, info, warn};
+use tracing::{Instrument, debug, info, warn};
 
 /// Type alias for node ID
 pub type NodeId = String;
@@ -525,6 +525,7 @@ impl<S: GraphState + 'static> CompiledGraph<S, serde_json::Value> for CompiledGr
         let (tx, rx) = tokio::sync::mpsc::channel(100);
 
         // Spawn execution task
+        let stream_span = tracing::info_span!("state_graph.stream");
         tokio::spawn(async move {
             let mut state = input;
             let mut current_nodes = vec![entry_point];
@@ -748,7 +749,7 @@ impl<S: GraphState + 'static> CompiledGraph<S, serde_json::Value> for CompiledGr
 
             // Send final event
             let _ = tx.send(Ok(StreamEvent::End { final_state: state })).await;
-        });
+        }.instrument(stream_span));
 
         // Convert receiver to stream
         Box::pin(tokio_stream::wrappers::ReceiverStream::new(rx))
