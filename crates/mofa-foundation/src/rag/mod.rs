@@ -14,7 +14,7 @@ pub mod vector_store;
 pub mod qdrant_store;
 
 pub use chunker::{ChunkConfig, TextChunker};
-pub use pipeline_adapters::{IdentityReranker, InMemoryRetriever, SimpleGenerator};
+pub use pipeline_adapters::{InMemoryRetriever, SimpleGenerator};
 pub use default_reranker::IdentityReranker;
 pub use similarity::compute_similarity;
 pub use streaming_generator::PassthroughStreamingGenerator;
@@ -25,8 +25,7 @@ pub use qdrant_store::{QdrantConfig, QdrantVectorStore};
 
 // Re-export kernel types for convenience
 pub use mofa_kernel::rag::{
-    Document, DocumentChunk, GenerateInput, Generator, RagPipeline, RagPipelineOutput, Reranker,
-    Retriever, ScoredDocument, SearchResult, SimilarityMetric, VectorStore,
-    Document, DocumentChunk, GenerateInput, Generator, GeneratorChunk, RagPipeline, RagPipelineOutput,
-    Reranker, Retriever, ScoredDocument, SearchResult, SimilarityMetric, VectorStore,
+    Document, DocumentChunk, GenerateInput, Generator, GeneratorChunk, RagPipeline,
+    RagPipelineOutput, Reranker, Retriever, ScoredDocument, SearchResult, SimilarityMetric,
+    VectorStore,
 };
