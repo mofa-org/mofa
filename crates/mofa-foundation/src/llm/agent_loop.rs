@@ -22,6 +22,7 @@ use std::path::Path;
 /// Type alias for tool handler function in SimpleToolExecutor
 pub type SimpleToolHandler = Box<dyn Fn(&str) -> GlobalResult<String> + Send + Sync>;
 use std::sync::Arc;
+use tracing::Instrument;
 
 /// Configuration for the agent loop
 #[derive(Debug, Clone)]
@@ -292,7 +293,8 @@ impl AgentLoop {
 
     /// Execute a tool call
     async fn execute_tool(&self, name: &str, arguments: &str) -> LLMResult<String> {
-        self.tools.execute(name, arguments).await
+        let span = tracing::info_span!("agent_loop.tool_call", tool = %name);
+        self.tools.execute(name, arguments).instrument(span).await
     }
 
     /// Build a vision message with images

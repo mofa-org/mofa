@@ -18,6 +18,7 @@
 
 // Rhai scripting
 use mofa_sdk::rhai::{RhaiScriptEngine, ScriptContext, ScriptEngineConfig};
+use mofa_sdk::kernel::plugin::PluginError;
 use mofa_sdk::plugins::PluginPriority;
 use mofa_sdk::plugins::{
     AgentPlugin, LLMPlugin, LLMPluginConfig, MemoryPlugin, MemoryStorage, PluginContext,
@@ -78,11 +79,16 @@ impl ToolExecutor for CalculatorTool {
             "multiply" => a * b,
             "divide" => {
                 if b == 0.0 {
-                    return Err(PluginError::ExecutionFailed("Division by zero".to_string()));
+                    return Err(PluginError::ExecutionFailed("Division by zero".into()));
                 }
                 a / b
             }
-            _ => return Err(PluginError::ExecutionFailed(format!("Unknown operation: {}", op))),
+            _ => {
+                return Err(PluginError::ExecutionFailed(format!(
+                    "Unknown operation: {}",
+                    op
+                )))
+            }
         };
 
         Ok(serde_json::json!({
@@ -251,7 +257,9 @@ impl AgentPlugin for MonitorPlugin {
             ["list"] => {
                 Ok(serde_json::to_string(&self.all_metrics())?)
             }
-            _ => Err(PluginError::ExecutionFailed("Invalid command. Use: record <name> <value>, get <name>, list".to_string())),
+            _ => Err(PluginError::ExecutionFailed(
+                "Invalid command. Use: record <name> <value>, get <name>, list".into(),
+            )),
         }
     }
 
