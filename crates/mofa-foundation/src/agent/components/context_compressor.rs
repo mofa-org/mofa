@@ -66,7 +66,12 @@ pub struct SlidingWindowCompressor {
 impl SlidingWindowCompressor {
     /// Create a new compressor that retains at most `window_size` non-system
     /// messages after the system prompt.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `window_size` is 0.
     pub fn new(window_size: usize) -> Self {
+        assert!(window_size > 0, "window_size must be greater than 0");
         Self { window_size }
     }
 }
@@ -128,27 +133,68 @@ impl ContextCompressor for SlidingWindowCompressor {
 ///
 /// ```rust,ignore
 /// let compressor = SummarizingCompressor::new(llm.clone())
-///     .with_keep_recent(8);
+///     .with_keep_recent(8)
+///     .with_model("gpt-4o-mini");  // Optional: override model
 /// let trimmed = compressor.compress(messages, 4096).await?;
 /// ```
 pub struct SummarizingCompressor {
     llm: Arc<dyn crate::llm::provider::LLMProvider>,
     keep_recent: usize,
+    /// Optional model override. If None, uses the provider's default_model().
+    model: Option<String>,
+    /// Optional custom summary prompt template (reserved for future use).
+    summary_prompt_template: Option<String>,
 }
 
 impl SummarizingCompressor {
     /// Create a new compressor using `llm` for summarisation.
     /// Defaults to keeping the 10 most-recent non-system messages intact.
+    ///
+    /// By default, uses the model configured in the LLM provider.
+    /// Use `.with_model()` to override.
     pub fn new(llm: Arc<dyn crate::llm::provider::LLMProvider>) -> Self {
         Self {
             llm,
             keep_recent: 10,
+            model: None,
+            summary_prompt_template: None,
         }
     }
 
     /// Override how many recent messages to preserve without summarisation.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `n` is 0.
     pub fn with_keep_recent(mut self, n: usize) -> Self {
+        assert!(n > 0, "keep_recent must be greater than 0");
         self.keep_recent = n;
+        self
+    }
+
+    /// Override the model used for summarisation.
+    ///
+    /// By default, the compressor uses the model configured in the LLM
+    /// provider. Use this method to explicitly specify a different model,
+    /// e.g., to use a cheaper model for summarisation.
+    ///
+    /// # Example
+    ///
+    /// ```rust,ignore
+    /// let compressor = SummarizingCompressor::new(llm)
+    ///     .with_model("gpt-4o-mini");  // Use cheaper model for summaries
+    /// ```
+    pub fn with_model(mut self, model: impl Into<String>) -> Self {
+        self.model = Some(model.into());
+        self
+    }
+
+    /// Set a custom summary prompt template.
+    ///
+    /// This allows customization of how summaries are generated.
+    /// Reserved for future implementation.
+    pub fn with_summary_prompt(mut self, template: String) -> Self {
+        self.summary_prompt_template = Some(template);
         self
     }
 
@@ -202,7 +248,14 @@ impl ContextCompressor for SummarizingCompressor {
         // Ask the LLM for a summary of the older turns using the foundation's
         // ChatCompletionRequest which is what the actual providers understand.
         let prompt = Self::build_summary_prompt(to_summarise);
-        let summary_request = crate::llm::types::ChatCompletionRequest::new("gpt-4o-mini")
+        
+        // Use the configured model override, or fall back to the provider's default.
+        let model = self
+            .model
+            .as_deref()
+            .unwrap_or_else(|| self.llm.default_model());
+        
+        let summary_request = crate::llm::types::ChatCompletionRequest::new(model)
             .user(prompt)
             .temperature(0.3)
             .max_tokens(512);
