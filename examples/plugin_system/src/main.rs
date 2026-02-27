@@ -17,7 +17,6 @@
 //! - Custom plugin development
 
 // Rhai scripting
-use mofa_sdk::kernel::plugin::PluginError;
 use mofa_sdk::rhai::{RhaiScriptEngine, ScriptContext, ScriptEngineConfig};
 use mofa_sdk::kernel::plugin::PluginError;
 use mofa_sdk::plugins::PluginPriority;
