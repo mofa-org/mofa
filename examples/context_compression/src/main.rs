@@ -24,7 +24,6 @@
 //! cargo run -p context_compression -- summarize
 //! ```
 
-use anyhow::Result;
 use mofa_foundation::agent::{
     AgentExecutorConfig, ContextCompressor, SlidingWindowCompressor, SummarizingCompressor,
     TokenCounter,
@@ -100,7 +99,7 @@ fn demo_token_counter() {
 // Demo 2: Sliding window compressor
 // ============================================================================
 
-async fn demo_sliding_window() -> Result<()> {
+async fn demo_sliding_window() -> Result<(), Box<dyn std::error::Error>> {
     println!("\n========================================");
     println!("  Demo 2: Sliding Window Compressor");
     println!("========================================\n");
@@ -144,7 +143,7 @@ async fn demo_sliding_window() -> Result<()> {
 // Demo 3: AgentExecutor with compressor attached
 // ============================================================================
 
-async fn demo_agent_executor() -> Result<()> {
+async fn demo_agent_executor() -> Result<(), Box<dyn std::error::Error>> {
     println!("\n========================================");
     println!("  Demo 3: AgentExecutor Integration");
     println!("========================================\n");
@@ -197,7 +196,7 @@ async fn demo_summarizing_compressor() -> Result<()> {
     println!("========================================\n");
 
     let api_key = match std::env::var("OPENAI_API_KEY") {
-        Ok(k) if !k.is_empty() => k,
+        Ok(k) if !k.is_empty() =, Box<dyn std::error::Error>> k,
         _ => {
             println!("OPENAI_API_KEY not set. Skipping live summarization demo.");
             println!(
@@ -256,7 +255,7 @@ async fn demo_summarizing_compressor() -> Result<()> {
 // ============================================================================
 
 #[tokio::main]
-async fn main() -> Result<()> {
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
     tracing_subscriber::fmt()
         .with_env_filter(
             tracing_subscriber::EnvFilter::try_from_default_env()

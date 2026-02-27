@@ -51,7 +51,7 @@ fn create_workflow_llm(name: &str, system_prompt: &str) -> Arc<LLMAgent> {
 ///
 /// 这是一个辅助函数，用于创建带有工具的 ReAct Agent。
 /// This is a helper function used to create a ReAct Agent with tools.
-async fn create_react_agent(name: &str, system_prompt: &str) -> Result<Arc<ReActAgent>, Box<dyn std::error::Error>> {
+async fn create_react_agent(name: &str, system_prompt: &str) -> Result<Arc<ReActAgent, Box<dyn std::error::Error>>, Box<dyn std::error::Error>> {
     let llm = create_workflow_llm(name, system_prompt);
     let tools = all_builtin_tools();
 

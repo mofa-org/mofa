@@ -3,7 +3,6 @@
 //! Run with:
 //! `cargo run --manifest-path examples/Cargo.toml -p message_graph_executor_runtime`
 
-use anyhow::{Context, Result};
 use mofa_kernel::agent::{AgentCapabilities, AgentMetadata, AgentState};
 use mofa_kernel::bus::{AgentBus, CommunicationMode};
 use mofa_kernel::message::AgentMessage;
@@ -25,16 +24,16 @@ fn metadata(id: &str) -> AgentMetadata {
     }
 }
 
-fn decode_event_envelope(message: AgentMessage) -> Result<MessageEnvelope> {
+fn decode_event_envelope(message: AgentMessage) -> Result<MessageEnvelope, Box<dyn std::error::Error>> {
     match message {
         AgentMessage::Event(mofa_kernel::message::AgentEvent::Custom(_, payload)) => {
-            serde_json::from_slice(&payload).context("failed to decode envelope from event payload")
+            serde_json::from_slice(&payload).map_err(|e| format!("failed to decode envelope from event payload: {}", e).into())
         }
-        other => anyhow::bail!("expected event/custom payload, got {other:?}"),
+        other => return Err(format!("expected event/custom payload, got {other:?}").into()),
     }
 }
 
-fn build_graph() -> Result<mofa_kernel::CompiledMessageGraph> {
+fn build_graph() -> Result<mofa_kernel::CompiledMessageGraph, Box<dyn std::error::Error>> {
     let mut graph = MessageGraph::new("orders-runtime").with_max_hops(8);
 
     graph.add_node(
@@ -98,7 +97,7 @@ fn build_graph() -> Result<mofa_kernel::CompiledMessageGraph> {
 }
 
 #[tokio::main]
-async fn main() -> Result<()> {
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let bus = Arc::new(AgentBus::new());
     let graph = build_graph()?;
     let executor = MessageGraphExecutor::new(graph, bus.clone())?;
@@ -151,10 +150,10 @@ async fn main() -> Result<()> {
 
     let fraud_msg = timeout(Duration::from_secs(1), fraud_recv)
         .await
-        .context("timed out waiting for fraud target message")?
-        .context("fraud receiver task failed")?
-        .context("fraud receive failed")?
-        .context("fraud receiver got no message")?;
+        .map_err(|e| format!("timed out waiting for fraud target message: {}", e).into())?
+        .map_err(|e| format!("fraud receiver task failed: {}", e).into())?
+        .map_err(|e| format!("fraud receive failed: {}", e).into())?
+        .map_err(|e| format!("fraud receiver got no message: {}", e).into())?;
     let routed = decode_event_envelope(fraud_msg)?;
     println!(
         "fraud target received type='{}' hop_count={}",
@@ -163,10 +162,10 @@ async fn main() -> Result<()> {
 
     let stream_msg = timeout(Duration::from_secs(1), stream_recv)
         .await
-        .context("timed out waiting for stream target message")?
-        .context("stream receiver task failed")?
-        .context("stream receive failed")?
-        .context("stream receiver got no message")?;
+        .map_err(|e| format!("timed out waiting for stream target message: {}", e).into())?
+        .map_err(|e| format!("stream receiver task failed: {}", e).into())?
+        .map_err(|e| format!("stream receive failed: {}", e).into())?
+        .map_err(|e| format!("stream receiver got no message: {}", e).into())?;
     match stream_msg {
         AgentMessage::StreamMessage {
             stream_id,
@@ -175,7 +174,7 @@ async fn main() -> Result<()> {
         } => {
             println!("stream target received stream_id='{stream_id}' sequence={sequence}");
         }
-        other => anyhow::bail!("expected stream message, got {other:?}"),
+        other => return Err(format!("expected stream message, got {other:?}").into()),
     }
 
     let dlq_bus = bus.clone();
@@ -199,10 +198,10 @@ async fn main() -> Result<()> {
 
     let dlq_msg = timeout(Duration::from_secs(1), dlq_recv)
         .await
-        .context("timed out waiting for dlq message")?
-        .context("dlq receiver task failed")?
-        .context("dlq receive failed")?
-        .context("dlq receiver got no message")?;
+        .map_err(|e| format!("timed out waiting for dlq message: {}", e).into())?
+        .map_err(|e| format!("dlq receiver task failed: {}", e).into())?
+        .map_err(|e| format!("dlq receive failed: {}", e).into())?
+        .map_err(|e| format!("dlq receiver got no message: {}", e).into())?;
     let dlq_envelope = decode_event_envelope(dlq_msg)?;
     let reason = dlq_envelope
         .headers

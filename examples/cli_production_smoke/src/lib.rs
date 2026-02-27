@@ -1,6 +1,5 @@
 #![allow(missing_docs)]
 
-use anyhow::{bail, Context, Result};
 use serde_json::Value;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -43,10 +42,10 @@ impl SmokeEnvironment {
         Self::new_with_bin(mofa_bin)
     }
 
-    pub fn new_with_bin(mofa_bin: PathBuf) -> Result<Self> {
+    pub fn new_with_bin(mofa_bin: PathBuf) -> Result<Self, Box<dyn std::error::Error>> {
         validate_mofa_bin(&mofa_bin)?;
 
-        let temp_dir = TempDir::new().context("Failed to create temp directory for smoke run")?;
+        let temp_dir = TempDir::new().map_err(|e| format!("Failed to create temp directory for smoke run: {}", e).into())?;
         let xdg_config_home = temp_dir.path().join("xdg-config");
         let xdg_data_home = temp_dir.path().join("xdg-data");
         let xdg_cache_home = temp_dir.path().join("xdg-cache");
@@ -75,7 +74,7 @@ impl SmokeEnvironment {
         self.xdg_data_home.join("mofa")
     }
 
-    pub fn run(&self, args: &[&str]) -> Result<CommandOutput> {
+    pub fn run(&self, args: &[&str]) -> Result<CommandOutput, Box<dyn std::error::Error>> {
         let output = Command::new(&self.mofa_bin)
             .args(args)
             .current_dir(workspace_root())
@@ -142,7 +141,7 @@ pub fn run_full_smoke() -> Result<SmokeReport> {
     Ok(run_full_smoke_with_env(&env))
 }
 
-pub fn run_full_smoke_with_env(env: &SmokeEnvironment) -> SmokeReport {
+pub fn run_full_smoke_with_env(env: &SmokeEnvironment) -, Box<dyn std::error::Error>> SmokeReport {
     let mut report = SmokeReport::default();
 
     report.record_step("Top-level CLI commands", smoke_top_level_commands(env));
@@ -164,7 +163,7 @@ pub fn run_full_smoke_with_env(env: &SmokeEnvironment) -> SmokeReport {
     report
 }
 
-pub fn smoke_top_level_commands(env: &SmokeEnvironment) -> Result<()> {
+pub fn smoke_top_level_commands(env: &SmokeEnvironment) -> Result<(), Box<dyn std::error::Error>> {
     let info = env.run(&["info"])?;
     expect_ok(&info, "mofa info")?;
     expect_stdout_contains(&info, "MoFA", "mofa info")?;
@@ -180,7 +179,7 @@ pub fn smoke_top_level_commands(env: &SmokeEnvironment) -> Result<()> {
     Ok(())
 }
 
-pub fn smoke_tool_commands(env: &SmokeEnvironment) -> Result<()> {
+pub fn smoke_tool_commands(env: &SmokeEnvironment) -> Result<(), Box<dyn std::error::Error>> {
     let list = env.run(&["tool", "list"])?;
     expect_ok(&list, "mofa tool list")?;
     expect_stdout_contains(&list, "echo", "mofa tool list")?;
@@ -193,7 +192,7 @@ pub fn smoke_tool_commands(env: &SmokeEnvironment) -> Result<()> {
     Ok(())
 }
 
-pub fn smoke_plugin_lifecycle(env: &SmokeEnvironment) -> Result<()> {
+pub fn smoke_plugin_lifecycle(env: &SmokeEnvironment) -> Result<(), Box<dyn std::error::Error>> {
     let initial_list = env.run(&["plugin", "list"])?;
     expect_ok(&initial_list, "mofa plugin list")?;
     expect_stdout_contains(&initial_list, "http-plugin", "mofa plugin list")?;
@@ -233,7 +232,7 @@ pub fn smoke_plugin_lifecycle(env: &SmokeEnvironment) -> Result<()> {
     Ok(())
 }
 
-pub fn smoke_agent_lifecycle(env: &SmokeEnvironment, agent_id: &str) -> Result<()> {
+pub fn smoke_agent_lifecycle(env: &SmokeEnvironment, agent_id: &str) -> Result<(), Box<dyn std::error::Error>> {
     let start = env.run(&["agent", "start", agent_id, "--type", "cli-base"])?;
     expect_ok(&start, "mofa agent start")?;
     expect_output_contains(&start, "started", "mofa agent start")?;
@@ -270,7 +269,7 @@ pub fn smoke_agent_lifecycle(env: &SmokeEnvironment, agent_id: &str) -> Result<(
     Ok(())
 }
 
-pub fn smoke_session_lifecycle(env: &SmokeEnvironment, session_id: &str) -> Result<()> {
+pub fn smoke_session_lifecycle(env: &SmokeEnvironment, session_id: &str) -> Result<(), Box<dyn std::error::Error>> {
     write_session_fixture(env, session_id)?;
 
     let list = env.run(&["session", "list"])?;
@@ -280,7 +279,7 @@ pub fn smoke_session_lifecycle(env: &SmokeEnvironment, session_id: &str) -> Resu
     let show = env.run(&["session", "show", session_id, "--format", "json"])?;
     expect_ok(&show, "mofa session show --format json")?;
     let shown_json =
-        extract_json_payload(&show).context("Failed to parse session show JSON output")?;
+        extract_json_payload(&show).map_err(|e| format!("Failed to parse session show JSON output: {}", e).into())?;
     let shown_id = shown_json
         .get("session_id")
         .and_then(Value::as_str)
@@ -324,7 +323,7 @@ pub fn smoke_session_lifecycle(env: &SmokeEnvironment, session_id: &str) -> Resu
     Ok(())
 }
 
-pub fn smoke_deleted_session_show_fails(env: &SmokeEnvironment, session_id: &str) -> Result<()> {
+pub fn smoke_deleted_session_show_fails(env: &SmokeEnvironment, session_id: &str) -> Result<(), Box<dyn std::error::Error>> {
     let deleted_show = env.run(&["session", "show", session_id])?;
     expect_fail(&deleted_show, "mofa session show (after delete)")?;
     expect_output_contains(
@@ -335,7 +334,7 @@ pub fn smoke_deleted_session_show_fails(env: &SmokeEnvironment, session_id: &str
     Ok(())
 }
 
-pub fn write_session_fixture(env: &SmokeEnvironment, session_id: &str) -> Result<PathBuf> {
+pub fn write_session_fixture(env: &SmokeEnvironment, session_id: &str) -> Result<PathBuf, Box<dyn std::error::Error>> {
     let sessions_dir = env.mofa_data_dir().join("sessions");
     fs::create_dir_all(&sessions_dir)
         .with_context(|| format!("Failed to create {}", sessions_dir.display()))?;
@@ -356,7 +355,7 @@ pub fn write_session_fixture(env: &SmokeEnvironment, session_id: &str) -> Result
     Ok(fixture_path)
 }
 
-pub fn expect_ok(output: &CommandOutput, label: &str) -> Result<()> {
+pub fn expect_ok(output: &CommandOutput, label: &str) -> Result<(), Box<dyn std::error::Error>> {
     if output.success() {
         return Ok(());
     }
@@ -369,7 +368,7 @@ pub fn expect_ok(output: &CommandOutput, label: &str) -> Result<()> {
     )
 }
 
-pub fn expect_fail(output: &CommandOutput, label: &str) -> Result<()> {
+pub fn expect_fail(output: &CommandOutput, label: &str) -> Result<(), Box<dyn std::error::Error>> {
     if !output.success() {
         return Ok(());
     }
@@ -382,7 +381,7 @@ pub fn expect_fail(output: &CommandOutput, label: &str) -> Result<()> {
     )
 }
 
-pub fn expect_stdout_contains(output: &CommandOutput, needle: &str, label: &str) -> Result<()> {
+pub fn expect_stdout_contains(output: &CommandOutput, needle: &str, label: &str) -> Result<(), Box<dyn std::error::Error>> {
     if output.stdout.contains(needle) {
         return Ok(());
     }
@@ -394,7 +393,7 @@ pub fn expect_stdout_contains(output: &CommandOutput, needle: &str, label: &str)
     )
 }
 
-pub fn expect_stdout_not_contains(output: &CommandOutput, needle: &str, label: &str) -> Result<()> {
+pub fn expect_stdout_not_contains(output: &CommandOutput, needle: &str, label: &str) -> Result<(), Box<dyn std::error::Error>> {
     if !output.stdout.contains(needle) {
         return Ok(());
     }
@@ -406,7 +405,7 @@ pub fn expect_stdout_not_contains(output: &CommandOutput, needle: &str, label: &
     )
 }
 
-pub fn expect_output_contains(output: &CommandOutput, needle: &str, label: &str) -> Result<()> {
+pub fn expect_output_contains(output: &CommandOutput, needle: &str, label: &str) -> Result<(), Box<dyn std::error::Error>> {
     if output.stdout.contains(needle) || output.stderr.contains(needle) {
         return Ok(());
     }
@@ -418,7 +417,7 @@ pub fn expect_output_contains(output: &CommandOutput, needle: &str, label: &str)
     )
 }
 
-pub fn expect_output_not_contains(output: &CommandOutput, needle: &str, label: &str) -> Result<()> {
+pub fn expect_output_not_contains(output: &CommandOutput, needle: &str, label: &str) -> Result<(), Box<dyn std::error::Error>> {
     if !output.stdout.contains(needle) && !output.stderr.contains(needle) {
         return Ok(());
     }
@@ -434,16 +433,16 @@ pub fn extract_json_payload(output: &CommandOutput) -> Result<Value> {
     let start = output
         .stdout
         .find('{')
-        .ok_or_else(|| anyhow::anyhow!("Could not find JSON object in output"))?;
+        .ok_or_else(|| format!("Could not find JSON object in output").into())?;
     let payload = &output.stdout[start..];
     // Use a streaming deserializer so any trailing text after the JSON object is ignored.
     let mut iter = serde_json::Deserializer::from_str(payload).into_iter::<Value>();
     iter.next()
-        .ok_or_else(|| anyhow::anyhow!("Empty JSON stream in output"))?
-        .context("Invalid JSON payload")
+        .ok_or_else(|| format!("Empty JSON stream in output").into())?
+        .map_err(|e| format!("Invalid JSON payload: {}", e).into())
 }
 
-pub fn resolve_mofa_bin() -> Result<PathBuf> {
+pub fn resolve_mofa_bin() -> Result<PathBuf, Box<dyn std::error::Error>> {
     if let Ok(raw) = std::env::var("MOFA_BIN") {
         let raw = raw.trim();
         if !raw.is_empty() {
@@ -467,7 +466,7 @@ pub fn resolve_mofa_bin() -> Result<PathBuf> {
     )
 }
 
-fn validate_mofa_bin(path: impl AsRef<Path>) -> Result<PathBuf> {
+fn validate_mofa_bin(path: impl AsRef<Path>) -> Result<PathBuf, Box<dyn std::error::Error>> {
     let path = path.as_ref();
     if path.is_file() {
         return Ok(path.to_path_buf());

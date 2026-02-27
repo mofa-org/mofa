@@ -15,7 +15,6 @@
 //! cargo run --manifest-path examples/reflection_agent/Cargo.toml
 //! ```
 
-use anyhow::Result;
 use mofa_sdk::llm::{LLMAgentBuilder, OpenAIConfig, OpenAIProvider};
 use mofa_sdk::react::{ReflectionAgent, ReflectionConfig};
 use std::sync::Arc;
@@ -46,7 +45,7 @@ fn create_llm_agent() -> Result<mofa_sdk::llm::LLMAgent> {
 }
 
 #[tokio::main]
-async fn main() -> Result<()> {
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
     tracing_subscriber::fmt()
         .with_env_filter(
             tracing_subscriber::EnvFilter::try_from_default_env()

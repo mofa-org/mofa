@@ -1,9 +1,10 @@
 //! `mofa agent create` command - Interactive agent creation wizard
 
+use crate::CliError;
 use colored::Colorize;
-use dialoguer::{Confirm, Input, Select, theme::ColorfulTheme};
-use serde::Serialize;
+use dialoguer::{theme::ColorfulTheme, Confirm, Input, Select};
 use serde::Deserialize;
+use serde::Serialize;
 use std::path::PathBuf;
 
 /// Agent configuration built from the interactive wizard
@@ -62,7 +63,7 @@ impl LLMProvider {
 }
 
 /// Execute the `mofa agent create` command
-pub fn run(non_interactive: bool, config_path: Option<PathBuf>) -> anyhow::Result<()> {
+pub fn run(non_interactive: bool, config_path: Option<PathBuf>) -> Result<(), CliError> {
     if non_interactive {
         // Non-interactive mode - use config file or defaults
         let config = config_from_file_or_defaults(config_path)?;
@@ -76,7 +77,7 @@ pub fn run(non_interactive: bool, config_path: Option<PathBuf>) -> anyhow::Resul
     Ok(())
 }
 
-fn run_interactive_wizard() -> anyhow::Result<AgentConfigBuilder> {
+fn run_interactive_wizard() -> Result<AgentConfigBuilder, CliError> {
     println!();
     println!(
         "{}",
@@ -150,7 +151,11 @@ fn run_interactive_wizard() -> anyhow::Result<AgentConfigBuilder> {
             .with_prompt("API key (or leave empty to use env var)")
             .allow_empty(true)
             .interact()?;
-        if key.is_empty() { None } else { Some(key) }
+        if key.is_empty() {
+            None
+        } else {
+            Some(key)
+        }
     } else {
         None
     };
@@ -161,7 +166,11 @@ fn run_interactive_wizard() -> anyhow::Result<AgentConfigBuilder> {
             .with_prompt("Base URL (optional)")
             .allow_empty(true)
             .interact()?;
-        if url.is_empty() { None } else { Some(url) }
+        if url.is_empty() {
+            None
+        } else {
+            Some(url)
+        }
     } else {
         None
     };
@@ -281,7 +290,7 @@ fn run_interactive_wizard() -> anyhow::Result<AgentConfigBuilder> {
 
 fn config_from_file_or_defaults(
     config_path: Option<PathBuf>,
-) -> anyhow::Result<AgentConfigBuilder> {
+) -> Result<AgentConfigBuilder, CliError> {
     if let Some(path) = config_path {
         #[derive(Debug, Deserialize)]
         struct FileAgentConfig {
@@ -311,16 +320,23 @@ fn config_from_file_or_defaults(
             llm: FileLlmConfig,
         }
 
-        let raw = std::fs::read_to_string(&path)
-            .map_err(|e| anyhow::anyhow!("Failed to read config file {}: {e}", path.display()))?;
+        let raw = std::fs::read_to_string(&path).map_err(|e| {
+            CliError::ConfigError(format!(
+                "Failed to read config file {}: {e}",
+                path.display()
+            ))
+        })?;
 
-        let parsed: FileRootConfig = serde_yaml::from_str(&raw)
-            .map_err(|e| anyhow::anyhow!("Failed to parse config file {}: {e}", path.display()))?;
+        let parsed: FileRootConfig = serde_yaml::from_str(&raw).map_err(|e| {
+            CliError::ConfigError(format!(
+                "Failed to parse config file {}: {e}",
+                path.display()
+            ))
+        })?;
 
-        let provider_value = parsed
-            .llm
-            .provider
-            .ok_or_else(|| anyhow::anyhow!("Missing required config field: llm.provider"))?;
+        let provider_value = parsed.llm.provider.ok_or_else(|| {
+            CliError::ConfigError("Missing required config field: llm.provider".into())
+        })?;
 
         let provider = parse_provider(&provider_value)?;
 
@@ -366,7 +382,7 @@ fn config_from_file_or_defaults(
     }
 }
 
-fn parse_provider(value: &str) -> anyhow::Result<LLMProvider> {
+fn parse_provider(value: &str) -> Result<LLMProvider, CliError> {
     match value.trim().to_ascii_lowercase().as_str() {
         "openai" => Ok(LLMProvider::OpenAI),
         "ollama" => Ok(LLMProvider::Ollama),
@@ -374,11 +390,15 @@ fn parse_provider(value: &str) -> anyhow::Result<LLMProvider> {
         "compatible" | "compatible_api" | "compatible-api" => Ok(LLMProvider::Compatible),
         "anthropic" => Ok(LLMProvider::Anthropic),
         "gemini" => Ok(LLMProvider::Gemini),
-        other => anyhow::bail!("Unsupported llm.provider value: {other}"),
+        other => {
+            return Err(CliError::ConfigError(format!(
+                "Unsupported llm.provider value: {other}"
+            )))
+        }
     }
 }
 
-fn write_agent_config(config: &AgentConfigBuilder) -> anyhow::Result<()> {
+fn write_agent_config(config: &AgentConfigBuilder) -> Result<(), CliError> {
     let filename = "agent.yml";
 
     let content = build_agent_config_yaml(config)?;
@@ -403,7 +423,7 @@ fn write_agent_config(config: &AgentConfigBuilder) -> anyhow::Result<()> {
     Ok(())
 }
 
-fn build_agent_config_yaml(config: &AgentConfigBuilder) -> anyhow::Result<String> {
+fn build_agent_config_yaml(config: &AgentConfigBuilder) -> Result<String, CliError> {
     #[derive(Serialize)]
     struct AgentSection<'a> {
         id: &'a str,
@@ -486,8 +506,9 @@ fn build_agent_config_yaml(config: &AgentConfigBuilder) -> anyhow::Result<String
         },
     };
 
-    let mut yaml = serde_yaml::to_string(&file)
-        .map_err(|e| anyhow::anyhow!("Failed to serialize agent config YAML: {e}"))?;
+    let mut yaml = serde_yaml::to_string(&file).map_err(|e| {
+        CliError::ConfigError(format!("Failed to serialize agent config YAML: {e}"))
+    })?;
     if !yaml.ends_with('\n') {
         yaml.push('\n');
     }

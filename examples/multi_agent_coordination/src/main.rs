@@ -39,7 +39,6 @@
 //! cargo run --example multi_agent_coordination -- --scenario diagnosis
 //! ```
 
-use anyhow::Result;
 use async_trait::async_trait;
 use chrono::Utc;
 use mofa_sdk::kernel::{
@@ -205,12 +204,12 @@ impl MasterAgent {
         let workers: Vec<_> = workers_map.iter().collect();
 
         if workers.is_empty() {
-            return Err(anyhow::anyhow!("No workers available"));
+            return Err(format!("No workers available").into());
         }
 
         // 构建 worker 列表描述
         // Build worker list description
-        let worker_info: Vec<String> = workers
+        let worker_info: Vec<String, Box<dyn std::error::Error>> = workers
             .iter()
             .map(|(id, state)| {
                 format!(
@@ -280,7 +279,7 @@ impl MasterAgent {
         &self,
         response: &str,
         workers: &HashMap<String, WorkerState>,
-    ) -> Result<String> {
+    ) -> Result<String, Box<dyn std::error::Error>> {
         // 尝试直接匹配
         // Try direct matching
         let trimmed = response.trim();
@@ -313,7 +312,7 @@ impl MasterAgent {
             }
         }
 
-        Err(anyhow::anyhow!("Could not parse worker ID from: {}", response))
+        Err(format!("Could not parse worker ID from: {}", response).into())
     }
 
     /// 处理任务请求事件
@@ -518,7 +517,7 @@ impl WorkerAgent {
 
     /// 处理任务
     /// Process Task
-    async fn process_task(&mut self, task: &TaskRequest) -> Result<TaskExecutionResult> {
+    async fn process_task(&mut self, task: &TaskRequest) -> Result<TaskExecutionResult, Box<dyn std::error::Error>> {
         let start_time = std::time::Instant::now();
         self.current_task = Some(task.task_id.clone());
 
@@ -648,7 +647,7 @@ async fn scenario_code_review(
     master: &mut MasterAgent,
     _workers: &mut Vec<WorkerAgent>,
     runtime: &SimpleRuntime,
-) -> Result<()> {
+) -> Result<(), Box<dyn std::error::Error>> {
     info!("\n{}", "=".repeat(70));
     info!("场景 1: 代码审查协同 (基于消息总线通信)");
     // Scenario 1: Code Review Collaboration (Based on message bus communication)
@@ -709,7 +708,7 @@ async fn scenario_doc_generation(
     _master: &mut MasterAgent,
     _workers: &mut Vec<WorkerAgent>,
     runtime: &SimpleRuntime,
-) -> Result<()> {
+) -> Result<(), Box<dyn std::error::Error>> {
     info!("\n{}", "=".repeat(70));
     info!("场景 2: 文档生成 (使用 AgentCoordinator 协调)");
     // Scenario 2: Document Generation (Coordinated by AgentCoordinator)
@@ -753,7 +752,7 @@ async fn scenario_diagnosis(
     _master: &mut MasterAgent,
     _workers: &mut Vec<WorkerAgent>,
     runtime: &SimpleRuntime,
-) -> Result<()> {
+) -> Result<(), Box<dyn std::error::Error>> {
     info!("\n{}", "=".repeat(70));
     info!("场景 3: 问题诊断 (并行处理)");
     // Scenario 3: Problem Diagnosis (Parallel Processing)
@@ -789,7 +788,7 @@ Panic: called `Result::unwrap()` on an `Err` value: ParseIntError { kind: Invali
 // ============================================================================
 
 #[tokio::main]
-async fn main() -> Result<()> {
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // 初始化日志
     // Initialize logging
     tracing_subscriber::fmt()
