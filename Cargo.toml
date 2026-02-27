@@ -11,6 +11,8 @@ members = [
     "crates/mofa-sdk",
     "crates/mofa-ffi",
     "crates/mofa-extra",
+    "crates/mofa-gateway",
+    "crates/mofa-smith",
 ]
 exclude = ["examples"]
 [workspace.lints.rust]

@@ -19,6 +19,7 @@
 // Rhai scripting
 use mofa_sdk::kernel::plugin::PluginError;
 use mofa_sdk::rhai::{RhaiScriptEngine, ScriptContext, ScriptEngineConfig};
+use mofa_sdk::kernel::plugin::PluginError;
 use mofa_sdk::plugins::PluginPriority;
 use mofa_sdk::plugins::{
     AgentPlugin, LLMPlugin, LLMPluginConfig, MemoryPlugin, MemoryStorage, PluginContext,

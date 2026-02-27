@@ -6,6 +6,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
+use tracing::Instrument;
 
 /// ReAct 步骤类型
 /// ReAct step types
@@ -568,19 +569,22 @@ Rules:
     /// 执行工具
     /// Execute tool
     async fn execute_tool(&self, tool_name: &str, input: &str) -> String {
-        let tools = self.tools.read().await;
+        let span = tracing::info_span!("react.tool_call", tool = %tool_name);
+        async {
+            let tools = self.tools.read().await;
 
-        match tools.get(tool_name) {
-            Some(tool) => match tool.execute(input).await {
-                Ok(result) => result,
-                Err(e) => format!("Tool error: {}", e),
-            },
-            None => format!(
-                "Tool '{}' not found. Available tools: {:?}",
-                tool_name,
-                tools.keys().collect::<Vec<_>>()
-            ),
-        }
+            match tools.get(tool_name) {
+                Some(tool) => match tool.execute(input).await {
+                    Ok(result) => result,
+                    Err(e) => format!("Tool error: {}", e),
+                },
+                None => format!(
+                    "Tool '{}' not found. Available tools: {:?}",
+                    tool_name,
+                    tools.keys().collect::<Vec<_>>()
+                ),
+            }
+        }.instrument(span).await
     }
 }
 
