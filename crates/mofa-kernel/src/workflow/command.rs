@@ -103,12 +103,11 @@ impl<V> Command<V> {
         self
     }
 
-    /// Provide an explicit routing decision for conditional edges
+    /// Provide an explicit routing decision for conditional edges (alias for with_route)
     pub fn route(mut self, decision: impl Into<String>) -> Self {
         self.route = Some(decision.into());
         self
     }
-
     /// Set control flow to continue to next node
     pub fn continue_(mut self) -> Self {
         self.control = ControlFlow::Continue;
@@ -134,6 +133,15 @@ impl<V> Command<V> {
             route: None,
             control: ControlFlow::Send(targets),
         }
+    }
+
+    /// Set control flow to create parallel branches while preserving builder state.
+    ///
+    /// Unlike [`Command::send`], this keeps any existing updates/route and only
+    /// switches the control-flow directive.
+    pub fn send_to(mut self, targets: Vec<SendCommand<V>>) -> Self {
+        self.control = ControlFlow::Send(targets);
+        self
     }
 
     /// Create a command that just updates state (continues by default)
@@ -268,6 +276,16 @@ mod tests {
     }
 
     #[test]
+    fn test_send_to_preserves_route() {
+        let cmd = Command::new()
+            .with_route("approve")
+            .send_to(vec![SendCommand::new("node_a", json!({"task": 1}))]);
+
+        assert_eq!(cmd.route.as_deref(), Some("approve"));
+        assert!(cmd.is_send());
+    }
+
+    #[test]
     fn test_send_command() {
         let send = SendCommand::new("process", json!({"data": "test"}));
         assert_eq!(send.target, "process");
@@ -302,10 +320,10 @@ mod tests {
     }
 
     #[test]
-    fn test_route_chain_builder() {
+    fn test_with_route_chain_builder() {
         let cmd = Command::new()
             .update("status", json!("pending"))
-            .route("reject")
+            .with_route("reject")
             .continue_();
         assert_eq!(cmd.route.as_deref(), Some("reject"));
         assert_eq!(cmd.updates.len(), 1);
