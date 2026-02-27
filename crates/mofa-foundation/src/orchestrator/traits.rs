@@ -7,6 +7,7 @@
 use async_trait::async_trait;
 use serde_json::Value;
 use std::collections::HashMap;
+use std::fmt;
 use std::sync::Arc;
 use thiserror::Error;
 
@@ -18,7 +19,7 @@ use thiserror::Error;
 ///
 /// When multiple models are registered, the orchestrator uses `ModelType` to pick
 /// the correct one for each pipeline stage automatically.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum ModelType {
     /// Automatic Speech Recognition (e.g., FunASR, Whisper)
     Asr,
@@ -32,6 +33,18 @@ pub enum ModelType {
     Other(String),
 }
 
+impl fmt::Display for ModelType {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            ModelType::Asr => write!(f, "ASR"),
+            ModelType::Llm => write!(f, "LLM"),
+            ModelType::Tts => write!(f, "TTS"),
+            ModelType::Embedding => write!(f, "Embedding"),
+            ModelType::Other(name) => write!(f, "{}", name),
+        }
+    }
+}
+
 // ============================================================================
 // Degradation — Dynamic precision switching under memory pressure
 // ============================================================================
@@ -42,7 +55,7 @@ pub enum ModelType {
 /// the orchestrator can reduce model precision to lower memory footprint.
 ///
 /// Order of degradation: `Full` → `Half` → `Int8` → `Int4`
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, serde::Serialize, serde::Deserialize)]
 pub enum DegradationLevel {
     /// FP32 — highest quality, highest memory (~4 bytes/param)
     Full,
@@ -52,6 +65,17 @@ pub enum DegradationLevel {
     Int8,
     /// INT4 quantized (~0.5 bytes/param) — maximum compression
     Int4,
+}
+
+impl fmt::Display for DegradationLevel {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            DegradationLevel::Full => write!(f, "FP32"),
+            DegradationLevel::Half => write!(f, "FP16"),
+            DegradationLevel::Int8 => write!(f, "INT8"),
+            DegradationLevel::Int4 => write!(f, "INT4"),
+        }
+    }
 }
 
 impl DegradationLevel {
@@ -140,7 +164,7 @@ pub type OrchestratorResult<T> = Result<T, OrchestratorError>;
 // ============================================================================
 
 /// Configuration for initializing a model provider
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct ModelProviderConfig {
     /// Human-readable name of the model (used as ID)
     pub model_name: String,
@@ -207,7 +231,7 @@ pub trait ModelProvider: Send + Sync {
 // ============================================================================
 
 /// Real-time statistics about the model pool state
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct PoolStatistics {
     /// Number of currently loaded models
     pub loaded_models_count: usize,
@@ -373,5 +397,86 @@ mod tests {
         assert_eq!(ModelType::Llm, ModelType::Llm);
         assert_ne!(ModelType::Asr, ModelType::Tts);
         assert_eq!(ModelType::Other("custom".into()), ModelType::Other("custom".into()));
+    }
+
+    #[test]
+    fn test_model_type_display() {
+        assert_eq!(ModelType::Asr.to_string(), "ASR");
+        assert_eq!(ModelType::Llm.to_string(), "LLM");
+        assert_eq!(ModelType::Tts.to_string(), "TTS");
+        assert_eq!(ModelType::Embedding.to_string(), "Embedding");
+        assert_eq!(ModelType::Other("custom".into()).to_string(), "custom");
+    }
+
+    #[test]
+    fn test_degradation_level_display() {
+        assert_eq!(DegradationLevel::Full.to_string(), "FP32");
+        assert_eq!(DegradationLevel::Half.to_string(), "FP16");
+        assert_eq!(DegradationLevel::Int8.to_string(), "INT8");
+        assert_eq!(DegradationLevel::Int4.to_string(), "INT4");
+    }
+
+    #[test]
+    fn test_model_type_serde_roundtrip() {
+        let types = vec![
+            ModelType::Asr,
+            ModelType::Llm,
+            ModelType::Tts,
+            ModelType::Embedding,
+            ModelType::Other("custom".into()),
+        ];
+        for model_type in types {
+            let json = serde_json::to_string(&model_type).expect("serialize");
+            let deserialized: ModelType = serde_json::from_str(&json).expect("deserialize");
+            assert_eq!(model_type, deserialized);
+        }
+    }
+
+    #[test]
+    fn test_degradation_level_serde_roundtrip() {
+        let levels = vec![
+            DegradationLevel::Full,
+            DegradationLevel::Half,
+            DegradationLevel::Int8,
+            DegradationLevel::Int4,
+        ];
+        for level in levels {
+            let json = serde_json::to_string(&level).expect("serialize");
+            let deserialized: DegradationLevel = serde_json::from_str(&json).expect("deserialize");
+            assert_eq!(level, deserialized);
+        }
+    }
+
+    #[test]
+    fn test_model_provider_config_serde_roundtrip() {
+        let config = ModelProviderConfig {
+            model_name: "qwen-7b".to_string(),
+            model_path: "/models/qwen-7b".to_string(),
+            device: "cuda".to_string(),
+            model_type: ModelType::Llm,
+            max_context_length: Some(4096),
+            quantization: Some("q4_0".to_string()),
+            extra_config: HashMap::new(),
+        };
+        let json = serde_json::to_string(&config).expect("serialize");
+        let deserialized: ModelProviderConfig = serde_json::from_str(&json).expect("deserialize");
+        assert_eq!(deserialized.model_name, "qwen-7b");
+        assert_eq!(deserialized.model_type, ModelType::Llm);
+        assert_eq!(deserialized.quantization, Some("q4_0".to_string()));
+    }
+
+    #[test]
+    fn test_pool_statistics_serde() {
+        let stats = PoolStatistics {
+            loaded_models_count: 2,
+            total_memory_usage: 8_000_000_000,
+            available_memory: 16_000_000_000,
+            queued_models_count: 1,
+            timestamp: chrono::Utc::now(),
+        };
+        let json = serde_json::to_string(&stats).expect("serialize");
+        let deserialized: PoolStatistics = serde_json::from_str(&json).expect("deserialize");
+        assert_eq!(deserialized.loaded_models_count, 2);
+        assert_eq!(deserialized.total_memory_usage, 8_000_000_000);
     }
 }
