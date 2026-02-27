@@ -63,12 +63,14 @@
 
 mod connection;
 mod context;
+pub mod error;
 mod traits;
 
 // 核心导出
 // Core exports
 pub use connection::{ConnectionFactory, UserConnection};
 pub use context::{SecretaryContext, SecretaryContextBuilder, SharedSecretaryContext};
+pub use error::{ConnectionError, SecretaryError};
 pub use traits::{
     EventListener, InputHandler, Middleware, PhaseHandler, PhaseResult, SecretaryBehavior,
     SecretaryEvent, SecretaryInput, SecretaryOutput, WorkflowOrchestrator, WorkflowResult,
