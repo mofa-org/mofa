@@ -1,3 +1,4 @@
+//! Chat stream example demonstrating LLM streaming with MoFA SDK.
 use mofa_sdk::llm::{LLMAgentBuilder, OpenAIProvider};
 use tokio_stream::StreamExt;
 use tracing::{info, Level};
