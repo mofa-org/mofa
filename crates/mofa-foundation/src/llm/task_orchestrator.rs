@@ -9,6 +9,7 @@
 use crate::llm::LLMProvider;
 use mofa_kernel::agent::types::error::{GlobalError, GlobalResult};
 use chrono::{DateTime, Utc};
+use tracing::Instrument;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
@@ -242,6 +243,7 @@ impl TaskOrchestrator {
         let prompt = prompt.to_string();
         let task_id_clone = task_id.clone();
 
+        let span = tracing::info_span!("task_orchestrator.background", task_id = %task_id_clone);
         tokio::spawn(async move {
             let result = Self::run_task(&provider, &model, &prompt).await;
 
@@ -268,7 +270,7 @@ impl TaskOrchestrator {
             tokio::time::sleep(tokio::time::Duration::from_secs(300)).await;
             let mut tasks = active_tasks.write().await;
             tasks.remove(&task_id_clone);
-        });
+        }.instrument(span));
 
         Ok(task_id)
     }
