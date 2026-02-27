@@ -64,6 +64,8 @@ pub struct Command<V = Value> {
     pub updates: Vec<StateUpdate<V>>,
     /// Control flow directive
     pub control: ControlFlow<V>,
+    /// Optional route name for conditional branching
+    pub route: Option<String>,
 }
 
 impl<V> Default for Command<V> {
@@ -71,6 +73,7 @@ impl<V> Default for Command<V> {
         Self {
             updates: Vec::new(),
             control: ControlFlow::default(),
+            route: None,
         }
     }
 }
@@ -90,6 +93,12 @@ impl<V> Command<V> {
     /// Add multiple state updates
     pub fn updates(mut self, updates: Vec<StateUpdate<V>>) -> Self {
         self.updates.extend(updates);
+        self
+    }
+
+    /// Set a route for conditional branching
+    pub fn with_route(mut self, route: impl Into<String>) -> Self {
+        self.route = Some(route.into());
         self
     }
 
@@ -116,7 +125,17 @@ impl<V> Command<V> {
         Self {
             updates: Vec::new(),
             control: ControlFlow::Send(targets),
+            route: None,
         }
+    }
+
+    /// Set control flow to create parallel branches while preserving builder state.
+    ///
+    /// Unlike [`Command::send`], this keeps any existing updates/route and only
+    /// switches the control-flow directive.
+    pub fn send_to(mut self, targets: Vec<SendCommand<V>>) -> Self {
+        self.control = ControlFlow::Send(targets);
+        self
     }
 
     /// Create a command that just updates state (continues by default)
@@ -235,6 +254,16 @@ mod tests {
     }
 
     #[test]
+    fn test_send_to_preserves_route() {
+        let cmd = Command::new()
+            .with_route("approve")
+            .send_to(vec![SendCommand::new("node_a", json!({"task": 1}))]);
+
+        assert_eq!(cmd.route.as_deref(), Some("approve"));
+        assert!(cmd.is_send());
+    }
+
+    #[test]
     fn test_send_command() {
         let send = SendCommand::new("process", json!({"data": "test"}));
         assert_eq!(send.target, "process");
@@ -257,5 +286,25 @@ mod tests {
 
         let cmd = Command::<serde_json::Value>::just_return();
         assert!(cmd.is_return());
+    }
+
+    #[test]
+    fn test_with_route_builder() {
+        let cmd = Command::<serde_json::Value>::new()
+            .with_route("approve")
+            .continue_();
+        assert_eq!(cmd.route.as_deref(), Some("approve"));
+        assert_eq!(cmd.control, ControlFlow::Continue);
+    }
+
+    #[test]
+    fn test_with_route_chain_builder() {
+        let cmd = Command::new()
+            .update("status", json!("pending"))
+            .with_route("reject")
+            .continue_();
+        assert_eq!(cmd.route.as_deref(), Some("reject"));
+        assert_eq!(cmd.updates.len(), 1);
+        assert_eq!(cmd.control, ControlFlow::Continue);
     }
 }
