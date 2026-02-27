@@ -14,6 +14,7 @@ const OTHER_LABEL_VALUE: &str = "__other__";
 
 /// Cardinality limits for exported label dimensions.
 #[derive(Debug, Clone)]
+#[non_exhaustive]
 pub struct CardinalityLimits {
     /// Maximum number of distinct `agent_id` series.
     pub agent_id: usize,
@@ -36,8 +37,31 @@ impl Default for CardinalityLimits {
     }
 }
 
+impl CardinalityLimits {
+    pub fn with_agent_id(mut self, limit: usize) -> Self {
+        self.agent_id = limit;
+        self
+    }
+
+    pub fn with_workflow_id(mut self, limit: usize) -> Self {
+        self.workflow_id = limit;
+        self
+    }
+
+    pub fn with_plugin_or_tool(mut self, limit: usize) -> Self {
+        self.plugin_or_tool = limit;
+        self
+    }
+
+    pub fn with_provider_model(mut self, limit: usize) -> Self {
+        self.provider_model = limit;
+        self
+    }
+}
+
 /// Prometheus export configuration.
 #[derive(Debug, Clone)]
+#[non_exhaustive]
 pub struct PrometheusExportConfig {
     /// Refresh interval for the background cache worker.
     pub refresh_interval: Duration,
@@ -52,6 +76,25 @@ impl Default for PrometheusExportConfig {
             cardinality: CardinalityLimits::default(),
         }
     }
+}
+
+impl PrometheusExportConfig {
+    pub fn with_refresh_interval(mut self, refresh_interval: Duration) -> Self {
+        self.refresh_interval = refresh_interval;
+        self
+    }
+
+    pub fn with_cardinality(mut self, cardinality: CardinalityLimits) -> Self {
+        self.cardinality = cardinality;
+        self
+    }
+}
+
+/// Errors returned by the Prometheus exporter lifecycle.
+#[derive(Debug, thiserror::Error)]
+pub enum PrometheusExportError {
+    #[error("prometheus exporter internal error: {0}")]
+    Internal(String),
 }
 
 #[derive(Debug, Clone)]
@@ -298,7 +341,7 @@ impl PrometheusExporter {
         })
     }
 
-    pub async fn refresh_once(&self) -> Result<(), String> {
+    pub async fn refresh_once(&self) -> Result<(), PrometheusExportError> {
         let snapshot = self.collector.current().await;
 
         let render_start = Instant::now();

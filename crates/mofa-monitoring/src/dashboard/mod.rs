@@ -25,6 +25,8 @@ pub use metrics::{
     AgentMetrics, Gauge, Histogram, LLMMetrics, MetricType, MetricValue, MetricsCollector,
     MetricsConfig, MetricsRegistry, MetricsSnapshot, PluginMetrics, SystemMetrics, WorkflowMetrics,
 };
-pub use prometheus::{CardinalityLimits, PrometheusExportConfig, PrometheusExporter};
+pub use prometheus::{
+    CardinalityLimits, PrometheusExportConfig, PrometheusExportError, PrometheusExporter,
+};
 pub use server::{DashboardConfig, DashboardServer, ServerState};
 pub use websocket::{WebSocketClient, WebSocketHandler, WebSocketMessage};

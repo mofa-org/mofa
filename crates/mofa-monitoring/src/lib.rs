@@ -30,6 +30,6 @@ pub use dashboard::{
     AgentMetrics, AgentStatus, ApiError, ApiResponse, CardinalityLimits, DashboardConfig,
     DashboardServer, Gauge, Histogram, LLMMetrics, LLMStatus, LLMSummary, MetricType, MetricValue,
     MetricsCollector, MetricsConfig, MetricsRegistry, MetricsSnapshot, PluginMetrics, PluginStatus,
-    PrometheusExportConfig, PrometheusExporter, ServerState, SystemMetrics, SystemStatus,
-    WebSocketClient, WebSocketHandler, WebSocketMessage, WorkflowMetrics,
+    PrometheusExportConfig, PrometheusExportError, PrometheusExporter, ServerState, SystemMetrics,
+    SystemStatus, WebSocketClient, WebSocketHandler, WebSocketMessage, WorkflowMetrics,
 };

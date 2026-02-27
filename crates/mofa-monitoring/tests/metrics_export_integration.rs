@@ -1,4 +1,4 @@
-use axum::body::{to_bytes, Body};
+use axum::body::{Body, to_bytes};
 use axum::http::{Request, StatusCode};
 use mofa_monitoring::{
     AgentMetrics, CardinalityLimits, DashboardConfig, DashboardServer, PrometheusExportConfig,
@@ -10,10 +10,11 @@ use tower::ServiceExt;
 #[tokio::test]
 async fn metrics_route_returns_prometheus_payload_with_histograms() {
     let mut server = DashboardServer::new(
-        DashboardConfig::new().with_prometheus_export_config(PrometheusExportConfig {
-            refresh_interval: Duration::from_millis(10),
-            cardinality: CardinalityLimits::default(),
-        }),
+        DashboardConfig::new().with_prometheus_export_config(
+            PrometheusExportConfig::default()
+                .with_refresh_interval(Duration::from_millis(10))
+                .with_cardinality(CardinalityLimits::default()),
+        ),
     );
 
     server
@@ -47,7 +48,12 @@ async fn metrics_route_returns_prometheus_payload_with_histograms() {
         .expect("refresh payload");
 
     let response = app
-        .oneshot(Request::builder().uri("/metrics").body(Body::empty()).unwrap())
+        .oneshot(
+            Request::builder()
+                .uri("/metrics")
+                .body(Body::empty())
+                .unwrap(),
+        )
         .await
         .expect("request success");
 
@@ -74,15 +80,17 @@ async fn metrics_route_returns_prometheus_payload_with_histograms() {
 #[tokio::test]
 async fn metrics_route_applies_cardinality_overflow_bucket() {
     let mut server = DashboardServer::new(
-        DashboardConfig::new().with_prometheus_export_config(PrometheusExportConfig {
-            refresh_interval: Duration::from_millis(10),
-            cardinality: CardinalityLimits {
-                agent_id: 1,
-                workflow_id: 100,
-                plugin_or_tool: 100,
-                provider_model: 50,
-            },
-        }),
+        DashboardConfig::new().with_prometheus_export_config(
+            PrometheusExportConfig::default()
+                .with_refresh_interval(Duration::from_millis(10))
+                .with_cardinality(
+                    CardinalityLimits::default()
+                        .with_agent_id(1)
+                        .with_workflow_id(100)
+                        .with_plugin_or_tool(100)
+                        .with_provider_model(50),
+                ),
+        ),
     );
 
     for idx in 0..3 {
@@ -108,7 +116,12 @@ async fn metrics_route_applies_cardinality_overflow_bucket() {
         .expect("refresh payload");
 
     let response = app
-        .oneshot(Request::builder().uri("/metrics").body(Body::empty()).unwrap())
+        .oneshot(
+            Request::builder()
+                .uri("/metrics")
+                .body(Body::empty())
+                .unwrap(),
+        )
         .await
         .expect("request success");
 
