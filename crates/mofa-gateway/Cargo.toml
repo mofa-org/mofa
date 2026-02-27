@@ -1,0 +1,43 @@
+[package]
+name = "mofa-gateway"
+version.workspace = true
+edition.workspace = true
+description = "MoFA Gateway - Control plane and API gateway for agent management"
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+documentation = "https://docs.rs/mofa-gateway"
+readme = "README.md"
+keywords = ["ai", "agent", "gateway", "api", "control-plane"]
+categories = ["development-tools", "web-programming"]
+publish = true
+
+[dependencies]
+# Workspace dependencies
+async-trait.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+uuid.workspace = true
+thiserror.workspace = true
+chrono.workspace = true
+dashmap = { workspace = true }
+
+# HTTP server
+axum = { workspace = true, features = ["macros"] }
+tower = { version = "0.5", features = ["util"] }
+tower-http = { version = "0.6", features = ["cors", "trace", "request-id"] }
+
+# Local dependencies
+mofa-kernel = { path = "../mofa-kernel", version = "0.1" }
+mofa-runtime = { path = "../mofa-runtime", version = "0.1" }
+mofa-monitoring = { path = "../mofa-monitoring", version = "0.1", optional = true }
+
+[features]
+default = []
+monitoring = ["dep:mofa-monitoring"]
+
+[lints]
+workspace = true
