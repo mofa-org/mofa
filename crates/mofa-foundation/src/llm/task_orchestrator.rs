@@ -303,11 +303,7 @@ let handle = tokio::spawn(async move {
             // Retain the completed task entry briefly so callers can poll its
             // status after receiving the broadcast result, then clean up.
             tokio::time::sleep(tokio::time::Duration::from_secs(300)).await;
-<<<<<<< HEAD
-            let mut tasks = active_tasks.write().await;
-            tasks.remove(&task_id_clone);
-        }.instrument(span));
-=======
+
 
             active_tasks.write().await.remove(&task_id_clone);
 
@@ -316,7 +312,6 @@ let handle = tokio::spawn(async move {
                 h.remove(&task_id_clone);
             }
         });
->>>>>>> 53aa163d (fix(task-orchestrator): correct concurrency gate and add JoinHandle abort-on-drop)
 
         // Store the handle so Drop can abort it if the orchestrator is torn down
         // before this task (including its cleanup sleep) has finished.
