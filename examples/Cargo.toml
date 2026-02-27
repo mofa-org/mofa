@@ -36,6 +36,7 @@ members = [
     "rag_pipeline",
     "workflow_viz",
     "message_graph_validation",
+    "message_graph_executor_runtime",
     "agent_builder",
     "context_compression",
 ]

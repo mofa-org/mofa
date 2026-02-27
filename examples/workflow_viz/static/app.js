@@ -1,5 +1,5 @@
 /* ================================================================
-   MoFA Workflow Visualizer — Production Client v3
+   MoFA Workflow Visualizer — Phase 2: Live Execution Monitoring
    ================================================================ */
 (() => {
   'use strict';
@@ -20,13 +20,23 @@
     transform: { fill: '#d5f5f0', stroke: '#1ABC9C', label: 'XFORM' },
     sub_workflow: { fill: '#d6eaf8', stroke: '#3498DB', label: 'SUB' },
   };
+
   let workflows = [], currentGraph = null, layoutNodes = [], layoutLayers = 0;
-  let selectedNode = null, simRunning = false, simTimer = null;
-  let viewX = 0, viewY = 0, scale = 1;
-  let isPanning = false, panSX = 0, panSY = 0;
+  let selectedNode = null, simRunning = false;
+  let isPanning = false, panSX = 0, panSY = 0, scale = 1;
+  let autoPan = false;
+
+  // Live execution state
+  let wsConn = null;
+  let wsRetryDelay = 1000;
+  let nodeExecData = {};   // node_id -> { status, duration_ms, error, inputs, outputs }
+  let logEvents = [];
+  let logFilter = 'all';
 
   const $ = id => document.getElementById(id);
-  const wfList = $('workflow-list'), statusText = $('status-text');
+
+  // Core DOM
+  const wfList = $('workflow-list');
   const graphTitle = $('graph-title'), statsBar = $('stats-bar');
   const statN = $('stat-nodes'), statE = $('stat-edges'), statL = $('stat-layers');
   const wrap = $('canvas-wrap'), svg = $('canvas'), gGroup = $('graph-group');
@@ -34,21 +44,27 @@
   const dPanel = $('detail-panel'), dTitle = $('detail-title'), dBody = $('detail-body');
   const dClose = $('detail-close');
   const bZI = $('btn-zoom-in'), bZO = $('btn-zoom-out'), bFit = $('btn-fit');
-  const bSim = $('btn-simulate'), bExp = $('btn-export'), zPct = $('zoom-pct');
+  const bExec = $('btn-execute'), bExp = $('btn-export'), zPct = $('zoom-pct');
+  const bAutoPan = $('btn-autopan');
   const mmEl = $('minimap'), mmCvs = $('minimap-canvas'), mmVp = $('minimap-viewport');
   const sInput = $('search-input'), sResults = $('search-results');
   const tip = $('tooltip');
 
-  // ── Init ──
+  // Live monitoring DOM
+  const wsDot = $('ws-dot'), wsStatus = $('ws-status');
+  const execLog = $('exec-log'), logToggle = $('log-toggle');
+  const logList = $('log-list'), logClear = $('log-clear');
+
+  // ── init ──
   async function init() {
     try {
       const r = await fetch('/api/workflows');
       const d = await r.json();
       workflows = d.workflows || [];
       renderSidebar();
-      statusText.textContent = `${workflows.length} workflow(s)`;
-    } catch { statusText.textContent = 'Error'; }
+    } catch { /* ignore */ }
     bindEvents();
+    connectWS();
   }
 
   function renderSidebar() {
@@ -69,8 +85,8 @@
     wfList.querySelectorAll('li').forEach(l => l.classList.toggle('active', l.dataset.id === id));
     empty.classList.add('hidden');
     loading.classList.remove('hidden');
-    stopSim(); closeDetail();
     currentGraph = null;
+    nodeExecData = {};
     try {
       const r = await fetch(`/api/workflows/${id}`);
       currentGraph = await r.json();
@@ -85,14 +101,28 @@
     } finally {
       loading.classList.add('hidden');
     }
-    // Layout immediately — viewBox approach doesn't need DOM timing
     doLayout();
+    // Fetch current execution state for catch-up
+    try {
+      const r = await fetch('/api/execution/state');
+      const d = await r.json();
+      if (d.states) {
+        for (const [id, entry] of Object.entries(d.states)) {
+          nodeExecData[id] = entry;
+          applyNodeStatus(id, entry.status);
+        }
+      }
+      if (d.sim_running) {
+        bExec.textContent = '⏹ Running…'; bExec.classList.add('running');
+        simRunning = true;
+      }
+    } catch { /* ignore */ }
   }
 
-  // ── Layout (Kahn's topo sort + longest path) ──
+  // ── Layout ──
   function doLayout() {
     if (!currentGraph) return;
-    const { nodes, edges, start_node } = currentGraph;
+    const { nodes, edges } = currentGraph;
     if (!nodes.length) return;
 
     const adj = {}, radj = {}, inDeg = {};
@@ -103,50 +133,37 @@
         inDeg[e.to]++;
       }
     });
-
-    // Kahn's BFS
     const topo = [], q = [], dc = { ...inDeg };
     nodes.forEach(n => { if (dc[n.id] === 0) q.push(n.id); });
     let qi = 0;
     while (qi < q.length) { const c = q[qi++]; topo.push(c); for (const nx of adj[c]) { dc[nx]--; if (dc[nx] === 0) q.push(nx); } }
     nodes.forEach(n => { if (!topo.includes(n.id)) topo.push(n.id); });
 
-    // Longest-path layers
     const layer = {};
     topo.forEach(id => {
       const p = radj[id] || [];
       layer[id] = p.length ? Math.max(...p.map(x => (layer[x] || 0) + 1)) : 0;
     });
-
-    // Group & sort
     const groups = {};
     nodes.forEach(n => { const l = layer[n.id] || 0; (groups[l] = groups[l] || []).push(n); });
     const maxL = Math.max(0, ...Object.keys(groups).map(Number));
     layoutLayers = maxL + 1;
 
-    // Barycenter crossing reduction
     for (let pass = 0; pass < 4; pass++) {
       for (let l = 1; l <= maxL; l++) {
         const g = groups[l] || [], prev = groups[l - 1] || [], pp = {};
         prev.forEach((n, i) => { pp[n.id] = i; });
-        g.forEach(n => {
-          const par = (radj[n.id] || []).filter(x => pp[x] !== undefined);
-          n._b = par.length ? par.reduce((s, x) => s + pp[x], 0) / par.length : Infinity;
-        });
+        g.forEach(n => { const par = (radj[n.id] || []).filter(x => pp[x] !== undefined); n._b = par.length ? par.reduce((s, x) => s + pp[x], 0) / par.length : Infinity; });
         g.sort((a, b) => a._b - b._b); groups[l] = g;
       }
       for (let l = maxL - 1; l >= 0; l--) {
         const g = groups[l] || [], nxt = groups[l + 1] || [], np = {};
         nxt.forEach((n, i) => { np[n.id] = i; });
-        g.forEach(n => {
-          const ch = (adj[n.id] || []).filter(x => np[x] !== undefined);
-          n._b = ch.length ? ch.reduce((s, x) => s + np[x], 0) / ch.length : Infinity;
-        });
+        g.forEach(n => { const ch = (adj[n.id] || []).filter(x => np[x] !== undefined); n._b = ch.length ? ch.reduce((s, x) => s + np[x], 0) / ch.length : Infinity; });
         g.sort((a, b) => a._b - b._b); groups[l] = g;
       }
     }
 
-    // Assign coords
     layoutNodes = [];
     for (let l = 0; l <= maxL; l++) {
       const g = groups[l] || [];
@@ -160,9 +177,8 @@
     statN.textContent = nodes.length;
     statE.textContent = edges.length;
     statL.textContent = layoutLayers;
-
     renderGraph();
-    fitView(); // sets SVG viewBox — always works, no DOM dependency
+    fitView();
     updateMinimap();
   }
 
@@ -173,7 +189,6 @@
     const nm = {};
     layoutNodes.forEach(n => { nm[n.id] = n; });
 
-    // Edges
     currentGraph.edges.forEach((e, i) => {
       const f = nm[e.from], t = nm[e.to];
       if (!f || !t) return;
@@ -202,7 +217,6 @@
       }
     });
 
-    // Nodes
     layoutNodes.forEach((n, i) => {
       const g = svgEl('g');
       g.setAttribute('class', 'node-group');
@@ -210,19 +224,13 @@
       g.dataset.id = n.id;
       g.style.animationDelay = `${i * 30}ms`;
       const m = TYPE_META[n.type] || TYPE_META.task;
-
-      // Shape
       const s = makeShape(n.type, m);
       g.appendChild(s);
-
-      // Label
       const lb = svgEl('text');
       lb.setAttribute('x', NODE_W / 2); lb.setAttribute('y', NODE_H / 2 - 5);
       lb.setAttribute('class', 'node-label');
       lb.textContent = n.name.length > 18 ? n.name.slice(0, 17) + '…' : n.name;
       g.appendChild(lb);
-
-      // Type badge
       const bd = svgEl('text');
       bd.setAttribute('x', NODE_W / 2); bd.setAttribute('y', NODE_H / 2 + 9);
       bd.setAttribute('class', 'node-type-badge');
@@ -236,8 +244,6 @@
       g.addEventListener('mouseleave', hideTip);
       gGroup.appendChild(g);
     });
-
-    // viewBox will be set by fitView() called after renderGraph()
   }
 
   function makeShape(type, m) {
@@ -273,9 +279,7 @@
     currentGraph.edges.forEach(e => {
       if (e.from === id || e.to === id) { cn.add(e.from); cn.add(e.to); ce.add(e.from + '->' + e.to); }
     });
-    gGroup.querySelectorAll('.node-group').forEach(g => {
-      g.classList.toggle('dimmed', !cn.has(g.dataset.id));
-    });
+    gGroup.querySelectorAll('.node-group').forEach(g => g.classList.toggle('dimmed', !cn.has(g.dataset.id)));
     gGroup.querySelectorAll('.edge-line').forEach(el => {
       const k = el.dataset.from + '->' + el.dataset.to;
       el.classList.toggle('dimmed', !ce.has(k));
@@ -284,10 +288,10 @@
   }
   function clearHL() {
     if (simRunning) return;
-    gGroup.querySelectorAll('.dimmed,.highlighted').forEach(el => { el.classList.remove('dimmed', 'highlighted'); });
+    gGroup.querySelectorAll('.dimmed,.highlighted').forEach(el => el.classList.remove('dimmed', 'highlighted'));
   }
 
-  // ── Detail ──
+  // ── Detail / Inspector ──
   function openDetail(n) {
     selectedNode = n; dPanel.classList.remove('hidden');
     const m = TYPE_META[n.type] || TYPE_META.task;
@@ -297,6 +301,8 @@
     ${n.type.toUpperCase()}</span></div>
     <div class="detail-section"><h3>ID</h3><p><code>${esc(n.id)}</code></p></div>
     <div class="detail-section"><h3>Layer</h3><p>${(n._layer || 0) + 1} / ${layoutLayers}</p></div>`;
+
+    // Incoming / Outgoing edges
     const inc = currentGraph.edges.filter(e => e.to === n.id);
     const out = currentGraph.edges.filter(e => e.from === n.id);
     if (inc.length) {
@@ -309,6 +315,35 @@
       out.forEach(e => { h += `<li data-node="${esc(e.to)}"><span class="arrow">→</span><code>${esc(e.to)}</code>${e.label ? ` <em style="color:var(--text-muted)">${esc(e.label)}</em>` : ''}${eTag(e.edge_type)}</li>`; });
       h += '</ul></div>';
     }
+
+    // Inspector v2: Execution data
+    const ed = nodeExecData[n.id];
+    if (ed) {
+      const statusColors = { pending: '#8e99a4', running: '#1ABC9C', completed: '#3498DB', failed: '#E74C3C' };
+      const sc = statusColors[ed.status] || '#8e99a4';
+      h += `<div class="detail-section"><h3>Execution Status</h3>
+      <span class="detail-badge" style="background:${sc}18;color:${sc};border:1px solid ${sc}">${(ed.status || 'pending').toUpperCase()}</span></div>`;
+      if (ed.duration_ms != null) {
+        h += `<div class="detail-section"><h3>Execution Time</h3><p><code>${ed.duration_ms}ms</code></p></div>`;
+      }
+      if (ed.inputs) {
+        h += `<div class="detail-section"><h3>Input Data</h3>
+        <details><summary style="cursor:pointer;font-size:11px;color:var(--text-muted)">Show JSON</summary>
+        <pre style="font-family:var(--mono);font-size:10px;background:var(--bg-hover);padding:8px;border-radius:4px;overflow:auto;max-height:150px;margin-top:4px">${esc(JSON.stringify(ed.inputs, null, 2))}</pre>
+        </details></div>`;
+      }
+      if (ed.outputs) {
+        h += `<div class="detail-section"><h3>Output Data</h3>
+        <details><summary style="cursor:pointer;font-size:11px;color:var(--text-muted)">Show JSON</summary>
+        <pre style="font-family:var(--mono);font-size:10px;background:var(--bg-hover);padding:8px;border-radius:4px;overflow:auto;max-height:150px;margin-top:4px">${esc(JSON.stringify(ed.outputs, null, 2))}</pre>
+        </details></div>`;
+      }
+      if (ed.error) {
+        h += `<div class="detail-section"><h3>Error</h3>
+        <div style="background:rgba(231,76,60,.08);border:1px solid rgba(231,76,60,.2);border-radius:6px;padding:8px 10px;color:#E74C3C;font-size:11px;font-family:var(--mono)">${esc(ed.error)}</div></div>`;
+      }
+    }
+
     dBody.innerHTML = h;
     dBody.querySelectorAll('li[data-node]').forEach(li => {
       li.onclick = () => { const t = layoutNodes.find(x => x.id === li.dataset.node); if (t) { panTo(t); openDetail(t); } };
@@ -321,34 +356,184 @@
   }
   function closeDetail() { selectedNode = null; dPanel.classList.add('hidden'); }
 
-  // ── Simulation ──
-  function toggleSim() { simRunning ? stopSim() : startSim(); }
-  function startSim() {
-    if (!currentGraph || !layoutNodes.length) return;
-    simRunning = true; bSim.textContent = '⏹ Stop'; bSim.classList.add('running');
-    clearHL();
-    const a = {}; layoutNodes.forEach(n => { a[n.id] = []; });
-    currentGraph.edges.forEach(e => { if (a[e.from]) a[e.from].push(e.to); });
-    const order = [], vis = new Set(), bq = [currentGraph.start_node || layoutNodes[0].id];
-    vis.add(bq[0]);
-    while (bq.length) { const c = bq.shift(); order.push(c); for (const nx of (a[c] || [])) { if (!vis.has(nx)) { vis.add(nx); bq.push(nx); } } }
-    layoutNodes.forEach(n => { if (!vis.has(n.id)) order.push(n.id); });
-    const allN = gGroup.querySelectorAll('.node-group'), allE = gGroup.querySelectorAll('.edge-line');
-    allN.forEach(g => g.classList.add('dimmed')); allE.forEach(el => el.classList.add('dimmed'));
-    let step = 0;
-    function adv() {
-      if (step >= order.length || !simRunning) { stopSim(); return; }
-      const id = order[step];
-      allN.forEach(g => { if (g.dataset.id === id) { g.classList.remove('dimmed'); g.classList.add('active-sim'); } });
-      allE.forEach(el => { if (el.dataset.to === id) { el.classList.remove('dimmed'); el.classList.add('active-sim'); } });
-      step++; simTimer = setTimeout(adv, 550);
-    }
-    adv();
+  // ================================================================
+  // WEBSOCKET CLIENT
+  // ================================================================
+
+  function connectWS() {
+    const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const url = `${proto}//${location.host}/ws`;
+    wsConn = new WebSocket(url);
+    setWSStatus('reconnecting');
+
+    wsConn.onopen = () => {
+      setWSStatus('connected');
+      wsRetryDelay = 1000;
+    };
+
+    wsConn.onmessage = (evt) => {
+      try {
+        const data = JSON.parse(evt.data);
+        handleWSMessage(data);
+      } catch { /* ignore parse errors */ }
+    };
+
+    wsConn.onclose = () => {
+      setWSStatus('disconnected');
+      scheduleReconnect();
+    };
+
+    wsConn.onerror = () => {
+      setWSStatus('disconnected');
+    };
   }
-  function stopSim() {
-    simRunning = false; if (simTimer) { clearTimeout(simTimer); simTimer = null; }
-    bSim.textContent = '▶ Simulate'; bSim.classList.remove('running');
-    gGroup.querySelectorAll('.dimmed,.active-sim').forEach(el => el.classList.remove('dimmed', 'active-sim'));
+
+  function scheduleReconnect() {
+    setWSStatus('reconnecting');
+    setTimeout(() => {
+      wsRetryDelay = Math.min(wsRetryDelay * 2, 10000);
+      connectWS();
+    }, wsRetryDelay);
+  }
+
+  function setWSStatus(status) {
+    wsDot.className = 'status-dot ' + status;
+    const labels = { connected: 'Connected', reconnecting: 'Reconnecting…', disconnected: 'Disconnected' };
+    wsStatus.textContent = labels[status] || status;
+  }
+
+  function handleWSMessage(data) {
+    if (data.event_type === 'heartbeat') return;
+
+    if (data.event_type === 'state_snapshot') {
+      // Full state catch-up on connect
+      if (data.states) {
+        for (const [id, entry] of Object.entries(data.states)) {
+          nodeExecData[id] = entry;
+          applyNodeStatus(id, entry.status);
+        }
+      }
+      return;
+    }
+
+    if (data.event_type === 'workflow_start') {
+      simRunning = true;
+      bExec.textContent = '⏹ Running…'; bExec.classList.add('running');
+      // Reset all node states to pending
+      nodeExecData = {};
+      gGroup.querySelectorAll('.node-group').forEach(g => {
+        g.classList.remove('status-running', 'status-completed', 'status-failed');
+        g.classList.add('status-pending');
+      });
+      // Remove old duration badges
+      gGroup.querySelectorAll('.node-duration-badge').forEach(el => el.remove());
+      addLogEntry('workflow', 'started', null);
+      return;
+    }
+
+    if (data.event_type === 'workflow_end') {
+      simRunning = false;
+      bExec.textContent = '▶ Execute'; bExec.classList.remove('running');
+      addLogEntry('workflow', 'ended', null);
+      return;
+    }
+
+    if (data.event_type === 'node_status' && data.node_id) {
+      const status = data.status;
+      nodeExecData[data.node_id] = {
+        status,
+        duration_ms: data.duration_ms || nodeExecData[data.node_id]?.duration_ms,
+        error: data.error || nodeExecData[data.node_id]?.error,
+        inputs: data.inputs || nodeExecData[data.node_id]?.inputs,
+        outputs: data.outputs || nodeExecData[data.node_id]?.outputs,
+      };
+      applyNodeStatus(data.node_id, status);
+      addLogEntry(data.node_id, status, data.duration_ms);
+
+      // Auto-pan to running node
+      if (autoPan && status === 'running') {
+        const n = layoutNodes.find(x => x.id === data.node_id);
+        if (n) panTo(n);
+      }
+
+      // Update detail panel if viewing this node
+      if (selectedNode && selectedNode.id === data.node_id) {
+        openDetail(selectedNode);
+      }
+    }
+  }
+
+  function applyNodeStatus(nodeId, status) {
+    const g = gGroup.querySelector(`.node-group[data-id="${nodeId}"]`);
+    if (!g) return;
+    g.classList.remove('status-pending', 'status-running', 'status-completed', 'status-failed');
+    g.classList.add(`status-${status}`);
+
+    // Add duration badge on completion
+    if ((status === 'completed' || status === 'failed') && nodeExecData[nodeId]?.duration_ms) {
+      // Remove existing badge
+      const existing = g.querySelector('.node-duration-badge');
+      if (existing) existing.remove();
+
+      const dur = svgEl('text');
+      dur.setAttribute('x', NODE_W / 2);
+      dur.setAttribute('y', NODE_H + 4);
+      dur.setAttribute('class', 'node-duration-badge');
+      dur.textContent = `${nodeExecData[nodeId].duration_ms}ms`;
+      if (status === 'failed') dur.style.fill = '#E74C3C';
+      g.appendChild(dur);
+    }
+  }
+
+  // ── Execute ──
+  async function triggerExecute() {
+    if (!currentGraph) return;
+    if (simRunning) return; // let the server handle completion
+    try {
+      await fetch(`/api/simulate?workflow_id=${encodeURIComponent(currentGraph.id)}`, { method: 'POST' });
+    } catch (e) {
+      console.error('Failed to start execution:', e);
+    }
+  }
+
+  // ── Execution Log ──
+  function addLogEntry(nodeId, status, durationMs) {
+    const now = new Date();
+    const ts = `${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}.${String(now.getMilliseconds()).padStart(3, '0')}`;
+    const entry = { nodeId, status, ts, durationMs };
+    logEvents.push(entry);
+    if (logEvents.length > 500) logEvents.shift();
+
+    const li = document.createElement('li');
+    li.dataset.status = status;
+    li.dataset.node = nodeId;
+    li.innerHTML = `<span class="log-time">${ts}</span>
+      <span class="log-node">${esc(nodeId)}</span>
+      <span class="log-arrow">→</span>
+      <span class="log-status ${status}">${status}</span>
+      ${durationMs != null ? `<span class="log-dur">(${durationMs}ms)</span>` : ''}`;
+    li.onclick = () => {
+      const n = layoutNodes.find(x => x.id === nodeId);
+      if (n) { panTo(n); openDetail(n); }
+    };
+    logList.appendChild(li);
+    applyLogFilter();
+    logList.scrollTop = logList.scrollHeight;
+  }
+
+  function applyLogFilter() {
+    logList.querySelectorAll('li').forEach(li => {
+      if (logFilter === 'all' || li.dataset.status === logFilter) {
+        li.classList.remove('hidden');
+      } else {
+        li.classList.add('hidden');
+      }
+    });
+  }
+
+  function toggleLog() {
+    execLog.classList.toggle('collapsed');
+    execLog.classList.toggle('expanded');
   }
 
   // ── Export ──
@@ -358,142 +543,62 @@
     const m = 50;
     const vx = bb.x - m, vy = bb.y - m;
     const vw = bb.width + m * 2, vh = bb.height + m * 2;
-
-    // Build a clean SVG from scratch with inlined styles
     const ns = 'http://www.w3.org/2000/svg';
     const out = document.createElementNS(ns, 'svg');
     out.setAttribute('xmlns', ns);
     out.setAttribute('viewBox', `${vx} ${vy} ${vw} ${vh}`);
-    out.setAttribute('width', vw);
-    out.setAttribute('height', vh);
-
-    // Embedded style for fonts
+    out.setAttribute('width', vw); out.setAttribute('height', vh);
     const style = document.createElementNS(ns, 'style');
-    style.textContent = `
-      @import url('https://fonts.googleapis.com/css2?family=Inter:wght@500;600;700&family=JetBrains+Mono:wght@500;600&display=swap');
-      text { font-family: 'Inter', system-ui, sans-serif; }
-    `;
+    style.textContent = `@import url('https://fonts.googleapis.com/css2?family=Inter:wght@500;600;700&family=JetBrains+Mono:wght@500;600&display=swap'); text { font-family: 'Inter', system-ui, sans-serif; }`;
     out.appendChild(style);
-
-    // White background
     const bg = document.createElementNS(ns, 'rect');
     bg.setAttribute('x', vx); bg.setAttribute('y', vy);
     bg.setAttribute('width', vw); bg.setAttribute('height', vh);
     bg.setAttribute('fill', '#f4f5f8');
     out.appendChild(bg);
-
-    // Re-create defs (markers)
     const defs = document.createElementNS(ns, 'defs');
-    const markers = [
-      { id: 'exp-arrow', fill: '#c0c4cc' },
-      { id: 'exp-arrow-cond', fill: '#F1C40F' },
-      { id: 'exp-arrow-err', fill: '#E74C3C' },
-    ];
-    markers.forEach(mk => {
+    [{ id: 'a1', fill: '#c0c4cc' }, { id: 'a2', fill: '#F1C40F' }, { id: 'a3', fill: '#E74C3C' }].forEach(mk => {
       const marker = document.createElementNS(ns, 'marker');
       setA(marker, { id: mk.id, markerWidth: 10, markerHeight: 7, refX: 10, refY: 3.5, orient: 'auto', markerUnits: 'strokeWidth' });
       const poly = document.createElementNS(ns, 'polygon');
-      poly.setAttribute('points', '0 0, 10 3.5, 0 7');
-      poly.setAttribute('fill', mk.fill);
-      marker.appendChild(poly);
-      defs.appendChild(marker);
+      poly.setAttribute('points', '0 0, 10 3.5, 0 7'); poly.setAttribute('fill', mk.fill);
+      marker.appendChild(poly); defs.appendChild(marker);
     });
     out.appendChild(defs);
-
     const g = document.createElementNS(ns, 'g');
-    const nm = {};
-    layoutNodes.forEach(n => { nm[n.id] = n; });
-
-    // Draw edges with inline styles
+    const nm = {}; layoutNodes.forEach(n => { nm[n.id] = n; });
     currentGraph.edges.forEach(e => {
-      const f = nm[e.from], t = nm[e.to];
-      if (!f || !t) return;
+      const f = nm[e.from], t = nm[e.to]; if (!f || !t) return;
       const x1 = f.x, y1 = f.y + NODE_H / 2, x2 = t.x, y2 = t.y - NODE_H / 2;
       const cp = Math.max(Math.abs(y2 - y1) * 0.4, 20);
       const p = document.createElementNS(ns, 'path');
       p.setAttribute('d', `M${x1} ${y1} C${x1} ${y1 + cp},${x2} ${y2 - cp},${x2} ${y2}`);
       p.setAttribute('fill', 'none');
-      if (e.edge_type === 'conditional') {
-        p.setAttribute('stroke', '#F1C40F');
-        p.setAttribute('stroke-width', '1.8');
-        p.setAttribute('stroke-dasharray', '8 5');
-        p.setAttribute('marker-end', 'url(#exp-arrow-cond)');
-      } else if (e.edge_type === 'error') {
-        p.setAttribute('stroke', '#E74C3C');
-        p.setAttribute('stroke-width', '1.5');
-        p.setAttribute('stroke-dasharray', '4 4');
-        p.setAttribute('marker-end', 'url(#exp-arrow-err)');
-      } else {
-        p.setAttribute('stroke', '#c0c4cc');
-        p.setAttribute('stroke-width', '1.5');
-        p.setAttribute('marker-end', 'url(#exp-arrow)');
-      }
+      if (e.edge_type === 'conditional') { p.setAttribute('stroke', '#F1C40F'); p.setAttribute('stroke-width', '1.8'); p.setAttribute('stroke-dasharray', '8 5'); p.setAttribute('marker-end', 'url(#a2)'); }
+      else if (e.edge_type === 'error') { p.setAttribute('stroke', '#E74C3C'); p.setAttribute('stroke-width', '1.5'); p.setAttribute('stroke-dasharray', '4 4'); p.setAttribute('marker-end', 'url(#a3)'); }
+      else { p.setAttribute('stroke', '#c0c4cc'); p.setAttribute('stroke-width', '1.5'); p.setAttribute('marker-end', 'url(#a1)'); }
       g.appendChild(p);
-
-      // Edge label
-      if (e.label) {
-        const mx = (x1 + x2) / 2, my = (y1 + y2) / 2;
-        const tw = e.label.length * 6.5 + 12;
-        const lbg = document.createElementNS(ns, 'rect');
-        setA(lbg, { x: mx - tw / 2, y: my - 8, width: tw, height: 16, rx: 3 });
-        lbg.setAttribute('fill', '#f4f5f8');
-        g.appendChild(lbg);
-        const lt = document.createElementNS(ns, 'text');
-        setA(lt, { x: mx, y: my + 1 });
-        lt.setAttribute('fill', '#5a6a7a');
-        lt.setAttribute('font-family', "'JetBrains Mono', monospace");
-        lt.setAttribute('font-size', '9');
-        lt.setAttribute('font-weight', '500');
-        lt.setAttribute('text-anchor', 'middle');
-        lt.setAttribute('dominant-baseline', 'central');
-        lt.textContent = e.label;
-        g.appendChild(lt);
-      }
     });
-
-    // Draw nodes with inline styles
     layoutNodes.forEach(n => {
       const ng = document.createElementNS(ns, 'g');
       ng.setAttribute('transform', `translate(${n.x - NODE_W / 2},${n.y - NODE_H / 2})`);
       const meta = TYPE_META[n.type] || TYPE_META.task;
-
-      // Shape
       const shape = makeShape(n.type, meta);
-      shape.setAttribute('fill', meta.fill);
-      shape.setAttribute('stroke', meta.stroke);
-      shape.setAttribute('stroke-width', '2');
+      shape.setAttribute('fill', meta.fill); shape.setAttribute('stroke', meta.stroke); shape.setAttribute('stroke-width', '2');
       ng.appendChild(shape);
-
-      // Label
       const lb = document.createElementNS(ns, 'text');
       setA(lb, { x: NODE_W / 2, y: NODE_H / 2 - 5 });
-      lb.setAttribute('fill', '#2c3e50');
-      lb.setAttribute('font-family', "'Inter', sans-serif");
-      lb.setAttribute('font-size', '11');
-      lb.setAttribute('font-weight', '600');
-      lb.setAttribute('text-anchor', 'middle');
-      lb.setAttribute('dominant-baseline', 'central');
+      lb.setAttribute('fill', '#2c3e50'); lb.setAttribute('font-family', "'Inter', sans-serif"); lb.setAttribute('font-size', '11'); lb.setAttribute('font-weight', '600'); lb.setAttribute('text-anchor', 'middle'); lb.setAttribute('dominant-baseline', 'central');
       lb.textContent = n.name.length > 18 ? n.name.slice(0, 17) + '…' : n.name;
       ng.appendChild(lb);
-
-      // Type badge
       const bd = document.createElementNS(ns, 'text');
       setA(bd, { x: NODE_W / 2, y: NODE_H / 2 + 9 });
-      bd.setAttribute('fill', '#8e99a4');
-      bd.setAttribute('font-family', "'JetBrains Mono', monospace");
-      bd.setAttribute('font-size', '8');
-      bd.setAttribute('font-weight', '500');
-      bd.setAttribute('text-anchor', 'middle');
-      bd.setAttribute('dominant-baseline', 'hanging');
-      bd.setAttribute('letter-spacing', '0.06em');
+      bd.setAttribute('fill', '#8e99a4'); bd.setAttribute('font-family', "'JetBrains Mono', monospace"); bd.setAttribute('font-size', '8'); bd.setAttribute('font-weight', '500'); bd.setAttribute('text-anchor', 'middle'); bd.setAttribute('dominant-baseline', 'hanging'); bd.setAttribute('letter-spacing', '0.06em');
       bd.textContent = meta.label;
       ng.appendChild(bd);
-
       g.appendChild(ng);
     });
-
     out.appendChild(g);
-
     const svgStr = new XMLSerializer().serializeToString(out);
     const blob = new Blob([svgStr], { type: 'image/svg+xml' });
     const u = URL.createObjectURL(blob);
@@ -536,7 +641,6 @@
     ctx.globalAlpha = 1;
     const rect = wrap.getBoundingClientRect();
     if (rect.width > 0 && rect.height > 0) {
-      // Map the current viewBox to minimap space
       const vx = (vbX - mnX) * s + (cw - gw * s) / 2;
       const vy = (vbY - mnY) * s + (ch - gh * s) / 2;
       const vw = vbW * s, vh = vbH * s;
@@ -545,16 +649,13 @@
     }
   }
 
-  // ── ViewBox-based camera system ──
-  // viewBox = [vbX, vbY, vbW, vbH] — defines visible area in graph coordinates
+  // ── ViewBox camera ──
   let vbX = 0, vbY = 0, vbW = 800, vbH = 600;
 
   function applyTx() {
-    // Remove any transform on the group — viewBox handles everything
     gGroup.removeAttribute('transform');
     svg.setAttribute('viewBox', `${vbX} ${vbY} ${vbW} ${vbH}`);
     svg.setAttribute('preserveAspectRatio', 'xMidYMid meet');
-    // Compute effective scale for display
     const rect = wrap.getBoundingClientRect();
     if (rect.width > 0) scale = rect.width / vbW;
     zPct.textContent = Math.round(scale * 100) + '%';
@@ -573,19 +674,12 @@
     applyTx();
   }
 
-  function panTo(n) {
-    // Center the viewBox on node n
-    vbX = n.x - vbW / 2;
-    vbY = n.y - vbH / 2;
-    applyTx();
-  }
+  function panTo(n) { vbX = n.x - vbW / 2; vbY = n.y - vbH / 2; applyTx(); }
   function zoom(f, cx, cy) {
-    // cx, cy are in screen pixels — convert to graph coords
     const rect = wrap.getBoundingClientRect();
     const gx = vbX + (cx !== undefined ? (cx / rect.width) * vbW : vbW / 2);
     const gy = vbY + (cy !== undefined ? (cy / rect.height) * vbH : vbH / 2);
     const nw = vbW / f, nh = vbH / f;
-    // Clamp zoom
     if (nw < 50 || nw > 10000) return;
     vbX = gx - (gx - vbX) * (nw / vbW);
     vbY = gy - (gy - vbY) * (nh / vbH);
@@ -600,7 +694,8 @@
   // ── Events ──
   function bindEvents() {
     bZI.onclick = () => zoom(1.25); bZO.onclick = () => zoom(1 / 1.25);
-    bFit.onclick = fitView; bSim.onclick = toggleSim; bExp.onclick = exportSVG;
+    bFit.onclick = fitView; bExec.onclick = triggerExecute; bExp.onclick = exportSVG;
+    bAutoPan.onclick = () => { autoPan = !autoPan; bAutoPan.classList.toggle('active', autoPan); };
     wrap.addEventListener('wheel', e => { e.preventDefault(); const r = wrap.getBoundingClientRect(); zoom(e.deltaY < 0 ? 1.08 : 1 / 1.08, e.clientX - r.left, e.clientY - r.top); }, { passive: false });
     wrap.onmousedown = e => { if (e.target.closest('.node-group')) return; isPanning = true; panSX = e.clientX; panSY = e.clientY; wrap.style.cursor = 'grabbing'; };
     window.onmousemove = e => { if (!isPanning) return; const rect = wrap.getBoundingClientRect(); const dx = (e.clientX - panSX) * (vbW / rect.width); const dy = (e.clientY - panSY) * (vbH / rect.height); vbX -= dx; vbY -= dy; panSX = e.clientX; panSY = e.clientY; applyTx(); };
@@ -610,21 +705,41 @@
     sInput.oninput = () => doSearch(sInput.value);
     sInput.onfocus = () => doSearch(sInput.value);
     sInput.onblur = () => setTimeout(() => sResults.classList.add('hidden'), 150);
+
+    // Log controls
+    logToggle.onclick = toggleLog;
+    logClear.onclick = () => { logEvents = []; logList.innerHTML = ''; };
+    document.querySelectorAll('.log-filter').forEach(btn => {
+      btn.onclick = () => {
+        document.querySelectorAll('.log-filter').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        logFilter = btn.dataset.filter;
+        applyLogFilter();
+      };
+    });
+
     window.onkeydown = e => {
       if (document.activeElement === sInput) { if (e.key === 'Escape') { sInput.blur(); sResults.classList.add('hidden'); } return; }
       switch (e.key) {
-        case 'Escape': closeDetail(); stopSim(); break;
-        case '+': case '=': zoom(1.25); break; case '-': zoom(1 / 1.25); break;
-        case '0': fitView(); break; case '/': e.preventDefault(); sInput.focus(); break;
-        case 's': case 'S': toggleSim(); break; case 'e': case 'E': exportSVG(); break;
+        case 'Escape': closeDetail(); break;
+        case '+': case '=': zoom(1.25); break;
+        case '-': zoom(1 / 1.25); break;
+        case '0': fitView(); break;
+        case '/': e.preventDefault(); sInput.focus(); break;
+        case 'x': case 'X': triggerExecute(); break;
+        case 'e': case 'E': exportSVG(); break;
+        case 'a': case 'A': autoPan = !autoPan; bAutoPan.classList.toggle('active', autoPan); break;
+        case 'l': case 'L': toggleLog(); break;
       }
     };
     window.onresize = updateMinimap;
   }
 
+  // ── Helpers ──
   function svgEl(t) { return document.createElementNS('http://www.w3.org/2000/svg', t); }
   function setA(el, o) { for (const [k, v] of Object.entries(o)) el.setAttribute(k, v); }
   function esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+  function pad(n) { return String(n).padStart(2, '0'); }
 
   init();
 })();
