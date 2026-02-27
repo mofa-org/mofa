@@ -83,7 +83,11 @@ impl ToolExecutor for CalculatorTool {
                 }
                 a / b
             }
-            _ => return Err(PluginError::ExecutionFailed(format!("Unknown operation: {}", op))),
+            _ => {
+                return Err(PluginError::ExecutionFailed(
+                    format!("Unknown operation: {}", op),
+                ));
+            }
         };
 
         Ok(serde_json::json!({
@@ -252,7 +256,9 @@ impl AgentPlugin for MonitorPlugin {
             ["list"] => {
                 Ok(serde_json::to_string(&self.all_metrics())?)
             }
-            _ => Err(PluginError::ExecutionFailed("Invalid command. Use: record <name> <value>, get <name>, list".into())),
+            _ => Err(PluginError::ExecutionFailed(
+                "Invalid command. Use: record <name> <value>, get <name>, list".into(),
+            )),
         }
     }
 

@@ -600,6 +600,23 @@ impl AgentWorkflow {
 
     /// 执行单个节点
     /// Execute a single node
+    /// Execute a single workflow node and return its output.
+    ///
+    /// # Panic containment
+    ///
+    /// [`RouterFn`], [`JoinFn`], and [`TransformFn`] closures are invoked at the
+    /// *future-construction boundary* — the synchronous call that produces a
+    /// `Pin<Box<dyn Future>>` before any `.await`.  That call is wrapped in
+    /// [`std::panic::catch_unwind`] via [`AssertUnwindSafe`], so a panic in the
+    /// closure body is caught and converted into [`LLMError::Other`] rather than
+    /// unwinding the caller.
+    ///
+    /// **Scope of containment:**
+    /// - ✅ Covered — panics that occur during future construction (synchronous).
+    /// - ❌ Not covered — panics that occur during `future.await` (async execution).
+    ///
+    /// Limiting containment to the synchronous boundary avoids interfering with
+    /// async cancellation semantics and imposes zero cost on the non-panic path.
     async fn execute_node(
         &self,
         ctx: &AgentWorkflowContext,
@@ -650,7 +667,12 @@ impl AgentWorkflow {
                     .router
                     .as_ref()
                     .ok_or_else(|| LLMError::Other("Router function not set".to_string()))?;
-                let _route = router(input.clone()).await;
+                let router_fn = Arc::clone(router);
+                let future = panic::catch_unwind(AssertUnwindSafe(|| router_fn(input.clone())))
+                    .map_err(|payload| {
+                        LLMError::Other(format!("Router panicked: {}", panic_payload_message(payload)))
+                    })?;
+                let _route = future.await;
                 // 路由节点返回原输入，路由决策在 get_next_node 中使用
                 // Router returns original input; decision is used in get_next_node
                 Ok(input)
@@ -668,7 +690,12 @@ impl AgentWorkflow {
                 let outputs = ctx.get_outputs(&node.wait_for).await;
 
                 if let Some(ref join_fn) = node.join_fn {
-                    Ok(join_fn(outputs).await)
+                    let join_fn = Arc::clone(join_fn);
+                    let future = panic::catch_unwind(AssertUnwindSafe(|| join_fn(outputs)))
+                        .map_err(|payload| {
+                            LLMError::Other(format!("Join panicked: {}", panic_payload_message(payload)))
+                        })?;
+                    Ok(future.await)
                 } else {
                     // 默认聚合：合并所有文本输出
                     // Default aggregation: merge all text outputs
@@ -1191,6 +1218,46 @@ mod tests {
         let result = workflow.run("hello").await;
 
         assert!(result.is_err(), "Panicking transform must return Err, not crash");
+        let err_msg = format!("{}", result.unwrap_err());
+        assert!(
+            err_msg.contains("panic"),
+            "Error message should mention panic, got: {}",
+            err_msg
+        );
+    }
+
+    #[tokio::test]
+    async fn test_router_panic_containment() {
+        let workflow = AgentWorkflowBuilder::new("router-panic-test")
+            .add_router("panicking_router", |_input: AgentValue| -> Pin<Box<dyn Future<Output = String> + Send>> {
+                panic!("intentional test panic in router");
+            })
+            .chain(["panicking_router"])
+            .build();
+
+        let result = workflow.run("hello").await;
+
+        assert!(result.is_err(), "Panicking router must return Err, not crash");
+        let err_msg = format!("{}", result.unwrap_err());
+        assert!(
+            err_msg.contains("panic"),
+            "Error message should mention panic, got: {}",
+            err_msg
+        );
+    }
+
+    #[tokio::test]
+    async fn test_join_panic_containment() {
+        let workflow = AgentWorkflowBuilder::new("join-panic-test")
+            .add_join_with("panicking_join", vec![], |_outputs| -> Pin<Box<dyn Future<Output = AgentValue> + Send>> {
+                panic!("intentional test panic in join");
+            })
+            .chain(["panicking_join"])
+            .build();
+
+        let result = workflow.run("hello").await;
+
+        assert!(result.is_err(), "Panicking join must return Err, not crash");
         let err_msg = format!("{}", result.unwrap_err());
         assert!(
             err_msg.contains("panic"),
