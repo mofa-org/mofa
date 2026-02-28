@@ -1,468 +1,432 @@
-//! Adapter Registry — runtime discovery and deterministic resolution.
+//! Adapter Registry for runtime model adapter discovery and management
 //!
-//! The registry stores [`AdapterDescriptor`]s and resolves the best candidate
-//! for a given [`ModelConfig`] using strict hard-constraint filtering followed
-//! by deterministic tie-breaking (alphabetical by adapter ID).
-//!
-//! # Resolution Algorithm
-//!
-//! 1. **Modality filter** — adapter must support the requested modality.
-//! 2. **Format filter** — adapter must support the requested model format.
-//! 3. **Quantization filter** — if the request specifies a quantization profile,
-//!    the adapter must list it as supported (adapters with an empty quantization
-//!    set are treated as "accepts any").
-//! 4. **Tie-break** — among all surviving candidates, the adapter with the
-//!    lexicographically smallest `id` wins. This guarantees deterministic,
-//!    reproducible resolution regardless of insertion order.
+//! This module provides the [`AdapterRegistry`] which manages adapter registration,
+//! discovery, and resolution based on model configuration and hardware profiles.
 
-use std::collections::BTreeMap;
+use std::collections::HashMap;
 
-use super::descriptor::{AdapterDescriptor, ModelFormat, ModelModality};
+use super::config::{HardwareProfile, ModelConfig};
+use super::descriptor::{AdapterDescriptor, ModelFormat, Modality};
+use super::error::{AdapterError, RejectionReason, ResolutionError};
 
-/// Configuration describing the model a caller wants to run.
-#[derive(Debug, Clone)]
-pub struct ModelConfig {
-    /// The modality required (e.g., `TextGeneration`)
-    pub modality: ModelModality,
-    /// The file format available on disk (e.g., `Gguf`)
-    pub format: ModelFormat,
-    /// Optional quantization profile (e.g., `"q4_0"`)
-    pub quantization: Option<String>,
+/// Result of adapter resolution containing the selected adapter and any rejection reasons
+#[derive(Debug)]
+pub struct ResolutionResult {
+    /// The selected adapter
+    pub adapter: AdapterDescriptor,
+    /// Reasons why other candidates were rejected (for debugging/logging)
+    pub rejection_reasons: HashMap<String, Vec<RejectionReason>>,
 }
 
-impl ModelConfig {
-    /// Create a new model configuration.
-    pub fn new(modality: ModelModality, format: ModelFormat) -> Self {
-        Self {
-            modality,
-            format,
-            quantization: None,
-        }
-    }
-
-    /// Builder: set quantization requirement.
-    pub fn with_quantization(mut self, quant: impl Into<String>) -> Self {
-        self.quantization = Some(quant.into());
-        self
-    }
-}
-
-/// Errors produced during adapter resolution.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum ResolutionError {
-    /// No adapters are registered at all.
-    EmptyRegistry,
-    /// No adapter supports the requested modality.
-    ModalityNotSupported(ModelModality),
-    /// No adapter supports the requested model format.
-    FormatNotSupported(ModelFormat),
-    /// No adapter supports the requested quantization profile.
-    QuantizationNotSupported(String),
-    /// No adapter passed all hard constraints.
-    NoCompatibleAdapter {
-        modality: ModelModality,
-        format: ModelFormat,
-        quantization: Option<String>,
-    },
-}
-
-impl std::fmt::Display for ResolutionError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::EmptyRegistry => write!(f, "adapter registry is empty"),
-            Self::ModalityNotSupported(m) => {
-                write!(f, "no adapter supports modality: {}", m)
-            }
-            Self::FormatNotSupported(fmt) => {
-                write!(f, "no adapter supports format: {}", fmt)
-            }
-            Self::QuantizationNotSupported(q) => {
-                write!(f, "no adapter supports quantization: {}", q)
-            }
-            Self::NoCompatibleAdapter {
-                modality,
-                format,
-                quantization,
-            } => {
-                write!(
-                    f,
-                    "no adapter matches all constraints: modality={}, format={}{}",
-                    modality,
-                    format,
-                    quantization
-                        .as_ref()
-                        .map(|q| format!(", quant={}", q))
-                        .unwrap_or_default()
-                )
-            }
-        }
-    }
-}
-
-/// The runtime model-adapter registry.
+/// Registry for managing model adapters
 ///
-/// Adapters are registered with an [`AdapterDescriptor`] and can be looked up
-/// deterministically using [`resolve`](AdapterRegistry::resolve).
-///
-/// # Example
-///
-/// ```
-/// use mofa_foundation::adapter::{
-///     AdapterDescriptor, AdapterRegistry, ModelConfig, ModelModality, ModelFormat,
-/// };
-///
-/// let mut registry = AdapterRegistry::new();
-///
-/// // Register an MLX adapter that handles GGUF text-generation models
-/// let mlx = AdapterDescriptor::new("mlx-local", "MLX Backend")
-///     .with_modality(ModelModality::TextGeneration)
-///     .with_format(ModelFormat::Gguf)
-///     .with_quantization("q4_0");
-///
-/// registry.register(mlx);
-///
-/// let config = ModelConfig::new(ModelModality::TextGeneration, ModelFormat::Gguf);
-/// let result = registry.resolve(&config);
-/// assert!(result.is_ok());
-/// assert_eq!(result.unwrap().id, "mlx-local");
-/// ```
+/// The registry provides:
+/// - Register/discover adapters at runtime
+/// - Resolve candidates for a given ModelConfig + HardwareProfile
+/// - Deterministic selection with structured rejection reasons
+#[derive(Debug, Default)]
 pub struct AdapterRegistry {
-    /// BTreeMap ensures iteration is always sorted by adapter ID,
-    /// giving us deterministic resolution for free.
-    adapters: BTreeMap<String, AdapterDescriptor>,
+    adapters: HashMap<String, AdapterDescriptor>,
 }
 
 impl AdapterRegistry {
-    /// Create an empty registry.
+    /// Create a new empty adapter registry
     pub fn new() -> Self {
         Self {
-            adapters: BTreeMap::new(),
+            adapters: HashMap::new(),
         }
     }
 
-    /// Register an adapter. If an adapter with the same ID already exists,
-    /// it will be replaced.
-    pub fn register(&mut self, descriptor: AdapterDescriptor) {
-        self.adapters.insert(descriptor.id.clone(), descriptor);
+    /// Register an adapter with the registry
+    ///
+    /// # Errors
+    /// Returns [`AdapterError::AlreadyRegistered`] if an adapter with the same ID already exists
+    pub fn register(&mut self, adapter: AdapterDescriptor) -> Result<(), AdapterError> {
+        let id = adapter.id.clone();
+        if self.adapters.contains_key(&id) {
+            return Err(AdapterError::AlreadyRegistered(id));
+        }
+        self.adapters.insert(id, adapter);
+        Ok(())
     }
 
-    /// Remove an adapter by ID. Returns `true` if it was present.
-    pub fn unregister(&mut self, id: &str) -> bool {
-        self.adapters.remove(id).is_some()
+    /// Register an adapter, replacing any existing adapter with the same ID
+    pub fn register_or_replace(&mut self, adapter: AdapterDescriptor) {
+        self.adapters.insert(adapter.id.clone(), adapter);
     }
 
-    /// Get a reference to a registered adapter by ID.
+    /// Unregister an adapter from the registry
+    ///
+    /// # Errors
+    /// Returns [`AdapterError::NotFound`] if no adapter with the given ID exists
+    pub fn unregister(&mut self, id: &str) -> Result<AdapterDescriptor, AdapterError> {
+        self.adapters
+            .remove(id)
+            .ok_or_else(|| AdapterError::NotFound(id.to_string()))
+    }
+
+    /// Get an adapter by ID
     pub fn get(&self, id: &str) -> Option<&AdapterDescriptor> {
         self.adapters.get(id)
     }
 
-    /// Number of registered adapters.
+    /// Get all registered adapters
+    pub fn adapters(&self) -> impl Iterator<Item = &AdapterDescriptor> {
+        self.adapters.values()
+    }
+
+    /// Get the number of registered adapters
     pub fn len(&self) -> usize {
         self.adapters.len()
     }
 
-    /// Whether the registry has no adapters.
+    /// Check if the registry is empty
     pub fn is_empty(&self) -> bool {
         self.adapters.is_empty()
     }
 
-    /// List all registered adapter IDs.
-    pub fn adapter_ids(&self) -> Vec<&str> {
-        self.adapters.keys().map(|s| s.as_str()).collect()
+    /// Resolve the best adapter for the given model configuration and hardware profile
+    ///
+    /// This method performs deterministic resolution with the following steps:
+    /// 1. Filter by modality (hard constraint)
+    /// 2. Filter by format (hard constraint)
+    /// 3. Filter by quantization (hard constraint, if specified)
+    /// 4. Filter by hardware compatibility (hard constraint)
+    /// 5. Filter by priority threshold (soft constraint)
+    /// 6. Filter out experimental adapters unless explicitly allowed
+    /// 7. Select highest priority, then by name for deterministic tie-break
+    ///
+    /// # Errors
+    /// Returns [`ResolutionError::NoCompatibleAdapter`] if no compatible adapter is found
+    pub fn resolve(
+        &self,
+        config: &ModelConfig,
+        hardware: &HardwareProfile,
+    ) -> Result<ResolutionResult, ResolutionError> {
+        self.resolve_with_rejections(config, hardware)
+            .map(|(adapter, reasons)| ResolutionResult {
+                adapter,
+                rejection_reasons: reasons,
+            })
     }
 
-    /// Resolve the best adapter for the given model configuration.
-    ///
-    /// Uses strict hard-constraint filtering:
-    /// 1. Modality must match.
-    /// 2. Format must match.
-    /// 3. Quantization must match (if specified in config).
-    ///
-    /// Among all passing candidates, the one with the lexicographically
-    /// smallest `id` is returned (deterministic tie-break).
-    pub fn resolve(&self, config: &ModelConfig) -> Result<&AdapterDescriptor, ResolutionError> {
-        if self.adapters.is_empty() {
-            return Err(ResolutionError::EmptyRegistry);
-        }
+    /// Resolve adapter with detailed rejection reasons for each candidate
+    fn resolve_with_rejections(
+        &self,
+        config: &ModelConfig,
+        hardware: &HardwareProfile,
+    ) -> Result<(AdapterDescriptor, HashMap<String, Vec<RejectionReason>>), ResolutionError> {
+        let mut candidates: Vec<(AdapterDescriptor, Vec<RejectionReason>)> = Vec::new();
 
-        // BTreeMap iterates in sorted key order, so the first match is
-        // already the deterministic winner.
-        for descriptor in self.adapters.values() {
-            if !descriptor.modalities.contains(&config.modality) {
-                continue;
+        for adapter in self.adapters.values() {
+            let mut rejections = Vec::new();
+
+            // Step 1: Check modality support (hard constraint)
+            if !adapter.supports_modality(&config.required_modality) {
+                rejections.push(RejectionReason::ModalityMismatch {
+                    required: config.required_modality.to_string(),
+                    supported: adapter
+                        .supported_modalities
+                        .iter()
+                        .map(|m| m.to_string())
+                        .collect(),
+                });
             }
-            if !descriptor.supported_formats.contains(&config.format) {
-                continue;
-            }
-            if let Some(ref quant) = config.quantization {
-                // If the adapter has an explicit quantization set,
-                // the requested quant must be in it.
-                // An empty set means "accepts any quantization".
-                if !descriptor.supported_quantization.is_empty()
-                    && !descriptor.supported_quantization.contains(quant)
-                {
-                    continue;
+
+            // Step 2: Check format support (hard constraint)
+            if let Some(ref required_format) = config.required_format {
+                let format = parse_format(required_format);
+                if !adapter.supports_format(&format) {
+                    rejections.push(RejectionReason::FormatMismatch {
+                        required: required_format.clone(),
+                        supported: adapter
+                            .supported_formats
+                            .iter()
+                            .map(|f| f.to_string())
+                            .collect(),
+                    });
                 }
             }
-            return Ok(descriptor);
-        }
 
-        // No candidate survived all filters — produce a specific error.
-        let has_modality = self
-            .adapters
-            .values()
-            .any(|d| d.modalities.contains(&config.modality));
-        if !has_modality {
-            return Err(ResolutionError::ModalityNotSupported(config.modality));
-        }
+            // Step 3: Check quantization support (hard constraint, if specified)
+            if let Some(ref required_quant) = config.required_quantization {
+                if !adapter.supports_quantization(required_quant) {
+                    rejections.push(RejectionReason::QuantizationMismatch {
+                        required: required_quant.clone(),
+                        supported: adapter
+                            .supported_quantizations
+                            .iter()
+                            .map(|q| q.name.clone())
+                            .collect(),
+                    });
+                }
+            }
 
-        let has_format = self
-            .adapters
-            .values()
-            .any(|d| d.supported_formats.contains(&config.format));
-        if !has_format {
-            return Err(ResolutionError::FormatNotSupported(config.format));
-        }
+            // Step 4: Check hardware compatibility (hard constraint)
+            if !adapter.supports_hardware(hardware) {
+                rejections.push(RejectionReason::HardwareConstraint {
+                    constraint: "hardware_compatibility".to_string(),
+                    reason: "Adapter does not meet hardware requirements".to_string(),
+                });
+            }
 
-        if let Some(ref quant) = config.quantization {
-            let has_quant = self.adapters.values().any(|d| {
-                d.supported_quantization.is_empty() || d.supported_quantization.contains(quant)
-            });
-            if !has_quant {
-                return Err(ResolutionError::QuantizationNotSupported(quant.clone()));
+            // Step 5: Check priority threshold (soft constraint)
+            if let Some(min_priority) = config.min_priority {
+                if adapter.priority < min_priority {
+                    rejections.push(RejectionReason::PriorityTooLow {
+                        required_min_priority: min_priority,
+                        adapter_priority: adapter.priority,
+                    });
+                }
+            }
+
+            // Step 6: Check experimental flag
+            if adapter.experimental && !config.allow_experimental {
+                rejections.push(RejectionReason::HardwareConstraint {
+                    constraint: "experimental".to_string(),
+                    reason: "Experimental adapter not allowed".to_string(),
+                });
+            }
+
+            // If no hard constraints failed, add as candidate
+            let has_hard_rejection = rejections
+                .iter()
+                .any(|r| r.severity() == super::error::RejectionSeverity::Hard);
+
+            if !has_hard_rejection {
+                candidates.push((adapter.clone(), rejections));
+            } else {
+                // Store rejection reasons for debugging
+                candidates.push((adapter.clone(), rejections));
             }
         }
 
-        Err(ResolutionError::NoCompatibleAdapter {
-            modality: config.modality,
-            format: config.format,
-            quantization: config.quantization.clone(),
-        })
+        // Filter to only candidates without hard rejections
+        let valid_candidates: Vec<_> = candidates
+            .iter()
+            .filter(|(_, reasons)| {
+                !reasons
+                    .iter()
+                    .any(|r| r.severity() == super::error::RejectionSeverity::Hard)
+            })
+            .collect();
+
+        if valid_candidates.is_empty() {
+            return Err(ResolutionError::NoCompatibleAdapter);
+        }
+
+        // Sort by priority (descending), then by name (ascending) for deterministic tie-break
+        let mut sorted_candidates: Vec<_> = valid_candidates
+            .iter()
+            .map(|(adapter, reasons)| (adapter, reasons))
+            .collect();
+
+        sorted_candidates.sort_by(|a, b| {
+            let priority_cmp = b.0.priority.cmp(&a.0.priority);
+            if priority_cmp == std::cmp::Ordering::Equal {
+                a.0.name.cmp(&b.0.name)
+            } else {
+                priority_cmp
+            }
+        });
+
+        // Clone the best adapter to avoid borrow issues
+        let best_adapter = sorted_candidates[0].0.clone();
+        let best_adapter_id = best_adapter.id.clone();
+
+        // Collect rejection reasons for all other candidates
+        let rejection_reasons: HashMap<String, Vec<RejectionReason>> = candidates
+            .into_iter()
+            .filter(|(adapter, _)| adapter.id != best_adapter_id)
+            .map(|(adapter, reasons)| (adapter.id, reasons))
+            .collect();
+
+        Ok((best_adapter, rejection_reasons))
+    }
+
+    /// Find all adapters that support a given modality
+    pub fn find_by_modality(&self, modality: &Modality) -> impl Iterator<Item = &AdapterDescriptor> {
+        self.adapters
+            .values()
+            .filter(|a| a.supports_modality(modality))
+    }
+
+    /// Find all adapters that support a given format
+    pub fn find_by_format(&self, format: &ModelFormat) -> impl Iterator<Item = &AdapterDescriptor> {
+        self.adapters
+            .values()
+            .filter(|a| a.supports_format(format))
+    }
+
+    /// Find all adapters compatible with the given hardware profile
+    pub fn find_compatible(&self, hardware: &HardwareProfile) -> impl Iterator<Item = &AdapterDescriptor> {
+        self.adapters
+            .values()
+            .filter(|a| a.supports_hardware(hardware))
     }
 }
 
-impl Default for AdapterRegistry {
-    fn default() -> Self {
-        Self::new()
+/// Parse a format string into a ModelFormat enum
+fn parse_format(format_str: &str) -> ModelFormat {
+    match format_str.to_lowercase().as_str() {
+        "safetensors" => ModelFormat::Safetensors,
+        "gguf" => ModelFormat::GGUF,
+        "pytorch" | "pt" | "ckpt" => ModelFormat::Pytorch,
+        "onnx" => ModelFormat::Onnx,
+        "tensorflow" | "tf" => ModelFormat::Tensorflow,
+        "mlx" => ModelFormat::MLX,
+        "ggml" => ModelFormat::GGML,
+        other => ModelFormat::Custom(other.to_string()),
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::adapter::descriptor::{ModelFormat, ModelModality};
 
-    fn mlx_adapter() -> AdapterDescriptor {
-        AdapterDescriptor::new("mlx-local", "MLX Backend")
-            .with_modality(ModelModality::TextGeneration)
-            .with_format(ModelFormat::Gguf)
-            .with_format(ModelFormat::Safetensors)
-            .with_quantization("q4_0")
-            .with_quantization("q8_0")
+    fn create_test_descriptors() -> Vec<AdapterDescriptor> {
+        vec![
+            AdapterDescriptor::builder()
+                .id("llama-cpp")
+                .name("Llama.cpp Backend")
+                .supported_modality(Modality::LLM)
+                .supported_format(ModelFormat::GGUF)
+                .supported_quantizations(vec!["q4_k".to_string(), "q8_0".to_string()])
+                .priority(100)
+                .build(),
+            AdapterDescriptor::builder()
+                .id("huggingface")
+                .name("HuggingFace Backend")
+                .supported_modality(Modality::LLM)
+                .supported_format(ModelFormat::Safetensors)
+                .supported_quantizations(vec!["bf16".to_string(), "fp16".to_string()])
+                .priority(90)
+                .build(),
+            AdapterDescriptor::builder()
+                .id("mlx-backend")
+                .name("Apple MLX Backend")
+                .supported_modality(Modality::LLM)
+                .supported_modality(Modality::VLM)
+                .supported_format(ModelFormat::MLX)
+                .priority(80)
+                .build(),
+        ]
     }
-
-    fn llama_cpp_adapter() -> AdapterDescriptor {
-        AdapterDescriptor::new("llama-cpp", "llama.cpp Backend")
-            .with_modality(ModelModality::TextGeneration)
-            .with_format(ModelFormat::Gguf)
-            .with_quantization("q4_0")
-            .with_quantization("q4_1")
-            .with_quantization("q8_0")
-    }
-
-    fn whisper_adapter() -> AdapterDescriptor {
-        AdapterDescriptor::new("whisper-mlx", "Whisper MLX")
-            .with_modality(ModelModality::SpeechToText)
-            .with_format(ModelFormat::Safetensors)
-    }
-
-    fn cloud_adapter() -> AdapterDescriptor {
-        AdapterDescriptor::new("openai-api", "OpenAI API")
-            .with_modality(ModelModality::TextGeneration)
-            .with_modality(ModelModality::Embedding)
-            .with_format(ModelFormat::Safetensors)
-            .with_format(ModelFormat::Gguf)
-    }
-
-    // --- Happy path tests ---
 
     #[test]
-    fn test_resolve_single_adapter() {
+    fn test_register_adapter() {
         let mut registry = AdapterRegistry::new();
-        registry.register(mlx_adapter());
+        let adapter = AdapterDescriptor::builder()
+            .id("test")
+            .name("Test")
+            .supported_modality(Modality::LLM)
+            .supported_format(ModelFormat::Safetensors)
+            .build();
 
-        let config = ModelConfig::new(ModelModality::TextGeneration, ModelFormat::Gguf);
-        let result = registry.resolve(&config);
+        assert!(registry.register(adapter.clone()).is_ok());
+        assert!(registry.register(adapter).is_err()); // Duplicate
+    }
+
+    #[test]
+    fn test_resolve_basic() {
+        let mut registry = AdapterRegistry::new();
+        for adapter in create_test_descriptors() {
+            registry.register(adapter).unwrap();
+        }
+
+        let config = ModelConfig::builder()
+            .model_id("llama-3-8b")
+            .required_modality(Modality::LLM)
+            .required_format("gguf")
+            .build();
+
+        let hardware = HardwareProfile::builder()
+            .os("linux")
+            .cpu_family("x86_64")
+            .gpu_available(true)
+            .gpu_type("cuda")
+            .build();
+
+        let result = registry.resolve(&config, &hardware);
         assert!(result.is_ok());
-        assert_eq!(result.unwrap().id, "mlx-local");
+        assert_eq!(result.unwrap().adapter.id, "llama-cpp");
     }
 
     #[test]
-    fn test_resolve_with_quantization() {
+    fn test_resolve_no_compatible() {
         let mut registry = AdapterRegistry::new();
-        registry.register(mlx_adapter());
+        for adapter in create_test_descriptors() {
+            registry.register(adapter).unwrap();
+        }
 
-        let config = ModelConfig::new(ModelModality::TextGeneration, ModelFormat::Gguf)
-            .with_quantization("q4_0");
-        let result = registry.resolve(&config);
-        assert!(result.is_ok());
-        assert_eq!(result.unwrap().id, "mlx-local");
+        let config = ModelConfig::builder()
+            .model_id("unknown-model")
+            .required_modality(Modality::ASR) // Not supported by any adapter
+            .build();
+
+        let hardware = HardwareProfile::default();
+
+        let result = registry.resolve(&config, &hardware);
+        assert!(result.is_err());
+        assert!(matches!(
+            result.unwrap_err(),
+            ResolutionError::NoCompatibleAdapter
+        ));
     }
 
     #[test]
-    fn test_deterministic_tiebreak_alphabetical() {
+    fn test_resolve_deterministic_tie_break() {
         let mut registry = AdapterRegistry::new();
-        // Register in non-alphabetical order
-        registry.register(mlx_adapter());
-        registry.register(llama_cpp_adapter());
 
-        // Both support TextGeneration + Gguf + q4_0
-        let config = ModelConfig::new(ModelModality::TextGeneration, ModelFormat::Gguf)
-            .with_quantization("q4_0");
-        let result = registry.resolve(&config);
-        assert!(result.is_ok());
-        // "llama-cpp" < "mlx-local" alphabetically
-        assert_eq!(result.unwrap().id, "llama-cpp");
+        // Two adapters with same priority
+        registry
+            .register(
+                AdapterDescriptor::builder()
+                    .id("adapter-a")
+                    .name("Adapter A")
+                    .supported_modality(Modality::LLM)
+                    .supported_format(ModelFormat::Safetensors)
+                    .priority(100)
+                    .build(),
+            )
+            .unwrap();
+
+        registry
+            .register(
+                AdapterDescriptor::builder()
+                    .id("adapter-b")
+                    .name("Adapter B")
+                    .supported_modality(Modality::LLM)
+                    .supported_format(ModelFormat::Safetensors)
+                    .priority(100)
+                    .build(),
+            )
+            .unwrap();
+
+        let config = ModelConfig::builder()
+            .model_id("test")
+            .required_modality(Modality::LLM)
+            .required_format("safetensors")
+            .build();
+
+        let hardware = HardwareProfile::default();
+
+        let result = registry.resolve(&config, &hardware).unwrap();
+        // Should select "Adapter A" (alphabetically first due to tie-break)
+        assert_eq!(result.adapter.name, "Adapter A");
     }
 
     #[test]
-    fn test_resolve_speech_to_text() {
+    fn test_find_by_modality() {
         let mut registry = AdapterRegistry::new();
-        registry.register(mlx_adapter());
-        registry.register(whisper_adapter());
+        for adapter in create_test_descriptors() {
+            registry.register(adapter).unwrap();
+        }
 
-        let config = ModelConfig::new(ModelModality::SpeechToText, ModelFormat::Safetensors);
-        let result = registry.resolve(&config);
-        assert!(result.is_ok());
-        assert_eq!(result.unwrap().id, "whisper-mlx");
-    }
+        let llm_adapters: Vec<_> = registry.find_by_modality(&Modality::LLM).collect();
+        assert_eq!(llm_adapters.len(), 3);
 
-    #[test]
-    fn test_cloud_adapter_accepts_any_quantization() {
-        let mut registry = AdapterRegistry::new();
-        registry.register(cloud_adapter());
-
-        // Cloud adapter has empty quantization set → accepts anything
-        let config = ModelConfig::new(ModelModality::TextGeneration, ModelFormat::Gguf)
-            .with_quantization("q4_0");
-        let result = registry.resolve(&config);
-        assert!(result.is_ok());
-        assert_eq!(result.unwrap().id, "openai-api");
-    }
-
-    // --- Error path tests ---
-
-    #[test]
-    fn test_empty_registry_error() {
-        let registry = AdapterRegistry::new();
-        let config = ModelConfig::new(ModelModality::TextGeneration, ModelFormat::Gguf);
-        let err = registry.resolve(&config).unwrap_err();
-        assert_eq!(err, ResolutionError::EmptyRegistry);
-    }
-
-    #[test]
-    fn test_modality_not_supported() {
-        let mut registry = AdapterRegistry::new();
-        registry.register(mlx_adapter()); // Only TextGeneration
-
-        let config = ModelConfig::new(ModelModality::SpeechToText, ModelFormat::Gguf);
-        let err = registry.resolve(&config).unwrap_err();
-        assert_eq!(
-            err,
-            ResolutionError::ModalityNotSupported(ModelModality::SpeechToText)
-        );
-    }
-
-    #[test]
-    fn test_format_not_supported() {
-        let mut registry = AdapterRegistry::new();
-        registry.register(mlx_adapter()); // Supports Gguf + Safetensors, not CoreMl
-
-        let config = ModelConfig::new(ModelModality::TextGeneration, ModelFormat::CoreMl);
-        let err = registry.resolve(&config).unwrap_err();
-        assert_eq!(
-            err,
-            ResolutionError::FormatNotSupported(ModelFormat::CoreMl)
-        );
-    }
-
-    #[test]
-    fn test_quantization_not_supported() {
-        let mut registry = AdapterRegistry::new();
-        registry.register(llama_cpp_adapter()); // Supports q4_0, q4_1, q8_0
-
-        let config = ModelConfig::new(ModelModality::TextGeneration, ModelFormat::Gguf)
-            .with_quantization("f16");
-        let err = registry.resolve(&config).unwrap_err();
-        assert_eq!(err, ResolutionError::QuantizationNotSupported("f16".into()));
-    }
-
-    #[test]
-    fn test_no_compatible_adapter_combined() {
-        let mut registry = AdapterRegistry::new();
-        // whisper only supports SpeechToText + Safetensors
-        registry.register(whisper_adapter());
-        // cloud supports TextGeneration + Embedding, Gguf + Safetensors
-        registry.register(cloud_adapter());
-
-        // Request: SpeechToText + Gguf → whisper has modality but wrong format,
-        // cloud has format but wrong modality
-        let config = ModelConfig::new(ModelModality::SpeechToText, ModelFormat::Gguf);
-        let err = registry.resolve(&config).unwrap_err();
-        assert!(matches!(err, ResolutionError::NoCompatibleAdapter { .. }));
-    }
-
-    // --- Registry management tests ---
-
-    #[test]
-    fn test_register_and_unregister() {
-        let mut registry = AdapterRegistry::new();
-        registry.register(mlx_adapter());
-        assert_eq!(registry.len(), 1);
-
-        let removed = registry.unregister("mlx-local");
-        assert!(removed);
-        assert_eq!(registry.len(), 0);
-        assert!(registry.is_empty());
-    }
-
-    #[test]
-    fn test_register_overwrites_existing() {
-        let mut registry = AdapterRegistry::new();
-        registry.register(mlx_adapter());
-
-        // Register a different adapter with the same ID
-        let updated = AdapterDescriptor::new("mlx-local", "MLX Backend v2")
-            .with_modality(ModelModality::VisionLanguage)
-            .with_format(ModelFormat::Safetensors);
-        registry.register(updated);
-
-        assert_eq!(registry.len(), 1);
-        let desc = registry.get("mlx-local").unwrap();
-        assert_eq!(desc.name, "MLX Backend v2");
-        assert!(desc.modalities.contains(&ModelModality::VisionLanguage));
-    }
-
-    #[test]
-    fn test_adapter_ids_sorted() {
-        let mut registry = AdapterRegistry::new();
-        registry.register(mlx_adapter());
-        registry.register(llama_cpp_adapter());
-        registry.register(whisper_adapter());
-
-        let ids = registry.adapter_ids();
-        assert_eq!(ids, vec!["llama-cpp", "mlx-local", "whisper-mlx"]);
-    }
-
-    #[test]
-    fn test_resolution_error_display() {
-        let err = ResolutionError::EmptyRegistry;
-        assert_eq!(format!("{}", err), "adapter registry is empty");
-
-        let err = ResolutionError::ModalityNotSupported(ModelModality::TextToSpeech);
-        assert_eq!(
-            format!("{}", err),
-            "no adapter supports modality: text-to-speech"
-        );
+        let vlm_adapters: Vec<_> = registry.find_by_modality(&Modality::VLM).collect();
+        assert_eq!(vlm_adapters.len(), 1);
     }
 }
