@@ -97,6 +97,10 @@ pub struct OtlpMetricsExporter {
 
 impl OtlpMetricsExporter {
     pub fn new(collector: Arc<MetricsCollector>, mut config: OtlpMetricsExporterConfig) -> Self {
+        if config.endpoint.trim().is_empty() {
+            warn!("OtlpMetricsExporterConfig.endpoint is empty; using default endpoint");
+            config.endpoint = OtlpMetricsExporterConfig::default().endpoint;
+        }
         if config.max_queue_size == 0 {
             warn!("OtlpMetricsExporterConfig.max_queue_size=0 is invalid; clamping to 1");
             config.max_queue_size = 1;
@@ -104,6 +108,18 @@ impl OtlpMetricsExporter {
         if config.batch_size == 0 {
             warn!("OtlpMetricsExporterConfig.batch_size=0 is invalid; clamping to 1");
             config.batch_size = 1;
+        }
+        if config.collect_interval.is_zero() {
+            warn!("OtlpMetricsExporterConfig.collect_interval=0 is invalid; clamping to 1s");
+            config.collect_interval = Duration::from_secs(1);
+        }
+        if config.export_interval.is_zero() {
+            warn!("OtlpMetricsExporterConfig.export_interval=0 is invalid; clamping to 1s");
+            config.export_interval = Duration::from_secs(1);
+        }
+        if config.timeout.is_zero() {
+            warn!("OtlpMetricsExporterConfig.timeout=0 is invalid; clamping to 1s");
+            config.timeout = Duration::from_secs(1);
         }
 
         let (sender, receiver) = mpsc::channel(config.max_queue_size);

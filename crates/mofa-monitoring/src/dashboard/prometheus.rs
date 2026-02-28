@@ -352,6 +352,10 @@ impl PrometheusExporter {
             latency.observe_snapshot(&snapshot, &mut dropped_this_render);
         }
 
+        let mut body = self
+            .render_snapshot(&snapshot, &mut dropped_this_render)
+            .await;
+
         let render_duration = render_start.elapsed().as_secs_f64();
         {
             let mut histogram = self.render_duration_histogram.write().await;
@@ -361,10 +365,6 @@ impl PrometheusExporter {
             let mut dropped_total = self.dropped_series_total.write().await;
             dropped_total.add_assign(&dropped_this_render);
         }
-
-        let mut body = self
-            .render_snapshot(&snapshot, &mut dropped_this_render)
-            .await;
         self.append_exporter_internal_metrics(&mut body).await;
 
         *self.cached_body.write().await = body;
