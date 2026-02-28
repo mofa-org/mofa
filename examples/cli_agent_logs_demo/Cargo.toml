@@ -1,0 +1,16 @@
+[package]
+name = "cli_agent_logs_demo"
+version.workspace = true
+edition.workspace = true
+description = "Demonstrates mofa agent logs command with real agent logging"
+
+[dependencies]
+mofa-cli = { path = "../../crates/mofa-cli", version = "0.1" }
+tempfile.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+chrono.workspace = true
+
+[lints]
+workspace = true

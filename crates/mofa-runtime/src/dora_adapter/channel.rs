@@ -14,6 +14,9 @@ use std::time::Duration;
 use tokio::sync::{Mutex, RwLock, broadcast, mpsc};
 use tokio::time::timeout;
 
+/// Type alias for the receiver storage type to reduce complexity
+type ReceiverMap = Arc<RwLock<HashMap<String, Arc<Mutex<mpsc::Receiver<MessageEnvelope>>>>>>;
+
 /// 通道配置
 /// Channel configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -140,7 +143,7 @@ pub struct DoraChannel {
     topic_channels: Arc<RwLock<HashMap<String, broadcast::Sender<MessageEnvelope>>>>,
     /// 接收器存储：智能体ID -> 接收器
     /// Receiver storage: Agent ID -> Receiver
-    receivers: Arc<RwLock<HashMap<String, Arc<Mutex<mpsc::Receiver<MessageEnvelope>>>>>>,
+    receivers: ReceiverMap,
 }
 
 impl DoraChannel {
@@ -311,12 +314,9 @@ impl DoraChannel {
     pub async fn receive_p2p(&self, agent_id: &str) -> DoraResult<Option<MessageEnvelope>> {
         let rx = {
             let receivers = self.receivers.read().await;
-            receivers
-                .get(agent_id)
-                .cloned()
-                .ok_or_else(|| {
-                    DoraError::AgentNotFound(format!("Agent {} not registered", agent_id))
-                })?
+            receivers.get(agent_id).cloned().ok_or_else(|| {
+                DoraError::AgentNotFound(format!("Agent {} not registered", agent_id))
+            })?
         };
 
         let mut rx_guard = rx.lock().await;
@@ -332,12 +332,9 @@ impl DoraChannel {
     pub async fn try_receive_p2p(&self, agent_id: &str) -> DoraResult<Option<MessageEnvelope>> {
         let rx = {
             let receivers = self.receivers.read().await;
-            receivers
-                .get(agent_id)
-                .cloned()
-                .ok_or_else(|| {
-                    DoraError::AgentNotFound(format!("Agent {} not registered", agent_id))
-                })?
+            receivers.get(agent_id).cloned().ok_or_else(|| {
+                DoraError::AgentNotFound(format!("Agent {} not registered", agent_id))
+            })?
         };
 
         let mut rx_guard = rx.lock().await;
@@ -542,4 +539,3 @@ mod tests {
         );
     }
 }
-

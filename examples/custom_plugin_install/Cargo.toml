@@ -1,0 +1,14 @@
+[package]
+name = "custom_plugin_install"
+version.workspace = true
+edition.workspace = true
+description = "Shows how to package and install a custom plugin via CLI"
+
+[dependencies]
+mofa-cli = { path = "../../crates/mofa-cli", version = "0.1" }
+tempfile.workspace = true
+tokio.workspace = true
+serde_json.workspace = true
+
+[lints]
+workspace = true

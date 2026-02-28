@@ -13,6 +13,10 @@ use crate::agent::error::AgentResult;
 
 use super::{Command, GraphConfig, GraphState, Reducer, RuntimeContext};
 
+/// Type alias for the boxed stream returned by graph execution.
+pub type GraphStream<'a, S, V> =
+    Pin<Box<dyn Stream<Item = AgentResult<StreamEvent<S, V>>> + Send + 'a>>;
+
 /// Special node ID for the graph entry point
 pub const START: &str = "__START__";
 
@@ -50,7 +54,10 @@ pub const END: &str = "__END__";
 /// }
 /// ```
 #[async_trait]
-pub trait NodeFunc<S: GraphState>: Send + Sync {
+pub trait NodeFunc<S: GraphState, V = serde_json::Value>: Send + Sync
+where
+    V: serde::Serialize + Send + Sync + 'static + std::clone::Clone,
+{
     /// Execute the node
     ///
     /// # Arguments
@@ -59,7 +66,7 @@ pub trait NodeFunc<S: GraphState>: Send + Sync {
     ///
     /// # Returns
     /// A Command containing state updates and control flow directive
-    async fn call(&self, state: &mut S, ctx: &RuntimeContext) -> AgentResult<Command>;
+    async fn call(&self, state: &mut S, ctx: &RuntimeContext<V>) -> AgentResult<Command<V>>;
 
     /// Returns the node name/identifier
     fn name(&self) -> &str;
@@ -72,6 +79,7 @@ pub trait NodeFunc<S: GraphState>: Send + Sync {
 
 /// Edge target definition
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[non_exhaustive]
 pub enum EdgeTarget {
     /// Single target node
     Single(String),
@@ -142,7 +150,7 @@ pub trait StateGraph: Send + Sync {
     type State: GraphState;
 
     /// The compiled graph type produced by this builder
-    type Compiled: CompiledGraph<Self::State>;
+    type Compiled: CompiledGraph<Self::State, serde_json::Value>;
 
     /// Create a new graph with the given ID
     fn new(id: impl Into<String>) -> Self;
@@ -221,7 +229,10 @@ pub trait StateGraph: Send + Sync {
 /// A compiled graph can be invoked with an initial state and
 /// returns the final state after execution.
 #[async_trait]
-pub trait CompiledGraph<S: GraphState>: Send + Sync {
+pub trait CompiledGraph<S: GraphState, V = serde_json::Value>: Send + Sync
+where
+    V: serde::Serialize + serde::de::DeserializeOwned + Clone + Send + Sync + 'static,
+{
     /// Get the graph ID
     fn id(&self) -> &str;
 
@@ -233,21 +244,23 @@ pub trait CompiledGraph<S: GraphState>: Send + Sync {
     ///
     /// # Returns
     /// The final state after graph execution completes
-    async fn invoke(&self, input: S, config: Option<RuntimeContext>) -> AgentResult<S>;
+    async fn invoke(&self, input: S, config: Option<RuntimeContext<V>>) -> AgentResult<S>;
 
     /// Execute the graph with streaming output
     ///
     /// Returns a stream of (node_id, state) pairs as each node completes.
-    async fn stream(
-        &self,
-        input: S,
-        config: Option<RuntimeContext>,
-    ) -> AgentResult<Pin<Box<dyn Stream<Item = AgentResult<StreamEvent<S>>> + Send>>>;
+    fn stream(&self, input: S, config: Option<RuntimeContext<V>>) -> GraphStream<'_, S, V>;
 
     /// Execute a single step of the graph
     ///
     /// Useful for debugging or interactive execution.
-    async fn step(&self, input: S, config: Option<RuntimeContext>) -> AgentResult<StepResult<S>>;
+    /// # Returns
+    /// Step execution result containing next state and command
+    async fn step(
+        &self,
+        input: S,
+        config: Option<RuntimeContext<V>>,
+    ) -> AgentResult<StepResult<S, V>>;
 
     /// Validate that a state is valid for this graph
     fn validate_state(&self, state: &S) -> AgentResult<()>;
@@ -258,14 +271,15 @@ pub trait CompiledGraph<S: GraphState>: Send + Sync {
 
 /// Stream event from graph execution
 #[derive(Debug, Clone)]
-pub enum StreamEvent<S: GraphState> {
+#[non_exhaustive]
+pub enum StreamEvent<S: GraphState, V = serde_json::Value> {
     /// A node started executing
     NodeStart { node_id: String, state: S },
     /// A node finished executing
     NodeEnd {
         node_id: String,
         state: S,
-        command: Command,
+        command: Command<V>,
     },
     /// Graph execution completed
     End { final_state: S },
@@ -274,17 +288,34 @@ pub enum StreamEvent<S: GraphState> {
         node_id: Option<String>,
         error: String,
     },
+    /// 瞬态失败后正在重试节点
+    /// A node is being retried after a transient failure
+    NodeRetry {
+        node_id: String,
+        attempt: u32,
+        error: String,
+    },
+    /// 节点永久失败，执行正在回退
+    /// A node failed permanently and execution is falling back
+    NodeFallback {
+        from_node: String,
+        to_node: String,
+        reason: String,
+    },
+    /// 由于重复失败，节点的断路器已打开
+    /// A node's circuit breaker has opened due to repeated failures
+    CircuitOpen { node_id: String },
 }
 
 /// Result of a single step execution
 #[derive(Debug, Clone)]
-pub struct StepResult<S: GraphState> {
+pub struct StepResult<S: GraphState, V = serde_json::Value> {
     /// Current state after the step
     pub state: S,
     /// Which node was executed
     pub node_id: String,
     /// Command returned by the node
-    pub command: Command,
+    pub command: Command<V>,
     /// Whether execution is complete
     pub is_complete: bool,
     /// Next node to execute (if any)

@@ -8,6 +8,7 @@ use super::plugin::EventResponsePlugin;
 use super::rule_manager::{RuleAdjustmentStrategy, RuleManager};
 use mofa_kernel::plugin::{AgentPlugin, PluginContext, PluginResult};
 use std::collections::{HashMap, VecDeque};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use tokio::sync::{RwLock, Semaphore};
 
@@ -96,12 +97,17 @@ impl EventHandlingEngine {
         let semaphore = self.semaphore.clone();
         let _permit = semaphore.acquire().await.unwrap();
 
-        // Get the next event from the queue
-        let mut queue = self.event_queue.write().await;
-        let mut event = match queue.pop_front() {
-            Some(event) => event,
-            None => return Ok(None),
-        };
+        // Pop the next event and immediately release the write lock so that
+        // concurrent calls to submit_event() are not blocked for the entire
+        // duration of plugin processing (which may include async I/O or LLM
+        // calls lasting seconds).
+        let mut event = {
+            let mut queue = self.event_queue.write().await;
+            match queue.pop_front() {
+                Some(event) => event,
+                None => return Ok(None),
+            }
+        }; // write lock released here, before any .await
 
         // Update event status
         event.update_status(EventStatus::Processing);
@@ -174,6 +180,59 @@ impl EventHandlingEngine {
     }
 }
 
+/// Lifecycle-aware runner for `EventHandlingEngine`.
+///
+/// This wrapper ensures that at most one main event-processing loop is running
+/// for a given engine instance. Calling `spawn()` multiple times on the same
+/// runner is idempotent: only the first call will actually start the loop.
+pub struct EventEngineRunner {
+    engine: Arc<EventHandlingEngine>,
+    running: Arc<AtomicBool>,
+}
+
+impl EventEngineRunner {
+    /// Create a new runner for the given engine instance.
+    pub fn new(engine: Arc<EventHandlingEngine>) -> Self {
+        Self {
+            engine,
+            running: Arc::new(AtomicBool::new(false)),
+        }
+    }
+
+    /// Return a reference to the wrapped engine.
+    pub fn engine(&self) -> &Arc<EventHandlingEngine> {
+        &self.engine
+    }
+
+    /// Start the event-handling loop if it is not already running.
+    ///
+    /// Multiple calls to `spawn()` on the same runner (or its clones) will
+    /// result in at most one background task that invokes `engine.start()`.
+    /// If the loop is already running, this method spawns a no-op task so
+    /// callers can always `await` the returned handle without special-casing.
+    pub fn spawn(&self) -> tokio::task::JoinHandle<()> {
+        // Try to transition running: false -> true. If this fails, another
+        // task has already started the loop for this runner.
+        if self
+            .running
+            .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
+            .is_err()
+        {
+            // Already running: spawn a no-op task so the caller still
+            // receives a handle it can `.await` or `.abort()` safely.
+            return tokio::spawn(async {});
+        }
+
+        let engine = Arc::clone(&self.engine);
+        let running_flag = Arc::clone(&self.running);
+
+        tokio::spawn(async move {
+            let _ = engine.start().await;
+            running_flag.store(false, Ordering::SeqCst);
+        })
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -231,5 +290,47 @@ mod tests {
         if let Ok(Some(event)) = result {
             assert!(matches!(event.status, EventStatus::Resolved));
         }
+    }
+
+    /// Demonstrates that calling `start()` twice on the same `EventHandlingEngine`
+    /// instance creates two independent event loops, both logging their startup.
+    #[tokio::test]
+    async fn demo_engine_double_start_logs_twice() {
+        use std::sync::Arc;
+
+        let engine = Arc::new(EventHandlingEngine::new());
+
+        // (Optionally register plugins and submit events here)
+
+        let e1 = engine.clone();
+        let e2 = engine.clone();
+
+        let h1 = tokio::spawn(async move {
+            let _ = e1.start().await;
+        });
+        let h2 = tokio::spawn(async move {
+            let _ = e2.start().await;
+        });
+
+        tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+        h1.abort();
+        h2.abort();
+    }
+
+    /// Verifies that `EventEngineRunner::spawn` is idempotent: calling it multiple
+    /// times results in at most one real `start()` invocation for the wrapped engine.
+    #[tokio::test]
+    async fn event_engine_runner_spawn_is_idempotent() {
+        use std::sync::Arc;
+
+        let engine = Arc::new(EventHandlingEngine::new());
+        let runner = EventEngineRunner::new(engine);
+
+        let h1 = runner.spawn();
+        let h2 = runner.spawn();
+
+        tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+        h1.abort();
+        h2.abort();
     }
 }

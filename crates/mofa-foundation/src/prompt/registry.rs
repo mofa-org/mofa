@@ -319,43 +319,57 @@ impl GlobalPromptRegistry {
     /// 注册模板
     /// Register a template
     pub fn register(&self, template: PromptTemplate) {
-        self.inner.write().unwrap().register(template);
+        self.inner.write()
+            .expect("Failed to acquire write lock on prompt registry")
+            .register(template);
     }
 
     /// 获取模板（克隆）
     /// Get a template (cloned)
     pub fn get(&self, id: &str) -> PromptResult<PromptTemplate> {
-        self.inner.read().unwrap().get(id).cloned()
+        self.inner.read()
+            .expect("Failed to acquire read lock on prompt registry")
+            .get(id).cloned()
     }
 
     /// 渲染模板
     /// Render a template
     pub fn render(&self, id: &str, vars: &[(&str, &str)]) -> PromptResult<String> {
-        self.inner.read().unwrap().render(id, vars)
+        self.inner.read()
+            .expect("Failed to acquire read lock on prompt registry")
+            .render(id, vars)
     }
 
     /// 检查是否包含
     /// Check if it contains
     pub fn contains(&self, id: &str) -> bool {
-        self.inner.read().unwrap().contains(id)
+        self.inner.read()
+            .expect("Failed to acquire read lock on prompt registry")
+            .contains(id)
     }
 
     /// 删除模板
     /// Remove a template
     pub fn remove(&self, id: &str) -> Option<PromptTemplate> {
-        self.inner.write().unwrap().remove(id)
+        self.inner.write()
+            .expect("Failed to acquire write lock on prompt registry")
+            .remove(id)
     }
 
     /// 从文件加载
     /// Load from a file
     pub fn load_from_file(&self, path: impl AsRef<Path>) -> PromptResult<()> {
-        self.inner.write().unwrap().load_from_file(path)
+        self.inner.write()
+            .expect("Failed to acquire write lock on prompt registry")
+            .load_from_file(path)
     }
 
     /// 从 YAML 加载
     /// Load from YAML
     pub fn load_from_yaml(&self, yaml: &str) -> PromptResult<()> {
-        self.inner.write().unwrap().load_from_yaml(yaml)
+        self.inner.write()
+            .expect("Failed to acquire write lock on prompt registry")
+            .load_from_yaml(yaml)
     }
 
     /// 获取所有模板 ID
@@ -397,19 +411,25 @@ impl GlobalPromptRegistry {
     /// 模板数量
     /// Number of templates
     pub fn len(&self) -> usize {
-        self.inner.read().unwrap().len()
+        self.inner.read()
+            .expect("Failed to acquire read lock on prompt registry")
+            .len()
     }
 
     /// 是否为空
     /// Whether it is empty
     pub fn is_empty(&self) -> bool {
-        self.inner.read().unwrap().is_empty()
+        self.inner.read()
+            .expect("Failed to acquire read lock on prompt registry")
+            .is_empty()
     }
 
     /// 清空
     /// Clear
     pub fn clear(&self) {
-        self.inner.write().unwrap().clear();
+        self.inner.write()
+            .expect("Failed to acquire write lock on prompt registry")
+            .clear();
     }
 }
 

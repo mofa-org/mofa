@@ -17,13 +17,17 @@ use tower_http::cors::{Any, CorsLayer};
 use tower_http::trace::TraceLayer;
 use tracing::info;
 
+use mofa_kernel::workflow::telemetry::{DebugEvent, SessionRecorder};
+
 use super::api::create_api_router;
 use super::assets::{INDEX_HTML, serve_asset};
+use super::auth::{AuthProvider, NoopAuthProvider};
 use super::metrics::{MetricsCollector, MetricsConfig};
 use super::websocket::{WebSocketHandler, create_websocket_handler};
+use tokio::sync::mpsc;
 
 /// Dashboard server configuration
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct DashboardConfig {
     /// Server host
     pub host: String,
@@ -37,6 +41,21 @@ pub struct DashboardConfig {
     pub ws_update_interval: Duration,
     /// Enable request tracing
     pub enable_tracing: bool,
+    /// WebSocket authentication provider (default: NoopAuthProvider)
+    pub auth_provider: Arc<dyn AuthProvider>,
+}
+
+impl std::fmt::Debug for DashboardConfig {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("DashboardConfig")
+            .field("host", &self.host)
+            .field("port", &self.port)
+            .field("enable_cors", &self.enable_cors)
+            .field("ws_update_interval", &self.ws_update_interval)
+            .field("enable_tracing", &self.enable_tracing)
+            .field("auth_enabled", &self.auth_provider.is_enabled())
+            .finish()
+    }
 }
 
 impl Default for DashboardConfig {
@@ -48,6 +67,7 @@ impl Default for DashboardConfig {
             metrics_config: MetricsConfig::default(),
             ws_update_interval: Duration::from_secs(1),
             enable_tracing: true,
+            auth_provider: Arc::new(NoopAuthProvider),
         }
     }
 }
@@ -82,6 +102,12 @@ impl DashboardConfig {
         self
     }
 
+    /// Set the WebSocket authentication provider.
+    pub fn with_auth(mut self, provider: Arc<dyn AuthProvider>) -> Self {
+        self.auth_provider = provider;
+        self
+    }
+
     pub fn socket_addr(&self) -> SocketAddr {
         format!("{}:{}", self.host, self.port)
             .parse()
@@ -93,6 +119,8 @@ impl DashboardConfig {
 pub struct ServerState {
     pub collector: Arc<MetricsCollector>,
     pub ws_handler: Arc<WebSocketHandler>,
+    /// Optional session recorder for debug sessions
+    pub session_recorder: Option<Arc<dyn SessionRecorder>>,
 }
 
 /// Dashboard server
@@ -100,6 +128,8 @@ pub struct DashboardServer {
     config: DashboardConfig,
     collector: Arc<MetricsCollector>,
     ws_handler: Option<Arc<WebSocketHandler>>,
+    session_recorder: Option<Arc<dyn SessionRecorder>>,
+    debug_event_rx: Option<mpsc::Receiver<DebugEvent>>,
 }
 
 impl DashboardServer {
@@ -111,6 +141,8 @@ impl DashboardServer {
             config,
             collector,
             ws_handler: None,
+            session_recorder: None,
+            debug_event_rx: None,
         }
     }
 
@@ -124,22 +156,52 @@ impl DashboardServer {
         self.ws_handler.clone()
     }
 
+    /// Get the session recorder (if configured)
+    pub fn session_recorder(&self) -> Option<Arc<dyn SessionRecorder>> {
+        self.session_recorder.clone()
+    }
+
+    /// Attach a session recorder for debug sessions
+    pub fn with_session_recorder(mut self, recorder: Arc<dyn SessionRecorder>) -> Self {
+        self.session_recorder = Some(recorder);
+        self
+    }
+
+    /// Attach a channel receiver for debug events to stream to WebSocket clients.
+    ///
+    /// This enables real-time debugging by forwarding `DebugEvent`s from the
+    /// provided receiver to all WebSocket clients subscribed to the "debug" topic.
+    ///
+    /// # Arguments
+    /// * `rx` - The receiver for debug events to stream to clients
+    ///
+    /// # Returns
+    /// The updated `DashboardServer` instance
+    pub fn with_debug_events(mut self, rx: mpsc::Receiver<DebugEvent>) -> Self {
+        self.debug_event_rx = Some(rx);
+        self
+    }
+
     /// Build the router
     pub fn build_router(&mut self) -> Router {
         // Create WebSocket handler
-        let (ws_handler, ws_route) = create_websocket_handler(self.collector.clone());
+        let (ws_handler, ws_route) =
+            create_websocket_handler(self.collector.clone(), self.config.auth_provider.clone());
         self.ws_handler = Some(ws_handler.clone());
 
         // API routes
-        let api_router = create_api_router(self.collector.clone());
+        let api_router = create_api_router(self.collector.clone(), self.session_recorder.clone());
 
         // Build main router
         let mut router = Router::new()
             // Static assets
             .route("/", get(serve_index))
             .route("/index.html", get(serve_index))
+            .route("/debugger", get(serve_debugger))
+            .route("/debugger.html", get(serve_debugger))
             .route("/styles.css", get(serve_styles))
             .route("/app.js", get(serve_app_js))
+            .route("/debugger.js", get(serve_debugger_js))
             .route("/assets/{*path}", get(serve_static))
             // API routes
             .nest("/api", api_router)
@@ -184,6 +246,14 @@ impl DashboardServer {
             tokio::spawn(async move {
                 handler_for_task.start_updates();
             });
+
+            // Start debug event forwarder if debug events receiver is provided
+            if let Some(debug_rx) = self.debug_event_rx {
+                let debug_handler = Arc::clone(ws_handler);
+                tokio::spawn(async move {
+                    debug_handler.start_debug_event_forwarder(debug_rx);
+                });
+            }
         }
 
         info!("Starting dashboard server on {}", addr);
@@ -227,6 +297,24 @@ async fn serve_app_js() -> impl IntoResponse {
         StatusCode::OK,
         [(header::CONTENT_TYPE, "application/javascript")],
         super::assets::APP_JS,
+    )
+}
+
+/// Serve debugger page
+async fn serve_debugger() -> impl IntoResponse {
+    (
+        StatusCode::OK,
+        [(header::CONTENT_TYPE, "text/html")],
+        super::assets::DEBUGGER_HTML,
+    )
+}
+
+/// Serve debugger.js
+async fn serve_debugger_js() -> impl IntoResponse {
+    (
+        StatusCode::OK,
+        [(header::CONTENT_TYPE, "application/javascript")],
+        super::assets::DEBUGGER_JS,
     )
 }
 
@@ -281,5 +369,6 @@ mod tests {
         let server = DashboardServer::new(config);
 
         assert!(server.ws_handler.is_none());
+        assert!(server.session_recorder.is_none());
     }
 }

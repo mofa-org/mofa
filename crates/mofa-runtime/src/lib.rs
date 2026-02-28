@@ -1,3 +1,4 @@
+use mofa_kernel::agent::types::error::{GlobalError, GlobalResult};
 #[cfg(feature = "monitoring")]
 pub use mofa_monitoring::*;
 
@@ -20,7 +21,9 @@ pub use mofa_monitoring::*;
 pub mod agent;
 pub mod builder;
 pub mod config;
+pub mod fallback;
 pub mod interrupt;
+pub mod retry;
 pub mod runner;
 
 // Dora adapter module (only compiled when dora feature is enabled)
@@ -242,6 +245,8 @@ impl AgentBuilder {
         let node = DoraAgentNode::new(node_config);
         let interrupt = node.interrupt().clone();
 
+        let context = mofa_kernel::agent::AgentContext::new(self.agent_id.clone());
+
         Ok(AgentRuntime {
             agent,
             node: Arc::new(node),
@@ -249,6 +254,7 @@ impl AgentBuilder {
             config,
             interrupt,
             plugins: self.plugins,
+            context,
         })
     }
 
@@ -264,7 +270,7 @@ impl AgentBuilder {
     /// 使用提供的 MoFAAgent 实现构建简单运行时（非 dora 模式）
     /// Builds simple runtime with MoFAAgent implementation (non-dora mode)
     #[cfg(not(feature = "dora"))]
-    pub async fn with_agent<A: MoFAAgent>(self, agent: A) -> anyhow::Result<SimpleAgentRuntime<A>> {
+    pub async fn with_agent<A: MoFAAgent>(self, agent: A) -> GlobalResult<SimpleAgentRuntime<A>> {
         let metadata = self.build_metadata();
         let config = self.build_config();
         let interrupt = AgentInterrupt::new();
@@ -272,6 +278,7 @@ impl AgentBuilder {
         // 创建事件通道
         // Creates event channel
         let (event_tx, event_rx) = tokio::sync::mpsc::channel(100);
+        let context = mofa_kernel::agent::AgentContext::new(self.agent_id.clone());
 
         Ok(SimpleAgentRuntime {
             agent,
@@ -285,6 +292,7 @@ impl AgentBuilder {
             default_timeout: self.default_timeout,
             event_tx,
             event_rx: Some(event_rx),
+            context,
         })
     }
 
@@ -294,7 +302,7 @@ impl AgentBuilder {
     pub async fn build_and_start<A: MoFAAgent>(
         self,
         agent: A,
-    ) -> anyhow::Result<SimpleAgentRuntime<A>> {
+    ) -> GlobalResult<SimpleAgentRuntime<A>> {
         let mut runtime = self.with_agent(agent).await?;
         runtime.start().await?;
         Ok(runtime)
@@ -311,6 +319,7 @@ pub struct AgentRuntime<A: MoFAAgent> {
     config: AgentConfig,
     interrupt: AgentInterrupt,
     plugins: Vec<Box<dyn AgentPlugin>>,
+    context: mofa_kernel::agent::AgentContext,
 }
 
 #[cfg(feature = "dora")]
@@ -374,11 +383,10 @@ impl<A: MoFAAgent> AgentRuntime<A> {
     /// 运行事件循环
     /// Runs the event loop
     pub async fn run_event_loop(&mut self) -> DoraResult<()> {
-        // 创建 CoreAgentContext 并初始化智能体
-        // Create CoreAgentContext and initialize agent
-        let context = mofa_kernel::agent::AgentContext::new(self.metadata.id.clone());
+        // 使用已存储的 CoreAgentContext 初始化智能体
+        // Initialize agent with the stored CoreAgentContext
         self.agent
-            .initialize(&context)
+            .initialize(&self.context)
             .await
             .map_err(|e| DoraError::Internal(e.to_string()))?;
 
@@ -423,7 +431,7 @@ impl<A: MoFAAgent> AgentRuntime<A> {
                     };
 
                     self.agent
-                        .execute(input, &context)
+                        .execute(input, &self.context)
                         .await
                         .map_err(|e| DoraError::Internal(e.to_string()))?;
                 }
@@ -489,6 +497,7 @@ pub struct SimpleAgentRuntime<A: MoFAAgent> {
     // Add event channel
     event_tx: tokio::sync::mpsc::Sender<AgentEvent>,
     event_rx: Option<tokio::sync::mpsc::Receiver<AgentEvent>>,
+    pub(crate) context: mofa_kernel::agent::AgentContext,
 }
 
 #[cfg(not(feature = "dora"))]
@@ -515,6 +524,12 @@ impl<A: MoFAAgent> SimpleAgentRuntime<A> {
     /// Gets configuration reference
     pub fn config(&self) -> &AgentConfig {
         &self.config
+    }
+
+    /// 获取上下文
+    /// Gets context reference
+    pub fn context(&self) -> &mofa_kernel::agent::AgentContext {
+        &self.context
     }
 
     /// 获取中断句柄
@@ -554,23 +569,22 @@ impl<A: MoFAAgent> SimpleAgentRuntime<A> {
 
     /// 初始化插件
     /// Initializes plugins
-    pub async fn init_plugins(&mut self) -> anyhow::Result<()> {
+    pub async fn init_plugins(&mut self) -> GlobalResult<()> {
         for plugin in &mut self.plugins {
-            plugin.init_plugin().await?;
+            plugin
+                .init_plugin()
+                .await
+                .map_err(|e| GlobalError::Other(e.to_string()))?;
         }
         Ok(())
     }
 
     /// 启动运行时
     /// Starts the runtime
-    pub async fn start(&mut self) -> anyhow::Result<()> {
-        // 创建 CoreAgentContext
-        // Create CoreAgentContext
-        let context = mofa_kernel::agent::AgentContext::new(self.metadata.id.clone());
-
-        // 初始化智能体 - 使用 MoFAAgent 的 initialize 方法
-        // Initialize agent - using MoFAAgent's initialize method
-        self.agent.initialize(&context).await?;
+    pub async fn start(&mut self) -> GlobalResult<()> {
+        // 初始化智能体 - 使用存储的 context
+        // Initialize agent - using stored context
+        self.agent.initialize(&self.context).await?;
         // 初始化插件
         // Initialize plugins
         self.init_plugins().await?;
@@ -580,7 +594,7 @@ impl<A: MoFAAgent> SimpleAgentRuntime<A> {
 
     /// 处理单个事件
     /// Processes a single event
-    pub async fn handle_event(&mut self, event: AgentEvent) -> anyhow::Result<()> {
+    pub async fn handle_event(&mut self, event: AgentEvent) -> GlobalResult<()> {
         // 检查中断 - 注意：MoFAAgent 没有 on_interrupt 方法
         // Check interrupt - Note: MoFAAgent lacks on_interrupt method
         // 中断处理需要由 Agent 内部自行处理或通过 AgentMessaging 扩展
@@ -596,8 +610,6 @@ impl<A: MoFAAgent> SimpleAgentRuntime<A> {
         // Convert event to input and call execute
         use mofa_kernel::agent::types::AgentInput;
 
-        let context = mofa_kernel::agent::AgentContext::new(self.metadata.id.clone());
-
         // 尝试将事件转换为输入
         // Try to convert event to input
         let input = match event {
@@ -610,19 +622,19 @@ impl<A: MoFAAgent> SimpleAgentRuntime<A> {
             _ => AgentInput::text(format!("{:?}", event)),
         };
 
-        let _output = self.agent.execute(input, &context).await?;
+        let _output = self.agent.execute(input, &self.context).await?;
         Ok(())
     }
 
     /// 运行事件循环（使用内部事件接收器）
     /// Runs event loop (using internal event receiver)
-    pub async fn run(&mut self) -> anyhow::Result<()> {
+    pub async fn run(&mut self) -> GlobalResult<()> {
         // 获取内部事件接收器
         // Get internal event receiver
         let event_rx = self
             .event_rx
             .take()
-            .ok_or_else(|| anyhow::anyhow!("Event receiver already taken"))?;
+            .ok_or_else(|| GlobalError::Other("Event receiver already taken".to_string()))?;
 
         self.run_with_receiver(event_rx).await
     }
@@ -632,7 +644,7 @@ impl<A: MoFAAgent> SimpleAgentRuntime<A> {
     pub async fn run_with_receiver(
         &mut self,
         mut event_rx: tokio::sync::mpsc::Receiver<AgentEvent>,
-    ) -> anyhow::Result<()> {
+    ) -> GlobalResult<()> {
         loop {
             // 检查中断
             // Check for interrupts
@@ -674,7 +686,7 @@ impl<A: MoFAAgent> SimpleAgentRuntime<A> {
 
     /// 停止运行时
     /// Stops the runtime
-    pub async fn stop(&mut self) -> anyhow::Result<()> {
+    pub async fn stop(&mut self) -> GlobalResult<()> {
         self.interrupt.trigger();
         self.agent.shutdown().await?;
         ::tracing::info!("SimpleAgentRuntime {} stopped", self.metadata.id);
@@ -767,42 +779,59 @@ impl SimpleMessageBus {
 
     /// 发送点对点消息
     /// Send point-to-point message
-    pub async fn send_to(&self, target_id: &str, event: AgentEvent) -> anyhow::Result<()> {
-        let subs = self.subscribers.read().await;
-        if let Some(senders) = subs.get(target_id) {
-            for tx in senders {
-                let _ = tx.send(event.clone()).await;
-            }
+    pub async fn send_to(&self, target_id: &str, event: AgentEvent) -> GlobalResult<()> {
+        let senders = {
+            let subs = self.subscribers.read().await;
+            subs.get(target_id).cloned().unwrap_or_default()
+        };
+
+        for tx in senders {
+            let _ = tx.send(event.clone()).await;
         }
         Ok(())
     }
 
     /// 广播消息给所有智能体
     /// Broadcast message to all agents
-    pub async fn broadcast(&self, event: AgentEvent) -> anyhow::Result<()> {
-        let subs = self.subscribers.read().await;
-        for senders in subs.values() {
-            for tx in senders {
-                let _ = tx.send(event.clone()).await;
-            }
+    pub async fn broadcast(&self, event: AgentEvent) -> GlobalResult<()> {
+        let senders = {
+            let subs = self.subscribers.read().await;
+            subs.values()
+                .flat_map(|agent_senders| agent_senders.iter().cloned())
+                .collect::<Vec<_>>()
+        };
+
+        for tx in senders {
+            let _ = tx.send(event.clone()).await;
         }
         Ok(())
     }
 
     /// 发布到主题
     /// Publish to a topic
-    pub async fn publish(&self, topic: &str, event: AgentEvent) -> anyhow::Result<()> {
-        let topics = self.topic_subscribers.read().await;
-        if let Some(agent_ids) = topics.get(topic) {
+    pub async fn publish(&self, topic: &str, event: AgentEvent) -> GlobalResult<()> {
+        let agent_ids = {
+            let topics = self.topic_subscribers.read().await;
+            topics.get(topic).cloned().unwrap_or_default()
+        };
+
+        let senders = {
             let subs = self.subscribers.read().await;
-            for agent_id in agent_ids {
-                if let Some(senders) = subs.get(agent_id) {
-                    for tx in senders {
-                        let _ = tx.send(event.clone()).await;
+            let mut senders = Vec::new();
+            for agent_id in &agent_ids {
+                if let Some(agent_senders) = subs.get(agent_id) {
+                    for tx in agent_senders {
+                        senders.push(tx.clone());
                     }
                 }
             }
+            senders
+        };
+
+        for tx in senders {
+            let _ = tx.send(event.clone()).await;
         }
+
         Ok(())
     }
 
@@ -818,24 +847,29 @@ impl SimpleMessageBus {
         stream_id: &str,
         stream_type: StreamType,
         metadata: HashMap<String, String>,
-    ) -> anyhow::Result<()> {
-        let mut streams = self.streams.write().await;
-        if streams.contains_key(stream_id) {
-            return Err(anyhow::anyhow!("Stream {} already exists", stream_id));
+    ) -> GlobalResult<()> {
+        {
+            let mut streams = self.streams.write().await;
+            if streams.contains_key(stream_id) {
+                return Err(GlobalError::Other(format!(
+                    "Stream {} already exists",
+                    stream_id
+                )));
+            }
+
+            // 创建流信息
+            // Create stream information
+            let stream_info = StreamInfo {
+                stream_id: stream_id.to_string(),
+                stream_type: stream_type.clone(),
+                metadata: metadata.clone(),
+                subscribers: Vec::new(),
+                sequence: 0,
+                is_paused: false,
+            };
+
+            streams.insert(stream_id.to_string(), stream_info);
         }
-
-        // 创建流信息
-        // Create stream information
-        let stream_info = StreamInfo {
-            stream_id: stream_id.to_string(),
-            stream_type: stream_type.clone(),
-            metadata: metadata.clone(),
-            subscribers: Vec::new(),
-            sequence: 0,
-            is_paused: false,
-        };
-
-        streams.insert(stream_id.to_string(), stream_info.clone());
 
         // 广播流创建事件
         // Broadcast stream creation event
@@ -849,119 +883,166 @@ impl SimpleMessageBus {
 
     /// 关闭流
     /// Close a stream
-    pub async fn close_stream(&self, stream_id: &str, reason: &str) -> anyhow::Result<()> {
-        let mut streams = self.streams.write().await;
-        if let Some(stream_info) = streams.remove(stream_id) {
-            // 广播流关闭事件
-            // Broadcast stream closure event
-            let event = AgentEvent::StreamClosed {
-                stream_id: stream_id.to_string(),
-                reason: reason.to_string(),
-            };
+    pub async fn close_stream(&self, stream_id: &str, reason: &str) -> GlobalResult<()> {
+        let subscribers = {
+            let mut streams = self.streams.write().await;
+            streams
+                .remove(stream_id)
+                .map(|stream_info| stream_info.subscribers)
+                .unwrap_or_default()
+        };
 
-            // 通知所有订阅者
-            // Notify all subscribers
+        if subscribers.is_empty() {
+            return Ok(());
+        }
+
+        // 广播流关闭事件
+        // Broadcast stream closure event
+        let event = AgentEvent::StreamClosed {
+            stream_id: stream_id.to_string(),
+            reason: reason.to_string(),
+        };
+
+        let senders = {
             let subs = self.subscribers.read().await;
-            for agent_id in &stream_info.subscribers {
-                if let Some(senders) = subs.get(agent_id) {
-                    for tx in senders {
-                        let _ = tx.send(event.clone()).await;
+            let mut senders = Vec::new();
+            for agent_id in &subscribers {
+                if let Some(agent_senders) = subs.get(agent_id) {
+                    for tx in agent_senders {
+                        senders.push(tx.clone());
                     }
                 }
             }
+            senders
+        };
+
+        for tx in senders {
+            let _ = tx.send(event.clone()).await;
         }
+
         Ok(())
     }
 
     /// 订阅流
     /// Subscribe to a stream
-    pub async fn subscribe_stream(&self, agent_id: &str, stream_id: &str) -> anyhow::Result<()> {
-        let mut streams = self.streams.write().await;
-        if let Some(stream_info) = streams.get_mut(stream_id) {
-            // 检查是否已订阅
-            // Check if already subscribed
-            if !stream_info.subscribers.contains(&agent_id.to_string()) {
-                stream_info.subscribers.push(agent_id.to_string());
-
-                // 广播订阅事件
-                // Broadcast subscription event
-                self.broadcast(AgentEvent::StreamSubscription {
-                    stream_id: stream_id.to_string(),
-                    subscriber_id: agent_id.to_string(),
-                })
-                .await?;
+    pub async fn subscribe_stream(&self, agent_id: &str, stream_id: &str) -> GlobalResult<()> {
+        let should_broadcast = {
+            let mut streams = self.streams.write().await;
+            if let Some(stream_info) = streams.get_mut(stream_id) {
+                // 检查是否已订阅
+                // Check if already subscribed
+                if !stream_info.subscribers.contains(&agent_id.to_string()) {
+                    stream_info.subscribers.push(agent_id.to_string());
+                    true
+                } else {
+                    false
+                }
+            } else {
+                false
             }
+        };
+
+        if should_broadcast {
+            // 广播订阅事件
+            // Broadcast subscription event
+            self.broadcast(AgentEvent::StreamSubscription {
+                stream_id: stream_id.to_string(),
+                subscriber_id: agent_id.to_string(),
+            })
+            .await?;
         }
         Ok(())
     }
 
     /// 取消订阅流
     /// Unsubscribe from a stream
-    pub async fn unsubscribe_stream(&self, agent_id: &str, stream_id: &str) -> anyhow::Result<()> {
-        let mut streams = self.streams.write().await;
-        if let Some(stream_info) = streams.get_mut(stream_id) {
-            // 移除订阅者
-            // Remove subscriber
-            if let Some(pos) = stream_info.subscribers.iter().position(|id| id == agent_id) {
-                stream_info.subscribers.remove(pos);
-
-                // 广播取消订阅事件
-                // Broadcast unsubscription event
-                self.broadcast(AgentEvent::StreamUnsubscription {
-                    stream_id: stream_id.to_string(),
-                    subscriber_id: agent_id.to_string(),
-                })
-                .await?;
+    pub async fn unsubscribe_stream(&self, agent_id: &str, stream_id: &str) -> GlobalResult<()> {
+        let should_broadcast = {
+            let mut streams = self.streams.write().await;
+            if let Some(stream_info) = streams.get_mut(stream_id) {
+                // 移除订阅者
+                // Remove subscriber
+                if let Some(pos) = stream_info.subscribers.iter().position(|id| id == agent_id) {
+                    stream_info.subscribers.remove(pos);
+                    true
+                } else {
+                    false
+                }
+            } else {
+                false
             }
+        };
+
+        if should_broadcast {
+            // 广播取消订阅事件
+            // Broadcast unsubscription event
+            self.broadcast(AgentEvent::StreamUnsubscription {
+                stream_id: stream_id.to_string(),
+                subscriber_id: agent_id.to_string(),
+            })
+            .await?;
         }
         Ok(())
     }
 
     /// 发送流消息
     /// Send stream message
-    pub async fn send_stream_message(
-        &self,
-        stream_id: &str,
-        message: Vec<u8>,
-    ) -> anyhow::Result<()> {
-        let mut streams = self.streams.write().await;
-        if let Some(stream_info) = streams.get_mut(stream_id) {
-            // 如果流被暂停，直接返回
-            // If stream is paused, return immediately
-            if stream_info.is_paused {
-                return Ok(());
+    pub async fn send_stream_message(&self, stream_id: &str, message: Vec<u8>) -> GlobalResult<()> {
+        let stream_delivery = {
+            let mut streams = self.streams.write().await;
+            if let Some(stream_info) = streams.get_mut(stream_id) {
+                // 如果流被暂停，直接返回
+                // If stream is paused, return immediately
+                if stream_info.is_paused {
+                    None
+                } else {
+                    // 生成序列号
+                    // Generate sequence number
+                    let sequence = stream_info.sequence;
+                    stream_info.sequence += 1;
+
+                    // 构造流消息事件
+                    // Construct stream message event
+                    let event = AgentEvent::StreamMessage {
+                        stream_id: stream_id.to_string(),
+                        message,
+                        sequence,
+                    };
+
+                    Some((event, stream_info.subscribers.clone()))
+                }
+            } else {
+                None
             }
+        };
 
-            // 生成序列号
-            // Generate sequence number
-            let sequence = stream_info.sequence;
-            stream_info.sequence += 1;
+        let Some((event, subscribers)) = stream_delivery else {
+            return Ok(());
+        };
 
-            // 构造流消息事件
-            // Construct stream message event
-            let event = AgentEvent::StreamMessage {
-                stream_id: stream_id.to_string(),
-                message,
-                sequence,
-            };
-
-            // 发送给所有订阅者
-            // Send to all subscribers
+        let senders = {
             let subs = self.subscribers.read().await;
-            for agent_id in &stream_info.subscribers {
-                if let Some(senders) = subs.get(agent_id) {
-                    for tx in senders {
-                        let _ = tx.send(event.clone()).await;
+            let mut senders = Vec::new();
+            for agent_id in &subscribers {
+                if let Some(agent_senders) = subs.get(agent_id) {
+                    for tx in agent_senders {
+                        senders.push(tx.clone());
                     }
                 }
             }
+            senders
+        };
+
+        for tx in senders {
+            let _ = tx.send(event.clone()).await;
         }
+
         Ok(())
     }
 
     /// 暂停流
     /// Pause a stream
-    pub async fn pause_stream(&self, stream_id: &str) -> anyhow::Result<()> {
+    pub async fn pause_stream(&self, stream_id: &str) -> GlobalResult<()> {
         let mut streams = self.streams.write().await;
         if let Some(stream_info) = streams.get_mut(stream_id) {
             stream_info.is_paused = true;
@@ -971,7 +1052,7 @@ impl SimpleMessageBus {
 
     /// 恢复流
     /// Resume a stream
-    pub async fn resume_stream(&self, stream_id: &str) -> anyhow::Result<()> {
+    pub async fn resume_stream(&self, stream_id: &str) -> GlobalResult<()> {
         let mut streams = self.streams.write().await;
         if let Some(stream_info) = streams.get_mut(stream_id) {
             stream_info.is_paused = false;
@@ -981,7 +1062,7 @@ impl SimpleMessageBus {
 
     /// 获取流信息
     /// Get stream information
-    pub async fn get_stream_info(&self, stream_id: &str) -> anyhow::Result<Option<StreamInfo>> {
+    pub async fn get_stream_info(&self, stream_id: &str) -> GlobalResult<Option<StreamInfo>> {
         let streams = self.streams.read().await;
         Ok(streams.get(stream_id).cloned())
     }
@@ -1013,7 +1094,7 @@ impl SimpleRuntime {
         metadata: AgentMetadata,
         config: AgentConfig,
         role: &str,
-    ) -> anyhow::Result<tokio::sync::mpsc::Receiver<AgentEvent>> {
+    ) -> GlobalResult<tokio::sync::mpsc::Receiver<AgentEvent>> {
         let agent_id = metadata.id.clone();
         let (tx, rx) = tokio::sync::mpsc::channel(100);
 
@@ -1061,25 +1142,25 @@ impl SimpleRuntime {
 
     /// 发送消息给指定智能体
     /// Send message to a specific agent
-    pub async fn send_to_agent(&self, target_id: &str, event: AgentEvent) -> anyhow::Result<()> {
+    pub async fn send_to_agent(&self, target_id: &str, event: AgentEvent) -> GlobalResult<()> {
         self.message_bus.send_to(target_id, event).await
     }
 
     /// 广播消息给所有智能体
     /// Broadcast message to all agents
-    pub async fn broadcast(&self, event: AgentEvent) -> anyhow::Result<()> {
+    pub async fn broadcast(&self, event: AgentEvent) -> GlobalResult<()> {
         self.message_bus.broadcast(event).await
     }
 
     /// 发布到主题
     /// Publish to a topic
-    pub async fn publish_to_topic(&self, topic: &str, event: AgentEvent) -> anyhow::Result<()> {
+    pub async fn publish_to_topic(&self, topic: &str, event: AgentEvent) -> GlobalResult<()> {
         self.message_bus.publish(topic, event).await
     }
 
     /// 订阅主题
     /// Subscribe to a topic
-    pub async fn subscribe_topic(&self, agent_id: &str, topic: &str) -> anyhow::Result<()> {
+    pub async fn subscribe_topic(&self, agent_id: &str, topic: &str) -> GlobalResult<()> {
         self.message_bus.subscribe(agent_id, topic).await;
         Ok(())
     }
@@ -1089,7 +1170,6 @@ impl SimpleRuntime {
     // Stream support methods
     // ---------------------------------
 
-
     /// 创建流
     /// Create stream
     pub async fn create_stream(
@@ -1097,7 +1177,7 @@ impl SimpleRuntime {
         stream_id: &str,
         stream_type: StreamType,
         metadata: std::collections::HashMap<String, String>,
-    ) -> anyhow::Result<()> {
+    ) -> GlobalResult<()> {
         self.message_bus
             .create_stream(stream_id, stream_type, metadata)
             .await
@@ -1105,19 +1185,19 @@ impl SimpleRuntime {
 
     /// 关闭流
     /// Close stream
-    pub async fn close_stream(&self, stream_id: &str, reason: &str) -> anyhow::Result<()> {
+    pub async fn close_stream(&self, stream_id: &str, reason: &str) -> GlobalResult<()> {
         self.message_bus.close_stream(stream_id, reason).await
     }
 
     /// 订阅流
     /// Subscribe to stream
-    pub async fn subscribe_stream(&self, agent_id: &str, stream_id: &str) -> anyhow::Result<()> {
+    pub async fn subscribe_stream(&self, agent_id: &str, stream_id: &str) -> GlobalResult<()> {
         self.message_bus.subscribe_stream(agent_id, stream_id).await
     }
 
     /// 取消订阅流
     /// Unsubscribe from stream
-    pub async fn unsubscribe_stream(&self, agent_id: &str, stream_id: &str) -> anyhow::Result<()> {
+    pub async fn unsubscribe_stream(&self, agent_id: &str, stream_id: &str) -> GlobalResult<()> {
         self.message_bus
             .unsubscribe_stream(agent_id, stream_id)
             .await
@@ -1125,11 +1205,7 @@ impl SimpleRuntime {
 
     /// 发送流消息
     /// Send stream message
-    pub async fn send_stream_message(
-        &self,
-        stream_id: &str,
-        message: Vec<u8>,
-    ) -> anyhow::Result<()> {
+    pub async fn send_stream_message(&self, stream_id: &str, message: Vec<u8>) -> GlobalResult<()> {
         self.message_bus
             .send_stream_message(stream_id, message)
             .await
@@ -1137,25 +1213,25 @@ impl SimpleRuntime {
 
     /// 暂停流
     /// Pause stream
-    pub async fn pause_stream(&self, stream_id: &str) -> anyhow::Result<()> {
+    pub async fn pause_stream(&self, stream_id: &str) -> GlobalResult<()> {
         self.message_bus.pause_stream(stream_id).await
     }
 
     /// 恢复流
     /// Resume stream
-    pub async fn resume_stream(&self, stream_id: &str) -> anyhow::Result<()> {
+    pub async fn resume_stream(&self, stream_id: &str) -> GlobalResult<()> {
         self.message_bus.resume_stream(stream_id).await
     }
 
     /// 获取流信息
     /// Get stream info
-    pub async fn get_stream_info(&self, stream_id: &str) -> anyhow::Result<Option<StreamInfo>> {
+    pub async fn get_stream_info(&self, stream_id: &str) -> GlobalResult<Option<StreamInfo>> {
         self.message_bus.get_stream_info(stream_id).await
     }
 
     /// 停止所有智能体
     /// Stop all agents
-    pub async fn stop_all(&self) -> anyhow::Result<()> {
+    pub async fn stop_all(&self) -> GlobalResult<()> {
         self.message_bus.broadcast(AgentEvent::Shutdown).await?;
         ::tracing::info!("SimpleRuntime stopped");
         Ok(())
@@ -1166,6 +1242,71 @@ impl SimpleRuntime {
 impl Default for SimpleRuntime {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+#[cfg(all(test, not(feature = "dora")))]
+mod tests {
+    use super::SimpleMessageBus;
+    use mofa_kernel::message::{AgentEvent, StreamType};
+    use std::collections::HashMap;
+    use std::sync::Arc;
+    use tokio::sync::mpsc;
+    use tokio::time::{Duration, timeout};
+
+    #[tokio::test]
+    async fn send_to_does_not_block_register_on_backpressure() {
+        let bus = Arc::new(SimpleMessageBus::new());
+        let (slow_tx, mut slow_rx) = mpsc::channel(1);
+        bus.register("slow", slow_tx.clone()).await;
+
+        slow_tx.send(AgentEvent::Shutdown).await.unwrap();
+
+        let bus_for_send = Arc::clone(&bus);
+        let send_task =
+            tokio::spawn(async move { bus_for_send.send_to("slow", AgentEvent::Shutdown).await });
+
+        tokio::time::sleep(Duration::from_millis(50)).await;
+
+        let (new_tx, _new_rx) = mpsc::channel(1);
+        timeout(Duration::from_millis(200), bus.register("new", new_tx))
+            .await
+            .expect("register should not block while send_to waits");
+
+        let _ = slow_rx.recv().await;
+        send_task.await.unwrap().unwrap();
+    }
+
+    #[tokio::test]
+    async fn send_stream_message_does_not_block_pause_on_backpressure() {
+        let bus = Arc::new(SimpleMessageBus::new());
+        bus.create_stream("stream-a", StreamType::DataStream, HashMap::new())
+            .await
+            .unwrap();
+
+        let (slow_tx, mut slow_rx) = mpsc::channel(1);
+        bus.register("slow", slow_tx.clone()).await;
+        bus.subscribe_stream("slow", "stream-a").await.unwrap();
+        let _ = slow_rx.recv().await;
+
+        slow_tx.send(AgentEvent::Shutdown).await.unwrap();
+
+        let bus_for_send = Arc::clone(&bus);
+        let send_task = tokio::spawn(async move {
+            bus_for_send
+                .send_stream_message("stream-a", b"data".to_vec())
+                .await
+        });
+
+        tokio::time::sleep(Duration::from_millis(50)).await;
+
+        timeout(Duration::from_millis(200), bus.pause_stream("stream-a"))
+            .await
+            .expect("pause_stream should not block while send_stream_message waits")
+            .unwrap();
+
+        let _ = slow_rx.recv().await;
+        send_task.await.unwrap().unwrap();
     }
 }
 
@@ -1360,5 +1501,116 @@ impl MoFARuntime {
             dataflow.resume().await?;
         }
         Ok(())
+    }
+}
+
+#[cfg(test)]
+#[cfg(not(feature = "dora"))]
+mod test_agent_context {
+    use crate::builder::AgentBuilder;
+    use async_trait::async_trait;
+    use mofa_kernel::agent::types::AgentOutput;
+    use mofa_kernel::agent::{AgentContext, AgentInput, AgentResult, MoFAAgent};
+    use mofa_kernel::message::{AgentEvent, AgentMessage, TaskPriority, TaskRequest};
+    use serde_json::json;
+
+    struct ContextPersistenceAgent;
+
+    #[async_trait]
+    impl MoFAAgent for ContextPersistenceAgent {
+        fn id(&self) -> &str {
+            "test-persistence-agent"
+        }
+
+        fn name(&self) -> &str {
+            "Test Persistence Agent"
+        }
+
+        fn capabilities(&self) -> &mofa_kernel::agent::AgentCapabilities {
+            // we need to return a static reference or cache it, but for test, we can just use a dummy
+            // Actually, capabilities returns &AgentCapabilities, which is often tied to self in real agents.
+            // Let's just create a static one using once_cell or standard lazy init, or hold it in the struct.
+            unimplemented!("Not needed for this particular test")
+        }
+
+        fn state(&self) -> mofa_kernel::agent::AgentState {
+            mofa_kernel::agent::AgentState::Ready
+        }
+
+        async fn initialize(&mut self, _ctx: &AgentContext) -> AgentResult<()> {
+            Ok(())
+        }
+
+        async fn execute(
+            &mut self,
+            _input: AgentInput,
+            ctx: &AgentContext,
+        ) -> AgentResult<AgentOutput> {
+            let current_count: u64 = ctx
+                .get("test_run_count")
+                .await
+                .and_then(|v| v.as_u64())
+                .unwrap_or(0);
+
+            let new_count = current_count + 1;
+            ctx.set("test_run_count", json!(new_count)).await;
+
+            Ok(AgentOutput::text(format!("Count is now {}", new_count)))
+        }
+
+        async fn shutdown(&mut self) -> AgentResult<()> {
+            Ok(())
+        }
+    }
+
+    #[tokio::test]
+    async fn test_agent_context_persistence() {
+        // Create an agent with the simple runtime (non-dora)
+        let builder = AgentBuilder::new("test-persistence-agent", "Test Agent");
+
+        let mut runtime = builder
+            .with_agent(ContextPersistenceAgent)
+            .await
+            .expect("Failed to build agent runtime");
+
+        runtime.start().await.expect("Failed to start runtime");
+
+        let task = TaskRequest {
+            task_id: "test1".to_string(),
+            content: "run".to_string(),
+            priority: TaskPriority::Normal,
+            deadline: None,
+            metadata: std::collections::HashMap::new(),
+        };
+
+        // Handle first event
+        let event1 = AgentEvent::TaskReceived(task.clone());
+        runtime
+            .handle_event(event1)
+            .await
+            .expect("Failed to handle first event");
+
+        // The context should hold our json(1) -> u64
+        let val1 = runtime
+            .context
+            .get("test_run_count")
+            .await
+            .expect("test_run_count should be set after first event");
+        assert_eq!(val1.as_u64().unwrap(), 1);
+
+        // Handle second event
+        let event2 = AgentEvent::TaskReceived(task);
+        runtime
+            .handle_event(event2)
+            .await
+            .expect("Failed to handle second event");
+
+        // The context should have persisted, so score should now be 2
+        let val2 = runtime
+            .context
+            .get("test_run_count")
+            .await
+            .expect("test_run_count should be set after second event");
+        assert_eq!(val2.as_u64().unwrap(), 2);
     }
 }

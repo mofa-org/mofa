@@ -479,7 +479,6 @@ impl PromptStore for PostgresPromptStore {
 // MySQL Implementation
 // ============================================================================
 
-
 #[cfg(feature = "persistence-mysql")]
 pub struct MySqlPromptStore {
     pool: MySqlPool,

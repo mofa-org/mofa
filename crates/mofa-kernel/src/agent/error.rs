@@ -14,6 +14,7 @@ pub type AgentResult<T> = Result<T, AgentError>;
 /// Agent 错误类型
 /// Agent error types
 #[derive(Debug, Error)]
+#[non_exhaustive]
 pub enum AgentError {
     /// Agent 未找到
     /// Agent not found
@@ -164,6 +165,45 @@ impl AgentError {
             available: available.into(),
         }
     }
+
+    /// Returns `true` for transient errors, `false` for permanent ones.
+    pub fn is_retryable(&self) -> bool {
+        matches!(
+            self,
+            AgentError::Timeout { .. }
+                | AgentError::ResourceUnavailable(_)
+                | AgentError::ExecutionFailed(_)
+                | AgentError::ToolExecutionFailed { .. }
+                | AgentError::CoordinationError(_)
+                | AgentError::Internal(_)
+                | AgentError::IoError(_)
+                | AgentError::ReasoningError(_)
+                | AgentError::MemoryError(_)
+        )
+    }
+
+    /// 此错误是否为瞬态错误，操作可能在重试时成功
+    /// Whether this error is transient and the operation may succeed on retry.
+    ///
+    /// 瞬态错误包括超时、资源不可用、IO 失败和通用执行失败。
+    /// 永久错误（配置、未找到、无效输入、中断、验证）应快速失败。
+    /// Transient errors include timeouts, resource unavailability, IO failures,
+    /// and generic execution failures. Permanent errors (config, not-found,
+    /// invalid input, interruption, validation) should fail fast.
+    ///
+    /// NOTE: This is stricter than [`is_retryable`] — it excludes `Internal`,
+    /// `ToolExecutionFailed`, `ReasoningError`, and `MemoryError` which may
+    /// indicate bugs rather than transient infrastructure issues.
+    pub fn is_transient(&self) -> bool {
+        matches!(
+            self,
+            Self::Timeout { .. }
+                | Self::ResourceUnavailable(_)
+                | Self::IoError(_)
+                | Self::ExecutionFailed(_)
+                | Self::CoordinationError(_)
+        )
+    }
 }
 
 impl From<std::io::Error> for AgentError {
@@ -178,9 +218,47 @@ impl From<serde_json::Error> for AgentError {
     }
 }
 
-impl From<anyhow::Error> for AgentError {
-    fn from(err: anyhow::Error) -> Self {
+impl From<crate::plugin::PluginError> for AgentError {
+    fn from(err: crate::plugin::PluginError) -> Self {
         AgentError::Internal(err.to_string())
+    }
+}
+
+impl From<crate::bus::BusError> for AgentError {
+    fn from(err: crate::bus::BusError) -> Self {
+        AgentError::Internal(err.to_string())
+    }
+}
+
+impl From<crate::agent::secretary::ConnectionError> for AgentError {
+    fn from(err: crate::agent::secretary::ConnectionError) -> Self {
+        AgentError::Internal(err.to_string())
+    }
+}
+
+impl From<crate::agent::secretary::SecretaryError> for AgentError {
+    fn from(err: crate::agent::secretary::SecretaryError) -> Self {
+        AgentError::Internal(err.to_string())
+    }
+}
+
+#[cfg(feature = "config")]
+impl From<crate::config::ConfigError> for AgentError {
+    fn from(err: crate::config::ConfigError) -> Self {
+        match err {
+            crate::config::ConfigError::Io(e) => {
+                AgentError::ConfigError(format!("Failed to read config file: {}", e))
+            }
+            crate::config::ConfigError::Parse(e) => {
+                AgentError::ConfigError(format!("Failed to parse config: {}", e))
+            }
+            crate::config::ConfigError::UnsupportedFormat(e) => {
+                AgentError::ConfigError(format!("Unsupported config format: {}", e))
+            }
+            crate::config::ConfigError::Serialization(e) => {
+                AgentError::ConfigError(format!("Failed to deserialize config: {}", e))
+            }
+        }
     }
 }
 
@@ -203,5 +281,35 @@ mod tests {
         let err = AgentError::tool_execution_failed("calculator", "division by zero");
         assert!(err.to_string().contains("calculator"));
         assert!(err.to_string().contains("division by zero"));
+    }
+
+    #[cfg(feature = "config")]
+    #[test]
+    fn config_error_converts_via_from() {
+        let config_err = crate::config::ConfigError::Parse("bad yaml".into());
+        let agent_err: AgentError = config_err.into();
+
+        assert!(matches!(agent_err, AgentError::ConfigError(_)));
+        if let AgentError::ConfigError(msg) = agent_err {
+            assert!(msg.contains("bad yaml"));
+        }
+    }
+
+    #[test]
+    fn test_is_transient_classification() {
+        // Transient errors — should be retried
+        assert!(AgentError::Timeout { duration_ms: 5000 }.is_transient());
+        assert!(AgentError::ResourceUnavailable("gpu".into()).is_transient());
+        assert!(AgentError::IoError("connection reset".into()).is_transient());
+        assert!(AgentError::ExecutionFailed("LLM timeout".into()).is_transient());
+        assert!(AgentError::CoordinationError("peer unreachable".into()).is_transient());
+
+        // Permanent errors — should NOT be retried
+        assert!(!AgentError::ConfigError("bad yaml".into()).is_transient());
+        assert!(!AgentError::NotFound("agent-x".into()).is_transient());
+        assert!(!AgentError::InvalidInput("missing field".into()).is_transient());
+        assert!(!AgentError::Interrupted.is_transient());
+        assert!(!AgentError::ValidationFailed("schema".into()).is_transient());
+        assert!(!AgentError::Internal("panic".into()).is_transient());
     }
 }

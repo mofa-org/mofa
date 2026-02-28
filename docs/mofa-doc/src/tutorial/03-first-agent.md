@@ -137,7 +137,6 @@ edition = "2024"
 mofa-sdk = { path = "../../crates/mofa-sdk" }
 async-trait = "0.1"
 tokio = { version = "1", features = ["full"] }
-anyhow = "1"
 serde_json = "1"
 ```
 
@@ -222,7 +221,7 @@ impl MoFAAgent for GreetingAgent {
 // --- Run it ---
 
 #[tokio::main]
-async fn main() -> anyhow::Result<()> {
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let agent = GreetingAgent::new();
 
     // run_agents handles the full lifecycle:

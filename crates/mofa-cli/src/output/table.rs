@@ -32,6 +32,7 @@ impl TableBuilder {
     }
 
     /// Build the table
+    #[must_use]
     pub fn build(self) -> Table {
         Table {
             inner: {

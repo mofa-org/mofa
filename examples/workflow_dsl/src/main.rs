@@ -14,7 +14,7 @@ use tracing::info;
 use tracing_subscriber;
 
 #[tokio::main]
-async fn main() -> anyhow::Result<()> {
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Initialize logging
     tracing_subscriber::fmt()
         .with_max_level(tracing::Level::INFO)
@@ -32,7 +32,7 @@ async fn main() -> anyhow::Result<()> {
 }
 
 /// Customer Support Workflow Example
-async fn run_customer_support() -> anyhow::Result<()> {
+async fn run_customer_support() -> Result<(), Box<dyn std::error::Error>> {
     info!("=== Customer Support Workflow ===");
 
     // Parse workflow from YAML file
@@ -63,7 +63,7 @@ async fn run_customer_support() -> anyhow::Result<()> {
 }
 
 /// Parallel Agents Workflow Example
-async fn run_parallel_agents() -> anyhow::Result<()> {
+async fn run_parallel_agents() -> Result<(), Box<dyn std::error::Error>> {
     info!("=== Parallel Agents Workflow ===");
 
     // Parse workflow from YAML file
@@ -102,7 +102,7 @@ async fn run_parallel_agents() -> anyhow::Result<()> {
 /// configured providers. This creates simple mock agents for demonstration.
 async fn build_mock_agents(
     definition: &WorkflowDefinition,
-) -> anyhow::Result<HashMap<String, Arc<LLMAgent>>> {
+) -> Result<HashMap<String, Arc<LLMAgent>>, Box<dyn std::error::Error>> {
     let mut registry = HashMap::new();
 
     // Check if we have an OpenAI API key
@@ -160,7 +160,7 @@ async fn build_mock_agents(
 async fn build_mock_agent(
     agent_id: &str,
     config: &LlmAgentConfig,
-) -> anyhow::Result<Arc<LLMAgent>> {
+) -> Result<Arc<LLMAgent>, Box<dyn std::error::Error>> {
     info!(
         "Building mock agent: {} with model: {}",
         agent_id,

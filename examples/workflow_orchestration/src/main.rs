@@ -163,64 +163,64 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .with_max_level(Level::INFO)
         .init();
 
-    info!("=== MoFA 工作流编排示例 ===\n");
+    info!("=== MoFA Workflow Orchestration Example ===\n");
     // === MoFA Workflow Orchestration Example ===
 
     // 示例1-5: 原有数据处理示例
     // Examples 1-5: Original data processing examples
-    info!("--- 示例1: 线性工作流 ---");
+    info!("--- Example 1: Linear Workflow ---");
     // --- Example 1: Linear Workflow ---
     run_linear_workflow().await?;
 
-    info!("\n--- 示例2: 条件分支工作流 ---");
+    info!("\n--- Example 2: Conditional Branch Workflow ---");
     // --- Example 2: Conditional Branch Workflow ---
     run_conditional_workflow().await?;
 
-    info!("\n--- 示例3: 并行执行工作流 ---");
+    info!("\n--- Example 3: Parallel Execution Workflow ---");
     // --- Example 3: Parallel Execution Workflow ---
     run_parallel_workflow().await?;
 
-    info!("\n--- 示例4: 数据处理管道 ---");
+    info!("\n--- Example 4: Data Processing Pipeline ---");
     // --- Example 4: Data Processing Pipeline ---
     run_data_pipeline().await?;
 
-    info!("\n--- 示例5: 事件监听工作流 ---");
+    info!("\n--- Example 5: Event Listening Workflow ---");
     // --- Example 5: Event Listening Workflow ---
     run_workflow_with_events().await?;
 
     // 示例6-10: LLM/Agent 工作流示例（需要 OPENAI_API_KEY）
     // Examples 6-10: LLM/Agent Workflow Examples (Requires OPENAI_API_KEY)
     if std::env::var("OPENAI_API_KEY").is_ok() {
-        info!("\n=== Dify 风格 LLM/Agent 工作流示例 ===\n");
+        info!("\n=== Dify-style LLM/Agent Workflow Examples ===\n");
         // === Dify-style LLM/Agent Workflow Examples ===
 
-        info!("--- 示例6: ReAct Agent 决策工作流 ---");
+        info!("--- Example 6: ReAct Agent Decision Workflow ---");
         // --- Example 6: ReAct Agent Decision Workflow ---
         run_react_agent_workflow().await?;
 
-        info!("\n--- 示例7: 多 Agent 并行分析工作流 ---");
+        info!("\n--- Example 7: Multi-Agent Parallel Analysis Workflow ---");
         // --- Example 7: Multi-Agent Parallel Analysis Workflow ---
         run_multi_agent_parallel_workflow().await?;
 
-        info!("\n--- 示例8: 条件路由 + LLM 决策工作流 ---");
+        info!("\n--- Example 8: Conditional Routing + LLM Decision Workflow ---");
         // --- Example 8: Conditional Routing + LLM Decision Workflow ---
         run_conditional_llm_workflow().await?;
 
-        info!("\n--- 示例9: 智能数据管道工作流 ---");
+        info!("\n--- Example 9: Intelligent Data Pipeline Workflow ---");
         // --- Example 9: Intelligent Data Pipeline Workflow ---
         run_intelligent_pipeline_workflow().await?;
 
-        info!("\n--- 示例10: 工具链 + LLM 总结工作流 ---");
+        info!("\n--- Example 10: Tool Chain + LLM Summary Workflow ---");
         // --- Example 10: Tool Chain + LLM Summary Workflow ---
         run_tool_chain_llm_workflow().await?;
     } else {
-        info!("\n=== LLM/Agent 示例已跳过 ===");
+        info!("\n=== LLM/Agent examples skipped ===");
         // === LLM/Agent Examples Skipped ===
-        info!("设置 OPENAI_API_KEY 环境变量以运行 LLM/Agent 示例");
+        info!("Set OPENAI_API_KEY environment variable to run LLM/Agent examples");
         // Set OPENAI_API_KEY environment variable to run LLM/Agent examples
     }
 
-    info!("\n=== 所有示例执行完成 ===");
+    info!("\n=== All examples have finished executing ===");
     // === All examples execution completed ===
     Ok(())
 }
@@ -229,26 +229,26 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 /// Example 1: Simple linear workflow
 /// start -> fetch_data -> process -> save -> end
 async fn run_linear_workflow() -> Result<(), Box<dyn std::error::Error>> {
-    let graph = WorkflowBuilder::new("linear_workflow", "线性数据处理工作流")
-        .description("一个简单的线性数据处理工作流示例")
+    let graph = WorkflowBuilder::new("linear_workflow", "Linear Data Processing Workflow")
+        .description("A simple linear data processing workflow example")
         // "A simple linear data processing workflow example"
         .start()
-        .task("fetch_data", "获取数据", |_ctx, input| async move {
-            info!("  [fetch_data] 获取数据中...");
+        .task("fetch_data", "Fetch Data", |_ctx, input| async move {
+            info!("  [fetch_data] Fetching data...");
             //   [fetch_data] Fetching data...
-            let data = format!("数据来源: {}", input.as_str().unwrap_or("default"));
+            let data = format!("Data source: {}", input.as_str().unwrap_or("default"));
             Ok(WorkflowValue::String(data))
         })
-        .task("process", "处理数据", |_ctx, input| async move {
-            info!("  [process] 处理数据: {:?}", input);
+        .task("process", "Process Data", |_ctx, input| async move {
+            info!("  [process] Processing data: {:?}", input);
             //   [process] Processing data: {:?}
-            let processed = format!("已处理 - {}", input.as_str().unwrap_or(""));
+            let processed = format!("Processed - {}", input.as_str().unwrap_or(""));
             Ok(WorkflowValue::String(processed))
         })
-        .task("save", "保存结果", |_ctx, input| async move {
-            info!("  [save] 保存结果: {:?}", input);
+        .task("save", "Save Result", |_ctx, input| async move {
+            info!("  [save] Saving result: {:?}", input);
             //   [save] Saving result: {:?}
-            Ok(WorkflowValue::String("保存成功".to_string()))
+            Ok(WorkflowValue::String("Save successful".to_string()))
             // "Save successful"
         })
         .end()
@@ -259,9 +259,9 @@ async fn run_linear_workflow() -> Result<(), Box<dyn std::error::Error>> {
         .execute(&graph, WorkflowValue::String("API".to_string()))
         .await?;
 
-    info!("  工作流状态: {:?}", result.status);
+    info!("  Workflow status: {:?}", result.status);
     //   Workflow Status: {:?}
-    info!("  执行的节点数: {}", result.node_records.len());
+    info!("  Number of executed nodes: {}", result.node_records.len());
     //   Number of nodes executed: {}
 
     Ok(())
@@ -274,24 +274,30 @@ async fn run_linear_workflow() -> Result<(), Box<dyn std::error::Error>> {
 async fn run_conditional_workflow() -> Result<(), Box<dyn std::error::Error>> {
     // 使用手动构建方式来正确处理条件分支
     // Use manual construction to handle conditional branches correctly
-    let mut graph = WorkflowGraph::new("conditional_workflow", "条件分支工作流");
+    let mut graph = WorkflowGraph::new("conditional_workflow", "Conditional Branch Workflow");
 
     graph.add_node(WorkflowNode::start("start"));
-    graph.add_node(WorkflowNode::condition("check_value", "检查值大小", |_ctx, input| async move {
+    graph.add_node(WorkflowNode::condition("check_value", "Check Value", |_ctx, input| async move {
         let value = input.as_i64().unwrap_or(0);
-        info!("  [check_value] 检查值: {} (阈值: 50)", value);
+        info!("  [check_value] Checking value: {} (threshold: 50)", value);
         //   [check_value] Checking value: {} (Threshold: 50)
         value > 50
     }));
-    graph.add_node(WorkflowNode::task("high_path", "高值处理", |_ctx, input| async move {
-        info!("  [high_path] 执行高值路径");
+    graph.add_node(WorkflowNode::task("high_path", "High Value Handling", |_ctx, input| async move {
+        info!("  [high_path] Executing high-value path");
         //   [high_path] Executing high-value path
-        Ok(WorkflowValue::String(format!("高值处理: {}", input.as_i64().unwrap_or(0))))
+        Ok(WorkflowValue::String(format!(
+            "High-value processing: {}",
+            input.as_i64().unwrap_or(0)
+        )))
     }));
-    graph.add_node(WorkflowNode::task("low_path", "低值处理", |_ctx, input| async move {
-        info!("  [low_path] 执行低值路径");
+    graph.add_node(WorkflowNode::task("low_path", "Low Value Handling", |_ctx, input| async move {
+        info!("  [low_path] Executing low-value path");
         //   [low_path] Executing low-value path
-        Ok(WorkflowValue::String(format!("低值处理: {}", input.as_i64().unwrap_or(0))))
+        Ok(WorkflowValue::String(format!(
+            "Low-value processing: {}",
+            input.as_i64().unwrap_or(0)
+        )))
     }));
     graph.add_node(WorkflowNode::end("end"));
 
@@ -307,18 +313,18 @@ async fn run_conditional_workflow() -> Result<(), Box<dyn std::error::Error>> {
 
     // 测试高值路径
     // Test high-value path
-    info!("  测试输入值: 75");
+    info!("  Testing input value: 75");
     //   Testing input value: 75
     let result = executor.execute(&graph, WorkflowValue::Int(75)).await?;
-    info!("  工作流状态: {:?}", result.status);
+    info!("  Workflow status: {:?}", result.status);
     //   Workflow status: {:?}
 
     // 测试低值路径
     // Test low-value path
-    info!("\n  测试输入值: 30");
+    info!("\n  Testing input value: 30");
     //   Testing input value: 30
     let result = executor.execute(&graph, WorkflowValue::Int(30)).await?;
-    info!("  工作流状态: {:?}", result.status);
+    info!("  Workflow status: {:?}", result.status);
     //   Workflow status: {:?}
 
     Ok(())
@@ -330,43 +336,43 @@ async fn run_conditional_workflow() -> Result<(), Box<dyn std::error::Error>> {
 ///                    +-> task_b -+
 ///                    +-> task_c -+
 async fn run_parallel_workflow() -> Result<(), Box<dyn std::error::Error>> {
-    let graph = WorkflowBuilder::new("parallel_workflow", "并行处理工作流")
-        .description("并行执行多个任务然后聚合结果")
+    let graph = WorkflowBuilder::new("parallel_workflow", "Parallel Processing Workflow")
+        .description("Execute multiple tasks in parallel and then aggregate results")
         // "Execute multiple tasks in parallel and then aggregate results"
         .start()
-        .parallel("fork", "分发任务")
-        .branch("task_a", "任务A", |_ctx, _input| async move {
-            info!("  [task_a] 开始执行任务A...");
+        .parallel("fork", "Dispatch Tasks")
+        .branch("task_a", "Task A", |_ctx, _input| async move {
+            info!("  [task_a] Starting Task A...");
             //   [task_a] Starting task A...
             tokio::time::sleep(std::time::Duration::from_millis(100)).await;
-            info!("  [task_a] 任务A完成");
+            info!("  [task_a] Task A complete");
             //   [task_a] Task A complete
-            Ok(WorkflowValue::String("结果A".to_string()))
+            Ok(WorkflowValue::String("Result A".to_string()))
         })
-        .branch("task_b", "任务B", |_ctx, _input| async move {
-            info!("  [task_b] 开始执行任务B...");
+        .branch("task_b", "Task B", |_ctx, _input| async move {
+            info!("  [task_b] Starting Task B...");
             //   [task_b] Starting task B...
             tokio::time::sleep(std::time::Duration::from_millis(50)).await;
-            info!("  [task_b] 任务B完成");
+            info!("  [task_b] Task B complete");
             //   [task_b] Task B complete
-            Ok(WorkflowValue::String("结果B".to_string()))
+            Ok(WorkflowValue::String("Result B".to_string()))
         })
-        .branch("task_c", "任务C", |_ctx, _input| async move {
-            info!("  [task_c] 开始执行任务C...");
+        .branch("task_c", "Task C", |_ctx, _input| async move {
+            info!("  [task_c] Starting Task C...");
             //   [task_c] Starting task C...
             tokio::time::sleep(std::time::Duration::from_millis(75)).await;
-            info!("  [task_c] 任务C完成");
+            info!("  [task_c] Task C complete");
             //   [task_c] Task C complete
-            Ok(WorkflowValue::String("结果C".to_string()))
+            Ok(WorkflowValue::String("Result C".to_string()))
         })
-        .join_with_transform("join", "聚合结果", |results| async move {
-            info!("  [join] 聚合所有结果");
+        .join_with_transform("join", "Aggregate Results", |results| async move {
+            info!("  [join] Aggregating all results");
             //   [join] Aggregating all results
             let combined: Vec<String> = results
                 .values()
                 .filter_map(|v| v.as_str().map(|s| s.to_string()))
                 .collect();
-            WorkflowValue::String(format!("聚合结果: {:?}", combined))
+            WorkflowValue::String(format!("Aggregated results: {:?}", combined))
         })
         .end()
         .build();
@@ -374,9 +380,9 @@ async fn run_parallel_workflow() -> Result<(), Box<dyn std::error::Error>> {
     let executor = WorkflowExecutor::new(ExecutorConfig::default());
     let result = executor.execute(&graph, WorkflowValue::Null).await?;
 
-    info!("  工作流状态: {:?}", result.status);
+    info!("  Workflow status: {:?}", result.status);
     //   Workflow status: {:?}
-    info!("  执行的节点数: {}", result.node_records.len());
+    info!("  Number of executed nodes: {}", result.node_records.len());
     //   Number of nodes executed: {}
 
     Ok(())
@@ -387,14 +393,14 @@ async fn run_parallel_workflow() -> Result<(), Box<dyn std::error::Error>> {
 /// 模拟 ETL 工作流: 提取 -> 转换 -> 加载
 /// Simulate ETL workflow: Extract -> Transform -> Load
 async fn run_data_pipeline() -> Result<(), Box<dyn std::error::Error>> {
-    let graph = WorkflowBuilder::new("data_pipeline", "ETL数据管道")
-        .description("Extract-Transform-Load 数据处理管道")
+    let graph = WorkflowBuilder::new("data_pipeline", "ETL Data Pipeline")
+        .description("Extract-Transform-Load data processing pipeline")
         // "Extract-Transform-Load data processing pipeline"
         .start()
         // 提取阶段
         // Extraction stage
-        .task("extract", "提取数据", |ctx, _input| async move {
-            info!("  [extract] 从数据源提取数据...");
+        .task("extract", "Extract Data", |ctx, _input| async move {
+            info!("  [extract] Extracting data from source...");
             //   [extract] Extracting data from source...
             let raw_data = vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
 
@@ -410,33 +416,40 @@ async fn run_data_pipeline() -> Result<(), Box<dyn std::error::Error>> {
         })
         // 转换阶段
         // Transformation stage
-        .task("transform", "转换数据", |ctx, input| async move {
-            info!("  [transform] 转换数据...");
+        .task("transform", "Transform Data", |ctx, input| async move {
+            info!("  [transform] Transforming data...");
             //   [transform] Transforming data...
             if let Some(list) = input.as_list() {
                 let transformed: Vec<WorkflowValue> = list
                     .iter()
                     .filter_map(|v| v.as_i64())
-                    .filter(|&n| n % 2 == 0) // 只保留偶数
+                    .filter(|&n| n % 2 == 0) // Keep only even numbers
                     // Keep only even numbers
-                    .map(|n| WorkflowValue::Int(n * 10)) // 乘以10
+                    .map(|n| WorkflowValue::Int(n * 10)) // Multiply by 10
                     // Multiply by 10
                     .collect();
 
-                ctx.set_variable("transformed_count", WorkflowValue::Int(transformed.len() as i64)).await;
+                ctx.set_variable(
+                    "transformed_count",
+                    WorkflowValue::Int(transformed.len() as i64),
+                )
+                .await;
 
-                info!("  [transform] 过滤后剩余 {} 条记录", transformed.len());
+                info!(
+                    "  [transform] {} records remaining after filtering",
+                    transformed.len()
+                );
                 //   [transform] {} records remaining after filtering
                 Ok(WorkflowValue::List(transformed))
             } else {
-                Err("输入数据格式错误".to_string())
+                Err("Input data format error".to_string())
                 // "Input data format error"
             }
         })
         // 加载阶段
         // Loading stage
-        .task("load", "加载数据", |ctx, input| async move {
-            info!("  [load] 加载数据到目标存储...");
+        .task("load", "Load Data", |ctx, input| async move {
+            info!("  [load] Loading data to target storage...");
             //   [load] Loading data to target storage...
 
             let original_count = ctx.get_variable("record_count").await
@@ -447,7 +460,7 @@ async fn run_data_pipeline() -> Result<(), Box<dyn std::error::Error>> {
                 .unwrap_or(0);
 
             let summary = format!(
-                "ETL完成: 原始记录 {} 条, 转换后 {} 条",
+                "ETL complete: {} original records, {} after transformation",
                 original_count, transformed_count
             );
             // "ETL Complete: {} original records, {} after transformation"
@@ -467,7 +480,7 @@ async fn run_data_pipeline() -> Result<(), Box<dyn std::error::Error>> {
     let executor = WorkflowExecutor::new(ExecutorConfig::default());
     let result = executor.execute(&graph, WorkflowValue::Null).await?;
 
-    info!("  工作流状态: {:?}", result.status);
+    info!("  Workflow status: {:?}", result.status);
     //   Workflow status: {:?}
 
     Ok(())
@@ -482,17 +495,17 @@ async fn run_workflow_with_events() -> Result<(), Box<dyn std::error::Error>> {
 
     // 创建简单工作流
     // Create simple workflow
-    let graph = WorkflowBuilder::new("event_workflow", "事件监听工作流")
+    let graph = WorkflowBuilder::new("event_workflow", "Event Listening Workflow")
         .start()
-        .task("step1", "步骤1", |_ctx, _input| async move {
+        .task("step1", "Step 1", |_ctx, _input| async move {
             tokio::time::sleep(std::time::Duration::from_millis(10)).await;
             Ok(WorkflowValue::String("step1_done".to_string()))
         })
-        .task("step2", "步骤2", |_ctx, _input| async move {
+        .task("step2", "Step 2", |_ctx, _input| async move {
             tokio::time::sleep(std::time::Duration::from_millis(10)).await;
             Ok(WorkflowValue::String("step2_done".to_string()))
         })
-        .task("step3", "步骤3", |_ctx, _input| async move {
+        .task("step3", "Step 3", |_ctx, _input| async move {
             tokio::time::sleep(std::time::Duration::from_millis(10)).await;
             Ok(WorkflowValue::String("step3_done".to_string()))
         })
@@ -515,23 +528,23 @@ async fn run_workflow_with_events() -> Result<(), Box<dyn std::error::Error>> {
         while let Some(event) = event_rx.recv().await {
             match &event {
                 ExecutionEvent::WorkflowStarted { workflow_id, execution_id } => {
-                    info!("  [EVENT] 工作流开始: {} ({})", workflow_id, execution_id);
+                    info!("  [EVENT] Workflow started: {} ({})", workflow_id, execution_id);
                     //   [EVENT] Workflow started: {} ({})
                 }
                 ExecutionEvent::NodeStarted { node_id } => {
-                    info!("  [EVENT] 节点开始: {}", node_id);
+                    info!("  [EVENT] Node started: {}", node_id);
                     //   [EVENT] Node started: {}
                 }
                 ExecutionEvent::NodeCompleted { node_id, result } => {
-                    info!("  [EVENT] 节点完成: {} - {:?}", node_id, result.status);
+                    info!("  [EVENT] Node completed: {} - {:?}", node_id, result.status);
                     //   [EVENT] Node completed: {} - {:?}
                 }
                 ExecutionEvent::CheckpointCreated { label } => {
-                    info!("  [EVENT] 检查点创建: {}", label);
+                    info!("  [EVENT] Checkpoint created: {}", label);
                     //   [EVENT] Checkpoint created: {}
                 }
                 ExecutionEvent::WorkflowCompleted { workflow_id, status, .. } => {
-                    info!("  [EVENT] 工作流完成: {} - {:?}", workflow_id, status);
+                    info!("  [EVENT] Workflow completed: {} - {:?}", workflow_id, status);
                     //   [EVENT] Workflow completed: {} - {:?}
                 }
                 _ => {}
@@ -550,7 +563,7 @@ async fn run_workflow_with_events() -> Result<(), Box<dyn std::error::Error>> {
     drop(executor);
     tokio::time::sleep(std::time::Duration::from_millis(50)).await;
 
-    info!("  工作流最终状态: {:?}", result.status);
+    info!("  Workflow final status: {:?}", result.status);
     //   Workflow final status: {:?}
 
     Ok(())
@@ -576,7 +589,7 @@ async fn run_react_agent_workflow() -> Result<(), Box<dyn std::error::Error>> {
     // Create ReAct Agent
     let react_agent = create_react_agent(
         "decision-agent",
-        "你是一个专业的决策助手，能够使用工具进行推理和分析。"
+        "You are a professional decision-making assistant who can use tools for reasoning and analysis."
     ).await?;
 
     // 创建用于综合分析的 LLM Agent
@@ -588,61 +601,61 @@ async fn run_react_agent_workflow() -> Result<(), Box<dyn std::error::Error>> {
 
     // 使用手动构建方式来集成 ReAct Agent
     // Use manual construction to integrate the ReAct Agent
-    let mut graph = WorkflowGraph::new("react_agent_workflow", "ReAct Agent 决策工作流");
+    let mut graph = WorkflowGraph::new("react_agent_workflow", "ReAct Agent Decision Workflow");
 
     // 添加节点
     // Add nodes
     graph.add_node(WorkflowNode::start("start"));
 
-    graph.add_node(WorkflowNode::task("gather_context", "收集上下文", |_ctx, input| async move {
-        info!("  [gather_context] 收集上下文信息...");
+    graph.add_node(WorkflowNode::task("gather_context", "Gather Context", |_ctx, input| async move {
+        info!("  [gather_context] Gathering context information...");
         //   [gather_context] Gathering context information...
         let prompt = input.as_str().unwrap_or("");
-        let context = format!("任务: {}\n\n已收集相关背景信息。", prompt);
+        let context = format!("Task: {}\n\nRelated background information has been collected.", prompt);
         Ok(WorkflowValue::String(context))
     }));
 
     // 集成 ReAct Agent
     // Integrate ReAct Agent
-    graph.add_node(WorkflowNode::task("react_agent", "ReAct 推理", {
+    graph.add_node(WorkflowNode::task("react_agent", "ReAct Reasoning", {
         let agent_clone = Arc::clone(&react_agent);
         move |_ctx, input| {
             let agent = Arc::clone(&agent_clone);
             async move {
-                info!("  [react_agent] 开始 ReAct 推理...");
+                info!("  [react_agent] Starting ReAct reasoning...");
                 //   [react_agent] Starting ReAct reasoning...
-                let task = input.as_str().unwrap_or("请分析当前情况");
+                let task = input.as_str().unwrap_or("Please analyze the current situation");
                 match agent.run(task).await {
                     Ok(result) => {
-                        info!("  [react_agent] 推理完成，迭代次数: {}", result.iterations);
+                        info!("  [react_agent] Reasoning complete, iterations: {}", result.iterations);
                         //   [react_agent] Reasoning complete, iterations: {}
                         // 构建步骤描述
                         // Build step descriptions
                         let steps_desc: Vec<String> = result.steps.iter()
                             .map(|s| {
                                 let step_type_str = match s.step_type {
-                                    mofa_sdk::react::ReActStepType::Thought => "思考",
+                                    mofa_sdk::react::ReActStepType::Thought => "Thought",
                                     // Thought
-                                    mofa_sdk::react::ReActStepType::Action => "行动",
+                                    mofa_sdk::react::ReActStepType::Action => "Action",
                                     // Action
-                                    mofa_sdk::react::ReActStepType::Observation => "观察",
+                                    mofa_sdk::react::ReActStepType::Observation => "Observation",
                                     // Observation
-                                    mofa_sdk::react::ReActStepType::FinalAnswer => "最终答案",
+                                    mofa_sdk::react::ReActStepType::FinalAnswer => "Final Answer",
                                     // Final Answer
                                 };
                                 format!("[{}] {}", step_type_str, s.content)
                             })
                             .collect();
                         Ok(WorkflowValue::String(format!(
-                            "推理步骤:\n{}\n\n最终答案: {}",
+                            "Reasoning steps:\n{}\n\nFinal answer: {}",
                             steps_desc.join("\n"),
                             result.answer
                         )))
                     }
                     Err(e) => {
-                        info!("  [react_agent] 推理失败: {}", e);
+                        info!("  [react_agent] Reasoning failed: {}", e);
                         //   [react_agent] Reasoning failed: {}
-                        Ok(WorkflowValue::String(format!("推理失败: {}", e)))
+                        Ok(WorkflowValue::String(format!("Reasoning failed: {}", e)))
                     }
                 }
             }
@@ -653,7 +666,7 @@ async fn run_react_agent_workflow() -> Result<(), Box<dyn std::error::Error>> {
     // Final synthesis by LLM node
     graph.add_node(WorkflowNode::llm_agent(
         "final_synthesis",
-        "最终综合分析",
+        "Final Synthesis",
         synthesis_agent
     ));
 
@@ -670,11 +683,11 @@ async fn run_react_agent_workflow() -> Result<(), Box<dyn std::error::Error>> {
     // Execute workflow
     let executor = WorkflowExecutor::new(ExecutorConfig::default());
     let input = WorkflowValue::String(
-        "计算 123 * 456 的结果。".to_string()
+        "Calculate the result of 123 * 456.".to_string()
     );
     let result = executor.execute(&graph, input).await?;
 
-    info!("  工作流状态: {:?}", result.status);
+    info!("  Workflow status: {:?}", result.status);
     //   Workflow status: {:?}
 
     Ok(())
@@ -715,21 +728,21 @@ async fn run_multi_agent_parallel_workflow() -> Result<(), Box<dyn std::error::E
 
     // 构建并行工作流
     // Build parallel workflow
-    let graph = WorkflowBuilder::new("multi_agent_workflow", "多 Agent 并行分析工作流")
-        .description("并行执行多个专家 Agent 然后综合意见")
+    let graph = WorkflowBuilder::new("multi_agent_workflow", "Multi-Agent Parallel Analysis Workflow")
+        .description("Execute multiple expert Agents in parallel and then synthesize opinions")
         // "Execute multiple expert Agents in parallel and then synthesize opinions"
         .start()
-        .parallel("fork", "分发分析任务")
+        .parallel("fork", "Distribute Analysis Tasks")
         // 技术专家分支
         // Technical expert branch
-        .llm_agent_branch("technical_agent", "技术分析", technical_agent)
+        .llm_agent_branch("technical_agent", "Technical Analysis", technical_agent)
         // 商业专家分支
         // Business expert branch
-        .llm_agent_branch("business_agent", "商业分析", business_agent)
+        .llm_agent_branch("business_agent", "Business Analysis", business_agent)
         // 聚合结果
         // Aggregate results
-        .join_with_transform("join", "聚合分析结果", |results| async move {
-            info!("  [join] 聚合多视角分析结果");
+        .join_with_transform("join", "Aggregate Analysis Results", |results| async move {
+            info!("  [join] Aggregating multi-perspective analysis results");
             //   [join] Aggregating multi-perspective analysis results
             let technical = results.get("technical_agent")
                 .and_then(|v| v.as_str())
@@ -749,7 +762,7 @@ async fn run_multi_agent_parallel_workflow() -> Result<(), Box<dyn std::error::E
         // LLM node synthesis analysis
         .llm_agent_with_template(
             "final_synthesis",
-            "综合决策建议",
+            "Comprehensive Decision Recommendation",
             synthesis_agent,
             prompts::MULTI_PERSPECTIVE_SYNTHESIS.to_string()
         )
@@ -760,11 +773,11 @@ async fn run_multi_agent_parallel_workflow() -> Result<(), Box<dyn std::error::E
     // Execute workflow
     let executor = WorkflowExecutor::new(ExecutorConfig::default());
     let input = WorkflowValue::String(
-        "开发一个基于 Rust 的 AI Agent 框架".to_string()
+        "Develop an AI Agent framework based on Rust.".to_string()
     );
     let result = executor.execute(&graph, input).await?;
 
-    info!("  工作流状态: {:?}", result.status);
+    info!("  Workflow status: {:?}", result.status);
     //   Workflow status: {:?}
 
     Ok(())
@@ -812,7 +825,7 @@ async fn run_conditional_llm_workflow() -> Result<(), Box<dyn std::error::Error>
 
     // 手动构建带条件分支的工作流
     // Manually build workflow with conditional branches
-    let mut graph = WorkflowGraph::new("conditional_llm_workflow", "条件路由 + LLM 决策工作流");
+    let mut graph = WorkflowGraph::new("conditional_llm_workflow", "Conditional Routing + LLM Decision Workflow");
 
     // 添加节点
     // Add nodes
@@ -820,28 +833,28 @@ async fn run_conditional_llm_workflow() -> Result<(), Box<dyn std::error::Error>
 
     // LLM 分类节点
     // LLM classification node
-    graph.add_node(WorkflowNode::llm_agent("complexity_check", "复杂度分类", classifier_agent));
+    graph.add_node(WorkflowNode::llm_agent("complexity_check", "Complexity Classification", classifier_agent));
 
     // 条件分支
     // Conditional branch
-    graph.add_node(WorkflowNode::condition("check_route", "检查分类结果", |_ctx, input| async move {
+    graph.add_node(WorkflowNode::condition("check_route", "Check Classification Result", |_ctx, input| async move {
         let mut response = input.as_str().unwrap_or("").to_lowercase();
-        info!("  [check_route] 分类结果: {}", response);
+        info!("  [check_route] Classification result: {}", response);
         //   [check_route] Classification result: {}
         response.contains("complex")
     }));
 
     // 简单处理分支
     // Simple processing branch
-    graph.add_node(WorkflowNode::llm_agent("simple_processing", "简单处理", simple_agent));
+    graph.add_node(WorkflowNode::llm_agent("simple_processing", "Simple Processing", simple_agent));
 
     // 深度分析分支
     // Deep analysis branch
-    graph.add_node(WorkflowNode::llm_agent("deep_analysis", "深度分析", deep_agent));
+    graph.add_node(WorkflowNode::llm_agent("deep_analysis", "Deep Analysis", deep_agent));
 
     // 最终决策节点
     // Final decision node
-    graph.add_node(WorkflowNode::llm_agent("final_decision", "最终决策", decision_agent));
+    graph.add_node(WorkflowNode::llm_agent("final_decision", "Final Decision", decision_agent));
 
     graph.add_node(WorkflowNode::end("end"));
 
@@ -861,24 +874,24 @@ async fn run_conditional_llm_workflow() -> Result<(), Box<dyn std::error::Error>
 
     // 测试简单任务
     // Test simple task
-    info!("  测试简单任务: \"什么是 Rust?\"");
+    info!("  Testing simple task: \"What is Rust?\"");
     //   Testing simple task: "What is Rust?"
     let result = executor.execute(
         &graph,
-        WorkflowValue::String("什么是 Rust?".to_string())
+        WorkflowValue::String("What is Rust?".to_string())
     ).await?;
-    info!("  工作流状态: {:?}", result.status);
+    info!("  Workflow status: {:?}", result.status);
     //   Workflow status: {:?}
 
     // 测试复杂任务
     // Test complex task
-    info!("\n  测试复杂任务: \"设计一个高并发的分布式系统架构，支持每秒 100 万请求\"");
+    info!("\n  Testing complex task: \"Design a high-concurrency distributed system architecture supporting 1M RPS\"");
     //   Testing complex task: "Design a high-concurrency distributed system architecture supporting 1M RPS"
     let result = executor.execute(
         &graph,
-        WorkflowValue::String("设计一个高并发的分布式系统架构，支持每秒 100 万请求".to_string())
+        WorkflowValue::String("Design a high-concurrency distributed system architecture supporting 1M RPS".to_string())
     ).await?;
-    info!("  工作流状态: {:?}", result.status);
+    info!("  Workflow status: {:?}", result.status);
     //   Workflow status: {:?}
 
     Ok(())
@@ -902,14 +915,14 @@ async fn run_intelligent_pipeline_workflow() -> Result<(), Box<dyn std::error::E
 
     // 构建智能数据管道
     // Build intelligent data pipeline
-    let graph = WorkflowBuilder::new("intelligent_pipeline", "智能数据管道")
-        .description("ETL 管道 + LLM 智能分析")
+    let graph = WorkflowBuilder::new("intelligent_pipeline", "Intelligent Data Pipeline")
+        .description("ETL Pipeline + LLM Intelligent Analysis")
         // "ETL Pipeline + LLM Intelligent Analysis"
         .start()
         // 提取阶段：获取销售数据
         // Extraction stage: Obtain sales data
-        .task("extract", "提取销售数据", |_ctx, _input| async move {
-            info!("  [extract] 从数据库提取销售数据...");
+        .task("extract", "Extract Sales Data", |_ctx, _input| async move {
+            info!("  [extract] Extracting sales data from database...");
             //   [extract] Extracting sales data from database...
             let sales_data = vec![
                 ("Q1", 150000), ("Q2", 180000), ("Q3", 210000), ("Q4", 280000)
@@ -919,12 +932,12 @@ async fn run_intelligent_pipeline_workflow() -> Result<(), Box<dyn std::error::E
         })
         // 转换阶段：计算同比增长
         // Transformation stage: Calculate year-over-year growth
-        .task("transform", "数据转换", |_ctx, input| async move {
-            info!("  [transform] 计算季度增长率...");
+        .task("transform", "Transform Data", |_ctx, input| async move {
+            info!("  [transform] Calculating quarterly growth rates...");
             //   [transform] Calculating quarterly growth rates...
             let data_str = input.as_str().unwrap_or("");
             let transformed = format!(
-                "{}\n\n转换结果: 季度增长率 Q2=+20%, Q3=+16.7%, Q4=+33.3%",
+                "{}\n\nTransformed result: quarterly growth rates Q2=+20%, Q3=+16.7%, Q4=+33.3%",
                 data_str
             );
             Ok(WorkflowValue::String(transformed))
@@ -933,7 +946,7 @@ async fn run_intelligent_pipeline_workflow() -> Result<(), Box<dyn std::error::E
         // LLM analysis stage: Generate insights
         .llm_agent_with_template(
             "llm_analysis",
-            "智能洞察分析",
+            "Intelligent Insight Analysis",
             analysis_agent,
             prompts::LLM_ANALYSIS.to_string()
         )
@@ -945,7 +958,7 @@ async fn run_intelligent_pipeline_workflow() -> Result<(), Box<dyn std::error::E
     let executor = WorkflowExecutor::new(ExecutorConfig::default());
     let result = executor.execute(&graph, WorkflowValue::Null).await?;
 
-    info!("  工作流状态: {:?}", result.status);
+    info!("  Workflow status: {:?}", result.status);
     //   Workflow status: {:?}
 
     Ok(())
@@ -969,24 +982,24 @@ async fn run_tool_chain_llm_workflow() -> Result<(), Box<dyn std::error::Error>>
 
     // 构建工具链工作流
     // Build tool chain workflow
-    let graph = WorkflowBuilder::new("tool_chain_workflow", "工具链 + LLM 总结")
-        .description("并行执行工具并用 LLM 综合结果")
+    let graph = WorkflowBuilder::new("tool_chain_workflow", "Tool Chain + LLM Summary")
+        .description("Execute tools in parallel and synthesize results with LLM")
         // "Execute tools in parallel and synthesize results with LLM"
         .start()
-        .parallel("fork", "分发工具调用")
+        .parallel("fork", "Dispatch Tool Calls")
         // 计算工具分支
         // Calculator tool branch
-        .branch("calculator", "计算器", |_ctx, _input| async move {
-            info!("  [calculator] 执行计算: 123 * 456");
+        .branch("calculator", "Calculator", |_ctx, _input| async move {
+            info!("  [calculator] Performing calculation: 123 * 456");
             //   [calculator] Performing calculation: 123 * 456
             tokio::time::sleep(std::time::Duration::from_millis(50)).await;
             let result = 123 * 456;
-            Ok(WorkflowValue::String(format!("计算结果: {}", result)))
+            Ok(WorkflowValue::String(format!("Calculation result: {}", result)))
         })
         // 日期时间工具分支
         // Date-time tool branch
-        .branch("datetime", "日期时间", |_ctx, _input| async move {
-            info!("  [datetime] 获取当前时间");
+        .branch("datetime", "DateTime", |_ctx, _input| async move {
+            info!("  [datetime] Getting current time");
             //   [datetime] Getting current time
             tokio::time::sleep(std::time::Duration::from_millis(30)).await;
             use std::time::{SystemTime, UNIX_EPOCH};
@@ -1001,14 +1014,14 @@ async fn run_tool_chain_llm_workflow() -> Result<(), Box<dyn std::error::Error>>
             let minutes = (now % 3600) / 60;
             let seconds = now % 60;
             Ok(WorkflowValue::String(format!(
-                "Unix 时间戳: {} (约 {} 天 {} 小时 {} 分钟 {} 秒)",
+                "Unix timestamp: {} (about {} days {} hours {} minutes {} seconds)",
                 now, days, hours, minutes, seconds
             )))
         })
         // 聚合工具结果
         // Aggregate tool results
-        .join_with_transform("join", "聚合工具结果", |results| async move {
-            info!("  [join] 聚合工具执行结果");
+        .join_with_transform("join", "Aggregate Tool Results", |results| async move {
+            info!("  [join] Aggregating tool execution results");
             //   [join] Aggregating tool execution results
             let calc = results.get("calculator")
                 .and_then(|v| v.as_str())
@@ -1028,7 +1041,7 @@ async fn run_tool_chain_llm_workflow() -> Result<(), Box<dyn std::error::Error>>
         // LLM summary node
         .llm_agent_with_template(
             "llm_summary",
-            "综合总结",
+            "Comprehensive Summary",
             summary_agent,
             prompts::LLM_SUMMARY.to_string()
         )
@@ -1040,7 +1053,7 @@ async fn run_tool_chain_llm_workflow() -> Result<(), Box<dyn std::error::Error>>
     let executor = WorkflowExecutor::new(ExecutorConfig::default());
     let result = executor.execute(&graph, WorkflowValue::Null).await?;
 
-    info!("  工作流状态: {:?}", result.status);
+    info!("  Workflow status: {:?}", result.status);
     //   Workflow status: {:?}
 
     Ok(())

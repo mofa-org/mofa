@@ -1,0 +1,11 @@
+[package]
+name = "message_graph_validation"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+futures.workspace = true
+serde_json.workspace = true
+
+# Local dependencies
+mofa-kernel = { path = "../../crates/mofa-kernel" }

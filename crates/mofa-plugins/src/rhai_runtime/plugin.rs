@@ -259,9 +259,6 @@ impl RhaiPlugin {
         // Create engine instance
         let engine = Arc::new(RhaiScriptEngine::new(config.engine_config.clone())?);
 
-        // Parse metadata from script - TODO
-        let _script_metadata: HashMap<String, String> = HashMap::new();
-
         // Initialize with default metadata
         let metadata = PluginMetadata {
             id: config.plugin_id.clone(),
@@ -273,7 +270,7 @@ impl RhaiPlugin {
             KernelPluginMetadata::new(&config.plugin_id, &metadata.name, PluginType::Tool);
 
         // Create plugin
-        Ok(Self {
+        let mut plugin = Self {
             id: config.plugin_id.clone(),
             config,
             engine,
@@ -284,7 +281,12 @@ impl RhaiPlugin {
             last_modified,
             cached_content: content,
             stats: Arc::new(PluginStats::default()),
-        })
+        };
+
+        // Keep metadata consistent from first construction.
+        plugin.extract_metadata().await?;
+
+        Ok(plugin)
     }
 
     /// Create a new Rhai plugin from file path
@@ -333,42 +335,66 @@ impl RhaiPlugin {
             .await
         {
             warn!("Failed to compile script for metadata extraction: {}", e);
-            return Ok(());
+        } else {
+            let context = mofa_extra::rhai::ScriptContext::new();
+
+            // Execute the script to define global variables
+            if self
+                .engine
+                .execute_compiled(&script_id, &context)
+                .await
+                .is_ok()
+            {
+                // Try to extract plugin_name
+                if let Ok(result) = self.engine.execute("plugin_name", &context).await
+                    && result.success
+                    && let Some(name) = result.value.as_str()
+                {
+                    self.metadata.name = name.to_string();
+                    self.kernel_metadata.name = name.to_string();
+                }
+
+                // Try to extract plugin_version
+                if let Ok(result) = self.engine.execute("plugin_version", &context).await
+                    && result.success
+                    && let Some(version) = result.value.as_str()
+                {
+                    self.metadata.version = version.to_string();
+                    self.kernel_metadata.version = version.to_string();
+                }
+
+                // Try to extract plugin_description
+                if let Ok(result) = self.engine.execute("plugin_description", &context).await
+                    && result.success
+                    && let Some(description) = result.value.as_str()
+                {
+                    self.metadata.description = description.to_string();
+                    self.kernel_metadata.description = description.to_string();
+                }
+            }
         }
 
-        let context = mofa_extra::rhai::ScriptContext::new();
-
-        // Execute the script to define global variables
-        if self
-            .engine
-            .execute_compiled(&script_id, &context)
-            .await
-            .is_ok()
+        // Fallback to direct source parsing when scope extraction misses values.
+        if self.metadata.name == "unknown"
+            && let Some(name) = extract_quoted_assignment(&self.cached_content, "plugin_name")
         {
-            // Now try to extract variables by calling a snippet that returns them
-            // Try to extract plugin_name
-            if let Ok(result) = self.engine.execute("plugin_name", &context).await
-                && result.success
-                && let Some(name) = result.value.as_str()
-            {
-                self.metadata.name = name.to_string();
-            }
+            self.metadata.name = name.clone();
+            self.kernel_metadata.name = name;
+        }
 
-            // Try to extract plugin_version
-            if let Ok(result) = self.engine.execute("plugin_version", &context).await
-                && result.success
-                && let Some(version) = result.value.as_str()
-            {
-                self.metadata.version = version.to_string();
-            }
+        if self.metadata.version == "0.0.0"
+            && let Some(version) = extract_quoted_assignment(&self.cached_content, "plugin_version")
+        {
+            self.metadata.version = version.clone();
+            self.kernel_metadata.version = version;
+        }
 
-            // Try to extract plugin_description
-            if let Ok(result) = self.engine.execute("plugin_description", &context).await
-                && result.success
-                && let Some(description) = result.value.as_str()
-            {
-                self.metadata.description = description.to_string();
-            }
+        if self.metadata.description.is_empty()
+            && let Some(description) =
+                extract_quoted_assignment(&self.cached_content, "plugin_description")
+        {
+            self.metadata.description = description.clone();
+            self.kernel_metadata.description = description;
         }
 
         Ok(())
@@ -434,13 +460,13 @@ impl RhaiPlugin {
     async fn execute_script(&self, input: String) -> PluginResult<String> {
         // Create context with input
         let mut context = ScriptContext::new();
-        context = context.with_variable("input", input.clone())?;
+        context = context.with_variable("input", input.clone()).map_err(|e| mofa_kernel::plugin::PluginError::ExecutionFailed(e.to_string()))?;
 
         // Compile and cache the script (idempotent when already cached)
         let script_id = format!("{}_exec", self.id);
         self.engine
             .compile_and_cache(&script_id, "execute", &self.cached_content)
-            .await?;
+            .await.map_err(|e| mofa_kernel::plugin::PluginError::ExecutionFailed(e.to_string()))?;
 
         // Try to call the execute function with the input
         match self
@@ -458,7 +484,7 @@ impl RhaiPlugin {
                     "Rhai plugin {} executed successfully via call_function",
                     self.id
                 );
-                Ok(serde_json::to_string_pretty(&result)?)
+                Ok(serde_json::to_string_pretty(&result).map_err(|e| mofa_kernel::plugin::PluginError::ExecutionFailed(e.to_string()))?)
             }
             Err(e) => {
                 warn!(
@@ -467,19 +493,77 @@ impl RhaiPlugin {
                 );
 
                 // Fallback: execute the whole script directly
-                let result = self.engine.execute(&self.cached_content, &context).await?;
+                let result = self.engine.execute(&self.cached_content, &context).await.map_err(|e| mofa_kernel::plugin::PluginError::ExecutionFailed(e.to_string()))?;
 
                 if !result.success {
-                    return Err(anyhow::anyhow!(
+                    return Err(mofa_kernel::plugin::PluginError::ExecutionFailed(format!(
                         "Script execution failed: {:?}",
                         result.error
-                    ));
+                    )));
                 }
 
-                Ok(serde_json::to_string_pretty(&result.value)?)
+                Ok(serde_json::to_string_pretty(&result.value).map_err(|e| mofa_kernel::plugin::PluginError::ExecutionFailed(e.to_string()))?)
             }
         }
     }
+}
+
+fn extract_quoted_assignment(script: &str, variable: &str) -> Option<String> {
+    for line in script.lines() {
+        let trimmed = line.trim();
+        let statement = trimmed.trim_end_matches(';').trim();
+
+        let Some(rest) = statement
+            .strip_prefix("let ")
+            .or_else(|| statement.strip_prefix("const "))
+        else {
+            continue;
+        };
+        let Some(rest) = rest.strip_prefix(variable) else {
+            continue;
+        };
+        let rest = rest.trim_start();
+        let Some(rest) = rest.strip_prefix('=') else {
+            continue;
+        };
+        let rest = rest.trim_start();
+
+        if let Some(value) = parse_quoted_literal(rest, '"') {
+            return Some(value);
+        }
+        if let Some(value) = parse_quoted_literal(rest, '\'') {
+            return Some(value);
+        }
+    }
+    None
+}
+
+fn parse_quoted_literal(input: &str, quote: char) -> Option<String> {
+    let mut chars = input.chars();
+    if chars.next()? != quote {
+        return None;
+    }
+
+    let mut output = String::new();
+    let mut escaped = false;
+
+    for ch in chars {
+        if escaped {
+            output.push(ch);
+            escaped = false;
+            continue;
+        }
+        if ch == '\\' {
+            escaped = true;
+            continue;
+        }
+        if ch == quote {
+            return Some(output);
+        }
+        output.push(ch);
+    }
+
+    None
 }
 
 // ============================================================================
@@ -509,7 +593,8 @@ impl AgentPlugin for RhaiPlugin {
         *self.plugin_context.write().await = Some(ctx.clone());
 
         // Extract metadata from script
-        self.extract_metadata().await?;
+        self.extract_metadata().await
+            .map_err(|e| mofa_kernel::plugin::PluginError::ExecutionFailed(e.to_string()))?;
 
         let mut state = self.state.write().await;
         *state = RhaiPluginState::Loaded;
@@ -519,7 +604,7 @@ impl AgentPlugin for RhaiPlugin {
     async fn init_plugin(&mut self) -> PluginResult<()> {
         let mut state = self.state.write().await;
         if *state != RhaiPluginState::Loaded {
-            return Err(anyhow::anyhow!("Plugin not loaded"));
+            return Err(mofa_kernel::plugin::PluginError::ExecutionFailed("Plugin not loaded".to_string()));
         }
 
         *state = RhaiPluginState::Initializing;
@@ -543,7 +628,7 @@ impl AgentPlugin for RhaiPlugin {
     async fn start(&mut self) -> PluginResult<()> {
         let mut state = self.state.write().await;
         if *state != RhaiPluginState::Running && *state != RhaiPluginState::Paused {
-            return Err(anyhow::anyhow!("Plugin not ready to start"));
+            return Err(mofa_kernel::plugin::PluginError::ExecutionFailed("Plugin not ready to start".to_string()));
         }
 
         // Call start function if exists
@@ -563,7 +648,7 @@ impl AgentPlugin for RhaiPlugin {
     async fn stop(&mut self) -> PluginResult<()> {
         let mut state = self.state.write().await;
         if *state != RhaiPluginState::Running {
-            return Err(anyhow::anyhow!("Plugin not running"));
+            return Err(mofa_kernel::plugin::PluginError::ExecutionFailed("Plugin not running".to_string()));
         }
 
         // Call stop function if exists
@@ -601,7 +686,7 @@ impl AgentPlugin for RhaiPlugin {
         {
             let state = self.state.read().await;
             if *state != RhaiPluginState::Running {
-                return Err(anyhow::anyhow!("Plugin not running"));
+                return Err(mofa_kernel::plugin::PluginError::ExecutionFailed("Plugin not running".to_string()));
             }
         }
 
@@ -659,10 +744,34 @@ mod tests {
             .unwrap();
 
         assert_eq!(plugin.id, "test-plugin");
-        // Note: metadata extraction happens during load(), not during creation
-        // After load(), metadata should be extracted from the script
-        // For now, verify the plugin was created successfully
+        assert_eq!(plugin.metadata.name, "test_rhai_plugin");
+        assert_eq!(plugin.metadata.version, "1.0.0");
+        assert_eq!(plugin.metadata.description, "Test Rhai plugin");
+        assert_eq!(plugin.kernel_metadata.name, "test_rhai_plugin");
+        assert_eq!(plugin.kernel_metadata.version, "1.0.0");
+        assert_eq!(plugin.kernel_metadata.description, "Test Rhai plugin");
         assert!(!plugin.cached_content.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_rhai_plugin_extracts_metadata_even_when_script_compile_fails() {
+        let broken_script = r#"
+            let plugin_name = "fallback_metadata_plugin";
+            let plugin_version = "2.1.3";
+            let plugin_description = "Fallback parser metadata";
+
+            fn execute(input) {
+                input +    // force compile failure
+            }
+        "#;
+
+        let plugin = RhaiPlugin::from_content("test-broken-metadata", broken_script)
+            .await
+            .unwrap();
+
+        assert_eq!(plugin.metadata.name, "fallback_metadata_plugin");
+        assert_eq!(plugin.metadata.version, "2.1.3");
+        assert_eq!(plugin.metadata.description, "Fallback parser metadata");
     }
 
     #[tokio::test]
@@ -1111,12 +1220,12 @@ mod tests {
 
         let map = stats.to_map();
 
-        assert!(map.contains_key("calls_total"),  "missing calls_total");
-        assert!(map.contains_key("calls_failed"),  "missing calls_failed");
-        assert!(map.contains_key("avg_latency_ms"),"missing avg_latency_ms");
+        assert!(map.contains_key("calls_total"), "missing calls_total");
+        assert!(map.contains_key("calls_failed"), "missing calls_failed");
+        assert!(map.contains_key("avg_latency_ms"), "missing avg_latency_ms");
 
-        assert_eq!(map["calls_total"],   serde_json::json!(2u64));
-        assert_eq!(map["calls_failed"],  serde_json::json!(1u64));
+        assert_eq!(map["calls_total"], serde_json::json!(2u64));
+        assert_eq!(map["calls_failed"], serde_json::json!(1u64));
         // avg = (40 + 60) / 2 = 50.0
         let avg = map["avg_latency_ms"].as_f64().unwrap();
         assert!((avg - 50.0).abs() < f64::EPSILON);
@@ -1139,10 +1248,9 @@ mod tests {
     #[tokio::test]
     async fn test_plugin_stats_via_agent_plugin_trait() {
         // AgentPlugin::stats() must also reflect live counter values.
-        let mut plugin =
-            RhaiPlugin::from_content("test-trait-stats", "fn execute(i) { i } ")
-                .await
-                .unwrap();
+        let mut plugin = RhaiPlugin::from_content("test-trait-stats", "fn execute(i) { i } ")
+            .await
+            .unwrap();
 
         let ctx = PluginContext::default();
         plugin.load(&ctx).await.unwrap();
@@ -1164,10 +1272,9 @@ mod tests {
         //
         // Note: scripts that throw *inside* fn execute() are currently healed by
         // the fallback direct-execution path, so we use only success scenarios here.
-        let mut plugin =
-            RhaiPlugin::from_content("test-arc-shared", "fn execute(i) { i }")
-                .await
-                .unwrap();
+        let mut plugin = RhaiPlugin::from_content("test-arc-shared", "fn execute(i) { i }")
+            .await
+            .unwrap();
 
         let ctx = PluginContext::default();
         plugin.load(&ctx).await.unwrap();

@@ -39,8 +39,10 @@
 
 mod builder;
 mod executor;
+mod fault_tolerance;
 mod graph;
 mod node;
+mod profiler;
 mod reducers;
 pub mod session_recorder;
 mod state;
@@ -68,8 +70,10 @@ pub use mofa_kernel::workflow::StateGraph;
 pub use builder::*;
 pub use dsl::*;
 pub use executor::*;
+pub use fault_tolerance::{NodePolicy, RetryBackoff};
 pub use graph::*;
 pub use node::*;
+pub use profiler::*;
 pub use reducers::*;
 pub use session_recorder::InMemorySessionRecorder;
 pub use state::*;

@@ -10,6 +10,12 @@ pub mod orchestrator;
 // hardware discovery module
 pub mod hardware;
 
+// adapter registry module - Runtime model adapter discovery
+pub mod adapter;
+
+// inference orchestration module - Unified Inference Routing & Lifecycle
+pub mod inference;
+
 // prompt module
 pub mod prompt;
 
@@ -56,6 +62,19 @@ pub use messaging::{
 pub use prompt::{
     ConversationBuilder, GlobalPromptRegistry, PromptBuilder, PromptComposition, PromptError,
     PromptRegistry, PromptResult, PromptTemplate, PromptVariable, VariableType,
+};
+
+// Re-export orchestrator types (GSoC 2026 Edge Model Orchestrator)
+pub use orchestrator::{
+    DegradationLevel, ModelOrchestrator, ModelProvider, ModelProviderConfig, ModelType,
+    OrchestratorError, OrchestratorResult, PoolStatistics,
+};
+
+// Re-export Linux implementation and pipeline when available
+#[cfg(all(target_os = "linux", feature = "linux-candle"))]
+pub use orchestrator::{
+    InferencePipeline, LinuxCandleProvider, ModelPool, PipelineBuilder, PipelineOutput,
+    PipelineStage,
 };
 
 // Re-export secretary types for convenience

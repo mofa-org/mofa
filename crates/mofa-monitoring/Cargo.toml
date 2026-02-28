@@ -26,7 +26,6 @@ async-trait.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 tokio.workspace = true
-anyhow.workspace = true
 tracing.workspace = true
 uuid = { workspace = true, features = ["serde", "v4"] }
 chrono.workspace = true
@@ -34,6 +33,7 @@ thiserror.workspace = true
 rand.workspace = true
 hex.workspace = true
 lazy_static.workspace = true
+sha2.workspace = true
 # HTTP server dependencies
 axum = { workspace = true, features = ["macros", "ws"] }
 tower = { version = "0.5", features = ["util", "timeout"] }
@@ -54,6 +54,8 @@ sysinfo = "0.32"
 [dev-dependencies]
 tokio-tungstenite = "0.24"
 futures-util = "0.3"
+mofa-foundation = { path = "../mofa-foundation" }
+mofa-kernel = { path = "../mofa-kernel" }
 
 [lints]
 workspace = true
