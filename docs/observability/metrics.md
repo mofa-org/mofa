@@ -1,8 +1,9 @@
 # Metrics Export Pipeline
 
-MoFA monitoring exposes Prometheus metrics via:
+MoFA monitoring now supports two export paths:
 
-- `GET /metrics`
+- `GET /metrics`: Prometheus text exposition
+- Optional native OTLP metrics push (`otlp-metrics` feature)
 
 ## Prometheus Endpoint
 
@@ -36,9 +37,26 @@ Exporter self-metrics:
 - `mofa_exporter_cache_age_seconds`
 - `mofa_exporter_refresh_failures_total`
 
+## OTLP Push Export
+
+Enable feature:
+
+```toml
+mofa-monitoring = { version = "0.1", features = ["otlp-metrics"] }
+```
+
+Use `OtlpMetricsExporter` to periodically sample `MetricsCollector` snapshots
+and record them via native OpenTelemetry metric instruments exported through
+the OTLP SDK pipeline.
+
+Backpressure is enforced with a bounded queue (`max_queue_size`), and dropped
+samples are counted.
+
 ## Local Verification
 
 ```bash
 cargo check -p mofa-monitoring --offline
+cargo check -p mofa-monitoring --features otlp-metrics --offline
 cargo test -p mofa-monitoring dashboard::prometheus --offline
+cargo test -p mofa-monitoring --features otlp-metrics tracing::metrics_exporter --offline
 ```

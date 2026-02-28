@@ -29,6 +29,16 @@ and low-overhead under high concurrency.
 Cardinality is guarded with configurable caps and an overflow `__other__`
 series to protect TSDB backends from unbounded label growth.
 
+## Optional OTLP Metrics Export
+
+Enable the `otlp-metrics` feature to use the native OpenTelemetry OTLP
+metrics push exporter:
+
+```toml
+[dependencies]
+mofa-monitoring = { version = "0.1", features = ["otlp-metrics"] }
+```
+
 ## Documentation
 
 - [API Documentation](https://docs.rs/mofa-monitoring)

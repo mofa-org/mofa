@@ -20,6 +20,14 @@ keywords = [
 categories = ["development-tools"]
 publish = true
 
+[features]
+default = []
+otlp-metrics = [
+    "dep:opentelemetry",
+    "dep:opentelemetry_sdk",
+    "dep:opentelemetry-otlp",
+]
+
 [dependencies]
 # Workspace dependencies
 async-trait.workspace = true
@@ -38,6 +46,14 @@ axum = { workspace = true, features = ["macros", "ws"] }
 tower = { version = "0.5", features = ["util", "timeout"] }
 reqwest = { version = "0.11", features = ["json", "rustls-tls"] }
 tower-http = { version = "0.6", features = ["fs", "cors", "trace"] }
+opentelemetry = { workspace = true, optional = true }
+opentelemetry_sdk = { workspace = true, optional = true, features = ["metrics", "rt-tokio"] }
+opentelemetry-otlp = { workspace = true, optional = true, features = [
+    "metrics",
+    "http-proto",
+    "reqwest-client",
+    "reqwest-rustls",
+] }
 
 # Static file embedding
 rust-embed = { version = "8.0", features = ["compression"] }
