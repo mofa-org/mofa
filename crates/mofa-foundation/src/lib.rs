@@ -10,6 +10,9 @@ pub mod orchestrator;
 // hardware discovery module
 pub mod hardware;
 
+// adapter registry module - Runtime model adapter discovery
+pub mod adapter;
+
 // prompt module
 pub mod prompt;
 

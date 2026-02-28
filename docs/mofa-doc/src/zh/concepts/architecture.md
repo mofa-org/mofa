@@ -244,7 +244,7 @@ MoFA 支持基于 `SKILL.md` 的技能体系，并采用渐进式披露策略以
 use mofa_sdk::skills::SkillsManager;
 
 #[tokio::main]
-async fn main() -> anyhow::Result<()> {
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // 扫描 skills 目录
     let skills = SkillsManager::new("./skills")?;
 
@@ -342,7 +342,7 @@ impl MoFAAgent for MyAgent {
 }
 
 #[tokio::main]
-async fn main() -> anyhow::Result<()> {
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let provider = openai_from_env()?;
     let llm = LLMClient::new(Arc::new(provider));
     let skills = SkillsManager::new("./skills")?;
@@ -404,7 +404,7 @@ impl MoFAAgent for EchoAgent {
 }
 
 #[tokio::main]
-async fn main() -> anyhow::Result<()> {
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let inputs = vec![
         AgentInput::text("task-1"),
         AgentInput::text("task-2"),
@@ -433,7 +433,7 @@ use std::sync::Arc;
 use uuid::Uuid;
 
 #[tokio::main]
-async fn main() -> anyhow::Result<()> {
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // 1) 持久化插件（可选，但推荐用于生产）
     let store = Arc::new(PostgresStore::connect("postgres://localhost/mofa").await?);
     let user_id = Uuid::now_v7();
@@ -489,7 +489,7 @@ use mofa_sdk::llm::LLMAgentBuilder;
 use mofa_sdk::kernel::AgentInput;
 
 #[tokio::main]
-async fn main() -> anyhow::Result<()> {
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let agent = LLMAgentBuilder::from_env()?
         .with_system_prompt("You are a helpful assistant.")
         .build();
@@ -551,7 +551,7 @@ impl AgentPlugin for MyPlugin {
 use mofa_sdk::llm::{LLMAgentBuilder, HotReloadableRhaiPromptPlugin};
 
 #[tokio::main]
-async fn main() -> anyhow::Result<()> {
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let prompt = HotReloadableRhaiPromptPlugin::new("./prompts/template.rhai").await;
 
     let _agent = LLMAgentBuilder::from_env()?
@@ -567,7 +567,7 @@ async fn main() -> anyhow::Result<()> {
 use mofa_sdk::llm::LLMAgentBuilder;
 
 #[tokio::main]
-async fn main() -> anyhow::Result<()> {
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let agent = LLMAgentBuilder::from_env()?
         .with_session_id("user-session-001")
         .build();
@@ -588,7 +588,7 @@ use std::sync::Arc;
 use uuid::Uuid;
 
 #[tokio::main]
-async fn main() -> anyhow::Result<()> {
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let store = Arc::new(PostgresStore::connect("postgres://localhost/mofa").await?);
     let user_id = Uuid::now_v7();
     let tenant_id = Uuid::now_v7();
@@ -618,7 +618,7 @@ async fn main() -> anyhow::Result<()> {
 use mofa_sdk::llm::{LLMClient, openai_from_env};
 
 #[tokio::main]
-async fn main() -> anyhow::Result<()> {
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let provider = openai_from_env()?;
     let client = LLMClient::new(std::sync::Arc::new(provider));
     let response = client.ask("What is Rust?").await?;
@@ -634,7 +634,7 @@ use mofa_sdk::runtime::{SimpleRuntime, AgentBuilder};
 use mofa_sdk::kernel::MoFAAgent;
 
 #[tokio::main]
-async fn main() -> anyhow::Result<()> {
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let runtime = SimpleRuntime::new();
 
     // 注册多个 agent

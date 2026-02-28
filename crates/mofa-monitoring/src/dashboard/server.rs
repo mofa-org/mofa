@@ -225,6 +225,7 @@ impl DashboardServer {
 
             // Start debug event forwarder if debug events receiver is provided
             if let Some(debug_rx) = self.debug_event_rx {
+                let debug_handler = Arc::clone(&ws_handler);
                 let debug_handler = Arc::clone(ws_handler);
                 tokio::spawn(async move {
                     debug_handler.start_debug_event_forwarder(debug_rx);

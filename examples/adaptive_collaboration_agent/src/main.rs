@@ -25,7 +25,6 @@
 //! - **mofa-sdk**: 导出统一的 API
 //! - **mofa-sdk**: Exports a unified API
 
-use anyhow::Result;
 use std::sync::Arc;
 use mofa_sdk::collaboration::LLMDrivenCollaborationManager;
 use mofa_sdk::collaboration::{
@@ -39,7 +38,7 @@ use tracing::{info, Level};
 // ============================================================================
 
 #[tokio::main]
-async fn main() -> Result<()> {
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // 初始化日志
     // Initialize logging
     tracing_subscriber::fmt().with_max_level(Level::INFO).init();
