@@ -262,9 +262,23 @@ impl WorkflowExecutor {
 
         // 使用基于依赖的执行
         // Use dependency-based execution
-        let result = self
-            .execute_from_node(graph, &ctx, start_node_id, input, &mut execution_record)
-            .await;
+        let result = if let Some(timeout_ms) = self.config.execution_timeout_ms {
+            match tokio::time::timeout(
+                std::time::Duration::from_millis(timeout_ms),
+                self.execute_from_node(graph, &ctx, start_node_id, input, &mut execution_record),
+            )
+            .await
+            {
+                Ok(inner) => inner,
+                Err(_) => Err(format!(
+                    "Workflow execution timed out after {}ms",
+                    timeout_ms
+                )),
+            }
+        } else {
+            self.execute_from_node(graph, &ctx, start_node_id, input, &mut execution_record)
+                .await
+        };
 
         let duration = start_time.elapsed();
         execution_record.ended_at = Some(
