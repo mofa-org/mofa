@@ -13,11 +13,21 @@ mofa-monitoring = "0.1"
 
 - Web-based dashboard for monitoring agent execution
 - Metrics collection and visualization
+- Prometheus text exposition via `GET /metrics`
 - Distributed tracing support with OpenTelemetry
 - Real-time agent status monitoring
 - Health checks and alerts
 - HTTP server for dashboard UI
 - Static file embedding for frontend assets
+
+## Prometheus Export
+
+`DashboardServer` now exposes a Prometheus-compatible endpoint at `/metrics`.
+The exporter uses a background cache worker so scrape requests stay read-only
+and low-overhead under high concurrency.
+
+Cardinality is guarded with configurable caps and an overflow `__other__`
+series to protect TSDB backends from unbounded label growth.
 
 ## Documentation
 

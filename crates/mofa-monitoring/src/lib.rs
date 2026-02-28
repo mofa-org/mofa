@@ -27,9 +27,12 @@ mod dashboard;
 pub mod tracing;
 
 pub use dashboard::{
-    AgentMetrics, AgentStatus, ApiError, ApiResponse, AuthInfo, AuthProvider, DashboardConfig,
+    AgentMetrics, AgentStatus, ApiError, ApiResponse, CardinalityLimits, DashboardConfig,
     DashboardServer, Gauge, Histogram, LLMMetrics, LLMStatus, LLMSummary, MetricType, MetricValue,
-    MetricsCollector, MetricsConfig, MetricsRegistry, MetricsSnapshot, NoopAuthProvider,
-    PluginMetrics, PluginStatus, ServerState, SystemMetrics, SystemStatus, TokenAuthProvider,
-    WebSocketClient, WebSocketHandler, WebSocketMessage, WorkflowMetrics,
+    MetricsCollector, MetricsConfig, MetricsRegistry, MetricsSnapshot, PluginMetrics, PluginStatus,
+    PrometheusExportConfig, PrometheusExportError, PrometheusExporter, ServerState, SystemMetrics,
+    SystemStatus, WebSocketClient, WebSocketHandler, WebSocketMessage, WorkflowMetrics,
+};
+pub use dashboard::{
+    AuthInfo, AuthProvider, NoopAuthProvider, TokenAuthProvider,
 };

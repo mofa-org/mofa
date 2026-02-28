@@ -15,7 +15,7 @@ use std::time::Duration;
 use tower::ServiceBuilder;
 use tower_http::cors::{Any, CorsLayer};
 use tower_http::trace::TraceLayer;
-use tracing::info;
+use tracing::{info, warn};
 
 use mofa_kernel::workflow::telemetry::{DebugEvent, SessionRecorder};
 
@@ -23,6 +23,7 @@ use super::api::create_api_router;
 use super::assets::{INDEX_HTML, serve_asset};
 use super::auth::{AuthProvider, NoopAuthProvider};
 use super::metrics::{MetricsCollector, MetricsConfig};
+use super::prometheus::{PrometheusExportConfig, PrometheusExporter};
 use super::websocket::{WebSocketHandler, create_websocket_handler};
 use tokio::sync::mpsc;
 
@@ -41,6 +42,8 @@ pub struct DashboardConfig {
     pub ws_update_interval: Duration,
     /// Enable request tracing
     pub enable_tracing: bool,
+    /// Prometheus export configuration
+    pub prometheus_export_config: PrometheusExportConfig,
     /// WebSocket authentication provider (default: NoopAuthProvider)
     pub auth_provider: Arc<dyn AuthProvider>,
 }
@@ -53,6 +56,7 @@ impl std::fmt::Debug for DashboardConfig {
             .field("enable_cors", &self.enable_cors)
             .field("ws_update_interval", &self.ws_update_interval)
             .field("enable_tracing", &self.enable_tracing)
+            .field("prometheus_export_config", &self.prometheus_export_config)
             .field("auth_enabled", &self.auth_provider.is_enabled())
             .finish()
     }
@@ -67,6 +71,7 @@ impl Default for DashboardConfig {
             metrics_config: MetricsConfig::default(),
             ws_update_interval: Duration::from_secs(1),
             enable_tracing: true,
+            prometheus_export_config: PrometheusExportConfig::default(),
             auth_provider: Arc::new(NoopAuthProvider),
         }
     }
@@ -102,6 +107,11 @@ impl DashboardConfig {
         self
     }
 
+    pub fn with_prometheus_export_config(mut self, config: PrometheusExportConfig) -> Self {
+        self.prometheus_export_config = config;
+        self
+    }
+
     /// Set the WebSocket authentication provider.
     pub fn with_auth(mut self, provider: Arc<dyn AuthProvider>) -> Self {
         self.auth_provider = provider;
@@ -128,6 +138,8 @@ pub struct DashboardServer {
     config: DashboardConfig,
     collector: Arc<MetricsCollector>,
     ws_handler: Option<Arc<WebSocketHandler>>,
+    prometheus_exporter: Option<Arc<PrometheusExporter>>,
+    prometheus_worker: Option<tokio::task::JoinHandle<()>>,
     session_recorder: Option<Arc<dyn SessionRecorder>>,
     debug_event_rx: Option<mpsc::Receiver<DebugEvent>>,
 }
@@ -141,6 +153,8 @@ impl DashboardServer {
             config,
             collector,
             ws_handler: None,
+            prometheus_exporter: None,
+            prometheus_worker: None,
             session_recorder: None,
             debug_event_rx: None,
         }
@@ -154,6 +168,11 @@ impl DashboardServer {
     /// Get the WebSocket handler (if started)
     pub fn ws_handler(&self) -> Option<Arc<WebSocketHandler>> {
         self.ws_handler.clone()
+    }
+
+    /// Get the Prometheus exporter (if initialized)
+    pub fn prometheus_exporter(&self) -> Option<Arc<PrometheusExporter>> {
+        self.prometheus_exporter.clone()
     }
 
     /// Get the session recorder (if configured)
@@ -191,6 +210,11 @@ impl DashboardServer {
 
         // API routes
         let api_router = create_api_router(self.collector.clone(), self.session_recorder.clone());
+        let prometheus_exporter = Arc::new(PrometheusExporter::new(
+            self.collector.clone(),
+            self.config.prometheus_export_config.clone(),
+        ));
+        self.prometheus_exporter = Some(prometheus_exporter.clone());
 
         // Build main router
         let mut router = Router::new()
@@ -203,6 +227,17 @@ impl DashboardServer {
             .route("/app.js", get(serve_app_js))
             .route("/debugger.js", get(serve_debugger_js))
             .route("/assets/{*path}", get(serve_static))
+            // Prometheus endpoint
+            .route(
+                "/metrics",
+                get({
+                    let exporter = prometheus_exporter.clone();
+                    move || {
+                        let exporter = exporter.clone();
+                        async move { serve_prometheus_metrics(exporter).await }
+                    }
+                }),
+            )
             // API routes
             .nest("/api", api_router)
             // WebSocket
@@ -239,6 +274,13 @@ impl DashboardServer {
         tokio::spawn(async move {
             collector.start_collection();
         });
+
+        if let Some(exporter) = &self.prometheus_exporter {
+            if let Err(err) = exporter.refresh_once().await {
+                warn!("initial /metrics cache refresh failed: {}", err);
+            }
+            self.prometheus_worker = Some(exporter.clone().start());
+        }
 
         // Start WebSocket updates
         if let Some(ws_handler) = &self.ws_handler {
@@ -323,6 +365,18 @@ async fn serve_static(Path(path): Path<String>) -> impl IntoResponse {
     serve_asset(path).await
 }
 
+/// Serve Prometheus metrics text exposition.
+async fn serve_prometheus_metrics(exporter: Arc<PrometheusExporter>) -> impl IntoResponse {
+    (
+        StatusCode::OK,
+        [(
+            header::CONTENT_TYPE,
+            "text/plain; version=0.0.4; charset=utf-8",
+        )],
+        exporter.render_cached().await,
+    )
+}
+
 /// Create a simple dashboard server with default configuration
 pub fn create_dashboard(port: u16) -> DashboardServer {
     let config = DashboardConfig::new().with_port(port);
@@ -369,6 +423,7 @@ mod tests {
         let server = DashboardServer::new(config);
 
         assert!(server.ws_handler.is_none());
+        assert!(server.prometheus_exporter.is_none());
         assert!(server.session_recorder.is_none());
     }
 }
