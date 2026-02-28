@@ -118,39 +118,42 @@ mod tests {
     use tempfile::TempDir;
 
     #[tokio::test]
-    async fn test_stop_updates_state_and_unregisters_agent() {
-        let temp = TempDir::new().unwrap();
-        let ctx = CliContext::with_temp_dir(temp.path()).await.unwrap();
+    async fn test_stop_updates_state_and_unregisters_agent() -> anyhow::Result<()> {
+        let temp = TempDir::new().expect("failed to create temporary directory");
+        let ctx = CliContext::with_temp_dir(temp.path()).await?;
 
-        start::run(&ctx, "stop-agent", None, None, false)
-            .await
-            .unwrap();
-        run(&ctx, "stop-agent", false).await.unwrap();
+        start::run(&ctx, "stop-agent", None, None, false).await?;
+        run(&ctx, "stop-agent", false).await?;
 
         assert!(!ctx.agent_registry.contains("stop-agent").await);
-        let persisted = ctx.agent_store.get("stop-agent").unwrap().unwrap();
+        let persisted = ctx.agent_store.get("stop-agent")?.unwrap();
         assert_eq!(persisted.state, "Stopped");
+        Ok(())
     }
 
     #[tokio::test]
-    async fn test_stop_returns_error_for_missing_agent() {
-        let temp = TempDir::new().unwrap();
-        let ctx = CliContext::with_temp_dir(temp.path()).await.unwrap();
+    async fn test_stop_returns_error_for_missing_agent() -> anyhow::Result<()> {
+        let temp = TempDir::new().expect("failed to create temporary directory");
+        let ctx = CliContext::with_temp_dir(temp.path()).await?;
 
         let result = run(&ctx, "missing-agent", false).await;
         assert!(result.is_err());
+        Ok(())
     }
 
     #[tokio::test]
-    async fn test_stop_errors_when_registry_missing_even_if_persisted_exists() {
-        let temp = TempDir::new().unwrap();
-        let first_ctx = CliContext::with_temp_dir(temp.path()).await.unwrap();
-        start::run(&first_ctx, "persisted-agent", None, None, false)
+    async fn test_stop_errors_when_registry_missing_even_if_persisted_exists() -> anyhow::Result<()>
+    {
+        let temp = TempDir::new().expect("failed to create temporary directory");
+        let first_ctx = CliContext::with_temp_dir(temp.path())
             .await
-            .unwrap();
+            .expect("Failed to initialize test CLI context");
+        start::run(&first_ctx, "persisted-agent", None, None, false).await?;
 
         // Simulate a new CLI process: persisted entry remains, runtime registry is empty.
-        let second_ctx = CliContext::with_temp_dir(temp.path()).await.unwrap();
+        let second_ctx = CliContext::with_temp_dir(temp.path())
+            .await
+            .expect("Failed to initialize test CLI context");
         assert!(!second_ctx.agent_registry.contains("persisted-agent").await);
 
         let result = run(&second_ctx, "persisted-agent", false).await;
@@ -159,20 +162,24 @@ mod tests {
         let persisted = second_ctx
             .agent_store
             .get("persisted-agent")
-            .unwrap()
-            .unwrap();
+            .expect("Request to agent_store failed")
+            .expect("Agent 'persisted-agent' should exist in store");
         assert_eq!(persisted.state, "Running");
+        Ok(())
     }
 
     #[tokio::test]
-    async fn test_stop_force_persisted_stop_updates_state_when_registry_missing() {
-        let temp = TempDir::new().unwrap();
-        let first_ctx = CliContext::with_temp_dir(temp.path()).await.unwrap();
-        start::run(&first_ctx, "persisted-agent-force", None, None, false)
+    async fn test_stop_force_persisted_stop_updates_state_when_registry_missing()
+    -> anyhow::Result<()> {
+        let temp = TempDir::new().expect("failed to create temporary directory");
+        let first_ctx = CliContext::with_temp_dir(temp.path())
             .await
-            .unwrap();
+            .expect("Failed to initialize test CLI context");
+        start::run(&first_ctx, "persisted-agent-force", None, None, false).await?;
 
-        let second_ctx = CliContext::with_temp_dir(temp.path()).await.unwrap();
+        let second_ctx = CliContext::with_temp_dir(temp.path())
+            .await
+            .expect("Failed to initialize test CLI context");
         assert!(
             !second_ctx
                 .agent_registry
@@ -180,15 +187,13 @@ mod tests {
                 .await
         );
 
-        run(&second_ctx, "persisted-agent-force", true)
-            .await
-            .unwrap();
+        run(&second_ctx, "persisted-agent-force", true).await?;
 
         let persisted = second_ctx
             .agent_store
-            .get("persisted-agent-force")
-            .unwrap()
+            .get("persisted-agent-force")?
             .unwrap();
         assert_eq!(persisted.state, "Stopped");
+        Ok(())
     }
 }
