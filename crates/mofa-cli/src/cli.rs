@@ -341,6 +341,12 @@ pub enum ConfigValueCommands {
 /// Plugin management subcommands
 #[derive(Subcommand)]
 pub enum PluginCommands {
+    /// Create a new plugin project interactively
+    New {
+        /// Optional name of the plugin (will prompt if not provided)
+        name: Option<String>,
+    },
+
     /// List plugins
     List {
         /// Show installed plugins only
