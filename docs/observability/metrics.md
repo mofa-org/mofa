@@ -27,8 +27,9 @@ Default hard limits:
 - `plugin_or_tool`: 100
 - `provider+model`: 50
 
-When a limit is exceeded, overflow series are aggregated into
-`label="__other__"`.
+When a limit is exceeded, overflow series keep their original label key(s)
+but replace value(s) with `__other__` (for example
+`agent_id="__other__"` or `provider="__other__",model="__other__"`).
 
 Exporter self-metrics:
 
