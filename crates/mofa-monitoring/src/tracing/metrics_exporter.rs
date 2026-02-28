@@ -48,7 +48,6 @@ impl Default for CardinalityLimits {
         }
     }
 }
-
 impl Default for OtlpMetricsExporterConfig {
     fn default() -> Self {
         Self {
