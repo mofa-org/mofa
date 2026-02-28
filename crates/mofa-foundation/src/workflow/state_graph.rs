@@ -630,8 +630,6 @@ impl<S: GraphState + 'static> CompiledGraph<S, serde_json::Value> for CompiledGr
         tokio::spawn(async move {
             let mut state = input;
             let mut current_nodes = vec![entry_point];
-            let mut iteration_count = 0;
-            const MAX_ITERATIONS: usize = 20;
             let default_policy = NodePolicy::default();
 
             // Helper function to get next nodes based on command and edges
@@ -677,20 +675,8 @@ impl<S: GraphState + 'static> CompiledGraph<S, serde_json::Value> for CompiledGr
             };
 
             while !current_nodes.is_empty() {
-                // Check iteration limit
-                iteration_count += 1;
-                if iteration_count > MAX_ITERATIONS {
-                    let _ = tx
-                        .send(Err(AgentError::Internal(format!(
-                            "Maximum iterations ({}) reached",
-                            MAX_ITERATIONS
-                        ))))
-                        .await;
-                    return;
-                }
-
                 // Check recursion limit
-                if ctx.remaining_steps.is_exhausted().await {
+                if ctx.is_recursion_limit_reached().await {
                     let _ = tx
                         .send(Err(AgentError::Internal(
                             "Recursion limit reached".to_string(),
@@ -698,7 +684,7 @@ impl<S: GraphState + 'static> CompiledGraph<S, serde_json::Value> for CompiledGr
                         .await;
                     return;
                 }
-                ctx.remaining_steps.decrement().await;
+                ctx.decrement_steps().await;
 
                 let nodes_to_execute = std::mem::take(&mut current_nodes);
                 let mut next_nodes = Vec::new();
