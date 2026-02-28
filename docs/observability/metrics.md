@@ -52,6 +52,13 @@ the OTLP SDK pipeline.
 Backpressure is enforced with a bounded queue (`max_queue_size`), and dropped
 samples are counted.
 
+Exporter config guards clamp invalid values to safe defaults:
+
+- Empty `endpoint` -> default OTLP endpoint
+- `batch_size == 0` -> `1`
+- `max_queue_size == 0` -> `1`
+- Zero durations (`collect_interval`, `export_interval`, `timeout`) -> `1s`
+
 ## Local Verification
 
 ```bash
@@ -59,4 +66,5 @@ cargo check -p mofa-monitoring --offline
 cargo check -p mofa-monitoring --features otlp-metrics --offline
 cargo test -p mofa-monitoring dashboard::prometheus --offline
 cargo test -p mofa-monitoring --features otlp-metrics tracing::metrics_exporter --offline
+cargo clippy -p mofa-monitoring --features otlp-metrics --lib -- -D warnings
 ```

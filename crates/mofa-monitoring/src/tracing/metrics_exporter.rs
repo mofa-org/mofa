@@ -566,3 +566,87 @@ fn label_key(labels: &[(String, String)]) -> String {
 fn is_non_zero(value: f64) -> bool {
     value.abs() > f64::EPSILON
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn cap_points_adds_other_bucket_when_limit_exceeded() {
+        let points = vec![
+            LabeledPoint {
+                labels: vec![("agent_id".to_string(), "a".to_string())],
+                rank: 10.0,
+                value: 10.0,
+            },
+            LabeledPoint {
+                labels: vec![("agent_id".to_string(), "b".to_string())],
+                rank: 8.0,
+                value: 8.0,
+            },
+            LabeledPoint {
+                labels: vec![("agent_id".to_string(), "c".to_string())],
+                rank: 5.0,
+                value: 5.0,
+            },
+        ];
+
+        let (capped, dropped) = cap_points(points, 2);
+        assert_eq!(dropped, 1);
+        assert_eq!(capped.len(), 3);
+
+        let has_other = capped.iter().any(|entry| {
+            entry
+                .labels
+                .iter()
+                .any(|(k, v)| k == "agent_id" && v == "__other__")
+        });
+        assert!(has_other);
+    }
+
+    #[test]
+    fn cap_points_keeps_deterministic_order() {
+        let points = vec![
+            LabeledPoint {
+                labels: vec![("k".to_string(), "b".to_string())],
+                rank: 1.0,
+                value: 1.0,
+            },
+            LabeledPoint {
+                labels: vec![("k".to_string(), "a".to_string())],
+                rank: 1.0,
+                value: 1.0,
+            },
+        ];
+
+        let (capped, dropped) = cap_points(points, 10);
+        assert_eq!(dropped, 0);
+        assert_eq!(capped.len(), 2);
+        assert_eq!(capped[0].labels[0].1, "a");
+        assert_eq!(capped[1].labels[0].1, "b");
+    }
+
+    #[test]
+    fn config_is_hardened_for_invalid_inputs() {
+        let collector = Arc::new(MetricsCollector::new(Default::default()));
+        let exporter = OtlpMetricsExporter::new(
+            collector,
+            OtlpMetricsExporterConfig {
+                endpoint: "   ".to_string(),
+                collect_interval: Duration::ZERO,
+                export_interval: Duration::ZERO,
+                batch_size: 0,
+                max_queue_size: 0,
+                timeout: Duration::ZERO,
+                ..Default::default()
+            },
+        );
+
+        assert_eq!(exporter.config.endpoint, "http://127.0.0.1:4318/v1/metrics");
+        assert_eq!(exporter.config.collect_interval, Duration::from_secs(1));
+        assert_eq!(exporter.config.export_interval, Duration::from_secs(1));
+        assert_eq!(exporter.config.timeout, Duration::from_secs(1));
+        assert_eq!(exporter.config.batch_size, 1);
+        assert_eq!(exporter.config.max_queue_size, 1);
+    }
+}

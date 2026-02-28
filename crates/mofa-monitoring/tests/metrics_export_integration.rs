@@ -133,3 +133,37 @@ async fn metrics_route_applies_cardinality_overflow_bucket() {
     assert!(body_str.contains("agent_id=\"__other__\""));
     assert!(body_str.contains("mofa_exporter_dropped_series_total{label=\"agent_id\"}"));
 }
+
+#[tokio::test]
+async fn metrics_route_exposes_exporter_cache_age_metric() {
+    let mut server = DashboardServer::new(DashboardConfig::new().with_prometheus_export_config(
+        PrometheusExportConfig::default().with_refresh_interval(Duration::from_millis(10)),
+    ));
+
+    let _ = server.collector().collect().await;
+    let app = server.build_router();
+
+    server
+        .prometheus_exporter()
+        .expect("prom exporter")
+        .refresh_once()
+        .await
+        .expect("refresh payload");
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .uri("/metrics")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .expect("request success");
+
+    let body = to_bytes(response.into_body(), usize::MAX)
+        .await
+        .expect("read body");
+    let body_str = String::from_utf8(body.to_vec()).expect("utf8");
+
+    assert!(body_str.contains("mofa_exporter_cache_age_seconds"));
+}
