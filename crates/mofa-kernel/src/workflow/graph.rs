@@ -14,7 +14,8 @@ use crate::agent::error::AgentResult;
 use super::{Command, GraphConfig, GraphState, Reducer, RuntimeContext};
 
 /// Type alias for the boxed stream returned by graph execution.
-pub type GraphStream<'a, S, V> = Pin<Box<dyn Stream<Item = AgentResult<StreamEvent<S, V>>> + Send + 'a>>;
+pub type GraphStream<'a, S, V> =
+    Pin<Box<dyn Stream<Item = AgentResult<StreamEvent<S, V>>> + Send + 'a>>;
 
 /// Special node ID for the graph entry point
 pub const START: &str = "__START__";
@@ -248,18 +249,18 @@ where
     /// Execute the graph with streaming output
     ///
     /// Returns a stream of (node_id, state) pairs as each node completes.
-    fn stream(
-        &self,
-        input: S,
-        config: Option<RuntimeContext<V>>,
-    ) -> GraphStream<'_, S, V>;
+    fn stream(&self, input: S, config: Option<RuntimeContext<V>>) -> GraphStream<'_, S, V>;
 
     /// Execute a single step of the graph
     ///
     /// Useful for debugging or interactive execution.
     /// # Returns
     /// Step execution result containing next state and command
-    async fn step(&self, input: S, config: Option<RuntimeContext<V>>) -> AgentResult<StepResult<S, V>>;
+    async fn step(
+        &self,
+        input: S,
+        config: Option<RuntimeContext<V>>,
+    ) -> AgentResult<StepResult<S, V>>;
 
     /// Validate that a state is valid for this graph
     fn validate_state(&self, state: &S) -> AgentResult<()>;
@@ -287,6 +288,23 @@ pub enum StreamEvent<S: GraphState, V = serde_json::Value> {
         node_id: Option<String>,
         error: String,
     },
+    /// 瞬态失败后正在重试节点
+    /// A node is being retried after a transient failure
+    NodeRetry {
+        node_id: String,
+        attempt: u32,
+        error: String,
+    },
+    /// 节点永久失败，执行正在回退
+    /// A node failed permanently and execution is falling back
+    NodeFallback {
+        from_node: String,
+        to_node: String,
+        reason: String,
+    },
+    /// 由于重复失败，节点的断路器已打开
+    /// A node's circuit breaker has opened due to repeated failures
+    CircuitOpen { node_id: String },
 }
 
 /// Result of a single step execution
