@@ -4,11 +4,33 @@ use super::metrics::{MetricValue, MetricsCollector, MetricsSnapshot};
 use std::collections::HashMap;
 use std::fmt::Write as _;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering as AtomicOrdering};
+use std::time::{Duration, Instant};
+use tokio::sync::RwLock;
+use tracing::warn;
 
 /// Prometheus export configuration.
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone)]
 #[non_exhaustive]
-pub struct PrometheusExportConfig;
+pub struct PrometheusExportConfig {
+    /// Refresh interval for the background cache worker.
+    pub refresh_interval: Duration,
+}
+
+impl Default for PrometheusExportConfig {
+    fn default() -> Self {
+        Self {
+            refresh_interval: Duration::from_secs(1),
+        }
+    }
+}
+
+impl PrometheusExportConfig {
+    pub fn with_refresh_interval(mut self, refresh_interval: Duration) -> Self {
+        self.refresh_interval = refresh_interval;
+        self
+    }
+}
 
 /// Errors returned by the Prometheus exporter lifecycle.
 #[derive(Debug, thiserror::Error)]
@@ -25,29 +47,154 @@ struct HistogramSample {
     bucket_counts: Vec<u64>,
 }
 
+#[derive(Debug)]
+struct DurationHistogram {
+    bounds: Vec<f64>,
+    sample: HistogramSample,
+}
+
+impl DurationHistogram {
+    fn new(bounds: Vec<f64>) -> Self {
+        Self {
+            sample: HistogramSample {
+                count: 0,
+                sum: 0.0,
+                bucket_counts: vec![0; bounds.len()],
+            },
+            bounds,
+        }
+    }
+
+    fn observe(&mut self, value_seconds: f64) {
+        if !value_seconds.is_finite() || value_seconds < 0.0 {
+            return;
+        }
+
+        self.sample.count = self.sample.count.saturating_add(1);
+        self.sample.sum += value_seconds;
+
+        for (idx, bound) in self.bounds.iter().enumerate() {
+            if value_seconds <= *bound {
+                self.sample.bucket_counts[idx] = self.sample.bucket_counts[idx].saturating_add(1);
+            }
+        }
+    }
+}
+
 /// Prometheus exporter bridge over `MetricsCollector` snapshots.
 pub struct PrometheusExporter {
     collector: Arc<MetricsCollector>,
-    _config: PrometheusExportConfig,
+    config: PrometheusExportConfig,
+    cached_body: Arc<RwLock<String>>,
+    last_render_at: Arc<RwLock<Option<Instant>>>,
+    render_duration_histogram: Arc<RwLock<DurationHistogram>>,
+    refresh_failures: AtomicU64,
 }
 
 impl PrometheusExporter {
     pub fn new(collector: Arc<MetricsCollector>, config: PrometheusExportConfig) -> Self {
         Self {
             collector,
-            _config: config,
+            config,
+            cached_body: Arc::new(RwLock::new(String::new())),
+            last_render_at: Arc::new(RwLock::new(None)),
+            render_duration_histogram: Arc::new(RwLock::new(DurationHistogram::new(vec![
+                0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0,
+            ]))),
+            refresh_failures: AtomicU64::new(0),
         }
     }
 
-    /// Kept for forward compatibility with cached exporter variants.
+    /// Starts the background cache refresh worker.
+    pub fn start(self: Arc<Self>) -> tokio::task::JoinHandle<()> {
+        let refresh_interval = self.config.refresh_interval;
+        tokio::spawn(async move {
+            let mut ticker = tokio::time::interval(refresh_interval);
+            loop {
+                ticker.tick().await;
+                if let Err(err) = self.refresh_once().await {
+                    self.refresh_failures.fetch_add(1, AtomicOrdering::Relaxed);
+                    warn!("prometheus exporter refresh failed: {err}");
+                }
+            }
+        })
+    }
+
     pub async fn refresh_once(&self) -> Result<(), PrometheusExportError> {
+        let snapshot = self.collector.current().await;
+
+        let render_start = Instant::now();
+        let mut body = render_snapshot(&snapshot);
+        self.append_exporter_internal_metrics(&mut body, render_start.elapsed().as_secs_f64())
+            .await;
+
+        *self.cached_body.write().await = body;
+        *self.last_render_at.write().await = Some(Instant::now());
+
         Ok(())
     }
 
-    /// Render current snapshot into Prometheus text exposition format.
+    /// Returns the current Prometheus payload from cache.
     pub async fn render_cached(&self) -> String {
-        let snapshot = self.collector.current().await;
-        render_snapshot(&snapshot)
+        let mut payload = self.cached_body.read().await.clone();
+        let cache_age = self.cache_age_seconds().await;
+
+        write_metric_header(
+            &mut payload,
+            "mofa_exporter_cache_age_seconds",
+            "Age of the current /metrics cache payload in seconds",
+            "gauge",
+        );
+        append_gauge_line(
+            &mut payload,
+            "mofa_exporter_cache_age_seconds",
+            &[],
+            cache_age,
+        );
+
+        payload
+    }
+
+    async fn cache_age_seconds(&self) -> f64 {
+        let last_render = self.last_render_at.read().await;
+        match *last_render {
+            Some(rendered_at) => rendered_at.elapsed().as_secs_f64(),
+            None => 0.0,
+        }
+    }
+
+    async fn append_exporter_internal_metrics(&self, out: &mut String, render_duration: f64) {
+        {
+            let mut render_hist = self.render_duration_histogram.write().await;
+            render_hist.observe(render_duration);
+
+            write_metric_header(
+                out,
+                "mofa_exporter_render_duration_seconds",
+                "Distribution of Prometheus payload render duration",
+                "histogram",
+            );
+            append_histogram_lines(
+                out,
+                "mofa_exporter_render_duration_seconds",
+                &[],
+                &render_hist.bounds,
+                &render_hist.sample,
+            );
+        }
+
+        write_metric_header(
+            out,
+            "mofa_exporter_refresh_failures_total",
+            "Total background refresh failures for the Prometheus exporter",
+            "counter",
+        );
+        append_gauge_line(
+            out,
+            "mofa_exporter_refresh_failures_total",
+            &[],
+            self.refresh_failures.load(AtomicOrdering::Relaxed) as f64,
+        );
     }
 }
 
@@ -568,6 +715,9 @@ fn escape_label_value(value: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use axum::{Router, http::StatusCode, routing::get};
+    use tokio::time::{Duration, timeout};
+    use tower::ServiceExt;
 
     fn sample_snapshot() -> MetricsSnapshot {
         MetricsSnapshot {
@@ -597,14 +747,126 @@ mod tests {
         }
     }
 
-    #[test]
-    fn renders_prometheus_headers_and_labels() {
-        let output = render_snapshot(&sample_snapshot());
+    async fn seed_collector_from_snapshot(collector: &MetricsCollector, snapshot: MetricsSnapshot) {
+        for agent in snapshot.agents {
+            collector.update_agent(agent).await;
+        }
+        for workflow in snapshot.workflows {
+            collector.update_workflow(workflow).await;
+        }
+        for plugin in snapshot.plugins {
+            collector.update_plugin(plugin).await;
+        }
+        for llm in snapshot.llm_metrics {
+            collector.update_llm(llm).await;
+        }
+        let _ = collector.collect().await;
+    }
+
+    #[tokio::test]
+    async fn renders_prometheus_headers_and_labels() {
+        let collector = Arc::new(MetricsCollector::new(Default::default()));
+        seed_collector_from_snapshot(&collector, sample_snapshot()).await;
+
+        let exporter = PrometheusExporter::new(collector, PrometheusExportConfig::default());
+        exporter.refresh_once().await.expect("refresh");
+        let output = exporter.render_cached().await;
 
         assert!(output.contains("# HELP mofa_agent_tasks_total"));
         assert!(output.contains("# TYPE mofa_agent_tasks_total gauge"));
         assert!(output.contains("mofa_agent_tasks_total{agent_id=\"agent-1\"} 42"));
         assert!(output.contains("# HELP mofa_system_cpu_percent"));
+    }
+
+    #[tokio::test]
+    async fn serves_metrics_route() {
+        let collector = Arc::new(MetricsCollector::new(Default::default()));
+        seed_collector_from_snapshot(&collector, sample_snapshot()).await;
+
+        let exporter = Arc::new(PrometheusExporter::new(
+            collector,
+            PrometheusExportConfig::default(),
+        ));
+        exporter.refresh_once().await.expect("refresh");
+
+        let app = Router::new().route(
+            "/metrics",
+            get({
+                let exporter = exporter.clone();
+                move || {
+                    let exporter = exporter.clone();
+                    async move {
+                        (
+                            [("content-type", "text/plain; version=0.0.4; charset=utf-8")],
+                            exporter.render_cached().await,
+                        )
+                    }
+                }
+            }),
+        );
+
+        let response = app
+            .oneshot(
+                axum::http::Request::builder()
+                    .uri("/metrics")
+                    .body(axum::body::Body::empty())
+                    .expect("request"),
+            )
+            .await
+            .expect("response");
+
+        assert_eq!(response.status(), StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn concurrent_scrapes_with_refresh_worker_complete() {
+        let collector = Arc::new(MetricsCollector::new(Default::default()));
+        let exporter = Arc::new(PrometheusExporter::new(
+            collector.clone(),
+            PrometheusExportConfig::default().with_refresh_interval(Duration::from_millis(20)),
+        ));
+
+        exporter.refresh_once().await.expect("initial refresh");
+        let worker = exporter.clone().start();
+
+        let updater = {
+            let collector = collector.clone();
+            tokio::spawn(async move {
+                for idx in 0..100u64 {
+                    collector
+                        .update_agent(super::super::metrics::AgentMetrics {
+                            agent_id: format!("agent-{idx}"),
+                            tasks_completed: idx,
+                            avg_task_duration_ms: idx as f64,
+                            ..Default::default()
+                        })
+                        .await;
+                    tokio::time::sleep(Duration::from_millis(2)).await;
+                }
+            })
+        };
+
+        let mut scrapers = Vec::new();
+        for _ in 0..20 {
+            let exporter = exporter.clone();
+            scrapers.push(tokio::spawn(async move {
+                for _ in 0..20 {
+                    let payload = exporter.render_cached().await;
+                    assert!(payload.contains("mofa_exporter_cache_age_seconds"));
+                }
+            }));
+        }
+
+        timeout(Duration::from_secs(8), async {
+            let _ = updater.await;
+            for scraper in scrapers {
+                let _ = scraper.await;
+            }
+        })
+        .await
+        .expect("concurrency test timed out");
+
+        worker.abort();
     }
 
     #[test]

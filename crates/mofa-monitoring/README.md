@@ -28,6 +28,10 @@ mofa-monitoring = "0.1"
 GET /metrics
 ```
 
+The exporter maintains a background cache worker (`refresh_interval` default:
+`1s`) so scrape handlers return cached payloads instead of rebuilding metrics on
+every request.
+
 ## Documentation
 
 - [API Documentation](https://docs.rs/mofa-monitoring)
