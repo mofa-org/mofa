@@ -16,7 +16,7 @@ use std::pin::Pin;
 use std::sync::Arc;
 use tokio::sync::{RwLock, Semaphore};
 use tokio::task::JoinSet;
-use tracing::{Instrument, debug, info, warn};
+use tracing::{Instrument, debug, error, info, warn};
 
 use super::fault_tolerance::{
     CircuitBreakerRegistry, NodeExecutionOutcome, NodePolicy, execute_with_policy,
@@ -329,9 +329,9 @@ impl<S: GraphState + 'static> mofa_kernel::workflow::StateGraph for StateGraphIm
             ),
             edges: Arc::new(self.edges),
             reducers: Arc::new(self.reducers),
-            entry_point: self.entry_point.ok_or_else(|| {
-                AgentError::ValidationFailed("No entry point set".to_string())
-            })?,
+            entry_point: self
+                .entry_point
+                .ok_or_else(|| AgentError::ValidationFailed("No entry point set".to_string()))?,
             config: self.config,
             policies: Arc::new(self.policies),
             circuit_states: new_circuit_registry(),
@@ -717,13 +717,18 @@ impl<S: GraphState + 'static> CompiledGraph<S, serde_json::Value> for CompiledGr
 
                     ctx.set_current_node(&node_id).await;
 
-                    // Send start event
-                    let _ = tx
+                    // Send start event — abort if receiver disconnected
+                    if tx
                         .send(Ok(StreamEvent::NodeStart {
                             node_id: node_id.clone(),
                             state: state.clone(),
                         }))
-                        .await;
+                        .await
+                        .is_err()
+                    {
+                        warn!(node_id, "Stream receiver dropped before node start; aborting graph execution");
+                        return;
+                    }
 
                     // 使用重试/断路器执行节点
                     // Execute node with retry/circuit-breaker
@@ -788,24 +793,35 @@ impl<S: GraphState + 'static> CompiledGraph<S, serde_json::Value> for CompiledGr
                         }
                     }
 
-                    // Send end event
-                    let _ = tx
+                    // Send end event — abort if receiver disconnected
+                    if tx
                         .send(Ok(StreamEvent::NodeEnd {
                             node_id: node_id.clone(),
                             state: state.clone(),
                             command: command.clone(),
                         }))
-                        .await;
+                        .await
+                        .is_err()
+                    {
+                        warn!(node_id, "Stream receiver dropped after node end; aborting graph execution");
+                        return;
+                    }
 
                     next_nodes.extend(get_next_nodes(&node_id, &command));
                 } else {
+                    // Send start events for parallel batch — abort if receiver disconnected
                     for node_id in &nodes_to_execute {
-                        let _ = tx
+                        if tx
                             .send(Ok(StreamEvent::NodeStart {
                                 node_id: node_id.clone(),
                                 state: state.clone(),
                             }))
-                            .await;
+                            .await
+                            .is_err()
+                        {
+                            warn!(node_id, "Stream receiver dropped during parallel start; aborting graph execution");
+                            return;
+                        }
                     }
 
                     let commands = match Self::execute_parallel_nodes(
@@ -859,13 +875,18 @@ impl<S: GraphState + 'static> CompiledGraph<S, serde_json::Value> for CompiledGr
                             }
                         }
 
-                        let _ = tx
+                        if tx
                             .send(Ok(StreamEvent::NodeEnd {
                                 node_id: node_id.clone(),
                                 state: state.clone(),
                                 command: command.clone(),
                             }))
-                            .await;
+                            .await
+                            .is_err()
+                        {
+                            warn!(node_id, "Stream receiver dropped during parallel end; aborting graph execution");
+                            return;
+                        }
 
                         next_nodes.extend(get_next_nodes(&node_id, &command));
                     }
