@@ -43,6 +43,7 @@ config.workspace = true
 regex.workspace = true
 chrono.workspace = true
 cron = "0.12"
+rand = { workspace = true, optional = true }
 
 [lints]
 workspace = true
@@ -50,3 +51,4 @@ workspace = true
 [features]
 dora = ["dora-node-api", "dora-operator-api", "dora-daemon", "dora-core", "dora-message"]
 monitoring = ["dep:mofa-monitoring"]
+random-jitter = ["rand"]
