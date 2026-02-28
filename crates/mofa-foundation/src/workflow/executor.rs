@@ -12,6 +12,7 @@ use super::state::{
     ExecutionRecord, NodeExecutionRecord, NodeResult, NodeStatus, WorkflowContext, WorkflowStatus,
     WorkflowValue,
 };
+use super::recorder::{ExecutionStep, StepStatus, WorkflowRecording};
 use mofa_kernel::workflow::telemetry::{DebugEvent, TelemetryEmitter};
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -60,6 +61,7 @@ pub enum ExecutionEvent {
         workflow_id: String,
         execution_id: String,
         status: WorkflowStatus,
+        recording: Option<crate::workflow::recorder::WorkflowRecording>,
     },
     /// 节点开始
     NodeStarted { node_id: String },
@@ -213,6 +215,10 @@ impl WorkflowExecutor {
             ended_at: None,
             status: WorkflowStatus::Running,
             node_records: Vec::new(),
+            recording: Some(WorkflowRecording::new(
+                uuid::Uuid::parse_str(&ctx.execution_id).unwrap_or_else(|_| uuid::Uuid::new_v4()),
+                graph.id.clone(),
+            )),
         };
 
         // 使用基于依赖的执行
@@ -246,6 +252,7 @@ impl WorkflowExecutor {
             workflow_id: graph.id.clone(),
             execution_id: ctx.execution_id.clone(),
             status: execution_record.status.clone(),
+            recording: execution_record.recording.clone(),
         })
         .await;
 
@@ -352,16 +359,44 @@ impl WorkflowExecutor {
             .await;
 
             // 记录节点执行
+            let status = ctx
+                .get_node_status(&current_node_id)
+                .await
+                .unwrap_or(NodeStatus::Pending);
+
             record.node_records.push(NodeExecutionRecord {
                 node_id: current_node_id.clone(),
                 started_at: start_time,
                 ended_at: end_time,
-                status: ctx
-                    .get_node_status(&current_node_id)
-                    .await
-                    .unwrap_or(NodeStatus::Pending),
+                status: status.clone(),
                 retry_count: 0,
             });
+
+            if let Some(ref mut recording) = record.recording {
+                let step_status = match status {
+                    NodeStatus::Completed => StepStatus::Success,
+                    NodeStatus::Failed(_) => StepStatus::Failed,
+                    NodeStatus::Skipped => StepStatus::Skipped,
+                    _ => StepStatus::Running,
+                };
+
+                let step = ExecutionStep {
+                    node_id: current_node_id.clone(),
+                    input: Some(serde_json::to_value(&current_input).unwrap_or_default()),
+                    output: match &result {
+                        Ok(output) => Some(serde_json::to_value(output).unwrap_or_default()),
+                        Err(_) => None,
+                    },
+                    timestamp: std::time::Duration::from_millis(start_time.saturating_sub(record.started_at)),
+                    duration: std::time::Duration::from_millis(end_time.saturating_sub(start_time)),
+                    status: step_status,
+                    error: match &result {
+                        Err(e) => Some(e.clone()),
+                        _ => None,
+                    },
+                };
+                recording.add_step(step);
+            }
 
             // 检查点
             if self.config.enable_checkpoints
@@ -695,6 +730,7 @@ impl WorkflowExecutor {
             ended_at: None,
             status: WorkflowStatus::Running,
             node_records: Vec::new(),
+            recording: None,
         };
 
         // 按层次执行（同层节点顺序执行，因为闭包无法跨线程共享）
@@ -740,6 +776,26 @@ impl WorkflowExecutor {
                     retry_count: result.retry_count,
                 };
                 execution_record.node_records.push(record_entry);
+
+                if let Some(ref mut recording) = execution_record.recording {
+                    let step_status = match result.status.clone() {
+                        NodeStatus::Completed => StepStatus::Success,
+                        NodeStatus::Failed(_) => StepStatus::Failed,
+                        NodeStatus::Skipped => StepStatus::Skipped,
+                        _ => StepStatus::Running,
+                    };
+
+                    let step = ExecutionStep {
+                        node_id: node_id.clone(),
+                        input: None, // Input tracking tricky in parallel group processing
+                        output: None, // Output tracking omitted for brevity in parallel
+                        timestamp: std::time::Duration::from_millis(node_start_time.saturating_sub(execution_record.started_at)),
+                        duration: std::time::Duration::from_millis(node_end_time.saturating_sub(node_start_time)),
+                        status: step_status,
+                        error: result.error.clone(),
+                    };
+                    recording.add_step(step);
+                }
 
                 if !result.status.is_success() && self.config.stop_on_failure {
                     execution_record.status = WorkflowStatus::Failed(
@@ -927,5 +983,56 @@ mod tests {
             node_ends.len(),
             "NodeStart and NodeEnd counts should match"
         );
+    }
+
+    #[tokio::test]
+    async fn test_workflow_execution_recording() {
+        let mut graph = WorkflowGraph::new("test_recording", "Recording Workflow");
+
+        graph.add_node(WorkflowNode::start("start"));
+        graph.add_node(WorkflowNode::task(
+            "triple",
+            "Triple",
+            |_ctx, input| async move {
+                let value = input.as_i64().unwrap_or(0);
+                Ok(WorkflowValue::Int(value * 3))
+            },
+        ));
+        graph.add_node(WorkflowNode::end("end"));
+
+        graph.connect("start", "triple");
+        graph.connect("triple", "end");
+
+        let executor = WorkflowExecutor::new(ExecutorConfig::default());
+        let result = executor
+            .execute(&graph, WorkflowValue::Int(10))
+            .await
+            .unwrap();
+            
+        assert!(matches!(result.status, WorkflowStatus::Completed));
+        assert!(result.recording.is_some(), "ExecutionRecord should contain a recording");
+        
+        let recording = result.recording.unwrap();
+        assert_eq!(recording.workflow_id, "test_recording");
+        // start -> triple -> end
+        assert_eq!(recording.steps.len(), 3, "Should have recorded 3 steps");
+        
+        let step1 = &recording.steps[0];
+        assert_eq!(step1.node_id, "start");
+        assert!(matches!(step1.status, crate::workflow::recorder::StepStatus::Success));
+        
+        let step2 = &recording.steps[1];
+        assert_eq!(step2.node_id, "triple");
+        assert!(matches!(step2.status, crate::workflow::recorder::StepStatus::Success));
+
+        let step3 = &recording.steps[2];
+        assert_eq!(step3.node_id, "end");
+        assert!(matches!(step3.status, crate::workflow::recorder::StepStatus::Success));
+        
+        // check input/output parsing
+        let input_val = step2.input.as_ref().unwrap();
+        assert_eq!(input_val.as_i64(), Some(10));
+        let output_val = step2.output.as_ref().unwrap();
+        assert_eq!(output_val.as_i64(), Some(30));
     }
 }

@@ -32,6 +32,8 @@ mod builder;
 mod executor;
 mod graph;
 mod node;
+pub mod recorder;
+pub mod replay;
 mod reducers;
 pub mod session_recorder;
 mod state;

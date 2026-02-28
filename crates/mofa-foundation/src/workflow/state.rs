@@ -437,6 +437,8 @@ pub struct ExecutionRecord {
     pub status: WorkflowStatus,
     /// 节点执行记录
     pub node_records: Vec<NodeExecutionRecord>,
+    /// Workflow Execution Recording (Time Travel Debugger)
+    pub recording: Option<crate::workflow::recorder::WorkflowRecording>,
 }
 
 /// 节点执行记录

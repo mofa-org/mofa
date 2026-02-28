@@ -271,6 +271,7 @@ pub fn create_api_router(collector: Arc<MetricsCollector>) -> Router {
         .route("/workflows", get(get_workflows))
         .route("/workflows/:id", get(get_workflow))
         .route("/workflows/:id/graph", get(get_workflow_graph))
+        .route("/workflows/:id/recording", get(get_workflow_recording))
         // Plugins
         .route("/plugins", get(get_plugins))
         .route("/plugins/:id", get(get_plugin))
@@ -478,6 +479,25 @@ async fn get_workflow_graph(
     }
 }
 
+/// Get workflow recording
+async fn get_workflow_recording(
+    State(state): State<Arc<ApiState>>,
+    Path(id): Path<String>,
+) -> Result<Json<ApiResponse<serde_json::Value>>, ApiError> {
+    let snapshot = state.collector.current().await;
+    let workflow = snapshot
+        .workflows
+        .into_iter()
+        .find(|w| w.workflow_id == id)
+        .ok_or_else(|| ApiError::NotFound(format!("Workflow {} not found", id)))?;
+
+    if let Some(recording) = workflow.recording {
+        Ok(Json(ApiResponse::success(recording)))
+    } else {
+        Err(ApiError::NotFound(format!("Recording not available for workflow {}", id)))
+    }
+}
+
 /// Get all plugins
 async fn get_plugins(
     State(state): State<Arc<ApiState>>,
@@ -615,6 +635,39 @@ mod tests {
         assert_eq!(json_result.0.data, Some(mock_json));
         
         let not_found_result = get_workflow_graph(State(state.clone()), axum::extract::Path("missing-flow".to_string())).await;
+        assert!(not_found_result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_get_workflow_recording_endpoint() {
+        let config = super::super::metrics::MetricsConfig::default();
+        let collector = Arc::new(MetricsCollector::new(config));
+        
+        let mut mock_json_map = serde_json::Map::new();
+        mock_json_map.insert("step".to_string(), serde_json::Value::String("start".to_string()));
+        let mock_json = serde_json::Value::Object(mock_json_map);
+        
+        // Add a mock workflow with recording mapping
+        collector.update_workflow(WorkflowMetrics {
+            workflow_id: "mock-flow-rec".to_string(),
+            name: "Mock Workflow Rec".to_string(),
+            status: "completed".to_string(),
+            recording: Some(mock_json.clone()),
+            ..Default::default()
+        }).await;
+        
+        collector.collect().await;
+        
+        let state = Arc::new(ApiState {
+            collector: collector.clone(),
+        });
+        
+        let result = get_workflow_recording(State(state.clone()), axum::extract::Path("mock-flow-rec".to_string())).await;
+        assert!(result.is_ok());
+        let json_result = result.unwrap();
+        assert_eq!(json_result.0.data, Some(mock_json));
+        
+        let not_found_result = get_workflow_recording(State(state.clone()), axum::extract::Path("missing-flow".to_string())).await;
         assert!(not_found_result.is_err());
     }
 }

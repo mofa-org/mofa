@@ -273,6 +273,8 @@ pub struct WorkflowMetrics {
     pub node_count: u32,
     /// Captured Workflow Graph Topology (JSON representation)
     pub graph_json: Option<serde_json::Value>,
+    /// Execution Recording JSON (Time Travel Debugger)
+    pub recording: Option<serde_json::Value>,
 }
 
 /// Plugin metrics
