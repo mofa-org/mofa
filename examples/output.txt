@@ -1,0 +1,44 @@
+   Compiling cli_production_smoke v0.1.0 (C:\Users\Aditya RS\mofa\examples\cli_production_smoke)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1.08s
+     Running unittests src\lib.rs (target\debug\deps\cli_production_smoke-92098b9702ce4822.exe)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src\main.rs (target\debug\deps\cli_production_smoke-9545f6d11d2c4bc2.exe)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests\smoke.rs (target\debug\deps\smoke-392dc6d21967ced3.exe)
+
+running 5 tests
+test missing_binary_error_is_actionable ... ok
+test plugin_uninstall_persists_across_process_calls ... ok
+test deleted_session_show_fails ... ok
+test agent_lifecycle_roundtrip_passes ... ok
+test full_workflow_passes ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.38s
+
+   Doc-tests cli_production_smoke
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.17s
+     Running `target\debug\cli_production_smoke.exe`
+=== MoFA CLI Production Smoke Check ===
+
+[1/6] Top-level CLI commands ... OK
+[2/6] Tool commands ... OK
+[3/6] Plugin lifecycle ... OK
+[4/6] Agent lifecycle ... OK
+[5/6] Session lifecycle ... OK
+[6/6] Negative checks ... OK
+
+Summary: 6 passed, 0 failed
+All CLI smoke checks passed.

@@ -17,10 +17,10 @@
 
 pub mod traits;
 
-#[cfg(target_os = "linux")]
+#[cfg(all(target_os = "linux", feature = "linux-candle"))]
 pub mod linux_candle;
 
-#[cfg(target_os = "linux")]
+#[cfg(all(target_os = "linux", feature = "linux-candle"))]
 pub mod pipeline;
 
 // Re-export core traits and types
@@ -30,9 +30,9 @@ pub use traits::{
 };
 
 // Re-export Linux implementation when available
-#[cfg(target_os = "linux")]
+#[cfg(all(target_os = "linux", feature = "linux-candle"))]
 pub use linux_candle::{LinuxCandleProvider, ModelPool};
 
 // Re-export pipeline types when available
-#[cfg(target_os = "linux")]
+#[cfg(all(target_os = "linux", feature = "linux-candle"))]
 pub use pipeline::{InferencePipeline, PipelineBuilder, PipelineOutput, PipelineStage};

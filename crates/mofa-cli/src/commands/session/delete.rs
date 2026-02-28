@@ -1,11 +1,12 @@
 //! `mofa session delete` command implementation
 
+use crate::CliError;
 use crate::context::CliContext;
 use colored::Colorize;
 use dialoguer::Confirm;
 
 /// Execute the `mofa session delete` command
-pub async fn run(ctx: &CliContext, session_id: &str, force: bool) -> anyhow::Result<()> {
+pub async fn run(ctx: &CliContext, session_id: &str, force: bool) -> Result<(), CliError> {
     if !force {
         let confirmed = Confirm::new()
             .with_prompt(format!(
@@ -27,7 +28,7 @@ pub async fn run(ctx: &CliContext, session_id: &str, force: bool) -> anyhow::Res
         .session_manager
         .delete(session_id)
         .await
-        .map_err(|e| anyhow::anyhow!("Failed to delete session: {}", e))?;
+        .map_err(|e| CliError::SessionError(format!("Failed to delete session: {}", e)))?;
 
     if deleted {
         println!("{} Session '{}' deleted", "✓".green(), session_id);

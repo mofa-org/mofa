@@ -15,7 +15,7 @@ MoFA 的技能系统支持渐进式能力展示，以管理上下文长度和成
 use mofa_sdk::skills::SkillsManager;
 
 #[tokio::main]
-async fn main() -> anyhow::Result<()> {
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // 初始化技能管理器
     let skills = SkillsManager::new("./skills")?;
 
