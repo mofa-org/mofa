@@ -13,3 +13,4 @@ tracing.workspace = true
 tokio.workspace = true
 async-trait.workspace = true
 tracing-subscriber.workspace = true
+anyhow = "1.0"

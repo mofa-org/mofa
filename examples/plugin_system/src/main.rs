@@ -21,8 +21,8 @@ use mofa_sdk::rhai::{RhaiScriptEngine, ScriptContext, ScriptEngineConfig};
 use mofa_sdk::plugins::PluginPriority;
 use mofa_sdk::plugins::{
     AgentPlugin, LLMPlugin, LLMPluginConfig, MemoryPlugin, MemoryStorage, PluginContext,
-    PluginManager, PluginMetadata, PluginResult, PluginState, PluginType, StoragePlugin,
-    ToolDefinition, ToolExecutor, ToolPlugin,
+    PluginError, PluginManager, PluginMetadata, PluginResult, PluginState, PluginType,
+    StoragePlugin, ToolDefinition, ToolExecutor, ToolPlugin,
 };
 use std::any::Any;
 use std::collections::HashMap;
