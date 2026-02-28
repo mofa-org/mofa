@@ -239,6 +239,16 @@ impl TikTokenCounter {
 #[cfg(test)]
 mod tiktoken_tests {
     use super::*;
+    use mofa_kernel::agent::types::ChatMessage;
+
+    fn make_msg(role: &str, content: &str) -> ChatMessage {
+        ChatMessage {
+            role: role.to_string(),
+            content: Some(content.to_string()),
+            tool_call_id: None,
+            tool_calls: None,
+        }
+    }
 
     #[test]
     fn test_tiktoken_counter_cl100k() {
