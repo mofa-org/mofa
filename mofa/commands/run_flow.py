@@ -19,12 +19,30 @@ from typing import List, Optional
 
 import click
 
-from mofa.utils.files.read import read_yaml
-from mofa.utils.process.util import (
-    stop_process,
-    stop_dora_dataflow,
-    destroy_dora_daemon,
-)
+try:
+    from mofa.utils.files.read import read_yaml
+except ModuleNotFoundError:  # Compatibility with upstream layouts without mofa.utils.files
+    import yaml
+
+    def read_yaml(file_path: str):
+        with open(file_path, "r", encoding="utf-8") as handle:
+            return yaml.safe_load(handle) or {}
+
+try:
+    from mofa.utils.process.util import (
+        stop_process,
+        stop_dora_dataflow,
+        destroy_dora_daemon,
+    )
+except ModuleNotFoundError:  # Compatibility fallback
+    def stop_process(*args, **kwargs):
+        return None
+
+    def stop_dora_dataflow(*args, **kwargs):
+        return None
+
+    def destroy_dora_daemon(*args, **kwargs):
+        return None
 from mofa.runtime.validation import (
     FlowValidationException,
     validate_and_plan_dataflow_descriptor,
