@@ -224,10 +224,10 @@ impl Resolver {
 
     /// Calculate score for an adapter
     fn calculate_score(&self, adapter: &AdapterDescriptor, hardware: &HardwareProfile) -> AdapterScore {
-        let mut score = AdapterScore::default();
-
-        // Priority score (0-100)
-        score.priority_score = (adapter.priority.max(0).min(100) as f64);
+        let mut score = AdapterScore {
+            priority_score: adapter.priority.clamp(0, 100) as f64,
+            ..Default::default()
+        };
 
         // Latency score (0-100, lower is better)
         // Prefer adapters with lower estimated latency or better runtime stats
