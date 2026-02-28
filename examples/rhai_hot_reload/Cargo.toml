@@ -10,4 +10,3 @@ mofa-sdk = { path = "../../crates/mofa-sdk" }
 tokio = { version = "1.48.0", features = ["full"] }
 tracing-subscriber = "0.3.22"
 tracing = "0.1.44"
-anyhow = "1.0.86"

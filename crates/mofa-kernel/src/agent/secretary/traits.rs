@@ -122,7 +122,7 @@ pub trait SecretaryOutput:
 ///         &self,
 ///         input: Self::Input,
 ///         ctx: &mut SecretaryContext<Self::State>,
-///     ) -> anyhow::Result<Vec<Self::Output>> {
+///     ) -> Result<Vec<Self::Output>, SecretaryError> {
 ///         match input {
 ///             MyInput::TextMessage(text) => {
 ///                 // 处理文本消息

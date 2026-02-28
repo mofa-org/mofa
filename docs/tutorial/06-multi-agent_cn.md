@@ -101,7 +101,6 @@ edition = "2024"
 mofa-sdk = { path = "../../crates/mofa-sdk" }
 async-trait = "0.1"
 tokio = { version = "1", features = ["full"] }
-anyhow = "1"
 serde_json = "1"
 ```
 
@@ -207,7 +206,7 @@ impl MoFAAgent for WriterAgent {
 }
 
 // --- 链式执行 ---
-async fn run_chain(input: &str) -> anyhow::Result<String> {
+async fn run_chain(input: &str) -> Result<String, Box<dyn std::error::Error>> {
     // 阶段 1：分析师
     let analyst = AnalystAgent::new();
     let outputs = run_agents(analyst, vec![AgentInput::text(input)]).await?;
@@ -224,7 +223,7 @@ async fn run_chain(input: &str) -> anyhow::Result<String> {
 }
 
 #[tokio::main]
-async fn main() -> anyhow::Result<()> {
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("=== 顺序链式：分析师 → 写手 ===\n");
     let result = run_chain("MoFA 是一个用 Rust 构建的模块化智能体框架").await?;
     println!("\n最终输出：\n{}", result);
@@ -240,7 +239,7 @@ async fn main() -> anyhow::Result<()> {
 ```rust
 use tokio::task::JoinSet;
 
-async fn run_parallel(input: &str) -> anyhow::Result<Vec<String>> {
+async fn run_parallel(input: &str) -> Result<Vec<String, Box<dyn std::error::Error>>> {
     let mut tasks = JoinSet::new();
 
     // 并行启动多个智能体

@@ -1,5 +1,6 @@
 //! `mofa agent stop` command implementation
 
+use crate::CliError;
 use crate::context::CliContext;
 use colored::Colorize;
 use tracing::info;
@@ -9,7 +10,7 @@ pub async fn run(
     ctx: &CliContext,
     agent_id: &str,
     force_persisted_stop: bool,
-) -> anyhow::Result<()> {
+) -> Result<(), CliError> {
     println!("{} Stopping agent: {}", "→".green(), agent_id.cyan());
 
     // Check if agent exists in registry or store
@@ -18,12 +19,12 @@ pub async fn run(
     let previous_entry = ctx
         .agent_store
         .get(agent_id)
-        .map_err(|e| anyhow::anyhow!("Failed to load persisted agent '{}': {}", agent_id, e))?;
+        .map_err(|e| CliError::StateError(format!("Failed to load persisted agent '{}': {}", agent_id, e)))?;
 
     let in_store = previous_entry.is_some();
 
     if !in_registry && !in_store {
-        anyhow::bail!("Agent '{}' not found", agent_id);
+        return Err(CliError::StateError(format!("Agent '{}' not found", agent_id)));
     }
 
     // When commands run in separate CLI invocations, runtime registry state can be absent.
@@ -36,7 +37,7 @@ pub async fn run(
         entry.state = "Stopped".to_string();
         ctx.agent_store
             .save(agent_id, &entry)
-            .map_err(|e| anyhow::anyhow!("Failed to update agent '{}': {}", agent_id, e))?;
+            .map_err(|e| CliError::StateError(format!("Failed to update agent '{}': {}", agent_id, e)))?;
 
         println!(
             "{} Agent '{}' persisted state updated to Stopped",
@@ -48,10 +49,10 @@ pub async fn run(
 
     // If not in registry and no force flag, error out
     if !in_registry {
-        anyhow::bail!(
+        return Err(CliError::StateError(format!(
             "Agent '{}' is not active in runtime registry. Use --force-persisted-stop to update persisted state.",
             agent_id
-        );
+        )));
     }
 
     // Attempt graceful shutdown via the agent instance
@@ -66,7 +67,7 @@ pub async fn run(
         entry.state = "Stopped".to_string();
         ctx.agent_store
             .save(agent_id, &entry)
-            .map_err(|e| anyhow::anyhow!("Failed to update agent '{}': {}", agent_id, e))?;
+            .map_err(|e| CliError::StateError(format!("Failed to update agent '{}': {}", agent_id, e)))?;
         true
     } else {
         false
@@ -77,18 +78,18 @@ pub async fn run(
         .agent_registry
         .unregister(agent_id)
         .await
-        .map_err(|e| anyhow::anyhow!("Failed to unregister agent: {}", e))?;
+        .map_err(|e| CliError::StateError(format!("Failed to unregister agent: {}", e)))?;
 
     if !removed
         && persisted_updated
         && let Some(previous) = previous_entry
     {
         ctx.agent_store.save(agent_id, &previous).map_err(|e| {
-            anyhow::anyhow!(
+            CliError::StateError(format!(
                 "Agent '{}' remained registered and failed to restore persisted state: {}",
                 agent_id,
                 e
-            )
+            ))
         })?;
     }
 
@@ -117,7 +118,7 @@ mod tests {
     use tempfile::TempDir;
 
     #[tokio::test]
-    async fn test_stop_updates_state_and_unregisters_agent() -> anyhow::Result<()> {
+    async fn test_stop_updates_state_and_unregisters_agent() -> Result<(), Box<dyn std::error::Error>> {
         let temp = TempDir::new().expect("failed to create temporary directory");
         let ctx = CliContext::with_temp_dir(temp.path()).await?;
 
@@ -131,7 +132,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_stop_returns_error_for_missing_agent() -> anyhow::Result<()> {
+    async fn test_stop_returns_error_for_missing_agent() -> Result<(), Box<dyn std::error::Error>> {
         let temp = TempDir::new().expect("failed to create temporary directory");
         let ctx = CliContext::with_temp_dir(temp.path()).await?;
 
@@ -141,7 +142,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_stop_errors_when_registry_missing_even_if_persisted_exists() -> anyhow::Result<()>
+    async fn test_stop_errors_when_registry_missing_even_if_persisted_exists() -> Result<(), Box<dyn std::error::Error>>
     {
         let temp = TempDir::new().expect("failed to create temporary directory");
         let first_ctx = CliContext::with_temp_dir(temp.path())
@@ -169,7 +170,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_stop_force_persisted_stop_updates_state_when_registry_missing()
-    -> anyhow::Result<()> {
+    -> Result<(), Box<dyn std::error::Error>> {
         let temp = TempDir::new().expect("failed to create temporary directory");
         let first_ctx = CliContext::with_temp_dir(temp.path())
             .await

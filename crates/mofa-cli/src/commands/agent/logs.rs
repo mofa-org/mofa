@@ -1,7 +1,7 @@
 //! `mofa agent logs` command implementation
 
+use crate::CliError;
 use crate::context::CliContext;
-use anyhow::{Context, Result};
 use colored::Colorize;
 use std::io::SeekFrom;
 use tokio::fs::File;
@@ -17,7 +17,7 @@ pub async fn run(
     grep: Option<String>,
     limit: Option<usize>,
     json: bool,
-) -> Result<()> {
+) -> Result<(), CliError> {
     // Determine log file location
     let log_file = get_agent_log_path(&ctx.data_dir, agent_id);
 
@@ -46,11 +46,11 @@ pub async fn run(
             return Ok(());
         } else {
             // Log file doesn't exist and agent isn't registered
-            anyhow::bail!(
+            return Err(CliError::StateError(format!(
                 "Agent '{}' not found in registry and no log file exists.\n  Log file location: {}",
                 agent_id,
                 log_file.display()
-            );
+            )));
         }
     }
 
@@ -99,10 +99,10 @@ async fn display_log_file(
     grep: &Option<String>,
     limit: Option<usize>,
     json: bool,
-) -> Result<()> {
+) -> Result<(), CliError> {
     let file = File::open(log_path)
         .await
-        .with_context(|| format!("Failed to open log file: {}", log_path.display()))?;
+        .map_err(|e| CliError::StateError(format!("Failed to open log file {}: {}", log_path.display(), e)))?;
 
     let reader = BufReader::new(file);
     let mut lines = reader.lines();
@@ -113,7 +113,7 @@ async fn display_log_file(
     while let Some(line) = lines
         .next_line()
         .await
-        .with_context(|| format!("Failed to read log file: {}", log_path.display()))?
+        .map_err(|e| CliError::StateError(format!("Failed to read log file {}: {}", log_path.display(), e)))?
     {
         // Apply filters
         if let Some(level_filter) = level
@@ -191,21 +191,21 @@ async fn tail_log_file(
     log_path: &std::path::Path,
     level: &Option<String>,
     grep: &Option<String>,
-) -> Result<()> {
+) -> Result<(), CliError> {
     let mut file = File::open(log_path)
         .await
-        .with_context(|| format!("Failed to open log file: {}", log_path.display()))?;
+        .map_err(|e| CliError::StateError(format!("Failed to open log file {}: {}", log_path.display(), e)))?;
 
     // Start at the end of file
     let file_len = file
         .metadata()
         .await
-        .with_context(|| "Failed to get file metadata")?
+        .map_err(|e| CliError::StateError(format!("Failed to get file metadata: {}", e)))?
         .len();
 
     file.seek(SeekFrom::Start(file_len))
         .await
-        .with_context(|| "Failed to seek to end of file")?;
+        .map_err(|e| CliError::StateError(format!("Failed to seek to end of file: {}", e)))?;
 
     let mut reader = BufReader::new(file);
     let mut interval = interval(Duration::from_millis(100));
@@ -223,7 +223,7 @@ async fn tail_log_file(
                 continue;
             }
             Err(e) => {
-                return Err(e).with_context(|| "Failed to check log file status");
+                return Err(CliError::StateError(format!("Failed to check log file status: {}", e)));
             }
         };
 
@@ -235,7 +235,7 @@ async fn tail_log_file(
             drop(reader);
             let new_file = File::open(log_path)
                 .await
-                .with_context(|| "Failed to reopen rotated log file")?;
+                .map_err(|e| CliError::StateError(format!("Failed to reopen rotated log file: {}", e)))?;
             reader = BufReader::new(new_file);
             last_pos = 0;
         }
@@ -270,7 +270,7 @@ async fn tail_log_file(
                     last_pos += line.len() as u64;
                 }
                 Err(e) => {
-                    return Err(e).with_context(|| "Failed to read from log file");
+                    return Err(CliError::StateError(format!("Failed to read from log file: {}", e)));
                 }
             }
         }
@@ -278,7 +278,7 @@ async fn tail_log_file(
 }
 
 /// Wait for a log file to be created and then start tailing it
-async fn wait_for_file_and_tail(log_path: &std::path::Path) -> Result<()> {
+async fn wait_for_file_and_tail(log_path: &std::path::Path) -> Result<(), CliError> {
     let mut interval = interval(Duration::from_millis(500));
 
     // Wait for file to exist

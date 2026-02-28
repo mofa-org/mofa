@@ -41,14 +41,19 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
+use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 
-use mofa_kernel::agent::components::tool::{DynTool, DynToolWrapper, Tool};
+use mofa_kernel::agent::components::tool::{
+    DynTool, LLMTool, Tool, ToolExt, ToolInput, ToolMetadata, ToolResult,
+};
+use mofa_kernel::agent::context::AgentContext;
 use mofa_kernel::agent::error::{AgentError, AgentResult};
 use mofa_kernel::agent::types::LLMProvider;
 
 use crate::agent::executor::{AgentExecutor, AgentExecutorConfig};
 
+// ============================================================================
 // ============================================================================
 // AgentBuilder
 // ============================================================================
@@ -132,19 +137,11 @@ impl AgentBuilder {
     /// Register a tool on the resulting executor.
     ///
     /// Can be called multiple times to register several tools.
-    pub fn with_tool<T>(mut self, tool: Arc<T>) -> Self
+    pub fn with_tool<T>(mut self, tool: T) -> Self
     where
-        T: mofa_kernel::agent::components::tool::Tool<serde_json::Value, serde_json::Value>
-            + Send
-            + Sync
-            + 'static,
+        T: Tool<serde_json::Value, serde_json::Value> + Send + Sync + 'static,
     {
-        use mofa_kernel::agent::components::tool::{DynTool, DynToolWrapper};
-        use std::sync::Arc;
-        self.tools.push(Arc::new(DynToolWrapper {
-            tool,
-            _phantom: std::marker::PhantomData,
-        }));
+        self.tools.push(tool.into_dynamic());
         self
     }
 
