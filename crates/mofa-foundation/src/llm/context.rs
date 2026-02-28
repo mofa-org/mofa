@@ -6,8 +6,9 @@
 //! - Agent identity integration
 //! - Vision message support
 
+use crate::llm::token_budget::ContextWindowManager;
 use crate::llm::types::{ChatMessage, ContentPart, ImageUrl, MessageContent, Role};
-use anyhow::Result;
+use mofa_kernel::agent::types::error::{GlobalError, GlobalResult};
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -89,6 +90,8 @@ pub struct AgentContextBuilder {
     skills: Option<Arc<dyn SkillsManager>>,
     /// Cached system prompt
     cached_prompt: Arc<RwLock<Option<String>>>,
+    /// Optional context window manager for token budget enforcement
+    context_window_manager: Option<Arc<ContextWindowManager>>,
 }
 
 impl AgentContextBuilder {
@@ -107,6 +110,7 @@ impl AgentContextBuilder {
             },
             skills: None,
             cached_prompt: Arc::new(RwLock::new(None)),
+            context_window_manager: None,
         }
     }
 
@@ -128,8 +132,17 @@ impl AgentContextBuilder {
         self
     }
 
+    /// Set context window manager for token budget enforcement.
+    ///
+    /// When set, `build_messages()` and `build_messages_with_skills()` will
+    /// automatically trim history to fit within the model's context window.
+    pub fn with_context_window_manager(mut self, manager: Arc<ContextWindowManager>) -> Self {
+        self.context_window_manager = Some(manager);
+        self
+    }
+
     /// Build system prompt from bootstrap files
-    pub async fn build_system_prompt(&self) -> Result<String> {
+    pub async fn build_system_prompt(&self) -> GlobalResult<String> {
         // Check cache
         {
             let cached = self.cached_prompt.read().await;
@@ -190,7 +203,7 @@ The following skills extend your capabilities. To use a skill, read its document
         history: Vec<ChatMessage>,
         current: &str,
         media: Option<Vec<String>>,
-    ) -> Result<Vec<ChatMessage>> {
+    ) -> GlobalResult<Vec<ChatMessage>> {
         let mut messages = Vec::new();
 
         // System prompt
@@ -213,6 +226,14 @@ The following skills extend your capabilities. To use a skill, read its document
 
         messages.push(user_msg);
 
+        // Apply context window management if configured
+        let messages = if let Some(ref manager) = self.context_window_manager {
+            let result = manager.apply(&messages);
+            result.messages
+        } else {
+            messages
+        };
+
         Ok(messages)
     }
 
@@ -223,7 +244,7 @@ The following skills extend your capabilities. To use a skill, read its document
         current: &str,
         media: Option<Vec<String>>,
         skill_names: Option<&[String]>,
-    ) -> Result<Vec<ChatMessage>> {
+    ) -> GlobalResult<Vec<ChatMessage>> {
         let mut messages = Vec::new();
 
         // Build system prompt with optional skills
@@ -269,11 +290,19 @@ The following skills extend your capabilities. To use a skill, read its document
 
         messages.push(user_msg);
 
+        // Apply context window management if configured
+        let messages = if let Some(ref manager) = self.context_window_manager {
+            let result = manager.apply(&messages);
+            result.messages
+        } else {
+            messages
+        };
+
         Ok(messages)
     }
 
     /// Build a vision message with images
-    fn build_vision_message(text: &str, image_paths: &[String]) -> Result<ChatMessage> {
+    fn build_vision_message(text: &str, image_paths: &[String]) -> GlobalResult<ChatMessage> {
         let mut parts = vec![ContentPart::Text {
             text: text.to_string(),
         }];
@@ -293,14 +322,14 @@ The following skills extend your capabilities. To use a skill, read its document
     }
 
     /// Encode an image file as a data URL
-    fn encode_image_data_url(path: &Path) -> Result<ImageUrl> {
+    fn encode_image_data_url(path: &Path) -> GlobalResult<ImageUrl> {
         use base64::Engine;
         use base64::engine::general_purpose::STANDARD_NO_PAD;
         use std::fs;
 
         let bytes = fs::read(path)?;
         let mime_type = infer::get_from_path(path)?
-            .ok_or_else(|| anyhow::anyhow!("Unknown MIME type for: {:?}", path))?
+            .ok_or_else(|| GlobalError::Other(format!("Unknown MIME type for: {:?}", path)))?
             .mime_type()
             .to_string();
 
@@ -311,9 +340,9 @@ The following skills extend your capabilities. To use a skill, read its document
     }
 
     /// Load a file's content
-    fn load_file(path: &Path) -> Result<String> {
+    fn load_file(path: &Path) -> GlobalResult<String> {
         std::fs::read_to_string(path)
-            .map_err(|e| anyhow::anyhow!("Failed to read {:?}: {}", path, e))
+            .map_err(|e| GlobalError::Other(format!("Failed to read {:?}: {}", path, e)))
     }
 
     /// Get the workspace path

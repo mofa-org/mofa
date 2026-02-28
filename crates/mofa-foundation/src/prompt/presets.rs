@@ -16,9 +16,9 @@ use super::template::{PromptTemplate, PromptVariable};
 /// General assistant system prompt
 pub fn general_assistant() -> PromptTemplate {
     PromptTemplate::new("general-assistant")
-        .with_name("通用助手")
+        .with_name("General Assistant")
         // General Assistant
-        .with_description("通用 AI 助手系统提示")
+        .with_description("General AI assistant system prompt")
         // General AI assistant system prompt
         .with_content(
             "你是一个乐于助人的 AI 助手。请以清晰、准确、专业的方式回答用户的问题。\n\n\
@@ -35,9 +35,9 @@ pub fn general_assistant() -> PromptTemplate {
 /// Professional role assistant
 pub fn role_assistant() -> PromptTemplate {
     PromptTemplate::new("role-assistant")
-        .with_name("角色助手")
+        .with_name("Role Assistant")
         // Role Assistant
-        .with_description("可自定义角色的助手模板")
+        .with_description("Assistant template with customizable roles")
         // Assistant template with customizable roles
         .with_content(
             "你是一个专业的{role}。你的专长是{expertise}。\n\n\
@@ -52,10 +52,10 @@ pub fn role_assistant() -> PromptTemplate {
         )
         .with_variable(
             PromptVariable::new("expertise")
-                .with_description("专业领域")
+                .with_description("Professional field")
                 // Professional field
-                .with_default("解决问题和提供帮助"),
-                // Problem solving and providing help
+                .with_default("Solving problems and providing help"),
+                // Solving problems and providing help
         )
         .with_tag("system")
         .with_tag("role")
@@ -70,9 +70,9 @@ pub fn role_assistant() -> PromptTemplate {
 /// Code review template
 pub fn code_review() -> PromptTemplate {
     PromptTemplate::new("code-review")
-        .with_name("代码审查")
+        .with_name("Code Review")
         // Code Review
-        .with_description("专业代码审查模板")
+        .with_description("Professional code review template")
         // Professional code review template
         .with_content(
             "请作为一个资深的{language}开发者，审查以下代码：\n\n\
@@ -87,12 +87,14 @@ pub fn code_review() -> PromptTemplate {
         )
         .with_variable(
             PromptVariable::new("language")
-                .with_description("编程语言")
+                .with_description("Programming language")
                 // Programming language
-                .with_default("代码"),
+                .with_default("code"),
                 // Code
         )
-        .with_variable(PromptVariable::new("code").with_description("要审查的代码"))
+        .with_variable(
+            PromptVariable::new("code").with_description("Code to be reviewed"),
+        )
         // The code to be reviewed
         .with_tag("code")
         .with_tag("review")
@@ -102,9 +104,9 @@ pub fn code_review() -> PromptTemplate {
 /// Code explanation template
 pub fn code_explain() -> PromptTemplate {
     PromptTemplate::new("code-explain")
-        .with_name("代码解释")
+        .with_name("Code Explanation")
         // Code Explanation
-        .with_description("解释代码功能和原理")
+        .with_description("Explain code functionality and principles")
         // Explain code functionality and principles
         .with_content(
             "请详细解释以下{language}代码的功能和工作原理：\n\n\
@@ -117,12 +119,14 @@ pub fn code_explain() -> PromptTemplate {
         )
         .with_variable(
             PromptVariable::new("language")
-                .with_description("编程语言")
+                .with_description("Programming language")
                 // Programming language
-                .with_default("代码"),
+                .with_default("code"),
                 // Code
         )
-        .with_variable(PromptVariable::new("code").with_description("要解释的代码"))
+        .with_variable(
+            PromptVariable::new("code").with_description("Code to be explained"),
+        )
         // The code to be explained
         .with_tag("code")
         .with_tag("explain")
@@ -132,9 +136,9 @@ pub fn code_explain() -> PromptTemplate {
 /// Code generation template
 pub fn code_generate() -> PromptTemplate {
     PromptTemplate::new("code-generate")
-        .with_name("代码生成")
+        .with_name("Code Generation")
         // Code Generation
-        .with_description("根据需求生成代码")
+        .with_description("Generate code based on requirements")
         // Generate code based on requirements
         .with_content(
             "请使用 {language} 编写代码实现以下功能：\n\n\
@@ -145,9 +149,14 @@ pub fn code_generate() -> PromptTemplate {
             3. 考虑边界情况和错误处理\n\
             4. 遵循 {language} 的最佳实践",
         )
-        .with_variable(PromptVariable::new("language").with_description("编程语言"))
+        .with_variable(
+            PromptVariable::new("language").with_description("Programming language"),
+        )
         // Programming language
-        .with_variable(PromptVariable::new("requirement").with_description("功能需求描述"))
+        .with_variable(
+            PromptVariable::new("requirement")
+                .with_description("Functional requirement description"),
+        )
         // Functional requirement description
         .with_tag("code")
         .with_tag("generate")
@@ -157,9 +166,9 @@ pub fn code_generate() -> PromptTemplate {
 /// Code refactoring template
 pub fn code_refactor() -> PromptTemplate {
     PromptTemplate::new("code-refactor")
-        .with_name("代码重构")
+        .with_name("Code Refactor")
         // Code Refactor
-        .with_description("重构和优化代码")
+        .with_description("Refactor and optimize code")
         // Refactor and optimize code
         .with_content(
             "请重构以下{language}代码，{goal}：\n\n\
@@ -172,18 +181,20 @@ pub fn code_refactor() -> PromptTemplate {
         )
         .with_variable(
             PromptVariable::new("language")
-                .with_description("编程语言")
+                .with_description("Programming language")
                 // Programming language
-                .with_default("代码"),
+                .with_default("code"),
                 // Code
         )
-        .with_variable(PromptVariable::new("code").with_description("要重构的代码"))
+        .with_variable(
+            PromptVariable::new("code").with_description("Code to be refactored"),
+        )
         // The code to be refactored
         .with_variable(
             PromptVariable::new("goal")
-                .with_description("重构目标")
+                .with_description("Refactoring goal")
                 // Refactoring goal
-                .with_default("使其更加清晰、高效"),
+                .with_default("Make it clearer and more efficient"),
                 // Make it clearer and more efficient
         )
         .with_tag("code")
@@ -194,9 +205,9 @@ pub fn code_refactor() -> PromptTemplate {
 /// Unit test generation template
 pub fn code_test() -> PromptTemplate {
     PromptTemplate::new("code-test")
-        .with_name("测试生成")
+        .with_name("Test Generation")
         // Test Generation
-        .with_description("为代码生成单元测试")
+        .with_description("Generate unit tests for code")
         // Generate unit tests for code
         .with_content(
             "请为以下{language}代码编写单元测试：\n\n\
@@ -207,15 +218,19 @@ pub fn code_test() -> PromptTemplate {
             3. 包含错误情况测试\n\
             4. 使用 {test_framework} 测试框架",
         )
-        .with_variable(PromptVariable::new("language").with_description("编程语言"))
+        .with_variable(
+            PromptVariable::new("language").with_description("Programming language"),
+        )
         // Programming language
-        .with_variable(PromptVariable::new("code").with_description("要测试的代码"))
+        .with_variable(
+            PromptVariable::new("code").with_description("Code to be tested"),
+        )
         // The code to be tested
         .with_variable(
             PromptVariable::new("test_framework")
-                .with_description("测试框架")
+                .with_description("Test framework")
                 // Test framework
-                .with_default("标准"),
+                .with_default("standard"),
                 // Standard
         )
         .with_tag("code")
@@ -252,7 +267,7 @@ pub fn tech_doc() -> PromptTemplate {
                 .with_description("目标读者")
                 // Target audience
                 .with_default("开发者"),
-                // Developers
+            // Developers
         )
         .with_tag("doc")
         .with_tag("writing")
@@ -281,7 +296,7 @@ pub fn summarize() -> PromptTemplate {
                 .with_description("目标长度")
                 // Target length
                 .with_default("200-300字"),
-                // 200-300 words
+            // 200-300 words
         )
         .with_tag("writing")
         .with_tag("summary")
@@ -309,14 +324,14 @@ pub fn translate() -> PromptTemplate {
                 .with_description("源语言")
                 // Source language
                 .with_default("英文"),
-                // English
+            // English
         )
         .with_variable(
             PromptVariable::new("target_lang")
                 .with_description("目标语言")
                 // Target language
                 .with_default("中文"),
-                // Chinese
+            // Chinese
         )
         .with_variable(PromptVariable::new("content").with_description("要翻译的内容"))
         // The content to be translated
@@ -354,7 +369,7 @@ pub fn analyze() -> PromptTemplate {
                 .with_description("相关背景信息")
                 // Relevant background information
                 .with_default("无额外上下文"),
-                // No extra context
+            // No extra context
         )
         .with_tag("analysis")
         .with_tag("problem-solving")
@@ -385,7 +400,7 @@ pub fn compare() -> PromptTemplate {
                 .with_description("对比维度")
                 // Comparison dimensions
                 .with_default("功能、性能、易用性、成本"),
-                // Function, performance, usability, cost
+            // Function, performance, usability, cost
         )
         .with_tag("analysis")
         .with_tag("comparison")
@@ -467,7 +482,7 @@ pub fn debater() -> PromptTemplate {
                 .with_description("辩论立场")
                 // Debate position
                 .with_enum(vec!["正".to_string(), "反".to_string()]),
-                // Pro, Con
+            // Pro, Con
         )
         .with_variable(PromptVariable::new("topic").with_description("辩论话题"))
         // Debate topic
@@ -476,7 +491,7 @@ pub fn debater() -> PromptTemplate {
                 .with_description("之前的辩论内容")
                 // Previous debate content
                 .with_default("这是辩论的开始"),
-                // This is the beginning of the debate
+            // This is the beginning of the debate
         )
         .with_tag("multi-agent")
         .with_tag("debate")
@@ -635,7 +650,7 @@ mod tests {
         let result = template.render(&[("role", "数据分析师")]).unwrap();
 
         assert!(result.contains("数据分析师"));
-        assert!(result.contains("解决问题和提供帮助")); // 默认值
+        assert!(result.contains("Solving problems and providing help")); // Default value
         // Default value
     }
 

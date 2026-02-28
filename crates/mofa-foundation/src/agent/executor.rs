@@ -29,6 +29,7 @@
 //! ```
 
 use async_trait::async_trait;
+use mofa_kernel::agent::components::context_compressor::ContextCompressor;
 use mofa_kernel::agent::context::AgentContext;
 use mofa_kernel::agent::error::{AgentError, AgentResult};
 use mofa_kernel::agent::types::{ChatCompletionRequest, ChatMessage, LLMProvider, ToolDefinition};
@@ -64,6 +65,10 @@ pub struct AgentExecutorConfig {
     pub temperature: Option<f32>,
     /// Max tokens for LLM responses
     pub max_tokens: Option<u32>,
+    /// Token budget for the conversation context sent to the LLM.
+    /// When the estimated token count exceeds this value and a compressor is
+    /// configured, compression is triggered automatically.  Defaults to 4096.
+    pub max_context_tokens: usize,
 }
 
 impl Default for AgentExecutorConfig {
@@ -74,6 +79,7 @@ impl Default for AgentExecutorConfig {
             default_model: None,
             temperature: None,
             max_tokens: None,
+            max_context_tokens: 4096,
         }
     }
 }
@@ -95,6 +101,12 @@ impl AgentExecutorConfig {
 
     pub fn with_temperature(mut self, temp: f32) -> Self {
         self.temperature = Some(temp);
+        self
+    }
+
+    /// Set the maximum number of context tokens before compression is triggered.
+    pub fn with_max_context_tokens(mut self, n: usize) -> Self {
+        self.max_context_tokens = n;
         self
     }
 }
@@ -147,6 +159,9 @@ pub struct AgentExecutor {
     sessions: Arc<SessionManager>,
     /// Configuration
     config: AgentExecutorConfig,
+    /// Optional context compressor applied before each LLM call when the
+    /// estimated token count exceeds `config.max_context_tokens`.
+    compressor: Option<Arc<dyn ContextCompressor>>,
 }
 
 impl AgentExecutor {
@@ -178,6 +193,7 @@ impl AgentExecutor {
             tools,
             sessions,
             config: AgentExecutorConfig::default(),
+            compressor: None,
         })
     }
 
@@ -213,13 +229,24 @@ impl AgentExecutor {
             tools,
             sessions,
             config,
+            compressor: None,
         })
     }
 
     /// Register a tool
-    pub async fn register_tool(&self, tool: Arc<dyn Tool>) -> AgentResult<()> {
+    pub async fn register_tool(&self, tool: Arc<dyn mofa_kernel::agent::components::tool::DynTool>) -> AgentResult<()> {
         let mut tools = self.tools.write().await;
         tools.register(tool)
+    }
+
+    /// Attach a context compressor.
+    ///
+    /// When set, the compressor is called automatically inside
+    /// `process_message` whenever the estimated token count for the built
+    /// message list exceeds `config.max_context_tokens`.
+    pub fn with_compressor(mut self, compressor: Arc<dyn ContextCompressor>) -> Self {
+        self.compressor = Some(compressor);
+        self
     }
 
     /// Process a user message
@@ -242,10 +269,21 @@ impl AgentExecutor {
             .build_messages(&session, &system_prompt, message)
             .await?;
 
-        // 4. Run agent loop
+        // 4. Compress context if a compressor is configured and the token
+        //    budget is exceeded.
+        if let Some(compressor) = &self.compressor {
+            let token_count = compressor.count_tokens(&messages);
+            if token_count > self.config.max_context_tokens {
+                messages = compressor
+                    .compress(messages, self.config.max_context_tokens)
+                    .await?;
+            }
+        }
+
+        // 5. Run agent loop
         let response = self.run_agent_loop(&mut messages).await?;
 
-        // 5. Update session
+        // 6. Update session
         let mut session_updated = session.clone();
         session_updated.add_message("user", message);
         session_updated.add_message("assistant", &response);
@@ -360,8 +398,10 @@ impl AgentExecutor {
                     let result = {
                         let tools_guard = self.tools.read().await;
                         if let Some(tool) = tools_guard.get(&tool_call.name) {
-                            let input = ToolInput::from_json(tool_call.arguments.clone());
-                            tool.execute(input, &AgentContext::new("executor")).await
+                            match tool.execute_dynamic(tool_call.arguments.clone(), &AgentContext::new("executor")).await {
+                                Ok(out) => mofa_kernel::agent::components::tool::ToolResult::success(out),
+                                Err(e) => mofa_kernel::agent::components::tool::ToolResult::failure(e.to_string()),
+                            }
                         } else {
                             return Err(AgentError::ExecutionFailed(format!(
                                 "Tool not found: {}",

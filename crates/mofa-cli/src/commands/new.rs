@@ -1,10 +1,15 @@
 //! `mofa new` command implementation
 
+use crate::CliError;
 use colored::Colorize;
 use std::path::{Path, PathBuf};
 
 /// Execute the `mofa new` command
-pub fn run(name: &str, template: &str, output: Option<&std::path::Path>) -> anyhow::Result<()> {
+pub fn run(
+    name: &str,
+    template: &str,
+    output: Option<&std::path::Path>,
+) -> Result<(), CliError> {
     let project_dir = output
         .map(|p| p.join(name))
         .unwrap_or_else(|| PathBuf::from(name));
@@ -43,7 +48,7 @@ pub fn run(name: &str, template: &str, output: Option<&std::path::Path>) -> anyh
     Ok(())
 }
 
-fn generate_basic_template(name: &str, project_dir: &Path) -> anyhow::Result<()> {
+fn generate_basic_template(name: &str, project_dir: &Path) -> Result<(), CliError> {
     // Create Cargo.toml
     let cargo_toml = format!(
         r#"[package]
@@ -54,7 +59,6 @@ edition = "2024"
 [dependencies]
 mofa-sdk = "0.1"
 tokio = {{ version = "1", features = ["full"] }}
-anyhow = "1.0"
 "#
     );
     std::fs::write(project_dir.join("Cargo.toml"), cargo_toml)?;
@@ -65,7 +69,7 @@ anyhow = "1.0"
 use std::sync::Arc;
 
 #[tokio::main]
-async fn main() -> anyhow::Result<()> {
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let agent = LLMAgentBuilder::new()
         .with_provider(Arc::new(OpenAIProvider::from_env()))
         .with_system_prompt("You are a helpful AI assistant.")
@@ -90,7 +94,7 @@ OPENAI_MODEL=gpt-4o
     Ok(())
 }
 
-fn generate_llm_template(name: &str, project_dir: &Path) -> anyhow::Result<()> {
+fn generate_llm_template(name: &str, project_dir: &Path) -> Result<(), CliError> {
     // Create Cargo.toml with LLM dependencies
     let cargo_toml = format!(
         r#"[package]
@@ -101,7 +105,6 @@ edition = "2024"
 [dependencies]
 mofa-sdk = "0.1"
 tokio = {{ version = "1", features = ["full"] }}
-anyhow = "1.0"
 uuid = "1"
 "#
     );
@@ -132,7 +135,7 @@ use std::sync::Arc;
 use uuid::Uuid;
 
 #[tokio::main]
-async fn main() -> anyhow::Result<()> {
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("========================================");
     println!("  MoFA LLM Agent                       ");
     println!("========================================\n");
@@ -154,7 +157,7 @@ async fn main() -> anyhow::Result<()> {
     println!("--- Chat Demo ---\n");
 
     let response = agent.ask("Hello! What can you help me with?").await
-        .map_err(|e| anyhow::anyhow!("LLM error: {}", e))?;
+        .map_err(|e| format!("LLM error: {}", e).into())?;
     println!("Q: Hello! What can you help me with?");
     println!("A: {}\n", response);
 
@@ -162,12 +165,12 @@ async fn main() -> anyhow::Result<()> {
     println!("--- Multi-turn Conversation ---\n");
 
     let r1 = agent.chat("My favorite programming language is Rust.").await
-        .map_err(|e| anyhow::anyhow!("LLM error: {}", e))?;
+        .map_err(|e| format!("LLM error: {}", e).into())?;
     println!("User: My favorite programming language is Rust.");
     println!("AI: {}\n", r1);
 
     let r2 = agent.chat("What's my favorite language?").await
-        .map_err(|e| anyhow::anyhow!("LLM error: {}", e))?;
+        .map_err(|e| format!("LLM error: {}", e).into())?;
     println!("User: What's my favorite language?");
     println!("AI: {}\n", r2);
 
@@ -191,7 +194,7 @@ OPENAI_MODEL=gpt-4o
     Ok(())
 }
 
-fn generate_axum_llm_template(name: &str, project_dir: &Path) -> anyhow::Result<()> {
+fn generate_axum_llm_template(name: &str, project_dir: &Path) -> Result<(), CliError> {
     // Create Cargo.toml with axum dependencies
     let cargo_toml = format!(
         r#"[package]
@@ -207,7 +210,6 @@ tower = "0.4"
 tower-http = {{ version = "0.5", features = ["cors", "trace"] }}
 serde = {{ version = "1.0", features = ["derive"] }}
 serde_json = "1.0"
-anyhow = "1.0"
 tracing = "0.1"
 tracing-subscriber = {{ version = "0.3", features = ["env-filter"] }}
 uuid = {{ version = "1.7", features = ["v4", "serde"] }}
@@ -319,7 +321,7 @@ struct AppState {
 }
 
 /// Create an LLM agent using the modern LLMAgentBuilder API
-fn create_agent() -> anyhow::Result<mofa_sdk::llm::LLMAgent> {
+fn create_agent() -> Result<mofa_sdk::llm::LLMAgent, Box<dyn std::error::Error>> {
     mofa_sdk::llm::LLMAgentBuilder::from_env()?
         .with_system_prompt(
             "You are a helpful AI assistant. Be concise, accurate, and friendly. \
@@ -459,7 +461,7 @@ async fn delete_session_handler(
 // ==============================================================================
 
 #[tokio::main]
-async fn main() -> anyhow::Result<()> {
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Initialize tracing
     tracing_subscriber::fmt()
         .with_env_filter(
@@ -678,7 +680,7 @@ Health check endpoint.
 Edit `create_agent()` in `src/main.rs`:
 
 ```rust
-fn create_agent() -> anyhow::Result<mofa_sdk::llm::LLMAgent> {{
+fn create_agent() -> Result<mofa_sdk::llm::LLMAgent, Box<dyn std::error::Error>> {{
     mofa_sdk::llm::LLMAgentBuilder::from_env()?
         .with_system_prompt("Your custom system prompt here")
         .with_temperature(0.5)  // Lower for more deterministic
@@ -786,7 +788,7 @@ Thumbs.db
     Ok(())
 }
 
-fn generate_python_template(name: &str, project_dir: &Path) -> anyhow::Result<()> {
+fn generate_python_template(name: &str, project_dir: &Path) -> Result<(), CliError> {
     // Create main.py using mofa SDK
     let main_py = r#"#!/usr/bin/env python3
 """

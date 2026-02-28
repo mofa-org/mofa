@@ -4,9 +4,11 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
-/// 插件执行结果
-/// Plugin execution result
-pub type PluginResult<T> = anyhow::Result<T>;
+pub mod error;
+pub use error::PluginError;
+
+/// Plugin execution result type using the typed [`PluginError`].
+pub type PluginResult<T> = Result<T, PluginError>;
 
 // ============================================================================
 // 热加载相关定义 (Hot-reload related definitions)
@@ -15,6 +17,7 @@ pub type PluginResult<T> = anyhow::Result<T>;
 /// 热加载策略
 /// Hot-reload strategy
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum ReloadStrategy {
     /// 立即热加载
     /// Immediate hot-reload
@@ -115,6 +118,7 @@ impl HotReloadConfig {
 /// 热加载事件
 /// Hot-reload event
 #[derive(Debug, Clone)]
+#[non_exhaustive]
 pub enum ReloadEvent {
     /// 热加载开始
     /// Hot-reload started
@@ -271,6 +275,7 @@ pub trait AgentPlugin: Send + Sync {
 /// 插件类型枚举
 /// Plugin type enumeration
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[non_exhaustive]
 pub enum PluginType {
     /// LLM 能力插件
     /// LLM capability plugin
@@ -304,6 +309,7 @@ pub enum PluginType {
 /// 插件状态
 /// Plugin state
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub enum PluginState {
     /// 未初始化
     /// Unloaded
@@ -328,6 +334,7 @@ pub enum PluginState {
 /// 插件优先级（用于确定执行顺序）
 /// Plugin priority (for execution order)
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, Default)]
+#[non_exhaustive]
 pub enum PluginPriority {
     Low = 0,
     #[default]
@@ -525,11 +532,11 @@ impl PluginContext {
 
     /// 发送插件事件
     /// Emit plugin event
-    pub async fn emit_event(&self, event: PluginEvent) -> anyhow::Result<()> {
+    pub async fn emit_event(&self, event: PluginEvent) -> PluginResult<()> {
         if let Some(ref tx) = self.event_tx {
             tx.send(event)
                 .await
-                .map_err(|e| anyhow::anyhow!("Failed to send event: {}", e))?;
+                .map_err(|e| PluginError::Other(format!("Failed to send event: {}", e)))?;
         }
         Ok(())
     }
@@ -553,6 +560,7 @@ impl Clone for PluginContext {
 /// 插件事件
 /// Plugin event
 #[derive(Debug, Clone)]
+#[non_exhaustive]
 pub enum PluginEvent {
     /// 插件已加载
     /// Plugin loaded
@@ -578,3 +586,7 @@ pub enum PluginEvent {
         data: Vec<u8>,
     },
 }
+
+#[cfg(test)]
+mod tests;
+

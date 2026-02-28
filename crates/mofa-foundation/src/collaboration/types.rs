@@ -32,7 +32,7 @@
 //! └─────────────────────────────────────────────────────────────┘
 //! ```
 //!
-//! # 快速开始 
+//! # 快速开始
 //! # Quick Start
 //!
 //! ```rust,ignore
@@ -44,7 +44,7 @@
 //! use std::sync::Arc;
 //!
 //! #[tokio::main]
-//! async fn main() -> anyhow::Result<()> {
+//! async fn main() -> GlobalResult<()> {
 //!     // 创建 LLM 客户端
 //!     // Create LLM client
 //!     let provider = Arc::new(OpenAIProvider::with_config(openai_config));
@@ -77,6 +77,7 @@
 //! }
 //! ```
 
+use mofa_kernel::agent::types::error::{GlobalError, GlobalResult};
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -137,12 +138,12 @@ pub enum CollaborationMode {
 impl std::fmt::Display for CollaborationMode {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            CollaborationMode::RequestResponse => write!(f, "请求-响应模式"),
-            CollaborationMode::PublishSubscribe => write!(f, "发布-订阅模式"),
-            CollaborationMode::Consensus => write!(f, "共识机制模式"),
-            CollaborationMode::Debate => write!(f, "辩论模式"),
-            CollaborationMode::Parallel => write!(f, "并行处理模式"),
-            CollaborationMode::Sequential => write!(f, "顺序执行模式"),
+            CollaborationMode::RequestResponse => write!(f, "Request-Response Mode"),
+            CollaborationMode::PublishSubscribe => write!(f, "Publish-Subscribe Mode"),
+            CollaborationMode::Consensus => write!(f, "Consensus Mode"),
+            CollaborationMode::Debate => write!(f, "Debate Mode"),
+            CollaborationMode::Parallel => write!(f, "Parallel Processing Mode"),
+            CollaborationMode::Sequential => write!(f, "Sequential Execution Mode"),
             CollaborationMode::Custom(s) => write!(f, "{}", s),
         }
     }
@@ -203,10 +204,10 @@ pub enum CollaborationContent {
     /// LLM 生成的响应
     /// LLM-generated response
     LLMResponse {
-        reasoning: String,       // LLM 的推理过程
-                                 // LLM's reasoning process
-        conclusion: String,      // LLM 的结论
-                                 // LLM's conclusion
+        reasoning: String, // LLM 的推理过程
+        // LLM's reasoning process
+        conclusion: String, // LLM 的结论
+        // LLM's conclusion
         data: serde_json::Value, // 相关数据
                                  // Related data
     },
@@ -219,13 +220,15 @@ impl CollaborationContent {
         match self {
             CollaborationContent::Text(s) => s.clone(),
             CollaborationContent::Data(v) => v.to_string(),
-            CollaborationContent::Mixed { text, data } => format!("{}\n\n数据: {}", text, data),
+            CollaborationContent::Mixed { text, data } => {
+                format!("{text}\n\nData: {data}")
+            }
             CollaborationContent::LLMResponse {
                 reasoning,
                 conclusion,
                 ..
             } => {
-                format!("推理: {}\n\n结论: {}", reasoning, conclusion)
+                format!("Reasoning: {reasoning}\n\nConclusion: {conclusion}")
             }
         }
     }
@@ -447,11 +450,11 @@ pub trait CollaborationProtocol: Send + Sync {
 
     /// 发送消息
     /// Send message
-    async fn send_message(&self, msg: CollaborationMessage) -> anyhow::Result<()>;
+    async fn send_message(&self, msg: CollaborationMessage) -> GlobalResult<()>;
 
     /// 接收消息
     /// Receive message
-    async fn receive_message(&self) -> anyhow::Result<Option<CollaborationMessage>>;
+    async fn receive_message(&self) -> GlobalResult<Option<CollaborationMessage>>;
 
     /// 处理消息并返回结果
     /// Process message and return result
@@ -465,7 +468,7 @@ pub trait CollaborationProtocol: Send + Sync {
     async fn process_message(
         &self,
         msg: CollaborationMessage,
-    ) -> anyhow::Result<CollaborationResult>;
+    ) -> GlobalResult<CollaborationResult>;
 
     /// 检查协议是否可用
     /// Check if protocol is available
@@ -493,33 +496,33 @@ pub trait CollaborationProtocol: Send + Sync {
 pub fn scenario_to_mode_suggestions() -> HashMap<String, Vec<CollaborationMode>> {
     HashMap::from([
         (
-            "数据处理".to_string(),
+            "Data Processing".to_string(),
             vec![
                 CollaborationMode::RequestResponse,
                 CollaborationMode::Parallel,
             ],
         ),
         (
-            "创意生成".to_string(),
+            "Creative Generation".to_string(),
             vec![
                 CollaborationMode::PublishSubscribe,
                 CollaborationMode::Debate,
             ],
         ),
         (
-            "决策制定".to_string(),
+            "Decision Making".to_string(),
             vec![CollaborationMode::Consensus, CollaborationMode::Debate],
         ),
         (
-            "分析任务".to_string(),
+            "Analysis Tasks".to_string(),
             vec![CollaborationMode::Parallel, CollaborationMode::Sequential],
         ),
         (
-            "审查任务".to_string(),
+            "Review Tasks".to_string(),
             vec![CollaborationMode::Debate, CollaborationMode::Consensus],
         ),
         (
-            "搜索任务".to_string(),
+            "Search Tasks".to_string(),
             vec![
                 CollaborationMode::Parallel,
                 CollaborationMode::RequestResponse,
@@ -560,7 +563,7 @@ impl ProtocolRegistry {
 
     /// 注册协作协议
     /// Register collaboration protocol
-    pub async fn register(&self, protocol: Arc<dyn CollaborationProtocol>) -> anyhow::Result<()> {
+    pub async fn register(&self, protocol: Arc<dyn CollaborationProtocol>) -> GlobalResult<()> {
         let name = protocol.name().to_string();
         let mut protocols = self.protocols.write().await;
         protocols.insert(name.clone(), protocol);
@@ -739,7 +742,7 @@ impl LLMDrivenCollaborationManager {
     pub async fn register_protocol(
         &self,
         protocol: Arc<dyn CollaborationProtocol>,
-    ) -> anyhow::Result<()> {
+    ) -> GlobalResult<()> {
         self.registry.register(protocol).await
     }
 
@@ -752,7 +755,7 @@ impl LLMDrivenCollaborationManager {
         &self,
         protocol_name: &str,
         content: impl Into<CollaborationContent>,
-    ) -> anyhow::Result<CollaborationResult> {
+    ) -> GlobalResult<CollaborationResult> {
         let start = std::time::Instant::now();
 
         // 更新统计
@@ -768,7 +771,7 @@ impl LLMDrivenCollaborationManager {
             .registry
             .get(protocol_name)
             .await
-            .ok_or_else(|| anyhow::anyhow!("Protocol not found: {}", protocol_name))?;
+            .ok_or_else(|| GlobalError::Other(format!("Protocol not found: {}", protocol_name)))?;
 
         // 更新当前协议
         // Update current protocol
@@ -826,7 +829,7 @@ impl LLMDrivenCollaborationManager {
 
     /// 发送协作消息
     /// Send collaboration message
-    pub async fn send_message(&self, msg: CollaborationMessage) -> anyhow::Result<()> {
+    pub async fn send_message(&self, msg: CollaborationMessage) -> GlobalResult<()> {
         let mut queue = self.message_queue.write().await;
         queue.push(msg);
         Ok(())
@@ -834,7 +837,7 @@ impl LLMDrivenCollaborationManager {
 
     /// 接收协作消息
     /// Receive collaboration message
-    pub async fn receive_message(&self) -> anyhow::Result<Option<CollaborationMessage>> {
+    pub async fn receive_message(&self) -> GlobalResult<Option<CollaborationMessage>> {
         let mut queue = self.message_queue.write().await;
         Ok(queue.pop())
     }
@@ -879,13 +882,16 @@ mod tests {
     fn test_collaboration_mode_display() {
         assert_eq!(
             CollaborationMode::RequestResponse.to_string(),
-            "请求-响应模式"
+            "Request-Response Mode"
         );
         assert_eq!(
             CollaborationMode::PublishSubscribe.to_string(),
-            "发布-订阅模式"
+            "Publish-Subscribe Mode"
         );
-        assert_eq!(CollaborationMode::Consensus.to_string(), "共识机制模式");
+        assert_eq!(
+            CollaborationMode::Consensus.to_string(),
+            "Consensus Mode"
+        );
     }
 
     #[test]
@@ -912,16 +918,11 @@ mod tests {
         assert!(json_content.to_text().contains("key"));
     }
 
-    #[test]
-    fn test_protocol_registry() {
+    #[tokio::test]
+    async fn test_protocol_registry() {
         let registry = ProtocolRegistry::new();
-
-        #[tokio::test]
-        async fn test_empty_registry() {
-            let registry = ProtocolRegistry::new();
-            assert_eq!(registry.count().await, 0);
-            assert!(registry.list_names().await.is_empty());
-        }
+        assert_eq!(registry.count().await, 0);
+        assert!(registry.list_names().await.is_empty());
     }
 
     #[tokio::test]

@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>MoFA — Workflow Visualizer</title>
+  <meta name="description" content="Interactive workflow graph visualization with live execution monitoring" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap"
+    rel="stylesheet" />
+  <link rel="stylesheet" href="/style.css" />
+</head>
+
+<body>
+  <!-- ── sidebar ── -->
+  <aside id="sidebar">
+    <div class="sidebar-header">
+      <div class="logo">
+        <img src="/logo.png" alt="MoFA" class="logo-img" />
+        <div class="logo-text">
+          <span>MoFA</span>
+          <small>Live Monitor</small>
+        </div>
+      </div>
+    </div>
+
+    <!-- search -->
+    <div class="sidebar-search">
+      <input type="text" id="search-input" placeholder="Search nodes…" autocomplete="off" spellcheck="false" />
+      <span class="search-icon">⌕</span>
+      <ul id="search-results" class="search-results hidden"></ul>
+    </div>
+
+    <div class="sidebar-section">
+      <h2>Workflows</h2>
+      <ul id="workflow-list" class="nav-list"></ul>
+    </div>
+
+    <div class="sidebar-section sidebar-shortcuts">
+      <h2>Keyboard</h2>
+      <div class="shortcut-grid">
+        <kbd>+</kbd><span>Zoom in</span>
+        <kbd>-</kbd><span>Zoom out</span>
+        <kbd>0</kbd><span>Fit view</span>
+        <kbd>/</kbd><span>Search</span>
+        <kbd>X</kbd><span>Execute</span>
+        <kbd>E</kbd><span>Export SVG</span>
+        <kbd>A</kbd><span>Auto-pan</span>
+        <kbd>L</kbd><span>Toggle log</span>
+        <kbd>Esc</kbd><span>Close panel</span>
+      </div>
+    </div>
+
+    <div class="sidebar-footer">
+      <span id="ws-dot" class="status-dot disconnected"></span>
+      <span id="ws-status">Disconnected</span>
+    </div>
+  </aside>
+
+  <!-- ── main canvas ── -->
+  <main id="main">
+    <!-- toolbar -->
+    <div id="toolbar">
+      <span id="graph-title">Select a workflow</span>
+      <div id="stats-bar" class="hidden">
+        <span class="stat"><b id="stat-nodes">0</b> nodes</span>
+        <span class="stat-sep">·</span>
+        <span class="stat"><b id="stat-edges">0</b> edges</span>
+        <span class="stat-sep">·</span>
+        <span class="stat"><b id="stat-layers">0</b> layers</span>
+      </div>
+      <div class="toolbar-actions">
+        <button id="btn-execute" title="Execute workflow (X)">▶ Execute</button>
+        <button id="btn-export" title="Export SVG (E)">⤓ Export</button>
+        <span class="toolbar-divider"></span>
+        <button id="btn-autopan" title="Auto-pan to active node (A)" class="btn-toggle">⊕ Auto-pan</button>
+        <span class="toolbar-divider"></span>
+        <button id="btn-zoom-in" title="Zoom in (+)">＋</button>
+        <span id="zoom-pct" class="zoom-pct">100%</span>
+        <button id="btn-zoom-out" title="Zoom out (−)">−</button>
+        <button id="btn-fit" title="Fit to view (0)">⊡</button>
+      </div>
+    </div>
+
+    <!-- SVG viewport -->
+    <div id="canvas-wrap">
+      <svg id="canvas" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <marker id="arrow" markerWidth="10" markerHeight="7" refX="10" refY="3.5" orient="auto"
+            markerUnits="strokeWidth">
+            <polygon points="0 0, 10 3.5, 0 7" fill="#c0c4cc" />
+          </marker>
+          <marker id="arrow-cond" markerWidth="10" markerHeight="7" refX="10" refY="3.5" orient="auto"
+            markerUnits="strokeWidth">
+            <polygon points="0 0, 10 3.5, 0 7" fill="#F1C40F" />
+          </marker>
+          <marker id="arrow-err" markerWidth="10" markerHeight="7" refX="10" refY="3.5" orient="auto"
+            markerUnits="strokeWidth">
+            <polygon points="0 0, 10 3.5, 0 7" fill="#E74C3C" />
+          </marker>
+          <marker id="arrow-active" markerWidth="10" markerHeight="7" refX="10" refY="3.5" orient="auto"
+            markerUnits="strokeWidth">
+            <polygon points="0 0, 10 3.5, 0 7" fill="#3498DB" />
+          </marker>
+          <filter id="glow">
+            <feGaussianBlur stdDeviation="3" result="blur" />
+            <feMerge>
+              <feMergeNode in="blur" />
+              <feMergeNode in="SourceGraphic" />
+            </feMerge>
+          </filter>
+          <filter id="glow-strong">
+            <feGaussianBlur stdDeviation="6" result="blur" />
+            <feMerge>
+              <feMergeNode in="blur" />
+              <feMergeNode in="SourceGraphic" />
+            </feMerge>
+          </filter>
+          <filter id="drop-shadow">
+            <feDropShadow dx="0" dy="1" stdDeviation="3" flood-color="rgba(0,0,0,0.12)" />
+          </filter>
+        </defs>
+        <g id="graph-group"></g>
+      </svg>
+      <!-- minimap -->
+      <div id="minimap"><canvas id="minimap-canvas" width="180" height="120"></canvas>
+        <div id="minimap-viewport"></div>
+      </div>
+      <!-- empty state -->
+      <div id="empty-state">
+        <div class="empty-icon">⬡</div>
+        <p>Select a workflow from the sidebar to visualize its graph.</p>
+        <p class="empty-hint">Press <kbd>/</kbd> to search, <kbd>X</kbd> to execute</p>
+      </div>
+      <!-- loading overlay -->
+      <div id="loading-overlay" class="hidden">
+        <div class="spinner"></div>
+        <p>Loading graph…</p>
+      </div>
+    </div>
+
+    <!-- ── Execution Log Panel ── -->
+    <div id="exec-log" class="exec-log collapsed">
+      <div class="exec-log-header">
+        <button id="log-toggle" class="log-toggle-btn">Execution Log</button>
+        <div class="log-filters">
+          <button class="log-filter active" data-filter="all">All</button>
+          <button class="log-filter" data-filter="running">Running</button>
+          <button class="log-filter" data-filter="completed">Completed</button>
+          <button class="log-filter" data-filter="failed">Failed</button>
+        </div>
+        <button id="log-clear" class="log-clear-btn">Clear</button>
+      </div>
+      <ul id="log-list" class="log-list"></ul>
+    </div>
+  </main>
+
+  <!-- ── detail panel (inspector) ── -->
+  <aside id="detail-panel" class="hidden">
+    <button id="detail-close" title="Close (Esc)">✕</button>
+    <h2 id="detail-title">Node</h2>
+    <div id="detail-body"></div>
+  </aside>
+
+  <!-- tooltip -->
+  <div id="tooltip" class="hidden"></div>
+
+  <script src="/app.js"></script>
+</body>
+
+</html>

@@ -83,12 +83,6 @@ impl From<tokio::sync::broadcast::error::SendError<Vec<u8>>> for DoraError {
     }
 }
 
-impl From<anyhow::Error> for DoraError {
-    fn from(err: anyhow::Error) -> Self {
-        DoraError::Internal(err.to_string())
-    }
-}
-
 /// dora-rs 适配层结果类型
 /// Result type for the dora-rs adapter layer
 pub type DoraResult<T> = Result<T, DoraError>;

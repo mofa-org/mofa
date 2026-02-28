@@ -108,7 +108,7 @@ impl AgentPlugin for ToolPluginAdapter {
     async fn execute(&mut self, input: String) -> PluginResult<String> {
         // Parse the input as ToolInput
         let tool_input: ToolInput = serde_json::from_str(&input)
-            .map_err(|e| anyhow::anyhow!("Failed to parse tool input: {}", e))?;
+            .map_err(|e| mofa_kernel::plugin::PluginError::ExecutionFailed(format!("Failed to parse tool input: {}", e)))?;
 
         // Execute the tool with a minimal context
         let ctx = mofa_kernel::agent::context::AgentContext::new("tool-execution");

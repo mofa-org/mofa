@@ -11,6 +11,7 @@ use std::collections::{HashMap, HashSet};
 /// 推理策略
 /// Reasoning Strategy
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, Default)]
+#[non_exhaustive]
 pub enum ReasoningStrategy {
     /// 直接 LLM 推理
     /// Direct LLM reasoning
@@ -329,6 +330,7 @@ impl AgentCapabilitiesBuilder {
 
     /// 构建能力描述
     /// Build the capability description
+    #[must_use]
     pub fn build(self) -> AgentCapabilities {
         self.capabilities
     }
@@ -531,6 +533,7 @@ impl AgentRequirementsBuilder {
 
     /// 构建需求描述
     /// Build the requirements description
+    #[must_use]
     pub fn build(self) -> AgentRequirements {
         self.requirements
     }

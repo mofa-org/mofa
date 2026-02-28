@@ -45,7 +45,7 @@
 //!         &self,
 //!         input: Self::Input,
 //!         ctx: &mut SecretaryContext<Self::State>,
-//!     ) -> anyhow::Result<Vec<Self::Output>> {
+//!     ) -> Result<Vec<Self::Output>, SecretaryError> {
 //!         // 自定义处理逻辑
 //!         // Custom processing logic
 //!     }
@@ -63,12 +63,14 @@
 
 mod connection;
 mod context;
+pub mod error;
 mod traits;
 
 // 核心导出
 // Core exports
 pub use connection::{ConnectionFactory, UserConnection};
 pub use context::{SecretaryContext, SecretaryContextBuilder, SharedSecretaryContext};
+pub use error::{ConnectionError, SecretaryError};
 pub use traits::{
     EventListener, InputHandler, Middleware, PhaseHandler, PhaseResult, SecretaryBehavior,
     SecretaryEvent, SecretaryInput, SecretaryOutput, WorkflowOrchestrator, WorkflowResult,
