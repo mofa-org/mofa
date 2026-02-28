@@ -1,0 +1,40 @@
+[package]
+name = "mofa-bench"
+version.workspace = true
+edition.workspace = true
+description = "MoFA Benchmark Suite - Standardized performance benchmarks for Agent execution"
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+publish = false
+
+[dependencies]
+# Workspace crates to benchmark
+mofa-kernel = { path = "../mofa-kernel", features = ["config"] }
+
+# Benchmark utilities
+serde_json.workspace = true
+serde.workspace = true
+tokio.workspace = true
+bincode.workspace = true
+rand.workspace = true
+
+[dev-dependencies]
+criterion = { version = "0.5", features = ["html_reports", "async_tokio"] }
+
+[[bench]]
+name = "agent_types"
+harness = false
+
+[[bench]]
+name = "message_bus"
+harness = false
+
+[[bench]]
+name = "agent_state"
+harness = false
+
+[[bench]]
+name = "agent_messages"
+harness = false
