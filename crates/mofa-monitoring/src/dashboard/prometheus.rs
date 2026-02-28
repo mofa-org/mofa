@@ -92,6 +92,7 @@ impl PrometheusExportConfig {
 
 /// Errors returned by the Prometheus exporter lifecycle.
 #[derive(Debug, thiserror::Error)]
+#[non_exhaustive]
 pub enum PrometheusExportError {
     #[error("prometheus exporter internal error: {0}")]
     Internal(String),
@@ -302,7 +303,7 @@ impl DroppedSeriesCounters {
 pub struct PrometheusExporter {
     collector: Arc<MetricsCollector>,
     config: PrometheusExportConfig,
-    cached_body: Arc<RwLock<String>>,
+    cached_body: Arc<RwLock<Arc<str>>>,
     last_render_at: Arc<RwLock<Option<Instant>>>,
     render_duration_histogram: Arc<RwLock<DurationHistogram>>,
     dropped_series_total: Arc<RwLock<DroppedSeriesCounters>>,
@@ -315,7 +316,7 @@ impl PrometheusExporter {
         Self {
             collector,
             config: config.clone(),
-            cached_body: Arc::new(RwLock::new(String::new())),
+            cached_body: Arc::new(RwLock::new(Arc::<str>::from(""))),
             last_render_at: Arc::new(RwLock::new(None)),
             render_duration_histogram: Arc::new(RwLock::new(DurationHistogram::new(vec![
                 0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0,
@@ -367,7 +368,7 @@ impl PrometheusExporter {
         }
         self.append_exporter_internal_metrics(&mut body).await;
 
-        *self.cached_body.write().await = body;
+        *self.cached_body.write().await = Arc::<str>::from(body);
         *self.last_render_at.write().await = Some(Instant::now());
 
         debug!("prometheus cache refreshed in {:.6}s", render_duration);
@@ -376,7 +377,9 @@ impl PrometheusExporter {
 
     /// Returns the current Prometheus payload from cache.
     pub async fn render_cached(&self) -> String {
-        let mut payload = self.cached_body.read().await.clone();
+        let cached = self.cached_body.read().await.clone();
+        let mut payload = String::with_capacity(cached.len() + 128);
+        payload.push_str(&cached);
         let cache_age = self.cache_age_seconds().await;
 
         write_metric_header(
@@ -561,7 +564,7 @@ fn render_agent_metrics(
         out,
         "mofa_agent_tasks_total",
         "Total tasks completed by agent",
-        "gauge",
+        "counter",
     );
     for series in limit_series(task_totals, limits.agent_id, &mut dropped.agent_id) {
         append_gauge_line(
@@ -576,7 +579,7 @@ fn render_agent_metrics(
         out,
         "mofa_agent_tasks_failed_total",
         "Total failed tasks by agent",
-        "gauge",
+        "counter",
     );
     for series in limit_series(task_failed, limits.agent_id, &mut dropped.agent_id) {
         append_gauge_line(
@@ -621,7 +624,7 @@ fn render_agent_metrics(
         out,
         "mofa_agent_messages_sent_total",
         "Total messages sent by agent",
-        "gauge",
+        "counter",
     );
     for series in limit_series(messages_sent, limits.agent_id, &mut dropped.agent_id) {
         append_gauge_line(
@@ -636,7 +639,7 @@ fn render_agent_metrics(
         out,
         "mofa_agent_messages_received_total",
         "Total messages received by agent",
-        "gauge",
+        "counter",
     );
     for series in limit_series(messages_received, limits.agent_id, &mut dropped.agent_id) {
         append_gauge_line(
@@ -693,7 +696,7 @@ fn render_workflow_metrics(
         out,
         "mofa_workflow_executions_total",
         "Total workflow executions",
-        "gauge",
+        "counter",
     );
     for series in limit_series(executions, limits.workflow_id, &mut dropped.workflow_id) {
         append_gauge_line(
@@ -708,7 +711,7 @@ fn render_workflow_metrics(
         out,
         "mofa_workflow_executions_success_total",
         "Total successful workflow executions",
-        "gauge",
+        "counter",
     );
     for series in limit_series(success, limits.workflow_id, &mut dropped.workflow_id) {
         append_gauge_line(
@@ -723,7 +726,7 @@ fn render_workflow_metrics(
         out,
         "mofa_workflow_executions_failed_total",
         "Total failed workflow executions",
-        "gauge",
+        "counter",
     );
     for series in limit_series(failures, limits.workflow_id, &mut dropped.workflow_id) {
         append_gauge_line(
@@ -886,7 +889,7 @@ fn render_llm_metrics(
         out,
         "mofa_llm_requests_total",
         "Total LLM requests",
-        "gauge",
+        "counter",
     );
     for series in limit_series(requests, limits.provider_model, &mut dropped.provider_model) {
         append_gauge_line(
@@ -916,7 +919,7 @@ fn render_llm_metrics(
         );
     }
 
-    write_metric_header(out, "mofa_llm_errors_total", "Total LLM errors", "gauge");
+    write_metric_header(out, "mofa_llm_errors_total", "Total LLM errors", "counter");
     for series in limit_series(errors, limits.provider_model, &mut dropped.provider_model) {
         append_gauge_line(
             out,
@@ -1159,10 +1162,17 @@ fn sanitize_metric_name(name: &str) -> String {
         }
     }
     if out.is_empty() {
-        "mofa_custom_metric".to_string()
-    } else {
-        out
+        return "mofa_custom_metric".to_string();
     }
+
+    // Prometheus metric names must start with [a-zA-Z_:].
+    if let Some(first) = out.chars().next()
+        && !(first.is_ascii_alphabetic() || first == '_' || first == ':')
+    {
+        out = format!("mofa_custom_{out}");
+    }
+
+    out
 }
 
 fn write_metric_header(out: &mut String, name: &str, help: &str, metric_type: &str) {
@@ -1303,7 +1313,7 @@ mod tests {
         let output = exporter.render_cached().await;
 
         assert!(output.contains("# HELP mofa_agent_tasks_total"));
-        assert!(output.contains("# TYPE mofa_agent_tasks_total gauge"));
+        assert!(output.contains("# TYPE mofa_agent_tasks_total counter"));
         assert!(output.contains("mofa_agent_tasks_total{agent_id=\"agent-1\"} 42"));
         assert!(output.contains("# HELP mofa_system_cpu_percent"));
     }
@@ -1468,5 +1478,11 @@ mod tests {
     fn escapes_label_values() {
         let escaped = escape_label_value("a\"b\\c\n");
         assert_eq!(escaped, "a\\\"b\\\\c\\n");
+    }
+
+    #[test]
+    fn sanitize_metric_name_prefixes_invalid_first_char() {
+        assert_eq!(sanitize_metric_name("1foo"), "mofa_custom_1foo");
+        assert_eq!(sanitize_metric_name("-foo"), "_foo");
     }
 }

@@ -12,6 +12,7 @@ use opentelemetry_otlp::WithExportConfig;
 use opentelemetry_sdk::{Resource, metrics::MeterProvider as SdkMeterProvider, runtime::Tokio};
 use std::cmp::Ordering;
 use std::collections::HashMap;
+use std::fmt::Write as _;
 use std::sync::Arc;
 use std::sync::Mutex as StdMutex;
 use std::sync::atomic::{AtomicU64, Ordering as AtomicOrdering};
@@ -23,6 +24,7 @@ const OTHER_LABEL_VALUE: &str = "__other__";
 
 /// OTLP metrics exporter configuration.
 #[derive(Debug, Clone)]
+#[non_exhaustive]
 pub struct OtlpMetricsExporterConfig {
     /// OTLP collector endpoint.
     pub endpoint: String,
@@ -85,6 +87,16 @@ pub struct OtlpExporterHandles {
     pub exporter: tokio::task::JoinHandle<()>,
 }
 
+/// Errors returned by OTLP metrics exporter lifecycle.
+#[derive(Debug, thiserror::Error)]
+#[non_exhaustive]
+pub enum OtlpMetricsExporterError {
+    #[error("OTLP metrics exporter already started")]
+    AlreadyStarted,
+    #[error("otlp metrics exporter internal error: {0}")]
+    Internal(String),
+}
+
 /// Feature-gated OTLP metrics exporter.
 pub struct OtlpMetricsExporter {
     collector: Arc<MetricsCollector>,
@@ -142,12 +154,20 @@ impl OtlpMetricsExporter {
     }
 
     /// Start sampler and exporter workers.
-    pub async fn start(self: Arc<Self>) -> Result<OtlpExporterHandles, String> {
+    pub async fn start(self: Arc<Self>) -> Result<OtlpExporterHandles, OtlpMetricsExporterError> {
         let Some(mut receiver) = self.receiver.lock().await.take() else {
-            return Err("OTLP metrics exporter already started".to_string());
+            let err = OtlpMetricsExporterError::AlreadyStarted;
+            *self.last_error.write().await = Some(err.to_string());
+            return Err(err);
         };
 
-        let recorder = Arc::new(OtlpRecorder::new(&self.config)?);
+        let recorder = match OtlpRecorder::new(&self.config) {
+            Ok(recorder) => Arc::new(recorder),
+            Err(err) => {
+                *self.last_error.write().await = Some(err.to_string());
+                return Err(err);
+            }
+        };
 
         let sampler = {
             let this = self.clone();
@@ -209,7 +229,7 @@ struct OtlpRecorder {
 }
 
 impl OtlpRecorder {
-    fn new(config: &OtlpMetricsExporterConfig) -> Result<Self, String> {
+    fn new(config: &OtlpMetricsExporterConfig) -> Result<Self, OtlpMetricsExporterError> {
         let exporter = opentelemetry_otlp::new_exporter()
             .http()
             .with_endpoint(config.endpoint.clone())
@@ -225,7 +245,11 @@ impl OtlpRecorder {
                 config.service_name.clone(),
             )]))
             .build()
-            .map_err(|err| format!("failed to build native OTLP meter provider: {err}"))?;
+            .map_err(|err| {
+                OtlpMetricsExporterError::Internal(format!(
+                    "failed to build native OTLP meter provider: {err}"
+                ))
+            })?;
 
         let meter = meter_provider.meter("mofa-monitoring.metrics-exporter");
         let instruments = OtlpInstruments::new(&meter);
@@ -556,11 +580,11 @@ fn compare_labels(a: &[(String, String)], b: &[(String, String)]) -> Ordering {
 }
 
 fn label_key(labels: &[(String, String)]) -> String {
-    labels
-        .iter()
-        .map(|(k, v)| format!("{k}={v}"))
-        .collect::<Vec<_>>()
-        .join("|")
+    let mut key = String::new();
+    for (k, v) in labels {
+        let _ = write!(&mut key, "{}:{}:{}:{};", k.len(), k, v.len(), v);
+    }
+    key
 }
 
 fn is_non_zero(value: f64) -> bool {
@@ -648,5 +672,37 @@ mod tests {
         assert_eq!(exporter.config.timeout, Duration::from_secs(1));
         assert_eq!(exporter.config.batch_size, 1);
         assert_eq!(exporter.config.max_queue_size, 1);
+    }
+
+    #[test]
+    fn label_key_uses_collision_safe_encoding() {
+        let a = vec![
+            ("k|1".to_string(), "v=1".to_string()),
+            ("x".to_string(), "y".to_string()),
+        ];
+        let b = vec![
+            ("k".to_string(), "1|v=1".to_string()),
+            ("x".to_string(), "y".to_string()),
+        ];
+        assert_ne!(label_key(&a), label_key(&b));
+    }
+
+    #[tokio::test]
+    async fn start_reports_already_started_error_and_sets_last_error() {
+        let collector = Arc::new(MetricsCollector::new(Default::default()));
+        let exporter = Arc::new(OtlpMetricsExporter::new(collector, Default::default()));
+
+        let _ = exporter.receiver.lock().await.take();
+        let err = exporter
+            .clone()
+            .start()
+            .await
+            .expect_err("second start should fail");
+        assert!(matches!(err, OtlpMetricsExporterError::AlreadyStarted));
+        let expected = err.to_string();
+        assert_eq!(
+            exporter.last_error().await.as_deref(),
+            Some(expected.as_str())
+        );
     }
 }
