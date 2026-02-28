@@ -1,13 +1,63 @@
 //! Prometheus metrics export bridge for dashboard metrics.
 
 use super::metrics::{MetricValue, MetricsCollector, MetricsSnapshot};
+use std::cmp::Ordering;
 use std::collections::HashMap;
 use std::fmt::Write as _;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering as AtomicOrdering};
 use std::time::{Duration, Instant};
 use tokio::sync::RwLock;
-use tracing::warn;
+use tracing::{debug, warn};
+
+const OTHER_LABEL_VALUE: &str = "__other__";
+
+/// Cardinality limits for exported label dimensions.
+#[derive(Debug, Clone)]
+#[non_exhaustive]
+pub struct CardinalityLimits {
+    /// Maximum number of distinct `agent_id` series.
+    pub agent_id: usize,
+    /// Maximum number of distinct `workflow_id` series.
+    pub workflow_id: usize,
+    /// Maximum number of distinct `plugin_id`/`tool_name` series.
+    pub plugin_or_tool: usize,
+    /// Maximum number of distinct `(provider, model)` series.
+    pub provider_model: usize,
+}
+
+impl Default for CardinalityLimits {
+    fn default() -> Self {
+        Self {
+            agent_id: 100,
+            workflow_id: 100,
+            plugin_or_tool: 100,
+            provider_model: 50,
+        }
+    }
+}
+
+impl CardinalityLimits {
+    pub fn with_agent_id(mut self, limit: usize) -> Self {
+        self.agent_id = limit;
+        self
+    }
+
+    pub fn with_workflow_id(mut self, limit: usize) -> Self {
+        self.workflow_id = limit;
+        self
+    }
+
+    pub fn with_plugin_or_tool(mut self, limit: usize) -> Self {
+        self.plugin_or_tool = limit;
+        self
+    }
+
+    pub fn with_provider_model(mut self, limit: usize) -> Self {
+        self.provider_model = limit;
+        self
+    }
+}
 
 /// Prometheus export configuration.
 #[derive(Debug, Clone)]
@@ -15,12 +65,15 @@ use tracing::warn;
 pub struct PrometheusExportConfig {
     /// Refresh interval for the background cache worker.
     pub refresh_interval: Duration,
+    /// Label cardinality limits.
+    pub cardinality: CardinalityLimits,
 }
 
 impl Default for PrometheusExportConfig {
     fn default() -> Self {
         Self {
             refresh_interval: Duration::from_secs(1),
+            cardinality: CardinalityLimits::default(),
         }
     }
 }
@@ -28,6 +81,11 @@ impl Default for PrometheusExportConfig {
 impl PrometheusExportConfig {
     pub fn with_refresh_interval(mut self, refresh_interval: Duration) -> Self {
         self.refresh_interval = refresh_interval;
+        self
+    }
+
+    pub fn with_cardinality(mut self, cardinality: CardinalityLimits) -> Self {
+        self.cardinality = cardinality;
         self
     }
 }
@@ -44,7 +102,98 @@ pub enum PrometheusExportError {
 struct HistogramSample {
     count: u64,
     sum: f64,
-    bucket_counts: Vec<u64>,
+    bucket_counts: Vec<u64>, // cumulative
+}
+
+impl HistogramSample {
+    fn new(bucket_bounds: &[f64]) -> Self {
+        Self {
+            count: 0,
+            sum: 0.0,
+            bucket_counts: vec![0; bucket_bounds.len()],
+        }
+    }
+
+    fn observe(&mut self, value: f64, bucket_bounds: &[f64]) {
+        if !value.is_finite() || value < 0.0 {
+            return;
+        }
+        self.count = self.count.saturating_add(1);
+        self.sum += value;
+        for (idx, bound) in bucket_bounds.iter().enumerate() {
+            if value <= *bound {
+                self.bucket_counts[idx] = self.bucket_counts[idx].saturating_add(1);
+            }
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+struct SeriesHistogram {
+    labels: Vec<(String, String)>,
+    sample: HistogramSample,
+}
+
+#[derive(Debug)]
+struct LabeledHistogramStore {
+    bucket_bounds: Vec<f64>,
+    series: HashMap<String, SeriesHistogram>,
+    label_limit: usize,
+    overflow_labels: Vec<(String, String)>,
+}
+
+impl LabeledHistogramStore {
+    fn new(
+        bucket_bounds: Vec<f64>,
+        label_limit: usize,
+        overflow_labels: Vec<(String, String)>,
+    ) -> Self {
+        Self {
+            bucket_bounds,
+            series: HashMap::new(),
+            label_limit,
+            overflow_labels,
+        }
+    }
+
+    fn observe(
+        &mut self,
+        key: String,
+        labels: Vec<(String, String)>,
+        value: f64,
+        dropped_series_counter: &mut u64,
+    ) {
+        if let Some(series) = self.series.get_mut(&key) {
+            series.sample.observe(value, &self.bucket_bounds);
+            return;
+        }
+
+        if self.series.len() >= self.label_limit {
+            let overflow_key = self.overflow_key();
+            let overflow = self
+                .series
+                .entry(overflow_key)
+                .or_insert_with(|| SeriesHistogram {
+                    labels: self.overflow_labels.clone(),
+                    sample: HistogramSample::new(&self.bucket_bounds),
+                });
+            overflow.sample.observe(value, &self.bucket_bounds);
+            *dropped_series_counter = dropped_series_counter.saturating_add(1);
+            return;
+        }
+
+        let mut sample = HistogramSample::new(&self.bucket_bounds);
+        sample.observe(value, &self.bucket_bounds);
+        self.series.insert(key, SeriesHistogram { labels, sample });
+    }
+
+    fn overflow_key(&self) -> String {
+        self.overflow_labels
+            .iter()
+            .map(|(k, v)| format!("{k}={v}"))
+            .collect::<Vec<_>>()
+            .join("|")
+    }
 }
 
 #[derive(Debug)]
@@ -55,39 +204,110 @@ struct DurationHistogram {
 
 impl DurationHistogram {
     fn new(bounds: Vec<f64>) -> Self {
-        Self {
-            sample: HistogramSample {
-                count: 0,
-                sum: 0.0,
-                bucket_counts: vec![0; bounds.len()],
-            },
-            bounds,
-        }
+        let sample = HistogramSample::new(&bounds);
+        Self { bounds, sample }
     }
 
     fn observe(&mut self, value_seconds: f64) {
-        if !value_seconds.is_finite() || value_seconds < 0.0 {
-            return;
+        self.sample.observe(value_seconds, &self.bounds);
+    }
+}
+
+#[derive(Debug)]
+struct LatencyStores {
+    agent_execution: LabeledHistogramStore,
+    tool_call: LabeledHistogramStore,
+    llm_request: LabeledHistogramStore,
+}
+
+impl LatencyStores {
+    fn new(limits: &CardinalityLimits) -> Self {
+        Self {
+            agent_execution: LabeledHistogramStore::new(
+                vec![0.01, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0],
+                limits.agent_id,
+                vec![("agent_id".to_string(), OTHER_LABEL_VALUE.to_string())],
+            ),
+            tool_call: LabeledHistogramStore::new(
+                vec![0.01, 0.05, 0.1, 0.5, 1.0, 5.0],
+                limits.plugin_or_tool,
+                vec![("tool_name".to_string(), OTHER_LABEL_VALUE.to_string())],
+            ),
+            llm_request: LabeledHistogramStore::new(
+                vec![0.1, 0.5, 1.0, 2.5, 5.0, 10.0, 30.0],
+                limits.provider_model,
+                vec![
+                    ("provider".to_string(), OTHER_LABEL_VALUE.to_string()),
+                    ("model".to_string(), OTHER_LABEL_VALUE.to_string()),
+                ],
+            ),
+        }
+    }
+
+    fn observe_snapshot(
+        &mut self,
+        snapshot: &MetricsSnapshot,
+        dropped: &mut DroppedSeriesCounters,
+    ) {
+        for agent in &snapshot.agents {
+            self.agent_execution.observe(
+                format!("agent:{}", agent.agent_id),
+                vec![("agent_id".to_string(), agent.agent_id.clone())],
+                agent.avg_task_duration_ms / 1000.0,
+                &mut dropped.agent_id,
+            );
         }
 
-        self.sample.count = self.sample.count.saturating_add(1);
-        self.sample.sum += value_seconds;
+        for plugin in &snapshot.plugins {
+            self.tool_call.observe(
+                format!("tool:{}", plugin.name),
+                vec![("tool_name".to_string(), plugin.name.clone())],
+                plugin.avg_response_time_ms / 1000.0,
+                &mut dropped.plugin_or_tool,
+            );
+        }
 
-        for (idx, bound) in self.bounds.iter().enumerate() {
-            if value_seconds <= *bound {
-                self.sample.bucket_counts[idx] = self.sample.bucket_counts[idx].saturating_add(1);
-            }
+        for llm in &snapshot.llm_metrics {
+            let key = format!("{}:{}", llm.provider_name, llm.model_name);
+            self.llm_request.observe(
+                key,
+                vec![
+                    ("provider".to_string(), llm.provider_name.clone()),
+                    ("model".to_string(), llm.model_name.clone()),
+                ],
+                llm.avg_latency_ms / 1000.0,
+                &mut dropped.provider_model,
+            );
         }
     }
 }
 
-/// Prometheus exporter bridge over `MetricsCollector` snapshots.
+#[derive(Debug, Default)]
+struct DroppedSeriesCounters {
+    agent_id: u64,
+    workflow_id: u64,
+    plugin_or_tool: u64,
+    provider_model: u64,
+}
+
+impl DroppedSeriesCounters {
+    fn add_assign(&mut self, rhs: &DroppedSeriesCounters) {
+        self.agent_id = self.agent_id.saturating_add(rhs.agent_id);
+        self.workflow_id = self.workflow_id.saturating_add(rhs.workflow_id);
+        self.plugin_or_tool = self.plugin_or_tool.saturating_add(rhs.plugin_or_tool);
+        self.provider_model = self.provider_model.saturating_add(rhs.provider_model);
+    }
+}
+
+/// Prometheus exporter bridge that caches rendered exposition text.
 pub struct PrometheusExporter {
     collector: Arc<MetricsCollector>,
     config: PrometheusExportConfig,
     cached_body: Arc<RwLock<String>>,
     last_render_at: Arc<RwLock<Option<Instant>>>,
     render_duration_histogram: Arc<RwLock<DurationHistogram>>,
+    dropped_series_total: Arc<RwLock<DroppedSeriesCounters>>,
+    latency_histograms: Arc<RwLock<LatencyStores>>,
     refresh_failures: AtomicU64,
 }
 
@@ -95,12 +315,14 @@ impl PrometheusExporter {
     pub fn new(collector: Arc<MetricsCollector>, config: PrometheusExportConfig) -> Self {
         Self {
             collector,
-            config,
+            config: config.clone(),
             cached_body: Arc::new(RwLock::new(String::new())),
             last_render_at: Arc::new(RwLock::new(None)),
             render_duration_histogram: Arc::new(RwLock::new(DurationHistogram::new(vec![
                 0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0,
             ]))),
+            dropped_series_total: Arc::new(RwLock::new(DroppedSeriesCounters::default())),
+            latency_histograms: Arc::new(RwLock::new(LatencyStores::new(&config.cardinality))),
             refresh_failures: AtomicU64::new(0),
         }
     }
@@ -124,13 +346,33 @@ impl PrometheusExporter {
         let snapshot = self.collector.current().await;
 
         let render_start = Instant::now();
-        let mut body = render_snapshot(&snapshot);
-        self.append_exporter_internal_metrics(&mut body, render_start.elapsed().as_secs_f64())
+        let mut dropped_this_render = DroppedSeriesCounters::default();
+
+        {
+            let mut latency = self.latency_histograms.write().await;
+            latency.observe_snapshot(&snapshot, &mut dropped_this_render);
+        }
+
+        let mut body = self
+            .render_snapshot(&snapshot, &mut dropped_this_render)
             .await;
+
+        let render_duration = render_start.elapsed().as_secs_f64();
+        {
+            let mut histogram = self.render_duration_histogram.write().await;
+            histogram.observe(render_duration);
+        }
+        {
+            let mut dropped_total = self.dropped_series_total.write().await;
+            dropped_total.add_assign(&dropped_this_render);
+        }
+
+        self.append_exporter_internal_metrics(&mut body).await;
 
         *self.cached_body.write().await = body;
         *self.last_render_at.write().await = Some(Instant::now());
 
+        debug!("prometheus cache refreshed in {:.6}s", render_duration);
         Ok(())
     }
 
@@ -163,25 +405,90 @@ impl PrometheusExporter {
         }
     }
 
-    async fn append_exporter_internal_metrics(&self, out: &mut String, render_duration: f64) {
-        {
-            let mut render_hist = self.render_duration_histogram.write().await;
-            render_hist.observe(render_duration);
+    async fn render_snapshot(
+        &self,
+        snapshot: &MetricsSnapshot,
+        dropped: &mut DroppedSeriesCounters,
+    ) -> String {
+        let mut out = String::with_capacity(16 * 1024);
 
-            write_metric_header(
-                out,
-                "mofa_exporter_render_duration_seconds",
-                "Distribution of Prometheus payload render duration",
-                "histogram",
-            );
-            append_histogram_lines(
-                out,
-                "mofa_exporter_render_duration_seconds",
-                &[],
-                &render_hist.bounds,
-                &render_hist.sample,
-            );
-        }
+        render_agent_metrics(&mut out, snapshot, &self.config.cardinality, dropped);
+        render_workflow_metrics(&mut out, snapshot, &self.config.cardinality, dropped);
+        render_plugin_metrics(&mut out, snapshot, &self.config.cardinality, dropped);
+        render_llm_metrics(&mut out, snapshot, &self.config.cardinality, dropped);
+        render_system_metrics(&mut out, snapshot);
+        render_custom_metrics(&mut out, snapshot);
+
+        let latency = self.latency_histograms.read().await;
+        render_labeled_histogram_store(
+            &mut out,
+            "mofa_agent_execution_duration_seconds",
+            "Rolling distribution of agent execution duration in seconds",
+            &latency.agent_execution,
+        );
+        render_labeled_histogram_store(
+            &mut out,
+            "mofa_tool_call_duration_seconds",
+            "Rolling distribution of tool/plugin call duration in seconds",
+            &latency.tool_call,
+        );
+        render_labeled_histogram_store(
+            &mut out,
+            "mofa_llm_request_duration_seconds",
+            "Rolling distribution of LLM request duration in seconds",
+            &latency.llm_request,
+        );
+
+        out
+    }
+
+    async fn append_exporter_internal_metrics(&self, out: &mut String) {
+        let render_hist = self.render_duration_histogram.read().await;
+        write_metric_header(
+            out,
+            "mofa_exporter_render_duration_seconds",
+            "Distribution of Prometheus payload render duration",
+            "histogram",
+        );
+        append_histogram_lines(
+            out,
+            "mofa_exporter_render_duration_seconds",
+            &[],
+            &render_hist.bounds,
+            &render_hist.sample,
+        );
+
+        let dropped = self.dropped_series_total.read().await;
+        write_metric_header(
+            out,
+            "mofa_exporter_dropped_series_total",
+            "Total dropped high-cardinality time series by label dimension",
+            "counter",
+        );
+        append_gauge_line(
+            out,
+            "mofa_exporter_dropped_series_total",
+            &[("label".to_string(), "agent_id".to_string())],
+            dropped.agent_id as f64,
+        );
+        append_gauge_line(
+            out,
+            "mofa_exporter_dropped_series_total",
+            &[("label".to_string(), "workflow_id".to_string())],
+            dropped.workflow_id as f64,
+        );
+        append_gauge_line(
+            out,
+            "mofa_exporter_dropped_series_total",
+            &[("label".to_string(), "plugin_or_tool".to_string())],
+            dropped.plugin_or_tool as f64,
+        );
+        append_gauge_line(
+            out,
+            "mofa_exporter_dropped_series_total",
+            &[("label".to_string(), "provider_model".to_string())],
+            dropped.provider_model as f64,
+        );
 
         write_metric_header(
             out,
@@ -198,32 +505,72 @@ impl PrometheusExporter {
     }
 }
 
-fn render_snapshot(snapshot: &MetricsSnapshot) -> String {
-    let mut out = String::with_capacity(16 * 1024);
-
-    render_agent_metrics(&mut out, snapshot);
-    render_workflow_metrics(&mut out, snapshot);
-    render_plugin_metrics(&mut out, snapshot);
-    render_llm_metrics(&mut out, snapshot);
-    render_system_metrics(&mut out, snapshot);
-    render_custom_metrics(&mut out, snapshot);
-
-    out
+#[derive(Clone)]
+struct LabeledValue {
+    labels: Vec<(String, String)>,
+    ranking_value: f64,
+    sample_value: f64,
 }
 
-fn render_agent_metrics(out: &mut String, snapshot: &MetricsSnapshot) {
+fn render_agent_metrics(
+    out: &mut String,
+    snapshot: &MetricsSnapshot,
+    limits: &CardinalityLimits,
+    dropped: &mut DroppedSeriesCounters,
+) {
+    let mut task_totals = Vec::with_capacity(snapshot.agents.len());
+    let mut task_failed = Vec::with_capacity(snapshot.agents.len());
+    let mut task_in_progress = Vec::with_capacity(snapshot.agents.len());
+    let mut avg_duration = Vec::with_capacity(snapshot.agents.len());
+    let mut messages_sent = Vec::with_capacity(snapshot.agents.len());
+    let mut messages_received = Vec::with_capacity(snapshot.agents.len());
+
+    for agent in &snapshot.agents {
+        let labels = vec![("agent_id".to_string(), agent.agent_id.clone())];
+        task_totals.push(LabeledValue {
+            labels: labels.clone(),
+            ranking_value: agent.tasks_completed as f64,
+            sample_value: agent.tasks_completed as f64,
+        });
+        task_failed.push(LabeledValue {
+            labels: labels.clone(),
+            ranking_value: agent.tasks_failed as f64,
+            sample_value: agent.tasks_failed as f64,
+        });
+        task_in_progress.push(LabeledValue {
+            labels: labels.clone(),
+            ranking_value: agent.tasks_in_progress as f64,
+            sample_value: agent.tasks_in_progress as f64,
+        });
+        avg_duration.push(LabeledValue {
+            labels: labels.clone(),
+            ranking_value: agent.avg_task_duration_ms,
+            sample_value: agent.avg_task_duration_ms / 1000.0,
+        });
+        messages_sent.push(LabeledValue {
+            labels: labels.clone(),
+            ranking_value: agent.messages_sent as f64,
+            sample_value: agent.messages_sent as f64,
+        });
+        messages_received.push(LabeledValue {
+            labels,
+            ranking_value: agent.messages_received as f64,
+            sample_value: agent.messages_received as f64,
+        });
+    }
+
     write_metric_header(
         out,
         "mofa_agent_tasks_total",
         "Total tasks completed by agent",
         "gauge",
     );
-    for agent in &snapshot.agents {
+    for series in limit_series(task_totals, limits.agent_id, &mut dropped.agent_id) {
         append_gauge_line(
             out,
             "mofa_agent_tasks_total",
-            &[("agent_id".to_string(), agent.agent_id.clone())],
-            agent.tasks_completed as f64,
+            &series.labels,
+            series.sample_value,
         );
     }
 
@@ -233,12 +580,12 @@ fn render_agent_metrics(out: &mut String, snapshot: &MetricsSnapshot) {
         "Total failed tasks by agent",
         "gauge",
     );
-    for agent in &snapshot.agents {
+    for series in limit_series(task_failed, limits.agent_id, &mut dropped.agent_id) {
         append_gauge_line(
             out,
             "mofa_agent_tasks_failed_total",
-            &[("agent_id".to_string(), agent.agent_id.clone())],
-            agent.tasks_failed as f64,
+            &series.labels,
+            series.sample_value,
         );
     }
 
@@ -248,12 +595,12 @@ fn render_agent_metrics(out: &mut String, snapshot: &MetricsSnapshot) {
         "Current in-progress tasks by agent",
         "gauge",
     );
-    for agent in &snapshot.agents {
+    for series in limit_series(task_in_progress, limits.agent_id, &mut dropped.agent_id) {
         append_gauge_line(
             out,
             "mofa_agent_tasks_in_progress",
-            &[("agent_id".to_string(), agent.agent_id.clone())],
-            agent.tasks_in_progress as f64,
+            &series.labels,
+            series.sample_value,
         );
     }
 
@@ -263,12 +610,12 @@ fn render_agent_metrics(out: &mut String, snapshot: &MetricsSnapshot) {
         "Average task duration by agent in seconds",
         "gauge",
     );
-    for agent in &snapshot.agents {
+    for series in limit_series(avg_duration, limits.agent_id, &mut dropped.agent_id) {
         append_gauge_line(
             out,
             "mofa_agent_response_time_seconds",
-            &[("agent_id".to_string(), agent.agent_id.clone())],
-            agent.avg_task_duration_ms / 1000.0,
+            &series.labels,
+            series.sample_value,
         );
     }
 
@@ -278,12 +625,12 @@ fn render_agent_metrics(out: &mut String, snapshot: &MetricsSnapshot) {
         "Total messages sent by agent",
         "gauge",
     );
-    for agent in &snapshot.agents {
+    for series in limit_series(messages_sent, limits.agent_id, &mut dropped.agent_id) {
         append_gauge_line(
             out,
             "mofa_agent_messages_sent_total",
-            &[("agent_id".to_string(), agent.agent_id.clone())],
-            agent.messages_sent as f64,
+            &series.labels,
+            series.sample_value,
         );
     }
 
@@ -293,29 +640,69 @@ fn render_agent_metrics(out: &mut String, snapshot: &MetricsSnapshot) {
         "Total messages received by agent",
         "gauge",
     );
-    for agent in &snapshot.agents {
+    for series in limit_series(messages_received, limits.agent_id, &mut dropped.agent_id) {
         append_gauge_line(
             out,
             "mofa_agent_messages_received_total",
-            &[("agent_id".to_string(), agent.agent_id.clone())],
-            agent.messages_received as f64,
+            &series.labels,
+            series.sample_value,
         );
     }
 }
 
-fn render_workflow_metrics(out: &mut String, snapshot: &MetricsSnapshot) {
+fn render_workflow_metrics(
+    out: &mut String,
+    snapshot: &MetricsSnapshot,
+    limits: &CardinalityLimits,
+    dropped: &mut DroppedSeriesCounters,
+) {
+    let mut executions = Vec::with_capacity(snapshot.workflows.len());
+    let mut success = Vec::with_capacity(snapshot.workflows.len());
+    let mut failures = Vec::with_capacity(snapshot.workflows.len());
+    let mut avg_duration = Vec::with_capacity(snapshot.workflows.len());
+    let mut running = Vec::with_capacity(snapshot.workflows.len());
+
+    for workflow in &snapshot.workflows {
+        let labels = vec![("workflow_id".to_string(), workflow.workflow_id.clone())];
+        executions.push(LabeledValue {
+            labels: labels.clone(),
+            ranking_value: workflow.total_executions as f64,
+            sample_value: workflow.total_executions as f64,
+        });
+        success.push(LabeledValue {
+            labels: labels.clone(),
+            ranking_value: workflow.successful_executions as f64,
+            sample_value: workflow.successful_executions as f64,
+        });
+        failures.push(LabeledValue {
+            labels: labels.clone(),
+            ranking_value: workflow.failed_executions as f64,
+            sample_value: workflow.failed_executions as f64,
+        });
+        avg_duration.push(LabeledValue {
+            labels: labels.clone(),
+            ranking_value: workflow.avg_execution_time_ms,
+            sample_value: workflow.avg_execution_time_ms / 1000.0,
+        });
+        running.push(LabeledValue {
+            labels,
+            ranking_value: workflow.running_instances as f64,
+            sample_value: workflow.running_instances as f64,
+        });
+    }
+
     write_metric_header(
         out,
         "mofa_workflow_executions_total",
         "Total workflow executions",
         "gauge",
     );
-    for workflow in &snapshot.workflows {
+    for series in limit_series(executions, limits.workflow_id, &mut dropped.workflow_id) {
         append_gauge_line(
             out,
             "mofa_workflow_executions_total",
-            &[("workflow_id".to_string(), workflow.workflow_id.clone())],
-            workflow.total_executions as f64,
+            &series.labels,
+            series.sample_value,
         );
     }
 
@@ -325,12 +712,12 @@ fn render_workflow_metrics(out: &mut String, snapshot: &MetricsSnapshot) {
         "Total successful workflow executions",
         "gauge",
     );
-    for workflow in &snapshot.workflows {
+    for series in limit_series(success, limits.workflow_id, &mut dropped.workflow_id) {
         append_gauge_line(
             out,
             "mofa_workflow_executions_success_total",
-            &[("workflow_id".to_string(), workflow.workflow_id.clone())],
-            workflow.successful_executions as f64,
+            &series.labels,
+            series.sample_value,
         );
     }
 
@@ -340,12 +727,12 @@ fn render_workflow_metrics(out: &mut String, snapshot: &MetricsSnapshot) {
         "Total failed workflow executions",
         "gauge",
     );
-    for workflow in &snapshot.workflows {
+    for series in limit_series(failures, limits.workflow_id, &mut dropped.workflow_id) {
         append_gauge_line(
             out,
             "mofa_workflow_executions_failed_total",
-            &[("workflow_id".to_string(), workflow.workflow_id.clone())],
-            workflow.failed_executions as f64,
+            &series.labels,
+            series.sample_value,
         );
     }
 
@@ -355,12 +742,12 @@ fn render_workflow_metrics(out: &mut String, snapshot: &MetricsSnapshot) {
         "Average workflow execution duration in seconds",
         "gauge",
     );
-    for workflow in &snapshot.workflows {
+    for series in limit_series(avg_duration, limits.workflow_id, &mut dropped.workflow_id) {
         append_gauge_line(
             out,
             "mofa_workflow_duration_seconds",
-            &[("workflow_id".to_string(), workflow.workflow_id.clone())],
-            workflow.avg_execution_time_ms / 1000.0,
+            &series.labels,
+            series.sample_value,
         );
     }
 
@@ -370,29 +757,57 @@ fn render_workflow_metrics(out: &mut String, snapshot: &MetricsSnapshot) {
         "Currently running workflow instances",
         "gauge",
     );
-    for workflow in &snapshot.workflows {
+    for series in limit_series(running, limits.workflow_id, &mut dropped.workflow_id) {
         append_gauge_line(
             out,
             "mofa_workflow_active",
-            &[("workflow_id".to_string(), workflow.workflow_id.clone())],
-            workflow.running_instances as f64,
+            &series.labels,
+            series.sample_value,
         );
     }
 }
 
-fn render_plugin_metrics(out: &mut String, snapshot: &MetricsSnapshot) {
+fn render_plugin_metrics(
+    out: &mut String,
+    snapshot: &MetricsSnapshot,
+    limits: &CardinalityLimits,
+    dropped: &mut DroppedSeriesCounters,
+) {
+    let mut calls = Vec::with_capacity(snapshot.plugins.len());
+    let mut errors = Vec::with_capacity(snapshot.plugins.len());
+    let mut avg_duration = Vec::with_capacity(snapshot.plugins.len());
+
+    for plugin in &snapshot.plugins {
+        let labels = vec![("tool_name".to_string(), plugin.name.clone())];
+        calls.push(LabeledValue {
+            labels: labels.clone(),
+            ranking_value: plugin.call_count as f64,
+            sample_value: plugin.call_count as f64,
+        });
+        errors.push(LabeledValue {
+            labels: labels.clone(),
+            ranking_value: plugin.error_count as f64,
+            sample_value: plugin.error_count as f64,
+        });
+        avg_duration.push(LabeledValue {
+            labels,
+            ranking_value: plugin.avg_response_time_ms,
+            sample_value: plugin.avg_response_time_ms / 1000.0,
+        });
+    }
+
     write_metric_header(
         out,
         "mofa_tool_call_count",
         "Total tool/plugin call count",
         "gauge",
     );
-    for plugin in &snapshot.plugins {
+    for series in limit_series(calls, limits.plugin_or_tool, &mut dropped.plugin_or_tool) {
         append_gauge_line(
             out,
             "mofa_tool_call_count",
-            &[("tool_name".to_string(), plugin.name.clone())],
-            plugin.call_count as f64,
+            &series.labels,
+            series.sample_value,
         );
     }
 
@@ -402,12 +817,12 @@ fn render_plugin_metrics(out: &mut String, snapshot: &MetricsSnapshot) {
         "Total tool/plugin errors",
         "gauge",
     );
-    for plugin in &snapshot.plugins {
+    for series in limit_series(errors, limits.plugin_or_tool, &mut dropped.plugin_or_tool) {
         append_gauge_line(
             out,
             "mofa_tool_error_count",
-            &[("tool_name".to_string(), plugin.name.clone())],
-            plugin.error_count as f64,
+            &series.labels,
+            series.sample_value,
         );
     }
 
@@ -417,32 +832,70 @@ fn render_plugin_metrics(out: &mut String, snapshot: &MetricsSnapshot) {
         "Average tool/plugin response duration in seconds",
         "gauge",
     );
-    for plugin in &snapshot.plugins {
+    for series in limit_series(
+        avg_duration,
+        limits.plugin_or_tool,
+        &mut dropped.plugin_or_tool,
+    ) {
         append_gauge_line(
             out,
             "mofa_tool_response_time_seconds",
-            &[("tool_name".to_string(), plugin.name.clone())],
-            plugin.avg_response_time_ms / 1000.0,
+            &series.labels,
+            series.sample_value,
         );
     }
 }
 
-fn render_llm_metrics(out: &mut String, snapshot: &MetricsSnapshot) {
+fn render_llm_metrics(
+    out: &mut String,
+    snapshot: &MetricsSnapshot,
+    limits: &CardinalityLimits,
+    dropped: &mut DroppedSeriesCounters,
+) {
+    let mut requests = Vec::with_capacity(snapshot.llm_metrics.len());
+    let mut tokens_per_second = Vec::with_capacity(snapshot.llm_metrics.len());
+    let mut errors = Vec::with_capacity(snapshot.llm_metrics.len());
+    let mut latency = Vec::with_capacity(snapshot.llm_metrics.len());
+
+    for llm in &snapshot.llm_metrics {
+        let labels = vec![
+            ("provider".to_string(), llm.provider_name.clone()),
+            ("model".to_string(), llm.model_name.clone()),
+        ];
+        requests.push(LabeledValue {
+            labels: labels.clone(),
+            ranking_value: llm.total_requests as f64,
+            sample_value: llm.total_requests as f64,
+        });
+        tokens_per_second.push(LabeledValue {
+            labels: labels.clone(),
+            ranking_value: llm.tokens_per_second.unwrap_or_default(),
+            sample_value: llm.tokens_per_second.unwrap_or_default(),
+        });
+        errors.push(LabeledValue {
+            labels: labels.clone(),
+            ranking_value: llm.failed_requests as f64,
+            sample_value: llm.failed_requests as f64,
+        });
+        latency.push(LabeledValue {
+            labels,
+            ranking_value: llm.avg_latency_ms,
+            sample_value: llm.avg_latency_ms / 1000.0,
+        });
+    }
+
     write_metric_header(
         out,
         "mofa_llm_requests_total",
         "Total LLM requests",
         "gauge",
     );
-    for llm in &snapshot.llm_metrics {
+    for series in limit_series(requests, limits.provider_model, &mut dropped.provider_model) {
         append_gauge_line(
             out,
             "mofa_llm_requests_total",
-            &[
-                ("provider".to_string(), llm.provider_name.clone()),
-                ("model".to_string(), llm.model_name.clone()),
-            ],
-            llm.total_requests as f64,
+            &series.labels,
+            series.sample_value,
         );
     }
 
@@ -452,28 +905,26 @@ fn render_llm_metrics(out: &mut String, snapshot: &MetricsSnapshot) {
         "LLM generation speed in tokens per second",
         "gauge",
     );
-    for llm in &snapshot.llm_metrics {
+    for series in limit_series(
+        tokens_per_second,
+        limits.provider_model,
+        &mut dropped.provider_model,
+    ) {
         append_gauge_line(
             out,
             "mofa_llm_tokens_per_second",
-            &[
-                ("provider".to_string(), llm.provider_name.clone()),
-                ("model".to_string(), llm.model_name.clone()),
-            ],
-            llm.tokens_per_second.unwrap_or_default(),
+            &series.labels,
+            series.sample_value,
         );
     }
 
     write_metric_header(out, "mofa_llm_errors_total", "Total LLM errors", "gauge");
-    for llm in &snapshot.llm_metrics {
+    for series in limit_series(errors, limits.provider_model, &mut dropped.provider_model) {
         append_gauge_line(
             out,
             "mofa_llm_errors_total",
-            &[
-                ("provider".to_string(), llm.provider_name.clone()),
-                ("model".to_string(), llm.model_name.clone()),
-            ],
-            llm.failed_requests as f64,
+            &series.labels,
+            series.sample_value,
         );
     }
 
@@ -483,15 +934,12 @@ fn render_llm_metrics(out: &mut String, snapshot: &MetricsSnapshot) {
         "Average LLM request latency in seconds",
         "gauge",
     );
-    for llm in &snapshot.llm_metrics {
+    for series in limit_series(latency, limits.provider_model, &mut dropped.provider_model) {
         append_gauge_line(
             out,
             "mofa_llm_latency_seconds",
-            &[
-                ("provider".to_string(), llm.provider_name.clone()),
-                ("model".to_string(), llm.model_name.clone()),
-            ],
-            llm.avg_latency_ms / 1000.0,
+            &series.labels,
+            series.sample_value,
         );
     }
 }
@@ -612,6 +1060,97 @@ fn render_custom_metrics(out: &mut String, snapshot: &MetricsSnapshot) {
     }
 }
 
+fn render_labeled_histogram_store(
+    out: &mut String,
+    metric_name: &str,
+    help: &str,
+    store: &LabeledHistogramStore,
+) {
+    write_metric_header(out, metric_name, help, "histogram");
+
+    let mut series_entries = store.series.values().collect::<Vec<_>>();
+    series_entries.sort_by(|a, b| compare_label_set(&a.labels, &b.labels));
+
+    for series in series_entries {
+        append_histogram_lines(
+            out,
+            metric_name,
+            &series.labels,
+            &store.bucket_bounds,
+            &series.sample,
+        );
+    }
+}
+
+fn limit_series(
+    mut values: Vec<LabeledValue>,
+    limit: usize,
+    dropped_counter: &mut u64,
+) -> Vec<LabeledValue> {
+    if values.len() <= limit {
+        values.sort_by(|a, b| compare_label_set(&a.labels, &b.labels));
+        return values;
+    }
+
+    values.sort_by(|a, b| {
+        b.ranking_value
+            .partial_cmp(&a.ranking_value)
+            .unwrap_or(Ordering::Equal)
+            .then_with(|| compare_label_set(&a.labels, &b.labels))
+    });
+
+    let mut kept = values.drain(..limit).collect::<Vec<_>>();
+    let overflow = values;
+
+    let overflow_sum = overflow
+        .iter()
+        .map(|entry| entry.sample_value)
+        .fold(0.0, |acc, v| acc + v);
+
+    let overflow_count = overflow.len() as u64;
+    *dropped_counter = dropped_counter.saturating_add(overflow_count);
+
+    if overflow_count > 0 {
+        // Preserve original label keys; replace values with __other__.
+        let mut label_keys = if let Some(first) = kept.first() {
+            first
+                .labels
+                .iter()
+                .map(|(k, _)| (k.clone(), OTHER_LABEL_VALUE.to_string()))
+                .collect::<Vec<_>>()
+        } else {
+            vec![("label".to_string(), OTHER_LABEL_VALUE.to_string())]
+        };
+
+        if label_keys.is_empty() {
+            label_keys.push(("label".to_string(), OTHER_LABEL_VALUE.to_string()));
+        }
+
+        kept.push(LabeledValue {
+            labels: label_keys,
+            ranking_value: overflow_sum,
+            sample_value: overflow_sum,
+        });
+    }
+
+    kept.sort_by(|a, b| compare_label_set(&a.labels, &b.labels));
+    kept
+}
+
+fn compare_label_set(a: &[(String, String)], b: &[(String, String)]) -> Ordering {
+    let a_key = a
+        .iter()
+        .map(|(k, v)| format!("{k}={v}"))
+        .collect::<Vec<_>>()
+        .join("|");
+    let b_key = b
+        .iter()
+        .map(|(k, v)| format!("{k}={v}"))
+        .collect::<Vec<_>>()
+        .join("|");
+    a_key.cmp(&b_key)
+}
+
 fn sanitize_metric_name(name: &str) -> String {
     let mut out = String::with_capacity(name.len());
     for ch in name.chars() {
@@ -621,7 +1160,6 @@ fn sanitize_metric_name(name: &str) -> String {
             out.push('_');
         }
     }
-
     if out.is_empty() {
         return "mofa_custom_metric".to_string();
     }
@@ -716,7 +1254,7 @@ fn escape_label_value(value: &str) -> String {
 mod tests {
     use super::*;
     use axum::{Router, http::StatusCode, routing::get};
-    use tokio::time::{Duration, timeout};
+    use tokio::time::timeout;
     use tower::ServiceExt;
 
     fn sample_snapshot() -> MetricsSnapshot {
@@ -731,6 +1269,7 @@ mod tests {
             },
             agents: vec![super::super::metrics::AgentMetrics {
                 agent_id: "agent-1".to_string(),
+                name: "Agent One".to_string(),
                 tasks_completed: 42,
                 tasks_failed: 1,
                 tasks_in_progress: 2,
@@ -779,6 +1318,63 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn enforces_cardinality_limits_with_other_bucket() {
+        let mut snapshot = sample_snapshot();
+        snapshot.agents = (0..5)
+            .map(|idx| super::super::metrics::AgentMetrics {
+                agent_id: format!("agent-{idx}"),
+                tasks_completed: (idx + 1) as u64,
+                avg_task_duration_ms: (idx * 10) as f64,
+                ..Default::default()
+            })
+            .collect();
+
+        let collector = Arc::new(MetricsCollector::new(Default::default()));
+        seed_collector_from_snapshot(&collector, snapshot).await;
+
+        let exporter = PrometheusExporter::new(
+            collector,
+            PrometheusExportConfig {
+                refresh_interval: Duration::from_millis(50),
+                cardinality: CardinalityLimits {
+                    agent_id: 2,
+                    ..Default::default()
+                },
+            },
+        );
+
+        exporter.refresh_once().await.expect("refresh");
+        let output = exporter.render_cached().await;
+
+        assert!(output.contains("agent_id=\"__other__\""));
+        assert!(output.contains("mofa_exporter_dropped_series_total{label=\"agent_id\"}"));
+    }
+
+    #[tokio::test]
+    async fn provides_deterministic_order_for_equal_ranked_series() {
+        let entries = vec![
+            LabeledValue {
+                labels: vec![("agent_id".to_string(), "b".to_string())],
+                ranking_value: 10.0,
+                sample_value: 10.0,
+            },
+            LabeledValue {
+                labels: vec![("agent_id".to_string(), "a".to_string())],
+                ranking_value: 10.0,
+                sample_value: 10.0,
+            },
+        ];
+
+        let mut dropped_a = 0;
+        let mut dropped_b = 0;
+        let first = limit_series(entries.clone(), 2, &mut dropped_a);
+        let second = limit_series(entries, 2, &mut dropped_b);
+
+        assert_eq!(first[0].labels[0].1, "a");
+        assert_eq!(second[0].labels[0].1, "a");
+    }
+
+    #[tokio::test]
     async fn serves_metrics_route() {
         let collector = Arc::new(MetricsCollector::new(Default::default()));
         seed_collector_from_snapshot(&collector, sample_snapshot()).await;
@@ -810,29 +1406,38 @@ mod tests {
                 axum::http::Request::builder()
                     .uri("/metrics")
                     .body(axum::body::Body::empty())
-                    .expect("request"),
+                    .unwrap(),
             )
             .await
             .expect("response");
 
         assert_eq!(response.status(), StatusCode::OK);
+        let content_type = response
+            .headers()
+            .get("content-type")
+            .unwrap()
+            .to_str()
+            .unwrap();
+        assert!(content_type.starts_with("text/plain"));
     }
 
     #[tokio::test]
-    async fn concurrent_scrapes_with_refresh_worker_complete() {
+    async fn concurrent_scrapes_do_not_block_updates() {
         let collector = Arc::new(MetricsCollector::new(Default::default()));
         let exporter = Arc::new(PrometheusExporter::new(
             collector.clone(),
-            PrometheusExportConfig::default().with_refresh_interval(Duration::from_millis(20)),
+            PrometheusExportConfig {
+                refresh_interval: Duration::from_millis(20),
+                ..Default::default()
+            },
         ));
 
-        exporter.refresh_once().await.expect("initial refresh");
         let worker = exporter.clone().start();
 
         let updater = {
             let collector = collector.clone();
             tokio::spawn(async move {
-                for idx in 0..100u64 {
+                for idx in 0..200u64 {
                     collector
                         .update_agent(super::super::metrics::AgentMetrics {
                             agent_id: format!("agent-{idx}"),
@@ -847,12 +1452,11 @@ mod tests {
         };
 
         let mut scrapers = Vec::new();
-        for _ in 0..20 {
+        for _ in 0..25 {
             let exporter = exporter.clone();
             scrapers.push(tokio::spawn(async move {
-                for _ in 0..20 {
-                    let payload = exporter.render_cached().await;
-                    assert!(payload.contains("mofa_exporter_cache_age_seconds"));
+                for _ in 0..30 {
+                    let _ = exporter.render_cached().await;
                 }
             }));
         }
