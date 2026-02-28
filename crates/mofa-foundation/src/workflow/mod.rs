@@ -48,6 +48,7 @@ pub mod session_recorder;
 mod state;
 mod state_graph;
 pub mod telemetry;
+pub mod validator;
 
 pub mod dsl;
 
@@ -79,3 +80,4 @@ pub use session_recorder::InMemorySessionRecorder;
 pub use state::*;
 pub use state_graph::{CompiledGraphImpl, StateGraphImpl};
 pub use telemetry::{ChannelTelemetryEmitter, RecordingTelemetryEmitter};
+pub use validator::{ValidationReport, WorkflowValidator, ValidationIssue, Severity};
