@@ -12,5 +12,4 @@ serde_json.workspace = true
 tracing.workspace = true
 tokio.workspace = true
 async-trait.workspace = true
-anyhow.workspace = true
 tracing-subscriber.workspace = true

@@ -203,7 +203,6 @@ mofa-sdk = { path = "../../crates/mofa-sdk" }
 mofa-plugins = { path = "../../crates/mofa-plugins" }
 mofa-kernel = { path = "../../crates/mofa-kernel" }
 tokio = { version = "1", features = ["full"] }
-anyhow = "1"
 serde_json = "1"
 ```
 
@@ -216,7 +215,7 @@ use std::path::Path;
 use tokio::time;
 
 #[tokio::main]
-async fn main() -> anyhow::Result<()> {
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let plugin_path = Path::new("plugins/content_filter.rhai");
 
     // --- 第 1 步：创建并初始化 Rhai 插件 ---
