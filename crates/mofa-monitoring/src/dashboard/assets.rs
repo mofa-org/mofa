@@ -41,6 +41,8 @@ impl DashboardAssets {
 pub async fn serve_asset(path: String) -> impl IntoResponse {
     let path = if path.is_empty() || path == "/" {
         "index.html"
+    } else if path == "visualizer" || path == "visualizer.html" {
+        "visualizer.html"
     } else {
         path.trim_start_matches('/')
     };
@@ -71,6 +73,11 @@ pub async fn serve_asset(path: String) -> impl IntoResponse {
             .status(StatusCode::OK)
             .header(header::CONTENT_TYPE, "application/javascript")
             .body(Body::from(APP_JS))
+            .unwrap(),
+        "visualizer.html" | "visualizer" => Response::builder()
+            .status(StatusCode::OK)
+            .header(header::CONTENT_TYPE, "text/html")
+            .body(Body::from(include_str!("static/visualizer.html"))) // Alternatively use embed
             .unwrap(),
         _ => Response::builder()
             .status(StatusCode::NOT_FOUND)

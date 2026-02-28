@@ -7,6 +7,27 @@ use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet, VecDeque};
 use tracing::{debug, warn};
 
+/// 工作流节点 DTO (用于序列化和 UI 可视化)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WorkflowNodeDto {
+    pub id: String,
+    pub name: String,
+    pub node_type: String,
+    pub description: String,
+}
+
+/// 工作流图 DTO (用于序列化和 UI 可视化)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WorkflowGraphDto {
+    pub id: String,
+    pub name: String,
+    pub description: String,
+    pub nodes: Vec<WorkflowNodeDto>,
+    pub edges: Vec<EdgeConfig>,
+    pub start_node: Option<String>,
+    pub end_nodes: Vec<String>,
+}
+
 /// 边类型
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum EdgeType {
@@ -504,6 +525,55 @@ impl WorkflowGraph {
 
         dot.push_str("}\n");
         dot
+    }
+
+    /// 导出为 JSON DTO 格式（用于可视化 UI）
+    pub fn to_json_dto(&self) -> WorkflowGraphDto {
+        let mut nodes: Vec<WorkflowNodeDto> = self
+            .nodes
+            .values()
+            .map(|node| WorkflowNodeDto {
+                id: node.config.id.clone(),
+                name: node.config.name.clone(),
+                // Convert NodeType enum to string representation
+                node_type: match node.node_type() {
+                    NodeType::Start => "Start".to_string(),
+                    NodeType::End => "End".to_string(),
+                    NodeType::Task => "Task".to_string(),
+                    NodeType::Agent => "Agent".to_string(),
+                    NodeType::Condition => "Condition".to_string(),
+                    NodeType::Parallel => "Parallel".to_string(),
+                    NodeType::Join => "Join".to_string(),
+                    NodeType::Loop => "Loop".to_string(),
+                    NodeType::SubWorkflow => "SubWorkflow".to_string(),
+                    NodeType::Wait => "Wait".to_string(),
+                    NodeType::Transform => "Transform".to_string(),
+                },
+                description: node.config.description.clone(),
+            })
+            .collect();
+            
+        // Sort nodes by ID for deterministic output
+        nodes.sort_by(|a, b| a.id.cmp(&b.id));
+
+        let mut edges_flat: Vec<EdgeConfig> = self
+            .edges
+            .values()
+            .flat_map(|e| e.clone())
+            .collect();
+            
+        // Sort edges for deterministic output
+        edges_flat.sort_by(|a, b| a.from.cmp(&b.from).then(a.to.cmp(&b.to)));
+
+        WorkflowGraphDto {
+            id: self.id.clone(),
+            name: self.name.clone(),
+            description: self.description.clone(),
+            nodes,
+            edges: edges_flat,
+            start_node: self.start_node.clone(),
+            end_nodes: self.end_nodes.clone(),
+        }
     }
 }
 

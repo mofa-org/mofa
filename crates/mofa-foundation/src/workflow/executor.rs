@@ -53,6 +53,7 @@ pub enum ExecutionEvent {
     WorkflowStarted {
         workflow_id: String,
         execution_id: String,
+        graph_json: Option<serde_json::Value>,
     },
     /// 工作流完成
     WorkflowCompleted {
@@ -162,9 +163,17 @@ impl WorkflowExecutor {
         ctx.set_input(input.clone()).await;
 
         // 发送开始事件
+        let graph_json = match serde_json::to_value(graph.to_json_dto()) {
+            Ok(v) => Some(v),
+            Err(e) => {
+                warn!("Failed to serialize workflow graph: {}", e);
+                None
+            }
+        };
         self.emit_event(ExecutionEvent::WorkflowStarted {
             workflow_id: graph.id.clone(),
             execution_id: ctx.execution_id.clone(),
+            graph_json,
         })
         .await;
 
