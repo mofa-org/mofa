@@ -76,6 +76,7 @@ crossterm = { version = "0.29", features = ["bracketed-paste", "event-stream"] }
 tokio-stream = "0.1"
 
 [dev-dependencies]
+anyhow = { workspace = true }
 assert_cmd = "2"
 predicates = "3"
 tempfile = "3"
