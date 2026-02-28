@@ -25,7 +25,7 @@ mofa-runtime = { path = "../mofa-runtime", version = "0.1" }
 mofa-foundation = { path = "../mofa-foundation", version = "0.1" }
 config.workspace = true
 tokio = { workspace = true }
-anyhow = { workspace = true }
+thiserror = { workspace = true }
 async-trait = { workspace = true }
 chrono = { workspace = true }
 
@@ -49,6 +49,18 @@ dialoguer = "0.11"
 indicatif = "0.17"
 comfy-table = "7"
 dirs-next = "2"
+
+# Process management
+nix = { version = "0.29", features = ["process", "signal"] }
+
+# Plugin installation
+reqwest = { version = "0.12", features = ["rustls-tls", "stream"] }
+flate2 = "1.0"
+tar = "0.4"
+zip = "2.1"
+sha2 = "0.10"
+hex = "0.4"
+futures = "0.3"
 
 # Database (optional, for db init command)
 sqlx = { version = "0.8", features = ["runtime-tokio", "postgres", "mysql", "sqlite"], optional = true }

@@ -18,6 +18,7 @@
 
 // 导出类型定义
 // Export type definitions
+use mofa_kernel::agent::types::error::{GlobalError, GlobalResult};
 pub mod types;
 
 // 重新导出核心类型
@@ -111,11 +112,11 @@ impl LLMProtocolHelper {
         &self,
         msg: &CollaborationMessage,
         system_prompt: &str,
-    ) -> anyhow::Result<CollaborationContent> {
+    ) -> GlobalResult<CollaborationContent> {
         let llm_client = self
             .llm_client
             .as_ref()
-            .ok_or_else(|| anyhow::anyhow!("LLM client not configured"))?;
+            .ok_or_else(|| GlobalError::Other("LLM client not configured".to_string()))?;
 
         let user_prompt = format!(
             "你是 {}。收到一条协作消息：\n\n发送者: {}\n内容: {}\n\n请处理这条消息并返回响应。",
@@ -130,7 +131,8 @@ impl LLMProtocolHelper {
             .system(system_prompt)
             .user(&user_prompt)
             .send()
-            .await?;
+            .await
+            .map_err(|e| GlobalError::Other(e.to_string()))?;
 
         Ok(CollaborationContent::LLMResponse {
             reasoning: "通过 LLM 分析和处理协作消息".to_string(),
@@ -207,13 +209,13 @@ impl CollaborationProtocol for RequestResponseProtocol {
         CollaborationMode::RequestResponse
     }
 
-    async fn send_message(&self, msg: CollaborationMessage) -> anyhow::Result<()> {
+    async fn send_message(&self, msg: CollaborationMessage) -> GlobalResult<()> {
         let mut queue = self.message_queue.write().await;
         queue.push(msg);
         Ok(())
     }
 
-    async fn receive_message(&self) -> anyhow::Result<Option<CollaborationMessage>> {
+    async fn receive_message(&self) -> GlobalResult<Option<CollaborationMessage>> {
         let mut queue = self.message_queue.write().await;
         Ok(queue.pop())
     }
@@ -221,7 +223,7 @@ impl CollaborationProtocol for RequestResponseProtocol {
     async fn process_message(
         &self,
         msg: CollaborationMessage,
-    ) -> anyhow::Result<CollaborationResult> {
+    ) -> GlobalResult<CollaborationResult> {
         let start = std::time::Instant::now();
 
         tracing::debug!(
@@ -304,7 +306,7 @@ impl PublishSubscribeProtocol {
 
     /// 订阅主题
     /// Subscribe to a topic
-    pub async fn subscribe(&self, topic: String) -> anyhow::Result<()> {
+    pub async fn subscribe(&self, topic: String) -> GlobalResult<()> {
         let mut subscribed = self.subscribed_topics.write().await;
         subscribed.insert(topic.clone());
         tracing::debug!(
@@ -344,13 +346,13 @@ impl CollaborationProtocol for PublishSubscribeProtocol {
         CollaborationMode::PublishSubscribe
     }
 
-    async fn send_message(&self, msg: CollaborationMessage) -> anyhow::Result<()> {
+    async fn send_message(&self, msg: CollaborationMessage) -> GlobalResult<()> {
         let mut queue = self.message_queue.write().await;
         queue.push(msg);
         Ok(())
     }
 
-    async fn receive_message(&self) -> anyhow::Result<Option<CollaborationMessage>> {
+    async fn receive_message(&self) -> GlobalResult<Option<CollaborationMessage>> {
         let mut queue = self.message_queue.write().await;
         Ok(queue.pop())
     }
@@ -358,7 +360,7 @@ impl CollaborationProtocol for PublishSubscribeProtocol {
     async fn process_message(
         &self,
         msg: CollaborationMessage,
-    ) -> anyhow::Result<CollaborationResult> {
+    ) -> GlobalResult<CollaborationResult> {
         let start = std::time::Instant::now();
 
         tracing::debug!(
@@ -472,13 +474,13 @@ impl CollaborationProtocol for ConsensusProtocol {
         CollaborationMode::Consensus
     }
 
-    async fn send_message(&self, msg: CollaborationMessage) -> anyhow::Result<()> {
+    async fn send_message(&self, msg: CollaborationMessage) -> GlobalResult<()> {
         let mut queue = self.message_queue.write().await;
         queue.push(msg);
         Ok(())
     }
 
-    async fn receive_message(&self) -> anyhow::Result<Option<CollaborationMessage>> {
+    async fn receive_message(&self) -> GlobalResult<Option<CollaborationMessage>> {
         let mut queue = self.message_queue.write().await;
         Ok(queue.pop())
     }
@@ -486,7 +488,7 @@ impl CollaborationProtocol for ConsensusProtocol {
     async fn process_message(
         &self,
         msg: CollaborationMessage,
-    ) -> anyhow::Result<CollaborationResult> {
+    ) -> GlobalResult<CollaborationResult> {
         let start = std::time::Instant::now();
 
         tracing::debug!(
@@ -595,13 +597,13 @@ impl CollaborationProtocol for DebateProtocol {
         CollaborationMode::Debate
     }
 
-    async fn send_message(&self, msg: CollaborationMessage) -> anyhow::Result<()> {
+    async fn send_message(&self, msg: CollaborationMessage) -> GlobalResult<()> {
         let mut queue = self.message_queue.write().await;
         queue.push(msg);
         Ok(())
     }
 
-    async fn receive_message(&self) -> anyhow::Result<Option<CollaborationMessage>> {
+    async fn receive_message(&self) -> GlobalResult<Option<CollaborationMessage>> {
         let mut queue = self.message_queue.write().await;
         Ok(queue.pop())
     }
@@ -609,7 +611,7 @@ impl CollaborationProtocol for DebateProtocol {
     async fn process_message(
         &self,
         msg: CollaborationMessage,
-    ) -> anyhow::Result<CollaborationResult> {
+    ) -> GlobalResult<CollaborationResult> {
         let start = std::time::Instant::now();
 
         tracing::debug!(
@@ -718,13 +720,13 @@ impl CollaborationProtocol for ParallelProtocol {
         CollaborationMode::Parallel
     }
 
-    async fn send_message(&self, msg: CollaborationMessage) -> anyhow::Result<()> {
+    async fn send_message(&self, msg: CollaborationMessage) -> GlobalResult<()> {
         let mut queue = self.message_queue.write().await;
         queue.push(msg);
         Ok(())
     }
 
-    async fn receive_message(&self) -> anyhow::Result<Option<CollaborationMessage>> {
+    async fn receive_message(&self) -> GlobalResult<Option<CollaborationMessage>> {
         let mut queue = self.message_queue.write().await;
         Ok(queue.pop())
     }
@@ -732,7 +734,7 @@ impl CollaborationProtocol for ParallelProtocol {
     async fn process_message(
         &self,
         msg: CollaborationMessage,
-    ) -> anyhow::Result<CollaborationResult> {
+    ) -> GlobalResult<CollaborationResult> {
         let start = std::time::Instant::now();
 
         tracing::debug!(
@@ -844,13 +846,13 @@ impl CollaborationProtocol for SequentialProtocol {
         CollaborationMode::Sequential
     }
 
-    async fn send_message(&self, msg: CollaborationMessage) -> anyhow::Result<()> {
+    async fn send_message(&self, msg: CollaborationMessage) -> GlobalResult<()> {
         let mut queue = self.message_queue.write().await;
         queue.push(msg);
         Ok(())
     }
 
-    async fn receive_message(&self) -> anyhow::Result<Option<CollaborationMessage>> {
+    async fn receive_message(&self) -> GlobalResult<Option<CollaborationMessage>> {
         let mut queue = self.message_queue.write().await;
         Ok(queue.pop())
     }
@@ -858,7 +860,7 @@ impl CollaborationProtocol for SequentialProtocol {
     async fn process_message(
         &self,
         msg: CollaborationMessage,
-    ) -> anyhow::Result<CollaborationResult> {
+    ) -> GlobalResult<CollaborationResult> {
         let start = std::time::Instant::now();
 
         tracing::debug!(

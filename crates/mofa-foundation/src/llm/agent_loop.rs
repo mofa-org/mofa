@@ -15,13 +15,14 @@ use crate::llm::types::{
     ChatCompletionRequest, ChatMessage, ContentPart, ImageUrl, LLMResult, MessageContent, Role,
     Tool,
 };
-use anyhow::Result;
+use mofa_kernel::agent::types::error::{GlobalError, GlobalResult};
 use std::collections::HashMap;
 use std::path::Path;
 
 /// Type alias for tool handler function in SimpleToolExecutor
-pub type SimpleToolHandler = Box<dyn Fn(&str) -> Result<String> + Send + Sync>;
+pub type SimpleToolHandler = Box<dyn Fn(&str) -> GlobalResult<String> + Send + Sync>;
 use std::sync::Arc;
+use tracing::Instrument;
 
 /// Configuration for the agent loop
 #[derive(Debug, Clone)]
@@ -93,7 +94,7 @@ impl AgentLoop {
         context: Vec<ChatMessage>,
         content: &str,
         media: Option<Vec<String>>,
-    ) -> Result<String> {
+    ) -> GlobalResult<String> {
         self.process_with_options(context, content, media, None)
             .await
     }
@@ -105,7 +106,7 @@ impl AgentLoop {
         content: &str,
         media: Option<Vec<String>>,
         model: &str,
-    ) -> Result<String> {
+    ) -> GlobalResult<String> {
         self.process_with_options(context, content, media, Some(model))
             .await
     }
@@ -117,7 +118,7 @@ impl AgentLoop {
         content: &str,
         media: Option<Vec<String>>,
         model: Option<&str>,
-    ) -> Result<String> {
+    ) -> GlobalResult<String> {
         // Build user message with optional media
         let user_msg = if let Some(media_paths) = media {
             if !media_paths.is_empty() {
@@ -136,7 +137,7 @@ impl AgentLoop {
             .tools
             .available_tools()
             .await
-            .map_err(|e| anyhow::anyhow!(e))?;
+            .map_err(|e| GlobalError::Other(e.to_string()))?;
 
         // Run the agent loop
         self.run_agent_loop(context, &tools, model).await
@@ -150,7 +151,7 @@ impl AgentLoop {
         content: &str,
         media: Option<Vec<String>>,
         model: Option<&str>,
-    ) -> Result<String> {
+    ) -> GlobalResult<String> {
         let context = context_builder
             .build_messages(history, content, media)
             .await?;
@@ -159,7 +160,7 @@ impl AgentLoop {
             .tools
             .available_tools()
             .await
-            .map_err(|e| anyhow::anyhow!(e))?;
+            .map_err(|e| GlobalError::Other(e.to_string()))?;
 
         self.run_agent_loop(context, &tools, model).await
     }
@@ -176,7 +177,7 @@ impl AgentLoop {
         media: Option<Vec<String>>,
         context_builder: Option<&AgentContextBuilder>,
         model: Option<&str>,
-    ) -> Result<String> {
+    ) -> GlobalResult<String> {
         let history = session.messages().to_vec();
 
         let context = if let Some(builder) = context_builder {
@@ -202,7 +203,7 @@ impl AgentLoop {
             .tools
             .available_tools()
             .await
-            .map_err(|e| anyhow::anyhow!(e))?;
+            .map_err(|e| GlobalError::Other(e.to_string()))?;
 
         let response = self.run_agent_loop(context, &tools, model).await?;
 
@@ -229,7 +230,7 @@ impl AgentLoop {
         mut messages: Vec<ChatMessage>,
         tools: &[Tool],
         model: Option<&str>,
-    ) -> Result<String> {
+    ) -> GlobalResult<String> {
         let model = model.unwrap_or(&self.config.default_model);
 
         for _iteration in 0..self.config.max_tool_iterations {
@@ -244,7 +245,7 @@ impl AgentLoop {
             }
 
             // Call LLM
-            let response = self.provider.chat(request).await?;
+            let response = self.provider.chat(request).await.map_err(|e| GlobalError::Other(e.to_string()))?;
 
             // Check for tool calls
             if let Some(tool_calls) = response.tool_calls()
@@ -292,11 +293,12 @@ impl AgentLoop {
 
     /// Execute a tool call
     async fn execute_tool(&self, name: &str, arguments: &str) -> LLMResult<String> {
-        self.tools.execute(name, arguments).await
+        let span = tracing::info_span!("agent_loop.tool_call", tool = %name);
+        self.tools.execute(name, arguments).instrument(span).await
     }
 
     /// Build a vision message with images
-    fn build_vision_message(text: &str, image_paths: &[String]) -> Result<ChatMessage> {
+    fn build_vision_message(text: &str, image_paths: &[String]) -> GlobalResult<ChatMessage> {
         let mut parts = vec![ContentPart::Text {
             text: text.to_string(),
         }];
@@ -316,14 +318,14 @@ impl AgentLoop {
     }
 
     /// Encode an image file as a data URL
-    fn encode_image_data_url(path: &Path) -> Result<ImageUrl> {
+    fn encode_image_data_url(path: &Path) -> GlobalResult<ImageUrl> {
         use base64::Engine;
         use base64::engine::general_purpose::STANDARD_NO_PAD;
         use std::fs;
 
         let bytes = fs::read(path)?;
         let mime_type = infer::get_from_path(path)?
-            .ok_or_else(|| anyhow::anyhow!("Unknown MIME type for: {:?}", path))?
+            .ok_or_else(|| GlobalError::Other(format!("Unknown MIME type for: {:?}", path)))?
             .mime_type()
             .to_string();
 
@@ -374,7 +376,7 @@ impl AgentLoopRunner {
     }
 
     /// Run the loop with optional media inputs.
-    pub async fn run(&mut self, content: &str, media: Option<Vec<String>>) -> Result<String> {
+    pub async fn run(&mut self, content: &str, media: Option<Vec<String>>) -> GlobalResult<String> {
         if let Some(session) = self.session.as_mut() {
             let builder = self.context_builder.as_ref();
             return self
@@ -416,7 +418,7 @@ impl SimpleToolExecutor {
 
     pub fn register<F>(&mut self, name: impl Into<String>, handler: F) -> &mut Self
     where
-        F: Fn(&str) -> Result<String> + Send + Sync + 'static,
+        F: Fn(&str) -> GlobalResult<String> + Send + Sync + 'static,
     {
         self.tools.insert(name.into(), Box::new(handler));
         self

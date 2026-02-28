@@ -324,6 +324,7 @@ pub mod pipeline;
 pub mod agent_loop;
 pub mod context;
 pub mod task_orchestrator;
+pub mod token_budget;
 pub mod vision;
 
 // Audio processing
@@ -380,6 +381,9 @@ pub use agent_loop::{AgentLoop, AgentLoopConfig, AgentLoopRunner, SimpleToolExec
 pub use context::{AgentContextBuilder, AgentIdentity, NoOpSkillsManager, SkillsManager};
 pub use task_orchestrator::{
     BackgroundTask, TaskOrchestrator, TaskOrchestratorConfig, TaskOrigin, TaskResult, TaskStatus,
+};
+pub use token_budget::{
+    CharBasedEstimator, ContextWindowManager, ContextWindowPolicy, TokenEstimator, TrimResult,
 };
 pub use vision::{
     ImageDetailExt, build_vision_chat_message, build_vision_chat_message_single,

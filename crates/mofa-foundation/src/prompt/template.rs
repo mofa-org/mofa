@@ -44,6 +44,10 @@ pub enum PromptError {
     /// YAML parsing error
     #[error("YAML error: {0}")]
     YamlError(String),
+    /// Lock poisoning error
+    /// Occurs when a thread panics while holding a lock
+    #[error("Lock poisoned: {0}")]
+    LockPoisoned(String),
 }
 
 /// Prompt 结果类型

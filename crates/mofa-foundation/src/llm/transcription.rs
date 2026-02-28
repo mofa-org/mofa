@@ -20,6 +20,7 @@
 //! println!("Transcript: {}", transcript);
 //! ```
 
+use mofa_kernel::agent::types::error::{GlobalError, GlobalResult};
 use async_trait::async_trait;
 use reqwest::Client;
 use serde::Deserialize;
@@ -37,7 +38,7 @@ pub trait TranscriptionProvider: Send + Sync {
     ///
     /// # Returns
     /// The transcribed text
-    async fn transcribe(&self, file_path: &Path) -> anyhow::Result<String>;
+    async fn transcribe(&self, file_path: &Path) -> GlobalResult<String>;
 
     /// Check if the provider is configured with an API key
     fn is_configured(&self) -> bool;
@@ -101,16 +102,16 @@ impl Default for GroqTranscriptionProvider {
 
 #[async_trait]
 impl TranscriptionProvider for GroqTranscriptionProvider {
-    async fn transcribe(&self, file_path: &Path) -> anyhow::Result<String> {
+    async fn transcribe(&self, file_path: &Path) -> GlobalResult<String> {
         if !self.is_configured() {
             return Ok(String::new());
         }
 
         if !file_path.exists() {
-            return Err(anyhow::anyhow!(
+            return Err(GlobalError::Other(format!(
                 "Audio file not found: {}",
                 file_path.display()
-            ));
+            )));
         }
 
         debug!("Transcribing audio file: {}", file_path.display());
@@ -118,7 +119,7 @@ impl TranscriptionProvider for GroqTranscriptionProvider {
         // Read the file content
         let file_content = tokio::fs::read(file_path)
             .await
-            .map_err(|e| anyhow::anyhow!("Failed to read audio file: {}", e))?;
+            .map_err(|e| GlobalError::Other(format!("Failed to read audio file: {}", e)))?;
 
         // Get the file name
         let file_name = file_path
@@ -130,7 +131,7 @@ impl TranscriptionProvider for GroqTranscriptionProvider {
         let part = reqwest::multipart::Part::bytes(file_content)
             .file_name(file_name.to_string())
             .mime_str("audio/*")
-            .map_err(|e| anyhow::anyhow!("Failed to create multipart: {}", e))?;
+            .map_err(|e| GlobalError::Other(format!("Failed to create multipart: {}", e)))?;
 
         let form = reqwest::multipart::Form::new()
             .part("file", part)
@@ -144,21 +145,21 @@ impl TranscriptionProvider for GroqTranscriptionProvider {
             .multipart(form)
             .send()
             .await
-            .map_err(|e| anyhow::anyhow!("Groq API error: {}", e))?;
+            .map_err(|e| GlobalError::Other(format!("Groq API error: {}", e)))?;
 
         let status = response.status();
         let response_text = response
             .text()
             .await
-            .map_err(|e| anyhow::anyhow!("Failed to read response: {}", e))?;
+            .map_err(|e| GlobalError::Other(format!("Failed to read response: {}", e)))?;
 
         if !status.is_success() {
             warn!("Groq API error: {}", response_text);
-            return Err(anyhow::anyhow!(
+            return Err(GlobalError::Other(format!(
                 "Groq API returned status {}: {}",
                 status,
                 response_text
-            ));
+            )));
         }
 
         // Parse response
@@ -241,16 +242,16 @@ impl Default for OpenAITranscriptionProvider {
 
 #[async_trait]
 impl TranscriptionProvider for OpenAITranscriptionProvider {
-    async fn transcribe(&self, file_path: &Path) -> anyhow::Result<String> {
+    async fn transcribe(&self, file_path: &Path) -> GlobalResult<String> {
         if !self.is_configured() {
             return Ok(String::new());
         }
 
         if !file_path.exists() {
-            return Err(anyhow::anyhow!(
+            return Err(GlobalError::Other(format!(
                 "Audio file not found: {}",
                 file_path.display()
-            ));
+            )));
         }
 
         debug!(
@@ -261,7 +262,7 @@ impl TranscriptionProvider for OpenAITranscriptionProvider {
         // Read the file content
         let file_content = tokio::fs::read(file_path)
             .await
-            .map_err(|e| anyhow::anyhow!("Failed to read audio file: {}", e))?;
+            .map_err(|e| GlobalError::Other(format!("Failed to read audio file: {}", e)))?;
 
         // Get the file name
         let file_name = file_path
@@ -273,7 +274,7 @@ impl TranscriptionProvider for OpenAITranscriptionProvider {
         let part = reqwest::multipart::Part::bytes(file_content)
             .file_name(file_name.to_string())
             .mime_str("audio/mp3")
-            .map_err(|e| anyhow::anyhow!("Failed to create multipart: {}", e))?;
+            .map_err(|e| GlobalError::Other(format!("Failed to create multipart: {}", e)))?;
 
         let form = reqwest::multipart::Form::new()
             .part("file", part)
@@ -287,21 +288,21 @@ impl TranscriptionProvider for OpenAITranscriptionProvider {
             .multipart(form)
             .send()
             .await
-            .map_err(|e| anyhow::anyhow!("OpenAI API error: {}", e))?;
+            .map_err(|e| GlobalError::Other(format!("OpenAI API error: {}", e)))?;
 
         let status = response.status();
         let response_text = response
             .text()
             .await
-            .map_err(|e| anyhow::anyhow!("Failed to read response: {}", e))?;
+            .map_err(|e| GlobalError::Other(format!("Failed to read response: {}", e)))?;
 
         if !status.is_success() {
             warn!("OpenAI API error: {}", response_text);
-            return Err(anyhow::anyhow!(
+            return Err(GlobalError::Other(format!(
                 "OpenAI API returned status {}: {}",
                 status,
                 response_text
-            ));
+            )));
         }
 
         // Parse response

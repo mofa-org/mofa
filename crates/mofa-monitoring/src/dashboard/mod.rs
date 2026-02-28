@@ -18,7 +18,8 @@ mod server;
 mod websocket;
 
 pub use api::{
-    AgentStatus, ApiError, ApiResponse, LLMStatus, LLMSummary, PluginStatus, SystemStatus,
+    AgentStatus, ApiError, ApiResponse, DebugSessionResponse, LLMStatus, LLMSummary, PluginStatus,
+    SystemStatus,
 };
 pub use auth::{AuthInfo, AuthProvider, NoopAuthProvider, TokenAuthProvider};
 pub use metrics::{

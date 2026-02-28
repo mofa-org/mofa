@@ -10,6 +10,7 @@
 
 use super::graph::WorkflowGraph;
 use super::node::{NodeType, WorkflowNode};
+use super::profiler::{ExecutionTimeline, ProfilerMode};
 use super::state::{
     ExecutionCheckpoint, ExecutionRecord, NodeExecutionRecord, NodeResult, NodeStatus,
     WorkflowContext, WorkflowStatus, WorkflowValue,
@@ -111,6 +112,8 @@ pub struct WorkflowExecutor {
     /// 并行执行信号量
     /// Parallel execution semaphore
     semaphore: Arc<Semaphore>,
+    /// Profiler for execution timing (optional)
+    profiler: ProfilerMode,
 }
 
 impl WorkflowExecutor {
@@ -123,6 +126,7 @@ impl WorkflowExecutor {
             sub_workflows: Arc::new(RwLock::new(HashMap::new())),
             event_waiters: Arc::new(RwLock::new(HashMap::new())),
             semaphore,
+            profiler: ProfilerMode::Disabled,
         }
     }
 
@@ -140,6 +144,22 @@ impl WorkflowExecutor {
     pub fn with_telemetry(mut self, emitter: Arc<dyn TelemetryEmitter>) -> Self {
         self.telemetry = Some(emitter);
         self
+    }
+
+    /// Attach a profiler for execution timing capture.
+    ///
+    /// When set, the executor will record execution timing spans.
+    pub fn with_profiler(mut self, mode: ProfilerMode) -> Self {
+        self.profiler = mode;
+        self
+    }
+
+    /// Get profiler timeline if profiling is enabled.
+    pub fn profiler_timeline(&self) -> Option<&ExecutionTimeline> {
+        match &self.profiler {
+            ProfilerMode::Record(timeline) => Some(timeline.get_timeline()),
+            ProfilerMode::Disabled => None,
+        }
     }
 
     /// Emit a debug telemetry event (no-op if no emitter is set).

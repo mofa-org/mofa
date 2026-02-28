@@ -55,6 +55,7 @@ use std::collections::HashMap;
 /// 定义如何连接到 MCP 服务器
 /// Defines how to connect to an MCP server
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[non_exhaustive]
 pub enum McpTransportConfig {
     /// 通过标准输入输出连接 (启动子进程)
     /// Connection via Standard Input/Output (spawning a sub-process)
@@ -173,7 +174,7 @@ impl McpServerConfig {
 /// 从 MCP 服务器发现的工具元信息
 /// Tool metadata discovered from an MCP server
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct McpToolInfo {
+pub struct McpToolInfo<Args = serde_json::Value> {
     /// 工具名称
     /// Tool name
     pub name: String,
@@ -182,7 +183,7 @@ pub struct McpToolInfo {
     pub description: String,
     /// 输入参数 JSON Schema
     /// Input parameter JSON Schema
-    pub input_schema: serde_json::Value,
+    pub input_schema: Args,
 }
 
 // ============================================================================
