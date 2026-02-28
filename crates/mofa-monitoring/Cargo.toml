@@ -49,7 +49,7 @@ reqwest = { version = "0.11", features = ["json", "rustls-tls"] }
 tower-http = { version = "0.6", features = ["fs", "cors", "trace"] }
 opentelemetry = { workspace = true, optional = true }
 opentelemetry_sdk = { workspace = true, optional = true, features = ["metrics", "rt-tokio"] }
-opentelemetry-otlp = { workspace = true, optional = true, features = [
+opentelemetry-otlp = { version = "0.14", optional = true, default-features = false, features = [
     "metrics",
     "http-proto",
     "reqwest-client",
