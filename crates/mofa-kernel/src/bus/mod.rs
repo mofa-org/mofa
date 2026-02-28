@@ -211,6 +211,12 @@ impl AgentBus {
     }
 }
 
+impl Default for AgentBus {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

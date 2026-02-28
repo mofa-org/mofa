@@ -34,11 +34,16 @@ members = [
     "tool_routing",
     "runtime_message_bus_backpressure",
     "rag_pipeline",
+    "hitl_v2",
+    "agent_builder",
     "workflow_viz",
     "message_graph_validation",
+    "message_graph_executor_runtime",
     "agent_builder",
     "context_compression",
     "structured_output",
+    "context_window_demo",
+    "admission_gate_demo",
 ]
 
 [workspace.package]
@@ -54,7 +59,6 @@ serde_yaml = "0.9"
 bincode = "1.3"
 tokio = { version = "1", features = ["full", "rt-multi-thread", "sync"] }
 tokio-stream = { version = "0.1", features = ["net"] }
-anyhow = "1.0"
 uuid = { version = "1.7", features = ["v4", "v7"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }

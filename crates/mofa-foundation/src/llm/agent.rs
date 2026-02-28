@@ -622,7 +622,7 @@ impl LLMAgent {
                 sess_store,
                 config.context_window_size,
             )
-                .await
+            .await
             {
                 Ok(loaded_session) => {
                     tracing::info!(
@@ -659,7 +659,7 @@ impl LLMAgent {
                         sess_store_clone,
                         config.context_window_size,
                     )
-                        .await
+                    .await
                     {
                         Ok(mut new_session) => {
                             if let Some(ref prompt) = config.system_prompt {
@@ -1538,9 +1538,9 @@ impl LLMAgent {
                 tokio::time::Duration::from_secs(30),
                 tts_handle._stream_handle,
             )
-                .await
-                .map_err(|_| LLMError::Other("TTS stream processing timeout".to_string()))
-                .and_then(|r| r.map_err(|e| LLMError::Other(format!("TTS stream task failed: {}", e))));
+            .await
+            .map_err(|_| LLMError::Other("TTS stream processing timeout".to_string()))
+            .and_then(|r| r.map_err(|e| LLMError::Other(format!("TTS stream task failed: {}", e))));
 
             Ok(())
         }
@@ -2990,7 +2990,7 @@ impl LLMAgentBuilder {
             persistence_tenant_id,
             self.persistence_agent_id,
         )
-            .await;
+        .await;
 
         // 设置Prompt模板插件
         // Set Prompt template plugin
@@ -3042,9 +3042,9 @@ impl LLMAgentBuilder {
                 // Identify persistence plugin via metadata
                 if plugin.metadata().plugin_type == PluginType::Storage
                     && plugin
-                    .metadata()
-                    .capabilities
-                    .contains(&"message_persistence".to_string())
+                        .metadata()
+                        .capabilities
+                        .contains(&"message_persistence".to_string())
                 {
                     // 这里我们无法直接调用泛型 PersistencePlugin 的 load_history
                     // We cannot directly call the generic PersistencePlugin's load_history
@@ -3053,7 +3053,9 @@ impl LLMAgentBuilder {
                     // 历史加载将由 LLMAgent 在首次运行时通过 store 完成
                     // History loading will be handled by LLMAgent via store on first run
                     tracing::info!("📦 检测到持久化插件，将在 agent 初始化后加载历史");
-                    tracing::info!("📦 Persistence plugin detected; history will load after agent init");
+                    tracing::info!(
+                        "📦 Persistence plugin detected; history will load after agent init"
+                    );
                     break;
                 }
             }

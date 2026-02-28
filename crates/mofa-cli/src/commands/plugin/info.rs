@@ -1,11 +1,12 @@
 //! `mofa plugin info` command implementation
 
+use crate::CliError;
 use crate::context::CliContext;
 use colored::Colorize;
 use mofa_kernel::agent::plugins::PluginRegistry;
 
 /// Execute the `mofa plugin info` command
-pub async fn run(ctx: &CliContext, name: &str) -> anyhow::Result<()> {
+pub async fn run(ctx: &CliContext, name: &str) -> Result<(), CliError> {
     println!("{} Plugin information: {}", "→".green(), name.cyan());
     println!();
 

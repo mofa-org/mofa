@@ -12,7 +12,6 @@
 //! 4. 规则引擎
 //! 4. Rule engine
 
-use anyhow::Result;
 use mofa_sdk::rhai::{
     // 脚本引擎
     // Script engine
@@ -30,7 +29,7 @@ use std::collections::HashMap;
 use tracing::{info, Level};
 
 #[tokio::main]
-async fn main() -> Result<()> {
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // 初始化日志
     // Initialize logging
     tracing_subscriber::fmt()
@@ -55,7 +54,7 @@ async fn main() -> Result<()> {
 
 /// 示例 1: 基础脚本执行
 /// Example 1: Basic script execution
-async fn demo_basic_script_execution() -> Result<()> {
+async fn demo_basic_script_execution() -> Result<(), Box<dyn std::error::Error>> {
     info!("\n--- Example 1: Basic script execution ---\n");
     // --- Example 1: Basic script execution ---
 
@@ -162,7 +161,7 @@ async fn demo_basic_script_execution() -> Result<()> {
 
 /// 示例 2: 脚本化工作流
 /// Example 2: Scripted workflow
-async fn demo_script_workflow() -> Result<()> {
+async fn demo_script_workflow() -> Result<(), Box<dyn std::error::Error>> {
     info!("\n--- Example 2: Scripted workflow ---\n");
     // --- Example 2: Scripted workflow ---
 
@@ -293,7 +292,7 @@ async fn demo_script_workflow() -> Result<()> {
 
 /// 示例 3: 动态工具定义
 /// Example 3: Dynamic tool definition
-async fn demo_dynamic_tools() -> Result<()> {
+async fn demo_dynamic_tools() -> Result<(), Box<dyn std::error::Error>> {
     info!("\n--- Example 3: Dynamic tool definition ---\n");
     // --- Example 3: Dynamic tool definition ---
 
@@ -438,7 +437,7 @@ async fn demo_dynamic_tools() -> Result<()> {
 
 /// 示例 4: 规则引擎
 /// Example 4: Rule engine
-async fn demo_rule_engine() -> Result<()> {
+async fn demo_rule_engine() -> Result<(), Box<dyn std::error::Error>> {
     info!("\n--- Example 4: Rule engine ---\n");
     // --- Example 4: Rule engine ---
 
@@ -652,7 +651,7 @@ async fn demo_rule_engine() -> Result<()> {
 
 /// 示例 5: 高级功能
 /// Example 5: Advanced features
-async fn demo_advanced_features() -> Result<()> {
+async fn demo_advanced_features() -> Result<(), Box<dyn std::error::Error>> {
     info!("\n--- 示例 5: 高级功能 ---\n");
     // --- Example 5: Advanced features ---
 
