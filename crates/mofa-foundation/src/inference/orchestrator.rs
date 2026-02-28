@@ -166,6 +166,44 @@ impl InferenceOrchestrator {
                     actual_precision: request.preferred_precision,
                 }
             }
+            RoutingDecision::UseLocalDegraded {
+                model_id,
+                degraded_precision,
+                quality_warning,
+            } => {
+                // Estimate degraded memory footprint
+                let degraded_memory_mb = ((request.required_memory_mb as f64)
+                    * (degraded_precision.bytes_per_param()
+                        / request.preferred_precision.bytes_per_param()))
+                .ceil() as usize;
+
+                // Load the model at degraded precision
+                if !self.model_pool.is_loaded(model_id) {
+                    self.model_pool
+                        .load(model_id, degraded_memory_mb, *degraded_precision);
+                } else {
+                    self.model_pool.touch(model_id);
+                }
+
+                tracing::warn!(
+                    model_id,
+                    from = %request.preferred_precision,
+                    to = %degraded_precision,
+                    "{}",
+                    quality_warning
+                );
+
+                InferenceResult {
+                    output: format!(
+                        "[local-degraded:{}@{}] Inference result for: {}",
+                        model_id, degraded_precision, request.prompt
+                    ),
+                    routed_to: RoutedBackend::Local {
+                        model_id: model_id.clone(),
+                    },
+                    actual_precision: *degraded_precision,
+                }
+            }
             RoutingDecision::UseCloud { provider } => InferenceResult {
                 output: format!(
                     "[cloud:{}] Inference result for: {}",
