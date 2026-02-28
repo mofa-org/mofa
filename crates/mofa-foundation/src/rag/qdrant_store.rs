@@ -6,11 +6,11 @@
 use async_trait::async_trait;
 use mofa_kernel::agent::error::{AgentError, AgentResult};
 use mofa_kernel::rag::{DocumentChunk, SearchResult, SimilarityMetric, VectorStore};
+use qdrant_client::Qdrant;
 use qdrant_client::qdrant::{
     CountPointsBuilder, CreateCollectionBuilder, DeletePointsBuilder, Distance, PointStruct,
     PointsIdsList, QueryPointsBuilder, UpsertPointsBuilder, VectorParamsBuilder,
 };
-use qdrant_client::Qdrant;
 use std::collections::HashMap;
 use std::hash::{Hash, Hasher};
 
@@ -76,9 +76,9 @@ impl QdrantVectorStore {
         if let Some(api_key) = config.api_key {
             builder = builder.api_key(api_key);
         }
-        let client = builder
-            .build()
-            .map_err(|e| AgentError::InitializationFailed(format!("Qdrant connection failed: {e}")))?;
+        let client = builder.build().map_err(|e| {
+            AgentError::InitializationFailed(format!("Qdrant connection failed: {e}"))
+        })?;
 
         let store = Self {
             client,
@@ -136,10 +136,7 @@ impl QdrantVectorStore {
         let point_id = string_id_to_u64(&chunk.id);
 
         let mut payload: HashMap<String, qdrant_client::qdrant::Value> = HashMap::new();
-        payload.insert(
-            PAYLOAD_KEY_ORIGINAL_ID.to_string(),
-            chunk.id.clone().into(),
-        );
+        payload.insert(PAYLOAD_KEY_ORIGINAL_ID.to_string(), chunk.id.clone().into());
         payload.insert(PAYLOAD_KEY_TEXT.to_string(), chunk.text.clone().into());
 
         for (key, value) in &chunk.metadata {
@@ -191,9 +188,7 @@ impl VectorStore for QdrantVectorStore {
     async fn upsert(&mut self, chunk: DocumentChunk) -> AgentResult<()> {
         let point = Self::chunk_to_point(&chunk);
         self.client
-            .upsert_points(
-                UpsertPointsBuilder::new(&self.collection_name, vec![point]).wait(true),
-            )
+            .upsert_points(UpsertPointsBuilder::new(&self.collection_name, vec![point]).wait(true))
             .await
             .map_err(|e| AgentError::Internal(format!("Qdrant upsert failed: {e}")))?;
         Ok(())
@@ -205,9 +200,7 @@ impl VectorStore for QdrantVectorStore {
         }
         let points: Vec<PointStruct> = chunks.iter().map(Self::chunk_to_point).collect();
         self.client
-            .upsert_points(
-                UpsertPointsBuilder::new(&self.collection_name, points).wait(true),
-            )
+            .upsert_points(UpsertPointsBuilder::new(&self.collection_name, points).wait(true))
             .await
             .map_err(|e| AgentError::Internal(format!("Qdrant batch upsert failed: {e}")))?;
         Ok(())
@@ -238,8 +231,11 @@ impl VectorStore for QdrantVectorStore {
             .await
             .map_err(|e| AgentError::Internal(format!("Qdrant search failed: {e}")))?;
 
-        let mut results: Vec<SearchResult> =
-            response.result.iter().map(Self::scored_point_to_result).collect();
+        let mut results: Vec<SearchResult> = response
+            .result
+            .iter()
+            .map(Self::scored_point_to_result)
+            .collect();
 
         if let Some(t) = threshold {
             results.retain(|r| r.score >= t);
@@ -266,10 +262,7 @@ impl VectorStore for QdrantVectorStore {
 
     async fn clear(&mut self) -> AgentResult<()> {
         // Delete and recreate the collection to clear all points.
-        let _ = self
-            .client
-            .delete_collection(&self.collection_name)
-            .await;
+        let _ = self.client.delete_collection(&self.collection_name).await;
 
         self.ensure_collection_exists().await?;
         Ok(())
@@ -328,7 +321,14 @@ mod tests {
 
         // Verify point ID is the hash of the string ID
         assert_eq!(
-            match point.id.as_ref().unwrap().point_id_options.as_ref().unwrap() {
+            match point
+                .id
+                .as_ref()
+                .unwrap()
+                .point_id_options
+                .as_ref()
+                .unwrap()
+            {
                 qdrant_client::qdrant::point_id::PointIdOptions::Num(n) => *n,
                 _ => 0,
             },

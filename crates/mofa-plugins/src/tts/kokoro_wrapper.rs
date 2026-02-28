@@ -83,7 +83,7 @@
 //! ```
 
 use super::{TTSEngine, VoiceInfo};
-use futures::StreamExt;
+use mofa_kernel::plugin::{PluginError, PluginResult};use futures::StreamExt;
 pub use kokoro_tts::{KokoroTts, SynthSink, SynthStream, Voice};
 use std::path::Path;
 use std::sync::Arc;
@@ -131,7 +131,7 @@ impl KokoroTTS {
     ///
     /// # Errors
     /// Returns an error if model initialization fails
-    pub async fn new(model_path: &str, voice_path: &str) -> Result<Self, anyhow::Error> {
+    pub async fn new(model_path: &str, voice_path: &str) -> PluginResult<Self> {
         info!(
             "Initializing Kokoro TTS with model: {}, voices: {}",
             model_path, voice_path
@@ -139,22 +139,22 @@ impl KokoroTTS {
 
         // Validate file paths exist
         if !Path::new(model_path).exists() {
-            return Err(anyhow::anyhow!(
+            return Err(PluginError::Other(format!(
                 "Kokoro model file not found: {}",
                 model_path
-            ));
+            )));
         }
         if !Path::new(voice_path).exists() {
-            return Err(anyhow::anyhow!(
+            return Err(PluginError::Other(format!(
                 "Kokoro voices file not found: {}",
                 voice_path
-            ));
+            )));
         }
 
         // Initialize Kokoro TTS
         let tts = KokoroTts::new(model_path, voice_path)
             .await
-            .map_err(|e| anyhow::anyhow!("Failed to initialize Kokoro TTS: {:?}", e))?;
+            .map_err(|e| mofa_kernel::plugin::PluginError::ExecutionFailed(format!("Failed to initialize Kokoro TTS: {:?}", e)))?;
 
         let model_lower = model_path.to_ascii_lowercase();
         let is_v11_model = model_lower.contains("v1.1") || model_lower.contains("v11");
@@ -231,7 +231,7 @@ impl KokoroTTS {
     pub async fn create_stream(
         &self,
         voice: &str,
-    ) -> Result<(SynthSink<String>, SynthStream), anyhow::Error> {
+    ) -> PluginResult<(SynthSink<String>, SynthStream)> {
         let voice_enum = self.resolve_voice(voice);
         let (sink, stream) = self.tts.stream::<String>(voice_enum);
         Ok((sink, stream))
@@ -259,7 +259,7 @@ impl KokoroTTS {
         text: &str,
         voice: &str,
         callback: Box<dyn Fn(Vec<f32>) + Send + Sync>,
-    ) -> Result<(), anyhow::Error> {
+    ) -> PluginResult<()> {
         debug!(
             "[KokoroTTS] F32 stream synthesizing with voice '{}': {}",
             voice, text
@@ -273,7 +273,7 @@ impl KokoroTTS {
         // Submit text for synthesis
         sink.synth(text.to_string())
             .await
-            .map_err(|e| anyhow::anyhow!("Failed to submit text for f32 streaming: {:?}", e))?;
+            .map_err(|e| mofa_kernel::plugin::PluginError::ExecutionFailed(format!("Failed to submit text for f32 streaming: {:?}", e)))?;
 
         // Process audio chunks and call callback for each chunk
         while let Some((audio_f32, _took)) = stream.next().await {
@@ -318,7 +318,7 @@ impl TTSEngine for KokoroTTS {
     /// let audio = kokoro.synthesize("Hello world", "default").await?;
     /// println!("Audio size: {} bytes", audio.len());
     /// ```
-    async fn synthesize(&self, text: &str, voice: &str) -> Result<Vec<u8>, anyhow::Error> {
+    async fn synthesize(&self, text: &str, voice: &str) -> PluginResult<Vec<u8>> {
         debug!(
             "[KokoroTTS] Synthesizing text with voice '{}': {}",
             voice, text
@@ -332,7 +332,7 @@ impl TTSEngine for KokoroTTS {
         // Submit text for synthesis using the synth method
         sink.synth(text.to_string())
             .await
-            .map_err(|e| anyhow::anyhow!("Failed to submit text for synthesis: {:?}", e))?;
+            .map_err(|e| mofa_kernel::plugin::PluginError::ExecutionFailed(format!("Failed to submit text for synthesis: {:?}", e)))?;
 
         // Collect all audio chunks
         let mut audio = Vec::new();
@@ -410,7 +410,7 @@ impl TTSEngine for KokoroTTS {
         text: &str,
         voice: &str,
         callback: Box<dyn Fn(Vec<u8>) + Send + Sync>,
-    ) -> Result<(), anyhow::Error> {
+    ) -> PluginResult<()> {
         debug!(
             "[KokoroTTS] Stream synthesizing text with voice '{}': {}",
             voice, text
@@ -423,7 +423,7 @@ impl TTSEngine for KokoroTTS {
 
         // Submit text for synthesis
         sink.synth(text.to_string()).await.map_err(|e| {
-            anyhow::anyhow!("Failed to submit text for streaming synthesis: {:?}", e)
+            mofa_kernel::plugin::PluginError::ExecutionFailed(format!("Failed to submit text for streaming synthesis: {:?}", e))
         })?;
 
         // Process audio chunks and call callback for each chunk
@@ -451,7 +451,7 @@ impl TTSEngine for KokoroTTS {
     }
 
     /// List available voices
-    async fn list_voices(&self) -> Result<Vec<VoiceInfo>, anyhow::Error> {
+    async fn list_voices(&self) -> PluginResult<Vec<VoiceInfo>> {
         let voices = vec![
             VoiceInfo::new("default", "默认女声 (Default Female)", "zh-CN"),
             VoiceInfo::new("zh_female", "中文女声1 (Chinese Female 1)", "zh-CN"),

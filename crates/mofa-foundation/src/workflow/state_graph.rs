@@ -16,7 +16,7 @@ use std::pin::Pin;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use tokio::task::JoinSet;
-use tracing::{debug, info, warn};
+use tracing::{Instrument, debug, info, warn};
 
 /// Type alias for node ID
 pub type NodeId = String;
@@ -287,7 +287,9 @@ impl<S: GraphState + 'static> mofa_kernel::workflow::StateGraph for StateGraphIm
             ),
             edges: Arc::new(self.edges),
             reducers: Arc::new(self.reducers),
-            entry_point: self.entry_point.expect("Entry point should be validated"),
+            entry_point: self.entry_point.ok_or_else(|| {
+                AgentError::ValidationFailed("No entry point set".to_string())
+            })?,
             config: self.config,
         })
     }
@@ -386,13 +388,19 @@ impl<S: GraphState> CompiledGraphImpl<S> {
                     Some(EdgeTarget::Single(target)) => vec![target.clone()],
                     Some(EdgeTarget::Parallel(targets)) => targets.clone(),
                     Some(EdgeTarget::Conditional(routes)) => {
-                        // Find matching route based on state updates
+                        // Priority 1: explicit route decision
+                        if let Some(decision) = command.route_value() {
+                            if let Some(target) = routes.get(decision) {
+                                return vec![target.clone()];
+                            }
+                        }
+                        // Priority 2: legacy key-name matching (backward compatible)
                         for update in &command.updates {
                             if let Some(target) = routes.get(&update.key) {
                                 return vec![target.clone()];
                             }
                         }
-                        // Default to first route if no match
+                        // Priority 3: fallback to first route
                         routes
                             .values()
                             .next()
@@ -525,6 +533,7 @@ impl<S: GraphState + 'static> CompiledGraph<S, serde_json::Value> for CompiledGr
         let (tx, rx) = tokio::sync::mpsc::channel(100);
 
         // Spawn execution task
+        let stream_span = tracing::info_span!("state_graph.stream");
         tokio::spawn(async move {
             let mut state = input;
             let mut current_nodes = vec![entry_point];
@@ -546,13 +555,19 @@ impl<S: GraphState + 'static> CompiledGraph<S, serde_json::Value> for CompiledGr
                             Some(EdgeTarget::Single(target)) => vec![target.clone()],
                             Some(EdgeTarget::Parallel(targets)) => targets.clone(),
                             Some(EdgeTarget::Conditional(routes)) => {
-                                // Find matching route based on state updates
+                                // Priority 1: explicit route decision
+                                if let Some(decision) = command.route_value() {
+                                    if let Some(target) = routes.get(decision) {
+                                        return vec![target.clone()];
+                                    }
+                                }
+                                // Priority 2: legacy key-name matching (backward compatible)
                                 for update in &command.updates {
                                     if let Some(target) = routes.get(&update.key) {
                                         return vec![target.clone()];
                                     }
                                 }
-                                // Default to first route if no match
+                                // Priority 3: fallback to first route
                                 routes
                                     .values()
                                     .next()
@@ -748,7 +763,7 @@ impl<S: GraphState + 'static> CompiledGraph<S, serde_json::Value> for CompiledGr
 
             // Send final event
             let _ = tx.send(Ok(StreamEvent::End { final_state: state })).await;
-        });
+        }.instrument(stream_span));
 
         // Convert receiver to stream
         Box::pin(tokio_stream::wrappers::ReceiverStream::new(rx))
@@ -816,6 +831,7 @@ mod tests {
     use futures::StreamExt;
     use mofa_kernel::workflow::{JsonState, StateGraph};
     use serde_json::json;
+    use std::collections::HashMap;
     use std::sync::atomic::{AtomicUsize, Ordering};
     use tokio::time::{Duration, sleep};
 
@@ -837,6 +853,27 @@ mod tests {
                 cmd = cmd.update(update.key.clone(), update.value.clone());
             }
             Ok(cmd.continue_())
+        }
+
+        fn name(&self) -> &str {
+            &self.name
+        }
+    }
+
+    /// Test node that returns a fixed Command (used for routing tests)
+    struct StaticCommandNode {
+        name: String,
+        command: Command,
+    }
+
+    #[async_trait]
+    impl NodeFunc<JsonState> for StaticCommandNode {
+        async fn call(
+            &self,
+            _state: &mut JsonState,
+            _ctx: &RuntimeContext,
+        ) -> AgentResult<Command> {
+            Ok(self.command.clone())
         }
 
         fn name(&self) -> &str {
@@ -875,10 +912,7 @@ mod tests {
     #[async_trait]
     impl NodeFunc<JsonState> for FlagReaderNode {
         async fn call(&self, state: &mut JsonState, _ctx: &RuntimeContext) -> AgentResult<Command> {
-            let saw_flag = state
-                .get_value("flag")
-                .and_then(|v: Value| v.as_bool())
-                .unwrap_or(false);
+            let saw_flag = state.get_value::<bool>("flag").unwrap_or(false);
             Ok(Command::new()
                 .update("reader_saw_flag", json!(saw_flag))
                 .continue_())
@@ -1041,26 +1075,174 @@ mod tests {
             .add_edge(START, "fan_out")
             .add_parallel_edges("fan_out", vec!["writer".to_string(), "reader".to_string()]);
 
-        let compiled = graph.compile().unwrap();
+        let compiled: CompiledGraphImpl<JsonState> = graph.compile().unwrap();
 
         let final_state = compiled.invoke(JsonState::new(), None).await.unwrap();
         assert_eq!(final_state.get_value("flag"), Some(json!(true)));
         assert_eq!(final_state.get_value("reader_saw_flag"), Some(json!(false)));
 
         let mut stream = compiled.stream(JsonState::new(), None);
-        let mut stream_final_state = None;
+        let mut stream_final_state: Option<JsonState> = None;
         while let Some(event) = stream.next().await {
             if let StreamEvent::End { final_state } = event.unwrap() {
                 stream_final_state = Some(final_state);
             }
         }
 
-        let stream_final_state =
+        let stream_final_state: JsonState =
             stream_final_state.expect("stream should emit a final end event with state");
         assert_eq!(stream_final_state.get_value("flag"), Some(json!(true)));
         assert_eq!(
             stream_final_state.get_value("reader_saw_flag"),
             Some(json!(false))
+        );
+    }
+
+    // ── Explicit route selection tests (issue #554) ──
+
+    #[tokio::test]
+    async fn test_conditional_routing_prefers_route_value_in_invoke() {
+        let mut graph = StateGraphImpl::<JsonState>::new("route_invoke");
+
+        let mut routes = HashMap::new();
+        routes.insert("approve".to_string(), "approved".to_string());
+        routes.insert("reject".to_string(), "rejected".to_string());
+
+        graph
+            .add_node(
+                "router",
+                Box::new(StaticCommandNode {
+                    name: "router".to_string(),
+                    // route says "approve", but a key-name update matches "reject".
+                    // The explicit route must win.
+                    command: Command::new()
+                        .route("approve")
+                        .update("reject", json!(true))
+                        .continue_(),
+                }),
+            )
+            .add_node(
+                "approved",
+                Box::new(TestNode {
+                    name: "approved".to_string(),
+                    updates: vec![StateUpdate::new("decision", json!("approved"))],
+                }),
+            )
+            .add_node(
+                "rejected",
+                Box::new(TestNode {
+                    name: "rejected".to_string(),
+                    updates: vec![StateUpdate::new("decision", json!("rejected"))],
+                }),
+            )
+            .add_edge(START, "router")
+            .add_conditional_edges("router", routes)
+            .add_edge("approved", END)
+            .add_edge("rejected", END);
+
+        let compiled = graph.compile().unwrap();
+        let final_state = compiled.invoke(JsonState::new(), None).await.unwrap();
+
+        assert_eq!(
+            final_state.get_value::<serde_json::Value>("decision"),
+            Some(json!("approved"))
+        );
+    }
+
+    #[tokio::test]
+    async fn test_conditional_routing_legacy_fallback_when_route_absent() {
+        let mut graph = StateGraphImpl::<JsonState>::new("route_fallback");
+
+        let mut routes = HashMap::new();
+        routes.insert("approve".to_string(), "approved".to_string());
+        routes.insert("reject".to_string(), "rejected".to_string());
+
+        graph
+            .add_node(
+                "router",
+                Box::new(StaticCommandNode {
+                    name: "router".to_string(),
+                    // No explicit route — should fall back to legacy key matching.
+                    command: Command::new().update("reject", json!(true)).continue_(),
+                }),
+            )
+            .add_node(
+                "approved",
+                Box::new(TestNode {
+                    name: "approved".to_string(),
+                    updates: vec![StateUpdate::new("decision", json!("approved"))],
+                }),
+            )
+            .add_node(
+                "rejected",
+                Box::new(TestNode {
+                    name: "rejected".to_string(),
+                    updates: vec![StateUpdate::new("decision", json!("rejected"))],
+                }),
+            )
+            .add_edge(START, "router")
+            .add_conditional_edges("router", routes)
+            .add_edge("approved", END)
+            .add_edge("rejected", END);
+
+        let compiled = graph.compile().unwrap();
+        let final_state = compiled.invoke(JsonState::new(), None).await.unwrap();
+
+        assert_eq!(
+            final_state.get_value::<serde_json::Value>("decision"),
+            Some(json!("rejected"))
+        );
+    }
+
+    #[tokio::test]
+    async fn test_conditional_routing_stream_respects_route_value() {
+        let mut graph = StateGraphImpl::<JsonState>::new("route_stream");
+
+        let mut routes = HashMap::new();
+        routes.insert("approve".to_string(), "approved".to_string());
+        routes.insert("reject".to_string(), "rejected".to_string());
+
+        graph
+            .add_node(
+                "router",
+                Box::new(StaticCommandNode {
+                    name: "router".to_string(),
+                    command: Command::new().route("approve").continue_(),
+                }),
+            )
+            .add_node(
+                "approved",
+                Box::new(TestNode {
+                    name: "approved".to_string(),
+                    updates: vec![StateUpdate::new("decision", json!("approved"))],
+                }),
+            )
+            .add_node(
+                "rejected",
+                Box::new(TestNode {
+                    name: "rejected".to_string(),
+                    updates: vec![StateUpdate::new("decision", json!("rejected"))],
+                }),
+            )
+            .add_edge(START, "router")
+            .add_conditional_edges("router", routes)
+            .add_edge("approved", END)
+            .add_edge("rejected", END);
+
+        let compiled = graph.compile().unwrap();
+        let mut stream = compiled.stream(JsonState::new(), None);
+
+        let mut final_state = None;
+        while let Some(event) = stream.next().await {
+            if let Ok(StreamEvent::End { final_state: state }) = event {
+                final_state = Some(state);
+            }
+        }
+
+        let final_state = final_state.expect("stream should produce final state");
+        assert_eq!(
+            final_state.get_value::<serde_json::Value>("decision"),
+            Some(json!("approved"))
         );
     }
 }

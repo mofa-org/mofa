@@ -3,6 +3,7 @@
 mod cli;
 mod commands;
 mod config;
+mod plugin_catalog;
 mod context;
 mod output;
 mod render;
@@ -12,12 +13,15 @@ mod tui;
 mod utils;
 mod widgets;
 
+mod error;
+pub use error::CliError;
+
 use clap::Parser;
 use cli::Cli;
 use colored::Colorize;
 use context::CliContext;
 
-fn main() -> anyhow::Result<()> {
+fn main() -> Result<(), CliError> {
     let mut args: Vec<String> = std::env::args().collect();
     normalize_legacy_output_flags(&mut args);
     let cli = Cli::parse_from(args);
@@ -46,7 +50,7 @@ fn main() -> anyhow::Result<()> {
     }
 }
 
-async fn run_command(cli: Cli) -> anyhow::Result<()> {
+async fn run_command(cli: Cli) -> Result<(), CliError> {
     use cli::Commands;
 
     // Initialize context for commands that need backend services
@@ -160,9 +164,21 @@ async fn run_command(cli: Cli) -> anyhow::Result<()> {
                 cli::AgentCommands::Logs {
                     agent_id,
                     tail,
-                    lines,
+                    level,
+                    grep,
+                    limit,
+                    json,
                 } => {
-                    commands::agent::logs::run(ctx, &agent_id, tail, lines).await?;
+                    commands::agent::logs::run(
+                        ctx,
+                        &agent_id,
+                        tail,
+                        level.clone(),
+                        grep.clone(),
+                        limit,
+                        json,
+                    )
+                    .await?;
                 }
             }
         }
@@ -201,12 +217,40 @@ async fn run_command(cli: Cli) -> anyhow::Result<()> {
                 cli::PluginCommands::Info { name } => {
                     commands::plugin::info::run(ctx, &name).await?;
                 }
-                cli::PluginCommands::Install { name } => {
-                    commands::plugin::install::run(ctx, &name).await?;
+                cli::PluginCommands::Install {
+                    name,
+                    checksum,
+                    verify_signature,
+                } => {
+                    commands::plugin::install::run(
+                        ctx,
+                        &name,
+                        checksum.as_deref(),
+                        verify_signature,
+                    )
+                    .await?;
                 }
                 cli::PluginCommands::Uninstall { name, force } => {
                     commands::plugin::uninstall::run(ctx, &name, force).await?;
                 }
+                cli::PluginCommands::Repository { action } => match action {
+                    cli::PluginRepositoryCommands::List => {
+                        commands::plugin::repository::list(ctx).await?;
+                    }
+                    cli::PluginRepositoryCommands::Add {
+                        id,
+                        url,
+                        description,
+                    } => {
+                        commands::plugin::repository::add(
+                            ctx,
+                            &id,
+                            &url,
+                            description.as_deref(),
+                        )
+                        .await?;
+                    }
+                },
             }
         }
 

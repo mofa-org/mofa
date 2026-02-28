@@ -2,6 +2,11 @@
 resolver = "3"
 members = [
     "cli_production_smoke",
+    "cli_agent_logs_demo",
+    "cli_plugin_lifecycle",
+    "custom_plugin_install",
+    "log_rotation_handling",
+    "cli_cicd_integration",
     "plugin_system",
     "workflow_orchestration",
     "wasm_plugin",
@@ -29,9 +34,12 @@ members = [
     "tool_routing",
     "runtime_message_bus_backpressure",
     "rag_pipeline",
+    "workflow_viz",
     "message_graph_validation",
+    "message_graph_executor_runtime",
     "agent_builder",
     "context_compression",
+    "context_window_demo",
 ]
 
 [workspace.package]
@@ -47,7 +55,6 @@ serde_yaml = "0.9"
 bincode = "1.3"
 tokio = { version = "1", features = ["full", "rt-multi-thread", "sync"] }
 tokio-stream = { version = "0.1", features = ["net"] }
-anyhow = "1.0"
 uuid = { version = "1.7", features = ["v4", "v7"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }

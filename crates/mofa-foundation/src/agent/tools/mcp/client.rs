@@ -163,9 +163,10 @@ impl McpClient for McpClientManager {
                 ));
             }
             _ => {
-                return Err(AgentError::ConfigError(
-                    "Unsupported MCP transport type".to_string(),
-                ));
+                return Err(AgentError::ConfigError(format!(
+                    "Unsupported MCP transport for server '{}'",
+                    server_name
+                )));
             }
         };
 

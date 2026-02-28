@@ -34,6 +34,7 @@
 //!   default_timeout_secs: 30
 //! ```
 
+use mofa_kernel::agent::types::error::{GlobalError, GlobalResult};
 use mofa_kernel::config::{from_str, load_config};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -116,10 +117,18 @@ pub struct LLMYamlConfig {
     /// Temperature parameter
     #[serde(default)]
     pub temperature: Option<f32>,
-    /// 最大 token 数
-    /// Maximum token count
+    /// 最大 token 数 (output generation limit)
+    /// Maximum token count (output generation limit)
     #[serde(default)]
     pub max_tokens: Option<u32>,
+    /// 上下文窗口大小 (input token budget)
+    /// Context window size (input token budget)
+    ///
+    /// When set, the framework will automatically trim conversation history
+    /// to fit within this token budget. This is the *input* limit, distinct
+    /// from `max_tokens` which controls *output* generation length.
+    #[serde(default)]
+    pub context_window_tokens: Option<u32>,
     /// 系统提示词
     /// System prompt
     #[serde(default)]
@@ -140,6 +149,7 @@ impl Default for LLMYamlConfig {
             deployment: None,
             temperature: Some(0.7),
             max_tokens: Some(4096),
+            context_window_tokens: None,
             system_prompt: None,
         }
     }
@@ -200,14 +210,14 @@ impl Default for RuntimeConfig {
 impl AgentYamlConfig {
     /// 从文件加载配置 (自动检测格式)
     /// Load config from file (auto-detect format)
-    pub fn from_file(path: impl AsRef<Path>) -> anyhow::Result<Self> {
+    pub fn from_file(path: impl AsRef<Path>) -> GlobalResult<Self> {
         let path_str = path.as_ref().to_string_lossy().to_string();
-        load_config(&path_str).map_err(|e| anyhow::anyhow!("Failed to load config: {}", e))
+        load_config(&path_str).map_err(|e| GlobalError::Other(format!("Failed to load config: {}", e)))
     }
 
     /// 从字符串解析配置 (指定格式)
     /// Parse config from string (specified format)
-    pub fn from_str_with_format(content: &str, format: &str) -> anyhow::Result<Self> {
+    pub fn from_str_with_format(content: &str, format: &str) -> GlobalResult<Self> {
         use config::FileFormat;
 
         let file_format = match format.to_lowercase().as_str() {
@@ -217,15 +227,15 @@ impl AgentYamlConfig {
             "ini" => FileFormat::Ini,
             "ron" => FileFormat::Ron,
             "json5" => FileFormat::Json5,
-            _ => return Err(anyhow::anyhow!("Unsupported config format: {}", format)),
+            _ => return Err(GlobalError::Other(format!("Unsupported config format: {}", format))),
         };
 
-        from_str(content, file_format).map_err(|e| anyhow::anyhow!("Failed to parse config: {}", e))
+        from_str(content, file_format).map_err(|e| GlobalError::Other(format!("Failed to parse config: {}", e)))
     }
 
     /// 从字符串解析配置 (自动检测为 YAML)
     /// Parse config from string (defaults to YAML)
-    pub fn parse(content: &str) -> anyhow::Result<Self> {
+    pub fn parse(content: &str) -> GlobalResult<Self> {
         Self::from_str_with_format(content, "yaml")
     }
 }

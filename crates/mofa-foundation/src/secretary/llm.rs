@@ -4,6 +4,7 @@
 //! 定义与 LLM 交互的抽象接口。
 //! Defines the abstract interface for interacting with LLMs.
 
+use mofa_kernel::agent::types::error::{GlobalError, GlobalResult};
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use tokio::sync::mpsc;
@@ -34,7 +35,7 @@ use tokio::sync::mpsc;
 ///         "openai"
 ///     }
 ///
-///     async fn chat(&self, messages: Vec<ChatMessage>) -> anyhow::Result<String> {
+///     async fn chat(&self, messages: Vec<ChatMessage>) -> GlobalResult<String> {
 ///         // 调用 OpenAI API
 ///         // Call OpenAI API
 ///         let response = call_openai(&self.api_key, &self.model, messages).await?;
@@ -50,7 +51,7 @@ pub trait LLMProvider: Send + Sync {
 
     /// 发送消息并获取响应
     /// Send messages and get response
-    async fn chat(&self, messages: Vec<ChatMessage>) -> anyhow::Result<String>;
+    async fn chat(&self, messages: Vec<ChatMessage>) -> GlobalResult<String>;
 
     /// 流式响应（可选实现）
     /// Streaming response (optional implementation)
@@ -58,13 +59,13 @@ pub trait LLMProvider: Send + Sync {
         &self,
         messages: Vec<ChatMessage>,
         tx: mpsc::Sender<String>,
-    ) -> anyhow::Result<()> {
+    ) -> GlobalResult<()> {
         // 默认实现：一次性返回
         // Default implementation: return all at once
         let response = self.chat(messages).await?;
         tx.send(response)
             .await
-            .map_err(|e| anyhow::anyhow!("Failed to send: {}", e))?;
+            .map_err(|e| GlobalError::Other(format!("Failed to send: {}", e)))?;
         Ok(())
     }
 
@@ -168,9 +169,9 @@ pub struct ModelInfo {
 /// let response = llm.chat(messages).await?;
 /// let analysis: TaskAnalysis = parse_llm_json(&response)?;
 /// ```
-pub fn parse_llm_json<T: serde::de::DeserializeOwned>(response: &str) -> anyhow::Result<T> {
+pub fn parse_llm_json<T: serde::de::DeserializeOwned>(response: &str) -> GlobalResult<T> {
     let json_str = extract_json_block(response).unwrap_or(response);
-    serde_json::from_str(json_str).map_err(|e| anyhow::anyhow!("JSON parse error: {}", e))
+    serde_json::from_str(json_str).map_err(|e| GlobalError::Other(format!("JSON parse error: {}", e)))
 }
 
 /// 从响应中提取 JSON 块

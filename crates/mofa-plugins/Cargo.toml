@@ -21,7 +21,6 @@ serde_json.workspace = true
 serde_yaml.workspace = true
 tokio.workspace = true
 tokio-stream = { workspace = true }
-anyhow.workspace = true
 thiserror.workspace = true
 parking_lot.workspace = true
 notify.workspace = true

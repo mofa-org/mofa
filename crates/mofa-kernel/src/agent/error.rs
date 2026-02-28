@@ -165,6 +165,22 @@ impl AgentError {
             available: available.into(),
         }
     }
+
+    /// Returns `true` for transient errors, `false` for permanent ones.
+    pub fn is_retryable(&self) -> bool {
+        matches!(
+            self,
+            AgentError::Timeout { .. }
+                | AgentError::ResourceUnavailable(_)
+                | AgentError::ExecutionFailed(_)
+                | AgentError::ToolExecutionFailed { .. }
+                | AgentError::CoordinationError(_)
+                | AgentError::Internal(_)
+                | AgentError::IoError(_)
+                | AgentError::ReasoningError(_)
+                | AgentError::MemoryError(_)
+        )
+    }
 }
 
 impl From<std::io::Error> for AgentError {
@@ -179,8 +195,26 @@ impl From<serde_json::Error> for AgentError {
     }
 }
 
-impl From<anyhow::Error> for AgentError {
-    fn from(err: anyhow::Error) -> Self {
+impl From<crate::plugin::PluginError> for AgentError {
+    fn from(err: crate::plugin::PluginError) -> Self {
+        AgentError::Internal(err.to_string())
+    }
+}
+
+impl From<crate::bus::BusError> for AgentError {
+    fn from(err: crate::bus::BusError) -> Self {
+        AgentError::Internal(err.to_string())
+    }
+}
+
+impl From<crate::agent::secretary::ConnectionError> for AgentError {
+    fn from(err: crate::agent::secretary::ConnectionError) -> Self {
+        AgentError::Internal(err.to_string())
+    }
+}
+
+impl From<crate::agent::secretary::SecretaryError> for AgentError {
+    fn from(err: crate::agent::secretary::SecretaryError) -> Self {
         AgentError::Internal(err.to_string())
     }
 }

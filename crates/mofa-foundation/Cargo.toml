@@ -39,7 +39,6 @@ uuid.workspace = true
 thiserror.workspace = true
 tokio.workspace = true
 futures.workspace = true
-anyhow.workspace = true
 tokio-stream = { workspace = true }
 tracing.workspace = true
 rand.workspace = true

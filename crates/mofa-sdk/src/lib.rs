@@ -43,7 +43,7 @@
 //! }
 //!
 //! #[tokio::main]
-//! async fn main() -> anyhow::Result<()> {
+//! async fn main() -> GlobalResult<()> {
 //!     let outputs = run_agents(MyAgent, vec![AgentInput::text("Hello")]).await?;
 //!     println!("{}", outputs[0].to_text());
 //!     Ok(())
@@ -305,6 +305,7 @@ pub mod plugins {
         // Kernel plugin primitives
         PluginConfig,
         PluginContext,
+        PluginError,
         PluginEvent,
         PluginManager,
         PluginMetadata,
@@ -623,7 +624,7 @@ pub mod secretary {
     //! use std::sync::Arc;
     //!
     //! #[tokio::main]
-    //! async fn main() -> anyhow::Result<()> {
+    //! async fn main() -> GlobalResult<()> {
     //!     // 1. 创建秘书Agent
     //!     // 1. Create Secretary Agent
     //!     let mut backend_agent = AgentInfo::new("backend_agent", "后端Agent");
@@ -695,7 +696,7 @@ pub mod secretary {
     //! impl LLMProvider for MyLLMProvider {
     //!     fn name(&self) -> &str { "my-llm" }
     //!
-    //!     async fn chat(&self, messages: Vec<ChatMessage>) -> anyhow::Result<String> {
+    //!     async fn chat(&self, messages: Vec<ChatMessage>) -> GlobalResult<String> {
     //!         // 调用你的LLM API
     //!         // Call your LLM API
     //!         Ok("LLM响应".to_string())
@@ -760,7 +761,7 @@ pub mod collaboration {
     //! use std::sync::Arc;
     //!
     //! #[tokio::main]
-    //! async fn main() -> anyhow::Result<()> {
+    //! async fn main() -> GlobalResult<()> {
     //!     let manager = LLMDrivenCollaborationManager::new("agent_001");
     //!
     //!     // 注册标准协议
