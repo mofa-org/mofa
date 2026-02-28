@@ -25,7 +25,7 @@ mofa-runtime = { path = "../mofa-runtime", version = "0.1" }
 mofa-foundation = { path = "../mofa-foundation", version = "0.1" }
 config.workspace = true
 tokio = { workspace = true }
-anyhow = { workspace = true }
+thiserror = { workspace = true }
 async-trait = { workspace = true }
 chrono = { workspace = true }
 

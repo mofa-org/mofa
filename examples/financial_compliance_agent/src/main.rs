@@ -8,7 +8,6 @@
 //! - 运行时接收监管部门的规则更新，自动重载插件并执行新规则
 //! - Receiving regulatory rule updates at runtime, auto-reloading plugins, and executing new rules
 
-use anyhow::Result;
 use mofa_sdk::plugins::rhai_runtime::{RhaiPlugin, RhaiPluginConfig};
 use mofa_sdk::plugins::{AgentPlugin, PluginContext};
 use notify::{Config, EventKind, RecommendedWatcher, RecursiveMode, Watcher};
@@ -24,7 +23,7 @@ use tracing::{info, warn, Level};
 // 1. Create compliance rules directory and initial rule file
 // ============================================================================
 
-async fn create_initial_rules_file(plugin_dir: &Path, rules_file: &Path) -> Result<()> {
+async fn create_initial_rules_file(plugin_dir: &Path, rules_file: &Path) -> Result<(), Box<dyn std::error::Error>> {
     // 创建插件目录
     // Create plugin directory
     tokio::fs::create_dir_all(plugin_dir).await?;
@@ -107,7 +106,7 @@ fn execute(content) {
 // ============================================================================
 
 #[tokio::main]
-async fn main() -> Result<()> {
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // 初始化日志
     // Initialize logging
     tracing_subscriber::fmt()
