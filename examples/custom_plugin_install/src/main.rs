@@ -103,10 +103,10 @@ Once installed, the plugin provides HTTP helper functions.
 
     println!("\n   Option B: Package as tar.gz and install from URL");
     println!("   tar -czf {}.tar.gz {}", plugin_name, plugin_dir.display());
-    println!("   mofa plugin install https://example.com/{}.tar.gz", plugin_name);
+    println!("   mofa plugin install https://example.com/{plugin_name}.tar.gz");
 
     println!("\n4. After installation:");
-    println!("   - Plugin will be in ~/.mofa/plugins/{}", plugin_name);
+    println!("   - Plugin will be in ~/.mofa/plugins/{plugin_name}");
     println!("   - Plugin spec will be saved to plugin store");
     println!("   - Use 'mofa plugin list' to verify");
 

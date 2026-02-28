@@ -43,7 +43,7 @@ pub fn run_dataflow(file: &std::path::Path, uv: bool) -> Result<(), CliError> {
                 Ok(())
             }
             Err(e) => {
-                return Err(CliError::Other(format!("Dataflow failed: {}", e)))
+                Err(CliError::Other(format!("Dataflow failed: {}", e)))
             }
         }
     })

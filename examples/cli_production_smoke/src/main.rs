@@ -27,6 +27,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         println!("All CLI smoke checks passed.");
         Ok(())
     } else {
-        return Err(format!("CLI smoke checks failed").into())
+        Err("CLI smoke checks failed".to_owned().into())
     }
 }

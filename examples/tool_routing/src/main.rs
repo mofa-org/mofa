@@ -30,7 +30,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // 3. 创建Agent并配置工具
     // 3. Create Agent and configure tools
-    let agent = Arc::new(simple_llm_agent(
+    let _agent = Arc::new(simple_llm_agent(
         "multi-task-agent",
         mock_provider.clone(),
         "You are a helpful assistant with access to various tools."
@@ -38,11 +38,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // 4. 创建工具执行器
     // 4. Create tool executor
-    let tool_executor = ExampleToolExecutor::new();
+    let _tool_executor = ExampleToolExecutor::new();
 
     // 5. 创建并添加工具路由插件
     // 5. Create and add tool routing plugin
-    let mut routing_plugin = ToolRoutingPlugin::new();
+    let routing_plugin = ToolRoutingPlugin::new();
     let rule_manager = routing_plugin.rule_manager();
 
     println!("✅ System initialization complete");

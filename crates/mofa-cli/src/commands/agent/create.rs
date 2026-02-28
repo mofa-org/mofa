@@ -391,7 +391,7 @@ fn parse_provider(value: &str) -> Result<LLMProvider, CliError> {
         "anthropic" => Ok(LLMProvider::Anthropic),
         "gemini" => Ok(LLMProvider::Gemini),
         other => {
-            return Err(CliError::ConfigError(format!(
+            Err(CliError::ConfigError(format!(
                 "Unsupported llm.provider value: {other}"
             )))
         }

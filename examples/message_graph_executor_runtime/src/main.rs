@@ -29,7 +29,7 @@ fn decode_event_envelope(message: AgentMessage) -> Result<MessageEnvelope, Box<d
         AgentMessage::Event(mofa_kernel::message::AgentEvent::Custom(_, payload)) => {
             serde_json::from_slice(&payload).map_err(|e| format!("failed to decode envelope from event payload: {}", e).into())
         }
-        other => return Err(format!("expected event/custom payload, got {other:?}").into()),
+        other => Err(format!("expected event/custom payload, got {other:?}").into()),
     }
 }
 
@@ -153,7 +153,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .map_err(|e| -> Box<dyn std::error::Error> { format!("timed out waiting for fraud target message: {}", e).into() })?
         .map_err(|e| -> Box<dyn std::error::Error> { format!("fraud receiver task failed: {}", e).into() })?
         .map_err(|e| -> Box<dyn std::error::Error> { format!("fraud receive failed: {}", e).into() })?
-        .ok_or_else(|| -> Box<dyn std::error::Error> { format!("fraud receiver got no message").into() })?;
+        .ok_or_else(|| -> Box<dyn std::error::Error> { "fraud receiver got no message".to_string().into() })?;
     let routed = decode_event_envelope(fraud_msg)?;
     println!(
         "fraud target received type='{}' hop_count={}",
@@ -165,7 +165,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .map_err(|e| -> Box<dyn std::error::Error> { format!("timed out waiting for stream target message: {}", e).into() })?
         .map_err(|e| -> Box<dyn std::error::Error> { format!("stream receiver task failed: {}", e).into() })?
         .map_err(|e| -> Box<dyn std::error::Error> { format!("stream receive failed: {}", e).into() })?
-        .ok_or_else(|| -> Box<dyn std::error::Error> { format!("stream receiver got no message").into() })?;
+        .ok_or_else(|| -> Box<dyn std::error::Error> { "stream receiver got no message".to_string().into() })?;
     match stream_msg {
         AgentMessage::StreamMessage {
             stream_id,
@@ -201,7 +201,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .map_err(|e| -> Box<dyn std::error::Error> { format!("timed out waiting for dlq message: {}", e).into() })?
         .map_err(|e| -> Box<dyn std::error::Error> { format!("dlq receiver task failed: {}", e).into() })?
         .map_err(|e| -> Box<dyn std::error::Error> { format!("dlq receive failed: {}", e).into() })?
-        .ok_or_else(|| -> Box<dyn std::error::Error> { format!("dlq receiver got no message").into() })?;
+        .ok_or_else(|| -> Box<dyn std::error::Error> { "dlq receiver got no message".to_string().into() })?;
     let dlq_envelope = decode_event_envelope(dlq_msg)?;
     let reason = dlq_envelope
         .headers

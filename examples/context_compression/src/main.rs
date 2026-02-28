@@ -38,8 +38,8 @@ use tracing::info;
 
 fn make_msg(role: &str, content: &str) -> ChatMessage {
     ChatMessage {
-        role: role.to_string(),
-        content: Some(content.to_string()),
+        role: role.to_owned(),
+        content: Some(content.to_owned()),
         tool_call_id: None,
         tool_calls: None,
     }
@@ -209,7 +209,7 @@ async fn demo_summarizing_compressor() -> Result<(), Box<dyn std::error::Error>>
     use mofa_foundation::llm::openai::{OpenAIConfig, OpenAIProvider};
 
     let base_url = std::env::var("OPENAI_BASE_URL").ok();
-    let model = std::env::var("OPENAI_MODEL").unwrap_or_else(|_| "gpt-4o-mini".to_string());
+    let model = std::env::var("OPENAI_MODEL").unwrap_or_else(|_| "gpt-4o-mini".to_owned());
 
     let mut cfg = OpenAIConfig::new(api_key).with_model(&model);
     if let Some(url) = base_url {

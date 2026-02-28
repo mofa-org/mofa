@@ -153,7 +153,7 @@ impl GeminiProvider {
                                         } else {
                                             "image/jpeg"
                                         };
-                                        let data = image_url.url.split(',').last().unwrap_or(&image_url.url);
+                                        let data = image_url.url.split(',').next_back().unwrap_or(&image_url.url);
                                         gemini_parts.push(serde_json::json!({
                                             "inlineData": {
                                                 "mimeType": mime_type,
@@ -163,7 +163,7 @@ impl GeminiProvider {
                                     }
                                     ContentPart::Audio { audio } => {
                                         let mime_type = format!("audio/{}", audio.format.to_lowercase());
-                                        let data = audio.data.split(',').last().unwrap_or(&audio.data);
+                                        let data = audio.data.split(',').next_back().unwrap_or(&audio.data);
                                         gemini_parts.push(serde_json::json!({
                                             "inlineData": {
                                                 "mimeType": mime_type,
@@ -173,7 +173,7 @@ impl GeminiProvider {
                                     }
                                     ContentPart::Video { video } => {
                                         let mime_type = format!("video/{}", video.format.to_lowercase());
-                                        let data = video.data.split(',').last().unwrap_or(&video.data);
+                                        let data = video.data.split(',').next_back().unwrap_or(&video.data);
                                         gemini_parts.push(serde_json::json!({
                                             "inlineData": {
                                                 "mimeType": mime_type,

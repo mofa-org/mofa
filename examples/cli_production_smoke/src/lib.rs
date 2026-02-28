@@ -8,12 +8,6 @@ use tempfile::TempDir;
 
 pub type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
 
-macro_rules! bail {
-    ($($arg:tt)*) => {
-        return Err(format!($($arg)*).into())
-    };
-}
-
 pub trait ContextExt<T, E> {
     fn with_context<C, F>(self, f: F) -> Result<T>
     where
@@ -71,7 +65,7 @@ impl SmokeEnvironment {
         validate_mofa_bin(&mofa_bin)?;
 
         let temp_dir = TempDir::new().map_err(|e| -> Box<dyn std::error::Error> {
-            format!("Failed to create temp directory for smoke run: {}", e).into()
+            format!("Failed to create temp directory for smoke run: {e}").into()
         })?;
         let xdg_config_home = temp_dir.path().join("xdg-config");
         let xdg_data_home = temp_dir.path().join("xdg-data");
@@ -315,7 +309,7 @@ pub fn smoke_session_lifecycle(env: &SmokeEnvironment, session_id: &str) -> Resu
     let show = env.run(&["session", "show", session_id, "--format", "json"])?;
     expect_ok(&show, "mofa session show --format json")?;
     let shown_json = extract_json_payload(&show).map_err(|e| -> Box<dyn std::error::Error> {
-        format!("Failed to parse session show JSON output: {}", e).into()
+        format!("Failed to parse session show JSON output: {e}").into()
     })?;
     let shown_id = shown_json
         .get("session_id")
@@ -397,13 +391,13 @@ pub fn expect_ok(output: &CommandOutput, label: &str) -> Result<()> {
         return Ok(());
     }
 
-    return Err(format!(
+    Err(format!(
         "{label} failed unexpectedly (cmd: {}).\nstdout:\n{}\nstderr:\n{}",
         output.command_line(),
         output.stdout,
         output.stderr
     )
-    .into());
+    .into())
 }
 
 pub fn expect_fail(output: &CommandOutput, label: &str) -> Result<()> {
@@ -411,13 +405,13 @@ pub fn expect_fail(output: &CommandOutput, label: &str) -> Result<()> {
         return Ok(());
     }
 
-    return Err(format!(
+    Err(format!(
         "{label} succeeded unexpectedly (cmd: {}).\nstdout:\n{}\nstderr:\n{}",
         output.command_line(),
         output.stdout,
         output.stderr
     )
-    .into());
+    .into())
 }
 
 pub fn expect_stdout_contains(output: &CommandOutput, needle: &str, label: &str) -> Result<()> {
@@ -425,11 +419,11 @@ pub fn expect_stdout_contains(output: &CommandOutput, needle: &str, label: &str)
         return Ok(());
     }
 
-    return Err(format!(
+    Err(format!(
         "{label} output did not contain '{needle}'.\nstdout:\n{}\nstderr:\n{}",
         output.stdout, output.stderr
     )
-    .into());
+    .into())
 }
 
 pub fn expect_stdout_not_contains(output: &CommandOutput, needle: &str, label: &str) -> Result<()> {
@@ -437,11 +431,11 @@ pub fn expect_stdout_not_contains(output: &CommandOutput, needle: &str, label: &
         return Ok(());
     }
 
-    return Err(format!(
+    Err(format!(
         "{label} output unexpectedly contained '{needle}'.\nstdout:\n{}\nstderr:\n{}",
         output.stdout, output.stderr
     )
-    .into());
+    .into())
 }
 
 pub fn expect_output_contains(output: &CommandOutput, needle: &str, label: &str) -> Result<()> {
@@ -449,11 +443,11 @@ pub fn expect_output_contains(output: &CommandOutput, needle: &str, label: &str)
         return Ok(());
     }
 
-    return Err(format!(
+    Err(format!(
         "{label} output did not contain '{needle}' in stdout/stderr.\nstdout:\n{}\nstderr:\n{}",
         output.stdout, output.stderr
     )
-    .into());
+    .into())
 }
 
 pub fn expect_output_not_contains(output: &CommandOutput, needle: &str, label: &str) -> Result<()> {
@@ -461,11 +455,11 @@ pub fn expect_output_not_contains(output: &CommandOutput, needle: &str, label: &
         return Ok(());
     }
 
-    return Err(format!(
+    Err(format!(
         "{label} output unexpectedly contained '{needle}' in stdout/stderr.\nstdout:\n{}\nstderr:\n{}",
         output.stdout,
         output.stderr
-    ).into());
+    ).into())
 }
 
 pub fn extract_json_payload(output: &CommandOutput) -> Result<Value> {
@@ -473,17 +467,17 @@ pub fn extract_json_payload(output: &CommandOutput) -> Result<Value> {
         .stdout
         .find('{')
         .ok_or_else(|| -> Box<dyn std::error::Error> {
-            format!("Could not find JSON object in output").into()
+            "Could not find JSON object in output".to_owned().into()
         })?;
     let payload = &output.stdout[start..];
     // Use a streaming deserializer so any trailing text after the JSON object is ignored.
     let mut iter = serde_json::Deserializer::from_str(payload).into_iter::<Value>();
     iter.next()
         .ok_or_else(|| -> Box<dyn std::error::Error> {
-            format!("Empty JSON stream in output").into()
+            "Empty JSON stream in output".to_owned().into()
         })?
         .map_err(|e| -> Box<dyn std::error::Error> {
-            format!("Invalid JSON payload: {}", e).into()
+            format!("Invalid JSON payload: {e}").into()
         })
 }
 
@@ -504,12 +498,12 @@ pub fn resolve_mofa_bin() -> Result<PathBuf> {
         return Ok(fallback);
     }
 
-    return Err(format!(
+    Err(format!(
         "Could not find mofa binary. Build it with `cargo build -p mofa-cli` from repo root, \
          or set MOFA_BIN to the binary path. Expected fallback: {}",
         fallback.display()
     )
-    .into());
+    .into())
 }
 
 fn validate_mofa_bin(path: impl AsRef<Path>) -> Result<PathBuf> {
@@ -518,10 +512,10 @@ fn validate_mofa_bin(path: impl AsRef<Path>) -> Result<PathBuf> {
         return Ok(path.to_path_buf());
     }
 
-    return Err(format!(
+    Err(format!(
         "Could not find mofa binary at '{}'. Build with `cargo build -p mofa-cli` or set MOFA_BIN to a valid binary path.",
         path.display()
-    ).into());
+    ).into())
 }
 
 fn binary_name(base: &str) -> String {
@@ -545,15 +539,14 @@ pub fn workspace_root() -> PathBuf {
     let mut outermost_workspace: Option<PathBuf> = None;
     for ancestor in manifest_dir.ancestors() {
         let cargo_toml = ancestor.join("Cargo.toml");
-        if cargo_toml.is_file() {
-            if let Ok(text) = std::fs::read_to_string(&cargo_toml) {
+        if cargo_toml.is_file()
+            && let Ok(text) = std::fs::read_to_string(&cargo_toml) {
                 // Match only a bare `[workspace]` section header (not inside a comment or
                 // string literal), to avoid false positives from `workspace = true` lines.
                 if text.lines().any(|line| line.trim() == "[workspace]") {
                     outermost_workspace = Some(ancestor.to_path_buf());
                 }
             }
-        }
     }
 
     // Fall back to the original hardcoded depth if the search finds nothing.

@@ -35,14 +35,13 @@ pub async fn run(
             return Err(CliError::PluginError(format!("Plugin '{}' is already installed", entry.id)));
         }
 
-        if let Ok(Some(existing)) = ctx.plugin_store.get(&entry.id) {
-            if existing.enabled {
+        if let Ok(Some(existing)) = ctx.plugin_store.get(&entry.id)
+            && existing.enabled {
                 return Err(CliError::PluginError(format!(
                     "Plugin '{}' is already persisted as enabled. Use `mofa plugin uninstall` first if you want to reinstall.",
                     entry.id
                 )));
             }
-        }
 
         let spec = PluginSpecEntry {
             id: entry.id.clone(),
@@ -72,11 +71,10 @@ pub async fn run(
     // Determine plugin source type natively (Local / Url)
     use std::path::Path as StdPath;
     let mut plugin_id = normalized.to_string();
-    if let PluginSource::LocalPath(path) = &plugin_source {
-        if StdPath::new(normalized) == path {
+    if let PluginSource::LocalPath(path) = &plugin_source
+        && StdPath::new(normalized) == path {
             plugin_id = normalized.replace(['/', '\\'], "_");
         }
-    }
 
     if ctx.plugin_store.get(&plugin_id)?.is_some() {
         return Err(CliError::PluginError(format!("Plugin '{}' is already installed", plugin_id)));
