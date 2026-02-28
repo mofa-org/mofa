@@ -15,6 +15,8 @@
 mod context;
 mod exporter;
 mod instrumentation;
+#[cfg(feature = "otlp-metrics")]
+mod metrics_exporter;
 mod propagator;
 mod span;
 mod tracer;
@@ -27,6 +29,8 @@ pub use instrumentation::{
     AgentTracer, MessageTracer, TracedAgent, TracedWorkflow, WorkflowTracer, trace_agent_operation,
     trace_workflow_execution,
 };
+#[cfg(feature = "otlp-metrics")]
+pub use metrics_exporter::{OtlpExporterHandles, OtlpMetricsExporter, OtlpMetricsExporterConfig};
 pub use propagator::{B3Propagator, HeaderCarrier, TracePropagator, W3CTraceContextPropagator};
 pub use span::{Span, SpanAttribute, SpanBuilder, SpanEvent, SpanKind, SpanLink, SpanStatus};
 pub use tracer::{
