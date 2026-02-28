@@ -287,7 +287,9 @@ impl<S: GraphState + 'static> mofa_kernel::workflow::StateGraph for StateGraphIm
             ),
             edges: Arc::new(self.edges),
             reducers: Arc::new(self.reducers),
-            entry_point: self.entry_point.expect("Entry point should be validated"),
+            entry_point: self.entry_point.ok_or_else(|| {
+                AgentError::ValidationFailed("No entry point set".to_string())
+            })?,
             config: self.config,
         })
     }
