@@ -49,6 +49,9 @@ pub enum ContentPart {
     /// 音频内容
     /// Audio content
     Audio { audio: AudioData },
+    /// 视频内容
+    /// Video content
+    Video { video: VideoData },
 }
 
 /// 图片 URL
@@ -83,6 +86,18 @@ pub struct AudioData {
     pub data: String,
     /// 音频格式
     /// Audio format
+    pub format: String,
+}
+
+/// 视频数据
+/// Video data
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct VideoData {
+    /// base64 编码的视频数据
+    /// base64 encoded video data
+    pub data: String,
+    /// 视频格式 (例如 mp4)
+    /// Video format (e.g. mp4)
     pub format: String,
 }
 
@@ -214,6 +229,46 @@ impl ChatMessage {
                     image_url: ImageUrl {
                         url: image_url.into(),
                         detail: None,
+                    },
+                },
+            ])),
+            name: None,
+            tool_calls: None,
+            tool_call_id: None,
+        }
+    }
+
+    /// 创建带音频的用户消息
+    /// Create a user message with audio
+    pub fn user_with_audio(text: impl Into<String>, audio_base64: String, format: String) -> Self {
+        Self {
+            role: Role::User,
+            content: Some(MessageContent::Parts(vec![
+                ContentPart::Text { text: text.into() },
+                ContentPart::Audio {
+                    audio: AudioData {
+                        data: audio_base64,
+                        format,
+                    },
+                },
+            ])),
+            name: None,
+            tool_calls: None,
+            tool_call_id: None,
+        }
+    }
+
+    /// 创建带视频的用户消息
+    /// Create a user message with video
+    pub fn user_with_video(text: impl Into<String>, video_base64: String, format: String) -> Self {
+        Self {
+            role: Role::User,
+            content: Some(MessageContent::Parts(vec![
+                ContentPart::Text { text: text.into() },
+                ContentPart::Video {
+                    video: VideoData {
+                        data: video_base64,
+                        format,
                     },
                 },
             ])),

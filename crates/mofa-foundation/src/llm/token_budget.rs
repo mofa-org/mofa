@@ -95,6 +95,8 @@ impl TokenEstimator for CharBasedEstimator {
                     crate::llm::types::ContentPart::Image { .. } => 85 * self.chars_per_token,
                     // Audio contributes a fixed token estimate (~200 tokens)
                     crate::llm::types::ContentPart::Audio { .. } => 200 * self.chars_per_token,
+                    // Video contributes a fixed token estimate (~300 tokens)
+                    crate::llm::types::ContentPart::Video { .. } => 300 * self.chars_per_token,
                 })
                 .sum(),
             None => 0,
