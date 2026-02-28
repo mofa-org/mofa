@@ -1,0 +1,91 @@
+{
+  "diagnostics": [],
+  "order": [
+    "ingress8",
+    "enrich8",
+    "score8",
+    "join8",
+    "sink8"
+  ],
+  "steps": [
+    {
+      "depends_on": [],
+      "hooks": {},
+      "node_id": "ingress8",
+      "node_type": "source",
+      "retry_policy": {
+        "backoff_multiplier": 2.0,
+        "initial_delay_seconds": 0.0,
+        "jitter_ratio": 0.0,
+        "max_attempts": 1,
+        "max_delay_seconds": 30.0
+      },
+      "retry_schedule_seconds": []
+    },
+    {
+      "depends_on": [
+        "ingress8"
+      ],
+      "hooks": {},
+      "node_id": "enrich8",
+      "node_type": "agent",
+      "retry_policy": {
+        "backoff_multiplier": 2.0,
+        "initial_delay_seconds": 0.0,
+        "jitter_ratio": 0.0,
+        "max_attempts": 1,
+        "max_delay_seconds": 30.0
+      },
+      "retry_schedule_seconds": []
+    },
+    {
+      "depends_on": [
+        "ingress8"
+      ],
+      "hooks": {},
+      "node_id": "score8",
+      "node_type": "agent",
+      "retry_policy": {
+        "backoff_multiplier": 2.0,
+        "initial_delay_seconds": 0.0,
+        "jitter_ratio": 0.0,
+        "max_attempts": 1,
+        "max_delay_seconds": 30.0
+      },
+      "retry_schedule_seconds": []
+    },
+    {
+      "depends_on": [
+        "enrich8",
+        "score8"
+      ],
+      "hooks": {},
+      "node_id": "join8",
+      "node_type": "router",
+      "retry_policy": {
+        "backoff_multiplier": 2.0,
+        "initial_delay_seconds": 0.0,
+        "jitter_ratio": 0.0,
+        "max_attempts": 1,
+        "max_delay_seconds": 30.0
+      },
+      "retry_schedule_seconds": []
+    },
+    {
+      "depends_on": [
+        "join8"
+      ],
+      "hooks": {},
+      "node_id": "sink8",
+      "node_type": "sink",
+      "retry_policy": {
+        "backoff_multiplier": 2.0,
+        "initial_delay_seconds": 0.0,
+        "jitter_ratio": 0.0,
+        "max_attempts": 1,
+        "max_delay_seconds": 30.0
+      },
+      "retry_schedule_seconds": []
+    }
+  ]
+}

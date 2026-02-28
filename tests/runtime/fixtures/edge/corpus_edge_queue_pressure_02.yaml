@@ -1,0 +1,18 @@
+schema_version: 2
+nodes:
+  - id: src_edge_queue_2
+    type: source
+    outputs: [out]
+  - id: worker_edge_queue_2
+    type: agent
+    build: pip install -e ./agents/queue2
+    path: dynamic
+    outputs: [done]
+    inputs:
+      payload:
+        source: src_edge_queue_2/out
+        queue_size: 102001
+  - id: sink_edge_queue_2
+    type: sink
+    inputs:
+      result: worker_edge_queue_2/done

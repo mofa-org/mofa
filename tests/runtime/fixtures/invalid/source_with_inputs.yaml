@@ -1,0 +1,10 @@
+schema_version: 2
+nodes:
+  - id: a
+    type: source
+    outputs: [out]
+    inputs:
+      bad: b/out
+  - id: b
+    type: source
+    outputs: [out]

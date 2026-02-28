@@ -1,0 +1,56 @@
+{
+  "diagnostics": [],
+  "order": [
+    "src3",
+    "wrk3",
+    "snk3"
+  ],
+  "steps": [
+    {
+      "depends_on": [],
+      "hooks": {},
+      "node_id": "src3",
+      "node_type": "source",
+      "retry_policy": {
+        "backoff_multiplier": 2.0,
+        "initial_delay_seconds": 0.0,
+        "jitter_ratio": 0.0,
+        "max_attempts": 1,
+        "max_delay_seconds": 30.0
+      },
+      "retry_schedule_seconds": []
+    },
+    {
+      "depends_on": [
+        "src3"
+      ],
+      "hooks": {},
+      "node_id": "wrk3",
+      "node_type": "router",
+      "retry_policy": {
+        "backoff_multiplier": 2.0,
+        "initial_delay_seconds": 0.0,
+        "jitter_ratio": 0.0,
+        "max_attempts": 1,
+        "max_delay_seconds": 30.0
+      },
+      "retry_schedule_seconds": []
+    },
+    {
+      "depends_on": [
+        "wrk3"
+      ],
+      "hooks": {},
+      "node_id": "snk3",
+      "node_type": "sink",
+      "retry_policy": {
+        "backoff_multiplier": 2.0,
+        "initial_delay_seconds": 0.0,
+        "jitter_ratio": 0.0,
+        "max_attempts": 1,
+        "max_delay_seconds": 30.0
+      },
+      "retry_schedule_seconds": []
+    }
+  ]
+}

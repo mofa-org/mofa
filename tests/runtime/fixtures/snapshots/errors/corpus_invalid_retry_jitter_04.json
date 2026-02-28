@@ -1,0 +1,14 @@
+{
+  "exception": "Flow validation failed:\n- [type/error] Node 'worker_bad_retry_4' retry.jitter_ratio must be in [0, 1]",
+  "issues": [
+    {
+      "field": null,
+      "hint": null,
+      "message": "Node 'worker_bad_retry_4' retry.jitter_ratio must be in [0, 1]",
+      "node_id": null,
+      "rule_id": null,
+      "severity": "error",
+      "stage": "type"
+    }
+  ]
+}

@@ -1,0 +1,24 @@
+schema_version: 2
+nodes:
+  - id: src6
+    type: source
+    outputs: [out]
+    env:
+      TRACE_ID: trace-6
+  - id: wrk6
+    type: router
+    build: pip install -e ./agents/wrk6
+    path: dynamic
+    outputs: [mid]
+    inputs:
+      payload: src6/out
+    retry:
+      max_attempts: 4
+      initial_delay_seconds: 0.6
+      backoff_multiplier: 2.0
+      max_delay_seconds: 4.0
+      jitter_ratio: 0.1
+  - id: snk6
+    type: sink
+    inputs:
+      result: wrk6/mid

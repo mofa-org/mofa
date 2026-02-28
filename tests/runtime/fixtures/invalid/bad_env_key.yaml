@@ -1,0 +1,7 @@
+schema_version: 2
+nodes:
+  - id: source
+    type: source
+    outputs: [out]
+    env:
+      bad-key: value

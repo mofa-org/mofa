@@ -1,0 +1,14 @@
+{
+  "exception": "Flow validation failed:\n- [type/error] Node 'src_bad_placeholder_3' env 'OPENAI_API_KEY' placeholder '$OPENAI-API-KEY' must match '$NAME'",
+  "issues": [
+    {
+      "field": null,
+      "hint": null,
+      "message": "Node 'src_bad_placeholder_3' env 'OPENAI_API_KEY' placeholder '$OPENAI-API-KEY' must match '$NAME'",
+      "node_id": null,
+      "rule_id": null,
+      "severity": "error",
+      "stage": "type"
+    }
+  ]
+}

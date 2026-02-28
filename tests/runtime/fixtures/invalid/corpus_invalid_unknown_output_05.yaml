@@ -1,0 +1,9 @@
+schema_version: 2
+nodes:
+  - id: src_unknown_output_5
+    type: source
+    outputs: [out]
+  - id: sink_unknown_output_5
+    type: sink
+    inputs:
+      data: src_unknown_output_5/missing

@@ -1,0 +1,27 @@
+schema_version: 2
+nodes:
+  - id: src8
+    type: source
+    outputs: [out]
+    env:
+      TRACE_ID: trace-8
+  - id: wrk8
+    type: transformer
+    build: pip install -e ./agents/wrk8
+    path: dynamic
+    outputs: [mid]
+    inputs:
+      payload: src8/out
+    retry:
+      max_attempts: 2
+      initial_delay_seconds: 0.8
+      backoff_multiplier: 2.0
+      max_delay_seconds: 4.0
+      jitter_ratio: 0.1
+    planning:
+      lane: lane-8
+      priority: 8
+  - id: snk8
+    type: sink
+    inputs:
+      result: wrk8/mid

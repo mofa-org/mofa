@@ -1,0 +1,14 @@
+{
+  "exception": "Flow validation failed:\n- [semantic/error] Source nodes must not declare inputs (node=a, field=inputs, rule=semantic.node_type_contract)",
+  "issues": [
+    {
+      "field": "inputs",
+      "hint": null,
+      "message": "Source nodes must not declare inputs",
+      "node_id": "a",
+      "rule_id": "semantic.node_type_contract",
+      "severity": "error",
+      "stage": "semantic"
+    }
+  ]
+}

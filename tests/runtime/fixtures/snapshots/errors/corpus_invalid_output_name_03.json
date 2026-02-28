@@ -1,0 +1,14 @@
+{
+  "exception": "Flow validation failed:\n- [type/error] Node 'src_bad_output_3' output 'bad.name' must match '^[A-Za-z][A-Za-z0-9_-]{0,63}$'",
+  "issues": [
+    {
+      "field": null,
+      "hint": null,
+      "message": "Node 'src_bad_output_3' output 'bad.name' must match '^[A-Za-z][A-Za-z0-9_-]{0,63}$'",
+      "node_id": null,
+      "rule_id": null,
+      "severity": "error",
+      "stage": "type"
+    }
+  ]
+}

@@ -1,0 +1,27 @@
+schema_version: 2
+nodes:
+  - id: input
+    type: source
+    outputs: [out]
+  - id: enrich
+    type: agent
+    build: pip install -e ./agents/enrich
+    path: dynamic
+    outputs: [enriched]
+    inputs:
+      q: input/out
+  - id: score
+    type: agent
+    build: pip install -e ./agents/score
+    path: dynamic
+    outputs: [scored]
+    inputs:
+      q: input/out
+  - id: join
+    type: router
+    build: pip install -e ./agents/join
+    path: dynamic
+    outputs: [out]
+    inputs:
+      a: enrich/enriched
+      b: score/scored

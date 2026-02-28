@@ -1,0 +1,13 @@
+schema_version: 2
+nodes:
+  - id: worker_bad_retry_2
+    type: agent
+    build: pip install -e ./agents/retrybad2
+    path: dynamic
+    outputs: [out]
+    retry:
+      max_attempts: 3
+      initial_delay_seconds: 0.1
+      backoff_multiplier: 2.0
+      max_delay_seconds: 3.0
+      jitter_ratio: 1.2

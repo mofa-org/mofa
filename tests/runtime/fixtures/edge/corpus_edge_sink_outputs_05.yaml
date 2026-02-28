@@ -1,0 +1,10 @@
+schema_version: 2
+nodes:
+  - id: src_edge_sink_5
+    type: source
+    outputs: [out]
+  - id: sink_edge_sink_5
+    type: sink
+    outputs: [legacy_out]
+    inputs:
+      data: src_edge_sink_5/out

@@ -1,0 +1,18 @@
+schema_version: 2
+nodes:
+  - id: src9
+    type: source
+    outputs: [out]
+    env:
+      TRACE_ID: trace-9
+  - id: wrk9
+    type: router
+    build: pip install -e ./agents/wrk9
+    path: dynamic
+    outputs: [mid]
+    inputs:
+      payload: src9/out
+  - id: snk9
+    type: sink
+    inputs:
+      result: wrk9/mid

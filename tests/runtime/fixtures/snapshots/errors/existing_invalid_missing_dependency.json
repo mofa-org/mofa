@@ -1,0 +1,14 @@
+{
+  "exception": "Flow validation failed:\n- [dependency/error] Input references unknown node 'source' (node=sink, field=inputs.data, rule=dependency.target_exists)",
+  "issues": [
+    {
+      "field": "inputs.data",
+      "hint": null,
+      "message": "Input references unknown node 'source'",
+      "node_id": "sink",
+      "rule_id": "dependency.target_exists",
+      "severity": "error",
+      "stage": "dependency"
+    }
+  ]
+}

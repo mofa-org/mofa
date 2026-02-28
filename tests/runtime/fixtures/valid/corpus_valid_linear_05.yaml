@@ -1,0 +1,18 @@
+schema_version: 2
+nodes:
+  - id: src5
+    type: source
+    outputs: [out]
+    env:
+      TRACE_ID: trace-5
+  - id: wrk5
+    type: transformer
+    build: pip install -e ./agents/wrk5
+    path: dynamic
+    outputs: [mid]
+    inputs:
+      payload: src5/out
+  - id: snk5
+    type: sink
+    inputs:
+      result: wrk5/mid

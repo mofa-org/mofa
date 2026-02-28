@@ -1,0 +1,5 @@
+schema_version: 2
+nodes:
+  - id: 1bad
+    type: source
+    outputs: [out]

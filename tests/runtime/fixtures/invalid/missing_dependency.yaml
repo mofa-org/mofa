@@ -1,0 +1,6 @@
+schema_version: 2
+nodes:
+  - id: sink
+    type: sink
+    inputs:
+      data: source/out

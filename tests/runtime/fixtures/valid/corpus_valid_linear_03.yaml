@@ -1,0 +1,18 @@
+schema_version: 2
+nodes:
+  - id: src3
+    type: source
+    outputs: [out]
+    env:
+      TRACE_ID: trace-3
+  - id: wrk3
+    type: router
+    build: pip install -e ./agents/wrk3
+    path: dynamic
+    outputs: [mid]
+    inputs:
+      payload: src3/out
+  - id: snk3
+    type: sink
+    inputs:
+      result: wrk3/mid

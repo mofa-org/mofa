@@ -1,0 +1,14 @@
+{
+  "exception": "Flow validation failed:\n- [type/error] Node 'source' env key 'bad-key' must match '^[A-Z_][A-Z0-9_]*$'",
+  "issues": [
+    {
+      "field": null,
+      "hint": null,
+      "message": "Node 'source' env key 'bad-key' must match '^[A-Z_][A-Z0-9_]*$'",
+      "node_id": null,
+      "rule_id": null,
+      "severity": "error",
+      "stage": "type"
+    }
+  ]
+}

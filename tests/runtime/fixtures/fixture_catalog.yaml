@@ -1,0 +1,597 @@
+cases:
+- id: corpus_edge_queue_pressure_01
+  fixture: edge/corpus_edge_queue_pressure_01.yaml
+  expect: valid
+  warning_contains:
+  - queue_size
+  - memory pressure
+  planner_snapshot: snapshots/planner/corpus_edge_queue_pressure_01.json
+- id: corpus_edge_queue_pressure_02
+  fixture: edge/corpus_edge_queue_pressure_02.yaml
+  expect: valid
+  warning_contains:
+  - queue_size
+  - memory pressure
+  planner_snapshot: snapshots/planner/corpus_edge_queue_pressure_02.json
+- id: corpus_edge_queue_pressure_03
+  fixture: edge/corpus_edge_queue_pressure_03.yaml
+  expect: valid
+  warning_contains:
+  - queue_size
+  - memory pressure
+  planner_snapshot: snapshots/planner/corpus_edge_queue_pressure_03.json
+- id: corpus_edge_queue_pressure_04
+  fixture: edge/corpus_edge_queue_pressure_04.yaml
+  expect: valid
+  warning_contains:
+  - queue_size
+  - memory pressure
+  planner_snapshot: snapshots/planner/corpus_edge_queue_pressure_04.json
+- id: corpus_edge_queue_pressure_05
+  fixture: edge/corpus_edge_queue_pressure_05.yaml
+  expect: valid
+  warning_contains:
+  - queue_size
+  - memory pressure
+  planner_snapshot: snapshots/planner/corpus_edge_queue_pressure_05.json
+- id: corpus_edge_retry_bounds_01
+  fixture: edge/corpus_edge_retry_bounds_01.yaml
+  expect: valid
+  warning_contains:
+  - retry.max_attempts
+  - tail latency
+  planner_snapshot: snapshots/planner/corpus_edge_retry_bounds_01.json
+- id: corpus_edge_retry_bounds_02
+  fixture: edge/corpus_edge_retry_bounds_02.yaml
+  expect: valid
+  warning_contains:
+  - retry.max_attempts
+  - tail latency
+  planner_snapshot: snapshots/planner/corpus_edge_retry_bounds_02.json
+- id: corpus_edge_retry_bounds_03
+  fixture: edge/corpus_edge_retry_bounds_03.yaml
+  expect: valid
+  warning_contains:
+  - retry.max_attempts
+  - tail latency
+  planner_snapshot: snapshots/planner/corpus_edge_retry_bounds_03.json
+- id: corpus_edge_retry_bounds_04
+  fixture: edge/corpus_edge_retry_bounds_04.yaml
+  expect: valid
+  warning_contains:
+  - retry.max_attempts
+  - tail latency
+  planner_snapshot: snapshots/planner/corpus_edge_retry_bounds_04.json
+- id: corpus_edge_retry_bounds_05
+  fixture: edge/corpus_edge_retry_bounds_05.yaml
+  expect: valid
+  warning_contains:
+  - retry.max_attempts
+  - tail latency
+  planner_snapshot: snapshots/planner/corpus_edge_retry_bounds_05.json
+- id: corpus_edge_sink_outputs_01
+  fixture: edge/corpus_edge_sink_outputs_01.yaml
+  expect: valid
+  warning_contains:
+  - Sink nodes should not declare outputs
+  planner_snapshot: snapshots/planner/corpus_edge_sink_outputs_01.json
+- id: corpus_edge_sink_outputs_02
+  fixture: edge/corpus_edge_sink_outputs_02.yaml
+  expect: valid
+  warning_contains:
+  - Sink nodes should not declare outputs
+  planner_snapshot: snapshots/planner/corpus_edge_sink_outputs_02.json
+- id: corpus_edge_sink_outputs_03
+  fixture: edge/corpus_edge_sink_outputs_03.yaml
+  expect: valid
+  warning_contains:
+  - Sink nodes should not declare outputs
+  planner_snapshot: snapshots/planner/corpus_edge_sink_outputs_03.json
+- id: corpus_edge_sink_outputs_04
+  fixture: edge/corpus_edge_sink_outputs_04.yaml
+  expect: valid
+  warning_contains:
+  - Sink nodes should not declare outputs
+  planner_snapshot: snapshots/planner/corpus_edge_sink_outputs_04.json
+- id: corpus_edge_sink_outputs_05
+  fixture: edge/corpus_edge_sink_outputs_05.yaml
+  expect: valid
+  warning_contains:
+  - Sink nodes should not declare outputs
+  planner_snapshot: snapshots/planner/corpus_edge_sink_outputs_05.json
+- id: corpus_invalid_duplicate_outputs_01
+  fixture: invalid/corpus_invalid_duplicate_outputs_01.yaml
+  expect: invalid
+  error_contains:
+  - Duplicate output
+  error_snapshot: snapshots/errors/corpus_invalid_duplicate_outputs_01.json
+- id: corpus_invalid_duplicate_outputs_02
+  fixture: invalid/corpus_invalid_duplicate_outputs_02.yaml
+  expect: invalid
+  error_contains:
+  - Duplicate output
+  error_snapshot: snapshots/errors/corpus_invalid_duplicate_outputs_02.json
+- id: corpus_invalid_duplicate_outputs_03
+  fixture: invalid/corpus_invalid_duplicate_outputs_03.yaml
+  expect: invalid
+  error_contains:
+  - Duplicate output
+  error_snapshot: snapshots/errors/corpus_invalid_duplicate_outputs_03.json
+- id: corpus_invalid_duplicate_outputs_04
+  fixture: invalid/corpus_invalid_duplicate_outputs_04.yaml
+  expect: invalid
+  error_contains:
+  - Duplicate output
+  error_snapshot: snapshots/errors/corpus_invalid_duplicate_outputs_04.json
+- id: corpus_invalid_duplicate_outputs_05
+  fixture: invalid/corpus_invalid_duplicate_outputs_05.yaml
+  expect: invalid
+  error_contains:
+  - Duplicate output
+  error_snapshot: snapshots/errors/corpus_invalid_duplicate_outputs_05.json
+- id: corpus_invalid_expression_literal_01
+  fixture: invalid/corpus_invalid_expression_literal_01.yaml
+  expect: invalid
+  error_contains:
+  - Only literal YAML values are allowed
+  error_snapshot: snapshots/errors/corpus_invalid_expression_literal_01.json
+- id: corpus_invalid_expression_literal_02
+  fixture: invalid/corpus_invalid_expression_literal_02.yaml
+  expect: invalid
+  error_contains:
+  - Only literal YAML values are allowed
+  error_snapshot: snapshots/errors/corpus_invalid_expression_literal_02.json
+- id: corpus_invalid_expression_literal_03
+  fixture: invalid/corpus_invalid_expression_literal_03.yaml
+  expect: invalid
+  error_contains:
+  - Only literal YAML values are allowed
+  error_snapshot: snapshots/errors/corpus_invalid_expression_literal_03.json
+- id: corpus_invalid_expression_literal_04
+  fixture: invalid/corpus_invalid_expression_literal_04.yaml
+  expect: invalid
+  error_contains:
+  - Only literal YAML values are allowed
+  error_snapshot: snapshots/errors/corpus_invalid_expression_literal_04.json
+- id: corpus_invalid_expression_literal_05
+  fixture: invalid/corpus_invalid_expression_literal_05.yaml
+  expect: invalid
+  error_contains:
+  - Only literal YAML values are allowed
+  error_snapshot: snapshots/errors/corpus_invalid_expression_literal_05.json
+- id: corpus_invalid_node_id_01
+  fixture: invalid/corpus_invalid_node_id_01.yaml
+  expect: invalid
+  error_contains:
+  - Field 'id' must match
+  error_snapshot: snapshots/errors/corpus_invalid_node_id_01.json
+- id: corpus_invalid_node_id_02
+  fixture: invalid/corpus_invalid_node_id_02.yaml
+  expect: invalid
+  error_contains:
+  - Field 'id' must match
+  error_snapshot: snapshots/errors/corpus_invalid_node_id_02.json
+- id: corpus_invalid_node_id_03
+  fixture: invalid/corpus_invalid_node_id_03.yaml
+  expect: invalid
+  error_contains:
+  - Field 'id' must match
+  error_snapshot: snapshots/errors/corpus_invalid_node_id_03.json
+- id: corpus_invalid_node_id_04
+  fixture: invalid/corpus_invalid_node_id_04.yaml
+  expect: invalid
+  error_contains:
+  - Field 'id' must match
+  error_snapshot: snapshots/errors/corpus_invalid_node_id_04.json
+- id: corpus_invalid_node_id_05
+  fixture: invalid/corpus_invalid_node_id_05.yaml
+  expect: invalid
+  error_contains:
+  - Field 'id' must match
+  error_snapshot: snapshots/errors/corpus_invalid_node_id_05.json
+- id: corpus_invalid_output_name_01
+  fixture: invalid/corpus_invalid_output_name_01.yaml
+  expect: invalid
+  error_contains:
+  - output 'bad.name' must match
+  error_snapshot: snapshots/errors/corpus_invalid_output_name_01.json
+- id: corpus_invalid_output_name_02
+  fixture: invalid/corpus_invalid_output_name_02.yaml
+  expect: invalid
+  error_contains:
+  - output 'bad.name' must match
+  error_snapshot: snapshots/errors/corpus_invalid_output_name_02.json
+- id: corpus_invalid_output_name_03
+  fixture: invalid/corpus_invalid_output_name_03.yaml
+  expect: invalid
+  error_contains:
+  - output 'bad.name' must match
+  error_snapshot: snapshots/errors/corpus_invalid_output_name_03.json
+- id: corpus_invalid_output_name_04
+  fixture: invalid/corpus_invalid_output_name_04.yaml
+  expect: invalid
+  error_contains:
+  - output 'bad.name' must match
+  error_snapshot: snapshots/errors/corpus_invalid_output_name_04.json
+- id: corpus_invalid_output_name_05
+  fixture: invalid/corpus_invalid_output_name_05.yaml
+  expect: invalid
+  error_contains:
+  - output 'bad.name' must match
+  error_snapshot: snapshots/errors/corpus_invalid_output_name_05.json
+- id: corpus_invalid_placeholder_01
+  fixture: invalid/corpus_invalid_placeholder_01.yaml
+  expect: invalid
+  error_contains:
+  - placeholder
+  - must match '$NAME'
+  error_snapshot: snapshots/errors/corpus_invalid_placeholder_01.json
+- id: corpus_invalid_placeholder_02
+  fixture: invalid/corpus_invalid_placeholder_02.yaml
+  expect: invalid
+  error_contains:
+  - placeholder
+  - must match '$NAME'
+  error_snapshot: snapshots/errors/corpus_invalid_placeholder_02.json
+- id: corpus_invalid_placeholder_03
+  fixture: invalid/corpus_invalid_placeholder_03.yaml
+  expect: invalid
+  error_contains:
+  - placeholder
+  - must match '$NAME'
+  error_snapshot: snapshots/errors/corpus_invalid_placeholder_03.json
+- id: corpus_invalid_placeholder_04
+  fixture: invalid/corpus_invalid_placeholder_04.yaml
+  expect: invalid
+  error_contains:
+  - placeholder
+  - must match '$NAME'
+  error_snapshot: snapshots/errors/corpus_invalid_placeholder_04.json
+- id: corpus_invalid_placeholder_05
+  fixture: invalid/corpus_invalid_placeholder_05.yaml
+  expect: invalid
+  error_contains:
+  - placeholder
+  - must match '$NAME'
+  error_snapshot: snapshots/errors/corpus_invalid_placeholder_05.json
+- id: corpus_invalid_retry_jitter_01
+  fixture: invalid/corpus_invalid_retry_jitter_01.yaml
+  expect: invalid
+  error_contains:
+  - retry.jitter_ratio
+  - in [0, 1]
+  error_snapshot: snapshots/errors/corpus_invalid_retry_jitter_01.json
+- id: corpus_invalid_retry_jitter_02
+  fixture: invalid/corpus_invalid_retry_jitter_02.yaml
+  expect: invalid
+  error_contains:
+  - retry.jitter_ratio
+  - in [0, 1]
+  error_snapshot: snapshots/errors/corpus_invalid_retry_jitter_02.json
+- id: corpus_invalid_retry_jitter_03
+  fixture: invalid/corpus_invalid_retry_jitter_03.yaml
+  expect: invalid
+  error_contains:
+  - retry.jitter_ratio
+  - in [0, 1]
+  error_snapshot: snapshots/errors/corpus_invalid_retry_jitter_03.json
+- id: corpus_invalid_retry_jitter_04
+  fixture: invalid/corpus_invalid_retry_jitter_04.yaml
+  expect: invalid
+  error_contains:
+  - retry.jitter_ratio
+  - in [0, 1]
+  error_snapshot: snapshots/errors/corpus_invalid_retry_jitter_04.json
+- id: corpus_invalid_retry_jitter_05
+  fixture: invalid/corpus_invalid_retry_jitter_05.yaml
+  expect: invalid
+  error_contains:
+  - retry.jitter_ratio
+  - in [0, 1]
+  error_snapshot: snapshots/errors/corpus_invalid_retry_jitter_05.json
+- id: corpus_invalid_unknown_output_01
+  fixture: invalid/corpus_invalid_unknown_output_01.yaml
+  expect: invalid
+  error_contains:
+  - unknown output 'missing'
+  error_snapshot: snapshots/errors/corpus_invalid_unknown_output_01.json
+- id: corpus_invalid_unknown_output_02
+  fixture: invalid/corpus_invalid_unknown_output_02.yaml
+  expect: invalid
+  error_contains:
+  - unknown output 'missing'
+  error_snapshot: snapshots/errors/corpus_invalid_unknown_output_02.json
+- id: corpus_invalid_unknown_output_03
+  fixture: invalid/corpus_invalid_unknown_output_03.yaml
+  expect: invalid
+  error_contains:
+  - unknown output 'missing'
+  error_snapshot: snapshots/errors/corpus_invalid_unknown_output_03.json
+- id: corpus_invalid_unknown_output_04
+  fixture: invalid/corpus_invalid_unknown_output_04.yaml
+  expect: invalid
+  error_contains:
+  - unknown output 'missing'
+  error_snapshot: snapshots/errors/corpus_invalid_unknown_output_04.json
+- id: corpus_invalid_unknown_output_05
+  fixture: invalid/corpus_invalid_unknown_output_05.yaml
+  expect: invalid
+  error_contains:
+  - unknown output 'missing'
+  error_snapshot: snapshots/errors/corpus_invalid_unknown_output_05.json
+- id: corpus_valid_fanout_01
+  fixture: valid/corpus_valid_fanout_01.yaml
+  expect: valid
+  expected_order:
+  - ingress1
+  - enrich1
+  - score1
+  - join1
+  - sink1
+  planner_snapshot: snapshots/planner/corpus_valid_fanout_01.json
+- id: corpus_valid_fanout_02
+  fixture: valid/corpus_valid_fanout_02.yaml
+  expect: valid
+  expected_order:
+  - ingress2
+  - enrich2
+  - score2
+  - join2
+  - sink2
+  planner_snapshot: snapshots/planner/corpus_valid_fanout_02.json
+- id: corpus_valid_fanout_03
+  fixture: valid/corpus_valid_fanout_03.yaml
+  expect: valid
+  expected_order:
+  - ingress3
+  - enrich3
+  - score3
+  - join3
+  - sink3
+  planner_snapshot: snapshots/planner/corpus_valid_fanout_03.json
+- id: corpus_valid_fanout_04
+  fixture: valid/corpus_valid_fanout_04.yaml
+  expect: valid
+  expected_order:
+  - ingress4
+  - enrich4
+  - score4
+  - join4
+  - sink4
+  planner_snapshot: snapshots/planner/corpus_valid_fanout_04.json
+- id: corpus_valid_fanout_05
+  fixture: valid/corpus_valid_fanout_05.yaml
+  expect: valid
+  expected_order:
+  - ingress5
+  - enrich5
+  - score5
+  - join5
+  - sink5
+  planner_snapshot: snapshots/planner/corpus_valid_fanout_05.json
+- id: corpus_valid_fanout_06
+  fixture: valid/corpus_valid_fanout_06.yaml
+  expect: valid
+  expected_order:
+  - ingress6
+  - enrich6
+  - score6
+  - join6
+  - sink6
+  planner_snapshot: snapshots/planner/corpus_valid_fanout_06.json
+- id: corpus_valid_fanout_07
+  fixture: valid/corpus_valid_fanout_07.yaml
+  expect: valid
+  expected_order:
+  - ingress7
+  - enrich7
+  - score7
+  - join7
+  - sink7
+  planner_snapshot: snapshots/planner/corpus_valid_fanout_07.json
+- id: corpus_valid_fanout_08
+  fixture: valid/corpus_valid_fanout_08.yaml
+  expect: valid
+  expected_order:
+  - ingress8
+  - enrich8
+  - score8
+  - join8
+  - sink8
+  planner_snapshot: snapshots/planner/corpus_valid_fanout_08.json
+- id: corpus_valid_legacy_01
+  fixture: valid/corpus_valid_legacy_01.yaml
+  expect: valid
+  expected_order:
+  - source1
+  - worker1
+  - sink1
+  planner_snapshot: snapshots/planner/corpus_valid_legacy_01.json
+- id: corpus_valid_legacy_02
+  fixture: valid/corpus_valid_legacy_02.yaml
+  expect: valid
+  expected_order:
+  - source2
+  - worker2
+  - sink2
+  planner_snapshot: snapshots/planner/corpus_valid_legacy_02.json
+- id: corpus_valid_legacy_03
+  fixture: valid/corpus_valid_legacy_03.yaml
+  expect: valid
+  expected_order:
+  - source3
+  - worker3
+  - sink3
+  planner_snapshot: snapshots/planner/corpus_valid_legacy_03.json
+- id: corpus_valid_legacy_04
+  fixture: valid/corpus_valid_legacy_04.yaml
+  expect: valid
+  expected_order:
+  - source4
+  - worker4
+  - sink4
+  planner_snapshot: snapshots/planner/corpus_valid_legacy_04.json
+- id: corpus_valid_legacy_05
+  fixture: valid/corpus_valid_legacy_05.yaml
+  expect: valid
+  expected_order:
+  - source5
+  - worker5
+  - sink5
+  planner_snapshot: snapshots/planner/corpus_valid_legacy_05.json
+- id: corpus_valid_legacy_06
+  fixture: valid/corpus_valid_legacy_06.yaml
+  expect: valid
+  expected_order:
+  - source6
+  - worker6
+  - sink6
+  planner_snapshot: snapshots/planner/corpus_valid_legacy_06.json
+- id: corpus_valid_linear_01
+  fixture: valid/corpus_valid_linear_01.yaml
+  expect: valid
+  expected_order:
+  - src1
+  - wrk1
+  - snk1
+  planner_snapshot: snapshots/planner/corpus_valid_linear_01.json
+- id: corpus_valid_linear_02
+  fixture: valid/corpus_valid_linear_02.yaml
+  expect: valid
+  expected_order:
+  - src2
+  - wrk2
+  - snk2
+  planner_snapshot: snapshots/planner/corpus_valid_linear_02.json
+- id: corpus_valid_linear_03
+  fixture: valid/corpus_valid_linear_03.yaml
+  expect: valid
+  expected_order:
+  - src3
+  - wrk3
+  - snk3
+  planner_snapshot: snapshots/planner/corpus_valid_linear_03.json
+- id: corpus_valid_linear_04
+  fixture: valid/corpus_valid_linear_04.yaml
+  expect: valid
+  expected_order:
+  - src4
+  - wrk4
+  - snk4
+  planner_snapshot: snapshots/planner/corpus_valid_linear_04.json
+- id: corpus_valid_linear_05
+  fixture: valid/corpus_valid_linear_05.yaml
+  expect: valid
+  expected_order:
+  - src5
+  - wrk5
+  - snk5
+  planner_snapshot: snapshots/planner/corpus_valid_linear_05.json
+- id: corpus_valid_linear_06
+  fixture: valid/corpus_valid_linear_06.yaml
+  expect: valid
+  expected_order:
+  - src6
+  - wrk6
+  - snk6
+  planner_snapshot: snapshots/planner/corpus_valid_linear_06.json
+- id: corpus_valid_linear_07
+  fixture: valid/corpus_valid_linear_07.yaml
+  expect: valid
+  expected_order:
+  - src7
+  - wrk7
+  - snk7
+  planner_snapshot: snapshots/planner/corpus_valid_linear_07.json
+- id: corpus_valid_linear_08
+  fixture: valid/corpus_valid_linear_08.yaml
+  expect: valid
+  expected_order:
+  - src8
+  - wrk8
+  - snk8
+  planner_snapshot: snapshots/planner/corpus_valid_linear_08.json
+- id: corpus_valid_linear_09
+  fixture: valid/corpus_valid_linear_09.yaml
+  expect: valid
+  expected_order:
+  - src9
+  - wrk9
+  - snk9
+  planner_snapshot: snapshots/planner/corpus_valid_linear_09.json
+- id: corpus_valid_linear_10
+  fixture: valid/corpus_valid_linear_10.yaml
+  expect: valid
+  expected_order:
+  - src10
+  - wrk10
+  - snk10
+  planner_snapshot: snapshots/planner/corpus_valid_linear_10.json
+- id: corpus_valid_linear_11
+  fixture: valid/corpus_valid_linear_11.yaml
+  expect: valid
+  expected_order:
+  - src11
+  - wrk11
+  - snk11
+  planner_snapshot: snapshots/planner/corpus_valid_linear_11.json
+- id: corpus_valid_linear_12
+  fixture: valid/corpus_valid_linear_12.yaml
+  expect: valid
+  expected_order:
+  - src12
+  - wrk12
+  - snk12
+  planner_snapshot: snapshots/planner/corpus_valid_linear_12.json
+- id: existing_invalid_bad_env_key
+  fixture: invalid/bad_env_key.yaml
+  expect: invalid
+  error_snapshot: snapshots/errors/existing_invalid_bad_env_key.json
+- id: existing_invalid_bad_node_type
+  fixture: invalid/bad_node_type.yaml
+  expect: invalid
+  error_snapshot: snapshots/errors/existing_invalid_bad_node_type.json
+- id: existing_invalid_cycle
+  fixture: invalid/cycle.yaml
+  expect: invalid
+  error_snapshot: snapshots/errors/existing_invalid_cycle.json
+- id: existing_invalid_expression_literal
+  fixture: invalid/expression_literal.yaml
+  expect: invalid
+  error_snapshot: snapshots/errors/existing_invalid_expression_literal.json
+- id: existing_invalid_invalid_source_format
+  fixture: invalid/invalid_source_format.yaml
+  expect: invalid
+  error_snapshot: snapshots/errors/existing_invalid_invalid_source_format.json
+- id: existing_invalid_missing_dependency
+  fixture: invalid/missing_dependency.yaml
+  expect: invalid
+  error_snapshot: snapshots/errors/existing_invalid_missing_dependency.json
+- id: existing_invalid_retry_bad_jitter
+  fixture: invalid/retry_bad_jitter.yaml
+  expect: invalid
+  error_snapshot: snapshots/errors/existing_invalid_retry_bad_jitter.json
+- id: existing_invalid_source_with_inputs
+  fixture: invalid/source_with_inputs.yaml
+  expect: invalid
+  error_snapshot: snapshots/errors/existing_invalid_source_with_inputs.json
+- id: existing_valid_basic_chain
+  fixture: valid/basic_chain.yaml
+  expect: valid
+  planner_snapshot: snapshots/planner/existing_valid_basic_chain.json
+- id: existing_valid_env_placeholders
+  fixture: valid/env_placeholders.yaml
+  expect: valid
+  planner_snapshot: snapshots/planner/existing_valid_env_placeholders.json
+- id: existing_valid_legacy_v1_kind_environment
+  fixture: valid/legacy_v1_kind_environment.yaml
+  expect: valid
+  planner_snapshot: snapshots/planner/existing_valid_legacy_v1_kind_environment.json
+- id: existing_valid_multi_branch
+  fixture: valid/multi_branch.yaml
+  expect: valid
+  planner_snapshot: snapshots/planner/existing_valid_multi_branch.json
+- id: existing_valid_retry_with_hooks
+  fixture: valid/retry_with_hooks.yaml
+  expect: valid
+  planner_snapshot: snapshots/planner/existing_valid_retry_with_hooks.json

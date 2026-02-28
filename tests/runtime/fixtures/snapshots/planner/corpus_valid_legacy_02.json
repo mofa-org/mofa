@@ -1,0 +1,56 @@
+{
+  "diagnostics": [],
+  "order": [
+    "source2",
+    "worker2",
+    "sink2"
+  ],
+  "steps": [
+    {
+      "depends_on": [],
+      "hooks": {},
+      "node_id": "source2",
+      "node_type": "source",
+      "retry_policy": {
+        "backoff_multiplier": 2.0,
+        "initial_delay_seconds": 0.0,
+        "jitter_ratio": 0.0,
+        "max_attempts": 1,
+        "max_delay_seconds": 30.0
+      },
+      "retry_schedule_seconds": []
+    },
+    {
+      "depends_on": [
+        "source2"
+      ],
+      "hooks": {},
+      "node_id": "worker2",
+      "node_type": "agent",
+      "retry_policy": {
+        "backoff_multiplier": 2.0,
+        "initial_delay_seconds": 0.0,
+        "jitter_ratio": 0.0,
+        "max_attempts": 1,
+        "max_delay_seconds": 30.0
+      },
+      "retry_schedule_seconds": []
+    },
+    {
+      "depends_on": [
+        "worker2"
+      ],
+      "hooks": {},
+      "node_id": "sink2",
+      "node_type": "sink",
+      "retry_policy": {
+        "backoff_multiplier": 2.0,
+        "initial_delay_seconds": 0.0,
+        "jitter_ratio": 0.0,
+        "max_attempts": 1,
+        "max_delay_seconds": 30.0
+      },
+      "retry_schedule_seconds": []
+    }
+  ]
+}
