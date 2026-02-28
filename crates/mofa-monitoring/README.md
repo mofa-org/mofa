@@ -42,6 +42,9 @@ metrics push exporter:
 mofa-monitoring = { version = "0.1", features = ["otlp-metrics"] }
 ```
 
+The OTLP exporter uses bounded queues and cardinality limits to avoid
+high-concurrency regressions and uncontrolled time-series growth.
+
 ## Documentation
 
 - [API Documentation](https://docs.rs/mofa-monitoring)
