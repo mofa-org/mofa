@@ -144,7 +144,7 @@ mod cache {
 }
 
 #[cfg(feature = "compression-cache")]
-use cache::{CompressionCache, CacheStats};
+pub use cache::{CompressionCache, CacheStats};
 
 // token counter utility
 
