@@ -13,6 +13,9 @@ pub mod hardware;
 // adapter registry module - Runtime model adapter discovery
 pub mod adapter;
 
+// inference orchestration module - Unified Inference Routing & Lifecycle
+pub mod inference;
+
 // prompt module
 pub mod prompt;
 
@@ -68,7 +71,7 @@ pub use orchestrator::{
 };
 
 // Re-export Linux implementation and pipeline when available
-#[cfg(target_os = "linux")]
+#[cfg(all(target_os = "linux", feature = "linux-candle"))]
 pub use orchestrator::{
     InferencePipeline, LinuxCandleProvider, ModelPool, PipelineBuilder, PipelineOutput,
     PipelineStage,

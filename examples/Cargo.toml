@@ -34,13 +34,16 @@ members = [
     "tool_routing",
     "runtime_message_bus_backpressure",
     "rag_pipeline",
+    "hitl_v2",
+    "agent_builder",
     "workflow_viz",
     "message_graph_validation",
     "message_graph_executor_runtime",
     "agent_builder",
     "context_compression",
     "context_window_demo",
-    "codex_compression_practical",
+    "compression_examples",
+    "admission_gate_demo",
 ]
 
 [workspace.package]

@@ -39,6 +39,8 @@
 //!     cpu_family: CpuFamily::X86_64,
 //!     gpu_available: true,
 //!     gpu_type: Some(GpuType::Cuda),
+//!     total_memory_bytes: 32_000_000_000,
+//!     available_memory_bytes: 16_000_000_000,
 //! };
 //!
 //! let hardware = HardwareProfile::from(hw_capability);
