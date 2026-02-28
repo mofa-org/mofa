@@ -3,7 +3,18 @@
 use crate::agent::error::{AgentError, AgentResult};
 use crate::rag::types::{GenerateInput, ScoredDocument};
 use async_trait::async_trait;
+use futures::stream::Stream;
+use std::pin::Pin;
 use std::sync::Arc;
+
+/// A chunk of generated content from a streaming generator.
+#[derive(Debug, Clone)]
+pub enum GeneratorChunk {
+    /// A piece of text content
+    Text(String),
+    /// End of stream marker
+    Done,
+}
 
 #[async_trait]
 pub trait Retriever: Send + Sync {
@@ -18,6 +29,17 @@ pub trait Reranker: Send + Sync {
 #[async_trait]
 pub trait Generator: Send + Sync {
     async fn generate(&self, input: &GenerateInput) -> AgentResult<String>;
+
+    /// Stream generation results as they become available.
+    /// Default implementation falls back to generate() and yields the result as a single chunk.
+    async fn stream(
+        &self,
+        input: GenerateInput,
+    ) -> AgentResult<Pin<Box<dyn Stream<Item = AgentResult<GeneratorChunk>> + Send>>> {
+        let result = self.generate(&input).await?;
+        let stream = futures::stream::once(async move { Ok(GeneratorChunk::Text(result)) });
+        Ok(Box::pin(stream))
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -27,6 +49,7 @@ pub struct RagPipelineOutput {
     pub reranked_docs: Vec<ScoredDocument>,
 }
 
+#[derive(Clone)]
 pub struct RagPipeline {
     retriever: Arc<dyn Retriever>,
     reranker: Arc<dyn Reranker>,
@@ -78,6 +101,32 @@ impl RagPipeline {
             retrieved_docs,
             reranked_docs,
         })
+    }
+
+    pub async fn run_streaming(
+        &self,
+        query: &str,
+        top_k: usize,
+    ) -> AgentResult<(
+        Vec<ScoredDocument>,
+        Pin<Box<dyn Stream<Item = AgentResult<GeneratorChunk>> + Send>>,
+    )> {
+        if top_k == 0 {
+            return Err(AgentError::InvalidInput("top_k must be greater than 0".to_string()));
+        }
+
+        let retrieved_docs = self.retriever.retrieve(query, top_k).await?;
+        let reranked_docs = self.reranker.rerank(query, retrieved_docs.clone()).await?;
+
+        let context = reranked_docs
+            .iter()
+            .map(|doc| doc.document.clone())
+            .collect();
+
+        let generate_input = GenerateInput::new(query, context);
+        let stream = self.generator.stream(generate_input).await?;
+
+        Ok((reranked_docs, stream))
     }
 }
 

@@ -117,10 +117,18 @@ pub struct LLMYamlConfig {
     /// Temperature parameter
     #[serde(default)]
     pub temperature: Option<f32>,
-    /// 最大 token 数
-    /// Maximum token count
+    /// 最大 token 数 (output generation limit)
+    /// Maximum token count (output generation limit)
     #[serde(default)]
     pub max_tokens: Option<u32>,
+    /// 上下文窗口大小 (input token budget)
+    /// Context window size (input token budget)
+    ///
+    /// When set, the framework will automatically trim conversation history
+    /// to fit within this token budget. This is the *input* limit, distinct
+    /// from `max_tokens` which controls *output* generation length.
+    #[serde(default)]
+    pub context_window_tokens: Option<u32>,
     /// 系统提示词
     /// System prompt
     #[serde(default)]
@@ -141,6 +149,7 @@ impl Default for LLMYamlConfig {
             deployment: None,
             temperature: Some(0.7),
             max_tokens: Some(4096),
+            context_window_tokens: None,
             system_prompt: None,
         }
     }

@@ -32,7 +32,7 @@
 //! └─────────────────────────────────────────────────────────────┘
 //! ```
 //!
-//! # 快速开始 
+//! # 快速开始
 //! # Quick Start
 //!
 //! ```rust,ignore
@@ -204,10 +204,10 @@ pub enum CollaborationContent {
     /// LLM 生成的响应
     /// LLM-generated response
     LLMResponse {
-        reasoning: String,       // LLM 的推理过程
-                                 // LLM's reasoning process
-        conclusion: String,      // LLM 的结论
-                                 // LLM's conclusion
+        reasoning: String, // LLM 的推理过程
+        // LLM's reasoning process
+        conclusion: String, // LLM 的结论
+        // LLM's conclusion
         data: serde_json::Value, // 相关数据
                                  // Related data
     },

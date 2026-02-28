@@ -1,7 +1,10 @@
 //! `mofa agent create` command - Interactive agent creation wizard
 
+use crate::CliError;
 use colored::Colorize;
-use dialoguer::{Confirm, Input, Select, theme::ColorfulTheme};
+use dialoguer::{theme::ColorfulTheme, Confirm, Input, Select};
+use serde::Deserialize;
+use serde::Serialize;
 use std::path::PathBuf;
 
 /// Agent configuration built from the interactive wizard
@@ -60,7 +63,7 @@ impl LLMProvider {
 }
 
 /// Execute the `mofa agent create` command
-pub fn run(non_interactive: bool, config_path: Option<PathBuf>) -> anyhow::Result<()> {
+pub fn run(non_interactive: bool, config_path: Option<PathBuf>) -> Result<(), CliError> {
     if non_interactive {
         // Non-interactive mode - use config file or defaults
         let config = config_from_file_or_defaults(config_path)?;
@@ -74,7 +77,7 @@ pub fn run(non_interactive: bool, config_path: Option<PathBuf>) -> anyhow::Resul
     Ok(())
 }
 
-fn run_interactive_wizard() -> anyhow::Result<AgentConfigBuilder> {
+fn run_interactive_wizard() -> Result<AgentConfigBuilder, CliError> {
     println!();
     println!(
         "{}",
@@ -148,7 +151,11 @@ fn run_interactive_wizard() -> anyhow::Result<AgentConfigBuilder> {
             .with_prompt("API key (or leave empty to use env var)")
             .allow_empty(true)
             .interact()?;
-        if key.is_empty() { None } else { Some(key) }
+        if key.is_empty() {
+            None
+        } else {
+            Some(key)
+        }
     } else {
         None
     };
@@ -159,7 +166,11 @@ fn run_interactive_wizard() -> anyhow::Result<AgentConfigBuilder> {
             .with_prompt("Base URL (optional)")
             .allow_empty(true)
             .interact()?;
-        if url.is_empty() { None } else { Some(url) }
+        if url.is_empty() {
+            None
+        } else {
+            Some(url)
+        }
     } else {
         None
     };
@@ -279,10 +290,80 @@ fn run_interactive_wizard() -> anyhow::Result<AgentConfigBuilder> {
 
 fn config_from_file_or_defaults(
     config_path: Option<PathBuf>,
-) -> anyhow::Result<AgentConfigBuilder> {
-    if let Some(_path) = config_path {
-        // Load from file (would parse the file here)
-        anyhow::bail!("Config file loading not yet implemented for non-interactive mode");
+) -> Result<AgentConfigBuilder, CliError> {
+    if let Some(path) = config_path {
+        #[derive(Debug, Deserialize)]
+        struct FileAgentConfig {
+            id: String,
+            name: String,
+            #[serde(default)]
+            description: String,
+            #[serde(default)]
+            capabilities: Vec<String>,
+        }
+
+        #[derive(Debug, Deserialize)]
+        struct FileLlmConfig {
+            provider: Option<String>,
+            model: Option<String>,
+            api_key: Option<String>,
+            base_url: Option<String>,
+            temperature: Option<f32>,
+            max_tokens: Option<u32>,
+            #[serde(default)]
+            system_prompt: String,
+        }
+
+        #[derive(Debug, Deserialize)]
+        struct FileRootConfig {
+            agent: FileAgentConfig,
+            llm: FileLlmConfig,
+        }
+
+        let raw = std::fs::read_to_string(&path).map_err(|e| {
+            CliError::ConfigError(format!(
+                "Failed to read config file {}: {e}",
+                path.display()
+            ))
+        })?;
+
+        let parsed: FileRootConfig = serde_yaml::from_str(&raw).map_err(|e| {
+            CliError::ConfigError(format!(
+                "Failed to parse config file {}: {e}",
+                path.display()
+            ))
+        })?;
+
+        let provider_value = parsed.llm.provider.ok_or_else(|| {
+            CliError::ConfigError("Missing required config field: llm.provider".into())
+        })?;
+
+        let provider = parse_provider(&provider_value)?;
+
+        let model = parsed
+            .llm
+            .model
+            .unwrap_or_else(|| provider.default_model().to_string());
+
+        let capabilities = if parsed.agent.capabilities.is_empty() {
+            vec!["llm".to_string()]
+        } else {
+            parsed.agent.capabilities
+        };
+
+        Ok(AgentConfigBuilder {
+            id: parsed.agent.id,
+            name: parsed.agent.name,
+            description: parsed.agent.description,
+            provider,
+            model,
+            api_key: parsed.llm.api_key,
+            base_url: parsed.llm.base_url,
+            temperature: parsed.llm.temperature.unwrap_or(0.7),
+            max_tokens: parsed.llm.max_tokens.unwrap_or(4096),
+            system_prompt: parsed.llm.system_prompt,
+            capabilities,
+        })
     } else {
         // Use defaults
         Ok(AgentConfigBuilder {
@@ -301,88 +382,26 @@ fn config_from_file_or_defaults(
     }
 }
 
-fn write_agent_config(config: &AgentConfigBuilder) -> anyhow::Result<()> {
+fn parse_provider(value: &str) -> Result<LLMProvider, CliError> {
+    match value.trim().to_ascii_lowercase().as_str() {
+        "openai" => Ok(LLMProvider::OpenAI),
+        "ollama" => Ok(LLMProvider::Ollama),
+        "azure" | "azure_openai" | "azure-openai" => Ok(LLMProvider::Azure),
+        "compatible" | "compatible_api" | "compatible-api" => Ok(LLMProvider::Compatible),
+        "anthropic" => Ok(LLMProvider::Anthropic),
+        "gemini" => Ok(LLMProvider::Gemini),
+        other => {
+            return Err(CliError::ConfigError(format!(
+                "Unsupported llm.provider value: {other}"
+            )))
+        }
+    }
+}
+
+fn write_agent_config(config: &AgentConfigBuilder) -> Result<(), CliError> {
     let filename = "agent.yml";
 
-    let provider_name = match config.provider {
-        LLMProvider::OpenAI => "openai",
-        LLMProvider::Ollama => "ollama",
-        LLMProvider::Azure => "azure",
-        LLMProvider::Compatible => "compatible",
-        LLMProvider::Anthropic => "anthropic",
-        LLMProvider::Gemini => "gemini",
-    };
-
-    let capabilities_str = if config.capabilities.is_empty() {
-        "    - llm".to_string()
-    } else {
-        config
-            .capabilities
-            .iter()
-            .map(|c| format!("    - {}", c))
-            .collect::<Vec<_>>()
-            .join("\n")
-    };
-
-    let api_key_str = match &config.api_key {
-        Some(key) => format!("  api_key: {}", key),
-        None => match config.provider {
-            LLMProvider::OpenAI | LLMProvider::Azure | LLMProvider::Compatible => {
-                "  api_key: ${OPENAI_API_KEY}".to_string()
-            }
-            LLMProvider::Anthropic => "  api_key: ${ANTHROPIC_API_KEY}".to_string(),
-            LLMProvider::Gemini => "  api_key: ${GEMINI_API_KEY}".to_string(),
-            LLMProvider::Ollama => "  api_key: ".to_string(), // not used
-        },
-    };
-
-    let base_url_str = match &config.base_url {
-        Some(url) => format!("  base_url: {}", url),
-        None => "".to_string(),
-    };
-
-    let content = format!(
-        r#"# MoFA Agent Configuration
-# Generated by mofa agent create
-
-agent:
-  id: "{id}"
-  name: "{name}"
-  description: "{description}"
-  capabilities:
-{capabilities}
-
-# LLM Provider Configuration
-llm:
-  provider: {provider}
-  model: {model}
-{api_key}
-{base_url}
-  # Generation parameters
-  temperature: {temp}
-  max_tokens: {max_tokens}
-
-  # System prompt
-  system_prompt: |
-    {system_prompt}
-
-# Runtime configuration
-runtime:
-  max_concurrent_tasks: 10
-  default_timeout_secs: 60
-"#,
-        id = config.id,
-        name = config.name,
-        description = config.description,
-        capabilities = capabilities_str,
-        provider = provider_name,
-        model = config.model,
-        api_key = api_key_str,
-        base_url = base_url_str,
-        temp = config.temperature,
-        max_tokens = config.max_tokens,
-        system_prompt = config.system_prompt,
-    );
+    let content = build_agent_config_yaml(config)?;
 
     std::fs::write(filename, content)?;
 
@@ -404,9 +423,200 @@ runtime:
     Ok(())
 }
 
+fn build_agent_config_yaml(config: &AgentConfigBuilder) -> Result<String, CliError> {
+    #[derive(Serialize)]
+    struct AgentSection<'a> {
+        id: &'a str,
+        name: &'a str,
+        description: &'a str,
+        capabilities: Vec<String>,
+    }
+
+    #[derive(Serialize)]
+    struct LlmSection<'a> {
+        provider: &'a str,
+        model: &'a str,
+        api_key: String,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        base_url: Option<&'a str>,
+        temperature: f32,
+        max_tokens: u32,
+        system_prompt: &'a str,
+    }
+
+    #[derive(Serialize)]
+    struct RuntimeSection {
+        max_concurrent_tasks: u32,
+        default_timeout_secs: u32,
+    }
+
+    #[derive(Serialize)]
+    struct AgentFileConfig<'a> {
+        agent: AgentSection<'a>,
+        llm: LlmSection<'a>,
+        runtime: RuntimeSection,
+    }
+
+    let provider_name = match config.provider {
+        LLMProvider::OpenAI => "openai",
+        LLMProvider::Ollama => "ollama",
+        LLMProvider::Azure => "azure",
+        LLMProvider::Compatible => "compatible",
+        LLMProvider::Anthropic => "anthropic",
+        LLMProvider::Gemini => "gemini",
+    };
+
+    let api_key = match &config.api_key {
+        Some(key) => key.clone(),
+        None => match config.provider {
+            LLMProvider::OpenAI | LLMProvider::Azure | LLMProvider::Compatible => {
+                "${OPENAI_API_KEY}".to_string()
+            }
+            LLMProvider::Anthropic => "${ANTHROPIC_API_KEY}".to_string(),
+            LLMProvider::Gemini => "${GEMINI_API_KEY}".to_string(),
+            LLMProvider::Ollama => String::new(),
+        },
+    };
+
+    let capabilities = if config.capabilities.is_empty() {
+        vec!["llm".to_string()]
+    } else {
+        config.capabilities.clone()
+    };
+
+    let file = AgentFileConfig {
+        agent: AgentSection {
+            id: &config.id,
+            name: &config.name,
+            description: &config.description,
+            capabilities,
+        },
+        llm: LlmSection {
+            provider: provider_name,
+            model: &config.model,
+            api_key,
+            base_url: config.base_url.as_deref(),
+            temperature: config.temperature,
+            max_tokens: config.max_tokens,
+            system_prompt: &config.system_prompt,
+        },
+        runtime: RuntimeSection {
+            max_concurrent_tasks: 10,
+            default_timeout_secs: 60,
+        },
+    };
+
+    let mut yaml = serde_yaml::to_string(&file).map_err(|e| {
+        CliError::ConfigError(format!("Failed to serialize agent config YAML: {e}"))
+    })?;
+    if !yaml.ends_with('\n') {
+        yaml.push('\n');
+    }
+
+    Ok(format!(
+        "# MoFA Agent Configuration\n# Generated by mofa agent create\n\n{}",
+        yaml
+    ))
+}
+
 /// Helper for multiline input
 fn multiline_input(default: &str) -> String {
     // For now, just use default value
     // In a full implementation, this would open a proper multiline editor
     default.to_string()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs;
+    use tempfile::TempDir;
+
+    fn write_config_file(temp: &TempDir, content: &str) -> PathBuf {
+        let path = temp.path().join("agent.yml");
+        fs::write(&path, content).expect("failed to write temp config");
+        path
+    }
+
+    #[test]
+    fn config_path_loads_into_builder_flow() {
+        let temp = TempDir::new().expect("failed to create tempdir");
+        let config_path = write_config_file(
+            &temp,
+            r#"
+agent:
+  id: "support-agent-001"
+  name: "Support Agent"
+  description: "Handles support requests"
+  capabilities:
+    - llm
+    - tool_call
+llm:
+  provider: anthropic
+  model: claude-3-5-sonnet-20241022
+  api_key: ${ANTHROPIC_API_KEY}
+  base_url: https://api.anthropic.com
+  temperature: 0.35
+  max_tokens: 2048
+  system_prompt: |
+    You are a support assistant.
+"#,
+        );
+
+        let config = config_from_file_or_defaults(Some(config_path)).expect("expected config");
+        assert_eq!(config.id, "support-agent-001");
+        assert_eq!(config.name, "Support Agent");
+        assert_eq!(config.description, "Handles support requests");
+        assert_eq!(config.provider, LLMProvider::Anthropic);
+        assert_eq!(config.model, "claude-3-5-sonnet-20241022");
+        assert_eq!(config.api_key.as_deref(), Some("${ANTHROPIC_API_KEY}"));
+        assert_eq!(
+            config.base_url.as_deref(),
+            Some("https://api.anthropic.com")
+        );
+        assert_eq!(config.temperature, 0.35);
+        assert_eq!(config.max_tokens, 2048);
+        assert_eq!(config.system_prompt.trim(), "You are a support assistant.");
+        assert_eq!(config.capabilities, vec!["llm", "tool_call"]);
+    }
+
+    #[test]
+    fn malformed_config_returns_clear_error() {
+        let temp = TempDir::new().expect("failed to create tempdir");
+        let config_path = write_config_file(
+            &temp,
+            r#"
+agent:
+  id: "bad-agent"
+  name: "Bad Agent"
+llm: [this is not valid
+"#,
+        );
+
+        let err =
+            config_from_file_or_defaults(Some(config_path)).expect_err("expected parse error");
+        let msg = err.to_string();
+        assert!(msg.contains("Failed to parse config file"));
+    }
+
+    #[test]
+    fn missing_required_fields_returns_useful_message() {
+        let temp = TempDir::new().expect("failed to create tempdir");
+        let config_path = write_config_file(
+            &temp,
+            r#"
+agent:
+  id: "missing-provider-agent"
+  name: "Missing Provider"
+llm:
+  model: gpt-4o
+"#,
+        );
+
+        let err = config_from_file_or_defaults(Some(config_path))
+            .expect_err("expected missing-required-field error");
+        let msg = err.to_string();
+        assert!(msg.contains("Missing required config field"));
+        assert!(msg.contains("llm.provider"));
+    }
 }

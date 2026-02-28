@@ -13,12 +13,15 @@ mod tui;
 mod utils;
 mod widgets;
 
+mod error;
+pub use error::CliError;
+
 use clap::Parser;
 use cli::Cli;
 use colored::Colorize;
 use context::CliContext;
 
-fn main() -> anyhow::Result<()> {
+fn main() -> Result<(), CliError> {
     let mut args: Vec<String> = std::env::args().collect();
     normalize_legacy_output_flags(&mut args);
     let cli = Cli::parse_from(args);
@@ -47,7 +50,7 @@ fn main() -> anyhow::Result<()> {
     }
 }
 
-async fn run_command(cli: Cli) -> anyhow::Result<()> {
+async fn run_command(cli: Cli) -> Result<(), CliError> {
     use cli::Commands;
 
     // Initialize context for commands that need backend services

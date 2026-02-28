@@ -12,6 +12,7 @@
 
 mod api;
 mod assets;
+pub mod auth;
 mod metrics;
 mod server;
 mod websocket;
@@ -20,6 +21,7 @@ pub use api::{
     AgentStatus, ApiError, ApiResponse, DebugSessionResponse, LLMStatus, LLMSummary, PluginStatus,
     SystemStatus,
 };
+pub use auth::{AuthInfo, AuthProvider, NoopAuthProvider, TokenAuthProvider};
 pub use metrics::{
     AgentMetrics, Gauge, Histogram, LLMMetrics, MetricType, MetricValue, MetricsCollector,
     MetricsConfig, MetricsRegistry, MetricsSnapshot, PluginMetrics, SystemMetrics, WorkflowMetrics,
