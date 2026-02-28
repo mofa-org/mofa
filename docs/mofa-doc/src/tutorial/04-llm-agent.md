@@ -85,7 +85,6 @@ edition = "2024"
 mofa-sdk = { path = "../../crates/mofa-sdk" }
 tokio = { version = "1", features = ["full"] }
 tokio-stream = "0.1"
-anyhow = "1"
 ```
 
 Write `src/main.rs`:
@@ -96,7 +95,7 @@ use std::sync::Arc;
 use tokio_stream::StreamExt;
 
 #[tokio::main]
-async fn main() -> anyhow::Result<()> {
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // --- Step 1: Create the provider ---
     let provider = Arc::new(OpenAIProvider::from_env());
 

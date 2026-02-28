@@ -31,5 +31,6 @@ pub use dashboard::{
     DashboardServer, Gauge, Histogram, LLMMetrics, LLMStatus, LLMSummary, MetricType, MetricValue,
     MetricsCollector, MetricsConfig, MetricsRegistry, MetricsSnapshot, PluginMetrics, PluginStatus,
     PrometheusExportConfig, PrometheusExportError, PrometheusExporter, ServerState, SystemMetrics,
-    SystemStatus, WebSocketClient, WebSocketHandler, WebSocketMessage, WorkflowMetrics,
+    SystemStatus, WebSocketClient, WebSocketHandler, WebSocketMessage, WorkflowMetrics, AuthInfo,
+    AuthProvider, NoopAuthProvider, TokenAuthProvider,
 };
