@@ -14,7 +14,9 @@ use serde_json::Value;
 use std::collections::{HashMap, HashSet};
 use std::pin::Pin;
 use std::sync::Arc;
-use tracing::{debug, info, warn};
+use tokio::sync::RwLock;
+use tokio::task::JoinSet;
+use tracing::{Instrument, debug, info, warn};
 
 /// Type alias for node ID
 pub type NodeId = String;
@@ -202,6 +204,9 @@ impl<S: GraphState + 'static> mofa_kernel::workflow::StateGraph for StateGraphIm
             None => {
                 self.edges.insert(from_id, EdgeTarget::single(to_id));
             }
+            _ => {
+                warn!("Unhandled EdgeTarget variant for '{}'", from_id);
+            }
         }
 
         self
@@ -274,10 +279,17 @@ impl<S: GraphState + 'static> mofa_kernel::workflow::StateGraph for StateGraphIm
         // Create compiled graph
         Ok(CompiledGraphImpl {
             id: self.id,
-            nodes: Arc::new(self.nodes),
+            nodes: Arc::new(
+                self.nodes
+                    .into_iter()
+                    .map(|(node_id, node)| (node_id, Arc::from(node)))
+                    .collect(),
+            ),
             edges: Arc::new(self.edges),
             reducers: Arc::new(self.reducers),
-            entry_point: self.entry_point.expect("Entry point should be validated"),
+            entry_point: self.entry_point.ok_or_else(|| {
+                AgentError::ValidationFailed("No entry point set".to_string())
+            })?,
             config: self.config,
         })
     }
@@ -288,7 +300,7 @@ pub struct CompiledGraphImpl<S: GraphState> {
     /// Graph ID
     id: String,
     /// Node functions
-    nodes: Arc<HashMap<NodeId, Box<dyn NodeFunc<S>>>>,
+    nodes: Arc<HashMap<NodeId, Arc<dyn NodeFunc<S>>>>,
     /// Edges
     edges: Arc<HashMap<NodeId, EdgeTarget>>,
     /// Reducers
@@ -300,6 +312,63 @@ pub struct CompiledGraphImpl<S: GraphState> {
 }
 
 impl<S: GraphState> CompiledGraphImpl<S> {
+    fn build_node_context(base: &RuntimeContext, node_id: &str) -> RuntimeContext {
+        RuntimeContext {
+            execution_id: base.execution_id.clone(),
+            graph_id: base.graph_id.clone(),
+            current_node: Arc::new(RwLock::new(node_id.to_string())),
+            remaining_steps: base.remaining_steps.clone(),
+            config: base.config.clone(),
+            metadata: base.metadata.clone(),
+            parent_execution_id: base.parent_execution_id.clone(),
+            tags: base.tags.clone(),
+        }
+    }
+
+    async fn execute_parallel_nodes(
+        nodes: &HashMap<NodeId, Arc<dyn NodeFunc<S>>>,
+        node_ids: &[String],
+        base_state: &S,
+        base_ctx: &RuntimeContext,
+    ) -> AgentResult<Vec<(String, Command)>> {
+        let mut join_set = JoinSet::new();
+
+        for (index, node_id) in node_ids.iter().enumerate() {
+            let node = nodes
+                .get(node_id)
+                .ok_or_else(|| AgentError::NotFound(format!("Node '{}'", node_id)))?
+                .clone();
+            // Each parallel node runs against an isolated snapshot. Node-side mutations are
+            // intentionally sandboxed; shared-state changes must be expressed via Command updates.
+            let mut isolated_state = base_state.clone();
+            let node_ctx = Self::build_node_context(base_ctx, node_id);
+            let node_id = node_id.clone();
+
+            join_set.spawn(async move {
+                let command = node.call(&mut isolated_state, &node_ctx).await?;
+                Ok::<(usize, String, Command), AgentError>((index, node_id, command))
+            });
+        }
+
+        let mut ordered_results: Vec<Option<(String, Command)>> = vec![None; node_ids.len()];
+        while let Some(joined) = join_set.join_next().await {
+            let (index, node_id, command) = joined
+                .map_err(|e| AgentError::Internal(format!("Parallel node task failed: {}", e)))??;
+            ordered_results[index] = Some((node_id, command));
+        }
+
+        ordered_results
+            .into_iter()
+            .map(|entry| {
+                entry.ok_or_else(|| {
+                    AgentError::Internal(
+                        "Parallel node execution returned incomplete results".to_string(),
+                    )
+                })
+            })
+            .collect()
+    }
+
     /// Get the next node(s) based on the current node and command
     fn get_next_nodes(&self, current_node: &str, command: &Command) -> Vec<String> {
         match &command.control {
@@ -319,13 +388,19 @@ impl<S: GraphState> CompiledGraphImpl<S> {
                     Some(EdgeTarget::Single(target)) => vec![target.clone()],
                     Some(EdgeTarget::Parallel(targets)) => targets.clone(),
                     Some(EdgeTarget::Conditional(routes)) => {
-                        // Find matching route based on state updates
+                        // Priority 1: explicit route decision
+                        if let Some(decision) = command.route_value() {
+                            if let Some(target) = routes.get(decision) {
+                                return vec![target.clone()];
+                            }
+                        }
+                        // Priority 2: legacy key-name matching (backward compatible)
                         for update in &command.updates {
                             if let Some(target) = routes.get(&update.key) {
                                 return vec![target.clone()];
                             }
                         }
-                        // Default to first route if no match
+                        // Priority 3: fallback to first route
                         routes
                             .values()
                             .next()
@@ -333,8 +408,10 @@ impl<S: GraphState> CompiledGraphImpl<S> {
                             .unwrap_or_default()
                     }
                     None => vec![],
+                    _ => vec![],
                 }
             }
+            _ => vec![],
         }
     }
 
@@ -410,19 +487,18 @@ impl<S: GraphState + 'static> CompiledGraph<S, serde_json::Value> for CompiledGr
                 // Parallel execution
                 let mut next_nodes = Vec::new();
                 let nodes_to_execute = std::mem::take(&mut current_nodes);
+                let parallel_results = Self::execute_parallel_nodes(
+                    self.nodes.as_ref(),
+                    &nodes_to_execute,
+                    &state,
+                    &ctx,
+                )
+                .await?;
 
-                for node_id in nodes_to_execute {
-                    let node = self
-                        .nodes
-                        .get(&node_id)
-                        .ok_or_else(|| AgentError::NotFound(format!("Node '{}'", node_id)))?;
+                for (node_id, command) in parallel_results {
+                    debug!("Applying updates from parallel node '{}'", node_id);
 
-                    ctx.set_current_node(&node_id).await;
-                    debug!("Executing node '{}' (parallel)", node_id);
-
-                    let command = node.call(&mut state, &ctx).await?;
-
-                    // Apply updates
+                    // Apply updates only after all parallel nodes have completed.
                     self.apply_updates(&mut state, &command.updates).await?;
 
                     // Collect next nodes
@@ -457,6 +533,7 @@ impl<S: GraphState + 'static> CompiledGraph<S, serde_json::Value> for CompiledGr
         let (tx, rx) = tokio::sync::mpsc::channel(100);
 
         // Spawn execution task
+        let stream_span = tracing::info_span!("state_graph.stream");
         tokio::spawn(async move {
             let mut state = input;
             let mut current_nodes = vec![entry_point];
@@ -478,13 +555,19 @@ impl<S: GraphState + 'static> CompiledGraph<S, serde_json::Value> for CompiledGr
                             Some(EdgeTarget::Single(target)) => vec![target.clone()],
                             Some(EdgeTarget::Parallel(targets)) => targets.clone(),
                             Some(EdgeTarget::Conditional(routes)) => {
-                                // Find matching route based on state updates
+                                // Priority 1: explicit route decision
+                                if let Some(decision) = command.route_value() {
+                                    if let Some(target) = routes.get(decision) {
+                                        return vec![target.clone()];
+                                    }
+                                }
+                                // Priority 2: legacy key-name matching (backward compatible)
                                 for update in &command.updates {
                                     if let Some(target) = routes.get(&update.key) {
                                         return vec![target.clone()];
                                     }
                                 }
-                                // Default to first route if no match
+                                // Priority 3: fallback to first route
                                 routes
                                     .values()
                                     .next()
@@ -492,8 +575,10 @@ impl<S: GraphState + 'static> CompiledGraph<S, serde_json::Value> for CompiledGr
                                     .unwrap_or_default()
                             }
                             None => vec![],
+                            _ => vec![],
                         }
                     }
+                    _ => vec![],
                 }
             };
 
@@ -522,8 +607,10 @@ impl<S: GraphState + 'static> CompiledGraph<S, serde_json::Value> for CompiledGr
                 ctx.remaining_steps.decrement().await;
 
                 let nodes_to_execute = std::mem::take(&mut current_nodes);
+                let mut next_nodes = Vec::new();
 
-                for node_id in nodes_to_execute {
+                if nodes_to_execute.len() == 1 {
+                    let node_id = nodes_to_execute[0].clone();
                     let node = match nodes.get(&node_id) {
                         Some(n) => n,
                         None => {
@@ -558,7 +645,6 @@ impl<S: GraphState + 'static> CompiledGraph<S, serde_json::Value> for CompiledGr
                         }
                     };
 
-                    // Apply updates
                     for update in &command.updates {
                         let current = state.get_value(&update.key);
                         let new_value = if let Some(reducer) = reducers.get(&update.key) {
@@ -597,19 +683,87 @@ impl<S: GraphState + 'static> CompiledGraph<S, serde_json::Value> for CompiledGr
                         }))
                         .await;
 
-                    // Get next nodes and add to current_nodes for next iteration
-                    let next_nodes = get_next_nodes(&node_id, &command);
-                    current_nodes.extend(next_nodes);
+                    next_nodes.extend(get_next_nodes(&node_id, &command));
+                } else {
+                    for node_id in &nodes_to_execute {
+                        let _ = tx
+                            .send(Ok(StreamEvent::NodeStart {
+                                node_id: node_id.clone(),
+                                state: state.clone(),
+                            }))
+                            .await;
+                    }
+
+                    let commands = match Self::execute_parallel_nodes(
+                        nodes.as_ref(),
+                        &nodes_to_execute,
+                        &state,
+                        &ctx,
+                    )
+                    .await
+                    {
+                        Ok(results) => results,
+                        Err(e) => {
+                            let _ = tx
+                                .send(Ok(StreamEvent::Error {
+                                    node_id: None,
+                                    error: e.to_string(),
+                                }))
+                                .await;
+                            return;
+                        }
+                    };
+
+                    for (node_id, command) in commands {
+                        for update in &command.updates {
+                            let current = state.get_value(&update.key);
+                            let new_value = if let Some(reducer) = reducers.get(&update.key) {
+                                match reducer.reduce(current.as_ref(), &update.value).await {
+                                    Ok(v) => v,
+                                    Err(e) => {
+                                        let _ = tx
+                                            .send(Ok(StreamEvent::Error {
+                                                node_id: Some(node_id.clone()),
+                                                error: e.to_string(),
+                                            }))
+                                            .await;
+                                        return;
+                                    }
+                                }
+                            } else {
+                                update.value.clone()
+                            };
+                            if let Err(e) = state.apply_update(&update.key, new_value).await {
+                                let _ = tx
+                                    .send(Ok(StreamEvent::Error {
+                                        node_id: Some(node_id.clone()),
+                                        error: e.to_string(),
+                                    }))
+                                    .await;
+                                return;
+                            }
+                        }
+
+                        let _ = tx
+                            .send(Ok(StreamEvent::NodeEnd {
+                                node_id: node_id.clone(),
+                                state: state.clone(),
+                                command: command.clone(),
+                            }))
+                            .await;
+
+                        next_nodes.extend(get_next_nodes(&node_id, &command));
+                    }
                 }
 
                 // Deduplicate current_nodes for parallel execution
-                let node_set: HashSet<String> = current_nodes.drain(..).collect();
+                let node_set: HashSet<String> = next_nodes.into_iter().collect();
                 current_nodes = node_set.into_iter().collect();
             }
 
             // Send final event
             let _ = tx.send(Ok(StreamEvent::End { final_state: state })).await;
-        });
+        }.instrument(stream_span));
 
         // Convert receiver to stream
         Box::pin(tokio_stream::wrappers::ReceiverStream::new(rx))
@@ -674,8 +828,12 @@ impl<S: GraphState + 'static> CompiledGraph<S, serde_json::Value> for CompiledGr
 #[cfg(test)]
 mod tests {
     use super::*;
+    use futures::StreamExt;
     use mofa_kernel::workflow::{JsonState, StateGraph};
     use serde_json::json;
+    use std::collections::HashMap;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    use tokio::time::{Duration, sleep};
 
     // Simple test node
     struct TestNode {
@@ -699,6 +857,69 @@ mod tests {
 
         fn name(&self) -> &str {
             &self.name
+        }
+    }
+
+    /// Test node that returns a fixed Command (used for routing tests)
+    struct StaticCommandNode {
+        name: String,
+        command: Command,
+    }
+
+    #[async_trait]
+    impl NodeFunc<JsonState> for StaticCommandNode {
+        async fn call(
+            &self,
+            _state: &mut JsonState,
+            _ctx: &RuntimeContext,
+        ) -> AgentResult<Command> {
+            Ok(self.command.clone())
+        }
+
+        fn name(&self) -> &str {
+            &self.name
+        }
+    }
+
+    struct ConcurrencyProbeNode {
+        name: String,
+        active: Arc<AtomicUsize>,
+        max_active: Arc<AtomicUsize>,
+    }
+
+    #[async_trait]
+    impl NodeFunc<JsonState> for ConcurrencyProbeNode {
+        async fn call(
+            &self,
+            _state: &mut JsonState,
+            _ctx: &RuntimeContext,
+        ) -> AgentResult<Command> {
+            let concurrent = self.active.fetch_add(1, Ordering::SeqCst) + 1;
+            self.max_active.fetch_max(concurrent, Ordering::SeqCst);
+            sleep(Duration::from_millis(100)).await;
+            self.active.fetch_sub(1, Ordering::SeqCst);
+
+            Ok(Command::new().continue_())
+        }
+
+        fn name(&self) -> &str {
+            &self.name
+        }
+    }
+
+    struct FlagReaderNode;
+
+    #[async_trait]
+    impl NodeFunc<JsonState> for FlagReaderNode {
+        async fn call(&self, state: &mut JsonState, _ctx: &RuntimeContext) -> AgentResult<Command> {
+            let saw_flag = state.get_value::<bool>("flag").unwrap_or(false);
+            Ok(Command::new()
+                .update("reader_saw_flag", json!(saw_flag))
+                .continue_())
+        }
+
+        fn name(&self) -> &str {
+            "flag_reader"
         }
     }
 
@@ -772,5 +993,256 @@ mod tests {
         let final_state = result.unwrap();
         assert_eq!(final_state.get_value("processed"), Some(json!(true)));
         assert_eq!(final_state.get_value("count"), Some(json!(1)));
+    }
+
+    #[tokio::test]
+    async fn test_parallel_nodes_execute_concurrently_in_invoke() {
+        let active = Arc::new(AtomicUsize::new(0));
+        let max_active = Arc::new(AtomicUsize::new(0));
+        let mut graph = StateGraphImpl::<JsonState>::new("parallel_concurrency");
+
+        graph
+            .add_node(
+                "fan_out",
+                Box::new(TestNode {
+                    name: "fan_out".to_string(),
+                    updates: vec![],
+                }),
+            )
+            .add_node(
+                "node_a",
+                Box::new(ConcurrencyProbeNode {
+                    name: "node_a".to_string(),
+                    active: active.clone(),
+                    max_active: max_active.clone(),
+                }),
+            )
+            .add_node(
+                "node_b",
+                Box::new(ConcurrencyProbeNode {
+                    name: "node_b".to_string(),
+                    active: active.clone(),
+                    max_active: max_active.clone(),
+                }),
+            )
+            .add_node(
+                "node_c",
+                Box::new(ConcurrencyProbeNode {
+                    name: "node_c".to_string(),
+                    active,
+                    max_active: max_active.clone(),
+                }),
+            )
+            .add_edge(START, "fan_out")
+            .add_parallel_edges(
+                "fan_out",
+                vec![
+                    "node_a".to_string(),
+                    "node_b".to_string(),
+                    "node_c".to_string(),
+                ],
+            );
+
+        let compiled = graph.compile().unwrap();
+        compiled.invoke(JsonState::new(), None).await.unwrap();
+
+        assert!(
+            max_active.load(Ordering::SeqCst) > 1,
+            "parallel nodes should overlap in execution"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_parallel_nodes_use_state_snapshot_in_invoke_and_stream() {
+        let mut graph = StateGraphImpl::<JsonState>::new("parallel_state_snapshot");
+
+        graph
+            .add_node(
+                "fan_out",
+                Box::new(TestNode {
+                    name: "fan_out".to_string(),
+                    updates: vec![],
+                }),
+            )
+            .add_node(
+                "writer",
+                Box::new(TestNode {
+                    name: "writer".to_string(),
+                    updates: vec![StateUpdate::new("flag", json!(true))],
+                }),
+            )
+            .add_node("reader", Box::new(FlagReaderNode))
+            .add_edge(START, "fan_out")
+            .add_parallel_edges("fan_out", vec!["writer".to_string(), "reader".to_string()]);
+
+        let compiled: CompiledGraphImpl<JsonState> = graph.compile().unwrap();
+
+        let final_state = compiled.invoke(JsonState::new(), None).await.unwrap();
+        assert_eq!(final_state.get_value("flag"), Some(json!(true)));
+        assert_eq!(final_state.get_value("reader_saw_flag"), Some(json!(false)));
+
+        let mut stream = compiled.stream(JsonState::new(), None);
+        let mut stream_final_state: Option<JsonState> = None;
+        while let Some(event) = stream.next().await {
+            if let StreamEvent::End { final_state } = event.unwrap() {
+                stream_final_state = Some(final_state);
+            }
+        }
+
+        let stream_final_state: JsonState =
+            stream_final_state.expect("stream should emit a final end event with state");
+        assert_eq!(stream_final_state.get_value("flag"), Some(json!(true)));
+        assert_eq!(
+            stream_final_state.get_value("reader_saw_flag"),
+            Some(json!(false))
+        );
+    }
+
+    // ── Explicit route selection tests (issue #554) ──
+
+    #[tokio::test]
+    async fn test_conditional_routing_prefers_route_value_in_invoke() {
+        let mut graph = StateGraphImpl::<JsonState>::new("route_invoke");
+
+        let mut routes = HashMap::new();
+        routes.insert("approve".to_string(), "approved".to_string());
+        routes.insert("reject".to_string(), "rejected".to_string());
+
+        graph
+            .add_node(
+                "router",
+                Box::new(StaticCommandNode {
+                    name: "router".to_string(),
+                    // route says "approve", but a key-name update matches "reject".
+                    // The explicit route must win.
+                    command: Command::new()
+                        .route("approve")
+                        .update("reject", json!(true))
+                        .continue_(),
+                }),
+            )
+            .add_node(
+                "approved",
+                Box::new(TestNode {
+                    name: "approved".to_string(),
+                    updates: vec![StateUpdate::new("decision", json!("approved"))],
+                }),
+            )
+            .add_node(
+                "rejected",
+                Box::new(TestNode {
+                    name: "rejected".to_string(),
+                    updates: vec![StateUpdate::new("decision", json!("rejected"))],
+                }),
+            )
+            .add_edge(START, "router")
+            .add_conditional_edges("router", routes)
+            .add_edge("approved", END)
+            .add_edge("rejected", END);
+
+        let compiled = graph.compile().unwrap();
+        let final_state = compiled.invoke(JsonState::new(), None).await.unwrap();
+
+        assert_eq!(
+            final_state.get_value::<serde_json::Value>("decision"),
+            Some(json!("approved"))
+        );
+    }
+
+    #[tokio::test]
+    async fn test_conditional_routing_legacy_fallback_when_route_absent() {
+        let mut graph = StateGraphImpl::<JsonState>::new("route_fallback");
+
+        let mut routes = HashMap::new();
+        routes.insert("approve".to_string(), "approved".to_string());
+        routes.insert("reject".to_string(), "rejected".to_string());
+
+        graph
+            .add_node(
+                "router",
+                Box::new(StaticCommandNode {
+                    name: "router".to_string(),
+                    // No explicit route — should fall back to legacy key matching.
+                    command: Command::new().update("reject", json!(true)).continue_(),
+                }),
+            )
+            .add_node(
+                "approved",
+                Box::new(TestNode {
+                    name: "approved".to_string(),
+                    updates: vec![StateUpdate::new("decision", json!("approved"))],
+                }),
+            )
+            .add_node(
+                "rejected",
+                Box::new(TestNode {
+                    name: "rejected".to_string(),
+                    updates: vec![StateUpdate::new("decision", json!("rejected"))],
+                }),
+            )
+            .add_edge(START, "router")
+            .add_conditional_edges("router", routes)
+            .add_edge("approved", END)
+            .add_edge("rejected", END);
+
+        let compiled = graph.compile().unwrap();
+        let final_state = compiled.invoke(JsonState::new(), None).await.unwrap();
+
+        assert_eq!(
+            final_state.get_value::<serde_json::Value>("decision"),
+            Some(json!("rejected"))
+        );
+    }
+
+    #[tokio::test]
+    async fn test_conditional_routing_stream_respects_route_value() {
+        let mut graph = StateGraphImpl::<JsonState>::new("route_stream");
+
+        let mut routes = HashMap::new();
+        routes.insert("approve".to_string(), "approved".to_string());
+        routes.insert("reject".to_string(), "rejected".to_string());
+
+        graph
+            .add_node(
+                "router",
+                Box::new(StaticCommandNode {
+                    name: "router".to_string(),
+                    command: Command::new().route("approve").continue_(),
+                }),
+            )
+            .add_node(
+                "approved",
+                Box::new(TestNode {
+                    name: "approved".to_string(),
+                    updates: vec![StateUpdate::new("decision", json!("approved"))],
+                }),
+            )
+            .add_node(
+                "rejected",
+                Box::new(TestNode {
+                    name: "rejected".to_string(),
+                    updates: vec![StateUpdate::new("decision", json!("rejected"))],
+                }),
+            )
+            .add_edge(START, "router")
+            .add_conditional_edges("router", routes)
+            .add_edge("approved", END)
+            .add_edge("rejected", END);
+
+        let compiled = graph.compile().unwrap();
+        let mut stream = compiled.stream(JsonState::new(), None);
+
+        let mut final_state = None;
+        while let Some(event) = stream.next().await {
+            if let Ok(StreamEvent::End { final_state: state }) = event {
+                final_state = Some(state);
+            }
+        }
+
+        let final_state = final_state.expect("stream should produce final state");
+        assert_eq!(
+            final_state.get_value::<serde_json::Value>("decision"),
+            Some(json!("approved"))
+        );
     }
 }

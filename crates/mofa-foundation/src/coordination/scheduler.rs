@@ -1,3 +1,4 @@
+use mofa_kernel::agent::types::error::{GlobalError, GlobalResult};
 use mofa_kernel::message::{AgentEvent, AgentMessage, SchedulingStatus, TaskPriority, TaskRequest};
 use mofa_kernel::{AgentBus, CommunicationMode};
 use std::collections::{BinaryHeap, HashMap};
@@ -18,7 +19,7 @@ impl Ord for PriorityTask {
         self.priority
             .cmp(&other.priority)
             .then_with(|| other.submit_time.cmp(&self.submit_time)) // 同优先级先提交先执行
-            // First-in-first-out for tasks with the same priority
+        // First-in-first-out for tasks with the same priority
     }
 }
 
@@ -33,14 +34,14 @@ impl PartialOrd for PriorityTask {
 pub struct PriorityScheduler {
     task_queue: Arc<RwLock<BinaryHeap<PriorityTask>>>, // 优先级任务队列
     // Priority task queue
-    agent_load: Arc<RwLock<HashMap<String, usize>>>,   // 智能体当前负载（执行中的任务数）
+    agent_load: Arc<RwLock<HashMap<String, usize>>>, // 智能体当前负载（执行中的任务数）
     // Current agent load (number of tasks being executed)
     bus: Arc<AgentBus>,
     task_status: Arc<RwLock<HashMap<String, SchedulingStatus>>>, // 任务状态跟踪
     // Task status tracking
-    role_mapping: Arc<RwLock<HashMap<String, Vec<String>>>>,     // 角色-智能体映射
+    role_mapping: Arc<RwLock<HashMap<String, Vec<String>>>>, // 角色-智能体映射
     // Role-to-agent mapping
-    agent_tasks: Arc<RwLock<HashMap<String, Vec<String>>>>,      // Agent-to-task mapping
+    agent_tasks: Arc<RwLock<HashMap<String, Vec<String>>>>, // Agent-to-task mapping
     task_priorities: Arc<RwLock<HashMap<String, TaskPriority>>>, // Task priority tracking
 }
 
@@ -59,7 +60,7 @@ impl PriorityScheduler {
 
     /// 1. 提交任务到优先级队列
     /// 1. Submit task to the priority queue
-    pub async fn submit_task(&self, task: TaskRequest) -> anyhow::Result<()> {
+    pub async fn submit_task(&self, task: TaskRequest) -> GlobalResult<()> {
         let priority_task = PriorityTask {
             priority: task.priority.clone(),
             task: task.clone(),
@@ -76,13 +77,13 @@ impl PriorityScheduler {
             .insert(task.task_id, SchedulingStatus::Pending);
         // 提交后立即触发调度
         // Trigger scheduling immediately after submission
-        self.schedule().await?;
+        self.schedule().await.map_err(|e| GlobalError::Other(e.to_string()))?;
         Ok(())
     }
 
     /// 2. 核心调度逻辑：选高优先级任务 + 选负载最低的智能体
     /// 2. Core logic: select high-priority task + select lowest-load agent
-    pub async fn schedule(&self) -> anyhow::Result<()> {
+    pub async fn schedule(&self) -> GlobalResult<()> {
         let mut task_queue = self.task_queue.write().await;
         let mut agent_load = self.agent_load.write().await;
         let mut task_status = self.task_status.write().await;
@@ -100,7 +101,7 @@ impl PriorityScheduler {
 
             // 选择负载最低的可用智能体（同角色内）
             // Select the available agent with the lowest load (within the same role)
-            let target_agent = self.select_low_load_agent("worker").await?;
+            let target_agent = self.select_low_load_agent("worker").await.map_err(|e| GlobalError::Other(e.to_string()))?;
             if target_agent.is_empty() {
                 // 无可用智能体，重新入队
                 // No agent available, re-enqueue the task
@@ -111,7 +112,7 @@ impl PriorityScheduler {
 
             // 检查是否需要抢占：如果目标智能体有低优先级任务在运行
             // Check for preemption: if the target agent has low-priority tasks running
-            self.preempt_low_priority_task(&target_agent, &task).await?;
+            self.preempt_low_priority_task(&target_agent, &task).await.map_err(|e| GlobalError::Other(e.to_string()))?;
 
             // 发送任务给目标智能体
             // Send task to the target agent
@@ -126,27 +127,24 @@ impl PriorityScheduler {
                     CommunicationMode::PointToPoint(target_agent.clone()),
                     &task_msg,
                 )
-                .await?;
+                .await.map_err(|e| GlobalError::Other(e.to_string()))?;
 
             // 更新状态和负载
             // Update task status and agent loa
             task_status.insert(task_id.clone(), SchedulingStatus::Running);
             *agent_load.entry(target_agent.clone()).or_insert(0) += 1;
-            agent_tasks
-                .entry(target_agent)
-                .or_default()
-                .push(task_id);
+            agent_tasks.entry(target_agent).or_default().push(task_id);
         }
         Ok(())
     }
 
     /// 3. 负载均衡：选择同角色内负载最低的智能体
     /// 3. Load balancing: select the lowest-load agent within the same role
-    async fn select_low_load_agent(&self, role: &str) -> anyhow::Result<Vec<String>> {
+    async fn select_low_load_agent(&self, role: &str) -> GlobalResult<Vec<String>> {
         let role_map = self.role_mapping.read().await;
         let agents = role_map
             .get(role)
-            .ok_or_else(|| anyhow::anyhow!("No agent for role: {}", role))?;
+            .ok_or_else(|| GlobalError::Other(format!("No agent for role: {}", role)))?;
         let agent_load = self.agent_load.read().await;
 
         // 按负载升序排序，取负载最低的
@@ -162,7 +160,7 @@ impl PriorityScheduler {
         &self,
         agent_id: &str,
         high_priority_task: &TaskRequest,
-    ) -> anyhow::Result<()> {
+    ) -> GlobalResult<()> {
         // 简化实现：直接发送抢占事件
         // Simplified implementation: directly send a preemption event
         let agent_load = self.agent_load.read().await;
@@ -206,7 +204,7 @@ impl PriorityScheduler {
                         CommunicationMode::PointToPoint(agent_id.to_string()),
                         &preempt_msg,
                     )
-                    .await?;
+                    .await.map_err(|e| GlobalError::Other(e.to_string()))?;
             }
         }
         Ok(())
@@ -214,7 +212,7 @@ impl PriorityScheduler {
 
     /// 5. 任务完成后更新状态和负载
     /// 5. Update status and load upon task completion
-    pub async fn on_task_completed(&self, agent_id: &str, task_id: &str) -> anyhow::Result<()> {
+    pub async fn on_task_completed(&self, agent_id: &str, task_id: &str) -> GlobalResult<()> {
         let mut agent_load = self.agent_load.write().await;
         let mut task_status = self.task_status.write().await;
         let mut agent_tasks = self.agent_tasks.write().await;
@@ -231,7 +229,7 @@ impl PriorityScheduler {
 
         // 任务完成后再次触发调度，处理队列中的下一个任务
         // Trigger scheduling again after completion to handle the next task
-        self.schedule().await?;
+        self.schedule().await.map_err(|e| GlobalError::Other(e.to_string()))?;
         Ok(())
     }
 }

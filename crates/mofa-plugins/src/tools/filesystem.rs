@@ -75,16 +75,16 @@ impl ToolExecutor for FileSystemTool {
     async fn execute(&self, arguments: serde_json::Value) -> PluginResult<serde_json::Value> {
         let operation = arguments["operation"]
             .as_str()
-            .ok_or_else(|| anyhow::anyhow!("Operation is required"))?;
+            .ok_or_else(|| mofa_kernel::plugin::PluginError::ExecutionFailed(format!("Operation is required")))?;
         let path = arguments["path"]
             .as_str()
-            .ok_or_else(|| anyhow::anyhow!("Path is required"))?;
+            .ok_or_else(|| mofa_kernel::plugin::PluginError::ExecutionFailed(format!("Path is required")))?;
 
         if !self.is_path_allowed(path) {
-            return Err(anyhow::anyhow!(
+            return Err(mofa_kernel::plugin::PluginError::ExecutionFailed(format!(
                 "Access denied: path '{}' is not in allowed paths",
                 path
-            ));
+            )));
         }
 
         match operation {
@@ -107,7 +107,7 @@ impl ToolExecutor for FileSystemTool {
             "write" => {
                 let content = arguments["content"]
                     .as_str()
-                    .ok_or_else(|| anyhow::anyhow!("Content is required for write operation"))?;
+                    .ok_or_else(|| mofa_kernel::plugin::PluginError::ExecutionFailed(format!("Content is required for write operation")))?;
                 fs::write(path, content).await?;
                 Ok(json!({
                     "success": true,
@@ -157,7 +157,7 @@ impl ToolExecutor for FileSystemTool {
                     "message": format!("Created directory {}", path)
                 }))
             }
-            _ => Err(anyhow::anyhow!("Unknown operation: {}", operation)),
+            _ => Err(mofa_kernel::plugin::PluginError::ExecutionFailed(format!("Unknown operation: {}", operation))),
         }
     }
 }

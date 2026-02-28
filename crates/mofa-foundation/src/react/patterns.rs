@@ -84,6 +84,7 @@ use crate::llm::{LLMAgent, LLMError, LLMResult};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
+use tracing::Instrument;
 
 /// Type alias for mapper function in MapReduceAgent
 pub type MapFunction = Arc<dyn Fn(&str) -> Vec<String> + Send + Sync>;
@@ -669,6 +670,7 @@ impl ParallelAgent {
             let task_input = self.prepare_task(&name, &task);
             let verbose = self.verbose;
 
+            let span = tracing::info_span!("parallel_agent.branch", agent_name = %name);
             let handle = tokio::spawn(async move {
                 if verbose {
                     tracing::info!("[Parallel] Agent '{}' starting", name);
@@ -692,7 +694,7 @@ impl ParallelAgent {
                 }
 
                 (name, task_input, result)
-            });
+            }.instrument(span));
 
             handles.push(handle);
         }
@@ -1176,6 +1178,7 @@ impl MapReduceAgent {
             let semaphore = semaphore.clone();
             let verbose = self.verbose;
 
+            let span = tracing::info_span!("map_reduce.worker", sub_task_idx = idx);
             let handle = tokio::spawn(async move {
                 let _permit = if let Some(ref sem) = semaphore {
                     Some(sem.acquire().await)
@@ -1199,7 +1202,7 @@ impl MapReduceAgent {
                 }
 
                 (idx, sub_task, result)
-            });
+            }.instrument(span));
 
             handles.push(handle);
         }

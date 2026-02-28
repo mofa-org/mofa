@@ -15,11 +15,13 @@
 //! 5. Hot-reload script support
 
 pub mod engine;
+pub mod error;
 pub mod rules;
 pub mod tools;
 pub mod workflow;
 
 pub use engine::*;
+pub use error::*;
 pub use rules::*;
 pub use tools::*;
 pub use workflow::*;

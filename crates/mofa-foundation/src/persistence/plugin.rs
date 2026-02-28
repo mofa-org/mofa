@@ -4,6 +4,7 @@
 //! 提供与 LLMAgent 集成的持久化功能
 //! Provides persistence functionality integrated with LLMAgent
 
+use mofa_kernel::agent::types::error::{GlobalError, GlobalResult};
 use super::entities::*;
 use super::traits::*;
 use crate::llm::types::LLMResponseMetadata;
@@ -188,7 +189,7 @@ where
 /// use mofa_sdk::llm::LLMAgentBuilder;
 /// use uuid::Uuid;
 ///
-/// # async fn example() -> anyhow::Result<()> {
+/// # async fn example() -> GlobalResult<()> {
 /// let store = PostgresStore::connect("postgres://localhost/mofa").await?;
 /// let user_id = Uuid::now_v7();
 /// let tenant_id = Uuid::now_v7();
@@ -531,7 +532,10 @@ impl crate::llm::agent::LLMAgentEventHandler for PersistencePlugin {
         // 保存用户消息
         // Save user message
         let user_msg_id = self.save_user_message(message).await?;
-        info!("✅ [持久化插件] 用户消息已保存: ID = {}", user_msg_id);
+        info!(
+            "✅ [Persistence Plugin] User message saved: ID = {}",
+            user_msg_id
+        );
         // ✅ [Persistence Plugin] User message saved: ID = {}
 
         // 存储当前用户消息 ID，用于后续关联 API 调用
@@ -563,7 +567,10 @@ impl crate::llm::agent::LLMAgentEventHandler for PersistencePlugin {
         // 保存助手消息
         // Save assistant message
         let assistant_msg_id = self.save_assistant_message(response).await?;
-        info!("✅ [持久化插件] 助手消息已保存: ID = {}", assistant_msg_id);
+        info!(
+            "✅ [Persistence Plugin] Assistant message saved: ID = {}",
+            assistant_msg_id
+        );
         // ✅ [Persistence Plugin] Assistant message saved: ID = {}
 
         // 计算请求延迟
@@ -593,10 +600,10 @@ impl crate::llm::agent::LLMAgentEventHandler for PersistencePlugin {
                 user_msg_id,
                 assistant_msg_id,
                 model_name,
-                0,                         // 未知（没有元数据时无法获取真实值）
-                                           // Unknown (cannot get real value without metadata)
+                0, // 未知（没有元数据时无法获取真实值）
+                // Unknown (cannot get real value without metadata)
                 response.len() as i32 / 4, // 简单估算 completion_tokens (每4字符一个token)
-                                           // Simple estimation of completion_tokens (1 token per 4 chars)
+                // Simple estimation of completion_tokens (1 token per 4 chars)
                 request_time,
                 now,
             );
@@ -607,7 +614,7 @@ impl crate::llm::agent::LLMAgentEventHandler for PersistencePlugin {
                 .await
                 .map_err(|e| LLMError::Other(e.to_string()));
             info!(
-                "✅ [持久化插件] API 调用记录已保存: 模型={}, 延迟={}ms",
+                "✅ [Persistence Plugin] API call record saved: model={}, latency={}ms",
                 model_name, latency
             );
             // ✅ [Persistence Plugin] API call record saved: model={}, latency={}ms
@@ -636,7 +643,10 @@ impl crate::llm::agent::LLMAgentEventHandler for PersistencePlugin {
         // 保存助手消息
         // Save assistant message
         let assistant_msg_id = self.save_assistant_message(response).await?;
-        info!("✅ [持久化插件] 助手消息已保存: ID = {}", assistant_msg_id);
+        info!(
+            "✅ [Persistence Plugin] Assistant message saved: ID = {}",
+            assistant_msg_id
+        );
         // ✅ [Persistence Plugin] Assistant message saved: ID = {}
 
         // 计算请求延迟
@@ -677,7 +687,7 @@ impl crate::llm::agent::LLMAgentEventHandler for PersistencePlugin {
                 .await
                 .map_err(|e| LLMError::Other(e.to_string()));
             info!(
-                "✅ [持久化插件] API 调用记录已保存: 模型={}, tokens={}/{}, 延迟={}ms",
+                "✅ [Persistence Plugin] API call record saved: model={}, tokens={}/{}, latency={}ms",
                 metadata.model, metadata.prompt_tokens, metadata.completion_tokens, latency
             );
             // ✅ [Persistence Plugin] API call record saved: model={}, tokens={}/{}, latency={}ms
@@ -695,7 +705,7 @@ impl crate::llm::agent::LLMAgentEventHandler for PersistencePlugin {
     /// 在发生错误时调用 - 记录 API 错误
     /// Called when an error occurs - records API error
     async fn on_error(&self, error: &LLMError) -> LLMResult<Option<String>> {
-        info!("✅ [持久化插件] 记录 API 错误...");
+        info!("✅ [Persistence Plugin] Recording API error...");
         // ✅ [Persistence Plugin] Recording API error...
 
         // 获取存储的模型名称，或使用默认值
@@ -724,7 +734,7 @@ impl crate::llm::agent::LLMAgentEventHandler for PersistencePlugin {
                 .save_api_call(&api_call)
                 .await
                 .map_err(|e| LLMError::Other(e.to_string()));
-            info!("✅ [持久化插件] API 错误记录已保存");
+            info!("✅ [Persistence Plugin] API error record saved");
             // ✅ [Persistence Plugin] API error record saved
         }
 

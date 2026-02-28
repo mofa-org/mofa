@@ -1,3 +1,4 @@
+use mofa_kernel::agent::types::error::{GlobalError, GlobalResult};
 mod scheduler;
 use mofa_kernel::message::{AgentMessage, TaskRequest, TaskStatus};
 use mofa_kernel::{AgentBus, CommunicationMode};
@@ -10,11 +11,11 @@ use tokio::sync::RwLock;
 #[derive(Debug, Clone)]
 pub enum CoordinationStrategy {
     MasterSlave, // 主从模式
-                 // Master-Slave mode
-    PeerToPeer,  // 对等协作模式
-                 // Peer-to-Peer collaboration mode
-    Pipeline,    // 流水线模式（任务串行传递）
-                 // Pipeline mode (serial task passing)
+    // Master-Slave mode
+    PeerToPeer, // 对等协作模式
+    // Peer-to-Peer collaboration mode
+    Pipeline, // 流水线模式（任务串行传递）
+              // Pipeline mode (serial task passing)
 }
 
 /// 协同器核心结构体
@@ -49,7 +50,7 @@ impl AgentCoordinator {
 
     /// 注册智能体角色（如 "master"/"worker"/"data_provider"）
     /// Register agent roles (e.g., "master"/"worker"/"data_provider")
-    pub async fn register_role(&self, agent_id: &str, role: &str) -> anyhow::Result<()> {
+    pub async fn register_role(&self, agent_id: &str, role: &str) -> GlobalResult<()> {
         let mut role_map = self.role_mapping.write().await;
         role_map
             .entry(role.to_string())
@@ -60,7 +61,7 @@ impl AgentCoordinator {
 
     /// 执行协同任务：根据策略自动分配任务给对应角色的智能体
     /// Execute coordination task: auto-assign tasks based on strategy and roles
-    pub async fn coordinate_task(&self, task_msg: &AgentMessage) -> anyhow::Result<()> {
+    pub async fn coordinate_task(&self, task_msg: &AgentMessage) -> GlobalResult<()> {
         match &self.strategy {
             CoordinationStrategy::MasterSlave => self.master_slave_coordinate(task_msg).await,
             CoordinationStrategy::Pipeline => self.pipeline_coordinate(task_msg).await,
@@ -70,31 +71,31 @@ impl AgentCoordinator {
 
     /// 对外暴露的接口：提交带优先级的任务
     /// Public interface: Submit tasks with priority levels
-    pub async fn submit_priority_task(&self, task: TaskRequest) -> anyhow::Result<()> {
+    pub async fn submit_priority_task(&self, task: TaskRequest) -> GlobalResult<()> {
         self.scheduler.submit_task(task).await
     }
 
     /// 主从模式协同逻辑（核心示例）
     /// Master-Slave coordination logic (Core example)
-    async fn master_slave_coordinate(&self, task_msg: &AgentMessage) -> anyhow::Result<()> {
+    async fn master_slave_coordinate(&self, task_msg: &AgentMessage) -> GlobalResult<()> {
         let role_map = self.role_mapping.read().await;
         // 1. 获取主智能体（负责任务分配）
         // 1. Get the Master agent (responsible for task distribution)
         let masters = role_map
             .get("master")
-            .ok_or_else(|| anyhow::anyhow!("No master agent registered"))?;
+            .ok_or_else(|| GlobalError::Other("No master agent registered".to_string()))?;
         let master_id = &masters[0];
         // 2. 获取所有 worker 智能体（负责执行任务）
         // 2. Get all worker agents (responsible for task execution)
         let workers = role_map
             .get("worker")
-            .ok_or_else(|| anyhow::anyhow!("No worker agents registered"))?;
+            .ok_or_else(|| GlobalError::Other("No worker agents registered".to_string()))?;
 
         // 3. 主智能体广播任务给所有 worker
         // 3. Master agent broadcasts the task to all workers
         self.bus
             .send_message(master_id, CommunicationMode::Broadcast, task_msg)
-            .await?;
+            .await.map_err(|e| GlobalError::Other(e.to_string()))?;
 
         // 4. 跟踪任务状态（简化示例）
         // 4. Track task status (Simplified example)
@@ -109,7 +110,7 @@ impl AgentCoordinator {
 
     /// 流水线模式协同逻辑（任务串行传递）
     /// Pipeline coordination logic (Serial task transmission)
-    async fn pipeline_coordinate(&self, task_msg: &AgentMessage) -> anyhow::Result<()> {
+    async fn pipeline_coordinate(&self, task_msg: &AgentMessage) -> GlobalResult<()> {
         let role_map = self.role_mapping.read().await;
         // 按流水线阶段顺序获取角色（如 "stage1_extract" → "stage2_process" → "stage3_output"）
         // Get roles by pipeline sequence (e.g., "stage1_extract" -> "stage2_process" -> "stage3_output")
@@ -119,7 +120,7 @@ impl AgentCoordinator {
         for stage in stages {
             let agents = role_map
                 .get(stage)
-                .ok_or_else(|| anyhow::anyhow!("No agent for stage {}", stage))?;
+                .ok_or_else(|| GlobalError::Other(format!("No agent for stage {}", stage)))?;
             let agent_id = &agents[0];
             // 传递上一阶段输出作为当前阶段输入
             // Pass the output of the previous stage as current stage input
@@ -138,7 +139,7 @@ impl AgentCoordinator {
                     CommunicationMode::PointToPoint(agent_id.to_string()),
                     &current_msg,
                 )
-                .await?;
+                .await.map_err(|e| GlobalError::Other(e.to_string()))?;
             // 接收当前阶段输出（简化示例）
             // Receive current stage output (Simplified example)
             if let Some(AgentMessage::TaskResponse { result, .. }) = self
@@ -147,7 +148,8 @@ impl AgentCoordinator {
                     agent_id,
                     CommunicationMode::PointToPoint("coordinator".to_string()),
                 )
-                .await?
+                .await
+                .map_err(|e| GlobalError::Other(e.to_string()))?
             {
                 last_output = Some(result);
             }

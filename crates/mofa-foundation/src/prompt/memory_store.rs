@@ -5,7 +5,7 @@
 //! Provides memory-based storage for Prompt templates, suitable for development and testing
 
 use super::store::{PromptCompositionEntity, PromptEntity, PromptFilter, PromptStore};
-use super::template::PromptResult;
+use super::template::{PromptError, PromptResult};
 use async_trait::async_trait;
 use std::collections::HashMap;
 use std::sync::RwLock;
@@ -80,23 +80,27 @@ impl InMemoryPromptStore {
     /// 获取模板数量
     /// Get template count
     pub fn template_count(&self) -> usize {
-        self.templates.read().unwrap().len()
+        self.templates.read()
+            .map(|t| t.len())
+            .unwrap_or(0)
     }
 
     /// 清空所有数据
     /// Clear all data
     pub fn clear(&self) {
-        self.templates.write().unwrap().clear();
-        self.template_index.write().unwrap().clear();
-        self.compositions.write().unwrap().clear();
+        let _ = self.templates.write().map(|mut t| t.clear());
+        let _ = self.template_index.write().map(|mut i| i.clear());
+        let _ = self.compositions.write().map(|mut c| c.clear());
     }
 }
 
 #[async_trait]
 impl PromptStore for InMemoryPromptStore {
     async fn save_template(&self, entity: &PromptEntity) -> PromptResult<()> {
-        let mut templates = self.templates.write().unwrap();
-        let mut index = self.template_index.write().unwrap();
+        let mut templates = self.templates.write()
+            .map_err(|e| PromptError::LockPoisoned(format!("Failed to acquire write lock on templates: {}", e)))?;
+        let mut index = self.template_index.write()
+            .map_err(|e| PromptError::LockPoisoned(format!("Failed to acquire write lock on index: {}", e)))?;
 
         // 如果已存在相同 template_id，删除旧的
         // If template_id already exists, remove the old one
@@ -111,13 +115,16 @@ impl PromptStore for InMemoryPromptStore {
     }
 
     async fn get_template_by_id(&self, id: Uuid) -> PromptResult<Option<PromptEntity>> {
-        let templates = self.templates.read().unwrap();
+        let templates = self.templates.read()
+            .map_err(|e| PromptError::LockPoisoned(format!("Failed to acquire read lock on templates: {}", e)))?;
         Ok(templates.get(&id).cloned())
     }
 
     async fn get_template(&self, template_id: &str) -> PromptResult<Option<PromptEntity>> {
-        let index = self.template_index.read().unwrap();
-        let templates = self.templates.read().unwrap();
+        let index = self.template_index.read()
+            .map_err(|e| PromptError::LockPoisoned(format!("Failed to acquire read lock on index: {}", e)))?;
+        let templates = self.templates.read()
+            .map_err(|e| PromptError::LockPoisoned(format!("Failed to acquire read lock on templates: {}", e)))?;
 
         if let Some(&uuid) = index.get(template_id) {
             Ok(templates.get(&uuid).cloned())
@@ -127,7 +134,8 @@ impl PromptStore for InMemoryPromptStore {
     }
 
     async fn query_templates(&self, filter: &PromptFilter) -> PromptResult<Vec<PromptEntity>> {
-        let templates = self.templates.read().unwrap();
+        let templates = self.templates.read()
+            .map_err(|e| PromptError::LockPoisoned(format!("Failed to acquire read lock on templates: {}", e)))?;
         let mut results: Vec<PromptEntity> = templates
             .values()
             .filter(|e| {
@@ -169,11 +177,11 @@ impl PromptStore for InMemoryPromptStore {
                     let match_name = e
                         .name
                         .as_ref()
-                        .is_some_and(|n| n.to_lowercase().contains(&kw));
+                        .is_some_and(|n: &String| n.to_lowercase().contains(&kw));
                     let match_desc = e
                         .description
                         .as_ref()
-                        .is_some_and(|d| d.to_lowercase().contains(&kw));
+                        .is_some_and(|d: &String| d.to_lowercase().contains(&kw));
 
                     if !match_id && !match_name && !match_desc {
                         return false;
@@ -208,8 +216,10 @@ impl PromptStore for InMemoryPromptStore {
     }
 
     async fn update_template(&self, entity: &PromptEntity) -> PromptResult<()> {
-        let mut templates = self.templates.write().unwrap();
-        let index = self.template_index.read().unwrap();
+        let mut templates = self.templates.write()
+            .map_err(|e| PromptError::LockPoisoned(format!("Failed to acquire write lock on templates: {}", e)))?;
+        let index = self.template_index.read()
+            .map_err(|e| PromptError::LockPoisoned(format!("Failed to acquire read lock on index: {}", e)))?;
 
         // 确保模板存在
         // Ensure template exists
@@ -224,8 +234,10 @@ impl PromptStore for InMemoryPromptStore {
     }
 
     async fn delete_template_by_id(&self, id: Uuid) -> PromptResult<bool> {
-        let mut templates = self.templates.write().unwrap();
-        let mut index = self.template_index.write().unwrap();
+        let mut templates = self.templates.write()
+            .map_err(|e| PromptError::LockPoisoned(format!("Failed to acquire write lock on templates: {}", e)))?;
+        let mut index = self.template_index.write()
+            .map_err(|e| PromptError::LockPoisoned(format!("Failed to acquire write lock on index: {}", e)))?;
 
         if let Some(entity) = templates.remove(&id) {
             index.remove(&entity.template_id);
@@ -237,7 +249,8 @@ impl PromptStore for InMemoryPromptStore {
 
     async fn delete_template(&self, template_id: &str) -> PromptResult<bool> {
         let uuid = {
-            let index = self.template_index.read().unwrap();
+            let index = self.template_index.read()
+                .map_err(|e| PromptError::LockPoisoned(format!("Failed to acquire read lock on index: {}", e)))?;
             index.get(template_id).copied()
         };
         if let Some(uuid) = uuid {
@@ -248,8 +261,10 @@ impl PromptStore for InMemoryPromptStore {
     }
 
     async fn set_template_enabled(&self, template_id: &str, enabled: bool) -> PromptResult<()> {
-        let index = self.template_index.read().unwrap();
-        let mut templates = self.templates.write().unwrap();
+        let index = self.template_index.read()
+            .map_err(|e| PromptError::LockPoisoned(format!("Failed to acquire read lock on index: {}", e)))?;
+        let mut templates = self.templates.write()
+            .map_err(|e| PromptError::LockPoisoned(format!("Failed to acquire write lock on templates: {}", e)))?;
 
         if let Some(&uuid) = index.get(template_id)
             && let Some(entity) = templates.get_mut(&uuid)
@@ -262,7 +277,8 @@ impl PromptStore for InMemoryPromptStore {
     }
 
     async fn exists(&self, template_id: &str) -> PromptResult<bool> {
-        let index = self.template_index.read().unwrap();
+        let index = self.template_index.read()
+            .map_err(|e| PromptError::LockPoisoned(format!("Failed to acquire read lock on index: {}", e)))?;
         Ok(index.contains_key(template_id))
     }
 
@@ -272,7 +288,8 @@ impl PromptStore for InMemoryPromptStore {
     }
 
     async fn get_all_tags(&self) -> PromptResult<Vec<String>> {
-        let templates = self.templates.read().unwrap();
+        let templates = self.templates.read()
+            .map_err(|e| PromptError::LockPoisoned(format!("Failed to acquire read lock on templates: {}", e)))?;
         let mut tags: std::collections::HashSet<String> = std::collections::HashSet::new();
 
         for entity in templates.values() {
@@ -287,7 +304,8 @@ impl PromptStore for InMemoryPromptStore {
     }
 
     async fn save_composition(&self, entity: &PromptCompositionEntity) -> PromptResult<()> {
-        let mut compositions = self.compositions.write().unwrap();
+        let mut compositions = self.compositions.write()
+            .map_err(|e| PromptError::LockPoisoned(format!("Failed to acquire write lock on compositions: {}", e)))?;
         compositions.insert(entity.composition_id.clone(), entity.clone());
         Ok(())
     }
@@ -296,17 +314,20 @@ impl PromptStore for InMemoryPromptStore {
         &self,
         composition_id: &str,
     ) -> PromptResult<Option<PromptCompositionEntity>> {
-        let compositions = self.compositions.read().unwrap();
+        let compositions = self.compositions.read()
+            .map_err(|e| PromptError::LockPoisoned(format!("Failed to acquire read lock on compositions: {}", e)))?;
         Ok(compositions.get(composition_id).cloned())
     }
 
     async fn query_compositions(&self) -> PromptResult<Vec<PromptCompositionEntity>> {
-        let compositions = self.compositions.read().unwrap();
+        let compositions = self.compositions.read()
+            .map_err(|e| PromptError::LockPoisoned(format!("Failed to acquire read lock on compositions: {}", e)))?;
         Ok(compositions.values().cloned().collect())
     }
 
     async fn delete_composition(&self, composition_id: &str) -> PromptResult<bool> {
-        let mut compositions = self.compositions.write().unwrap();
+        let mut compositions = self.compositions.write()
+            .map_err(|e| PromptError::LockPoisoned(format!("Failed to acquire write lock on compositions: {}", e)))?;
         Ok(compositions.remove(composition_id).is_some())
     }
 }
@@ -314,6 +335,7 @@ impl PromptStore for InMemoryPromptStore {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::prompt::store::PromptStore;
     use crate::prompt::template::PromptTemplate;
 
     #[tokio::test]

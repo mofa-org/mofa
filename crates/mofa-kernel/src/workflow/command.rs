@@ -12,6 +12,7 @@ use super::StateUpdate;
 ///
 /// Determines what happens after a node completes execution.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+#[non_exhaustive]
 pub enum ControlFlow<V = Value> {
     /// Continue to the next node(s) based on graph edges
     #[default]
@@ -58,9 +59,12 @@ pub enum ControlFlow<V = Value> {
 /// ]);
 /// ```
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct Command<V = Value> {
     /// State updates to apply
     pub updates: Vec<StateUpdate<V>>,
+    /// Optional explicit routing decision for conditional edges
+    pub route: Option<String>,
     /// Control flow directive
     pub control: ControlFlow<V>,
 }
@@ -69,6 +73,7 @@ impl<V> Default for Command<V> {
     fn default() -> Self {
         Self {
             updates: Vec::new(),
+            route: None,
             control: ControlFlow::default(),
         }
     }
@@ -89,6 +94,12 @@ impl<V> Command<V> {
     /// Add multiple state updates
     pub fn updates(mut self, updates: Vec<StateUpdate<V>>) -> Self {
         self.updates.extend(updates);
+        self
+    }
+
+    /// Provide an explicit routing decision for conditional edges
+    pub fn route(mut self, decision: impl Into<String>) -> Self {
+        self.route = Some(decision.into());
         self
     }
 
@@ -114,6 +125,7 @@ impl<V> Command<V> {
     pub fn send(targets: Vec<SendCommand<V>>) -> Self {
         Self {
             updates: Vec::new(),
+            route: None,
             control: ControlFlow::Send(targets),
         }
     }
@@ -149,6 +161,11 @@ impl<V> Command<V> {
             ControlFlow::Goto(target) => Some(target),
             _ => None,
         }
+    }
+
+    /// Get the explicit routing decision if set
+    pub fn route_value(&self) -> Option<&str> {
+        self.route.as_deref()
     }
 }
 
@@ -201,6 +218,17 @@ mod tests {
         assert_eq!(cmd.updates.len(), 2);
         assert_eq!(cmd.updates[0].key, "key1");
         assert_eq!(cmd.goto_target(), Some("next_node"));
+    }
+
+    #[test]
+    fn test_command_route_value() {
+        let cmd = Command::new()
+            .update("status", json!("pending"))
+            .route("approve")
+            .continue_();
+
+        assert_eq!(cmd.route_value(), Some("approve"));
+        assert_eq!(cmd.control, ControlFlow::Continue);
     }
 
     #[test]

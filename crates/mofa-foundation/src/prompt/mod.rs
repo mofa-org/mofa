@@ -27,7 +27,7 @@ mod presets;
 mod registry;
 mod store;
 mod template; // 新增插件模块
-              // Added plugin module
+// Added plugin module
 
 // SQL 存储模块 (条件编译)
 // SQL Storage Module (Conditional Compilation)
