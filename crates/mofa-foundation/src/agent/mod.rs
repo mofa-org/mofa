@@ -30,6 +30,7 @@ pub use components::{
     // Context compressor trait and implementations
     CompressionStrategy,
     ContextCompressor,
+    ContextCompressorError,
     SlidingWindowCompressor,
     SummarizingCompressor,
     TokenCounter,
