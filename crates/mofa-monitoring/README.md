@@ -13,11 +13,20 @@ mofa-monitoring = "0.1"
 
 - Web-based dashboard for monitoring agent execution
 - Metrics collection and visualization
+- Prometheus-compatible metrics endpoint at `GET /metrics`
 - Distributed tracing support with OpenTelemetry
 - Real-time agent status monitoring
 - Health checks and alerts
 - HTTP server for dashboard UI
 - Static file embedding for frontend assets
+
+## Prometheus Endpoint
+
+`DashboardServer` now serves metrics in Prometheus text exposition format on:
+
+```text
+GET /metrics
+```
 
 ## Documentation
 
