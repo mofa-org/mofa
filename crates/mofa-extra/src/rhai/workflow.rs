@@ -221,13 +221,9 @@ impl ScriptWorkflowNode {
                 .await
                 .map_err(RhaiError::from)
         } else {
-
             Err(RhaiError::Other(
                 "No script source or path specified".to_string(),
             ))
-
-            Err(RhaiError::Other("No script source or path specified".to_string()))
-
         }
     }
 
