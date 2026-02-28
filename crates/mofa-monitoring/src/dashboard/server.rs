@@ -21,6 +21,7 @@ use mofa_kernel::workflow::telemetry::{DebugEvent, SessionRecorder};
 
 use super::api::create_api_router;
 use super::assets::{INDEX_HTML, serve_asset};
+use super::auth::{AuthProvider, NoopAuthProvider};
 use super::metrics::{MetricsCollector, MetricsConfig};
 use super::prometheus::{PrometheusExportConfig, PrometheusExporter};
 use super::websocket::{WebSocketHandler, create_websocket_handler};
@@ -29,7 +30,7 @@ use crate::tracing::{OtlpExporterHandles, OtlpMetricsExporter, OtlpMetricsExport
 use tokio::sync::mpsc;
 
 /// Dashboard server configuration
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct DashboardConfig {
     /// Server host
     pub host: String,
@@ -48,6 +49,30 @@ pub struct DashboardConfig {
     /// Optional OTLP metrics exporter configuration
     #[cfg(feature = "otlp-metrics")]
     pub otlp_metrics_exporter: Option<OtlpMetricsExporterConfig>,
+    /// WebSocket authentication provider (default: NoopAuthProvider)
+    pub auth_provider: Arc<dyn AuthProvider>,
+}
+
+impl std::fmt::Debug for DashboardConfig {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("DashboardConfig")
+            .field("host", &self.host)
+            .field("port", &self.port)
+            .field("enable_cors", &self.enable_cors)
+            .field("ws_update_interval", &self.ws_update_interval)
+            .field("enable_tracing", &self.enable_tracing)
+            .field("prometheus_export_config", &self.prometheus_export_config)
+            .field(
+                "otlp_metrics_exporter_enabled",
+                &self
+                    .otlp_metrics_exporter
+                    .as_ref()
+                    .map(|_| true)
+                    .unwrap_or(false),
+            )
+            .field("auth_enabled", &self.auth_provider.is_enabled())
+            .finish()
+    }
 }
 
 impl Default for DashboardConfig {
@@ -62,6 +87,7 @@ impl Default for DashboardConfig {
             prometheus_export_config: PrometheusExportConfig::default(),
             #[cfg(feature = "otlp-metrics")]
             otlp_metrics_exporter: None,
+            auth_provider: Arc::new(NoopAuthProvider),
         }
     }
 }
@@ -104,6 +130,12 @@ impl DashboardConfig {
     #[cfg(feature = "otlp-metrics")]
     pub fn with_otlp_metrics_exporter(mut self, config: OtlpMetricsExporterConfig) -> Self {
         self.otlp_metrics_exporter = Some(config);
+        self
+    }
+
+    /// Set the WebSocket authentication provider.
+    pub fn with_auth(mut self, provider: Arc<dyn AuthProvider>) -> Self {
+        self.auth_provider = provider;
         self
     }
 
@@ -206,7 +238,8 @@ impl DashboardServer {
     /// Build the router
     pub fn build_router(&mut self) -> Router {
         // Create WebSocket handler
-        let (ws_handler, ws_route) = create_websocket_handler(self.collector.clone());
+        let (ws_handler, ws_route) =
+            create_websocket_handler(self.collector.clone(), self.config.auth_provider.clone());
         self.ws_handler = Some(ws_handler.clone());
 
         // API routes

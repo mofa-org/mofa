@@ -2,7 +2,9 @@
 //!
 //! Manages persistent storage and lifecycle of agents on the local system.
 
-use anyhow::Result;
+use crate::CliError;
+
+type Result<T> = std::result::Result<T, CliError>;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};

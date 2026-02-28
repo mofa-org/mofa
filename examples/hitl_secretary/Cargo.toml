@@ -10,5 +10,4 @@ tokio = { version = "1", features = ["full"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 serde_json = "1.0"
-anyhow = "1.0"
 async-trait = "0.1"

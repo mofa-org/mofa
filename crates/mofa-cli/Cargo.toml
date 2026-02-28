@@ -20,12 +20,14 @@ path = "src/main.rs"
 [dependencies]
 # Core
 mofa-sdk = { path = "../mofa-sdk", version = "0.1" }
-mofa-kernel = { path = "../mofa-kernel", version = "0.1", features = ["config"] }
+mofa-kernel = { path = "../mofa-kernel", version = "0.1", features = [
+    "config",
+] }
 mofa-runtime = { path = "../mofa-runtime", version = "0.1" }
 mofa-foundation = { path = "../mofa-foundation", version = "0.1" }
 config.workspace = true
 tokio = { workspace = true }
-anyhow = { workspace = true }
+thiserror = { workspace = true }
 async-trait = { workspace = true }
 chrono = { workspace = true }
 
@@ -63,7 +65,12 @@ hex = "0.4"
 futures = "0.3"
 
 # Database (optional, for db init command)
-sqlx = { version = "0.8", features = ["runtime-tokio", "postgres", "mysql", "sqlite"], optional = true }
+sqlx = { version = "0.8", features = [
+    "runtime-tokio",
+    "postgres",
+    "mysql",
+    "sqlite",
+], optional = true }
 
 # TUI (Terminal User Interface)
 ratatui = { version = "0.30", features = [
@@ -71,11 +78,12 @@ ratatui = { version = "0.30", features = [
     "unstable-backend-writer",
     "unstable-rendered-line-info",
     "unstable-widget-ref",
-]}
+] }
 crossterm = { version = "0.29", features = ["bracketed-paste", "event-stream"] }
 tokio-stream = "0.1"
 
 [dev-dependencies]
+anyhow.workspace = true
 assert_cmd = "2"
 predicates = "3"
 tempfile = "3"

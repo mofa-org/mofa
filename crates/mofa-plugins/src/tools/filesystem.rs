@@ -75,10 +75,10 @@ impl ToolExecutor for FileSystemTool {
     async fn execute(&self, arguments: serde_json::Value) -> PluginResult<serde_json::Value> {
         let operation = arguments["operation"]
             .as_str()
-            .ok_or_else(|| mofa_kernel::plugin::PluginError::ExecutionFailed(format!("Operation is required")))?;
+            .ok_or_else(|| mofa_kernel::plugin::PluginError::ExecutionFailed("Operation is required".to_string()))?;
         let path = arguments["path"]
             .as_str()
-            .ok_or_else(|| mofa_kernel::plugin::PluginError::ExecutionFailed(format!("Path is required")))?;
+            .ok_or_else(|| mofa_kernel::plugin::PluginError::ExecutionFailed("Path is required".to_string()))?;
 
         if !self.is_path_allowed(path) {
             return Err(mofa_kernel::plugin::PluginError::ExecutionFailed(format!(
@@ -107,7 +107,7 @@ impl ToolExecutor for FileSystemTool {
             "write" => {
                 let content = arguments["content"]
                     .as_str()
-                    .ok_or_else(|| mofa_kernel::plugin::PluginError::ExecutionFailed(format!("Content is required for write operation")))?;
+                    .ok_or_else(|| mofa_kernel::plugin::PluginError::ExecutionFailed("Content is required for write operation".to_string()))?;
                 fs::write(path, content).await?;
                 Ok(json!({
                     "success": true,

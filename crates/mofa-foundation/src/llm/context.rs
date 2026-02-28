@@ -6,6 +6,7 @@
 //! - Agent identity integration
 //! - Vision message support
 
+use crate::llm::token_budget::ContextWindowManager;
 use crate::llm::types::{ChatMessage, ContentPart, ImageUrl, MessageContent, Role};
 use mofa_kernel::agent::types::error::{GlobalError, GlobalResult};
 use serde::{Deserialize, Serialize};
@@ -89,6 +90,8 @@ pub struct AgentContextBuilder {
     skills: Option<Arc<dyn SkillsManager>>,
     /// Cached system prompt
     cached_prompt: Arc<RwLock<Option<String>>>,
+    /// Optional context window manager for token budget enforcement
+    context_window_manager: Option<Arc<ContextWindowManager>>,
 }
 
 impl AgentContextBuilder {
@@ -107,6 +110,7 @@ impl AgentContextBuilder {
             },
             skills: None,
             cached_prompt: Arc::new(RwLock::new(None)),
+            context_window_manager: None,
         }
     }
 
@@ -125,6 +129,15 @@ impl AgentContextBuilder {
     /// Set skills manager
     pub fn with_skills(mut self, skills: Arc<dyn SkillsManager>) -> Self {
         self.skills = Some(skills);
+        self
+    }
+
+    /// Set context window manager for token budget enforcement.
+    ///
+    /// When set, `build_messages()` and `build_messages_with_skills()` will
+    /// automatically trim history to fit within the model's context window.
+    pub fn with_context_window_manager(mut self, manager: Arc<ContextWindowManager>) -> Self {
+        self.context_window_manager = Some(manager);
         self
     }
 
@@ -213,6 +226,14 @@ The following skills extend your capabilities. To use a skill, read its document
 
         messages.push(user_msg);
 
+        // Apply context window management if configured
+        let messages = if let Some(ref manager) = self.context_window_manager {
+            let result = manager.apply(&messages);
+            result.messages
+        } else {
+            messages
+        };
+
         Ok(messages)
     }
 
@@ -268,6 +289,14 @@ The following skills extend your capabilities. To use a skill, read its document
         };
 
         messages.push(user_msg);
+
+        // Apply context window management if configured
+        let messages = if let Some(ref manager) = self.context_window_manager {
+            let result = manager.apply(&messages);
+            result.messages
+        } else {
+            messages
+        };
 
         Ok(messages)
     }
