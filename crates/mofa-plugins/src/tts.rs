@@ -444,7 +444,7 @@ impl TTSPlugin {
         let engine = self
             .engine
             .as_ref()
-            .ok_or_else(|| mofa_kernel::plugin::PluginError::ExecutionFailed(format!("TTS engine not initialized")))?;
+            .ok_or_else(|| mofa_kernel::plugin::PluginError::ExecutionFailed("TTS engine not initialized".to_string()))?;
 
         self.synthesis_count += 1;
         self.total_chars_synthesized += text.len() as u64;
@@ -460,7 +460,7 @@ impl TTSPlugin {
         let engine = self
             .engine
             .as_ref()
-            .ok_or_else(|| mofa_kernel::plugin::PluginError::ExecutionFailed(format!("TTS engine not initialized")))?;
+            .ok_or_else(|| mofa_kernel::plugin::PluginError::ExecutionFailed("TTS engine not initialized".to_string()))?;
 
         self.synthesis_count += 1;
         self.total_chars_synthesized += text.len() as u64;
@@ -478,7 +478,7 @@ impl TTSPlugin {
         let engine = self
             .engine
             .as_ref()
-            .ok_or_else(|| mofa_kernel::plugin::PluginError::ExecutionFailed(format!("TTS engine not initialized")))?;
+            .ok_or_else(|| mofa_kernel::plugin::PluginError::ExecutionFailed("TTS engine not initialized".to_string()))?;
 
         self.synthesis_count += 1;
         self.total_chars_synthesized += text.len() as u64;
@@ -511,7 +511,7 @@ impl TTSPlugin {
         let engine = self
             .engine
             .as_ref()
-            .ok_or_else(|| mofa_kernel::plugin::PluginError::ExecutionFailed(format!("TTS engine not initialized")))?;
+            .ok_or_else(|| mofa_kernel::plugin::PluginError::ExecutionFailed("TTS engine not initialized".to_string()))?;
 
         self.synthesis_count += 1;
         self.total_chars_synthesized += text.len() as u64;
@@ -552,7 +552,7 @@ impl TTSPlugin {
         let engine = self
             .engine
             .as_ref()
-            .ok_or_else(|| mofa_kernel::plugin::PluginError::ExecutionFailed(format!("TTS engine not initialized")))?;
+            .ok_or_else(|| mofa_kernel::plugin::PluginError::ExecutionFailed("TTS engine not initialized".to_string()))?;
         engine.list_voices().await
     }
 
@@ -661,12 +661,12 @@ impl AgentPlugin for TTSPlugin {
         let cache = self
             .model_cache
             .as_ref()
-            .ok_or_else(|| mofa_kernel::plugin::PluginError::ExecutionFailed(format!("Model cache not initialized")))?;
+            .ok_or_else(|| mofa_kernel::plugin::PluginError::ExecutionFailed("Model cache not initialized".to_string()))?;
 
         let hf_client = self
             .hf_client
             .as_ref()
-            .ok_or_else(|| mofa_kernel::plugin::PluginError::ExecutionFailed(format!("HF client not initialized")))?;
+            .ok_or_else(|| mofa_kernel::plugin::PluginError::ExecutionFailed("HF client not initialized".to_string()))?;
 
         // Check if model exists in cache
         let model_exists = cache.exists(&self.config.model_url).await;
@@ -734,7 +734,7 @@ impl AgentPlugin for TTSPlugin {
 
                 let model_path_str = model_path
                     .to_str()
-                    .ok_or_else(|| mofa_kernel::plugin::PluginError::ExecutionFailed(format!("Invalid model path")))?;
+                    .ok_or_else(|| mofa_kernel::plugin::PluginError::ExecutionFailed("Invalid model path".to_string()))?;
 
                 info!(
                     "Initializing Kokoro TTS engine with model: {}, voices: {}",
@@ -797,7 +797,7 @@ impl AgentPlugin for TTSPlugin {
             "speak" | "synthesize" => {
                 let text = command
                     .text
-                    .ok_or_else(|| mofa_kernel::plugin::PluginError::ExecutionFailed(format!("Missing 'text' parameter")))?;
+                    .ok_or_else(|| mofa_kernel::plugin::PluginError::ExecutionFailed("Missing 'text' parameter".to_string()))?;
 
                 if command.play.unwrap_or(true) {
                     self.synthesize_and_play(&text).await?;
@@ -818,7 +818,7 @@ impl AgentPlugin for TTSPlugin {
             "set_voice" => {
                 let voice = command
                     .voice
-                    .ok_or_else(|| mofa_kernel::plugin::PluginError::ExecutionFailed(format!("Missing 'voice' parameter")))?;
+                    .ok_or_else(|| mofa_kernel::plugin::PluginError::ExecutionFailed("Missing 'voice' parameter".to_string()))?;
                 self.set_default_voice(&voice);
                 Ok(format!("Default voice set to: {}", voice))
             }
@@ -922,7 +922,7 @@ impl ToolExecutor for TextToSpeechTool {
         let text = arguments
             .get("text")
             .and_then(|v| v.as_str())
-            .ok_or_else(|| mofa_kernel::plugin::PluginError::ExecutionFailed(format!("Missing 'text' parameter")))?;
+            .ok_or_else(|| mofa_kernel::plugin::PluginError::ExecutionFailed("Missing 'text' parameter".to_string()))?;
 
         let voice = arguments.get("voice").and_then(|v| v.as_str());
         let play = arguments
@@ -957,10 +957,10 @@ impl ToolExecutor for TextToSpeechTool {
 
     fn validate(&self, arguments: &serde_json::Value) -> PluginResult<()> {
         if !arguments.is_object() {
-            return Err(mofa_kernel::plugin::PluginError::ExecutionFailed(format!("Arguments must be an object")));
+            return Err(mofa_kernel::plugin::PluginError::ExecutionFailed("Arguments must be an object".to_string()));
         }
         if arguments.get("text").and_then(|v| v.as_str()).is_none() {
-            return Err(mofa_kernel::plugin::PluginError::ExecutionFailed(format!("Missing required parameter: text")));
+            return Err(mofa_kernel::plugin::PluginError::ExecutionFailed("Missing required parameter: text".to_string()));
         }
         Ok(())
     }
