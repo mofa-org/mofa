@@ -1,9 +1,10 @@
 //! `mofa build` command implementation
 
+use crate::CliError;
 use colored::Colorize;
 
 /// Execute the `mofa build` command
-pub fn run(release: bool, features: Option<&str>) -> anyhow::Result<()> {
+pub fn run(release: bool, features: Option<&str>) -> Result<(), CliError> {
     println!("{} Building agent...", "→".green());
 
     let mut cmd = std::process::Command::new("cargo");

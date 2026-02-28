@@ -245,7 +245,7 @@ MoFA supports a skill system based on `SKILL.md` files with progressive disclosu
 use mofa_sdk::skills::SkillsManager;
 
 #[tokio::main]
-async fn main() -> anyhow::Result<()> {
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Scan skills directory
     let skills = SkillsManager::new("./skills")?;
 
@@ -343,7 +343,7 @@ impl MoFAAgent for MyAgent {
 }
 
 #[tokio::main]
-async fn main() -> anyhow::Result<()> {
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let provider = openai_from_env()?;
     let llm = LLMClient::new(Arc::new(provider));
     let skills = SkillsManager::new("./skills")?;
@@ -405,7 +405,7 @@ impl MoFAAgent for EchoAgent {
 }
 
 #[tokio::main]
-async fn main() -> anyhow::Result<()> {
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let inputs = vec![
         AgentInput::text("task-1"),
         AgentInput::text("task-2"),
@@ -434,7 +434,7 @@ use std::sync::Arc;
 use uuid::Uuid;
 
 #[tokio::main]
-async fn main() -> anyhow::Result<()> {
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // 1) Persistence plugin (optional, but recommended for production)
     let store = Arc::new(PostgresStore::connect("postgres://localhost/mofa").await?);
     let user_id = Uuid::now_v7();
@@ -487,7 +487,7 @@ async fn main() -> anyhow::Result<()> {
 use mofa_sdk::llm::{LLMClient, openai_from_env};
 
 #[tokio::main]
-async fn main() -> anyhow::Result<()> {
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let provider = openai_from_env()?;
     let client = LLMClient::new(std::sync::Arc::new(provider));
     let response = client.ask("What is Rust?").await?;
@@ -503,7 +503,7 @@ use mofa_sdk::runtime::{SimpleRuntime, AgentBuilder};
 use mofa_sdk::kernel::MoFAAgent;
 
 #[tokio::main]
-async fn main() -> anyhow::Result<()> {
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let runtime = SimpleRuntime::new();
 
     // Register multiple agents
