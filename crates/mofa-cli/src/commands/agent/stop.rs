@@ -118,7 +118,7 @@ mod tests {
     use tempfile::TempDir;
 
     #[tokio::test]
-    async fn test_stop_updates_state_and_unregisters_agent() -> anyhow::Result<()> {
+    async fn test_stop_updates_state_and_unregisters_agent() -> Result<(), Box<dyn std::error::Error>> {
         let temp = TempDir::new().expect("failed to create temporary directory");
         let ctx = CliContext::with_temp_dir(temp.path()).await?;
 
@@ -132,7 +132,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_stop_returns_error_for_missing_agent() -> anyhow::Result<()> {
+    async fn test_stop_returns_error_for_missing_agent() -> Result<(), Box<dyn std::error::Error>> {
         let temp = TempDir::new().expect("failed to create temporary directory");
         let ctx = CliContext::with_temp_dir(temp.path()).await?;
 
@@ -142,7 +142,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_stop_errors_when_registry_missing_even_if_persisted_exists() -> anyhow::Result<()>
+    async fn test_stop_errors_when_registry_missing_even_if_persisted_exists() -> Result<(), Box<dyn std::error::Error>>
     {
         let temp = TempDir::new().expect("failed to create temporary directory");
         let first_ctx = CliContext::with_temp_dir(temp.path())
@@ -170,7 +170,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_stop_force_persisted_stop_updates_state_when_registry_missing()
-    -> anyhow::Result<()> {
+    -> Result<(), Box<dyn std::error::Error>> {
         let temp = TempDir::new().expect("failed to create temporary directory");
         let first_ctx = CliContext::with_temp_dir(temp.path())
             .await

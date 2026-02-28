@@ -14,9 +14,14 @@ use serde_json::Value;
 use std::collections::{HashMap, HashSet};
 use std::pin::Pin;
 use std::sync::Arc;
-use tokio::sync::RwLock;
+use tokio::sync::{RwLock, Semaphore};
 use tokio::task::JoinSet;
 use tracing::{Instrument, debug, info, warn};
+
+use super::fault_tolerance::{
+    CircuitBreakerRegistry, NodeExecutionOutcome, NodePolicy, execute_with_policy,
+    new_circuit_registry,
+};
 
 /// Type alias for node ID
 pub type NodeId = String;
@@ -49,8 +54,12 @@ pub struct StateGraphImpl<S: GraphState> {
     entry_point: Option<NodeId>,
     /// Finish points (nodes that connect to END)
     finish_points: Vec<NodeId>,
+    /// 图配置
     /// Graph configuration
     config: GraphConfig,
+    /// 每节点的容错策略
+    /// Per-node fault-tolerance policies
+    policies: HashMap<NodeId, NodePolicy>,
 }
 
 impl<S: GraphState> StateGraphImpl<S> {
@@ -64,6 +73,7 @@ impl<S: GraphState> StateGraphImpl<S> {
             entry_point: None,
             finish_points: Vec::new(),
             config: GraphConfig::default(),
+            policies: HashMap::new(),
         }
     }
 
@@ -145,6 +155,18 @@ impl<S: GraphState> StateGraphImpl<S> {
         }
 
         reachable
+    }
+
+    /// 为特定节点附加容错策略
+    /// Attach a fault-tolerance policy to a specific node.
+    ///
+    /// 策略是可选的：没有策略的节点以默认行为执行
+    /// （无重试，无断路器）。
+    /// Policies are optional: nodes without a policy execute with default
+    /// behavior (no retry, no circuit breaker).
+    pub fn with_policy(&mut self, node_id: impl Into<String>, policy: NodePolicy) -> &mut Self {
+        self.policies.insert(node_id.into(), policy);
+        self
     }
 }
 
@@ -276,7 +298,27 @@ impl<S: GraphState + 'static> mofa_kernel::workflow::StateGraph for StateGraphIm
         // Validate
         self.validate()?;
 
+        // Validate fallback node references in policies
+        for (node_id, policy) in &self.policies {
+            if !self.nodes.contains_key(node_id) {
+                return Err(AgentError::ValidationFailed(format!(
+                    "Policy references non-existent node '{}'",
+                    node_id
+                )));
+            }
+            if let Some(ref fallback) = policy.fallback_node
+                && !self.nodes.contains_key(fallback)
+            {
+                return Err(AgentError::ValidationFailed(format!(
+                    "Fallback node '{}' for node '{}' does not exist in graph",
+                    fallback, node_id
+                )));
+            }
+        }
+
+        // 创建已编译的图
         // Create compiled graph
+        let max_par = self.config.max_parallelism.max(1);
         Ok(CompiledGraphImpl {
             id: self.id,
             nodes: Arc::new(
@@ -291,24 +333,36 @@ impl<S: GraphState + 'static> mofa_kernel::workflow::StateGraph for StateGraphIm
                 AgentError::ValidationFailed("No entry point set".to_string())
             })?,
             config: self.config,
+            policies: Arc::new(self.policies),
+            circuit_states: new_circuit_registry(),
+            parallelism_semaphore: Arc::new(Semaphore::new(max_par)),
         })
     }
 }
 
+/// 已编译的可执行图
 /// Compiled graph ready for execution
 pub struct CompiledGraphImpl<S: GraphState> {
-    /// Graph ID
+    /// 图 ID / Graph ID
     id: String,
-    /// Node functions
+    /// 节点函数 / Node functions
     nodes: Arc<HashMap<NodeId, Arc<dyn NodeFunc<S>>>>,
-    /// Edges
+    /// 边 / Edges
     edges: Arc<HashMap<NodeId, EdgeTarget>>,
-    /// Reducers
+    /// 归约器 / Reducers
     reducers: Arc<HashMap<String, Box<dyn Reducer>>>,
-    /// Entry point
+    /// 入口点 / Entry point
     entry_point: NodeId,
-    /// Configuration
+    /// 配置 / Configuration
     config: GraphConfig,
+    /// 每节点的容错策略 / Per-node fault-tolerance policies
+    policies: Arc<HashMap<NodeId, NodePolicy>>,
+    /// 每节点的断路器状态（跨调用共享）
+    /// Per-node circuit breaker state (shared across invocations)
+    circuit_states: CircuitBreakerRegistry,
+    /// 并行分支的并发信号量
+    /// Concurrency semaphore for parallel branches
+    parallelism_semaphore: Arc<Semaphore>,
 }
 
 impl<S: GraphState> CompiledGraphImpl<S> {
@@ -325,11 +379,20 @@ impl<S: GraphState> CompiledGraphImpl<S> {
         }
     }
 
+    /// 并行执行多个节点，强制执行并发限制
+    /// Execute multiple nodes in parallel, enforcing max_parallelism via semaphore.
+    ///
+    /// NOTE: Parallel nodes run without per-node retry/circuit-breaker protection.
+    /// Each node executes against an isolated state snapshot. This is by design:
+    /// parallel fan-out patterns prioritize throughput over individual node
+    /// resilience. If retry is needed, place a single-node step before/after
+    /// the parallel fan-out.
     async fn execute_parallel_nodes(
         nodes: &HashMap<NodeId, Arc<dyn NodeFunc<S>>>,
         node_ids: &[String],
         base_state: &S,
         base_ctx: &RuntimeContext,
+        semaphore: &Arc<Semaphore>,
     ) -> AgentResult<Vec<(String, Command)>> {
         let mut join_set = JoinSet::new();
 
@@ -343,8 +406,13 @@ impl<S: GraphState> CompiledGraphImpl<S> {
             let mut isolated_state = base_state.clone();
             let node_ctx = Self::build_node_context(base_ctx, node_id);
             let node_id = node_id.clone();
+            let sem = semaphore.clone();
 
             join_set.spawn(async move {
+                // Acquire semaphore permit to enforce max_parallelism
+                let _permit = sem.acquire().await.map_err(|_| {
+                    AgentError::Internal("Parallelism semaphore closed".to_string())
+                })?;
                 let command = node.call(&mut isolated_state, &node_ctx).await?;
                 Ok::<(usize, String, Command), AgentError>((index, node_id, command))
             });
@@ -451,6 +519,7 @@ impl<S: GraphState + 'static> CompiledGraph<S, serde_json::Value> for CompiledGr
 
         let mut state = input;
         let mut current_nodes = vec![self.entry_point.clone()];
+        let default_policy = NodePolicy::default();
 
         while !current_nodes.is_empty() {
             // Check recursion limit
@@ -471,7 +540,27 @@ impl<S: GraphState + 'static> CompiledGraph<S, serde_json::Value> for CompiledGr
                 ctx.set_current_node(&node_id).await;
                 debug!("Executing node '{}' in graph '{}'", node_id, self.id);
 
-                let command = node.call(&mut state, &ctx).await?;
+                let policy = self.policies.get(&node_id).unwrap_or(&default_policy);
+
+                let command = match execute_with_policy(
+                    node.as_ref(),
+                    &mut state,
+                    &ctx,
+                    policy,
+                    &self.circuit_states,
+                    &node_id,
+                    None, // no event channel in invoke()
+                )
+                .await
+                {
+                    Ok(cmd) => cmd,
+                    Err(NodeExecutionOutcome::Fallback(fallback_id)) => {
+                        debug!("Node '{}' falling back to '{}'", node_id, fallback_id);
+                        current_nodes = vec![fallback_id];
+                        continue;
+                    }
+                    Err(NodeExecutionOutcome::Error(e)) => return Err(e),
+                };
 
                 // Apply updates
                 self.apply_updates(&mut state, &command.updates).await?;
@@ -492,6 +581,7 @@ impl<S: GraphState + 'static> CompiledGraph<S, serde_json::Value> for CompiledGr
                     &nodes_to_execute,
                     &state,
                     &ctx,
+                    &self.parallelism_semaphore,
                 )
                 .await?;
 
@@ -528,6 +618,9 @@ impl<S: GraphState + 'static> CompiledGraph<S, serde_json::Value> for CompiledGr
         let reducers = self.reducers.clone();
         let edges = self.edges.clone();
         let entry_point = self.entry_point.clone();
+        let policies = self.policies.clone();
+        let circuit_states = self.circuit_states.clone();
+        let semaphore = self.parallelism_semaphore.clone();
 
         // Create a channel for streaming events
         let (tx, rx) = tokio::sync::mpsc::channel(100);
@@ -539,6 +632,7 @@ impl<S: GraphState + 'static> CompiledGraph<S, serde_json::Value> for CompiledGr
             let mut current_nodes = vec![entry_point];
             let mut iteration_count = 0;
             const MAX_ITERATIONS: usize = 20;
+            let default_policy = NodePolicy::default();
 
             // Helper function to get next nodes based on command and edges
             let get_next_nodes = |current_node: &str, command: &Command| -> Vec<String> {
@@ -631,10 +725,30 @@ impl<S: GraphState + 'static> CompiledGraph<S, serde_json::Value> for CompiledGr
                         }))
                         .await;
 
-                    // Execute node
-                    let command = match node.call(&mut state, &ctx).await {
+                    // 使用重试/断路器执行节点
+                    // Execute node with retry/circuit-breaker
+                    let policy = policies.get(&node_id).unwrap_or(&default_policy);
+                    let command = match execute_with_policy(
+                        node.as_ref(),
+                        &mut state,
+                        &ctx,
+                        policy,
+                        &circuit_states,
+                        &node_id,
+                        Some(&tx),
+                    )
+                    .await
+                    {
                         Ok(cmd) => cmd,
-                        Err(e) => {
+                        Err(NodeExecutionOutcome::Fallback(fallback_id)) => {
+                            // Route to fallback node on next iteration
+                            // (execute_with_policy already emitted NodeFallback event)
+                            next_nodes.push(fallback_id);
+                            let node_set: HashSet<String> = next_nodes.into_iter().collect();
+                            current_nodes = node_set.into_iter().collect();
+                            continue;
+                        }
+                        Err(NodeExecutionOutcome::Error(e)) => {
                             let _ = tx
                                 .send(Ok(StreamEvent::Error {
                                     node_id: Some(node_id),
@@ -699,6 +813,7 @@ impl<S: GraphState + 'static> CompiledGraph<S, serde_json::Value> for CompiledGr
                         &nodes_to_execute,
                         &state,
                         &ctx,
+                        &semaphore,
                     )
                     .await
                     {
@@ -1084,7 +1199,7 @@ mod tests {
         let mut stream = compiled.stream(JsonState::new(), None);
         let mut stream_final_state: Option<JsonState> = None;
         while let Some(event) = stream.next().await {
-            if let StreamEvent::End { final_state } = event.unwrap() {
+            if let Ok(StreamEvent::End { final_state }) = event {
                 stream_final_state = Some(final_state);
             }
         }

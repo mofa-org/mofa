@@ -142,7 +142,7 @@ impl ToolExecutor for HttpRequestTool {
         let method = arguments["method"].as_str().unwrap_or("GET");
         let url = arguments["url"]
             .as_str()
-            .ok_or_else(|| mofa_kernel::plugin::PluginError::ExecutionFailed(format!("URL is required")))?;
+            .ok_or_else(|| mofa_kernel::plugin::PluginError::ExecutionFailed("URL is required".to_string()))?;
 
         // Validate URL to prevent SSRF attacks
         if !Self::is_url_allowed(url) {
