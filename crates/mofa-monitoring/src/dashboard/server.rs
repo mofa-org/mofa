@@ -15,7 +15,7 @@ use std::time::Duration;
 use tower::ServiceBuilder;
 use tower_http::cors::{Any, CorsLayer};
 use tower_http::trace::TraceLayer;
-use tracing::info;
+use tracing::{info, warn};
 
 use mofa_kernel::workflow::telemetry::{DebugEvent, SessionRecorder};
 
@@ -138,6 +138,7 @@ pub struct DashboardServer {
     collector: Arc<MetricsCollector>,
     ws_handler: Option<Arc<WebSocketHandler>>,
     prometheus_exporter: Option<Arc<PrometheusExporter>>,
+    prometheus_worker: Option<tokio::task::JoinHandle<()>>,
     session_recorder: Option<Arc<dyn SessionRecorder>>,
     debug_event_rx: Option<mpsc::Receiver<DebugEvent>>,
 }
@@ -152,6 +153,7 @@ impl DashboardServer {
             collector,
             ws_handler: None,
             prometheus_exporter: None,
+            prometheus_worker: None,
             session_recorder: None,
             debug_event_rx: None,
         }
@@ -276,6 +278,13 @@ impl DashboardServer {
         tokio::spawn(async move {
             collector.start_collection();
         });
+
+        if let Some(exporter) = &self.prometheus_exporter {
+            if let Err(err) = exporter.refresh_once().await {
+                warn!("initial /metrics cache refresh failed: {}", err);
+            }
+            self.prometheus_worker = Some(exporter.clone().start());
+        }
 
         // Start WebSocket updates
         if let Some(ws_handler) = &self.ws_handler {
@@ -419,6 +428,7 @@ mod tests {
 
         assert!(server.ws_handler.is_none());
         assert!(server.prometheus_exporter.is_none());
+        assert!(server.prometheus_worker.is_none());
         assert!(server.session_recorder.is_none());
     }
 }
