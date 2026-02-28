@@ -55,22 +55,19 @@ pub struct DashboardConfig {
 
 impl std::fmt::Debug for DashboardConfig {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("DashboardConfig")
-            .field("host", &self.host)
+        let mut dbg = f.debug_struct("DashboardConfig");
+        dbg.field("host", &self.host)
             .field("port", &self.port)
             .field("enable_cors", &self.enable_cors)
             .field("ws_update_interval", &self.ws_update_interval)
             .field("enable_tracing", &self.enable_tracing)
-            .field("prometheus_export_config", &self.prometheus_export_config)
-            .field(
-                "otlp_metrics_exporter_enabled",
-                &self
-                    .otlp_metrics_exporter
-                    .as_ref()
-                    .map(|_| true)
-                    .unwrap_or(false),
-            )
-            .field("auth_enabled", &self.auth_provider.is_enabled())
+            .field("prometheus_export_config", &self.prometheus_export_config);
+        #[cfg(feature = "otlp-metrics")]
+        dbg.field(
+            "otlp_metrics_exporter_enabled",
+            &self.otlp_metrics_exporter.is_some(),
+        );
+        dbg.field("auth_enabled", &self.auth_provider.is_enabled())
             .finish()
     }
 }
