@@ -21,13 +21,14 @@ use mofa_kernel::workflow::telemetry::{DebugEvent, SessionRecorder};
 
 use super::api::create_api_router;
 use super::assets::{INDEX_HTML, serve_asset};
+use super::auth::{AuthProvider, NoopAuthProvider};
 use super::metrics::{MetricsCollector, MetricsConfig};
 use super::prometheus::{PrometheusExportConfig, PrometheusExporter};
 use super::websocket::{WebSocketHandler, create_websocket_handler};
 use tokio::sync::mpsc;
 
 /// Dashboard server configuration
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct DashboardConfig {
     /// Server host
     pub host: String,
@@ -43,6 +44,22 @@ pub struct DashboardConfig {
     pub enable_tracing: bool,
     /// Prometheus export configuration
     pub prometheus_export_config: PrometheusExportConfig,
+    /// WebSocket authentication provider (default: NoopAuthProvider)
+    pub auth_provider: Arc<dyn AuthProvider>,
+}
+
+impl std::fmt::Debug for DashboardConfig {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("DashboardConfig")
+            .field("host", &self.host)
+            .field("port", &self.port)
+            .field("enable_cors", &self.enable_cors)
+            .field("ws_update_interval", &self.ws_update_interval)
+            .field("enable_tracing", &self.enable_tracing)
+            .field("prometheus_export_config", &self.prometheus_export_config)
+            .field("auth_enabled", &self.auth_provider.is_enabled())
+            .finish()
+    }
 }
 
 impl Default for DashboardConfig {
@@ -55,6 +72,7 @@ impl Default for DashboardConfig {
             ws_update_interval: Duration::from_secs(1),
             enable_tracing: true,
             prometheus_export_config: PrometheusExportConfig::default(),
+            auth_provider: Arc::new(NoopAuthProvider),
         }
     }
 }
@@ -91,6 +109,12 @@ impl DashboardConfig {
 
     pub fn with_prometheus_export_config(mut self, config: PrometheusExportConfig) -> Self {
         self.prometheus_export_config = config;
+        self
+    }
+
+    /// Set the WebSocket authentication provider.
+    pub fn with_auth(mut self, provider: Arc<dyn AuthProvider>) -> Self {
+        self.auth_provider = provider;
         self
     }
 
@@ -180,7 +204,8 @@ impl DashboardServer {
     /// Build the router
     pub fn build_router(&mut self) -> Router {
         // Create WebSocket handler
-        let (ws_handler, ws_route) = create_websocket_handler(self.collector.clone());
+        let (ws_handler, ws_route) =
+            create_websocket_handler(self.collector.clone(), self.config.auth_provider.clone());
         self.ws_handler = Some(ws_handler.clone());
 
         // API routes

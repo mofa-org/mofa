@@ -54,7 +54,7 @@ impl MockKokoroTTS {
         }
     }
 
-    async fn synthesize(&self, text: &str, voice: &str) -> Result<Vec<u8>, String> {
+    async fn synthesize(&self, text: &str, voice: &str) -> Result<Vec<u8, Box<dyn std::error::Error>>, String> {
         println!("🎙️  Synthesizing with voice '{}': {}", voice, text);
 
         if text.is_empty() {

@@ -33,3 +33,6 @@ pub use dashboard::{
     PrometheusExportConfig, PrometheusExportError, PrometheusExporter, ServerState, SystemMetrics,
     SystemStatus, WebSocketClient, WebSocketHandler, WebSocketMessage, WorkflowMetrics,
 };
+pub use dashboard::{
+    AuthInfo, AuthProvider, NoopAuthProvider, TokenAuthProvider,
+};

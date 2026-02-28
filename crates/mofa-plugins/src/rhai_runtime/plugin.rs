@@ -604,7 +604,7 @@ impl AgentPlugin for RhaiPlugin {
     async fn init_plugin(&mut self) -> PluginResult<()> {
         let mut state = self.state.write().await;
         if *state != RhaiPluginState::Loaded {
-            return Err(mofa_kernel::plugin::PluginError::ExecutionFailed(format!("Plugin not loaded")));
+            return Err(mofa_kernel::plugin::PluginError::ExecutionFailed("Plugin not loaded".to_string()));
         }
 
         *state = RhaiPluginState::Initializing;
@@ -628,7 +628,7 @@ impl AgentPlugin for RhaiPlugin {
     async fn start(&mut self) -> PluginResult<()> {
         let mut state = self.state.write().await;
         if *state != RhaiPluginState::Running && *state != RhaiPluginState::Paused {
-            return Err(mofa_kernel::plugin::PluginError::ExecutionFailed(format!("Plugin not ready to start")));
+            return Err(mofa_kernel::plugin::PluginError::ExecutionFailed("Plugin not ready to start".to_string()));
         }
 
         // Call start function if exists
@@ -648,7 +648,7 @@ impl AgentPlugin for RhaiPlugin {
     async fn stop(&mut self) -> PluginResult<()> {
         let mut state = self.state.write().await;
         if *state != RhaiPluginState::Running {
-            return Err(mofa_kernel::plugin::PluginError::ExecutionFailed(format!("Plugin not running")));
+            return Err(mofa_kernel::plugin::PluginError::ExecutionFailed("Plugin not running".to_string()));
         }
 
         // Call stop function if exists
@@ -686,7 +686,7 @@ impl AgentPlugin for RhaiPlugin {
         {
             let state = self.state.read().await;
             if *state != RhaiPluginState::Running {
-                return Err(mofa_kernel::plugin::PluginError::ExecutionFailed(format!("Plugin not running")));
+                return Err(mofa_kernel::plugin::PluginError::ExecutionFailed("Plugin not running".to_string()));
             }
         }
 
