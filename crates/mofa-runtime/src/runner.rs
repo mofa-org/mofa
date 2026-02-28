@@ -578,13 +578,12 @@ impl<T: MoFAAgent> AgentRunner<T> {
     where
         T: AgentLifecycle,
     {
-        *self.state.write().await = RunnerState::Running;
-
         self.agent
             .resume()
             .await
             .map_err(|e| AgentError::Other(format!("Resume failed: {}", e)))?;
 
+        *self.state.write().await = RunnerState::Running;
         Ok(())
     }
 
