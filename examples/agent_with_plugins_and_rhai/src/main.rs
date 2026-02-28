@@ -260,7 +260,7 @@ fn execute(llm_response) {
 
     // 创建规则插件
     // Create rules plugin
-    let rules_config = RhaiPluginConfig::new_file("llm_rules", &rules_file.to_path_buf());
+    let rules_config = RhaiPluginConfig::new_file("llm_rules", rules_file);
     let mut rules_plugin = RhaiPlugin::new(rules_config).await?;
 
     let ctx = PluginContext::new("llm_rules_agent");

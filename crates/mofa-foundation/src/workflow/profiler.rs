@@ -107,21 +107,20 @@ impl ExecutionTimeline {
 
     /// End the current node span
     pub fn end_node(&mut self) {
-        if let Some(idx) = self.current_node_span {
-            if let Some(span) = self.node_spans.get_mut(idx) {
+        if let Some(idx) = self.current_node_span
+            && let Some(span) = self.node_spans.get_mut(idx) {
                 let now = DebugEvent::now_ms();
                 span.ended_at_ms = Some(now);
                 span.duration_ms = Some(now.saturating_sub(span.started_at_ms));
             }
-        }
         self.current_node_span = None;
         self.current_tool_span = None;
     }
 
     /// Start recording a tool span within current node
     pub fn start_tool(&mut self, tool_id: String, tool_name: String) {
-        if let Some(idx) = self.current_node_span {
-            if let Some(span) = self.node_spans.get_mut(idx) {
+        if let Some(idx) = self.current_node_span
+            && let Some(span) = self.node_spans.get_mut(idx) {
                 let tool_span = ToolSpan {
                     tool_id,
                     tool_name,
@@ -132,22 +131,18 @@ impl ExecutionTimeline {
                 self.current_tool_span = Some(span.tool_spans.len());
                 span.tool_spans.push(tool_span);
             }
-        }
     }
 
     /// End the current tool span
     pub fn end_tool(&mut self) {
-        if let Some(node_idx) = self.current_node_span {
-            if let Some(span) = self.node_spans.get_mut(node_idx) {
-                if let Some(tool_idx) = self.current_tool_span {
-                    if let Some(tool_span) = span.tool_spans.get_mut(tool_idx) {
+        if let Some(node_idx) = self.current_node_span
+            && let Some(span) = self.node_spans.get_mut(node_idx)
+                && let Some(tool_idx) = self.current_tool_span
+                    && let Some(tool_span) = span.tool_spans.get_mut(tool_idx) {
                         let now = DebugEvent::now_ms();
                         tool_span.ended_at_ms = Some(now);
                         tool_span.duration_ms = Some(now.saturating_sub(tool_span.started_at_ms));
                     }
-                }
-            }
-        }
         self.current_tool_span = None;
     }
 

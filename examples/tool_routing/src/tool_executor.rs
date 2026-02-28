@@ -110,13 +110,13 @@ impl ExampleToolExecutor {
         // For demonstration only, actual projects should use mature math libraries
         use std::str::FromStr;
 
-        let mut chars = expr.chars().peekable();
+        let chars = expr.chars().peekable();
         let mut num_str = String::new();
         let mut result: i64 = 0;
         let mut current_op = '+';
 
-        while let Some(c) = chars.next() {
-            if c.is_digit(10) {
+        for c in chars {
+            if c.is_ascii_digit() {
                 num_str.push(c);
             } else {
                 let num = i64::from_str(&num_str).map_err(|_| ())?;

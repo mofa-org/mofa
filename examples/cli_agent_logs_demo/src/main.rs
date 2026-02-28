@@ -28,7 +28,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     fs::create_dir_all(&logs_dir).await?;
 
     let agent_id = "demo-agent";
-    let log_file = logs_dir.join(format!("{}.log", agent_id));
+    let log_file = logs_dir.join(format!("{agent_id}.log"));
 
     println!("1. Creating agent log file: {}", log_file.display());
     
@@ -52,8 +52,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     println!("3. Log file created with content. You can now:");
-    println!("   - View logs: mofa agent logs {}", agent_id);
-    println!("   - Tail logs: mofa agent logs {} --tail", agent_id);
+    println!("   - View logs: mofa agent logs {agent_id}");
+    println!("   - Tail logs: mofa agent logs {agent_id} --tail");
     println!("\n4. Demonstrating log rotation...");
     
     // Simulate log rotation by truncating and writing new content
@@ -79,8 +79,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("\nDemo complete!");
     println!("\nTo test the CLI commands:");
     println!("   cd {}", temp.path().display());
-    println!("   mofa agent logs {}  # View all logs", agent_id);
-    println!("   mofa agent logs {} --tail  # Follow logs in real-time", agent_id);
+    println!("   mofa agent logs {agent_id}  # View all logs");
+    println!("   mofa agent logs {agent_id} --tail  # Follow logs in real-time");
 
     // Keep temp dir alive for manual testing
     println!("\nPress Ctrl+C to exit (temp dir will be cleaned up)");

@@ -26,7 +26,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     fs::create_dir_all(&logs_dir).await?;
 
     let agent_id = "rotating-agent";
-    let log_file = logs_dir.join(format!("{}.log", agent_id));
+    let log_file = logs_dir.join(format!("{agent_id}.log"));
 
     println!("1. Creating initial log file...");
     let mut file = fs::OpenOptions::new()
@@ -55,7 +55,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     drop(file);
 
     // Rotate: move old log and create new one
-    let rotated_log = logs_dir.join(format!("{}.log.1", agent_id));
+    let rotated_log = logs_dir.join(format!("{agent_id}.log.1"));
     fs::rename(&log_file, &rotated_log).await?;
 
     println!("   Moved old log to: {}", rotated_log.display());
@@ -89,7 +89,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     println!("\n5. To test:");
     println!("   # In one terminal, start tailing:");
-    println!("   mofa agent logs {} --tail", agent_id);
+    println!("   mofa agent logs {agent_id} --tail");
     println!("\n   # In another terminal, trigger rotation:");
     println!("   mv {0} {0}.old && touch {0}", log_file.display());
     println!("\n   # The tail command should detect rotation and continue");
