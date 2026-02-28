@@ -51,6 +51,7 @@ dialoguer = "0.11"
 indicatif = "0.17"
 comfy-table = "7"
 dirs-next = "2"
+tera = "1.19"
 
 # Process management
 nix = { version = "0.29", features = ["process", "signal"] }

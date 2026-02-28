@@ -1,0 +1,97 @@
+#![allow(dead_code)]
+
+pub mod config;
+pub mod handler;
+
+use mofa_kernel::plugin::{AgentPlugin, PluginContext, PluginError, PluginMetadata, PluginState, PluginType, PluginResult};
+use async_trait::async_trait;
+use serde::{Deserialize, Serialize};
+use std::any::Any;
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct {{ plugin_name | title | replace(from="-", to="") }}Plugin {
+    metadata: PluginMetadata,
+    state: PluginState,
+    config: config::PluginConfig,
+}
+
+impl {{ plugin_name | title | replace(from="-", to="") }}Plugin {
+    pub fn new() -> Self {
+        let mut metadata = PluginMetadata::new(
+            "{{ crate_name }}",
+            "{{ plugin_name | title | replace(from="-", to=" ") }}",
+            PluginType::Tool, // or Custom
+        );
+        metadata.description = "{{ description }}".to_string();
+        
+        Self {
+            metadata,
+            state: PluginState::Unloaded,
+            config: config::PluginConfig::default(),
+        }
+    }
+}
+
+impl Default for {{ plugin_name | title | replace(from="-", to="") }}Plugin {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+#[async_trait]
+impl AgentPlugin for {{ plugin_name | title | replace(from="-", to="") }}Plugin {
+    fn metadata(&self) -> &PluginMetadata {
+        &self.metadata
+    }
+
+    fn state(&self) -> PluginState {
+        self.state.clone()
+    }
+
+    async fn load(&mut self, _ctx: &PluginContext) -> PluginResult<()> {
+        self.state = PluginState::Loaded;
+        Ok(())
+    }
+
+    async fn init_plugin(&mut self) -> PluginResult<()> {
+        // Initialization logic here
+        Ok(())
+    }
+
+    async fn start(&mut self) -> PluginResult<()> {
+        self.state = PluginState::Running;
+        Ok(())
+    }
+
+    async fn stop(&mut self) -> PluginResult<()> {
+        self.state = PluginState::Loaded;
+        Ok(())
+    }
+
+    async fn unload(&mut self) -> PluginResult<()> {
+        self.state = PluginState::Unloaded;
+        Ok(())
+    }
+
+    async fn execute(&mut self, input: String) -> PluginResult<String> {
+        let val: serde_json::Value = serde_json::from_str(&input)
+            .map_err(|e| PluginError::Other(e.to_string()))?;
+            
+        let result = handler::handle_request(val).await
+            .map_err(|e| PluginError::Other(e.to_string()))?;
+            
+        Ok(result.to_string())
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+
+    fn as_any_mut(&mut self) -> &mut dyn Any {
+        self
+    }
+
+    fn into_any(self: Box<Self>) -> Box<dyn Any> {
+        self
+    }
+}
