@@ -55,16 +55,16 @@ pub struct DashboardConfig {
 
 impl std::fmt::Debug for DashboardConfig {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("DashboardConfig")
-            .field("host", &self.host)
+        let mut dbg = f.debug_struct("DashboardConfig");
+        dbg.field("host", &self.host)
             .field("port", &self.port)
             .field("enable_cors", &self.enable_cors)
             .field("ws_update_interval", &self.ws_update_interval)
             .field("enable_tracing", &self.enable_tracing)
-            .field("prometheus_export_config", &self.prometheus_export_config)
-            #[cfg(feature = "otlp-metrics")]
-            .field("otlp_metrics_exporter", &self.otlp_metrics_exporter)
-            .field("auth_enabled", &self.auth_provider.is_enabled())
+            .field("prometheus_export_config", &self.prometheus_export_config);
+        #[cfg(feature = "otlp-metrics")]
+        dbg.field("otlp_metrics_exporter", &self.otlp_metrics_exporter);
+        dbg.field("auth_enabled", &self.auth_provider.is_enabled())
             .finish()
     }
 }
@@ -238,11 +238,16 @@ impl DashboardServer {
 
         // API routes
         let api_router = create_api_router(self.collector.clone(), self.session_recorder.clone());
-        let prometheus_exporter = Arc::new(PrometheusExporter::new(
-            self.collector.clone(),
-            self.config.prometheus_export_config.clone(),
-        ));
-        self.prometheus_exporter = Some(prometheus_exporter.clone());
+        let prometheus_exporter = if let Some(exporter) = &self.prometheus_exporter {
+            exporter.clone()
+        } else {
+            let exporter = Arc::new(PrometheusExporter::new(
+                self.collector.clone(),
+                self.config.prometheus_export_config.clone(),
+            ));
+            self.prometheus_exporter = Some(exporter.clone());
+            exporter
+        };
 
         // Build main router
         let mut router = Router::new()

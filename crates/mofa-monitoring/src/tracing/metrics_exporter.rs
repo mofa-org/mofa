@@ -9,6 +9,7 @@ use std::time::Duration;
 
 /// OTLP metrics exporter configuration.
 #[derive(Debug, Clone)]
+#[non_exhaustive]
 pub struct OtlpMetricsExporterConfig {
     /// OTLP collector endpoint.
     pub endpoint: String,
@@ -49,6 +50,13 @@ pub struct OtlpExporterHandles {
     pub exporter: tokio::task::JoinHandle<()>,
 }
 
+#[derive(Debug, thiserror::Error)]
+#[non_exhaustive]
+pub enum OtlpMetricsExporterError {
+    #[error("otlp metrics exporter internal error: {0}")]
+    Internal(String),
+}
+
 /// OTLP metrics exporter placeholder. Full implementation lands in PR2.
 pub struct OtlpMetricsExporter {
     _collector: Arc<MetricsCollector>,
@@ -63,7 +71,7 @@ impl OtlpMetricsExporter {
         }
     }
 
-    pub async fn start(self: Arc<Self>) -> Result<OtlpExporterHandles, String> {
+    pub async fn start(self: Arc<Self>) -> Result<OtlpExporterHandles, OtlpMetricsExporterError> {
         let sampler = tokio::spawn(async move {});
         let exporter = tokio::spawn(async move {});
         Ok(OtlpExporterHandles { sampler, exporter })

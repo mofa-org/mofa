@@ -92,6 +92,7 @@ impl PrometheusExportConfig {
 
 /// Errors returned by the Prometheus exporter lifecycle.
 #[derive(Debug, thiserror::Error)]
+#[non_exhaustive]
 pub enum PrometheusExportError {
     #[error("prometheus exporter internal error: {0}")]
     Internal(String),
@@ -343,7 +344,6 @@ impl PrometheusExporter {
 
     pub async fn refresh_once(&self) -> Result<(), PrometheusExportError> {
         let snapshot = self.collector.current().await;
-
         let render_start = Instant::now();
         let mut dropped_this_render = DroppedSeriesCounters::default();
 
@@ -352,19 +352,21 @@ impl PrometheusExporter {
             latency.observe_snapshot(&snapshot, &mut dropped_this_render);
         }
 
-        let render_duration = render_start.elapsed().as_secs_f64();
-        {
-            let mut histogram = self.render_duration_histogram.write().await;
-            histogram.observe(render_duration);
-        }
+        let mut body = self
+            .render_snapshot(&snapshot, &mut dropped_this_render)
+            .await;
+
         {
             let mut dropped_total = self.dropped_series_total.write().await;
             dropped_total.add_assign(&dropped_this_render);
         }
 
-        let mut body = self
-            .render_snapshot(&snapshot, &mut dropped_this_render)
-            .await;
+        let render_duration = render_start.elapsed().as_secs_f64();
+        {
+            let mut histogram = self.render_duration_histogram.write().await;
+            histogram.observe(render_duration);
+        }
+
         self.append_exporter_internal_metrics(&mut body).await;
 
         *self.cached_body.write().await = body;
@@ -561,7 +563,7 @@ fn render_agent_metrics(
         out,
         "mofa_agent_tasks_total",
         "Total tasks completed by agent",
-        "gauge",
+        "counter",
     );
     for series in limit_series(task_totals, limits.agent_id, &mut dropped.agent_id) {
         append_gauge_line(
@@ -576,7 +578,7 @@ fn render_agent_metrics(
         out,
         "mofa_agent_tasks_failed_total",
         "Total failed tasks by agent",
-        "gauge",
+        "counter",
     );
     for series in limit_series(task_failed, limits.agent_id, &mut dropped.agent_id) {
         append_gauge_line(
@@ -621,7 +623,7 @@ fn render_agent_metrics(
         out,
         "mofa_agent_messages_sent_total",
         "Total messages sent by agent",
-        "gauge",
+        "counter",
     );
     for series in limit_series(messages_sent, limits.agent_id, &mut dropped.agent_id) {
         append_gauge_line(
@@ -636,7 +638,7 @@ fn render_agent_metrics(
         out,
         "mofa_agent_messages_received_total",
         "Total messages received by agent",
-        "gauge",
+        "counter",
     );
     for series in limit_series(messages_received, limits.agent_id, &mut dropped.agent_id) {
         append_gauge_line(
@@ -693,7 +695,7 @@ fn render_workflow_metrics(
         out,
         "mofa_workflow_executions_total",
         "Total workflow executions",
-        "gauge",
+        "counter",
     );
     for series in limit_series(executions, limits.workflow_id, &mut dropped.workflow_id) {
         append_gauge_line(
@@ -708,7 +710,7 @@ fn render_workflow_metrics(
         out,
         "mofa_workflow_executions_success_total",
         "Total successful workflow executions",
-        "gauge",
+        "counter",
     );
     for series in limit_series(success, limits.workflow_id, &mut dropped.workflow_id) {
         append_gauge_line(
@@ -723,7 +725,7 @@ fn render_workflow_metrics(
         out,
         "mofa_workflow_executions_failed_total",
         "Total failed workflow executions",
-        "gauge",
+        "counter",
     );
     for series in limit_series(failures, limits.workflow_id, &mut dropped.workflow_id) {
         append_gauge_line(
@@ -886,7 +888,7 @@ fn render_llm_metrics(
         out,
         "mofa_llm_requests_total",
         "Total LLM requests",
-        "gauge",
+        "counter",
     );
     for series in limit_series(requests, limits.provider_model, &mut dropped.provider_model) {
         append_gauge_line(
@@ -916,7 +918,7 @@ fn render_llm_metrics(
         );
     }
 
-    write_metric_header(out, "mofa_llm_errors_total", "Total LLM errors", "gauge");
+    write_metric_header(out, "mofa_llm_errors_total", "Total LLM errors", "counter");
     for series in limit_series(errors, limits.provider_model, &mut dropped.provider_model) {
         append_gauge_line(
             out,
@@ -1303,7 +1305,7 @@ mod tests {
         let output = exporter.render_cached().await;
 
         assert!(output.contains("# HELP mofa_agent_tasks_total"));
-        assert!(output.contains("# TYPE mofa_agent_tasks_total gauge"));
+        assert!(output.contains("# TYPE mofa_agent_tasks_total counter"));
         assert!(output.contains("mofa_agent_tasks_total{agent_id=\"agent-1\"} 42"));
         assert!(output.contains("# HELP mofa_system_cpu_percent"));
     }
