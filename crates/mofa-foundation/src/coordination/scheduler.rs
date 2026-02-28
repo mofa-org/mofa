@@ -77,7 +77,9 @@ impl PriorityScheduler {
             .insert(task.task_id, SchedulingStatus::Pending);
         // 提交后立即触发调度
         // Trigger scheduling immediately after submission
-        self.schedule().await.map_err(|e| GlobalError::Other(e.to_string()))?;
+        self.schedule()
+            .await
+            .map_err(|e| GlobalError::Other(e.to_string()))?;
         Ok(())
     }
 
@@ -101,7 +103,10 @@ impl PriorityScheduler {
 
             // 选择负载最低的可用智能体（同角色内）
             // Select the available agent with the lowest load (within the same role)
-            let target_agent = self.select_low_load_agent("worker").await.map_err(|e| GlobalError::Other(e.to_string()))?;
+            let target_agent = self
+                .select_low_load_agent("worker")
+                .await
+                .map_err(|e| GlobalError::Other(e.to_string()))?;
             if target_agent.is_empty() {
                 // 无可用智能体，重新入队
                 // No agent available, re-enqueue the task
@@ -112,7 +117,9 @@ impl PriorityScheduler {
 
             // 检查是否需要抢占：如果目标智能体有低优先级任务在运行
             // Check for preemption: if the target agent has low-priority tasks running
-            self.preempt_low_priority_task(&target_agent, &task).await.map_err(|e| GlobalError::Other(e.to_string()))?;
+            self.preempt_low_priority_task(&target_agent, &task)
+                .await
+                .map_err(|e| GlobalError::Other(e.to_string()))?;
 
             // 发送任务给目标智能体
             // Send task to the target agent
@@ -127,7 +134,8 @@ impl PriorityScheduler {
                     CommunicationMode::PointToPoint(target_agent.clone()),
                     &task_msg,
                 )
-                .await.map_err(|e| GlobalError::Other(e.to_string()))?;
+                .await
+                .map_err(|e| GlobalError::Other(e.to_string()))?;
 
             // 更新状态和负载
             // Update task status and agent loa
@@ -204,7 +212,8 @@ impl PriorityScheduler {
                         CommunicationMode::PointToPoint(agent_id.to_string()),
                         &preempt_msg,
                     )
-                    .await.map_err(|e| GlobalError::Other(e.to_string()))?;
+                    .await
+                    .map_err(|e| GlobalError::Other(e.to_string()))?;
             }
         }
         Ok(())
@@ -229,7 +238,9 @@ impl PriorityScheduler {
 
         // 任务完成后再次触发调度，处理队列中的下一个任务
         // Trigger scheduling again after completion to handle the next task
-        self.schedule().await.map_err(|e| GlobalError::Other(e.to_string()))?;
+        self.schedule()
+            .await
+            .map_err(|e| GlobalError::Other(e.to_string()))?;
         Ok(())
     }
 }

@@ -40,6 +40,7 @@ members = [
     "agent_builder",
     "context_compression",
     "context_window_demo",
+    "codex_compression_practical",
 ]
 
 [workspace.package]

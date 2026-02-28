@@ -47,25 +47,18 @@
 //! assert!(result.is_ok());
 //! ```
 
-pub mod registry;
-pub mod descriptor;
 pub mod config;
-pub mod resolver;
+pub mod descriptor;
 pub mod error;
+pub mod registry;
+pub mod resolver;
 pub mod scheduler;
 
-pub use registry::AdapterRegistry;
+pub use config::{HardwareProfile, ModelConfig};
 pub use descriptor::{AdapterDescriptor, Modality, ModelFormat, QuantizationProfile};
-pub use config::{ModelConfig, HardwareProfile};
-pub use error::{AdapterError, ResolutionError, RejectionReason};
+pub use error::{AdapterError, RejectionReason, ResolutionError};
+pub use registry::AdapterRegistry;
 pub use scheduler::{
-    AdmissionDecision,
-    AdmissionReason,
-    MemoryThresholds,
-    MemoryBudget,
-    SchedulerPolicy,
-    Scheduler,
-    DeferredQueue,
-    DeferredRequest,
-    StabilityControl,
+    AdmissionDecision, AdmissionReason, DeferredQueue, DeferredRequest, MemoryBudget,
+    MemoryThresholds, Scheduler, SchedulerPolicy, StabilityControl,
 };

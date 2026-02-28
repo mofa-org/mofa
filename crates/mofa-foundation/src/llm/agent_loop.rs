@@ -245,7 +245,11 @@ impl AgentLoop {
             }
 
             // Call LLM
-            let response = self.provider.chat(request).await.map_err(|e| GlobalError::Other(e.to_string()))?;
+            let response = self
+                .provider
+                .chat(request)
+                .await
+                .map_err(|e| GlobalError::Other(e.to_string()))?;
 
             // Check for tool calls
             if let Some(tool_calls) = response.tool_calls()

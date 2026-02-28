@@ -207,9 +207,12 @@ impl AgentPlugin for LLMPlugin {
     async fn execute(&mut self, input: String) -> PluginResult<String> {
         // 简单模式：直接将输入作为用户消息
         // Simple mode: treat input directly as a user message
-        self.ask(&input)
-            .await
-            .map_err(|e| mofa_kernel::plugin::PluginError::ExecutionFailed(format!("LLM execution failed: {}", e)))
+        self.ask(&input).await.map_err(|e| {
+            mofa_kernel::plugin::PluginError::ExecutionFailed(format!(
+                "LLM execution failed: {}",
+                e
+            ))
+        })
     }
 
     fn stats(&self) -> HashMap<String, serde_json::Value> {

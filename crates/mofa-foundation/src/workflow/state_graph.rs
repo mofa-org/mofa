@@ -287,9 +287,9 @@ impl<S: GraphState + 'static> mofa_kernel::workflow::StateGraph for StateGraphIm
             ),
             edges: Arc::new(self.edges),
             reducers: Arc::new(self.reducers),
-            entry_point: self.entry_point.ok_or_else(|| {
-                AgentError::ValidationFailed("No entry point set".to_string())
-            })?,
+            entry_point: self
+                .entry_point
+                .ok_or_else(|| AgentError::ValidationFailed("No entry point set".to_string()))?,
             config: self.config,
         })
     }
@@ -534,187 +534,118 @@ impl<S: GraphState + 'static> CompiledGraph<S, serde_json::Value> for CompiledGr
 
         // Spawn execution task
         let stream_span = tracing::info_span!("state_graph.stream");
-        tokio::spawn(async move {
-            let mut state = input;
-            let mut current_nodes = vec![entry_point];
-            let mut iteration_count = 0;
-            const MAX_ITERATIONS: usize = 20;
+        tokio::spawn(
+            async move {
+                let mut state = input;
+                let mut current_nodes = vec![entry_point];
+                let mut iteration_count = 0;
+                const MAX_ITERATIONS: usize = 20;
 
-            // Helper function to get next nodes based on command and edges
-            let get_next_nodes = |current_node: &str, command: &Command| -> Vec<String> {
-                match &command.control {
-                    ControlFlow::Goto(target) => vec![target.clone()],
-                    ControlFlow::Return => vec![], // End execution
-                    ControlFlow::Send(sends) => {
-                        // MapReduce: create branches for each send target
-                        sends.iter().map(|s| s.target.clone()).collect()
-                    }
-                    ControlFlow::Continue => {
-                        // Follow graph edges
-                        match edges.get(current_node) {
-                            Some(EdgeTarget::Single(target)) => vec![target.clone()],
-                            Some(EdgeTarget::Parallel(targets)) => targets.clone(),
-                            Some(EdgeTarget::Conditional(routes)) => {
-                                // Priority 1: explicit route decision
-                                if let Some(decision) = command.route_value() {
-                                    if let Some(target) = routes.get(decision) {
-                                        return vec![target.clone()];
+                // Helper function to get next nodes based on command and edges
+                let get_next_nodes = |current_node: &str, command: &Command| -> Vec<String> {
+                    match &command.control {
+                        ControlFlow::Goto(target) => vec![target.clone()],
+                        ControlFlow::Return => vec![], // End execution
+                        ControlFlow::Send(sends) => {
+                            // MapReduce: create branches for each send target
+                            sends.iter().map(|s| s.target.clone()).collect()
+                        }
+                        ControlFlow::Continue => {
+                            // Follow graph edges
+                            match edges.get(current_node) {
+                                Some(EdgeTarget::Single(target)) => vec![target.clone()],
+                                Some(EdgeTarget::Parallel(targets)) => targets.clone(),
+                                Some(EdgeTarget::Conditional(routes)) => {
+                                    // Priority 1: explicit route decision
+                                    if let Some(decision) = command.route_value() {
+                                        if let Some(target) = routes.get(decision) {
+                                            return vec![target.clone()];
+                                        }
                                     }
-                                }
-                                // Priority 2: legacy key-name matching (backward compatible)
-                                for update in &command.updates {
-                                    if let Some(target) = routes.get(&update.key) {
-                                        return vec![target.clone()];
+                                    // Priority 2: legacy key-name matching (backward compatible)
+                                    for update in &command.updates {
+                                        if let Some(target) = routes.get(&update.key) {
+                                            return vec![target.clone()];
+                                        }
                                     }
+                                    // Priority 3: fallback to first route
+                                    routes
+                                        .values()
+                                        .next()
+                                        .map(|t: &String| vec![t.clone()])
+                                        .unwrap_or_default()
                                 }
-                                // Priority 3: fallback to first route
-                                routes
-                                    .values()
-                                    .next()
-                                    .map(|t: &String| vec![t.clone()])
-                                    .unwrap_or_default()
+                                None => vec![],
+                                _ => vec![],
                             }
-                            None => vec![],
-                            _ => vec![],
                         }
+                        _ => vec![],
                     }
-                    _ => vec![],
-                }
-            };
+                };
 
-            while !current_nodes.is_empty() {
-                // Check iteration limit
-                iteration_count += 1;
-                if iteration_count > MAX_ITERATIONS {
-                    let _ = tx
-                        .send(Err(AgentError::Internal(format!(
-                            "Maximum iterations ({}) reached",
-                            MAX_ITERATIONS
-                        ))))
-                        .await;
-                    return;
-                }
+                while !current_nodes.is_empty() {
+                    // Check iteration limit
+                    iteration_count += 1;
+                    if iteration_count > MAX_ITERATIONS {
+                        let _ = tx
+                            .send(Err(AgentError::Internal(format!(
+                                "Maximum iterations ({}) reached",
+                                MAX_ITERATIONS
+                            ))))
+                            .await;
+                        return;
+                    }
 
-                // Check recursion limit
-                if ctx.remaining_steps.is_exhausted().await {
-                    let _ = tx
-                        .send(Err(AgentError::Internal(
-                            "Recursion limit reached".to_string(),
-                        )))
-                        .await;
-                    return;
-                }
-                ctx.remaining_steps.decrement().await;
+                    // Check recursion limit
+                    if ctx.remaining_steps.is_exhausted().await {
+                        let _ = tx
+                            .send(Err(AgentError::Internal(
+                                "Recursion limit reached".to_string(),
+                            )))
+                            .await;
+                        return;
+                    }
+                    ctx.remaining_steps.decrement().await;
 
-                let nodes_to_execute = std::mem::take(&mut current_nodes);
-                let mut next_nodes = Vec::new();
+                    let nodes_to_execute = std::mem::take(&mut current_nodes);
+                    let mut next_nodes = Vec::new();
 
-                if nodes_to_execute.len() == 1 {
-                    let node_id = nodes_to_execute[0].clone();
-                    let node = match nodes.get(&node_id) {
-                        Some(n) => n,
-                        None => {
-                            let _ = tx
-                                .send(Err(AgentError::NotFound(format!("Node '{}'", node_id))))
-                                .await;
-                            return;
-                        }
-                    };
-
-                    ctx.set_current_node(&node_id).await;
-
-                    // Send start event
-                    let _ = tx
-                        .send(Ok(StreamEvent::NodeStart {
-                            node_id: node_id.clone(),
-                            state: state.clone(),
-                        }))
-                        .await;
-
-                    // Execute node
-                    let command = match node.call(&mut state, &ctx).await {
-                        Ok(cmd) => cmd,
-                        Err(e) => {
-                            let _ = tx
-                                .send(Ok(StreamEvent::Error {
-                                    node_id: Some(node_id),
-                                    error: e.to_string(),
-                                }))
-                                .await;
-                            return;
-                        }
-                    };
-
-                    for update in &command.updates {
-                        let current = state.get_value(&update.key);
-                        let new_value = if let Some(reducer) = reducers.get(&update.key) {
-                            match reducer.reduce(current.as_ref(), &update.value).await {
-                                Ok(v) => v,
-                                Err(e) => {
-                                    let _ = tx
-                                        .send(Ok(StreamEvent::Error {
-                                            node_id: Some(node_id.clone()),
-                                            error: e.to_string(),
-                                        }))
-                                        .await;
-                                    return;
-                                }
+                    if nodes_to_execute.len() == 1 {
+                        let node_id = nodes_to_execute[0].clone();
+                        let node = match nodes.get(&node_id) {
+                            Some(n) => n,
+                            None => {
+                                let _ = tx
+                                    .send(Err(AgentError::NotFound(format!("Node '{}'", node_id))))
+                                    .await;
+                                return;
                             }
-                        } else {
-                            update.value.clone()
                         };
-                        if let Err(e) = state.apply_update(&update.key, new_value).await {
-                            let _ = tx
-                                .send(Ok(StreamEvent::Error {
-                                    node_id: Some(node_id.clone()),
-                                    error: e.to_string(),
-                                }))
-                                .await;
-                            return;
-                        }
-                    }
 
-                    // Send end event
-                    let _ = tx
-                        .send(Ok(StreamEvent::NodeEnd {
-                            node_id: node_id.clone(),
-                            state: state.clone(),
-                            command: command.clone(),
-                        }))
-                        .await;
+                        ctx.set_current_node(&node_id).await;
 
-                    next_nodes.extend(get_next_nodes(&node_id, &command));
-                } else {
-                    for node_id in &nodes_to_execute {
+                        // Send start event
                         let _ = tx
                             .send(Ok(StreamEvent::NodeStart {
                                 node_id: node_id.clone(),
                                 state: state.clone(),
                             }))
                             .await;
-                    }
 
-                    let commands = match Self::execute_parallel_nodes(
-                        nodes.as_ref(),
-                        &nodes_to_execute,
-                        &state,
-                        &ctx,
-                    )
-                    .await
-                    {
-                        Ok(results) => results,
-                        Err(e) => {
-                            let _ = tx
-                                .send(Ok(StreamEvent::Error {
-                                    node_id: None,
-                                    error: e.to_string(),
-                                }))
-                                .await;
-                            return;
-                        }
-                    };
+                        // Execute node
+                        let command = match node.call(&mut state, &ctx).await {
+                            Ok(cmd) => cmd,
+                            Err(e) => {
+                                let _ = tx
+                                    .send(Ok(StreamEvent::Error {
+                                        node_id: Some(node_id),
+                                        error: e.to_string(),
+                                    }))
+                                    .await;
+                                return;
+                            }
+                        };
 
-                    for (node_id, command) in commands {
                         for update in &command.updates {
                             let current = state.get_value(&update.key);
                             let new_value = if let Some(reducer) = reducers.get(&update.key) {
@@ -744,6 +675,7 @@ impl<S: GraphState + 'static> CompiledGraph<S, serde_json::Value> for CompiledGr
                             }
                         }
 
+                        // Send end event
                         let _ = tx
                             .send(Ok(StreamEvent::NodeEnd {
                                 node_id: node_id.clone(),
@@ -753,17 +685,88 @@ impl<S: GraphState + 'static> CompiledGraph<S, serde_json::Value> for CompiledGr
                             .await;
 
                         next_nodes.extend(get_next_nodes(&node_id, &command));
+                    } else {
+                        for node_id in &nodes_to_execute {
+                            let _ = tx
+                                .send(Ok(StreamEvent::NodeStart {
+                                    node_id: node_id.clone(),
+                                    state: state.clone(),
+                                }))
+                                .await;
+                        }
+
+                        let commands = match Self::execute_parallel_nodes(
+                            nodes.as_ref(),
+                            &nodes_to_execute,
+                            &state,
+                            &ctx,
+                        )
+                        .await
+                        {
+                            Ok(results) => results,
+                            Err(e) => {
+                                let _ = tx
+                                    .send(Ok(StreamEvent::Error {
+                                        node_id: None,
+                                        error: e.to_string(),
+                                    }))
+                                    .await;
+                                return;
+                            }
+                        };
+
+                        for (node_id, command) in commands {
+                            for update in &command.updates {
+                                let current = state.get_value(&update.key);
+                                let new_value = if let Some(reducer) = reducers.get(&update.key) {
+                                    match reducer.reduce(current.as_ref(), &update.value).await {
+                                        Ok(v) => v,
+                                        Err(e) => {
+                                            let _ = tx
+                                                .send(Ok(StreamEvent::Error {
+                                                    node_id: Some(node_id.clone()),
+                                                    error: e.to_string(),
+                                                }))
+                                                .await;
+                                            return;
+                                        }
+                                    }
+                                } else {
+                                    update.value.clone()
+                                };
+                                if let Err(e) = state.apply_update(&update.key, new_value).await {
+                                    let _ = tx
+                                        .send(Ok(StreamEvent::Error {
+                                            node_id: Some(node_id.clone()),
+                                            error: e.to_string(),
+                                        }))
+                                        .await;
+                                    return;
+                                }
+                            }
+
+                            let _ = tx
+                                .send(Ok(StreamEvent::NodeEnd {
+                                    node_id: node_id.clone(),
+                                    state: state.clone(),
+                                    command: command.clone(),
+                                }))
+                                .await;
+
+                            next_nodes.extend(get_next_nodes(&node_id, &command));
+                        }
                     }
+
+                    // Deduplicate current_nodes for parallel execution
+                    let node_set: HashSet<String> = next_nodes.into_iter().collect();
+                    current_nodes = node_set.into_iter().collect();
                 }
 
-                // Deduplicate current_nodes for parallel execution
-                let node_set: HashSet<String> = next_nodes.into_iter().collect();
-                current_nodes = node_set.into_iter().collect();
+                // Send final event
+                let _ = tx.send(Ok(StreamEvent::End { final_state: state })).await;
             }
-
-            // Send final event
-            let _ = tx.send(Ok(StreamEvent::End { final_state: state })).await;
-        }.instrument(stream_span));
+            .instrument(stream_span),
+        );
 
         // Convert receiver to stream
         Box::pin(tokio_stream::wrappers::ReceiverStream::new(rx))

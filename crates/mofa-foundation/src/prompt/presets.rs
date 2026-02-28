@@ -55,7 +55,7 @@ pub fn role_assistant() -> PromptTemplate {
                 .with_description("Professional field")
                 // Professional field
                 .with_default("Solving problems and providing help"),
-                // Solving problems and providing help
+            // Solving problems and providing help
         )
         .with_tag("system")
         .with_tag("role")
@@ -90,11 +90,9 @@ pub fn code_review() -> PromptTemplate {
                 .with_description("Programming language")
                 // Programming language
                 .with_default("code"),
-                // Code
+            // Code
         )
-        .with_variable(
-            PromptVariable::new("code").with_description("Code to be reviewed"),
-        )
+        .with_variable(PromptVariable::new("code").with_description("Code to be reviewed"))
         // The code to be reviewed
         .with_tag("code")
         .with_tag("review")
@@ -122,11 +120,9 @@ pub fn code_explain() -> PromptTemplate {
                 .with_description("Programming language")
                 // Programming language
                 .with_default("code"),
-                // Code
+            // Code
         )
-        .with_variable(
-            PromptVariable::new("code").with_description("Code to be explained"),
-        )
+        .with_variable(PromptVariable::new("code").with_description("Code to be explained"))
         // The code to be explained
         .with_tag("code")
         .with_tag("explain")
@@ -149,9 +145,7 @@ pub fn code_generate() -> PromptTemplate {
             3. 考虑边界情况和错误处理\n\
             4. 遵循 {language} 的最佳实践",
         )
-        .with_variable(
-            PromptVariable::new("language").with_description("Programming language"),
-        )
+        .with_variable(PromptVariable::new("language").with_description("Programming language"))
         // Programming language
         .with_variable(
             PromptVariable::new("requirement")
@@ -184,18 +178,16 @@ pub fn code_refactor() -> PromptTemplate {
                 .with_description("Programming language")
                 // Programming language
                 .with_default("code"),
-                // Code
+            // Code
         )
-        .with_variable(
-            PromptVariable::new("code").with_description("Code to be refactored"),
-        )
+        .with_variable(PromptVariable::new("code").with_description("Code to be refactored"))
         // The code to be refactored
         .with_variable(
             PromptVariable::new("goal")
                 .with_description("Refactoring goal")
                 // Refactoring goal
                 .with_default("Make it clearer and more efficient"),
-                // Make it clearer and more efficient
+            // Make it clearer and more efficient
         )
         .with_tag("code")
         .with_tag("refactor")
@@ -218,20 +210,16 @@ pub fn code_test() -> PromptTemplate {
             3. 包含错误情况测试\n\
             4. 使用 {test_framework} 测试框架",
         )
-        .with_variable(
-            PromptVariable::new("language").with_description("Programming language"),
-        )
+        .with_variable(PromptVariable::new("language").with_description("Programming language"))
         // Programming language
-        .with_variable(
-            PromptVariable::new("code").with_description("Code to be tested"),
-        )
+        .with_variable(PromptVariable::new("code").with_description("Code to be tested"))
         // The code to be tested
         .with_variable(
             PromptVariable::new("test_framework")
                 .with_description("Test framework")
                 // Test framework
                 .with_default("standard"),
-                // Standard
+            // Standard
         )
         .with_tag("code")
         .with_tag("test")
