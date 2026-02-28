@@ -30,7 +30,9 @@ pub use instrumentation::{
     trace_workflow_execution,
 };
 #[cfg(feature = "otlp-metrics")]
-pub use metrics_exporter::{OtlpExporterHandles, OtlpMetricsExporter, OtlpMetricsExporterConfig};
+pub use metrics_exporter::{
+    OtlpExporterHandles, OtlpMetricsExporter, OtlpMetricsExporterConfig, OtlpMetricsExporterError,
+};
 pub use propagator::{B3Propagator, HeaderCarrier, TracePropagator, W3CTraceContextPropagator};
 pub use span::{Span, SpanAttribute, SpanBuilder, SpanEvent, SpanKind, SpanLink, SpanStatus};
 pub use tracer::{

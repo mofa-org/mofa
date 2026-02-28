@@ -23,6 +23,7 @@ const OTHER_LABEL_VALUE: &str = "__other__";
 
 /// OTLP metrics exporter configuration.
 #[derive(Debug, Clone)]
+#[non_exhaustive]
 pub struct OtlpMetricsExporterConfig {
     /// OTLP collector endpoint.
     pub endpoint: String,
@@ -85,6 +86,15 @@ pub struct OtlpExporterHandles {
     pub exporter: tokio::task::JoinHandle<()>,
 }
 
+#[derive(Debug, thiserror::Error)]
+#[non_exhaustive]
+pub enum OtlpMetricsExporterError {
+    #[error("otlp metrics exporter already started")]
+    AlreadyStarted,
+    #[error("failed to initialize otlp metrics exporter: {0}")]
+    Internal(String),
+}
+
 /// Feature-gated OTLP metrics exporter.
 pub struct OtlpMetricsExporter {
     collector: Arc<MetricsCollector>,
@@ -126,12 +136,20 @@ impl OtlpMetricsExporter {
     }
 
     /// Start sampler and exporter workers.
-    pub async fn start(self: Arc<Self>) -> Result<OtlpExporterHandles, String> {
+    pub async fn start(self: Arc<Self>) -> Result<OtlpExporterHandles, OtlpMetricsExporterError> {
         let Some(mut receiver) = self.receiver.lock().await.take() else {
-            return Err("OTLP metrics exporter already started".to_string());
+            *self.last_error.write().await =
+                Some(OtlpMetricsExporterError::AlreadyStarted.to_string());
+            return Err(OtlpMetricsExporterError::AlreadyStarted);
         };
 
-        let recorder = Arc::new(OtlpRecorder::new(&self.config)?);
+        let recorder = match OtlpRecorder::new(&self.config) {
+            Ok(recorder) => Arc::new(recorder),
+            Err(err) => {
+                *self.last_error.write().await = Some(err.to_string());
+                return Err(err);
+            }
+        };
 
         let sampler = {
             let this = self.clone();
@@ -193,7 +211,7 @@ struct OtlpRecorder {
 }
 
 impl OtlpRecorder {
-    fn new(config: &OtlpMetricsExporterConfig) -> Result<Self, String> {
+    fn new(config: &OtlpMetricsExporterConfig) -> Result<Self, OtlpMetricsExporterError> {
         let exporter = opentelemetry_otlp::new_exporter()
             .http()
             .with_endpoint(config.endpoint.clone())
@@ -209,7 +227,7 @@ impl OtlpRecorder {
                 config.service_name.clone(),
             )]))
             .build()
-            .map_err(|err| format!("failed to build native OTLP meter provider: {err}"))?;
+            .map_err(|err| OtlpMetricsExporterError::Internal(err.to_string()))?;
 
         let meter = meter_provider.meter("mofa-monitoring.metrics-exporter");
         let instruments = OtlpInstruments::new(&meter);
@@ -540,13 +558,87 @@ fn compare_labels(a: &[(String, String)], b: &[(String, String)]) -> Ordering {
 }
 
 fn label_key(labels: &[(String, String)]) -> String {
-    labels
-        .iter()
-        .map(|(k, v)| format!("{k}={v}"))
-        .collect::<Vec<_>>()
-        .join("|")
+    use std::fmt::Write as _;
+
+    let mut key = String::new();
+    for (k, v) in labels {
+        // Length-delimited encoding avoids collisions when keys/values contain separators.
+        let _ = write!(&mut key, "{}:{}:{}:{};", k.len(), k, v.len(), v);
+    }
+    key
 }
 
 fn is_non_zero(value: f64) -> bool {
     value.abs() > f64::EPSILON
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::MetricsConfig;
+
+    #[test]
+    fn label_key_uses_collision_safe_encoding() {
+        let a = vec![
+            ("k".to_string(), "a|b".to_string()),
+            ("c".to_string(), "d".to_string()),
+        ];
+        let b = vec![
+            ("k".to_string(), "a".to_string()),
+            ("b|c".to_string(), "d".to_string()),
+        ];
+        assert_ne!(label_key(&a), label_key(&b));
+    }
+
+    #[test]
+    fn cap_points_adds_other_bucket_with_original_keys() {
+        let points = vec![
+            LabeledPoint {
+                labels: vec![("agent_id".to_string(), "a".to_string())],
+                rank: 10.0,
+                value: 10.0,
+            },
+            LabeledPoint {
+                labels: vec![("agent_id".to_string(), "b".to_string())],
+                rank: 9.0,
+                value: 9.0,
+            },
+            LabeledPoint {
+                labels: vec![("agent_id".to_string(), "c".to_string())],
+                rank: 8.0,
+                value: 8.0,
+            },
+        ];
+
+        let (capped, dropped) = cap_points(points, 1);
+        assert_eq!(dropped, 2);
+        assert!(
+            capped
+                .iter()
+                .any(|p| p.labels == vec![("agent_id".to_string(), "__other__".to_string())])
+        );
+    }
+
+    #[tokio::test]
+    async fn start_twice_sets_last_error() {
+        let collector = Arc::new(MetricsCollector::new(MetricsConfig::default()));
+        let exporter = Arc::new(OtlpMetricsExporter::new(
+            collector,
+            OtlpMetricsExporterConfig::default(),
+        ));
+
+        *exporter.receiver.lock().await = None;
+        let second = exporter.clone().start().await;
+        assert!(matches!(
+            second,
+            Err(OtlpMetricsExporterError::AlreadyStarted)
+        ));
+        assert!(
+            exporter
+                .last_error()
+                .await
+                .unwrap_or_default()
+                .contains("already started")
+        );
+    }
 }
