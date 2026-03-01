@@ -68,3 +68,6 @@ pub use workflow::*;
 // Metrics traits for monitoring integration
 pub mod metrics;
 pub use metrics::*;
+
+// LLM protocol types and kernel-layer inference traits
+pub mod llm;
