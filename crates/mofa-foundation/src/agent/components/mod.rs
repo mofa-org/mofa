@@ -33,7 +33,9 @@ pub use mofa_kernel::agent::components::context_compressor::{
 };
 
 // Context compressor - Foundation implementations
-pub use context_compressor::{SlidingWindowCompressor, SummarizingCompressor, TokenCounter};
+pub use context_compressor::{
+    ContextCompressorError, SlidingWindowCompressor, SummarizingCompressor, TokenCounter,
+};
 
 // Coordinator - Kernel trait 和类型
 // Coordinator - Kernel trait and types

@@ -16,6 +16,23 @@ use mofa_kernel::agent::components::context_compressor::{CompressionStrategy, Co
 use mofa_kernel::agent::error::{AgentError, AgentResult};
 use mofa_kernel::agent::types::ChatMessage;
 use std::sync::Arc;
+use thiserror::Error;
+
+// ============================================================================
+// Error types
+// ============================================================================
+
+/// Errors that can occur when configuring context compressors.
+#[derive(Debug, Error)]
+pub enum ContextCompressorError {
+    /// Returned when `window_size` is 0 in `SlidingWindowCompressor::new`.
+    #[error("window_size must be greater than 0, got {0}")]
+    InvalidWindowSize(usize),
+
+    /// Returned when `keep_recent` is 0 in `SummarizingCompressor::with_keep_recent`.
+    #[error("keep_recent must be greater than 0, got {0}")]
+    InvalidKeepRecent(usize),
+}
 
 // ============================================================================
 // Token counter utility
@@ -56,9 +73,10 @@ impl TokenCounter {
 /// # Example
 ///
 /// ```rust,ignore
-/// let compressor = SlidingWindowCompressor::new(20);
+/// let compressor = SlidingWindowCompressor::new(20)?;
 /// let trimmed = compressor.compress(messages, 4096).await?;
 /// ```
+#[derive(Debug)]
 pub struct SlidingWindowCompressor {
     window_size: usize,
 }
@@ -66,7 +84,29 @@ pub struct SlidingWindowCompressor {
 impl SlidingWindowCompressor {
     /// Create a new compressor that retains at most `window_size` non-system
     /// messages after the system prompt.
-    pub fn new(window_size: usize) -> Self {
+    ///
+    /// # Errors
+    ///
+    /// Returns `ContextCompressorError::InvalidWindowSize` if `window_size` is 0.
+    pub fn new(window_size: usize) -> Result<Self, ContextCompressorError> {
+        if window_size == 0 {
+            return Err(ContextCompressorError::InvalidWindowSize(window_size));
+        }
+        Ok(Self { window_size })
+    }
+
+    /// Create a new compressor without validation.
+    ///
+    /// # Panics
+    ///
+    /// Panics in debug mode if `window_size` is 0.
+    ///
+    /// # Safety
+    ///
+    /// This is only for test code. Use `new()` in production.
+    #[cfg(test)]
+    pub fn new_unchecked(window_size: usize) -> Self {
+        debug_assert!(window_size > 0, "window_size must be greater than 0");
         Self { window_size }
     }
 }
@@ -128,27 +168,97 @@ impl ContextCompressor for SlidingWindowCompressor {
 ///
 /// ```rust,ignore
 /// let compressor = SummarizingCompressor::new(llm.clone())
-///     .with_keep_recent(8);
+///     .with_keep_recent(8)?
+///     .with_model("gpt-4o-mini");  // Optional: override model
 /// let trimmed = compressor.compress(messages, 4096).await?;
 /// ```
 pub struct SummarizingCompressor {
     llm: Arc<dyn crate::llm::provider::LLMProvider>,
     keep_recent: usize,
+    /// Optional model override. If None, uses the provider's default_model().
+    model: Option<String>,
+    /// Optional custom summary prompt template (reserved for future use).
+    summary_prompt_template: Option<String>,
+}
+
+impl std::fmt::Debug for SummarizingCompressor {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("SummarizingCompressor")
+            .field("llm", &format!("{}", self.llm.name()))
+            .field("keep_recent", &self.keep_recent)
+            .field("model", &self.model)
+            .field("summary_prompt_template", &self.summary_prompt_template)
+            .finish()
+    }
 }
 
 impl SummarizingCompressor {
     /// Create a new compressor using `llm` for summarisation.
     /// Defaults to keeping the 10 most-recent non-system messages intact.
+    ///
+    /// By default, uses the model configured in the LLM provider.
+    /// Use `.with_model()` to override.
     pub fn new(llm: Arc<dyn crate::llm::provider::LLMProvider>) -> Self {
         Self {
             llm,
             keep_recent: 10,
+            model: None,
+            summary_prompt_template: None,
         }
     }
 
     /// Override how many recent messages to preserve without summarisation.
-    pub fn with_keep_recent(mut self, n: usize) -> Self {
+    ///
+    /// # Errors
+    ///
+    /// Returns `ContextCompressorError::InvalidKeepRecent` if `n` is 0.
+    pub fn with_keep_recent(mut self, n: usize) -> Result<Self, ContextCompressorError> {
+        if n == 0 {
+            return Err(ContextCompressorError::InvalidKeepRecent(n));
+        }
         self.keep_recent = n;
+        Ok(self)
+    }
+
+    /// Set `keep_recent` without validation.
+    ///
+    /// # Panics
+    ///
+    /// Panics in debug mode if `n` is 0.
+    ///
+    /// # Safety
+    ///
+    /// This is only for test code. Use `with_keep_recent()` in production.
+    #[cfg(test)]
+    pub fn with_keep_recent_unchecked(mut self, n: usize) -> Self {
+        debug_assert!(n > 0, "keep_recent must be greater than 0");
+        self.keep_recent = n;
+        self
+    }
+
+    /// Override the model used for summarisation.
+    ///
+    /// By default, the compressor uses the model configured in the LLM
+    /// provider. Use this method to explicitly specify a different model,
+    /// e.g., to use a cheaper model for summarisation.
+    ///
+    /// # Example
+    ///
+    /// ```rust,ignore
+    /// let compressor = SummarizingCompressor::new(llm)
+    ///     .with_model("gpt-4o-mini");  // Use cheaper model for summaries
+    /// ```
+    pub fn with_model(mut self, model: impl Into<String>) -> Self {
+        self.model = Some(model.into());
+        self
+    }
+
+    /// Set a custom summary prompt template.
+    ///
+    /// This allows customization of how summaries are generated.
+    /// Reserved for future implementation.
+    pub fn with_summary_prompt(mut self, template: String) -> Self {
+        self.summary_prompt_template = Some(template);
         self
     }
 
@@ -202,7 +312,14 @@ impl ContextCompressor for SummarizingCompressor {
         // Ask the LLM for a summary of the older turns using the foundation's
         // ChatCompletionRequest which is what the actual providers understand.
         let prompt = Self::build_summary_prompt(to_summarise);
-        let summary_request = crate::llm::types::ChatCompletionRequest::new("gpt-4o-mini")
+        
+        // Use the configured model override, or fall back to the provider's default.
+        let model = self
+            .model
+            .as_deref()
+            .unwrap_or_else(|| self.llm.default_model());
+        
+        let summary_request = crate::llm::types::ChatCompletionRequest::new(model)
             .user(prompt)
             .temperature(0.3)
             .max_tokens(512);
@@ -348,7 +465,7 @@ mod tests {
 
     #[tokio::test]
     async fn sliding_window_under_limit_unchanged() {
-        let compressor = SlidingWindowCompressor::new(20);
+        let compressor = SlidingWindowCompressor::new_unchecked(20);
         let msgs = short_conversation();
         let result = compressor.compress(msgs.clone(), 100_000).await.unwrap();
         assert_eq!(result.len(), msgs.len());
@@ -356,7 +473,7 @@ mod tests {
 
     #[tokio::test]
     async fn sliding_window_only_system_message() {
-        let compressor = SlidingWindowCompressor::new(5);
+        let compressor = SlidingWindowCompressor::new_unchecked(5);
         let msgs = system_only();
         // Force compression by using tiny max_tokens budget.
         // TokenCounter for this system message: "You are a helpful assistant." = 28 chars → 8 tokens
@@ -370,7 +487,7 @@ mod tests {
     #[tokio::test]
     async fn sliding_window_trims_to_window_size() {
         // 5 user+assistant pairs = 10 conversation messages + 1 system = 11 total.
-        let compressor = SlidingWindowCompressor::new(4);
+        let compressor = SlidingWindowCompressor::new_unchecked(4);
         let msgs = long_conversation(5);
         assert_eq!(msgs.len(), 11);
         // Force compression.
@@ -382,7 +499,7 @@ mod tests {
 
     #[tokio::test]
     async fn sliding_window_very_long_single_message() {
-        let compressor = SlidingWindowCompressor::new(2);
+        let compressor = SlidingWindowCompressor::new_unchecked(2);
         let long_content = "a".repeat(10_000);
         let msgs = vec![
             make_msg("system", "sys"),
@@ -396,7 +513,7 @@ mod tests {
 
     #[tokio::test]
     async fn sliding_window_preserves_system_prompt() {
-        let compressor = SlidingWindowCompressor::new(2);
+        let compressor = SlidingWindowCompressor::new_unchecked(2);
         let msgs = long_conversation(10); // 21 messages
         let result = compressor.compress(msgs, 1).await.unwrap();
         assert_eq!(result[0].role, "system");
@@ -426,7 +543,7 @@ mod tests {
     #[tokio::test]
     async fn summarizing_injects_summary_message() {
         let llm = Arc::new(MockLLM);
-        let compressor = SummarizingCompressor::new(llm).with_keep_recent(2);
+        let compressor = SummarizingCompressor::new(llm).with_keep_recent_unchecked(2);
         // 1 system + 6 conversation messages (3 pairs).
         let msgs = long_conversation(3);
         assert_eq!(msgs.len(), 7);
@@ -445,7 +562,7 @@ mod tests {
     #[tokio::test]
     async fn summarizing_very_long_single_message() {
         let llm = Arc::new(MockLLM);
-        let compressor = SummarizingCompressor::new(llm).with_keep_recent(10);
+        let compressor = SummarizingCompressor::new(llm).with_keep_recent_unchecked(10);
         let long_content = "x".repeat(50_000);
         let msgs = vec![
             make_msg("system", "sys"),
@@ -455,5 +572,44 @@ mod tests {
         // summarisation happens; messages are returned as-is even over budget.
         let result = compressor.compress(msgs.clone(), 1).await.unwrap();
         assert_eq!(result.len(), 2);
+    }
+
+    // ---- Error handling tests ----------------------------------------------
+
+    #[test]
+    fn sliding_window_new_rejects_zero() {
+        let result = SlidingWindowCompressor::new(0);
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(matches!(
+            err,
+            ContextCompressorError::InvalidWindowSize(0)
+        ));
+        assert_eq!(err.to_string(), "window_size must be greater than 0, got 0");
+    }
+
+    #[test]
+    fn sliding_window_new_accepts_positive() {
+        let result = SlidingWindowCompressor::new(1);
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap().window_size, 1);
+    }
+
+    #[test]
+    fn summarizing_with_keep_recent_rejects_zero() {
+        let llm = Arc::new(MockLLM);
+        let result = SummarizingCompressor::new(llm).with_keep_recent(0);
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(matches!(err, ContextCompressorError::InvalidKeepRecent(0)));
+        assert_eq!(err.to_string(), "keep_recent must be greater than 0, got 0");
+    }
+
+    #[test]
+    fn summarizing_with_keep_recent_accepts_positive() {
+        let llm = Arc::new(MockLLM);
+        let result = SummarizingCompressor::new(llm).with_keep_recent(1);
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap().keep_recent, 1);
     }
 }

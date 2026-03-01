@@ -108,7 +108,7 @@ async fn demo_sliding_window() -> Result<(), Box<dyn std::error::Error>> {
     let messages = build_long_conversation(15);
     println!("Original conversation: {} messages", messages.len());
 
-    let compressor = SlidingWindowCompressor::new(6); // keep 6 most-recent non-system messages
+    let compressor = SlidingWindowCompressor::new(6)?; // keep 6 most-recent non-system messages
     let tokens_before = compressor.count_tokens(&messages);
     println!("Estimated tokens before compression: {tokens_before}");
 
@@ -152,7 +152,7 @@ async fn demo_agent_executor() -> Result<(), Box<dyn std::error::Error>> {
     // This demo shows the API surface without making actual LLM calls.
     println!("Creating AgentExecutor with a SlidingWindowCompressor attached...\n");
     println!(
-        r#"  let compressor = Arc::new(SlidingWindowCompressor::new(10));
+        r#"  let compressor = Arc::new(SlidingWindowCompressor::new(10)?);
 
   let executor = AgentExecutor::with_config(
       llm_provider,
@@ -217,7 +217,7 @@ async fn demo_summarizing_compressor() -> Result<(), Box<dyn std::error::Error>>
     }
     let provider = Arc::new(OpenAIProvider::with_config(cfg));
 
-    let compressor = SummarizingCompressor::new(provider).with_keep_recent(4);
+    let compressor = SummarizingCompressor::new(provider).with_keep_recent(4)?;
 
     let messages = build_long_conversation(8); // 1 system + 16 conversation messages
     let tokens_before = compressor.count_tokens(&messages);
