@@ -68,3 +68,6 @@ pub use workflow::*;
 // Metrics traits for monitoring integration
 pub mod metrics;
 pub use metrics::*;
+
+// LLM provider traits and message types
+pub mod llm;
