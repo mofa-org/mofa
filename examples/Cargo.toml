@@ -41,6 +41,7 @@ members = [
     "message_graph_executor_runtime",
     "agent_builder",
     "context_compression",
+    "control_plane",
     "context_window_demo",
     "admission_gate_demo",
     "integrations_demo",
@@ -51,6 +52,7 @@ version = "0.1.0"
 edition = "2024"
 
 [workspace.dependencies]
+anyhow = "1.0"
 async-trait = "0.1"
 axum = "0"
 serde = { version = "1.0", features = ["derive"] }
