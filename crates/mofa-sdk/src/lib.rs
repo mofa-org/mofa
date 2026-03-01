@@ -112,6 +112,9 @@ pub mod kernel {
     pub mod storage {
         pub use mofa_kernel::storage::*;
     }
+    pub mod error {
+        pub use mofa_kernel::error::*;
+    }
 
     // ---------------------------------------------------------------------
     // Curated, commonly-used exports
@@ -120,10 +123,12 @@ pub mod kernel {
         AgentCapabilities, AgentCapabilitiesBuilder, AgentContext, AgentError, AgentFactory,
         AgentInput, AgentLifecycle, AgentMessage as CoreAgentMessage, AgentMessaging,
         AgentMetadata, AgentOutput, AgentPluginSupport, AgentRequirements,
-        AgentRequirementsBuilder, AgentResult, AgentState, AgentStats, ChatCompletionRequest,
-        ChatCompletionResponse, ChatMessage, ContextConfig, CoordinationPattern, Coordinator,
-        DynAgent, ErrorCategory, ErrorContext, EventBuilder, EventBus, GlobalError, GlobalEvent,
-        GlobalMessage, GlobalResult, HealthStatus, InputType, InterruptResult, LLMProvider, Memory,
+        AgentRequirementsBuilder, AgentReport, AgentResult, AgentState, AgentStats,
+        ChatCompletionRequest, ChatCompletionResponse, ChatMessage, ContextConfig,
+        CoordinationPattern, Coordinator, DynAgent, ErrorCategory, ErrorContext, EventBuilder,
+        EventBus, GlobalError, GlobalEvent, GlobalMessage, GlobalReport, GlobalResult,
+        HealthStatus, InputType, IntoAgentReport, IntoGlobalReport, InterruptResult, LLMProvider,
+        Memory,
         MemoryItem, MemoryStats, MemoryValue, Message, MessageContent, MessageMetadata,
         MessageRole, MoFAAgent, OutputContent, OutputType, Reasoner, ReasoningResult,
         ReasoningStep, ReasoningStepType, ReasoningStrategy, TokenUsage, Tool, ToolCall,
@@ -156,6 +161,9 @@ pub mod kernel {
 
     // Storage trait
     pub use mofa_kernel::Storage;
+
+    // Crate-level error and result types
+    pub use mofa_kernel::error::{IntoKernelReport, KernelError, KernelResult};
 }
 
 // =============================================================================
