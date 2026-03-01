@@ -7,11 +7,12 @@ use mofa_kernel::agent::error::{AgentError, AgentResult};
 use mofa_kernel::workflow::telemetry::{DebugEvent, DebugSession, SessionRecorder};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::collections::hash_map::Entry;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tokio::fs::{self, OpenOptions};
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
-use tokio::sync::RwLock;
+use tokio::sync::{Mutex, RwLock};
 use tracing::warn;
 
 // ============================================================================
@@ -88,6 +89,7 @@ impl Default for FileSessionRecorderConfig {
 pub struct FileSessionRecorder {
     config: FileSessionRecorderConfig,
     active_sessions: Arc<RwLock<HashMap<String, DebugSession>>>,
+    file_locks: Arc<RwLock<HashMap<String, Arc<Mutex<()>>>>>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -119,6 +121,7 @@ impl FileSessionRecorder {
         Self {
             config,
             active_sessions: Arc::new(RwLock::new(HashMap::new())),
+            file_locks: Arc::new(RwLock::new(HashMap::new())),
         }
     }
 
@@ -137,6 +140,40 @@ impl FileSessionRecorder {
         self.config
             .session_dir
             .join(format!("{}.jsonl.tmp", session_id))
+    }
+
+    fn validate_session_id(session_id: &str) -> AgentResult<()> {
+        if session_id.is_empty() {
+            return Err(AgentError::InvalidInput(
+                "Session ID must not be empty".to_string(),
+            ));
+        }
+        if !session_id
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
+        {
+            return Err(AgentError::InvalidInput(format!(
+                "Invalid session_id '{}': only [A-Za-z0-9_-] are allowed",
+                session_id
+            )));
+        }
+        Ok(())
+    }
+
+    async fn file_lock_for_session(&self, session_id: &str) -> Arc<Mutex<()>> {
+        if let Some(lock) = self.file_locks.read().await.get(session_id) {
+            return lock.clone();
+        }
+
+        let mut locks = self.file_locks.write().await;
+        match locks.entry(session_id.to_string()) {
+            Entry::Occupied(entry) => entry.get().clone(),
+            Entry::Vacant(entry) => {
+                let lock = Arc::new(Mutex::new(()));
+                entry.insert(lock.clone());
+                lock
+            }
+        }
     }
 
     async fn append_json_line<T: Serialize>(path: &Path, payload: &T) -> AgentResult<()> {
@@ -183,7 +220,8 @@ impl FileSessionRecorder {
         }
 
         let mut sessions = self.list_sessions().await?;
-        if sessions.len() <= self.config.max_sessions {
+        let total_sessions = sessions.len();
+        if total_sessions <= self.config.max_sessions {
             return Ok(());
         }
 
@@ -196,11 +234,7 @@ impl FileSessionRecorder {
             .collect::<Vec<_>>();
         completed.sort_by_key(|s| s.started_at);
 
-        let excess = self
-            .list_sessions()
-            .await?
-            .len()
-            .saturating_sub(self.config.max_sessions);
+        let excess = total_sessions.saturating_sub(self.config.max_sessions);
         for session in completed.into_iter().take(excess) {
             let path = self.session_path(&session.session_id);
             if let Err(err) = fs::remove_file(&path).await {
@@ -277,7 +311,11 @@ impl SessionRecorder for InMemorySessionRecorder {
 #[async_trait]
 impl SessionRecorder for FileSessionRecorder {
     async fn start_session(&self, session: &DebugSession) -> AgentResult<()> {
+        Self::validate_session_id(&session.session_id)?;
         fs::create_dir_all(&self.config.session_dir).await?;
+
+        let session_lock = self.file_lock_for_session(&session.session_id).await;
+        let _guard = session_lock.lock().await;
 
         let tmp_path = self.session_tmp_path(&session.session_id);
         let final_path = self.session_path(&session.session_id);
@@ -302,7 +340,10 @@ impl SessionRecorder for FileSessionRecorder {
     }
 
     async fn record_event(&self, session_id: &str, event: &DebugEvent) -> AgentResult<()> {
+        Self::validate_session_id(session_id)?;
         let path = self.session_path(session_id);
+        let session_lock = self.file_lock_for_session(session_id).await;
+        let _guard = session_lock.lock().await;
 
         {
             let sessions = self.active_sessions.read().await;
@@ -346,6 +387,10 @@ impl SessionRecorder for FileSessionRecorder {
     }
 
     async fn end_session(&self, session_id: &str, status: &str) -> AgentResult<()> {
+        Self::validate_session_id(session_id)?;
+        let session_lock = self.file_lock_for_session(session_id).await;
+        let _guard = session_lock.lock().await;
+
         let mut sessions = self.active_sessions.write().await;
         let mut session = sessions.remove(session_id).ok_or_else(|| {
             AgentError::InvalidInput(format!("Session not found: {}", session_id))
@@ -367,6 +412,7 @@ impl SessionRecorder for FileSessionRecorder {
     }
 
     async fn get_session(&self, session_id: &str) -> AgentResult<Option<DebugSession>> {
+        Self::validate_session_id(session_id)?;
         if let Some(session) = self.active_sessions.read().await.get(session_id).cloned() {
             return Ok(Some(session));
         }
@@ -374,6 +420,7 @@ impl SessionRecorder for FileSessionRecorder {
     }
 
     async fn get_events(&self, session_id: &str) -> AgentResult<Vec<DebugEvent>> {
+        Self::validate_session_id(session_id)?;
         let path = self.session_path(session_id);
         let file = match fs::File::open(&path).await {
             Ok(file) => file,
@@ -761,5 +808,13 @@ mod tests {
                     .starts_with(&format!("n-{idx}-"))
             }));
         }
+    }
+
+    #[tokio::test]
+    async fn test_file_recorder_rejects_invalid_session_id() {
+        let (recorder, _temp_dir) = file_recorder_with_tempdir(0);
+        let bad_session = DebugSession::new("../escape", "wf", "exec");
+        let err = recorder.start_session(&bad_session).await.unwrap_err();
+        assert!(err.to_string().contains("Invalid session_id"));
     }
 }
