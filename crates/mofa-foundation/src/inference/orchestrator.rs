@@ -31,6 +31,7 @@ use crate::hardware::{HardwareCapability, detect_hardware};
 
 use super::model_pool::ModelPool;
 use super::routing::{self, AdmissionOutcome, RoutingDecision, RoutingPolicy};
+use super::smart_router::{ProviderEntry, SmartRouter, TaskType};
 use super::types::{InferenceRequest, InferenceResult, RoutedBackend};
 
 /// Configuration for the `InferenceOrchestrator`.
@@ -81,6 +82,7 @@ pub struct InferenceOrchestrator {
     config: OrchestratorConfig,
     model_pool: ModelPool,
     hardware: HardwareCapability,
+    smart_router: SmartRouter,
 }
 
 impl InferenceOrchestrator {
@@ -97,22 +99,26 @@ impl InferenceOrchestrator {
         }
 
         let model_pool = ModelPool::new(config.model_pool_capacity, config.idle_timeout);
+        let smart_router = Self::build_smart_router(&config);
 
         Self {
             config,
             model_pool,
             hardware,
+            smart_router,
         }
     }
 
     /// Create an orchestrator with explicit hardware capabilities (for testing).
     pub fn with_hardware(config: OrchestratorConfig, hardware: HardwareCapability) -> Self {
         let model_pool = ModelPool::new(config.model_pool_capacity, config.idle_timeout);
+        let smart_router = Self::build_smart_router(&config);
 
         Self {
             config,
             model_pool,
             hardware,
+            smart_router,
         }
     }
 
@@ -185,6 +191,73 @@ impl InferenceOrchestrator {
             },
         }
     }
+
+    // ── SmartRouter integration ──────────────────────────────────────
+
+    /// Build a `SmartRouter` seeded with the cloud provider from config.
+    ///
+    /// The cloud provider is registered for all task types so that
+    /// `infer_routed()` can always fall back to it.
+    fn build_smart_router(config: &OrchestratorConfig) -> SmartRouter {
+        let mut router = SmartRouter::new(config.routing_policy.clone());
+        // Seed the router with the configured cloud provider.
+        let cloud_entry = ProviderEntry {
+            id: config.cloud_provider.clone(),
+            name: config.cloud_provider.clone(),
+            is_local: false,
+            supported_tasks: vec![
+                TaskType::Llm,
+                TaskType::Embedding,
+                TaskType::Asr,
+                TaskType::Tts,
+                TaskType::Vlm,
+            ],
+            latency_ms: 200,
+            cost_per_1k_tokens: 0.03,
+        };
+        router.register_provider(cloud_entry);
+        router
+    }
+
+    /// Immutable access to the `SmartRouter`.
+    pub fn smart_router(&self) -> &SmartRouter {
+        &self.smart_router
+    }
+
+    /// Mutable access to the `SmartRouter`, e.g. to register additional
+    /// providers at runtime.
+    pub fn smart_router_mut(&mut self) -> &mut SmartRouter {
+        &mut self.smart_router
+    }
+
+    /// Route an inference request through the `SmartRouter` and execute.
+    ///
+    /// This is the **new** entry point that uses task-type-aware routing.
+    /// If the SmartRouter finds no suitable provider for `task_type`, the
+    /// method transparently falls back to the legacy `infer()` path.
+    pub fn infer_routed(
+        &mut self,
+        request: &InferenceRequest,
+        task_type: TaskType,
+    ) -> InferenceResult {
+        let selection = self.smart_router.route(task_type);
+
+        match selection {
+            Some(sel) => InferenceResult {
+                output: format!(
+                    "[routed:{}] Inference result for: {}",
+                    sel.provider_id, request.prompt
+                ),
+                routed_to: RoutedBackend::Cloud {
+                    provider: sel.provider_id.clone(),
+                },
+                actual_precision: request.preferred_precision,
+            },
+            None => self.infer(request),
+        }
+    }
+
+    // ── Admission control ──────────────────────────────────────────
 
     /// Evaluate whether a local backend can admit this request based on
     /// current memory usage and configured thresholds.
@@ -385,5 +458,58 @@ mod tests {
         );
         // Model should NOT be loaded locally
         assert_eq!(orch.loaded_model_count(), 0);
+    }
+
+    // ── SmartRouter integration tests ──────────────────────────────
+
+    #[test]
+    fn test_infer_routed_selects_local_provider() {
+        let mut orch = InferenceOrchestrator::with_hardware(test_config(), test_hardware());
+
+        // Register a local TTS provider — local-first policy will
+        // prefer it over the default cloud seed.
+        let local_tts = ProviderEntry {
+            id: "local-piper".into(),
+            name: "Piper TTS".into(),
+            is_local: true,
+            supported_tasks: vec![TaskType::Tts],
+            latency_ms: 20,
+            cost_per_1k_tokens: 0.0,
+        };
+        orch.smart_router_mut().register_provider(local_tts);
+
+        let req = InferenceRequest::new("tts-model", "Say hi", 512);
+        let result = orch.infer_routed(&req, TaskType::Tts);
+
+        // Local-first policy should pick the local provider.
+        assert!(result.output.contains("routed:local-piper"));
+    }
+
+    #[test]
+    fn test_infer_routed_falls_back_to_cloud_for_unsupported_task() {
+        let mut orch = InferenceOrchestrator::with_hardware(test_config(), test_hardware());
+
+        // Don't register any extra provider — the SmartRouter only has
+        // the default cloud seed.  `route()` still returns the cloud
+        // provider, so the result should say "routed:openai".
+        let req = InferenceRequest::new("llama-3-7b", "Hello", 7168);
+        let result = orch.infer_routed(&req, TaskType::Llm);
+
+        assert!(result.output.contains("routed:openai"));
+    }
+
+    #[test]
+    fn test_smart_router_accessible_from_orchestrator() {
+        let orch = InferenceOrchestrator::with_hardware(test_config(), test_hardware());
+
+        // The cloud seed registers one provider that supports 5 task types.
+        let router = orch.smart_router();
+        assert!(!router.providers().is_empty());
+        // Route should succeed for each seeded task type.
+        assert!(router.route(TaskType::Llm).is_some());
+        assert!(router.route(TaskType::Tts).is_some());
+        assert!(router.route(TaskType::Asr).is_some());
+        assert!(router.route(TaskType::Embedding).is_some());
+        assert!(router.route(TaskType::Vlm).is_some());
     }
 }

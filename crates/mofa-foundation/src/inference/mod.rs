@@ -29,9 +29,11 @@
 pub mod model_pool;
 pub mod orchestrator;
 pub mod routing;
+pub mod smart_router;
 pub mod types;
 
 // Re-export primary public API
 pub use orchestrator::{InferenceOrchestrator, OrchestratorConfig};
 pub use routing::{AdmissionOutcome, RoutingDecision, RoutingPolicy};
+pub use smart_router::{ProviderEntry, RouteSelection, SmartRouter, TaskType};
 pub use types::{InferenceRequest, InferenceResult, Precision, RequestPriority, RoutedBackend};
