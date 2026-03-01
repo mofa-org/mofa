@@ -203,8 +203,7 @@ mod tests {
     #[test]
     fn test_generate_input_with_metadata() {
         let doc = Document::new("doc-1", "hello");
-        let input = GenerateInput::new("what is this?", vec![doc])
-            .with_metadata("language", "en");
+        let input = GenerateInput::new("what is this?", vec![doc]).with_metadata("language", "en");
 
         assert_eq!(input.query, "what is this?");
         assert_eq!(input.context.len(), 1);

@@ -331,7 +331,7 @@ impl WorkflowExecutor {
         if let Some(paused_at) = *ctx.paused_at.read().await {
             let duration = chrono::Utc::now().signed_duration_since(paused_at);
             let wait_duration_ms = duration.num_milliseconds().max(0) as u64;
-            *ctx.total_wait_time_ms.write().await += wait_duration_ms;  // ← accumulate
+            *ctx.total_wait_time_ms.write().await += wait_duration_ms; // ← accumulate
         }
 
         ctx.set_node_output(waiting_node_id, human_input).await;

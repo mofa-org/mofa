@@ -13,10 +13,10 @@
 
 use async_trait::async_trait;
 use aws_config::BehaviorVersion;
+use aws_sdk_s3::Client;
 use aws_sdk_s3::config::Builder as S3Builder;
 use aws_sdk_s3::presigning::PresigningConfig;
 use aws_sdk_s3::primitives::ByteStream;
-use aws_sdk_s3::Client;
 use mofa_kernel::ObjectStore;
 use mofa_kernel::agent::error::{AgentError, AgentResult};
 use std::time::Duration;
@@ -150,7 +150,9 @@ impl ObjectStore for S3ObjectStore {
                     .body
                     .collect()
                     .await
-                    .map_err(|e| Self::err(format!("S3 body read failed for key '{}': {}", key, e)))?
+                    .map_err(|e| {
+                        Self::err(format!("S3 body read failed for key '{}': {}", key, e))
+                    })?
                     .into_bytes();
                 Ok(Some(bytes.to_vec()))
             }
@@ -160,7 +162,10 @@ impl ObjectStore for S3ObjectStore {
                 if service_err.is_no_such_key() {
                     Ok(None)
                 } else {
-                    Err(Self::err(format!("S3 get failed for key '{}': {}", key, service_err)))
+                    Err(Self::err(format!(
+                        "S3 get failed for key '{}': {}",
+                        key, service_err
+                    )))
                 }
             }
         }

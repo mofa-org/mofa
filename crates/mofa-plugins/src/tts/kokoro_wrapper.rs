@@ -83,8 +83,9 @@
 //! ```
 
 use super::{TTSEngine, VoiceInfo};
-use mofa_kernel::plugin::{PluginError, PluginResult};use futures::StreamExt;
+use futures::StreamExt;
 pub use kokoro_tts::{KokoroTts, SynthSink, SynthStream, Voice};
+use mofa_kernel::plugin::{PluginError, PluginResult};
 use std::path::Path;
 use std::sync::Arc;
 use tracing::{debug, info, warn};
@@ -152,9 +153,12 @@ impl KokoroTTS {
         }
 
         // Initialize Kokoro TTS
-        let tts = KokoroTts::new(model_path, voice_path)
-            .await
-            .map_err(|e| mofa_kernel::plugin::PluginError::ExecutionFailed(format!("Failed to initialize Kokoro TTS: {:?}", e)))?;
+        let tts = KokoroTts::new(model_path, voice_path).await.map_err(|e| {
+            mofa_kernel::plugin::PluginError::ExecutionFailed(format!(
+                "Failed to initialize Kokoro TTS: {:?}",
+                e
+            ))
+        })?;
 
         let model_lower = model_path.to_ascii_lowercase();
         let is_v11_model = model_lower.contains("v1.1") || model_lower.contains("v11");
@@ -271,9 +275,12 @@ impl KokoroTTS {
         let (mut sink, mut stream) = self.tts.stream::<String>(voice_enum);
 
         // Submit text for synthesis
-        sink.synth(text.to_string())
-            .await
-            .map_err(|e| mofa_kernel::plugin::PluginError::ExecutionFailed(format!("Failed to submit text for f32 streaming: {:?}", e)))?;
+        sink.synth(text.to_string()).await.map_err(|e| {
+            mofa_kernel::plugin::PluginError::ExecutionFailed(format!(
+                "Failed to submit text for f32 streaming: {:?}",
+                e
+            ))
+        })?;
 
         // Process audio chunks and call callback for each chunk
         while let Some((audio_f32, _took)) = stream.next().await {
@@ -330,9 +337,12 @@ impl TTSEngine for KokoroTTS {
         let (mut sink, mut stream) = self.tts.stream::<String>(voice);
 
         // Submit text for synthesis using the synth method
-        sink.synth(text.to_string())
-            .await
-            .map_err(|e| mofa_kernel::plugin::PluginError::ExecutionFailed(format!("Failed to submit text for synthesis: {:?}", e)))?;
+        sink.synth(text.to_string()).await.map_err(|e| {
+            mofa_kernel::plugin::PluginError::ExecutionFailed(format!(
+                "Failed to submit text for synthesis: {:?}",
+                e
+            ))
+        })?;
 
         // Collect all audio chunks
         let mut audio = Vec::new();
@@ -423,7 +433,10 @@ impl TTSEngine for KokoroTTS {
 
         // Submit text for synthesis
         sink.synth(text.to_string()).await.map_err(|e| {
-            mofa_kernel::plugin::PluginError::ExecutionFailed(format!("Failed to submit text for streaming synthesis: {:?}", e))
+            mofa_kernel::plugin::PluginError::ExecutionFailed(format!(
+                "Failed to submit text for streaming synthesis: {:?}",
+                e
+            ))
         })?;
 
         // Process audio chunks and call callback for each chunk

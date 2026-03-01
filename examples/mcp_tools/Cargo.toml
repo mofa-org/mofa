@@ -1,0 +1,21 @@
+[package]
+name = "mcp_tools"
+version.workspace = true
+edition.workspace = true
+
+[[bin]]
+name = "mcp_tools"
+path = "src/main.rs"
+
+[dependencies]
+# Foundation layer with the `mcp` feature enabled
+mofa-foundation = { path = "../../crates/mofa-foundation", features = ["mcp"] }
+mofa-kernel = { path = "../../crates/mofa-kernel" }
+
+tokio.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+serde_json.workspace = true
+
+[lints]
+workspace = true

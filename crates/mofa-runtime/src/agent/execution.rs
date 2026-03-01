@@ -96,7 +96,9 @@ impl ExecutionOptions {
         self.retry_delay_ms = retry_delay_ms;
         self.retry_config = Some(RetryConfig {
             max_attempts: max_retries + 1,
-            policy: RetryPolicy::Fixed { delay_ms: retry_delay_ms },
+            policy: RetryPolicy::Fixed {
+                delay_ms: retry_delay_ms,
+            },
         });
         self
     }
@@ -411,10 +413,8 @@ impl ExecutionEngine {
             Err(e) => {
                 // Try graceful degradation before giving up.
                 let attempts = retry_cfg.max_attempts;
-                if let Some(fallback_output) = self
-                    .fallback
-                    .on_failure(agent_id, &e, attempts)
-                    .await
+                if let Some(fallback_output) =
+                    self.fallback.on_failure(agent_id, &e, attempts).await
                 {
                     let mut r = ExecutionResult::success(
                         execution_id,
@@ -479,17 +479,19 @@ impl ExecutionEngine {
         let mut last_error = None;
 
         for attempt in 0..max_attempts {
-            let attempt_span = tracing::info_span!("agent.attempt", attempt = attempt, max_attempts = max_attempts);
+            let attempt_span = tracing::info_span!(
+                "agent.attempt",
+                attempt = attempt,
+                max_attempts = max_attempts
+            );
             if attempt > 0 {
                 let delay = retry_cfg.policy.delay_for(attempt - 1);
                 tokio::time::sleep(delay).await;
             }
 
-            let result = async {
-                self.execute_once(agent, input.clone(), ctx, options).await
-            }
-            .instrument(attempt_span)
-            .await;
+            let result = async { self.execute_once(agent, input.clone(), ctx, options).await }
+                .instrument(attempt_span)
+                .await;
 
             match result {
                 Ok(output) => return Ok((output, attempt)),

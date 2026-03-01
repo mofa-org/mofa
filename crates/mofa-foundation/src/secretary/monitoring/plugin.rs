@@ -155,7 +155,9 @@ impl AgentPlugin for BaseEventResponsePlugin {
 
         // Check if we can handle this event
         if !self.can_handle(&event) {
-            return Err(mofa_kernel::plugin::PluginError::ExecutionFailed("Cannot handle this event type".into()));
+            return Err(mofa_kernel::plugin::PluginError::ExecutionFailed(
+                "Cannot handle this event type".into(),
+            ));
         }
 
         // Handle the event
@@ -163,7 +165,9 @@ impl AgentPlugin for BaseEventResponsePlugin {
         let processed_event = self.handle_event(event).await?;
 
         // Return the result as JSON
-        processed_event.to_json().map_err(|e| mofa_kernel::plugin::PluginError::ExecutionFailed(e.to_string()))
+        processed_event
+            .to_json()
+            .map_err(|e| mofa_kernel::plugin::PluginError::ExecutionFailed(e.to_string()))
     }
 
     fn stats(&self) -> HashMap<String, serde_json::Value> {

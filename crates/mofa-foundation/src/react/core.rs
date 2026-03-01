@@ -584,7 +584,9 @@ Rules:
                     tools.keys().collect::<Vec<_>>()
                 ),
             }
-        }.instrument(span).await
+        }
+        .instrument(span)
+        .await
     }
 }
 

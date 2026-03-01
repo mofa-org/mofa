@@ -30,9 +30,6 @@ pub use components::{
     // Context compressor trait and implementations
     CompressionStrategy,
     ContextCompressor,
-    SlidingWindowCompressor,
-    SummarizingCompressor,
-    TokenCounter,
     CoordinationPattern,
     // Kernel traits 和类型 (通过 components 重导出)
     // Kernel traits and types (re-exported via components)
@@ -61,8 +58,11 @@ pub use components::{
     SimpleTool,
     SimpleToolAdapter,
     SimpleToolRegistry,
+    SlidingWindowCompressor,
+    SummarizingCompressor,
     Task,
     ThoughtStep,
+    TokenCounter,
     Tool,
     // Foundation 扩展类型
     // Foundation extension types

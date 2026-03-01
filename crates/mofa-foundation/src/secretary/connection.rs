@@ -76,9 +76,7 @@ where
 
     async fn receive(&self) -> Result<Self::Input, ConnectionError> {
         let mut rx = self.input_rx.lock().await;
-        rx.recv()
-            .await
-            .ok_or(ConnectionError::Closed)
+        rx.recv().await.ok_or(ConnectionError::Closed)
     }
 
     async fn try_receive(&self) -> Result<Option<Self::Input>, ConnectionError> {

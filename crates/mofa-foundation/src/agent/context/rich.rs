@@ -223,7 +223,9 @@ impl RichAgentContext {
     pub async fn set<T: Serialize>(&self, key: &str, value: T) {
         match serde_json::to_value(value) {
             Ok(v) => self.inner.set(key, v).await,
-            Err(e) => tracing::warn!(key = key, error = %e, "RichAgentContext::set serialization failed"),
+            Err(e) => {
+                tracing::warn!(key = key, error = %e, "RichAgentContext::set serialization failed")
+            }
         }
     }
 

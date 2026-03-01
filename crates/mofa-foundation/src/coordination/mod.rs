@@ -95,7 +95,8 @@ impl AgentCoordinator {
         // 3. Master agent broadcasts the task to all workers
         self.bus
             .send_message(master_id, CommunicationMode::Broadcast, task_msg)
-            .await.map_err(|e| GlobalError::Other(e.to_string()))?;
+            .await
+            .map_err(|e| GlobalError::Other(e.to_string()))?;
 
         // 4. 跟踪任务状态（简化示例）
         // 4. Track task status (Simplified example)
@@ -139,7 +140,8 @@ impl AgentCoordinator {
                     CommunicationMode::PointToPoint(agent_id.to_string()),
                     &current_msg,
                 )
-                .await.map_err(|e| GlobalError::Other(e.to_string()))?;
+                .await
+                .map_err(|e| GlobalError::Other(e.to_string()))?;
             // 接收当前阶段输出（简化示例）
             // Receive current stage output (Simplified example)
             if let Some(AgentMessage::TaskResponse { result, .. }) = self

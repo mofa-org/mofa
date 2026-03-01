@@ -51,45 +51,57 @@ impl ToolExecutor for CalculatorTool {
     }
 
     async fn execute(&self, arguments: serde_json::Value) -> PluginResult<serde_json::Value> {
-        let operation = arguments["operation"]
-            .as_str()
-            .ok_or_else(|| mofa_kernel::plugin::PluginError::ExecutionFailed("Operation is required".to_string()))?;
-        let a = arguments["a"]
-            .as_f64()
-            .ok_or_else(|| mofa_kernel::plugin::PluginError::ExecutionFailed("Operand 'a' is required".to_string()))?;
+        let operation = arguments["operation"].as_str().ok_or_else(|| {
+            mofa_kernel::plugin::PluginError::ExecutionFailed("Operation is required".to_string())
+        })?;
+        let a = arguments["a"].as_f64().ok_or_else(|| {
+            mofa_kernel::plugin::PluginError::ExecutionFailed("Operand 'a' is required".to_string())
+        })?;
 
         let result = match operation {
             "add" => {
-                let b = arguments["b"]
-                    .as_f64()
-                    .ok_or_else(|| mofa_kernel::plugin::PluginError::ExecutionFailed("Operand 'b' is required for add".to_string()))?;
+                let b = arguments["b"].as_f64().ok_or_else(|| {
+                    mofa_kernel::plugin::PluginError::ExecutionFailed(
+                        "Operand 'b' is required for add".to_string(),
+                    )
+                })?;
                 a + b
             }
             "subtract" => {
-                let b = arguments["b"]
-                    .as_f64()
-                    .ok_or_else(|| mofa_kernel::plugin::PluginError::ExecutionFailed("Operand 'b' is required for subtract".to_string()))?;
+                let b = arguments["b"].as_f64().ok_or_else(|| {
+                    mofa_kernel::plugin::PluginError::ExecutionFailed(
+                        "Operand 'b' is required for subtract".to_string(),
+                    )
+                })?;
                 a - b
             }
             "multiply" => {
-                let b = arguments["b"]
-                    .as_f64()
-                    .ok_or_else(|| mofa_kernel::plugin::PluginError::ExecutionFailed("Operand 'b' is required for multiply".to_string()))?;
+                let b = arguments["b"].as_f64().ok_or_else(|| {
+                    mofa_kernel::plugin::PluginError::ExecutionFailed(
+                        "Operand 'b' is required for multiply".to_string(),
+                    )
+                })?;
                 a * b
             }
             "divide" => {
-                let b = arguments["b"]
-                    .as_f64()
-                    .ok_or_else(|| mofa_kernel::plugin::PluginError::ExecutionFailed("Operand 'b' is required for divide".to_string()))?;
+                let b = arguments["b"].as_f64().ok_or_else(|| {
+                    mofa_kernel::plugin::PluginError::ExecutionFailed(
+                        "Operand 'b' is required for divide".to_string(),
+                    )
+                })?;
                 if b == 0.0 {
-                    return Err(mofa_kernel::plugin::PluginError::ExecutionFailed("Division by zero".to_string()));
+                    return Err(mofa_kernel::plugin::PluginError::ExecutionFailed(
+                        "Division by zero".to_string(),
+                    ));
                 }
                 a / b
             }
             "power" => {
-                let b = arguments["b"]
-                    .as_f64()
-                    .ok_or_else(|| mofa_kernel::plugin::PluginError::ExecutionFailed("Operand 'b' is required for power".to_string()))?;
+                let b = arguments["b"].as_f64().ok_or_else(|| {
+                    mofa_kernel::plugin::PluginError::ExecutionFailed(
+                        "Operand 'b' is required for power".to_string(),
+                    )
+                })?;
                 a.powf(b)
             }
             "sqrt" => {
@@ -112,7 +124,12 @@ impl ToolExecutor for CalculatorTool {
             "floor" => a.floor(),
             "ceil" => a.ceil(),
             "round" => a.round(),
-            _ => return Err(mofa_kernel::plugin::PluginError::ExecutionFailed(format!("Unknown operation: {}", operation))),
+            _ => {
+                return Err(mofa_kernel::plugin::PluginError::ExecutionFailed(format!(
+                    "Unknown operation: {}",
+                    operation
+                )));
+            }
         };
 
         Ok(json!({

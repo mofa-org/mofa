@@ -7,14 +7,14 @@
 //! - Result streaming via channels
 
 use crate::llm::LLMProvider;
-use mofa_kernel::agent::types::error::{GlobalError, GlobalResult};
 use chrono::{DateTime, Utc};
-use tracing::Instrument;
+use mofa_kernel::agent::types::error::{GlobalError, GlobalResult};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::{RwLock, broadcast};
+use tracing::Instrument;
 use uuid::Uuid;
 
 /// Where to route task results
@@ -244,33 +244,36 @@ impl TaskOrchestrator {
         let task_id_clone = task_id.clone();
 
         let span = tracing::info_span!("task_orchestrator.background", task_id = %task_id_clone);
-        tokio::spawn(async move {
-            let result = Self::run_task(&provider, &model, &prompt).await;
+        tokio::spawn(
+            async move {
+                let result = Self::run_task(&provider, &model, &prompt).await;
 
-            // Update task status
-            {
-                let mut tasks = active_tasks.write().await;
-                if let Some(task) = tasks.get_mut(&task_id_clone) {
-                    match &result {
-                        Ok(content) => task.mark_completed(content),
-                        Err(e) => task.mark_failed(e.to_string()),
+                // Update task status
+                {
+                    let mut tasks = active_tasks.write().await;
+                    if let Some(task) = tasks.get_mut(&task_id_clone) {
+                        match &result {
+                            Ok(content) => task.mark_completed(content),
+                            Err(e) => task.mark_failed(e.to_string()),
+                        }
                     }
                 }
+
+                // Send result
+                let task_result = match &result {
+                    Ok(content) => TaskResult::success(&task_id_clone, origin, content),
+                    Err(e) => TaskResult::failure(&task_id_clone, origin, e.to_string()),
+                };
+
+                let _ = result_sender.send(task_result);
+
+                // Cleanup completed tasks after a delay
+                tokio::time::sleep(tokio::time::Duration::from_secs(300)).await;
+                let mut tasks = active_tasks.write().await;
+                tasks.remove(&task_id_clone);
             }
-
-            // Send result
-            let task_result = match &result {
-                Ok(content) => TaskResult::success(&task_id_clone, origin, content),
-                Err(e) => TaskResult::failure(&task_id_clone, origin, e.to_string()),
-            };
-
-            let _ = result_sender.send(task_result);
-
-            // Cleanup completed tasks after a delay
-            tokio::time::sleep(tokio::time::Duration::from_secs(300)).await;
-            let mut tasks = active_tasks.write().await;
-            tasks.remove(&task_id_clone);
-        }.instrument(span));
+            .instrument(span),
+        );
 
         Ok(task_id)
     }
@@ -289,7 +292,10 @@ impl TaskOrchestrator {
             )
             .user(prompt);
 
-        let response = provider.chat(request).await.map_err(|e| GlobalError::Other(e.to_string()))?;
+        let response = provider
+            .chat(request)
+            .await
+            .map_err(|e| GlobalError::Other(e.to_string()))?;
 
         response
             .content()

@@ -3,9 +3,9 @@
 //! Provides an implementation of the LLMMetricsSource trait
 //! that retrieves metrics from an ApiCallStore.
 
-use mofa_kernel::metrics::{LLMMetricsSource, LLMStatsSummary};
 use crate::persistence::{DynApiCallStore, QueryFilter};
 use async_trait::async_trait;
+use mofa_kernel::metrics::{LLMMetricsSource, LLMStatsSummary};
 use std::sync::Arc;
 
 /// Metrics source that retrieves LLM statistics from persistence storage
@@ -26,7 +26,9 @@ impl PersistenceMetricsSource {
 
 #[async_trait]
 impl LLMMetricsSource for PersistenceMetricsSource {
-    async fn get_llm_statistics(&self) -> Result<LLMStatsSummary, Box<dyn std::error::Error + Send + Sync>> {
+    async fn get_llm_statistics(
+        &self,
+    ) -> Result<LLMStatsSummary, Box<dyn std::error::Error + Send + Sync>> {
         let stats = self.store.get_statistics(&QueryFilter::default()).await?;
 
         Ok(LLMStatsSummary {

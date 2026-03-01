@@ -6,8 +6,8 @@
 use super::provider::LLMProvider;
 use super::types::*;
 use std::sync::Arc;
-use tracing::{debug, info, warn};
 use tracing::Instrument;
+use tracing::{debug, info, warn};
 
 /// Retry executor for LLM calls
 ///
@@ -47,11 +47,18 @@ impl RetryExecutor {
                     max_attempts,
                     delay.as_millis()
                 );
-                tokio::time::sleep(delay).instrument(attempt_span.clone()).await;
+                tokio::time::sleep(delay)
+                    .instrument(attempt_span.clone())
+                    .await;
             }
 
             // Try to execute the request
-            match self.provider.chat(request.clone()).instrument(attempt_span).await {
+            match self
+                .provider
+                .chat(request.clone())
+                .instrument(attempt_span)
+                .await
+            {
                 Ok(response) => {
                     // Validate JSON if in JSON mode
                     if let Some(json_error) = self.validate_json_response(&request, &response) {

@@ -100,9 +100,13 @@ async fn display_log_file(
     limit: Option<usize>,
     json: bool,
 ) -> Result<(), CliError> {
-    let file = File::open(log_path)
-        .await
-        .map_err(|e| CliError::StateError(format!("Failed to open log file {}: {}", log_path.display(), e)))?;
+    let file = File::open(log_path).await.map_err(|e| {
+        CliError::StateError(format!(
+            "Failed to open log file {}: {}",
+            log_path.display(),
+            e
+        ))
+    })?;
 
     let reader = BufReader::new(file);
     let mut lines = reader.lines();
@@ -110,11 +114,13 @@ async fn display_log_file(
 
     let mut output_lines = Vec::new();
 
-    while let Some(line) = lines
-        .next_line()
-        .await
-        .map_err(|e| CliError::StateError(format!("Failed to read log file {}: {}", log_path.display(), e)))?
-    {
+    while let Some(line) = lines.next_line().await.map_err(|e| {
+        CliError::StateError(format!(
+            "Failed to read log file {}: {}",
+            log_path.display(),
+            e
+        ))
+    })? {
         // Apply filters
         if let Some(level_filter) = level
             && !matches_log_level(&line, level_filter)
@@ -192,9 +198,13 @@ async fn tail_log_file(
     level: &Option<String>,
     grep: &Option<String>,
 ) -> Result<(), CliError> {
-    let mut file = File::open(log_path)
-        .await
-        .map_err(|e| CliError::StateError(format!("Failed to open log file {}: {}", log_path.display(), e)))?;
+    let mut file = File::open(log_path).await.map_err(|e| {
+        CliError::StateError(format!(
+            "Failed to open log file {}: {}",
+            log_path.display(),
+            e
+        ))
+    })?;
 
     // Start at the end of file
     let file_len = file
@@ -223,7 +233,10 @@ async fn tail_log_file(
                 continue;
             }
             Err(e) => {
-                return Err(CliError::StateError(format!("Failed to check log file status: {}", e)));
+                return Err(CliError::StateError(format!(
+                    "Failed to check log file status: {}",
+                    e
+                )));
             }
         };
 
@@ -233,9 +246,9 @@ async fn tail_log_file(
         if current_size < last_pos {
             // File was truncated or rotated - reopen from beginning
             drop(reader);
-            let new_file = File::open(log_path)
-                .await
-                .map_err(|e| CliError::StateError(format!("Failed to reopen rotated log file: {}", e)))?;
+            let new_file = File::open(log_path).await.map_err(|e| {
+                CliError::StateError(format!("Failed to reopen rotated log file: {}", e))
+            })?;
             reader = BufReader::new(new_file);
             last_pos = 0;
         }
@@ -270,7 +283,10 @@ async fn tail_log_file(
                     last_pos += line.len() as u64;
                 }
                 Err(e) => {
-                    return Err(CliError::StateError(format!("Failed to read from log file: {}", e)));
+                    return Err(CliError::StateError(format!(
+                        "Failed to read from log file: {}",
+                        e
+                    )));
                 }
             }
         }

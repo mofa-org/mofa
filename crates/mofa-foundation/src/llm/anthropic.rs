@@ -165,16 +165,21 @@ impl AnthropicProvider {
                                         }));
                                     }
                                     ContentPart::Image { image_url } => {
-                                        let media_type = if image_url.url.contains("data:image/jpeg") {
-                                            "image/jpeg"
-                                        } else if image_url.url.contains("data:image/png") {
-                                            "image/png"
-                                        } else if image_url.url.contains("data:image/webp") {
-                                            "image/webp"
-                                        } else {
-                                            "image/jpeg" // Default
-                                        };
-                                        let data = image_url.url.split(',').last().unwrap_or(&image_url.url);
+                                        let media_type =
+                                            if image_url.url.contains("data:image/jpeg") {
+                                                "image/jpeg"
+                                            } else if image_url.url.contains("data:image/png") {
+                                                "image/png"
+                                            } else if image_url.url.contains("data:image/webp") {
+                                                "image/webp"
+                                            } else {
+                                                "image/jpeg" // Default
+                                            };
+                                        let data = image_url
+                                            .url
+                                            .split(',')
+                                            .last()
+                                            .unwrap_or(&image_url.url);
                                         contents.push(serde_json::json!({
                                             "type": "image",
                                             "source": {
@@ -185,8 +190,10 @@ impl AnthropicProvider {
                                         }));
                                     }
                                     ContentPart::Audio { audio } => {
-                                        let media_type = format!("audio/{}", audio.format.to_lowercase());
-                                        let data = audio.data.split(',').last().unwrap_or(&audio.data);
+                                        let media_type =
+                                            format!("audio/{}", audio.format.to_lowercase());
+                                        let data =
+                                            audio.data.split(',').last().unwrap_or(&audio.data);
                                         // Some providers/models may not support this block, but this is the standard Anthropics structure if/when supported.
                                         contents.push(serde_json::json!({
                                             "type": "audio",
@@ -198,8 +205,10 @@ impl AnthropicProvider {
                                         }));
                                     }
                                     ContentPart::Video { video } => {
-                                        let media_type = format!("video/{}", video.format.to_lowercase());
-                                        let data = video.data.split(',').last().unwrap_or(&video.data);
+                                        let media_type =
+                                            format!("video/{}", video.format.to_lowercase());
+                                        let data =
+                                            video.data.split(',').last().unwrap_or(&video.data);
                                         contents.push(serde_json::json!({
                                             "type": "video",
                                             "source": {
@@ -243,7 +252,11 @@ impl AnthropicProvider {
     }
 
     /// Build the JSON request body (shared between chat and chat_stream)
-    fn build_request_body(&self, request: &ChatCompletionRequest, stream: bool) -> serde_json::Value {
+    fn build_request_body(
+        &self,
+        request: &ChatCompletionRequest,
+        stream: bool,
+    ) -> serde_json::Value {
         let (system_prompt, messages) = Self::convert_messages(&request.messages);
 
         let model = if request.model.is_empty() {
@@ -453,7 +466,13 @@ fn parse_sse_event(
 fn parse_anthropic_sse(resp: reqwest::Response) -> ChatStream {
     // State: (response, line_buffer, event_type, msg_id, model)
     let stream = futures::stream::unfold(
-        (resp, String::new(), String::new(), String::new(), String::new()),
+        (
+            resp,
+            String::new(),
+            String::new(),
+            String::new(),
+            String::new(),
+        ),
         |(mut resp, mut buf, mut event_type, mut msg_id, mut model)| async move {
             loop {
                 // Try to extract a complete line from the buffer.
@@ -745,8 +764,7 @@ mod tests {
     #[test]
     fn test_build_request_body_streaming() {
         let provider = AnthropicProvider::new("test-key");
-        let request = ChatCompletionRequest::new("claude-3.5-sonnet-20241022")
-            .user("Hello");
+        let request = ChatCompletionRequest::new("claude-3.5-sonnet-20241022").user("Hello");
         let body = provider.build_request_body(&request, true);
         assert_eq!(body["stream"], true);
     }
@@ -779,9 +797,15 @@ data: {\"type\":\"message_stop\"}";
         assert_eq!(chunks[0].usage.as_ref().unwrap().prompt_tokens, 10);
 
         // content deltas
-        assert_eq!(chunks[1].choices[0].delta.content, Some("Hello".to_string()));
+        assert_eq!(
+            chunks[1].choices[0].delta.content,
+            Some("Hello".to_string())
+        );
         assert!(chunks[1].choices[0].finish_reason.is_none());
-        assert_eq!(chunks[2].choices[0].delta.content, Some(" world".to_string()));
+        assert_eq!(
+            chunks[2].choices[0].delta.content,
+            Some(" world".to_string())
+        );
 
         // message_delta: finish_reason + usage
         assert_eq!(chunks[3].choices[0].finish_reason, Some(FinishReason::Stop));
@@ -805,7 +829,10 @@ data: {\"type\":\"message_stop\"}";
 
         let chunks = process_sse_text(sse_data);
         assert_eq!(chunks.len(), 3);
-        assert_eq!(chunks[2].choices[0].finish_reason, Some(FinishReason::Length));
+        assert_eq!(
+            chunks[2].choices[0].finish_reason,
+            Some(FinishReason::Length)
+        );
     }
 
     #[test]

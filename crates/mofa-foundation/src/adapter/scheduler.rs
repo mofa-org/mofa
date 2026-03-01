@@ -120,8 +120,8 @@ pub struct MemoryThresholds {
 impl Default for MemoryThresholds {
     fn default() -> Self {
         Self {
-            max_memory_mb: 16 * 1024, // 16 GB
-            defer_threshold_mb: 14 * 1024, // 14 GB
+            max_memory_mb: 16 * 1024,       // 16 GB
+            defer_threshold_mb: 14 * 1024,  // 14 GB
             accept_threshold_mb: 12 * 1024, // 12 GB
         }
     }
@@ -172,7 +172,7 @@ pub struct StabilityControl {
 impl Default for StabilityControl {
     fn default() -> Self {
         Self {
-            cooldown_ms: 5000, // 5 seconds
+            cooldown_ms: 5000,  // 5 seconds
             hysteresis_mb: 512, // 512 MB
             last_switch: None,
             last_memory: None,
@@ -374,7 +374,9 @@ impl MemoryBudget {
 
     /// Get available memory
     pub fn available(&self) -> u64 {
-        self.total_memory_mb.saturating_sub(self.current_usage_mb).saturating_sub(self.reserved_mb)
+        self.total_memory_mb
+            .saturating_sub(self.current_usage_mb)
+            .saturating_sub(self.reserved_mb)
     }
 
     /// Allocate memory for a request
@@ -517,12 +519,19 @@ impl Scheduler {
         let current = self.memory.current_usage_mb;
         let available = self.memory.available();
 
-        let decision = self.policy.thresholds.check_memory(current, required_memory);
+        let decision = self
+            .policy
+            .thresholds
+            .check_memory(current, required_memory);
 
         match decision {
-            AdmissionDecision::Accept => AdmissionReason::accept(current, required_memory, available),
+            AdmissionDecision::Accept => {
+                AdmissionReason::accept(current, required_memory, available)
+            }
             AdmissionDecision::Defer => AdmissionReason::defer(current, required_memory, available),
-            AdmissionDecision::Reject => AdmissionReason::reject(current, required_memory, available),
+            AdmissionDecision::Reject => {
+                AdmissionReason::reject(current, required_memory, available)
+            }
         }
     }
 
@@ -663,7 +672,11 @@ mod tests {
             .supported_format(ModelFormat::Safetensors)
             .build();
 
-        assert!(queue.enqueue(DeferredRequest::new("req1".to_string(), 1024, adapter.clone())));
+        assert!(queue.enqueue(DeferredRequest::new(
+            "req1".to_string(),
+            1024,
+            adapter.clone()
+        )));
         assert_eq!(queue.size(), 1);
 
         // Can't dequeue - not enough memory
@@ -690,7 +703,7 @@ mod tests {
         let mut req = DeferredRequest::new("req1".to_string(), 512, adapter);
         req.increment_retry();
         req.increment_retry();
-        
+
         queue.enqueue(req);
         assert_eq!(queue.size(), 1);
 
@@ -707,10 +720,10 @@ mod tests {
         // Set defer threshold very low so almost any request will be deferred
         policy.thresholds = MemoryThresholds::new(8192, 512, 256);
         let mut scheduler = Scheduler::new(policy, MemoryBudget::new(8192));
-        
+
         // Pre-allocate memory to trigger defer
         scheduler.memory.allocate(700);
-        
+
         // Now should defer because projected (700+512=1212) > 512
         let reason = scheduler.decide(512);
         assert_eq!(reason.decision, AdmissionDecision::Defer);
@@ -724,7 +737,7 @@ mod tests {
     #[test]
     fn test_scheduler_accept_and_release() {
         let mut scheduler = Scheduler::with_default_policy(8192);
-        
+
         assert!(scheduler.accept(1024));
         assert_eq!(scheduler.memory_usage(), 1024);
         assert_eq!(scheduler.active_requests(), 1);
@@ -737,12 +750,12 @@ mod tests {
     #[test]
     fn test_stability_control() {
         let mut stability = StabilityControl::default();
-        
+
         // Should be able to switch initially
         assert!(stability.can_switch());
 
         stability.record_switch();
-        
+
         // Should not be able to switch immediately after
         assert!(!stability.can_switch());
     }

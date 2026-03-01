@@ -141,10 +141,12 @@ impl GeminiProvider {
                             for part in parts {
                                 match part {
                                     ContentPart::Text { text } => {
-                                        gemini_parts.push(serde_json::json!({"text": text.clone()}));
+                                        gemini_parts
+                                            .push(serde_json::json!({"text": text.clone()}));
                                     }
                                     ContentPart::Image { image_url } => {
-                                        let mime_type = if image_url.url.contains("data:image/jpeg") {
+                                        let mime_type = if image_url.url.contains("data:image/jpeg")
+                                        {
                                             "image/jpeg"
                                         } else if image_url.url.contains("data:image/png") {
                                             "image/png"
@@ -153,7 +155,11 @@ impl GeminiProvider {
                                         } else {
                                             "image/jpeg"
                                         };
-                                        let data = image_url.url.split(',').last().unwrap_or(&image_url.url);
+                                        let data = image_url
+                                            .url
+                                            .split(',')
+                                            .last()
+                                            .unwrap_or(&image_url.url);
                                         gemini_parts.push(serde_json::json!({
                                             "inlineData": {
                                                 "mimeType": mime_type,
@@ -162,8 +168,10 @@ impl GeminiProvider {
                                         }));
                                     }
                                     ContentPart::Audio { audio } => {
-                                        let mime_type = format!("audio/{}", audio.format.to_lowercase());
-                                        let data = audio.data.split(',').last().unwrap_or(&audio.data);
+                                        let mime_type =
+                                            format!("audio/{}", audio.format.to_lowercase());
+                                        let data =
+                                            audio.data.split(',').last().unwrap_or(&audio.data);
                                         gemini_parts.push(serde_json::json!({
                                             "inlineData": {
                                                 "mimeType": mime_type,
@@ -172,8 +180,10 @@ impl GeminiProvider {
                                         }));
                                     }
                                     ContentPart::Video { video } => {
-                                        let mime_type = format!("video/{}", video.format.to_lowercase());
-                                        let data = video.data.split(',').last().unwrap_or(&video.data);
+                                        let mime_type =
+                                            format!("video/{}", video.format.to_lowercase());
+                                        let data =
+                                            video.data.split(',').last().unwrap_or(&video.data);
                                         gemini_parts.push(serde_json::json!({
                                             "inlineData": {
                                                 "mimeType": mime_type,

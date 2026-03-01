@@ -848,9 +848,12 @@ impl HotReloadManager {
     /// Execute a plugin
     pub async fn execute(&self, plugin_id: &str, input: String) -> PluginResult<String> {
         let mut plugins = self.loaded_plugins.write().await;
-        let entry = plugins
-            .get_mut(plugin_id)
-            .ok_or_else(|| mofa_kernel::plugin::PluginError::ExecutionFailed(format!("Plugin {} not found", plugin_id)))?;
+        let entry = plugins.get_mut(plugin_id).ok_or_else(|| {
+            mofa_kernel::plugin::PluginError::ExecutionFailed(format!(
+                "Plugin {} not found",
+                plugin_id
+            ))
+        })?;
 
         entry.plugin.plugin_mut().execute(input).await
     }

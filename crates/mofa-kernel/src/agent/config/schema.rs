@@ -150,12 +150,10 @@ impl<E> AgentConfig<E> {
     where
         E: serde::Serialize,
     {
-        self.custom
-            .get(key)
-            .and_then(|v| {
-                let json = serde_json::to_value(v).ok()?;
-                serde_json::from_value(json).ok()
-            })
+        self.custom.get(key).and_then(|v| {
+            let json = serde_json::to_value(v).ok()?;
+            serde_json::from_value(json).ok()
+        })
     }
 
     /// 验证配置
@@ -907,8 +905,9 @@ mod tests {
     fn test_agent_config_validation() {
         // 验证 Agent 配置
         // Validate agent configuration
-        let config = AgentConfig::<serde_json::Value>::new("test-agent", "Test Agent")
-            .with_type(AgentType::Llm(LlmAgentConfig::<serde_json::Value>::default()));
+        let config = AgentConfig::<serde_json::Value>::new("test-agent", "Test Agent").with_type(
+            AgentType::Llm(LlmAgentConfig::<serde_json::Value>::default()),
+        );
 
         assert!(config.validate().is_ok());
     }

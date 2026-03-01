@@ -37,12 +37,9 @@ pub async fn run(
 
     let mut sessions = Vec::new();
     for key in &keys {
-        let session = match ctx
-            .session_manager
-            .get(key)
-            .await
-            .map_err(|e| CliError::SessionError(format!("Failed to load session '{}': {}", key, e)))?
-        {
+        let session = match ctx.session_manager.get(key).await.map_err(|e| {
+            CliError::SessionError(format!("Failed to load session '{}': {}", key, e))
+        })? {
             Some(session) => session,
             None => continue,
         };

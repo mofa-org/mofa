@@ -42,9 +42,7 @@ pub fn run_dataflow(file: &std::path::Path, uv: bool) -> Result<(), CliError> {
                 println!("{} Dataflow {} completed", "✓".green(), result.uuid);
                 Ok(())
             }
-            Err(e) => {
-                return Err(CliError::Other(format!("Dataflow failed: {}", e)))
-            }
+            Err(e) => return Err(CliError::Other(format!("Dataflow failed: {}", e))),
         }
     })
 }

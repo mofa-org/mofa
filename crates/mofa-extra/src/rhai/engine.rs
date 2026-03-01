@@ -209,7 +209,7 @@ impl ScriptResult {
     pub fn into_typed<T: for<'de> Deserialize<'de>>(self) -> RhaiResult<T> {
         if !self.success {
             return Err(RhaiError::ExecutionError(
-                self.error.unwrap_or_else(|| "Unknown error".into())
+                self.error.unwrap_or_else(|| "Unknown error".into()),
             ));
         }
         serde_json::from_value(self.value).map_err(|e| RhaiError::Serialization(e.to_string()))

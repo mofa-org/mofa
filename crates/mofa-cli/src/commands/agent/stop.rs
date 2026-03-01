@@ -16,15 +16,20 @@ pub async fn run(
     // Check if agent exists in registry or store
     let in_registry = ctx.agent_registry.contains(agent_id).await;
 
-    let previous_entry = ctx
-        .agent_store
-        .get(agent_id)
-        .map_err(|e| CliError::StateError(format!("Failed to load persisted agent '{}': {}", agent_id, e)))?;
+    let previous_entry = ctx.agent_store.get(agent_id).map_err(|e| {
+        CliError::StateError(format!(
+            "Failed to load persisted agent '{}': {}",
+            agent_id, e
+        ))
+    })?;
 
     let in_store = previous_entry.is_some();
 
     if !in_registry && !in_store {
-        return Err(CliError::StateError(format!("Agent '{}' not found", agent_id)));
+        return Err(CliError::StateError(format!(
+            "Agent '{}' not found",
+            agent_id
+        )));
     }
 
     // When commands run in separate CLI invocations, runtime registry state can be absent.
@@ -35,9 +40,9 @@ pub async fn run(
         && let Some(mut entry) = previous_entry
     {
         entry.state = "Stopped".to_string();
-        ctx.agent_store
-            .save(agent_id, &entry)
-            .map_err(|e| CliError::StateError(format!("Failed to update agent '{}': {}", agent_id, e)))?;
+        ctx.agent_store.save(agent_id, &entry).map_err(|e| {
+            CliError::StateError(format!("Failed to update agent '{}': {}", agent_id, e))
+        })?;
 
         println!(
             "{} Agent '{}' persisted state updated to Stopped",
@@ -65,9 +70,9 @@ pub async fn run(
 
     let persisted_updated = if let Some(mut entry) = previous_entry.clone() {
         entry.state = "Stopped".to_string();
-        ctx.agent_store
-            .save(agent_id, &entry)
-            .map_err(|e| CliError::StateError(format!("Failed to update agent '{}': {}", agent_id, e)))?;
+        ctx.agent_store.save(agent_id, &entry).map_err(|e| {
+            CliError::StateError(format!("Failed to update agent '{}': {}", agent_id, e))
+        })?;
         true
     } else {
         false
@@ -87,8 +92,7 @@ pub async fn run(
         ctx.agent_store.save(agent_id, &previous).map_err(|e| {
             CliError::StateError(format!(
                 "Agent '{}' remained registered and failed to restore persisted state: {}",
-                agent_id,
-                e
+                agent_id, e
             ))
         })?;
     }
@@ -118,7 +122,8 @@ mod tests {
     use tempfile::TempDir;
 
     #[tokio::test]
-    async fn test_stop_updates_state_and_unregisters_agent() -> Result<(), Box<dyn std::error::Error>> {
+    async fn test_stop_updates_state_and_unregisters_agent()
+    -> Result<(), Box<dyn std::error::Error>> {
         let temp = TempDir::new().expect("failed to create temporary directory");
         let ctx = CliContext::with_temp_dir(temp.path()).await?;
 
@@ -142,8 +147,8 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_stop_errors_when_registry_missing_even_if_persisted_exists() -> Result<(), Box<dyn std::error::Error>>
-    {
+    async fn test_stop_errors_when_registry_missing_even_if_persisted_exists()
+    -> Result<(), Box<dyn std::error::Error>> {
         let temp = TempDir::new().expect("failed to create temporary directory");
         let first_ctx = CliContext::with_temp_dir(temp.path())
             .await

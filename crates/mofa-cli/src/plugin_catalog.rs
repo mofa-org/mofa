@@ -31,8 +31,9 @@ fn base_catalog() -> Vec<PluginCatalogEntry> {
         id: "http-plugin".to_string(),
         repo_id: DEFAULT_PLUGIN_REPO_ID.to_string(),
         name: "HTTP Helper".to_string(),
-        description: "Implements the builtin HTTP helper plugin and exposes an HTTP client to agents."
-            .to_string(),
+        description:
+            "Implements the builtin HTTP helper plugin and exposes an HTTP client to agents."
+                .to_string(),
         kind: "builtin:http".to_string(),
         config: serde_json::json!({ "url": "https://example.com" }),
     }]
