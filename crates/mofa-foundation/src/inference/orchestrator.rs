@@ -29,12 +29,26 @@ use std::time::Duration;
 
 use crate::hardware::{HardwareCapability, detect_hardware};
 
+mod duration_secs {
+    use serde::{Deserialize, Deserializer, Serialize, Serializer};
+    use std::time::Duration;
+
+    pub fn serialize<S: Serializer>(duration: &Duration, serializer: S) -> Result<S::Ok, S::Error> {
+        duration.as_secs().serialize(serializer)
+    }
+
+    pub fn deserialize<'de, D: Deserializer<'de>>(deserializer: D) -> Result<Duration, D::Error> {
+        let secs = u64::deserialize(deserializer)?;
+        Ok(Duration::from_secs(secs))
+    }
+}
+
 use super::model_pool::ModelPool;
 use super::routing::{self, AdmissionOutcome, RoutingDecision, RoutingPolicy};
 use super::types::{InferenceRequest, InferenceResult, RoutedBackend};
 
 /// Configuration for the `InferenceOrchestrator`.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct OrchestratorConfig {
     /// Total memory budget for local models (in MB)
     pub memory_capacity_mb: usize,
@@ -45,6 +59,7 @@ pub struct OrchestratorConfig {
     /// Maximum number of models that can be concurrently loaded
     pub model_pool_capacity: usize,
     /// Models idle longer than this duration are candidates for eviction
+    #[serde(with = "duration_secs")]
     pub idle_timeout: Duration,
     /// The routing policy governing local vs cloud decisions
     pub routing_policy: RoutingPolicy,
@@ -385,5 +400,40 @@ mod tests {
         );
         // Model should NOT be loaded locally
         assert_eq!(orch.loaded_model_count(), 0);
+    }
+
+    #[test]
+    fn test_orchestrator_config_serde_roundtrip() {
+        let config = OrchestratorConfig {
+            memory_capacity_mb: 32768,
+            defer_threshold: 0.80,
+            reject_threshold: 0.95,
+            model_pool_capacity: 10,
+            idle_timeout: Duration::from_secs(600),
+            routing_policy: RoutingPolicy::CostOptimized,
+            cloud_provider: "anthropic".to_string(),
+        };
+        let json = serde_json::to_string(&config).unwrap();
+        let back: OrchestratorConfig = serde_json::from_str(&json).unwrap();
+        assert_eq!(back, config);
+    }
+
+    #[test]
+    fn test_orchestrator_config_default_serde_roundtrip() {
+        let config = OrchestratorConfig::default();
+        let json = serde_json::to_string(&config).unwrap();
+        let back: OrchestratorConfig = serde_json::from_str(&json).unwrap();
+        assert_eq!(back, config);
+    }
+
+    #[test]
+    fn test_idle_timeout_serializes_as_seconds() {
+        let config = OrchestratorConfig {
+            idle_timeout: Duration::from_secs(120),
+            ..OrchestratorConfig::default()
+        };
+        let json = serde_json::to_string(&config).unwrap();
+        let value: serde_json::Value = serde_json::from_str(&json).unwrap();
+        assert_eq!(value["idle_timeout"], serde_json::json!(120));
     }
 }
