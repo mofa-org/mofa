@@ -36,7 +36,11 @@ jobs:
             ${{ runner.os }}-bench-
 
       - name: Run benchmarks
-        run: cargo bench -p mofa-bench -- --noplot
+        run: |
+          cargo bench -p mofa-bench --bench agent_types
+          cargo bench -p mofa-bench --bench agent_state
+          cargo bench -p mofa-bench --bench agent_messages
+          cargo bench -p mofa-bench --bench message_bus
 
       - name: Upload benchmark artifacts
         uses: actions/upload-artifact@v4
