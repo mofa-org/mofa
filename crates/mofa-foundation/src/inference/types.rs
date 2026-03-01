@@ -11,7 +11,16 @@ use std::fmt;
 /// Higher-priority requests are preferred during admission control
 /// and may preempt deferred lower-priority requests.
 #[derive(
-    Debug, Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord, Hash, serde::Serialize,
+    Debug,
+    Clone,
+    Copy,
+    Default,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    Hash,
+    serde::Serialize,
     serde::Deserialize,
 )]
 pub enum RequestPriority {
