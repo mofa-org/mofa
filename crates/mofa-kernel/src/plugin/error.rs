@@ -6,17 +6,18 @@ use thiserror::Error;
 /// Error-stack–backed result alias for plugin operations.
 ///
 /// Equivalent to `Result<T, error_stack::Report<PluginError>>`.
-pub type PluginResult<T> = ::std::result::Result<T, Report<PluginError>>;
+/// For the plain `Result<T, PluginError>` alias see `PluginResult` in `plugin::mod`.
+pub type PluginReport<T> = ::std::result::Result<T, Report<PluginError>>;
 
-/// Extension trait to convert `Result<T, PluginError>` into [`PluginResult<T>`].
+/// Extension trait to convert `Result<T, PluginError>` into [`PluginReport<T>`].
 pub trait IntoPluginReport<T> {
     /// Wrap the error in an `error_stack::Report`.
-    fn into_report(self) -> PluginResult<T>;
+    fn into_report(self) -> PluginReport<T>;
 }
 
 impl<T> IntoPluginReport<T> for ::std::result::Result<T, PluginError> {
     #[inline]
-    fn into_report(self) -> PluginResult<T> {
+    fn into_report(self) -> PluginReport<T> {
         self.map_err(Report::new)
     }
 }
