@@ -12,12 +12,15 @@
 // Unified error conversions (GlobalError <-> plugin errors)
 pub mod error_conversions;
 
+pub mod asr;
 pub mod hot_reload;
 pub mod skill;
 pub mod tool;
 pub mod tools;
 pub mod tts;
 pub mod wasm_runtime;
+
+pub use asr::{ASREngine, ASRPlugin, ASRPluginConfig, MockASREngine};
 
 pub use mofa_kernel::{
     AgentPlugin, PluginConfig, PluginContext, PluginError, PluginEvent, PluginMetadata,

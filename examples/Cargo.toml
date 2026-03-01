@@ -33,6 +33,7 @@ members = [
     "reflection_agent",
     "tool_routing",
     "runtime_message_bus_backpressure",
+    "cloud_voice_demo",
     "rag_pipeline",
     "hitl_v2",
     "agent_builder",
