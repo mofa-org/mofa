@@ -194,7 +194,10 @@ pub struct ScheduleHandle {
 
 impl ScheduleHandle {
     /// Create a new handle (used by `CronScheduler` in foundation).
-    pub fn new(schedule_id: impl Into<String>, cancel_tx: tokio::sync::oneshot::Sender<()>) -> Self {
+    pub fn new(
+        schedule_id: impl Into<String>,
+        cancel_tx: tokio::sync::oneshot::Sender<()>,
+    ) -> Self {
         Self {
             schedule_id: schedule_id.into(),
             cancel_tx,
@@ -244,6 +247,27 @@ pub struct ScheduleInfo {
     pub is_paused: bool,
 }
 
+impl ScheduleInfo {
+    /// Create a new ScheduleInfo for monitoring purposes.
+    pub fn new(
+        schedule_id: impl Into<String>,
+        agent_id: impl Into<String>,
+        next_run_ms: Option<u64>,
+        last_run_ms: Option<u64>,
+        consecutive_failures: u32,
+        is_paused: bool,
+    ) -> Self {
+        Self {
+            schedule_id: schedule_id.into(),
+            agent_id: agent_id.into(),
+            next_run_ms,
+            last_run_ms,
+            consecutive_failures,
+            is_paused,
+        }
+    }
+}
+
 // ---------------------------------------------------------------------------
 // AgentScheduler trait
 // ---------------------------------------------------------------------------
@@ -268,10 +292,7 @@ pub trait AgentScheduler: Send + Sync {
     /// - [`SchedulerError::AlreadyExists`] — `def.schedule_id` is already registered.
     /// - [`SchedulerError::AgentNotFound`] — the agent is not in the registry.
     /// - [`SchedulerError::InvalidCron`] — the cron expression is syntactically invalid.
-    async fn register(
-        &self,
-        def: ScheduleDefinition,
-    ) -> Result<ScheduleHandle, SchedulerError>;
+    async fn register(&self, def: ScheduleDefinition) -> Result<ScheduleHandle, SchedulerError>;
 
     /// Stop and remove a schedule.
     ///

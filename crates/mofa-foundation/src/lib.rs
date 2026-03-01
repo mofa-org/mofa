@@ -37,6 +37,9 @@ pub mod workflow;
 // coordination module
 pub mod coordination;
 
+// scheduler module - periodic agent execution
+pub mod scheduler;
+
 // config module
 pub mod config;
 
@@ -121,3 +124,6 @@ pub use secretary::{
     extract_json_block,
     parse_llm_json,
 };
+
+// Re-export scheduler types for convenience
+pub use scheduler::CronScheduler;
