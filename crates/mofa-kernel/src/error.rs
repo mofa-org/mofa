@@ -86,10 +86,33 @@ impl From<crate::agent::types::error::GlobalError> for KernelError {
     }
 }
 
-/// Convenience result alias using [`error_stack::Report`].
+/// Canonical result type for `mofa-kernel` operations.
 ///
 /// Equivalent to `Result<T, error_stack::Report<KernelError>>`.
-pub type KernelResult<T> = Result<T, error_stack::Report<KernelError>>;
+pub type KernelResult<T> = ::std::result::Result<T, error_stack::Report<KernelError>>;
+
+/// Extension trait to convert `Result<T, KernelError>` into [`KernelResult<T>`].
+///
+/// ```rust,ignore
+/// use mofa_kernel::error::IntoKernelReport as _;
+/// use error_stack::ResultExt as _;
+///
+/// std::fs::read_to_string("agent.toml")
+///     .map_err(KernelError::Io)
+///     .into_report()
+///     .attach("loading agent.toml")?;
+/// ```
+pub trait IntoKernelReport<T> {
+    /// Wrap the error in an `error_stack::Report`.
+    fn into_report(self) -> KernelResult<T>;
+}
+
+impl<T> IntoKernelReport<T> for ::std::result::Result<T, KernelError> {
+    #[inline]
+    fn into_report(self) -> KernelResult<T> {
+        self.map_err(error_stack::Report::new)
+    }
+}
 
 // tests
 #[cfg(test)]

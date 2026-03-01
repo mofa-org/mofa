@@ -1,5 +1,5 @@
 pub mod error;
-pub use error::BusError;
+pub use error::{BusError, BusResult, IntoBusReport};
 
 use crate::agent::AgentMetadata;
 use crate::message::AgentMessage;

@@ -79,8 +79,9 @@ impl PluginMetadata {
 // Plugin Error Type
 // ============================================================================
 
-/// Rhai plugin error type
+/// Rhai plugin error type.
 #[derive(thiserror::Error, Debug)]
+#[non_exhaustive]
 pub enum RhaiPluginError {
     /// Script compilation error
     #[error("Compilation error: {0}")]
@@ -121,8 +122,24 @@ impl From<mofa_extra::rhai::RhaiError> for RhaiPluginError {
     }
 }
 
-/// Rhai plugin result type
+/// Plain result alias for Rhai-plugin operations (backward-compatible).
 pub type RhaiPluginResult<T = ()> = Result<T, RhaiPluginError>;
+
+/// Error-stack–backed result alias for Rhai-plugin operations.
+pub type RhaiPluginReport<T = ()> = ::std::result::Result<T, error_stack::Report<RhaiPluginError>>;
+
+/// Extension trait to convert [`RhaiPluginResult<T>`] into [`RhaiPluginReport<T>`].
+pub trait IntoRhaiPluginReport<T> {
+    /// Wrap the error in an `error_stack::Report`.
+    fn into_report(self) -> RhaiPluginReport<T>;
+}
+
+impl<T> IntoRhaiPluginReport<T> for RhaiPluginResult<T> {
+    #[inline]
+    fn into_report(self) -> RhaiPluginReport<T> {
+        self.map_err(error_stack::Report::new)
+    }
+}
 
 // ============================================================================
 // Plugin Capabilities

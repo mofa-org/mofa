@@ -941,6 +941,7 @@ pub struct EmbeddingUsage {
 /// LLM 错误
 /// LLM error
 #[derive(Debug, Clone, thiserror::Error)]
+#[non_exhaustive]
 pub enum LLMError {
     /// API 错误
     /// API error
@@ -999,9 +1000,30 @@ pub enum LLMError {
     Other(String),
 }
 
-/// LLM 结果类型
-/// LLM result type
+/// Plain result alias for LLM operations (backward-compatible).
+///
+/// Used in public trait signatures such as [`LLMProvider`]. For new code
+/// that needs a full causal chain, prefer [`LLMReport<T>`].
 pub type LLMResult<T> = Result<T, LLMError>;
+
+/// Error-stack–backed result alias for LLM operations.
+///
+/// Note: `LLMError` derives [`Clone`], but `error_stack::Report` does not;
+/// clone the inner error before wrapping if you need to preserve it.
+pub type LLMReport<T> = ::std::result::Result<T, error_stack::Report<LLMError>>;
+
+/// Extension trait to convert [`LLMResult<T>`] into [`LLMReport<T>`].
+pub trait IntoLLMReport<T> {
+    /// Wrap the error in an `error_stack::Report`.
+    fn into_report(self) -> LLMReport<T>;
+}
+
+impl<T> IntoLLMReport<T> for LLMResult<T> {
+    #[inline]
+    fn into_report(self) -> LLMReport<T> {
+        self.map_err(error_stack::Report::new)
+    }
+}
 
 // ============================================================================
 // Retry Policy and Strategy

@@ -5,9 +5,12 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 
 pub mod error;
-pub use error::PluginError;
+pub use error::{IntoPluginReport, PluginError, PluginReport};
 
 /// Plugin execution result type using the typed [`PluginError`].
+///
+/// This is the plain (non-report) alias used by existing plugin trait methods.
+/// For the `error_stack::Report`-carrying variant see [`PluginReport<T>`].
 pub type PluginResult<T> = Result<T, PluginError>;
 
 // ============================================================================

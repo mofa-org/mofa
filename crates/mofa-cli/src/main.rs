@@ -14,7 +14,7 @@ mod utils;
 mod widgets;
 
 mod error;
-pub use error::CliError;
+pub use error::{CliError, CliResult, IntoCliReport};
 
 use clap::Parser;
 use cli::Cli;
@@ -22,6 +22,8 @@ use colored::Colorize;
 use context::CliContext;
 
 fn main() -> Result<(), CliError> {
+    // Suppress source-location frames in release builds for cleaner user output.
+    error::install_hook();
     let mut args: Vec<String> = std::env::args().collect();
     normalize_legacy_output_flags(&mut args);
     let cli = Cli::parse_from(args);

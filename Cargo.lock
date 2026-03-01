@@ -5543,6 +5543,7 @@ dependencies = [
  "crossterm",
  "dialoguer",
  "dirs-next",
+ "error-stack",
  "flate2",
  "futures",
  "hex",
@@ -5576,6 +5577,7 @@ name = "mofa-extra"
 version = "0.1.0"
 dependencies = [
  "async-trait",
+ "error-stack",
  "regex",
  "rhai",
  "serde",
@@ -5592,6 +5594,7 @@ name = "mofa-ffi"
 version = "0.1.0"
 dependencies = [
  "async-trait",
+ "error-stack",
  "mofa-foundation",
  "mofa-kernel",
  "mofa-sdk",
@@ -5616,6 +5619,7 @@ dependencies = [
  "candle-transformers",
  "chrono",
  "config",
+ "error-stack",
  "futures",
  "infer",
  "lazy_static",
@@ -5703,6 +5707,7 @@ dependencies = [
  "async-trait",
  "axum 0.8.8",
  "chrono",
+ "error-stack",
  "futures",
  "futures-util",
  "hex",
@@ -5734,6 +5739,7 @@ dependencies = [
  "backoff",
  "chrono",
  "dirs 5.0.1",
+ "error-stack",
  "futures",
  "hf-hub",
  "kokoro-tts",
@@ -5780,6 +5786,7 @@ dependencies = [
  "dora-message",
  "dora-node-api",
  "dora-operator-api",
+ "error-stack",
  "eyre",
  "flume 0.10.14",
  "mofa-kernel",
@@ -5801,6 +5808,7 @@ name = "mofa-sdk"
 version = "0.1.0"
 dependencies = [
  "async-trait",
+ "error-stack",
  "mofa-extra",
  "mofa-foundation",
  "mofa-kernel",

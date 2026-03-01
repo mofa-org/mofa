@@ -39,6 +39,7 @@ pub enum ConfigFormat {
 /// 配置错误类型
 /// Configuration error types
 #[derive(Debug, thiserror::Error)]
+#[non_exhaustive]
 pub enum AgentConfigError {
     #[error("IO error: {0}")]
     Io(#[from] std::io::Error),
@@ -56,9 +57,24 @@ pub enum AgentConfigError {
     Validation(String),
 }
 
-/// 配置结果类型
-/// Configuration result type
+/// Plain result alias for agent-config operations (backward-compatible).
 pub type AgentResult<T> = Result<T, AgentConfigError>;
+
+/// Error-stack–backed result alias for agent-config operations.
+pub type AgentConfigReport<T> = ::std::result::Result<T, error_stack::Report<AgentConfigError>>;
+
+/// Extension trait to convert [`AgentResult<T>`] into [`AgentConfigReport<T>`].
+pub trait IntoAgentConfigReport<T> {
+    /// Wrap the error in an `error_stack::Report`.
+    fn into_report(self) -> AgentConfigReport<T>;
+}
+
+impl<T> IntoAgentConfigReport<T> for AgentResult<T> {
+    #[inline]
+    fn into_report(self) -> AgentConfigReport<T> {
+        self.map_err(error_stack::Report::new)
+    }
+}
 
 impl ConfigFormat {
     /// 从文件扩展名推断格式

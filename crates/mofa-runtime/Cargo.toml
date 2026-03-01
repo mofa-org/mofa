@@ -24,6 +24,7 @@ tracing.workspace = true
 flume.workspace = true
 uuid.workspace = true
 thiserror.workspace = true
+error-stack = { workspace = true }
 eyre.workspace = true
 
 # Local dependencies

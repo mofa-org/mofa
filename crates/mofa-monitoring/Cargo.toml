@@ -30,6 +30,7 @@ tracing.workspace = true
 uuid = { workspace = true, features = ["serde", "v4"] }
 chrono.workspace = true
 thiserror.workspace = true
+error-stack = { workspace = true }
 rand.workspace = true
 hex.workspace = true
 lazy_static.workspace = true

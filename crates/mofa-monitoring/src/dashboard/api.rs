@@ -53,8 +53,9 @@ impl<T: Serialize> ApiResponse<T> {
     }
 }
 
-/// API error type
+/// API error type.
 #[derive(Debug, thiserror::Error)]
+#[non_exhaustive]
 pub enum ApiError {
     #[error("Not found: {0}")]
     NotFound(String),
@@ -64,6 +65,25 @@ pub enum ApiError {
 
     #[error("Internal error: {0}")]
     Internal(String),
+}
+
+/// Plain result alias for API handler operations (backward-compatible).
+pub type ApiResult<T> = ::std::result::Result<T, ApiError>;
+
+/// Error-stack–backed result alias for API operations.
+pub type ApiReport<T> = ::std::result::Result<T, error_stack::Report<ApiError>>;
+
+/// Extension trait to convert [`ApiResult<T>`] into [`ApiReport<T>`].
+pub trait IntoApiReport<T> {
+    /// Wrap the error in an `error_stack::Report`.
+    fn into_report(self) -> ApiReport<T>;
+}
+
+impl<T> IntoApiReport<T> for ApiResult<T> {
+    #[inline]
+    fn into_report(self) -> ApiReport<T> {
+        self.map_err(error_stack::Report::new)
+    }
 }
 
 impl IntoResponse for ApiError {
