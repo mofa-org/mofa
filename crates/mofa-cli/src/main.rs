@@ -14,14 +14,19 @@ mod utils;
 mod widgets;
 
 mod error;
-pub use error::CliError;
+pub use error::{CliError, CliResult, IntoCliReport};
 
 use clap::Parser;
 use cli::Cli;
 use colored::Colorize;
 use context::CliContext;
+use error_stack::ResultExt as _;
 
-fn main() -> Result<(), CliError> {
+fn main() {
+    // Install the global error-stack hooks FIRST so every Report rendered
+    // afterward benefits from the configured debug output.
+    error::install_hook();
+
     let mut args: Vec<String> = std::env::args().collect();
     normalize_legacy_output_flags(&mut args);
     let cli = Cli::parse_from(args);
@@ -30,27 +35,45 @@ fn main() -> Result<(), CliError> {
         eprintln!("Warning: '--output' is deprecated. Use '--output-format' instead.");
     }
 
-    // Initialize logging
+    // Initialize logging.
     if cli.verbose {
         tracing_subscriber::fmt().with_env_filter("debug").init();
     } else {
         tracing_subscriber::fmt().with_env_filter("info").init();
     }
 
-    let rt = tokio::runtime::Runtime::new()?;
+    let rt = match tokio::runtime::Runtime::new() {
+        Ok(rt) => rt,
+        Err(e) => {
+            let report = error_stack::Report::new(CliError::Io(e))
+                .attach("failed to initialize the async runtime");
+            eprintln!("{report:?}");
+            std::process::exit(1);
+        }
+    };
 
-    // Launch TUI if requested or no command provided
-    if cli.tui || cli.command.is_none() {
-        // Run TUI mode
-        rt.block_on(tui::run())?;
-        Ok(())
+    // Launch TUI if requested or no command provided.
+    let result: CliResult<()> = if cli.tui || cli.command.is_none() {
+        rt.block_on(async {
+            tui::run()
+                .await
+                .into_report()
+                .attach("running TUI mode")
+                .map(|_| ())
+        })
     } else {
-        // Run CLI command
         rt.block_on(run_command(cli))
+    };
+
+    if let Err(report) = result {
+        // Print the full error chain to stderr, then exit non-zero.
+        // Set RUST_BACKTRACE=1 for source locations in each frame.
+        eprintln!("{report:?}");
+        std::process::exit(1);
     }
 }
 
-async fn run_command(cli: Cli) -> Result<(), CliError> {
+async fn run_command(cli: Cli) -> CliResult<()> {
     use cli::Commands;
 
     // Initialize context for commands that need backend services
@@ -65,7 +88,12 @@ async fn run_command(cli: Cli) -> Result<(), CliError> {
     );
 
     let ctx = if needs_context {
-        Some(CliContext::new().await?)
+        Some(
+            CliContext::new()
+                .await
+                .into_report()
+                .attach("initializing CLI context (runtime, registry, kernel)")?,
+        )
     } else {
         None
     };
@@ -76,7 +104,9 @@ async fn run_command(cli: Cli) -> Result<(), CliError> {
             template,
             output,
         }) => {
-            commands::new::run(&name, &template, output.as_deref())?;
+            commands::new::run(&name, &template, output.as_deref())
+                .into_report()
+                .attach_with(|| format!("scaffolding project '{name}' with template '{template}'"))?;
         }
 
         Some(Commands::Init { path }) => {
