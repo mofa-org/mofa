@@ -6,12 +6,49 @@
 
 use super::state::{NodeResult, WorkflowContext, WorkflowValue};
 use crate::llm::LLMAgent;
+use rand::Rng;
+use rand::rngs::StdRng;
+use rand::SeedableRng;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::Arc;
 use tracing::{debug, info, warn};
+
+/// Execution-scoped RNG for deterministic retry jitter.
+///
+/// When constructed with a seed, all jitter values are reproducible.
+/// When constructed without a seed, falls back to `thread_rng()`.
+pub struct WorkflowExecutionRng {
+    deterministic: Option<StdRng>,
+}
+
+impl WorkflowExecutionRng {
+    /// Create a new execution RNG.
+    ///
+    /// * `seed = Some(v)` — deterministic `StdRng` seeded from `v`.
+    /// * `seed = None` — no `StdRng` is allocated; `jitter_f64` uses `thread_rng()`.
+    pub fn new(seed: Option<u64>) -> Self {
+        Self {
+            deterministic: seed.map(StdRng::seed_from_u64),
+        }
+    }
+
+    /// Return a random `f64` in `[0.0, 1.0)` used for jitter.
+    pub fn jitter_f64(&mut self) -> f64 {
+        if let Some(rng) = &mut self.deterministic {
+            rng.gen_range(0.0..1.0)
+        } else {
+            rand::thread_rng().gen_range(0.0..1.0)
+        }
+    }
+
+    /// Whether this RNG was constructed with a deterministic seed.
+    pub fn is_seeded(&self) -> bool {
+        self.deterministic.is_some()
+    }
+}
 
 /// 节点执行函数类型
 /// Node execution function type
@@ -132,6 +169,19 @@ impl RetryPolicy {
         } else {
             self.retry_delay_ms
         }
+    }
+
+    /// Calculate delay with random jitter applied.
+    ///
+    /// Applies ±25% jitter around the base delay, capped at `max_delay_ms`.
+    /// The jitter value is drawn from the provided [`WorkflowExecutionRng`].
+    pub fn get_delay_with_jitter(&self, retry_count: u32, rng: &mut WorkflowExecutionRng) -> u64 {
+        let base = self.get_delay(retry_count);
+        let jitter = rng.jitter_f64();
+        // Map [0.0, 1.0) → [0.75, 1.25) for ±25% jitter.
+        let factor = 0.75 + jitter * 0.5;
+        let jittered = (base as f64 * factor) as u64;
+        jittered.min(self.max_delay_ms)
     }
 }
 
@@ -789,6 +839,9 @@ impl WorkflowNode {
             None => return NodeResult::failed(node_id, "No executor function", 0),
         };
 
+        // Create execution-scoped RNG once — reused across all retry attempts.
+        let mut rng = WorkflowExecutionRng::new(ctx.seed);
+
         let mut retry_count = 0;
         loop {
             match executor(ctx.clone(), input.clone()).await {
@@ -803,7 +856,11 @@ impl WorkflowNode {
                 }
                 Err(e) => {
                     if retry_count < policy.max_retries {
-                        let delay = policy.get_delay(retry_count);
+                        let delay = if rng.is_seeded() {
+                            policy.get_delay_with_jitter(retry_count, &mut rng)
+                        } else {
+                            policy.get_delay(retry_count)
+                        };
                         warn!(
                             "Node {} failed (attempt {}), retrying in {}ms: {}",
                             node_id,
@@ -953,5 +1010,62 @@ mod tests {
         assert_eq!(policy.get_delay(2), 4000);
         assert_eq!(policy.get_delay(10), 30000); // capped at max
         // capped at max
+    }
+
+    /// Deterministic retry jitter integration test.
+    ///
+    /// Verifies that:
+    /// 1. Two runs with the same seed produce identical jitter delay sequences.
+    /// 2. A run with a different seed produces a different sequence.
+    /// 3. A run with `None` seed uses the original (non-jittered) delay.
+    #[test]
+    fn test_retry_jitter_deterministic_with_seed() {
+        let policy = RetryPolicy {
+            max_retries: 3,
+            retry_delay_ms: 1000,
+            exponential_backoff: true,
+            max_delay_ms: 30000,
+        };
+
+        // --- Run 1: seed = 42 ---
+        let mut rng1 = WorkflowExecutionRng::new(Some(42));
+        let delays_run1: Vec<u64> = (0..3)
+            .map(|i| policy.get_delay_with_jitter(i, &mut rng1))
+            .collect();
+
+        // --- Run 2: same seed = 42 ---
+        let mut rng2 = WorkflowExecutionRng::new(Some(42));
+        let delays_run2: Vec<u64> = (0..3)
+            .map(|i| policy.get_delay_with_jitter(i, &mut rng2))
+            .collect();
+
+        // Same seed must yield identical delays.
+        assert_eq!(delays_run1, delays_run2, "same seed must produce identical delays");
+
+        // --- Run 3: different seed = 99 ---
+        let mut rng3 = WorkflowExecutionRng::new(Some(99));
+        let delays_run3: Vec<u64> = (0..3)
+            .map(|i| policy.get_delay_with_jitter(i, &mut rng3))
+            .collect();
+
+        // Different seed must produce different delays.
+        assert_ne!(delays_run1, delays_run3, "different seed must produce different delays");
+
+        // --- Run 4: no seed (None) — unchanged base delays ---
+        let base_delays: Vec<u64> = (0..3).map(|i| policy.get_delay(i)).collect();
+        // Jittered delays should differ from the non-jittered base.
+        assert_ne!(delays_run1, base_delays, "jittered delays should differ from base");
+
+        // Verify jittered values stay within ±25% of base and ≤ max_delay_ms.
+        for (idx, &d) in delays_run1.iter().enumerate() {
+            let base = policy.get_delay(idx as u32) as f64;
+            let lo = (base * 0.75) as u64;
+            let hi = ((base * 1.25) as u64).min(policy.max_delay_ms);
+            assert!(
+                d >= lo && d <= hi,
+                "delay {} out of jitter range [{}, {}] for attempt {}",
+                d, lo, hi, idx
+            );
+        }
     }
 }

@@ -295,6 +295,8 @@ pub struct WorkflowContext {
     /// Last waiting node (for resume)
     pub last_waiting_node: Arc<RwLock<Option<String>>>,
     pub total_wait_time_ms: Arc<RwLock<u64>>,
+    /// Optional deterministic seed for retry jitter.
+    pub seed: Option<u64>,
 }
 
 /// 可序列化的工作流上下文快照
@@ -348,6 +350,7 @@ impl WorkflowContext {
             paused_at: Arc::new(RwLock::new(snapshot.paused_at)),
             last_waiting_node: Arc::new(RwLock::new(snapshot.last_waiting_node)),
             total_wait_time_ms: Arc::new(RwLock::new(snapshot.total_wait_time_ms)),
+            seed: None,
         }
     }
 }
@@ -369,7 +372,14 @@ impl WorkflowContext {
             paused_at: Arc::new(RwLock::new(None)),
             last_waiting_node: Arc::new(RwLock::new(None)),
             total_wait_time_ms: Arc::new(RwLock::new(0)),
+            seed: None,
         }
+    }
+
+    /// Set the deterministic seed for retry jitter.
+    pub fn with_seed(mut self, seed: Option<u64>) -> Self {
+        self.seed = seed;
+        self
     }
 
     /// 设置工作流输入
@@ -510,6 +520,7 @@ impl Clone for WorkflowContext {
             paused_at: self.paused_at.clone(),
             last_waiting_node: self.last_waiting_node.clone(),
             total_wait_time_ms: self.total_wait_time_ms.clone(),
+            seed: self.seed,
         }
     }
 }

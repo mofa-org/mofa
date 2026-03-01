@@ -73,6 +73,12 @@ pub struct WorkflowConfig {
     /// Retry policy for all nodes
     #[serde(default)]
     pub retry_policy: Option<RetryPolicy>,
+
+    /// Optional deterministic seed for retry jitter/backoff randomness.
+    /// When `Some`, retry delays use a seeded RNG for reproducible jitter.
+    /// When `None`, the default (non-jittered) behavior is preserved.
+    #[serde(default)]
+    pub seed: Option<u64>,
 }
 
 impl Default for WorkflowConfig {
@@ -82,6 +88,7 @@ impl Default for WorkflowConfig {
             default_timeout_ms: default_timeout(),
             enable_checkpoints: false,
             retry_policy: None,
+            seed: None,
         }
     }
 }
