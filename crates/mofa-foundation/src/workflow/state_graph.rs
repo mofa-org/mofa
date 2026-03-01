@@ -512,6 +512,13 @@ impl<S: GraphState + 'static> CompiledGraph<S, serde_json::Value> for CompiledGr
         let ctx =
             config.unwrap_or_else(|| RuntimeContext::with_config(&self.id, self.config.clone()));
 
+        let span = tracing::info_span!(
+            "workflow.invoke",
+            graph_id = %self.id,
+            execution_id = %ctx.execution_id
+        );
+
+        async {
         info!(
             "Starting graph execution '{}' with execution_id={}",
             self.id, ctx.execution_id
@@ -604,6 +611,7 @@ impl<S: GraphState + 'static> CompiledGraph<S, serde_json::Value> for CompiledGr
 
         info!("Graph '{}' execution completed", self.id);
         Ok(state)
+        }.instrument(span).await
     }
 
     fn stream(
