@@ -164,6 +164,7 @@ pub mod manifest;
 // Secretary Agent abstraction
 pub mod plugins;
 pub mod secretary;
+pub mod voice;
 
 // AgentPlugin 统一到 plugin 模块
 // AgentPlugin unified into the plugin module

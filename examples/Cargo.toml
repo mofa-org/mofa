@@ -45,6 +45,7 @@ members = [
     "context_window_demo",
     "compression_examples",
     "admission_gate_demo",
+    "voice_pipeline_demo",
     "integrations_demo",
     "native_dataflow",
     "mcp_tools",
