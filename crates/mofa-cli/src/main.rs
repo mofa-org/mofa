@@ -116,7 +116,8 @@ async fn run_command(cli: Cli) -> Result<(), CliError> {
             fix,
             strict,
         }) => {
-            commands::doctor::run(Some(path), scenario, strict, json, fix)?;
+            commands::doctor::run(Some(path), scenario, strict, json, fix)
+                .map_err(|e| CliError::Other(e.to_string()))?;
         }
 
         Some(Commands::Db { action }) => match action {

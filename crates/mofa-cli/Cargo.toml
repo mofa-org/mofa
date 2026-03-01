@@ -63,6 +63,7 @@ zip = "2.1"
 sha2 = "0.10"
 hex = "0.4"
 futures = "0.3"
+anyhow.workspace = true
 
 # Database (optional, for db init command)
 sqlx = { version = "0.8", features = [
@@ -83,7 +84,6 @@ crossterm = { version = "0.29", features = ["bracketed-paste", "event-stream"] }
 tokio-stream = "0.1"
 
 [dev-dependencies]
-anyhow.workspace = true
 assert_cmd = "2"
 predicates = "3"
 tempfile = "3"

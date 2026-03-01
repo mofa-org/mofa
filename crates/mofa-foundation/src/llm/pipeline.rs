@@ -220,31 +220,24 @@ impl Pipeline {
     where
         F: Fn(&str) -> bool + Send + Sync + 'static,
     {
-        // 将子流水线转换为单个步骤
-        // Convert sub-pipeline into a single step
-        let true_step = if if_true.steps.is_empty() {
-            PipelineStep::Identity
-        } else if if_true.steps.len() == 1 {
-            if_true.steps.into_iter().next().unwrap()
+        // Pass all sub-pipeline steps directly into the Branch variant so that
+        // all steps are executed when the condition is evaluated.
+        let true_steps = if if_true.steps.is_empty() {
+            vec![PipelineStep::Identity]
         } else {
-            // 多步骤情况，需要嵌套
-            // Multi-step case, requires nesting
-            PipelineStep::Identity // 简化处理
-            // Simplified handling
+            if_true.steps
         };
 
-        let false_step = if if_false.steps.is_empty() {
-            PipelineStep::Identity
-        } else if if_false.steps.len() == 1 {
-            if_false.steps.into_iter().next().unwrap()
+        let false_steps = if if_false.steps.is_empty() {
+            vec![PipelineStep::Identity]
         } else {
-            PipelineStep::Identity
+            if_false.steps
         };
 
         self.steps.push(PipelineStep::Branch {
             condition: Arc::new(condition),
-            if_true: if_true.steps,
-            if_false: if_false.steps,
+            if_true: true_steps,
+            if_false: false_steps,
         });
         self
     }
