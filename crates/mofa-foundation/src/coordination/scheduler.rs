@@ -103,13 +103,6 @@ impl PriorityScheduler {
                 continue;
             }
 
-            // 选择负载最低的可用智能体（同角色内）
-            // Select the available agent with the lowest load (within the same role)
-            let target_agent = self
-                .select_low_load_agent("worker")
-                .await
-                .map_err(|e| GlobalError::Other(e.to_string()))?;
-            if target_agent.is_empty() {
             // 选择负载最低的可用智能体（同角色内）— 内联以避免死锁
             // Select the available agent with the lowest load — inlined to avoid deadlock
             let sorted_agents = {
@@ -132,11 +125,6 @@ impl PriorityScheduler {
             }
             let target_agent = sorted_agents[0].clone();
 
-            // 检查是否需要抢占：如果目标智能体有低优先级任务在运行
-            // Check for preemption: if the target agent has low-priority tasks running
-            self.preempt_low_priority_task(&target_agent, &task)
-                .await
-                .map_err(|e| GlobalError::Other(e.to_string()))?;
             // 检查是否需要抢占 — 内联以避免死锁
             // Check for preemption — inlined to avoid deadlock
             if let Some(&load) = agent_load.get(&target_agent) {
