@@ -408,6 +408,11 @@ impl<S: GraphState> CompiledGraphImpl<S> {
             let node_id = node_id.clone();
             let sem = semaphore.clone();
 
+            let node_span = tracing::info_span!(
+                "state_graph.parallel_node",
+                node_id = %node_id,
+                branch_index = index,
+            );
             join_set.spawn(async move {
                 // Acquire semaphore permit to enforce max_parallelism
                 let _permit = sem.acquire().await.map_err(|_| {
@@ -415,7 +420,7 @@ impl<S: GraphState> CompiledGraphImpl<S> {
                 })?;
                 let command = node.call(&mut isolated_state, &node_ctx).await?;
                 Ok::<(usize, String, Command), AgentError>((index, node_id, command))
-            });
+            }.instrument(node_span));
         }
 
         let mut ordered_results: Vec<Option<(String, Command)>> = vec![None; node_ids.len()];
@@ -508,6 +513,11 @@ impl<S: GraphState + 'static> CompiledGraph<S, serde_json::Value> for CompiledGr
         &self.id
     }
 
+    #[tracing::instrument(
+        name = "state_graph.invoke",
+        skip_all,
+        fields(graph_id = %self.id),
+    )]
     async fn invoke(&self, input: S, config: Option<RuntimeContext>) -> AgentResult<S> {
         let ctx =
             config.unwrap_or_else(|| RuntimeContext::with_config(&self.id, self.config.clone()));

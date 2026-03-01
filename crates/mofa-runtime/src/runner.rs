@@ -94,6 +94,7 @@ use std::str::FromStr;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use tokio::time::{Duration, MissedTickBehavior};
+use tracing::Instrument;
 
 /// 运行器状态
 /// Runner state
@@ -384,6 +385,17 @@ impl<T: MoFAAgent> AgentRunner<T> {
     /// 返回 Agent 的输出。
     /// Returns the Agent's output.
     pub async fn execute(&mut self, input: AgentInput) -> AgentResult<AgentOutput> {
+        let span = tracing::info_span!(
+            "agent_runner.execute",
+            agent_id = %self.agent.id(),
+            agent_name = %self.agent.name(),
+        );
+        self.execute_instrumented(input).instrument(span).await
+    }
+
+    /// Inner implementation separated so `.instrument(span)` can wrap the
+    /// full async lifetime without holding an entered guard across `.await`.
+    async fn execute_instrumented(&mut self, input: AgentInput) -> AgentResult<AgentOutput> {
         // 检查状态
         // Check state
         let current_state = self.state().await;
