@@ -1,11 +1,12 @@
 //! Prometheus metrics export bridge for dashboard metrics.
 
 use super::metrics::{MetricValue, MetricsCollector, MetricsSnapshot};
+use axum::body::Bytes;
 use std::collections::HashMap;
 use std::fmt::Write as _;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering as AtomicOrdering};
-use std::time::{Duration, Instant};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use tokio::sync::RwLock;
 use tracing::warn;
 
@@ -27,7 +28,14 @@ impl Default for PrometheusExportConfig {
 
 impl PrometheusExportConfig {
     pub fn with_refresh_interval(mut self, refresh_interval: Duration) -> Self {
-        self.refresh_interval = refresh_interval;
+        if refresh_interval.is_zero() {
+            warn!(
+                "PrometheusExportConfig::with_refresh_interval received zero duration; clamping to 1ms"
+            );
+            self.refresh_interval = Duration::from_millis(1);
+        } else {
+            self.refresh_interval = refresh_interval;
+        }
         self
     }
 }
@@ -85,8 +93,7 @@ impl DurationHistogram {
 pub struct PrometheusExporter {
     collector: Arc<MetricsCollector>,
     config: PrometheusExportConfig,
-    cached_body: Arc<RwLock<String>>,
-    last_render_at: Arc<RwLock<Option<Instant>>>,
+    cached_body: Arc<RwLock<Bytes>>,
     render_duration_histogram: Arc<RwLock<DurationHistogram>>,
     refresh_failures: AtomicU64,
 }
@@ -96,8 +103,7 @@ impl PrometheusExporter {
         Self {
             collector,
             config,
-            cached_body: Arc::new(RwLock::new(String::new())),
-            last_render_at: Arc::new(RwLock::new(None)),
+            cached_body: Arc::new(RwLock::new(Bytes::new())),
             render_duration_histogram: Arc::new(RwLock::new(DurationHistogram::new(vec![
                 0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0,
             ]))),
@@ -125,45 +131,32 @@ impl PrometheusExporter {
 
         let render_start = Instant::now();
         let mut body = render_snapshot(&snapshot);
-        self.append_exporter_internal_metrics(&mut body, render_start.elapsed().as_secs_f64())
-            .await;
+        self.append_exporter_internal_metrics(
+            &mut body,
+            render_start.elapsed().as_secs_f64(),
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_secs_f64(),
+        )
+        .await;
 
-        *self.cached_body.write().await = body;
-        *self.last_render_at.write().await = Some(Instant::now());
+        *self.cached_body.write().await = Bytes::from(body);
 
         Ok(())
     }
 
     /// Returns the current Prometheus payload from cache.
-    pub async fn render_cached(&self) -> String {
-        let mut payload = self.cached_body.read().await.clone();
-        let cache_age = self.cache_age_seconds().await;
-
-        write_metric_header(
-            &mut payload,
-            "mofa_exporter_cache_age_seconds",
-            "Age of the current /metrics cache payload in seconds",
-            "gauge",
-        );
-        append_gauge_line(
-            &mut payload,
-            "mofa_exporter_cache_age_seconds",
-            &[],
-            cache_age,
-        );
-
-        payload
+    pub async fn render_cached(&self) -> Bytes {
+        self.cached_body.read().await.clone()
     }
 
-    async fn cache_age_seconds(&self) -> f64 {
-        let last_render = self.last_render_at.read().await;
-        match *last_render {
-            Some(rendered_at) => rendered_at.elapsed().as_secs_f64(),
-            None => 0.0,
-        }
-    }
-
-    async fn append_exporter_internal_metrics(&self, out: &mut String, render_duration: f64) {
+    async fn append_exporter_internal_metrics(
+        &self,
+        out: &mut String,
+        render_duration: f64,
+        last_refresh_unix_seconds: f64,
+    ) {
         {
             let mut render_hist = self.render_duration_histogram.write().await;
             render_hist.observe(render_duration);
@@ -195,6 +188,19 @@ impl PrometheusExporter {
             &[],
             self.refresh_failures.load(AtomicOrdering::Relaxed) as f64,
         );
+
+        write_metric_header(
+            out,
+            "mofa_exporter_last_refresh_timestamp_seconds",
+            "Unix timestamp of the last successful /metrics payload refresh",
+            "gauge",
+        );
+        append_gauge_line(
+            out,
+            "mofa_exporter_last_refresh_timestamp_seconds",
+            &[],
+            last_refresh_unix_seconds,
+        );
     }
 }
 
@@ -216,7 +222,7 @@ fn render_agent_metrics(out: &mut String, snapshot: &MetricsSnapshot) {
         out,
         "mofa_agent_tasks_total",
         "Total tasks completed by agent",
-        "gauge",
+        "counter",
     );
     for agent in &snapshot.agents {
         append_gauge_line(
@@ -231,7 +237,7 @@ fn render_agent_metrics(out: &mut String, snapshot: &MetricsSnapshot) {
         out,
         "mofa_agent_tasks_failed_total",
         "Total failed tasks by agent",
-        "gauge",
+        "counter",
     );
     for agent in &snapshot.agents {
         append_gauge_line(
@@ -276,7 +282,7 @@ fn render_agent_metrics(out: &mut String, snapshot: &MetricsSnapshot) {
         out,
         "mofa_agent_messages_sent_total",
         "Total messages sent by agent",
-        "gauge",
+        "counter",
     );
     for agent in &snapshot.agents {
         append_gauge_line(
@@ -291,7 +297,7 @@ fn render_agent_metrics(out: &mut String, snapshot: &MetricsSnapshot) {
         out,
         "mofa_agent_messages_received_total",
         "Total messages received by agent",
-        "gauge",
+        "counter",
     );
     for agent in &snapshot.agents {
         append_gauge_line(
@@ -308,7 +314,7 @@ fn render_workflow_metrics(out: &mut String, snapshot: &MetricsSnapshot) {
         out,
         "mofa_workflow_executions_total",
         "Total workflow executions",
-        "gauge",
+        "counter",
     );
     for workflow in &snapshot.workflows {
         append_gauge_line(
@@ -323,7 +329,7 @@ fn render_workflow_metrics(out: &mut String, snapshot: &MetricsSnapshot) {
         out,
         "mofa_workflow_executions_success_total",
         "Total successful workflow executions",
-        "gauge",
+        "counter",
     );
     for workflow in &snapshot.workflows {
         append_gauge_line(
@@ -338,7 +344,7 @@ fn render_workflow_metrics(out: &mut String, snapshot: &MetricsSnapshot) {
         out,
         "mofa_workflow_executions_failed_total",
         "Total failed workflow executions",
-        "gauge",
+        "counter",
     );
     for workflow in &snapshot.workflows {
         append_gauge_line(
@@ -383,14 +389,14 @@ fn render_workflow_metrics(out: &mut String, snapshot: &MetricsSnapshot) {
 fn render_plugin_metrics(out: &mut String, snapshot: &MetricsSnapshot) {
     write_metric_header(
         out,
-        "mofa_tool_call_count",
+        "mofa_tool_calls_total",
         "Total tool/plugin call count",
-        "gauge",
+        "counter",
     );
     for plugin in &snapshot.plugins {
         append_gauge_line(
             out,
-            "mofa_tool_call_count",
+            "mofa_tool_calls_total",
             &[("tool_name".to_string(), plugin.name.clone())],
             plugin.call_count as f64,
         );
@@ -398,14 +404,14 @@ fn render_plugin_metrics(out: &mut String, snapshot: &MetricsSnapshot) {
 
     write_metric_header(
         out,
-        "mofa_tool_error_count",
+        "mofa_tool_errors_total",
         "Total tool/plugin errors",
-        "gauge",
+        "counter",
     );
     for plugin in &snapshot.plugins {
         append_gauge_line(
             out,
-            "mofa_tool_error_count",
+            "mofa_tool_errors_total",
             &[("tool_name".to_string(), plugin.name.clone())],
             plugin.error_count as f64,
         );
@@ -432,7 +438,7 @@ fn render_llm_metrics(out: &mut String, snapshot: &MetricsSnapshot) {
         out,
         "mofa_llm_requests_total",
         "Total LLM requests",
-        "gauge",
+        "counter",
     );
     for llm in &snapshot.llm_metrics {
         append_gauge_line(
@@ -464,7 +470,7 @@ fn render_llm_metrics(out: &mut String, snapshot: &MetricsSnapshot) {
         );
     }
 
-    write_metric_header(out, "mofa_llm_errors_total", "Total LLM errors", "gauge");
+    write_metric_header(out, "mofa_llm_errors_total", "Total LLM errors", "counter");
     for llm in &snapshot.llm_metrics {
         append_gauge_line(
             out,
@@ -564,8 +570,21 @@ fn render_system_metrics(out: &mut String, snapshot: &MetricsSnapshot) {
 }
 
 fn render_custom_metrics(out: &mut String, snapshot: &MetricsSnapshot) {
-    for (name, value) in &snapshot.custom {
-        let metric_name = sanitize_metric_name(name);
+    let mut custom = snapshot.custom.iter().collect::<Vec<_>>();
+    custom.sort_by(|(left, _), (right, _)| left.cmp(right));
+
+    let mut collision_counts: HashMap<String, usize> = HashMap::new();
+
+    for (name, value) in custom {
+        let sanitized = sanitize_metric_name(name);
+        let next = collision_counts.entry(sanitized.clone()).or_insert(0);
+        let metric_name = if *next == 0 {
+            sanitized
+        } else {
+            format!("{sanitized}_{}", *next)
+        };
+        *next += 1;
+
         match value {
             MetricValue::Integer(v) => {
                 write_metric_header(
@@ -592,15 +611,15 @@ fn render_custom_metrics(out: &mut String, snapshot: &MetricsSnapshot) {
                     "Custom histogram metric exported from MetricsRegistry",
                     "histogram",
                 );
-                let mut cumulative = Vec::with_capacity(hist.buckets.len());
-                for (_, count) in &hist.buckets {
+                let mut sorted = hist.buckets.clone();
+                sorted.sort_by(|(left, _), (right, _)| {
+                    left.partial_cmp(right).unwrap_or(std::cmp::Ordering::Equal)
+                });
+                let mut cumulative = Vec::with_capacity(sorted.len());
+                for (_, count) in &sorted {
                     cumulative.push(*count);
                 }
-                let bounds = hist
-                    .buckets
-                    .iter()
-                    .map(|(bound, _)| *bound)
-                    .collect::<Vec<_>>();
+                let bounds = sorted.iter().map(|(bound, _)| *bound).collect::<Vec<_>>();
                 let sample = HistogramSample {
                     count: hist.count,
                     sum: hist.sum,
@@ -701,7 +720,7 @@ fn format_float(value: f64) -> String {
     if value.fract() == 0.0 {
         format!("{value:.0}")
     } else {
-        format!("{value:.6}")
+        value.to_string()
     }
 }
 
@@ -771,9 +790,10 @@ mod tests {
         let exporter = PrometheusExporter::new(collector, PrometheusExportConfig::default());
         exporter.refresh_once().await.expect("refresh");
         let output = exporter.render_cached().await;
+        let output = std::str::from_utf8(output.as_ref()).expect("utf8");
 
         assert!(output.contains("# HELP mofa_agent_tasks_total"));
-        assert!(output.contains("# TYPE mofa_agent_tasks_total gauge"));
+        assert!(output.contains("# TYPE mofa_agent_tasks_total counter"));
         assert!(output.contains("mofa_agent_tasks_total{agent_id=\"agent-1\"} 42"));
         assert!(output.contains("# HELP mofa_system_cpu_percent"));
     }
@@ -852,7 +872,8 @@ mod tests {
             scrapers.push(tokio::spawn(async move {
                 for _ in 0..20 {
                     let payload = exporter.render_cached().await;
-                    assert!(payload.contains("mofa_exporter_cache_age_seconds"));
+                    let payload = std::str::from_utf8(payload.as_ref()).expect("utf8");
+                    assert!(payload.contains("mofa_exporter_last_refresh_timestamp_seconds"));
                 }
             }));
         }
@@ -879,5 +900,26 @@ mod tests {
     fn sanitizes_metric_names_with_invalid_first_char() {
         assert_eq!(sanitize_metric_name("1foo"), "mofa_custom_1foo");
         assert_eq!(sanitize_metric_name(""), "mofa_custom_metric");
+    }
+
+    #[test]
+    fn zero_refresh_interval_is_clamped() {
+        let config = PrometheusExportConfig::default().with_refresh_interval(Duration::ZERO);
+        assert_eq!(config.refresh_interval, Duration::from_millis(1));
+    }
+
+    #[test]
+    fn custom_metric_name_collisions_are_disambiguated() {
+        let mut snapshot = sample_snapshot();
+        snapshot
+            .custom
+            .insert("foo-bar".to_string(), MetricValue::Integer(1));
+        snapshot
+            .custom
+            .insert("foo_bar".to_string(), MetricValue::Integer(2));
+        let output = render_snapshot(&snapshot);
+
+        assert!(output.contains("# HELP foo_bar "));
+        assert!(output.contains("# HELP foo_bar_1 "));
     }
 }

@@ -42,8 +42,6 @@ pub struct DashboardConfig {
     pub ws_update_interval: Duration,
     /// Enable request tracing
     pub enable_tracing: bool,
-    /// Prometheus export configuration
-    pub prometheus_export_config: PrometheusExportConfig,
     /// WebSocket authentication provider (default: NoopAuthProvider)
     pub auth_provider: Arc<dyn AuthProvider>,
 }
@@ -70,7 +68,6 @@ impl Default for DashboardConfig {
             metrics_config: MetricsConfig::default(),
             ws_update_interval: Duration::from_secs(1),
             enable_tracing: true,
-            prometheus_export_config: PrometheusExportConfig::default(),
             auth_provider: Arc::new(NoopAuthProvider),
         }
     }
@@ -106,11 +103,6 @@ impl DashboardConfig {
         self
     }
 
-    pub fn with_prometheus_export_config(mut self, config: PrometheusExportConfig) -> Self {
-        self.prometheus_export_config = config;
-        self
-    }
-
     /// Set the WebSocket authentication provider.
     pub fn with_auth(mut self, provider: Arc<dyn AuthProvider>) -> Self {
         self.auth_provider = provider;
@@ -136,6 +128,7 @@ pub struct ServerState {
 pub struct DashboardServer {
     config: DashboardConfig,
     collector: Arc<MetricsCollector>,
+    prometheus_export_config: PrometheusExportConfig,
     ws_handler: Option<Arc<WebSocketHandler>>,
     prometheus_exporter: Option<Arc<PrometheusExporter>>,
     prometheus_worker: Option<tokio::task::JoinHandle<()>>,
@@ -151,6 +144,7 @@ impl DashboardServer {
         Self {
             config,
             collector,
+            prometheus_export_config: PrometheusExportConfig::default(),
             ws_handler: None,
             prometheus_exporter: None,
             prometheus_worker: None,
@@ -185,6 +179,12 @@ impl DashboardServer {
         self
     }
 
+    /// Override Prometheus exporter settings.
+    pub fn with_prometheus_export_config(mut self, config: PrometheusExportConfig) -> Self {
+        self.prometheus_export_config = config;
+        self
+    }
+
     /// Attach a channel receiver for debug events to stream to WebSocket clients.
     ///
     /// This enables real-time debugging by forwarding `DebugEvent`s from the
@@ -214,7 +214,7 @@ impl DashboardServer {
         } else {
             let exporter = Arc::new(PrometheusExporter::new(
                 self.collector.clone(),
-                self.config.prometheus_export_config.clone(),
+                self.prometheus_export_config.clone(),
             ));
             self.prometheus_exporter = Some(exporter.clone());
             exporter
@@ -283,6 +283,9 @@ impl DashboardServer {
             if let Err(err) = exporter.refresh_once().await {
                 warn!("initial /metrics cache refresh failed: {}", err);
             }
+            if let Some(handle) = self.prometheus_worker.take() {
+                handle.abort();
+            }
             self.prometheus_worker = Some(exporter.clone().start());
         }
 
@@ -294,7 +297,7 @@ impl DashboardServer {
             });
 
             // Start debug event forwarder if debug events receiver is provided
-            if let Some(debug_rx) = self.debug_event_rx {
+            if let Some(debug_rx) = self.debug_event_rx.take() {
                 let debug_handler = Arc::clone(ws_handler);
                 tokio::spawn(async move {
                     debug_handler.start_debug_event_forwarder(debug_rx);
@@ -316,6 +319,14 @@ impl DashboardServer {
         self,
     ) -> tokio::task::JoinHandle<Result<(), Box<dyn std::error::Error + Send + Sync>>> {
         tokio::spawn(async move { self.start().await })
+    }
+}
+
+impl Drop for DashboardServer {
+    fn drop(&mut self) {
+        if let Some(handle) = self.prometheus_worker.take() {
+            handle.abort();
+        }
     }
 }
 
