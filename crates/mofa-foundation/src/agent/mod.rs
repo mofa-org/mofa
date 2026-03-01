@@ -11,6 +11,8 @@ pub mod context;
 pub mod executor;
 pub mod session;
 pub mod tools;
+pub mod voice;
+pub mod voice_mock;
 
 // ========================================================================
 // 从 Kernel 层重导出核心类型
@@ -30,9 +32,6 @@ pub use components::{
     // Context compressor trait and implementations
     CompressionStrategy,
     ContextCompressor,
-    SlidingWindowCompressor,
-    SummarizingCompressor,
-    TokenCounter,
     CoordinationPattern,
     // Kernel traits 和类型 (通过 components 重导出)
     // Kernel traits and types (re-exported via components)
@@ -61,8 +60,11 @@ pub use components::{
     SimpleTool,
     SimpleToolAdapter,
     SimpleToolRegistry,
+    SlidingWindowCompressor,
+    SummarizingCompressor,
     Task,
     ThoughtStep,
+    TokenCounter,
     Tool,
     // Foundation 扩展类型
     // Foundation extension types

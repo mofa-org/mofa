@@ -39,10 +39,10 @@ members = [
     "workflow_viz",
     "message_graph_validation",
     "message_graph_executor_runtime",
-    "agent_builder",
     "context_compression",
     "context_window_demo",
     "admission_gate_demo",
+    "voice_pipeline_demo",
     "integrations_demo",
 ]
 

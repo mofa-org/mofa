@@ -7543,6 +7543,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "voice_pipeline_demo"
+version = "0.1.0"
+dependencies = [
+ "mofa-foundation",
+ "mofa-kernel",
+ "tokio",
+ "tracing",
+ "tracing-subscriber 0.3.22",
+ "uuid",
+]
+
+[[package]]
 name = "vtparse"
 version = "0.6.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
