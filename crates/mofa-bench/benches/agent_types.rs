@@ -156,6 +156,11 @@ fn bench_agent_output_construction(c: &mut Criterion) {
 fn bench_bincode_serde(c: &mut Criterion) {
     let mut group = c.benchmark_group("agent_types_bincode");
 
+    // Note: bincode serialization works for AgentInput/AgentOutput, but
+    // deserialization fails with `DeserializeAnyNotSupported` because these
+    // types use serde features (e.g. untagged enums) that bincode does not
+    // support. Only AgentMessage (used on the bus) round-trips via bincode.
+
     let input = utils::json_input();
     group.bench_function("input_serialize", |b| {
         b.iter(|| {
@@ -164,29 +169,11 @@ fn bench_bincode_serde(c: &mut Criterion) {
         });
     });
 
-    let encoded = bincode::serialize(&input).unwrap();
-    group.bench_function("input_deserialize", |b| {
-        b.iter(|| {
-            let decoded: mofa_kernel::agent::types::AgentInput =
-                bincode::deserialize(black_box(&encoded)).unwrap();
-            black_box(decoded);
-        });
-    });
-
     let output = utils::rich_output();
     group.bench_function("output_serialize", |b| {
         b.iter(|| {
             let encoded = bincode::serialize(black_box(&output)).unwrap();
             black_box(encoded);
-        });
-    });
-
-    let encoded = bincode::serialize(&output).unwrap();
-    group.bench_function("output_deserialize", |b| {
-        b.iter(|| {
-            let decoded: mofa_kernel::agent::types::AgentOutput =
-                bincode::deserialize(black_box(&encoded)).unwrap();
-            black_box(decoded);
         });
     });
 
