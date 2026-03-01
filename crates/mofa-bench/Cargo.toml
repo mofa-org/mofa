@@ -9,6 +9,9 @@ repository.workspace = true
 homepage.workspace = true
 publish = false
 
+[lib]
+bench = false
+
 [dependencies]
 # Workspace crates to benchmark
 mofa-kernel = { path = "../mofa-kernel", features = ["config"] }
