@@ -42,8 +42,6 @@ pub struct DashboardConfig {
     pub ws_update_interval: Duration,
     /// Enable request tracing
     pub enable_tracing: bool,
-    /// Prometheus export configuration
-    pub prometheus_export_config: PrometheusExportConfig,
     /// WebSocket authentication provider (default: NoopAuthProvider)
     pub auth_provider: Arc<dyn AuthProvider>,
 }
@@ -70,7 +68,6 @@ impl Default for DashboardConfig {
             metrics_config: MetricsConfig::default(),
             ws_update_interval: Duration::from_secs(1),
             enable_tracing: true,
-            prometheus_export_config: PrometheusExportConfig::default(),
             auth_provider: Arc::new(NoopAuthProvider),
         }
     }
@@ -103,11 +100,6 @@ impl DashboardConfig {
 
     pub fn with_ws_interval(mut self, interval: Duration) -> Self {
         self.ws_update_interval = interval;
-        self
-    }
-
-    pub fn with_prometheus_export_config(mut self, config: PrometheusExportConfig) -> Self {
-        self.prometheus_export_config = config;
         self
     }
 
@@ -212,7 +204,7 @@ impl DashboardServer {
         } else {
             let exporter = Arc::new(PrometheusExporter::new(
                 self.collector.clone(),
-                self.config.prometheus_export_config.clone(),
+                PrometheusExportConfig::default(),
             ));
             self.prometheus_exporter = Some(exporter.clone());
             exporter

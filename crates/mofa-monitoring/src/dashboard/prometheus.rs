@@ -69,7 +69,7 @@ fn render_agent_metrics(out: &mut String, snapshot: &MetricsSnapshot) {
         out,
         "mofa_agent_tasks_total",
         "Total tasks completed by agent",
-        "gauge",
+        "counter",
     );
     for agent in &snapshot.agents {
         append_gauge_line(
@@ -84,7 +84,7 @@ fn render_agent_metrics(out: &mut String, snapshot: &MetricsSnapshot) {
         out,
         "mofa_agent_tasks_failed_total",
         "Total failed tasks by agent",
-        "gauge",
+        "counter",
     );
     for agent in &snapshot.agents {
         append_gauge_line(
@@ -129,7 +129,7 @@ fn render_agent_metrics(out: &mut String, snapshot: &MetricsSnapshot) {
         out,
         "mofa_agent_messages_sent_total",
         "Total messages sent by agent",
-        "gauge",
+        "counter",
     );
     for agent in &snapshot.agents {
         append_gauge_line(
@@ -144,7 +144,7 @@ fn render_agent_metrics(out: &mut String, snapshot: &MetricsSnapshot) {
         out,
         "mofa_agent_messages_received_total",
         "Total messages received by agent",
-        "gauge",
+        "counter",
     );
     for agent in &snapshot.agents {
         append_gauge_line(
@@ -161,7 +161,7 @@ fn render_workflow_metrics(out: &mut String, snapshot: &MetricsSnapshot) {
         out,
         "mofa_workflow_executions_total",
         "Total workflow executions",
-        "gauge",
+        "counter",
     );
     for workflow in &snapshot.workflows {
         append_gauge_line(
@@ -176,7 +176,7 @@ fn render_workflow_metrics(out: &mut String, snapshot: &MetricsSnapshot) {
         out,
         "mofa_workflow_executions_success_total",
         "Total successful workflow executions",
-        "gauge",
+        "counter",
     );
     for workflow in &snapshot.workflows {
         append_gauge_line(
@@ -191,7 +191,7 @@ fn render_workflow_metrics(out: &mut String, snapshot: &MetricsSnapshot) {
         out,
         "mofa_workflow_executions_failed_total",
         "Total failed workflow executions",
-        "gauge",
+        "counter",
     );
     for workflow in &snapshot.workflows {
         append_gauge_line(
@@ -236,14 +236,14 @@ fn render_workflow_metrics(out: &mut String, snapshot: &MetricsSnapshot) {
 fn render_plugin_metrics(out: &mut String, snapshot: &MetricsSnapshot) {
     write_metric_header(
         out,
-        "mofa_tool_call_count",
+        "mofa_tool_calls_total",
         "Total tool/plugin call count",
-        "gauge",
+        "counter",
     );
     for plugin in &snapshot.plugins {
         append_gauge_line(
             out,
-            "mofa_tool_call_count",
+            "mofa_tool_calls_total",
             &[("tool_name".to_string(), plugin.name.clone())],
             plugin.call_count as f64,
         );
@@ -251,14 +251,14 @@ fn render_plugin_metrics(out: &mut String, snapshot: &MetricsSnapshot) {
 
     write_metric_header(
         out,
-        "mofa_tool_error_count",
+        "mofa_tool_errors_total",
         "Total tool/plugin errors",
-        "gauge",
+        "counter",
     );
     for plugin in &snapshot.plugins {
         append_gauge_line(
             out,
-            "mofa_tool_error_count",
+            "mofa_tool_errors_total",
             &[("tool_name".to_string(), plugin.name.clone())],
             plugin.error_count as f64,
         );
@@ -285,7 +285,7 @@ fn render_llm_metrics(out: &mut String, snapshot: &MetricsSnapshot) {
         out,
         "mofa_llm_requests_total",
         "Total LLM requests",
-        "gauge",
+        "counter",
     );
     for llm in &snapshot.llm_metrics {
         append_gauge_line(
@@ -317,7 +317,7 @@ fn render_llm_metrics(out: &mut String, snapshot: &MetricsSnapshot) {
         );
     }
 
-    write_metric_header(out, "mofa_llm_errors_total", "Total LLM errors", "gauge");
+    write_metric_header(out, "mofa_llm_errors_total", "Total LLM errors", "counter");
     for llm in &snapshot.llm_metrics {
         append_gauge_line(
             out,
@@ -417,8 +417,21 @@ fn render_system_metrics(out: &mut String, snapshot: &MetricsSnapshot) {
 }
 
 fn render_custom_metrics(out: &mut String, snapshot: &MetricsSnapshot) {
-    for (name, value) in &snapshot.custom {
-        let metric_name = sanitize_metric_name(name);
+    let mut custom = snapshot.custom.iter().collect::<Vec<_>>();
+    custom.sort_by(|(left, _), (right, _)| left.cmp(right));
+
+    let mut collision_counts: HashMap<String, usize> = HashMap::new();
+
+    for (name, value) in custom {
+        let sanitized = sanitize_metric_name(name);
+        let next = collision_counts.entry(sanitized.clone()).or_insert(0);
+        let metric_name = if *next == 0 {
+            sanitized
+        } else {
+            format!("{sanitized}_{}", *next)
+        };
+        *next += 1;
+
         match value {
             MetricValue::Integer(v) => {
                 write_metric_header(
@@ -445,15 +458,16 @@ fn render_custom_metrics(out: &mut String, snapshot: &MetricsSnapshot) {
                     "Custom histogram metric exported from MetricsRegistry",
                     "histogram",
                 );
-                let mut cumulative = Vec::with_capacity(hist.buckets.len());
-                for (_, count) in &hist.buckets {
+                let mut sorted = hist.buckets.clone();
+                sorted.sort_by(|(left, _), (right, _)| {
+                    left.partial_cmp(right).unwrap_or(std::cmp::Ordering::Equal)
+                });
+
+                let mut cumulative = Vec::with_capacity(sorted.len());
+                for (_, count) in &sorted {
                     cumulative.push(*count);
                 }
-                let bounds = hist
-                    .buckets
-                    .iter()
-                    .map(|(bound, _)| *bound)
-                    .collect::<Vec<_>>();
+                let bounds = sorted.iter().map(|(bound, _)| *bound).collect::<Vec<_>>();
                 let sample = HistogramSample {
                     count: hist.count,
                     sum: hist.sum,
@@ -554,7 +568,7 @@ fn format_float(value: f64) -> String {
     if value.fract() == 0.0 {
         format!("{value:.0}")
     } else {
-        format!("{value:.6}")
+        value.to_string()
     }
 }
 
@@ -602,7 +616,7 @@ mod tests {
         let output = render_snapshot(&sample_snapshot());
 
         assert!(output.contains("# HELP mofa_agent_tasks_total"));
-        assert!(output.contains("# TYPE mofa_agent_tasks_total gauge"));
+        assert!(output.contains("# TYPE mofa_agent_tasks_total counter"));
         assert!(output.contains("mofa_agent_tasks_total{agent_id=\"agent-1\"} 42"));
         assert!(output.contains("# HELP mofa_system_cpu_percent"));
     }
@@ -617,5 +631,21 @@ mod tests {
     fn sanitizes_metric_names_with_invalid_first_char() {
         assert_eq!(sanitize_metric_name("1foo"), "mofa_custom_1foo");
         assert_eq!(sanitize_metric_name(""), "mofa_custom_metric");
+    }
+
+    #[test]
+    fn custom_metric_name_collisions_are_disambiguated() {
+        let mut snapshot = sample_snapshot();
+        snapshot
+            .custom
+            .insert("foo-bar".to_string(), MetricValue::Integer(1));
+        snapshot
+            .custom
+            .insert("foo_bar".to_string(), MetricValue::Integer(2));
+
+        let output = render_snapshot(&snapshot);
+
+        assert!(output.contains("# HELP foo_bar "));
+        assert!(output.contains("# HELP foo_bar_1 "));
     }
 }
