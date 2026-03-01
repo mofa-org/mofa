@@ -16,6 +16,7 @@
 //! QDRANT_URL=http://localhost:6334 cargo run -p rag_pipeline -- qdrant
 //! ```
 
+use anyhow::Result;
 use futures::StreamExt;
 use mofa_foundation::rag::{
     ChunkConfig, Document, DocumentChunk, IdentityReranker, InMemoryVectorStore, PassthroughStreamingGenerator,

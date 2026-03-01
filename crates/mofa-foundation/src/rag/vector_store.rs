@@ -122,14 +122,14 @@ impl VectorStore for InMemoryVectorStore {
         let removed = self.chunks.remove(id).is_some();
         if removed && self.chunks.is_empty() {
             // reset dimension when store becomes empty
-            self.dimension = None;
+            self.embedding_dimensions = None;
         }
         Ok(removed)
     }
 
     async fn clear(&mut self) -> AgentResult<()> {
         self.chunks.clear();
-        self.dimension = None;
+        self.embedding_dimensions = None;
         Ok(())
     }
 
@@ -459,16 +459,16 @@ mod tests {
             .upsert(make_chunk("a", "text", vec![1.0, 0.0]))
             .await
             .unwrap();
-        assert_eq!(store.dimension, Some(2));
+        assert_eq!(store.embedding_dimensions, Some(2));
         store.clear().await.unwrap();
-        assert_eq!(store.dimension, None);
+        assert_eq!(store.embedding_dimensions, None);
         store
             .upsert(make_chunk("b", "text", vec![0.0, 1.0]))
             .await
             .unwrap();
-        assert_eq!(store.dimension, Some(2));
+        assert_eq!(store.embedding_dimensions, Some(2));
         store.delete("b").await.unwrap();
-        assert_eq!(store.dimension, None);
+        assert_eq!(store.embedding_dimensions, None);
     }
 
     #[tokio::test]

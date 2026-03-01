@@ -4921,6 +4921,7 @@ dependencies = [
 name = "rag_pipeline"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
  "async-trait",
  "futures",
  "mofa-foundation",
