@@ -181,7 +181,7 @@ pub use core::{
     AgentPluginSupport,
     MoFAAgent,
 };
-pub use error::{AgentError, AgentResult};
+pub use error::{AgentError, AgentReport, AgentResult, IntoAgentReport};
 pub use traits::{AgentMetadata, AgentStats, DynAgent, HealthStatus};
 pub use types::event::execution as execution_events;
 // Event type constants are available via types::event::lifecycle, types::event::execution, etc.

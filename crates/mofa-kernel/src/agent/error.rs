@@ -1,140 +1,177 @@
-//! Agent 错误类型定义
-//! Agent Error Type Definitions
+//! Typed error and result types for the agent sub-system.
 //!
-//! 统一的 Agent 错误处理
-//! Unified error handling for Agents
+//! # Result types
+//!
+//! Two result aliases are provided:
+//!
+//! - [`AgentResult<T>`] — `Result<T, AgentError>`.  Used by the **existing**
+//!   public trait methods ([`MoFAAgent`][crate::agent::core::MoFAAgent], etc.)
+//!   to preserve backward compatibility for all downstream implementors.
+//!
+//! - [`AgentReport<T>`] — `Result<T, error_stack::Report<AgentError>>`.  Use
+//!   this in **new** code and internal helpers that want a full causal chain.
+//!
+//! ## Converting between the two
+//!
+//! Use the [`IntoAgentReport`] extension trait at module boundaries:
+//!
+//! ```rust,ignore
+//! use mofa_kernel::agent::error::IntoAgentReport as _;
+//! use error_stack::ResultExt as _;
+//!
+//! fn foo() -> AgentReport<()> {
+//!     some_fallible_op()
+//!         .into_report()               // AgentResult<T> → AgentReport<T>
+//!         .attach("doing foo")
+//! }
+//! ```
 
 use std::fmt;
 use thiserror::Error;
 
-/// Agent 操作结果类型
-/// Agent operation result type
+/// Backward-compatible result alias for existing public trait methods.
+///
+/// Equivalent to `Result<T, AgentError>`.  All [`MoFAAgent`][crate::agent::core::MoFAAgent]
+/// trait methods return this type to preserve compatibility for downstream
+/// implementors.
+///
+/// For **new** internal code, prefer [`AgentReport<T>`] which carries a full
+/// `error_stack` causal chain.
 pub type AgentResult<T> = Result<T, AgentError>;
+
+/// Error-stack–backed result alias for new agent code.
+///
+/// Equivalent to `Result<T, error_stack::Report<AgentError>>`.
+/// Convert from [`AgentResult<T>`] using [`IntoAgentReport`].
+pub type AgentReport<T> = ::std::result::Result<T, error_stack::Report<AgentError>>;
+
+/// Extension trait to convert [`AgentResult<T>`] into [`AgentReport<T>`].
+///
+/// ```rust,ignore
+/// use mofa_kernel::agent::error::IntoAgentReport as _;
+/// use error_stack::ResultExt as _;
+///
+/// agent_op()
+///     .into_report()
+///     .attach("calling agent op")?;
+/// ```
+pub trait IntoAgentReport<T> {
+    /// Wrap the error in an `error_stack::Report`, capturing the current
+    /// location as the first stack frame.
+    fn into_report(self) -> AgentReport<T>;
+}
+
+impl<T> IntoAgentReport<T> for AgentResult<T> {
+    #[inline]
+    fn into_report(self) -> AgentReport<T> {
+        self.map_err(error_stack::Report::new)
+    }
+}
 
 /// Agent 错误类型
 /// Agent error types
 #[derive(Debug, Error)]
 #[non_exhaustive]
 pub enum AgentError {
-    /// Agent 未找到
-    /// Agent not found
+    /// Agent not found.
     #[error("Agent not found: {0}")]
     NotFound(String),
 
-    /// Agent 初始化失败
-    /// Agent initialization failed
+    /// Agent initialization failed.
     #[error("Agent initialization failed: {0}")]
     InitializationFailed(String),
 
+    /// Agent validation failed.
     #[error("Agent validation failed: {0}")]
     ValidationFailed(String),
 
-    /// Agent 执行失败
-    /// Agent execution failed
+    /// Agent execution failed.
     #[error("Agent execution failed: {0}")]
     ExecutionFailed(String),
 
-    /// 工具执行失败
-    /// Tool execution failed
+    /// A specific tool's execution failed.
     #[error("Tool execution failed: {tool_name}: {message}")]
     ToolExecutionFailed { tool_name: String, message: String },
 
-    /// 工具未找到
-    /// Tool not found
+    /// The requested tool could not be found.
     #[error("Tool not found: {0}")]
     ToolNotFound(String),
 
-    /// 配置错误
-    /// Configuration error
+    /// Agent configuration is invalid or missing.
     #[error("Configuration error: {0}")]
     ConfigError(String),
 
+    /// Agent shutdown failed.
     #[error("Shutdown Failed: {0}")]
     ShutdownFailed(String),
-    /// 无效输入
-    /// Invalid input
+
+    /// The input provided to the agent was invalid.
     #[error("Invalid input: {0}")]
     InvalidInput(String),
 
-    /// 无效输出
-    /// Invalid output
+    /// The output produced by the agent was invalid.
     #[error("Invalid output: {0}")]
     InvalidOutput(String),
 
-    /// 状态错误
-    /// State error
+    /// An illegal agent state transition was attempted.
     #[error("Invalid state transition: from {from:?} to {to:?}")]
     InvalidStateTransition { from: String, to: String },
 
-    /// 超时错误
-    /// Timeout error
+    /// An operation timed out.
     #[error("Operation timed out after {duration_ms}ms")]
     Timeout { duration_ms: u64 },
 
-    /// 中断错误
-    /// Interruption error
+    /// An operation was cancelled or interrupted.
     #[error("Operation was interrupted")]
     Interrupted,
 
-    /// 资源不可用
-    /// Resource unavailable
+    /// A required resource is temporarily unavailable.
     #[error("Resource unavailable: {0}")]
     ResourceUnavailable(String),
 
-    /// 能力不匹配
-    /// Capability mismatch
+    /// The agent does not satisfy the required capability set.
     #[error("Capability mismatch: required {required}, available {available}")]
     CapabilityMismatch { required: String, available: String },
 
-    /// 工厂未找到
-    /// Factory not found
+    /// The requested agent factory was not found in the registry.
     #[error("Agent factory not found: {0}")]
     FactoryNotFound(String),
 
-    /// 注册失败
-    /// Registration failed
+    /// Registering an agent or tool in the registry failed.
     #[error("Registration failed: {0}")]
     RegistrationFailed(String),
 
-    /// 内存错误
-    /// Memory error
+    /// A memory sub-system operation failed.
     #[error("Memory error: {0}")]
     MemoryError(String),
 
-    /// 推理错误
-    /// Reasoning error
+    /// A reasoning / inference step failed.
     #[error("Reasoning error: {0}")]
     ReasoningError(String),
 
-    /// 协调错误
-    /// Coordination error
+    /// A multi-agent coordination step failed.
     #[error("Coordination error: {0}")]
     CoordinationError(String),
 
-    /// 序列化错误
-    /// Serialization error
+    /// A (de)serialization error at the agent boundary.
     #[error("Serialization error: {0}")]
     SerializationError(String),
 
-    /// IO 错误
-    /// IO error
+    /// An I/O error (file, network, etc.).
     #[error("IO error: {0}")]
     IoError(String),
 
-    /// 内部错误
-    /// Internal error
+    /// An unexpected internal error.
     #[error("Internal error: {0}")]
     Internal(String),
 
-    /// 其他错误
-    /// Other errors
+    /// A catch-all for errors that do not fit the above categories.
     #[error("{0}")]
     Other(String),
 }
 
 impl AgentError {
-    /// 创建工具执行失败错误
-    /// Create a tool execution failure error
+    /// Create a tool execution failure error.
     pub fn tool_execution_failed(tool_name: impl Into<String>, message: impl Into<String>) -> Self {
         Self::ToolExecutionFailed {
             tool_name: tool_name.into(),
@@ -142,8 +179,7 @@ impl AgentError {
         }
     }
 
-    /// 创建状态转换错误
-    /// Create an invalid state transition error
+    /// Create an invalid state transition error.
     pub fn invalid_state_transition(from: impl fmt::Debug, to: impl fmt::Debug) -> Self {
         Self::InvalidStateTransition {
             from: format!("{:?}", from),
@@ -151,14 +187,12 @@ impl AgentError {
         }
     }
 
-    /// 创建超时错误
-    /// Create a timeout error
+    /// Create a timeout error.
     pub fn timeout(duration_ms: u64) -> Self {
         Self::Timeout { duration_ms }
     }
 
-    /// 创建能力不匹配错误
-    /// Create a capability mismatch error
+    /// Create a capability mismatch error.
     pub fn capability_mismatch(required: impl Into<String>, available: impl Into<String>) -> Self {
         Self::CapabilityMismatch {
             required: required.into(),
@@ -166,7 +200,7 @@ impl AgentError {
         }
     }
 
-    /// Returns `true` for transient errors, `false` for permanent ones.
+    /// Returns `true` for transient errors that *may* succeed on retry.
     pub fn is_retryable(&self) -> bool {
         matches!(
             self,
@@ -182,16 +216,14 @@ impl AgentError {
         )
     }
 
-    /// 此错误是否为瞬态错误，操作可能在重试时成功
     /// Whether this error is transient and the operation may succeed on retry.
     ///
-    /// 瞬态错误包括超时、资源不可用、IO 失败和通用执行失败。
-    /// 永久错误（配置、未找到、无效输入、中断、验证）应快速失败。
-    /// Transient errors include timeouts, resource unavailability, IO failures,
-    /// and generic execution failures. Permanent errors (config, not-found,
-    /// invalid input, interruption, validation) should fail fast.
+    /// Transient errors: timeouts, resource unavailability, IO failures, and
+    /// generic execution/coordination failures.
+    /// Permanent errors (config, not-found, invalid input, interruption,
+    /// validation) should fail fast without retry.
     ///
-    /// NOTE: This is stricter than [`is_retryable`] — it excludes `Internal`,
+    /// NOTE: Stricter than [`is_retryable`] — excludes `Internal`,
     /// `ToolExecutionFailed`, `ReasoningError`, and `MemoryError` which may
     /// indicate bugs rather than transient infrastructure issues.
     pub fn is_transient(&self) -> bool {
