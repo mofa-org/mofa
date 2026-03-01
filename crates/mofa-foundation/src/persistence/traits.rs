@@ -12,6 +12,7 @@ use uuid::Uuid;
 /// 持久化错误
 /// Persistence error
 #[derive(Debug, thiserror::Error)]
+#[non_exhaustive]
 pub enum PersistenceError {
     /// 连接错误
     /// Connection error
@@ -39,9 +40,27 @@ pub enum PersistenceError {
     Other(String),
 }
 
-/// 持久化结果类型
-/// Persistence result type
+/// Plain result alias for persistence operations (backward-compatible).
+///
+/// Used in public trait method signatures ([`MessageStore`], etc.).
+/// For new code with full causal chains, prefer [`PersistenceReport<T>`].
 pub type PersistenceResult<T> = Result<T, PersistenceError>;
+
+/// Error-stack–backed result alias for persistence operations.
+pub type PersistenceReport<T> = ::std::result::Result<T, error_stack::Report<PersistenceError>>;
+
+/// Extension trait to convert [`PersistenceResult<T>`] into [`PersistenceReport<T>`].
+pub trait IntoPersistenceReport<T> {
+    /// Wrap the error in an `error_stack::Report`.
+    fn into_report(self) -> PersistenceReport<T>;
+}
+
+impl<T> IntoPersistenceReport<T> for PersistenceResult<T> {
+    #[inline]
+    fn into_report(self) -> PersistenceReport<T> {
+        self.map_err(error_stack::Report::new)
+    }
+}
 
 /// 消息存储 trait
 /// Message store trait

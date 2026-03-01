@@ -106,6 +106,7 @@ impl DegradationLevel {
 
 /// Model orchestrator error types
 #[derive(Debug, Clone, Error)]
+#[non_exhaustive]
 pub enum OrchestratorError {
     /// Model loading failed
     #[error("Model load failed: {0}")]
@@ -156,8 +157,27 @@ pub enum OrchestratorError {
     Other(String),
 }
 
-/// Result type for orchestrator operations
+/// Plain result alias for orchestrator operations (backward-compatible).
 pub type OrchestratorResult<T> = Result<T, OrchestratorError>;
+
+/// Error-stack–backed result alias for orchestrator operations.
+///
+/// Note: `OrchestratorError` derives [`Clone`]; `error_stack::Report` does not
+/// — clone the inner error before wrapping when needed.
+pub type OrchestratorReport<T> = ::std::result::Result<T, error_stack::Report<OrchestratorError>>;
+
+/// Extension trait to convert [`OrchestratorResult<T>`] into [`OrchestratorReport<T>`].
+pub trait IntoOrchestratorReport<T> {
+    /// Wrap the error in an `error_stack::Report`.
+    fn into_report(self) -> OrchestratorReport<T>;
+}
+
+impl<T> IntoOrchestratorReport<T> for OrchestratorResult<T> {
+    #[inline]
+    fn into_report(self) -> OrchestratorReport<T> {
+        self.map_err(error_stack::Report::new)
+    }
+}
 
 // ============================================================================
 // Model Provider Configuration
