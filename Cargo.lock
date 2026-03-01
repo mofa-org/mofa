@@ -5693,6 +5693,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "mofa-local-llm"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "chrono",
+ "mofa-foundation",
+ "serde",
+ "serde_json",
+ "sysinfo 0.31.4",
+ "thiserror 1.0.69",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
 name = "mofa-macros"
 version = "0.1.0"
 
