@@ -438,48 +438,55 @@ impl<S: GraphState> CompiledGraphImpl<S> {
     }
 
     /// Get the next node(s) based on the current node and command
-    fn get_next_nodes(&self, current_node: &str, command: &Command) -> Vec<String> {
+    fn get_next_nodes(&self, current_node: &str, command: &Command) -> AgentResult<Vec<String>> {
         match &command.control {
             ControlFlow::Goto(target) => {
-                vec![target.clone()]
+                Ok(vec![target.clone()])
             }
             ControlFlow::Return => {
-                vec![] // End execution
+                Ok(vec![]) // End execution
             }
             ControlFlow::Send(sends) => {
                 // MapReduce: create branches for each send target
-                sends.iter().map(|s| s.target.clone()).collect()
+                Ok(sends.iter().map(|s| s.target.clone()).collect())
             }
             ControlFlow::Continue => {
                 // Follow graph edges
                 match self.edges.get(current_node) {
-                    Some(EdgeTarget::Single(target)) => vec![target.clone()],
-                    Some(EdgeTarget::Parallel(targets)) => targets.clone(),
+                    Some(EdgeTarget::Single(target)) => Ok(vec![target.clone()]),
+                    Some(EdgeTarget::Parallel(targets)) => Ok(targets.clone()),
                     Some(EdgeTarget::Conditional(routes)) => {
                         // Priority 1: explicit route decision
                         if let Some(decision) = command.route_value() {
                             if let Some(target) = routes.get(decision) {
-                                return vec![target.clone()];
+                                return Ok(vec![target.clone()]);
                             }
                         }
                         // Priority 2: legacy key-name matching (backward compatible)
                         for update in &command.updates {
                             if let Some(target) = routes.get(&update.key) {
-                                return vec![target.clone()];
+                                return Ok(vec![target.clone()]);
                             }
                         }
-                        // Priority 3: fallback to first route
-                        routes
-                            .values()
-                            .next()
-                            .map(|t: &String| vec![t.clone()])
-                            .unwrap_or_default()
+                        // No route matched — report error instead of silent fallback
+                        let update_keys: Vec<&str> = command.updates.iter().map(|u| u.key.as_str()).collect();
+                        let route_keys: Vec<&String> = routes.keys().collect();
+                        warn!(
+                            node_id = current_node,
+                            ?update_keys,
+                            ?route_keys,
+                            "Conditional routing: no route matched for node"
+                        );
+                        Err(AgentError::Internal(format!(
+                            "No conditional route matched for node '{}': update keys {:?}, available routes {:?}",
+                            current_node, update_keys, route_keys
+                        )))
                     }
-                    None => vec![],
-                    _ => vec![],
+                    None => Ok(vec![]),
+                    _ => Ok(vec![]),
                 }
             }
-            _ => vec![],
+            _ => Ok(vec![]),
         }
     }
 
@@ -566,7 +573,7 @@ impl<S: GraphState + 'static> CompiledGraph<S, serde_json::Value> for CompiledGr
                 self.apply_updates(&mut state, &command.updates).await?;
 
                 // Get next nodes
-                current_nodes = self.get_next_nodes(&node_id, &command);
+                current_nodes = self.get_next_nodes(&node_id, &command)?;
 
                 debug!(
                     "Node '{}' completed, next nodes: {:?}",
@@ -592,7 +599,7 @@ impl<S: GraphState + 'static> CompiledGraph<S, serde_json::Value> for CompiledGr
                     self.apply_updates(&mut state, &command.updates).await?;
 
                     // Collect next nodes
-                    let next = self.get_next_nodes(&node_id, &command);
+                    let next = self.get_next_nodes(&node_id, &command)?;
                     next_nodes.extend(next);
                 }
 
@@ -633,44 +640,51 @@ impl<S: GraphState + 'static> CompiledGraph<S, serde_json::Value> for CompiledGr
             let default_policy = NodePolicy::default();
 
             // Helper function to get next nodes based on command and edges
-            let get_next_nodes = |current_node: &str, command: &Command| -> Vec<String> {
+            let get_next_nodes = |current_node: &str, command: &Command| -> AgentResult<Vec<String>> {
                 match &command.control {
-                    ControlFlow::Goto(target) => vec![target.clone()],
-                    ControlFlow::Return => vec![], // End execution
+                    ControlFlow::Goto(target) => Ok(vec![target.clone()]),
+                    ControlFlow::Return => Ok(vec![]), // End execution
                     ControlFlow::Send(sends) => {
                         // MapReduce: create branches for each send target
-                        sends.iter().map(|s| s.target.clone()).collect()
+                        Ok(sends.iter().map(|s| s.target.clone()).collect())
                     }
                     ControlFlow::Continue => {
                         // Follow graph edges
                         match edges.get(current_node) {
-                            Some(EdgeTarget::Single(target)) => vec![target.clone()],
-                            Some(EdgeTarget::Parallel(targets)) => targets.clone(),
+                            Some(EdgeTarget::Single(target)) => Ok(vec![target.clone()]),
+                            Some(EdgeTarget::Parallel(targets)) => Ok(targets.clone()),
                             Some(EdgeTarget::Conditional(routes)) => {
                                 // Priority 1: explicit route decision
                                 if let Some(decision) = command.route_value() {
                                     if let Some(target) = routes.get(decision) {
-                                        return vec![target.clone()];
+                                        return Ok(vec![target.clone()]);
                                     }
                                 }
                                 // Priority 2: legacy key-name matching (backward compatible)
                                 for update in &command.updates {
                                     if let Some(target) = routes.get(&update.key) {
-                                        return vec![target.clone()];
+                                        return Ok(vec![target.clone()]);
                                     }
                                 }
-                                // Priority 3: fallback to first route
-                                routes
-                                    .values()
-                                    .next()
-                                    .map(|t: &String| vec![t.clone()])
-                                    .unwrap_or_default()
+                                // No route matched — report error instead of silent fallback
+                                let update_keys: Vec<&str> = command.updates.iter().map(|u| u.key.as_str()).collect();
+                                let route_keys: Vec<&String> = routes.keys().collect();
+                                warn!(
+                                    node_id = current_node,
+                                    ?update_keys,
+                                    ?route_keys,
+                                    "Conditional routing: no route matched for node"
+                                );
+                                Err(AgentError::Internal(format!(
+                                    "No conditional route matched for node '{}': update keys {:?}, available routes {:?}",
+                                    current_node, update_keys, route_keys
+                                )))
                             }
-                            None => vec![],
-                            _ => vec![],
+                            None => Ok(vec![]),
+                            _ => Ok(vec![]),
                         }
                     }
-                    _ => vec![],
+                    _ => Ok(vec![]),
                 }
             };
 
@@ -793,7 +807,18 @@ impl<S: GraphState + 'static> CompiledGraph<S, serde_json::Value> for CompiledGr
                         return;
                     }
 
-                    next_nodes.extend(get_next_nodes(&node_id, &command));
+                    match get_next_nodes(&node_id, &command) {
+                        Ok(nodes) => next_nodes.extend(nodes),
+                        Err(e) => {
+                            let _ = tx
+                                .send(Ok(StreamEvent::Error {
+                                    node_id: Some(node_id.clone()),
+                                    error: e.to_string(),
+                                }))
+                                .await;
+                            return;
+                        }
+                    }
                 } else {
                     // Send start events for parallel batch — abort if receiver disconnected
                     for node_id in &nodes_to_execute {
@@ -874,7 +899,18 @@ impl<S: GraphState + 'static> CompiledGraph<S, serde_json::Value> for CompiledGr
                             return;
                         }
 
-                        next_nodes.extend(get_next_nodes(&node_id, &command));
+                        match get_next_nodes(&node_id, &command) {
+                            Ok(nodes) => next_nodes.extend(nodes),
+                            Err(e) => {
+                                let _ = tx
+                                    .send(Ok(StreamEvent::Error {
+                                        node_id: Some(node_id.clone()),
+                                        error: e.to_string(),
+                                    }))
+                                    .await;
+                                return;
+                            }
+                        }
                     }
                 }
 
@@ -921,7 +957,7 @@ impl<S: GraphState + 'static> CompiledGraph<S, serde_json::Value> for CompiledGr
         self.apply_updates(&mut state, &command.updates).await?;
 
         // Get next nodes
-        let next_nodes = self.get_next_nodes(&node_id, &command);
+        let next_nodes = self.get_next_nodes(&node_id, &command)?;
         let is_complete = next_nodes.is_empty();
         let next_node = next_nodes.into_iter().next();
 
@@ -1366,5 +1402,106 @@ mod tests {
             final_state.get_value::<serde_json::Value>("decision"),
             Some(json!("approved"))
         );
+    }
+
+    #[tokio::test]
+    async fn test_conditional_routing_no_match_returns_error_invoke() {
+        let mut graph = StateGraphImpl::<JsonState>::new("route_no_match");
+
+        let mut routes = HashMap::new();
+        routes.insert("approve".to_string(), "approved".to_string());
+        routes.insert("reject".to_string(), "rejected".to_string());
+
+        graph
+            .add_node(
+                "router",
+                Box::new(StaticCommandNode {
+                    name: "router".to_string(),
+                    // No route value set, and update key "unknown" matches no route
+                    command: Command::new().update("unknown", json!(true)).continue_(),
+                }),
+            )
+            .add_node(
+                "approved",
+                Box::new(TestNode {
+                    name: "approved".to_string(),
+                    updates: vec![StateUpdate::new("decision", json!("approved"))],
+                }),
+            )
+            .add_node(
+                "rejected",
+                Box::new(TestNode {
+                    name: "rejected".to_string(),
+                    updates: vec![StateUpdate::new("decision", json!("rejected"))],
+                }),
+            )
+            .add_edge(START, "router")
+            .add_conditional_edges("router", routes)
+            .add_edge("approved", END)
+            .add_edge("rejected", END);
+
+        let compiled = graph.compile().unwrap();
+        let result = compiled.invoke(JsonState::new(), None).await;
+
+        assert!(result.is_err(), "invoke should return Err when no conditional route matches");
+        let err_msg = result.unwrap_err().to_string();
+        assert!(
+            err_msg.contains("No conditional route matched"),
+            "error should mention no route matched, got: {}",
+            err_msg
+        );
+    }
+
+    #[tokio::test]
+    async fn test_conditional_routing_no_match_returns_error_stream() {
+        let mut graph = StateGraphImpl::<JsonState>::new("route_no_match_stream");
+
+        let mut routes = HashMap::new();
+        routes.insert("approve".to_string(), "approved".to_string());
+        routes.insert("reject".to_string(), "rejected".to_string());
+
+        graph
+            .add_node(
+                "router",
+                Box::new(StaticCommandNode {
+                    name: "router".to_string(),
+                    command: Command::new().update("unknown", json!(true)).continue_(),
+                }),
+            )
+            .add_node(
+                "approved",
+                Box::new(TestNode {
+                    name: "approved".to_string(),
+                    updates: vec![StateUpdate::new("decision", json!("approved"))],
+                }),
+            )
+            .add_node(
+                "rejected",
+                Box::new(TestNode {
+                    name: "rejected".to_string(),
+                    updates: vec![StateUpdate::new("decision", json!("rejected"))],
+                }),
+            )
+            .add_edge(START, "router")
+            .add_conditional_edges("router", routes)
+            .add_edge("approved", END)
+            .add_edge("rejected", END);
+
+        let compiled = graph.compile().unwrap();
+        let mut stream = compiled.stream(JsonState::new(), None);
+
+        let mut got_error = false;
+        while let Some(event) = stream.next().await {
+            if let Ok(StreamEvent::Error { error, .. }) = event {
+                assert!(
+                    error.contains("No conditional route matched"),
+                    "stream error should mention no route matched, got: {}",
+                    error
+                );
+                got_error = true;
+            }
+        }
+
+        assert!(got_error, "stream should emit an error event when no conditional route matches");
     }
 }
