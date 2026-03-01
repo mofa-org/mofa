@@ -1,6 +1,25 @@
-//! Typed errors for the plugin sub-system.
+//! Typed errors and result aliases for the plugin sub-system.
 
+use error_stack::Report;
 use thiserror::Error;
+
+/// Error-stack–backed result alias for plugin operations.
+///
+/// Equivalent to `Result<T, error_stack::Report<PluginError>>`.
+pub type PluginResult<T> = ::std::result::Result<T, Report<PluginError>>;
+
+/// Extension trait to convert `Result<T, PluginError>` into [`PluginResult<T>`].
+pub trait IntoPluginReport<T> {
+    /// Wrap the error in an `error_stack::Report`.
+    fn into_report(self) -> PluginResult<T>;
+}
+
+impl<T> IntoPluginReport<T> for ::std::result::Result<T, PluginError> {
+    #[inline]
+    fn into_report(self) -> PluginResult<T> {
+        self.map_err(Report::new)
+    }
+}
 
 /// Errors that can occur during plugin lifecycle operations.
 #[derive(Debug, Error)]
