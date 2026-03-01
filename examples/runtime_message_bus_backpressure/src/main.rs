@@ -3,7 +3,7 @@ use mofa_sdk::runtime::{AgentBuilder, SimpleRuntime};
 use tokio::time::{Duration, sleep, timeout};
 
 #[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
+async fn main() -> anyhow::Result<()> {
     let runtime = SimpleRuntime::new();
 
     let slow_builder = AgentBuilder::new("slow-agent", "SlowAgent");
