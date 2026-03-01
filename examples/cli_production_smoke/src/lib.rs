@@ -8,6 +8,7 @@ use tempfile::TempDir;
 
 pub type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
 
+#[allow(unused_macros)]
 macro_rules! bail {
     ($($arg:tt)*) => {
         return Err(format!($($arg)*).into())

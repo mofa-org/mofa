@@ -80,7 +80,6 @@
 
 use mofa_sdk::persistence::ChatSession;
 use std::io::Write;
-use std::sync::Arc;
 use futures::StreamExt;
 use mofa_sdk::{llm::{LLMAgentBuilder, Role}, persistence::{PostgresStore, PersistencePlugin}};
 use tracing::{info, Level};

@@ -80,6 +80,7 @@ impl RouteRuleManager {
 
     /// 移除规则
     /// Remove a rule
+    #[allow(dead_code)]
     pub fn remove_rule(&self, rule_name: &str) {
         let mut rules = self.rules.write().unwrap();
         rules.retain(|rule| rule.name != rule_name);
