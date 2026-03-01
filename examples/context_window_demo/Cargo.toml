@@ -1,0 +1,8 @@
+[package]
+name = "context_window_demo"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+mofa-foundation = { path = "../../crates/mofa-foundation" }
+tokio = { workspace = true }

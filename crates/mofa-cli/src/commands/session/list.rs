@@ -1,5 +1,6 @@
 //! `mofa session list` command implementation
 
+use crate::CliError;
 use crate::context::CliContext;
 use crate::output::Table;
 use colored::Colorize;
@@ -10,7 +11,7 @@ pub async fn run(
     ctx: &CliContext,
     agent_id: Option<&str>,
     limit: Option<usize>,
-) -> anyhow::Result<()> {
+) -> Result<(), CliError> {
     println!("{} Listing sessions", "→".green());
 
     if let Some(agent) = agent_id {
@@ -27,7 +28,7 @@ pub async fn run(
         .session_manager
         .list()
         .await
-        .map_err(|e| anyhow::anyhow!("Failed to list sessions: {}", e))?;
+        .map_err(|e| CliError::SessionError(format!("Failed to list sessions: {}", e)))?;
 
     if keys.is_empty() {
         println!("  No sessions found.");
@@ -40,7 +41,7 @@ pub async fn run(
             .session_manager
             .get(key)
             .await
-            .map_err(|e| anyhow::anyhow!("Failed to load session '{}': {}", key, e))?
+            .map_err(|e| CliError::SessionError(format!("Failed to load session '{}': {}", key, e)))?
         {
             Some(session) => session,
             None => continue,

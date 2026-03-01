@@ -590,7 +590,7 @@ impl ModelPool {
             }
         }
 
-        Err(OrchestratorError::NoModelForType(format!("{:?}", task)))
+        Err(OrchestratorError::NoModelForType(format!("{}", task)))
     }
 
     /// Apply dynamic precision degradation to the model with the worst LRU score.

@@ -129,23 +129,67 @@ impl GeminiProvider {
                         Role::System => unreachable!(),
                     };
 
-                    let text = match &msg.content {
-                        Some(MessageContent::Text(t)) => t.clone(),
-                        Some(MessageContent::Parts(parts)) => parts
-                            .iter()
-                            .filter_map(|p| match p {
-                                ContentPart::Text { text } => Some(text.clone()),
-                                _ => None,
-                            })
-                            .collect::<Vec<_>>()
-                            .join("\n"),
-                        None => String::new(),
-                    };
-
-                    contents.push(serde_json::json!({
-                        "role": role,
-                        "parts": [{"text": text}],
-                    }));
+                    match &msg.content {
+                        Some(MessageContent::Text(t)) => {
+                            contents.push(serde_json::json!({
+                                "role": role,
+                                "parts": [{"text": t.clone()}],
+                            }));
+                        }
+                        Some(MessageContent::Parts(parts)) => {
+                            let mut gemini_parts = Vec::new();
+                            for part in parts {
+                                match part {
+                                    ContentPart::Text { text } => {
+                                        gemini_parts.push(serde_json::json!({"text": text.clone()}));
+                                    }
+                                    ContentPart::Image { image_url } => {
+                                        let mime_type = if image_url.url.contains("data:image/jpeg") {
+                                            "image/jpeg"
+                                        } else if image_url.url.contains("data:image/png") {
+                                            "image/png"
+                                        } else if image_url.url.contains("data:image/webp") {
+                                            "image/webp"
+                                        } else {
+                                            "image/jpeg"
+                                        };
+                                        let data = image_url.url.split(',').last().unwrap_or(&image_url.url);
+                                        gemini_parts.push(serde_json::json!({
+                                            "inlineData": {
+                                                "mimeType": mime_type,
+                                                "data": data,
+                                            }
+                                        }));
+                                    }
+                                    ContentPart::Audio { audio } => {
+                                        let mime_type = format!("audio/{}", audio.format.to_lowercase());
+                                        let data = audio.data.split(',').last().unwrap_or(&audio.data);
+                                        gemini_parts.push(serde_json::json!({
+                                            "inlineData": {
+                                                "mimeType": mime_type,
+                                                "data": data,
+                                            }
+                                        }));
+                                    }
+                                    ContentPart::Video { video } => {
+                                        let mime_type = format!("video/{}", video.format.to_lowercase());
+                                        let data = video.data.split(',').last().unwrap_or(&video.data);
+                                        gemini_parts.push(serde_json::json!({
+                                            "inlineData": {
+                                                "mimeType": mime_type,
+                                                "data": data,
+                                            }
+                                        }));
+                                    }
+                                }
+                            }
+                            contents.push(serde_json::json!({
+                                "role": role,
+                                "parts": gemini_parts,
+                            }));
+                        }
+                        None => {}
+                    }
                 }
             }
         }

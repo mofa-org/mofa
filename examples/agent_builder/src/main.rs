@@ -18,7 +18,6 @@
 
 use std::sync::Arc;
 
-use anyhow::Result;
 use async_trait::async_trait;
 use tracing::info;
 
@@ -88,7 +87,7 @@ impl LLMProvider for MockLLM {
 }
 
 #[tokio::main]
-async fn main() -> Result<()> {
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
     tracing_subscriber::fmt().with_env_filter("info").init();
 
     // ------------------------------------------------------------------
