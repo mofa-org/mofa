@@ -1087,7 +1087,7 @@ mod tests {
     impl NodeFunc<JsonState> for LoopNode {
         async fn call(&self, state: &mut JsonState, _ctx: &RuntimeContext) -> AgentResult<Command> {
             let count = state
-                .get_value("count")
+                .get_value::<serde_json::Value>("count")
                 .and_then(|v| v.as_u64())
                 .unwrap_or(0)
                 + 1;
