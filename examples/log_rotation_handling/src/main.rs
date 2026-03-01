@@ -5,7 +5,6 @@
 //! 2. Simulates log rotation (truncate/rename)
 //! 3. Shows how tail command handles rotation gracefully
 
-use anyhow::Result;
 use std::time::Duration;
 use tempfile::TempDir;
 use tokio::fs;
@@ -13,7 +12,7 @@ use tokio::io::AsyncWriteExt;
 use tokio::time::sleep;
 
 #[tokio::main]
-async fn main() -> Result<()> {
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
     tracing_subscriber::fmt::init();
 
     println!("Log Rotation Handling Demo\n");

@@ -523,12 +523,14 @@ mod tests {
 
     /// Create a test runtime without async support for synchronous tests
     fn create_test_runtime() -> WasmResult<WasmRuntime> {
-        let mut config = RuntimeConfig::default();
-        config.execution_config = ExecutionConfig {
-            async_support: false,
-            fuel_metering: false,
-            epoch_interruption: false,
-            ..ExecutionConfig::default()
+        let config = RuntimeConfig {
+            execution_config: ExecutionConfig {
+                async_support: false,
+                fuel_metering: false,
+                epoch_interruption: false,
+                ..ExecutionConfig::default()
+            },
+            ..RuntimeConfig::default()
         };
         WasmRuntime::new(config)
     }

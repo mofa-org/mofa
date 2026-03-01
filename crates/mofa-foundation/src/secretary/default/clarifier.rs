@@ -464,7 +464,7 @@ impl RequirementClarifier {
                 .default_answer
                 .clone()
                 .unwrap_or_else(|| "待定".to_string());
-                // Pending
+            // Pending
             self.answer_question(&mut session, &question.id, &answer)
                 .await?;
         }

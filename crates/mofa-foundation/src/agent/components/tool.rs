@@ -6,7 +6,8 @@
 
 use async_trait::async_trait;
 use mofa_kernel::agent::components::tool::{
-    ToolDescriptor, ToolInput, ToolMetadata, ToolRegistry, ToolResult, DynTool, ToolExt as KernelToolExt,
+    DynTool, ToolDescriptor, ToolExt as KernelToolExt, ToolInput, ToolMetadata, ToolRegistry,
+    ToolResult,
 };
 use mofa_kernel::agent::context::AgentContext;
 use mofa_kernel::agent::error::AgentResult;

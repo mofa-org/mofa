@@ -80,7 +80,9 @@ impl HttpRequestTool {
         }
 
         // Resolve hostname and check all resulting IPs
-        let port = parsed.port().unwrap_or(if parsed.scheme() == "https" { 443 } else { 80 });
+        let port = parsed
+            .port()
+            .unwrap_or(if parsed.scheme() == "https" { 443 } else { 80 });
         let socket_addrs = format!("{}:{}", host, port);
         let addrs: Vec<_> = match socket_addrs.to_socket_addrs() {
             Ok(a) => a.collect(),
@@ -124,8 +126,7 @@ impl HttpRequestTool {
             std::net::IpAddr::V6(ipv6) => {
                 // Block unique local (fc00::/7) and link-local (fe80::/10)
                 let segments = ipv6.segments();
-                (segments[0] & 0xfe00) == 0xfc00
-                    || (segments[0] & 0xffc0) == 0xfe80
+                (segments[0] & 0xfe00) == 0xfc00 || (segments[0] & 0xffc0) == 0xfe80
             }
         }
     }
@@ -141,7 +142,7 @@ impl ToolExecutor for HttpRequestTool {
         let method = arguments["method"].as_str().unwrap_or("GET");
         let url = arguments["url"]
             .as_str()
-            .ok_or_else(|| mofa_kernel::plugin::PluginError::ExecutionFailed(format!("URL is required")))?;
+            .ok_or_else(|| mofa_kernel::plugin::PluginError::ExecutionFailed("URL is required".to_string()))?;
 
         // Validate URL to prevent SSRF attacks
         if !Self::is_url_allowed(url) {
