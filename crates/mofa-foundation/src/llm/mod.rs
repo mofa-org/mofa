@@ -326,7 +326,8 @@ pub mod context;
 pub mod task_orchestrator;
 pub mod token_budget;
 pub mod vision;
-
+pub mod stream_adapter;
+pub mod stream_bridge;
 // Audio processing
 pub mod transcription;
 
@@ -338,6 +339,8 @@ pub use provider::{
     ChatStream, LLMConfig, LLMProvider, LLMRegistry, ModelCapabilities, ModelInfo, global_registry,
 };
 pub use retry::RetryExecutor;
+pub use stream_adapter::{GenericStreamAdapter, StreamAdapter, adapter_for_provider};
+pub use stream_bridge::{stream_error_to_llm_error, token_stream_to_events, token_stream_to_text};
 pub use tool_executor::ToolExecutor;
 pub use tool_schema::{normalize_schema, parse_schema, validate_schema};
 pub use types::*;
