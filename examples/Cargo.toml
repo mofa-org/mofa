@@ -44,6 +44,7 @@ members = [
     "context_window_demo",
     "compression_examples",
     "admission_gate_demo",
+    "integrations_demo",
 ]
 
 [workspace.package]

@@ -141,6 +141,8 @@ candle-transformers = { version = "0.8", optional = true }
 workspace = true
 
 [dev-dependencies]
+# bring in proc macro to satisfy downstream crates during all-features build
+num_enum_derive = "0.7"
 tempfile = "3"
 criterion = { version = "0.5", features = ["html_reports"] }
 
