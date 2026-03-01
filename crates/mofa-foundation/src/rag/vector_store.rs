@@ -119,11 +119,17 @@ impl VectorStore for InMemoryVectorStore {
     }
 
     async fn delete(&mut self, id: &str) -> AgentResult<bool> {
-        Ok(self.chunks.remove(id).is_some())
+        let removed = self.chunks.remove(id).is_some();
+        if removed && self.chunks.is_empty() {
+            // reset dimension when store becomes empty
+            self.dimension = None;
+        }
+        Ok(removed)
     }
 
     async fn clear(&mut self) -> AgentResult<()> {
         self.chunks.clear();
+        self.dimension = None;
         Ok(())
     }
 
@@ -166,6 +172,7 @@ impl InMemoryVectorStore {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use mofa_kernel::agent::error::AgentError;
 
     fn make_chunk(id: &str, text: &str, embedding: Vec<f32>) -> DocumentChunk {
         DocumentChunk::new(id, text, embedding)
@@ -418,5 +425,60 @@ mod tests {
     fn test_default_is_cosine() {
         let store = InMemoryVectorStore::default();
         assert_eq!(store.similarity_metric(), SimilarityMetric::Cosine);
+    }
+
+    #[tokio::test]
+    async fn test_dimension_validation_upsert() {
+        let mut store = InMemoryVectorStore::cosine();
+        store
+            .upsert(make_chunk("a", "text", vec![1.0, 0.0]))
+            .await
+            .unwrap();
+        let err = store
+            .upsert(make_chunk("b", "other", vec![0.0]))
+            .await
+            .unwrap_err();
+        assert!(matches!(err, AgentError::InvalidInput(_)));
+    }
+
+    #[tokio::test]
+    async fn test_dimension_validation_search() {
+        let mut store = InMemoryVectorStore::cosine();
+        store
+            .upsert(make_chunk("a", "text", vec![1.0, 0.0]))
+            .await
+            .unwrap();
+        let err = store.search(&[1.0], 1, None).await.unwrap_err();
+        assert!(matches!(err, AgentError::InvalidInput(_)));
+    }
+
+    #[tokio::test]
+    async fn test_dimension_reset_on_clear_and_delete() {
+        let mut store = InMemoryVectorStore::cosine();
+        store
+            .upsert(make_chunk("a", "text", vec![1.0, 0.0]))
+            .await
+            .unwrap();
+        assert_eq!(store.dimension, Some(2));
+        store.clear().await.unwrap();
+        assert_eq!(store.dimension, None);
+        store
+            .upsert(make_chunk("b", "text", vec![0.0, 1.0]))
+            .await
+            .unwrap();
+        assert_eq!(store.dimension, Some(2));
+        store.delete("b").await.unwrap();
+        assert_eq!(store.dimension, None);
+    }
+
+    #[tokio::test]
+    async fn test_dimension_validation_upsert_batch() {
+        let mut store = InMemoryVectorStore::cosine();
+        let chunks = vec![
+            make_chunk("a", "t", vec![1.0, 0.0]),
+            make_chunk("b", "t", vec![0.0]),
+        ];
+        let err = store.upsert_batch(chunks).await.unwrap_err();
+        assert!(matches!(err, AgentError::InvalidInput(_)));
     }
 }

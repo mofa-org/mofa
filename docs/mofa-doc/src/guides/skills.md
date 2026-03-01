@@ -15,7 +15,7 @@ The skills system:
 use mofa_sdk::skills::SkillsManager;
 
 #[tokio::main]
-async fn main() -> anyhow::Result<()> {
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Initialize skills manager
     let skills = SkillsManager::new("./skills")?;
 

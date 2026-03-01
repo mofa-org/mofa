@@ -79,11 +79,11 @@ impl ToolExecutor for CalculatorTool {
             "multiply" => a * b,
             "divide" => {
                 if b == 0.0 {
-                    return Err(std::io::Error::other("Division by zero").into());
+                    return Err(PluginError::ExecutionFailed("Division by zero".to_string()));
                 }
                 a / b
             }
-            _ => return Err(std::io::Error::other(format!("Unknown operation: {}", op)).into()),
+            _ => return Err(PluginError::ExecutionFailed(format!("Unknown operation: {}", op))),
         };
 
         Ok(serde_json::json!({
@@ -252,12 +252,7 @@ impl AgentPlugin for MonitorPlugin {
             ["list"] => {
                 Ok(serde_json::to_string(&self.all_metrics())?)
             }
-            _ => Err(
-                std::io::Error::other(
-                    "Invalid command. Use: record <name> <value>, get <name>, list",
-                )
-                .into(),
-            ),
+            _ => Err(PluginError::ExecutionFailed("Invalid command. Use: record <name> <value>, get <name>, list".to_string())),
         }
     }
 
@@ -287,7 +282,7 @@ impl AgentPlugin for MonitorPlugin {
 // ============================================================================
 
 #[tokio::main]
-async fn main() -> anyhow::Result<()> {
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // 初始化日志
     // Initialize logging
     tracing_subscriber::fmt()

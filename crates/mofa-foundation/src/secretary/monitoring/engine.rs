@@ -97,12 +97,17 @@ impl EventHandlingEngine {
         let semaphore = self.semaphore.clone();
         let _permit = semaphore.acquire().await.unwrap();
 
-        // Get the next event from the queue
-        let mut queue = self.event_queue.write().await;
-        let mut event = match queue.pop_front() {
-            Some(event) => event,
-            None => return Ok(None),
-        };
+        // Pop the next event and immediately release the write lock so that
+        // concurrent calls to submit_event() are not blocked for the entire
+        // duration of plugin processing (which may include async I/O or LLM
+        // calls lasting seconds).
+        let mut event = {
+            let mut queue = self.event_queue.write().await;
+            match queue.pop_front() {
+                Some(event) => event,
+                None => return Ok(None),
+            }
+        }; // write lock released here, before any .await
 
         // Update event status
         event.update_status(EventStatus::Processing);

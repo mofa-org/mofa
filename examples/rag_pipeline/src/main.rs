@@ -16,7 +16,6 @@
 //! QDRANT_URL=http://localhost:6334 cargo run -p rag_pipeline -- qdrant
 //! ```
 
-use anyhow::Result;
 use futures::StreamExt;
 use mofa_foundation::rag::{
     ChunkConfig, Document, DocumentChunk, IdentityReranker, InMemoryVectorStore, PassthroughStreamingGenerator,
@@ -110,7 +109,7 @@ impl Generator for SimpleGenerator {
 /// Demonstrates a basic RAG pipeline using the in-memory vector store.
 ///
 /// Steps: chunk documents, embed, store, search, build context for LLM.
-async fn basic_rag_pipeline() -> Result<()> {
+async fn basic_rag_pipeline() -> Result<(), Box<dyn std::error::Error>> {
     println!("--- Basic RAG Pipeline (In-Memory) ---\n");
 
     let mut store = InMemoryVectorStore::cosine();
@@ -189,7 +188,7 @@ async fn basic_rag_pipeline() -> Result<()> {
 }
 
 /// Demonstrates the new RAG pipeline with streaming generation and real-world testing.
-async fn streaming_rag_pipeline() -> Result<()> {
+async fn streaming_rag_pipeline() -> Result<(), Box<dyn std::error::Error>> {
     println!("--- Streaming RAG Pipeline with Real-World Testing ---\n");
 
     let mut store = InMemoryVectorStore::cosine();
@@ -351,7 +350,7 @@ async fn streaming_rag_pipeline() -> Result<()> {
 }
 
 /// Test edge cases and error conditions in streaming
-async fn streaming_edge_cases_test() -> Result<()> {
+async fn streaming_edge_cases_test() -> Result<(), Box<dyn std::error::Error>> {
     println!("--- Streaming Edge Cases Test ---\n");
 
     let mut store = InMemoryVectorStore::cosine();
@@ -452,7 +451,7 @@ async fn streaming_edge_cases_test() -> Result<()> {
     Ok(())
 }
 
-async fn streaming_memory_test() -> Result<()> {
+async fn streaming_memory_test() -> Result<(), Box<dyn std::error::Error>> {
     println!("--- Streaming Memory Usage Test ---\n");
 
     // Note: This is a basic memory test. In production, you'd use proper memory profiling tools.
@@ -519,11 +518,11 @@ async fn streaming_memory_test() -> Result<()> {
             let query = format!("What are the key features of document {}?", i);
             let start = std::time::Instant::now();
 
-            let (docs, mut stream) = pipeline_clone.run_streaming(&query, 3).await?;
+            let (docs, mut stream) = pipeline_clone.run_streaming(&query, 3).await.map_err(|e| -> Box<dyn std::error::Error + Send + Sync> { format!("{}", e).into() })?;
             let mut char_count = 0;
 
             while let Some(chunk_result) = stream.next().await {
-                match chunk_result? {
+                match chunk_result.map_err(|e| -> Box<dyn std::error::Error + Send + Sync> { format!("{}", e).into() })? {
                     mofa_kernel::rag::pipeline::GeneratorChunk::Text(text) => {
                         char_count += text.len();
                         // Simulate processing time
@@ -534,7 +533,7 @@ async fn streaming_memory_test() -> Result<()> {
             }
 
             let duration = start.elapsed();
-            Ok::<_, anyhow::Error>((docs.len(), char_count, duration))
+            Ok::<_, Box<dyn std::error::Error + Send + Sync>>((docs.len(), char_count, duration))
         });
         handles.push(handle);
     }
@@ -545,7 +544,11 @@ async fn streaming_memory_test() -> Result<()> {
     let mut max_duration = std::time::Duration::new(0, 0);
 
     for handle in handles {
-        let (docs, chars, duration) = handle.await??;
+        let (docs, chars, duration) = match handle.await {
+            Ok(Ok(val)) => val,
+            Ok(Err(e)) => return Err(format!("Task error: {}", e).into()),
+            Err(e) => return Err(format!("Join error: {}", e).into()),
+        };
         total_docs += docs;
         total_chars += chars;
         if duration > max_duration {
@@ -572,7 +575,7 @@ async fn streaming_memory_test() -> Result<()> {
     Ok(())
 }
 
-async fn streaming_performance_benchmark() -> Result<()> {
+async fn streaming_performance_benchmark() -> Result<(), Box<dyn std::error::Error>> {
     println!("--- Streaming RAG Performance Benchmark ---\n");
 
     let mut store = InMemoryVectorStore::cosine();
@@ -681,7 +684,7 @@ async fn streaming_performance_benchmark() -> Result<()> {
 }
 
 /// Demonstrates multi-document ingestion with metadata tracking.
-async fn document_ingestion_demo() -> Result<()> {
+async fn document_ingestion_demo() -> Result<(), Box<dyn std::error::Error>> {
     println!("--- Document Ingestion Demo (In-Memory) ---\n");
 
     let mut store = InMemoryVectorStore::cosine();
@@ -828,7 +831,7 @@ async fn practical_validation_suite() -> Result<()> {
 }
 
 /// Demonstrates using Qdrant as the vector store backend.
-async fn qdrant_rag_pipeline(qdrant_url: &str) -> Result<()> {
+async fn qdrant_rag_pipeline(qdrant_url: &str) -> Result<(), Box<dyn std::error::Error>> {
     println!("--- Qdrant RAG Pipeline ---\n");
 
     let dimensions: u64 = 64;
@@ -905,7 +908,7 @@ fn truncate_text(text: &str, max_len: usize) -> String {
 }
 
 #[tokio::main]
-async fn main() -> Result<()> {
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
     tracing_subscriber::fmt()
         .with_env_filter("info")
         .init();

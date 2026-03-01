@@ -45,7 +45,7 @@
 //!         &self,
 //!         input: Self::Input,
 //!         ctx: &mut SecretaryContext<Self::State>,
-//!     ) -> anyhow::Result<Vec<Self::Output>> {
+//!     ) -> Result<Vec<Self::Output>, SecretaryError> {
 //!         // 自定义处理逻辑
 //!         // Custom processing logic
 //!     }

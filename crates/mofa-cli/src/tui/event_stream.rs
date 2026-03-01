@@ -3,7 +3,9 @@
 //! Combines keyboard input, paste events, resize events, and draw triggers
 //! into a single async stream.
 
-use anyhow::Result;
+use crate::CliError;
+
+type Result<T> = std::result::Result<T, CliError>;
 use crossterm::event::{Event, KeyEvent, MouseEvent};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
