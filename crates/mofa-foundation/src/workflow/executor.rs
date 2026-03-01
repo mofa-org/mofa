@@ -262,9 +262,23 @@ impl WorkflowExecutor {
 
         // 使用基于依赖的执行
         // Use dependency-based execution
-        let result = self
-            .execute_from_node(graph, &ctx, start_node_id, input, &mut execution_record)
-            .await;
+        let result = if let Some(timeout_ms) = self.config.execution_timeout_ms {
+            match tokio::time::timeout(
+                std::time::Duration::from_millis(timeout_ms),
+                self.execute_from_node(graph, &ctx, start_node_id, input, &mut execution_record),
+            )
+            .await
+            {
+                Ok(inner) => inner,
+                Err(_) => Err(format!(
+                    "Workflow execution timed out after {}ms",
+                    timeout_ms
+                )),
+            }
+        } else {
+            self.execute_from_node(graph, &ctx, start_node_id, input, &mut execution_record)
+                .await
+        };
 
         let duration = start_time.elapsed();
         execution_record.ended_at = Some(
@@ -1641,5 +1655,72 @@ mod tests {
             "branch_b should not observe branch_a input mutation"
         );
         assert_eq!(branch_b.get("seed").and_then(|v| v.as_i64()), Some(7));
+    }
+
+    #[tokio::test]
+    async fn test_execution_timeout_enforcement() {
+        let config = ExecutorConfig {
+            execution_timeout_ms: Some(100),
+            ..ExecutorConfig::default()
+        };
+        let executor = WorkflowExecutor::new(config);
+
+        let mut graph = WorkflowGraph::new("timeout_wf", "Timeout Workflow");
+        graph.add_node(WorkflowNode::start("start"));
+        graph.add_node(WorkflowNode::task(
+            "slow_task",
+            "Slow Task",
+            |_ctx, _input| async move {
+                sleep(Duration::from_millis(500)).await;
+                Ok(WorkflowValue::String("done".to_string()))
+            },
+        ));
+        graph.add_node(WorkflowNode::end("end"));
+        graph.connect("start", "slow_task");
+        graph.connect("slow_task", "end");
+
+        let record = executor
+            .execute(&graph, WorkflowValue::Null)
+            .await
+            .expect("execute() should return Ok(record) even on timeout");
+
+        match &record.status {
+            WorkflowStatus::Failed(msg) => {
+                assert!(
+                    msg.contains("timed out"),
+                    "Expected timeout message, got: {}",
+                    msg
+                );
+            }
+            other => panic!("Expected Failed status with timeout, got: {:?}", other),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_no_timeout_when_none() {
+        let config = ExecutorConfig {
+            execution_timeout_ms: None,
+            ..ExecutorConfig::default()
+        };
+        let executor = WorkflowExecutor::new(config);
+
+        let mut graph = WorkflowGraph::new("no_timeout_wf", "No Timeout Workflow");
+        graph.add_node(WorkflowNode::start("start"));
+        graph.add_node(WorkflowNode::task(
+            "fast_task",
+            "Fast Task",
+            |_ctx, _input| async move {
+                Ok(WorkflowValue::String("fast".to_string()))
+            },
+        ));
+        graph.add_node(WorkflowNode::end("end"));
+        graph.connect("start", "fast_task");
+        graph.connect("fast_task", "end");
+
+        let result = executor
+            .execute(&graph, WorkflowValue::Null)
+            .await
+            .expect("Should complete without timeout");
+        assert!(matches!(result.status, WorkflowStatus::Completed));
     }
 }
