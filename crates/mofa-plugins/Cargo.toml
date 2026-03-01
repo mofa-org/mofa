@@ -28,13 +28,17 @@ libloading.workspace = true
 tempfile.workspace = true
 sha2.workspace = true
 tracing.workspace = true
-uuid = {workspace = true,features = ["v7"]}
+uuid = { workspace = true, features = ["v7"] }
 rand.workspace = true
 # WASM plugin runtime
 wasmtime = { version = "40", features = ["component-model", "async"] }
 # Local dependencies
 mofa-kernel = { path = "../mofa-kernel", version = "0.1" }
-reqwest = { version = "0.12.28", features = ["json", "rustls-tls"] }
+reqwest = { version = "0.12.28", features = [
+    "json",
+    "rustls-tls",
+    "multipart",
+] }
 chrono = { workspace = true, features = ["serde"] }
 mofa-extra = { version = "0.1", path = "../mofa-extra" }
 rhai = { version = "1.20", features = ["sync", "serde"] }
