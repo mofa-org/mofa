@@ -3,6 +3,8 @@
 use std::future::Future;
 use std::time::Duration;
 
+use rand::Rng;
+
 use crate::agent::error::{AgentError, AgentResult};
 
 /// Delay strategy between retry attempts.
@@ -13,13 +15,18 @@ pub enum RetryPolicy {
     Fixed { delay_ms: u64 },
     /// Delay increases linearly: `base_ms * attempt`.
     Linear { base_ms: u64 },
-    /// Exponential backoff capped at `max_ms`, with optional ±12.5% pseudo-jitter.
+    /// Exponential backoff capped at `max_ms`, with optional random ±12.5% jitter.
     ExponentialBackoff { base_ms: u64, max_ms: u64, jitter: bool },
 }
 
 impl RetryPolicy {
     /// Returns the sleep duration before the given retry attempt (0-indexed).
     pub fn delay_for(&self, attempt: usize) -> Duration {
+        self.delay_for_with_rng(attempt, &mut rand::thread_rng())
+    }
+
+    /// Core delay calculation with injectable RNG for testability.
+    fn delay_for_with_rng<R: Rng + ?Sized>(&self, attempt: usize, rng: &mut R) -> Duration {
         let ms = match self {
             RetryPolicy::Fixed { delay_ms } => *delay_ms,
             RetryPolicy::Linear { base_ms } => base_ms.saturating_mul((attempt + 1) as u64),
@@ -31,12 +38,12 @@ impl RetryPolicy {
                 let capped = exp.min(*max_ms);
                 if *jitter {
                     let eighth = capped / 8;
-                    if attempt.is_multiple_of(2) {
-                        capped.saturating_add(eighth)
+                    if eighth == 0 {
+                        capped
                     } else {
-                        capped.saturating_sub(eighth)
+                        let offset = rng.gen_range(0..=2 * eighth);
+                        capped.saturating_sub(eighth).saturating_add(offset).min(*max_ms)
                     }
-                    .min(*max_ms)
                 } else {
                     capped
                 }
@@ -141,6 +148,51 @@ mod tests {
         for attempt in 0..10 {
             assert!(p.delay_for(attempt).as_millis() <= 1_000);
         }
+    }
+
+    #[test]
+    fn test_jitter_stays_within_bounds() {
+        use rand::SeedableRng;
+        let p = RetryPolicy::ExponentialBackoff { base_ms: 1_000, max_ms: 60_000, jitter: true };
+        let mut rng = rand::rngs::StdRng::seed_from_u64(42);
+        for attempt in 0..8 {
+            let exp = 1u64.checked_shl(attempt as u32)
+                .and_then(|s| 1_000u64.checked_mul(s)).unwrap_or(60_000);
+            let capped = exp.min(60_000);
+            let eighth = capped / 8;
+            let lo = capped.saturating_sub(eighth);
+            let hi = (capped + eighth).min(60_000);
+            for _ in 0..50 {
+                let d = p.delay_for_with_rng(attempt, &mut rng).as_millis() as u64;
+                assert!(d >= lo && d <= hi, "attempt {attempt}: {d} outside [{lo}, {hi}]");
+            }
+        }
+    }
+
+    #[test]
+    fn test_jitter_noop_when_eighth_is_zero() {
+        use rand::SeedableRng;
+        let p = RetryPolicy::ExponentialBackoff { base_ms: 3, max_ms: 100, jitter: true };
+        let mut rng = rand::rngs::StdRng::seed_from_u64(99);
+        // base_ms=3, attempt 0 → capped=3, eighth=3/8=0 → no jitter applied
+        for _ in 0..20 {
+            assert_eq!(p.delay_for_with_rng(0, &mut rng), Duration::from_millis(3));
+        }
+    }
+
+    #[test]
+    fn test_jitter_deterministic_with_seeded_rng() {
+        use rand::SeedableRng;
+        let p = RetryPolicy::ExponentialBackoff { base_ms: 1_000, max_ms: 60_000, jitter: true };
+        let results: Vec<_> = (0..5).map(|attempt| {
+            let mut rng = rand::rngs::StdRng::seed_from_u64(123);
+            p.delay_for_with_rng(attempt, &mut rng)
+        }).collect();
+        let results2: Vec<_> = (0..5).map(|attempt| {
+            let mut rng = rand::rngs::StdRng::seed_from_u64(123);
+            p.delay_for_with_rng(attempt, &mut rng)
+        }).collect();
+        assert_eq!(results, results2);
     }
 
     #[tokio::test]
