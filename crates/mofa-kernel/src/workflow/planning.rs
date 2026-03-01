@@ -180,7 +180,10 @@ pub struct Plan {
     pub steps: Vec<PlanStep>,
 
     /// ISO-8601 timestamp of when this plan was created.
-    pub created_at: String,
+    ///
+    /// Populated by the planning executor or planner implementation;
+    /// left `None` when constructing plans in tests or static configs.
+    pub created_at: Option<String>,
 
     /// How many times this plan has been revised (0 = original plan).
     pub iteration: u32,
@@ -192,7 +195,7 @@ impl Plan {
         Self {
             goal: goal.into(),
             steps: Vec::new(),
-            created_at: String::new(),
+            created_at: None,
             iteration: 0,
         }
     }
@@ -228,12 +231,12 @@ impl Plan {
         self.steps.iter().all(|s| s.status.is_terminal())
     }
 
-    /// Collect all completed step results as `(step_id, output)` pairs.
-    pub fn completed_results(&self) -> Vec<StepResult> {
+    /// Collect all completed step results as [`PlanStepOutput`] values.
+    pub fn completed_results(&self) -> Vec<PlanStepOutput> {
         self.steps
             .iter()
             .filter(|s| s.status.is_success())
-            .map(|s| StepResult {
+            .map(|s| PlanStepOutput {
                 step_id: s.id.clone(),
                 output: s.result.clone().unwrap_or_default(),
             })
@@ -341,8 +344,11 @@ impl Plan {
 // ---------------------------------------------------------------------------
 
 /// Output of a successfully completed plan step, passed to the synthesis phase.
+///
+/// Named `PlanStepOutput` (not `StepResult`) to avoid collision with
+/// [`super::graph::StepResult`], which is a different, generic type.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct StepResult {
+pub struct PlanStepOutput {
     /// Which step produced this result.
     pub step_id: String,
     /// The textual output of the step.
@@ -460,7 +466,7 @@ pub trait Planner: Send + Sync {
     async fn replan(&self, plan: &Plan, failed_step: &PlanStep, error: &str) -> AgentResult<Plan>;
 
     /// Combine all step results into a coherent final answer.
-    async fn synthesize(&self, goal: &str, results: &[StepResult]) -> AgentResult<String>;
+    async fn synthesize(&self, goal: &str, results: &[PlanStepOutput]) -> AgentResult<String>;
 }
 
 // ---------------------------------------------------------------------------

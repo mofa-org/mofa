@@ -15,7 +15,7 @@
 use std::sync::Arc;
 
 use mofa_kernel::agent::error::{AgentError, AgentResult};
-use mofa_kernel::workflow::planning::{Plan, PlanStep, Planner, ReflectionVerdict, StepResult};
+use mofa_kernel::workflow::planning::{Plan, PlanStep, PlanStepOutput, Planner, ReflectionVerdict};
 
 use super::provider::LLMProvider;
 use super::types::{ChatCompletionRequest, ChatMessage};
@@ -177,7 +177,13 @@ Rules:
                 }
 
                 if let Some(retries) = step_val["max_retries"].as_u64() {
-                    step = step.with_max_retries(retries as u32);
+                    let max_retries = u32::try_from(retries).map_err(|_| {
+                        AgentError::ValidationFailed(format!(
+                            "max_retries value {} is out of range for u32",
+                            retries
+                        ))
+                    })?;
+                    step = step.with_max_retries(max_retries);
                 }
 
                 plan = plan.add_step(step);
@@ -228,9 +234,14 @@ Return ONLY the JSON object."#;
                     .to_string();
                 Ok(ReflectionVerdict::Replan(reason))
             }
-            _ => {
-                // Default to accept if we can't parse the verdict
-                Ok(ReflectionVerdict::Accept)
+            other => {
+                // Treat unexpected or missing verdicts as an error to avoid
+                // silently accepting bad LLM output.
+                let verdict_str = other.unwrap_or("<missing verdict>");
+                Err(AgentError::ExecutionFailed(format!(
+                    "Unexpected reflection verdict from LLM: '{}'",
+                    verdict_str
+                )))
             }
         }
     }
@@ -315,7 +326,13 @@ Rules:
                 }
 
                 if let Some(retries) = step_val["max_retries"].as_u64() {
-                    step = step.with_max_retries(retries as u32);
+                    let max_retries = u32::try_from(retries).map_err(|_| {
+                        AgentError::ValidationFailed(format!(
+                            "max_retries value {} is out of range for u32",
+                            retries
+                        ))
+                    })?;
+                    step = step.with_max_retries(max_retries);
                 }
 
                 new_plan = new_plan.add_step(step);
@@ -325,7 +342,7 @@ Rules:
         Ok(new_plan)
     }
 
-    async fn synthesize(&self, goal: &str, results: &[StepResult]) -> AgentResult<String> {
+    async fn synthesize(&self, goal: &str, results: &[PlanStepOutput]) -> AgentResult<String> {
         let system = "You are a synthesis agent. Given a goal and the outputs from multiple steps, combine them into a single coherent response that fully addresses the original goal. Be thorough but concise.";
 
         let step_outputs: Vec<String> = results

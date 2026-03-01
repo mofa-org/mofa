@@ -54,7 +54,9 @@ pub use context::{GraphConfig, RemainingSteps, RuntimeContext};
 pub use graph::{
     CompiledGraph, END, EdgeTarget, NodeFunc, START, StateGraph, StepResult, StreamEvent,
 };
-pub use planning::{Plan, PlanStep, Planner, PlanningConfig, PlanningEvent, ReflectionVerdict};
+pub use planning::{
+    Plan, PlanStep, PlanStepOutput, Planner, PlanningConfig, PlanningEvent, ReflectionVerdict,
+};
 pub use reducer::{Reducer, ReducerType, StateUpdate};
 pub use state::{GraphState, JsonState, StateSchema};
 pub use telemetry::{DebugEvent, DebugSession, SessionRecorder, TelemetryEmitter};

@@ -3,8 +3,9 @@
 //! Orchestrates the Plan → Execute → Reflect → Synthesize lifecycle:
 //!
 //! 1. **Plan** — Calls [`Planner::decompose`] to produce a DAG-based plan.
-//! 2. **Execute** — Runs steps in topological order; independent steps run in
-//!    parallel (up to [`PlanningConfig::max_parallel_steps`]).
+//! 2. **Execute** — Runs steps respecting DAG dependencies. Steps within a
+//!    batch are executed **sequentially** (parallel via `JoinSet` is planned).
+//!    Batch size is limited by [`PlanningConfig::max_parallel_steps`].
 //! 3. **Reflect** — After each step, calls [`Planner::reflect`]. On `Retry`,
 //!    re-executes with feedback. On `Replan`, revises the plan.
 //! 4. **Synthesize** — Calls [`Planner::synthesize`] to merge step outputs.
@@ -13,7 +14,8 @@
 //!
 //! - Uses [`ToolExecutor`] for tool access during step execution.
 //! - Emits [`PlanningEvent`]s for observability.
-//! - Respects [`PlanningConfig`] for concurrency and retry limits.
+//! - Respects [`PlanningConfig`] for batch sizing, retry limits, and per-step
+//!   timeouts.
 
 use std::collections::HashSet;
 use std::sync::Arc;
@@ -22,6 +24,7 @@ use mofa_kernel::agent::error::{AgentError, AgentResult};
 use mofa_kernel::workflow::planning::{
     Plan, PlanStep, Planner, PlanningConfig, PlanningEvent, ReflectionVerdict, StepStatus,
 };
+use std::time::Duration;
 use tokio::sync::mpsc;
 
 use super::tool_executor::ToolExecutor;
@@ -245,8 +248,26 @@ impl PlanningExecutor {
                             reason: error_msg.clone(),
                         });
 
+                        // Snapshot completed results before replacing the plan
+                        let old_completed_results: Vec<(String, String)> = plan
+                            .steps
+                            .iter()
+                            .filter(|s| s.status.is_success())
+                            .map(|s| (s.id.clone(), s.result.clone().unwrap_or_default()))
+                            .collect();
+
                         plan = self.planner.replan(&plan, &failed, &error_msg).await?;
                         plan.validate()?;
+
+                        // Carry forward completed step results from the old
+                        // plan so they remain available for dependency context
+                        // and final synthesis.
+                        for old_step in &old_completed_results {
+                            if let Some(new_step) = plan.get_step_mut(&old_step.0) {
+                                new_step.status = StepStatus::Completed;
+                                new_step.result = Some(old_step.1.clone());
+                            }
+                        }
 
                         let _ = tx.send(PlanningEvent::PlanCreated { plan: plan.clone() });
                     } else {
@@ -313,9 +334,8 @@ impl PlanningExecutor {
                 .take(self.config.max_parallel_steps)
                 .collect();
 
-            // Execute batch (sequentially for now; parallel via JoinSet in future)
-            // Note: We execute sequentially to avoid complexity with mutable plan access.
-            // Parallel execution can be added as a follow-up.
+            // Execute batch sequentially. (Parallel execution via JoinSet
+            // is a planned follow-up — requires decoupling plan mutation.)
             for step_id in batch {
                 self.execute_single_step(plan, &step_id, &completed, tx)
                     .await?;
@@ -330,11 +350,16 @@ impl PlanningExecutor {
     }
 
     /// Execute a single step with retry and reflection.
+    ///
+    /// `max_retries` on a step is the **total number of attempts** (including
+    /// the first). Setting it to `1` means one attempt, no retries.
+    /// When `PlanningConfig::step_timeout_ms > 0`, each execution attempt
+    /// is wrapped in `tokio::time::timeout`.
     async fn execute_single_step(
         &self,
         plan: &mut Plan,
         step_id: &str,
-        completed: &HashSet<String>,
+        _completed: &HashSet<String>,
         tx: &mpsc::UnboundedSender<PlanningEvent>,
     ) -> Result<(), String> {
         // Gather dependency outputs for context
@@ -373,13 +398,32 @@ impl PlanningExecutor {
                 step.attempts = attempt;
             }
 
-            // Execute — pass retry feedback so the executor can improve
+            // Execute — pass retry feedback so the executor can improve.
+            // Apply per-step timeout if configured.
             let step_snapshot = plan.get_step(step_id).ok_or("Step not found")?.clone();
-            let exec_result = self
-                .step_executor
-                .execute_step(&step_snapshot, &dep_outputs, last_feedback.as_deref())
-                .await;
-
+            let exec_result = if self.config.step_timeout_ms > 0 {
+                let timeout_dur = Duration::from_millis(self.config.step_timeout_ms);
+                match tokio::time::timeout(
+                    timeout_dur,
+                    self.step_executor.execute_step(
+                        &step_snapshot,
+                        &dep_outputs,
+                        last_feedback.as_deref(),
+                    ),
+                )
+                .await
+                {
+                    Ok(result) => result,
+                    Err(_elapsed) => Err(AgentError::ExecutionFailed(format!(
+                        "Step '{}' timed out after {}ms",
+                        step_id, self.config.step_timeout_ms
+                    ))),
+                }
+            } else {
+                self.step_executor
+                    .execute_step(&step_snapshot, &dep_outputs, last_feedback.as_deref())
+                    .await
+            };
             match exec_result {
                 Ok(output) => {
                     // Reflect
@@ -489,7 +533,7 @@ impl PlanningExecutor {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use mofa_kernel::workflow::planning::{PlanStep, StepResult as PlanStepResult};
+    use mofa_kernel::workflow::planning::{PlanStep, PlanStepOutput};
 
     // -- Mock Planner ---------------------------------------------------
 
@@ -538,7 +582,7 @@ mod tests {
                 .add_step(PlanStep::new("recovery", "Recovery step").with_max_retries(2)))
         }
 
-        async fn synthesize(&self, goal: &str, results: &[PlanStepResult]) -> AgentResult<String> {
+        async fn synthesize(&self, goal: &str, results: &[PlanStepOutput]) -> AgentResult<String> {
             let summary: Vec<String> = results
                 .iter()
                 .map(|r| format!("[{}] {}", r.step_id, r.output))
@@ -654,7 +698,7 @@ mod tests {
             async fn synthesize(
                 &self,
                 _goal: &str,
-                results: &[PlanStepResult],
+                results: &[PlanStepOutput],
             ) -> AgentResult<String> {
                 Ok(format!("Recovered: {}", results.len()))
             }
@@ -710,7 +754,7 @@ mod tests {
             async fn synthesize(
                 &self,
                 _goal: &str,
-                _results: &[PlanStepResult],
+                _results: &[PlanStepOutput],
             ) -> AgentResult<String> {
                 Ok("never reached".into())
             }
@@ -773,7 +817,7 @@ mod tests {
             async fn synthesize(
                 &self,
                 _goal: &str,
-                results: &[PlanStepResult],
+                results: &[PlanStepOutput],
             ) -> AgentResult<String> {
                 Ok(format!("Joined {} results", results.len()))
             }
@@ -835,7 +879,7 @@ mod tests {
             async fn synthesize(
                 &self,
                 _goal: &str,
-                results: &[PlanStepResult],
+                results: &[PlanStepOutput],
             ) -> AgentResult<String> {
                 Ok(format!("Done: {}", results[0].output))
             }
