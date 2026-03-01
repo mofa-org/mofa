@@ -69,6 +69,10 @@ pub enum KernelError {
     /// A secretary-layer error.
     #[error("Secretary error: {0}")]
     Secretary(#[from] crate::agent::secretary::SecretaryError),
+
+    /// A scheduler error.
+    #[error("Scheduler error: {0}")]
+    Scheduler(#[from] crate::scheduler::SchedulerError),
 }
 
 impl From<crate::agent::types::error::GlobalError> for KernelError {
