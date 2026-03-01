@@ -220,6 +220,7 @@ impl NodeConfig {
 
 /// 工作流节点
 /// Workflow node
+#[derive(Clone)]
 pub struct WorkflowNode {
     /// 节点配置
     /// Node configuration

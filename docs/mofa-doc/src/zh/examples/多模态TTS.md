@@ -14,7 +14,7 @@ use mofa_sdk::plugins::{KokoroTTS, TTSPlugin};
 use rodio::{OutputStream, Sink, buffer::SamplesBuffer};
 
 #[tokio::main]
-async fn main() -> anyhow::Result<()> {
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // 初始化 TTS 引擎
     let kokoro_engine = KokoroTTS::new(&model_path, &voice_path).await?;
 

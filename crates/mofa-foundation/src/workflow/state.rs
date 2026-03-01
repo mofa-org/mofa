@@ -4,8 +4,8 @@
 //! 管理工作流执行过程中的状态和数据传递
 //! Manages state and data transfer during workflow execution
 
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-use std::any::Any;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
@@ -265,6 +265,7 @@ impl NodeResult {
 
 /// 工作流上下文 - 在节点间传递数据
 /// Workflow Context - Passing data between nodes
+#[derive(Debug)]
 pub struct WorkflowContext {
     /// 工作流 ID
     /// Workflow ID
@@ -284,12 +285,71 @@ pub struct WorkflowContext {
     /// 全局变量
     /// Global variables
     variables: Arc<RwLock<HashMap<String, WorkflowValue>>>,
-    /// 自定义数据存储
-    /// Custom data storage
-    custom_data: Arc<RwLock<HashMap<String, Box<dyn Any + Send + Sync>>>>,
     /// 检查点数据
     /// Checkpoint data
     checkpoints: Arc<RwLock<Vec<CheckpointData>>>,
+    /// 暂停时间（用于超时处理）
+    /// Paused timestamp (for timeout handling)
+    pub paused_at: Arc<RwLock<Option<DateTime<Utc>>>>,
+    /// 上一个等待节点（用于恢复）
+    /// Last waiting node (for resume)
+    pub last_waiting_node: Arc<RwLock<Option<String>>>,
+    pub total_wait_time_ms: Arc<RwLock<u64>>,
+}
+
+/// 可序列化的工作流上下文快照
+/// Serializable Workflow Context Snapshot
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WorkflowContextSnapshot {
+    /// Schema version for migration compatibility
+    pub version: u32,
+    pub workflow_id: String,
+    pub execution_id: String,
+    pub input: WorkflowValue,
+    pub node_outputs: HashMap<String, WorkflowValue>,
+    pub node_statuses: HashMap<String, NodeStatus>,
+    pub variables: HashMap<String, WorkflowValue>,
+    pub checkpoints: Vec<CheckpointData>,
+    pub paused_at: Option<DateTime<Utc>>,
+    pub last_waiting_node: Option<String>,
+    pub total_wait_time_ms: u64,
+}
+
+impl WorkflowContext {
+    /// 创建状态快照
+    /// Create state snapshot
+    pub async fn snapshot(&self) -> WorkflowContextSnapshot {
+        WorkflowContextSnapshot {
+            version: 1,
+            workflow_id: self.workflow_id.clone(),
+            execution_id: self.execution_id.clone(),
+            input: self.input.read().await.clone(),
+            node_outputs: self.node_outputs.read().await.clone(),
+            node_statuses: self.node_statuses.read().await.clone(),
+            variables: self.variables.read().await.clone(),
+            checkpoints: self.checkpoints.read().await.clone(),
+            paused_at: *self.paused_at.read().await,
+            last_waiting_node: self.last_waiting_node.read().await.clone(),
+            total_wait_time_ms: *self.total_wait_time_ms.read().await,
+        }
+    }
+
+    /// 从快照恢复
+    /// Restore from snapshot
+    pub fn from_snapshot(snapshot: WorkflowContextSnapshot) -> Self {
+        Self {
+            workflow_id: snapshot.workflow_id,
+            execution_id: snapshot.execution_id,
+            input: Arc::new(RwLock::new(snapshot.input)),
+            node_outputs: Arc::new(RwLock::new(snapshot.node_outputs)),
+            node_statuses: Arc::new(RwLock::new(snapshot.node_statuses)),
+            variables: Arc::new(RwLock::new(snapshot.variables)),
+            checkpoints: Arc::new(RwLock::new(snapshot.checkpoints)),
+            paused_at: Arc::new(RwLock::new(snapshot.paused_at)),
+            last_waiting_node: Arc::new(RwLock::new(snapshot.last_waiting_node)),
+            total_wait_time_ms: Arc::new(RwLock::new(snapshot.total_wait_time_ms)),
+        }
+    }
 }
 
 impl WorkflowContext {
@@ -305,8 +365,10 @@ impl WorkflowContext {
             node_outputs: Arc::new(RwLock::new(HashMap::new())),
             node_statuses: Arc::new(RwLock::new(HashMap::new())),
             variables: Arc::new(RwLock::new(HashMap::new())),
-            custom_data: Arc::new(RwLock::new(HashMap::new())),
             checkpoints: Arc::new(RwLock::new(Vec::new())),
+            paused_at: Arc::new(RwLock::new(None)),
+            last_waiting_node: Arc::new(RwLock::new(None)),
+            total_wait_time_ms: Arc::new(RwLock::new(0)),
         }
     }
 
@@ -385,20 +447,6 @@ impl WorkflowContext {
         vars.get(name).cloned()
     }
 
-    /// 设置自定义数据
-    /// Set custom data
-    pub async fn set_custom<T: Send + Sync + 'static>(&self, key: &str, value: T) {
-        let mut data = self.custom_data.write().await;
-        data.insert(key.to_string(), Box::new(value));
-    }
-
-    /// 获取自定义数据
-    /// Get custom data
-    pub async fn get_custom<T: Clone + Send + Sync + 'static>(&self, key: &str) -> Option<T> {
-        let data = self.custom_data.read().await;
-        data.get(key).and_then(|v| v.downcast_ref::<T>().cloned())
-    }
-
     /// 创建检查点
     /// Create checkpoint
     pub async fn create_checkpoint(&self, label: &str) {
@@ -458,8 +506,10 @@ impl Clone for WorkflowContext {
             node_outputs: self.node_outputs.clone(),
             node_statuses: self.node_statuses.clone(),
             variables: self.variables.clone(),
-            custom_data: self.custom_data.clone(),
             checkpoints: self.checkpoints.clone(),
+            paused_at: self.paused_at.clone(),
+            last_waiting_node: self.last_waiting_node.clone(),
+            total_wait_time_ms: self.total_wait_time_ms.clone(),
         }
     }
 }
@@ -544,6 +594,14 @@ pub struct ExecutionRecord {
     pub node_records: Vec<NodeExecutionRecord>,
     #[serde(default)]
     pub outputs: HashMap<String, WorkflowValue>,
+    /// Total wait time for human interaction (ms)
+    #[serde(default)]
+    pub total_wait_time_ms: u64,
+    /// The live workflow context, only present if the workflow is paused.
+    /// This is not serialized and is used to allow the caller to create a
+    /// snapshot for persistence.
+    #[serde(skip, default)]
+    pub context: Option<WorkflowContext>,
 }
 
 /// 节点执行记录

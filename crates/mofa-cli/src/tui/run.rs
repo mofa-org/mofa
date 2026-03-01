@@ -2,7 +2,9 @@
 //!
 //! This module provides the main entry point for launching the TUI.
 
-use anyhow::Result;
+use crate::CliError;
+
+type Result<T> = std::result::Result<T, CliError>;
 use tracing::{info, warn};
 
 use crate::tui::app::{App, AppExitInfo};

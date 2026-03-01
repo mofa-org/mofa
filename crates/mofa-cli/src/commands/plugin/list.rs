@@ -1,5 +1,6 @@
 //! `mofa plugin list` command implementation
 
+use crate::CliError;
 use crate::context::CliContext;
 use crate::output::Table;
 use crate::plugin_catalog::catalog_entries;
@@ -7,7 +8,7 @@ use colored::Colorize;
 use mofa_kernel::agent::plugins::PluginRegistry;
 
 /// Execute the `mofa plugin list` command
-pub async fn run(ctx: &CliContext, installed_only: bool, available: bool) -> anyhow::Result<()> {
+pub async fn run(ctx: &CliContext, installed_only: bool, available: bool) -> Result<(), CliError> {
     let show_available = available;
     let show_installed = installed_only || !available;
 
@@ -30,7 +31,7 @@ pub async fn run(ctx: &CliContext, installed_only: bool, available: bool) -> any
     Ok(())
 }
 
-fn print_available(ctx: &CliContext) -> anyhow::Result<()> {
+fn print_available(ctx: &CliContext) -> Result<(), CliError> {
     let entries = catalog_entries();
     if entries.is_empty() {
         println!("  No catalog entries available.");
@@ -54,7 +55,7 @@ fn print_available(ctx: &CliContext) -> anyhow::Result<()> {
     Ok(())
 }
 
-fn print_installed(ctx: &CliContext) -> anyhow::Result<()> {
+fn print_installed(ctx: &CliContext) -> Result<(), CliError> {
     let specs = ctx.plugin_store.list()?;
     let mut table = Table::builder().headers(&["ID", "Kind", "Repo", "Description", "Enabled"]);
     let mut found = false;

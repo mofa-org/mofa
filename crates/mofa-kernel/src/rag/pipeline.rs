@@ -3,7 +3,19 @@
 use crate::agent::error::{AgentError, AgentResult};
 use crate::rag::types::{GenerateInput, ScoredDocument};
 use async_trait::async_trait;
+use futures::stream::Stream;
+use futures::StreamExt; // needed for `.next()` in tests
+use std::pin::Pin;
 use std::sync::Arc;
+
+/// A chunk of generated content from a streaming generator.
+#[derive(Debug, Clone)]
+pub enum GeneratorChunk {
+    /// A piece of text content
+    Text(String),
+    /// End of stream marker
+    Done,
+}
 
 #[async_trait]
 pub trait Retriever: Send + Sync {
@@ -18,6 +30,17 @@ pub trait Reranker: Send + Sync {
 #[async_trait]
 pub trait Generator: Send + Sync {
     async fn generate(&self, input: &GenerateInput) -> AgentResult<String>;
+
+    /// Stream generation results as they become available.
+    /// Default implementation falls back to generate() and yields the result as a single chunk.
+    async fn stream(
+        &self,
+        input: GenerateInput,
+    ) -> AgentResult<Pin<Box<dyn Stream<Item = AgentResult<GeneratorChunk>> + Send>>> {
+        let result = self.generate(&input).await?;
+        let stream = futures::stream::once(async move { Ok(GeneratorChunk::Text(result)) });
+        Ok(Box::pin(stream))
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -27,6 +50,7 @@ pub struct RagPipelineOutput {
     pub reranked_docs: Vec<ScoredDocument>,
 }
 
+#[derive(Clone)]
 pub struct RagPipeline {
     retriever: Arc<dyn Retriever>,
     reranker: Arc<dyn Reranker>,
@@ -78,6 +102,32 @@ impl RagPipeline {
             retrieved_docs,
             reranked_docs,
         })
+    }
+
+    pub async fn run_streaming(
+        &self,
+        query: &str,
+        top_k: usize,
+    ) -> AgentResult<(
+        Vec<ScoredDocument>,
+        Pin<Box<dyn Stream<Item = AgentResult<GeneratorChunk>> + Send>>,
+    )> {
+        if top_k == 0 {
+            return Err(AgentError::InvalidInput("top_k must be greater than 0".to_string()));
+        }
+
+        let retrieved_docs = self.retriever.retrieve(query, top_k).await?;
+        let reranked_docs = self.reranker.rerank(query, retrieved_docs.clone()).await?;
+
+        let context = reranked_docs
+            .iter()
+            .map(|doc| doc.document.clone())
+            .collect();
+
+        let generate_input = GenerateInput::new(query, context);
+        let stream = self.generator.stream(generate_input).await?;
+
+        Ok((reranked_docs, stream))
     }
 }
 
@@ -217,5 +267,70 @@ mod tests {
             AgentError::ExecutionFailed(msg) => assert!(msg.contains("retrieval failed")),
             other => panic!("unexpected error: {other:?}"),
         }
+    }
+
+    #[tokio::test]
+    async fn pipeline_streaming_happy_path() {
+        let retriever = Arc::new(FakeRetriever::new(vec![scored("1", "a", 0.9)]));
+        let pipeline = RagPipeline::new(retriever, Arc::new(IdentityReranker), Arc::new(FakeGenerator));
+
+        let (reranked_docs, mut stream) = pipeline.run_streaming("hello", 1).await.unwrap();
+        assert_eq!(reranked_docs.len(), 1);
+        let mut collected = String::new();
+        while let Some(chunk_result) = stream.next().await {
+            let chunk: AgentResult<GeneratorChunk> = chunk_result;
+            match chunk.unwrap() {
+                GeneratorChunk::Text(text) => collected.push_str(&text),
+                GeneratorChunk::Done => break,
+            }
+        }
+        assert!(collected.contains("Q: hello"));
+    }
+
+    #[tokio::test]
+    async fn pipeline_streaming_invalid_top_k() {
+        let pipeline = RagPipeline::new(
+            Arc::new(FakeRetriever::new(vec![])),
+            Arc::new(IdentityReranker),
+            Arc::new(FakeGenerator),
+        );
+        let result = pipeline.run_streaming("hi", 0).await;
+        match result {
+            Err(AgentError::InvalidInput(msg)) => assert!(msg.contains("top_k must be greater than 0")),
+            Ok(_) => panic!("expected error but got success"),
+            Err(other) => panic!("unexpected error type: {other:?}"),
+        }
+    }
+
+    struct FailingStreamGenerator;
+
+    #[async_trait]
+    impl Generator for FailingStreamGenerator {
+        async fn generate(&self, _input: &GenerateInput) -> AgentResult<String> {
+            Ok("should not be used".to_string())
+        }
+        async fn stream(
+            &self,
+            _input: GenerateInput,
+        ) -> AgentResult<Pin<Box<dyn Stream<Item = AgentResult<GeneratorChunk>> + Send>>> {
+            let err_stream = futures::stream::once(async {
+                Err(AgentError::ExecutionFailed("stream failure".to_string()))
+            });
+            Ok(Box::pin(err_stream))
+        }
+    }
+
+    #[tokio::test]
+    async fn pipeline_streaming_propagates_chunk_error() {
+        let retriever = Arc::new(FakeRetriever::new(vec![scored("1", "a", 0.9)]));
+        let pipeline = RagPipeline::new(
+            retriever,
+            Arc::new(IdentityReranker),
+            Arc::new(FailingStreamGenerator),
+        );
+
+        let (_docs, mut stream) = pipeline.run_streaming("hello", 1).await.unwrap();
+        let first: AgentResult<GeneratorChunk> = stream.next().await.unwrap();
+        assert!(first.is_err());
     }
 }

@@ -78,7 +78,7 @@ impl ToolExecutor for ShellCommandTool {
     async fn execute(&self, arguments: serde_json::Value) -> PluginResult<serde_json::Value> {
         let command = arguments["command"]
             .as_str()
-            .ok_or_else(|| mofa_kernel::plugin::PluginError::ExecutionFailed(format!("Command is required")))?;
+            .ok_or_else(|| mofa_kernel::plugin::PluginError::ExecutionFailed("Command is required".to_string()))?;
 
         if !self.is_command_allowed(command) {
             return Err(mofa_kernel::plugin::PluginError::ExecutionFailed(format!(

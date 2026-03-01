@@ -73,8 +73,8 @@ enum PipelineStep {
     /// Conditional Branch
     Branch {
         condition: Arc<dyn Fn(&str) -> bool + Send + Sync>,
-        if_true: Box<PipelineStep>,
-        if_false: Box<PipelineStep>,
+        if_true: Vec<PipelineStep>,
+        if_false: Vec<PipelineStep>,
     },
     /// 尝试恢复（如果失败则使用默认值）
     /// Try Recovery (use default value on failure)
@@ -243,8 +243,8 @@ impl Pipeline {
 
         self.steps.push(PipelineStep::Branch {
             condition: Arc::new(condition),
-            if_true: Box::new(true_step),
-            if_false: Box::new(false_step),
+            if_true: if_true.steps,
+            if_false: if_false.steps,
         });
         self
     }
@@ -329,11 +329,14 @@ impl Pipeline {
                     if_true,
                     if_false,
                 } => {
-                    if condition(&input) {
-                        Self::execute_step(if_true, input).await
-                    } else {
-                        Self::execute_step(if_false, input).await
+                    let selected_steps = if condition(&input) { if_true } else { if_false };
+                    let mut current = input;
+
+                    for step in selected_steps {
+                        current = Self::execute_step(step, current).await?;
                     }
+
+                    Ok(current)
                 }
 
                 PipelineStep::TryRecover { step, default } => {
@@ -597,5 +600,37 @@ mod tests {
             .map(|s| s.to_lowercase());
 
         assert_eq!(pipeline.steps.len(), 2);
+    }
+
+    #[tokio::test]
+    async fn test_branch_multistep_true_runs_all_steps() {
+        let pipeline = Pipeline::new().branch(
+            |_| true,
+            Pipeline::new()
+                .map(|s| format!("{s}-A"))
+                .map(|s| format!("{s}-B")),
+            Pipeline::new()
+                .map(|s| format!("{s}-C"))
+                .map(|s| format!("{s}-D")),
+        );
+
+        let out = pipeline.run("x").await.expect("pipeline should run");
+        assert_eq!(out, "x-A-B");
+    }
+
+    #[tokio::test]
+    async fn test_branch_multistep_false_runs_all_steps() {
+        let pipeline = Pipeline::new().branch(
+            |_| false,
+            Pipeline::new()
+                .map(|s| format!("{s}-A"))
+                .map(|s| format!("{s}-B")),
+            Pipeline::new()
+                .map(|s| format!("{s}-C"))
+                .map(|s| format!("{s}-D")),
+        );
+
+        let out = pipeline.run("x").await.expect("pipeline should run");
+        assert_eq!(out, "x-C-D");
     }
 }

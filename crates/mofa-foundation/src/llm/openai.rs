@@ -337,6 +337,11 @@ impl OpenAIProvider {
                                         ),
                                     );
                                 }
+                                ContentPart::Video { video } => {
+                                    // OpenAI API does not officially support pure video upload in standard completion context via generic content parts yet
+                                    // We will gracefully log a warning and omit or fall back to an unsupported message.
+                                    tracing::warn!("OpenAI provider currently does not explicitly support raw Video parts in standard ChatCompletion. Ignoring video part format {}", video.format);
+                                }
                             }
                         }
                         ChatCompletionRequestUserMessageContent::Array(out)

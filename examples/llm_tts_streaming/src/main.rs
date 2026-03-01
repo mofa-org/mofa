@@ -13,8 +13,11 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use uuid::Uuid;
 
+#[cfg(feature = "audio-playback")]
+use rodio::{OutputStream, Sink, buffer::SamplesBuffer};
+
 #[tokio::main]
-async fn main() -> anyhow::Result<()> {
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
     tracing_subscriber::fmt()
         .with_max_level(tracing::Level::INFO)
         .init();
@@ -41,6 +44,9 @@ async fn main() -> anyhow::Result<()> {
             .build()
     );
     let rendered_chunks = Arc::new(AtomicUsize::new(0));
+
+    #[cfg(not(feature = "audio-playback"))]
+    println!("Audio playback disabled. Rebuild with --features audio-playback to hear output.");
 
     let session_id = agent.current_session_id().await;
     println!("Using session: {}", session_id);
