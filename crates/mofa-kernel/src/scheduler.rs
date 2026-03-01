@@ -15,6 +15,34 @@
 use crate::agent::types::AgentInput;
 
 // ---------------------------------------------------------------------------
+// Clock abstraction (injectable for testing)
+// ---------------------------------------------------------------------------
+
+/// Provides the current wall-clock time as Unix-epoch milliseconds.
+///
+/// Injecting this through [`CronScheduler`](mofa_foundation) rather than calling
+/// `SystemTime::now()` directly makes timing-sensitive code deterministic in tests.
+/// See INSTRUCTIONS.md §IV.3 — "Timestamp generation logic MUST be abstracted".
+pub trait Clock: Send + Sync {
+    /// Returns the current time as milliseconds since the Unix epoch.
+    fn now_millis(&self) -> u64;
+}
+
+/// The default [`Clock`] implementation backed by the system clock.
+pub struct SystemClock;
+
+impl Clock for SystemClock {
+    fn now_millis(&self) -> u64 {
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_millis()
+            .try_into()
+            .unwrap_or(u64::MAX)
+    }
+}
+
+// ---------------------------------------------------------------------------
 // ScheduleDefinition
 // ---------------------------------------------------------------------------
 
@@ -508,5 +536,25 @@ mod tests {
         let handle = ScheduleHandle::new("test-handle", tx);
         // _rx is still in scope, so the send should succeed
         assert!(handle.cancel());
+    }
+
+    // ------------------------------------------------------------------
+    // 7. SystemClock returns a plausible timestamp
+    // ------------------------------------------------------------------
+
+    #[test]
+    fn system_clock_returns_nonzero_millis() {
+        let clock = SystemClock;
+        let ts = clock.now_millis();
+        // Must be after 2020-01-01 (1_577_836_800_000 ms) and not overflow
+        assert!(ts > 1_577_836_800_000, "timestamp looks too old: {ts}");
+    }
+
+    #[test]
+    fn system_clock_advances_monotonically() {
+        let clock = SystemClock;
+        let t1 = clock.now_millis();
+        let t2 = clock.now_millis();
+        assert!(t2 >= t1, "clock went backwards: {t1} > {t2}");
     }
 }
