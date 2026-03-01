@@ -36,24 +36,11 @@ jobs:
             ${{ runner.os }}-bench-
 
       - name: Run benchmarks
-        run: cargo bench -p mofa-bench -- --output-format bencher | tee bench_output.txt
-
-      - name: Store benchmark result
-        uses: benchmark-action/github-action-benchmark@v1
-        with:
-          name: MoFA Agent Benchmarks
-          tool: cargo
-          output-file-path: bench_output.txt
-          comment-on-alert: true
-          alert-threshold: '110%'
-          fail-on-alert: false
-          comment-always: false
-          save-data-file: true
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          auto-push: false
+        run: cargo bench -p mofa-bench -- --noplot
 
       - name: Upload benchmark artifacts
         uses: actions/upload-artifact@v4
+        if: always()
         with:
           name: benchmark-results
           path: target/criterion/
