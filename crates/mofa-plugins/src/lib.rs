@@ -17,12 +17,15 @@
 //! - Agent Skills 支持
 //! - Agent Skills support
 
+pub mod asr;
 pub mod hot_reload;
 pub mod skill;
 pub mod tool;
 pub mod tools;
 pub mod tts;
 pub mod wasm_runtime;
+
+pub use asr::{ASREngine, ASRPlugin, ASRPluginConfig, MockASREngine};
 
 pub use mofa_kernel::{
     AgentPlugin, PluginConfig, PluginContext, PluginError, PluginEvent, PluginMetadata,
@@ -497,10 +500,9 @@ impl ToolPlugin {
     /// 调用工具
     /// Call tool
     pub async fn call_tool(&mut self, call: ToolCall) -> PluginResult<ToolResult> {
-        let tool = self
-            .tools
-            .get(&call.name)
-            .ok_or_else(|| PluginError::ExecutionFailed(format!("Tool not found: {}", call.name)))?;
+        let tool = self.tools.get(&call.name).ok_or_else(|| {
+            PluginError::ExecutionFailed(format!("Tool not found: {}", call.name))
+        })?;
 
         // 验证参数
         // Validate arguments
@@ -577,8 +579,9 @@ impl AgentPlugin for ToolPlugin {
     async fn execute(&mut self, input: String) -> PluginResult<String> {
         // 解析输入为工具调用
         // Parse input as tool call
-        let call: ToolCall = serde_json::from_str(&input)
-            .map_err(|e| PluginError::ExecutionFailed(format!("Invalid tool call format: {}", e)))?;
+        let call: ToolCall = serde_json::from_str(&input).map_err(|e| {
+            PluginError::ExecutionFailed(format!("Invalid tool call format: {}", e))
+        })?;
         let result = self.call_tool(call).await?;
         serde_json::to_string(&result)
             .map_err(|e| PluginError::ExecutionFailed(format!("Failed to serialize result: {}", e)))
@@ -1150,7 +1153,10 @@ impl PluginManager {
         let mut plugins = self.plugins.write().await;
 
         if plugins.contains_key(&plugin_id) {
-            return Err(PluginError::Other(format!("Plugin {} already registered", plugin_id)));
+            return Err(PluginError::Other(format!(
+                "Plugin {} already registered",
+                plugin_id
+            )));
         }
 
         let entry = PluginEntry {
