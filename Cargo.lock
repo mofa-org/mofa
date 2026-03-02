@@ -5929,6 +5929,7 @@ name = "mofa-runtime"
 version = "0.1.0"
 dependencies = [
  "async-trait",
+ "axum 0.8.8",
  "bincode 1.3.3",
  "chrono",
  "config",
@@ -5940,6 +5941,7 @@ dependencies = [
  "dora-operator-api",
  "eyre",
  "flume 0.10.14",
+ "mofa-integrations",
  "mofa-kernel",
  "mofa-monitoring",
  "mofa-plugins",
@@ -5947,6 +5949,7 @@ dependencies = [
  "serde",
  "serde_json",
  "serde_yaml",
+ "socketioxide",
  "thiserror 1.0.69",
  "tokio",
  "toml 0.8.23",
