@@ -56,6 +56,34 @@ impl fmt::Display for Precision {
     }
 }
 
+impl Precision {
+    /// Returns the next lower precision level, or `None` if already at
+    /// maximum compression (Q4).
+    ///
+    /// Degradation order: `F32 → F16 → Q8 → Q4`
+    pub fn next_lower(&self) -> Option<Precision> {
+        match self {
+            Precision::F32 => Some(Precision::F16),
+            Precision::F16 => Some(Precision::Q8),
+            Precision::Q8 => Some(Precision::Q4),
+            Precision::Q4 => None, // Already at maximum compression
+        }
+    }
+
+    /// Approximate bytes per parameter at this precision level.
+    ///
+    /// Used by the degradation ladder to estimate memory footprint at
+    /// different quantization levels.
+    pub fn bytes_per_param(&self) -> f64 {
+        match self {
+            Precision::F32 => 4.0,
+            Precision::F16 => 2.0,
+            Precision::Q8 => 1.0,
+            Precision::Q4 => 0.5,
+        }
+    }
+}
+
 /// An inference request submitted by an agent.
 ///
 /// Agents construct this and pass it to `InferenceOrchestrator::infer()`.
