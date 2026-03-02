@@ -43,6 +43,7 @@ members = [
     "context_compression",
     "context_window_demo",
     "admission_gate_demo",
+    "integrations_demo",
 ]
 
 [workspace.package]

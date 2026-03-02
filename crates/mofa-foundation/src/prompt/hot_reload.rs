@@ -100,66 +100,85 @@ impl HotReloadableRhaiPromptPlugin {
         // 处理热重载事件
         // Handle hot-reload events
         tokio::spawn(async move {
-            while let Ok(event) = event_subscriber.recv().await {
-                match event {
-                    ReloadEvent::ReloadCompleted {
-                        plugin_id,
-                        path,
-                        duration,
-                        .. // 忽略 success 字段，因为我们当前不使用它
-                           // Ignore success field as we are not currently using it
-                    } => {
-                        info!(
-                            "Plugin {} reloaded in {:?} from path {:?}",
-                            plugin_id, duration, path
-                        );
-                        // 刷新模板
-                        // Refresh templates
-                        let inner_guard = inner_clone.write().await;
-                        if let Err(e) = inner_guard.refresh_templates().await {
-                            warn!("Failed to refresh templates: {}", e);
+            loop {
+                match event_subscriber.recv().await {
+                    Ok(event) => match event {
+                        ReloadEvent::ReloadCompleted {
+                            plugin_id,
+                            path,
+                            duration,
+                            .. // 忽略 success 字段，因为我们当前不使用它
+                               // Ignore success field as we are not currently using it
+                        } => {
+                            info!(
+                                "Plugin {} reloaded in {:?} from path {:?}",
+                                plugin_id, duration, path
+                            );
+                            // 刷新模板
+                            // Refresh templates
+                            let inner_guard = inner_clone.write().await;
+                            if let Err(e) = inner_guard.refresh_templates().await {
+                                warn!("Failed to refresh templates: {}", e);
+                            }
                         }
-                    }
 
-                    ReloadEvent::ReloadFailed {
-                        plugin_id,
-                        path,
-                        error,
-                        attempt,
-                    } => {
+                        ReloadEvent::ReloadFailed {
+                            plugin_id,
+                            path,
+                            error,
+                            attempt,
+                        } => {
+                            warn!(
+                                "Plugin {} reload failed (attempt {}): {} at path {:?}",
+                                plugin_id, attempt, error, path
+                            );
+                        }
+
+                        ReloadEvent::PluginDiscovered { path } => {
+                            info!("New plugin discovered at path {:?}", path);
+                            // 刷新模板
+                            // Refresh templates
+                            let inner_guard = inner_clone.write().await;
+                            if let Err(e) = inner_guard.refresh_templates().await {
+                                warn!("Failed to refresh templates: {}", e);
+                            }
+                        }
+
+                        ReloadEvent::PluginRemoved {
+                            plugin_id,
+                            path,
+                        } => {
+                            info!(
+                                "Plugin {} removed from path {:?}",
+                                plugin_id, path
+                            );
+                            // 刷新模板
+                            // Refresh templates
+                            let inner_guard = inner_clone.write().await;
+                            if let Err(e) = inner_guard.refresh_templates().await {
+                                warn!("Failed to refresh templates: {}", e);
+                            }
+                        }
+
+                        _ => {} // Ignore other events
+                    },
+
+                    Err(tokio::sync::broadcast::error::RecvError::Lagged(n)) => {
+                        // The subscriber fell behind — skip the lost messages and keep running.
+                        // Without this arm, `while let Ok(...)` would have exited here and
+                        // silently disabled hot-reload permanently.
                         warn!(
-                            "Plugin {} reload failed (attempt {}): {} at path {:?}",
-                            plugin_id, attempt, error, path
+                            "Hot-reload event subscriber lagged by {} message(s); \
+                             skipping missed events and continuing",
+                            n
                         );
                     }
 
-                    ReloadEvent::PluginDiscovered { path } => {
-                        info!("New plugin discovered at path {:?}", path);
-                        // 刷新模板
-                        // Refresh templates
-                        let inner_guard = inner_clone.write().await;
-                        if let Err(e) = inner_guard.refresh_templates().await {
-                            warn!("Failed to refresh templates: {}", e);
-                        }
+                    Err(tokio::sync::broadcast::error::RecvError::Closed) => {
+                        // The broadcast channel has been dropped — the manager has shut down.
+                        info!("Hot-reload broadcast channel closed; stopping subscriber");
+                        break;
                     }
-
-                    ReloadEvent::PluginRemoved {
-                        plugin_id,
-                        path,
-                    } => {
-                        info!(
-                            "Plugin {} removed from path {:?}",
-                            plugin_id, path
-                        );
-                        // 刷新模板
-                        // Refresh templates
-                        let inner_guard = inner_clone.write().await;
-                        if let Err(e) = inner_guard.refresh_templates().await {
-                            warn!("Failed to refresh templates: {}", e);
-                        }
-                    }
-
-                    _ => {} // Ignore other events
                 }
             }
         });

@@ -74,6 +74,58 @@ pub trait Storage<K, V>: Send + Sync {
     async fn list(&self) -> AgentResult<Vec<K>>;
 }
 
+// ============================================================================
+// Object Storage Trait
+// ============================================================================
+
+/// Trait for cloud-compatible object (blob) storage
+///
+/// Object stores differ from key-value stores in that they are optimised for
+/// large binary payloads (files, documents, images) and add S3-compatible
+/// operations such as prefix listing and presigned download URLs.
+///
+/// Implementations include S3, GCS, Azure Blob, and S3-compatible services
+/// like MinIO for local development.
+///
+/// # Example
+///
+/// ```rust,ignore
+/// use mofa_kernel::storage::ObjectStore;
+///
+/// async fn upload_report(store: &dyn ObjectStore, name: &str, data: Vec<u8>) {
+///     store.put(name, data).await.unwrap();
+///     let url = store.presigned_get_url(name, 3600).await.unwrap();
+///     println!("download at: {url}");
+/// }
+/// ```
+#[async_trait]
+pub trait ObjectStore: Send + Sync {
+    /// Upload an object.
+    ///
+    /// Creates or replaces the object at `key`.
+    async fn put(&self, key: &str, data: Vec<u8>) -> AgentResult<()>;
+
+    /// Download an object.
+    ///
+    /// Returns `Ok(None)` if the key does not exist.
+    async fn get(&self, key: &str) -> AgentResult<Option<Vec<u8>>>;
+
+    /// Delete an object.
+    ///
+    /// Returns `Ok(true)` if the object existed and was deleted.
+    async fn delete(&self, key: &str) -> AgentResult<bool>;
+
+    /// List object keys that share the given prefix.
+    ///
+    /// Pass an empty string `""` to list all objects in the bucket/container.
+    async fn list_keys(&self, prefix: &str) -> AgentResult<Vec<String>>;
+
+    /// Generate a time-limited presigned URL for a `GET` request.
+    ///
+    /// `expires_secs` is the number of seconds until the URL becomes invalid.
+    async fn presigned_get_url(&self, key: &str, expires_secs: u64) -> AgentResult<String>;
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
