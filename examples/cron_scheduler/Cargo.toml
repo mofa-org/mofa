@@ -1,0 +1,26 @@
+[package]
+name = "cron_scheduler"
+version.workspace = true
+edition.workspace = true
+
+[[bin]]
+name = "cron_scheduler"
+path = "main.rs"
+
+[features]
+default = ["scheduler-telemetry"]
+scheduler-telemetry = []
+
+[dependencies]
+mofa-foundation = { path = "../../crates/mofa-foundation", features = ["scheduler-telemetry"] }
+mofa-kernel = { path = "../../crates/mofa-kernel" }
+mofa-runtime = { path = "../../crates/mofa-runtime" }
+
+tokio.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+async-trait.workspace = true
+chrono.workspace = true
+
+[lints]
+workspace = true

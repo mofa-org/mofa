@@ -359,6 +359,10 @@ pub enum SchedulerError {
     /// A `register` call was made with a `schedule_id` that is already active.
     #[error("Schedule '{0}' is already registered")]
     AlreadyExists(String),
+
+    /// Persistence operation failed (save/load from disk).
+    #[error("Persistence error: {0}")]
+    PersistenceError(String),
 }
 
 // ---------------------------------------------------------------------------

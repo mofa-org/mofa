@@ -20,6 +20,8 @@
 //! - **Dynamic management**: Pause, resume, unregister operations
 //! - **Monitoring**: `list()` provides runtime state snapshots
 
+pub mod persistence;
+
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
@@ -30,6 +32,9 @@ use tokio::sync::{RwLock, Semaphore, oneshot};
 use tokio::task::JoinHandle;
 use tokio::time::{Duration, Instant, interval};
 
+#[cfg(feature = "scheduler-telemetry")]
+use metrics::{counter, gauge, histogram};
+
 use mofa_kernel::agent::context::AgentContext;
 use mofa_kernel::agent::core::MoFAAgent;
 use mofa_kernel::agent::types::{AgentInput, AgentOutput};
@@ -39,6 +44,8 @@ use mofa_kernel::scheduler::{
 };
 use mofa_runtime::agent::execution::{ExecutionEngine, ExecutionOptions, ExecutionResult};
 use mofa_runtime::agent::registry::AgentRegistry;
+
+use crate::scheduler::persistence::SchedulePersistence;
 
 // ============================================================================
 // ScheduleEntry - Internal state for each registered schedule
@@ -144,6 +151,8 @@ pub struct CronScheduler {
     schedules: Arc<RwLock<HashMap<String, ScheduleEntry>>>,
     /// Clock for time operations (injectable for testing).
     clock: Arc<dyn Clock>,
+    /// Optional persistence backend for saving/loading schedules.
+    persistence: Option<SchedulePersistence>,
 }
 
 impl CronScheduler {
@@ -169,6 +178,7 @@ impl CronScheduler {
             global_semaphore: Arc::new(Semaphore::new(global_max_concurrent)),
             schedules: Arc::new(RwLock::new(HashMap::new())),
             clock: Arc::new(SystemClock),
+            persistence: None,
         }
     }
 
@@ -189,7 +199,63 @@ impl CronScheduler {
             global_semaphore: Arc::new(Semaphore::new(global_max_concurrent)),
             schedules: Arc::new(RwLock::new(HashMap::new())),
             clock,
+            persistence: None,
         }
+    }
+
+    /// Enable persistence for this scheduler.
+    ///
+    /// When persistence is enabled:
+    /// - `start()` will load and re-register previously saved schedules
+    /// - `register()` and `unregister()` will automatically persist changes
+    ///
+    /// # Parameters
+    ///
+    /// - `file_path`: Path where schedule definitions will be saved/loaded
+    ///
+    /// # Returns
+    ///
+    /// Returns self for method chaining.
+    pub fn with_persistence(mut self, file_path: impl AsRef<std::path::Path>) -> Self {
+        self.persistence = Some(SchedulePersistence::new(file_path));
+        self
+    }
+
+    /// Start the scheduler by loading any persisted schedules.
+    ///
+    /// This method should be called after creating the scheduler and registering
+    /// any agents, but before the application starts accepting requests.
+    ///
+    /// If persistence is not enabled, this is a no-op.
+    ///
+    /// # Errors
+    ///
+    /// Returns `SchedulerError::PersistenceError` if loading fails.
+    /// Returns `SchedulerError::AgentNotFound` if a persisted schedule references
+    /// an agent that is no longer registered.
+    pub async fn start(&self) -> Result<(), SchedulerError> {
+        if let Some(persistence) = &self.persistence {
+            let definitions = persistence.load().await?;
+            for def in definitions {
+                // Validate agent still exists
+                if self.registry.get(&def.agent_id).await.is_none() {
+                    return Err(SchedulerError::AgentNotFound(def.agent_id));
+                }
+
+                // Re-register the schedule (this will also persist it again)
+                self.register(def).await?;
+            }
+        }
+        Ok(())
+    }
+
+    /// Get all current schedule definitions for persistence.
+    async fn list_definitions(&self) -> Vec<ScheduleDefinition> {
+        let schedules = self.schedules.read().await;
+        schedules
+            .values()
+            .map(|entry| entry.definition.clone())
+            .collect()
     }
 }
 
@@ -243,6 +309,15 @@ impl AgentScheduler for CronScheduler {
             schedules.insert(entry.definition.schedule_id.clone(), entry);
         }
 
+        // Persist the updated schedule list if persistence is enabled
+        if let Some(persistence) = &self.persistence {
+            let definitions = self.list_definitions().await;
+            if let Err(e) = persistence.save(&definitions).await {
+                // Log the error but don't fail the registration
+                tracing::error!("Failed to persist schedule registration: {}", e);
+            }
+        }
+
         // Return handle
         Ok(ScheduleHandle::new(schedule_id, cancel_tx))
     }
@@ -255,6 +330,18 @@ impl AgentScheduler for CronScheduler {
 
         // The task will be aborted when the entry is dropped
         drop(entry);
+
+        // Persist the updated schedule list if persistence is enabled
+        if let Some(persistence) = &self.persistence {
+            let definitions = schedules
+                .values()
+                .map(|entry| entry.definition.clone())
+                .collect::<Vec<_>>();
+            if let Err(e) = persistence.save(&definitions).await {
+                // Log the error but don't fail the unregistration
+                tracing::error!("Failed to persist schedule unregistration: {}", e);
+            }
+        }
 
         Ok(())
     }
@@ -335,6 +422,8 @@ impl CronScheduler {
                                 let global_permit = match global_semaphore.try_acquire() {
                                     Ok(permit) => permit,
                                     Err(_) => {
+                                        #[cfg(feature = "scheduler-telemetry")]
+                                        counter!("mofa_scheduler_missed_ticks_total", "schedule_id" => schedule_id.clone()).increment(1);
                                         tracing::debug!("Global concurrency limit reached for schedule {}", schedule_id);
                                         continue;
                                     }
@@ -343,11 +432,17 @@ impl CronScheduler {
                                 let schedule_permit = match per_schedule_semaphore.try_acquire() {
                                     Ok(permit) => permit,
                                     Err(_) => {
+                                        #[cfg(feature = "scheduler-telemetry")]
+                                        counter!("mofa_scheduler_missed_ticks_total", "schedule_id" => schedule_id.clone()).increment(1);
                                         tracing::debug!("Schedule concurrency limit reached for schedule {}", schedule_id);
                                         drop(global_permit); // Release global permit
                                         continue;
                                     }
                                 };
+
+                                // Record active run
+                                #[cfg(feature = "scheduler-telemetry")]
+                                gauge!("mofa_scheduler_active_runs", "schedule_id" => schedule_id.clone()).increment(1.0);
 
                                 // Execute agent
                                 let registry_clone = Arc::clone(&registry);
@@ -356,15 +451,42 @@ impl CronScheduler {
                                 let schedule_id_clone = schedule_id.clone();
 
                                 tokio::spawn(async move {
+                                    let start_time = std::time::Instant::now();
                                     let engine = ExecutionEngine::new(registry_clone);
                                     match engine.execute(&agent_id_clone, input_clone, Default::default()).await {
                                         Ok(result) => {
+                                            #[cfg(feature = "scheduler-telemetry")]
+                                            {
+                                                counter!("mofa_scheduler_executions_total",
+                                                    "schedule_id" => schedule_id_clone.clone(),
+                                                    "agent_id" => agent_id_clone.clone(),
+                                                    "status" => "success"
+                                                ).increment(1);
+                                                histogram!("mofa_scheduler_execution_duration_seconds",
+                                                    "schedule_id" => schedule_id_clone.clone(),
+                                                    "agent_id" => agent_id_clone.clone()
+                                                ).record(start_time.elapsed().as_secs_f64());
+                                                gauge!("mofa_scheduler_last_run_timestamp_ms",
+                                                    "schedule_id" => schedule_id_clone.clone()
+                                                ).set(chrono::Utc::now().timestamp_millis() as f64);
+                                            }
                                             tracing::info!("Schedule {} executed successfully: {:?}", schedule_id_clone, result.status);
                                         }
                                         Err(e) => {
+                                            #[cfg(feature = "scheduler-telemetry")]
+                                            counter!("mofa_scheduler_executions_total",
+                                                "schedule_id" => schedule_id_clone.clone(),
+                                                "agent_id" => agent_id_clone.clone(),
+                                                "status" => "error"
+                                            ).increment(1);
                                             tracing::error!("Schedule {} execution failed: {}", schedule_id_clone, e);
                                         }
                                     }
+
+                                    // Record active run completion
+                                    #[cfg(feature = "scheduler-telemetry")]
+                                    gauge!("mofa_scheduler_active_runs", "schedule_id" => schedule_id_clone).decrement(1.0);
+
                                     // Permits are automatically released when dropped
                                 });
                             }

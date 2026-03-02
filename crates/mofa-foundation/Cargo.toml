@@ -35,6 +35,8 @@ mcp = ["dep:rmcp"]
 qdrant = ["dep:qdrant-client"]
 # Enable Linux Candle on-device ML inference (Hugging Face Candle)
 linux-candle = ["dep:candle-core", "dep:candle-transformers"]
+# Enable scheduler telemetry (Prometheus metrics)
+scheduler-telemetry = ["dep:metrics"]
 
 [dependencies]
 # Workspace dependencies
@@ -125,6 +127,9 @@ candle-transformers = { version = "0.8", optional = true }
 
 # Cron expression parsing for scheduled agent execution
 cron = "0.12"
+
+# Prometheus metrics (optional)
+metrics = { version = "0.22", optional = true }
 
 [lints]
 workspace = true
