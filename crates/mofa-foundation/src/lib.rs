@@ -50,6 +50,33 @@ pub mod collaboration;
 // RAG module - vector store and document chunking
 pub mod rag;
 
+// Circuit breaker module - Retry and circuit breaker patterns
+pub mod circuit_breaker;
+
+// Re-export circuit breaker types
+pub use circuit_breaker::{
+    // Config
+    CircuitBreakerConfig,
+    AgentCircuitBreakerConfig,
+    GlobalCircuitBreakerConfig,
+    // State
+    CircuitBreaker,
+    AsyncCircuitBreaker,
+    CircuitBreakerError,
+    State,
+    // Metrics
+    CircuitBreakerMetrics,
+    CircuitBreakerMetricsSnapshot,
+    StateTransition,
+    // Fallback
+    FallbackStrategy,
+    FallbackHandler,
+    FallbackContext,
+    FallbackError,
+    execute_fallback,
+    FallbackBuilder,
+};
+
 // Re-export config types
 pub use config::{AgentInfo, AgentYamlConfig, LLMYamlConfig, RuntimeConfig, ToolConfig};
 
