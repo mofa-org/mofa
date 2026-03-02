@@ -68,3 +68,6 @@ pub use workflow::*;
 // Metrics traits for monitoring integration
 pub mod metrics;
 pub use metrics::*;
+
+// Security governance (PII redaction, content moderation, prompt guard)
+pub mod security;
