@@ -33,6 +33,10 @@ pub enum GatewayError {
     #[error("route '{0}' is already registered")]
     DuplicateRoute(String),
 
+    /// No route with this id is currently registered.
+    #[error("route '{0}' is not registered")]
+    RouteNotFound(String),
+
     /// A route references a backend id that is not present in the backend list.
     #[error("route '{0}' references unknown backend '{1}'")]
     UnknownBackend(String, String),
@@ -53,6 +57,10 @@ pub enum GatewayError {
     /// A backend with this id has already been registered.
     #[error("backend '{0}' is already registered")]
     DuplicateBackend(String),
+
+    /// No backend with this id is currently registered.
+    #[error("backend '{0}' is not registered")]
+    BackendNotFound(String),
 
     /// A backend endpoint URI is syntactically invalid.
     #[error("backend '{0}' has an invalid endpoint URI: {1}")]

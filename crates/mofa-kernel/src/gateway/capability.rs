@@ -6,7 +6,6 @@
 //! live in `mofa-gateway` or plugin crates.
 
 use super::error::GatewayError;
-use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
@@ -147,7 +146,6 @@ impl CapabilityDescriptor {
 ///
 /// Implementations store [`CapabilityDescriptor`]s and expose lookup and
 /// filtering operations used by the router and health-check system.
-#[async_trait]
 pub trait CapabilityRegistry: Send + Sync {
     /// Register a new backend.
     ///
@@ -166,14 +164,12 @@ pub trait CapabilityRegistry: Send + Sync {
 
     /// Remove a backend by id.
     ///
-    /// Returns [`GatewayError::DuplicateBackend`] (used as "not found") if
-    /// the id is absent.
+    /// Returns [`GatewayError::BackendNotFound`] if the id is not registered.
     fn deregister(&mut self, id: &str) -> Result<(), GatewayError>;
 
     /// Update the health state of a registered backend.
     ///
-    /// Returns [`GatewayError::DuplicateBackend`] (used as "not found") if
-    /// the id is absent.
+    /// Returns [`GatewayError::BackendNotFound`] if the id is not registered.
     fn update_health(
         &mut self,
         id: &str,

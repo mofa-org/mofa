@@ -62,7 +62,7 @@ pub struct GatewayConfig {
     pub backends: Vec<CapabilityDescriptor>,
     /// Optional filter chain configuration.
     pub filter_chain: Option<FilterChainConfig>,
-    /// Global default request timeout in milliseconds (`0` = no timeout).
+    /// Global default request timeout in milliseconds (must be > 0).
     pub request_timeout_ms: u64,
     /// Optional global rate-limit configuration.
     pub rate_limit: Option<RateLimitConfig>,
@@ -126,11 +126,11 @@ impl GatewayConfig {
     /// 2. At least one route is defined.
     /// 3. At least one backend is defined.
     /// 4. Global `request_timeout_ms` is non-zero.
-    /// 5. Each route passes its own [`RouteConfig::validate()`] check.
-    /// 6. No two routes share the same id.
-    /// 7. Every route's `backend_id` refers to a declared backend.
-    /// 8. Each backend passes its own [`CapabilityDescriptor::validate()`] check.
-    /// 9. No two backends share the same id.
+    /// 5. Each backend passes its own [`CapabilityDescriptor::validate()`] check.
+    /// 6. No two backends share the same id.
+    /// 7. Each route passes its own [`RouteConfig::validate()`] check.
+    /// 8. No two routes share the same id.
+    /// 9. Every route's `backend_id` refers to a declared backend.
     /// 10. If a filter chain is present, it is non-empty.
     /// 11. If a rate-limit config is present, burst >= rate.
     pub fn validate(&self) -> Result<(), GatewayError> {

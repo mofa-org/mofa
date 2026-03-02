@@ -29,15 +29,22 @@ pub enum HttpMethod {
 impl HttpMethod {
     /// Case-insensitive parse from a string slice.
     pub fn from_str_ci(s: &str) -> Option<Self> {
-        match s.to_uppercase().as_str() {
-            "GET" => Some(HttpMethod::Get),
-            "POST" => Some(HttpMethod::Post),
-            "PUT" => Some(HttpMethod::Put),
-            "PATCH" => Some(HttpMethod::Patch),
-            "DELETE" => Some(HttpMethod::Delete),
-            "HEAD" => Some(HttpMethod::Head),
-            "OPTIONS" => Some(HttpMethod::Options),
-            _ => None,
+        if s.eq_ignore_ascii_case("GET") {
+            Some(HttpMethod::Get)
+        } else if s.eq_ignore_ascii_case("POST") {
+            Some(HttpMethod::Post)
+        } else if s.eq_ignore_ascii_case("PUT") {
+            Some(HttpMethod::Put)
+        } else if s.eq_ignore_ascii_case("PATCH") {
+            Some(HttpMethod::Patch)
+        } else if s.eq_ignore_ascii_case("DELETE") {
+            Some(HttpMethod::Delete)
+        } else if s.eq_ignore_ascii_case("HEAD") {
+            Some(HttpMethod::Head)
+        } else if s.eq_ignore_ascii_case("OPTIONS") {
+            Some(HttpMethod::Options)
+        } else {
+            None
         }
     }
 

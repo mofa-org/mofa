@@ -79,16 +79,16 @@ impl RouteConfig {
         if self.id.trim().is_empty() {
             return Err(GatewayError::EmptyRouteId);
         }
-        if !self.path_pattern.starts_with('/') {
-            return Err(GatewayError::InvalidPathPattern(
-                self.id.clone(),
-                "path pattern must start with '/'".to_string(),
-            ));
-        }
         if self.path_pattern.trim().is_empty() {
             return Err(GatewayError::InvalidPathPattern(
                 self.id.clone(),
                 "path pattern cannot be empty".to_string(),
+            ));
+        }
+        if !self.path_pattern.starts_with('/') {
+            return Err(GatewayError::InvalidPathPattern(
+                self.id.clone(),
+                "path pattern must start with '/'" .to_string(),
             ));
         }
         Ok(())
@@ -120,7 +120,6 @@ pub trait GatewayRouter: Send + Sync {
     fn routes(&self) -> Vec<&RouteConfig>;
 
     /// Remove a previously registered route.
-    /// Returns [`GatewayError::DuplicateRoute`] (repurposed as "not found") if
-    /// the id is absent — implementations may define a more specific error.
+    /// Returns [`GatewayError::RouteNotFound`] if the id is not registered.
     fn deregister(&mut self, route_id: &str) -> Result<(), GatewayError>;
 }
