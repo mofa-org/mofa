@@ -353,7 +353,7 @@ async fn run_command(cli: Cli) -> CliResult<()> {
 fn normalize_legacy_output_flags(args: &mut [String]) {
     const TOP_LEVEL_COMMANDS: &[&str] = &[
         "new", "init", "build", "run", "dataflow", "generate", "info", "db", "agent", "config",
-        "plugin", "session", "tool",
+        "plugin", "session", "tool", "gateway",
     ];
 
     let top_command_index = args

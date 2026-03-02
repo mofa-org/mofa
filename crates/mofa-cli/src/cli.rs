@@ -18,9 +18,13 @@ pub struct Cli {
     #[arg(short, long, global = true)]
     pub verbose: bool,
 
-    /// Output format (text, json, table)
-    #[arg(short = 'o', long, global = true)]
-    pub output: Option<OutputFormat>,
+    /// Global output format (text, json, table)
+    #[arg(long = "output-format", global = true)]
+    pub output_format: Option<OutputFormat>,
+
+    /// Deprecated alias for `--output-format` (root-level only for compatibility)
+    #[arg(long = "output", global = false, hide = true)]
+    pub output_legacy: Option<OutputFormat>,
 
     /// Configuration file path
     #[arg(short = 'c', long, global = true)]
@@ -238,6 +242,10 @@ pub enum AgentCommands {
     Stop {
         /// Agent ID
         agent_id: String,
+
+        /// Allow persisted state transition when runtime registry is unavailable
+        #[arg(long)]
+        force_persisted_stop: bool,
     },
 
     /// Restart an agent
@@ -265,6 +273,32 @@ pub enum AgentCommands {
         /// Show all agents
         #[arg(long)]
         all: bool,
+    },
+
+    /// View agent logs
+    Logs {
+        /// Agent ID
+        agent_id: String,
+
+        /// Tail the logs
+        #[arg(short, long)]
+        tail: bool,
+
+        /// Filter by log level (INFO, DEBUG, ERROR, WARN)
+        #[arg(long)]
+        level: Option<String>,
+
+        /// Search for text in logs
+        #[arg(long)]
+        grep: Option<String>,
+
+        /// Limit number of lines to display
+        #[arg(long)]
+        limit: Option<usize>,
+
+        /// Output logs as JSON
+        #[arg(long)]
+        json: bool,
     },
 }
 
@@ -330,6 +364,20 @@ pub enum PluginCommands {
         name: String,
     },
 
+    /// Install a plugin
+    Install {
+        /// Plugin name, path, or URL
+        name: String,
+
+        /// Expected SHA256 checksum for verification
+        #[arg(long)]
+        checksum: Option<String>,
+
+        /// Verify plugin signature (if available)
+        #[arg(long)]
+        verify_signature: bool,
+    },
+
     /// Uninstall a plugin
     Uninstall {
         /// Plugin name
@@ -338,6 +386,32 @@ pub enum PluginCommands {
         /// Force removal without confirmation
         #[arg(long)]
         force: bool,
+    },
+
+    /// Manage plugin repositories
+    Repository {
+        #[command(subcommand)]
+        action: PluginRepositoryCommands,
+    },
+}
+
+/// Plugin repository management subcommands
+#[derive(Subcommand)]
+pub enum PluginRepositoryCommands {
+    /// List configured plugin repositories
+    List,
+
+    /// Add a plugin repository
+    Add {
+        /// Repository identifier
+        id: String,
+
+        /// Repository URL
+        url: String,
+
+        /// Optional description for the repository
+        #[arg(short, long)]
+        description: Option<String>,
     },
 }
 
@@ -361,7 +435,7 @@ pub enum SessionCommands {
         session_id: String,
 
         /// Output format
-        #[arg(short = 'o', long)]
+        #[arg(short = 'f', long, short_alias = 'o')]
         format: Option<SessionFormat>,
     },
 
@@ -381,8 +455,8 @@ pub enum SessionCommands {
         session_id: String,
 
         /// Output file
-        #[arg(short, long)]
-        output: PathBuf,
+        #[arg(id = "session_export_output", short = 'o', long = "output")]
+        output_path: PathBuf,
 
         /// Export format
         #[arg(short, long)]

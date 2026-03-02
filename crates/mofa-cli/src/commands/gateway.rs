@@ -1,15 +1,21 @@
 //! `mofa gateway` command implementations
 
+use crate::CliError;
 use colored::Colorize;
 use mofa_runtime::gateway::{BackendConfig, GatewayConfig, run_gateway};
 
 /// Execute `mofa gateway serve`
-pub async fn run_serve(host: &str, port: u16, backends: &[String], rpm: u32) -> anyhow::Result<()> {
+pub async fn run_serve(
+    host: &str,
+    port: u16,
+    backends: &[String],
+    rpm: u32,
+) -> Result<(), CliError> {
     let backend_configs = backends
         .iter()
         .enumerate()
         .map(|(idx, spec)| parse_backend_spec(idx + 1, spec))
-        .collect::<anyhow::Result<Vec<_>>>()?;
+        .collect::<Result<Vec<_>, CliError>>()?;
 
     let mut cfg = GatewayConfig::new(host.to_string(), port, backend_configs);
     cfg.rate_limit.requests_per_minute = rpm;
@@ -21,10 +27,10 @@ pub async fn run_serve(host: &str, port: u16, backends: &[String], rpm: u32) -> 
         port,
         backends.len()
     );
-    run_gateway(cfg).await
+    run_gateway(cfg).await.map_err(|e| CliError::Other(e.to_string()))
 }
 
-fn parse_backend_spec(index: usize, spec: &str) -> anyhow::Result<BackendConfig> {
+fn parse_backend_spec(index: usize, spec: &str) -> Result<BackendConfig, CliError> {
     let (name_part, rhs) = if let Some((name, value)) = spec.split_once('=') {
         (Some(name.trim().to_string()), value.trim())
     } else {
@@ -35,20 +41,22 @@ fn parse_backend_spec(index: usize, spec: &str) -> anyhow::Result<BackendConfig>
         let parsed_weight = weight
             .trim()
             .parse::<u32>()
-            .map_err(|_| anyhow::anyhow!("Invalid backend weight '{}'", weight.trim()))?;
+            .map_err(|_| CliError::Other(format!("Invalid backend weight '{}'", weight.trim())))?;
         (url.trim().to_string(), parsed_weight)
     } else {
         (rhs.to_string(), 1)
     };
 
     if url.is_empty() {
-        anyhow::bail!("Backend URL cannot be empty");
+        return Err(CliError::Other("Backend URL cannot be empty".to_string()));
     }
     if !(url.starts_with("http://") || url.starts_with("https://")) {
-        anyhow::bail!("Backend URL must start with http:// or https://");
+        return Err(CliError::Other(
+            "Backend URL must start with http:// or https://".to_string(),
+        ));
     }
     if weight == 0 {
-        anyhow::bail!("Backend weight must be >= 1");
+        return Err(CliError::Other("Backend weight must be >= 1".to_string()));
     }
 
     let name = name_part.unwrap_or_else(|| format!("backend-{}", index));

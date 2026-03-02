@@ -23,6 +23,7 @@ pub mod config;
 pub mod fallback;
 pub mod gateway;
 pub mod interrupt;
+pub mod retry;
 pub mod runner;
 
 // Dora adapter module (only compiled when dora feature is enabled)
