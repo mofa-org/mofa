@@ -81,6 +81,14 @@ impl From<crate::agent::types::error::GlobalError> for KernelError {
             GlobalError::LLM(msg)
             | GlobalError::Plugin(msg)
             | GlobalError::Runtime(msg)
+            | GlobalError::Config(msg)
+            | GlobalError::Persistence(msg)
+            | GlobalError::Prompt(msg)
+            | GlobalError::Dsl(msg)
+            | GlobalError::Wasm(msg)
+            | GlobalError::Rhai(msg)
+            | GlobalError::Dora(msg)
+            | GlobalError::MessageGraph(msg)
             | GlobalError::Other(msg) => KernelError::Internal(msg),
         }
     }

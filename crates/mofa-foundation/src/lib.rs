@@ -4,6 +4,8 @@
     non_camel_case_types,
     ambiguous_glob_reexports
 )]
+// Unified error conversions (GlobalError <-> domain errors)
+pub mod error_conversions;
 // orchestrator module - Model Lifecycle & Allocation
 pub mod orchestrator;
 
