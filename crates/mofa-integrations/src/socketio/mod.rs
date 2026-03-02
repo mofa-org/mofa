@@ -167,6 +167,29 @@ impl SocketIoBridge {
 }
 
 fn agent_message_to_json(msg: &AgentMessage) -> Value {
-    serde_json::to_value(msg)
-        .unwrap_or_else(|_| json!({ "error": "serialization failed" }))
+    serde_json::to_value(msg).unwrap_or_else(|_| json!({ "error": "serialization failed" }))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::SocketIoConfig;
+
+    #[test]
+    fn socketio_config_defaults() {
+        let cfg = SocketIoConfig::new();
+        assert_eq!(cfg.namespace, "/agents");
+        assert_eq!(cfg.channel_buffer, 256);
+        assert!(cfg.auth_token.is_none());
+    }
+
+    #[test]
+    fn socketio_config_builders() {
+        let cfg = SocketIoConfig::new()
+            .with_namespace("/control")
+            .with_buffer(1024)
+            .with_auth_token("token-1");
+        assert_eq!(cfg.namespace, "/control");
+        assert_eq!(cfg.channel_buffer, 1024);
+        assert_eq!(cfg.auth_token.as_deref(), Some("token-1"));
+    }
 }

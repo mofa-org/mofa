@@ -4,6 +4,7 @@ members = [
     "crates/mofa-monitoring",
     "crates/mofa-kernel",
     "crates/mofa-foundation",
+    "crates/mofa-integrations",
     "crates/mofa-runtime",
     "crates/mofa-cli",
     "crates/mofa-plugins",

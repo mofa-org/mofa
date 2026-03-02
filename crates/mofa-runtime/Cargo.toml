@@ -30,6 +30,7 @@ eyre.workspace = true
 mofa-kernel = { path = "../mofa-kernel", version = "0.1", features = ["config"] }
 mofa-plugins = { path = "../mofa-plugins", version = "0.1" }
 mofa-monitoring = { path = "../mofa-monitoring", version = "0.1", optional = true }
+mofa-integrations = { path = "../mofa-integrations", version = "0.1", optional = true }
 # Dora-rs dependencies
 dora-node-api = { version = "0", default-features = false, optional = true }
 dora-operator-api = { version = "0", default-features = false, optional = true }
@@ -50,3 +51,5 @@ workspace = true
 [features]
 dora = ["dora-node-api", "dora-operator-api", "dora-daemon", "dora-core", "dora-message"]
 monitoring = ["dep:mofa-monitoring"]
+integrations-s3 = ["dep:mofa-integrations", "mofa-integrations/s3"]
+integrations-socketio = ["dep:mofa-integrations", "mofa-integrations/socketio"]
