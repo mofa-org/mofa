@@ -1,0 +1,6 @@
+agent:
+  id: healthy-agent
+  name: Healthy Agent
+  role: assistant
+runtime:
+  max_concurrency: 8

@@ -220,10 +220,24 @@ impl Pipeline {
     where
         F: Fn(&str) -> bool + Send + Sync + 'static,
     {
+        // Pass all sub-pipeline steps directly into the Branch variant so that
+        // all steps are executed when the condition is evaluated.
+        let true_steps = if if_true.steps.is_empty() {
+            vec![PipelineStep::Identity]
+        } else {
+            if_true.steps
+        };
+
+        let false_steps = if if_false.steps.is_empty() {
+            vec![PipelineStep::Identity]
+        } else {
+            if_false.steps
+        };
+
         self.steps.push(PipelineStep::Branch {
             condition: Arc::new(condition),
-            if_true: if_true.steps,
-            if_false: if_false.steps,
+            if_true: true_steps,
+            if_false: false_steps,
         });
         self
     }
