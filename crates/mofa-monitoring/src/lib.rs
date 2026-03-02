@@ -34,6 +34,3 @@ pub use dashboard::{
     PrometheusExporter, ServerState, SystemMetrics, SystemStatus, TokenAuthProvider,
     WebSocketClient, WebSocketHandler, WebSocketMessage, WorkflowMetrics,
 };
-
-#[cfg(feature = "otlp-metrics")]
-pub use tracing::CardinalityLimits;

@@ -216,12 +216,6 @@ impl DashboardServer {
         self
     }
 
-    /// Override Prometheus exporter settings.
-    pub fn with_prometheus_export_config(mut self, config: PrometheusExportConfig) -> Self {
-        self.prometheus_export_config = config;
-        self
-    }
-
     /// Attach a channel receiver for debug events to stream to WebSocket clients.
     ///
     /// This enables real-time debugging by forwarding `DebugEvent`s from the
