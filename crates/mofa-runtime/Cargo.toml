@@ -25,6 +25,7 @@ flume.workspace = true
 uuid.workspace = true
 thiserror.workspace = true
 eyre.workspace = true
+rand.workspace = true
 
 # Local dependencies
 mofa-kernel = { path = "../mofa-kernel", version = "0.1", features = ["config"] }
