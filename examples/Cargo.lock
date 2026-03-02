@@ -3697,6 +3697,7 @@ dependencies = [
  "crossterm",
  "dialoguer",
  "dirs-next",
+ "error-stack",
  "flate2",
  "futures",
  "hex",
@@ -4932,6 +4933,7 @@ dependencies = [
 name = "rag_pipeline"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
  "async-trait",
  "futures",
  "mofa-foundation",
