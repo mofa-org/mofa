@@ -13,8 +13,8 @@ mofa-kernel = { path = "../mofa-kernel" }
 
 # HTTP server & middleware
 axum.workspace = true
-tower = "0.4"
-tower-http = { version = "0.5", features = ["trace", "cors", "timeout"] }
+tower = "0.5"
+tower-http = { version = "0.6", features = ["trace", "cors", "timeout"] }
 
 # Async runtime
 tokio.workspace = true

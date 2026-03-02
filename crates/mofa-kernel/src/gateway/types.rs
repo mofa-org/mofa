@@ -4,7 +4,7 @@
 //! ([`GatewayRouter`](super::router::GatewayRouter),
 //! [`GatewayFilter`](super::filter::GatewayFilter),
 //! [`CapabilityRegistry`](super::capability::CapabilityRegistry))
-//! and carry no runtime dependencies beyond `serde` and `std`.
+//! and carry no runtime dependencies beyond `serde`, `serde_json`, and `std`.
 
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;

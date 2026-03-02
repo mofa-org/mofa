@@ -58,8 +58,13 @@ impl GatewayFilter for ApiKeyFilter {
     async fn on_request(&self, ctx: &mut GatewayContext) -> Result<FilterAction, GatewayError> {
         match Self::extract_key(ctx) {
             Some(key) if self.valid_keys.contains(&key) => {
-                // Record the authenticated principal in the context.
-                ctx.auth_principal = Some(key.clone());
+                // Store a non-sensitive truncated identifier, not the raw key,
+                // so it is safe to propagate into logs via LoggingFilter.
+                let truncated = format!(
+                    "{}…",
+                    key.chars().take(8).collect::<String>()
+                );
+                ctx.auth_principal = Some(truncated);
                 Ok(FilterAction::Continue)
             }
             Some(key) => {
@@ -110,17 +115,18 @@ mod tests {
         let mut c = ctx(Some("Bearer secret-key-1"), None);
         let action = filter.on_request(&mut c).await.unwrap();
         assert_eq!(action, FilterAction::Continue);
-        assert_eq!(c.auth_principal, Some("secret-key-1".to_string()));
+        // Principal should be truncated to first 8 chars to avoid logging secrets.
+        assert_eq!(c.auth_principal, Some("secret-k\u{2026}".to_string()));
     }
 
     #[tokio::test]
     async fn valid_x_api_key_passes() {
         let filter = ApiKeyFilter::new(["sk-abc"]);
         let mut c = ctx(None, Some("sk-abc"));
-        assert_eq!(
-            filter.on_request(&mut c).await.unwrap(),
-            FilterAction::Continue
-        );
+        let action = filter.on_request(&mut c).await.unwrap();
+        assert_eq!(action, FilterAction::Continue);
+        // Keys shorter than 8 chars are fully included before the ellipsis.
+        assert_eq!(c.auth_principal, Some("sk-abc\u{2026}".to_string()));
     }
 
     #[tokio::test]

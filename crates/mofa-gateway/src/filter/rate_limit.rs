@@ -11,8 +11,8 @@ use mofa_kernel::gateway::{
     FilterAction, FilterOrder, GatewayContext, GatewayError, GatewayFilter, GatewayResponse,
 };
 use std::collections::HashMap;
-use std::sync::Mutex;
 use std::time::{Duration, Instant};
+use tokio::sync::Mutex;
 use tracing::warn;
 
 struct Bucket {
@@ -96,7 +96,7 @@ impl GatewayFilter for RateLimitFilter {
     async fn on_request(&self, ctx: &mut GatewayContext) -> Result<FilterAction, GatewayError> {
         let caller = Self::caller_id(ctx);
         let allowed = {
-            let mut buckets = self.buckets.lock().unwrap();
+            let mut buckets = self.buckets.lock().await;
             let bucket = buckets
                 .entry(caller.clone())
                 .or_insert_with(|| Bucket::new(self.burst_capacity));

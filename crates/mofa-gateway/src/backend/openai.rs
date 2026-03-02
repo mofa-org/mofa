@@ -55,13 +55,14 @@ impl OpenAiBackend {
 
         let start = std::time::Instant::now();
 
-        let mut builder = match req.method {
+        // Match on a reference to avoid moving out of the borrowed GatewayRequest.
+        let mut builder = match &req.method {
             mofa_kernel::gateway::HttpMethod::Post => self.client.post(&url),
             mofa_kernel::gateway::HttpMethod::Get => self.client.get(&url),
             mofa_kernel::gateway::HttpMethod::Put => self.client.put(&url),
             mofa_kernel::gateway::HttpMethod::Delete => self.client.delete(&url),
             mofa_kernel::gateway::HttpMethod::Patch => self.client.patch(&url),
-            _ => self.client.get(&url),
+            _ => self.client.post(&url), // HEAD/OPTIONS: fall back to POST for proxy
         };
 
         // Forward headers from the original request, except `host`.
@@ -105,6 +106,8 @@ impl OpenAiBackend {
             source: e,
         })?;
 
+        // Surface 5xx responses as errors; 4xx are proxied transparently so
+        // callers can inspect the structured error body (e.g. OpenAI 429 JSON).
         if status >= 500 {
             return Err(GatewayImplError::UpstreamError {
                 backend_id: self.backend_id.clone(),
@@ -112,6 +115,8 @@ impl OpenAiBackend {
                 message: String::from_utf8_lossy(&body).to_string(),
             });
         }
+        // TODO: plumb RouteMatch.timeout_ms into per-request reqwest timeout
+        // once the proxy_handler passes GatewayContext instead of GatewayRequest.
 
         let mut resp = GatewayResponse::new(status, &self.backend_id);
         resp.headers = headers;

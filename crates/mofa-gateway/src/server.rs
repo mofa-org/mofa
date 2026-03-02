@@ -29,7 +29,7 @@ use mofa_kernel::gateway::{
 use serde_json::json;
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use tracing::info;
+use tracing::{info, warn};
 use uuid::Uuid;
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -198,8 +198,22 @@ async fn proxy_handler(
     headers: HeaderMap,
     body: Bytes,
 ) -> Response {
-    let http_method = axum_method_to_kernel(&method);
-    let path = uri.path().to_string();
+    // Preserve query string so /v1/models?foo=bar is forwarded correctly.
+    let path = uri
+        .path_and_query()
+        .map(|pq| pq.as_str().to_string())
+        .unwrap_or_else(|| uri.path().to_string());
+
+    let http_method = match axum_method_to_kernel(&method) {
+        Some(m) => m,
+        None => {
+            return (
+                StatusCode::METHOD_NOT_ALLOWED,
+                Json(json!({ "error": format!("method '{}' is not supported", method) })),
+            )
+                .into_response();
+        }
+    };
     let request_id = Uuid::new_v4().to_string();
 
     let mut req = GatewayRequest::new(&request_id, &path, http_method);
@@ -252,8 +266,22 @@ async fn proxy_handler(
         }
     }
 
-    // Forward to OpenAI-compatible backend.
-    let upstream_result = state.openai_backend.forward(&ctx.request).await;
+    // Select backend by backend_id resolved during routing.
+    let backend_id = ctx
+        .route_match
+        .as_ref()
+        .map(|m| m.backend_id.as_str())
+        .unwrap_or("openai");
+    let upstream_result = match backend_id {
+        "openai" => state.openai_backend.forward(&ctx.request).await,
+        other => {
+            return (
+                StatusCode::BAD_GATEWAY,
+                Json(json!({ "error": format!("unsupported backend '{other}'") })),
+            )
+                .into_response();
+        }
+    };
 
     let mut gateway_resp = match upstream_result {
         Ok(r) => r,
@@ -267,7 +295,13 @@ async fn proxy_handler(
     };
 
     // Run the filter pipeline on the response.
-    let _ = state.pipeline.run_response(&ctx, &mut gateway_resp).await;
+    if let Err(err) = state.pipeline.run_response(&ctx, &mut gateway_resp).await {
+        warn!(
+            request_id = %request_id,
+            error = %err,
+            "response filter pipeline error (upstream response still returned)"
+        );
+    }
 
     build_axum_response(gateway_resp)
 }
@@ -276,16 +310,21 @@ async fn proxy_handler(
 // Helpers
 // ─────────────────────────────────────────────────────────────────────────────
 
-fn axum_method_to_kernel(m: &Method) -> HttpMethod {
+/// Convert an axum [`Method`] to the kernel [`HttpMethod`].
+///
+/// Returns `None` for methods not in the kernel's `HttpMethod` enum
+/// (e.g. `CONNECT`, `TRACE`, `LINK`).  Callers should respond with
+/// `405 Method Not Allowed` when `None` is returned.
+fn axum_method_to_kernel(m: &Method) -> Option<HttpMethod> {
     match m.as_str() {
-        "GET" => HttpMethod::Get,
-        "POST" => HttpMethod::Post,
-        "PUT" => HttpMethod::Put,
-        "PATCH" => HttpMethod::Patch,
-        "DELETE" => HttpMethod::Delete,
-        "HEAD" => HttpMethod::Head,
-        "OPTIONS" => HttpMethod::Options,
-        _ => HttpMethod::Get,
+        "GET"     => Some(HttpMethod::Get),
+        "POST"    => Some(HttpMethod::Post),
+        "PUT"     => Some(HttpMethod::Put),
+        "PATCH"   => Some(HttpMethod::Patch),
+        "DELETE"  => Some(HttpMethod::Delete),
+        "HEAD"    => Some(HttpMethod::Head),
+        "OPTIONS" => Some(HttpMethod::Options),
+        _         => None,
     }
 }
 
