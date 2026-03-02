@@ -323,6 +323,8 @@ pub mod pipeline;
 // Framework components
 pub mod agent_loop;
 pub mod context;
+pub mod llm_planner;
+pub mod planning_executor;
 pub mod task_orchestrator;
 pub mod token_budget;
 pub mod vision;
@@ -379,6 +381,8 @@ pub use pipeline::{
 // Re-export framework components
 pub use agent_loop::{AgentLoop, AgentLoopConfig, AgentLoopRunner, SimpleToolExecutor};
 pub use context::{AgentContextBuilder, AgentIdentity, NoOpSkillsManager, SkillsManager};
+pub use llm_planner::LLMPlanner;
+pub use planning_executor::{PlanningExecutor, SimpleStepExecutor, StepExecutor};
 pub use task_orchestrator::{
     BackgroundTask, TaskOrchestrator, TaskOrchestratorConfig, TaskOrigin, TaskResult, TaskStatus,
 };
