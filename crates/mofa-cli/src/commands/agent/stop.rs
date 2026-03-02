@@ -42,16 +42,14 @@ pub async fn run(ctx: &CliContext, agent_id: &str) -> anyhow::Result<()> {
         .await
         .map_err(|e| anyhow::anyhow!("Failed to unregister agent: {}", e))?;
 
-    if !removed && persisted_updated {
-        if let Some(previous) = previous_entry {
-            ctx.agent_store.save(agent_id, &previous).map_err(|e| {
-                anyhow::anyhow!(
-                    "Agent '{}' remained registered and failed to restore persisted state: {}",
-                    agent_id,
-                    e
-                )
-            })?;
-        }
+    if !removed && persisted_updated && let Some(previous) = previous_entry {
+        ctx.agent_store.save(agent_id, &previous).map_err(|e| {
+            anyhow::anyhow!(
+                "Agent '{}' remained registered and failed to restore persisted state: {}",
+                agent_id,
+                e
+            )
+        })?;
     }
 
     if removed {
