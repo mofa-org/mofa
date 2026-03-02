@@ -145,8 +145,8 @@ impl PromptTemplatePlugin for RhaiScriptPromptPlugin {
             .map_err(|e| mofa_kernel::plugin::PluginError::Other(e.to_string()))?;
 
         for entry in entries {
-            let entry = entry
-                .map_err(|e| mofa_kernel::plugin::PluginError::Other(e.to_string()))?;
+            let entry =
+                entry.map_err(|e| mofa_kernel::plugin::PluginError::Other(e.to_string()))?;
             let path = entry.path();
 
             // Process only Rhai files
@@ -263,18 +263,19 @@ impl mofa_kernel::plugin::AgentPlugin for RhaiScriptPromptPlugin {
         // Parse input to decide what to do
         // This could support commands like "set_scenario:promotion" or "get_template:outage"
         if input.starts_with("set_scenario:") {
-            let scenario = input
-                .strip_prefix("set_scenario:")
-                .ok_or_else(|| mofa_kernel::plugin::PluginError::ExecutionFailed("Invalid scenario".into()))?;
+            let scenario = input.strip_prefix("set_scenario:").ok_or_else(|| {
+                mofa_kernel::plugin::PluginError::ExecutionFailed("Invalid scenario".into())
+            })?;
             self.set_active_scenario(scenario).await;
             Ok(format!("Successfully switched to scenario: {}", scenario))
         } else if input.starts_with("get_template:") {
-            let scenario = input
-                .strip_prefix("get_template:")
-                .ok_or_else(|| mofa_kernel::plugin::PluginError::ExecutionFailed("Invalid scenario".into()))?;
+            let scenario = input.strip_prefix("get_template:").ok_or_else(|| {
+                mofa_kernel::plugin::PluginError::ExecutionFailed("Invalid scenario".into())
+            })?;
             if let Some(template) = self.get_prompt_template(scenario).await {
-                Ok(serde_json::to_string(&template)
-                    .map_err(|e| mofa_kernel::plugin::PluginError::ExecutionFailed(e.to_string()))?)
+                Ok(serde_json::to_string(&template).map_err(|e| {
+                    mofa_kernel::plugin::PluginError::ExecutionFailed(e.to_string())
+                })?)
             } else {
                 Ok(format!("Template not found: {}", scenario))
             }

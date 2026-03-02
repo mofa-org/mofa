@@ -42,6 +42,7 @@ members = [
     "agent_builder",
     "context_compression",
     "context_window_demo",
+    "compression_examples",
     "admission_gate_demo",
     "integrations_demo",
 ]

@@ -29,11 +29,20 @@ pub mod tool;
 
 // Context compressor - Kernel trait and types
 pub use mofa_kernel::agent::components::context_compressor::{
-    CompressionStrategy, ContextCompressor,
+    CompressionMetrics, CompressionResult, CompressionStrategy, ContextCompressor,
 };
 
 // Context compressor - Foundation implementations
-pub use context_compressor::{SlidingWindowCompressor, SummarizingCompressor, TokenCounter};
+pub use context_compressor::{
+    HierarchicalCompressor, HybridCompressor, SemanticCompressor, SlidingWindowCompressor,
+    SummarizingCompressor, TokenCounter,
+};
+
+#[cfg(feature = "tiktoken")]
+pub use context_compressor::TikTokenCounter;
+
+#[cfg(feature = "compression-cache")]
+pub use context_compressor::{CompressionCache, CacheStats};
 
 // Coordinator - Kernel trait 和类型
 // Coordinator - Kernel trait and types

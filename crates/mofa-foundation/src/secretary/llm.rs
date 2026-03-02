@@ -4,8 +4,8 @@
 //! 定义与 LLM 交互的抽象接口。
 //! Defines the abstract interface for interacting with LLMs.
 
-use mofa_kernel::agent::types::error::{GlobalError, GlobalResult};
 use async_trait::async_trait;
+use mofa_kernel::agent::types::error::{GlobalError, GlobalResult};
 use serde::{Deserialize, Serialize};
 use tokio::sync::mpsc;
 
@@ -171,7 +171,8 @@ pub struct ModelInfo {
 /// ```
 pub fn parse_llm_json<T: serde::de::DeserializeOwned>(response: &str) -> GlobalResult<T> {
     let json_str = extract_json_block(response).unwrap_or(response);
-    serde_json::from_str(json_str).map_err(|e| GlobalError::Other(format!("JSON parse error: {}", e)))
+    serde_json::from_str(json_str)
+        .map_err(|e| GlobalError::Other(format!("JSON parse error: {}", e)))
 }
 
 /// 从响应中提取 JSON 块
