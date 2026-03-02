@@ -21,4 +21,17 @@ pub enum BusError {
     /// A serialization or deserialization error occurred.
     #[error("Serialization error: {0}")]
     Serialization(String),
+
+    /// The channel buffer is full and the configured strategy does not
+    /// allow dropping messages.
+    #[error("Buffer full for channel: {0}")]
+    BufferFull(String),
+
+    /// The receiver lagged behind and missed messages. The inner value
+    /// is the number of messages that were lost.
+    ///
+    /// This error is only returned when the channel's [`LagPolicy`](super::backpressure::LagPolicy)
+    /// is set to [`Error`](super::backpressure::LagPolicy::Error).
+    #[error("Receiver lagged behind, missed {0} message(s)")]
+    MessageLag(u64),
 }

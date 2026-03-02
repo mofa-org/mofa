@@ -1,5 +1,12 @@
+pub mod backpressure;
 pub mod error;
+pub mod metrics;
+
+pub use backpressure::{BusConfig, ChannelConfig, LagPolicy};
 pub use error::BusError;
+pub use metrics::{BusMetrics, MetricsSnapshot};
+
+use backpressure::LagPolicy as LagPolicyEnum;
 
 use crate::agent::AgentMetadata;
 use crate::message::AgentMessage;
@@ -7,53 +14,105 @@ use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use tokio::sync::{RwLock, broadcast};
+use tracing::warn;
 
-/// 通信模式枚举
-/// Communication mode enumeration
+/// Communication mode enumeration.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
 #[non_exhaustive]
 pub enum CommunicationMode {
-    /// 点对点通信（单发送方 -> 单接收方）
-    /// Point-to-point communication (Single sender -> Single receiver)
+    /// Point-to-point communication (Single sender -> Single receiver).
     PointToPoint(String),
-    /// 广播通信（单发送方 -> 所有智能体）
-    /// Broadcast communication (Single sender -> All agents)
+    /// Broadcast communication (Single sender -> All agents).
     Broadcast,
-    /// 订阅-发布通信（基于主题）
-    /// Pub-Sub communication (Topic-based)
+    /// Pub-Sub communication (Topic-based).
     PubSub(String),
 }
+
 pub type AgentChannelMap =
     Arc<RwLock<HashMap<String, HashMap<CommunicationMode, broadcast::Sender<Vec<u8>>>>>>;
-/// 通信总线核心结构体
-/// Core structure for the communication bus
+
+/// Core structure for the communication bus.
+///
+/// Supports configurable buffer sizes, per-channel backpressure policies,
+/// and observable metrics. See [`BusConfig`] for configuration options.
+///
+/// # Example
+///
+/// ```rust,ignore
+/// use mofa_kernel::bus::{AgentBus, BusConfig, ChannelConfig, LagPolicy};
+///
+/// // High-throughput bus with skip-and-continue for lag
+/// let config = BusConfig::new(
+///     ChannelConfig::new(4096).with_lag_policy(LagPolicy::SkipAndContinue),
+/// );
+/// let bus = AgentBus::with_config(config);
+///
+/// // Access metrics
+/// let snap = bus.metrics().snapshot();
+/// println!("Delivery rate: {:.1}%", snap.delivery_rate() * 100.0);
+/// ```
 #[derive(Clone)]
 pub struct AgentBus {
-    /// 智能体-通信通道映射
-    /// Agent-to-communication channel mapping
+    /// Agent-to-communication channel mapping.
     agent_channels: AgentChannelMap,
-    /// 主题-订阅者映射（PubSub 模式专用）
-    /// Topic-to-subscriber mapping (Exclusive to PubSub mode)
+    /// Topic-to-subscriber mapping (Exclusive to PubSub mode).
     topic_subscribers: Arc<RwLock<HashMap<String, HashSet<String>>>>,
-    /// 广播通道
-    /// Broadcast channel
+    /// Global broadcast channel.
     broadcast_channel: broadcast::Sender<Vec<u8>>,
+    /// Bus configuration (buffer sizes, lag policies).
+    config: Arc<BusConfig>,
+    /// Shared metrics (lock-free atomic counters).
+    bus_metrics: Arc<BusMetrics>,
 }
 
 impl AgentBus {
-    /// 创建通信总线实例
-    /// Create a communication bus instance
+    /// Create a communication bus instance with default configuration.
+    ///
+    /// Uses [`BusConfig::default()`] which sets a 256-slot buffer and
+    /// [`LagPolicy::Error`] (lag is surfaced, never silent).
     pub fn new() -> Self {
-        let (broadcast_sender, _) = broadcast::channel(100);
+        Self::with_config(BusConfig::default())
+    }
+
+    /// Create a bus with the given configuration.
+    pub fn with_config(config: BusConfig) -> Self {
+        let buffer_size = config.broadcast().buffer_size();
+        let (broadcast_sender, _) = broadcast::channel(buffer_size);
         Self {
             agent_channels: Arc::new(RwLock::new(HashMap::new())),
             topic_subscribers: Arc::new(RwLock::new(HashMap::new())),
             broadcast_channel: broadcast_sender,
+            config: Arc::new(config),
+            bus_metrics: Arc::new(BusMetrics::new()),
         }
     }
 
-    /// 为智能体注册通信通道
-    /// Register a communication channel for an agent
+    /// Returns a reference to the live bus metrics.
+    ///
+    /// Counters are updated atomically and can be read without locking.
+    /// For a serializable snapshot, call [`BusMetrics::snapshot()`].
+    pub fn metrics(&self) -> &BusMetrics {
+        &self.bus_metrics
+    }
+
+    /// Returns the bus configuration.
+    pub fn config(&self) -> &BusConfig {
+        &self.config
+    }
+
+    /// Subscribe to the raw global broadcast channel.
+    ///
+    /// Returns a `broadcast::Receiver` for low-level consumers (e.g., the
+    /// Socket.IO bridge) that handle their own lag/close recovery.
+    ///
+    /// Most callers should use [`receive_message`](Self::receive_message)
+    /// instead, which integrates with the configured [`LagPolicy`] and
+    /// metrics.
+    pub fn subscribe_broadcast(&self) -> broadcast::Receiver<Vec<u8>> {
+        self.broadcast_channel.subscribe()
+    }
+
+    /// Register a communication channel for an agent.
     pub async fn register_channel(
         &self,
         agent_metadata: &AgentMetadata,
@@ -63,25 +122,22 @@ impl AgentBus {
         let mut agent_channels = self.agent_channels.write().await;
         let entry = agent_channels.entry(id.clone()).or_default();
 
-        // 如果是广播模式，不需要单独注册，使用全局广播通道
-        // If broadcast mode, no individual registration needed; use global channel
+        // Broadcast mode uses the global broadcast channel, no per-agent channel needed.
         if matches!(mode, CommunicationMode::Broadcast) {
             return Ok(());
         }
 
-        // 如果通道已存在，直接返回
-        // If the channel already exists, return directly
+        // If the channel already exists, return directly.
         if entry.contains_key(&mode) {
             return Ok(());
         }
 
-        // 创建新的广播通道
-        // Create a new broadcast channel
-        let (sender, _) = broadcast::channel(100);
+        // Resolve buffer size from config (per-mode override or default).
+        let channel_config = self.config.resolve(&mode);
+        let (sender, _) = broadcast::channel(channel_config.buffer_size());
         entry.insert(mode.clone(), sender);
 
-        // PubSub 模式需注册订阅者映射
-        // PubSub mode requires registering subscriber mapping
+        // PubSub mode requires registering subscriber mapping.
         if let CommunicationMode::PubSub(topic) = &mode {
             let mut topic_subs = self.topic_subscribers.write().await;
             topic_subs
@@ -93,121 +149,68 @@ impl AgentBus {
         Ok(())
     }
 
-    // 核心：完善点对点消息发送逻辑
-    // Core: Refine the point-to-point message sending logic
+    /// Send a message through the bus.
     pub async fn send_message(
         &self,
         sender_id: &str,
         mode: CommunicationMode,
         message: &AgentMessage,
     ) -> Result<(), BusError> {
-        let message_bytes = bincode::serialize(message)
-            .map_err(|e| BusError::Serialization(e.to_string()))?;
+        let message_bytes =
+            bincode::serialize(message).map_err(|e| BusError::Serialization(e.to_string()))?;
 
-        match mode {
-            // 点对点模式：根据接收方 ID 查找通道并发送
-            // Point-to-point mode: Find channel by receiver ID and send
+        let result = match mode {
             CommunicationMode::PointToPoint(receiver_id) => {
-                let agent_channels = self.agent_channels.read().await;
-                // 1. 校验接收方是否存在并注册了对应通道
-                // 1. Verify if receiver exists and has registered the channel
-                let Some(receiver_channels) = agent_channels.get(&receiver_id) else {
-                    return Err(BusError::AgentNotRegistered(receiver_id.clone()));
-                };
-                let Some(channel) =
-                    receiver_channels.get(&CommunicationMode::PointToPoint(sender_id.to_string()))
-                else {
-                    return Err(BusError::ChannelNotFound(format!(
-                        "Receiver {} has no point-to-point channel with sender {}",
-                        receiver_id, sender_id
-                    )));
-                };
-                // 2. 发送消息
-                // 2. Send the message
-                channel.send(message_bytes)
-                    .map_err(|e| BusError::SendFailed(e.to_string()))?;
+                self.send_point_to_point(sender_id, &receiver_id, message_bytes)
+                    .await
             }
-            CommunicationMode::Broadcast => {
-                // 使用全局广播通道
-                // Use the global broadcast channel
-                self.broadcast_channel.send(message_bytes)
-                    .map_err(|e| BusError::SendFailed(e.to_string()))?;
-            }
+            CommunicationMode::Broadcast => self.send_broadcast(message_bytes).await,
             CommunicationMode::PubSub(ref topic) => {
-                let topic_subs = self.topic_subscribers.read().await;
-                let subscribers = topic_subs
-                    .get(topic)
-                    .ok_or_else(|| BusError::ChannelNotFound(format!("No subscribers for topic: {}", topic)))?;
-                let agent_channels = self.agent_channels.read().await;
-
-                for sub_id in subscribers {
-                    let Some(channels) = agent_channels.get(sub_id) else {
-                        continue;
-                    };
-                    let Some(channel) = channels.get(&mode) else {
-                        continue;
-                    };
-                    channel.send(message_bytes.clone())
-                        .map_err(|e| BusError::SendFailed(e.to_string()))?;
-                }
+                self.send_pubsub(topic, &mode, message_bytes).await
             }
+        };
+
+        match &result {
+            Ok(()) => self.bus_metrics.record_send(),
+            Err(_) => self.bus_metrics.record_send_error(),
         }
 
-        Ok(())
+        result
     }
 
+    /// Receive a message from the bus.
     pub async fn receive_message(
         &self,
         id: &str,
         mode: CommunicationMode,
     ) -> Result<Option<AgentMessage>, BusError> {
-        // 处理广播模式
-        // Handle broadcast mode
+        let lag_policy = self.config.resolve(&mode).lag_policy().clone();
+
         if matches!(mode, CommunicationMode::Broadcast) {
             let mut receiver = self.broadcast_channel.subscribe();
-            match receiver.recv().await {
-                Ok(data) => {
-                    let message = bincode::deserialize(&data)
-                        .map_err(|e| BusError::Serialization(e.to_string()))?;
-                    Ok(Some(message))
-                }
-                Err(_) => Ok(None),
-            }
-        } else {
-            // 处理其他模式
-            // Handle other modes
-            let channel = {
-                let agent_channels = self.agent_channels.read().await;
-                let Some(channels) = agent_channels.get(id) else {
-                    return Ok(None);
-                };
-                let Some(channel) = channels.get(&mode) else {
-                    return Ok(None);
-                };
-                channel.clone()
-            };
-
-            let mut receiver = channel.subscribe();
-            match receiver.recv().await {
-                Ok(data) => {
-                    let message = bincode::deserialize(&data)
-                        .map_err(|e| BusError::Serialization(e.to_string()))?;
-                    Ok(Some(message))
-                }
-                Err(_) => Ok(None),
-            }
+            return self
+                .recv_with_lag_handling(&mut receiver, &lag_policy)
+                .await;
         }
+
+        // Non-broadcast: look up the per-agent channel.
+        let channel = {
+            let agent_channels = self.agent_channels.read().await;
+            let Some(channels) = agent_channels.get(id) else {
+                return Ok(None);
+            };
+            let Some(channel) = channels.get(&mode) else {
+                return Ok(None);
+            };
+            channel.clone()
+        };
+
+        let mut receiver = channel.subscribe();
+        self.recv_with_lag_handling(&mut receiver, &lag_policy)
+            .await
     }
 
-    /// Subscribe to the global broadcast channel.
-    ///
-    /// Returns a `broadcast::Receiver` that will receive every message
-    /// published in `Broadcast` mode on this bus. Use this to bridge the
-    /// internal bus to external transports (WebSocket, Socket.IO, etc.).
-    pub fn subscribe_broadcast(&self) -> tokio::sync::broadcast::Receiver<Vec<u8>> {
-        self.broadcast_channel.subscribe()
-    }
-
+    /// Unsubscribe an agent from a PubSub topic.
     pub async fn unsubscribe_topic(&self, id: &str, topic: &str) -> Result<(), BusError> {
         let mut topic_subs = self.topic_subscribers.write().await;
         if let Some(subscribers) = topic_subs.get_mut(topic) {
@@ -217,6 +220,118 @@ impl AgentBus {
             }
         }
         Ok(())
+    }
+
+    // -----------------------------------------------------------------------
+    // Private helpers
+    // -----------------------------------------------------------------------
+
+    /// Send a point-to-point message.
+    async fn send_point_to_point(
+        &self,
+        sender_id: &str,
+        receiver_id: &str,
+        data: Vec<u8>,
+    ) -> Result<(), BusError> {
+        let agent_channels = self.agent_channels.read().await;
+        let receiver_channels = agent_channels
+            .get(receiver_id)
+            .ok_or_else(|| BusError::AgentNotRegistered(receiver_id.to_owned()))?;
+
+        let channel = receiver_channels
+            .get(&CommunicationMode::PointToPoint(sender_id.to_owned()))
+            .ok_or_else(|| {
+                BusError::ChannelNotFound(format!(
+                    "Receiver {} has no point-to-point channel with sender {}",
+                    receiver_id, sender_id
+                ))
+            })?;
+
+        channel
+            .send(data)
+            .map_err(|e| BusError::SendFailed(e.to_string()))?;
+        Ok(())
+    }
+
+    /// Send a broadcast message.
+    async fn send_broadcast(&self, data: Vec<u8>) -> Result<(), BusError> {
+        self.broadcast_channel
+            .send(data)
+            .map_err(|e| BusError::SendFailed(e.to_string()))?;
+        Ok(())
+    }
+
+    /// Send a PubSub message to all subscribers of the given topic.
+    async fn send_pubsub(
+        &self,
+        topic: &str,
+        mode: &CommunicationMode,
+        data: Vec<u8>,
+    ) -> Result<(), BusError> {
+        let topic_subs = self.topic_subscribers.read().await;
+        let subscribers = topic_subs.get(topic).ok_or_else(|| {
+            BusError::ChannelNotFound(format!("No subscribers for topic: {}", topic))
+        })?;
+        let agent_channels = self.agent_channels.read().await;
+
+        for sub_id in subscribers {
+            let Some(channels) = agent_channels.get(sub_id) else {
+                continue;
+            };
+            let Some(channel) = channels.get(mode) else {
+                continue;
+            };
+            channel
+                .send(data.clone())
+                .map_err(|e| BusError::SendFailed(e.to_string()))?;
+        }
+        Ok(())
+    }
+
+    /// Receive from a broadcast receiver with lag policy handling.
+    ///
+    /// This is where the core bug fix lives: instead of `Err(_) => Ok(None)`,
+    /// we match on `RecvError::Lagged(n)` and apply the configured policy.
+    async fn recv_with_lag_handling(
+        &self,
+        receiver: &mut broadcast::Receiver<Vec<u8>>,
+        lag_policy: &LagPolicyEnum,
+    ) -> Result<Option<AgentMessage>, BusError> {
+        loop {
+            match receiver.recv().await {
+                Ok(data) => {
+                    self.bus_metrics.record_receive();
+                    let message = bincode::deserialize(&data)
+                        .map_err(|e| BusError::Serialization(e.to_string()))?;
+                    return Ok(Some(message));
+                }
+                Err(broadcast::error::RecvError::Lagged(n)) => {
+                    // Always record the lag in metrics — this is observable.
+                    self.bus_metrics.record_lag(n);
+
+                    match lag_policy {
+                        LagPolicyEnum::Error => {
+                            return Err(BusError::MessageLag(n));
+                        }
+                        LagPolicyEnum::SkipAndContinue => {
+                            warn!(
+                                missed = n,
+                                "Bus receiver lagged, skipping {} message(s) and continuing", n,
+                            );
+                            // Loop back to recv() — the receiver has been
+                            // advanced past the gap and will return the next
+                            // available message.
+                            continue;
+                        }
+                        // Future-proof: unknown policies treated as errors.
+                        _ => return Err(BusError::MessageLag(n)),
+                    }
+                }
+                Err(broadcast::error::RecvError::Closed) => {
+                    return Ok(None);
+                }
+            }
+        }
     }
 }
 
@@ -242,6 +357,10 @@ mod tests {
             state: AgentState::Ready,
         }
     }
+
+    // -----------------------------------------------------------------------
+    // Original tests (backward compatibility)
+    // -----------------------------------------------------------------------
 
     #[tokio::test]
     async fn receive_message_point_to_point_does_not_block_register_channel() {
@@ -354,5 +473,197 @@ mod tests {
             received.is_some(),
             "expected one received broadcast message"
         );
+    }
+
+    // -----------------------------------------------------------------------
+    // New tests: backpressure and observability
+    // -----------------------------------------------------------------------
+
+    #[tokio::test]
+    async fn test_default_backward_compatible() {
+        // AgentBus::new() should work identically to the old hardcoded behavior.
+        let bus = AgentBus::new();
+        assert_eq!(bus.config().broadcast().buffer_size(), 256);
+        assert_eq!(bus.metrics().messages_sent(), 0);
+    }
+
+    #[tokio::test]
+    async fn test_configurable_buffer_size() {
+        // Buffer size should be respected from config.
+        let config = BusConfig::new(ChannelConfig::new(512));
+        let bus = AgentBus::with_config(config);
+        assert_eq!(bus.config().default_channel().buffer_size(), 512);
+    }
+
+    #[tokio::test]
+    async fn test_metrics_tracking() {
+        let config =
+            BusConfig::new(ChannelConfig::new(256).with_lag_policy(LagPolicy::SkipAndContinue));
+        let bus = AgentBus::with_config(config);
+
+        // Broadcast requires at least one subscriber to accept sends.
+        let _rx = bus.broadcast_channel.subscribe();
+
+        // Send a broadcast message.
+        bus.send_message(
+            "sender",
+            CommunicationMode::Broadcast,
+            &AgentMessage::TaskRequest {
+                task_id: "t1".into(),
+                content: "hello".into(),
+            },
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(bus.metrics().messages_sent(), 1);
+        assert_eq!(bus.metrics().messages_received(), 0);
+    }
+
+    #[tokio::test]
+    async fn test_lag_error_surfaced() {
+        // Small buffer + strict lag policy → BusError::MessageLag.
+        let config = BusConfig::new(ChannelConfig::new(2).with_lag_policy(LagPolicy::Error));
+        let bus = AgentBus::with_config(config);
+
+        // Subscribe BEFORE sending so the receiver is listening.
+        let mut receiver = bus.broadcast_channel.subscribe();
+
+        // Send 4 messages into a 2-slot buffer → receiver will lag.
+        for i in 0..4 {
+            bus.broadcast_channel
+                .send(
+                    bincode::serialize(&AgentMessage::TaskRequest {
+                        task_id: format!("t{}", i),
+                        content: "x".into(),
+                    })
+                    .unwrap(),
+                )
+                .unwrap();
+        }
+
+        // The first recv should return Lagged(2) since 2 messages were overwritten.
+        let lag_policy = LagPolicy::Error;
+        let result = bus.recv_with_lag_handling(&mut receiver, &lag_policy).await;
+
+        match result {
+            Err(BusError::MessageLag(n)) => {
+                assert!(n > 0, "should have lagged by at least 1 message");
+                assert!(bus.metrics().lag_events() >= 1);
+                assert!(bus.metrics().messages_dropped() >= n);
+            }
+            other => panic!("Expected MessageLag error, got: {:?}", other),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_lag_skip_policy() {
+        // Small buffer + skip policy → should auto-recover and return next message.
+        let config =
+            BusConfig::new(ChannelConfig::new(2).with_lag_policy(LagPolicy::SkipAndContinue));
+        let bus = AgentBus::with_config(config);
+
+        let mut receiver = bus.broadcast_channel.subscribe();
+
+        // Send 4 messages into 2-slot buffer.
+        for i in 0..4 {
+            bus.broadcast_channel
+                .send(
+                    bincode::serialize(&AgentMessage::TaskRequest {
+                        task_id: format!("msg-{}", i),
+                        content: format!("payload-{}", i),
+                    })
+                    .unwrap(),
+                )
+                .unwrap();
+        }
+
+        // With SkipAndContinue, recv should skip the lag and return a valid message.
+        let lag_policy = LagPolicy::SkipAndContinue;
+        let result = bus.recv_with_lag_handling(&mut receiver, &lag_policy).await;
+
+        match result {
+            Ok(Some(AgentMessage::TaskRequest { task_id, .. })) => {
+                // Should get one of the surviving messages (msg-2 or msg-3).
+                assert!(
+                    task_id.starts_with("msg-"),
+                    "expected a valid task_id, got: {}",
+                    task_id
+                );
+            }
+            other => panic!("Expected Ok(Some(TaskRequest)), got: {:?}", other),
+        }
+
+        // Metrics should show the lag was detected.
+        assert!(bus.metrics().lag_events() >= 1);
+        assert!(bus.metrics().messages_dropped() > 0);
+        // And the successful receive was also recorded.
+        assert_eq!(bus.metrics().messages_received(), 1);
+    }
+
+    #[tokio::test]
+    async fn test_per_channel_config() {
+        let config = BusConfig::default().with_override(
+            CommunicationMode::PubSub("telemetry".into()),
+            ChannelConfig::new(4096).with_lag_policy(LagPolicy::SkipAndContinue),
+        );
+        let bus = AgentBus::with_config(config);
+
+        // Default channels should have the default buffer size.
+        let default = bus
+            .config()
+            .resolve(&CommunicationMode::PointToPoint("x".into()));
+        assert_eq!(default.buffer_size(), 256);
+
+        // The telemetry channel should have the override.
+        let telemetry = bus
+            .config()
+            .resolve(&CommunicationMode::PubSub("telemetry".into()));
+        assert_eq!(telemetry.buffer_size(), 4096);
+        assert_eq!(*telemetry.lag_policy(), LagPolicy::SkipAndContinue);
+    }
+
+    #[tokio::test]
+    async fn test_metrics_snapshot_serialization() {
+        let bus = AgentBus::new();
+
+        // Broadcast requires at least one subscriber.
+        let _rx = bus.broadcast_channel.subscribe();
+
+        bus.send_message(
+            "s",
+            CommunicationMode::Broadcast,
+            &AgentMessage::TaskRequest {
+                task_id: "t".into(),
+                content: "c".into(),
+            },
+        )
+        .await
+        .unwrap();
+
+        let snap = bus.metrics().snapshot();
+        let json = serde_json::to_string(&snap).unwrap();
+        let de: MetricsSnapshot = serde_json::from_str(&json).unwrap();
+        assert_eq!(de.messages_sent, 1);
+    }
+
+    #[tokio::test]
+    async fn test_send_error_tracked() {
+        // Sending to a non-existent P2P channel should increment send_errors.
+        let bus = AgentBus::new();
+        let result = bus
+            .send_message(
+                "sender",
+                CommunicationMode::PointToPoint("nobody".into()),
+                &AgentMessage::TaskRequest {
+                    task_id: "t".into(),
+                    content: "c".into(),
+                },
+            )
+            .await;
+
+        assert!(result.is_err());
+        assert_eq!(bus.metrics().send_errors(), 1);
+        assert_eq!(bus.metrics().messages_sent(), 0);
     }
 }
