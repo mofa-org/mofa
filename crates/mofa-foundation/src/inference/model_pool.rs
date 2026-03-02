@@ -11,7 +11,7 @@ use std::time::{Duration, Instant};
 use super::types::Precision;
 
 /// An entry in the model pool representing a loaded model.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct ModelEntry {
     /// The model identifier
     pub model_id: String,
@@ -20,6 +20,7 @@ pub struct ModelEntry {
     /// The precision/quantization level the model was loaded at
     pub precision: Precision,
     /// When the model was last used for inference
+    #[serde(skip, default = "Instant::now")]
     pub last_used: Instant,
 }
 
@@ -281,5 +282,33 @@ mod tests {
         // Unloading a model that doesn't exist returns 0
         let freed = pool.unload("nonexistent");
         assert_eq!(freed, 0);
+    }
+
+    #[test]
+    fn test_model_entry_serde_roundtrip() {
+        let entry = ModelEntry {
+            model_id: "llama-3-13b".into(),
+            memory_mb: 13312,
+            precision: Precision::F16,
+            last_used: Instant::now(),
+        };
+        let json = serde_json::to_string(&entry).unwrap();
+        let back: ModelEntry = serde_json::from_str(&json).unwrap();
+        assert_eq!(back.model_id, entry.model_id);
+        assert_eq!(back.memory_mb, entry.memory_mb);
+        assert_eq!(back.precision, entry.precision);
+    }
+
+    #[test]
+    fn test_model_entry_serde_skips_last_used() {
+        let entry = ModelEntry {
+            model_id: "llama-3".into(),
+            memory_mb: 7168,
+            precision: Precision::Q8,
+            last_used: Instant::now(),
+        };
+        let json = serde_json::to_string(&entry).unwrap();
+        let value: serde_json::Value = serde_json::from_str(&json).unwrap();
+        assert!(value.get("last_used").is_none());
     }
 }
