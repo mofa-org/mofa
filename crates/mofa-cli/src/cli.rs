@@ -18,13 +18,9 @@ pub struct Cli {
     #[arg(short, long, global = true)]
     pub verbose: bool,
 
-    /// Global output format (text, json, table)
-    #[arg(long = "output-format", global = true)]
-    pub output_format: Option<OutputFormat>,
-
-    /// Deprecated alias for `--output-format` (root-level only for compatibility)
-    #[arg(long = "output", global = false, hide = true)]
-    pub output_legacy: Option<OutputFormat>,
+    /// Output format (text, json, table)
+    #[arg(short = 'o', long, global = true)]
+    pub output: Option<OutputFormat>,
 
     /// Configuration file path
     #[arg(short = 'c', long, global = true)]
@@ -133,6 +129,12 @@ pub enum Commands {
         #[command(subcommand)]
         action: ToolCommands,
     },
+
+    /// Gateway management (OpenAI-compatible API)
+    Gateway {
+        #[command(subcommand)]
+        action: GatewayCommands,
+    },
 }
 
 /// Generate subcommands
@@ -236,10 +238,6 @@ pub enum AgentCommands {
     Stop {
         /// Agent ID
         agent_id: String,
-
-        /// Allow persisted state transition when runtime registry is unavailable
-        #[arg(long)]
-        force_persisted_stop: bool,
     },
 
     /// Restart an agent
@@ -267,32 +265,6 @@ pub enum AgentCommands {
         /// Show all agents
         #[arg(long)]
         all: bool,
-    },
-
-    /// View agent logs
-    Logs {
-        /// Agent ID
-        agent_id: String,
-
-        /// Tail the logs
-        #[arg(short, long)]
-        tail: bool,
-
-        /// Filter by log level (INFO, DEBUG, ERROR, WARN)
-        #[arg(long)]
-        level: Option<String>,
-
-        /// Search for text in logs
-        #[arg(long)]
-        grep: Option<String>,
-
-        /// Limit number of lines to display
-        #[arg(long)]
-        limit: Option<usize>,
-
-        /// Output logs as JSON
-        #[arg(long)]
-        json: bool,
     },
 }
 
@@ -358,20 +330,6 @@ pub enum PluginCommands {
         name: String,
     },
 
-    /// Install a plugin
-    Install {
-        /// Plugin name, path, or URL
-        name: String,
-
-        /// Expected SHA256 checksum for verification
-        #[arg(long)]
-        checksum: Option<String>,
-
-        /// Verify plugin signature (if available)
-        #[arg(long)]
-        verify_signature: bool,
-    },
-
     /// Uninstall a plugin
     Uninstall {
         /// Plugin name
@@ -380,32 +338,6 @@ pub enum PluginCommands {
         /// Force removal without confirmation
         #[arg(long)]
         force: bool,
-    },
-
-    /// Manage plugin repositories
-    Repository {
-        #[command(subcommand)]
-        action: PluginRepositoryCommands,
-    },
-}
-
-/// Plugin repository management subcommands
-#[derive(Subcommand)]
-pub enum PluginRepositoryCommands {
-    /// List configured plugin repositories
-    List,
-
-    /// Add a plugin repository
-    Add {
-        /// Repository identifier
-        id: String,
-
-        /// Repository URL
-        url: String,
-
-        /// Optional description for the repository
-        #[arg(short, long)]
-        description: Option<String>,
     },
 }
 
@@ -429,7 +361,7 @@ pub enum SessionCommands {
         session_id: String,
 
         /// Output format
-        #[arg(short = 'f', long, short_alias = 'o')]
+        #[arg(short = 'o', long)]
         format: Option<SessionFormat>,
     },
 
@@ -449,8 +381,8 @@ pub enum SessionCommands {
         session_id: String,
 
         /// Output file
-        #[arg(id = "session_export_output", short = 'o', long = "output")]
-        output_path: PathBuf,
+        #[arg(short, long)]
+        output: PathBuf,
 
         /// Export format
         #[arg(short, long)]
@@ -515,6 +447,29 @@ pub enum ToolCommands {
     Info {
         /// Tool name
         name: String,
+    },
+}
+
+/// Gateway management subcommands
+#[derive(Subcommand)]
+pub enum GatewayCommands {
+    /// Serve OpenAI-compatible gateway endpoint
+    Serve {
+        /// Gateway host address
+        #[arg(long, default_value = "0.0.0.0")]
+        host: String,
+
+        /// Gateway port
+        #[arg(long, default_value_t = 8000)]
+        port: u16,
+
+        /// Backend spec (repeatable): `url`, `url@weight`, or `name=url@weight`
+        #[arg(long = "backend", required = true)]
+        backends: Vec<String>,
+
+        /// Global requests-per-minute limit
+        #[arg(long, default_value_t = 120)]
+        rpm: u32,
     },
 }
 

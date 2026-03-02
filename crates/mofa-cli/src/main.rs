@@ -325,6 +325,17 @@ async fn run_command(cli: Cli) -> CliResult<()> {
             }
         }
 
+        Some(Commands::Gateway { action }) => match action {
+            cli::GatewayCommands::Serve {
+                host,
+                port,
+                backends,
+                rpm,
+            } => {
+                commands::gateway::run_serve(&host, port, &backends, rpm).await?;
+            }
+        },
+
         None => {
             // Should have been handled by TUI check above
             // If we get here, show help
