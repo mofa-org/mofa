@@ -1,7 +1,7 @@
 # Runtime Reliability Troubleshooting Guide
 
 This guide maps common runtime validation failures to concrete diagnosis and recovery steps.
-It is designed for engineers iterating on flow descriptors during PR1 reliability rollout.
+It is designed for engineers iterating on flow descriptors during runtime reliability rollout.
 
 ## Quick Triage
 

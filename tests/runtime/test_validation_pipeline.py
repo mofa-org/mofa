@@ -25,7 +25,6 @@ class ValidationPipelineTests(unittest.TestCase):
                     "type": "sink",
                     "build": "",
                     "path": "",
-                    "outputs": ["done"],
                     "inputs": {"q": "source/out"},
                 },
             ]
@@ -65,7 +64,6 @@ class ValidationPipelineTests(unittest.TestCase):
                     "type": "sink",
                     "build": "",
                     "path": "",
-                    "outputs": ["res"],
                     "inputs": {"q": "invalid"},
                 },
             ]
@@ -82,7 +80,6 @@ class ValidationPipelineTests(unittest.TestCase):
                     "type": "sink",
                     "build": "",
                     "path": "",
-                    "outputs": ["done"],
                     "inputs": {"q": "missing/out"},
                 },
             ]
@@ -100,7 +97,6 @@ class ValidationPipelineTests(unittest.TestCase):
                     "type": "sink",
                     "build": "",
                     "path": "",
-                    "outputs": ["done"],
                     "inputs": {"q": "source/unknown"},
                 },
             ]
@@ -146,7 +142,6 @@ nodes:
     type: sink
     build: ""
     path: ""
-    outputs: [done]
     inputs:
       q: source/out
 """

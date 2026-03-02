@@ -75,6 +75,8 @@ def compute_backoff_delay(policy: RetryPolicy, attempt_index: int, rand: Optiona
 
 
 def build_retry_schedule(policy: RetryPolicy) -> Tuple[float, ...]:
+    """Build a deterministic no-jitter baseline schedule for planning/snapshots."""
     validate_retry_policy(policy)
     retries = max(0, policy.max_attempts - 1)
+    # Using rand=0.5 makes jitter term evaluate to zero while keeping stable output.
     return tuple(compute_backoff_delay(policy, index, rand=0.5) for index in range(retries))

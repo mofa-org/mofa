@@ -1,6 +1,6 @@
 # Runtime Validation Rule Reference
 
-This document is the operator-focused reference for PR1 runtime reliability validation.
+This document is the operator-focused reference for MoFA runtime reliability validation.
 Each rule entry includes trigger conditions, representative examples, and remediation notes.
 
 ## Rule Taxonomy

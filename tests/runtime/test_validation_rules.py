@@ -128,7 +128,20 @@ class ValidationRulesTests(unittest.TestCase):
 
         report = validate_and_plan_dataflow_descriptor(self._valid_flow(), custom_rules=[AlwaysWarnRule()])
         self.assertEqual(len(report.issues), 0)
-        self.assertEqual(report.diagnostics[0].rule_id, "custom.warn")
+        self.assertTrue(any(item.rule_id == "custom.warn" for item in report.diagnostics))
+
+    def test_validation_custom_rules_do_not_disable_default_rules(self):
+        class AlwaysWarnRule:
+            rule_id = "custom.warn"
+
+            def evaluate(self, flow):
+                return (RuleDiagnostic(stage="semantic", rule_id=self.rule_id, message="hello", severity="warning"),)
+
+        data = self._valid_flow()
+        data["nodes"][2]["inputs"] = {"x": "missing/out"}
+        with self.assertRaises(FlowValidationException) as ctx:
+            validate_and_plan_dataflow_descriptor(data, custom_rules=[AlwaysWarnRule()])
+        self.assertIn("dependency.target_exists", str(ctx.exception))
 
     def test_validation_allows_custom_rule_errors(self):
         class AlwaysErrorRule:

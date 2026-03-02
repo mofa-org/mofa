@@ -8,7 +8,7 @@ from typing import Any, Optional, Sequence, Tuple
 from mofa.runtime.execution import DependencyCycleError, plan_execution
 from mofa.schema import FlowSchemaError, FlowSpec, parse_flow_dict, parse_yaml_file
 
-from .rules import RuleDiagnostic, ValidationRule, ValidationRuleEngine
+from .rules import DEFAULT_RULES, RuleDiagnostic, ValidationRule, ValidationRuleEngine
 
 
 @dataclass(frozen=True)
@@ -86,7 +86,8 @@ def validate_and_plan_dataflow_descriptor(
         issues = _build_issues(stage="type", message=f"{exc}")
         raise FlowValidationException(issues) from exc
 
-    rule_engine = ValidationRuleEngine(custom_rules)
+    active_rules = DEFAULT_RULES + tuple(custom_rules) if custom_rules is not None else DEFAULT_RULES
+    rule_engine = ValidationRuleEngine(active_rules)
     rule_diagnostics = rule_engine.run(flow)
 
     diagnostics = list(_issue_from_rule_diagnostic(diagnostic) for diagnostic in rule_diagnostics)

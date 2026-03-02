@@ -1,4 +1,4 @@
-# Runtime Reliability Core (PR-1 Groundwork)
+# Runtime Reliability Core
 
 This document describes the first reliability building blocks added for `mofa run-flow`.
 
