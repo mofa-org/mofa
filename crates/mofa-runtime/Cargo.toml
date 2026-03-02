@@ -37,6 +37,8 @@ dora-daemon = { version = "0", default-features = false, optional = true }
 dora-core = { version = "0", features = ["build"], optional = true }
 dora-message = { version = "0", optional = true }
 
+rand.workspace = true
+
 serde_yaml = { workspace = true }
 toml = "0.8"
 config.workspace = true

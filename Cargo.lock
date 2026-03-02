@@ -5785,6 +5785,7 @@ dependencies = [
  "mofa-kernel",
  "mofa-monitoring",
  "mofa-plugins",
+ "rand 0.8.5",
  "regex",
  "serde",
  "serde_json",
