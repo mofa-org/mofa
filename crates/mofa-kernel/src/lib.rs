@@ -68,3 +68,7 @@ pub use workflow::*;
 // Metrics traits for monitoring integration
 pub mod metrics;
 pub use metrics::*;
+
+// Gateway kernel contract (Task 12)
+pub mod gateway;
+pub use gateway::GatewayError;
