@@ -457,11 +457,10 @@ impl<S: GraphState> CompiledGraphImpl<S> {
                     Some(EdgeTarget::Parallel(targets)) => targets.clone(),
                     Some(EdgeTarget::Conditional(routes)) => {
                         // Priority 1: explicit route decision
-                        if let Some(decision) = command.route_value() {
-                            if let Some(target) = routes.get(decision) {
+                        if let Some(decision) = command.route_value()
+                            && let Some(target) = routes.get(decision) {
                                 return vec![target.clone()];
                             }
-                        }
                         // Priority 2: legacy key-name matching (backward compatible)
                         for update in &command.updates {
                             if let Some(target) = routes.get(&update.key) {
@@ -648,11 +647,10 @@ impl<S: GraphState + 'static> CompiledGraph<S, serde_json::Value> for CompiledGr
                             Some(EdgeTarget::Parallel(targets)) => targets.clone(),
                             Some(EdgeTarget::Conditional(routes)) => {
                                 // Priority 1: explicit route decision
-                                if let Some(decision) = command.route_value() {
-                                    if let Some(target) = routes.get(decision) {
+                                if let Some(decision) = command.route_value()
+                                    && let Some(target) = routes.get(decision) {
                                         return vec![target.clone()];
                                     }
-                                }
                                 // Priority 2: legacy key-name matching (backward compatible)
                                 for update in &command.updates {
                                     if let Some(target) = routes.get(&update.key) {

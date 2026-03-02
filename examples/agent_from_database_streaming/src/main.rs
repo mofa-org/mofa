@@ -80,7 +80,6 @@
 
 use mofa_sdk::persistence::ChatSession;
 use std::io::Write;
-use std::sync::Arc;
 use futures::StreamExt;
 use mofa_sdk::{llm::{LLMAgentBuilder, Role}, persistence::{PostgresStore, PersistencePlugin}};
 use tracing::{info, Level};
@@ -286,8 +285,8 @@ async fn print_agent_info(agent: &mofa_sdk::llm::LLMAgent) {
     // 获取系统提示词
     // Get system prompt
     let history = agent.history().await;
-    if let Some(system_msg) = history.first() {
-        if matches!(system_msg.role, Role::System) {
+    if let Some(system_msg) = history.first()
+        && matches!(system_msg.role, Role::System) {
             let prompt = system_msg.content.as_ref()
                 .and_then(|c| {
                     if let mofa_sdk::llm::MessageContent::Text(text) = c {
@@ -300,7 +299,6 @@ async fn print_agent_info(agent: &mofa_sdk::llm::LLMAgent) {
             info!("  系统提示词: {}", prompt);
             //   System Prompt: {}
         }
-    }
 
     info!("  当前上下文消息数: {} 条", history.len());
     //   Current context message count: {}

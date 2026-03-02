@@ -29,12 +29,12 @@ use std::sync::Arc;
 /// Generate a simple topic label for a document
 fn get_document_topic(doc_idx: usize) -> String {
     match doc_idx {
-        0 => "architecture".to_string(),
-        1 => "performance".to_string(),
-        2 => "extensibility".to_string(),
-        3 => "deployment".to_string(),
-        4 => "examples".to_string(),
-        _ => "general".to_string(),
+        0 => "architecture".to_owned(),
+        1 => "performance".to_owned(),
+        2 => "extensibility".to_owned(),
+        3 => "deployment".to_owned(),
+        4 => "examples".to_owned(),
+        _ => "general".to_owned(),
     }
 }
 
@@ -80,7 +80,7 @@ impl Retriever for SimpleRetriever {
             .map(|r| ScoredDocument {
                 document: Document::new(r.id, r.text),
                 score: r.score,
-                source: Some("vector_search".to_string()),
+                source: Some("vector_search".to_owned()),
             })
             .collect())
     }
@@ -116,8 +116,7 @@ async fn basic_rag_pipeline() -> Result<(), Box<dyn std::error::Error>> {
     let dimensions = 64;
 
     // Knowledge base: a few paragraphs about MoFA
-    let documents = vec![
-        "MoFA is a modular framework for building AI agents in Rust. It uses a microkernel \
+    let documents = ["MoFA is a modular framework for building AI agents in Rust. It uses a microkernel \
          architecture where the core only defines trait interfaces and concrete implementations \
          are provided by the foundation layer.",
         "The dual plugin system in MoFA supports both compile-time Rust/WASM plugins for \
@@ -128,8 +127,7 @@ async fn basic_rag_pipeline() -> Result<(), Box<dyn std::error::Error>> {
          with five phases: receive ideas, clarify requirements, schedule dispatch, monitor \
          feedback, and acceptance report.",
         "MoFA uses UniFFI for cross-language bindings, allowing agents built in Rust to be \
-         called from Python, Java, Swift, Kotlin, and Go.",
-    ];
+         called from Python, Java, Swift, Kotlin, and Go."];
 
     // Chunk and embed each document
     let chunker = TextChunker::new(ChunkConfig {
@@ -144,8 +142,8 @@ async fn basic_rag_pipeline() -> Result<(), Box<dyn std::error::Error>> {
             let id = format!("doc-{doc_idx}-chunk-{chunk_idx}");
             let embedding = simple_embedding(text, dimensions);
             let chunk = DocumentChunk::new(&id, text.as_str(), embedding)
-                .with_metadata("source", &format!("document_{doc_idx}"))
-                .with_metadata("chunk_index", &chunk_idx.to_string());
+                .with_metadata("source", format!("document_{doc_idx}"))
+                .with_metadata("chunk_index", chunk_idx.to_string());
             all_chunks.push(chunk);
         }
     }
@@ -254,9 +252,9 @@ async fn streaming_rag_pipeline() -> Result<(), Box<dyn std::error::Error>> {
             let id = format!("doc-{doc_idx}-chunk-{chunk_idx}");
             let embedding = simple_embedding(text, dimensions);
             let chunk = DocumentChunk::new(&id, text.as_str(), embedding)
-                .with_metadata("source", &format!("document_{doc_idx}"))
-                .with_metadata("chunk_index", &chunk_idx.to_string())
-                .with_metadata("word_count", &text.split_whitespace().count().to_string())
+                .with_metadata("source", format!("document_{doc_idx}"))
+                .with_metadata("chunk_index", chunk_idx.to_string())
+                .with_metadata("word_count", text.split_whitespace().count().to_string())
                 .with_metadata("topic", get_document_topic(doc_idx));
             all_chunks.push(chunk);
         }
@@ -273,13 +271,11 @@ async fn streaming_rag_pipeline() -> Result<(), Box<dyn std::error::Error>> {
     let pipeline = RagPipeline::new(retriever, reranker, generator);
 
     // Test multiple realistic queries
-    let test_queries = vec![
-        "How does MoFA achieve both performance and extensibility?",
+    let test_queries = ["How does MoFA achieve both performance and extensibility?",
         "What are the different ways agents can coordinate in MoFA?",
         "How does the Secretary Agent pattern work?",
         "What database backends does MoFA support?",
-        "How does MoFA handle cross-language integration?",
-    ];
+        "How does MoFA handle cross-language integration?"];
 
     for (query_idx, query) in test_queries.iter().enumerate() {
         println!("\n--- Test Query {}: \"{}\" ---", query_idx + 1, query);
@@ -296,7 +292,7 @@ async fn streaming_rag_pipeline() -> Result<(), Box<dyn std::error::Error>> {
             println!("  {}. [score: {:.4}] {} ({} words)",
                     i + 1, doc.score,
                     truncate_text(&doc.document.text, 60),
-                    doc.document.metadata.get("word_count").unwrap_or(&"0".to_string()));
+                    doc.document.metadata.get("word_count").unwrap_or(&"0".to_owned()));
         }
 
         println!("\n--- Streaming Generation ---");
@@ -309,7 +305,7 @@ async fn streaming_rag_pipeline() -> Result<(), Box<dyn std::error::Error>> {
         while let Some(chunk_result) = stream.next().await {
             match chunk_result? {
                 mofa_kernel::rag::pipeline::GeneratorChunk::Text(text) => {
-                    print!("{}", text);
+                    print!("{text}");
                     full_response.push_str(&text);
                     chunk_count += 1;
                     total_chars += text.len();
@@ -336,14 +332,14 @@ async fn streaming_rag_pipeline() -> Result<(), Box<dyn std::error::Error>> {
     // Test with empty query
     match pipeline.run_streaming("", 3).await {
         Ok(_) => println!("✓ Empty query handled gracefully"),
-        Err(e) => println!("✗ Empty query failed: {}", e),
+        Err(e) => println!("✗ Empty query failed: {e}"),
     }
 
     // Test with very long query
     let long_query = "What is the relationship between ".repeat(50) + "?";
     match pipeline.run_streaming(&long_query, 3).await {
         Ok((docs, _)) => println!("✓ Long query handled ({} docs retrieved)", docs.len()),
-        Err(e) => println!("✗ Long query failed: {}", e),
+        Err(e) => println!("✗ Long query failed: {e}"),
     }
 
     Ok(())
@@ -357,11 +353,9 @@ async fn streaming_edge_cases_test() -> Result<(), Box<dyn std::error::Error>> {
     let dimensions = 64;
 
     // Minimal knowledge base for edge case testing
-    let documents = vec![
-        "MoFA is a framework for AI agents.",
+    let documents = ["MoFA is a framework for AI agents.",
         "It supports streaming responses.",
-        "Error handling is important.",
-    ];
+        "Error handling is important."];
 
     let chunker = TextChunker::new(ChunkConfig {
         chunk_size: 100,
@@ -398,7 +392,7 @@ async fn streaming_edge_cases_test() -> Result<(), Box<dyn std::error::Error>> {
     ];
 
     for (test_name, query, top_k, description) in test_cases {
-        println!("Testing: {} - {}", test_name, description);
+        println!("Testing: {test_name} - {description}");
 
         match pipeline.run_streaming(query, top_k).await {
             Ok((documents, mut stream)) => {
@@ -418,7 +412,7 @@ async fn streaming_edge_cases_test() -> Result<(), Box<dyn std::error::Error>> {
                             mofa_kernel::rag::pipeline::GeneratorChunk::Done => break,
                         },
                         Err(e) => {
-                            println!("  ✗ Stream error: {}", e);
+                            println!("  ✗ Stream error: {e}");
                             stream_success = false;
                             break;
                         }
@@ -426,11 +420,11 @@ async fn streaming_edge_cases_test() -> Result<(), Box<dyn std::error::Error>> {
                 }
 
                 if stream_success {
-                    println!("  ✓ Streaming succeeded: {} chunks, {} characters", chunk_count, total_chars);
+                    println!("  ✓ Streaming succeeded: {chunk_count} chunks, {total_chars} characters");
                 }
             }
             Err(e) => {
-                println!("  ✗ Query failed: {}", e);
+                println!("  ✗ Query failed: {e}");
             }
         }
         println!();
@@ -443,7 +437,7 @@ async fn streaming_edge_cases_test() -> Result<(), Box<dyn std::error::Error>> {
 
     match broken_pipeline.run_streaming("test query", 3).await {
         Ok(_) => println!("  ✗ Expected error but succeeded"),
-        Err(e) => println!("  ✓ Correctly failed with error: {}", e),
+        Err(e) => println!("  ✓ Correctly failed with error: {e}"),
     }
 
     println!("\n✓ Edge cases test completed");
@@ -464,7 +458,7 @@ async fn streaming_memory_test() -> Result<(), Box<dyn std::error::Error>> {
     let mut documents = Vec::new();
     for i in 0..50 {
         documents.push(format!(
-            "Document {}: MoFA is a comprehensive framework for AI agent development. \
+            "Document {i}: MoFA is a comprehensive framework for AI agent development. \
              It provides extensive capabilities for building distributed systems, \
              including advanced coordination patterns, persistence layers, and cross-language \
              interoperability. The framework supports various deployment scenarios from \
@@ -472,8 +466,7 @@ async fn streaming_memory_test() -> Result<(), Box<dyn std::error::Error>> {
              microkernel architecture, dual plugin system, and actor-based concurrency model. \
              Performance optimizations include zero-copy message passing, async I/O operations, \
              and efficient memory management techniques. The framework has been designed \
-             with scalability, reliability, and maintainability as core principles.",
-            i
+             with scalability, reliability, and maintainability as core principles."
         ));
     }
 
@@ -515,14 +508,14 @@ async fn streaming_memory_test() -> Result<(), Box<dyn std::error::Error>> {
     for i in 0..5 {
         let pipeline_clone = pipeline.clone();
         let handle = tokio::spawn(async move {
-            let query = format!("What are the key features of document {}?", i);
+            let query = format!("What are the key features of document {i}?");
             let start = std::time::Instant::now();
 
-            let (docs, mut stream) = pipeline_clone.run_streaming(&query, 3).await.map_err(|e| -> Box<dyn std::error::Error + Send + Sync> { format!("{}", e).into() })?;
+            let (docs, mut stream) = pipeline_clone.run_streaming(&query, 3).await.map_err(|e| -> Box<dyn std::error::Error + Send + Sync> { format!("{e}").into() })?;
             let mut char_count = 0;
 
             while let Some(chunk_result) = stream.next().await {
-                match chunk_result.map_err(|e| -> Box<dyn std::error::Error + Send + Sync> { format!("{}", e).into() })? {
+                match chunk_result.map_err(|e| -> Box<dyn std::error::Error + Send + Sync> { format!("{e}").into() })? {
                     mofa_kernel::rag::pipeline::GeneratorChunk::Text(text) => {
                         char_count += text.len();
                         // Simulate processing time
@@ -546,8 +539,8 @@ async fn streaming_memory_test() -> Result<(), Box<dyn std::error::Error>> {
     for handle in handles {
         let (docs, chars, duration) = match handle.await {
             Ok(Ok(val)) => val,
-            Ok(Err(e)) => return Err(format!("Task error: {}", e).into()),
-            Err(e) => return Err(format!("Join error: {}", e).into()),
+            Ok(Err(e)) => return Err(format!("Task error: {e}").into()),
+            Err(e) => return Err(format!("Join error: {e}").into()),
         };
         total_docs += docs;
         total_chars += chars;
@@ -559,8 +552,8 @@ async fn streaming_memory_test() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     println!("\nConcurrent test results:");
-    println!("  Total documents retrieved: {}", total_docs);
-    println!("  Total characters streamed: {}", total_chars);
+    println!("  Total documents retrieved: {total_docs}");
+    println!("  Total characters streamed: {total_chars}");
     println!("  Max operation time: {:.2}ms", max_duration.as_millis());
     println!("  Average throughput: {:.1} chars/sec",
             total_chars as f64 / max_duration.as_secs_f64());
@@ -594,7 +587,7 @@ async fn streaming_performance_benchmark() -> Result<(), Box<dyn std::error::Err
     let mut documents = Vec::new();
     for i in 0..20 {
         for base_doc in &base_docs {
-            documents.push(format!("{} (variation {})", base_doc, i));
+            documents.push(format!("{base_doc} (variation {i})"));
         }
     }
 
@@ -633,7 +626,7 @@ async fn streaming_performance_benchmark() -> Result<(), Box<dyn std::error::Err
     println!("\nRunning benchmarks...\n");
 
     for (scenario_name, query, top_k) in scenarios {
-        println!("Scenario: {}", scenario_name);
+        println!("Scenario: {scenario_name}");
 
         let mut total_retrieval_time = std::time::Duration::new(0, 0);
         let mut total_streaming_time = std::time::Duration::new(0, 0);
@@ -708,7 +701,7 @@ async fn document_ingestion_demo() -> Result<(), Box<dyn std::error::Error>> {
             let embedding = simple_embedding(text, dimensions);
             let chunk = DocumentChunk::new(&id, text.as_str(), embedding)
                 .with_metadata("filename", *filename)
-                .with_metadata("chunk_index", &i.to_string());
+                .with_metadata("chunk_index", i.to_string());
             chunks.push(chunk);
         }
         total_chunks += chunks.len();
@@ -809,7 +802,7 @@ async fn qdrant_rag_pipeline(qdrant_url: &str) -> Result<(), Box<dyn std::error:
 /// Truncate text to a maximum length with ellipsis.
 fn truncate_text(text: &str, max_len: usize) -> String {
     if text.len() <= max_len {
-        text.to_string()
+        text.to_owned()
     } else {
         format!("{}...", &text[..max_len])
     }

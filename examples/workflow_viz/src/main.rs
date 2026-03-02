@@ -459,7 +459,7 @@ async fn simulate_execution(
             };
 
             // Random failure chance (~8%)
-            let will_fail = pseudo_rand(node_id) % 13 == 0 && node_type != "start" && node_type != "end";
+            let will_fail = pseudo_rand(node_id).is_multiple_of(13) && node_type != "start" && node_type != "end";
 
             // -- RUNNING --
             {

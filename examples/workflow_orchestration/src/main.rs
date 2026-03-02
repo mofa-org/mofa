@@ -838,7 +838,7 @@ async fn run_conditional_llm_workflow() -> Result<(), Box<dyn std::error::Error>
     // 条件分支
     // Conditional branch
     graph.add_node(WorkflowNode::condition("check_route", "Check Classification Result", |_ctx, input| async move {
-        let mut response = input.as_str().unwrap_or("").to_lowercase();
+        let response = input.as_str().unwrap_or("").to_lowercase();
         info!("  [check_route] Classification result: {}", response);
         //   [check_route] Classification result: {}
         response.contains("complex")

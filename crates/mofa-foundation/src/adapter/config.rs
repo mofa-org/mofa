@@ -39,6 +39,12 @@ pub struct ModelConfigBuilder {
     config: ModelConfig,
 }
 
+impl Default for ModelConfigBuilder {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ModelConfigBuilder {
     pub fn new() -> Self {
         Self {
@@ -195,6 +201,12 @@ pub struct HardwareProfileBuilder {
     profile: HardwareProfile,
 }
 
+impl Default for HardwareProfileBuilder {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl HardwareProfileBuilder {
     pub fn new() -> Self {
         Self {
@@ -273,6 +285,12 @@ impl HardwarePreferences {
 #[derive(Debug)]
 pub struct HardwarePreferencesBuilder {
     preferences: HardwarePreferences,
+}
+
+impl Default for HardwarePreferencesBuilder {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl HardwarePreferencesBuilder {

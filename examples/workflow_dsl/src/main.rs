@@ -11,7 +11,6 @@ use mofa_sdk::workflow::{
 use std::collections::HashMap;
 use std::sync::Arc;
 use tracing::info;
-use tracing_subscriber;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -171,7 +170,7 @@ async fn build_mock_agent(
     // In production, you would configure an actual LLM provider
     let mut builder = LLMAgentBuilder::new()
         .with_id(agent_id)
-        .with_name(&format!("Mock {}", agent_id));
+        .with_name(format!("Mock {}", agent_id));
 
     if let Some(prompt) = &config.system_prompt {
         builder = builder.with_system_prompt(prompt);

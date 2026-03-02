@@ -204,7 +204,7 @@ impl MasterAgent {
         let workers: Vec<_> = workers_map.iter().collect();
 
         if workers.is_empty() {
-            return Err(format!("No workers available").into());
+            return Err("No workers available".to_string().into());
         }
 
         // 构建 worker 列表描述

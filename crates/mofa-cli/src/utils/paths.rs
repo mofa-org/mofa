@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 
 /// Get the current working directory
 pub fn current_dir() -> Result<PathBuf, CliError> {
-    std::env::current_dir().map_err(|e| CliError::Io(e))
+    std::env::current_dir().map_err(CliError::Io)
 }
 
 /// Resolve a path relative to the current directory
