@@ -15,6 +15,7 @@ use super::state::{
     ExecutionCheckpoint, ExecutionRecord, NodeExecutionRecord, NodeResult, NodeStatus,
     WorkflowContext, WorkflowStatus, WorkflowValue,
 };
+use mofa_kernel::checkpoint::CheckpointStore;
 use mofa_kernel::workflow::telemetry::{DebugEvent, TelemetryEmitter};
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -114,6 +115,8 @@ pub struct WorkflowExecutor {
     semaphore: Arc<Semaphore>,
     /// Profiler for execution timing (optional)
     profiler: ProfilerMode,
+    /// Optional durable checkpoint store
+    checkpoint_store: Option<Arc<dyn CheckpointStore>>,
 }
 
 impl WorkflowExecutor {
@@ -127,6 +130,7 @@ impl WorkflowExecutor {
             event_waiters: Arc::new(RwLock::new(HashMap::new())),
             semaphore,
             profiler: ProfilerMode::Disabled,
+            checkpoint_store: None,
         }
     }
 
@@ -151,6 +155,12 @@ impl WorkflowExecutor {
     /// When set, the executor will record execution timing spans.
     pub fn with_profiler(mut self, mode: ProfilerMode) -> Self {
         self.profiler = mode;
+        self
+    }
+
+    /// Attach a durable checkpoint store for cross-process recovery.
+    pub fn with_checkpoint_store(mut self, store: Arc<dyn CheckpointStore>) -> Self {
+        self.checkpoint_store = Some(store);
         self
     }
 
@@ -676,6 +686,16 @@ impl WorkflowExecutor {
             {
                 let label = format!("auto_checkpoint_{}", record.node_records.len());
                 ctx.create_checkpoint(&label).await;
+
+                if let Some(ref store) = self.checkpoint_store {
+                    let snapshot = ctx.snapshot().await;
+                    if let Ok(json) = serde_json::to_value(&snapshot) {
+                        let _ = store
+                            .save(&ctx.execution_id, &ctx.workflow_id, &label, &json)
+                            .await;
+                    }
+                }
+
                 self.emit_event(ExecutionEvent::CheckpointCreated { label })
                     .await;
             }

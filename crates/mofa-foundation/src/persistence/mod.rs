@@ -143,6 +143,7 @@ mod memory;
 mod metrics_source;
 mod plugin;
 mod traits;
+pub mod checkpoint_store;
 
 pub use entities::*;
 pub use memory::*;
