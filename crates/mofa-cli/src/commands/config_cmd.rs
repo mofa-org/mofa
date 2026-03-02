@@ -225,7 +225,10 @@ fn validate_config_file(path: &PathBuf) -> Result<(), CliError> {
                     ));
                 }
                 _ => {
-                    return Err(CliError::ConfigError(format!("Unsupported config format: {}", ext)));
+                    return Err(CliError::ConfigError(format!(
+                        "Unsupported config format: {}",
+                        ext
+                    )));
                 }
             }
         }
@@ -240,16 +243,22 @@ fn validate_config_file(path: &PathBuf) -> Result<(), CliError> {
     {
         // Check for agent section
         if !obj.contains_key("agent") {
-            return Err(CliError::ConfigError("Missing required 'agent' section".into()));
+            return Err(CliError::ConfigError(
+                "Missing required 'agent' section".into(),
+            ));
         }
 
         // Check for required agent fields
         if let Some(agent) = obj.get("agent").and_then(|v| v.as_object()) {
             if !agent.contains_key("id") {
-                return Err(CliError::ConfigError("Missing required 'agent.id' field".into()));
+                return Err(CliError::ConfigError(
+                    "Missing required 'agent.id' field".into(),
+                ));
             }
             if !agent.contains_key("name") {
-                return Err(CliError::ConfigError("Missing required 'agent.name' field".into()));
+                return Err(CliError::ConfigError(
+                    "Missing required 'agent.name' field".into(),
+                ));
             }
         }
     }

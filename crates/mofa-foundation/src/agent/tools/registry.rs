@@ -195,10 +195,22 @@ impl ToolRegistry {
 
     /// 加载 MCP 服务器的工具 (存根 - 需要启用 `mcp` feature)
     /// Load MCP tools (Stub - requires `mcp` feature)
+    ///
+    /// # Warning
+    ///
+    /// This is a no-op stub. Recompile with `--features mcp` to enable real MCP support:
+    ///
+    /// ```toml
+    /// mofa-foundation = { version = "...", features = ["mcp"] }
+    /// ```
     #[cfg(not(feature = "mcp"))]
     pub async fn load_mcp_server(&mut self, endpoint: &str) -> AgentResult<Vec<String>> {
+        tracing::warn!(
+            endpoint = endpoint,
+            "load_mcp_server called but the `mcp` feature is not enabled. \
+             No tools will be loaded. Recompile with `--features mcp` to enable MCP support.",
+        );
         self.mcp_endpoints.push(endpoint.to_string());
-        // MCP feature not enabled - return empty
         Ok(vec![])
     }
 

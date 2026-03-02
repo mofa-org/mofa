@@ -3,8 +3,8 @@
 use crate::agent::error::{AgentError, AgentResult};
 use crate::rag::types::{GenerateInput, ScoredDocument};
 use async_trait::async_trait;
-use futures::stream::Stream;
 use futures::StreamExt; // needed for `.next()` in tests
+use futures::stream::Stream;
 use std::pin::Pin;
 use std::sync::Arc;
 
@@ -24,7 +24,11 @@ pub trait Retriever: Send + Sync {
 
 #[async_trait]
 pub trait Reranker: Send + Sync {
-    async fn rerank(&self, query: &str, docs: Vec<ScoredDocument>) -> AgentResult<Vec<ScoredDocument>>;
+    async fn rerank(
+        &self,
+        query: &str,
+        docs: Vec<ScoredDocument>,
+    ) -> AgentResult<Vec<ScoredDocument>>;
 }
 
 #[async_trait]
@@ -81,9 +85,15 @@ impl RagPipeline {
         self.run_with_top_k(query, self.default_top_k).await
     }
 
-    pub async fn run_with_top_k(&self, query: &str, top_k: usize) -> AgentResult<RagPipelineOutput> {
+    pub async fn run_with_top_k(
+        &self,
+        query: &str,
+        top_k: usize,
+    ) -> AgentResult<RagPipelineOutput> {
         if top_k == 0 {
-            return Err(AgentError::InvalidInput("top_k must be greater than 0".to_string()));
+            return Err(AgentError::InvalidInput(
+                "top_k must be greater than 0".to_string(),
+            ));
         }
 
         let retrieved_docs = self.retriever.retrieve(query, top_k).await?;
@@ -113,7 +123,9 @@ impl RagPipeline {
         Pin<Box<dyn Stream<Item = AgentResult<GeneratorChunk>> + Send>>,
     )> {
         if top_k == 0 {
-            return Err(AgentError::InvalidInput("top_k must be greater than 0".to_string()));
+            return Err(AgentError::InvalidInput(
+                "top_k must be greater than 0".to_string(),
+            ));
         }
 
         let retrieved_docs = self.retriever.retrieve(query, top_k).await?;
@@ -164,7 +176,11 @@ mod tests {
 
     #[async_trait]
     impl Reranker for IdentityReranker {
-        async fn rerank(&self, _query: &str, docs: Vec<ScoredDocument>) -> AgentResult<Vec<ScoredDocument>> {
+        async fn rerank(
+            &self,
+            _query: &str,
+            docs: Vec<ScoredDocument>,
+        ) -> AgentResult<Vec<ScoredDocument>> {
             Ok(docs)
         }
     }
@@ -173,7 +189,11 @@ mod tests {
 
     #[async_trait]
     impl Reranker for ReverseReranker {
-        async fn rerank(&self, _query: &str, mut docs: Vec<ScoredDocument>) -> AgentResult<Vec<ScoredDocument>> {
+        async fn rerank(
+            &self,
+            _query: &str,
+            mut docs: Vec<ScoredDocument>,
+        ) -> AgentResult<Vec<ScoredDocument>> {
             docs.reverse();
             Ok(docs)
         }
@@ -224,7 +244,11 @@ mod tests {
         ]));
         let top_k_ref = Arc::clone(&retriever.last_top_k);
 
-        let pipeline = RagPipeline::new(retriever, Arc::new(IdentityReranker), Arc::new(FakeGenerator));
+        let pipeline = RagPipeline::new(
+            retriever,
+            Arc::new(IdentityReranker),
+            Arc::new(FakeGenerator),
+        );
         let _ = pipeline.run_with_top_k("hello", 2).await.unwrap();
 
         let seen = *top_k_ref.lock().unwrap();
@@ -237,7 +261,11 @@ mod tests {
             scored("a", "first", 0.9),
             scored("b", "second", 0.8),
         ]));
-        let pipeline = RagPipeline::new(retriever, Arc::new(ReverseReranker), Arc::new(FakeGenerator));
+        let pipeline = RagPipeline::new(
+            retriever,
+            Arc::new(ReverseReranker),
+            Arc::new(FakeGenerator),
+        );
 
         let output = pipeline.run_with_top_k("hello", 2).await.unwrap();
         assert_eq!(output.retrieved_docs[0].document.id, "a");
@@ -247,7 +275,11 @@ mod tests {
     #[tokio::test]
     async fn pipeline_empty_retrieval_still_generates() {
         let retriever = Arc::new(FakeRetriever::new(vec![]));
-        let pipeline = RagPipeline::new(retriever, Arc::new(IdentityReranker), Arc::new(FakeGenerator));
+        let pipeline = RagPipeline::new(
+            retriever,
+            Arc::new(IdentityReranker),
+            Arc::new(FakeGenerator),
+        );
 
         let output = pipeline.run_with_top_k("hello", 1).await.unwrap();
         assert_eq!(output.retrieved_docs.len(), 0);
@@ -272,7 +304,11 @@ mod tests {
     #[tokio::test]
     async fn pipeline_streaming_happy_path() {
         let retriever = Arc::new(FakeRetriever::new(vec![scored("1", "a", 0.9)]));
-        let pipeline = RagPipeline::new(retriever, Arc::new(IdentityReranker), Arc::new(FakeGenerator));
+        let pipeline = RagPipeline::new(
+            retriever,
+            Arc::new(IdentityReranker),
+            Arc::new(FakeGenerator),
+        );
 
         let (reranked_docs, mut stream) = pipeline.run_streaming("hello", 1).await.unwrap();
         assert_eq!(reranked_docs.len(), 1);
@@ -296,7 +332,9 @@ mod tests {
         );
         let result = pipeline.run_streaming("hi", 0).await;
         match result {
-            Err(AgentError::InvalidInput(msg)) => assert!(msg.contains("top_k must be greater than 0")),
+            Err(AgentError::InvalidInput(msg)) => {
+                assert!(msg.contains("top_k must be greater than 0"))
+            }
             Ok(_) => panic!("expected error but got success"),
             Err(other) => panic!("unexpected error type: {other:?}"),
         }

@@ -4,8 +4,8 @@
 //! in mofa-kernel, along with utilities for document chunking.
 
 pub mod chunker;
-pub mod pipeline_adapters;
 pub mod default_reranker;
+pub mod pipeline_adapters;
 pub mod similarity;
 pub mod streaming_generator;
 pub mod vector_store;
@@ -14,8 +14,8 @@ pub mod vector_store;
 pub mod qdrant_store;
 
 pub use chunker::{ChunkConfig, TextChunker};
-pub use pipeline_adapters::{InMemoryRetriever, SimpleGenerator};
 pub use default_reranker::IdentityReranker;
+pub use pipeline_adapters::{InMemoryRetriever, SimpleGenerator};
 pub use similarity::compute_similarity;
 pub use streaming_generator::PassthroughStreamingGenerator;
 pub use vector_store::InMemoryVectorStore;

@@ -156,11 +156,7 @@ impl SummarizingCompressor {
     fn build_summary_prompt(messages: &[ChatMessage]) -> String {
         let history = messages
             .iter()
-            .filter_map(|m| {
-                m.content
-                    .as_ref()
-                    .map(|c| format!("{}: {}", m.role, c))
-            })
+            .filter_map(|m| m.content.as_ref().map(|c| format!("{}: {}", m.role, c)))
             .collect::<Vec<_>>()
             .join("\n");
 
@@ -384,10 +380,7 @@ mod tests {
     async fn sliding_window_very_long_single_message() {
         let compressor = SlidingWindowCompressor::new(2);
         let long_content = "a".repeat(10_000);
-        let msgs = vec![
-            make_msg("system", "sys"),
-            make_msg("user", &long_content),
-        ];
+        let msgs = vec![make_msg("system", "sys"), make_msg("user", &long_content)];
         // Even though the single message exceeds the token budget, the window
         // compressor keeps it because it is within window_size.
         let result = compressor.compress(msgs, 1).await.unwrap();
@@ -435,11 +428,13 @@ mod tests {
         // Result: system + summary + 2 recent = 4
         assert_eq!(result.len(), 4);
         assert_eq!(result[0].role, "system");
-        assert!(result[1]
-            .content
-            .as_ref()
-            .unwrap()
-            .starts_with("[Conversation summary]"));
+        assert!(
+            result[1]
+                .content
+                .as_ref()
+                .unwrap()
+                .starts_with("[Conversation summary]")
+        );
     }
 
     #[tokio::test]
@@ -447,10 +442,7 @@ mod tests {
         let llm = Arc::new(MockLLM);
         let compressor = SummarizingCompressor::new(llm).with_keep_recent(10);
         let long_content = "x".repeat(50_000);
-        let msgs = vec![
-            make_msg("system", "sys"),
-            make_msg("user", &long_content),
-        ];
+        let msgs = vec![make_msg("system", "sys"), make_msg("user", &long_content)];
         // Only 1 conversation message which is <= keep_recent=10, so no
         // summarisation happens; messages are returned as-is even over budget.
         let result = compressor.compress(msgs.clone(), 1).await.unwrap();

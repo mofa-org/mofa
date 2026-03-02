@@ -115,7 +115,11 @@ impl QuantizationProfile {
     }
 
     /// Create a new quantization profile with description
-    pub fn with_description(name: impl Into<String>, bits: u8, description: impl Into<String>) -> Self {
+    pub fn with_description(
+        name: impl Into<String>,
+        bits: u8,
+        description: impl Into<String>,
+    ) -> Self {
         Self {
             name: name.into(),
             bits,
@@ -353,9 +357,7 @@ impl AdapterDescriptorBuilder {
     }
 
     pub fn supported_modalities(mut self, modalities: impl IntoIterator<Item = Modality>) -> Self {
-        self.descriptor
-            .supported_modalities
-            .extend(modalities);
+        self.descriptor.supported_modalities.extend(modalities);
         self
     }
 

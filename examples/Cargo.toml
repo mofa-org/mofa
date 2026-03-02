@@ -44,6 +44,7 @@ members = [
     "context_window_demo",
     "admission_gate_demo",
     "integrations_demo",
+    "mcp_tools",
 ]
 
 [workspace.package]

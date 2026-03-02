@@ -41,7 +41,12 @@ pub async fn run(
     let output_str = match format {
         "json" => serde_json::to_string_pretty(&session_data)?,
         "yaml" => serde_yaml::to_string(&session_data)?,
-        _ => return Err(CliError::SessionError(format!("Unsupported export format: {}", format))),
+        _ => {
+            return Err(CliError::SessionError(format!(
+                "Unsupported export format: {}",
+                format
+            )));
+        }
     };
 
     std::fs::write(&output, output_str)?;

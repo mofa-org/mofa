@@ -2,7 +2,7 @@
 
 use crate::CliError;
 use colored::Colorize;
-use dialoguer::{theme::ColorfulTheme, Confirm, Input, Select};
+use dialoguer::{Confirm, Input, Select, theme::ColorfulTheme};
 use serde::Deserialize;
 use serde::Serialize;
 use std::path::PathBuf;
@@ -151,11 +151,7 @@ fn run_interactive_wizard() -> Result<AgentConfigBuilder, CliError> {
             .with_prompt("API key (or leave empty to use env var)")
             .allow_empty(true)
             .interact()?;
-        if key.is_empty() {
-            None
-        } else {
-            Some(key)
-        }
+        if key.is_empty() { None } else { Some(key) }
     } else {
         None
     };
@@ -166,11 +162,7 @@ fn run_interactive_wizard() -> Result<AgentConfigBuilder, CliError> {
             .with_prompt("Base URL (optional)")
             .allow_empty(true)
             .interact()?;
-        if url.is_empty() {
-            None
-        } else {
-            Some(url)
-        }
+        if url.is_empty() { None } else { Some(url) }
     } else {
         None
     };
@@ -393,7 +385,7 @@ fn parse_provider(value: &str) -> Result<LLMProvider, CliError> {
         other => {
             return Err(CliError::ConfigError(format!(
                 "Unsupported llm.provider value: {other}"
-            )))
+            )));
         }
     }
 }

@@ -3,9 +3,9 @@
 mod cli;
 mod commands;
 mod config;
-mod plugin_catalog;
 mod context;
 mod output;
+mod plugin_catalog;
 mod render;
 mod state;
 mod store;
@@ -242,13 +242,8 @@ async fn run_command(cli: Cli) -> Result<(), CliError> {
                         url,
                         description,
                     } => {
-                        commands::plugin::repository::add(
-                            ctx,
-                            &id,
-                            &url,
-                            description.as_deref(),
-                        )
-                        .await?;
+                        commands::plugin::repository::add(ctx, &id, &url, description.as_deref())
+                            .await?;
                     }
                 },
             }

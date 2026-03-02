@@ -54,7 +54,10 @@ impl AgentProcessManager {
 
         // Verify config file exists
         if !config.exists() {
-            return Err(CliError::StateError(format!("Agent configuration not found at: {}", config.display())));
+            return Err(CliError::StateError(format!(
+                "Agent configuration not found at: {}",
+                config.display()
+            )));
         }
 
         info!(
@@ -84,9 +87,12 @@ impl AgentProcessManager {
         }
 
         // Spawn the process
-        let mut child = cmd
-            .spawn()
-            .map_err(|e| CliError::StateError(format!("Failed to start agent '{}' process: {}", agent_id, e)))?;
+        let mut child = cmd.spawn().map_err(|e| {
+            CliError::StateError(format!(
+                "Failed to start agent '{}' process: {}",
+                agent_id, e
+            ))
+        })?;
 
         // Get the child process ID
         let pid = child.id();
@@ -132,8 +138,7 @@ impl AgentProcessManager {
                     warn!("Failed to send {:?} to process {}: {}", signal, pid, e);
                     Err(CliError::StateError(format!(
                         "Failed to terminate process {}: {}",
-                        pid,
-                        e
+                        pid, e
                     )))
                 }
             }
@@ -154,13 +159,18 @@ impl AgentProcessManager {
                 info!("Successfully terminated process {}", pid);
                 Ok(())
             } else {
-                return Err(CliError::StateError(format!("Failed to terminate process {}", pid)));
+                return Err(CliError::StateError(format!(
+                    "Failed to terminate process {}",
+                    pid
+                )));
             }
         }
 
         #[cfg(not(any(unix, windows)))]
         {
-            return Err(CliError::StateError("Agent process termination not supported on this platform".to_string()));
+            return Err(CliError::StateError(
+                "Agent process termination not supported on this platform".to_string(),
+            ));
         }
     }
 
@@ -199,7 +209,10 @@ impl AgentProcessManager {
     /// Validate agent configuration
     pub fn validate_config(&self, config_path: &Path) -> Result<()> {
         if !config_path.exists() {
-            return Err(CliError::StateError(format!("Configuration file not found: {}", config_path.display())));
+            return Err(CliError::StateError(format!(
+                "Configuration file not found: {}",
+                config_path.display()
+            )));
         }
 
         // Try to load and parse as YAML

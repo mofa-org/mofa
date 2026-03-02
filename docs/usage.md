@@ -307,6 +307,156 @@ let agent = LLMAgentBuilder::new()
 
 ---
 
+# MCP (Model Context Protocol) Tool Integration
+
+MoFA supports connecting to any [MCP](https://modelcontextprotocol.io) server and automatically surfacing its tools inside the MoFA `ToolRegistry`.  This means you can add hundreds of community-built MCP tools to any agent with just a few lines of code.
+
+## Prerequisites
+
+MCP support requires the `mcp` feature flag.  Add it to your `Cargo.toml`:
+
+```toml
+mofa-foundation = { version = "...", features = ["mcp"] }
+```
+
+> **Note:** Calling `load_mcp_server` without the `mcp` feature generates a tracing `WARN` log and returns an empty tool list.  No tools are silently dropped; a message explaining how to fix it is always emitted.
+
+## Quick Start — Filesystem Server
+
+The `@modelcontextprotocol/server-filesystem` reference server is a good starting point.
+
+### 1. Install the server (one-time)
+
+```text
+npm install -g @modelcontextprotocol/server-filesystem
+```
+
+### 2. Connect and discover tools
+
+```rust,ignore
+use mofa_foundation::agent::tools::ToolRegistry;
+use mofa_kernel::agent::components::mcp::McpServerConfig;
+
+let config = McpServerConfig::stdio(
+    "filesystem",               // logical server name
+    "npx",
+    vec![
+        "-y".to_string(),
+        "@modelcontextprotocol/server-filesystem".to_string(),
+        "/tmp".to_string(),     // allowed root directory
+    ],
+);
+
+let mut registry = ToolRegistry::new();
+let tool_names = registry.load_mcp_server(config).await?;
+
+println!("Loaded {} MCP tools: {:?}", tool_names.len(), tool_names);
+```
+
+### 3. Call an MCP tool through the registry
+
+```rust,ignore
+use mofa_kernel::agent::components::tool::DynTool;
+use mofa_kernel::agent::context::AgentContext;
+
+let tool = registry.get("list_directory").expect("tool not found");
+
+// AgentContext requires a unique execution ID string.
+let ctx = AgentContext::new("my-execution");
+
+match tool
+    .execute_dynamic(serde_json::json!({ "path": "/tmp" }), &ctx)
+    .await
+{
+    Ok(output) => println!("{}", serde_json::to_string_pretty(&output)?),
+    Err(e) => eprintln!("Tool call failed: {e}"),
+}
+```
+
+### 4. Unload a server at runtime
+
+```rust,ignore
+let removed = registry.unload_mcp_server("filesystem").await?;
+println!("Removed {} tools", removed.len());
+```
+
+## Low-Level API — McpClientManager
+
+`McpClientManager` is the low-level client that manages the raw MCP connections.  Use it when you need direct protocol access without the `ToolRegistry` abstraction.
+
+```rust,ignore
+use mofa_foundation::agent::tools::mcp::McpClientManager;
+use mofa_kernel::agent::components::mcp::{McpClient, McpServerConfig};
+
+let config = McpServerConfig::stdio(
+    "my-server",
+    "npx",
+    vec!["-y".to_string(), "@modelcontextprotocol/server-github".to_string()],
+).with_env("GITHUB_TOKEN", &std::env::var("GITHUB_TOKEN")?);
+
+let mut manager = McpClientManager::new();
+manager.connect(config).await?;
+
+// Discover tools
+let tools = manager.list_tools("my-server").await?;
+for tool in &tools {
+    println!("{}: {}", tool.name, tool.description);
+}
+
+// Call a tool
+let result = manager.call_tool(
+    "my-server",
+    "list_repos",
+    serde_json::json!({ "owner": "mofa-org" }),
+).await?;
+
+// Graceful disconnect
+manager.disconnect("my-server").await?;
+```
+
+## Supported Transports
+
+| Transport | Status | Notes |
+|-----------|--------|-------|
+| `stdio` (child process) | ✅ Supported | Start any MCP server as a subprocess |
+| `HTTP/SSE` | ⏳ Planned | `transport-streamable-http-client-reqwest` feature not yet bundled |
+
+## Environment Variables
+
+When using the `stdio` transport you can inject environment variables into the child process:
+
+```rust,ignore
+let config = McpServerConfig::stdio("github", "npx", args)
+    .with_env("GITHUB_TOKEN",  "ghp_xxxxx")
+    .with_env("GITHUB_OWNER",  "mofa-org");
+```
+
+## Example
+
+A runnable end-to-end example is located at [`examples/mcp_tools/`](../examples/mcp_tools/).
+
+```text
+cargo run -p mcp_tools
+```
+
+## Running Integration Tests
+
+Integration tests are in `crates/mofa-foundation/tests/mcp_integration.rs`.
+
+Tests that do **not** require a live server run by default:
+
+```text
+cargo test -p mofa-foundation --features mcp
+```
+
+Tests against a live `@modelcontextprotocol/server-filesystem` are marked `#[ignore]`.  Run them with:
+
+```text
+cargo test -p mofa-foundation --features mcp -- --ignored
+```
+
+---
+
 # UniFFI
 
 Generate Python bindings:

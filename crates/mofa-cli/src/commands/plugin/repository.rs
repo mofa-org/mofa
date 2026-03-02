@@ -1,9 +1,9 @@
 //! `mofa plugin repository` subcommands
 
- use crate::context::CliContext;
 use crate::CliError;
-use crate::plugin_catalog::PluginRepoEntry;
+use crate::context::CliContext;
 use crate::output::Table;
+use crate::plugin_catalog::PluginRepoEntry;
 use chrono::Utc;
 use colored::Colorize;
 
@@ -44,7 +44,10 @@ pub async fn add(
     description: Option<&str>,
 ) -> Result<(), CliError> {
     if ctx.plugin_repo_store.get(id)?.is_some() {
-        return Err(CliError::PluginError(format!("Repository '{}' already exists", id)));
+        return Err(CliError::PluginError(format!(
+            "Repository '{}' already exists",
+            id
+        )));
     }
 
     let repo = PluginRepoEntry {

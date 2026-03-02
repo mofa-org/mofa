@@ -167,6 +167,5 @@ impl SocketIoBridge {
 }
 
 fn agent_message_to_json(msg: &AgentMessage) -> Value {
-    serde_json::to_value(msg)
-        .unwrap_or_else(|_| json!({ "error": "serialization failed" }))
+    serde_json::to_value(msg).unwrap_or_else(|_| json!({ "error": "serialization failed" }))
 }

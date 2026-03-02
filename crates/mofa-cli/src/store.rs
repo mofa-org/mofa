@@ -1,8 +1,8 @@
 //! Generic file-based persisted store for CLI state.
 
 use crate::CliError;
-use serde::de::DeserializeOwned;
 use serde::Serialize;
+use serde::de::DeserializeOwned;
 use std::fs;
 use std::marker::PhantomData;
 use std::path::{Path, PathBuf};
