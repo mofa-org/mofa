@@ -50,6 +50,9 @@ pub mod collaboration;
 // RAG module - vector store and document chunking
 pub mod rag;
 
+// Security governance - PII redaction, content moderation, prompt guard
+pub mod security;
+
 // Re-export config types
 pub use config::{AgentInfo, AgentYamlConfig, LLMYamlConfig, RuntimeConfig, ToolConfig};
 
