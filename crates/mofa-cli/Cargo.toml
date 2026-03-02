@@ -28,6 +28,7 @@ mofa-foundation = { path = "../mofa-foundation", version = "0.1" }
 config.workspace = true
 tokio = { workspace = true }
 thiserror = { workspace = true }
+error-stack = { workspace = true }
 async-trait = { workspace = true }
 chrono = { workspace = true }
 
