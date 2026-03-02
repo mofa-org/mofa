@@ -402,3 +402,33 @@ pub use tool_executor::ToolExecutor as AgentLoopToolExecutor;
 pub use transcription::{
     GroqTranscriptionProvider, OpenAITranscriptionProvider, TranscriptionProvider,
 };
+
+// Re-export inference module
+pub mod inference;
+pub use inference::{
+    BackendHealth, HardwareRequirements, InferenceBackend, InferenceChunk, InferenceError,
+    InferenceRequest, InferenceResponse, InferenceResult, InferenceStream, ModelCapability,
+    ModelHandle, ModelMetadata, ModelType, QuantizationType, TokenUsage, ToolDefinition,
+};
+
+// Re-export model pool module
+pub mod model_pool;
+pub use model_pool::{ModelPool, ModelPoolConfig};
+
+// Re-export routing module
+pub mod routing;
+pub use routing::{
+    AdmissionController, AdmissionControlConfig, RoutingConfig, RoutingEngine, RoutingMetrics,
+    RoutingPolicy,
+};
+
+// Re-export pipeline inference module
+pub mod pipeline_inference;
+pub use pipeline_inference::{
+    HybridPipeline, InferencePipeline, PipelineConfig, PipelineMetrics, PipelineStage,
+    PipelineStageConfig,
+};
+
+// Re-export MLX local backend
+pub mod mlx_backend;
+pub use mlx_backend::{LocalBackendConfig, MlxLocalBackend};
