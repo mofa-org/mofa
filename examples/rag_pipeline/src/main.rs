@@ -919,7 +919,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     println!("=== MoFA RAG Pipeline Example ===\n");
 
-    // Always run in-memory demos
+    // When in validate mode, run only the deterministic validation suite and exit early
+    // to keep it fast and non-flaky (skips benchmarks, sleeps, and spawned tasks).
+    if mode == "validate" {
+        practical_validation_suite().await?;
+        println!("=== Done ===");
+        return Ok(());
+    }
+
+    // Run in-memory demos
     basic_rag_pipeline().await?;
     document_ingestion_demo().await?;
     customer_support_use_case().await?;
@@ -929,9 +937,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     streaming_edge_cases_test().await?;
 
     // Run Qdrant demo if requested
-    if mode == "validate" {
-        practical_validation_suite().await?;
-    } else if mode == "qdrant" {
+    if mode == "qdrant" {
         let url = std::env::var("QDRANT_URL").unwrap_or_else(|_| "http://localhost:6334".into());
         qdrant_rag_pipeline(&url).await?;
     } else {

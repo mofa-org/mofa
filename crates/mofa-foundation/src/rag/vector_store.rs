@@ -30,6 +30,8 @@ use std::collections::HashMap;
 pub struct InMemoryVectorStore {
     chunks: HashMap<String, DocumentChunk>,
     metric: SimilarityMetric,
+    /// Tracks the dimensionality of stored embeddings; `None` when the store is empty
+    /// or has not yet seen any embeddings.
     embedding_dimensions: Option<usize>,
 }
 
@@ -60,13 +62,6 @@ impl VectorStore for InMemoryVectorStore {
     async fn upsert(&mut self, chunk: DocumentChunk) -> AgentResult<()> {
         self.validate_chunk_embedding(&chunk)?;
         self.chunks.insert(chunk.id.clone(), chunk);
-        Ok(())
-    }
-
-    async fn upsert_batch(&mut self, chunks: Vec<DocumentChunk>) -> AgentResult<()> {
-        for chunk in chunks {
-            self.upsert(chunk).await?;
-        }
         Ok(())
     }
 
