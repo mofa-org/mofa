@@ -38,11 +38,11 @@ dora-core = { version = "0", features = ["build"], optional = true }
 dora-message = { version = "0", optional = true }
 
 serde_yaml = { workspace = true }
-toml = "0.8"
+toml = "0.9"
 config.workspace = true
 regex.workspace = true
 chrono.workspace = true
-cron = "0.12"
+cron = "0.15"
 
 [lints]
 workspace = true
