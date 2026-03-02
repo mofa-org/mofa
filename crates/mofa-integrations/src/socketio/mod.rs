@@ -26,8 +26,6 @@ pub struct SocketIoConfig {
     pub auth_token: Option<String>,
     /// Socket.IO namespace for agent events (default: `/agents`).
     pub namespace: String,
-    /// Internal broadcast channel buffer size.
-    pub channel_buffer: usize,
 }
 
 impl Default for SocketIoConfig {
@@ -41,7 +39,6 @@ impl SocketIoConfig {
         Self {
             auth_token: None,
             namespace: "/agents".to_string(),
-            channel_buffer: 256,
         }
     }
 
@@ -54,12 +51,6 @@ impl SocketIoConfig {
     /// Override the namespace (default: `/agents`).
     pub fn with_namespace(mut self, ns: impl Into<String>) -> Self {
         self.namespace = ns.into();
-        self
-    }
-
-    /// Override the broadcast channel buffer size.
-    pub fn with_buffer(mut self, size: usize) -> Self {
-        self.channel_buffer = size;
         self
     }
 }
@@ -112,7 +103,13 @@ impl SocketIoBridge {
                     Ok(raw) => {
                         let payload = match bincode::deserialize::<AgentMessage>(&raw) {
                             Ok(msg) => agent_message_to_json(&msg),
-                            Err(_) => json!({ "raw": hex::encode(&raw) }),
+                            Err(e) => {
+                                warn!("failed to decode AgentMessage for socket emit: {}", e);
+                                json!({
+                                    "type": "decode_error",
+                                    "message": "agent_message decode failed"
+                                })
+                            }
                         };
                         if let Some(ns) = io_fwd.of(&ns_fwd) {
                             let _ = ns.emit("agent_message", &payload);
