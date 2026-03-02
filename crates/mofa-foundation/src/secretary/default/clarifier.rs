@@ -1,8 +1,8 @@
 //! 需求澄清器 - 阶段2: 澄清需求，转换为项目文档
 //! Requirement Clarifier - Phase 2: Clarify requirements and convert to project documents
 
-use mofa_kernel::agent::types::error::{GlobalError, GlobalResult};
 use super::types::*;
+use mofa_kernel::agent::types::error::{GlobalError, GlobalResult};
 use std::collections::HashMap;
 use std::sync::Arc;
 
@@ -326,7 +326,10 @@ impl RequirementClarifier {
                 .push((question, answer.to_string()));
             Ok(())
         } else {
-            Err(GlobalError::Other(format!("Question not found: {}", question_id)))
+            Err(GlobalError::Other(format!(
+                "Question not found: {}",
+                question_id
+            )))
         }
     }
 
@@ -416,7 +419,9 @@ impl RequirementClarifier {
             });
         }
 
-        if idea_lower.contains("ui") || idea_lower.contains("interface") || idea_lower.contains("frontend")
+        if idea_lower.contains("ui")
+            || idea_lower.contains("interface")
+            || idea_lower.contains("frontend")
         {
             subtasks.push(Subtask {
                 id: "subtask_ui_design".to_string(),
