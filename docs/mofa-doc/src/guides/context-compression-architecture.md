@@ -19,13 +19,25 @@ the context compression system follows mofa's microkernel architecture - trait d
 
 ```mermaid
 graph TB
-    subgraph "User Code / Agent Executor"
-        Agent[Agent Executor]
+
+    %% =========================
+    %% User Layer
+    %% =========================
+    subgraph USER["User Code / Agent Executor"]
         Messages[Chat Messages]
+        Agent[Agent Executor]
+        Messages -->|input| Agent
+        Agent -->|compressed| Messages
     end
 
-    subgraph "mofa-foundation Layer"
-        subgraph "Compression Implementations"
+
+    %% =========================
+    %% Foundation Layer
+    %% =========================
+    subgraph FOUNDATION["mofa-foundation Layer"]
+
+        subgraph IMPL["Compression Implementations"]
+            direction LR
             SW[SlidingWindowCompressor]
             SUM[SummarizingCompressor]
             SEM[SemanticCompressor]
@@ -33,53 +45,64 @@ graph TB
             HYB[HybridCompressor]
         end
         
-        subgraph "Supporting Components"
+        subgraph SUPPORT["Supporting Components"]
+            direction LR
             TC[TokenCounter]
             TTC[TikTokenCounter]
             Cache[CompressionCache]
         end
         
-        subgraph "LLM Integration"
+        subgraph LLMINT["LLM Integration"]
+            direction LR
             LLM[LLM Provider]
             Embed[Embedding Provider]
         end
     end
 
-    subgraph "mofa-kernel Layer"
+
+    %% =========================
+    %% Kernel Layer
+    %% =========================
+    subgraph KERNEL["mofa-kernel Layer"]
+        direction LR
         Trait[ContextCompressor Trait]
         Strategy[CompressionStrategy Enum]
-        Metrics[CompressionMetrics]
         Result[CompressionResult]
+        Metrics[CompressionMetrics]
+
+        Trait -->|defines| Strategy
+        Trait -->|returns| Result
+        Result -->|contains| Metrics
     end
 
+
+    %% =========================
+    %% Connections (Structured)
+    %% =========================
+
+    %% Agent uses implementations (kept vertical)
     Agent -->|uses| SW
     Agent -->|uses| SUM
     Agent -->|uses| SEM
     Agent -->|uses| HIER
     Agent -->|uses| HYB
-    
+
+    %% Implementations implement trait
     SW -->|implements| Trait
     SUM -->|implements| Trait
     SEM -->|implements| Trait
     HIER -->|implements| Trait
     HYB -->|implements| Trait
-    
-    SW -->|uses| TC
-    SUM -->|uses| TC
-    SUM -->|uses| LLM
-    SEM -->|uses| TC
-    SEM -->|uses| Embed
-    SEM -->|uses| Cache
-    HIER -->|uses| TC
-    HIER -->|uses| LLM
-    HYB -->|uses| TC
-    
-    Trait -->|defines| Strategy
-    Trait -->|returns| Result
-    Result -->|contains| Metrics
-    
-    Messages -->|input| Agent
-    Agent -->|compressed| Messages
+
+    %% Dependencies aligned downward to reduce crossing
+    SW --> TC
+    SUM --> TC
+    SUM --> LLM
+    SEM --> TC
+    SEM --> Embed
+    SEM --> Cache
+    HIER --> TC
+    HYB --> TC
 ```
 
 ## layer responsibilities
