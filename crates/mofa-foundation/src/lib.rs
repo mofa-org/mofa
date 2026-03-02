@@ -4,15 +4,11 @@
     non_camel_case_types,
     ambiguous_glob_reexports
 )]
-// Unified error conversions (GlobalError <-> domain errors)
-pub mod error_conversions;
 // orchestrator module - Model Lifecycle & Allocation
 pub mod orchestrator;
 
 // hardware discovery module
 pub mod hardware;
-// memory-budgeted scheduler for inference orchestration
-pub mod scheduler;
 
 // adapter registry module - Runtime model adapter discovery
 pub mod adapter;
@@ -69,6 +65,17 @@ pub mod capability_registry;
 pub use capability_registry::CapabilityRegistry;
 // Error recovery strategies (Backoff, RetryPolicy, CircuitBreaker, retry, fallback_chain)
 pub mod recovery;
+
+// Metrics and telemetry module
+pub mod metrics;
+
+// Re-export metrics types
+pub use metrics::{
+    AgentMetrics, BusinessMetrics, CircuitBreakerEvent, CircuitBreakerMetrics,
+    CircuitBreakerState, LatencyPercentiles, MetricBuilder, MetricsBackend, MetricsCollector,
+    ModelPoolEvent, ModelPoolMetrics, RetryMetrics, RoutingMetrics, SchedulerMetrics, StepStatus,
+    StepTiming, TokenUsage, ToolMetrics, WorkflowMetrics,
+};
 
 // Re-export config types
 pub use config::{AgentInfo, AgentYamlConfig, LLMYamlConfig, RuntimeConfig, ToolConfig};
