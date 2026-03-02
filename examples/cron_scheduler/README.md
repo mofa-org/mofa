@@ -14,10 +14,15 @@ This example demonstrates the `CronScheduler` with persistence and optional tele
 ```bash
 # From the project root directory
 cd examples
+
+# Run with telemetry enabled (default)
 cargo run -p cron_scheduler
 
-# To disable telemetry
+# Run with telemetry disabled
 cargo run -p cron_scheduler --no-default-features
+
+# Run with telemetry explicitly enabled
+cargo run -p cron_scheduler --features scheduler-telemetry
 ```
 
 ## What It Does

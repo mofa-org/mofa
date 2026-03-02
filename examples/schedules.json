@@ -1,0 +1,13 @@
+[
+  {
+    "schedule_id": "log-every-minute",
+    "agent_id": "logger",
+    "cron_expression": "0 * * * * *",
+    "interval_ms": null,
+    "max_concurrent": 1,
+    "input_template": {
+      "Text": "Scheduled log message"
+    },
+    "missed_tick_policy": "Skip"
+  }
+]

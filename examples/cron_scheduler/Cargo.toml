@@ -9,10 +9,10 @@ path = "main.rs"
 
 [features]
 default = ["scheduler-telemetry"]
-scheduler-telemetry = []
+scheduler-telemetry = ["mofa-foundation/scheduler-telemetry"]
 
 [dependencies]
-mofa-foundation = { path = "../../crates/mofa-foundation", features = ["scheduler-telemetry"] }
+mofa-foundation = { path = "../../crates/mofa-foundation" }
 mofa-kernel = { path = "../../crates/mofa-kernel" }
 mofa-runtime = { path = "../../crates/mofa-runtime" }
 
