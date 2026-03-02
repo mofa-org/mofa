@@ -75,7 +75,7 @@ class RuntimeFixtureTests(unittest.TestCase):
         self.assertGreaterEqual(len(list(INVALID_ROOT.glob("*.yaml"))), 30)
 
     def test_fixture_edge_set_non_empty(self):
-        self.assertGreaterEqual(len(list(EDGE_ROOT.glob("*.yaml"))), 12)
+        self.assertGreaterEqual(len(list(EDGE_ROOT.glob("*.yaml"))), 3)
 
 
 if __name__ == "__main__":

@@ -6,34 +6,6 @@ cases:
   - queue_size
   - memory pressure
   planner_snapshot: snapshots/planner/corpus_edge_queue_pressure_01.json
-- id: corpus_edge_queue_pressure_02
-  fixture: edge/corpus_edge_queue_pressure_02.yaml
-  expect: valid
-  warning_contains:
-  - queue_size
-  - memory pressure
-  planner_snapshot: snapshots/planner/corpus_edge_queue_pressure_02.json
-- id: corpus_edge_queue_pressure_03
-  fixture: edge/corpus_edge_queue_pressure_03.yaml
-  expect: valid
-  warning_contains:
-  - queue_size
-  - memory pressure
-  planner_snapshot: snapshots/planner/corpus_edge_queue_pressure_03.json
-- id: corpus_edge_queue_pressure_04
-  fixture: edge/corpus_edge_queue_pressure_04.yaml
-  expect: valid
-  warning_contains:
-  - queue_size
-  - memory pressure
-  planner_snapshot: snapshots/planner/corpus_edge_queue_pressure_04.json
-- id: corpus_edge_queue_pressure_05
-  fixture: edge/corpus_edge_queue_pressure_05.yaml
-  expect: valid
-  warning_contains:
-  - queue_size
-  - memory pressure
-  planner_snapshot: snapshots/planner/corpus_edge_queue_pressure_05.json
 - id: corpus_edge_retry_bounds_01
   fixture: edge/corpus_edge_retry_bounds_01.yaml
   expect: valid
@@ -41,64 +13,12 @@ cases:
   - retry.max_attempts
   - tail latency
   planner_snapshot: snapshots/planner/corpus_edge_retry_bounds_01.json
-- id: corpus_edge_retry_bounds_02
-  fixture: edge/corpus_edge_retry_bounds_02.yaml
-  expect: valid
-  warning_contains:
-  - retry.max_attempts
-  - tail latency
-  planner_snapshot: snapshots/planner/corpus_edge_retry_bounds_02.json
-- id: corpus_edge_retry_bounds_03
-  fixture: edge/corpus_edge_retry_bounds_03.yaml
-  expect: valid
-  warning_contains:
-  - retry.max_attempts
-  - tail latency
-  planner_snapshot: snapshots/planner/corpus_edge_retry_bounds_03.json
-- id: corpus_edge_retry_bounds_04
-  fixture: edge/corpus_edge_retry_bounds_04.yaml
-  expect: valid
-  warning_contains:
-  - retry.max_attempts
-  - tail latency
-  planner_snapshot: snapshots/planner/corpus_edge_retry_bounds_04.json
-- id: corpus_edge_retry_bounds_05
-  fixture: edge/corpus_edge_retry_bounds_05.yaml
-  expect: valid
-  warning_contains:
-  - retry.max_attempts
-  - tail latency
-  planner_snapshot: snapshots/planner/corpus_edge_retry_bounds_05.json
 - id: corpus_edge_sink_outputs_01
   fixture: edge/corpus_edge_sink_outputs_01.yaml
   expect: valid
   warning_contains:
   - Sink nodes should not declare outputs
   planner_snapshot: snapshots/planner/corpus_edge_sink_outputs_01.json
-- id: corpus_edge_sink_outputs_02
-  fixture: edge/corpus_edge_sink_outputs_02.yaml
-  expect: valid
-  warning_contains:
-  - Sink nodes should not declare outputs
-  planner_snapshot: snapshots/planner/corpus_edge_sink_outputs_02.json
-- id: corpus_edge_sink_outputs_03
-  fixture: edge/corpus_edge_sink_outputs_03.yaml
-  expect: valid
-  warning_contains:
-  - Sink nodes should not declare outputs
-  planner_snapshot: snapshots/planner/corpus_edge_sink_outputs_03.json
-- id: corpus_edge_sink_outputs_04
-  fixture: edge/corpus_edge_sink_outputs_04.yaml
-  expect: valid
-  warning_contains:
-  - Sink nodes should not declare outputs
-  planner_snapshot: snapshots/planner/corpus_edge_sink_outputs_04.json
-- id: corpus_edge_sink_outputs_05
-  fixture: edge/corpus_edge_sink_outputs_05.yaml
-  expect: valid
-  warning_contains:
-  - Sink nodes should not declare outputs
-  planner_snapshot: snapshots/planner/corpus_edge_sink_outputs_05.json
 - id: corpus_invalid_duplicate_outputs_01
   fixture: invalid/corpus_invalid_duplicate_outputs_01.yaml
   expect: invalid

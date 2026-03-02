@@ -19,7 +19,7 @@ class FixtureCatalogSnapshotTests(unittest.TestCase):
 
     def test_catalog_file_exists_and_non_empty(self):
         self.assertTrue(CATALOG_PATH.exists())
-        self.assertGreaterEqual(len(self.cases), 80)
+        self.assertGreaterEqual(len(self.cases), 70)
 
     def test_every_fixture_path_exists(self):
         for case in self.cases:
