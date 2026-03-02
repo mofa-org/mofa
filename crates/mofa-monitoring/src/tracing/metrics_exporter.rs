@@ -3,7 +3,7 @@
 //! This placeholder keeps the server/config surface stable in PR1. The native
 //! OpenTelemetry exporter implementation is added in the next PR.
 
-use crate::{CardinalityLimits, MetricsCollector};
+use crate::MetricsCollector;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -26,6 +26,27 @@ pub struct OtlpMetricsExporterConfig {
     pub service_name: String,
     /// Cardinality guard settings.
     pub cardinality: CardinalityLimits,
+}
+
+/// Cardinality guard configuration for OTLP label dimensions.
+#[derive(Debug, Clone)]
+#[non_exhaustive]
+pub struct CardinalityLimits {
+    pub agent_id: usize,
+    pub workflow_id: usize,
+    pub plugin_or_tool: usize,
+    pub provider_model: usize,
+}
+
+impl Default for CardinalityLimits {
+    fn default() -> Self {
+        Self {
+            agent_id: 100,
+            workflow_id: 100,
+            plugin_or_tool: 100,
+            provider_model: 50,
+        }
+    }
 }
 
 impl Default for OtlpMetricsExporterConfig {
