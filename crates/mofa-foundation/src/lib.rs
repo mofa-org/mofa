@@ -50,6 +50,17 @@ pub mod collaboration;
 // RAG module - vector store and document chunking
 pub mod rag;
 
+// Metrics and telemetry module
+pub mod metrics;
+
+// Re-export metrics types
+pub use metrics::{
+    AgentMetrics, BusinessMetrics, CircuitBreakerEvent, CircuitBreakerMetrics,
+    CircuitBreakerState, LatencyPercentiles, MetricBuilder, MetricsBackend, MetricsCollector,
+    ModelPoolEvent, ModelPoolMetrics, RetryMetrics, RoutingMetrics, SchedulerMetrics, StepStatus,
+    StepTiming, TokenUsage, ToolMetrics, WorkflowMetrics,
+};
+
 // Re-export config types
 pub use config::{AgentInfo, AgentYamlConfig, LLMYamlConfig, RuntimeConfig, ToolConfig};
 
