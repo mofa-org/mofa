@@ -151,7 +151,7 @@ pub fn create_llm_provider() -> Arc<dyn LLMProvider> {
 //         "openai"
 //     }
 
-//     async fn chat(&self, messages: Vec<ChatMessage>) -> anyhow::Result<String> {
+//     async fn chat(&self, messages: Vec<ChatMessage>) -> Result<String, Box<dyn std::error::Error>> {
 //         let res = self.client.post("https://api.openai.com/v1/chat/completions")
 //             .bearer_auth(&self.api_key)
 //             .json(&json!({

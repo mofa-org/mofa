@@ -5,12 +5,7 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
-/// A chunk of a document with its embedding vector and metadata.
-///
-/// This is the basic unit stored in a vector store. Documents are split
-/// into chunks, each chunk is embedded into a vector, and stored along
-/// with its text content and metadata for later retrieval.
-
+/// A full document used in retrieval and generation stages.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Document {
     /// Unique identifier for the entire document.
@@ -22,10 +17,8 @@ pub struct Document {
 }
 
 impl Document {
-    pub fn new(
-        id: impl Into<String>,
-        text: impl Into<String>,
-    ) -> Self {
+    /// Create a new document.
+    pub fn new(id: impl Into<String>, text: impl Into<String>) -> Self {
         Self {
             id: id.into(),
             text: text.into(),
@@ -33,14 +26,14 @@ impl Document {
         }
     }
 
-    /// Add a metadata entry
+    /// Add a metadata entry.
     pub fn with_metadata(mut self, key: impl Into<String>, value: impl Into<String>) -> Self {
         self.metadata.insert(key.into(), value.into());
         self
     }
 }
 
-
+/// Retrieved document plus ranking metadata.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ScoredDocument {
     /// Retrieved document.
@@ -52,6 +45,7 @@ pub struct ScoredDocument {
 }
 
 impl ScoredDocument {
+    /// Create a new scored document.
     pub fn new(document: Document, score: f32, source: Option<String>) -> Self {
         Self {
             document,
@@ -61,6 +55,7 @@ impl ScoredDocument {
     }
 }
 
+/// Input passed to generation stage.
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct GenerateInput {
     /// User query.
@@ -72,17 +67,27 @@ pub struct GenerateInput {
 }
 
 impl GenerateInput {
+    /// Create a generation input with query + context.
     pub fn new(query: impl Into<String>, context: Vec<Document>) -> Self {
-        Self { query: query.into(), context, metadata: HashMap::new() }
+        Self {
+            query: query.into(),
+            context,
+            metadata: HashMap::new(),
+        }
     }
 
+    /// Add metadata entry.
     pub fn with_metadata(mut self, key: impl Into<String>, value: impl Into<String>) -> Self {
         self.metadata.insert(key.into(), value.into());
         self
     }
 }
 
-
+/// A chunk of a document with its embedding vector and metadata.
+///
+/// This is the basic unit stored in a vector store. Documents are split
+/// into chunks, each chunk is embedded into a vector, and stored along
+/// with its text content and metadata for later retrieval.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DocumentChunk {
     /// Unique identifier for this chunk

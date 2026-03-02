@@ -6,7 +6,6 @@ description = "Demonstrates CLI usage in CI/CD pipelines for production deployme
 
 [dependencies]
 mofa-cli = { path = "../../crates/mofa-cli", version = "0.1" }
-anyhow.workspace = true
 tempfile.workspace = true
 tokio.workspace = true
 serde_json.workspace = true

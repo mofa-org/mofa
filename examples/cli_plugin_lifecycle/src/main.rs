@@ -6,12 +6,11 @@
 //! 3. Validates installation
 //! 4. Demonstrates uninstall process
 
-use anyhow::Result;
 use tempfile::TempDir;
 use tokio::fs;
 
 #[tokio::main]
-async fn main() -> Result<()> {
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("CLI Plugin Lifecycle Demo\n");
     println!("This example demonstrates the plugin install/uninstall workflow.\n");
 

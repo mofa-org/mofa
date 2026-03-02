@@ -2,8 +2,8 @@
 //!
 //! Supports multiple configuration formats: YAML, TOML, JSON, INI, RON, JSON5
 
+use crate::CliError;
 use super::AgentConfig;
-use anyhow::Context;
 use mofa_kernel::config::{detect_format, from_str};
 use std::path::{Path, PathBuf};
 
@@ -67,13 +67,19 @@ pub struct ConfigFile {
 
 impl ConfigFile {
     /// Read a configuration file
-    pub fn read<P: AsRef<Path>>(path: P) -> anyhow::Result<Self> {
+    pub fn read<P: AsRef<Path>>(path: P) -> Result<Self, CliError> {
         let path = path.as_ref();
-        let format = ConfigFormat::from_path(path)
-            .ok_or_else(|| anyhow::anyhow!("Unsupported config format: {}", path.display()))?;
+        let format = ConfigFormat::from_path(path).ok_or_else(|| {
+            CliError::ConfigError(format!("Unsupported config format: {}", path.display()))
+        })?;
 
-        let content = std::fs::read_to_string(path)
-            .with_context(|| format!("Failed to read config file: {}", path.display()))?;
+        let content = std::fs::read_to_string(path).map_err(|e| {
+            CliError::ConfigError(format!(
+                "Failed to read config file {}: {}",
+                path.display(),
+                e
+            ))
+        })?;
 
         Ok(Self {
             path: path.to_path_buf(),
@@ -83,7 +89,7 @@ impl ConfigFile {
     }
 
     /// Parse the configuration file
-    pub fn parse(&self) -> anyhow::Result<AgentConfig> {
+    pub fn parse(&self) -> Result<AgentConfig, CliError> {
         let file_format = match self.format {
             ConfigFormat::Yaml => config::FileFormat::Yaml,
             ConfigFormat::Toml => config::FileFormat::Toml,
@@ -93,7 +99,9 @@ impl ConfigFile {
             ConfigFormat::Json5 => config::FileFormat::Json5,
         };
 
-        from_str(&self.content, file_format).context("Failed to parse configuration")
+        from_str(&self.content, file_format).map_err(|e| {
+            CliError::ConfigError(format!("Failed to parse configuration: {}", e))
+        })
     }
 }
 
@@ -157,7 +165,7 @@ impl ConfigLoader {
     }
 
     /// Load configuration from a specific path
-    pub fn load<P: AsRef<Path>>(&self, path: P) -> anyhow::Result<AgentConfig> {
+    pub fn load<P: AsRef<Path>>(&self, path: P) -> Result<AgentConfig, CliError> {
         let path = path.as_ref();
 
         // If path is a directory, look for config files
@@ -183,7 +191,10 @@ impl ConfigLoader {
             }
 
             found.ok_or_else(|| {
-                anyhow::anyhow!("No config file found in directory: {}", path.display())
+                CliError::ConfigError(format!(
+                    "No config file found in directory: {}",
+                    path.display()
+                ))
             })?
         } else {
             path.to_path_buf()
@@ -198,7 +209,7 @@ impl ConfigLoader {
         &self,
         file_path: Option<PathBuf>,
         _env_prefix: Option<&str>,
-    ) -> anyhow::Result<AgentConfig> {
+    ) -> Result<AgentConfig, CliError> {
         let config = if let Some(path) = file_path {
             self.load(&path)?
         } else if let Some(found) = self.find_config() {

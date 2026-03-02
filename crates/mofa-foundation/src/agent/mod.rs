@@ -28,11 +28,10 @@ pub use mofa_kernel::agent::types::AgentInput;
 // Re-export components (unified import from components module)
 pub use components::{
     // Context compressor trait and implementations
+    CompressionMetrics,
+    CompressionResult,
     CompressionStrategy,
     ContextCompressor,
-    SlidingWindowCompressor,
-    SummarizingCompressor,
-    TokenCounter,
     CoordinationPattern,
     // Kernel traits 和类型 (通过 components 重导出)
     // Kernel traits and types (re-exported via components)
@@ -44,6 +43,8 @@ pub use components::{
     DispatchResult,
     EchoTool,
     FileBasedStorage,
+    HierarchicalCompressor,
+    HybridCompressor,
     InMemoryStorage,
     LLMTool,
     Memory,
@@ -55,14 +56,18 @@ pub use components::{
     ParallelCoordinator,
     Reasoner,
     ReasoningResult,
+    SemanticCompressor,
     SequentialCoordinator,
     // SimpleTool 便捷接口
     // SimpleTool convenient interfaces
     SimpleTool,
     SimpleToolAdapter,
     SimpleToolRegistry,
+    SlidingWindowCompressor,
+    SummarizingCompressor,
     Task,
     ThoughtStep,
+    TokenCounter,
     Tool,
     // Foundation 扩展类型
     // Foundation extension types

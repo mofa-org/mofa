@@ -8,6 +8,5 @@ mofa-sdk = { path = "../../crates/mofa-sdk", features = ["persistence-postgres"]
 tokio.workspace = true
 futures.workspace = true
 uuid.workspace = true
-anyhow.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true

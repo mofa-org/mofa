@@ -954,7 +954,7 @@ mod tests {
 
         let result = ShellTool.execute(ToolInput::from_json(input)).await;
         assert!(!result.success);
-        assert!(result.error.as_deref().unwrap().contains("exit"));
+        assert!(result.error.as_deref().unwrap().contains("exited"));
     }
 
     #[tokio::test]

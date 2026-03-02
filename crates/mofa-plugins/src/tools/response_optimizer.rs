@@ -117,12 +117,12 @@ impl ToolExecutor for ResponseOptimizerTool {
     async fn execute(&self, arguments: serde_json::Value) -> PluginResult<serde_json::Value> {
         let action = arguments["action"]
             .as_str()
-            .ok_or_else(|| mofa_kernel::plugin::PluginError::ExecutionFailed(format!("Action is required")))?;
+            .ok_or_else(|| mofa_kernel::plugin::PluginError::ExecutionFailed("Action is required".to_string()))?;
 
         match action {
             "record_feedback" => {
                 let feedback_type = arguments["feedback_type"].as_str().ok_or_else(|| {
-                    mofa_kernel::plugin::PluginError::ExecutionFailed(format!("feedback_type is required for record_feedback"))
+                    mofa_kernel::plugin::PluginError::ExecutionFailed("feedback_type is required for record_feedback".to_string())
                 })?;
 
                 let feedback_content = arguments["feedback_content"].as_str().unwrap_or("");

@@ -64,7 +64,7 @@ OPENAI_MODEL=google/gemini-2.0-flash-001
 use mofa_sdk::llm::{LLMClient, openai_from_env};
 
 #[tokio::main]
-async fn main() -> anyhow::Result<()> {
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
     dotenvy::dotenv().ok();  // Load .env file
 
     let provider = openai_from_env()?;
@@ -83,7 +83,7 @@ async fn main() -> anyhow::Result<()> {
 use mofa_sdk::llm::{LLMClient, openai_from_env};
 
 #[tokio::main]
-async fn main() -> anyhow::Result<()> {
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
     dotenvy::dotenv().ok();
 
     let provider = openai_from_env()?;
@@ -109,7 +109,7 @@ use mofa_sdk::llm::{LLMClient, openai_from_env};
 use futures::StreamExt;
 
 #[tokio::main]
-async fn main() -> anyhow::Result<()> {
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
     dotenvy::dotenv().ok();
 
     let provider = openai_from_env()?;

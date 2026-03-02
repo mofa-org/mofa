@@ -77,8 +77,8 @@
 //! }
 //! ```
 
-use mofa_kernel::agent::types::error::{GlobalError, GlobalResult};
 use async_trait::async_trait;
+use mofa_kernel::agent::types::error::{GlobalError, GlobalResult};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -465,10 +465,8 @@ pub trait CollaborationProtocol: Send + Sync {
     /// 1. Direct processing (fast path)
     /// 2. 调用 LLM 辅助处理（智能路径）
     /// 2. LLM-assisted processing (intelligent path)
-    async fn process_message(
-        &self,
-        msg: CollaborationMessage,
-    ) -> GlobalResult<CollaborationResult>;
+    async fn process_message(&self, msg: CollaborationMessage)
+    -> GlobalResult<CollaborationResult>;
 
     /// 检查协议是否可用
     /// Check if protocol is available
@@ -767,11 +765,10 @@ impl LLMDrivenCollaborationManager {
 
         // 获取协议
         // Get protocol
-        let protocol = self
-            .registry
-            .get(protocol_name)
-            .await
-            .ok_or_else(|| GlobalError::Other(format!("Protocol not found: {}", protocol_name)))?;
+        let protocol =
+            self.registry.get(protocol_name).await.ok_or_else(|| {
+                GlobalError::Other(format!("Protocol not found: {}", protocol_name))
+            })?;
 
         // 更新当前协议
         // Update current protocol
@@ -888,10 +885,7 @@ mod tests {
             CollaborationMode::PublishSubscribe.to_string(),
             "Publish-Subscribe Mode"
         );
-        assert_eq!(
-            CollaborationMode::Consensus.to_string(),
-            "Consensus Mode"
-        );
+        assert_eq!(CollaborationMode::Consensus.to_string(), "Consensus Mode");
     }
 
     #[test]

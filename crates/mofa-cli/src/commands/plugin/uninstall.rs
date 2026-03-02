@@ -1,15 +1,16 @@
 //! `mofa plugin uninstall` command implementation
 
+use crate::CliError;
 use crate::context::CliContext;
 use colored::Colorize;
 use dialoguer::Confirm;
 use mofa_kernel::agent::plugins::PluginRegistry;
 
 /// Execute the `mofa plugin uninstall` command
-pub async fn run(ctx: &CliContext, name: &str, force: bool) -> anyhow::Result<()> {
+pub async fn run(ctx: &CliContext, name: &str, force: bool) -> Result<(), CliError> {
     // Check if plugin exists
     if !ctx.plugin_registry.contains(name) {
-        anyhow::bail!("Plugin '{}' not found in registry", name);
+        return Err(CliError::PluginError(format!("Plugin '{}' not found in registry", name)));
     }
 
     if !force {
@@ -29,13 +30,13 @@ pub async fn run(ctx: &CliContext, name: &str, force: bool) -> anyhow::Result<()
     let previous_spec = ctx
         .plugin_store
         .get(name)
-        .map_err(|e| anyhow::anyhow!("Failed to load plugin spec '{}': {}", name, e))?;
+        .map_err(|e| CliError::PluginError(format!("Failed to load plugin spec '{}': {}", name, e)))?;
 
     let persisted_updated = if let Some(mut spec) = previous_spec.clone() {
         spec.enabled = false;
         ctx.plugin_store
             .save(name, &spec)
-            .map_err(|e| anyhow::anyhow!("Failed to persist plugin '{}': {}", name, e))?;
+            .map_err(|e| CliError::PluginError(format!("Failed to persist plugin '{}': {}", name, e)))?;
         true
     } else {
         false
@@ -44,18 +45,18 @@ pub async fn run(ctx: &CliContext, name: &str, force: bool) -> anyhow::Result<()
     let removed = ctx
         .plugin_registry
         .unregister(name)
-        .map_err(|e| anyhow::anyhow!("Failed to unregister plugin: {}", e))?;
+        .map_err(|e| CliError::PluginError(format!("Failed to unregister plugin: {}", e)))?;
 
     if !removed
         && persisted_updated
         && let Some(previous) = previous_spec
     {
         ctx.plugin_store.save(name, &previous).map_err(|e| {
-            anyhow::anyhow!(
+            CliError::PluginError(format!(
                 "Plugin '{}' remained registered and failed to restore persisted state: {}",
                 name,
                 e
-            )
+            ))
         })?;
     }
 

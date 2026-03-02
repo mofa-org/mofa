@@ -6,7 +6,6 @@
 //! 3. Demonstrates tailing logs with `--tail` flag
 //! 4. Tests log rotation handling
 
-use anyhow::Result;
 use std::time::Duration;
 use tempfile::TempDir;
 use tokio::fs;
@@ -14,7 +13,7 @@ use tokio::io::AsyncWriteExt;
 use tokio::time::sleep;
 
 #[tokio::main]
-async fn main() -> Result<()> {
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
     tracing_subscriber::fmt::init();
 
     println!("CLI Agent Logs Demo\n");

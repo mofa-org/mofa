@@ -1,0 +1,14 @@
+   Compiling mofa-kernel v0.1.0 (C:\Users\Aditya RS\mofa\crates\mofa-kernel)
+error[E0599]: no variant or associated item named `Idle` found for enum `agent::types::AgentState` in the current scope
+   --> crates\mofa-kernel\src\bus\mod.rs:225:46
+    |
+225 |             state: crate::agent::AgentState::Idle,
+    |                                              ^^^^ variant or associated item not found in `agent::types::AgentState`
+    |
+   ::: crates\mofa-kernel\src\agent\types.rs:33:1
+    |
+ 33 | pub enum AgentState {
+    | ------------------- variant or associated item `Idle` not found for this enum
+
+For more information about this error, try `rustc --explain E0599`.
+error: could not compile `mofa-kernel` (lib test) due to 1 previous error

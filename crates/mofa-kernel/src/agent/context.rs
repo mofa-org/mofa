@@ -469,7 +469,7 @@ mod tests {
 
         ctx.emit_event(AgentEvent::<String>::new(
             "test_event",
-            serde_json::json!({"msg": "hello"}).to_string(),
+            "hello".to_string(),
         ))
         .await;
 

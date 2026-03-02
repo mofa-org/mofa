@@ -1,0 +1,33 @@
+    Checking mofa-kernel v0.1.0 (C:\Users\Aditya RS\mofa\crates\mofa-kernel)
+error[E0308]: mismatched types
+   --> crates\mofa-kernel\src\bus\mod.rs:209:26
+    |
+209 |             description: "A test agent".to_string(),
+    |                          ^^^^^^^^^^^^^^^^^^^^^^^^^^ expected `Option<String>`, found `String`
+    |
+    = note: expected enum `std::option::Option<std::string::String>`
+             found struct `std::string::String`
+help: try wrapping the expression in `Some`
+    |
+209 |             description: Some("A test agent".to_string()),
+    |                          +++++                          +
+
+error[E0063]: missing fields `state` and `version` in initializer of `agent::traits::AgentMetadata`
+   --> crates\mofa-kernel\src\bus\mod.rs:206:9
+    |
+206 |         AgentMetadata {
+    |         ^^^^^^^^^^^^^ missing `state` and `version`
+
+error[E0308]: mismatched types
+   --> crates\mofa-kernel\src\bus\mod.rs:210:27
+    |
+210 |             capabilities: vec![],
+    |                           ^^^^^^ expected `AgentCapabilities`, found `Vec<_>`
+    |
+    = note: expected struct `capabilities::AgentCapabilities`
+               found struct `Vec<_>`
+    = note: this error originates in the macro `vec` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+Some errors have detailed explanations: E0063, E0308.
+For more information about an error, try `rustc --explain E0063`.
+error: could not compile `mofa-kernel` (lib test) due to 3 previous errors

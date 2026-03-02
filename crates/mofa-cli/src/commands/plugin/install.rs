@@ -1,8 +1,8 @@
 //! `mofa plugin install` command implementation
 
+use crate::CliError;
 use crate::context::{CliContext, PluginSpecEntry, instantiate_plugin_from_spec};
 use crate::plugin_catalog::{DEFAULT_PLUGIN_REPO_ID, find_catalog_entry};
-use anyhow::{Context, Result};
 use colored::Colorize;
 use futures::StreamExt;
 use mofa_kernel::agent::plugins::PluginRegistry;
@@ -15,10 +15,10 @@ pub async fn run(
     name: &str,
     checksum: Option<&str>,
     verify_signature: bool,
-) -> Result<()> {
+) -> Result<(), CliError> {
     let normalized = name.trim();
     if normalized.is_empty() {
-        anyhow::bail!("Plugin name cannot be empty");
+        return Err(CliError::PluginError("Plugin name cannot be empty".into()));
     }
 
     println!("{} Installing plugin: {}", "→".green(), normalized.cyan());
@@ -28,19 +28,19 @@ pub async fn run(
     if let PluginSource::Registry(_) = plugin_source {
         let (repo_id, plugin_id) = parse_plugin_reference(normalized)?;
         let entry = find_catalog_entry(&repo_id, &plugin_id).ok_or_else(|| {
-            anyhow::anyhow!("Plugin '{}' not found in repository '{}'", plugin_id, repo_id)
+            CliError::PluginError(format!("Plugin '{}' not found in repository '{}'", plugin_id, repo_id))
         })?;
 
         if ctx.plugin_registry.contains(&entry.id) {
-            anyhow::bail!("Plugin '{}' is already installed", entry.id);
+            return Err(CliError::PluginError(format!("Plugin '{}' is already installed", entry.id)));
         }
 
         if let Ok(Some(existing)) = ctx.plugin_store.get(&entry.id) {
             if existing.enabled {
-                anyhow::bail!(
+                return Err(CliError::PluginError(format!(
                     "Plugin '{}' is already persisted as enabled. Use `mofa plugin uninstall` first if you want to reinstall.",
                     entry.id
-                );
+                )));
             }
         }
 
@@ -54,15 +54,15 @@ pub async fn run(
         };
 
         let plugin = instantiate_plugin_from_spec(&spec).ok_or_else(|| {
-            anyhow::anyhow!("CLI installer does not support plugin kind '{}'", spec.kind)
+            CliError::PluginError(format!("CLI installer does not support plugin kind '{}'", spec.kind))
         })?;
 
         ctx.plugin_registry.register(plugin)
-            .map_err(|e| anyhow::anyhow!("Failed to register plugin '{}': {}", entry.id, e))?;
+            .map_err(|e| CliError::PluginError(format!("Failed to register plugin '{}': {}", entry.id, e)))?;
 
         if let Err(e) = ctx.plugin_store.save(&spec.id, &spec) {
             let _ = ctx.plugin_registry.unregister(&spec.id);
-            anyhow::bail!("Failed to persist plugin '{}': {}. Rolled back in-memory registration.", spec.id, e);
+            return Err(CliError::PluginError(format!("Failed to persist plugin '{}': {}. Rolled back in-memory registration.", spec.id, e)));
         }
 
         println!("{} Installed plugin '{}' from repository '{}'", "✓".green(), spec.id, repo_id);
@@ -79,7 +79,7 @@ pub async fn run(
     }
 
     if ctx.plugin_store.get(&plugin_id)?.is_some() {
-        anyhow::bail!("Plugin '{}' is already installed", plugin_id);
+        return Err(CliError::PluginError(format!("Plugin '{}' is already installed", plugin_id)));
     }
 
     let plugin_dir = match plugin_source {
@@ -109,7 +109,7 @@ pub async fn run(
     };
 
     ctx.plugin_store.save(&plugin_id, &spec)
-        .with_context(|| format!("Failed to persist plugin spec for '{}'", plugin_id))?;
+        .map_err(|e| CliError::PluginError(format!("Failed to persist plugin spec for '{}': {}", plugin_id, e)))?;
 
     println!("{} Plugin '{}' installed successfully", "✓".green(), plugin_id);
     println!("  {} Location: {}", "•".bright_black(), plugin_dir.display().to_string().cyan());
@@ -118,13 +118,13 @@ pub async fn run(
     Ok(())
 }
 
-fn parse_plugin_reference(value: &str) -> anyhow::Result<(String, String)> {
+fn parse_plugin_reference(value: &str) -> Result<(String, String), CliError> {
     if let Some((repo, plugin)) = value.split_once('/') {
         let repo = repo.trim();
         let plugin = plugin.trim();
 
         if repo.is_empty() || plugin.is_empty() {
-            anyhow::bail!("Plugin reference must be '<repo>/<plugin>'");
+            return Err(CliError::PluginError("Plugin reference must be '<repo>/<plugin>'".into()));
         }
 
         Ok((repo.to_string(), plugin.to_string()))
@@ -134,7 +134,7 @@ fn parse_plugin_reference(value: &str) -> anyhow::Result<(String, String)> {
 }
 
 /// Determine the source type of a plugin
-fn determine_plugin_source(name: &str) -> Result<PluginSource> {
+fn determine_plugin_source(name: &str) -> Result<PluginSource, CliError> {
     // Check if it's a URL
     if name.starts_with("http://") || name.starts_with("https://") {
         return Ok(PluginSource::Url(name.to_string()));
@@ -155,23 +155,22 @@ async fn install_from_local_path(
     data_dir: &Path,
     plugin_name: &str,
     source_path: &Path,
-) -> Result<PathBuf> {
+) -> Result<PathBuf, CliError> {
     let plugins_dir = data_dir.join("plugins");
     tokio::fs::create_dir_all(&plugins_dir)
         .await
-        .with_context(|| "Failed to create plugins directory")?;
+        .map_err(|e| CliError::PluginError(format!("Failed to create plugins directory: {}", e)))?;
 
     let dest_dir = plugins_dir.join(plugin_name);
 
     // Remove existing directory if present
     if dest_dir.exists() {
-        tokio::fs::remove_dir_all(&dest_dir)
-            .await
-            .with_context(|| {
-                format!(
-                    "Failed to remove existing plugin directory: {}",
-                    dest_dir.display()
-                )
+        tokio::fs::remove_dir_all(&dest_dir).await
+            .map_err(|e| {
+                CliError::PluginError(format!(
+                    "Failed to remove existing plugin directory '{}': {}",
+                    dest_dir.display(), e
+                ))
             })?;
     }
 
@@ -188,21 +187,21 @@ async fn install_from_url(
     url: &str,
     expected_checksum: Option<&str>,
     verify_signature: bool,
-) -> Result<PathBuf> {
+) -> Result<PathBuf, CliError> {
     let plugins_dir = data_dir.join("plugins");
     tokio::fs::create_dir_all(&plugins_dir)
         .await
-        .with_context(|| "Failed to create plugins directory")?;
+        .map_err(|e| CliError::PluginError(format!("Failed to create plugins directory: {}", e)))?;
 
     // Download the file with progress bar
     println!("  {} Downloading from {}", "•".bright_black(), url.cyan());
 
     let response = reqwest::get(url)
         .await
-        .with_context(|| format!("Failed to download plugin from {}", url))?;
+        .map_err(|e| CliError::PluginError(format!("Failed to download plugin from {}: {}", url, e)))?;
 
     if !response.status().is_success() {
-        anyhow::bail!("Download failed with status: {}", response.status());
+        return Err(CliError::PluginError(format!("Download failed with status: {}", response.status())));
     }
 
     // Get content length for progress bar
@@ -219,7 +218,7 @@ async fn install_from_url(
     let mut bytes = Vec::new();
     let mut stream = response.bytes_stream();
     while let Some(chunk) = stream.next().await {
-        let chunk = chunk.with_context(|| "Failed to read download chunk")?;
+        let chunk = chunk.map_err(|e| CliError::PluginError(format!("Failed to read download chunk: {}", e)))?;
         bytes.extend_from_slice(&chunk);
         pb.inc(chunk.len() as u64);
     }
@@ -234,11 +233,11 @@ async fn install_from_url(
         let computed_hex = hex::encode(computed);
 
         if computed_hex.to_lowercase() != expected.to_lowercase() {
-            anyhow::bail!(
+            return Err(CliError::PluginError(format!(
                 "Checksum mismatch!\n  Expected: {}\n  Computed: {}\n\nPlugin may be corrupted or tampered with.",
                 expected,
                 computed_hex
-            );
+            )));
         }
         println!("  {} Checksum verified", "✓".green());
     }
@@ -253,9 +252,8 @@ async fn install_from_url(
 
     // Determine if it's an archive or single file
     let dest_dir = plugins_dir.join(plugin_name);
-    tokio::fs::create_dir_all(&dest_dir)
-        .await
-        .with_context(|| "Failed to create plugin directory")?;
+    tokio::fs::create_dir_all(&dest_dir).await
+        .map_err(|e| CliError::PluginError(format!("Failed to create plugin directory: {}", e)))?;
 
     // For simplicity, assume it's a tar.gz or zip based on URL
     if url.ends_with(".tar.gz") || url.ends_with(".tgz") {
@@ -266,29 +264,28 @@ async fn install_from_url(
         // Treat as single file, save it directly
         let filename = url.split('/').next_back().unwrap_or("plugin");
         let file_path = dest_dir.join(filename);
-        tokio::fs::write(&file_path, &bytes)
-            .await
-            .with_context(|| "Failed to write plugin file")?;
+        tokio::fs::write(&file_path, &bytes).await
+            .map_err(|e| CliError::PluginError(format!("Failed to write plugin file: {}", e)))?;
     }
 
     Ok(dest_dir)
 }
 
 /// Validate that the plugin directory has required structure
-fn validate_plugin_structure(plugin_dir: &Path) -> Result<()> {
+fn validate_plugin_structure(plugin_dir: &Path) -> Result<(), CliError> {
     if !plugin_dir.exists() {
-        anyhow::bail!("Plugin directory does not exist: {}", plugin_dir.display());
+        return Err(CliError::PluginError(format!("Plugin directory does not exist: {}", plugin_dir.display())));
     }
 
     if !plugin_dir.is_dir() {
-        anyhow::bail!("Plugin path is not a directory: {}", plugin_dir.display());
+        return Err(CliError::PluginError(format!("Plugin path is not a directory: {}", plugin_dir.display())));
     }
 
     // Check for at least one file (skip . and .. entries)
     let mut has_files = false;
     let mut entry_count = 0;
     let entries = std::fs::read_dir(plugin_dir)
-        .with_context(|| format!("Failed to read plugin directory: {}", plugin_dir.display()))?;
+        .map_err(|e| CliError::PluginError(format!("Failed to read plugin directory '{}': {}", plugin_dir.display(), e)))?;
     for entry in entries {
         entry_count += 1;
         match entry {
@@ -309,11 +306,11 @@ fn validate_plugin_structure(plugin_dir: &Path) -> Result<()> {
     }
 
     if !has_files {
-        anyhow::bail!(
+        return Err(CliError::PluginError(format!(
             "Plugin directory is empty or contains only hidden files (found {} entries): {}",
             entry_count,
             plugin_dir.display()
-        );
+        )));
     }
 
     // Plugin validation passed
@@ -324,20 +321,20 @@ fn validate_plugin_structure(plugin_dir: &Path) -> Result<()> {
 fn copy_dir_recursive<'a>(
     src: &'a Path,
     dest: &'a Path,
-) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<()>> + Send + 'a>> {
+) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<(), CliError>> + Send + 'a>> {
     Box::pin(async move {
         tokio::fs::create_dir_all(dest)
             .await
-            .with_context(|| format!("Failed to create directory: {}", dest.display()))?;
+            .map_err(|e| CliError::PluginError(format!("Failed to create directory '{}': {}", dest.display(), e)))?;
 
         let mut entries = tokio::fs::read_dir(src)
             .await
-            .with_context(|| format!("Failed to read source directory: {}", src.display()))?;
+            .map_err(|e| CliError::PluginError(format!("Failed to read source directory '{}': {}", src.display(), e)))?;
 
         while let Some(entry) = entries
             .next_entry()
             .await
-            .with_context(|| "Failed to read directory entry")?
+            .map_err(|e| CliError::PluginError(format!("Failed to read directory entry: {}", e)))?
         {
             let entry_path = entry.path();
             let dest_path = dest.join(entry.file_name());
@@ -347,13 +344,12 @@ fn copy_dir_recursive<'a>(
             } else {
                 tokio::fs::copy(&entry_path, &dest_path)
                     .await
-                    .with_context(|| {
-                        format!(
-                            "Failed to copy file from {} to {}",
-                            entry_path.display(),
-                            dest_path.display()
-                        )
-                    })?;
+                    .map_err(|e| CliError::PluginError(format!(
+                        "Failed to copy file from {} to {}: {}",
+                        entry_path.display(),
+                        dest_path.display(),
+                        e
+                    )))?;
             }
         }
 
@@ -362,7 +358,7 @@ fn copy_dir_recursive<'a>(
 }
 
 /// Extract a tar.gz archive
-fn extract_tar_gz(bytes: &[u8], dest_dir: &Path) -> Result<()> {
+fn extract_tar_gz(bytes: &[u8], dest_dir: &Path) -> Result<(), CliError> {
     use flate2::read::GzDecoder;
     use tar::Archive;
 
@@ -371,23 +367,23 @@ fn extract_tar_gz(bytes: &[u8], dest_dir: &Path) -> Result<()> {
 
     archive
         .unpack(dest_dir)
-        .with_context(|| "Failed to extract tar.gz archive")?;
+        .map_err(|e| CliError::PluginError(format!("Failed to extract tar.gz archive: {}", e)))?;
 
     Ok(())
 }
 
 /// Extract a zip archive
-fn extract_zip(bytes: &[u8], dest_dir: &Path) -> Result<()> {
+fn extract_zip(bytes: &[u8], dest_dir: &Path) -> Result<(), CliError> {
     use std::io::Cursor;
     use zip::ZipArchive;
 
     let cursor = Cursor::new(bytes);
-    let mut archive = ZipArchive::new(cursor).with_context(|| "Failed to read zip archive")?;
+    let mut archive = ZipArchive::new(cursor).map_err(|e| CliError::PluginError(format!("Failed to read zip archive: {}", e)))?;
 
     for i in 0..archive.len() {
         let mut file = archive
             .by_index(i)
-            .with_context(|| format!("Failed to read zip entry {}", i))?;
+            .map_err(|e| CliError::PluginError(format!("Failed to read zip entry {}: {}", i, e)))?;
 
         let outpath = match file.enclosed_name() {
             Some(path) => dest_dir.join(path),
@@ -396,17 +392,15 @@ fn extract_zip(bytes: &[u8], dest_dir: &Path) -> Result<()> {
 
         if file.name().ends_with('/') {
             std::fs::create_dir_all(&outpath)
-                .with_context(|| format!("Failed to create directory: {}", outpath.display()))?;
+                .map_err(|e| CliError::PluginError(format!("Failed to create directory '{}': {}", outpath.display(), e)))?;
         } else {
             if let Some(parent) = outpath.parent() {
-                std::fs::create_dir_all(parent).with_context(|| {
-                    format!("Failed to create parent directory: {}", parent.display())
-                })?;
+                std::fs::create_dir_all(parent).map_err(|e| CliError::PluginError(format!("Failed to create parent directory '{}': {}", parent.display(), e)))?;
             }
             let mut outfile = std::fs::File::create(&outpath)
-                .with_context(|| format!("Failed to create file: {}", outpath.display()))?;
+                .map_err(|e| CliError::PluginError(format!("Failed to create file '{}': {}", outpath.display(), e)))?;
             std::io::copy(&mut file, &mut outfile)
-                .with_context(|| "Failed to write file contents")?;
+                .map_err(|e| CliError::PluginError(format!("Failed to write file contents: {}", e)))?;
         }
     }
 

@@ -1,6 +1,5 @@
 #![allow(missing_docs)]
 
-use anyhow::{Result, bail};
 use cli_production_smoke::{
     DEFAULT_AGENT_ID, DEFAULT_SESSION_ID, SmokeEnvironment, expect_ok, expect_stdout_contains,
     expect_stdout_not_contains, run_full_smoke, smoke_agent_lifecycle,
@@ -9,7 +8,7 @@ use cli_production_smoke::{
 use std::path::PathBuf;
 
 #[test]
-fn full_workflow_passes() -> Result<()> {
+fn full_workflow_passes() -> Result<(), Box<dyn std::error::Error>> {
     let report = run_full_smoke()?;
     if !report.all_passed() {
         let failures = report
@@ -27,14 +26,14 @@ fn full_workflow_passes() -> Result<()> {
             })
             .collect::<Vec<_>>()
             .join("\n");
-        bail!("Smoke report has failing steps:\n{}", failures);
+        return Err(format!("Smoke report has failing steps:\n{}", failures).into());
     }
 
     Ok(())
 }
 
 #[test]
-fn plugin_uninstall_persists_across_process_calls() -> Result<()> {
+fn plugin_uninstall_persists_across_process_calls() -> Result<(), Box<dyn std::error::Error>> {
     let env = SmokeEnvironment::new()?;
     smoke_plugin_lifecycle(&env)?;
 
@@ -53,7 +52,7 @@ fn plugin_uninstall_persists_across_process_calls() -> Result<()> {
 }
 
 #[test]
-fn agent_lifecycle_roundtrip_passes() -> Result<()> {
+fn agent_lifecycle_roundtrip_passes() -> Result<(), Box<dyn std::error::Error>> {
     let env = SmokeEnvironment::new()?;
     smoke_agent_lifecycle(&env, DEFAULT_AGENT_ID)?;
 
@@ -69,7 +68,7 @@ fn agent_lifecycle_roundtrip_passes() -> Result<()> {
 }
 
 #[test]
-fn deleted_session_show_fails() -> Result<()> {
+fn deleted_session_show_fails() -> Result<(), Box<dyn std::error::Error>> {
     let env = SmokeEnvironment::new()?;
     smoke_session_lifecycle(&env, DEFAULT_SESSION_ID)?;
     smoke_deleted_session_show_fails(&env, DEFAULT_SESSION_ID)?;

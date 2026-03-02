@@ -1,5 +1,6 @@
 //! CLI context providing access to backend services
 
+use crate::CliError;
 use crate::state::PersistentAgentRegistry;
 use crate::plugin_catalog::{default_repos, DEFAULT_PLUGIN_REPO_ID, PluginRepoEntry};
 use crate::store::PersistedStore;
@@ -102,14 +103,14 @@ pub struct CliContext {
 
 impl CliContext {
     /// Initialize the CLI context with default backend services
-    pub async fn new() -> anyhow::Result<Self> {
+    pub async fn new() -> Result<Self, CliError> {
         let data_dir = paths::ensure_mofa_data_dir()?;
         let config_dir = paths::ensure_mofa_config_dir()?;
         migrate_legacy_nested_sessions(&data_dir)?;
 
         let session_manager = SessionManager::with_jsonl(&data_dir)
             .await
-            .map_err(|e| anyhow::anyhow!("Failed to initialize session manager: {}", e))?;
+            .map_err(|e| CliError::InitError(format!("Failed to initialize session manager: {}", e)))?;
         let agent_store = PersistedStore::new(data_dir.join("agents"))?;
         let agent_registry = AgentRegistry::new();
         register_default_agent_factories(&agent_registry).await?;
@@ -126,7 +127,7 @@ impl CliContext {
 
         let agents_dir = data_dir.join("agents");
         let persistent_agents = Arc::new(PersistentAgentRegistry::new(agents_dir).await.map_err(
-            |e| anyhow::anyhow!("Failed to initialize persistent agent registry: {}", e),
+            |e| CliError::InitError(format!("Failed to initialize persistent agent registry: {}", e)),
         )?);
 
         let process_manager = AgentProcessManager::new(config_dir.clone());
@@ -150,7 +151,7 @@ impl CliContext {
 
 #[cfg(test)]
 impl CliContext {
-    pub async fn with_temp_dir(temp_dir: &std::path::Path) -> anyhow::Result<Self> {
+    pub async fn with_temp_dir(temp_dir: &std::path::Path) -> Result<Self, CliError> {
         let data_dir = temp_dir.join("data");
         let config_dir = temp_dir.join("config");
         std::fs::create_dir_all(&data_dir)?;
@@ -159,7 +160,7 @@ impl CliContext {
 
         let session_manager = SessionManager::with_jsonl(&data_dir)
             .await
-            .map_err(|e| anyhow::anyhow!("{}", e))?;
+            .map_err(|e| CliError::InitError(format!("{}", e)))?;
         let agent_store = PersistedStore::new(data_dir.join("agents"))?;
         let agent_registry = AgentRegistry::new();
         register_default_agent_factories(&agent_registry).await?;
@@ -176,7 +177,7 @@ impl CliContext {
 
         let agents_dir = data_dir.join("agents");
         let persistent_agents = Arc::new(PersistentAgentRegistry::new(agents_dir).await.map_err(
-            |e| anyhow::anyhow!("Failed to initialize persistent agent registry: {}", e),
+            |e| CliError::InitError(format!("Failed to initialize persistent agent registry: {}", e)),
         )?);
 
         let process_manager = AgentProcessManager::new(config_dir.clone());
@@ -249,7 +250,7 @@ impl AgentFactory for CliBaseAgentFactory {
     }
 }
 
-async fn register_default_agent_factories(agent_registry: &AgentRegistry) -> anyhow::Result<()> {
+async fn register_default_agent_factories(agent_registry: &AgentRegistry) -> Result<(), CliError> {
     if agent_registry
         .list_factory_types()
         .await
@@ -262,7 +263,7 @@ async fn register_default_agent_factories(agent_registry: &AgentRegistry) -> any
     agent_registry
         .register_factory(Arc::new(CliBaseAgentFactory))
         .await
-        .map_err(|e| anyhow::anyhow!("Failed to register default agent factory: {}", e))?;
+        .map_err(|e| CliError::InitError(format!("Failed to register default agent factory: {}", e)))?;
 
     Ok(())
 }
@@ -270,7 +271,7 @@ async fn register_default_agent_factories(agent_registry: &AgentRegistry) -> any
 fn seed_default_specs(
     plugin_store: &PersistedStore<PluginSpecEntry>,
     tool_store: &PersistedStore<ToolSpecEntry>,
-) -> anyhow::Result<()> {
+) -> Result<(), CliError> {
     let default_plugin = PluginSpecEntry {
         id: "http-plugin".to_string(),
         kind: BUILTIN_HTTP_PLUGIN_KIND.to_string(),
@@ -318,7 +319,7 @@ pub fn instantiate_plugin_from_spec(
     }
 }
 
-fn seed_default_repos(store: &PersistedStore<PluginRepoEntry>) -> anyhow::Result<()> {
+fn seed_default_repos(store: &PersistedStore<PluginRepoEntry>) -> Result<(), CliError> {
     if !store.list()?.is_empty() {
         return Ok(());
     }
@@ -331,7 +332,7 @@ fn seed_default_repos(store: &PersistedStore<PluginRepoEntry>) -> anyhow::Result
 fn replay_persisted_plugins(
     plugin_registry: &Arc<SimplePluginRegistry>,
     plugin_store: &PersistedStore<PluginSpecEntry>,
-) -> anyhow::Result<()> {
+) -> Result<(), CliError> {
     for (_, spec) in plugin_store.list()? {
         if !spec.enabled {
             continue;
@@ -340,7 +341,7 @@ fn replay_persisted_plugins(
         if let Some(plugin) = instantiate_plugin_from_spec(&spec) {
             plugin_registry
                 .register(plugin)
-                .map_err(|e| anyhow::anyhow!("Failed to register plugin '{}': {}", spec.id, e))?;
+                .map_err(|e| CliError::PluginError(format!("Failed to register plugin '{}': {}", spec.id, e)))?;
         }
     }
 
@@ -350,7 +351,7 @@ fn replay_persisted_plugins(
 fn replay_persisted_tools(
     tool_registry: &mut ToolRegistry,
     tool_store: &PersistedStore<ToolSpecEntry>,
-) -> anyhow::Result<()> {
+) -> Result<(), CliError> {
     for (_, spec) in tool_store.list()? {
         if !spec.enabled {
             continue;
@@ -360,7 +361,7 @@ fn replay_persisted_tools(
             BUILTIN_ECHO_TOOL_KIND => {
                 tool_registry
                     .register_with_source(EchoTool.into_dynamic(), ToolSource::Builtin)
-                    .map_err(|e| anyhow::anyhow!("Failed to register tool '{}': {}", spec.id, e))?;
+                    .map_err(|e| CliError::ToolError(format!("Failed to register tool '{}': {}", spec.id, e)))?;
             }
             _ => {
                 // Ignore unknown kinds for forward compatibility.
@@ -371,7 +372,7 @@ fn replay_persisted_tools(
     Ok(())
 }
 
-fn migrate_legacy_nested_sessions(data_dir: &Path) -> anyhow::Result<()> {
+fn migrate_legacy_nested_sessions(data_dir: &Path) -> Result<(), CliError> {
     let sessions_dir = data_dir.join("sessions");
     let legacy_dir = sessions_dir.join("sessions");
     if !legacy_dir.exists() {

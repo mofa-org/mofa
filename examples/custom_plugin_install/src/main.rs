@@ -5,12 +5,11 @@
 //! 2. How to package it (directory or archive)
 //! 3. How to install via `mofa plugin install`
 
-use anyhow::Result;
 use tempfile::TempDir;
 use tokio::fs;
 
 #[tokio::main]
-async fn main() -> Result<()> {
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("Custom Plugin Install Demo\n");
     println!("This example shows how to package and install custom plugins.\n");
 

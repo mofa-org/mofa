@@ -1,5 +1,6 @@
 //! `mofa agent restart` command implementation
 
+use crate::CliError;
 use crate::context::CliContext;
 use colored::Colorize;
 
@@ -8,7 +9,7 @@ pub async fn run(
     ctx: &CliContext,
     agent_id: &str,
     config: Option<&std::path::Path>,
-) -> anyhow::Result<()> {
+) -> Result<(), CliError> {
     println!("{} Restarting agent: {}", "→".green(), agent_id.cyan());
 
     // Stop the agent if it's running

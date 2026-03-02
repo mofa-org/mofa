@@ -12,7 +12,7 @@ use tool_executor::ExampleToolExecutor;
 use tool_routing_plugin::ToolRoutingPlugin;
 
 #[tokio::main]
-async fn main() -> anyhow::Result<()> {
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("🔧 Context-aware tool routing example for multi-task agents\n");
     // 🔧 Example of context-aware tool routing for Multi-task Agents
 

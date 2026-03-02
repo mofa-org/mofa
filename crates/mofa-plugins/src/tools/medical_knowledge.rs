@@ -133,7 +133,7 @@ impl ToolExecutor for MedicalKnowledgeTool {
     async fn execute(&self, arguments: serde_json::Value) -> PluginResult<serde_json::Value> {
         let action = arguments["action"]
             .as_str()
-            .ok_or_else(|| mofa_kernel::plugin::PluginError::ExecutionFailed(format!("Action is required")))?;
+            .ok_or_else(|| mofa_kernel::plugin::PluginError::ExecutionFailed("Action is required".to_string()))?;
 
         match action {
             // 注入知识（支持JSON数据或文件路径）
@@ -178,7 +178,7 @@ impl ToolExecutor for MedicalKnowledgeTool {
             // Query diagnosis criteria
             "query_diagnosis" => {
                 let disease = arguments["disease"].as_str().ok_or_else(|| {
-                    mofa_kernel::plugin::PluginError::ExecutionFailed(format!("Disease name is required for query_diagnosis"))
+                    mofa_kernel::plugin::PluginError::ExecutionFailed("Disease name is required for query_diagnosis".to_string())
                 })?;
 
                 let knowledge = self.knowledge.read().unwrap();
@@ -201,7 +201,7 @@ impl ToolExecutor for MedicalKnowledgeTool {
             // Query treatment plan
             "query_treatment" => {
                 let disease = arguments["disease"].as_str().ok_or_else(|| {
-                    mofa_kernel::plugin::PluginError::ExecutionFailed(format!("Disease name is required for query_treatment"))
+                    mofa_kernel::plugin::PluginError::ExecutionFailed("Disease name is required for query_treatment".to_string())
                 })?;
 
                 let knowledge = self.knowledge.read().unwrap();

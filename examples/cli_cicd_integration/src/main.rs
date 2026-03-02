@@ -6,11 +6,10 @@
 //! - Plugin verification before deployment
 //! - Automated testing workflows
 
-use anyhow::Result;
 use tempfile::TempDir;
 
 #[tokio::main]
-async fn main() -> Result<()> {
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("CI/CD Integration Demo\n");
     println!("This example shows production-ready CLI usage in CI/CD pipelines.\n");
 
