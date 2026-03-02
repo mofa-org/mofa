@@ -1019,7 +1019,6 @@ fn render_llm_metrics(
     }
 
     write_metric_header(out, "mofa_llm_errors_total", "Total LLM errors", "counter");
-    for series in limit_series(errors, limits.provider_model, &mut dropped.provider_model) {
     for series in limit_series(
         errors,
         limits.provider_model,
