@@ -70,7 +70,7 @@ pub use mofa_kernel::workflow::StateGraph;
 pub use builder::*;
 pub use dsl::*;
 pub use executor::*;
-pub use fault_tolerance::{NodePolicy, RetryBackoff};
+pub use mofa_kernel::workflow::policy::NodePolicy;
 pub use graph::*;
 pub use node::*;
 pub use profiler::*;

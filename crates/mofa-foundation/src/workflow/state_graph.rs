@@ -19,9 +19,9 @@ use tokio::task::JoinSet;
 use tracing::{Instrument, debug, error, info, warn};
 
 use super::fault_tolerance::{
-    CircuitBreakerRegistry, NodeExecutionOutcome, NodePolicy, execute_with_policy,
-    new_circuit_registry,
+    CircuitBreakerRegistry, NodeExecutionOutcome, execute_with_policy, new_circuit_registry,
 };
+use mofa_kernel::workflow::policy::NodePolicy;
 
 /// Type alias for node ID
 pub type NodeId = String;
@@ -290,6 +290,15 @@ impl<S: GraphState + 'static> mofa_kernel::workflow::StateGraph for StateGraphIm
 
     fn id(&self) -> &str {
         &self.id
+    }
+
+    fn with_node_policy(&mut self, node_id: impl Into<String>, policy: NodePolicy) -> &mut Self {
+        self.policies.insert(node_id.into(), policy);
+        self
+    }
+
+    fn node_policy(&self, node_id: &str) -> Option<&NodePolicy> {
+        self.policies.get(node_id)
     }
 
     fn compile(self) -> AgentResult<CompiledGraphImpl<S>> {
