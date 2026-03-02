@@ -15,7 +15,7 @@ use std::time::Duration;
 use tower::ServiceBuilder;
 use tower_http::cors::{Any, CorsLayer};
 use tower_http::trace::TraceLayer;
-use tracing::info;
+use tracing::{info, warn};
 
 use mofa_kernel::workflow::telemetry::{DebugEvent, SessionRecorder};
 
@@ -128,8 +128,10 @@ pub struct ServerState {
 pub struct DashboardServer {
     config: DashboardConfig,
     collector: Arc<MetricsCollector>,
+    prometheus_export_config: PrometheusExportConfig,
     ws_handler: Option<Arc<WebSocketHandler>>,
     prometheus_exporter: Option<Arc<PrometheusExporter>>,
+    prometheus_worker: Option<tokio::task::JoinHandle<()>>,
     session_recorder: Option<Arc<dyn SessionRecorder>>,
     debug_event_rx: Option<mpsc::Receiver<DebugEvent>>,
 }
@@ -142,8 +144,10 @@ impl DashboardServer {
         Self {
             config,
             collector,
+            prometheus_export_config: PrometheusExportConfig::default(),
             ws_handler: None,
             prometheus_exporter: None,
+            prometheus_worker: None,
             session_recorder: None,
             debug_event_rx: None,
         }
@@ -157,6 +161,12 @@ impl DashboardServer {
     /// Get the WebSocket handler (if started)
     pub fn ws_handler(&self) -> Option<Arc<WebSocketHandler>> {
         self.ws_handler.clone()
+    }
+
+    /// Override Prometheus exporter settings.
+    pub fn with_prometheus_export_config(mut self, config: PrometheusExportConfig) -> Self {
+        self.prometheus_export_config = config;
+        self
     }
 
     /// Get the Prometheus exporter (if initialized)
@@ -204,7 +214,7 @@ impl DashboardServer {
         } else {
             let exporter = Arc::new(PrometheusExporter::new(
                 self.collector.clone(),
-                PrometheusExportConfig::default(),
+                self.prometheus_export_config.clone(),
             ));
             self.prometheus_exporter = Some(exporter.clone());
             exporter
@@ -269,6 +279,16 @@ impl DashboardServer {
             collector.start_collection();
         });
 
+        if let Some(exporter) = &self.prometheus_exporter {
+            if let Err(err) = exporter.refresh_once().await {
+                warn!("initial /metrics cache refresh failed: {}", err);
+            }
+            if let Some(handle) = self.prometheus_worker.take() {
+                handle.abort();
+            }
+            self.prometheus_worker = Some(exporter.clone().start());
+        }
+
         // Start WebSocket updates
         if let Some(ws_handler) = &self.ws_handler {
             let handler_for_task = Arc::clone(ws_handler);
@@ -277,7 +297,7 @@ impl DashboardServer {
             });
 
             // Start debug event forwarder if debug events receiver is provided
-            if let Some(debug_rx) = self.debug_event_rx {
+            if let Some(debug_rx) = self.debug_event_rx.take() {
                 let debug_handler = Arc::clone(ws_handler);
                 tokio::spawn(async move {
                     debug_handler.start_debug_event_forwarder(debug_rx);
@@ -299,6 +319,14 @@ impl DashboardServer {
         self,
     ) -> tokio::task::JoinHandle<Result<(), Box<dyn std::error::Error + Send + Sync>>> {
         tokio::spawn(async move { self.start().await })
+    }
+}
+
+impl Drop for DashboardServer {
+    fn drop(&mut self) {
+        if let Some(handle) = self.prometheus_worker.take() {
+            handle.abort();
+        }
     }
 }
 
@@ -411,6 +439,7 @@ mod tests {
 
         assert!(server.ws_handler.is_none());
         assert!(server.prometheus_exporter.is_none());
+        assert!(server.prometheus_worker.is_none());
         assert!(server.session_recorder.is_none());
     }
 }
