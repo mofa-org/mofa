@@ -48,6 +48,44 @@ When the `scheduler-telemetry` feature is enabled, the following Prometheus metr
 - `mofa_scheduler_last_run_timestamp_ms{schedule_id}` - Last execution timestamp
 - `mofa_scheduler_execution_duration_seconds{schedule_id, agent_id}` - Execution duration histogram
 
+### Viewing Metrics
+
+The example emits metrics to the `metrics` crate registry, but doesn't include a built-in HTTP server. To view the metrics:
+
+**Option 1: Use Prometheus Exporter**
+In production, integrate with a metrics collection system like Prometheus by setting up a `metrics-exporter-prometheus` recorder.
+
+**Option 2: Debug Recorder (Development)**
+For development, you can modify the example to use the debug recorder:
+
+```rust
+use metrics_util::debugging::DebuggingRecorder;
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // Set up debug recorder
+    let recorder = DebuggingRecorder::new();
+    let snapshotter = recorder.snapshotter();
+    metrics::set_global_recorder(recorder).unwrap();
+
+    // ... rest of main ...
+
+    // Periodically print metrics
+    tokio::spawn(async move {
+        let mut interval = tokio::time::interval(std::time::Duration::from_secs(10));
+        loop {
+            interval.tick().await;
+            println!("Current metrics:");
+            for (key, value, labels, metric_value) in snapshotter.snapshot().into_vec() {
+                println!("  {}: {:?}", key.name(), metric_value);
+            }
+        }
+    });
+
+    // ... rest of main ...
+}
+```
+
 This example enables telemetry by default. To disable it, use `--no-default-features`.
 
 ## Testing Persistence
