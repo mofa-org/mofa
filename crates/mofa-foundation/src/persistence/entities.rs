@@ -502,6 +502,26 @@ impl LLMApiCall {
         self
     }
 
+    /// Auto calculate price from token counts using a pricing registry
+    pub fn with_auto_price(
+        mut self,
+        registry: &dyn mofa_kernel::pricing::ProviderPricingRegistry,
+        provider: &str,
+    ) -> Self {
+        if let Some(pricing) = registry.get_pricing(provider, &self.model_name) {
+            let breakdown = pricing
+                .calculate_cost_detailed(self.prompt_tokens as u32, self.completion_tokens as u32);
+            self.total_price = Some(breakdown.total_cost);
+            self.price_details = Some(PriceDetails {
+                input_price: Some(breakdown.input_cost),
+                output_price: Some(breakdown.output_cost),
+                currency: breakdown.currency,
+                extra: HashMap::new(),
+            });
+        }
+        self
+    }
+
     /// 设置首 token 时间
     /// Set time to first token
     pub fn with_time_to_first_token(mut self, ttft_ms: i32) -> Self {
