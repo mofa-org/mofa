@@ -92,6 +92,7 @@ tempfile = "3"
 default = []
 dora = ["mofa-sdk/dora"]
 db = ["dep:sqlx"]
+qdrant = ["mofa-foundation/qdrant"]
 
 [lints]
 workspace = true
