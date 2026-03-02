@@ -1,72 +1,96 @@
 //! 任务协调器 - 阶段3: 调度分配，调用执行Agent
+//! Task Coordinator - Phase 3: Scheduling and allocation, invoking execution Agents
 
 use super::types::*;
 use crate::secretary::agent_router::{
     AgentInfo, AgentProvider, AgentRouter, CapabilityRouter, RoutingContext, RoutingDecision,
 };
+use mofa_kernel::agent::types::error::{GlobalError, GlobalResult};
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
 /// Type alias for message sender function
-pub type MessageSenderFn = Arc<dyn Fn(SecretaryMessage, &str) -> anyhow::Result<()> + Send + Sync>;
+pub type MessageSenderFn = Arc<dyn Fn(SecretaryMessage, &str) -> GlobalResult<()> + Send + Sync>;
 
 /// 分配策略
+/// Dispatch Strategy
 #[derive(Debug, Clone)]
 pub enum DispatchStrategy {
     /// 轮询分配
+    /// Round Robin allocation
     RoundRobin,
     /// 最低负载优先
+    /// Least load priority
     LeastLoaded,
     /// 能力匹配优先
+    /// Capability matching priority
     CapabilityFirst,
     /// 性能评分优先
+    /// Performance score priority
     PerformanceFirst,
     /// 综合评分
+    /// Composite scoring
     Composite {
         capability_weight: f32,
         load_weight: f32,
         performance_weight: f32,
     },
     /// 动态路由
+    /// Dynamic routing
     Dynamic,
 }
 
 /// 任务分配结果
+/// Task allocation result
 #[derive(Debug, Clone)]
 pub struct DispatchResult {
     /// 子任务ID
+    /// Subtask ID
     pub subtask_id: String,
     /// 分配的Agent ID
+    /// Allocated Agent ID
     pub agent_id: String,
     /// 匹配分数
+    /// Match score
     pub match_score: f32,
     /// 分配时间
+    /// Dispatch time
     pub dispatched_at: u64,
     /// 路由决策
+    /// Routing decision
     pub routing_decision: Option<RoutingDecision>,
 }
 
 /// 任务协调器
+/// Task Coordinator
 pub struct TaskCoordinator {
     /// 可用的执行Agent列表
+    /// List of available execution Agents
     executors: Arc<RwLock<HashMap<String, AgentInfo>>>,
     /// 分配策略
+    /// Dispatch strategy
     strategy: DispatchStrategy,
     /// 任务分配记录
+    /// Task dispatch records
     dispatch_records: Arc<RwLock<Vec<DispatchResult>>>,
     /// 轮询索引
+    /// Round robin index
     round_robin_index: Arc<RwLock<usize>>,
     /// 消息发送回调
+    /// Message sender callback
     message_sender: Option<MessageSenderFn>,
     /// 动态Agent提供者
+    /// Dynamic Agent provider
     agent_provider: Option<Arc<dyn AgentProvider>>,
     /// Agent路由器
+    /// Agent router
     agent_router: Option<Arc<dyn AgentRouter>>,
 }
 
 impl TaskCoordinator {
     /// 创建新的任务协调器
+    /// Create a new task coordinator
     pub fn new(strategy: DispatchStrategy) -> Self {
         Self {
             executors: Arc::new(RwLock::new(HashMap::new())),
@@ -80,52 +104,61 @@ impl TaskCoordinator {
     }
 
     /// 创建使用动态路由的协调器
+    /// Create a coordinator using dynamic routing
     pub fn with_dynamic_routing() -> Self {
         Self::new(DispatchStrategy::Dynamic)
     }
 
     /// 设置消息发送回调
+    /// Set message sender callback
     pub fn with_message_sender<F>(mut self, sender: F) -> Self
     where
-        F: Fn(SecretaryMessage, &str) -> anyhow::Result<()> + Send + Sync + 'static,
+        F: Fn(SecretaryMessage, &str) -> GlobalResult<()> + Send + Sync + 'static,
     {
         self.message_sender = Some(Arc::new(sender));
         self
     }
 
     /// 设置动态Agent提供者
+    /// Set dynamic Agent provider
     pub fn with_agent_provider(mut self, provider: Arc<dyn AgentProvider>) -> Self {
         self.agent_provider = Some(provider);
         self
     }
 
     /// 设置Agent路由器
+    /// Set Agent router
     pub fn with_agent_router(mut self, router: Arc<dyn AgentRouter>) -> Self {
         self.agent_router = Some(router);
         self
     }
 
     /// 设置Agent提供者（非消费式）
+    /// Set Agent provider (non-consuming)
     pub fn set_agent_provider(&mut self, provider: Arc<dyn AgentProvider>) {
         self.agent_provider = Some(provider);
     }
 
     /// 设置Agent路由器（非消费式）
+    /// Set Agent router (non-consuming)
     pub fn set_agent_router(&mut self, router: Arc<dyn AgentRouter>) {
         self.agent_router = Some(router);
     }
 
     /// 获取Agent提供者
+    /// Get Agent provider
     pub fn agent_provider(&self) -> Option<&Arc<dyn AgentProvider>> {
         self.agent_provider.as_ref()
     }
 
     /// 获取Agent路由器
+    /// Get Agent router
     pub fn agent_router(&self) -> Option<&Arc<dyn AgentRouter>> {
         self.agent_router.as_ref()
     }
 
     /// 注册执行Agent
+    /// Register execution Agent
     pub async fn register_executor(&self, executor: AgentInfo) {
         let mut executors = self.executors.write().await;
         tracing::info!(
@@ -137,6 +170,7 @@ impl TaskCoordinator {
     }
 
     /// 注销执行Agent
+    /// Unregister execution Agent
     pub async fn unregister_executor(&self, agent_id: &str) {
         let mut executors = self.executors.write().await;
         executors.remove(agent_id);
@@ -144,6 +178,7 @@ impl TaskCoordinator {
     }
 
     /// 更新执行Agent状态
+    /// Update execution Agent status
     pub async fn update_executor_status(&self, agent_id: &str, load: u32, available: bool) {
         let mut executors = self.executors.write().await;
         if let Some(executor) = executors.get_mut(agent_id) {
@@ -153,6 +188,7 @@ impl TaskCoordinator {
     }
 
     /// 获取所有可用执行Agent
+    /// Get all available execution Agents
     pub async fn list_available_executors(&self) -> Vec<AgentInfo> {
         let executors = self.executors.read().await;
         executors
@@ -163,7 +199,8 @@ impl TaskCoordinator {
     }
 
     /// 为子任务分配执行Agent
-    pub async fn dispatch_subtask(&self, subtask: &Subtask) -> anyhow::Result<DispatchResult> {
+    /// Allocate execution Agent for subtask
+    pub async fn dispatch_subtask(&self, subtask: &Subtask) -> GlobalResult<DispatchResult> {
         if matches!(self.strategy, DispatchStrategy::Dynamic) {
             return self.dispatch_subtask_dynamic(subtask, None).await;
         }
@@ -172,7 +209,7 @@ impl TaskCoordinator {
         let available: Vec<_> = executors.values().filter(|e| e.available).collect();
 
         if available.is_empty() {
-            return Err(anyhow::anyhow!("No available executors"));
+            return Err(GlobalError::Other("No available executors".to_string()));
         }
 
         let (selected, score): (&AgentInfo, f32) = match &self.strategy {
@@ -187,7 +224,7 @@ impl TaskCoordinator {
                     .iter()
                     .copied()
                     .min_by_key(|e| e.current_load)
-                    .ok_or_else(|| anyhow::anyhow!("No available executors"))?;
+                    .ok_or_else(|| GlobalError::Other("No available executors".to_string()))?;
                 let score = 1.0 - (selected.current_load as f32 / 100.0);
                 (selected, score)
             }
@@ -203,7 +240,7 @@ impl TaskCoordinator {
                             .partial_cmp(&b.performance_score)
                             .unwrap_or(std::cmp::Ordering::Equal)
                     })
-                    .ok_or_else(|| anyhow::anyhow!("No available executors"))?;
+                    .ok_or_else(|| GlobalError::Other("No available executors".to_string()))?;
                 (selected, selected.performance_score)
             }
             DispatchStrategy::Composite {
@@ -249,15 +286,16 @@ impl TaskCoordinator {
     }
 
     /// 使用动态路由分配子任务
+    /// Allocate subtasks using dynamic routing
     pub async fn dispatch_subtask_dynamic(
         &self,
         subtask: &Subtask,
         context: Option<&RoutingContext>,
-    ) -> anyhow::Result<DispatchResult> {
+    ) -> GlobalResult<DispatchResult> {
         let available_agents = self.get_available_agents().await?;
 
         if available_agents.is_empty() {
-            return Err(anyhow::anyhow!("No available agents"));
+            return Err(GlobalError::Other("No available agents".to_string()));
         }
 
         let routing_context = if let Some(ctx) = context {
@@ -305,7 +343,8 @@ impl TaskCoordinator {
     }
 
     /// 获取可用Agent列表
-    pub async fn get_available_agents(&self) -> anyhow::Result<Vec<AgentInfo>> {
+    /// Get the list of available Agents
+    pub async fn get_available_agents(&self) -> GlobalResult<Vec<AgentInfo>> {
         if let Some(ref provider) = self.agent_provider {
             return Ok(provider.list_agents().await);
         }
@@ -324,7 +363,7 @@ impl TaskCoordinator {
         &self,
         available: &[&'a AgentInfo],
         required_capabilities: &[String],
-    ) -> anyhow::Result<(&'a AgentInfo, f32)> {
+    ) -> GlobalResult<(&'a AgentInfo, f32)> {
         let mut best: Option<(&AgentInfo, f32)> = None;
 
         for executor in available {
@@ -344,7 +383,7 @@ impl TaskCoordinator {
             }
         }
 
-        best.ok_or_else(|| anyhow::anyhow!("No matching executor found"))
+        best.ok_or_else(|| GlobalError::Other("No matching executor found".to_string()))
     }
 
     fn select_composite<'a>(
@@ -354,7 +393,7 @@ impl TaskCoordinator {
         capability_weight: f32,
         load_weight: f32,
         performance_weight: f32,
-    ) -> anyhow::Result<(&'a AgentInfo, f32)> {
+    ) -> GlobalResult<(&'a AgentInfo, f32)> {
         let mut best: Option<(&AgentInfo, f32)> = None;
 
         for executor in available {
@@ -380,15 +419,16 @@ impl TaskCoordinator {
             }
         }
 
-        best.ok_or_else(|| anyhow::anyhow!("No matching executor found"))
+        best.ok_or_else(|| GlobalError::Other("No matching executor found".to_string()))
     }
 
     /// 为需求的所有子任务分配Agent
+    /// Allocate Agents for all subtasks of a requirement
     pub async fn dispatch_requirement(
         &self,
         requirement: &ProjectRequirement,
         context: HashMap<String, String>,
-    ) -> anyhow::Result<Vec<DispatchResult>> {
+    ) -> GlobalResult<Vec<DispatchResult>> {
         let mut results = Vec::new();
         let mut pending_subtasks: Vec<&Subtask> = requirement.subtasks.iter().collect();
         pending_subtasks.sort_by_key(|s| s.order);
@@ -412,12 +452,13 @@ impl TaskCoordinator {
     }
 
     /// 取消任务
-    pub async fn cancel_task(&self, task_id: &str, reason: &str) -> anyhow::Result<()> {
+    /// Cancel task
+    pub async fn cancel_task(&self, task_id: &str, reason: &str) -> GlobalResult<()> {
         let records = self.dispatch_records.read().await;
         let record = records
             .iter()
             .find(|r| r.subtask_id == task_id)
-            .ok_or_else(|| anyhow::anyhow!("Task not found: {}", task_id))?;
+            .ok_or_else(|| GlobalError::Other(format!("Task not found: {}", task_id)))?;
 
         if let Some(ref sender) = self.message_sender {
             let message = SecretaryMessage::CancelTask {
@@ -432,12 +473,14 @@ impl TaskCoordinator {
     }
 
     /// 获取分配记录
+    /// Get dispatch records
     pub async fn get_dispatch_records(&self) -> Vec<DispatchResult> {
         let records = self.dispatch_records.read().await;
         records.clone()
     }
 
     /// 获取Agent的分配统计
+    /// Get dispatch statistics for Agents
     pub async fn get_agent_statistics(&self) -> HashMap<String, usize> {
         let records = self.dispatch_records.read().await;
         let mut stats: HashMap<String, usize> = HashMap::new();

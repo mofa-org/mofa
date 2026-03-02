@@ -1,27 +1,36 @@
 //! Prompt 构建器
+//! Prompt Builder
 //!
 //! 提供链式 API 构建复杂的 Prompt 消息序列
+//! Provides a fluent API for building complex Prompt message sequences
 
 use super::template::{PromptError, PromptResult, PromptTemplate};
 use crate::llm::types::{ChatMessage, MessageContent, Role};
 use std::collections::HashMap;
 
 /// 消息条目
+/// Message entry
 #[derive(Debug, Clone)]
 struct MessageEntry {
     /// 消息角色
+    /// Message role
     role: Role,
     /// 原始内容（可能包含变量）
+    /// Original content (may contain variables)
     content: String,
     /// 消息名称
+    /// Message name
     name: Option<String>,
 }
 
 /// Prompt 构建器
+/// Prompt Builder
 ///
 /// 链式构建多消息 Prompt，支持变量替换
+/// Fluent builder for multi-message Prompts, supporting variable replacement
 ///
 /// # 示例
+/// # Example
 ///
 /// ```rust,ignore
 /// use mofa_foundation::prompt::PromptBuilder;
@@ -36,18 +45,22 @@ struct MessageEntry {
 #[derive(Default)]
 pub struct PromptBuilder {
     /// 消息列表
+    /// Message list
     messages: Vec<MessageEntry>,
     /// 变量映射
+    /// Variable mapping
     variables: HashMap<String, String>,
 }
 
 impl PromptBuilder {
     /// 创建新的构建器
+    /// Create a new builder
     pub fn new() -> Self {
         Self::default()
     }
 
     /// 添加系统消息
+    /// Add a system message
     pub fn system(mut self, content: impl Into<String>) -> Self {
         self.messages.push(MessageEntry {
             role: Role::System,
@@ -58,6 +71,7 @@ impl PromptBuilder {
     }
 
     /// 添加用户消息
+    /// Add a user message
     pub fn user(mut self, content: impl Into<String>) -> Self {
         self.messages.push(MessageEntry {
             role: Role::User,
@@ -68,6 +82,7 @@ impl PromptBuilder {
     }
 
     /// 添加助手消息
+    /// Add an assistant message
     pub fn assistant(mut self, content: impl Into<String>) -> Self {
         self.messages.push(MessageEntry {
             role: Role::Assistant,
@@ -78,6 +93,7 @@ impl PromptBuilder {
     }
 
     /// 添加带名称的用户消息
+    /// Add a named user message
     pub fn user_with_name(mut self, name: impl Into<String>, content: impl Into<String>) -> Self {
         self.messages.push(MessageEntry {
             role: Role::User,
@@ -88,6 +104,7 @@ impl PromptBuilder {
     }
 
     /// 添加带名称的助手消息
+    /// Add a named assistant message
     pub fn assistant_with_name(
         mut self,
         name: impl Into<String>,
@@ -102,6 +119,7 @@ impl PromptBuilder {
     }
 
     /// 添加自定义角色消息
+    /// Add a custom role message
     pub fn message(mut self, role: Role, content: impl Into<String>) -> Self {
         self.messages.push(MessageEntry {
             role,
@@ -112,12 +130,14 @@ impl PromptBuilder {
     }
 
     /// 添加变量
+    /// Add a variable
     pub fn with_var(mut self, name: impl Into<String>, value: impl Into<String>) -> Self {
         self.variables.insert(name.into(), value.into());
         self
     }
 
     /// 批量添加变量
+    /// Add variables in batch
     pub fn with_vars<K, V>(mut self, vars: impl IntoIterator<Item = (K, V)>) -> Self
     where
         K: Into<String>,
@@ -130,25 +150,30 @@ impl PromptBuilder {
     }
 
     /// 使用模板添加系统消息
+    /// Add a system message using a template
     pub fn system_template(self, template: &PromptTemplate) -> Self {
         self.system(&template.content)
     }
 
     /// 使用模板添加用户消息
+    /// Add a user message using a template
     pub fn user_template(self, template: &PromptTemplate) -> Self {
         self.user(&template.content)
     }
 
     /// 使用模板添加助手消息
+    /// Add an assistant message using a template
     pub fn assistant_template(self, template: &PromptTemplate) -> Self {
         self.assistant(&template.content)
     }
 
     /// 替换变量
+    /// Replace variables
     fn render_content(&self, content: &str) -> PromptResult<String> {
         let mut result = content.to_string();
 
         // 查找所有变量
+        // Find all variables
         let re = regex::Regex::new(r"\{(\w+)\}").unwrap();
         let mut missing = Vec::new();
 
@@ -163,6 +188,7 @@ impl PromptBuilder {
         }
 
         // 如果有缺失的变量，报错
+        // If there are missing variables, return an error
         if !missing.is_empty() {
             return Err(PromptError::MissingVariable(missing.join(", ")));
         }
@@ -171,6 +197,7 @@ impl PromptBuilder {
     }
 
     /// 构建消息列表
+    /// Build the message list
     pub fn build(self) -> PromptResult<Vec<ChatMessage>> {
         let mut messages = Vec::with_capacity(self.messages.len());
 
@@ -201,6 +228,7 @@ impl PromptBuilder {
     }
 
     /// 构建为单个字符串（用分隔符连接）
+    /// Build into a single string (connected with a separator)
     pub fn build_string(self, separator: &str) -> PromptResult<String> {
         let mut parts = Vec::with_capacity(self.messages.len());
 
@@ -213,6 +241,7 @@ impl PromptBuilder {
     }
 
     /// 部分构建（不验证变量）
+    /// Partial build (does not validate variables)
     pub fn build_partial(self) -> Vec<ChatMessage> {
         self.messages
             .into_iter()
@@ -220,6 +249,7 @@ impl PromptBuilder {
                 let mut content = entry.content;
 
                 // 尝试替换变量，但不报错
+                // Try to replace variables without returning errors
                 for (var_name, value) in &self.variables {
                     let placeholder = format!("{{{}}}", var_name);
                     content = content.replace(&placeholder, value);
@@ -242,11 +272,13 @@ impl PromptBuilder {
     }
 
     /// 检查是否包含某个变量
+    /// Check if a variable is included
     pub fn has_variable(&self, name: &str) -> bool {
         self.variables.contains_key(name)
     }
 
     /// 获取所有需要的变量名
+    /// Get all required variable names
     pub fn required_variables(&self) -> Vec<String> {
         let re = regex::Regex::new(r"\{(\w+)\}").unwrap();
         let mut vars = std::collections::HashSet::new();
@@ -261,6 +293,7 @@ impl PromptBuilder {
     }
 
     /// 获取缺失的变量
+    /// Get missing variables
     pub fn missing_variables(&self) -> Vec<String> {
         self.required_variables()
             .into_iter()
@@ -269,22 +302,26 @@ impl PromptBuilder {
     }
 
     /// 消息数量
+    /// Message count
     pub fn len(&self) -> usize {
         self.messages.len()
     }
 
     /// 是否为空
+    /// Is empty
     pub fn is_empty(&self) -> bool {
         self.messages.is_empty()
     }
 
     /// 清空消息
+    /// Clear messages
     pub fn clear_messages(mut self) -> Self {
         self.messages.clear();
         self
     }
 
     /// 清空变量
+    /// Clear variables
     pub fn clear_variables(mut self) -> Self {
         self.variables.clear();
         self
@@ -292,14 +329,19 @@ impl PromptBuilder {
 }
 
 /// 对话构建器（支持多轮对话）
+/// Conversation builder (supports multi-turn dialogue)
 pub struct ConversationBuilder {
     /// 系统提示
+    /// System prompt
     system_prompt: Option<String>,
     /// 对话历史
+    /// Dialogue history
     history: Vec<(Role, String)>,
     /// 变量
+    /// Variables
     variables: HashMap<String, String>,
     /// 最大历史长度
+    /// Maximum history length
     max_history: Option<usize>,
 }
 
@@ -311,6 +353,7 @@ impl Default for ConversationBuilder {
 
 impl ConversationBuilder {
     /// 创建新的对话构建器
+    /// Create a new conversation builder
     pub fn new() -> Self {
         Self {
             system_prompt: None,
@@ -321,35 +364,41 @@ impl ConversationBuilder {
     }
 
     /// 设置系统提示
+    /// Set system prompt
     pub fn system(mut self, prompt: impl Into<String>) -> Self {
         self.system_prompt = Some(prompt.into());
         self
     }
 
     /// 设置最大历史长度
+    /// Set maximum history length
     pub fn max_history(mut self, max: usize) -> Self {
         self.max_history = Some(max);
         self
     }
 
     /// 添加用户消息
+    /// Add a user message
     pub fn add_user(&mut self, content: impl Into<String>) {
         self.history.push((Role::User, content.into()));
         self.trim_history();
     }
 
     /// 添加助手消息
+    /// Add an assistant message
     pub fn add_assistant(&mut self, content: impl Into<String>) {
         self.history.push((Role::Assistant, content.into()));
         self.trim_history();
     }
 
     /// 设置变量
+    /// Set a variable
     pub fn set_var(&mut self, name: impl Into<String>, value: impl Into<String>) {
         self.variables.insert(name.into(), value.into());
     }
 
     /// 裁剪历史
+    /// Trim history
     fn trim_history(&mut self) {
         if let Some(max) = self.max_history {
             while self.history.len() > max {
@@ -359,10 +408,12 @@ impl ConversationBuilder {
     }
 
     /// 构建消息列表
+    /// Build the message list
     pub fn build(&self) -> Vec<ChatMessage> {
         let mut messages = Vec::new();
 
         // 添加系统提示
+        // Add system prompt
         if let Some(ref system) = self.system_prompt {
             let mut content = system.clone();
             for (name, value) in &self.variables {
@@ -372,6 +423,7 @@ impl ConversationBuilder {
         }
 
         // 添加历史
+        // Add history
         for (role, content) in &self.history {
             let message = match role {
                 Role::User => ChatMessage::user(content),
@@ -385,17 +437,20 @@ impl ConversationBuilder {
     }
 
     /// 构建并添加新的用户消息
+    /// Build and add a new user message
     pub fn build_with_user(&mut self, user_message: impl Into<String>) -> Vec<ChatMessage> {
         self.add_user(user_message);
         self.build()
     }
 
     /// 清空历史
+    /// Clear history
     pub fn clear_history(&mut self) {
         self.history.clear();
     }
 
     /// 历史长度
+    /// History length
     pub fn history_len(&self) -> usize {
         self.history.len()
     }
@@ -454,6 +509,7 @@ mod tests {
             .build_partial();
 
         // 部分替换：name 被替换，place 保留
+        // Partial replacement: name is replaced, place is kept
         assert_eq!(
             messages[0].text_content().unwrap(),
             "Hello, Alice! Welcome to {place}."
@@ -530,6 +586,7 @@ mod tests {
         conv.add_user("Message 3");
 
         // 应该只保留最后 2 条
+        // Should only keep the last 2 entries
         assert_eq!(conv.history_len(), 2);
 
         let messages = conv.build();

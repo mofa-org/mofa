@@ -1,8 +1,10 @@
 //! Rhai 脚本引擎核心实现
+//! Rhai script engine core implementation
 //!
 //! 提供安全的、可扩展的脚本执行环境
+//! Provides a secure and extensible script execution environment
 
-use anyhow::{Result, anyhow};
+use super::error::{RhaiError, RhaiResult};
 use rhai::{AST, Dynamic, Engine, Map, Scope};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -13,26 +15,36 @@ use tracing::{debug, error, info, warn};
 
 // ============================================================================
 // 脚本引擎配置
+// Script Engine Configuration
 // ============================================================================
 
 /// 脚本引擎安全配置
+/// Script engine security configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ScriptSecurityConfig {
     /// 最大执行时间（毫秒）
+    /// Maximum execution time (milliseconds)
     pub max_execution_time_ms: u64,
     /// 最大调用栈深度
+    /// Maximum call stack depth
     pub max_call_stack_depth: usize,
     /// 最大运算次数
+    /// Maximum number of operations
     pub max_operations: u64,
     /// 最大数组大小
+    /// Maximum array size
     pub max_array_size: usize,
     /// 最大字符串长度
+    /// Maximum string size
     pub max_string_size: usize,
     /// 是否允许循环
+    /// Whether to allow loops
     pub allow_loops: bool,
     /// 是否允许文件操作
+    /// Whether to allow file operations
     pub allow_file_operations: bool,
     /// 是否允许网络操作
+    /// Whether to allow network operations
     pub allow_network_operations: bool,
 }
 
@@ -52,38 +64,52 @@ impl Default for ScriptSecurityConfig {
 }
 
 /// 脚本引擎配置
+/// Script engine configuration
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct ScriptEngineConfig {
     /// 安全配置
+    /// Security configuration
     pub security: ScriptSecurityConfig,
     /// 脚本目录
+    /// Script directories
     pub script_dirs: Vec<String>,
     /// 是否启用调试
+    /// Whether to enable debug mode
     pub debug_mode: bool,
     /// 是否启用严格模式
+    /// Whether to enable strict mode
     pub strict_mode: bool,
     /// 预加载模块列表
+    /// List of preloaded modules
     pub preload_modules: Vec<String>,
 }
 
 // ============================================================================
 // 脚本上下文
+// Script Context
 // ============================================================================
 
 /// 脚本执行上下文
+/// Script execution context
 #[derive(Debug, Clone, Default)]
 pub struct ScriptContext {
     /// 上下文变量
+    /// Context variables
     pub variables: HashMap<String, serde_json::Value>,
+    /// Agent ID
     /// Agent ID
     pub agent_id: Option<String>,
     /// 工作流 ID
+    /// Workflow ID
     pub workflow_id: Option<String>,
     /// 节点 ID
+    /// Node ID
     pub node_id: Option<String>,
     /// 执行 ID
+    /// Execution ID
     pub execution_id: Option<String>,
     /// 自定义元数据
+    /// Custom metadata
     pub metadata: HashMap<String, String>,
 }
 
@@ -107,13 +133,13 @@ impl ScriptContext {
         self
     }
 
-    pub fn with_variable<T: Serialize>(mut self, key: &str, value: T) -> Result<Self> {
+    pub fn with_variable<T: Serialize>(mut self, key: &str, value: T) -> RhaiResult<Self> {
         let json_value = serde_json::to_value(value)?;
         self.variables.insert(key.to_string(), json_value);
         Ok(self)
     }
 
-    pub fn set_variable<T: Serialize>(&mut self, key: &str, value: T) -> Result<()> {
+    pub fn set_variable<T: Serialize>(&mut self, key: &str, value: T) -> RhaiResult<()> {
         let json_value = serde_json::to_value(value)?;
         self.variables.insert(key.to_string(), json_value);
         Ok(())
@@ -128,22 +154,30 @@ impl ScriptContext {
 
 // ============================================================================
 // 脚本执行结果
+// Script Execution Result
 // ============================================================================
 
 /// 脚本执行结果
+/// Script execution result
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ScriptResult {
     /// 是否成功
+    /// Whether execution was successful
     pub success: bool,
     /// 返回值
+    /// Return value
     pub value: serde_json::Value,
     /// 错误信息
+    /// Error message
     pub error: Option<String>,
     /// 执行时间（毫秒）
+    /// Execution time (milliseconds)
     pub execution_time_ms: u64,
     /// 运算次数
+    /// Operation count
     pub operations_count: u64,
     /// 日志输出
+    /// Log output
     pub logs: Vec<String>,
 }
 
@@ -171,31 +205,36 @@ impl ScriptResult {
     }
 
     /// 转换为指定类型
-    pub fn into_typed<T: for<'de> Deserialize<'de>>(self) -> Result<T> {
+    /// Convert to specified type
+    pub fn into_typed<T: for<'de> Deserialize<'de>>(self) -> RhaiResult<T> {
         if !self.success {
-            return Err(anyhow!(
+            return Err(RhaiError::ExecutionError(
                 self.error.unwrap_or_else(|| "Unknown error".into())
             ));
         }
-        serde_json::from_value(self.value).map_err(|e| anyhow!("Failed to deserialize: {}", e))
+        serde_json::from_value(self.value).map_err(|e| RhaiError::Serialization(e.to_string()))
     }
 
     /// 获取布尔值
+    /// Get as boolean
     pub fn as_bool(&self) -> Option<bool> {
         self.value.as_bool()
     }
 
     /// 获取字符串
+    /// Get as string
     pub fn as_str(&self) -> Option<&str> {
         self.value.as_str()
     }
 
     /// 获取整数
+    /// Get as i64
     pub fn as_i64(&self) -> Option<i64> {
         self.value.as_i64()
     }
 
     /// 获取浮点数
+    /// Get as f64
     pub fn as_f64(&self) -> Option<f64> {
         self.value.as_f64()
     }
@@ -203,19 +242,26 @@ impl ScriptResult {
 
 // ============================================================================
 // 已编译脚本
+// Compiled Script
 // ============================================================================
 
 /// 已编译的脚本
+/// A compiled script
 pub struct CompiledScript {
     /// 脚本 ID
+    /// Script ID
     pub id: String,
     /// 脚本名称
+    /// Script name
     pub name: String,
     /// 编译后的 AST
+    /// Compiled AST
     ast: AST,
     /// 源代码（用于调试）
+    /// Source code (for debugging)
     source: String,
     /// 编译时间戳
+    /// Compilation timestamp
     pub compiled_at: u64,
 }
 
@@ -240,36 +286,47 @@ impl CompiledScript {
 
 // ============================================================================
 // Rhai 脚本引擎
+// Rhai Script Engine
 // ============================================================================
 
 /// MoFA Rhai 脚本引擎
+/// MoFA Rhai script engine
 pub struct RhaiScriptEngine {
     /// Rhai 引擎实例
+    /// Rhai engine instance
     engine: Engine,
     /// 引擎配置
+    /// Engine configuration
     #[allow(dead_code)]
     config: ScriptEngineConfig,
     /// 已编译脚本缓存
+    /// Compiled script cache
     script_cache: Arc<RwLock<HashMap<String, CompiledScript>>>,
     /// 全局作用域（预定义函数和变量）
+    /// Global scope (predefined functions and variables)
     global_scope: Scope<'static>,
     /// 日志收集器
+    /// Log collector
     logs: Arc<RwLock<Vec<String>>>,
 }
 
 impl RhaiScriptEngine {
     /// 创建新的脚本引擎
-    pub fn new(config: ScriptEngineConfig) -> Result<Self> {
+    /// Create a new script engine
+    pub fn new(config: ScriptEngineConfig) -> RhaiResult<Self> {
         let mut engine = Engine::new();
 
         // 应用安全限制
+        // Apply security limits
         Self::apply_security_limits(&mut engine, &config.security);
 
         // 注册内置函数
+        // Register built-in functions
         let logs = Arc::new(RwLock::new(Vec::new()));
         Self::register_builtin_functions(&mut engine, logs.clone());
 
         // 创建全局作用域
+        // Create global scope
         let global_scope = Scope::new();
 
         Ok(Self {
@@ -282,6 +339,7 @@ impl RhaiScriptEngine {
     }
 
     /// 应用安全限制
+    /// Apply security limits
     fn apply_security_limits(engine: &mut Engine, security: &ScriptSecurityConfig) {
         engine.set_max_call_levels(security.max_call_stack_depth);
         engine.set_max_operations(security.max_operations);
@@ -293,12 +351,15 @@ impl RhaiScriptEngine {
         }
 
         // 禁用严格模式，以便在运行时可以使用上下文变量
+        // Disable strict variables to allow runtime context variable usage
         engine.set_strict_variables(false);
     }
 
     /// 注册内置函数
+    /// Register built-in functions
     fn register_builtin_functions(engine: &mut Engine, logs: Arc<RwLock<Vec<String>>>) {
         // 日志函数
+        // Logging functions
         let logs_clone = logs.clone();
         engine.register_fn("log", move |msg: &str| {
             if let Ok(mut l) = logs_clone.try_write() {
@@ -340,6 +401,7 @@ impl RhaiScriptEngine {
         });
 
         // JSON 操作函数
+        // JSON operation functions
         engine.register_fn("to_json", |value: Dynamic| -> String {
             serde_json::to_string(&value).unwrap_or_else(|_| "null".to_string())
         });
@@ -351,6 +413,7 @@ impl RhaiScriptEngine {
         });
 
         // 字符串操作
+        // String operations
         engine.register_fn("trim", |s: &str| -> String { s.trim().to_string() });
 
         engine.register_fn("upper", |s: &str| -> String { s.to_uppercase() });
@@ -380,6 +443,7 @@ impl RhaiScriptEngine {
         });
 
         // 数学函数
+        // Mathematical functions
         engine.register_fn("abs", |x: i64| -> i64 { x.abs() });
         engine.register_fn("abs_f", |x: f64| -> f64 { x.abs() });
         engine.register_fn("min", |a: i64, b: i64| -> i64 { a.min(b) });
@@ -389,6 +453,7 @@ impl RhaiScriptEngine {
         });
 
         // 时间函数
+        // Time functions
         engine.register_fn("now", || -> i64 {
             std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
@@ -404,9 +469,11 @@ impl RhaiScriptEngine {
         });
 
         // UUID 生成
+        // UUID generation
         engine.register_fn("uuid", || -> String { uuid::Uuid::now_v7().to_string() });
 
         // 类型检查
+        // Type checking
         engine.register_fn("is_null", |v: Dynamic| -> bool { v.is_unit() });
         engine.register_fn("is_string", |v: Dynamic| -> bool { v.is_string() });
         engine.register_fn("is_int", |v: Dynamic| -> bool { v.is_int() });
@@ -416,6 +483,7 @@ impl RhaiScriptEngine {
         engine.register_fn("is_map", |v: Dynamic| -> bool { v.is_map() });
 
         // 类型转换
+        // Type conversion
         engine.register_fn("to_string", |v: i64| -> String { v.to_string() });
         engine.register_fn("to_string", |v: f64| -> String { v.to_string() });
         engine.register_fn("to_string", |v: bool| -> String { v.to_string() });
@@ -423,17 +491,19 @@ impl RhaiScriptEngine {
     }
 
     /// 编译脚本
-    pub fn compile(&self, id: &str, name: &str, source: &str) -> Result<CompiledScript> {
+    /// Compile script
+    pub fn compile(&self, id: &str, name: &str, source: &str) -> RhaiResult<CompiledScript> {
         let ast = self
             .engine
             .compile(source)
-            .map_err(|e| anyhow!("Compile error: {}", e))?;
+            .map_err(|e| RhaiError::CompileError(e.to_string()))?;
 
         Ok(CompiledScript::new(id, name, ast, source.to_string()))
     }
 
     /// 编译并缓存脚本
-    pub async fn compile_and_cache(&self, id: &str, name: &str, source: &str) -> Result<()> {
+    /// Compile and cache script
+    pub async fn compile_and_cache(&self, id: &str, name: &str, source: &str) -> RhaiResult<()> {
         let compiled = self.compile(id, name, source)?;
         let mut cache = self.script_cache.write().await;
         cache.insert(id.to_string(), compiled);
@@ -442,7 +512,8 @@ impl RhaiScriptEngine {
     }
 
     /// 从文件加载脚本
-    pub async fn load_from_file(&self, path: &Path) -> Result<String> {
+    /// Load script from file
+    pub async fn load_from_file(&self, path: &Path) -> RhaiResult<String> {
         let source = tokio::fs::read_to_string(path).await?;
         let id = path
             .file_stem()
@@ -458,20 +529,24 @@ impl RhaiScriptEngine {
     }
 
     /// 执行脚本
-    pub async fn execute(&self, source: &str, context: &ScriptContext) -> Result<ScriptResult> {
+    /// Execute script
+    pub async fn execute(&self, source: &str, context: &ScriptContext) -> RhaiResult<ScriptResult> {
         let start_time = std::time::Instant::now();
 
         // 清空日志
+        // Clear logs
         {
             let mut logs = self.logs.write().await;
             logs.clear();
         }
 
         // 准备作用域
+        // Prepare scope
         let mut scope = self.global_scope.clone();
         self.prepare_scope(&mut scope, context);
 
         // 执行脚本
+        // Execute the script
         let result = self.engine.eval_with_scope::<Dynamic>(&mut scope, source);
 
         let execution_time_ms = start_time.elapsed().as_millis() as u64;
@@ -501,29 +576,33 @@ impl RhaiScriptEngine {
     }
 
     /// 执行已编译的脚本
+    /// Execute a compiled script
     pub async fn execute_compiled(
         &self,
         script_id: &str,
         context: &ScriptContext,
-    ) -> Result<ScriptResult> {
+    ) -> RhaiResult<ScriptResult> {
         let cache = self.script_cache.read().await;
         let compiled = cache
             .get(script_id)
-            .ok_or_else(|| anyhow!("Script not found: {}", script_id))?;
+            .ok_or_else(|| RhaiError::NotFound(format!("Script not found: {}", script_id)))?;
 
         let start_time = std::time::Instant::now();
 
         // 清空日志
+        // Clear logs
         {
             let mut logs = self.logs.write().await;
             logs.clear();
         }
 
         // 准备作用域
+        // Prepare scope
         let mut scope = self.global_scope.clone();
         self.prepare_scope(&mut scope, context);
 
         // 执行已编译的 AST
+        // Execute the compiled AST
         let result = self
             .engine
             .eval_ast_with_scope::<Dynamic>(&mut scope, &compiled.ast);
@@ -555,39 +634,46 @@ impl RhaiScriptEngine {
     }
 
     /// 调用脚本函数
+    /// Call a script function
     pub async fn call_function<T: for<'de> Deserialize<'de>>(
         &self,
         script_id: &str,
         function_name: &str,
         args: Vec<serde_json::Value>,
         context: &ScriptContext,
-    ) -> Result<T> {
+    ) -> RhaiResult<T> {
         let cache = self.script_cache.read().await;
         let compiled = cache
             .get(script_id)
-            .ok_or_else(|| anyhow!("Script not found: {}", script_id))?;
+            .ok_or_else(|| RhaiError::NotFound(format!("Script not found: {}", script_id)))?;
 
         // 准备作用域
+        // Prepare scope
         let mut scope = self.global_scope.clone();
         self.prepare_scope(&mut scope, context);
 
         // 转换参数
+        // Convert arguments
         let dynamic_args: Vec<Dynamic> = args.iter().map(json_to_dynamic).collect();
 
         // 调用函数
+        // Call function
         let result: Dynamic = self
             .engine
             .call_fn(&mut scope, &compiled.ast, function_name, dynamic_args)
-            .map_err(|e| anyhow!("Function call error: {}", e))?;
+            .map_err(|e| RhaiError::ExecutionError(e.to_string()))?;
 
         // 转换结果
+        // Convert result
         let json_value = dynamic_to_json(&result);
-        serde_json::from_value(json_value).map_err(|e| anyhow!("Result conversion error: {}", e))
+        serde_json::from_value(json_value).map_err(|e| RhaiError::Serialization(e.to_string()))
     }
 
     /// 准备执行作用域
+    /// Prepare execution scope
     fn prepare_scope(&self, scope: &mut Scope, context: &ScriptContext) {
         // 添加上下文信息
+        // Add context information
         if let Some(ref agent_id) = context.agent_id {
             scope.push_constant("AGENT_ID", agent_id.clone());
         }
@@ -602,12 +688,14 @@ impl RhaiScriptEngine {
         }
 
         // 添加上下文变量
+        // Add context variables
         for (key, value) in &context.variables {
             let dynamic_value = json_to_dynamic(value);
             scope.push(key.clone(), dynamic_value);
         }
 
         // 添加元数据
+        // Add metadata
         let mut metadata_map = Map::new();
         for (k, v) in &context.metadata {
             metadata_map.insert(k.clone().into(), Dynamic::from(v.clone()));
@@ -616,7 +704,8 @@ impl RhaiScriptEngine {
     }
 
     /// 验证脚本语法
-    pub fn validate(&self, source: &str) -> Result<Vec<String>> {
+    /// Validate script syntax
+    pub fn validate(&self, source: &str) -> RhaiResult<Vec<String>> {
         match self.engine.compile(source) {
             Ok(_) => Ok(Vec::new()),
             Err(e) => {
@@ -627,29 +716,34 @@ impl RhaiScriptEngine {
     }
 
     /// 获取缓存的脚本 ID 列表
+    /// Get list of cached script IDs
     pub async fn cached_scripts(&self) -> Vec<String> {
         let cache = self.script_cache.read().await;
         cache.keys().cloned().collect()
     }
 
     /// 移除缓存的脚本
+    /// Remove a cached script
     pub async fn remove_cached(&self, script_id: &str) -> bool {
         let mut cache = self.script_cache.write().await;
         cache.remove(script_id).is_some()
     }
 
     /// 清空脚本缓存
+    /// Clear script cache
     pub async fn clear_cache(&self) {
         let mut cache = self.script_cache.write().await;
         cache.clear();
     }
 
     /// 获取引擎引用（用于高级自定义）
+    /// Get engine reference (for advanced customization)
     pub fn engine(&self) -> &Engine {
         &self.engine
     }
 
     /// 获取可变引擎引用
+    /// Get mutable engine reference
     pub fn engine_mut(&mut self) -> &mut Engine {
         &mut self.engine
     }
@@ -657,9 +751,11 @@ impl RhaiScriptEngine {
 
 // ============================================================================
 // 辅助函数
+// Helper Functions
 // ============================================================================
 
 /// JSON Value 转换为 Rhai Dynamic
+/// Convert JSON Value to Rhai Dynamic
 pub fn json_to_dynamic(value: &serde_json::Value) -> Dynamic {
     match value {
         serde_json::Value::Null => Dynamic::UNIT,
@@ -689,6 +785,7 @@ pub fn json_to_dynamic(value: &serde_json::Value) -> Dynamic {
 }
 
 /// Rhai Dynamic 转换为 JSON Value
+/// Convert Rhai Dynamic to JSON Value
 pub fn dynamic_to_json(value: &Dynamic) -> serde_json::Value {
     if value.is_unit() {
         serde_json::Value::Null
@@ -729,12 +826,14 @@ pub fn dynamic_to_json(value: &Dynamic) -> serde_json::Value {
         serde_json::Value::Object(json_obj)
     } else {
         // 尝试转换为字符串
+        // Try converting to string
         serde_json::Value::String(value.to_string())
     }
 }
 
 // ============================================================================
 // 测试
+// Tests
 // ============================================================================
 
 #[cfg(test)]
@@ -832,10 +931,12 @@ mod tests {
         let context = ScriptContext::new();
 
         // 测试字符串函数
+        // Test string functions
         let result = engine.execute(r#"upper("hello")"#, &context).await.unwrap();
         assert_eq!(result.value, "HELLO");
 
         // 测试 JSON 函数
+        // Test JSON functions
         let result = engine
             .execute(r#"to_json(#{name: "test", value: 42})"#, &context)
             .await
@@ -843,6 +944,7 @@ mod tests {
         assert!(result.value.as_str().is_some());
 
         // 测试时间函数
+        // Test time functions
         let result = engine.execute("now()", &context).await.unwrap();
         assert!(result.value.as_i64().is_some());
     }

@@ -1,22 +1,29 @@
 //! OpenAI Provider Implementation
+//! OpenAI Provider Implementation
 //!
 //! 使用 `async-openai` crate 实现 OpenAI API 交互
+//! Use the `async-openai` crate to implement OpenAI API interactions
 //!
 //! # 支持的服务
+//! # Supported Services
 //!
 //! - OpenAI API (api.openai.com)
 //! - Azure OpenAI
 //! - 兼容 OpenAI API 的本地服务 (Ollama, vLLM, LocalAI 等)
+//! - OpenAI-compatible local services (Ollama, vLLM, LocalAI, etc.)
 //!
 //! # 示例
+//! # Examples
 //!
 //! ```rust,ignore
 //! use mofa_foundation::llm::openai::{OpenAIProvider, OpenAIConfig};
 //!
 //! // 使用 OpenAI
+//! // Use OpenAI
 //! let provider = OpenAIProvider::new("sk-xxx");
 //!
 //! // 使用自定义 endpoint
+//! // Use custom endpoint
 //! let provider = OpenAIProvider::with_config(
 //!     OpenAIConfig::new("sk-xxx")
 //!         .with_base_url("http://localhost:11434/v1")
@@ -47,21 +54,29 @@ use async_trait::async_trait;
 use futures::StreamExt;
 
 /// OpenAI Provider 配置
+/// OpenAI Provider Configuration
 #[derive(Debug, Clone)]
 pub struct OpenAIConfig {
     /// API Key
+    /// API Key
     pub api_key: String,
     /// API 基础 URL
+    /// API Base URL
     pub base_url: Option<String>,
     /// 组织 ID
+    /// Organization ID
     pub org_id: Option<String>,
     /// 默认模型
+    /// Default Model
     pub default_model: String,
     /// 默认温度
+    /// Default Temperature
     pub default_temperature: f32,
     /// 默认最大 token 数
+    /// Default Max Tokens
     pub default_max_tokens: u32,
     /// 请求超时（秒）
+    /// Request Timeout (seconds)
     pub timeout_secs: u64,
 }
 
@@ -81,6 +96,7 @@ impl Default for OpenAIConfig {
 
 impl OpenAIConfig {
     /// 创建新配置
+    /// Create new configuration
     pub fn new(api_key: impl Into<String>) -> Self {
         Self {
             api_key: api_key.into(),
@@ -89,6 +105,7 @@ impl OpenAIConfig {
     }
 
     /// 从环境变量创建配置
+    /// Create configuration from environment variables
     pub fn from_env() -> Self {
         Self {
             api_key: std::env::var("OPENAI_API_KEY").unwrap_or_default(),
@@ -99,36 +116,42 @@ impl OpenAIConfig {
     }
 
     /// 设置 base URL
+    /// Set base URL
     pub fn with_base_url(mut self, url: impl Into<String>) -> Self {
         self.base_url = Some(url.into());
         self
     }
 
     /// 设置默认模型
+    /// Set default model
     pub fn with_model(mut self, model: impl Into<String>) -> Self {
         self.default_model = model.into();
         self
     }
 
     /// 设置默认温度
+    /// Set default temperature
     pub fn with_temperature(mut self, temp: f32) -> Self {
         self.default_temperature = temp;
         self
     }
 
     /// 设置默认最大 token 数
+    /// Set default max tokens
     pub fn with_max_tokens(mut self, tokens: u32) -> Self {
         self.default_max_tokens = tokens;
         self
     }
 
     /// 设置组织 ID
+    /// Set organization ID
     pub fn with_org_id(mut self, org_id: impl Into<String>) -> Self {
         self.org_id = Some(org_id.into());
         self
     }
 
     /// 设置超时
+    /// Set timeout
     pub fn with_timeout(mut self, secs: u64) -> Self {
         self.timeout_secs = secs;
         self
@@ -136,8 +159,10 @@ impl OpenAIConfig {
 }
 
 /// OpenAI LLM Provider
+/// OpenAI LLM Provider
 ///
 /// 支持 OpenAI API 及兼容服务
+/// Supports OpenAI API and compatible services
 pub struct OpenAIProvider {
     client: Client<AsyncOpenAIConfig>,
     config: OpenAIConfig,
@@ -145,17 +170,20 @@ pub struct OpenAIProvider {
 
 impl OpenAIProvider {
     /// 使用 API Key 创建 Provider
+    /// Create Provider using API Key
     pub fn new(api_key: impl Into<String>) -> Self {
         let config = OpenAIConfig::new(api_key);
         Self::with_config(config)
     }
 
     /// 从环境变量创建 Provider
+    /// Create Provider from environment variables
     pub fn from_env() -> Self {
         Self::with_config(OpenAIConfig::from_env())
     }
 
     /// 使用配置创建 Provider
+    /// Create Provider using configuration
     pub fn with_config(config: OpenAIConfig) -> Self {
         let mut openai_config = AsyncOpenAIConfig::new().with_api_key(&config.api_key);
 
@@ -173,6 +201,7 @@ impl OpenAIProvider {
     }
 
     /// 创建 Azure OpenAI Provider
+    /// Create Azure OpenAI Provider
     pub fn azure(
         endpoint: impl Into<String>,
         api_key: impl Into<String>,
@@ -182,6 +211,7 @@ impl OpenAIProvider {
         let deployment = deployment.into();
 
         // Azure OpenAI 使用不同的 URL 格式
+        // Azure OpenAI uses a different URL format
         let base_url = format!(
             "{}/openai/deployments/{}",
             endpoint.trim_end_matches('/'),
@@ -196,11 +226,13 @@ impl OpenAIProvider {
     }
 
     /// 创建 Ollama Provider (通过 OpenAI 兼容 API)
+    /// Create Ollama Provider (via OpenAI compatible API)
     pub fn ollama(model: impl Into<String>) -> Self {
         Self::local("http://localhost:11434/v1", model)
     }
 
     /// 创建兼容 OpenAI API 的本地服务 Provider
+    /// Create Provider for local services compatible with OpenAI API
     pub fn local(base_url: impl Into<String>, model: impl Into<String>) -> Self {
         let config = OpenAIConfig::new("not-needed")
             .with_base_url(base_url)
@@ -210,16 +242,19 @@ impl OpenAIProvider {
     }
 
     /// 获取底层 async-openai 客户端
+    /// Get the underlying async-openai client
     pub fn client(&self) -> &Client<AsyncOpenAIConfig> {
         &self.client
     }
 
     /// 获取配置
+    /// Get configuration
     pub fn config(&self) -> &OpenAIConfig {
         &self.config
     }
 
     /// 转换消息格式
+    /// Convert message format
     fn convert_messages(
         messages: &[ChatMessage],
     ) -> Result<Vec<ChatCompletionRequestMessage>, LLMError> {
@@ -227,6 +262,7 @@ impl OpenAIProvider {
     }
 
     /// 转换单个消息
+    /// Convert a single message
     fn convert_message(msg: &ChatMessage) -> Result<ChatCompletionRequestMessage, LLMError> {
         let text_only_content = msg
             .content
@@ -301,6 +337,11 @@ impl OpenAIProvider {
                                         ),
                                     );
                                 }
+                                ContentPart::Video { video } => {
+                                    // OpenAI API does not officially support pure video upload in standard completion context via generic content parts yet
+                                    // We will gracefully log a warning and omit or fall back to an unsupported message.
+                                    tracing::warn!("OpenAI provider currently does not explicitly support raw Video parts in standard ChatCompletion. Ignoring video part format {}", video.format);
+                                }
                             }
                         }
                         ChatCompletionRequestUserMessageContent::Array(out)
@@ -321,6 +362,7 @@ impl OpenAIProvider {
                 }
 
                 // 处理工具调用
+                // Handle tool calls
                 if let Some(ref tool_calls) = msg.tool_calls {
                     let converted_calls: Vec<_> = tool_calls
                         .iter()
@@ -358,6 +400,7 @@ impl OpenAIProvider {
     }
 
     /// 转换工具定义
+    /// Convert tool definitions
     fn convert_tools(
         tools: &[Tool],
     ) -> Result<Vec<async_openai::types::ChatCompletionTool>, LLMError> {
@@ -386,6 +429,7 @@ impl OpenAIProvider {
     }
 
     /// 转换响应
+    /// Convert response
     fn convert_response(
         response: async_openai::types::CreateChatCompletionResponse,
     ) -> ChatCompletionResponse {
@@ -429,6 +473,7 @@ impl OpenAIProvider {
     }
 
     /// 转换响应消息
+    /// Convert response message
     fn convert_response_message(
         msg: async_openai::types::ChatCompletionResponseMessage,
     ) -> ChatMessage {
@@ -510,6 +555,7 @@ impl LLMProvider for OpenAIProvider {
         builder.model(&model).messages(messages);
 
         // 设置可选参数
+        // Set optional parameters
         if let Some(temp) = request.temperature {
             builder.temperature(temp);
         } else {
@@ -541,6 +587,7 @@ impl LLMProvider for OpenAIProvider {
         }
 
         // 设置工具
+        // Set tools
         if let Some(ref tools) = request.tools
             && !tools.is_empty()
         {
@@ -548,6 +595,7 @@ impl LLMProvider for OpenAIProvider {
             builder.tools(converted_tools);
 
             // 设置 tool_choice
+            // Set tool_choice
             if let Some(ref choice) = request.tool_choice {
                 let tc = match choice {
                     ToolChoice::Auto => ChatCompletionToolChoiceOption::Auto,
@@ -567,6 +615,7 @@ impl LLMProvider for OpenAIProvider {
         }
 
         // 设置响应格式
+        // Set response format
         if let Some(ref format) = request.response_format
             && format.format_type == "json_object"
         {
@@ -608,6 +657,7 @@ impl LLMProvider for OpenAIProvider {
         }
 
         // 设置工具
+        // Set tools
         if let Some(ref tools) = request.tools
             && !tools.is_empty()
         {
@@ -627,6 +677,7 @@ impl LLMProvider for OpenAIProvider {
             .map_err(Self::convert_error)?;
 
         // 转换流，过滤掉 UTF-8 错误（某些 OpenAI 兼容 API 可能返回无效的 UTF-8 数据）
+        // Convert stream, filtering UTF-8 errors (some compatible APIs may return invalid data)
         let converted_stream = stream
             .filter_map(|result| async move {
                 match result {
@@ -634,6 +685,7 @@ impl LLMProvider for OpenAIProvider {
                     Err(e) => {
                         let err_str = e.to_string();
                         // 过滤掉 UTF-8 错误，记录日志但继续处理流
+                        // Filter UTF-8 errors, log them but continue processing the stream
                         if err_str.contains("stream did not contain valid UTF-8") || err_str.contains("utf8") {
                             tracing::warn!("Skipping invalid UTF-8 chunk from stream (may happen with some OpenAI-compatible APIs)");
                             None
@@ -691,6 +743,7 @@ impl LLMProvider for OpenAIProvider {
 
     async fn health_check(&self) -> LLMResult<bool> {
         // 发送一个简单请求来检查连接
+        // Send a simple request to check the connection
         let request = ChatCompletionRequest::new(&self.config.default_model)
             .system("Say 'ok'")
             .max_tokens(5);
@@ -703,6 +756,7 @@ impl LLMProvider for OpenAIProvider {
 
     async fn get_model_info(&self, model: &str) -> LLMResult<ModelInfo> {
         // OpenAI 没有公开的模型信息 API，返回预定义信息
+        // OpenAI has no public info API, return predefined information
         let info = match model {
             "gpt-4o" => ModelInfo {
                 id: "gpt-4o".to_string(),
@@ -781,6 +835,7 @@ impl LLMProvider for OpenAIProvider {
 
 impl OpenAIProvider {
     /// 转换流式响应块
+    /// Convert streaming response chunk
     fn convert_chunk(
         chunk: async_openai::types::CreateChatCompletionStreamResponse,
     ) -> ChatCompletionChunk {
@@ -838,6 +893,7 @@ impl OpenAIProvider {
     }
 
     /// 转换错误
+    /// Convert error
     fn convert_error(err: async_openai::error::OpenAIError) -> LLMError {
         match err {
             async_openai::error::OpenAIError::ApiError(api_err) => {
@@ -845,6 +901,7 @@ impl OpenAIProvider {
                 let message = api_err.message.clone();
 
                 // 根据错误类型分类
+                // Categorize by error type
                 if message.contains("rate limit") {
                     LLMError::RateLimited(message)
                 } else if message.contains("quota") || message.contains("billing") {
@@ -872,11 +929,13 @@ impl OpenAIProvider {
     }
 
     /// 快速创建 OpenAI Provider
+    /// Quickly create OpenAI Provider
     pub fn openai(api_key: impl Into<String>) -> OpenAIProvider {
         OpenAIProvider::new(api_key)
     }
 
     /// 快速创建兼容 OpenAI API 的本地 Provider
+    /// Quickly create local OpenAI compatible Provider
     pub fn openai_compatible(
         base_url: impl Into<String>,
         api_key: impl Into<String>,

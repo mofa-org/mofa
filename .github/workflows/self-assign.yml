@@ -1,0 +1,97 @@
+name: MoFA Self-Assign via /assign
+
+on:
+  issue_comment:
+    types: [created]
+
+permissions:
+  issues: write
+
+jobs:
+  self_assign:
+    if: ${{ github.event.issue.pull_request == null }} # only issues, not PRs
+    runs-on: ubuntu-latest
+    steps:
+      - name: Handle /assign command
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const commentBody = context.payload.comment.body.trim();
+            if (commentBody !== '/assign') {
+              core.info('Not a /assign command, skipping.');
+              return;
+            }
+
+            const issue = context.payload.issue;
+            const issueNumber = issue.number;
+            const repo = context.repo;
+            const username = context.payload.comment.user.login;
+
+            // If already assigned, do nothing
+            const alreadyAssigned = (issue.assignees || []).some(a => a.login === username);
+            if (alreadyAssigned) {
+              core.info(`Issue #${issueNumber} is already assigned to ${username}.`);
+              return;
+            }
+
+            // Check if issue is already assigned to someone else
+            const assignees = issue.assignees || [];
+            if (assignees.length > 0) {
+              const assignedUsers = assignees.map(a => a.login).join(', @');
+              await github.rest.issues.createComment({
+                owner: repo.owner,
+                repo: repo.repo,
+                issue_number: issueNumber,
+                body: `Thanks for your interest, @${username}! This issue is already assigned to @${assignedUsers}. We'd still love to have you contribute! Check out our [open issues](https://github.com/${repo.owner}/${repo.repo}/issues?q=is%3Aopen+is%3Aissue+no%3Aassignee) or look for issues labeled [good first issue](https://github.com/${repo.owner}/${repo.repo}/issues?q=is%3Aopen+is%3Aissue+label%3A%22good+first+issue%22) where we could use some extra help. 🚀`
+              });
+              core.info(`Issue #${issueNumber} is already assigned to ${assignedUsers}.`);
+              return;
+            }
+
+            // Count open issues assigned to this user
+            const { data: assignedIssues } = await github.rest.issues.listForRepo({
+              owner: repo.owner,
+              repo: repo.repo,
+              state: 'open',
+              assignee: username,
+              per_page: 100
+            });
+
+            const openAssignedCount = assignedIssues.filter(i => !i.pull_request).length;
+
+            if (openAssignedCount >= 6) {
+              await github.rest.issues.createComment({
+                owner: repo.owner,
+                repo: repo.repo,
+                issue_number: issueNumber,
+                body: `Hi @${username}, you already have ${openAssignedCount} open issues assigned. Please finish one before taking on another.`
+              });
+              core.info(`User ${username} already has ${openAssignedCount} open issues.`);
+              return;
+            }
+
+            // Assign the issue
+            await github.rest.issues.addAssignees({
+              owner: repo.owner,
+              repo: repo.repo,
+              issue_number: issueNumber,
+              assignees: [username]
+            });
+            
+            // Get default branch for the repository
+            const { data: repoData } = await github.rest.repos.get({
+              owner: repo.owner,
+              repo: repo.repo
+            });
+            const defaultBranch = repoData.default_branch;
+            
+            // Add thank you message
+            await github.rest.issues.createComment({
+              owner: repo.owner,
+              repo: repo.repo,
+              issue_number: issueNumber,
+              body: `👋 @${username}, you've been assigned to this issue! Thank you for taking the time to contribute. Make sure to check out our [contributing guidelines](https://github.com/${repo.owner}/${repo.repo}/blob/${defaultBranch}/CONTRIBUTING.md).`
+            });
+            
+            core.info(`Assigned issue #${issueNumber} to ${username}.`);

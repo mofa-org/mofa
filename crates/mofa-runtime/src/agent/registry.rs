@@ -1,6 +1,8 @@
 //! Agent 注册中心
+//! Agent Registry
 //!
 //! 提供 Agent 的注册、发现、工厂创建功能
+//! Provides Agent registration, discovery, and factory creation functions
 
 use crate::agent::capabilities::{AgentCapabilities, AgentRequirements};
 use crate::agent::context::AgentContext;
@@ -17,29 +19,39 @@ use tokio::sync::RwLock;
 
 // ============================================================================
 // Agent 注册条目
+// Agent Registration Entry
 // ============================================================================
 
 /// Agent 注册条目
+/// Agent Registration Entry
 struct AgentEntry {
     /// Agent 实例
+    /// Agent Instance
     agent: Arc<RwLock<dyn MoFAAgent>>,
     /// 元数据
+    /// Metadata
     metadata: AgentMetadata,
     /// 注册时间
+    /// Registration Time
     registered_at: u64,
 }
 
 // ============================================================================
 // 能力索引
+// Capability Index
 // ============================================================================
 
 /// 能力索引
+/// Capability Index
 ///
 /// 用于快速查找具有特定能力的 Agent
+/// Used to quickly find Agents with specific capabilities
 struct CapabilityIndex {
     /// 标签索引: tag -> agent_ids
+    /// Tag Index: tag -> agent_ids
     by_tag: HashMap<String, Vec<String>>,
     /// 推理策略索引: strategy -> agent_ids
+    /// Reasoning Strategy Index: strategy -> agent_ids
     by_strategy: HashMap<String, Vec<String>>,
 }
 
@@ -52,8 +64,10 @@ impl CapabilityIndex {
     }
 
     /// 添加索引
+    /// Add Index
     fn index(&mut self, agent_id: &str, capabilities: &AgentCapabilities) {
         // 索引标签
+        // Index tags
         for tag in &capabilities.tags {
             self.by_tag
                 .entry(tag.clone())
@@ -62,6 +76,7 @@ impl CapabilityIndex {
         }
 
         // 索引推理策略
+        // Index reasoning strategies
         for strategy in &capabilities.reasoning_strategies {
             let strategy_name = format!("{:?}", strategy);
             self.by_strategy
@@ -72,6 +87,7 @@ impl CapabilityIndex {
     }
 
     /// 移除索引
+    /// Remove Index
     fn unindex(&mut self, agent_id: &str) {
         for ids in self.by_tag.values_mut() {
             ids.retain(|id| id != agent_id);
@@ -82,11 +98,13 @@ impl CapabilityIndex {
     }
 
     /// 按标签查找
+    /// Find by tag
     fn find_by_tag(&self, tag: &str) -> Vec<String> {
         self.by_tag.get(tag).cloned().unwrap_or_default()
     }
 
     /// 按多个标签查找 (交集)
+    /// Find by multiple tags (intersection)
     fn find_by_tags(&self, tags: &[String]) -> Vec<String> {
         if tags.is_empty() {
             return vec![];
@@ -110,13 +128,17 @@ impl CapabilityIndex {
 
 // ============================================================================
 // Agent 注册中心
+// Agent Registry
 // ============================================================================
 
 /// Agent 注册中心
+/// Agent Registry
 ///
 /// 提供 Agent 的注册、发现、工厂创建功能
+/// Provides Agent registration, discovery, and factory creation functions
 ///
 /// # 示例
+/// # Example
 ///
 /// ```rust,ignore
 /// use mofa_runtime::agent::AgentRegistry;
@@ -125,29 +147,37 @@ impl CapabilityIndex {
 /// let registry = AgentRegistry::new();
 ///
 /// // 注册工厂
+/// // Register factory
 /// registry.register_factory(Arc::new(LLMAgentFactory)).await?;
 ///
 /// // 通过工厂创建 Agent
+/// // Create Agent via factory
 /// let config = AgentConfig::new("agent-1", "My Agent", "llm");
 /// let agent = registry.create("llm", config).await?;
 ///
 /// // 注册 Agent
+/// // Register Agent
 /// registry.register(agent).await?;
 ///
 /// // 查找 Agent
+/// // Find Agent
 /// let found = registry.get("agent-1").await;
 /// ```
 pub struct AgentRegistry {
     /// 已注册的 Agent
+    /// Registered Agents
     agents: Arc<RwLock<HashMap<String, AgentEntry>>>,
     /// 能力索引
+    /// Capability Index
     capability_index: Arc<RwLock<CapabilityIndex>>,
     /// Agent 工厂
+    /// Agent Factories
     factories: Arc<RwLock<HashMap<String, Arc<dyn AgentFactory>>>>,
 }
 
 impl AgentRegistry {
     /// 创建新的注册中心
+    /// Create a new registry
     pub fn new() -> Self {
         Self {
             agents: Arc::new(RwLock::new(HashMap::new())),
@@ -158,9 +188,11 @@ impl AgentRegistry {
 
     // ========================================================================
     // Agent 管理
+    // Agent Management
     // ========================================================================
 
     /// 注册 Agent
+    /// Register Agent
     pub async fn register(&self, agent: Arc<RwLock<dyn MoFAAgent>>) -> AgentResult<()> {
         let agent_guard = agent.read().await;
         let id = agent_guard.id().to_string();
@@ -190,12 +222,14 @@ impl AgentRegistry {
         };
 
         // 更新能力索引
+        // Update capability index
         {
             let mut index = self.capability_index.write().await;
             index.index(&id, &capabilities);
         }
 
         // 注册 Agent
+        // Register Agent
         {
             let mut agents = self.agents.write().await;
             agents.insert(id, entry);
@@ -205,43 +239,51 @@ impl AgentRegistry {
     }
 
     /// 获取 Agent
+    /// Get Agent
     pub async fn get(&self, id: &str) -> Option<Arc<RwLock<dyn MoFAAgent>>> {
         let agents = self.agents.read().await;
         agents.get(id).map(|e| e.agent.clone())
     }
 
     /// 移除 Agent
+    /// Remove Agent
     pub async fn unregister(&self, id: &str) -> AgentResult<bool> {
         // 更新能力索引
+        // Update capability index
         {
             let mut index = self.capability_index.write().await;
             index.unindex(id);
         }
 
         // 移除 Agent
+        // Remove Agent
         let mut agents = self.agents.write().await;
         Ok(agents.remove(id).is_some())
     }
 
     /// 获取 Agent 元数据
+    /// Get Agent metadata
     pub async fn get_metadata(&self, id: &str) -> Option<AgentMetadata> {
         let agents = self.agents.read().await;
         agents.get(id).map(|e| e.metadata.clone())
     }
 
     /// 列出所有 Agent
+    /// List all Agents
     pub async fn list(&self) -> Vec<AgentMetadata> {
         let agents = self.agents.read().await;
         agents.values().map(|e| e.metadata.clone()).collect()
     }
 
     /// 获取 Agent 数量
+    /// Get Agent count
     pub async fn count(&self) -> usize {
         let agents = self.agents.read().await;
         agents.len()
     }
 
     /// 检查 Agent 是否存在
+    /// Check if Agent exists
     pub async fn contains(&self, id: &str) -> bool {
         let agents = self.agents.read().await;
         agents.contains_key(id)
@@ -249,9 +291,11 @@ impl AgentRegistry {
 
     // ========================================================================
     // 能力查询
+    // Capability Query
     // ========================================================================
 
     /// 按能力要求查找 Agent
+    /// Find Agent by capability requirements
     pub async fn find_by_capabilities(
         &self,
         requirements: &AgentRequirements,
@@ -266,6 +310,7 @@ impl AgentRegistry {
     }
 
     /// 按标签查找 Agent
+    /// Find Agent by tag
     pub async fn find_by_tag(&self, tag: &str) -> Vec<AgentMetadata> {
         let index = self.capability_index.read().await;
         let ids = index.find_by_tag(tag);
@@ -278,6 +323,7 @@ impl AgentRegistry {
     }
 
     /// 按多个标签查找 Agent (交集)
+    /// Find Agent by multiple tags (intersection)
     pub async fn find_by_tags(&self, tags: &[String]) -> Vec<AgentMetadata> {
         let index = self.capability_index.read().await;
         let ids = index.find_by_tags(tags);
@@ -290,6 +336,7 @@ impl AgentRegistry {
     }
 
     /// 按状态查找 Agent
+    /// Find Agent by state
     pub async fn find_by_state(&self, state: AgentState) -> Vec<AgentMetadata> {
         let agents = self.agents.read().await;
 
@@ -302,9 +349,11 @@ impl AgentRegistry {
 
     // ========================================================================
     // 工厂管理
+    // Factory Management
     // ========================================================================
 
     /// 注册 Agent 工厂
+    /// Register Agent factory
     pub async fn register_factory(&self, factory: Arc<dyn AgentFactory>) -> AgentResult<()> {
         let type_id = factory.type_id().to_string();
         let mut factories = self.factories.write().await;
@@ -313,24 +362,28 @@ impl AgentRegistry {
     }
 
     /// 获取 Agent 工厂
+    /// Get Agent factory
     pub async fn get_factory(&self, type_id: &str) -> Option<Arc<dyn AgentFactory>> {
         let factories = self.factories.read().await;
         factories.get(type_id).cloned()
     }
 
     /// 移除 Agent 工厂
+    /// Remove Agent factory
     pub async fn unregister_factory(&self, type_id: &str) -> AgentResult<bool> {
         let mut factories = self.factories.write().await;
         Ok(factories.remove(type_id).is_some())
     }
 
     /// 列出所有工厂类型
+    /// List all factory types
     pub async fn list_factory_types(&self) -> Vec<String> {
         let factories = self.factories.read().await;
         factories.keys().cloned().collect()
     }
 
     /// 通过工厂创建 Agent
+    /// Create Agent via factory
     pub async fn create(
         &self,
         type_id: &str,
@@ -346,6 +399,7 @@ impl AgentRegistry {
     }
 
     /// 创建并注册 Agent
+    /// Create and register Agent
     pub async fn create_and_register(
         &self,
         type_id: &str,
@@ -358,18 +412,29 @@ impl AgentRegistry {
 
     // ========================================================================
     // 批量操作
+    // Batch Operations
     // ========================================================================
 
     /// 初始化所有 Agent
+    /// Initialize all Agents
     pub async fn initialize_all(&self, ctx: &AgentContext) -> AgentResult<Vec<String>> {
-        let agents = self.agents.read().await;
-        let mut initialized = Vec::new();
+        // Collect agent refs and drop the read lock before any .await to prevent
+        // deadlock when an agent's initialize() calls back into the registry
+        // (e.g., to register sub-agents).
+        let entries: Vec<(String, Arc<RwLock<dyn MoFAAgent>>)> = {
+            let agents = self.agents.read().await;
+            agents
+                .iter()
+                .map(|(id, entry)| (id.clone(), entry.agent.clone()))
+                .collect()
+        };
 
-        for (id, entry) in agents.iter() {
-            let mut agent = entry.agent.write().await;
+        let mut initialized = Vec::new();
+        for (id, agent_arc) in entries {
+            let mut agent = agent_arc.write().await;
             if agent.state() == AgentState::Created {
                 agent.initialize(ctx).await?;
-                initialized.push(id.clone());
+                initialized.push(id);
             }
         }
 
@@ -377,16 +442,26 @@ impl AgentRegistry {
     }
 
     /// 关闭所有 Agent
+    /// Shutdown all Agents
     pub async fn shutdown_all(&self) -> AgentResult<Vec<String>> {
-        let agents = self.agents.read().await;
-        let mut shutdown = Vec::new();
+        // Collect agent refs and drop the read lock before any .await to prevent
+        // deadlock when an agent's shutdown() calls back into the registry
+        // (e.g., to unregister sub-agents).
+        let entries: Vec<(String, Arc<RwLock<dyn MoFAAgent>>)> = {
+            let agents = self.agents.read().await;
+            agents
+                .iter()
+                .map(|(id, entry)| (id.clone(), entry.agent.clone()))
+                .collect()
+        };
 
-        for (id, entry) in agents.iter() {
-            let mut agent = entry.agent.write().await;
+        let mut shutdown = Vec::new();
+        for (id, agent_arc) in entries {
+            let mut agent = agent_arc.write().await;
             let state = agent.state();
             if state != AgentState::Shutdown && state != AgentState::Failed {
                 agent.shutdown().await?;
-                shutdown.push(id.clone());
+                shutdown.push(id);
             }
         }
 
@@ -394,17 +469,21 @@ impl AgentRegistry {
     }
 
     /// 清空所有 Agent
+    /// Clear all Agents
     pub async fn clear(&self) -> AgentResult<usize> {
         // 先关闭所有 Agent
+        // Shutdown all Agents first
         self.shutdown_all().await?;
 
         // 清空索引
+        // Clear index
         {
             let mut index = self.capability_index.write().await;
             *index = CapabilityIndex::new();
         }
 
         // 清空 Agent
+        // Clear Agents
         let mut agents = self.agents.write().await;
         let count = agents.len();
         agents.clear();
@@ -421,23 +500,30 @@ impl Default for AgentRegistry {
 
 // ============================================================================
 // 注册中心统计
+// Registry Statistics
 // ============================================================================
 
 /// 注册中心统计
+/// Registry Statistics
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct RegistryStats {
     /// 总 Agent 数
+    /// Total Agent Count
     pub total_agents: usize,
     /// 各状态 Agent 数
+    /// Agent count by state
     pub by_state: HashMap<String, usize>,
     /// 各标签 Agent 数
+    /// Agent count by tag
     pub by_tag: HashMap<String, usize>,
     /// 工厂类型数
+    /// Factory type count
     pub factory_count: usize,
 }
 
 impl AgentRegistry {
     /// 获取统计信息
+    /// Get statistical information
     pub async fn stats(&self) -> RegistryStats {
         let agents = self.agents.read().await;
         let factories = self.factories.read().await;
@@ -447,10 +533,12 @@ impl AgentRegistry {
 
         for entry in agents.values() {
             // 统计状态
+            // Count states
             let state_name = format!("{:?}", entry.metadata.state);
             *by_state.entry(state_name).or_insert(0) += 1;
 
             // 统计标签
+            // Count tags
             for tag in &entry.metadata.capabilities.tags {
                 *by_tag.entry(tag.clone()).or_insert(0) += 1;
             }
@@ -476,6 +564,7 @@ mod tests {
     use async_trait::async_trait;
 
     // 测试用的简单 Agent (内联实现，不依赖 BaseAgent)
+    // Simple Agent for testing (inline implementation, no BaseAgent dependency)
     struct TestAgent {
         id: String,
         name: String,
@@ -532,6 +621,7 @@ mod tests {
     }
 
     // 测试用的工厂
+    // Factory for testing
     struct TestAgentFactory;
 
     #[async_trait]
@@ -585,6 +675,7 @@ mod tests {
         let registry = AgentRegistry::new();
 
         // 创建带有标签的 Agent
+        // Create Agent with tags
         let mut agent1 = TestAgent::new("agent-1", "Agent 1");
         agent1.capabilities = AgentCapabilities::builder()
             .with_tag("llm")
@@ -607,6 +698,7 @@ mod tests {
             .unwrap();
 
         // 按标签查找
+        // Find by tag
         let chat_agents = registry.find_by_tag("chat").await;
         assert_eq!(chat_agents.len(), 2);
 

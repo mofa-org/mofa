@@ -1,0 +1,58 @@
+[package]
+name = "mofa-integrations"
+version.workspace = true
+edition.workspace = true
+description = "MoFA Integrations - Socket.IO real-time layer and AWS S3 object storage"
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+documentation = "https://docs.rs/mofa-integrations"
+readme = "README.md"
+keywords = ["ai", "agent", "websocket", "s3", "realtime"]
+categories = ["development-tools", "web-programming"]
+publish = true
+
+[dependencies]
+# Workspace deps always needed
+async-trait.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+thiserror.workspace = true
+bincode.workspace = true
+hex.workspace = true
+
+# Local kernel (always needed for traits)
+mofa-kernel = { path = "../mofa-kernel", version = "0.1" }
+
+# ── Socket.IO feature ──────────────────────────────────────────────────────────
+socketioxide = { version = "0.15", optional = true }
+axum = { workspace = true, optional = true }
+tower = { version = "0.5", optional = true }
+tower-http = { version = "0.6", features = ["cors"], optional = true }
+
+# ── S3 feature ─────────────────────────────────────────────────────────────────
+aws-sdk-s3  = { version = "1", optional = true }
+aws-config  = { version = "1", features = ["behavior-version-latest"], optional = true }
+
+[features]
+default = []
+
+# Real-time Socket.IO bridge to AgentBus
+socketio = [
+    "dep:socketioxide",
+    "dep:axum",
+    "dep:tower",
+    "dep:tower-http",
+]
+
+# AWS S3 / MinIO object storage adapter
+s3 = [
+    "dep:aws-sdk-s3",
+    "dep:aws-config",
+]
+
+[lints]
+workspace = true

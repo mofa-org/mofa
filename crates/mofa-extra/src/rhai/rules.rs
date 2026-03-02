@@ -8,12 +8,62 @@
 //! - Rule hot-reloading
 
 use super::engine::{RhaiScriptEngine, ScriptContext, ScriptEngineConfig};
-use anyhow::{Result, anyhow};
+use super::error::{RhaiError, RhaiResult};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use tracing::{info, warn};
+
+// ============================================================================
+// Validation Helpers
+// ============================================================================
+
+/// Validate that a string is a safe Rhai function identifier.
+/// Rejects anything that could be used for script injection.
+fn is_valid_rhai_identifier(name: &str) -> bool {
+    !name.is_empty()
+        && name
+            .chars()
+            .next()
+            .is_some_and(|c| c.is_ascii_alphabetic() || c == '_')
+        && name
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '_')
+}
+
+/// Escape a string so it is safe inside a Rhai double-quoted string literal.
+/// Handles backslashes, quotes, and control characters that could break the literal.
+fn escape_rhai_string(s: &str) -> String {
+    s.replace('\\', "\\\\")
+        .replace('"', "\\\"")
+        .replace('\n', "\\n")
+        .replace('\r', "\\r")
+        .replace('\t', "\\t")
+}
+
+/// Convert a serde_json::Value into a safe Rhai literal string.
+/// This avoids injection by not using the raw Display output of arbitrary JSON.
+fn json_to_rhai_literal(value: &serde_json::Value) -> String {
+    match value {
+        serde_json::Value::Null => "()".to_string(),
+        serde_json::Value::Bool(b) => b.to_string(),
+        serde_json::Value::Number(n) => n.to_string(),
+        serde_json::Value::String(s) => {
+            // Escape characters that could break out of the Rhai string literal
+            let escaped = escape_rhai_string(s);
+            format!("\"{}\"" , escaped)
+        }
+        // For complex types, serialize to a JSON string literal that the
+        // script can parse if needed.  This is safe because the outer
+        // quotes are controlled by us.
+        other => {
+            let json_str = other.to_string();
+            let escaped = escape_rhai_string(&json_str);
+            format!("\"{}\"" , escaped)
+        }
+    }
+}
 
 // ============================================================================
 // Rule Definitions
@@ -271,7 +321,7 @@ pub struct RuleEngine {
 
 impl RuleEngine {
     /// Create a rule engine
-    pub fn new(engine_config: ScriptEngineConfig) -> Result<Self> {
+    pub fn new(engine_config: ScriptEngineConfig) -> RhaiResult<Self> {
         let engine = Arc::new(RhaiScriptEngine::new(engine_config)?);
         Ok(Self {
             engine,
@@ -292,7 +342,7 @@ impl RuleEngine {
     }
 
     /// Register a rule
-    pub async fn register_rule(&self, rule: RuleDefinition) -> Result<()> {
+    pub async fn register_rule(&self, rule: RuleDefinition) -> RhaiResult<()> {
         let mut rules = self.rules.write().await;
         info!("Registered rule: {} ({})", rule.name, rule.id);
         rules.insert(rule.id.clone(), rule);
@@ -300,7 +350,7 @@ impl RuleEngine {
     }
 
     /// Batch register rules
-    pub async fn register_rules(&self, rules: Vec<RuleDefinition>) -> Result<()> {
+    pub async fn register_rules(&self, rules: Vec<RuleDefinition>) -> RhaiResult<()> {
         for rule in rules {
             self.register_rule(rule).await?;
         }
@@ -308,7 +358,7 @@ impl RuleEngine {
     }
 
     /// Register a rule group
-    pub async fn register_group(&self, group: RuleGroupDefinition) -> Result<()> {
+    pub async fn register_group(&self, group: RuleGroupDefinition) -> RhaiResult<()> {
         let mut groups = self.groups.write().await;
         info!("Registered rule group: {} ({})", group.name, group.id);
         groups.insert(group.id.clone(), group);
@@ -316,7 +366,7 @@ impl RuleEngine {
     }
 
     /// Load rules from YAML
-    pub async fn load_rules_from_yaml(&self, path: &str) -> Result<Vec<String>> {
+    pub async fn load_rules_from_yaml(&self, path: &str) -> RhaiResult<Vec<String>> {
         let content = tokio::fs::read_to_string(path).await?;
         let rules: Vec<RuleDefinition> = serde_yaml::from_str(&content)?;
         let ids: Vec<String> = rules.iter().map(|r| r.id.clone()).collect();
@@ -325,7 +375,7 @@ impl RuleEngine {
     }
 
     /// Load rules from JSON
-    pub async fn load_rules_from_json(&self, path: &str) -> Result<Vec<String>> {
+    pub async fn load_rules_from_json(&self, path: &str) -> RhaiResult<Vec<String>> {
         let content = tokio::fs::read_to_string(path).await?;
         let rules: Vec<RuleDefinition> = serde_json::from_str(&content)?;
         let ids: Vec<String> = rules.iter().map(|r| r.id.clone()).collect();
@@ -338,7 +388,7 @@ impl RuleEngine {
         &self,
         rule: &RuleDefinition,
         context: &ScriptContext,
-    ) -> Result<bool> {
+    ) -> RhaiResult<bool> {
         if !rule.enabled {
             return Ok(false);
         }
@@ -369,7 +419,7 @@ impl RuleEngine {
         &'a self,
         action: &'a RuleAction,
         context: &'a mut ScriptContext,
-    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<RuleExecutionResult>> + Send + 'a>>
+    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = RhaiResult<RuleExecutionResult>> + Send + 'a>>
     {
         Box::pin(async move {
             let start_time = std::time::Instant::now();
@@ -396,10 +446,24 @@ impl RuleEngine {
                 }
 
                 RuleAction::CallFunction { function, args } => {
-                    // Simplified handling: convert function call to script
+                    // Validate function name to prevent script injection
+                    if !is_valid_rhai_identifier(function) {
+                        return Ok(RuleExecutionResult {
+                            rule_id: String::new(),
+                            success: false,
+                            result: serde_json::Value::Null,
+                            error: Some(format!(
+                                "Invalid function name: '{}'. Must be a valid identifier.",
+                                function
+                            )),
+                            execution_time_ms: start_time.elapsed().as_millis() as u64,
+                            variable_updates,
+                            triggered_events,
+                        });
+                    }
                     let args_str = args
                         .iter()
-                        .map(|a| a.to_string())
+                        .map(json_to_rhai_literal)
                         .collect::<Vec<_>>()
                         .join(", ");
                     let script = format!("{}({})", function, args_str);
@@ -479,7 +543,7 @@ impl RuleEngine {
         &self,
         action: &RuleAction,
         context: &mut ScriptContext,
-    ) -> Result<RuleExecutionResult> {
+    ) -> RhaiResult<RuleExecutionResult> {
         let start_time = std::time::Instant::now();
         let mut variable_updates = HashMap::new();
         let mut triggered_events = Vec::new();
@@ -504,9 +568,24 @@ impl RuleEngine {
             }
 
             RuleAction::CallFunction { function, args } => {
+                // Validate function name to prevent script injection
+                if !is_valid_rhai_identifier(function) {
+                    return Ok(RuleExecutionResult {
+                        rule_id: String::new(),
+                        success: false,
+                        result: serde_json::Value::Null,
+                        error: Some(format!(
+                            "Invalid function name: '{}'. Must be a valid identifier.",
+                            function
+                        )),
+                        execution_time_ms: start_time.elapsed().as_millis() as u64,
+                        variable_updates,
+                        triggered_events,
+                    });
+                }
                 let args_str = args
                     .iter()
-                    .map(|a| a.to_string())
+                    .map(json_to_rhai_literal)
                     .collect::<Vec<_>>()
                     .join(", ");
                 let script = format!("{}({})", function, args_str);
@@ -552,7 +631,7 @@ impl RuleEngine {
 
             RuleAction::Composite { .. } => {
                 // Composite actions are not handled recursively here, return error
-                return Err(anyhow!("Nested composite actions are not supported"));
+                return Err(RhaiError::Other("Nested composite actions are not supported".to_string()));
             }
         };
 
@@ -572,11 +651,11 @@ impl RuleEngine {
         &self,
         rule_id: &str,
         context: &mut ScriptContext,
-    ) -> Result<Option<RuleExecutionResult>> {
+    ) -> RhaiResult<Option<RuleExecutionResult>> {
         let rules = self.rules.read().await;
         let rule = rules
             .get(rule_id)
-            .ok_or_else(|| anyhow!("Rule not found: {}", rule_id))?
+            .ok_or_else(|| RhaiError::NotFound(format!("Rule not found: {}", rule_id)))?
             .clone();
         drop(rules);
 
@@ -596,13 +675,13 @@ impl RuleEngine {
         &self,
         group_id: &str,
         context: &mut ScriptContext,
-    ) -> Result<RuleGroupExecutionResult> {
+    ) -> RhaiResult<RuleGroupExecutionResult> {
         let start_time = std::time::Instant::now();
 
         let groups = self.groups.read().await;
         let group = groups
             .get(group_id)
-            .ok_or_else(|| anyhow!("Rule group not found: {}", group_id))?
+            .ok_or_else(|| RhaiError::NotFound(format!("Rule group not found: {}", group_id)))?
             .clone();
         drop(groups);
 
@@ -720,7 +799,7 @@ impl RuleEngine {
     pub async fn execute_all(
         &self,
         context: &mut ScriptContext,
-    ) -> Result<Vec<RuleExecutionResult>> {
+    ) -> RhaiResult<Vec<RuleExecutionResult>> {
         let rules = self.rules.read().await;
         let mut all_rules: Vec<_> = rules.values().cloned().collect();
         drop(rules);
@@ -774,24 +853,24 @@ impl RuleEngine {
     }
 
     /// Enable a rule
-    pub async fn enable_rule(&self, rule_id: &str) -> Result<()> {
+    pub async fn enable_rule(&self, rule_id: &str) -> RhaiResult<()> {
         let mut rules = self.rules.write().await;
         if let Some(rule) = rules.get_mut(rule_id) {
             rule.enabled = true;
             Ok(())
         } else {
-            Err(anyhow!("Rule not found: {}", rule_id))
+            Err(RhaiError::NotFound(format!("Rule not found: {}", rule_id)))
         }
     }
 
     /// Disable a rule
-    pub async fn disable_rule(&self, rule_id: &str) -> Result<()> {
+    pub async fn disable_rule(&self, rule_id: &str) -> RhaiResult<()> {
         let mut rules = self.rules.write().await;
         if let Some(rule) = rules.get_mut(rule_id) {
             rule.enabled = false;
             Ok(())
         } else {
-            Err(anyhow!("Rule not found: {}", rule_id))
+            Err(RhaiError::NotFound(format!("Rule not found: {}", rule_id)))
         }
     }
 
@@ -911,6 +990,7 @@ impl RuleBuilder {
         self
     }
 
+    #[must_use]
     pub fn build(self) -> RuleDefinition {
         self.rule
     }
@@ -1108,5 +1188,220 @@ mod tests {
         assert_eq!(rule.priority, RulePriority::High);
         assert_eq!(rule.condition, "x > 10");
         assert!(rule.tags.contains(&"test".to_string()));
+    }
+
+    // ========================================================================
+    // Regression tests for C4: Rhai CallFunction script injection
+    // ========================================================================
+
+    #[test]
+    fn test_is_valid_rhai_identifier_accepts_valid_names() {
+        assert!(is_valid_rhai_identifier("foo"));
+        assert!(is_valid_rhai_identifier("my_function"));
+        assert!(is_valid_rhai_identifier("_private"));
+        assert!(is_valid_rhai_identifier("camelCase123"));
+        assert!(is_valid_rhai_identifier("A"));
+    }
+
+    #[test]
+    fn test_is_valid_rhai_identifier_rejects_empty() {
+        assert!(!is_valid_rhai_identifier(""));
+    }
+
+    #[test]
+    fn test_is_valid_rhai_identifier_rejects_injection_payloads() {
+        // Semicolons allow chaining arbitrary statements
+        assert!(!is_valid_rhai_identifier("foo(); dangerous();//"));
+        // Parentheses alone are not part of an identifier
+        assert!(!is_valid_rhai_identifier("foo()"));
+        // Spaces break out of the identifier position
+        assert!(!is_valid_rhai_identifier("foo bar"));
+        // Leading digit is not a valid identifier start
+        assert!(!is_valid_rhai_identifier("1foo"));
+        // Quotes allow string breakout
+        assert!(!is_valid_rhai_identifier("foo\""));
+        // Newlines could bypass single-line assumptions
+        assert!(!is_valid_rhai_identifier("foo\nbar"));
+    }
+
+    #[test]
+    fn test_json_to_rhai_literal_strings_are_escaped() {
+        // A plain string
+        assert_eq!(
+            json_to_rhai_literal(&serde_json::json!("hello")),
+            "\"hello\""
+        );
+        // Embedded double quotes must be escaped
+        assert_eq!(
+            json_to_rhai_literal(&serde_json::json!("say \"hi\"")),
+            r#""say \"hi\"""#
+        );
+        // Embedded backslashes must be escaped
+        assert_eq!(
+            json_to_rhai_literal(&serde_json::json!("back\\slash")),
+            r#""back\\slash""#
+        );
+        // Injection attempt via string value: closing quote + code
+        let malicious = serde_json::json!("\"); dangerous(); //");
+        let lit = json_to_rhai_literal(&malicious);
+        // The result must be a single quoted string — no unescaped quotes inside
+        assert!(lit.starts_with('"'));
+        assert!(lit.ends_with('"'));
+        // Count unescaped quotes: should be exactly 2 (open and close).
+        // A quote is considered unescaped if it is preceded by an even number
+        // of consecutive backslashes (including zero).
+        let mut unescaped_quotes: Vec<usize> = Vec::new();
+        let mut backslash_run = 0usize;
+        for (i, c) in lit.char_indices() {
+            if c == '\\' {
+                backslash_run += 1;
+            } else {
+                if c == '"' && backslash_run.is_multiple_of(2) {
+                    unescaped_quotes.push(i);
+                }
+                backslash_run = 0;
+            }
+        }
+        assert_eq!(
+            unescaped_quotes.len(),
+            2,
+            "Injection payload must be fully contained in a single string literal, got: {}",
+            lit
+        );
+    }
+
+    #[test]
+    fn test_json_to_rhai_literal_control_chars_are_escaped() {
+        // Newlines must become \n
+        assert_eq!(
+            json_to_rhai_literal(&serde_json::json!("hello\nworld")),
+            "\"hello\\nworld\""
+        );
+        // Tabs must become \t
+        assert_eq!(
+            json_to_rhai_literal(&serde_json::json!("tab\there")),
+            "\"tab\\there\""
+        );
+        // Carriage returns must become \r
+        assert_eq!(
+            json_to_rhai_literal(&serde_json::json!("carriage\rreturn")),
+            "\"carriage\\rreturn\""
+        );
+    }
+
+    #[test]
+    fn test_json_to_rhai_literal_primitives() {
+        assert_eq!(json_to_rhai_literal(&serde_json::json!(null)), "()");
+        assert_eq!(json_to_rhai_literal(&serde_json::json!(true)), "true");
+        assert_eq!(json_to_rhai_literal(&serde_json::json!(false)), "false");
+        assert_eq!(json_to_rhai_literal(&serde_json::json!(42)), "42");
+        assert_eq!(json_to_rhai_literal(&serde_json::json!(3.125)), "3.125");
+    }
+
+    #[test]
+    fn test_json_to_rhai_literal_complex_types_become_string() {
+        // Arrays and objects are serialized as quoted JSON strings
+        let arr = serde_json::json!([1, 2, 3]);
+        let lit = json_to_rhai_literal(&arr);
+        assert!(lit.starts_with('"') && lit.ends_with('"'));
+        // The inner content, when unescaped, should be valid JSON
+        let inner = &lit[1..lit.len() - 1];
+        let inner = inner.replace("\\\"", "\"").replace("\\\\", "\\");
+        assert!(serde_json::from_str::<serde_json::Value>(&inner).is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_callfunction_rejects_malicious_function_name() {
+        let engine = RuleEngine::new(ScriptEngineConfig::default()).unwrap();
+
+        // Create a rule with a CallFunction action that uses an injection payload
+        // as the function name.  Before the C4 fix, this would have been
+        // interpolated directly into a Rhai script string, executing arbitrary
+        // code.  After the fix, the engine must reject it.
+        let rule = RuleDefinition {
+            id: "inject_rule".to_string(),
+            name: "Injection Test".to_string(),
+            description: String::new(),
+            condition: "true".to_string(),
+            action: RuleAction::CallFunction {
+                function: "foo(); dangerous(); //".to_string(),
+                args: vec![],
+            },
+            priority: RulePriority::Normal,
+            enabled: true,
+            tags: vec![],
+            metadata: HashMap::new(),
+        };
+
+        engine.register_rule(rule).await.unwrap();
+
+        let mut context = ScriptContext::new();
+        let result = engine
+            .execute_rule("inject_rule", &mut context)
+            .await
+            .unwrap();
+
+        // The rule must have been evaluated (condition is `true`) but the
+        // action must fail because the function name is invalid.
+        let result = result.expect("Rule should match (condition is true)");
+        assert!(!result.success, "Malicious function name must be rejected");
+        assert!(
+            result
+                .error
+                .as_ref()
+                .unwrap()
+                .contains("Invalid function name"),
+            "Error message should mention invalid function name, got: {:?}",
+            result.error
+        );
+    }
+
+    #[tokio::test]
+    async fn test_callfunction_string_arg_injection_is_safe() {
+        let engine = RuleEngine::new(ScriptEngineConfig::default()).unwrap();
+
+        // A rule with a valid function name, but args contain an injection
+        // payload.  The engine must safely quote the argument so that it
+        // becomes a harmless string literal rather than executable code.
+        let rule = RuleDefinition {
+            id: "arg_inject_rule".to_string(),
+            name: "Arg Injection Test".to_string(),
+            description: String::new(),
+            condition: "true".to_string(),
+            action: RuleAction::CallFunction {
+                function: "identity".to_string(),
+                args: vec![serde_json::json!("\"); dangerous(); //")],
+            },
+            priority: RulePriority::Normal,
+            enabled: true,
+            tags: vec![],
+            metadata: HashMap::new(),
+        };
+
+        engine.register_rule(rule).await.unwrap();
+
+        let mut context = ScriptContext::new();
+        let result = engine
+            .execute_rule("arg_inject_rule", &mut context)
+            .await
+            .unwrap();
+
+        // The 'identity' function doesn't exist, so the script execution
+        // itself will fail — but the important thing is that the generated
+        // script is NOT `identity(""); dangerous(); //")` (which would call
+        // `dangerous()`).  If injection happened, we'd see different errors
+        // or `dangerous` in the error output.
+        let result = result.expect("Rule should match (condition is true)");
+        // Either the call fails with "function not found" for `identity`
+        // or succeeds if the engine defines it.  In no case should
+        // "dangerous" appear in error messages (which would indicate
+        // injection caused it to be parsed as a separate function call).
+        if let Some(ref err) = result.error {
+            assert!(
+                !err.contains("dangerous"),
+                "Injection payload must not be executed as code, got error: {}",
+                err
+            );
+        }
     }
 }

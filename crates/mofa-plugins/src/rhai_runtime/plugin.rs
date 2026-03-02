@@ -49,6 +49,16 @@ impl PluginStats {
         }
     }
 
+    /// Total invocations recorded.
+    pub fn calls_total(&self) -> u64 {
+        self.calls_total.load(Ordering::Relaxed)
+    }
+
+    /// Invocations that returned an error.
+    pub fn calls_failed(&self) -> u64 {
+        self.calls_failed.load(Ordering::Relaxed)
+    }
+
     /// Average wall-clock latency across all recorded invocations.
     pub fn avg_latency_ms(&self) -> f64 {
         let total = self.calls_total.load(Ordering::Relaxed);
@@ -230,6 +240,14 @@ impl RhaiPlugin {
         self.last_modified
     }
 
+    /// Return a shared reference to this plugin's runtime statistics.
+    ///
+    /// The returned `Arc` can be cloned and stored by the caller so that stats
+    /// can be read concurrently without holding a mutable reference to the plugin.
+    pub fn stats(&self) -> Arc<PluginStats> {
+        Arc::clone(&self.stats)
+    }
+
     /// Create a new Rhai plugin from config
     pub async fn new(config: RhaiPluginConfig) -> RhaiPluginResult<Self> {
         let content = config.source.get_content().await?;
@@ -240,9 +258,6 @@ impl RhaiPlugin {
 
         // Create engine instance
         let engine = Arc::new(RhaiScriptEngine::new(config.engine_config.clone())?);
-
-        // Parse metadata from script - TODO
-        let _script_metadata: HashMap<String, String> = HashMap::new();
 
         // Initialize with default metadata
         let metadata = PluginMetadata {
@@ -255,7 +270,7 @@ impl RhaiPlugin {
             KernelPluginMetadata::new(&config.plugin_id, &metadata.name, PluginType::Tool);
 
         // Create plugin
-        Ok(Self {
+        let mut plugin = Self {
             id: config.plugin_id.clone(),
             config,
             engine,
@@ -266,7 +281,12 @@ impl RhaiPlugin {
             last_modified,
             cached_content: content,
             stats: Arc::new(PluginStats::default()),
-        })
+        };
+
+        // Keep metadata consistent from first construction.
+        plugin.extract_metadata().await?;
+
+        Ok(plugin)
     }
 
     /// Create a new Rhai plugin from file path
@@ -291,7 +311,7 @@ impl RhaiPlugin {
             RhaiPluginSource::File(path) => std::fs::metadata(path)?
                 .modified()?
                 .duration_since(std::time::UNIX_EPOCH)
-                .expect("时间转换失败")
+                .unwrap_or_default()
                 .as_secs(),
             _ => std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
@@ -315,37 +335,66 @@ impl RhaiPlugin {
             .await
         {
             warn!("Failed to compile script for metadata extraction: {}", e);
-            return Ok(());
+        } else {
+            let context = mofa_extra::rhai::ScriptContext::new();
+
+            // Execute the script to define global variables
+            if self
+                .engine
+                .execute_compiled(&script_id, &context)
+                .await
+                .is_ok()
+            {
+                // Try to extract plugin_name
+                if let Ok(result) = self.engine.execute("plugin_name", &context).await
+                    && result.success
+                    && let Some(name) = result.value.as_str()
+                {
+                    self.metadata.name = name.to_string();
+                    self.kernel_metadata.name = name.to_string();
+                }
+
+                // Try to extract plugin_version
+                if let Ok(result) = self.engine.execute("plugin_version", &context).await
+                    && result.success
+                    && let Some(version) = result.value.as_str()
+                {
+                    self.metadata.version = version.to_string();
+                    self.kernel_metadata.version = version.to_string();
+                }
+
+                // Try to extract plugin_description
+                if let Ok(result) = self.engine.execute("plugin_description", &context).await
+                    && result.success
+                    && let Some(description) = result.value.as_str()
+                {
+                    self.metadata.description = description.to_string();
+                    self.kernel_metadata.description = description.to_string();
+                }
+            }
         }
 
-        let context = mofa_extra::rhai::ScriptContext::new();
+        // Fallback to direct source parsing when scope extraction misses values.
+        if self.metadata.name == "unknown"
+            && let Some(name) = extract_quoted_assignment(&self.cached_content, "plugin_name")
+        {
+            self.metadata.name = name.clone();
+            self.kernel_metadata.name = name;
+        }
 
-        // Execute the script to define global variables
-        if self.engine.execute_compiled(&script_id, &context).await.is_ok() {
-            // Now try to extract variables by calling a snippet that returns them
-            // Try to extract plugin_name
-            if let Ok(result) = self.engine.execute("plugin_name", &context).await
-                && result.success
-                && let Some(name) = result.value.as_str()
-            {
-                self.metadata.name = name.to_string();
-            }
+        if self.metadata.version == "0.0.0"
+            && let Some(version) = extract_quoted_assignment(&self.cached_content, "plugin_version")
+        {
+            self.metadata.version = version.clone();
+            self.kernel_metadata.version = version;
+        }
 
-            // Try to extract plugin_version
-            if let Ok(result) = self.engine.execute("plugin_version", &context).await
-                && result.success
-                && let Some(version) = result.value.as_str()
-            {
-                self.metadata.version = version.to_string();
-            }
-
-            // Try to extract plugin_description
-            if let Ok(result) = self.engine.execute("plugin_description", &context).await
-                && result.success
-                && let Some(description) = result.value.as_str()
-            {
-                self.metadata.description = description.to_string();
-            }
+        if self.metadata.description.is_empty()
+            && let Some(description) =
+                extract_quoted_assignment(&self.cached_content, "plugin_description")
+        {
+            self.metadata.description = description.clone();
+            self.kernel_metadata.description = description;
         }
 
         Ok(())
@@ -374,7 +423,7 @@ impl RhaiPlugin {
         let context = ScriptContext::new();
 
         // Convert Dynamic args to serde_json::Value for call_function
-        let json_args: Vec<serde_json::Value> = args.iter().map(|d| dynamic_to_json(d)).collect();
+        let json_args: Vec<serde_json::Value> = args.iter().map(dynamic_to_json).collect();
 
         // Try to call the function, using serde_json::Value as the return type
         // This is flexible and won't fail on deserialization
@@ -411,13 +460,13 @@ impl RhaiPlugin {
     async fn execute_script(&self, input: String) -> PluginResult<String> {
         // Create context with input
         let mut context = ScriptContext::new();
-        context = context.with_variable("input", input.clone())?;
+        context = context.with_variable("input", input.clone()).map_err(|e| mofa_kernel::plugin::PluginError::ExecutionFailed(e.to_string()))?;
 
         // Compile and cache the script (idempotent when already cached)
         let script_id = format!("{}_exec", self.id);
         self.engine
             .compile_and_cache(&script_id, "execute", &self.cached_content)
-            .await?;
+            .await.map_err(|e| mofa_kernel::plugin::PluginError::ExecutionFailed(e.to_string()))?;
 
         // Try to call the execute function with the input
         match self
@@ -435,7 +484,7 @@ impl RhaiPlugin {
                     "Rhai plugin {} executed successfully via call_function",
                     self.id
                 );
-                Ok(serde_json::to_string_pretty(&result)?)
+                Ok(serde_json::to_string_pretty(&result).map_err(|e| mofa_kernel::plugin::PluginError::ExecutionFailed(e.to_string()))?)
             }
             Err(e) => {
                 warn!(
@@ -444,19 +493,77 @@ impl RhaiPlugin {
                 );
 
                 // Fallback: execute the whole script directly
-                let result = self.engine.execute(&self.cached_content, &context).await?;
+                let result = self.engine.execute(&self.cached_content, &context).await.map_err(|e| mofa_kernel::plugin::PluginError::ExecutionFailed(e.to_string()))?;
 
                 if !result.success {
-                    return Err(anyhow::anyhow!(
+                    return Err(mofa_kernel::plugin::PluginError::ExecutionFailed(format!(
                         "Script execution failed: {:?}",
                         result.error
-                    ));
+                    )));
                 }
 
-                Ok(serde_json::to_string_pretty(&result.value)?)
+                Ok(serde_json::to_string_pretty(&result.value).map_err(|e| mofa_kernel::plugin::PluginError::ExecutionFailed(e.to_string()))?)
             }
         }
     }
+}
+
+fn extract_quoted_assignment(script: &str, variable: &str) -> Option<String> {
+    for line in script.lines() {
+        let trimmed = line.trim();
+        let statement = trimmed.trim_end_matches(';').trim();
+
+        let Some(rest) = statement
+            .strip_prefix("let ")
+            .or_else(|| statement.strip_prefix("const "))
+        else {
+            continue;
+        };
+        let Some(rest) = rest.strip_prefix(variable) else {
+            continue;
+        };
+        let rest = rest.trim_start();
+        let Some(rest) = rest.strip_prefix('=') else {
+            continue;
+        };
+        let rest = rest.trim_start();
+
+        if let Some(value) = parse_quoted_literal(rest, '"') {
+            return Some(value);
+        }
+        if let Some(value) = parse_quoted_literal(rest, '\'') {
+            return Some(value);
+        }
+    }
+    None
+}
+
+fn parse_quoted_literal(input: &str, quote: char) -> Option<String> {
+    let mut chars = input.chars();
+    if chars.next()? != quote {
+        return None;
+    }
+
+    let mut output = String::new();
+    let mut escaped = false;
+
+    for ch in chars {
+        if escaped {
+            output.push(ch);
+            escaped = false;
+            continue;
+        }
+        if ch == '\\' {
+            escaped = true;
+            continue;
+        }
+        if ch == quote {
+            return Some(output);
+        }
+        output.push(ch);
+    }
+
+    None
 }
 
 // ============================================================================
@@ -486,7 +593,8 @@ impl AgentPlugin for RhaiPlugin {
         *self.plugin_context.write().await = Some(ctx.clone());
 
         // Extract metadata from script
-        self.extract_metadata().await?;
+        self.extract_metadata().await
+            .map_err(|e| mofa_kernel::plugin::PluginError::ExecutionFailed(e.to_string()))?;
 
         let mut state = self.state.write().await;
         *state = RhaiPluginState::Loaded;
@@ -496,7 +604,7 @@ impl AgentPlugin for RhaiPlugin {
     async fn init_plugin(&mut self) -> PluginResult<()> {
         let mut state = self.state.write().await;
         if *state != RhaiPluginState::Loaded {
-            return Err(anyhow::anyhow!("Plugin not loaded"));
+            return Err(mofa_kernel::plugin::PluginError::ExecutionFailed("Plugin not loaded".to_string()));
         }
 
         *state = RhaiPluginState::Initializing;
@@ -520,7 +628,7 @@ impl AgentPlugin for RhaiPlugin {
     async fn start(&mut self) -> PluginResult<()> {
         let mut state = self.state.write().await;
         if *state != RhaiPluginState::Running && *state != RhaiPluginState::Paused {
-            return Err(anyhow::anyhow!("Plugin not ready to start"));
+            return Err(mofa_kernel::plugin::PluginError::ExecutionFailed("Plugin not ready to start".to_string()));
         }
 
         // Call start function if exists
@@ -540,7 +648,7 @@ impl AgentPlugin for RhaiPlugin {
     async fn stop(&mut self) -> PluginResult<()> {
         let mut state = self.state.write().await;
         if *state != RhaiPluginState::Running {
-            return Err(anyhow::anyhow!("Plugin not running"));
+            return Err(mofa_kernel::plugin::PluginError::ExecutionFailed("Plugin not running".to_string()));
         }
 
         // Call stop function if exists
@@ -578,7 +686,7 @@ impl AgentPlugin for RhaiPlugin {
         {
             let state = self.state.read().await;
             if *state != RhaiPluginState::Running {
-                return Err(anyhow::anyhow!("Plugin not running"));
+                return Err(mofa_kernel::plugin::PluginError::ExecutionFailed("Plugin not running".to_string()));
             }
         }
 
@@ -636,10 +744,34 @@ mod tests {
             .unwrap();
 
         assert_eq!(plugin.id, "test-plugin");
-        // Note: metadata extraction happens during load(), not during creation
-        // After load(), metadata should be extracted from the script
-        // For now, verify the plugin was created successfully
+        assert_eq!(plugin.metadata.name, "test_rhai_plugin");
+        assert_eq!(plugin.metadata.version, "1.0.0");
+        assert_eq!(plugin.metadata.description, "Test Rhai plugin");
+        assert_eq!(plugin.kernel_metadata.name, "test_rhai_plugin");
+        assert_eq!(plugin.kernel_metadata.version, "1.0.0");
+        assert_eq!(plugin.kernel_metadata.description, "Test Rhai plugin");
         assert!(!plugin.cached_content.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_rhai_plugin_extracts_metadata_even_when_script_compile_fails() {
+        let broken_script = r#"
+            let plugin_name = "fallback_metadata_plugin";
+            let plugin_version = "2.1.3";
+            let plugin_description = "Fallback parser metadata";
+
+            fn execute(input) {
+                input +    // force compile failure
+            }
+        "#;
+
+        let plugin = RhaiPlugin::from_content("test-broken-metadata", broken_script)
+            .await
+            .unwrap();
+
+        assert_eq!(plugin.metadata.name, "fallback_metadata_plugin");
+        assert_eq!(plugin.metadata.version, "2.1.3");
+        assert_eq!(plugin.metadata.description, "Fallback parser metadata");
     }
 
     #[tokio::test]
@@ -1009,8 +1141,186 @@ mod tests {
         assert!(result.is_some()); // Just verify result is not None
     }
 
+    // ========================================================================
+    // Unit Tests for PluginStats
+    // ========================================================================
+
+    #[test]
+    fn test_plugin_stats_zero_call_guard() {
+        // avg_latency_ms must return 0.0 when no calls have been recorded yet
+        // (guard against division-by-zero).
+        let stats = PluginStats::default();
+        assert_eq!(stats.calls_total(), 0);
+        assert_eq!(stats.calls_failed(), 0);
+        assert_eq!(stats.avg_latency_ms(), 0.0);
+    }
+
+    #[test]
+    fn test_plugin_stats_successful_invocation() {
+        let stats = PluginStats::default();
+        stats.record(50, false);
+
+        assert_eq!(stats.calls_total(), 1);
+        assert_eq!(stats.calls_failed(), 0);
+        assert_eq!(stats.avg_latency_ms(), 50.0);
+    }
+
+    #[test]
+    fn test_plugin_stats_failed_invocation() {
+        let stats = PluginStats::default();
+        stats.record(30, true);
+
+        assert_eq!(stats.calls_total(), 1);
+        assert_eq!(stats.calls_failed(), 1);
+        assert_eq!(stats.avg_latency_ms(), 30.0);
+    }
+
+    #[test]
+    fn test_plugin_stats_counter_increments() {
+        let stats = PluginStats::default();
+
+        // Two successes, one failure
+        stats.record(10, false);
+        stats.record(20, false);
+        stats.record(30, true);
+
+        assert_eq!(stats.calls_total(), 3);
+        assert_eq!(stats.calls_failed(), 1);
+        // avg = (10 + 20 + 30) / 3 = 20.0
+        assert!((stats.avg_latency_ms() - 20.0).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn test_plugin_stats_avg_latency_multiple_calls() {
+        let stats = PluginStats::default();
+
+        stats.record(100, false);
+        stats.record(200, false);
+
+        // avg = (100 + 200) / 2 = 150.0
+        assert!((stats.avg_latency_ms() - 150.0).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn test_plugin_stats_all_failed() {
+        let stats = PluginStats::default();
+
+        stats.record(5, true);
+        stats.record(10, true);
+
+        assert_eq!(stats.calls_total(), 2);
+        assert_eq!(stats.calls_failed(), 2);
+    }
+
+    #[test]
+    fn test_plugin_stats_to_map_keys() {
+        let stats = PluginStats::default();
+        stats.record(40, false);
+        stats.record(60, true);
+
+        let map = stats.to_map();
+
+        assert!(map.contains_key("calls_total"), "missing calls_total");
+        assert!(map.contains_key("calls_failed"), "missing calls_failed");
+        assert!(map.contains_key("avg_latency_ms"), "missing avg_latency_ms");
+
+        assert_eq!(map["calls_total"], serde_json::json!(2u64));
+        assert_eq!(map["calls_failed"], serde_json::json!(1u64));
+        // avg = (40 + 60) / 2 = 50.0
+        let avg = map["avg_latency_ms"].as_f64().unwrap();
+        assert!((avg - 50.0).abs() < f64::EPSILON);
+    }
+
     #[tokio::test]
-    async fn test_call_script_function_boolean_logic() {
+    async fn test_rhai_plugin_stats_accessor_returns_arc() {
+        // The stats() method must return an Arc that shares the same counters
+        // as the plugin internal state, not a copy.
+        let plugin = RhaiPlugin::from_content("test-stats-arc", "fn execute(i) { i }")
+            .await
+            .unwrap();
+
+        let stats_ref = plugin.stats();
+
+        // Initially zero
+        assert_eq!(stats_ref.calls_total(), 0);
+    }
+
+    #[tokio::test]
+    async fn test_plugin_stats_via_agent_plugin_trait() {
+        // AgentPlugin::stats() must also reflect live counter values.
+        let mut plugin = RhaiPlugin::from_content("test-trait-stats", "fn execute(i) { i } ")
+            .await
+            .unwrap();
+
+        let ctx = PluginContext::default();
+        plugin.load(&ctx).await.unwrap();
+        plugin.init_plugin().await.unwrap();
+
+        // Execute once to increment counters
+        let _ = plugin.execute("ping".to_string()).await;
+
+        // Read back through AgentPlugin::stats()
+        let map = AgentPlugin::stats(&plugin);
+        let total = map["calls_total"].as_u64().unwrap();
+        assert_eq!(total, 1, "calls_total should be 1 after one execute");
+    }
+
+    #[tokio::test]
+    async fn test_plugin_stats_arc_shared_with_plugin_execute() {
+        // Clone the Arc before executing; after execute() completes the cloned
+        // reference must observe the updated counters.
+        //
+        // Note: scripts that throw *inside* fn execute() are currently healed by
+        // the fallback direct-execution path, so we use only success scenarios here.
+        let mut plugin = RhaiPlugin::from_content("test-arc-shared", "fn execute(i) { i }")
+            .await
+            .unwrap();
+
+        let ctx = PluginContext::default();
+        plugin.load(&ctx).await.unwrap();
+        plugin.init_plugin().await.unwrap();
+
+        // Grab Arc before any execution
+        let stats = plugin.stats();
+        assert_eq!(stats.calls_total(), 0);
+
+        let _ = plugin.execute("hello".to_string()).await;
+        let _ = plugin.execute("world".to_string()).await;
+
+        // The Arc should now reflect the two calls
+        assert_eq!(stats.calls_total(), 2);
+        assert_eq!(stats.calls_failed(), 0);
+    }
+
+    #[tokio::test]
+    async fn test_plugin_stats_failed_execute_increments_failed_counter() {
+        // A top-level `throw` means:
+        //  1. call_function("execute") fails with "function not found" → fallback triggers
+        //  2. fallback runs the full script body which throws at the top level → execute_script Err
+        // This is the most reliable way to force a recorded failure without
+        // relying on details of the call_function error-vs-fallback split.
+        let script = r#"throw "intentional top-level error";"#;
+
+        let mut plugin = RhaiPlugin::from_content("test-fail-stats", script)
+            .await
+            .unwrap();
+
+        let ctx = PluginContext::default();
+        plugin.load(&ctx).await.unwrap();
+        plugin.init_plugin().await.unwrap();
+
+        let stats = plugin.stats();
+
+        // Execute should return an error
+        let result = plugin.execute("trigger".to_string()).await;
+        assert!(result.is_err(), "expected execution to fail");
+
+        assert_eq!(stats.calls_total(), 1, "calls_total should still be 1");
+        assert_eq!(stats.calls_failed(), 1, "calls_failed should be 1");
+    }
+
+    #[tokio::test]
+    async fn test_plugin_stats_boolean_logic() {
         let script = r#"
             fn validate(age, is_citizen) {
                 age >= 18 && is_citizen == true

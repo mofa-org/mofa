@@ -1,15 +1,24 @@
 //! 插件系统示例
+//! Plugin system example
 //!
 //! 演示 MoFA 框架的插件机制，包括：
+//! Demonstrate the MoFA framework's plugin mechanism, including:
 //! - 插件管理器的使用
+//! - Use of the plugin manager
 //! - LLM 插件（文本生成、聊天）
+//! - LLM plugins (text generation, chat)
 //! - 工具插件（自定义工具）
+//! - Tool plugins (custom tools)
 //! - 存储插件（键值存储）
+//! - Storage plugins (key-value storage)
 //! - 记忆插件（智能体记忆管理）
+//! - Memory plugins (agent memory management)
 //! - 自定义插件开发
+//! - Custom plugin development
 
 // Rhai scripting
 use mofa_sdk::rhai::{RhaiScriptEngine, ScriptContext, ScriptEngineConfig};
+use mofa_sdk::kernel::plugin::PluginError;
 use mofa_sdk::plugins::PluginPriority;
 use mofa_sdk::plugins::{
     AgentPlugin, LLMPlugin, LLMPluginConfig, MemoryPlugin, MemoryStorage, PluginContext,
@@ -19,8 +28,10 @@ use mofa_sdk::plugins::{
 use std::any::Any;
 use std::collections::HashMap;
 use tracing::{info, warn};
+
 // ============================================================================
 // 自定义工具：计算器
+// Custom Tool: Calculator
 // ============================================================================
 
 struct CalculatorTool {
@@ -68,11 +79,11 @@ impl ToolExecutor for CalculatorTool {
             "multiply" => a * b,
             "divide" => {
                 if b == 0.0 {
-                    return Err(anyhow::anyhow!("Division by zero"));
+                    return Err(PluginError::ExecutionFailed("Division by zero".to_string()));
                 }
                 a / b
             }
-            _ => return Err(anyhow::anyhow!("Unknown operation: {}", op)),
+            _ => return Err(PluginError::ExecutionFailed(format!("Unknown operation: {}", op))),
         };
 
         Ok(serde_json::json!({
@@ -86,6 +97,7 @@ impl ToolExecutor for CalculatorTool {
 
 // ============================================================================
 // 自定义工具：天气查询（模拟）
+// Custom Tool: Weather Query (Mock)
 // ============================================================================
 
 struct WeatherTool {
@@ -121,6 +133,7 @@ impl ToolExecutor for WeatherTool {
         let location = arguments["location"].as_str().unwrap_or("Unknown");
 
         // 模拟天气数据
+        // Simulate weather data
         Ok(serde_json::json!({
             "location": location,
             "temperature": 22,
@@ -134,6 +147,7 @@ impl ToolExecutor for WeatherTool {
 
 // ============================================================================
 // 自定义插件：监控插件
+// Custom Plugin: Monitor Plugin
 // ============================================================================
 
 struct MonitorPlugin {
@@ -195,6 +209,7 @@ impl AgentPlugin for MonitorPlugin {
     async fn init_plugin(&mut self) -> PluginResult<()> {
         info!("Initializing Monitor plugin: {}", self.metadata.id);
         // 初始化基础指标
+        // Initialize base metrics
         self.metrics.insert("cpu_usage".to_string(), 0.0);
         self.metrics.insert("memory_usage".to_string(), 0.0);
         self.metrics.insert("request_count".to_string(), 0.0);
@@ -237,7 +252,7 @@ impl AgentPlugin for MonitorPlugin {
             ["list"] => {
                 Ok(serde_json::to_string(&self.all_metrics())?)
             }
-            _ => Err(anyhow::anyhow!("Invalid command. Use: record <name> <value>, get <name>, list")),
+            _ => Err(PluginError::ExecutionFailed("Invalid command. Use: record <name> <value>, get <name>, list".to_string())),
         }
     }
 
@@ -263,11 +278,13 @@ impl AgentPlugin for MonitorPlugin {
 
 // ============================================================================
 // 主函数
+// Main Function
 // ============================================================================
 
 #[tokio::main]
-async fn main() -> anyhow::Result<()> {
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // 初始化日志
+    // Initialize logging
     tracing_subscriber::fmt()
         .with_env_filter("info")
         .init();
@@ -275,10 +292,12 @@ async fn main() -> anyhow::Result<()> {
     info!("=== MoFA Plugin System Demo ===\n");
 
     // 1. 创建插件管理器
+    // 1. Create plugin manager
     let manager = PluginManager::new("demo_agent");
     info!("Created PluginManager for agent: demo_agent");
 
     // 2. 注册 LLM 插件
+    // 2. Register LLM plugin
     info!("\n--- Registering LLM Plugin ---");
     let llm_config = LLMPluginConfig {
         model: "gpt-4".to_string(),
@@ -291,6 +310,7 @@ async fn main() -> anyhow::Result<()> {
     info!("LLM plugin registered");
 
     // 3. 注册工具插件并添加工具
+    // 3. Register tool plugin and add tools
     info!("\n--- Registering Tool Plugin ---");
     let mut tool_plugin = ToolPlugin::new("tools_main");
     tool_plugin.register_tool(CalculatorTool::new());
@@ -299,6 +319,7 @@ async fn main() -> anyhow::Result<()> {
     info!("Tool plugin registered with calculator and weather tools");
 
     // 4. 注册存储插件
+    // 4. Register storage plugin
     info!("\n--- Registering Storage Plugin ---");
     let storage = StoragePlugin::new("storage_main")
         .with_backend(MemoryStorage::new());
@@ -306,24 +327,28 @@ async fn main() -> anyhow::Result<()> {
     info!("Storage plugin registered");
 
     // 5. 注册记忆插件
+    // 5. Register memory plugin
     info!("\n--- Registering Memory Plugin ---");
     let memory = MemoryPlugin::new("memory_main").with_max_memories(500);
     manager.register(memory).await?;
     info!("Memory plugin registered");
 
     // 6. 注册自定义监控插件
+    // 6. Register custom monitor plugin
     info!("\n--- Registering Custom Monitor Plugin ---");
     let monitor = MonitorPlugin::new("monitor_main");
     manager.register(monitor).await?;
     info!("Monitor plugin registered");
 
     // 7. 初始化所有插件
+    // 7. Initialize all plugins
     info!("\n--- Initializing All Plugins ---");
     manager.load_all().await?;
     manager.init_all().await?;
     manager.start_all().await?;
 
     // 8. 列出所有已注册的插件
+    // 8. List all registered plugins
     info!("\n--- Registered Plugins ---");
     let plugins = manager.list_plugins().await;
     for p in &plugins {
@@ -334,14 +359,17 @@ async fn main() -> anyhow::Result<()> {
     }
 
     // 9. 使用 LLM 插件
+    // 9. Use LLM plugin
     info!("\n--- Using LLM Plugin ---");
     let llm_response = manager.execute("llm_main", "What is the capital of France?".to_string()).await?;
     info!("LLM Response: {}", llm_response);
 
     // 10. 使用工具插件
+    // 10. Use tool plugin
     info!("\n--- Using Tool Plugin ---");
 
     // 计算器工具
+    // Calculator tool
     let calc_call = serde_json::json!({
         "name": "calculator",
         "arguments": {
@@ -355,6 +383,7 @@ async fn main() -> anyhow::Result<()> {
     info!("Calculator Result: {}", calc_result);
 
     // 天气工具
+    // Weather tool
     let weather_call = serde_json::json!({
         "name": "weather",
         "arguments": {
@@ -366,6 +395,7 @@ async fn main() -> anyhow::Result<()> {
     info!("Weather Result: {}", weather_result);
 
     // 11. 使用存储插件
+    // 11. Use storage plugin
     info!("\n--- Using Storage Plugin ---");
     manager.execute("storage_main", "set user:name Alice".to_string()).await?;
     manager.execute("storage_main", "set user:age 30".to_string()).await?;
@@ -376,6 +406,7 @@ async fn main() -> anyhow::Result<()> {
     info!("Stored user: name={}, age={}", name, age);
 
     // 12. 使用记忆插件
+    // 12. Use memory plugin
     info!("\n--- Using Memory Plugin ---");
     manager.execute("memory_main", "add User asked about weather in Beijing 0.8".to_string()).await?;
     manager.execute("memory_main", "add User calculated 7 * 8 = 56 0.6".to_string()).await?;
@@ -388,16 +419,19 @@ async fn main() -> anyhow::Result<()> {
     info!("Memory search for 'weather': {}", search_result);
 
     // 13. 使用监控插件
+    // 13. Use monitor plugin
     info!("\n--- Using Monitor Plugin ---");
     manager.execute("monitor_main", "record cpu_usage 45.5".to_string()).await?;
     manager.execute("monitor_main", "record memory_usage 72.3".to_string()).await?;
     manager.execute("monitor_main", "record request_count 1234".to_string()).await?;
     manager.execute("monitor_main", "record error_rate 85.0".to_string()).await?; // 会触发告警
+    // This will trigger an alert
 
     let metrics = manager.execute("monitor_main", "list".to_string()).await?;
     info!("All metrics: {}", metrics);
 
     // 14. 健康检查
+    // 14. Health check
     info!("\n--- Health Check ---");
     let health = manager.health_check_all().await;
     for (id, healthy) in &health {
@@ -405,6 +439,7 @@ async fn main() -> anyhow::Result<()> {
     }
 
     // 15. 获取插件统计
+    // 15. Get plugin statistics
     info!("\n--- Plugin Statistics ---");
     for p in &plugins {
         if let Some(stats) = manager.stats(&p.id).await {
@@ -413,6 +448,7 @@ async fn main() -> anyhow::Result<()> {
     }
 
     // 16. 按类型获取插件
+    // 16. Get plugins by type
     info!("\n--- Plugins by Type ---");
     let llm_plugins = manager.get_by_type(PluginType::LLM).await;
     info!("LLM plugins: {:?}", llm_plugins);
@@ -422,6 +458,7 @@ async fn main() -> anyhow::Result<()> {
     info!("Storage plugins: {:?}", storage_plugins);
 
     // 17. 演示插件上下文共享状态
+    // 17. Demonstrate plugin context shared state
     info!("\n--- Plugin Context Shared State ---");
     let ctx = manager.context();
     ctx.set_state("conversation_id", "conv_12345".to_string()).await;
@@ -432,20 +469,26 @@ async fn main() -> anyhow::Result<()> {
     info!("Shared state - conversation_id: {:?}, turn_count: {:?}", conv_id, turn_count);
 
     // 18. 停止和卸载
+    // 18. Stop and unload
     info!("\n--- Stopping All Plugins ---");
     manager.stop_all().await?;
     manager.unload_all().await?;
 
     // 19. Rhai 脚本引擎示例
+    // 19. Rhai scripting engine example
     info!("\n--- Rhai Scripting Engine Examples ---\n");
 
     // 创建脚本引擎
+    // Create script engine
     let script_engine = RhaiScriptEngine::new(ScriptEngineConfig::default())?;
 
     // 编译时脚本：预编译并缓存，提高运行时性能
+    // Compile-time script: pre-compiled and cached for better runtime performance
     info!("19.1 编译时脚本执行（预编译缓存）:");
+    // 19.1 Compile-time script execution (pre-compiled cache):
 
     // 编译并缓存脚本
+    // Compile and cache script
     script_engine.compile_and_cache(
         "greeting_script",
         "Greeting",
@@ -461,22 +504,30 @@ async fn main() -> anyhow::Result<()> {
     ).await?;
 
     // 创建上下文
+    // Create context
     let ctx = ScriptContext::new()
         .with_variable("user_name", "MoFA Plugin System")?;
 
     // 执行编译后的脚本
+    // Execute pre-compiled script
     let result = script_engine.execute_compiled("greeting_script", &ctx).await?;
     info!("  编译时脚本结果: {}", serde_json::to_string_pretty(&result.value)?);
+    // Compile-time script result: {}
 
     // 运行时脚本：动态执行，灵活性高
+    // Runtime script: dynamic execution with high flexibility
     info!("\n19.2 运行时脚本执行（动态）:");
+    // 19.2 Runtime script execution (dynamic):
 
     // 运行时动态生成并执行脚本
+    // Dynamically generate and execute script at runtime
     let runtime_script = format!(
         r#"
             // 计算插件数量
+            // Calculate plugin count
             let plugin_count = {};
             // 动态生成消息
+            // Dynamically generate message
             "当前系统共有 " + plugin_count + " 个插件在运行"
         "#,
         plugins.len()
@@ -484,13 +535,18 @@ async fn main() -> anyhow::Result<()> {
 
     let result = script_engine.execute(&runtime_script, &ctx).await?;
     info!("  运行时脚本结果: {}", result.value);
+    // Runtime script result: {}
 
     // 19.3 与插件系统结合：使用脚本调用插件
+    // 19.3 Integration with plugin system: using script to call plugins
     info!("\n19.3 脚本与插件系统结合:");
+    // 19.3 Integration of script and plugin system:
 
     // 创建一个使用脚本调用计算器工具的示例
+    // Create an example of calling calculator tool via script
     let _tool_script = r#"
         // 使用插件系统的计算器工具
+        // Use calculator tool from the plugin system
         let calc_result = call_tool("calculator", #{
             operation: "add",
             a: 100,
@@ -501,8 +557,11 @@ async fn main() -> anyhow::Result<()> {
     "#;
 
     // 创建一个包含工具调用能力的上下文
+    // Create a context with tool calling capabilities
     // 注意：需要将工具调用函数注册到脚本引擎中
+    // Note: tool calling functions need to be registered in the script engine
     info!("  脚本与插件结合示例已准备，可扩展实现工具调用接口\n");
+    // Script and plugin combination example ready, extendable for tool call interfaces
 
     info!("\n=== Demo Completed ===");
     Ok(())

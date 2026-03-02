@@ -3,6 +3,7 @@ use serde_json::json;
 use tokio::fs;
 
 /// 文件系统工具 - 读写文件、列出目录
+/// File system utilities - Read/write files, list directories
 pub struct FileSystemTool {
     definition: ToolDefinition,
     allowed_paths: Vec<String>,
@@ -49,11 +50,17 @@ impl FileSystemTool {
 
     fn is_path_allowed(&self, path: &str) -> bool {
         if self.allowed_paths.is_empty() {
-            return true;
+            return false; // Default deny if no paths specified
         }
-        let path = std::path::Path::new(path);
+        let path = match std::path::Path::new(path).canonicalize() {
+            Ok(p) => p,
+            Err(_) => return false, // Deny if path cannot be resolved
+        };
         self.allowed_paths.iter().any(|allowed| {
-            let allowed_path = std::path::Path::new(allowed);
+            let allowed_path = match std::path::Path::new(allowed).canonicalize() {
+                Ok(p) => p,
+                Err(_) => return false,
+            };
             path.starts_with(allowed_path)
         })
     }
@@ -68,16 +75,16 @@ impl ToolExecutor for FileSystemTool {
     async fn execute(&self, arguments: serde_json::Value) -> PluginResult<serde_json::Value> {
         let operation = arguments["operation"]
             .as_str()
-            .ok_or_else(|| anyhow::anyhow!("Operation is required"))?;
+            .ok_or_else(|| mofa_kernel::plugin::PluginError::ExecutionFailed("Operation is required".to_string()))?;
         let path = arguments["path"]
             .as_str()
-            .ok_or_else(|| anyhow::anyhow!("Path is required"))?;
+            .ok_or_else(|| mofa_kernel::plugin::PluginError::ExecutionFailed("Path is required".to_string()))?;
 
         if !self.is_path_allowed(path) {
-            return Err(anyhow::anyhow!(
+            return Err(mofa_kernel::plugin::PluginError::ExecutionFailed(format!(
                 "Access denied: path '{}' is not in allowed paths",
                 path
-            ));
+            )));
         }
 
         match operation {
@@ -100,7 +107,7 @@ impl ToolExecutor for FileSystemTool {
             "write" => {
                 let content = arguments["content"]
                     .as_str()
-                    .ok_or_else(|| anyhow::anyhow!("Content is required for write operation"))?;
+                    .ok_or_else(|| mofa_kernel::plugin::PluginError::ExecutionFailed("Content is required for write operation".to_string()))?;
                 fs::write(path, content).await?;
                 Ok(json!({
                     "success": true,
@@ -150,7 +157,7 @@ impl ToolExecutor for FileSystemTool {
                     "message": format!("Created directory {}", path)
                 }))
             }
-            _ => Err(anyhow::anyhow!("Unknown operation: {}", operation)),
+            _ => Err(mofa_kernel::plugin::PluginError::ExecutionFailed(format!("Unknown operation: {}", operation))),
         }
     }
 }

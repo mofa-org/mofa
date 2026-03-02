@@ -1,10 +1,11 @@
 //! `mofa agent status` command implementation
 
+use crate::CliError;
 use crate::context::CliContext;
 use colored::Colorize;
 
 /// Execute the `mofa agent status` command
-pub async fn run(ctx: &CliContext, agent_id: Option<&str>) -> anyhow::Result<()> {
+pub async fn run(ctx: &CliContext, agent_id: Option<&str>) -> Result<(), CliError> {
     if let Some(id) = agent_id {
         // Show status for a specific agent
         println!("{} Agent status: {}", "→".green(), id.cyan());
@@ -31,12 +32,29 @@ pub async fn run(ctx: &CliContext, agent_id: Option<&str>) -> anyhow::Result<()>
                 }
             }
             None => {
-                println!("  Agent '{}' not found in registry", id);
-                println!();
-                println!(
-                    "  Use {} to see available agents.",
-                    "mofa agent list".cyan()
-                );
+                let persisted = ctx.agent_store.get(id).map_err(|e| {
+                    CliError::StateError(format!("Failed to load persisted agent '{}': {}", id, e))
+                })?;
+
+                if let Some(entry) = persisted {
+                    println!("  ID:           {}", entry.id.cyan());
+                    println!("  Name:         {}", entry.name.white());
+                    println!(
+                        "  State:        {}",
+                        format!("{} (persisted)", entry.state).yellow()
+                    );
+                    if let Some(desc) = entry.description {
+                        println!("  Description:  {}", desc.white());
+                    }
+                    println!("  Source:       persisted store (not active in runtime)");
+                } else {
+                    println!("  Agent '{}' not found in registry or persisted store", id);
+                    println!();
+                    println!(
+                        "  Use {} to see available agents.",
+                        "mofa agent list".cyan()
+                    );
+                }
             }
         }
     } else {

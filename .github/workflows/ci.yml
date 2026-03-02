@@ -81,6 +81,9 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v6
 
+      - name: Check docs internal markdown links
+        run: docs/mofa-doc/scripts/check-internal-links.sh
+
       - name: Install system dependencies
         run: |
           sudo apt-get update

@@ -1,4 +1,5 @@
 //! 任务管理器 - 阶段1: 接收想法，记录Todo
+//! Task Manager - Phase 1: Receive ideas, record Todos
 
 use super::types::*;
 use std::collections::HashMap;
@@ -6,17 +7,22 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 
 /// 任务管理器
+/// Task Manager
 ///
 /// 管理 Todo 任务的创建、更新和查询。
+/// Manages the creation, updating, and querying of Todo tasks.
 pub struct TodoManager {
     /// Todo 列表
+    /// Todo list
     todos: Arc<RwLock<HashMap<String, TodoItem>>>,
     /// 计数器（用于生成ID）
+    /// Counter (used for ID generation)
     counter: Arc<RwLock<u64>>,
 }
 
 impl TodoManager {
     /// 创建新的任务管理器
+    /// Create a new task manager
     pub fn new() -> Self {
         Self {
             todos: Arc::new(RwLock::new(HashMap::new())),
@@ -25,6 +31,7 @@ impl TodoManager {
     }
 
     /// 生成新的 Todo ID
+    /// Generate a new Todo ID
     async fn generate_id(&self) -> String {
         let mut counter = self.counter.write().await;
         *counter += 1;
@@ -32,6 +39,7 @@ impl TodoManager {
     }
 
     /// 阶段1: 接收想法，创建 Todo
+    /// Phase 1: Receive ideas, create Todos
     pub async fn receive_idea(
         &self,
         raw_idea: &str,
@@ -47,6 +55,7 @@ impl TodoManager {
         }
 
         // 保存
+        // Save
         {
             let mut todos = self.todos.write().await;
             todos.insert(id.clone(), todo.clone());
@@ -57,18 +66,21 @@ impl TodoManager {
     }
 
     /// 获取 Todo
+    /// Get Todo
     pub async fn get_todo(&self, todo_id: &str) -> Option<TodoItem> {
         let todos = self.todos.read().await;
         todos.get(todo_id).cloned()
     }
 
     /// 获取所有 Todo
+    /// List all Todos
     pub async fn list_todos(&self) -> Vec<TodoItem> {
         let todos = self.todos.read().await;
         todos.values().cloned().collect()
     }
 
     /// 按状态筛选 Todo
+    /// Filter Todos by status
     pub async fn list_by_status(&self, status: TodoStatus) -> Vec<TodoItem> {
         let todos = self.todos.read().await;
         todos
@@ -79,6 +91,7 @@ impl TodoManager {
     }
 
     /// 更新 Todo 状态
+    /// Update Todo status
     pub async fn update_status(&self, todo_id: &str, status: TodoStatus) {
         let mut todos = self.todos.write().await;
         if let Some(todo) = todos.get_mut(todo_id) {
@@ -87,6 +100,7 @@ impl TodoManager {
     }
 
     /// 设置澄清后的需求
+    /// Set clarified requirements
     pub async fn set_requirement(&self, todo_id: &str, requirement: ProjectRequirement) {
         let mut todos = self.todos.write().await;
         if let Some(todo) = todos.get_mut(todo_id) {
@@ -96,6 +110,7 @@ impl TodoManager {
     }
 
     /// 分配执行 Agent
+    /// Assign execution Agents
     pub async fn assign_agents(&self, todo_id: &str, agent_ids: Vec<String>) {
         let mut todos = self.todos.write().await;
         if let Some(todo) = todos.get_mut(todo_id) {
@@ -104,6 +119,7 @@ impl TodoManager {
     }
 
     /// 设置执行结果
+    /// Set execution result
     pub async fn set_result(&self, todo_id: &str, result: ExecutionResult) {
         let mut todos = self.todos.write().await;
         if let Some(todo) = todos.get_mut(todo_id) {
@@ -113,12 +129,14 @@ impl TodoManager {
     }
 
     /// 删除 Todo
+    /// Delete Todo
     pub async fn delete_todo(&self, todo_id: &str) -> Option<TodoItem> {
         let mut todos = self.todos.write().await;
         todos.remove(todo_id)
     }
 
     /// 获取统计信息
+    /// Get statistics
     pub async fn get_statistics(&self) -> HashMap<String, usize> {
         let todos = self.todos.read().await;
         let mut stats = HashMap::new();

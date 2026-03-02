@@ -400,6 +400,9 @@ impl HotReloadManager {
                                             std::time::Instant::now() + Duration::from_secs(5),
                                         );
                                     }
+                                    _ => {
+                                        debug!("Unhandled reload strategy");
+                                    }
                                 }
                             }
 
@@ -847,7 +850,7 @@ impl HotReloadManager {
         let mut plugins = self.loaded_plugins.write().await;
         let entry = plugins
             .get_mut(plugin_id)
-            .ok_or_else(|| anyhow::anyhow!("Plugin {} not found", plugin_id))?;
+            .ok_or_else(|| mofa_kernel::plugin::PluginError::ExecutionFailed(format!("Plugin {} not found", plugin_id)))?;
 
         entry.plugin.plugin_mut().execute(input).await
     }

@@ -44,6 +44,7 @@ pub trait Reducer: Send + Sync {
 
 /// Built-in reducer types
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+#[non_exhaustive]
 pub enum ReducerType {
     /// Overwrite the current value with the update (default)
     #[default]
@@ -96,36 +97,38 @@ impl std::fmt::Display for ReducerType {
 ///
 /// Represents a single key-value update to be applied to the state.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct StateUpdate {
+pub struct StateUpdate<V = Value> {
     /// The key to update
     pub key: String,
     /// The new value
-    pub value: Value,
+    pub value: V,
 }
 
-impl StateUpdate {
+impl<V> StateUpdate<V> {
     /// Create a new state update
-    pub fn new(key: impl Into<String>, value: Value) -> Self {
+    pub fn new(key: impl Into<String>, value: V) -> Self {
         Self {
             key: key.into(),
             value,
         }
     }
+}
 
+impl StateUpdate<Value> {
     /// Create a state update from a serializable value
     pub fn from_serializable<T: Serialize>(key: impl Into<String>, value: &T) -> AgentResult<Self> {
         Ok(Self::new(key, serde_json::to_value(value)?))
     }
 }
 
-impl From<(String, Value)> for StateUpdate {
-    fn from((key, value): (String, Value)) -> Self {
+impl<V> From<(String, V)> for StateUpdate<V> {
+    fn from((key, value): (String, V)) -> Self {
         Self::new(key, value)
     }
 }
 
-impl From<(&str, Value)> for StateUpdate {
-    fn from((key, value): (&str, Value)) -> Self {
+impl<V> From<(&str, V)> for StateUpdate<V> {
+    fn from((key, value): (&str, V)) -> Self {
         Self::new(key, value)
     }
 }

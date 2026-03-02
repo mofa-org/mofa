@@ -1,38 +1,44 @@
 //! MCP (Model Context Protocol) 组件
+//! MCP (Model Context Protocol) Component
 //!
 //! 定义 MCP 客户端接口，用于连接外部 MCP 服务器并使用其工具。
+//! Defines the MCP client interface for connecting to external MCP servers and using their tools.
 //!
 //! # 概述
+//! # Overview
 //!
 //! MCP 是 Anthropic 提出的标准化协议，允许 AI Agent 与外部工具服务器通信。
+//! MCP is a standardized protocol proposed by Anthropic that allows AI Agents to communicate with external tool servers.
 //! 本模块定义了 MoFA 框架中的 MCP 客户端抽象。
+//! This module defines the MCP client abstraction within the MoFA framework.
 //!
 //! # 架构
+//! # Architecture
 //!
 //! ```text
 //! ┌─────────────────────────────────────────────┐
-//! │              MoFA Agent                      │
-//! │  ┌─────────────────────────────────────────┐│
-//! │  │          ToolRegistry                    ││
-//! │  │  ┌───────────┐  ┌───────────────────┐   ││
-//! │  │  │ Built-in  │  │  McpToolAdapter   │   ││
-//! │  │  │   Tools   │  │  (per MCP tool)   │   ││
-//! │  │  └───────────┘  └────────┬──────────┘   ││
-//! │  └──────────────────────────┼──────────────┘│
+//! │              MoFA Agent                      │
+//! │  ┌─────────────────────────────────────────┐│
+//! │  │          ToolRegistry                    ││
+//! │  │  ┌───────────┐  ┌───────────────────┐   ││
+//! │  │  │ Built-in  │  │  McpToolAdapter   │   ││
+//! │  │  │   Tools   │  │  (per MCP tool)   │   ││
+//! │  │  └───────────┘  └────────┬──────────┘   ││
+//! │  └──────────────────────────┼──────────────┘│
 //! └─────────────────────────────┼───────────────┘
-//!                               │
-//!                    ┌──────────▼──────────┐
-//!                    │    McpClient        │
-//!                    │  (manages MCP       │
-//!                    │   connections)      │
-//!                    └──────────┬──────────┘
-//!                               │
-//!              ┌────────────────┼────────────────┐
-//!              ▼                ▼                 ▼
-//!     ┌──────────────┐ ┌──────────────┐ ┌──────────────┐
-//!     │ MCP Server A │ │ MCP Server B │ │ MCP Server C │
-//!     │  (stdio)     │ │   (HTTP)     │ │  (stdio)     │
-//!     └──────────────┘ └──────────────┘ └──────────────┘
+//!                               │
+//!                    ┌──────────▼──────────┐
+//!                    │    McpClient        │
+//!                    │  (manages MCP       │
+//!                    │   connections)      │
+//!                    └──────────┬──────────┘
+//!                               │
+//!              ┌────────────────┼────────────────┐
+//!              ▼                ▼                 ▼
+//!     ┌──────────────┐ ┌──────────────┐ ┌──────────────┐
+//!     │ MCP Server A │ │ MCP Server B │ │ MCP Server C │
+//!     │  (stdio)     │ │   (HTTP)     │ │  (stdio)     │
+//!     └──────────────┘ └──────────────┘ └──────────────┘
 //! ```
 
 use async_trait::async_trait;
@@ -44,13 +50,18 @@ use std::collections::HashMap;
 // ============================================================================
 
 /// MCP 服务器传输配置
+/// MCP Server Transport Configuration
 ///
 /// 定义如何连接到 MCP 服务器
+/// Defines how to connect to an MCP server
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[non_exhaustive]
 pub enum McpTransportConfig {
     /// 通过标准输入输出连接 (启动子进程)
+    /// Connection via Standard Input/Output (spawning a sub-process)
     ///
     /// # 示例
+    /// # Example
     ///
     /// ```rust,ignore
     /// let config = McpTransportConfig::Stdio {
@@ -61,16 +72,21 @@ pub enum McpTransportConfig {
     /// ```
     Stdio {
         /// 可执行命令
+        /// Executable command
         command: String,
         /// 命令参数
+        /// Command arguments
         args: Vec<String>,
         /// 环境变量
+        /// Environment variables
         env: HashMap<String, String>,
     },
 
     /// 通过 HTTP/SSE 连接
+    /// Connection via HTTP/SSE
     ///
     /// # 示例
+    /// # Example
     ///
     /// ```rust,ignore
     /// let config = McpTransportConfig::Http {
@@ -79,6 +95,7 @@ pub enum McpTransportConfig {
     /// ```
     Http {
         /// 服务器 URL
+        /// Server URL
         url: String,
     },
 }
@@ -88,20 +105,26 @@ pub enum McpTransportConfig {
 // ============================================================================
 
 /// MCP 服务器配置
+/// MCP Server Configuration
 ///
 /// 定义单个 MCP 服务器的完整配置
+/// Defines the full configuration for a single MCP server
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct McpServerConfig {
     /// 服务器名称 (用于标识)
+    /// Server name (used for identification)
     pub name: String,
     /// 传输配置
+    /// Transport configuration
     pub transport: McpTransportConfig,
     /// 是否自动连接
+    /// Whether to connect automatically
     pub auto_connect: bool,
 }
 
 impl McpServerConfig {
     /// 创建 Stdio 类型的 MCP 服务器配置
+    /// Creates an MCP server configuration of Stdio type
     pub fn stdio(name: impl Into<String>, command: impl Into<String>, args: Vec<String>) -> Self {
         Self {
             name: name.into(),
@@ -115,6 +138,7 @@ impl McpServerConfig {
     }
 
     /// 创建 HTTP 类型的 MCP 服务器配置
+    /// Creates an MCP server configuration of HTTP type
     pub fn http(name: impl Into<String>, url: impl Into<String>) -> Self {
         Self {
             name: name.into(),
@@ -124,6 +148,7 @@ impl McpServerConfig {
     }
 
     /// 设置环境变量 (仅对 Stdio 有效)
+    /// Sets environment variables (only valid for Stdio)
     pub fn with_env(mut self, key: impl Into<String>, value: impl Into<String>) -> Self {
         if let McpTransportConfig::Stdio { ref mut env, .. } = self.transport {
             env.insert(key.into(), value.into());
@@ -132,6 +157,7 @@ impl McpServerConfig {
     }
 
     /// 设置是否自动连接
+    /// Sets whether to connect automatically
     pub fn with_auto_connect(mut self, auto_connect: bool) -> Self {
         self.auto_connect = auto_connect;
         self
@@ -143,16 +169,21 @@ impl McpServerConfig {
 // ============================================================================
 
 /// MCP 工具信息
+/// MCP Tool Information
 ///
 /// 从 MCP 服务器发现的工具元信息
+/// Tool metadata discovered from an MCP server
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct McpToolInfo {
+pub struct McpToolInfo<Args = serde_json::Value> {
     /// 工具名称
+    /// Tool name
     pub name: String,
     /// 工具描述
+    /// Tool description
     pub description: String,
     /// 输入参数 JSON Schema
-    pub input_schema: serde_json::Value,
+    /// Input parameter JSON Schema
+    pub input_schema: Args,
 }
 
 // ============================================================================
@@ -160,15 +191,20 @@ pub struct McpToolInfo {
 // ============================================================================
 
 /// MCP 服务器信息
+/// MCP Server Information
 ///
 /// MCP 服务器在初始化握手时返回的元信息
+/// Metadata returned by the MCP server during initial handshake
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct McpServerInfo {
     /// 服务器名称
+    /// Server name
     pub name: String,
     /// 服务器版本
+    /// Server version
     pub version: String,
     /// 服务器说明
+    /// Server instructions
     pub instructions: Option<String>,
 }
 
@@ -177,11 +213,15 @@ pub struct McpServerInfo {
 // ============================================================================
 
 /// MCP 客户端 Trait
+/// MCP Client Trait
 ///
 /// 定义与 MCP 服务器通信的接口。
+/// Defines the interface for communicating with MCP servers.
 /// 具体实现在 `mofa-foundation` 层。
+/// Concrete implementation is in the `mofa-foundation` layer.
 ///
 /// # 示例
+/// # Example
 ///
 /// ```rust,ignore
 /// use mofa_kernel::agent::components::mcp::*;
@@ -205,21 +245,27 @@ pub struct McpServerInfo {
 #[async_trait]
 pub trait McpClient: Send + Sync {
     /// 连接到 MCP 服务器
+    /// Connect to an MCP server
     ///
     /// 使用给定配置建立与 MCP 服务器的连接。
+    /// Establish a connection to the MCP server using the given configuration.
     /// 连接建立后，可以通过 `server_name` 引用该服务器。
+    /// Once connected, the server can be referenced by `server_name`.
     async fn connect(&mut self, config: McpServerConfig) -> crate::agent::error::AgentResult<()>;
 
     /// 断开与 MCP 服务器的连接
+    /// Disconnect from an MCP server
     async fn disconnect(&mut self, server_name: &str) -> crate::agent::error::AgentResult<()>;
 
     /// 列出 MCP 服务器提供的工具
+    /// List tools provided by the MCP server
     async fn list_tools(
         &self,
         server_name: &str,
     ) -> crate::agent::error::AgentResult<Vec<McpToolInfo>>;
 
     /// 调用 MCP 服务器上的工具
+    /// Call a tool on the MCP server
     async fn call_tool(
         &self,
         server_name: &str,
@@ -228,15 +274,18 @@ pub trait McpClient: Send + Sync {
     ) -> crate::agent::error::AgentResult<serde_json::Value>;
 
     /// 获取 MCP 服务器信息
+    /// Get MCP server information
     async fn server_info(
         &self,
         server_name: &str,
     ) -> crate::agent::error::AgentResult<McpServerInfo>;
 
     /// 获取所有已连接的服务器名称
+    /// Get names of all connected servers
     fn connected_servers(&self) -> Vec<String>;
 
     /// 检查服务器是否已连接
+    /// Check if a server is connected
     fn is_connected(&self, server_name: &str) -> bool;
 }
 
@@ -259,6 +308,7 @@ mod tests {
             assert_eq!(env.get("API_KEY"), Some(&"test-key".to_string()));
         } else {
             panic!("Expected Stdio transport");
+            // 应当为 Stdio 传输方式
         }
     }
 
@@ -273,6 +323,7 @@ mod tests {
             assert_eq!(url, "http://localhost:8080/mcp");
         } else {
             panic!("Expected Http transport");
+            // 应当为 Http 传输方式
         }
     }
 

@@ -134,7 +134,10 @@ async fn test_registry_factory_create() {
         .unwrap();
 
     let created = registry
-        .create("test-factory", AgentConfig::new("factory-agent", "Factory Agent"))
+        .create(
+            "test-factory",
+            AgentConfig::new("factory-agent", "Factory Agent"),
+        )
         .await
         .unwrap();
     let guard = created.read().await;

@@ -28,6 +28,8 @@ rodio = ["mofa-plugins/rodio"]
 kokoro = ["mofa-plugins/kokoro", "mofa-foundation/kokoro"]
 # Enable monitoring support
 monitoring = ["mofa-runtime/monitoring", "dep:mofa-monitoring"]
+# Enable Qdrant vector database support
+qdrant = ["mofa-foundation/qdrant"]
 
 [dependencies]
 # Core dependencies
@@ -40,7 +42,6 @@ mofa-monitoring = { path = "../mofa-monitoring", version = "0.1", optional = tru
 sqlx = { version = "0.8", features = ["runtime-tokio", "postgres", "mysql", "sqlite", "uuid", "chrono", "json"], optional = true }
 async-trait = "0.1"
 tokio = { version = "1", features = ["full"] }
-anyhow.workspace = true
 uuid.workspace = true
 tracing.workspace = true
 serde_json.workspace = true

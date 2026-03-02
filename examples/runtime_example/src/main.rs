@@ -7,11 +7,14 @@ use mofa_sdk::runtime::{AgentRunner, run_agents, AgentBuilder, SimpleRuntime};
 use tracing::info;
 // ============================================================================
 // SimpleRuntimeAgent - 新版 MoFAAgent 实现
+// SimpleRuntimeAgent - New MoFAAgent Implementation
 // ============================================================================
 
 /// 简单运行时智能体实现
+/// Simple runtime agent implementation
 ///
 /// 展示如何使用新版 MoFAAgent 接口实现智能体
+/// Demonstrates how to implement an agent using the new MoFAAgent interface
 struct SimpleRuntimeAgent {
     id: String,
     name: String,
@@ -84,14 +87,16 @@ impl MoFAAgent for SimpleRuntimeAgent {
 // ============================================================================
 
 #[tokio::main]
-async fn main() -> anyhow::Result<()> {
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // 初始化日志
+    // Initialize logging
     tracing_subscriber::fmt::init();
 
     info!("=== MoFA Runtime Example (New API) ===\n");
 
     // ========================================================================
     // Example 1: 使用 run_agents 批量执行
+    // Example 1: Using run_agents for batch execution
     // ========================================================================
     info!("Example 1: Using run_agents() for batch execution");
     let batch_agent = SimpleRuntimeAgent::new("agent_batch", "BatchAgent");
@@ -108,6 +113,7 @@ async fn main() -> anyhow::Result<()> {
 
     // ========================================================================
     // Example 2: 直接使用 AgentBuilder 构建和使用 SimpleAgentRuntime
+    // Example 2: Building and using SimpleAgentRuntime via AgentBuilder directly
     // ========================================================================
     info!("Example 2: Using AgentBuilder directly");
 
@@ -120,9 +126,11 @@ async fn main() -> anyhow::Result<()> {
         .await?;
 
     // 启动智能体
+    // Start the agent
     runtime.start().await?;
 
     // 处理一些自定义事件
+    // Handle some custom events
     info!("Sending events to agent1...");
     runtime
         .handle_event(AgentEvent::Custom("test_event".to_string(), vec![]))
@@ -135,18 +143,21 @@ async fn main() -> anyhow::Result<()> {
         .await?;
 
     // 停止智能体
+    // Stop the agent
     runtime.stop().await?;
 
     info!("\n");
 
     // ========================================================================
     // Example 3: 使用 SimpleRuntime 管理多个智能体
+    // Example 3: Using SimpleRuntime to manage multiple agents
     // ========================================================================
     info!("Example 3: Using SimpleRuntime to manage multiple agents");
 
     let runtime = SimpleRuntime::new();
 
     // 使用 AgentBuilder 构建 AgentMetadata
+    // Use AgentBuilder to construct AgentMetadata
     let metadata1 = AgentBuilder::new("agent_master", "MasterAgent")
         .with_capability("master")
         .build_metadata();
@@ -156,6 +167,7 @@ async fn main() -> anyhow::Result<()> {
         .build_metadata();
 
     // 构建配置
+    // Construct configurations
     let config1 = AgentBuilder::new("agent_master", "MasterAgent").build_config();
     let config2 = AgentBuilder::new("agent_worker", "WorkerAgent").build_config();
 
@@ -167,10 +179,12 @@ async fn main() -> anyhow::Result<()> {
         .await?;
 
     // 创建并运行智能体实例
+    // Create and run agent instances
     let agent_master = SimpleRuntimeAgent::new("agent_master", "MasterAgent");
     let agent_worker = SimpleRuntimeAgent::new("agent_worker", "WorkerAgent");
 
     // Master agent 事件循环
+    // Master agent event loop
     tokio::spawn(async move {
         let mut runner = AgentRunner::new(agent_master).await.unwrap();
 
@@ -183,6 +197,7 @@ async fn main() -> anyhow::Result<()> {
             }
 
             // 将事件转换为输入
+            // Convert event into input
             let input = match event {
                 AgentEvent::TaskReceived(task) => AgentInput::text(task.content),
                 AgentEvent::Custom(data, _) => AgentInput::text(data),
@@ -196,6 +211,7 @@ async fn main() -> anyhow::Result<()> {
     });
 
     // Worker agent 事件循环
+    // Worker agent event loop
     tokio::spawn(async move {
         let mut runner = AgentRunner::new(agent_worker).await.unwrap();
 
@@ -220,9 +236,11 @@ async fn main() -> anyhow::Result<()> {
     });
 
     // 创建消息总线并发送消息
+    // Create message bus and send messages
     let message_bus = runtime.message_bus();
 
     // 订阅主题
+    // Subscribe to topics
     runtime
         .subscribe_topic("agent_master", "commands")
         .await?;
@@ -231,6 +249,7 @@ async fn main() -> anyhow::Result<()> {
         .await?;
 
     // 发布消息到主题
+    // Publish message to topic
     info!("Publishing command to 'commands' topic...");
     message_bus
         .publish(
@@ -240,6 +259,7 @@ async fn main() -> anyhow::Result<()> {
         .await?;
 
     // 发送点对点消息
+    // Send peer-to-peer message
     info!("Sending direct message from master to worker...");
     message_bus
         .send_to(
@@ -252,9 +272,11 @@ async fn main() -> anyhow::Result<()> {
         .await?;
 
     // 让程序运行一段时间
+    // Let the program run for a while
     tokio::time::sleep(std::time::Duration::from_millis(500)).await;
 
     // 停止所有智能体
+    // Stop all agents
     runtime.stop_all().await?;
 
     info!("\nAll examples completed!");

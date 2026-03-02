@@ -1,6 +1,8 @@
 //! SQL 数据库 Prompt 存储实现
+//! SQL Database Prompt Storage Implementation
 //!
 //! 支持 PostgreSQL、MySQL、SQLite 的统一实现
+//! Unified implementation supporting PostgreSQL, MySQL, and SQLite
 
 use super::store::{PromptCompositionEntity, PromptEntity, PromptFilter, PromptStore};
 use super::template::{PromptError, PromptResult};
@@ -25,6 +27,7 @@ use sqlx::Row;
 
 // ============================================================================
 // PostgreSQL 实现
+// PostgreSQL Implementation
 // ============================================================================
 
 #[cfg(feature = "persistence-postgres")]
@@ -35,6 +38,7 @@ pub struct PostgresPromptStore {
 #[cfg(feature = "persistence-postgres")]
 impl PostgresPromptStore {
     /// 连接到 PostgreSQL
+    /// Connect to PostgreSQL
     pub async fn connect(database_url: &str) -> PromptResult<Self> {
         let pool = sqlx::postgres::PgPoolOptions::new()
             .max_connections(10)
@@ -46,21 +50,25 @@ impl PostgresPromptStore {
     }
 
     /// 从现有连接池创建
+    /// Create from an existing connection pool
     pub fn from_pool(pool: PgPool) -> Self {
         Self { pool }
     }
 
     /// 创建共享实例
+    /// Create a shared instance
     pub async fn shared(database_url: &str) -> PromptResult<std::sync::Arc<Self>> {
         Ok(std::sync::Arc::new(Self::connect(database_url).await?))
     }
 
     /// 获取连接池
+    /// Get the connection pool
     pub fn pool(&self) -> &PgPool {
         &self.pool
     }
 
     /// 从行解析实体
+    /// Parse entity from row
     fn parse_template_row(row: &PgRow) -> PromptResult<PromptEntity> {
         let tags: Vec<String> = row
             .try_get::<serde_json::Value, _>("tags")
@@ -100,6 +108,8 @@ impl PostgresPromptStore {
         })
     }
 
+    /// 从行解析组合实体
+    /// Parse composition entity from row
     fn parse_composition_row(row: &PgRow) -> PromptResult<PromptCompositionEntity> {
         let template_ids: Vec<String> = row
             .try_get::<serde_json::Value, _>("template_ids")
@@ -466,6 +476,7 @@ impl PromptStore for PostgresPromptStore {
 
 // ============================================================================
 // MySQL 实现
+// MySQL Implementation
 // ============================================================================
 
 #[cfg(feature = "persistence-mysql")]
@@ -476,6 +487,7 @@ pub struct MySqlPromptStore {
 #[cfg(feature = "persistence-mysql")]
 impl MySqlPromptStore {
     /// 连接到 MySQL
+    /// Connect to MySQL
     pub async fn connect(database_url: &str) -> PromptResult<Self> {
         let pool = sqlx::mysql::MySqlPoolOptions::new()
             .max_connections(10)
@@ -487,11 +499,13 @@ impl MySqlPromptStore {
     }
 
     /// 从现有连接池创建
+    /// Create from existing connection pool
     pub fn from_pool(pool: MySqlPool) -> Self {
         Self { pool }
     }
 
     /// 获取连接池
+    /// Get the connection pool
     pub fn pool(&self) -> &MySqlPool {
         &self.pool
     }
@@ -509,6 +523,7 @@ impl MySqlPromptStore {
             .unwrap_or(serde_json::Value::Object(serde_json::Map::new()));
 
         // MySQL UUID 需要特殊处理
+        // MySQL UUID requires special handling
         let id_bytes: Vec<u8> = row
             .try_get("id")
             .map_err(|e| PromptError::ParseError(e.to_string()))?;
@@ -668,6 +683,7 @@ impl PromptStore for MySqlPromptStore {
 
     async fn find_by_tag(&self, tag: &str) -> PromptResult<Vec<PromptEntity>> {
         // MySQL 使用 JSON_CONTAINS
+        // MySQL uses JSON_CONTAINS
         let rows = sqlx::query(
             "SELECT * FROM prompt_template WHERE enabled = true AND JSON_CONTAINS(tags, ?) ORDER BY updated_at DESC",
         )
@@ -752,6 +768,7 @@ impl PromptStore for MySqlPromptStore {
 
     async fn get_all_tags(&self) -> PromptResult<Vec<String>> {
         // MySQL 需要使用 JSON_TABLE 或解析
+        // MySQL requires using JSON_TABLE or manual parsing
         let rows = sqlx::query("SELECT DISTINCT tags FROM prompt_template WHERE enabled = true")
             .fetch_all(&self.pool)
             .await
@@ -810,6 +827,7 @@ impl PromptStore for MySqlPromptStore {
         composition_id: &str,
     ) -> PromptResult<Option<PromptCompositionEntity>> {
         // 简化实现，返回 None
+        // Simplified implementation, returns None
         Ok(None)
     }
 
@@ -830,6 +848,7 @@ impl PromptStore for MySqlPromptStore {
 
 // ============================================================================
 // SQLite 实现
+// SQLite Implementation
 // ============================================================================
 
 #[cfg(feature = "persistence-sqlite")]
@@ -840,6 +859,7 @@ pub struct SqlitePromptStore {
 #[cfg(feature = "persistence-sqlite")]
 impl SqlitePromptStore {
     /// 连接到 SQLite
+    /// Connect to SQLite
     pub async fn connect(database_url: &str) -> PromptResult<Self> {
         let pool = sqlx::sqlite::SqlitePoolOptions::new()
             .max_connections(5)
@@ -851,21 +871,25 @@ impl SqlitePromptStore {
     }
 
     /// 创建内存数据库
+    /// Create in-memory database
     pub async fn in_memory() -> PromptResult<Self> {
         Self::connect("sqlite::memory:").await
     }
 
     /// 从现有连接池创建
+    /// Create from existing connection pool
     pub fn from_pool(pool: SqlitePool) -> Self {
         Self { pool }
     }
 
     /// 获取连接池
+    /// Get connection pool
     pub fn pool(&self) -> &SqlitePool {
         &self.pool
     }
 
     /// 初始化表结构
+    /// Initialize table structures
     pub async fn init_tables(&self) -> PromptResult<()> {
         sqlx::query(
             r#"
@@ -911,6 +935,7 @@ impl SqlitePromptStore {
         .map_err(|e| PromptError::ParseError(e.to_string()))?;
 
         // 创建索引
+        // Create indexes
         sqlx::query(
             "CREATE INDEX IF NOT EXISTS idx_prompt_template_id ON prompt_template(template_id)",
         )
@@ -1094,6 +1119,7 @@ impl PromptStore for SqlitePromptStore {
 
     async fn find_by_tag(&self, tag: &str) -> PromptResult<Vec<PromptEntity>> {
         // SQLite 使用 JSON 函数或 LIKE
+        // SQLite uses JSON functions or LIKE
         let rows = sqlx::query(
             "SELECT * FROM prompt_template WHERE enabled = 1 AND tags LIKE ? ORDER BY updated_at DESC",
         )

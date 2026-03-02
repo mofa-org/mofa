@@ -1,6 +1,8 @@
 //! Prompt 持久化存储
+//! Prompt Persistence Storage
 //!
 //! 提供 Prompt 模板的数据库存储支持
+//! Provides database storage support for Prompt templates
 
 use super::template::{
     PromptComposition, PromptError, PromptResult, PromptTemplate, PromptVariable,
@@ -11,40 +13,56 @@ use std::collections::HashMap;
 use uuid::Uuid;
 
 /// Prompt 模板数据库实体
+/// Prompt template database entity
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PromptEntity {
     /// 唯一 ID
+    /// Unique ID
     pub id: Uuid,
     /// 模板标识符（用于查找）
+    /// Template identifier (used for lookup)
     pub template_id: String,
     /// 模板名称
+    /// Template name
     pub name: Option<String>,
     /// 模板描述
+    /// Template description
     pub description: Option<String>,
     /// 模板内容
+    /// Template content
     pub content: String,
     /// 变量定义（JSON）
+    /// Variable definitions (JSON)
     pub variables: serde_json::Value,
     /// 标签列表
+    /// Tag list
     pub tags: Vec<String>,
     /// 版本号
+    /// Version number
     pub version: Option<String>,
     /// 元数据（JSON）
+    /// Metadata (JSON)
     pub metadata: serde_json::Value,
     /// 是否启用
+    /// Whether enabled
     pub enabled: bool,
     /// 创建时间
+    /// Creation time
     pub created_at: chrono::DateTime<chrono::Utc>,
     /// 更新时间
+    /// Update time
     pub updated_at: chrono::DateTime<chrono::Utc>,
     /// 创建者 ID
+    /// Creator ID
     pub created_by: Option<Uuid>,
     /// 租户 ID（用于多租户隔离）
+    /// Tenant ID (for multi-tenant isolation)
     pub tenant_id: Option<Uuid>,
 }
 
 impl PromptEntity {
     /// 从 PromptTemplate 创建实体
+    /// Create entity from PromptTemplate
     pub fn from_template(template: &PromptTemplate) -> Self {
         let now = chrono::Utc::now();
         let variables = serde_json::to_value(&template.variables).unwrap_or_default();
@@ -69,6 +87,7 @@ impl PromptEntity {
     }
 
     /// 转换为 PromptTemplate
+    /// Convert to PromptTemplate
     pub fn to_template(&self) -> PromptResult<PromptTemplate> {
         let variables: Vec<PromptVariable> = serde_json::from_value(self.variables.clone())
             .map_err(|e| PromptError::ParseError(e.to_string()))?;
@@ -88,12 +107,14 @@ impl PromptEntity {
     }
 
     /// 设置创建者
+    /// Set creator
     pub fn with_creator(mut self, creator_id: Uuid) -> Self {
         self.created_by = Some(creator_id);
         self
     }
 
     /// 设置租户
+    /// Set tenant
     pub fn with_tenant(mut self, tenant_id: Uuid) -> Self {
         self.tenant_id = Some(tenant_id);
         self
@@ -101,30 +122,41 @@ impl PromptEntity {
 }
 
 /// Prompt 组合数据库实体
+/// Prompt composition database entity
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PromptCompositionEntity {
     /// 唯一 ID
+    /// Unique ID
     pub id: Uuid,
     /// 组合标识符
+    /// Composition identifier
     pub composition_id: String,
     /// 描述
+    /// Description
     pub description: Option<String>,
     /// 模板 ID 列表
+    /// Template ID list
     pub template_ids: Vec<String>,
     /// 分隔符
+    /// Separator
     pub separator: String,
     /// 是否启用
+    /// Whether enabled
     pub enabled: bool,
     /// 创建时间
+    /// Creation time
     pub created_at: chrono::DateTime<chrono::Utc>,
     /// 更新时间
+    /// Update time
     pub updated_at: chrono::DateTime<chrono::Utc>,
     /// 租户 ID
+    /// Tenant ID
     pub tenant_id: Option<Uuid>,
 }
 
 impl PromptCompositionEntity {
     /// 从 PromptComposition 创建实体
+    /// Create entity from PromptComposition
     pub fn from_composition(composition: &PromptComposition) -> Self {
         let now = chrono::Utc::now();
         Self {
@@ -141,6 +173,7 @@ impl PromptCompositionEntity {
     }
 
     /// 转换为 PromptComposition
+    /// Convert to PromptComposition
     pub fn to_composition(&self) -> PromptComposition {
         PromptComposition {
             id: self.composition_id.clone(),
@@ -152,21 +185,29 @@ impl PromptCompositionEntity {
 }
 
 /// Prompt 查询过滤器
+/// Prompt query filter
 #[derive(Debug, Clone, Default)]
 pub struct PromptFilter {
     /// 按模板 ID 查找
+    /// Find by template ID
     pub template_id: Option<String>,
     /// 按标签查找
+    /// Find by tags
     pub tags: Option<Vec<String>>,
     /// 搜索关键词（名称、描述）
+    /// Search keywords (name, description)
     pub search: Option<String>,
     /// 只返回启用的
+    /// Only return enabled
     pub enabled_only: bool,
     /// 租户 ID
+    /// Tenant ID
     pub tenant_id: Option<Uuid>,
     /// 分页偏移
+    /// Pagination offset
     pub offset: Option<i64>,
     /// 分页限制
+    /// Pagination limit
     pub limit: Option<i64>,
 }
 
@@ -216,14 +257,18 @@ impl PromptFilter {
 }
 
 /// Prompt 存储 trait
+/// Prompt storage trait
 ///
 /// 定义 Prompt 模板的 CRUD 操作
+/// Defines CRUD operations for Prompt templates
 #[async_trait]
 pub trait PromptStore: Send + Sync {
     /// 保存模板
+    /// Save template
     async fn save_template(&self, entity: &PromptEntity) -> PromptResult<()>;
 
     /// 批量保存模板
+    /// Batch save templates
     async fn save_templates(&self, entities: &[PromptEntity]) -> PromptResult<()> {
         for entity in entities {
             self.save_template(entity).await?;
@@ -232,60 +277,78 @@ pub trait PromptStore: Send + Sync {
     }
 
     /// 获取模板（按 UUID）
+    /// Get template (by UUID)
     async fn get_template_by_id(&self, id: Uuid) -> PromptResult<Option<PromptEntity>>;
 
     /// 获取模板（按模板 ID）
+    /// Get template (by template ID)
     async fn get_template(&self, template_id: &str) -> PromptResult<Option<PromptEntity>>;
 
     /// 查询模板列表
+    /// Query template list
     async fn query_templates(&self, filter: &PromptFilter) -> PromptResult<Vec<PromptEntity>>;
 
     /// 按标签查找模板
+    /// Find templates by tag
     async fn find_by_tag(&self, tag: &str) -> PromptResult<Vec<PromptEntity>>;
 
     /// 搜索模板
+    /// Search templates
     async fn search_templates(&self, keyword: &str) -> PromptResult<Vec<PromptEntity>>;
 
     /// 更新模板
+    /// Update template
     async fn update_template(&self, entity: &PromptEntity) -> PromptResult<()>;
 
     /// 删除模板（按 UUID）
+    /// Delete template (by UUID)
     async fn delete_template_by_id(&self, id: Uuid) -> PromptResult<bool>;
 
     /// 删除模板（按模板 ID）
+    /// Delete template (by template ID)
     async fn delete_template(&self, template_id: &str) -> PromptResult<bool>;
 
     /// 启用/禁用模板
+    /// Enable/disable template
     async fn set_template_enabled(&self, template_id: &str, enabled: bool) -> PromptResult<()>;
 
     /// 检查模板是否存在
+    /// Check if template exists
     async fn exists(&self, template_id: &str) -> PromptResult<bool>;
 
     /// 统计模板数量
+    /// Count template quantity
     async fn count(&self, filter: &PromptFilter) -> PromptResult<i64>;
 
     /// 获取所有标签
+    /// Get all tags
     async fn get_all_tags(&self) -> PromptResult<Vec<String>>;
 
     // ========== 组合操作 ==========
+    // ========== Composition Operations ==========
 
     /// 保存组合
+    /// Save composition
     async fn save_composition(&self, entity: &PromptCompositionEntity) -> PromptResult<()>;
 
     /// 获取组合
+    /// Get composition
     async fn get_composition(
         &self,
         composition_id: &str,
     ) -> PromptResult<Option<PromptCompositionEntity>>;
 
     /// 查询所有组合
+    /// Query all compositions
     async fn query_compositions(&self) -> PromptResult<Vec<PromptCompositionEntity>>;
 
     /// 删除组合
+    /// Delete composition
     async fn delete_composition(&self, composition_id: &str) -> PromptResult<bool>;
 }
 
 /// 动态分发的 PromptStore
+/// Dynamically dispatched PromptStore
 pub type DynPromptStore = std::sync::Arc<dyn PromptStore>;
 
 #[cfg(test)]

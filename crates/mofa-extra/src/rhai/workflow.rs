@@ -1,13 +1,19 @@
 //! Rhai 工作流脚本节点
+//! Rhai workflow script nodes
 //!
 //! 提供脚本化的工作流节点支持，允许用户通过 Rhai 脚本定义：
+//! Provides scripted workflow node support, allowing users to define via Rhai scripts:
 //! - 任务节点逻辑
+//! - Task node logic
 //! - 条件判断逻辑
+//! - Conditional judgment logic
 //! - 数据转换逻辑
+//! - Data transformation logic
 //! - 循环控制逻辑
+//! - Loop control logic
 
 use super::engine::{RhaiScriptEngine, ScriptContext, ScriptEngineConfig, ScriptResult};
-use anyhow::{Result, anyhow};
+use super::error::{RhaiError, RhaiResult};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -15,47 +21,66 @@ use tokio::sync::RwLock;
 
 // ============================================================================
 // 脚本节点定义
+// Script node definition
 // ============================================================================
 
 /// 脚本节点类型
+/// Script node type
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum ScriptNodeType {
     /// 任务脚本 - 执行具体业务逻辑
+    /// Task script - Executes specific business logic
     Task,
     /// 条件脚本 - 返回布尔值用于分支判断
+    /// Condition script - Returns boolean for branch judgment
     Condition,
     /// 转换脚本 - 数据转换处理
+    /// Transform script - Data transformation processing
     Transform,
     /// 验证脚本 - 数据验证
+    /// Validator script - Data validation
     Validator,
     /// 聚合脚本 - 多输入聚合处理
+    /// Aggregator script - Multi-input aggregation processing
     Aggregator,
     /// 循环条件脚本 - 控制循环执行
+    /// Loop condition script - Controls loop execution
     LoopCondition,
 }
 
 /// 脚本节点配置
+/// Script node configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ScriptNodeConfig {
     /// 节点 ID
+    /// Node ID
     pub id: String,
     /// 节点名称
+    /// Node name
     pub name: String,
     /// 节点类型
+    /// Node type
     pub node_type: ScriptNodeType,
     /// 脚本源代码（内联方式）
+    /// Script source code (inline mode)
     pub script_source: Option<String>,
     /// 脚本文件路径（文件方式）
+    /// Script file path (file mode)
     pub script_path: Option<String>,
     /// 入口函数名（默认为 "main"）
+    /// Entry function name (default is "main")
     pub entry_function: Option<String>,
     /// 是否启用缓存
+    /// Whether to enable caching
     pub enable_cache: bool,
     /// 超时时间（毫秒）
+    /// Timeout duration (milliseconds)
     pub timeout_ms: u64,
     /// 重试次数
+    /// Retry count
     pub max_retries: u32,
     /// 节点元数据
+    /// Node metadata
     pub metadata: HashMap<String, String>,
 }
 
@@ -109,40 +134,54 @@ impl ScriptNodeConfig {
 
 // ============================================================================
 // 脚本节点执行器
+// Script node executor
 // ============================================================================
 
 /// 脚本节点执行结果
+/// Script node execution result
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ScriptNodeResult {
     /// 节点 ID
+    /// Node ID
     pub node_id: String,
     /// 是否成功
+    /// Success status
     pub success: bool,
     /// 输出值
+    /// Output value
     pub output: serde_json::Value,
     /// 错误信息
+    /// Error message
     pub error: Option<String>,
     /// 执行时间（毫秒）
+    /// Execution time (milliseconds)
     pub execution_time_ms: u64,
     /// 重试次数
+    /// Retry count
     pub retry_count: u32,
     /// 脚本日志
+    /// Script logs
     pub logs: Vec<String>,
 }
 
 /// 脚本工作流节点执行器
+/// Script workflow node executor
 pub struct ScriptWorkflowNode {
     /// 节点配置
+    /// Node configuration
     config: ScriptNodeConfig,
     /// 脚本引擎
+    /// Script engine
     engine: Arc<RhaiScriptEngine>,
     /// 编译后的脚本 ID（如果已缓存）
+    /// Compiled script ID (if cached)
     cached_script_id: Option<String>,
 }
 
 impl ScriptWorkflowNode {
     /// 创建脚本节点
-    pub async fn new(config: ScriptNodeConfig, engine: Arc<RhaiScriptEngine>) -> Result<Self> {
+    /// Create script node
+    pub async fn new(config: ScriptNodeConfig, engine: Arc<RhaiScriptEngine>) -> RhaiResult<Self> {
         let mut node = Self {
             config,
             engine,
@@ -150,6 +189,7 @@ impl ScriptWorkflowNode {
         };
 
         // 如果启用缓存，预编译脚本
+        // Pre-compile script if cache is enabled
         if node.config.enable_cache {
             node.compile_script().await?;
         }
@@ -158,7 +198,8 @@ impl ScriptWorkflowNode {
     }
 
     /// 编译脚本
-    async fn compile_script(&mut self) -> Result<()> {
+    /// Compile script
+    async fn compile_script(&mut self) -> RhaiResult<()> {
         let source = self.get_script_source().await?;
         let script_id = format!("node_{}", self.config.id);
 
@@ -171,35 +212,40 @@ impl ScriptWorkflowNode {
     }
 
     /// 获取脚本源代码
-    async fn get_script_source(&self) -> Result<String> {
+    /// Get script source code
+    async fn get_script_source(&self) -> RhaiResult<String> {
         if let Some(ref source) = self.config.script_source {
             Ok(source.clone())
         } else if let Some(ref path) = self.config.script_path {
             tokio::fs::read_to_string(path)
                 .await
-                .map_err(|e| anyhow!("Failed to read script file: {}", e))
+                .map_err(RhaiError::from)
         } else {
-            Err(anyhow!("No script source or path specified"))
+            Err(RhaiError::Other("No script source or path specified".to_string()))
         }
     }
 
     /// 执行节点
-    pub async fn execute(&self, input: serde_json::Value) -> Result<ScriptNodeResult> {
+    /// Execute node
+    pub async fn execute(&self, input: serde_json::Value) -> RhaiResult<ScriptNodeResult> {
         let start_time = std::time::Instant::now();
         let mut last_error = None;
         let mut retry_count = 0;
 
         // 准备上下文
+        // Prepare context
         let mut context = ScriptContext::new()
             .with_node(&self.config.id)
             .with_variable("input", input.clone())?;
 
         // 添加元数据
+        // Add metadata
         for (k, v) in &self.config.metadata {
             context.metadata.insert(k.clone(), v.clone());
         }
 
         // 带重试的执行
+        // Execution with retries
         while retry_count <= self.config.max_retries {
             let result = self.execute_once(&context).await;
 
@@ -225,6 +271,7 @@ impl ScriptWorkflowNode {
 
             if retry_count < self.config.max_retries {
                 // 指数退避重试
+                // Exponential backoff retry
                 let delay = std::time::Duration::from_millis(100 * 2u64.pow(retry_count));
                 tokio::time::sleep(delay).await;
             }
@@ -243,10 +290,13 @@ impl ScriptWorkflowNode {
     }
 
     /// 执行一次（不重试）
-    async fn execute_once(&self, context: &ScriptContext) -> Result<ScriptResult> {
+    /// Execute once (no retry)
+    async fn execute_once(&self, context: &ScriptContext) -> RhaiResult<ScriptResult> {
         // 使用缓存的脚本或直接执行
+        // Use cached script or execute directly
         if let Some(ref script_id) = self.cached_script_id {
             // 如果有入口函数，调用函数
+            // If entry function exists, call function
             if let Some(ref entry) = self.config.entry_function {
                 let input = context
                     .get_variable::<serde_json::Value>("input")
@@ -268,11 +318,12 @@ impl ScriptWorkflowNode {
     }
 
     /// 作为条件节点执行（返回布尔值）
-    pub async fn execute_as_condition(&self, input: serde_json::Value) -> Result<bool> {
+    /// Execute as condition node (returns boolean)
+    pub async fn execute_as_condition(&self, input: serde_json::Value) -> RhaiResult<bool> {
         let result = self.execute(input).await?;
 
         if !result.success {
-            return Err(anyhow!(
+            return Err(RhaiError::ExecutionError(
                 result
                     .error
                     .unwrap_or_else(|| "Condition execution failed".into())
@@ -280,6 +331,7 @@ impl ScriptWorkflowNode {
         }
 
         // 尝试将结果转换为布尔值
+        // Attempt to convert result to boolean
         match &result.output {
             serde_json::Value::Bool(b) => Ok(*b),
             serde_json::Value::Number(n) => Ok(n.as_i64().unwrap_or(0) != 0),
@@ -291,16 +343,19 @@ impl ScriptWorkflowNode {
     }
 
     /// 获取节点配置
+    /// Get node configuration
     pub fn config(&self) -> &ScriptNodeConfig {
         &self.config
     }
 
     /// 获取节点 ID
+    /// Get node ID
     pub fn id(&self) -> &str {
         &self.config.id
     }
 
     /// 获取节点名称
+    /// Get node name
     pub fn name(&self) -> &str {
         &self.config.name
     }
@@ -308,26 +363,36 @@ impl ScriptWorkflowNode {
 
 // ============================================================================
 // 脚本工作流构建器
+// Script workflow builder
 // ============================================================================
 
 /// 脚本工作流定义
+/// Script workflow definition
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ScriptWorkflowDefinition {
     /// 工作流 ID
+    /// Workflow ID
     pub id: String,
     /// 工作流名称
+    /// Workflow name
     pub name: String,
     /// 工作流描述
+    /// Workflow description
     pub description: String,
     /// 节点配置列表
+    /// Node configuration list
     pub nodes: Vec<ScriptNodeConfig>,
     /// 边定义：(源节点ID, 目标节点ID, 可选条件)
+    /// Edge definition: (source node ID, target node ID, optional condition)
     pub edges: Vec<(String, String, Option<String>)>,
     /// 开始节点 ID
+    /// Start node ID
     pub start_node: String,
     /// 结束节点 ID 列表
+    /// End node ID list
     pub end_nodes: Vec<String>,
     /// 全局变量
+    /// Global variables
     pub global_variables: HashMap<String, serde_json::Value>,
 }
 
@@ -346,30 +411,35 @@ impl ScriptWorkflowDefinition {
     }
 
     /// 从 YAML 文件加载
-    pub async fn from_yaml(path: &str) -> Result<Self> {
+    /// Load from YAML file
+    pub async fn from_yaml(path: &str) -> RhaiResult<Self> {
         let content = tokio::fs::read_to_string(path).await?;
-        serde_yaml::from_str(&content).map_err(|e| anyhow!("Failed to parse YAML: {}", e))
+        serde_yaml::from_str(&content).map_err(RhaiError::from)
     }
 
     /// 从 JSON 文件加载
-    pub async fn from_json(path: &str) -> Result<Self> {
+    /// Load from JSON file
+    pub async fn from_json(path: &str) -> RhaiResult<Self> {
         let content = tokio::fs::read_to_string(path).await?;
-        serde_json::from_str(&content).map_err(|e| anyhow!("Failed to parse JSON: {}", e))
+        serde_json::from_str(&content).map_err(RhaiError::from)
     }
 
     /// 添加节点
+    /// Add node
     pub fn add_node(&mut self, config: ScriptNodeConfig) -> &mut Self {
         self.nodes.push(config);
         self
     }
 
     /// 添加边
+    /// Add edge
     pub fn add_edge(&mut self, from: &str, to: &str) -> &mut Self {
         self.edges.push((from.to_string(), to.to_string(), None));
         self
     }
 
     /// 添加条件边
+    /// Add conditional edge
     pub fn add_conditional_edge(&mut self, from: &str, to: &str, condition: &str) -> &mut Self {
         self.edges.push((
             from.to_string(),
@@ -380,19 +450,22 @@ impl ScriptWorkflowDefinition {
     }
 
     /// 设置开始节点
+    /// Set start node
     pub fn set_start(&mut self, node_id: &str) -> &mut Self {
         self.start_node = node_id.to_string();
         self
     }
 
     /// 添加结束节点
+    /// Add end node
     pub fn add_end(&mut self, node_id: &str) -> &mut Self {
         self.end_nodes.push(node_id.to_string());
         self
     }
 
     /// 验证工作流定义
-    pub fn validate(&self) -> Result<Vec<String>> {
+    /// Validate workflow definition
+    pub fn validate(&self) -> RhaiResult<Vec<String>> {
         let mut errors = Vec::new();
 
         if self.id.is_empty() {
@@ -408,6 +481,7 @@ impl ScriptWorkflowDefinition {
         }
 
         // 检查所有引用的节点是否存在
+        // Check if all referenced nodes exist
         let node_ids: std::collections::HashSet<_> = self.nodes.iter().map(|n| &n.id).collect();
 
         if !node_ids.contains(&self.start_node) {
@@ -435,56 +509,73 @@ impl ScriptWorkflowDefinition {
 
 // ============================================================================
 // 脚本工作流执行器
+// Script workflow executor
 // ============================================================================
 
 /// 脚本工作流执行器
+/// Script workflow executor
 pub struct ScriptWorkflowExecutor {
     /// 脚本引擎
+    /// Script engine
     #[allow(dead_code)]
     engine: Arc<RhaiScriptEngine>,
     /// 已加载的节点
+    /// Loaded nodes
     nodes: HashMap<String, ScriptWorkflowNode>,
     /// 工作流定义
+    /// Workflow definition
     definition: ScriptWorkflowDefinition,
     /// 执行状态
+    /// Execution state
     state: Arc<RwLock<WorkflowExecutionState>>,
 }
 
 /// 工作流执行状态
+/// Workflow execution state
 #[derive(Debug, Clone, Default)]
 pub struct WorkflowExecutionState {
     /// 当前节点 ID
+    /// Current node ID
     pub current_node: Option<String>,
     /// 节点输出
+    /// Node output
     pub node_outputs: HashMap<String, serde_json::Value>,
     /// 全局变量
+    /// Global variables
     pub variables: HashMap<String, serde_json::Value>,
     /// 执行历史
+    /// Execution history
     pub execution_history: Vec<String>,
     /// 是否完成
+    /// Whether completed
     pub completed: bool,
     /// 最终结果
+    /// Final result
     pub final_result: Option<serde_json::Value>,
     /// 错误信息
+    /// Error message
     pub error: Option<String>,
 }
 
 impl ScriptWorkflowExecutor {
     /// 创建工作流执行器
+    /// Create workflow executor
     pub async fn new(
         definition: ScriptWorkflowDefinition,
         engine_config: ScriptEngineConfig,
-    ) -> Result<Self> {
+    ) -> RhaiResult<Self> {
         let engine = Arc::new(RhaiScriptEngine::new(engine_config)?);
         let mut nodes = HashMap::new();
 
         // 创建所有节点
+        // Create all nodes
         for node_config in &definition.nodes {
             let node = ScriptWorkflowNode::new(node_config.clone(), engine.clone()).await?;
             nodes.insert(node_config.id.clone(), node);
         }
 
         // 初始化状态
+        // Initialize state
         let state = WorkflowExecutionState {
             variables: definition.global_variables.clone(),
             ..Default::default()
@@ -499,7 +590,8 @@ impl ScriptWorkflowExecutor {
     }
 
     /// 执行工作流
-    pub async fn execute(&self, input: serde_json::Value) -> Result<serde_json::Value> {
+    /// Execute workflow
+    pub async fn execute(&self, input: serde_json::Value) -> RhaiResult<serde_json::Value> {
         let mut state = self.state.write().await;
         state.current_node = Some(self.definition.start_node.clone());
         state.variables.insert("input".to_string(), input.clone());
@@ -508,22 +600,26 @@ impl ScriptWorkflowExecutor {
 
         while let Some(ref node_id) = state.current_node.clone() {
             // 获取节点
+            // Get node
             let node = self
                 .nodes
                 .get(node_id)
-                .ok_or_else(|| anyhow!("Node not found: {}", node_id))?;
+                .ok_or_else(|| RhaiError::NotFound(format!("Node not found: {}", node_id)))?;
 
             // 检查是否为结束节点
+            // Check if it's an end node
             if self.definition.end_nodes.contains(node_id) {
                 // 执行结束节点的脚本
+                // Execute end node script
                 let result = node.execute(current_value.clone()).await?;
 
                 if !result.success {
                     state.error = result.error;
-                    return Err(anyhow!("Node {} execution failed", node_id));
+                    return Err(RhaiError::ExecutionError(format!("Node {} execution failed", node_id)));
                 }
 
                 // 保存节点输出
+                // Save node output
                 state
                     .node_outputs
                     .insert(node_id.clone(), result.output.clone());
@@ -534,29 +630,33 @@ impl ScriptWorkflowExecutor {
             }
 
             // 记录执行历史
+            // Record execution history
             state.execution_history.push(node_id.clone());
 
             // 执行节点
+            // Execute node
             let result = node.execute(current_value.clone()).await?;
 
             if !result.success {
                 let error = result.error.clone(); // Clone the error before moving it
                 state.error = error.clone();
                 let error_detail = error.unwrap_or_else(|| "unknown error".to_string());
-                return Err(anyhow!(
+                return Err(RhaiError::ExecutionError(format!(
                     "Node {} execution failed: {}",
                     node_id,
                     error_detail
-                ));
+                )));
             }
 
             // 保存节点输出
+            // Save node output
             state
                 .node_outputs
                 .insert(node_id.clone(), result.output.clone());
             current_value = result.output;
 
             // 确定下一个节点
+            // Determine next node
             let next_node = self.determine_next_node(node_id, &current_value).await?;
             state.current_node = next_node;
         }
@@ -568,12 +668,14 @@ impl ScriptWorkflowExecutor {
     }
 
     /// 确定下一个节点
+    /// Determine next node
     async fn determine_next_node(
         &self,
         current_node_id: &str,
         output: &serde_json::Value,
-    ) -> Result<Option<String>> {
+    ) -> RhaiResult<Option<String>> {
         // 查找从当前节点出发的边
+        // Find edges starting from the current node
         let candidate_edges: Vec<_> = self
             .definition
             .edges
@@ -586,14 +688,17 @@ impl ScriptWorkflowExecutor {
         }
 
         // 如果只有一条边，直接返回
+        // If only one edge, return directly
         if candidate_edges.len() == 1 && candidate_edges[0].2.is_none() {
             return Ok(Some(candidate_edges[0].1.clone()));
         }
 
         // 检查条件边
+        // Check conditional edges
         for (_, to, condition) in &candidate_edges {
             if let Some(cond) = condition {
                 // 评估条件
+                // Evaluate condition
                 // Parse and evaluate the condition (supports expressions like "rating == \"excellent\"")
                 let condition_value = {
                     // Simple implementation for equality checks on object fields
@@ -650,6 +755,7 @@ impl ScriptWorkflowExecutor {
         }
 
         // 返回无条件边（如果存在）
+        // Return unconditional edge (if exists)
         for (_, to, condition) in &candidate_edges {
             if condition.is_none() {
                 return Ok(Some(to.clone()));
@@ -660,11 +766,13 @@ impl ScriptWorkflowExecutor {
     }
 
     /// 获取执行状态
+    /// Get execution status
     pub async fn state(&self) -> WorkflowExecutionState {
         self.state.read().await.clone()
     }
 
     /// 重置执行器
+    /// Reset executor
     pub async fn reset(&self) {
         let mut state = self.state.write().await;
         *state = WorkflowExecutionState::default();
@@ -674,30 +782,36 @@ impl ScriptWorkflowExecutor {
 
 // ============================================================================
 // 便捷函数
+// Convenience functions
 // ============================================================================
 
 /// 创建任务脚本节点
+/// Create task script node
 pub fn task_script(id: &str, name: &str, script: &str) -> ScriptNodeConfig {
     ScriptNodeConfig::new(id, name, ScriptNodeType::Task).with_source(script)
 }
 
 /// 创建条件脚本节点
+/// Create condition script node
 pub fn condition_script(id: &str, name: &str, script: &str) -> ScriptNodeConfig {
     ScriptNodeConfig::new(id, name, ScriptNodeType::Condition).with_source(script)
 }
 
 /// 创建转换脚本节点
+/// Create transform script node
 pub fn transform_script(id: &str, name: &str, script: &str) -> ScriptNodeConfig {
     ScriptNodeConfig::new(id, name, ScriptNodeType::Transform).with_source(script)
 }
 
 /// 创建验证脚本节点
+/// Create validator script node
 pub fn validator_script(id: &str, name: &str, script: &str) -> ScriptNodeConfig {
     ScriptNodeConfig::new(id, name, ScriptNodeType::Validator).with_source(script)
 }
 
 // ============================================================================
 // 测试
+// Tests
 // ============================================================================
 
 #[cfg(test)]

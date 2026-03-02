@@ -1,7 +1,8 @@
 // MoFA UniFFI Interface Definition
 //
-// Clean, minimal API for cross-language bindings (Python, Kotlin, Swift, Java)
-// This file defines only the core interfaces that have actual Rust implementations.
+// Cross-language bindings (Python, Kotlin, Swift, Java)
+// Exposes core MoFA functionality: LLM agents, session management,
+// tool registration, and agent lifecycle types.
 
 namespace mofa {};
 
@@ -16,6 +17,55 @@ enum MoFaError {
     "LLMError",
     "IoError",
     "InvalidArgument",
+    "ToolError",
+    "SessionError",
+};
+
+// ============================================================================
+// Agent Lifecycle Types
+// ============================================================================
+
+// Agent state (simplified for FFI, without associated data)
+enum AgentStatus {
+    "Created",
+    "Initializing",
+    "Ready",
+    "Running",
+    "Executing",
+    "Paused",
+    "Interrupted",
+    "ShuttingDown",
+    "Shutdown",
+    "Failed",
+    "Destroyed",
+    "Error",
+};
+
+// Token usage statistics from an LLM call
+dictionary TokenUsageInfo {
+    u32 prompt_tokens;
+    u32 completion_tokens;
+    u32 total_tokens;
+};
+
+// Tool usage record showing which tools were invoked during execution
+dictionary ToolUsageRecord {
+    string name;
+    string input_json;
+    string? output_json;
+    boolean success;
+    string? error;
+    u64 duration_ms;
+};
+
+// Structured agent output returned after execution
+dictionary AgentOutputInfo {
+    string content;
+    string content_type;
+    sequence<ToolUsageRecord> tools_used;
+    u64 duration_ms;
+    TokenUsageInfo? token_usage;
+    string metadata_json;
 };
 
 // ============================================================================
@@ -43,6 +93,45 @@ enum ChatRole {
 dictionary ChatMessage {
     ChatRole role;
     string content;
+};
+
+// ============================================================================
+// Session Management Types
+// ============================================================================
+
+// A single message within a session
+dictionary SessionMessageInfo {
+    string role;
+    string content;
+    string timestamp;
+};
+
+// ============================================================================
+// Tool System Types
+// ============================================================================
+
+// Description of a registered tool
+dictionary ToolInfo {
+    string name;
+    string description;
+    string parameters_schema_json;
+};
+
+// Result from executing a tool
+dictionary FfiToolResult {
+    boolean success;
+    string output_json;
+    string? error;
+};
+
+// Callback interface for foreign-language tool implementations.
+// Implement this in Python, Java, Swift, or Kotlin to define custom tools
+// that agents can invoke.
+callback interface FfiToolCallback {
+    string name();
+    string description();
+    string parameters_schema_json();
+    FfiToolResult execute(string arguments_json);
 };
 
 // ============================================================================
@@ -110,4 +199,108 @@ interface LLMAgent {
 
     // Get conversation history
     sequence<ChatMessage> get_history();
+
+    // Get structured output from the last execution
+    [Throws=MoFaError]
+    AgentOutputInfo get_last_output();
+};
+
+// ============================================================================
+// Session Manager Interface
+// ============================================================================
+
+// Manages conversation sessions with in-memory or file-based storage
+interface SessionManager {
+    // Create a new in-memory session manager
+    [Name=new_in_memory]
+    constructor();
+
+    // Create a file-backed session manager (JSONL storage)
+    [Throws=MoFaError, Name=new_with_storage]
+    constructor(string workspace_path);
+
+    // Get or create a session by key
+    [Throws=MoFaError]
+    Session get_or_create(string key);
+
+    // Get a session by key (returns null if not found)
+    [Throws=MoFaError]
+    Session? get_session(string key);
+
+    // Save a session to storage
+    [Throws=MoFaError]
+    void save_session(Session session);
+
+    // Delete a session by key
+    [Throws=MoFaError]
+    boolean delete_session(string key);
+
+    // List all session keys
+    [Throws=MoFaError]
+    sequence<string> list_sessions();
+};
+
+// A conversation session holding messages and metadata
+interface Session {
+    // Create a new empty session
+    constructor(string key);
+
+    // Get the session key
+    string get_key();
+
+    // Add a message to the session
+    void add_message(string role, string content);
+
+    // Get message history (most recent N messages)
+    sequence<SessionMessageInfo> get_history(u32 max_messages);
+
+    // Clear all messages
+    void clear();
+
+    // Get the number of messages
+    u32 message_count();
+
+    // Check if empty
+    boolean is_empty();
+
+    // Set metadata (as JSON string)
+    [Throws=MoFaError]
+    void set_metadata(string key, string value_json);
+
+    // Get metadata value (as JSON string, null if not found)
+    string? get_metadata(string key);
+};
+
+// ============================================================================
+// Tool Registry Interface
+// ============================================================================
+
+// Registry for managing tools that agents can invoke
+interface ToolRegistry {
+    // Create a new empty tool registry
+    constructor();
+
+    // Register a foreign-language tool via callback
+    [Throws=MoFaError]
+    void register_tool(FfiToolCallback tool);
+
+    // Unregister a tool by name
+    [Throws=MoFaError]
+    boolean unregister_tool(string name);
+
+    // List all registered tools
+    sequence<ToolInfo> list_tools();
+
+    // Get tool names
+    sequence<string> list_tool_names();
+
+    // Check if a tool exists
+    boolean has_tool(string name);
+
+    // Get the number of registered tools
+    u32 tool_count();
+
+    // Execute a tool by name with JSON arguments
+    [Throws=MoFaError]
+    FfiToolResult execute_tool(string name, string arguments_json);
 };

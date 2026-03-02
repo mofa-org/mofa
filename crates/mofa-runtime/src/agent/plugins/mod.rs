@@ -1,7 +1,10 @@
 // 插件系统
+// Plugin System
 //!
 //! 提供动态插件机制，允许用户在运行时扩展和控制上下文内容
+//! Provides a dynamic plugin mechanism allowing users to extend and control context at runtime
 //! 该模块基于 mofa-kernel 的插件抽象，并提供运行时示例实现
+//! This module is based on mofa-kernel plugin abstractions and provides runtime implementations
 
 pub use mofa_kernel::agent::plugins::{Plugin, PluginMetadata, PluginRegistry, PluginStage};
 
@@ -18,15 +21,18 @@ pub type CustomFunctionHandler =
 
 // ============================================================================
 // 运行时插件注册中心
+// Runtime Plugin Registry
 // ============================================================================
 
 /// 简单插件注册中心实现
+/// Simple plugin registry implementation
 pub struct SimplePluginRegistry {
     plugins: RwLock<HashMap<String, Arc<dyn Plugin>>>,
 }
 
 impl SimplePluginRegistry {
     /// 创建新的插件注册中心
+    /// Create a new plugin registry
     pub fn new() -> Self {
         Self {
             plugins: RwLock::new(HashMap::new()),
@@ -104,20 +110,24 @@ impl PluginRegistry for SimplePluginRegistry {
 
 // ============================================================================
 // 插件执行器（运行时层）
+// Plugin Executor (Runtime Layer)
 // ============================================================================
 
 /// 插件执行器
+/// Plugin executor
 pub struct PluginExecutor {
     pub registry: Arc<dyn PluginRegistry>,
 }
 
 impl PluginExecutor {
     /// 创建插件执行器
+    /// Create a plugin executor
     pub fn new(registry: Arc<dyn PluginRegistry>) -> Self {
         Self { registry }
     }
 
     /// 执行指定阶段的所有插件
+    /// Execute all plugins for a specific stage
     pub async fn execute_stage(&self, stage: PluginStage, ctx: &AgentContext) -> AgentResult<()> {
         let plugins = self.registry.list_by_stage(stage);
         for plugin in plugins {
@@ -130,6 +140,7 @@ impl PluginExecutor {
                 }
                 _ => {
                     // PreRequest 和 PostResponse 需要参数，单独处理
+                    // PreRequest and PostResponse require arguments and are handled separately
                     continue;
                 }
             }
@@ -138,6 +149,7 @@ impl PluginExecutor {
     }
 
     /// 执行PreRequest阶段的所有插件
+    /// Execute all plugins in the PreRequest stage
     pub async fn execute_pre_request(
         &self,
         input: AgentInput,
@@ -154,6 +166,7 @@ impl PluginExecutor {
     }
 
     /// 执行PostResponse阶段的所有插件
+    /// Execute all plugins in the PostResponse stage
     pub async fn execute_post_response(
         &self,
         output: AgentOutput,
@@ -172,9 +185,11 @@ impl PluginExecutor {
 
 // ============================================================================
 // 内置插件示例 (运行时层)
+// Built-in Plugin Examples (Runtime Layer)
 // ============================================================================
 
 /// 示例HTTP请求插件
+/// Example HTTP request plugin
 pub struct HttpPlugin {
     name: String,
     description: String,
@@ -183,10 +198,12 @@ pub struct HttpPlugin {
 
 impl HttpPlugin {
     /// 创建HTTP插件
+    /// Create an HTTP plugin
     pub fn new(url: impl Into<String>) -> Self {
         Self {
             name: "http-plugin".to_string(),
-            description: "HTTP请求插件".to_string(),
+            description: "HTTP Request Plugin".to_string(),
+            // HTTP Request Plugin
             url: url.into(),
         }
     }
@@ -214,13 +231,18 @@ impl Plugin for HttpPlugin {
 
     async fn pre_context(&self, ctx: &AgentContext) -> AgentResult<()> {
         // 这里可以实现HTTP请求逻辑，并将结果存入上下文
+        // HTTP request logic can be implemented here, storing results in context
         // 示例：将固定内容存入上下文
-        ctx.set("http_response", "示例HTTP响应内容").await;
+        // Example: store fixed content into the context
+        ctx.set("http_response", "Example HTTP response content".into())
+            .await;
+        // Example HTTP response content
         Ok(())
     }
 }
 
 /// 示例自定义函数插件
+/// Example custom function plugin
 pub struct CustomFunctionPlugin {
     name: String,
     description: String,
@@ -229,6 +251,7 @@ pub struct CustomFunctionPlugin {
 
 impl CustomFunctionPlugin {
     /// 创建自定义函数插件
+    /// Create a custom function plugin
     pub fn new<F>(name: impl Into<String>, desc: impl Into<String>, func: F) -> Self
     where
         F: Fn(AgentInput, &AgentContext) -> AgentResult<AgentInput> + Send + Sync + 'static,

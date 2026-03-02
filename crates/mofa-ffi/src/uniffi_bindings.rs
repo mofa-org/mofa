@@ -1,7 +1,9 @@
 //! UniFFI bindings implementation
 //!
-//! This module provides clean implementations for the types defined in mofa.udl
+//! This module provides implementations for the types defined in mofa.udl,
+//! exposing core MoFA functionality across Python, Kotlin, Swift, and Java.
 
+use std::collections::HashMap;
 use std::sync::{Arc, Mutex as StdMutex};
 use tokio::runtime::Runtime;
 use tokio::sync::RwLock;
@@ -23,6 +25,130 @@ pub enum MoFaError {
     IoError(String),
     #[error("Invalid argument: {0}")]
     InvalidArgument(String),
+    #[error("Tool error: {0}")]
+    ToolError(String),
+    #[error("Session error: {0}")]
+    SessionError(String),
+}
+
+// =============================================================================
+// Agent Lifecycle Types
+// =============================================================================
+
+/// Agent status (FFI-safe version of AgentState, without associated data)
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AgentStatus {
+    Created,
+    Initializing,
+    Ready,
+    Running,
+    Executing,
+    Paused,
+    Interrupted,
+    ShuttingDown,
+    Shutdown,
+    Failed,
+    Destroyed,
+    Error,
+}
+
+impl From<&mofa_kernel::agent::types::AgentState> for AgentStatus {
+    fn from(state: &mofa_kernel::agent::types::AgentState) -> Self {
+        use mofa_kernel::agent::types::AgentState;
+        match state {
+            AgentState::Created => AgentStatus::Created,
+            AgentState::Initializing => AgentStatus::Initializing,
+            AgentState::Ready => AgentStatus::Ready,
+            AgentState::Running => AgentStatus::Running,
+            AgentState::Executing => AgentStatus::Executing,
+            AgentState::Paused => AgentStatus::Paused,
+            AgentState::Interrupted => AgentStatus::Interrupted,
+            AgentState::ShuttingDown => AgentStatus::ShuttingDown,
+            AgentState::Shutdown => AgentStatus::Shutdown,
+            AgentState::Failed => AgentStatus::Failed,
+            AgentState::Destroyed => AgentStatus::Destroyed,
+            AgentState::Error(_) => AgentStatus::Error,
+            _ => AgentStatus::Error,
+        }
+    }
+}
+
+/// Token usage statistics
+#[derive(Debug, Clone)]
+pub struct TokenUsageInfo {
+    pub prompt_tokens: u32,
+    pub completion_tokens: u32,
+    pub total_tokens: u32,
+}
+
+/// Tool usage record
+#[derive(Debug, Clone)]
+pub struct ToolUsageRecord {
+    pub name: String,
+    pub input_json: String,
+    pub output_json: Option<String>,
+    pub success: bool,
+    pub error: Option<String>,
+    pub duration_ms: u64,
+}
+
+/// Structured agent output
+#[derive(Debug, Clone)]
+pub struct AgentOutputInfo {
+    pub content: String,
+    pub content_type: String,
+    pub tools_used: Vec<ToolUsageRecord>,
+    pub duration_ms: u64,
+    pub token_usage: Option<TokenUsageInfo>,
+    pub metadata_json: String,
+}
+
+impl From<&mofa_kernel::agent::types::AgentOutput> for AgentOutputInfo {
+    fn from(output: &mofa_kernel::agent::types::AgentOutput) -> Self {
+        use mofa_kernel::agent::types::OutputContent;
+
+        let (content, content_type) = match &output.content {
+            OutputContent::Text(s) => (s.clone(), "text".to_string()),
+            OutputContent::Texts(v) => (v.join("\n"), "texts".to_string()),
+            OutputContent::Json(v) => (v.to_string(), "json".to_string()),
+            OutputContent::Binary(_) => ("[binary]".to_string(), "binary".to_string()),
+            OutputContent::Stream => ("[stream]".to_string(), "stream".to_string()),
+            OutputContent::Error(e) => (e.clone(), "error".to_string()),
+            OutputContent::Empty => (String::new(), "empty".to_string()),
+            _ => ("".to_string(), "unknown".to_string()),
+        };
+
+        let tools_used = output
+            .tools_used
+            .iter()
+            .map(|t| ToolUsageRecord {
+                name: t.name.clone(),
+                input_json: t.input.to_string(),
+                output_json: t.output.as_ref().map(|v| v.to_string()),
+                success: t.success,
+                error: t.error.clone(),
+                duration_ms: t.duration_ms,
+            })
+            .collect();
+
+        let token_usage = output.token_usage.as_ref().map(|u| TokenUsageInfo {
+            prompt_tokens: u.prompt_tokens,
+            completion_tokens: u.completion_tokens,
+            total_tokens: u.total_tokens,
+        });
+
+        let metadata_json =
+            serde_json::to_string(&output.metadata).unwrap_or_else(|_| "{}".to_string());
+
+        AgentOutputInfo {
+            content,
+            content_type,
+            tools_used,
+            duration_ms: output.duration_ms,
+            token_usage,
+            metadata_json,
+        }
+    }
 }
 
 // =============================================================================
@@ -69,6 +195,46 @@ pub struct ChatMessage {
 }
 
 // =============================================================================
+// Session Management Types
+// =============================================================================
+
+/// Session message info for FFI
+#[derive(Debug, Clone)]
+pub struct SessionMessageInfo {
+    pub role: String,
+    pub content: String,
+    pub timestamp: String,
+}
+
+// =============================================================================
+// Tool System Types
+// =============================================================================
+
+/// Tool description for listing
+#[derive(Debug, Clone)]
+pub struct ToolInfo {
+    pub name: String,
+    pub description: String,
+    pub parameters_schema_json: String,
+}
+
+/// FFI tool execution result
+#[derive(Debug, Clone)]
+pub struct FfiToolResult {
+    pub success: bool,
+    pub output_json: String,
+    pub error: Option<String>,
+}
+
+/// Callback interface for foreign-language tool implementations
+pub trait FfiToolCallback: Send + Sync {
+    fn name(&self) -> String;
+    fn description(&self) -> String;
+    fn parameters_schema_json(&self) -> String;
+    fn execute(&self, arguments_json: String) -> FfiToolResult;
+}
+
+// =============================================================================
 // Namespace functions
 // =============================================================================
 
@@ -84,7 +250,7 @@ pub fn is_dora_available() -> bool {
 
 /// Create a new LLM Agent Builder
 pub fn new_llm_agent_builder() -> Result<std::sync::Arc<LLMAgentBuilder>, MoFaError> {
-    Ok(LLMAgentBuilder::create())
+    LLMAgentBuilder::create()
 }
 
 // =============================================================================
@@ -286,75 +452,74 @@ impl LLMAgent {
 
     /// Simple Q&A (no context retention)
     pub fn ask(&self, question: String) -> Result<String, MoFaError> {
-        {
-            self.runtime.block_on(async {
-                let agent = self.inner.read().await;
-                agent
-                    .ask(&question)
-                    .await
-                    .map_err(|e| MoFaError::LLMError(e.to_string()))
-            })
-        }
+        self.runtime.block_on(async {
+            let agent = self.inner.read().await;
+            agent
+                .ask(&question)
+                .await
+                .map_err(|e| MoFaError::LLMError(e.to_string()))
+        })
     }
 
     /// Multi-turn chat (with context retention)
     pub fn chat(&self, message: String) -> Result<String, MoFaError> {
-        {
-            self.runtime.block_on(async {
-                let agent = self.inner.read().await;
-                agent
-                    .chat(&message)
-                    .await
-                    .map_err(|e| MoFaError::LLMError(e.to_string()))
-            })
-        }
+        self.runtime.block_on(async {
+            let agent = self.inner.read().await;
+            agent
+                .chat(&message)
+                .await
+                .map_err(|e| MoFaError::LLMError(e.to_string()))
+        })
     }
 
     /// Clear conversation history
     pub fn clear_history(&self) {
-        {
-            self.runtime.block_on(async {
-                let agent = self.inner.read().await;
-                agent.clear_history().await;
-            });
-        }
+        self.runtime.block_on(async {
+            let agent = self.inner.read().await;
+            agent.clear_history().await;
+        });
     }
 
     /// Get conversation history
     pub fn get_history(&self) -> Vec<ChatMessage> {
-        {
-            self.runtime.block_on(async {
-                let agent = self.inner.read().await;
-                agent
-                    .history()
-                    .await
-                    .iter()
-                    .map(|msg| {
-                        let role = match msg.role {
-                            mofa_foundation::llm::Role::System => ChatRole::System,
-                            mofa_foundation::llm::Role::User => ChatRole::User,
-                            mofa_foundation::llm::Role::Assistant => ChatRole::Assistant,
-                            _ => ChatRole::User,
-                        };
-                        let content = msg
-                            .content
-                            .as_ref()
-                            .map(|c| match c {
-                                mofa_foundation::llm::MessageContent::Text(s) => s.clone(),
-                                _ => String::new(),
-                            })
-                            .unwrap_or_default();
-                        ChatMessage { role, content }
-                    })
-                    .collect()
-            })
-        }
+        self.runtime.block_on(async {
+            let agent = self.inner.read().await;
+            agent
+                .history()
+                .await
+                .iter()
+                .map(|msg| {
+                    let role = match msg.role {
+                        mofa_foundation::llm::Role::System => ChatRole::System,
+                        mofa_foundation::llm::Role::User => ChatRole::User,
+                        mofa_foundation::llm::Role::Assistant => ChatRole::Assistant,
+                        _ => ChatRole::User,
+                    };
+                    let content = msg
+                        .content
+                        .as_ref()
+                        .map(|c| match c {
+                            mofa_foundation::llm::MessageContent::Text(s) => s.clone(),
+                            _ => String::new(),
+                        })
+                        .unwrap_or_default();
+                    ChatMessage { role, content }
+                })
+                .collect()
+        })
+    }
+
+    /// Get structured output info (placeholder until agent tracks last output)
+    pub fn get_last_output(&self) -> Result<AgentOutputInfo, MoFaError> {
+        Err(MoFaError::RuntimeError(
+            "get_last_output is not yet supported: LLMAgent does not persist structured output in this API".to_string(),
+        ))
     }
 }
 
 // =============================================================================
 // LLM Agent Builder Implementation
-// ============================================================================
+// =============================================================================
 
 /// Builder state for storing configuration
 #[derive(Debug, Clone, Default)]
@@ -384,15 +549,13 @@ pub struct LLMAgentBuilder {
 
 impl LLMAgentBuilder {
     /// Create a new builder
-    pub fn create() -> Arc<Self> {
-        let runtime = tokio::runtime::Runtime::new()
-            .map_err(|e| MoFaError::RuntimeError(e.to_string()))
-            .unwrap();
-
-        Arc::new(Self {
+    pub fn create() -> Result<Arc<Self>, MoFaError> {
+        let runtime =
+            tokio::runtime::Runtime::new().map_err(|e| MoFaError::RuntimeError(e.to_string()))?;
+        Ok(Arc::new(Self {
             state: Arc::new(StdMutex::new(BuilderState::default())),
             runtime: Arc::new(runtime),
-        })
+        }))
     }
 
     /// Set agent ID
@@ -489,7 +652,6 @@ impl LLMAgentBuilder {
 
         let state = self.state.lock().unwrap();
 
-        // Get or generate agent_id
         let agent_id = state
             .agent_id
             .clone()
@@ -497,47 +659,30 @@ impl LLMAgentBuilder {
 
         let mut builder = LLMAgentBuilder::new().with_id(&agent_id);
 
-        // Set name if provided
         if let Some(ref name) = state.name {
             builder = builder.with_name(name);
         }
-
-        // Set system prompt if provided
         if let Some(ref prompt) = state.system_prompt {
             builder = builder.with_system_prompt(prompt);
         }
-
-        // Set temperature if provided
         if let Some(temp) = state.temperature {
             builder = builder.with_temperature(temp);
         }
-
-        // Set max tokens if provided
         if let Some(tokens) = state.max_tokens {
             builder = builder.with_max_tokens(tokens);
         }
-
-        // Set session ID if provided
         if let Some(ref session_id) = state.session_id {
             builder = builder.with_session_id(session_id);
         }
-
-        // Set user ID if provided
         if let Some(ref user_id) = state.user_id {
             builder = builder.with_user(user_id);
         }
-
-        // Set tenant ID if provided
         if let Some(ref tenant_id) = state.tenant_id {
             builder = builder.with_tenant(tenant_id);
         }
-
-        // Set context window size if provided
         if let Some(size) = state.context_window_size {
             builder = builder.with_sliding_window(size);
         }
-
-        // Set OpenAI provider if API key is provided
         if let Some(ref api_key) = state.openai_api_key {
             let mut config = OpenAIConfig::new(api_key.clone());
             if let Some(ref base_url) = state.openai_base_url {
@@ -567,5 +712,412 @@ impl LLMAgentBuilder {
             runtime: self.runtime.clone(),
             _runtime: std::marker::PhantomData,
         }))
+    }
+}
+
+// =============================================================================
+// Session Implementation
+// =============================================================================
+
+/// A conversation session holding messages and metadata.
+/// Wraps mofa_foundation::agent::session::Session for FFI.
+pub struct Session {
+    inner: StdMutex<mofa_foundation::agent::session::Session>,
+}
+
+impl Session {
+    /// Create a new empty session
+    pub fn new(key: String) -> Self {
+        Self {
+            inner: StdMutex::new(mofa_foundation::agent::session::Session::new(key)),
+        }
+    }
+
+    /// Get the session key
+    pub fn get_key(&self) -> String {
+        self.inner.lock().unwrap().key.clone()
+    }
+
+    /// Add a message to the session
+    pub fn add_message(&self, role: String, content: String) {
+        self.inner.lock().unwrap().add_message(role, content);
+    }
+
+    /// Get message history (most recent N messages)
+    pub fn get_history(&self, max_messages: u32) -> Vec<SessionMessageInfo> {
+        let session = self.inner.lock().unwrap();
+        session
+            .get_history(max_messages as usize)
+            .iter()
+            .map(|msg| SessionMessageInfo {
+                role: msg.role.clone(),
+                content: msg.content.clone(),
+                timestamp: msg.timestamp.to_rfc3339(),
+            })
+            .collect()
+    }
+
+    /// Clear all messages
+    pub fn clear(&self) {
+        self.inner.lock().unwrap().clear();
+    }
+
+    /// Get the number of messages
+    pub fn message_count(&self) -> u32 {
+        self.inner.lock().unwrap().len() as u32
+    }
+
+    /// Check if empty
+    pub fn is_empty(&self) -> bool {
+        self.inner.lock().unwrap().is_empty()
+    }
+
+    /// Set metadata value (JSON string)
+    pub fn set_metadata(&self, key: String, value_json: String) -> Result<(), MoFaError> {
+        let value: serde_json::Value = serde_json::from_str(&value_json).map_err(|e| {
+            MoFaError::InvalidArgument(format!("Invalid JSON for metadata value: {}", e))
+        })?;
+        self.inner.lock().unwrap().metadata.insert(key, value);
+        Ok(())
+    }
+
+    /// Get metadata value as JSON string
+    pub fn get_metadata(&self, key: String) -> Option<String> {
+        self.inner
+            .lock()
+            .unwrap()
+            .metadata
+            .get(&key)
+            .map(|v| v.to_string())
+    }
+
+    /// Convert to the inner foundation Session (for saving)
+    fn to_inner(&self) -> mofa_foundation::agent::session::Session {
+        self.inner.lock().unwrap().clone()
+    }
+
+    /// Create from an inner foundation Session
+    fn from_inner(session: mofa_foundation::agent::session::Session) -> Arc<Self> {
+        Arc::new(Self {
+            inner: StdMutex::new(session),
+        })
+    }
+}
+
+// =============================================================================
+// Session Manager Implementation
+// =============================================================================
+
+/// Manages conversation sessions with pluggable storage
+pub struct SessionManager {
+    inner: Arc<RwLock<mofa_foundation::agent::session::SessionManager>>,
+    runtime: Arc<Runtime>,
+}
+
+impl SessionManager {
+    /// Create a new in-memory session manager
+    /// Internal fallible constructor
+    pub(crate) fn try_new_in_memory() -> Result<Self, MoFaError> {
+        let runtime =
+            tokio::runtime::Runtime::new().map_err(|e| MoFaError::RuntimeError(e.to_string()))?;
+        let storage = Box::new(mofa_foundation::agent::session::MemorySessionStorage::new());
+        let manager = mofa_foundation::agent::session::SessionManager::with_storage(storage);
+        Ok(Self {
+            inner: Arc::new(RwLock::new(manager)),
+            runtime: Arc::new(runtime),
+        })
+    }
+
+    /// FFI-safe infallible constructor. Logs error and aborts if runtime creation fails.
+    pub fn new_in_memory() -> Self {
+        match Self::try_new_in_memory() {
+            Ok(manager) => manager,
+            Err(e) => {
+                eprintln!(
+                    "SessionManager::new_in_memory: failed to create in-memory session manager: {}",
+                    e
+                );
+                std::process::abort();
+            }
+        }
+    }
+
+    /// Create a file-backed session manager (JSONL storage)
+    pub fn new_with_storage(workspace_path: String) -> Result<Self, MoFaError> {
+        let runtime =
+            tokio::runtime::Runtime::new().map_err(|e| MoFaError::RuntimeError(e.to_string()))?;
+
+        let manager = runtime
+            .block_on(mofa_foundation::agent::session::SessionManager::with_jsonl(
+                &workspace_path,
+            ))
+            .map_err(|e| MoFaError::SessionError(e.to_string()))?;
+
+        Ok(Self {
+            inner: Arc::new(RwLock::new(manager)),
+            runtime: Arc::new(runtime),
+        })
+    }
+
+    /// Get or create a session by key
+    pub fn get_or_create(&self, key: String) -> Result<Arc<Session>, MoFaError> {
+        let session = self.runtime.block_on(async {
+            let manager = self.inner.read().await;
+            manager.get_or_create(&key).await
+        });
+        Ok(Session::from_inner(session))
+    }
+
+    /// Get a session by key (returns None if not found)
+    pub fn get_session(&self, key: String) -> Result<Option<Arc<Session>>, MoFaError> {
+        let result = self.runtime.block_on(async {
+            let manager = self.inner.read().await;
+            manager.get(&key).await
+        });
+        match result {
+            Ok(Some(session)) => Ok(Some(Session::from_inner(session))),
+            Ok(None) => Ok(None),
+            Err(e) => Err(MoFaError::SessionError(e.to_string())),
+        }
+    }
+
+    /// Save a session to storage
+    pub fn save_session(&self, session: Arc<Session>) -> Result<(), MoFaError> {
+        let inner_session = session.to_inner();
+        self.runtime
+            .block_on(async {
+                let manager = self.inner.read().await;
+                manager.save(&inner_session).await
+            })
+            .map_err(|e| MoFaError::SessionError(e.to_string()))
+    }
+
+    /// Delete a session by key
+    pub fn delete_session(&self, key: String) -> Result<bool, MoFaError> {
+        self.runtime
+            .block_on(async {
+                let manager = self.inner.read().await;
+                manager.delete(&key).await
+            })
+            .map_err(|e| MoFaError::SessionError(e.to_string()))
+    }
+
+    /// List all session keys
+    pub fn list_sessions(&self) -> Result<Vec<String>, MoFaError> {
+        self.runtime
+            .block_on(async {
+                let manager = self.inner.read().await;
+                manager.list().await
+            })
+            .map_err(|e| MoFaError::SessionError(e.to_string()))
+    }
+}
+
+// =============================================================================
+// Tool Registry Implementation
+// =============================================================================
+
+/// Adapter that wraps a foreign FfiToolCallback into the kernel Tool trait
+struct CallbackToolAdapter {
+    callback: Box<dyn FfiToolCallback>,
+}
+
+impl CallbackToolAdapter {
+    fn new(callback: Box<dyn FfiToolCallback>) -> Self {
+        Self { callback }
+    }
+}
+
+#[async_trait::async_trait]
+impl mofa_kernel::agent::components::tool::Tool for CallbackToolAdapter {
+    fn name(&self) -> &str {
+        // We store the name in a leaked string to return a &str.
+        // This is acceptable for long-lived tool registrations.
+        // Use a thread-local cache to avoid repeated leaking.
+        // For simplicity, we just leak once per name.
+        let name = self.callback.name();
+        // SAFETY: We need a &str with 'static lifetime for the trait.
+        // Tools are long-lived so this small leak is acceptable.
+        Box::leak(name.into_boxed_str())
+    }
+
+    fn description(&self) -> &str {
+        let desc = self.callback.description();
+        Box::leak(desc.into_boxed_str())
+    }
+
+    fn parameters_schema(&self) -> serde_json::Value {
+        let json_str = self.callback.parameters_schema_json();
+        serde_json::from_str(&json_str).unwrap_or(serde_json::Value::Object(Default::default()))
+    }
+
+    async fn execute(
+        &self,
+        input: mofa_kernel::agent::components::tool::ToolInput,
+        _ctx: &mofa_kernel::agent::context::AgentContext,
+    ) -> mofa_kernel::agent::components::tool::ToolResult {
+        let arguments_json = input.arguments.to_string();
+        let result = self.callback.execute(arguments_json);
+
+        if result.success {
+            let output = serde_json::from_str(&result.output_json)
+                .unwrap_or(serde_json::Value::String(result.output_json));
+            mofa_kernel::agent::components::tool::ToolResult::success(output)
+        } else {
+            mofa_kernel::agent::components::tool::ToolResult::failure(
+                result
+                    .error
+                    .unwrap_or_else(|| "Unknown tool error".to_string()),
+            )
+        }
+    }
+}
+
+/// Registry for managing tools that agents can invoke
+pub struct ToolRegistry {
+    inner: StdMutex<mofa_foundation::agent::components::tool::SimpleToolRegistry>,
+}
+
+impl Default for ToolRegistry {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl ToolRegistry {
+    /// Create a new empty tool registry
+    pub fn new() -> Self {
+        Self {
+            inner: StdMutex::new(
+                mofa_foundation::agent::components::tool::SimpleToolRegistry::new(),
+            ),
+        }
+    }
+
+    /// Register a foreign-language tool via callback
+    pub fn register_tool(&self, tool: Box<dyn FfiToolCallback>) -> Result<(), MoFaError> {
+        use mofa_kernel::agent::components::tool::{ToolExt, ToolRegistry as _};
+        let adapter = CallbackToolAdapter::new(tool);
+        let tool_arc = adapter.into_dynamic();
+        self.inner
+            .lock()
+            .unwrap()
+            .register(tool_arc)
+            .map_err(|e: mofa_kernel::agent::error::AgentError| MoFaError::ToolError(e.to_string()))
+    }
+
+    /// Unregister a tool by name
+    pub fn unregister_tool(&self, name: String) -> Result<bool, MoFaError> {
+        use mofa_kernel::agent::components::tool::ToolRegistry as _;
+        self.inner
+            .lock()
+            .unwrap()
+            .unregister(&name)
+            .map_err(|e: mofa_kernel::agent::error::AgentError| MoFaError::ToolError(e.to_string()))
+    }
+
+    /// List all registered tools
+    pub fn list_tools(&self) -> Vec<ToolInfo> {
+        use mofa_kernel::agent::components::tool::ToolRegistry as _;
+        self.inner
+            .lock()
+            .unwrap()
+            .list()
+            .into_iter()
+            .map(|desc| ToolInfo {
+                name: desc.name,
+                description: desc.description,
+                parameters_schema_json: desc.parameters_schema.to_string(),
+            })
+            .collect()
+    }
+
+    /// Get tool names
+    pub fn list_tool_names(&self) -> Vec<String> {
+        use mofa_kernel::agent::components::tool::ToolRegistry as _;
+        self.inner.lock().unwrap().list_names()
+    }
+
+    /// Check if a tool exists
+    pub fn has_tool(&self, name: String) -> bool {
+        use mofa_kernel::agent::components::tool::ToolRegistry as _;
+        self.inner.lock().unwrap().contains(&name)
+    }
+
+    /// Get the number of registered tools
+    pub fn tool_count(&self) -> u32 {
+        use mofa_kernel::agent::components::tool::ToolRegistry as _;
+        self.inner.lock().unwrap().count() as u32
+    }
+
+    /// Execute a tool by name with JSON arguments
+    pub fn execute_tool(
+        &self,
+        name: String,
+        arguments_json: String,
+    ) -> Result<FfiToolResult, MoFaError> {
+        use mofa_kernel::agent::components::tool::ToolRegistry as _;
+
+        let registry = self.inner.lock().unwrap();
+        let tool = registry
+            .get(&name)
+            .ok_or_else(|| MoFaError::ToolError(format!("Tool not found: {}", name)))?;
+
+        let arguments: serde_json::Value = serde_json::from_str(&arguments_json)
+            .map_err(|e| MoFaError::InvalidArgument(format!("Invalid JSON arguments: {}", e)))?;
+
+        // Execute synchronously using a runtime
+        let runtime =
+            tokio::runtime::Runtime::new().map_err(|e| MoFaError::RuntimeError(e.to_string()))?;
+
+        let ctx = mofa_kernel::agent::context::AgentContext::new("ffi-execution");
+        let result = runtime.block_on(tool.execute_dynamic(arguments, &ctx));
+
+        match result {
+            Ok(output) => Ok(FfiToolResult {
+                success: true,
+                output_json: output.to_string(),
+                error: None,
+            }),
+            Err(e) => Ok(FfiToolResult {
+                success: false,
+                output_json: "{}".to_string(),
+                error: Some(e.to_string()),
+            }),
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn get_last_output_returns_explicit_runtime_error() {
+        let config = LLMConfig {
+            provider: LLMProviderType::Ollama,
+            model: Some("llama2".to_string()),
+            api_key: None,
+            base_url: None,
+            deployment: None,
+            temperature: Some(0.2),
+            max_tokens: Some(128),
+            system_prompt: Some("You are a test agent".to_string()),
+        };
+
+        let agent = LLMAgent::from_config(
+            config,
+            "ffi-test-agent".to_string(),
+            "FFI Test Agent".to_string(),
+        )
+        .expect("ollama config should build without network calls");
+
+        let err = agent
+            .get_last_output()
+            .expect_err("get_last_output should return explicit unsupported error");
+
+        let msg = err.to_string();
+        assert!(msg.contains("Runtime error:"));
+        assert!(msg.contains("get_last_output is not yet supported"));
     }
 }

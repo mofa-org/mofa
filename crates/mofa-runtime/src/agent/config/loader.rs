@@ -1,8 +1,11 @@
 //! 配置加载器
+//! Configuration loader
 //!
 //! 支持多种配置格式: YAML, TOML, JSON, INI, RON, JSON5
+//! Supports multiple formats: YAML, TOML, JSON, INI, RON, JSON5
 //!
 //! 使用统一的 config crate 提供一致的 API 接口
+//! Uses unified config crate to provide a consistent API interface
 
 use super::schema::AgentConfig;
 use config::FileFormat;
@@ -10,23 +13,31 @@ use mofa_kernel::config::{ConfigError, detect_format, from_str, load_config, loa
 use serde::{Deserialize, Serialize};
 
 /// 配置格式
+/// Configuration formats
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ConfigFormat {
     /// YAML 格式
+    /// YAML format
     Yaml,
     /// TOML 格式
+    /// TOML format
     Toml,
     /// JSON 格式
+    /// JSON format
     Json,
     /// INI 格式
+    /// INI format
     Ini,
     /// RON 格式
+    /// RON format
     Ron,
     /// JSON5 格式
+    /// JSON5 format
     Json5,
 }
 
 /// 配置错误类型
+/// Configuration error types
 #[derive(Debug, thiserror::Error)]
 pub enum AgentConfigError {
     #[error("IO error: {0}")]
@@ -46,10 +57,12 @@ pub enum AgentConfigError {
 }
 
 /// 配置结果类型
+/// Configuration result type
 pub type AgentResult<T> = Result<T, AgentConfigError>;
 
 impl ConfigFormat {
     /// 从文件扩展名推断格式
+    /// Infer format from file extension
     pub fn from_extension(path: &str) -> Option<Self> {
         match detect_format(path) {
             Ok(FileFormat::Yaml) => Some(Self::Yaml),
@@ -63,6 +76,7 @@ impl ConfigFormat {
     }
 
     /// 转换为 config crate 的 FileFormat
+    /// Convert to config crate's FileFormat
     pub fn to_file_format(self) -> FileFormat {
         match self {
             Self::Yaml => FileFormat::Yaml,
@@ -75,6 +89,7 @@ impl ConfigFormat {
     }
 
     /// 获取格式名称
+    /// Get format name
     pub fn name(&self) -> &str {
         match self {
             Self::Yaml => "yaml",
@@ -87,6 +102,7 @@ impl ConfigFormat {
     }
 
     /// 获取默认文件扩展名
+    /// Get default file extension
     pub fn default_extension(&self) -> &str {
         match self {
             Self::Yaml => "yml",
@@ -100,15 +116,19 @@ impl ConfigFormat {
 }
 
 /// 配置加载器
+/// Configuration loader
 ///
 /// 支持从文件或字符串加载配置，支持多种格式
+/// Support loading from file or string in various formats
 ///
 /// # 示例
+/// # Example
 ///
 /// ```rust,ignore
 /// use mofa_runtime::agent::config::{ConfigLoader, ConfigFormat};
 ///
 /// // 从 YAML 字符串加载
+/// // Load from YAML string
 /// let yaml = r#"
 /// id: my-agent
 /// name: My Agent
@@ -119,9 +139,11 @@ impl ConfigFormat {
 /// let config = ConfigLoader::from_str(yaml, ConfigFormat::Yaml)?;
 ///
 /// // 从文件加载 (自动检测格式)
+/// // Load from file (auto-detect format)
 /// let config = ConfigLoader::load_file("agent.yaml")?;
 ///
 /// // 从 TOML 字符串加载
+/// // Load from TOML string
 /// let toml = r#"
 /// id = "my-agent"
 /// name = "My Agent"
@@ -130,12 +152,14 @@ impl ConfigFormat {
 /// let config = ConfigLoader::from_toml(toml)?;
 ///
 /// // 从 INI 文件加载
+/// // Load from INI file
 /// let config = ConfigLoader::load_ini("agent.ini")?;
 /// ```
 pub struct ConfigLoader;
 
 impl ConfigLoader {
     /// 从字符串加载配置
+    /// Load configuration from string
     pub fn from_str(content: &str, format: ConfigFormat) -> AgentResult<AgentConfig> {
         from_str(content, format.to_file_format()).map_err(|e| match e {
             ConfigError::Parse(e) => AgentConfigError::Parse(e.to_string()),
@@ -146,45 +170,54 @@ impl ConfigLoader {
     }
 
     /// 从 YAML 字符串加载
+    /// Load from YAML string
     pub fn from_yaml(content: &str) -> AgentResult<AgentConfig> {
         Self::from_str(content, ConfigFormat::Yaml)
     }
 
     /// 从 TOML 字符串加载
+    /// Load from TOML string
     pub fn from_toml(content: &str) -> AgentResult<AgentConfig> {
         Self::from_str(content, ConfigFormat::Toml)
     }
 
     /// 从 JSON 字符串加载
+    /// Load from JSON string
     pub fn from_json(content: &str) -> AgentResult<AgentConfig> {
         Self::from_str(content, ConfigFormat::Json)
     }
 
     /// 从 INI 字符串加载
+    /// Load from INI string
     pub fn from_ini(content: &str) -> AgentResult<AgentConfig> {
         Self::from_str(content, ConfigFormat::Ini)
     }
 
     /// 从 RON 字符串加载
+    /// Load from RON string
     pub fn from_ron(content: &str) -> AgentResult<AgentConfig> {
         Self::from_str(content, ConfigFormat::Ron)
     }
 
     /// 从 JSON5 字符串加载
+    /// Load from JSON5 string
     pub fn from_json5(content: &str) -> AgentResult<AgentConfig> {
         Self::from_str(content, ConfigFormat::Json5)
     }
 
     /// 从文件加载配置 (自动检测格式)
+    /// Load from file (auto-detect format)
     pub fn load_file(path: &str) -> AgentResult<AgentConfig> {
         let config: AgentConfig = load_config(path).map_err(|e| match e {
             ConfigError::Io(e) => AgentConfigError::Io(e),
             ConfigError::Parse(e) => AgentConfigError::Parse(e),
             ConfigError::Serialization(e) => AgentConfigError::Serialization(e),
             ConfigError::UnsupportedFormat(e) => AgentConfigError::UnsupportedFormat(e),
+            _ => AgentConfigError::Parse(e.to_string()),
         })?;
 
         // 验证配置
+        // Validate configuration
         config
             .validate()
             .map_err(|errors| AgentConfigError::Validation(errors.join(", ")))?;
@@ -193,36 +226,43 @@ impl ConfigLoader {
     }
 
     /// 从文件加载 YAML 配置
+    /// Load YAML config from file
     pub fn load_yaml(path: &str) -> AgentResult<AgentConfig> {
         Self::load_file(path)
     }
 
     /// 从文件加载 TOML 配置
+    /// Load TOML config from file
     pub fn load_toml(path: &str) -> AgentResult<AgentConfig> {
         Self::load_file(path)
     }
 
     /// 从文件加载 JSON 配置
+    /// Load JSON config from file
     pub fn load_json(path: &str) -> AgentResult<AgentConfig> {
         Self::load_file(path)
     }
 
     /// 从文件加载 INI 配置
+    /// Load INI config from file
     pub fn load_ini(path: &str) -> AgentResult<AgentConfig> {
         Self::load_file(path)
     }
 
     /// 从文件加载 RON 配置
+    /// Load RON config from file
     pub fn load_ron(path: &str) -> AgentResult<AgentConfig> {
         Self::load_file(path)
     }
 
     /// 从文件加载 JSON5 配置
+    /// Load JSON5 config from file
     pub fn load_json5(path: &str) -> AgentResult<AgentConfig> {
         Self::load_file(path)
     }
 
     /// 将配置序列化为字符串
+    /// Serialize config to string
     pub fn to_string(config: &AgentConfig, format: ConfigFormat) -> AgentResult<String> {
         let content = match format {
             ConfigFormat::Yaml => serde_yaml::to_string(config).map_err(|e| {
@@ -248,6 +288,7 @@ impl ConfigLoader {
             }
             ConfigFormat::Json5 => {
                 // JSON5 is compatible with JSON for serialization purposes
+                // JSON5 is compatible with JSON for serialization purposes
                 serde_json::to_string_pretty(config).map_err(|e| {
                     AgentConfigError::Serialization(format!("Failed to serialize to JSON5: {}", e))
                 })?
@@ -258,6 +299,7 @@ impl ConfigLoader {
     }
 
     /// 将配置保存到文件
+    /// Save configuration to file
     pub fn save_file(config: &AgentConfig, path: &str) -> AgentResult<()> {
         let format = ConfigFormat::from_extension(path).ok_or_else(|| {
             AgentConfigError::UnsupportedFormat(format!(
@@ -274,6 +316,7 @@ impl ConfigLoader {
     }
 
     /// 加载多个配置文件
+    /// Load multiple configuration files
     pub fn load_directory(dir_path: &str) -> AgentResult<Vec<AgentConfig>> {
         let mut configs = Vec::new();
 
@@ -295,6 +338,7 @@ impl ConfigLoader {
                         Ok(config) => configs.push(config),
                         Err(e) => {
                             // 记录错误但继续加载其他文件
+                            // Log error but continue loading other files
                             tracing::warn!("Failed to load config '{}': {}", path_str, e);
                         }
                     }
@@ -306,6 +350,7 @@ impl ConfigLoader {
     }
 
     /// 合并多个配置 (后面的覆盖前面的)
+    /// Merge configs (later ones override earlier ones)
     pub fn merge(base: AgentConfig, overlay: AgentConfig) -> AgentConfig {
         AgentConfig {
             id: if overlay.id.is_empty() {
@@ -349,12 +394,14 @@ impl ConfigLoader {
     }
 
     /// 从多个文件合并加载配置
+    /// Load and merge config from multiple files
     pub fn load_merged_files(paths: &[&str]) -> AgentResult<AgentConfig> {
         load_merged(paths).map_err(|e| match e {
             ConfigError::Io(e) => AgentConfigError::Io(e),
             ConfigError::Parse(e) => AgentConfigError::Parse(e.to_string()),
             ConfigError::Serialization(e) => AgentConfigError::Serialization(e),
             ConfigError::UnsupportedFormat(e) => AgentConfigError::UnsupportedFormat(e),
+            _ => AgentConfigError::Parse(e.to_string()),
         })
     }
 }
@@ -455,6 +502,8 @@ model = "gpt-4"
     fn test_load_ini_string() {
         // INI format requires sections or dot notation for nesting
         // Using dot notation to match AgentConfig's flat structure
+        // INI format requires sections or dot notation for nesting
+        // Using dot notation to match AgentConfig's flat structure
         let ini = r#"
 id = "test-agent"
 name = "Test Agent"
@@ -527,7 +576,10 @@ model = "gpt-4"
 
         let merged = ConfigLoader::merge(base, overlay);
         assert_eq!(merged.id, "base-agent"); // From base
+        assert_eq!(merged.id, "base-agent"); // From base
         assert_eq!(merged.name, "Override Name"); // From overlay
+        assert_eq!(merged.name, "Override Name"); // From overlay
+        assert_eq!(merged.description, Some("Override description".to_string())); // From overlay
         assert_eq!(merged.description, Some("Override description".to_string())); // From overlay
     }
 

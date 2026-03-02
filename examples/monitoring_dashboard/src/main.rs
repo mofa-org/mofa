@@ -14,7 +14,7 @@
 //!
 //! Run with: cargo run --example monitoring_dashboard
 
-use mofa_sdk::dashboard::{AgentMetrics, DashboardConfig, DashboardServer, MetricsCollector, PluginMetrics, WorkflowMetrics};
+use mofa_sdk::dashboard::{AgentMetrics, DashboardConfig, DashboardServer, LLMMetrics, MetricsCollector, PluginMetrics, WorkflowMetrics};
 use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::Duration;
@@ -55,6 +55,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
 
     // Build the router (this also sets up WebSocket handler)
     let router = server.build_router();
+
+    // Start metrics collection background task
+    collector.clone().start_collection();
 
     // Get WebSocket handler for sending updates
     if let Some(ws_handler) = server.ws_handler() {
@@ -200,13 +203,51 @@ async fn generate_demo_data(collector: Arc<MetricsCollector>) {
                 reload_count: (tick / 500) as u32,
             };
 
-            collector.update_plugin(metrics).await;
+        collector.update_plugin(metrics).await;
+        }
+
+        // Update LLM metrics
+        let llm_models = [
+            ("openai-gpt4", "OpenAI", "gpt-4"),
+            ("openai-gpt35", "OpenAI", "gpt-3.5-turbo"),
+            ("anthropic-claude", "Anthropic", "claude-3-opus"),
+        ];
+
+        for (i, (plugin_id, provider, model)) in llm_models.iter().enumerate() {
+            let success_rate = 0.95 - (i as f64 * 0.05);
+            let requests = tick * (i as u64 + 1) * 5;
+            let successes = (requests as f64 * success_rate) as u64;
+            let failures = requests - successes;
+
+            let metrics = LLMMetrics {
+                plugin_id: plugin_id.to_string(),
+                provider_name: provider.to_string(),
+                model_name: model.to_string(),
+                state: "running".to_string(),
+                total_requests: requests,
+                successful_requests: successes,
+                failed_requests: failures,
+                total_tokens: requests * (200 + i as u64 * 100),
+                prompt_tokens: requests * (120 + i as u64 * 60),
+                completion_tokens: requests * (80 + i as u64 * 40),
+                avg_latency_ms: 400.0 + (i as f64 * 150.0),
+                tokens_per_second: Some(35.0 + i as f64 * 10.0),
+                time_to_first_token_ms: Some(150.0 + i as f64 * 50.0),
+                requests_per_minute: 60.0 + i as f64 * 20.0,
+                error_rate: (1.0 - success_rate) * 100.0,
+                last_request_timestamp: std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap_or_default()
+                    .as_secs(),
+            };
+
+            collector.update_llm(metrics).await;
         }
 
         // Log progress occasionally
-        if tick.is_multiple_of(60) {
-            info!("📊 Demo data tick: {} (agents: {}, workflows: {}, plugins: {})",
-                tick, agents.len(), workflows.len(), plugins.len());
+        if tick % 60 == 0 {
+            info!("📊 Demo data tick: {} (agents: {}, workflows: {}, plugins: {}, llm: {})",
+                tick, agents.len(), workflows.len(), plugins.len(), llm_models.len());
         }
     }
 }

@@ -1,5 +1,6 @@
 //! `mofa config` command implementation
 
+use crate::CliError;
 use colored::Colorize;
 use mofa_kernel::config::{load_config, substitute_env_vars};
 use serde_json::{Value, json};
@@ -8,7 +9,7 @@ use std::fs;
 use std::path::PathBuf;
 
 /// Execute the `mofa config get` command
-pub fn run_get(key: &str) -> anyhow::Result<()> {
+pub fn run_get(key: &str) -> Result<(), CliError> {
     let config = load_global_config()?;
     match config.get(key) {
         Some(value) => println!("{}", value),
@@ -21,7 +22,7 @@ pub fn run_get(key: &str) -> anyhow::Result<()> {
 }
 
 /// Execute the `mofa config set` command
-pub fn run_set(key: &str, value: &str) -> anyhow::Result<()> {
+pub fn run_set(key: &str, value: &str) -> Result<(), CliError> {
     println!(
         "{} Setting config: {} = {}",
         "->".green(),
@@ -38,7 +39,7 @@ pub fn run_set(key: &str, value: &str) -> anyhow::Result<()> {
 }
 
 /// Execute the `mofa config unset` command
-pub fn run_unset(key: &str) -> anyhow::Result<()> {
+pub fn run_unset(key: &str) -> Result<(), CliError> {
     println!("{} Unsetting config: {}", "->".green(), key.cyan());
 
     let mut config = load_global_config()?;
@@ -53,7 +54,7 @@ pub fn run_unset(key: &str) -> anyhow::Result<()> {
 }
 
 /// Execute the `mofa config list` command
-pub fn run_list() -> anyhow::Result<()> {
+pub fn run_list() -> Result<(), CliError> {
     println!("{} Global configuration", "->".green());
     println!();
 
@@ -72,14 +73,14 @@ pub fn run_list() -> anyhow::Result<()> {
 }
 
 /// Execute the `mofa config validate` command
-pub fn run_validate(config_path: Option<PathBuf>) -> anyhow::Result<()> {
+pub fn run_validate(config_path: Option<PathBuf>) -> Result<(), CliError> {
     println!("{} Validating configuration", "->".green());
 
     let config_path = if let Some(path) = config_path {
         path
     } else {
         // Try to find a config file
-        find_config_file().ok_or_else(|| anyhow::anyhow!("No config file found"))?
+        find_config_file().ok_or_else(|| CliError::ConfigError("No config file found".into()))?
     };
 
     println!(
@@ -101,14 +102,14 @@ pub fn run_validate(config_path: Option<PathBuf>) -> anyhow::Result<()> {
 }
 
 /// Execute the `mofa config path` command
-pub fn run_path() -> anyhow::Result<()> {
+pub fn run_path() -> Result<(), CliError> {
     let path = crate::utils::mofa_config_dir()?;
     println!("{}", path.display());
     Ok(())
 }
 
 /// Load global configuration from config directory
-fn load_global_config() -> anyhow::Result<HashMap<String, String>> {
+fn load_global_config() -> Result<HashMap<String, String>, CliError> {
     let config_dir = crate::utils::mofa_config_dir()?;
     let config_file = config_dir.join("config.yml");
 
@@ -120,7 +121,7 @@ fn load_global_config() -> anyhow::Result<HashMap<String, String>> {
 
     // Use the global config loading
     let config: Value = load_config(config_file.to_string_lossy().as_ref())
-        .map_err(|e| anyhow::anyhow!("Failed to parse config: {}", e))?;
+        .map_err(|e| CliError::ConfigError(format!("Failed to parse config: {}", e)))?;
 
     let mut result = HashMap::new();
     if let Some(obj) = config.as_object() {
@@ -137,7 +138,7 @@ fn load_global_config() -> anyhow::Result<HashMap<String, String>> {
 }
 
 /// Save global configuration to config directory
-fn save_global_config(config: HashMap<String, String>) -> anyhow::Result<()> {
+fn save_global_config(config: HashMap<String, String>) -> Result<(), CliError> {
     let config_dir = crate::utils::mofa_config_dir()?;
     fs::create_dir_all(&config_dir)?;
 
@@ -192,7 +193,7 @@ fn find_config_file() -> Option<PathBuf> {
 }
 
 /// Validate a configuration file
-fn validate_config_file(path: &PathBuf) -> anyhow::Result<()> {
+fn validate_config_file(path: &PathBuf) -> Result<(), CliError> {
     let content = fs::read_to_string(path)?;
 
     // Check for environment variable substitution
@@ -203,31 +204,33 @@ fn validate_config_file(path: &PathBuf) -> anyhow::Result<()> {
         Some(ext) => {
             match ext.to_lowercase().as_str() {
                 "yaml" | "yml" => serde_yaml::from_str::<Value>(&substituted)
-                    .map_err(|e| anyhow::anyhow!("YAML parsing error: {}", e)),
+                    .map_err(|e| CliError::ConfigError(format!("YAML parsing error: {}", e))),
                 "toml" => toml::from_str::<Value>(&substituted)
-                    .map_err(|e| anyhow::anyhow!("TOML parsing error: {}", e)),
+                    .map_err(|e| CliError::ConfigError(format!("TOML parsing error: {}", e))),
                 "json" => serde_json::from_str::<Value>(&substituted)
-                    .map_err(|e| anyhow::anyhow!("JSON parsing error: {}", e)),
+                    .map_err(|e| CliError::ConfigError(format!("JSON parsing error: {}", e))),
                 "json5" => {
                     // Try to parse as JSON5 (fall back to JSON for validation)
                     serde_json::from_str::<Value>(&substituted)
-                        .map_err(|e| anyhow::anyhow!("JSON5 parsing error: {}", e))
+                        .map_err(|e| CliError::ConfigError(format!("JSON5 parsing error: {}", e)))
                 }
                 "ini" => {
-                    // INI validation is more relaxed
-                    Ok(Value::Null)
+                    return Err(CliError::ConfigError(
+                        "INI format validation is not yet supported. Please use YAML, TOML, or JSON format for validated configuration.".into()
+                    ));
                 }
                 "ron" => {
-                    // RON validation (simplified)
-                    Ok(Value::Null)
+                    return Err(CliError::ConfigError(
+                        "RON format validation is not yet supported. Please use YAML, TOML, or JSON format for validated configuration.".into()
+                    ));
                 }
                 _ => {
-                    return Err(anyhow::anyhow!("Unsupported config format: {}", ext));
+                    return Err(CliError::ConfigError(format!("Unsupported config format: {}", ext)));
                 }
             }
         }
         None => {
-            return Err(anyhow::anyhow!("Cannot determine file format"));
+            return Err(CliError::ConfigError("Cannot determine file format".into()));
         }
     };
 
@@ -237,16 +240,16 @@ fn validate_config_file(path: &PathBuf) -> anyhow::Result<()> {
     {
         // Check for agent section
         if !obj.contains_key("agent") {
-            return Err(anyhow::anyhow!("Missing required 'agent' section"));
+            return Err(CliError::ConfigError("Missing required 'agent' section".into()));
         }
 
         // Check for required agent fields
         if let Some(agent) = obj.get("agent").and_then(|v| v.as_object()) {
             if !agent.contains_key("id") {
-                return Err(anyhow::anyhow!("Missing required 'agent.id' field"));
+                return Err(CliError::ConfigError("Missing required 'agent.id' field".into()));
             }
             if !agent.contains_key("name") {
-                return Err(anyhow::anyhow!("Missing required 'agent.name' field"));
+                return Err(CliError::ConfigError("Missing required 'agent.name' field".into()));
             }
         }
     }

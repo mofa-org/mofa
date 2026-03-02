@@ -1,21 +1,26 @@
 //! ReAct Agent 示例
+//! ReAct Agent Example
 //!
 //! 演示如何使用 mofa-foundation 的 ReAct (Reasoning + Acting) 框架
+//! Demonstrates how to use the mofa-foundation ReAct (Reasoning + Acting) framework
 //!
 //! # 运行方式
+//! # How to run
 //!
 //! ```bash
 //! # 设置 OpenAI API Key
+//! # Set OpenAI API Key
 //! export OPENAI_API_KEY=your-api-key
 //!
 //! # 可选: 设置自定义 API 端点 (如使用 Ollama 或其他兼容服务)
+//! # Optional: Set custom API endpoint (e.g., using Ollama or other compatible services)
 //! export OPENAI_BASE_URL=http://localhost:11434/v1
 //!
 //! # 运行示例
+//! # Run example
 //! cargo run -p react_agent
 //! ```
 
-use anyhow::Result;
 use async_trait::async_trait;
 use mofa_sdk::llm::{LLMAgent, LLMAgentBuilder, OpenAIConfig, OpenAIProvider};
 use mofa_sdk::react::{
@@ -27,9 +32,11 @@ use tracing::info;
 
 // ============================================================================
 // 自定义工具实现
+// Custom tool implementations
 // ============================================================================
 
 /// 网页搜索工具 (模拟)
+/// Web search tool (mock)
 struct WebSearchTool;
 
 #[async_trait]
@@ -57,6 +64,7 @@ impl ReActTool for WebSearchTool {
 
     async fn execute(&self, input: &str) -> Result<String, String> {
         // 解析输入
+        // Parse input
         let query = if let Ok(json) = serde_json::from_str::<Value>(input) {
             json.get("query")
                 .and_then(|v| v.as_str())
@@ -68,6 +76,7 @@ impl ReActTool for WebSearchTool {
         info!("WebSearchTool: Searching for '{}'", query);
 
         // 模拟搜索结果
+        // Mock search results
         let results = match query.to_lowercase().as_str() {
             q if q.contains("rust") && q.contains("language") => {
                 r#"Search results for "Rust programming language":
@@ -104,6 +113,7 @@ Found 10 results. Here are the top 3:
 }
 
 /// 天气查询工具 (模拟)
+/// Weather query tool (mock)
 struct WeatherTool;
 
 #[async_trait]
@@ -141,6 +151,7 @@ impl ReActTool for WeatherTool {
         info!("WeatherTool: Getting weather for '{}'", city);
 
         // 模拟天气数据
+        // Mock weather data
         let weather = match city.to_lowercase().as_str() {
             "paris" => "Paris: 18°C, Partly cloudy, Humidity: 65%, Wind: 12 km/h NW",
             "tokyo" => "Tokyo: 22°C, Sunny, Humidity: 55%, Wind: 8 km/h E",
@@ -161,6 +172,7 @@ impl ReActTool for WeatherTool {
 }
 
 /// 维基百科查询工具 (模拟)
+/// Wikipedia query tool (mock)
 struct WikipediaTool;
 
 #[async_trait]
@@ -223,15 +235,18 @@ Consider using web_search for more current information."#
 
 // ============================================================================
 // 示例函数
+// Example functions
 // ============================================================================
 
 /// 示例 1: 基本 ReAct Agent 用法
-async fn example_basic_react(llm_agent: Arc<LLMAgent>) -> Result<()> {
+/// Example 1: Basic ReAct Agent usage
+async fn example_basic_react(llm_agent: Arc<LLMAgent>) -> Result<(), Box<dyn std::error::Error>> {
     info!("\n{}", "=".repeat(60));
     info!("Example 1: Basic ReAct Agent");
     info!("{}\n", "=".repeat(60));
 
     // 创建 ReAct Agent
+    // Create ReAct Agent
     let react_agent = ReActAgent::builder()
         .with_llm(llm_agent)
         .with_tool(Arc::new(WebSearchTool))
@@ -244,6 +259,7 @@ async fn example_basic_react(llm_agent: Arc<LLMAgent>) -> Result<()> {
         .await?;
 
     // 执行任务
+    // Execute task
     let task = "What is Rust programming language and when was it first released?";
     info!("Task: {}\n", task);
 
@@ -255,12 +271,14 @@ async fn example_basic_react(llm_agent: Arc<LLMAgent>) -> Result<()> {
 }
 
 /// 示例 2: 使用 Actor 模型
-async fn example_actor_model(llm_agent: Arc<LLMAgent>) -> Result<()> {
+/// Example 2: Using the Actor model
+async fn example_actor_model(llm_agent: Arc<LLMAgent>) -> Result<(), Box<dyn std::error::Error>> {
     info!("\n{}", "=".repeat(60));
     info!("Example 2: ReAct Actor Model");
     info!("{}\n", "=".repeat(60));
 
     // 准备工具
+    // Prepare tools
     let tools: Vec<Arc<dyn ReActTool>> = vec![
         Arc::new(WeatherTool),
         Arc::new(WebSearchTool),
@@ -269,6 +287,7 @@ async fn example_actor_model(llm_agent: Arc<LLMAgent>) -> Result<()> {
     ];
 
     // 启动 ReAct Actor
+    // Start ReAct Actor
     let (actor_ref, _handle) = spawn_react_actor(
         "weather-react-agent",
         llm_agent,
@@ -278,10 +297,12 @@ async fn example_actor_model(llm_agent: Arc<LLMAgent>) -> Result<()> {
     .await?;
 
     // 获取状态
+    // Get status
     let status = actor_ref.get_status().await?;
     info!("Actor Status: {:?}\n", status);
 
     // 执行任务
+    // Execute task
     let task = "What is the current weather in Paris and Tokyo? Compare the temperatures.";
     info!("Task: {}\n", task);
 
@@ -290,24 +311,28 @@ async fn example_actor_model(llm_agent: Arc<LLMAgent>) -> Result<()> {
     print_result(&result);
 
     // 停止 Actor
+    // Stop Actor
     actor_ref.stop()?;
 
     Ok(())
 }
 
 /// 示例 3: AutoAgent - 自动选择策略
+/// Example 3: AutoAgent - Automatic strategy selection
 async fn example_auto_agent(
     llm_agent: Arc<LLMAgent>,
     react_agent: Arc<ReActAgent>,
-) -> Result<()> {
+) -> Result<(), Box<dyn std::error::Error>> {
     info!("\n{}", "=".repeat(60));
     info!("Example 3: AutoAgent - Automatic Strategy Selection");
     info!("{}\n", "=".repeat(60));
 
     // 创建 AutoAgent
+    // Create AutoAgent
     let auto_agent = AutoAgent::new(llm_agent.clone(), react_agent).with_auto_mode(true);
 
     // 简单任务 - 应该使用 Direct 模式
+    // Simple task - should use Direct mode
     let simple_task = "What is 2 + 2?";
     info!("Simple Task: {}", simple_task);
     let result = auto_agent.run(simple_task).await?;
@@ -315,6 +340,7 @@ async fn example_auto_agent(
     info!("Answer: {}\n", result.answer);
 
     // 复杂任务 - 应该使用 ReAct 模式
+    // Complex task - should use ReAct mode
     let complex_task = "Search for information about the Rust programming language and summarize its key features.";
     info!("Complex Task: {}", complex_task);
     let result = auto_agent.run(complex_task).await?;
@@ -326,20 +352,24 @@ async fn example_auto_agent(
 }
 
 /// 示例 4: 使用内置工具
-async fn example_builtin_tools(llm_agent: Arc<LLMAgent>) -> Result<()> {
+/// Example 4: Using built-in tools
+async fn example_builtin_tools(llm_agent: Arc<LLMAgent>) -> Result<(), Box<dyn std::error::Error>> {
     info!("\n{}", "=".repeat(60));
     info!("Example 4: Built-in Tools");
     info!("{}\n", "=".repeat(60));
 
     // 使用所有内置工具
+    // Use all built-in tools
     let react_agent = ReActAgent::builder()
         .with_llm(llm_agent)
         .with_tools(all_builtin_tools()) // 计算器、字符串、JSON、日期时间、Echo
+                                         // Calculator, String, JSON, DateTime, Echo
         .with_max_iterations(8)
         .build_async()
         .await?;
 
     // 数学计算任务
+    // Math calculation task
     let task = "Calculate (25 * 4) + (100 / 5) and then get the current timestamp.";
     info!("Task: {}\n", task);
 
@@ -351,7 +381,8 @@ async fn example_builtin_tools(llm_agent: Arc<LLMAgent>) -> Result<()> {
 }
 
 /// 示例 5: 流式输出 (使用 Actor)
-async fn example_streaming(llm_agent: Arc<LLMAgent>) -> Result<()> {
+/// Example 5: Streaming output (using Actor)
+async fn example_streaming(llm_agent: Arc<LLMAgent>) -> Result<(), Box<dyn std::error::Error>> {
     info!("\n{}", "=".repeat(60));
     info!("Example 5: Streaming Output with Actor");
     info!("{}\n", "=".repeat(60));
@@ -376,9 +407,11 @@ async fn example_streaming(llm_agent: Arc<LLMAgent>) -> Result<()> {
     info!("Streaming steps:\n");
 
     // 使用流式 API
+    // Use streaming API
     let (mut step_rx, result_rx) = actor_ref.run_task_streaming(task).await?;
 
     // 接收每个步骤
+    // Receive each step
     while let Some(step) = step_rx.recv().await {
         info!(
             "[Step {}] {:?}: {}",
@@ -389,6 +422,7 @@ async fn example_streaming(llm_agent: Arc<LLMAgent>) -> Result<()> {
     }
 
     // 等待最终结果
+    // Wait for final result
     let result = result_rx.await??;
     info!("\nFinal Answer: {}", result.answer);
     info!("Total iterations: {}", result.iterations);
@@ -399,12 +433,14 @@ async fn example_streaming(llm_agent: Arc<LLMAgent>) -> Result<()> {
 }
 
 /// 示例 6: 自定义工具组合
-async fn example_custom_tools(llm_agent: Arc<LLMAgent>) -> Result<()> {
+/// Example 6: Custom tool combination
+async fn example_custom_tools(llm_agent: Arc<LLMAgent>) -> Result<(), Box<dyn std::error::Error>> {
     info!("\n{}", "=".repeat(60));
     info!("Example 6: Custom Tool Combination");
     info!("{}\n", "=".repeat(60));
 
     // 组合自定义工具和内置工具
+    // Combine custom and built-in tools
     let tools: Vec<Arc<dyn ReActTool>> = vec![
         Arc::new(WebSearchTool),
         Arc::new(WeatherTool),
@@ -438,14 +474,17 @@ When you have gathered enough information, provide a comprehensive final answer.
 }
 
 /// 示例 7: Chain Agent (链式模式)
+/// Example 7: Chain Agent (Sequential mode)
 ///
 /// 多个 Agent 串行执行，前一个的输出作为后一个的输入
-async fn example_chain_agent(llm_agent: Arc<LLMAgent>) -> Result<()> {
+/// Multiple agents execute sequentially; output of the previous is input for the next.
+async fn example_chain_agent(llm_agent: Arc<LLMAgent>) -> Result<(), Box<dyn std::error::Error>> {
     info!("\n{}", "=".repeat(60));
     info!("Example 7: Chain Agent (Sequential Execution)");
     info!("{}\n", "=".repeat(60));
 
     // 创建研究者 Agent
+    // Create Researcher Agent
     let researcher = Arc::new(
         ReActAgent::builder()
             .with_llm(llm_agent.clone())
@@ -458,6 +497,7 @@ async fn example_chain_agent(llm_agent: Arc<LLMAgent>) -> Result<()> {
     );
 
     // 创建写作者 Agent
+    // Create Writer Agent
     let writer = Arc::new(
         ReActAgent::builder()
             .with_llm(llm_agent.clone())
@@ -469,6 +509,7 @@ async fn example_chain_agent(llm_agent: Arc<LLMAgent>) -> Result<()> {
     );
 
     // 创建编辑者 Agent
+    // Create Editor Agent
     let editor = Arc::new(
         ReActAgent::builder()
             .with_llm(llm_agent.clone())
@@ -480,6 +521,7 @@ async fn example_chain_agent(llm_agent: Arc<LLMAgent>) -> Result<()> {
     );
 
     // 使用便捷函数创建链式 Agent
+    // Create chain agent using utility function
     let chain = chain_agents(vec![
         ("researcher", researcher),
         ("writer", writer),
@@ -520,14 +562,17 @@ async fn example_chain_agent(llm_agent: Arc<LLMAgent>) -> Result<()> {
 }
 
 /// 示例 8: Parallel Agent (并行模式)
+/// Example 8: Parallel Agent (Parallel mode)
 ///
 /// 多个 Agent 并行执行同一任务，然后聚合结果
-async fn example_parallel_agent(llm_agent: Arc<LLMAgent>) -> Result<()> {
+/// Multiple agents execute the same task in parallel, then aggregate results.
+async fn example_parallel_agent(llm_agent: Arc<LLMAgent>) -> Result<(), Box<dyn std::error::Error>> {
     info!("\n{}", "=".repeat(60));
     info!("Example 8: Parallel Agent (Concurrent Execution)");
     info!("{}\n", "=".repeat(60));
 
     // 创建多个专家 Agent
+    // Create multiple expert agents
     let tech_expert = Arc::new(
         ReActAgent::builder()
             .with_llm(llm_agent.clone())
@@ -559,6 +604,7 @@ async fn example_parallel_agent(llm_agent: Arc<LLMAgent>) -> Result<()> {
     );
 
     // 创建并行 Agent，使用拼接聚合
+    // Create parallel agent using concatenation aggregation
     let parallel = ParallelAgent::new()
         .add("tech_expert", tech_expert)
         .add("business_expert", business_expert)
@@ -597,14 +643,17 @@ async fn example_parallel_agent(llm_agent: Arc<LLMAgent>) -> Result<()> {
 }
 
 /// 示例 9: Parallel Agent with LLM Summarizer
+/// Example 9: Parallel Agent with LLM Summarizer
 ///
 /// 使用 LLM 聚合多个 Agent 的结果
-async fn example_parallel_with_summarizer(llm_agent: Arc<LLMAgent>) -> Result<()> {
+/// Use LLM to aggregate results from multiple agents.
+async fn example_parallel_with_summarizer(llm_agent: Arc<LLMAgent>) -> Result<(), Box<dyn std::error::Error>> {
     info!("\n{}", "=".repeat(60));
     info!("Example 9: Parallel Agent with LLM Summarizer");
     info!("{}\n", "=".repeat(60));
 
     // 创建多个分析师 Agent
+    // Create multiple analyst agents
     let analyst1 = Arc::new(
         ReActAgent::builder()
             .with_llm(llm_agent.clone())
@@ -626,6 +675,7 @@ async fn example_parallel_with_summarizer(llm_agent: Arc<LLMAgent>) -> Result<()
     );
 
     // 使用便捷函数创建带 LLM 聚合器的并行 Agent
+    // Create parallel agent with LLM aggregator using utility function
     let parallel = parallel_agents_with_summarizer(
         vec![("analyst1", analyst1), ("analyst2", analyst2)],
         llm_agent.clone(),
@@ -648,14 +698,17 @@ async fn example_parallel_with_summarizer(llm_agent: Arc<LLMAgent>) -> Result<()
 }
 
 /// 示例 10: MapReduce Agent
+/// Example 10: MapReduce Agent
 ///
 /// 将任务拆分、并行处理、然后归约结果
-async fn example_map_reduce(llm_agent: Arc<LLMAgent>) -> Result<()> {
+/// Split tasks, process in parallel, then reduce the results.
+async fn example_map_reduce(llm_agent: Arc<LLMAgent>) -> Result<(), Box<dyn std::error::Error>> {
     info!("\n{}", "=".repeat(60));
     info!("Example 10: MapReduce Agent");
     info!("{}\n", "=".repeat(60));
 
     // 创建工作 Agent
+    // Create Worker Agent
     let worker = Arc::new(
         ReActAgent::builder()
             .with_llm(llm_agent.clone())
@@ -667,6 +720,7 @@ async fn example_map_reduce(llm_agent: Arc<LLMAgent>) -> Result<()> {
     );
 
     // 创建归约 Agent
+    // Create Reducer Agent
     let reducer = Arc::new(
         ReActAgent::builder()
             .with_llm(llm_agent.clone())
@@ -677,9 +731,11 @@ async fn example_map_reduce(llm_agent: Arc<LLMAgent>) -> Result<()> {
     );
 
     // 创建 MapReduce Agent
+    // Create MapReduce Agent
     let map_reduce = MapReduceAgent::new()
         .with_mapper(|input| {
             // 按行拆分输入
+            // Split input by lines
             input
                 .lines()
                 .filter(|line| !line.trim().is_empty())
@@ -721,6 +777,7 @@ JavaScript programming language
 
 // ============================================================================
 // 辅助函数
+// Helper functions
 // ============================================================================
 
 fn print_result(result: &ReActResult) {
@@ -749,8 +806,9 @@ fn print_result(result: &ReActResult) {
     }
 }
 
-fn create_llm_agent() -> Result<LLMAgent> {
+fn create_llm_agent() -> Result<LLMAgent, Box<dyn std::error::Error>> {
     // 从环境变量获取配置
+    // Get configuration from environment variables
     let api_key = std::env::var("OPENAI_API_KEY")
         .unwrap_or_else(|_| "demo-key".to_owned());
 
@@ -782,8 +840,9 @@ fn create_llm_agent() -> Result<LLMAgent> {
 // ============================================================================
 
 #[tokio::main]
-async fn main() -> Result<()> {
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // 初始化日志
+    // Initialize logging
     tracing_subscriber::fmt()
         .with_env_filter(
             tracing_subscriber::EnvFilter::try_from_default_env()
@@ -798,9 +857,11 @@ async fn main() -> Result<()> {
     info!("The agent thinks step by step and uses tools to solve tasks.\n");
 
     // 创建 LLM Agent
+    // Create LLM Agent
     let llm_agent = Arc::new(create_llm_agent()?);
 
     // 获取要运行的示例
+    // Get the example to run
     let example = std::env::args()
         .nth(1)
         .unwrap_or_else(|| "all".to_owned());
@@ -814,6 +875,7 @@ async fn main() -> Result<()> {
         }
         "3" | "auto" => {
             // 需要先创建 react_agent
+            // Need to create react_agent first
             let react_agent = Arc::new(
                 ReActAgent::builder()
                     .with_llm(llm_agent.clone())
@@ -849,6 +911,7 @@ async fn main() -> Result<()> {
         }
         "all" => {
             // 运行所有示例
+            // Run all examples
             example_basic_react(llm_agent.clone()).await?;
             example_actor_model(llm_agent.clone()).await?;
 
