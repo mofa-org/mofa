@@ -35,10 +35,12 @@
 //!     to: end
 //! ```
 
+mod compiler;
 mod env;
 mod parser;
 mod schema;
 
+pub use compiler::DslCompiler;
 pub use parser::*;
 pub use schema::*;
 
