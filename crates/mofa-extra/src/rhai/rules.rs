@@ -631,7 +631,13 @@ impl RuleEngine {
 
             RuleAction::Composite { .. } => {
                 // Composite actions are not handled recursively here, return error
+
+                return Err(RhaiError::Other(
+                    "Nested composite actions are not supported".to_string(),
+                ));
+
                 return Err(RhaiError::Other("Nested composite actions are not supported".to_string()));
+
             }
         };
 

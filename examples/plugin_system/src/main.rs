@@ -18,7 +18,6 @@
 
 // Rhai scripting
 use mofa_sdk::rhai::{RhaiScriptEngine, ScriptContext, ScriptEngineConfig};
-use mofa_sdk::kernel::plugin::PluginError;
 use mofa_sdk::plugins::PluginPriority;
 use mofa_sdk::plugins::{
     AgentPlugin, LLMPlugin, LLMPluginConfig, MemoryPlugin, MemoryStorage, PluginContext,
@@ -252,7 +251,17 @@ impl AgentPlugin for MonitorPlugin {
             ["list"] => {
                 Ok(serde_json::to_string(&self.all_metrics())?)
             }
+
+
+            _ => Err(
+                std::io::Error::other(
+                    "Invalid command. Use: record <name> <value>, get <name>, list",
+                )
+                .into(),
+            ),
+
             _ => Err(PluginError::ExecutionFailed("Invalid command. Use: record <name> <value>, get <name>, list".to_string())),
+
         }
     }
 
