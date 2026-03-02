@@ -5,7 +5,7 @@
 
 use crate::rag::similarity::compute_similarity;
 use async_trait::async_trait;
-use mofa_kernel::agent::error::AgentResult;
+use mofa_kernel::agent::error::{AgentError, AgentResult};
 use mofa_kernel::rag::{DocumentChunk, SearchResult, SimilarityMetric, VectorStore};
 use std::collections::HashMap;
 
@@ -30,6 +30,8 @@ use std::collections::HashMap;
 pub struct InMemoryVectorStore {
     chunks: HashMap<String, DocumentChunk>,
     metric: SimilarityMetric,
+    /// Dimensionality of vectors stored in this index. `None` when empty.
+    dimension: Option<usize>,
 }
 
 impl InMemoryVectorStore {
@@ -38,6 +40,7 @@ impl InMemoryVectorStore {
         Self {
             chunks: HashMap::new(),
             metric,
+            dimension: None,
         }
     }
 
@@ -56,12 +59,39 @@ impl Default for InMemoryVectorStore {
 #[async_trait]
 impl VectorStore for InMemoryVectorStore {
     async fn upsert(&mut self, chunk: DocumentChunk) -> AgentResult<()> {
+        let len = chunk.embedding.len();
+        if let Some(d) = self.dimension {
+            if len != d {
+                return Err(AgentError::InvalidInput(format!(
+                    "chunk embedding length {} does not match store dimension {}",
+                    len, d
+                )));
+            }
+        } else {
+            // first vector sets the dimension
+            self.dimension = Some(len);
+        }
+
         self.chunks.insert(chunk.id.clone(), chunk);
         Ok(())
     }
 
     async fn upsert_batch(&mut self, chunks: Vec<DocumentChunk>) -> AgentResult<()> {
-        for chunk in chunks {
+        if chunks.is_empty() {
+            return Ok(());
+        }
+        for chunk in chunks.into_iter() {
+            let len = chunk.embedding.len();
+            if let Some(d) = self.dimension {
+                if len != d {
+                    return Err(AgentError::InvalidInput(format!(
+                        "chunk embedding length {} does not match store dimension {}",
+                        len, d
+                    )));
+                }
+            } else {
+                self.dimension = Some(len);
+            }
             self.chunks.insert(chunk.id.clone(), chunk);
         }
         Ok(())
@@ -73,6 +103,16 @@ impl VectorStore for InMemoryVectorStore {
         top_k: usize,
         threshold: Option<f32>,
     ) -> AgentResult<Vec<SearchResult>> {
+        if let Some(d) = self.dimension {
+            if query_embedding.len() != d {
+                return Err(AgentError::InvalidInput(format!(
+                    "query embedding length {} does not match store dimension {}",
+                    query_embedding.len(),
+                    d
+                )));
+            }
+        }
+
         let mut scored: Vec<SearchResult> = self
             .chunks
             .values()
@@ -100,11 +140,17 @@ impl VectorStore for InMemoryVectorStore {
     }
 
     async fn delete(&mut self, id: &str) -> AgentResult<bool> {
-        Ok(self.chunks.remove(id).is_some())
+        let removed = self.chunks.remove(id).is_some();
+        if removed && self.chunks.is_empty() {
+            // reset dimension when store becomes empty
+            self.dimension = None;
+        }
+        Ok(removed)
     }
 
     async fn clear(&mut self) -> AgentResult<()> {
         self.chunks.clear();
+        self.dimension = None;
         Ok(())
     }
 
@@ -120,6 +166,7 @@ impl VectorStore for InMemoryVectorStore {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use mofa_kernel::agent::error::AgentError;
 
     fn make_chunk(id: &str, text: &str, embedding: Vec<f32>) -> DocumentChunk {
         DocumentChunk::new(id, text, embedding)
@@ -285,5 +332,60 @@ mod tests {
     fn test_default_is_cosine() {
         let store = InMemoryVectorStore::default();
         assert_eq!(store.similarity_metric(), SimilarityMetric::Cosine);
+    }
+
+    #[tokio::test]
+    async fn test_dimension_validation_upsert() {
+        let mut store = InMemoryVectorStore::cosine();
+        store
+            .upsert(make_chunk("a", "text", vec![1.0, 0.0]))
+            .await
+            .unwrap();
+        let err = store
+            .upsert(make_chunk("b", "other", vec![0.0]))
+            .await
+            .unwrap_err();
+        assert!(matches!(err, AgentError::InvalidInput(_)));
+    }
+
+    #[tokio::test]
+    async fn test_dimension_validation_search() {
+        let mut store = InMemoryVectorStore::cosine();
+        store
+            .upsert(make_chunk("a", "text", vec![1.0, 0.0]))
+            .await
+            .unwrap();
+        let err = store.search(&[1.0], 1, None).await.unwrap_err();
+        assert!(matches!(err, AgentError::InvalidInput(_)));
+    }
+
+    #[tokio::test]
+    async fn test_dimension_reset_on_clear_and_delete() {
+        let mut store = InMemoryVectorStore::cosine();
+        store
+            .upsert(make_chunk("a", "text", vec![1.0, 0.0]))
+            .await
+            .unwrap();
+        assert_eq!(store.dimension, Some(2));
+        store.clear().await.unwrap();
+        assert_eq!(store.dimension, None);
+        store
+            .upsert(make_chunk("b", "text", vec![0.0, 1.0]))
+            .await
+            .unwrap();
+        assert_eq!(store.dimension, Some(2));
+        store.delete("b").await.unwrap();
+        assert_eq!(store.dimension, None);
+    }
+
+    #[tokio::test]
+    async fn test_dimension_validation_upsert_batch() {
+        let mut store = InMemoryVectorStore::cosine();
+        let chunks = vec![
+            make_chunk("a", "t", vec![1.0, 0.0]),
+            make_chunk("b", "t", vec![0.0]),
+        ];
+        let err = store.upsert_batch(chunks).await.unwrap_err();
+        assert!(matches!(err, AgentError::InvalidInput(_)));
     }
 }

@@ -411,7 +411,11 @@ pub trait DynTool: Send + Sync {
     fn name(&self) -> &str;
     fn description(&self) -> &str;
     fn parameters_schema(&self) -> serde_json::Value;
-    async fn execute_dynamic(&self, input: serde_json::Value, ctx: &AgentContext) -> AgentResult<serde_json::Value>;
+    async fn execute_dynamic(
+        &self,
+        input: serde_json::Value,
+        ctx: &AgentContext,
+    ) -> AgentResult<serde_json::Value>;
     fn metadata(&self) -> ToolMetadata;
     fn validate_dynamic_input(&self, input: &serde_json::Value) -> AgentResult<()>;
     fn requires_confirmation(&self) -> bool;
@@ -419,8 +423,8 @@ pub trait DynTool: Send + Sync {
 }
 
 pub struct DynToolWrapper<T, Args, Out> {
-    tool: T,
-    _phantom: std::marker::PhantomData<(Args, Out)>,
+    pub tool: Arc<T>,
+    pub _phantom: std::marker::PhantomData<(Args, Out)>,
 }
 
 pub trait ToolExt<Args, Out>: Tool<Args, Out> + Sized + Send + Sync + 'static
@@ -430,7 +434,7 @@ where
 {
     fn into_dynamic(self) -> std::sync::Arc<dyn DynTool> {
         std::sync::Arc::new(DynToolWrapper {
-            tool: self,
+            tool: std::sync::Arc::new(self),
             _phantom: std::marker::PhantomData,
         })
     }
@@ -440,7 +444,8 @@ where
     T: Tool<Args, Out> + Send + Sync + 'static,
     Args: serde::de::DeserializeOwned + Send + Sync + 'static,
     Out: serde::Serialize + Send + Sync + 'static,
-{}
+{
+}
 
 #[async_trait]
 impl<T, Args, Out> DynTool for DynToolWrapper<T, Args, Out>
@@ -449,32 +454,55 @@ where
     Args: serde::de::DeserializeOwned + Send + Sync + 'static,
     Out: serde::Serialize + Send + Sync + 'static,
 {
-    fn name(&self) -> &str { Tool::name(&self.tool) }
-    fn description(&self) -> &str { Tool::description(&self.tool) }
-    fn parameters_schema(&self) -> serde_json::Value { Tool::parameters_schema(&self.tool) }
-    fn metadata(&self) -> ToolMetadata { Tool::metadata(&self.tool) }
-    fn requires_confirmation(&self) -> bool { Tool::requires_confirmation(&self.tool) }
-    fn to_llm_tool(&self) -> LLMTool { Tool::to_llm_tool(&self.tool) }
-
-    fn validate_dynamic_input(&self, input: &serde_json::Value) -> AgentResult<()> {
-        let args: Args = serde_json::from_value(input.clone())
-            .map_err(|e| AgentError::InvalidInput(format!("Tool {} args mapping error: {}", self.name(), e)))?;
-        self.tool.validate_input(&ToolInput::new(args))
+    fn name(&self) -> &str {
+        Tool::name(&*self.tool)
+    }
+    fn description(&self) -> &str {
+        Tool::description(&*self.tool)
+    }
+    fn parameters_schema(&self) -> serde_json::Value {
+        Tool::parameters_schema(&*self.tool)
+    }
+    fn metadata(&self) -> ToolMetadata {
+        Tool::metadata(&*self.tool)
+    }
+    fn requires_confirmation(&self) -> bool {
+        Tool::requires_confirmation(&*self.tool)
+    }
+    fn to_llm_tool(&self) -> LLMTool {
+        Tool::to_llm_tool(&*self.tool)
     }
 
-    async fn execute_dynamic(&self, input: serde_json::Value, ctx: &AgentContext) -> AgentResult<serde_json::Value> {
-        let args: Args = serde_json::from_value(input)
-            .map_err(|e| AgentError::InvalidInput(format!("Tool {} args mapping error: {}", self.name(), e)))?;
+    fn validate_dynamic_input(&self, input: &serde_json::Value) -> AgentResult<()> {
+        let args: Args = serde_json::from_value(input.clone()).map_err(|e| {
+            AgentError::InvalidInput(format!("Tool {} args mapping error: {}", self.name(), e))
+        })?;
+        (*self.tool).validate_input(&ToolInput::new(args))
+    }
+
+    async fn execute_dynamic(
+        &self,
+        input: serde_json::Value,
+        ctx: &AgentContext,
+    ) -> AgentResult<serde_json::Value> {
+        let args: Args = serde_json::from_value(input).map_err(|e| {
+            AgentError::InvalidInput(format!("Tool {} args mapping error: {}", self.name(), e))
+        })?;
         let tool_input = ToolInput::new(args);
-        let result = self.tool.execute(tool_input, ctx).await;
+        let result = (*self.tool).execute(tool_input, ctx).await;
         if !result.success {
             return Err(AgentError::ToolExecutionFailed {
                 tool_name: self.name().to_string(),
                 message: result.error.unwrap_or_default(),
             });
         }
-        serde_json::to_value(result.output)
-            .map_err(|e| AgentError::ExecutionFailed(format!("Tool {} output serialize error: {}", self.name(), e)))
+        serde_json::to_value(result.output).map_err(|e| {
+            AgentError::ExecutionFailed(format!(
+                "Tool {} output serialize error: {}",
+                self.name(),
+                e
+            ))
+        })
     }
 }
 
@@ -534,15 +562,20 @@ pub trait ToolRegistry: Send + Sync {
         let tool = self
             .get(name)
             .ok_or_else(|| AgentError::ToolNotFound(name.to_string()))?;
-            
-        let json_input = serde_json::to_value(&input.arguments)
-            .map_err(|e| AgentError::InvalidInput(format!("Failed to serialize args for tool {}: {}", name, e)))?;
-            
+
+        let json_input = serde_json::to_value(&input.arguments).map_err(|e| {
+            AgentError::InvalidInput(format!("Failed to serialize args for tool {}: {}", name, e))
+        })?;
+
         let json_output = tool.execute_dynamic(json_input, ctx).await?;
-        
-        let output: Out = serde_json::from_value(json_output)
-            .map_err(|e| AgentError::ExecutionFailed(format!("Failed to deserialize output from tool {}: {}", name, e)))?;
-            
+
+        let output: Out = serde_json::from_value(json_output).map_err(|e| {
+            AgentError::ExecutionFailed(format!(
+                "Failed to deserialize output from tool {}: {}",
+                name, e
+            ))
+        })?;
+
         Ok(ToolResult::success(output))
     }
 

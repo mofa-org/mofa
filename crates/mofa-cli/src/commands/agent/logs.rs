@@ -67,7 +67,7 @@ pub async fn run(
         tail_log_file(&log_file, &level, &grep).await?;
     } else {
         println!(
-            "{} Displaying logs for agent: {}",
+            "{} Displaying recent logs for agent: {}\n",
             "→".green(),
             agent_id.cyan()
         );

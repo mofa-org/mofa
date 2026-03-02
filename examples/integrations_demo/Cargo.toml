@@ -1,0 +1,23 @@
+[package]
+name = "integrations_demo"
+version.workspace = true
+edition.workspace = true
+
+[[bin]]
+name = "integrations_demo"
+path = "src/main.rs"
+
+[dependencies]
+mofa-kernel      = { path = "../../crates/mofa-kernel" }
+mofa-integrations = { path = "../../crates/mofa-integrations", features = ["socketio"] }
+
+axum.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+anyhow = "1.0"
+serde_json.workspace = true
+tower-http = { version = "0.6", features = ["cors"] }
+
+[lints]
+workspace = true
