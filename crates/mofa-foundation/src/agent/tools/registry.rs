@@ -652,17 +652,11 @@ mod tests {
         let mut registry = ToolRegistry::new();
 
         registry
-            .register_with_source(
-                TestTool::new("dup_tool").into_dynamic(),
-                ToolSource::Builtin,
-            )
+            .register_with_source(TestTool::new("dup_tool").into_dynamic(), ToolSource::Builtin)
             .unwrap();
 
         let err = registry
-            .register_with_source(
-                TestTool::new("dup_tool").into_dynamic(),
-                ToolSource::Dynamic,
-            )
+            .register_with_source(TestTool::new("dup_tool").into_dynamic(), ToolSource::Dynamic)
             .expect_err("duplicate registration should fail");
 
         assert!(matches!(err, AgentError::RegistrationFailed(_)));

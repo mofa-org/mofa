@@ -204,11 +204,11 @@ mod tests {
     #[test]
     fn test_node_duration_recorded() {
         let mut timeline = ExecutionTimeline::new("workflow-1".to_string(), "exec-1".to_string());
-        
+
         // Start and end a node
         timeline.start_node("node-1".to_string());
         timeline.end_node();
-        
+
         // Verify duration was computed (may be 0 in fast tests)
         assert!(timeline.node_spans[0].duration_ms.is_some());
     }
@@ -216,13 +216,13 @@ mod tests {
     #[test]
     fn test_tool_duration_recorded() {
         let mut timeline = ExecutionTimeline::new("workflow-1".to_string(), "exec-1".to_string());
-        
+
         // Start node, then tool
         timeline.start_node("node-1".to_string());
         timeline.start_tool("tool-1".to_string(), "search".to_string());
         timeline.end_tool();
         timeline.end_node();
-        
+
         // Verify tool duration was computed (may be 0 in fast tests)
         assert!(timeline.node_spans[0].tool_spans[0].duration_ms.is_some());
     }
@@ -230,11 +230,11 @@ mod tests {
     #[test]
     fn test_workflow_duration() {
         let mut timeline = ExecutionTimeline::new("workflow-1".to_string(), "exec-1".to_string());
-        
+
         timeline.start_node("node-1".to_string());
         timeline.end_node();
         timeline.finish();
-        
+
         // Verify workflow duration
         assert!(timeline.duration_ms.is_some());
     }

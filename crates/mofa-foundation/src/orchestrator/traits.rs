@@ -378,9 +378,18 @@ mod tests {
 
     #[test]
     fn test_degradation_level_next() {
-        assert_eq!(DegradationLevel::Full.next_level(), Some(DegradationLevel::Half));
-        assert_eq!(DegradationLevel::Half.next_level(), Some(DegradationLevel::Int8));
-        assert_eq!(DegradationLevel::Int8.next_level(), Some(DegradationLevel::Int4));
+        assert_eq!(
+            DegradationLevel::Full.next_level(),
+            Some(DegradationLevel::Half)
+        );
+        assert_eq!(
+            DegradationLevel::Half.next_level(),
+            Some(DegradationLevel::Int8)
+        );
+        assert_eq!(
+            DegradationLevel::Int8.next_level(),
+            Some(DegradationLevel::Int4)
+        );
         assert_eq!(DegradationLevel::Int4.next_level(), None);
     }
 
@@ -396,7 +405,10 @@ mod tests {
     fn test_model_type_equality() {
         assert_eq!(ModelType::Llm, ModelType::Llm);
         assert_ne!(ModelType::Asr, ModelType::Tts);
-        assert_eq!(ModelType::Other("custom".into()), ModelType::Other("custom".into()));
+        assert_eq!(
+            ModelType::Other("custom".into()),
+            ModelType::Other("custom".into())
+        );
     }
 
     #[test]
