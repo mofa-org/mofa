@@ -21,6 +21,12 @@ pub async fn run(
         return Err(CliError::PluginError("Plugin name cannot be empty".into()));
     }
 
+    if verify_signature {
+        return Err(CliError::PluginError(
+            "Signature verification requested with --verify-signature, but this feature is not implemented yet. Remove the flag or use --checksum for integrity verification.".into(),
+        ));
+    }
+
     println!("{} Installing plugin: {}", "→".green(), normalized.cyan());
 
     let plugin_source = determine_plugin_source(normalized)?;
@@ -28,11 +34,17 @@ pub async fn run(
     if let PluginSource::Registry(_) = plugin_source {
         let (repo_id, plugin_id) = parse_plugin_reference(normalized)?;
         let entry = find_catalog_entry(&repo_id, &plugin_id).ok_or_else(|| {
-            CliError::PluginError(format!("Plugin '{}' not found in repository '{}'", plugin_id, repo_id))
+            CliError::PluginError(format!(
+                "Plugin '{}' not found in repository '{}'",
+                plugin_id, repo_id
+            ))
         })?;
 
         if ctx.plugin_registry.contains(&entry.id) {
-            return Err(CliError::PluginError(format!("Plugin '{}' is already installed", entry.id)));
+            return Err(CliError::PluginError(format!(
+                "Plugin '{}' is already installed",
+                entry.id
+            )));
         }
 
         if let Ok(Some(existing)) = ctx.plugin_store.get(&entry.id) {
@@ -54,18 +66,30 @@ pub async fn run(
         };
 
         let plugin = instantiate_plugin_from_spec(&spec).ok_or_else(|| {
-            CliError::PluginError(format!("CLI installer does not support plugin kind '{}'", spec.kind))
+            CliError::PluginError(format!(
+                "CLI installer does not support plugin kind '{}'",
+                spec.kind
+            ))
         })?;
 
-        ctx.plugin_registry.register(plugin)
-            .map_err(|e| CliError::PluginError(format!("Failed to register plugin '{}': {}", entry.id, e)))?;
+        ctx.plugin_registry.register(plugin).map_err(|e| {
+            CliError::PluginError(format!("Failed to register plugin '{}': {}", entry.id, e))
+        })?;
 
         if let Err(e) = ctx.plugin_store.save(&spec.id, &spec) {
             let _ = ctx.plugin_registry.unregister(&spec.id);
-            return Err(CliError::PluginError(format!("Failed to persist plugin '{}': {}. Rolled back in-memory registration.", spec.id, e)));
+            return Err(CliError::PluginError(format!(
+                "Failed to persist plugin '{}': {}. Rolled back in-memory registration.",
+                spec.id, e
+            )));
         }
 
-        println!("{} Installed plugin '{}' from repository '{}'", "✓".green(), spec.id, repo_id);
+        println!(
+            "{} Installed plugin '{}' from repository '{}'",
+            "✓".green(),
+            spec.id,
+            repo_id
+        );
         return Ok(());
     }
 
@@ -79,7 +103,10 @@ pub async fn run(
     }
 
     if ctx.plugin_store.get(&plugin_id)?.is_some() {
-        return Err(CliError::PluginError(format!("Plugin '{}' is already installed", plugin_id)));
+        return Err(CliError::PluginError(format!(
+            "Plugin '{}' is already installed",
+            plugin_id
+        )));
     }
 
     let plugin_dir = match plugin_source {
@@ -89,7 +116,7 @@ pub async fn run(
         }
         PluginSource::Url(url) => {
             println!("  {} Source: URL", "•".bright_black());
-            install_from_url(&ctx.data_dir, &plugin_id, &url, checksum, verify_signature).await?
+            install_from_url(&ctx.data_dir, &plugin_id, &url, checksum).await?
         }
         PluginSource::Registry(_) => unreachable!(),
     };
@@ -108,12 +135,28 @@ pub async fn run(
         repo_id: None,
     };
 
-    ctx.plugin_store.save(&plugin_id, &spec)
-        .map_err(|e| CliError::PluginError(format!("Failed to persist plugin spec for '{}': {}", plugin_id, e)))?;
+    ctx.plugin_store.save(&plugin_id, &spec).map_err(|e| {
+        CliError::PluginError(format!(
+            "Failed to persist plugin spec for '{}': {}",
+            plugin_id, e
+        ))
+    })?;
 
-    println!("{} Plugin '{}' installed successfully", "✓".green(), plugin_id);
-    println!("  {} Location: {}", "•".bright_black(), plugin_dir.display().to_string().cyan());
-    println!("  {} Use {} to activate it", "•".bright_black(), "mofa plugin enable".yellow());
+    println!(
+        "{} Plugin '{}' installed successfully",
+        "✓".green(),
+        plugin_id
+    );
+    println!(
+        "  {} Location: {}",
+        "•".bright_black(),
+        plugin_dir.display().to_string().cyan()
+    );
+    println!(
+        "  {} Use {} to activate it",
+        "•".bright_black(),
+        "mofa plugin enable".yellow()
+    );
 
     Ok(())
 }
@@ -124,7 +167,9 @@ fn parse_plugin_reference(value: &str) -> Result<(String, String), CliError> {
         let plugin = plugin.trim();
 
         if repo.is_empty() || plugin.is_empty() {
-            return Err(CliError::PluginError("Plugin reference must be '<repo>/<plugin>'".into()));
+            return Err(CliError::PluginError(
+                "Plugin reference must be '<repo>/<plugin>'".into(),
+            ));
         }
 
         Ok((repo.to_string(), plugin.to_string()))
@@ -165,13 +210,13 @@ async fn install_from_local_path(
 
     // Remove existing directory if present
     if dest_dir.exists() {
-        tokio::fs::remove_dir_all(&dest_dir).await
-            .map_err(|e| {
-                CliError::PluginError(format!(
-                    "Failed to remove existing plugin directory '{}': {}",
-                    dest_dir.display(), e
-                ))
-            })?;
+        tokio::fs::remove_dir_all(&dest_dir).await.map_err(|e| {
+            CliError::PluginError(format!(
+                "Failed to remove existing plugin directory '{}': {}",
+                dest_dir.display(),
+                e
+            ))
+        })?;
     }
 
     // Copy plugin files
@@ -186,7 +231,6 @@ async fn install_from_url(
     plugin_name: &str,
     url: &str,
     expected_checksum: Option<&str>,
-    verify_signature: bool,
 ) -> Result<PathBuf, CliError> {
     let plugins_dir = data_dir.join("plugins");
     tokio::fs::create_dir_all(&plugins_dir)
@@ -196,12 +240,15 @@ async fn install_from_url(
     // Download the file with progress bar
     println!("  {} Downloading from {}", "•".bright_black(), url.cyan());
 
-    let response = reqwest::get(url)
-        .await
-        .map_err(|e| CliError::PluginError(format!("Failed to download plugin from {}: {}", url, e)))?;
+    let response = reqwest::get(url).await.map_err(|e| {
+        CliError::PluginError(format!("Failed to download plugin from {}: {}", url, e))
+    })?;
 
     if !response.status().is_success() {
-        return Err(CliError::PluginError(format!("Download failed with status: {}", response.status())));
+        return Err(CliError::PluginError(format!(
+            "Download failed with status: {}",
+            response.status()
+        )));
     }
 
     // Get content length for progress bar
@@ -218,7 +265,8 @@ async fn install_from_url(
     let mut bytes = Vec::new();
     let mut stream = response.bytes_stream();
     while let Some(chunk) = stream.next().await {
-        let chunk = chunk.map_err(|e| CliError::PluginError(format!("Failed to read download chunk: {}", e)))?;
+        let chunk = chunk
+            .map_err(|e| CliError::PluginError(format!("Failed to read download chunk: {}", e)))?;
         bytes.extend_from_slice(&chunk);
         pb.inc(chunk.len() as u64);
     }
@@ -235,24 +283,16 @@ async fn install_from_url(
         if computed_hex.to_lowercase() != expected.to_lowercase() {
             return Err(CliError::PluginError(format!(
                 "Checksum mismatch!\n  Expected: {}\n  Computed: {}\n\nPlugin may be corrupted or tampered with.",
-                expected,
-                computed_hex
+                expected, computed_hex
             )));
         }
         println!("  {} Checksum verified", "✓".green());
     }
 
-    if verify_signature {
-        println!(
-            "  {} Signature verification not yet implemented",
-            "⚠".yellow()
-        );
-        println!("  {} Consider using --checksum for now", "•".bright_black());
-    }
-
     // Determine if it's an archive or single file
     let dest_dir = plugins_dir.join(plugin_name);
-    tokio::fs::create_dir_all(&dest_dir).await
+    tokio::fs::create_dir_all(&dest_dir)
+        .await
         .map_err(|e| CliError::PluginError(format!("Failed to create plugin directory: {}", e)))?;
 
     // For simplicity, assume it's a tar.gz or zip based on URL
@@ -264,7 +304,8 @@ async fn install_from_url(
         // Treat as single file, save it directly
         let filename = url.split('/').next_back().unwrap_or("plugin");
         let file_path = dest_dir.join(filename);
-        tokio::fs::write(&file_path, &bytes).await
+        tokio::fs::write(&file_path, &bytes)
+            .await
             .map_err(|e| CliError::PluginError(format!("Failed to write plugin file: {}", e)))?;
     }
 
@@ -274,18 +315,29 @@ async fn install_from_url(
 /// Validate that the plugin directory has required structure
 fn validate_plugin_structure(plugin_dir: &Path) -> Result<(), CliError> {
     if !plugin_dir.exists() {
-        return Err(CliError::PluginError(format!("Plugin directory does not exist: {}", plugin_dir.display())));
+        return Err(CliError::PluginError(format!(
+            "Plugin directory does not exist: {}",
+            plugin_dir.display()
+        )));
     }
 
     if !plugin_dir.is_dir() {
-        return Err(CliError::PluginError(format!("Plugin path is not a directory: {}", plugin_dir.display())));
+        return Err(CliError::PluginError(format!(
+            "Plugin path is not a directory: {}",
+            plugin_dir.display()
+        )));
     }
 
     // Check for at least one file (skip . and .. entries)
     let mut has_files = false;
     let mut entry_count = 0;
-    let entries = std::fs::read_dir(plugin_dir)
-        .map_err(|e| CliError::PluginError(format!("Failed to read plugin directory '{}': {}", plugin_dir.display(), e)))?;
+    let entries = std::fs::read_dir(plugin_dir).map_err(|e| {
+        CliError::PluginError(format!(
+            "Failed to read plugin directory '{}': {}",
+            plugin_dir.display(),
+            e
+        ))
+    })?;
     for entry in entries {
         entry_count += 1;
         match entry {
@@ -323,13 +375,21 @@ fn copy_dir_recursive<'a>(
     dest: &'a Path,
 ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<(), CliError>> + Send + 'a>> {
     Box::pin(async move {
-        tokio::fs::create_dir_all(dest)
-            .await
-            .map_err(|e| CliError::PluginError(format!("Failed to create directory '{}': {}", dest.display(), e)))?;
+        tokio::fs::create_dir_all(dest).await.map_err(|e| {
+            CliError::PluginError(format!(
+                "Failed to create directory '{}': {}",
+                dest.display(),
+                e
+            ))
+        })?;
 
-        let mut entries = tokio::fs::read_dir(src)
-            .await
-            .map_err(|e| CliError::PluginError(format!("Failed to read source directory '{}': {}", src.display(), e)))?;
+        let mut entries = tokio::fs::read_dir(src).await.map_err(|e| {
+            CliError::PluginError(format!(
+                "Failed to read source directory '{}': {}",
+                src.display(),
+                e
+            ))
+        })?;
 
         while let Some(entry) = entries
             .next_entry()
@@ -344,12 +404,14 @@ fn copy_dir_recursive<'a>(
             } else {
                 tokio::fs::copy(&entry_path, &dest_path)
                     .await
-                    .map_err(|e| CliError::PluginError(format!(
-                        "Failed to copy file from {} to {}: {}",
-                        entry_path.display(),
-                        dest_path.display(),
-                        e
-                    )))?;
+                    .map_err(|e| {
+                        CliError::PluginError(format!(
+                            "Failed to copy file from {} to {}: {}",
+                            entry_path.display(),
+                            dest_path.display(),
+                            e
+                        ))
+                    })?;
             }
         }
 
@@ -378,7 +440,8 @@ fn extract_zip(bytes: &[u8], dest_dir: &Path) -> Result<(), CliError> {
     use zip::ZipArchive;
 
     let cursor = Cursor::new(bytes);
-    let mut archive = ZipArchive::new(cursor).map_err(|e| CliError::PluginError(format!("Failed to read zip archive: {}", e)))?;
+    let mut archive = ZipArchive::new(cursor)
+        .map_err(|e| CliError::PluginError(format!("Failed to read zip archive: {}", e)))?;
 
     for i in 0..archive.len() {
         let mut file = archive
@@ -391,16 +454,33 @@ fn extract_zip(bytes: &[u8], dest_dir: &Path) -> Result<(), CliError> {
         };
 
         if file.name().ends_with('/') {
-            std::fs::create_dir_all(&outpath)
-                .map_err(|e| CliError::PluginError(format!("Failed to create directory '{}': {}", outpath.display(), e)))?;
+            std::fs::create_dir_all(&outpath).map_err(|e| {
+                CliError::PluginError(format!(
+                    "Failed to create directory '{}': {}",
+                    outpath.display(),
+                    e
+                ))
+            })?;
         } else {
             if let Some(parent) = outpath.parent() {
-                std::fs::create_dir_all(parent).map_err(|e| CliError::PluginError(format!("Failed to create parent directory '{}': {}", parent.display(), e)))?;
+                std::fs::create_dir_all(parent).map_err(|e| {
+                    CliError::PluginError(format!(
+                        "Failed to create parent directory '{}': {}",
+                        parent.display(),
+                        e
+                    ))
+                })?;
             }
-            let mut outfile = std::fs::File::create(&outpath)
-                .map_err(|e| CliError::PluginError(format!("Failed to create file '{}': {}", outpath.display(), e)))?;
-            std::io::copy(&mut file, &mut outfile)
-                .map_err(|e| CliError::PluginError(format!("Failed to write file contents: {}", e)))?;
+            let mut outfile = std::fs::File::create(&outpath).map_err(|e| {
+                CliError::PluginError(format!(
+                    "Failed to create file '{}': {}",
+                    outpath.display(),
+                    e
+                ))
+            })?;
+            std::io::copy(&mut file, &mut outfile).map_err(|e| {
+                CliError::PluginError(format!("Failed to write file contents: {}", e))
+            })?;
         }
     }
 
@@ -413,7 +493,6 @@ enum PluginSource {
     Url(String),
     Registry(String),
 }
-
 
 #[cfg(test)]
 mod tests {
@@ -504,13 +583,25 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_install_rejects_verify_signature_until_implemented() {
+        let temp = TempDir::new().unwrap();
+        let ctx = CliContext::with_temp_dir(temp.path()).await.unwrap();
+
+        let err = run(&ctx, "http-plugin", None, true).await.unwrap_err();
+        assert!(err.to_string().contains("not implemented yet"));
+        assert!(err.to_string().contains("--verify-signature"));
+    }
+
+    #[tokio::test]
     async fn test_install_supports_repo_prefixed_reference() {
         let temp = TempDir::new().unwrap();
         let ctx = CliContext::with_temp_dir(temp.path()).await.unwrap();
 
         disable_default_http_plugin(&ctx);
 
-        run(&ctx, "official/http-plugin", None, false).await.unwrap();
+        run(&ctx, "official/http-plugin", None, false)
+            .await
+            .unwrap();
 
         let spec = ctx.plugin_store.get("http-plugin").unwrap().unwrap();
         assert_eq!(spec.repo_id.as_deref(), Some(DEFAULT_PLUGIN_REPO_ID));
@@ -522,7 +613,9 @@ mod tests {
         let temp = TempDir::new().unwrap();
         let ctx = CliContext::with_temp_dir(temp.path()).await.unwrap();
 
-        let err = run(&ctx, "official/not-real", None, false).await.unwrap_err();
+        let err = run(&ctx, "official/not-real", None, false)
+            .await
+            .unwrap_err();
         assert!(err.to_string().contains("not found in repository"));
     }
 
