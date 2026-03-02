@@ -15,24 +15,20 @@
 //! let result = compiled.invoke(JsonState::default(), None).await?;
 //! ```
 
-use std::collections::HashMap;
-
+use super::schema::*;
+use super::{DslError, DslResult};
+use crate::llm::LLMAgent;
+use crate::workflow::state_graph::{CompiledGraphImpl, StateGraphImpl};
 use async_trait::async_trait;
 use mofa_kernel::agent::error::AgentResult;
 use mofa_kernel::workflow::{
     Command, END, GraphState, JsonState, NodeFunc, RuntimeContext, START, StateGraph,
 };
 use serde_json::Value;
-
-use super::schema::*;
-use super::{DslError, DslResult};
-use crate::llm::LLMAgent;
-use crate::workflow::state_graph::{CompiledGraphImpl, StateGraphImpl};
+use std::collections::HashMap;
 use std::sync::Arc;
 
-// =============================================================================
 // Node Adapters — DSL NodeDefinition → Box<dyn NodeFunc<JsonState>>
-// =============================================================================
 
 /// A pass-through node that forwards state unchanged.
 ///
@@ -54,11 +50,9 @@ impl NodeFunc<JsonState> for PassthroughNode {
     async fn call(&self, _state: &mut JsonState, _ctx: &RuntimeContext) -> AgentResult<Command> {
         Ok(Command::new().continue_())
     }
-
     fn name(&self) -> &str {
         &self.node_name
     }
-
     fn description(&self) -> Option<&str> {
         Some("Pass-through node (no-op)")
     }
@@ -86,57 +80,43 @@ impl DslTaskNode {
 impl NodeFunc<JsonState> for DslTaskNode {
     async fn call(&self, _state: &mut JsonState, _ctx: &RuntimeContext) -> AgentResult<Command> {
         match &self.executor {
-            TaskExecutorDef::None => {
-                // No-op: just continue to next node
-                Ok(Command::new().continue_())
-            }
-            TaskExecutorDef::Function { function } => {
-                // Store the function name in state for downstream consumers
-                Ok(Command::new()
-                    .update(
-                        "last_task",
-                        serde_json::json!({
-                            "type": "function",
-                            "function": function,
-                            "status": "placeholder"
-                        }),
-                    )
-                    .continue_())
-            }
-            TaskExecutorDef::Http { url, method } => {
-                // Store HTTP config in state for downstream consumers
-                Ok(Command::new()
-                    .update(
-                        "last_task",
-                        serde_json::json!({
-                            "type": "http",
-                            "url": url,
-                            "method": method.as_deref().unwrap_or("GET"),
-                            "status": "placeholder"
-                        }),
-                    )
-                    .continue_())
-            }
-            TaskExecutorDef::Script { script } => {
-                // Store script info in state
-                Ok(Command::new()
-                    .update(
-                        "last_task",
-                        serde_json::json!({
-                            "type": "script",
-                            "script_length": script.len(),
-                            "status": "placeholder"
-                        }),
-                    )
-                    .continue_())
-            }
+            TaskExecutorDef::None => Ok(Command::new().continue_()),
+            TaskExecutorDef::Function { function } => Ok(Command::new()
+                .update(
+                    "last_task",
+                    serde_json::json!({
+                        "type": "function",
+                        "function": function,
+                        "status": "placeholder"
+                    }),
+                )
+                .continue_()),
+            TaskExecutorDef::Http { url, method } => Ok(Command::new()
+                .update(
+                    "last_task",
+                    serde_json::json!({
+                        "type": "http",
+                        "url": url,
+                        "method": method.as_deref().unwrap_or("GET"),
+                        "status": "placeholder"
+                    }),
+                )
+                .continue_()),
+            TaskExecutorDef::Script { script } => Ok(Command::new()
+                .update(
+                    "last_task",
+                    serde_json::json!({
+                        "type": "script",
+                        "script_length": script.len(),
+                        "status": "placeholder"
+                    }),
+                )
+                .continue_()),
         }
     }
-
     fn name(&self) -> &str {
         &self.node_name
     }
-
     fn description(&self) -> Option<&str> {
         Some("DSL task node")
     }
@@ -165,7 +145,6 @@ impl NodeFunc<JsonState> for DslConditionNode {
     async fn call(&self, state: &mut JsonState, _ctx: &RuntimeContext) -> AgentResult<Command> {
         let result = match &self.condition {
             ConditionDef::Expression { expr } => {
-                // For expression conditions, evaluate against state
                 // Currently returns the expression as the route key for conditional edges.
                 // A full expression evaluator (e.g. Rhai) can be integrated in a future PR.
                 serde_json::json!(expr)
@@ -175,7 +154,6 @@ impl NodeFunc<JsonState> for DslConditionNode {
                 operator,
                 value,
             } => {
-                // Evaluate a simple field comparison
                 let field_value: Option<Value> = state.get_value(field);
                 let matches = match field_value {
                     Some(actual) => evaluate_condition(&actual, operator, value),
@@ -184,14 +162,11 @@ impl NodeFunc<JsonState> for DslConditionNode {
                 serde_json::json!(if matches { "true" } else { "false" })
             }
         };
-
         Ok(Command::new().update(&self.node_name, result).continue_())
     }
-
     fn name(&self) -> &str {
         &self.node_name
     }
-
     fn description(&self) -> Option<&str> {
         Some("DSL condition node")
     }
@@ -228,11 +203,9 @@ impl NodeFunc<JsonState> for DslJoinNode {
             )
             .continue_())
     }
-
     fn name(&self) -> &str {
         &self.node_name
     }
-
     fn description(&self) -> Option<&str> {
         Some("DSL join node")
     }
@@ -271,14 +244,11 @@ impl NodeFunc<JsonState> for DslTransformNode {
                 "reduce": reduce,
             }),
         };
-
         Ok(Command::new().update(&self.node_name, info).continue_())
     }
-
     fn name(&self) -> &str {
         &self.node_name
     }
-
     fn description(&self) -> Option<&str> {
         Some("DSL transform node")
     }
@@ -290,7 +260,7 @@ impl NodeFunc<JsonState> for DslTransformNode {
 struct DslAgentNode {
     node_name: String,
     agent: Arc<LLMAgent>,
-    _config: AgentRef, // Kept for future extension (e.g. system prompt overrides)
+    _config: AgentRef,
 }
 
 impl DslAgentNode {
@@ -308,7 +278,8 @@ impl NodeFunc<JsonState> for DslAgentNode {
     async fn call(&self, state: &mut JsonState, _ctx: &RuntimeContext) -> AgentResult<Command> {
         // Find input argument depending on upstream context
         // Try `input` first, then default to dumping state if empty
-        let input_text = if let Some(input) = state.get_value::<Value>("input") {
+        let input_value: Option<Value> = state.get_value("input");
+        let input_text = if let Some(input) = input_value {
             if let Some(s) = input.as_str() {
                 s.to_string()
             } else {
@@ -326,24 +297,19 @@ impl NodeFunc<JsonState> for DslAgentNode {
             ))
         })?;
 
-        // Store result in state using the node's ID as the key
         Ok(Command::new()
             .update(&self.node_name, serde_json::json!(response))
             .continue_())
     }
-
     fn name(&self) -> &str {
         &self.node_name
     }
-
     fn description(&self) -> Option<&str> {
         Some("DSL LLM Agent node")
     }
 }
 
-// =============================================================================
 // Condition Evaluation Helper
-// =============================================================================
 
 /// Evaluate a simple condition: `actual <operator> expected`
 fn evaluate_condition(actual: &Value, operator: &str, expected: &Value) -> bool {
@@ -379,19 +345,14 @@ fn evaluate_condition(actual: &Value, operator: &str, expected: &Value) -> bool 
 fn compare_values(a: &Value, b: &Value) -> Option<std::cmp::Ordering> {
     match (a.as_f64(), b.as_f64()) {
         (Some(a_num), Some(b_num)) => a_num.partial_cmp(&b_num),
-        _ => {
-            // Fall back to string comparison
-            match (a.as_str(), b.as_str()) {
-                (Some(a_str), Some(b_str)) => Some(a_str.cmp(b_str)),
-                _ => None,
-            }
-        }
+        _ => match (a.as_str(), b.as_str()) {
+            (Some(a_str), Some(b_str)) => Some(a_str.cmp(b_str)),
+            _ => None,
+        },
     }
 }
 
-// =============================================================================
 // DSL Compiler
-// =============================================================================
 
 /// Compiles a parsed `WorkflowDefinition` into an executable `CompiledGraphImpl<JsonState>`.
 ///
@@ -447,23 +408,16 @@ impl DslCompiler {
         def: WorkflowDefinition,
         agent_registry: &HashMap<String, Arc<LLMAgent>>,
     ) -> DslResult<CompiledGraphImpl<JsonState>> {
-        // 1. Validate the definition
         Self::validate(&def)?;
-
-        // 2. Build the StateGraph
         let mut graph = StateGraphImpl::<JsonState>::build(&def.metadata.id);
 
-        // 3. Add nodes
         for node_def in &def.nodes {
             let node_func = Self::compile_node(node_def, agent_registry)?;
             let node_id = node_def.id();
             graph.add_node(node_id, node_func);
         }
 
-        // 4. Wire edges
         Self::wire_edges(&mut graph, &def)?;
-
-        // 5. Compile
         graph.compile().map_err(|e| DslError::Build(e.to_string()))
     }
 
@@ -492,10 +446,9 @@ impl DslCompiler {
                 let agent_id = match agent {
                     AgentRef::Registry { agent_id } => agent_id,
                     AgentRef::Inline(_) => {
-                        return Err(DslError::InlineAgentNotSupported(id.clone()));
+                        return Err(DslError::InlineAgentNotSupported(id.to_string()));
                     }
                 };
-
                 if let Some(agent_instance) = agent_registry.get(agent_id) {
                     Ok(Box::new(DslAgentNode::new(
                         id,
@@ -504,13 +457,11 @@ impl DslCompiler {
                     )))
                 } else {
                     Err(DslError::MissingAgentInRegistry {
-                        node_id: id.clone(),
-                        agent_id: agent_id.clone(),
+                        node_id: id.to_string(),
+                        agent_id: agent_id.to_string(),
                     })
                 }
             }
-
-            // Unsupported node types — clear errors
             NodeDefinition::Loop { id, .. } => Err(DslError::InvalidNodeType(format!(
                 "Loop node '{}' is not yet supported by the DSL compiler.",
                 id
@@ -531,30 +482,25 @@ impl DslCompiler {
         graph: &mut StateGraphImpl<JsonState>,
         def: &WorkflowDefinition,
     ) -> DslResult<()> {
-        // Find the start and end node IDs
         let start_id = def
             .nodes
             .iter()
             .find(|n| matches!(n, NodeDefinition::Start { .. }))
             .map(|n| n.id().to_string())
-            .ok_or_else(|| DslError::MissingStartNode)?;
+            .ok_or(DslError::MissingStartNode)?;
 
         let end_id = def
             .nodes
             .iter()
             .find(|n| matches!(n, NodeDefinition::End { .. }))
             .map(|n| n.id().to_string())
-            .ok_or_else(|| DslError::MissingEndNode)?;
+            .ok_or(DslError::MissingEndNode)?;
 
-        // Set the entry point: START → first_node_after_start
         graph.set_entry_point(&start_id);
-
-        // Set the finish point: end_node → END
         graph.set_finish_point(&end_id);
 
         // Group conditional edges by source: from → [(condition, to)]
         let mut conditional_map: HashMap<String, HashMap<String, String>> = HashMap::new();
-
         for edge in &def.edges {
             if let Some(ref condition) = edge.condition {
                 conditional_map
@@ -562,16 +508,13 @@ impl DslCompiler {
                     .or_default()
                     .insert(condition.clone(), edge.to.clone());
             } else {
-                // Simple edge
                 graph.add_edge(&edge.from, &edge.to);
             }
         }
 
-        // Add grouped conditional edges
         for (from, conditions) in conditional_map {
             graph.add_conditional_edges(&from, conditions);
         }
-
         Ok(())
     }
 
@@ -581,7 +524,6 @@ impl DslCompiler {
     fn validate(def: &WorkflowDefinition) -> DslResult<()> {
         let node_ids: Vec<&str> = def.nodes.iter().map(|n| n.id()).collect();
 
-        // Must have a start node
         if !def
             .nodes
             .iter()
@@ -590,7 +532,6 @@ impl DslCompiler {
             return Err(DslError::MissingStartNode);
         }
 
-        // Must have an end node
         if !def
             .nodes
             .iter()
@@ -599,7 +540,6 @@ impl DslCompiler {
             return Err(DslError::MissingEndNode);
         }
 
-        // All edge references must point to valid nodes
         for edge in &def.edges {
             if !node_ids.contains(&edge.from.as_str()) {
                 return Err(DslError::InvalidEdge {
@@ -615,21 +555,17 @@ impl DslCompiler {
             }
         }
 
-        // No duplicate node IDs
         let mut seen = std::collections::HashSet::new();
         for id in &node_ids {
             if !seen.insert(id) {
                 return Err(DslError::DuplicateNodeId(id.to_string()));
             }
         }
-
         Ok(())
     }
 }
 
-// =============================================================================
 // Tests
-// =============================================================================
 
 #[cfg(test)]
 mod tests {
@@ -641,9 +577,7 @@ mod tests {
         serde_yaml::from_str(yaml).expect("Failed to parse YAML")
     }
 
-    // -------------------------------------------------------------------------
     // Compilation Tests
-    // -------------------------------------------------------------------------
 
     #[test]
     fn test_compile_minimal_workflow() {
@@ -651,13 +585,11 @@ mod tests {
 metadata:
   id: minimal
   name: Minimal Workflow
-
 nodes:
   - type: start
     id: start
   - type: end
     id: end
-
 edges:
   - from: start
     to: end
@@ -677,7 +609,6 @@ edges:
 metadata:
   id: linear
   name: Linear Workflow
-
 nodes:
   - type: start
     id: start
@@ -691,7 +622,6 @@ nodes:
     executor_type: none
   - type: end
     id: end
-
 edges:
   - from: start
     to: process
@@ -715,7 +645,6 @@ edges:
 metadata:
   id: roundtrip
   name: Round Trip Test
-
 nodes:
   - type: start
     id: start
@@ -725,7 +654,6 @@ nodes:
     executor_type: none
   - type: end
     id: end
-
 edges:
   - from: start
     to: process
@@ -744,7 +672,6 @@ edges:
 metadata:
   id: conditional
   name: Conditional Workflow
-
 nodes:
   - type: start
     id: start
@@ -766,7 +693,6 @@ nodes:
     executor_type: none
   - type: end
     id: end
-
 edges:
   - from: start
     to: check
@@ -796,7 +722,6 @@ edges:
 metadata:
   id: transform_test
   name: Transform Test
-
 nodes:
   - type: start
     id: start
@@ -807,7 +732,6 @@ nodes:
     template: "Hello {{ name }}"
   - type: end
     id: end
-
 edges:
   - from: start
     to: transform1
@@ -829,7 +753,6 @@ edges:
 metadata:
   id: join_test
   name: Join Test
-
 nodes:
   - type: start
     id: start
@@ -849,7 +772,6 @@ nodes:
       - branch_b
   - type: end
     id: end
-
 edges:
   - from: start
     to: branch_a
@@ -871,9 +793,7 @@ edges:
         );
     }
 
-    // -------------------------------------------------------------------------
     // Validation Error Tests
-    // -------------------------------------------------------------------------
 
     #[test]
     fn test_compile_missing_start_node() {
@@ -881,11 +801,9 @@ edges:
 metadata:
   id: no_start
   name: No Start
-
 nodes:
   - type: end
     id: end
-
 edges: []
 "#;
         let def = parse_yaml(yaml);
@@ -906,11 +824,9 @@ edges: []
 metadata:
   id: no_end
   name: No End
-
 nodes:
   - type: start
     id: start
-
 edges: []
 "#;
         let def = parse_yaml(yaml);
@@ -931,13 +847,11 @@ edges: []
 metadata:
   id: bad_edge
   name: Bad Edge
-
 nodes:
   - type: start
     id: start
   - type: end
     id: end
-
 edges:
   - from: start
     to: nonexistent
@@ -960,7 +874,6 @@ edges:
 metadata:
   id: duplicates
   name: Duplicates
-
 nodes:
   - type: start
     id: start
@@ -970,7 +883,6 @@ nodes:
     executor_type: none
   - type: end
     id: end
-
 edges:
   - from: start
     to: end
@@ -993,7 +905,6 @@ edges:
 metadata:
   id: llm_test_missing_registry
   name: LLM Test Missing Registry
-
 nodes:
   - type: start
     id: start
@@ -1004,7 +915,6 @@ nodes:
       agent_id: test_missing
   - type: end
     id: end
-
 edges:
   - from: start
     to: agent1
@@ -1023,9 +933,7 @@ edges:
         );
     }
 
-    // -------------------------------------------------------------------------
     // Condition Evaluation Tests
-    // -------------------------------------------------------------------------
 
     #[test]
     fn test_evaluate_condition_equality() {
@@ -1096,17 +1004,14 @@ edges:
             value: serde_json::json!(80),
         };
         let node = DslConditionNode::new("check", condition);
-
         let mut state = JsonState::new();
         state
             .apply_update("score", serde_json::json!(90))
             .await
             .unwrap();
-
         let ctx = RuntimeContext::new("test");
         let cmd = node.call(&mut state, &ctx).await.unwrap();
 
-        // Should have set "check" to "true"
         assert!(!cmd.updates.is_empty());
         assert_eq!(cmd.updates[0].key, "check");
         assert_eq!(cmd.updates[0].value, serde_json::json!("true"));
@@ -1120,16 +1025,13 @@ edges:
             value: serde_json::json!(80),
         };
         let node = DslConditionNode::new("check", condition);
-
         let mut state = JsonState::new();
         state
             .apply_update("score", serde_json::json!(50))
             .await
             .unwrap();
-
         let ctx = RuntimeContext::new("test");
         let cmd = node.call(&mut state, &ctx).await.unwrap();
-
         assert_eq!(cmd.updates[0].value, serde_json::json!("false"));
     }
 
@@ -1141,12 +1043,10 @@ edges:
                 function: "my_function".into(),
             },
         );
-
         let mut state = JsonState::new();
         let ctx = RuntimeContext::new("test");
         let cmd = node.call(&mut state, &ctx).await.unwrap();
-
         assert!(!cmd.updates.is_empty());
-        assert_eq!(cmd.updates[0].key, "last_task");
+        assert_eq!(cmd.updates[0].key, "task1");
     }
 }
