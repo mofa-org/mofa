@@ -129,6 +129,21 @@ pub enum AgentError {
     /// Other errors
     #[error("{0}")]
     Other(String),
+
+    /// Sandbox policy violation
+    /// Sandbox policy violation
+    #[error("Sandbox violation: {0}")]
+    SandboxViolation(String),
+
+    /// Tool execution timed out within sandbox
+    /// Tool execution timed out within sandbox
+    #[error("Tool execution timed out after {0}ms")]
+    ToolTimeout(u64),
+
+    /// Required capability was denied by sandbox
+    /// Required capability was denied by sandbox
+    #[error("Capability denied: {0}")]
+    CapabilityDenied(String),
 }
 
 impl AgentError {
