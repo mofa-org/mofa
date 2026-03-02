@@ -83,7 +83,7 @@ impl NodeFunc<JsonState> for DslTaskNode {
             TaskExecutorDef::None => Ok(Command::new().continue_()),
             TaskExecutorDef::Function { function } => Ok(Command::new()
                 .update(
-                    "last_task",
+                    &self.node_name,
                     serde_json::json!({
                         "type": "function",
                         "function": function,
@@ -93,7 +93,7 @@ impl NodeFunc<JsonState> for DslTaskNode {
                 .continue_()),
             TaskExecutorDef::Http { url, method } => Ok(Command::new()
                 .update(
-                    "last_task",
+                    &self.node_name,
                     serde_json::json!({
                         "type": "http",
                         "url": url,
@@ -104,7 +104,7 @@ impl NodeFunc<JsonState> for DslTaskNode {
                 .continue_()),
             TaskExecutorDef::Script { script } => Ok(Command::new()
                 .update(
-                    "last_task",
+                    &self.node_name,
                     serde_json::json!({
                         "type": "script",
                         "script_length": script.len(),
@@ -286,7 +286,9 @@ impl NodeFunc<JsonState> for DslAgentNode {
                 input.to_string()
             }
         } else {
-            serde_json::to_string(state).unwrap_or_default()
+            return Err(mofa_kernel::agent::error::AgentError::ExecutionFailed(
+                "No 'input' key found in state for agent node".into(),
+            ));
         };
 
         // Use simple Q&A ask() for stateless workflow processing
@@ -557,7 +559,7 @@ impl DslCompiler {
 
         let mut seen = std::collections::HashSet::new();
         for id in &node_ids {
-            if !seen.insert(id) {
+            if !seen.insert(*id) {
                 return Err(DslError::DuplicateNodeId(id.to_string()));
             }
         }
