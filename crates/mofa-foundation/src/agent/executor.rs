@@ -45,7 +45,7 @@ use crate::agent::base::BaseAgent;
 use crate::agent::context::prompt::PromptContext;
 
 use super::components::tool::SimpleToolRegistry;
-use super::{Session, SessionManager};
+use super::{Session, SessionCompressionPolicy, SessionManager};
 use mofa_kernel::agent::components::tool::{Tool, ToolInput, ToolRegistry};
 
 // ============================================================================
@@ -69,6 +69,8 @@ pub struct AgentExecutorConfig {
     /// When the estimated token count exceeds this value and a compressor is
     /// configured, compression is triggered automatically.  Defaults to 4096.
     pub max_context_tokens: usize,
+    /// Optional persisted session-compression policy for long-running chats.
+    pub session_compression: Option<SessionCompressionPolicy>,
 }
 
 impl Default for AgentExecutorConfig {
@@ -80,6 +82,7 @@ impl Default for AgentExecutorConfig {
             temperature: None,
             max_tokens: None,
             max_context_tokens: 4096,
+            session_compression: None,
         }
     }
 }
@@ -107,6 +110,12 @@ impl AgentExecutorConfig {
     /// Set the maximum number of context tokens before compression is triggered.
     pub fn with_max_context_tokens(mut self, n: usize) -> Self {
         self.max_context_tokens = n;
+        self
+    }
+
+    /// Enable persistent session compression for long-running conversations.
+    pub fn with_session_compression(mut self, policy: SessionCompressionPolicy) -> Self {
+        self.session_compression = Some(policy);
         self
     }
 }
@@ -259,7 +268,12 @@ impl AgentExecutor {
         message: &str,
     ) -> AgentResult<String> {
         // 1. Get or create session
-        let session = self.sessions.get_or_create(session_key).await;
+        let mut session = self.sessions.get_or_create(session_key).await;
+        if let Some(policy) = &self.config.session_compression
+            && session.compress_if_needed(policy)
+        {
+            self.sessions.save(&session).await?;
+        }
 
         // 2. Build system prompt
         let system_prompt = {
@@ -287,7 +301,7 @@ impl AgentExecutor {
         let response = self.run_agent_loop(&mut messages).await?;
 
         // 6. Update session
-        let mut session_updated = session.clone();
+        let mut session_updated = session;
         session_updated.add_message("user", message);
         session_updated.add_message("assistant", &response);
         self.sessions.save(&session_updated).await?;
