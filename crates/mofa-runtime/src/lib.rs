@@ -767,14 +767,28 @@ impl SimpleMessageBus {
             .push(tx);
     }
 
+    /// Unregister an agent and clean up its topic subscriptions
+    pub async fn unregister(&self, agent_id: &str) {
+        {
+            let mut subs = self.subscribers.write().await;
+            subs.remove(agent_id);
+        }
+
+        let mut topics = self.topic_subscribers.write().await;
+        for subscriber_ids in topics.values_mut() {
+            subscriber_ids.retain(|id| id != agent_id);
+        }
+        topics.retain(|_, subscriber_ids| !subscriber_ids.is_empty());
+    }
+
     /// 订阅主题
     /// Subscribe to a topic
     pub async fn subscribe(&self, agent_id: &str, topic: &str) {
         let mut topics = self.topic_subscribers.write().await;
-        topics
-            .entry(topic.to_string())
-            .or_insert_with(Vec::new)
-            .push(agent_id.to_string());
+        let subscriber_ids = topics.entry(topic.to_string()).or_insert_with(Vec::new);
+        if !subscriber_ids.iter().any(|id| id == agent_id) {
+            subscriber_ids.push(agent_id.to_string());
+        }
     }
 
     /// 发送点对点消息
@@ -1095,8 +1109,22 @@ impl SimpleRuntime {
         config: AgentConfig,
         role: &str,
     ) -> GlobalResult<tokio::sync::mpsc::Receiver<AgentEvent>> {
+        self.register_agent_with_capacity(metadata, config, role, 100)
+            .await
+    }
+
+    /// 注册智能体并指定事件队列容量
+    /// Register an agent with explicit event queue capacity
+    pub async fn register_agent_with_capacity(
+        &self,
+        metadata: AgentMetadata,
+        config: AgentConfig,
+        role: &str,
+        queue_capacity: usize,
+    ) -> GlobalResult<tokio::sync::mpsc::Receiver<AgentEvent>> {
         let agent_id = metadata.id.clone();
-        let (tx, rx) = tokio::sync::mpsc::channel(100);
+        let capacity = queue_capacity.max(1);
+        let (tx, rx) = tokio::sync::mpsc::channel(capacity);
 
         // 注册到消息总线
         // Register to the message bus
@@ -1121,6 +1149,26 @@ impl SimpleRuntime {
 
         ::tracing::info!("Agent {} registered with role {}", agent_id, role);
         Ok(rx)
+    }
+
+    /// 注销智能体并清理其路由信息
+    /// Unregister an agent and clean up its routing entries
+    pub async fn unregister_agent(&self, agent_id: &str) -> GlobalResult<bool> {
+        let removed = {
+            let mut agents = self.agents.write().await;
+            agents.remove(agent_id).is_some()
+        };
+
+        if removed {
+            {
+                let mut roles = self.agent_roles.write().await;
+                roles.remove(agent_id);
+            }
+            self.message_bus.unregister(agent_id).await;
+            ::tracing::info!("Agent {} unregistered", agent_id);
+        }
+
+        Ok(removed)
     }
 
     /// 获取消息总线
