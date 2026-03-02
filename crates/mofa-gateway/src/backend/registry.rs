@@ -46,14 +46,14 @@ impl CapabilityRegistry for InMemoryCapabilityRegistry {
         self.store
             .remove(id)
             .map(|_| ())
-            .ok_or_else(|| GatewayError::DuplicateBackend(id.to_string()))
+            .ok_or_else(|| GatewayError::BackendNotFound(id.to_string()))
     }
 
     fn update_health(&mut self, id: &str, health: BackendHealth) -> Result<(), GatewayError> {
         self.store
             .get_mut(id)
             .map(|d| d.health = health)
-            .ok_or_else(|| GatewayError::DuplicateBackend(id.to_string()))
+            .ok_or_else(|| GatewayError::BackendNotFound(id.to_string()))
     }
 }
 

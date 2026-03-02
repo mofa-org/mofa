@@ -92,7 +92,7 @@ impl GatewayRouter for TrieRouter {
         let before = self.routes.len();
         self.routes.retain(|r| r.id != route_id);
         if self.routes.len() == before {
-            return Err(GatewayError::DuplicateRoute(route_id.to_string()));
+            return Err(GatewayError::RouteNotFound(route_id.to_string()));
         }
         Ok(())
     }
