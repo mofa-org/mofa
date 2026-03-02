@@ -1,0 +1,18 @@
+schema_version: 2
+nodes:
+  - id: src11
+    type: source
+    outputs: [out]
+    env:
+      TRACE_ID: trace-11
+  - id: wrk11
+    type: transformer
+    build: pip install -e ./agents/wrk11
+    path: dynamic
+    outputs: [mid]
+    inputs:
+      payload: src11/out
+  - id: snk11
+    type: sink
+    inputs:
+      result: wrk11/mid

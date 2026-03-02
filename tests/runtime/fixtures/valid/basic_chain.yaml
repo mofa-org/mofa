@@ -1,0 +1,12 @@
+schema_version: 2
+nodes:
+  - id: source
+    type: source
+    outputs: [out]
+  - id: worker
+    type: agent
+    build: pip install -e ./agents/worker
+    path: dynamic
+    outputs: [done]
+    inputs:
+      in: source/out

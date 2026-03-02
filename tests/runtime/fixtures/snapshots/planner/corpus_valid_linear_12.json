@@ -1,0 +1,61 @@
+{
+  "diagnostics": [],
+  "order": [
+    "src12",
+    "wrk12",
+    "snk12"
+  ],
+  "steps": [
+    {
+      "depends_on": [],
+      "hooks": {},
+      "node_id": "src12",
+      "node_type": "source",
+      "retry_policy": {
+        "backoff_multiplier": 2.0,
+        "initial_delay_seconds": 0.0,
+        "jitter_ratio": 0.0,
+        "max_attempts": 1,
+        "max_delay_seconds": 30.0
+      },
+      "retry_schedule_seconds": []
+    },
+    {
+      "depends_on": [
+        "src12"
+      ],
+      "hooks": {
+        "lane": "lane-12",
+        "priority": 12
+      },
+      "node_id": "wrk12",
+      "node_type": "router",
+      "retry_policy": {
+        "backoff_multiplier": 2.0,
+        "initial_delay_seconds": 0.12,
+        "jitter_ratio": 0.1,
+        "max_attempts": 2,
+        "max_delay_seconds": 4.0
+      },
+      "retry_schedule_seconds": [
+        0.12
+      ]
+    },
+    {
+      "depends_on": [
+        "wrk12"
+      ],
+      "hooks": {},
+      "node_id": "snk12",
+      "node_type": "sink",
+      "retry_policy": {
+        "backoff_multiplier": 2.0,
+        "initial_delay_seconds": 0.0,
+        "jitter_ratio": 0.0,
+        "max_attempts": 1,
+        "max_delay_seconds": 30.0
+      },
+      "retry_schedule_seconds": []
+    }
+  ]
+}

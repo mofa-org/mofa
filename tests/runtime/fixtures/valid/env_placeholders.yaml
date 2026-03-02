@@ -1,0 +1,15 @@
+schema_version: 2
+nodes:
+  - id: source
+    type: source
+    outputs: [out]
+  - id: llm
+    type: agent
+    build: pip install -e ./agents/openai
+    path: dynamic
+    outputs: [answer]
+    env:
+      OPENAI_API_KEY: $OPENAI_API_KEY
+      REQUEST_TIMEOUT: 30
+    inputs:
+      query: source/out

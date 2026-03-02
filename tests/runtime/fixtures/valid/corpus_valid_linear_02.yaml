@@ -1,0 +1,24 @@
+schema_version: 2
+nodes:
+  - id: src2
+    type: source
+    outputs: [out]
+    env:
+      TRACE_ID: trace-2
+  - id: wrk2
+    type: transformer
+    build: pip install -e ./agents/wrk2
+    path: dynamic
+    outputs: [mid]
+    inputs:
+      payload: src2/out
+    retry:
+      max_attempts: 4
+      initial_delay_seconds: 0.2
+      backoff_multiplier: 2.0
+      max_delay_seconds: 4.0
+      jitter_ratio: 0.1
+  - id: snk2
+    type: sink
+    inputs:
+      result: wrk2/mid

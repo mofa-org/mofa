@@ -1,0 +1,66 @@
+{
+  "diagnostics": [
+    {
+      "field": "inputs.payload.queue_size",
+      "hint": null,
+      "message": "queue_size 102001 exceeds max 100000; this can create memory pressure",
+      "node_id": "worker_edge_queue_2",
+      "rule_id": "semantic.queue_size_bounds",
+      "severity": "warning",
+      "stage": "semantic"
+    }
+  ],
+  "order": [
+    "src_edge_queue_2",
+    "worker_edge_queue_2",
+    "sink_edge_queue_2"
+  ],
+  "steps": [
+    {
+      "depends_on": [],
+      "hooks": {},
+      "node_id": "src_edge_queue_2",
+      "node_type": "source",
+      "retry_policy": {
+        "backoff_multiplier": 2.0,
+        "initial_delay_seconds": 0.0,
+        "jitter_ratio": 0.0,
+        "max_attempts": 1,
+        "max_delay_seconds": 30.0
+      },
+      "retry_schedule_seconds": []
+    },
+    {
+      "depends_on": [
+        "src_edge_queue_2"
+      ],
+      "hooks": {},
+      "node_id": "worker_edge_queue_2",
+      "node_type": "agent",
+      "retry_policy": {
+        "backoff_multiplier": 2.0,
+        "initial_delay_seconds": 0.0,
+        "jitter_ratio": 0.0,
+        "max_attempts": 1,
+        "max_delay_seconds": 30.0
+      },
+      "retry_schedule_seconds": []
+    },
+    {
+      "depends_on": [
+        "worker_edge_queue_2"
+      ],
+      "hooks": {},
+      "node_id": "sink_edge_queue_2",
+      "node_type": "sink",
+      "retry_policy": {
+        "backoff_multiplier": 2.0,
+        "initial_delay_seconds": 0.0,
+        "jitter_ratio": 0.0,
+        "max_attempts": 1,
+        "max_delay_seconds": 30.0
+      },
+      "retry_schedule_seconds": []
+    }
+  ]
+}

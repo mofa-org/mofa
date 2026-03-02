@@ -1,0 +1,21 @@
+version: 1
+nodes:
+  - id: source2
+    kind: source
+    output: out
+    environment:
+      API_TOKEN: $API_TOKEN
+  - id: worker2
+    kind: agent
+    build: pip install -e ./agents/worker2
+    path: dynamic
+    output: done
+    inputs:
+      payload:
+        node: source2
+        output: out
+        queue: 2
+  - id: sink2
+    kind: sink
+    inputs:
+      result: worker2:done

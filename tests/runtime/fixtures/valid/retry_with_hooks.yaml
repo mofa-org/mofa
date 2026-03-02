@@ -1,0 +1,26 @@
+schema_version: 2
+nodes:
+  - id: source
+    type: source
+    outputs: [out]
+  - id: transform
+    type: transformer
+    build: pip install -e ./agents/transform
+    path: dynamic
+    outputs: [clean]
+    inputs:
+      raw:
+        source: source/out
+        queue_size: 16
+    retry:
+      max_attempts: 4
+      initial_delay_seconds: 0.1
+      backoff_multiplier: 2.0
+      max_delay_seconds: 1.0
+      jitter_ratio: 0.2
+    planning:
+      lane: cpu
+  - id: sink
+    type: sink
+    inputs:
+      result: transform/clean

@@ -1,0 +1,31 @@
+schema_version: 2
+nodes:
+  - id: ingress4
+    type: source
+    outputs: [out]
+  - id: enrich4
+    type: agent
+    build: pip install -e ./agents/enrich4
+    path: dynamic
+    outputs: [enriched]
+    inputs:
+      q: ingress4/out
+  - id: score4
+    type: agent
+    build: pip install -e ./agents/score4
+    path: dynamic
+    outputs: [scored]
+    inputs:
+      q: ingress4/out
+  - id: join4
+    type: router
+    build: pip install -e ./agents/join4
+    path: dynamic
+    outputs: [joined]
+    inputs:
+      a: enrich4/enriched
+      b: score4/scored
+  - id: sink4
+    type: sink
+    inputs:
+      data: join4/joined

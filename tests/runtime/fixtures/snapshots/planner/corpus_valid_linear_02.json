@@ -1,0 +1,60 @@
+{
+  "diagnostics": [],
+  "order": [
+    "src2",
+    "wrk2",
+    "snk2"
+  ],
+  "steps": [
+    {
+      "depends_on": [],
+      "hooks": {},
+      "node_id": "src2",
+      "node_type": "source",
+      "retry_policy": {
+        "backoff_multiplier": 2.0,
+        "initial_delay_seconds": 0.0,
+        "jitter_ratio": 0.0,
+        "max_attempts": 1,
+        "max_delay_seconds": 30.0
+      },
+      "retry_schedule_seconds": []
+    },
+    {
+      "depends_on": [
+        "src2"
+      ],
+      "hooks": {},
+      "node_id": "wrk2",
+      "node_type": "transformer",
+      "retry_policy": {
+        "backoff_multiplier": 2.0,
+        "initial_delay_seconds": 0.2,
+        "jitter_ratio": 0.1,
+        "max_attempts": 4,
+        "max_delay_seconds": 4.0
+      },
+      "retry_schedule_seconds": [
+        0.2,
+        0.4,
+        0.8
+      ]
+    },
+    {
+      "depends_on": [
+        "wrk2"
+      ],
+      "hooks": {},
+      "node_id": "snk2",
+      "node_type": "sink",
+      "retry_policy": {
+        "backoff_multiplier": 2.0,
+        "initial_delay_seconds": 0.0,
+        "jitter_ratio": 0.0,
+        "max_attempts": 1,
+        "max_delay_seconds": 30.0
+      },
+      "retry_schedule_seconds": []
+    }
+  ]
+}

@@ -1,0 +1,14 @@
+{
+  "exception": "Flow validation failed:\n- [dependency/error] Dependency cycle detected: a -> b -> a (rule=dependency.cycle)",
+  "issues": [
+    {
+      "field": null,
+      "hint": null,
+      "message": "Dependency cycle detected: a -> b -> a",
+      "node_id": null,
+      "rule_id": "dependency.cycle",
+      "severity": "error",
+      "stage": "dependency"
+    }
+  ]
+}

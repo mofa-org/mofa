@@ -1,0 +1,31 @@
+schema_version: 2
+nodes:
+  - id: ingress2
+    type: source
+    outputs: [out]
+  - id: enrich2
+    type: agent
+    build: pip install -e ./agents/enrich2
+    path: dynamic
+    outputs: [enriched]
+    inputs:
+      q: ingress2/out
+  - id: score2
+    type: agent
+    build: pip install -e ./agents/score2
+    path: dynamic
+    outputs: [scored]
+    inputs:
+      q: ingress2/out
+  - id: join2
+    type: router
+    build: pip install -e ./agents/join2
+    path: dynamic
+    outputs: [joined]
+    inputs:
+      a: enrich2/enriched
+      b: score2/scored
+  - id: sink2
+    type: sink
+    inputs:
+      data: join2/joined

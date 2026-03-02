@@ -1,0 +1,6 @@
+nodes:
+  - id: source
+    type: source
+    outputs: [out]
+    env:
+      BAD: '"a" * 2'

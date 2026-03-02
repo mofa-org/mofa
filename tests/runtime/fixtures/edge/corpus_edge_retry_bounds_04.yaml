@@ -1,0 +1,22 @@
+schema_version: 2
+nodes:
+  - id: src_edge_retry_4
+    type: source
+    outputs: [out]
+  - id: worker_edge_retry_4
+    type: transformer
+    build: pip install -e ./agents/retry4
+    path: dynamic
+    outputs: [clean]
+    inputs:
+      payload: src_edge_retry_4/out
+    retry:
+      max_attempts: 25
+      initial_delay_seconds: 0.1
+      backoff_multiplier: 2.0
+      max_delay_seconds: 5.0
+      jitter_ratio: 0.0
+  - id: sink_edge_retry_4
+    type: sink
+    inputs:
+      result: worker_edge_retry_4/clean

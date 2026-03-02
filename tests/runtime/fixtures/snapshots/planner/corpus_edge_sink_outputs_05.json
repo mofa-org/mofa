@@ -1,0 +1,49 @@
+{
+  "diagnostics": [
+    {
+      "field": "outputs",
+      "hint": "Remove outputs from sink nodes unless required for compatibility",
+      "message": "Sink nodes should not declare outputs",
+      "node_id": "sink_edge_sink_5",
+      "rule_id": "semantic.node_type_contract",
+      "severity": "warning",
+      "stage": "semantic"
+    }
+  ],
+  "order": [
+    "src_edge_sink_5",
+    "sink_edge_sink_5"
+  ],
+  "steps": [
+    {
+      "depends_on": [],
+      "hooks": {},
+      "node_id": "src_edge_sink_5",
+      "node_type": "source",
+      "retry_policy": {
+        "backoff_multiplier": 2.0,
+        "initial_delay_seconds": 0.0,
+        "jitter_ratio": 0.0,
+        "max_attempts": 1,
+        "max_delay_seconds": 30.0
+      },
+      "retry_schedule_seconds": []
+    },
+    {
+      "depends_on": [
+        "src_edge_sink_5"
+      ],
+      "hooks": {},
+      "node_id": "sink_edge_sink_5",
+      "node_type": "sink",
+      "retry_policy": {
+        "backoff_multiplier": 2.0,
+        "initial_delay_seconds": 0.0,
+        "jitter_ratio": 0.0,
+        "max_attempts": 1,
+        "max_delay_seconds": 30.0
+      },
+      "retry_schedule_seconds": []
+    }
+  ]
+}

@@ -1,0 +1,90 @@
+{
+  "diagnostics": [
+    {
+      "field": "retry.max_attempts",
+      "hint": "Consider reducing attempts to keep tail latency bounded",
+      "message": "retry.max_attempts 24 exceeds limit 20",
+      "node_id": "worker_edge_retry_3",
+      "rule_id": "semantic.retry_bounds",
+      "severity": "warning",
+      "stage": "semantic"
+    }
+  ],
+  "order": [
+    "src_edge_retry_3",
+    "worker_edge_retry_3",
+    "sink_edge_retry_3"
+  ],
+  "steps": [
+    {
+      "depends_on": [],
+      "hooks": {},
+      "node_id": "src_edge_retry_3",
+      "node_type": "source",
+      "retry_policy": {
+        "backoff_multiplier": 2.0,
+        "initial_delay_seconds": 0.0,
+        "jitter_ratio": 0.0,
+        "max_attempts": 1,
+        "max_delay_seconds": 30.0
+      },
+      "retry_schedule_seconds": []
+    },
+    {
+      "depends_on": [
+        "src_edge_retry_3"
+      ],
+      "hooks": {},
+      "node_id": "worker_edge_retry_3",
+      "node_type": "transformer",
+      "retry_policy": {
+        "backoff_multiplier": 2.0,
+        "initial_delay_seconds": 0.1,
+        "jitter_ratio": 0.0,
+        "max_attempts": 24,
+        "max_delay_seconds": 5.0
+      },
+      "retry_schedule_seconds": [
+        0.1,
+        0.2,
+        0.4,
+        0.8,
+        1.6,
+        3.2,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0
+      ]
+    },
+    {
+      "depends_on": [
+        "worker_edge_retry_3"
+      ],
+      "hooks": {},
+      "node_id": "sink_edge_retry_3",
+      "node_type": "sink",
+      "retry_policy": {
+        "backoff_multiplier": 2.0,
+        "initial_delay_seconds": 0.0,
+        "jitter_ratio": 0.0,
+        "max_attempts": 1,
+        "max_delay_seconds": 30.0
+      },
+      "retry_schedule_seconds": []
+    }
+  ]
+}

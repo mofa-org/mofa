@@ -1,0 +1,14 @@
+{
+  "exception": "Flow validation failed:\n- [dependency/error] Input references unknown output 'missing' from node 'src_unknown_output_4' (node=sink_unknown_output_4, field=inputs.data, rule=dependency.output_exists)",
+  "issues": [
+    {
+      "field": "inputs.data",
+      "hint": null,
+      "message": "Input references unknown output 'missing' from node 'src_unknown_output_4'",
+      "node_id": "sink_unknown_output_4",
+      "rule_id": "dependency.output_exists",
+      "severity": "error",
+      "stage": "dependency"
+    }
+  ]
+}

@@ -1,0 +1,7 @@
+schema_version: 2
+nodes:
+  - id: src_bad_placeholder_3
+    type: source
+    outputs: [out]
+    env:
+      OPENAI_API_KEY: $OPENAI-API-KEY

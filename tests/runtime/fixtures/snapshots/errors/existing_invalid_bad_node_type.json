@@ -1,0 +1,14 @@
+{
+  "exception": "Flow validation failed:\n- [type/error] Node 'source' field 'type' must be one of: agent, router, sink, source, transformer",
+  "issues": [
+    {
+      "field": null,
+      "hint": null,
+      "message": "Node 'source' field 'type' must be one of: agent, router, sink, source, transformer",
+      "node_id": null,
+      "rule_id": null,
+      "severity": "error",
+      "stage": "type"
+    }
+  ]
+}

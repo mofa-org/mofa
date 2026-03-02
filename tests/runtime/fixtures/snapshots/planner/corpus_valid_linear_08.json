@@ -1,0 +1,61 @@
+{
+  "diagnostics": [],
+  "order": [
+    "src8",
+    "wrk8",
+    "snk8"
+  ],
+  "steps": [
+    {
+      "depends_on": [],
+      "hooks": {},
+      "node_id": "src8",
+      "node_type": "source",
+      "retry_policy": {
+        "backoff_multiplier": 2.0,
+        "initial_delay_seconds": 0.0,
+        "jitter_ratio": 0.0,
+        "max_attempts": 1,
+        "max_delay_seconds": 30.0
+      },
+      "retry_schedule_seconds": []
+    },
+    {
+      "depends_on": [
+        "src8"
+      ],
+      "hooks": {
+        "lane": "lane-8",
+        "priority": 8
+      },
+      "node_id": "wrk8",
+      "node_type": "transformer",
+      "retry_policy": {
+        "backoff_multiplier": 2.0,
+        "initial_delay_seconds": 0.8,
+        "jitter_ratio": 0.1,
+        "max_attempts": 2,
+        "max_delay_seconds": 4.0
+      },
+      "retry_schedule_seconds": [
+        0.8
+      ]
+    },
+    {
+      "depends_on": [
+        "wrk8"
+      ],
+      "hooks": {},
+      "node_id": "snk8",
+      "node_type": "sink",
+      "retry_policy": {
+        "backoff_multiplier": 2.0,
+        "initial_delay_seconds": 0.0,
+        "jitter_ratio": 0.0,
+        "max_attempts": 1,
+        "max_delay_seconds": 30.0
+      },
+      "retry_schedule_seconds": []
+    }
+  ]
+}

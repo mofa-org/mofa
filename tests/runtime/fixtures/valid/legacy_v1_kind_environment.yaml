@@ -1,0 +1,11 @@
+version: 1
+nodes:
+  - id: source
+    kind: source
+    output: out
+  - id: sink
+    kind: sink
+    environment:
+      RESULT_PATH: /tmp/out
+    inputs:
+      data: source:out

@@ -1,0 +1,18 @@
+schema_version: 2
+nodes:
+  - id: src7
+    type: source
+    outputs: [out]
+    env:
+      TRACE_ID: trace-7
+  - id: wrk7
+    type: agent
+    build: pip install -e ./agents/wrk7
+    path: dynamic
+    outputs: [mid]
+    inputs:
+      payload: src7/out
+  - id: snk7
+    type: sink
+    inputs:
+      result: wrk7/mid

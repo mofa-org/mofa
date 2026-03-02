@@ -1,0 +1,14 @@
+{
+  "exception": "Flow validation failed:\n- [semantic/error] Duplicate output 'out' (node=dup_outputs_4, field=outputs, rule=flow.unique_outputs)",
+  "issues": [
+    {
+      "field": "outputs",
+      "hint": null,
+      "message": "Duplicate output 'out'",
+      "node_id": "dup_outputs_4",
+      "rule_id": "flow.unique_outputs",
+      "severity": "error",
+      "stage": "semantic"
+    }
+  ]
+}

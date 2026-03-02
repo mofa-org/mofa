@@ -1,0 +1,7 @@
+schema_version: 2
+nodes:
+  - id: src_expression_2
+    type: source
+    outputs: [out]
+    env:
+      BAD: '"x" * 3'

@@ -1,0 +1,14 @@
+{
+  "exception": "Flow validation failed:\n- [dependency/error] Invalid source reference 'a-out'. Expected '<node-id>/<output-name>'. (node=b, field=inputs.data, rule=dependency.source_format)",
+  "issues": [
+    {
+      "field": "inputs.data",
+      "hint": null,
+      "message": "Invalid source reference 'a-out'. Expected '<node-id>/<output-name>'.",
+      "node_id": "b",
+      "rule_id": "dependency.source_format",
+      "severity": "error",
+      "stage": "dependency"
+    }
+  ]
+}

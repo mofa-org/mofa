@@ -1,0 +1,14 @@
+{
+  "exception": "Flow validation failed:\n- [syntax/error] Only literal YAML values are allowed. Expression-like values found: $.nodes[0].env.BAD: \"x\" * 6",
+  "issues": [
+    {
+      "field": null,
+      "hint": null,
+      "message": "Only literal YAML values are allowed. Expression-like values found: $.nodes[0].env.BAD: \"x\" * 6",
+      "node_id": null,
+      "rule_id": null,
+      "severity": "error",
+      "stage": "syntax"
+    }
+  ]
+}
