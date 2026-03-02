@@ -189,6 +189,12 @@ impl DashboardServer {
         self.ws_handler.clone()
     }
 
+    /// Override Prometheus exporter settings.
+    pub fn with_prometheus_export_config(mut self, config: PrometheusExportConfig) -> Self {
+        self.prometheus_export_config = config;
+        self
+    }
+
     /// Get the Prometheus exporter (if initialized)
     pub fn prometheus_exporter(&self) -> Option<Arc<PrometheusExporter>> {
         self.prometheus_exporter.clone()

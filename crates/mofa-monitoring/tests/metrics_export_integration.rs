@@ -9,12 +9,10 @@ use tower::ServiceExt;
 
 #[tokio::test]
 async fn metrics_route_returns_prometheus_payload_with_histograms() {
-    let mut server = DashboardServer::new(
-        DashboardConfig::new().with_prometheus_export_config(
-            PrometheusExportConfig::default()
-                .with_refresh_interval(Duration::from_millis(10))
-                .with_cardinality(CardinalityLimits::default()),
-        ),
+    let mut server = DashboardServer::new(DashboardConfig::new()).with_prometheus_export_config(
+        PrometheusExportConfig::default()
+            .with_refresh_interval(Duration::from_millis(10))
+            .with_cardinality(CardinalityLimits::default()),
     );
 
     server
@@ -66,7 +64,7 @@ async fn metrics_route_returns_prometheus_payload_with_histograms() {
         .unwrap_or_default();
     assert!(content_type.starts_with("text/plain"));
 
-    let body = to_bytes(response.into_body(), usize::MAX)
+    let body = to_bytes(response.into_body(), 5 * 1024 * 1024)
         .await
         .expect("read body");
     let body_str = String::from_utf8(body.to_vec()).expect("utf8");
@@ -79,18 +77,16 @@ async fn metrics_route_returns_prometheus_payload_with_histograms() {
 
 #[tokio::test]
 async fn metrics_route_applies_cardinality_overflow_bucket() {
-    let mut server = DashboardServer::new(
-        DashboardConfig::new().with_prometheus_export_config(
-            PrometheusExportConfig::default()
-                .with_refresh_interval(Duration::from_millis(10))
-                .with_cardinality(
-                    CardinalityLimits::default()
-                        .with_agent_id(1)
-                        .with_workflow_id(100)
-                        .with_plugin_or_tool(100)
-                        .with_provider_model(50),
-                ),
-        ),
+    let mut server = DashboardServer::new(DashboardConfig::new()).with_prometheus_export_config(
+        PrometheusExportConfig::default()
+            .with_refresh_interval(Duration::from_millis(10))
+            .with_cardinality(
+                CardinalityLimits::default()
+                    .with_agent_id(1)
+                    .with_workflow_id(100)
+                    .with_plugin_or_tool(100)
+                    .with_provider_model(50),
+            ),
     );
 
     for idx in 0..3 {
@@ -125,7 +121,7 @@ async fn metrics_route_applies_cardinality_overflow_bucket() {
         .await
         .expect("request success");
 
-    let body = to_bytes(response.into_body(), usize::MAX)
+    let body = to_bytes(response.into_body(), 5 * 1024 * 1024)
         .await
         .expect("read body");
     let body_str = String::from_utf8(body.to_vec()).expect("utf8");

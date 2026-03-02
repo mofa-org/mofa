@@ -40,22 +40,22 @@ impl Default for CardinalityLimits {
 
 impl CardinalityLimits {
     pub fn with_agent_id(mut self, limit: usize) -> Self {
-        self.agent_id = limit;
+        self.agent_id = sanitize_limit(limit, "agent_id");
         self
     }
 
     pub fn with_workflow_id(mut self, limit: usize) -> Self {
-        self.workflow_id = limit;
+        self.workflow_id = sanitize_limit(limit, "workflow_id");
         self
     }
 
     pub fn with_plugin_or_tool(mut self, limit: usize) -> Self {
-        self.plugin_or_tool = limit;
+        self.plugin_or_tool = sanitize_limit(limit, "plugin_or_tool");
         self
     }
 
     pub fn with_provider_model(mut self, limit: usize) -> Self {
-        self.provider_model = limit;
+        self.provider_model = sanitize_limit(limit, "provider_model");
         self
     }
 }
@@ -81,20 +81,41 @@ impl Default for PrometheusExportConfig {
 
 impl PrometheusExportConfig {
     pub fn with_refresh_interval(mut self, refresh_interval: Duration) -> Self {
-        if refresh_interval.is_zero() {
-            warn!(
-                "PrometheusExportConfig::with_refresh_interval received zero duration; clamping to 1ms"
-            );
-            self.refresh_interval = Duration::from_millis(1);
-        } else {
-            self.refresh_interval = refresh_interval;
-        }
+        self.refresh_interval = sanitize_refresh_interval(refresh_interval);
         self
     }
 
     pub fn with_cardinality(mut self, cardinality: CardinalityLimits) -> Self {
-        self.cardinality = cardinality;
+        self.cardinality = sanitize_cardinality_limits(cardinality);
         self
+    }
+}
+
+fn sanitize_limit(limit: usize, name: &str) -> usize {
+    if limit == 0 {
+        warn!("{name} cardinality limit was 0; clamping to 1");
+        1
+    } else {
+        limit
+    }
+}
+
+fn sanitize_cardinality_limits(mut limits: CardinalityLimits) -> CardinalityLimits {
+    limits.agent_id = sanitize_limit(limits.agent_id, "agent_id");
+    limits.workflow_id = sanitize_limit(limits.workflow_id, "workflow_id");
+    limits.plugin_or_tool = sanitize_limit(limits.plugin_or_tool, "plugin_or_tool");
+    limits.provider_model = sanitize_limit(limits.provider_model, "provider_model");
+    limits
+}
+
+fn sanitize_refresh_interval(refresh_interval: Duration) -> Duration {
+    if refresh_interval.is_zero() {
+        warn!(
+            "PrometheusExportConfig::with_refresh_interval received zero duration; clamping to 1ms"
+        );
+        Duration::from_millis(1)
+    } else {
+        refresh_interval
     }
 }
 
@@ -319,10 +340,13 @@ pub struct PrometheusExporter {
 }
 
 impl PrometheusExporter {
-    pub fn new(collector: Arc<MetricsCollector>, config: PrometheusExportConfig) -> Self {
+    pub fn new(collector: Arc<MetricsCollector>, mut config: PrometheusExportConfig) -> Self {
+        config.refresh_interval = sanitize_refresh_interval(config.refresh_interval);
+        config.cardinality = sanitize_cardinality_limits(config.cardinality);
+
         Self {
             collector,
-            config,
+            config: config.clone(),
             cached_body: Arc::new(RwLock::new(Bytes::new())),
             render_duration_histogram: Arc::new(RwLock::new(DurationHistogram::new(vec![
                 0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0,
@@ -350,6 +374,10 @@ impl PrometheusExporter {
 
     pub async fn refresh_once(&self) -> Result<(), PrometheusExportError> {
         let snapshot = self.collector.current().await;
+        let refresh_unix_seconds = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs_f64();
 
         let render_start = Instant::now();
         let mut dropped_this_render = DroppedSeriesCounters::default();
@@ -373,8 +401,8 @@ impl PrometheusExporter {
             dropped_total.add_assign(&dropped_this_render);
         }
 
-        self.append_exporter_internal_metrics(&mut body).await;
-
+        self.append_exporter_internal_metrics(&mut body, refresh_unix_seconds)
+            .await;
         *self.cached_body.write().await = Bytes::from(body);
 
         debug!("prometheus cache refreshed in {:.6}s", render_duration);
@@ -423,7 +451,7 @@ impl PrometheusExporter {
         out
     }
 
-    async fn append_exporter_internal_metrics(&self, out: &mut String) {
+    async fn append_exporter_internal_metrics(&self, out: &mut String, last_refresh_unix_seconds: f64) {
         let render_hist = self.render_duration_histogram.read().await;
         write_metric_header(
             out,
@@ -494,10 +522,7 @@ impl PrometheusExporter {
             out,
             "mofa_exporter_last_refresh_timestamp_seconds",
             &[],
-            SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .unwrap_or_default()
-                .as_secs_f64(),
+            last_refresh_unix_seconds,
         );
     }
 }
@@ -507,6 +532,12 @@ struct LabeledValue {
     labels: Vec<(String, String)>,
     ranking_value: f64,
     sample_value: f64,
+}
+
+#[derive(Copy, Clone)]
+enum OverflowAggregation {
+    Sum,
+    Mean,
 }
 
 fn render_agent_metrics(
@@ -562,7 +593,12 @@ fn render_agent_metrics(
         "Total tasks completed by agent",
         "counter",
     );
-    for series in limit_series(task_totals, limits.agent_id, &mut dropped.agent_id) {
+    for series in limit_series(
+        task_totals,
+        limits.agent_id,
+        &mut dropped.agent_id,
+        OverflowAggregation::Sum,
+    ) {
         append_gauge_line(
             out,
             "mofa_agent_tasks_total",
@@ -577,7 +613,12 @@ fn render_agent_metrics(
         "Total failed tasks by agent",
         "counter",
     );
-    for series in limit_series(task_failed, limits.agent_id, &mut dropped.agent_id) {
+    for series in limit_series(
+        task_failed,
+        limits.agent_id,
+        &mut dropped.agent_id,
+        OverflowAggregation::Sum,
+    ) {
         append_gauge_line(
             out,
             "mofa_agent_tasks_failed_total",
@@ -592,7 +633,12 @@ fn render_agent_metrics(
         "Current in-progress tasks by agent",
         "gauge",
     );
-    for series in limit_series(task_in_progress, limits.agent_id, &mut dropped.agent_id) {
+    for series in limit_series(
+        task_in_progress,
+        limits.agent_id,
+        &mut dropped.agent_id,
+        OverflowAggregation::Sum,
+    ) {
         append_gauge_line(
             out,
             "mofa_agent_tasks_in_progress",
@@ -607,7 +653,12 @@ fn render_agent_metrics(
         "Average task duration by agent in seconds",
         "gauge",
     );
-    for series in limit_series(avg_duration, limits.agent_id, &mut dropped.agent_id) {
+    for series in limit_series(
+        avg_duration,
+        limits.agent_id,
+        &mut dropped.agent_id,
+        OverflowAggregation::Mean,
+    ) {
         append_gauge_line(
             out,
             "mofa_agent_response_time_seconds",
@@ -622,7 +673,12 @@ fn render_agent_metrics(
         "Total messages sent by agent",
         "counter",
     );
-    for series in limit_series(messages_sent, limits.agent_id, &mut dropped.agent_id) {
+    for series in limit_series(
+        messages_sent,
+        limits.agent_id,
+        &mut dropped.agent_id,
+        OverflowAggregation::Sum,
+    ) {
         append_gauge_line(
             out,
             "mofa_agent_messages_sent_total",
@@ -637,7 +693,12 @@ fn render_agent_metrics(
         "Total messages received by agent",
         "counter",
     );
-    for series in limit_series(messages_received, limits.agent_id, &mut dropped.agent_id) {
+    for series in limit_series(
+        messages_received,
+        limits.agent_id,
+        &mut dropped.agent_id,
+        OverflowAggregation::Sum,
+    ) {
         append_gauge_line(
             out,
             "mofa_agent_messages_received_total",
@@ -694,7 +755,12 @@ fn render_workflow_metrics(
         "Total workflow executions",
         "counter",
     );
-    for series in limit_series(executions, limits.workflow_id, &mut dropped.workflow_id) {
+    for series in limit_series(
+        executions,
+        limits.workflow_id,
+        &mut dropped.workflow_id,
+        OverflowAggregation::Sum,
+    ) {
         append_gauge_line(
             out,
             "mofa_workflow_executions_total",
@@ -709,7 +775,12 @@ fn render_workflow_metrics(
         "Total successful workflow executions",
         "counter",
     );
-    for series in limit_series(success, limits.workflow_id, &mut dropped.workflow_id) {
+    for series in limit_series(
+        success,
+        limits.workflow_id,
+        &mut dropped.workflow_id,
+        OverflowAggregation::Sum,
+    ) {
         append_gauge_line(
             out,
             "mofa_workflow_executions_success_total",
@@ -724,7 +795,12 @@ fn render_workflow_metrics(
         "Total failed workflow executions",
         "counter",
     );
-    for series in limit_series(failures, limits.workflow_id, &mut dropped.workflow_id) {
+    for series in limit_series(
+        failures,
+        limits.workflow_id,
+        &mut dropped.workflow_id,
+        OverflowAggregation::Sum,
+    ) {
         append_gauge_line(
             out,
             "mofa_workflow_executions_failed_total",
@@ -739,7 +815,12 @@ fn render_workflow_metrics(
         "Average workflow execution duration in seconds",
         "gauge",
     );
-    for series in limit_series(avg_duration, limits.workflow_id, &mut dropped.workflow_id) {
+    for series in limit_series(
+        avg_duration,
+        limits.workflow_id,
+        &mut dropped.workflow_id,
+        OverflowAggregation::Mean,
+    ) {
         append_gauge_line(
             out,
             "mofa_workflow_duration_seconds",
@@ -754,7 +835,12 @@ fn render_workflow_metrics(
         "Currently running workflow instances",
         "gauge",
     );
-    for series in limit_series(running, limits.workflow_id, &mut dropped.workflow_id) {
+    for series in limit_series(
+        running,
+        limits.workflow_id,
+        &mut dropped.workflow_id,
+        OverflowAggregation::Sum,
+    ) {
         append_gauge_line(
             out,
             "mofa_workflow_active",
@@ -799,7 +885,12 @@ fn render_plugin_metrics(
         "Total tool/plugin call count",
         "counter",
     );
-    for series in limit_series(calls, limits.plugin_or_tool, &mut dropped.plugin_or_tool) {
+    for series in limit_series(
+        calls,
+        limits.plugin_or_tool,
+        &mut dropped.plugin_or_tool,
+        OverflowAggregation::Sum,
+    ) {
         append_gauge_line(
             out,
             "mofa_tool_calls_total",
@@ -814,7 +905,12 @@ fn render_plugin_metrics(
         "Total tool/plugin errors",
         "counter",
     );
-    for series in limit_series(errors, limits.plugin_or_tool, &mut dropped.plugin_or_tool) {
+    for series in limit_series(
+        errors,
+        limits.plugin_or_tool,
+        &mut dropped.plugin_or_tool,
+        OverflowAggregation::Sum,
+    ) {
         append_gauge_line(
             out,
             "mofa_tool_errors_total",
@@ -833,6 +929,7 @@ fn render_plugin_metrics(
         avg_duration,
         limits.plugin_or_tool,
         &mut dropped.plugin_or_tool,
+        OverflowAggregation::Mean,
     ) {
         append_gauge_line(
             out,
@@ -887,7 +984,12 @@ fn render_llm_metrics(
         "Total LLM requests",
         "counter",
     );
-    for series in limit_series(requests, limits.provider_model, &mut dropped.provider_model) {
+    for series in limit_series(
+        requests,
+        limits.provider_model,
+        &mut dropped.provider_model,
+        OverflowAggregation::Sum,
+    ) {
         append_gauge_line(
             out,
             "mofa_llm_requests_total",
@@ -906,6 +1008,7 @@ fn render_llm_metrics(
         tokens_per_second,
         limits.provider_model,
         &mut dropped.provider_model,
+        OverflowAggregation::Mean,
     ) {
         append_gauge_line(
             out,
@@ -917,6 +1020,12 @@ fn render_llm_metrics(
 
     write_metric_header(out, "mofa_llm_errors_total", "Total LLM errors", "counter");
     for series in limit_series(errors, limits.provider_model, &mut dropped.provider_model) {
+    for series in limit_series(
+        errors,
+        limits.provider_model,
+        &mut dropped.provider_model,
+        OverflowAggregation::Sum,
+    ) {
         append_gauge_line(
             out,
             "mofa_llm_errors_total",
@@ -931,7 +1040,12 @@ fn render_llm_metrics(
         "Average LLM request latency in seconds",
         "gauge",
     );
-    for series in limit_series(latency, limits.provider_model, &mut dropped.provider_model) {
+    for series in limit_series(
+        latency,
+        limits.provider_model,
+        &mut dropped.provider_model,
+        OverflowAggregation::Mean,
+    ) {
         append_gauge_line(
             out,
             "mofa_llm_latency_seconds",
@@ -1096,8 +1210,11 @@ fn limit_series(
     mut values: Vec<LabeledValue>,
     limit: usize,
     dropped_counter: &mut u64,
+    aggregation: OverflowAggregation,
 ) -> Vec<LabeledValue> {
-    if values.len() <= limit {
+    let effective_limit = limit.max(1);
+
+    if values.len() <= effective_limit {
         values.sort_by(|a, b| compare_label_set(&a.labels, &b.labels));
         return values;
     }
@@ -1109,20 +1226,24 @@ fn limit_series(
             .then_with(|| compare_label_set(&a.labels, &b.labels))
     });
 
-    let mut kept = values.drain(..limit).collect::<Vec<_>>();
+    let mut kept = values.drain(..effective_limit).collect::<Vec<_>>();
     let overflow = values;
-
-    let overflow_sum = overflow
-        .iter()
-        .map(|entry| entry.sample_value)
-        .fold(0.0, |acc, v| acc + v);
 
     let overflow_count = overflow.len() as u64;
     *dropped_counter = dropped_counter.saturating_add(overflow_count);
 
     if overflow_count > 0 {
+        let overflow_sum = overflow
+            .iter()
+            .map(|entry| entry.sample_value)
+            .fold(0.0, |acc, v| acc + v);
+        let overflow_value = match aggregation {
+            OverflowAggregation::Sum => overflow_sum,
+            OverflowAggregation::Mean => overflow_sum / (overflow_count as f64),
+        };
+
         // Preserve original label keys; replace values with __other__.
-        let mut label_keys = if let Some(first) = kept.first() {
+        let mut label_keys = if let Some(first) = kept.first().or_else(|| overflow.first()) {
             first
                 .labels
                 .iter()
@@ -1138,8 +1259,8 @@ fn limit_series(
 
         kept.push(LabeledValue {
             labels: label_keys,
-            ranking_value: overflow_sum,
-            sample_value: overflow_sum,
+            ranking_value: overflow_value,
+            sample_value: overflow_value,
         });
     }
 
@@ -1148,17 +1269,20 @@ fn limit_series(
 }
 
 fn compare_label_set(a: &[(String, String)], b: &[(String, String)]) -> Ordering {
-    let a_key = a
-        .iter()
-        .map(|(k, v)| format!("{k}={v}"))
-        .collect::<Vec<_>>()
-        .join("|");
-    let b_key = b
-        .iter()
-        .map(|(k, v)| format!("{k}={v}"))
-        .collect::<Vec<_>>()
-        .join("|");
-    a_key.cmp(&b_key)
+    for ((ak, av), (bk, bv)) in a.iter().zip(b.iter()) {
+        match ak.cmp(bk) {
+            Ordering::Less => return Ordering::Less,
+            Ordering::Greater => return Ordering::Greater,
+            Ordering::Equal => {}
+        }
+        match av.cmp(bv) {
+            Ordering::Less => return Ordering::Less,
+            Ordering::Greater => return Ordering::Greater,
+            Ordering::Equal => {}
+        }
+    }
+
+    a.len().cmp(&b.len())
 }
 
 fn sanitize_metric_name(name: &str) -> String {
@@ -1356,6 +1480,7 @@ mod tests {
 
         exporter.refresh_once().await.expect("refresh");
         let output = exporter.render_cached().await;
+        let output = std::str::from_utf8(output.as_ref()).expect("utf8");
 
         assert!(output.contains("agent_id=\"__other__\""));
         assert!(output.contains("mofa_exporter_dropped_series_total{label=\"agent_id\"}"));
@@ -1378,11 +1503,82 @@ mod tests {
 
         let mut dropped_a = 0;
         let mut dropped_b = 0;
-        let first = limit_series(entries.clone(), 2, &mut dropped_a);
-        let second = limit_series(entries, 2, &mut dropped_b);
+        let first = limit_series(entries.clone(), 2, &mut dropped_a, OverflowAggregation::Sum);
+        let second = limit_series(entries, 2, &mut dropped_b, OverflowAggregation::Sum);
 
         assert_eq!(first[0].labels[0].1, "a");
         assert_eq!(second[0].labels[0].1, "a");
+    }
+
+    #[tokio::test]
+    async fn zero_limits_are_clamped_and_preserve_dimension_keys() {
+        let mut snapshot = sample_snapshot();
+        snapshot.agents = (0..3)
+            .map(|idx| super::super::metrics::AgentMetrics {
+                agent_id: format!("agent-{idx}"),
+                tasks_completed: (idx + 1) as u64,
+                ..Default::default()
+            })
+            .collect();
+
+        let collector = Arc::new(MetricsCollector::new(Default::default()));
+        seed_collector_from_snapshot(&collector, snapshot).await;
+
+        let exporter = PrometheusExporter::new(
+            collector,
+            PrometheusExportConfig {
+                refresh_interval: Duration::from_millis(20),
+                cardinality: CardinalityLimits {
+                    agent_id: 0,
+                    workflow_id: 0,
+                    plugin_or_tool: 0,
+                    provider_model: 0,
+                },
+            },
+        );
+        exporter.refresh_once().await.expect("refresh");
+        let output = exporter.render_cached().await;
+        let output = std::str::from_utf8(output.as_ref()).expect("utf8");
+
+        assert!(output.contains("mofa_agent_tasks_total{agent_id=\"__other__\"}"));
+        assert!(!output.contains("mofa_agent_tasks_total{label=\"__other__\"}"));
+    }
+
+    #[tokio::test]
+    async fn overflow_uses_mean_for_average_metrics() {
+        let mut snapshot = sample_snapshot();
+        snapshot.agents = vec![
+            super::super::metrics::AgentMetrics {
+                agent_id: "a".to_string(),
+                avg_task_duration_ms: 1_000.0,
+                ..Default::default()
+            },
+            super::super::metrics::AgentMetrics {
+                agent_id: "b".to_string(),
+                avg_task_duration_ms: 2_000.0,
+                ..Default::default()
+            },
+            super::super::metrics::AgentMetrics {
+                agent_id: "c".to_string(),
+                avg_task_duration_ms: 9_000.0,
+                ..Default::default()
+            },
+        ];
+
+        let collector = Arc::new(MetricsCollector::new(Default::default()));
+        seed_collector_from_snapshot(&collector, snapshot).await;
+
+        let exporter = PrometheusExporter::new(
+            collector,
+            PrometheusExportConfig::default()
+                .with_refresh_interval(Duration::from_millis(10))
+                .with_cardinality(CardinalityLimits::default().with_agent_id(1)),
+        );
+        exporter.refresh_once().await.expect("refresh");
+        let output = exporter.render_cached().await;
+        let output = std::str::from_utf8(output.as_ref()).expect("utf8");
+
+        assert!(output.contains("mofa_agent_response_time_seconds{agent_id=\"__other__\"} 1.5"));
     }
 
     #[tokio::test]
