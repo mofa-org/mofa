@@ -50,6 +50,9 @@ pub mod collaboration;
 // RAG module - vector store and document chunking
 pub mod rag;
 
+// swarm module - Multi-agent swarm orchestration
+pub mod swarm;
+
 // Re-export config types
 pub use config::{AgentInfo, AgentYamlConfig, LLMYamlConfig, RuntimeConfig, ToolConfig};
 
