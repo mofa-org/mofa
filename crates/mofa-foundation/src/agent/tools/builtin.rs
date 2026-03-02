@@ -892,8 +892,8 @@ mod tests {
             .await;
         assert!(read.success);
         let content = read.output["content"].as_str().unwrap();
-        assert!(content.contains("line1"));
-        assert!(content.contains("line2"));
+        assert!(content.contains("line1"), "content={content:?}");
+        assert!(content.contains("line2"), "content={content:?}");
     }
 
     #[tokio::test]
