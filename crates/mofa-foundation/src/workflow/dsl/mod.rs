@@ -62,8 +62,33 @@ pub enum DslError {
     #[error("JSON parse error: {0}")]
     JsonParse(#[from] serde_json::Error),
 
-    #[error("Validation error: {0}")]
-    Validation(String),
+    #[error("Graph validation failed: Missing Start node")]
+    MissingStartNode,
+
+    #[error("Graph validation failed: Missing End node")]
+    MissingEndNode,
+
+    #[error("Duplicate node ID found: {0}")]
+    DuplicateNodeId(String),
+
+    #[error(
+        "LlmAgent node '{node_id}' requires agent_id '{agent_id}' which is not in the registry."
+    )]
+    MissingAgentInRegistry { node_id: String, agent_id: String },
+
+    #[error(
+        "Inline agents are not supported in DslCompiler for node '{0}'. Please use registry agents."
+    )]
+    InlineAgentNotSupported(String),
+
+    #[error("TOML to JSON conversion error")]
+    TomlToJsonConversion,
+
+    #[error("No file extension provided")]
+    MissingFileExtension,
+
+    #[error("Unsupported file extension: {0}")]
+    UnsupportedFileExtension(String),
 
     #[error("Agent not found: {0}")]
     AgentNotFound(String),

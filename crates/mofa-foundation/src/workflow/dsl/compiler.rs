@@ -492,10 +492,7 @@ impl DslCompiler {
                 let agent_id = match agent {
                     AgentRef::Registry { agent_id } => agent_id,
                     AgentRef::Inline(_) => {
-                        return Err(DslError::Validation(format!(
-                            "Inline agents are not supported in DslCompiler for node '{}'. Please use registry agents.",
-                            id
-                        )));
+                        return Err(DslError::InlineAgentNotSupported(id.clone()));
                     }
                 };
 
@@ -506,10 +503,10 @@ impl DslCompiler {
                         agent.clone(),
                     )))
                 } else {
-                    Err(DslError::Validation(format!(
-                        "LlmAgent node '{}' requires agent_id '{}' which is not in the registry.",
-                        id, agent_id
-                    )))
+                    Err(DslError::MissingAgentInRegistry {
+                        node_id: id.clone(),
+                        agent_id: agent_id.clone(),
+                    })
                 }
             }
 
@@ -540,14 +537,14 @@ impl DslCompiler {
             .iter()
             .find(|n| matches!(n, NodeDefinition::Start { .. }))
             .map(|n| n.id().to_string())
-            .ok_or_else(|| DslError::Validation("Missing start node".into()))?;
+            .ok_or_else(|| DslError::MissingStartNode)?;
 
         let end_id = def
             .nodes
             .iter()
             .find(|n| matches!(n, NodeDefinition::End { .. }))
             .map(|n| n.id().to_string())
-            .ok_or_else(|| DslError::Validation("Missing end node".into()))?;
+            .ok_or_else(|| DslError::MissingEndNode)?;
 
         // Set the entry point: START → first_node_after_start
         graph.set_entry_point(&start_id);
@@ -590,9 +587,7 @@ impl DslCompiler {
             .iter()
             .any(|n| matches!(n, NodeDefinition::Start { .. }))
         {
-            return Err(DslError::Validation(
-                "Workflow must have a Start node".into(),
-            ));
+            return Err(DslError::MissingStartNode);
         }
 
         // Must have an end node
@@ -601,9 +596,7 @@ impl DslCompiler {
             .iter()
             .any(|n| matches!(n, NodeDefinition::End { .. }))
         {
-            return Err(DslError::Validation(
-                "Workflow must have an End node".into(),
-            ));
+            return Err(DslError::MissingEndNode);
         }
 
         // All edge references must point to valid nodes
@@ -626,7 +619,7 @@ impl DslCompiler {
         let mut seen = std::collections::HashSet::new();
         for id in &node_ids {
             if !seen.insert(id) {
-                return Err(DslError::Validation(format!("Duplicate node ID: '{}'", id)));
+                return Err(DslError::DuplicateNodeId(id.to_string()));
             }
         }
 
@@ -901,7 +894,7 @@ edges: []
             Ok(_) => panic!("Expected error, got Ok"),
         };
         assert!(
-            matches!(err, DslError::Validation(ref msg) if msg.contains("Start")),
+            matches!(err, DslError::MissingStartNode),
             "Expected validation error about missing start, got: {:?}",
             err
         );
@@ -926,7 +919,7 @@ edges: []
             Ok(_) => panic!("Expected error, got Ok"),
         };
         assert!(
-            matches!(err, DslError::Validation(ref msg) if msg.contains("End")),
+            matches!(err, DslError::MissingEndNode),
             "Expected validation error about missing end, got: {:?}",
             err
         );
@@ -988,7 +981,7 @@ edges:
             Ok(_) => panic!("Expected error, got Ok"),
         };
         assert!(
-            matches!(err, DslError::Validation(ref msg) if msg.contains("Duplicate")),
+            matches!(err, DslError::DuplicateNodeId(_)),
             "Expected duplicate node ID error, got: {:?}",
             err
         );
@@ -1024,7 +1017,7 @@ edges:
             Ok(_) => panic!("Expected error, got Ok"),
         };
         assert!(
-            matches!(err, DslError::Validation(ref msg) if msg.contains("not in the registry")),
+            matches!(err, DslError::MissingAgentInRegistry { .. }),
             "Expected missing registry validation error, got: {:?}",
             err
         );
