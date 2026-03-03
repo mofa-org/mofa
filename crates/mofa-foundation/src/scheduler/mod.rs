@@ -27,6 +27,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 
 use async_trait::async_trait;
+use chrono::{DateTime, Utc};
 use cron::Schedule;
 use tokio::sync::{RwLock, Semaphore, oneshot};
 use tokio::task::JoinHandle;
@@ -87,10 +88,12 @@ impl ScheduleEntry {
     /// Convert to a monitoring snapshot.
     fn to_info(&self, clock: &dyn Clock) -> ScheduleInfo {
         let last_run = self.last_run_ms.load(Ordering::Relaxed);
+        let next_run_ms = self.calculate_next_run_time(clock);
+
         ScheduleInfo::new(
             self.definition.schedule_id.clone(),
             self.definition.agent_id.clone(),
-            None, // TODO: Calculate next run time
+            next_run_ms,
             if last_run == 0 {
                 None
             } else {
@@ -99,6 +102,37 @@ impl ScheduleEntry {
             self.consecutive_failures.load(Ordering::Relaxed),
             self.paused.load(Ordering::Acquire),
         )
+    }
+
+    /// Calculate the next run time based on schedule type and current time.
+    fn calculate_next_run_time(&self, clock: &dyn Clock) -> Option<u64> {
+        if self.paused.load(Ordering::Acquire) {
+            return None; // No next run if paused
+        }
+
+        let now_ms = clock.now_millis();
+
+        if let Some(cron_expr) = &self.definition.cron_expression {
+            // For cron schedules, find the next occurrence
+            if let Ok(schedule) = cron_expr.parse::<Schedule>() {
+                let now = DateTime::from_timestamp_millis(now_ms as i64)?
+                    .with_timezone(&Utc);
+                if let Some(next) = schedule.upcoming(Utc).next() {
+                    return Some(next.timestamp_millis() as u64);
+                }
+            }
+        } else if let Some(interval_ms) = self.definition.interval_ms {
+            // For interval schedules, add interval to last run time or current time
+            let last_run_u64 = self.last_run_ms.load(Ordering::Relaxed) as u64;
+            let base_time = if last_run_u64 > 0 {
+                last_run_u64 + interval_ms
+            } else {
+                now_ms + interval_ms
+            };
+            return Some(base_time);
+        }
+
+        None
     }
 }
 
@@ -735,6 +769,55 @@ mod tests {
         let scheduler = make_test_scheduler(10).await;
         let result = scheduler.unregister("nonexistent").await;
         assert!(matches!(result, Err(SchedulerError::NotFound(id)) if id == "nonexistent"));
+    }
+
+    #[tokio::test]
+    async fn test_next_run_time_calculation() {
+        use std::sync::Arc;
+        use tokio::sync::Semaphore;
+
+        // Test interval schedule
+        let def = ScheduleDefinition::new_interval(
+            "test-interval",
+            "test-agent",
+            5000, // 5 seconds
+            1,
+            AgentInput::text("test"),
+            MissedTickPolicy::Skip,
+        ).unwrap();
+
+        let entry = ScheduleEntry::new(
+            def,
+            tokio::spawn(async {}), // dummy handle
+            Arc::new(Semaphore::new(1)),
+        );
+
+        let mock_clock = MockClock { current_time: 1000000 }; // 1M ms
+        let info = entry.to_info(&mock_clock);
+
+        // Should calculate next run as current time + interval since no last run
+        assert_eq!(info.next_run_ms, Some(1000000 + 5000));
+
+        // Test with last run time
+        entry.last_run_ms.store(900000, Ordering::Relaxed); // 900K ms
+        let info2 = entry.to_info(&mock_clock);
+        assert_eq!(info2.next_run_ms, Some(900000 + 5000));
+
+        // Test paused schedule
+        entry.paused.store(true, Ordering::Release);
+        let info3 = entry.to_info(&mock_clock);
+        assert_eq!(info3.next_run_ms, None); // No next run when paused
+    }
+
+    // Mock clock for testing
+    struct MockClock {
+        current_time: u64,
+    }
+
+    impl Clock for MockClock {
+        fn now_millis(&self) -> u64 {
+            self.current_time
+        }
     }
 }
 // Memory-budgeted scheduler for inference orchestration
