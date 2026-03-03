@@ -3735,6 +3735,7 @@ name = "mofa-extra"
 version = "0.1.0"
 dependencies = [
  "async-trait",
+ "error-stack",
  "regex",
  "rhai",
  "serde",
@@ -3756,6 +3757,7 @@ dependencies = [
  "chrono",
  "config 0.14.1",
  "cron",
+ "error-stack",
  "futures",
  "infer",
  "lazy_static",
@@ -3830,6 +3832,7 @@ dependencies = [
  "async-trait",
  "axum 0.8.8",
  "chrono",
+ "error-stack",
  "futures",
  "hex",
  "lazy_static",
@@ -3858,6 +3861,7 @@ dependencies = [
  "backoff",
  "chrono",
  "dirs 5.0.1",
+ "error-stack",
  "futures",
  "hf-hub",
  "kokoro-tts",
@@ -3898,6 +3902,7 @@ dependencies = [
  "chrono",
  "config 0.14.1",
  "cron",
+ "error-stack",
  "eyre",
  "flume 0.10.14",
  "mofa-kernel",
@@ -3919,6 +3924,7 @@ name = "mofa-sdk"
 version = "0.1.0"
 dependencies = [
  "async-trait",
+ "error-stack",
  "mofa-extra",
  "mofa-foundation",
  "mofa-kernel",

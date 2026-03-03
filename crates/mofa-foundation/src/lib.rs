@@ -39,9 +39,6 @@ pub mod workflow;
 // coordination module
 pub mod coordination;
 
-// scheduler module - periodic agent execution
-pub mod scheduler;
-
 // config module
 pub mod config;
 

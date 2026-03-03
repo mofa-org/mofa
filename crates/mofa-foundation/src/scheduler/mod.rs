@@ -1,24 +1,8 @@
-//! Cron-based scheduler implementation for periodic agent execution.
+//! Scheduler implementations for MoFA.
 //!
-//! This module provides `CronScheduler`, a concrete implementation of the
-//! `AgentScheduler` trait from `mofa-kernel`. It supports both interval-based
-//! and cron-expression-based scheduling with bounded concurrency control.
-//!
-//! # Architecture
-//!
-//! The scheduler uses a global semaphore to cap total concurrent agent executions
-//! across all schedules, plus per-schedule semaphores to enforce `max_concurrent`.
-//! Each schedule runs in its own tokio task that waits for ticks and invokes agents
-//! through the provided `AgentRegistry`.
-//!
-//! # Features
-//!
-//! - **Interval scheduling**: Fixed intervals with `tokio::time::interval`
-//! - **Cron scheduling**: Cron expressions parsed with the `cron` crate
-//! - **Concurrency control**: Global and per-schedule limits
-//! - **Missed tick policies**: Skip, Burst, DelaySingle
-//! - **Dynamic management**: Pause, resume, unregister operations
-//! - **Monitoring**: `list()` provides runtime state snapshots
+//! This module provides concrete implementations of schedulers:
+//! - `CronScheduler`: For periodic agent execution with cron/interval scheduling.
+//! - `MemoryScheduler`: For memory-budgeted admission control for inference requests.
 
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -615,56 +599,56 @@ mod tests {
         assert!(matches!(result, Err(SchedulerError::NotFound(id)) if id == "nonexistent"));
     }
 }
-//! Memory-budgeted scheduler for inference orchestration
-//!
-//! This module provides admission control under memory constraints for inference
-//! requests. It is **architecturally separate** from the adapter registry
-//! (`adapter/`) because scheduling is a dynamic runtime concern, while adapter
-//! discovery is a static capability resolution concern.
-//!
-//! # Architecture
-//!
-//! ```text
-//! ┌─────────────────────────┐
-//! │   Adapter Registry      │  ← static: "which backends can run this model?"
-//! │   (adapter/)            │
-//! └──────────┬──────────────┘
-//!            │ candidates
-//!            ▼
-//! ┌─────────────────────────┐
-//! │   Memory Scheduler      │  ← dynamic: "should we admit this request now?"
-//! │   (scheduler/)          │
-//! └──────────┬──────────────┘
-//!            │ Accept / Defer / Reject
-//!            ▼
-//! ┌─────────────────────────┐
-//! │   Inference Execution   │
-//! └─────────────────────────┘
-//! ```
-//!
-//! # Phase 1: Rule-based baseline
-//!
-//! - `AdmissionDecision`: Accept / Defer / Reject with structured metadata
-//! - `MemoryPolicy`: deterministic threshold-based admission control
-//! - `StabilityControl`: cooldown/hysteresis to prevent profile thrashing
-//! - `DeferredQueue`: age-aware fairness for deferred requests
-//!
-//! # Example
-//!
-//! ```rust,ignore
-//! use mofa_foundation::scheduler::{MemoryScheduler, MemoryPolicy, MemoryBudget};
-//!
-//! let policy = MemoryPolicy::default();
-//! let budget = MemoryBudget::new(16_384); // 16 GB
-//! let mut scheduler = MemoryScheduler::new(policy, budget);
-//!
-//! let decision = scheduler.evaluate(2048); // request needs 2 GB
-//! match decision.outcome {
-//!     AdmissionOutcome::Accept => { scheduler.allocate(2048); }
-//!     AdmissionOutcome::Defer  => { scheduler.defer("req-1", 2048); }
-//!     AdmissionOutcome::Reject => { /* drop request */ }
-//! }
-//! ```
+// Memory-budgeted scheduler for inference orchestration
+//
+// This module provides admission control under memory constraints for inference
+// requests. It is **architecturally separate** from the adapter registry
+// (`adapter/`) because scheduling is a dynamic runtime concern, while adapter
+// discovery is a static capability resolution concern.
+//
+// # Architecture
+//
+// ```text
+// ┌─────────────────────────┐
+// │   Adapter Registry      │  ← static: "which backends can run this model?"
+// │   (adapter/)            │
+// └──────────┬──────────────┘
+//            │ candidates
+//            ▼
+// ┌─────────────────────────┐
+// │   Memory Scheduler      │  ← dynamic: "should we admit this request now?"
+// │   (scheduler/)          │
+// └──────────┬──────────────┘
+//            │ Accept / Defer / Reject
+//            ▼
+// ┌─────────────────────────┐
+// │   Inference Execution   │
+// └─────────────────────────┘
+// ```
+//
+// # Phase 1: Rule-based baseline
+//
+// - `AdmissionDecision`: Accept / Defer / Reject with structured metadata
+// - `MemoryPolicy`: deterministic threshold-based admission control
+// - `StabilityControl`: cooldown/hysteresis to prevent profile thrashing
+// - `DeferredQueue`: age-aware fairness for deferred requests
+//
+// # Example
+//
+// ```rust,ignore
+// use mofa_foundation::scheduler::{MemoryScheduler, MemoryPolicy, MemoryBudget};
+//
+// let policy = MemoryPolicy::default();
+// let budget = MemoryBudget::new(16_384); // 16 GB
+// let mut scheduler = MemoryScheduler::new(policy, budget);
+//
+// let decision = scheduler.evaluate(2048); // request needs 2 GB
+// match decision.outcome {
+//     AdmissionOutcome::Accept => { scheduler.allocate(2048); }
+//     AdmissionOutcome::Defer  => { scheduler.defer("req-1", 2048); }
+//     AdmissionOutcome::Reject => { /* drop request */ }
+// }
+// ```
 
 mod admission;
 mod budget;
