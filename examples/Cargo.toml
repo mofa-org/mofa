@@ -34,7 +34,7 @@ members = [
     "tool_routing",
     "runtime_message_bus_backpressure",
     "rag_pipeline",
-    "hitl_v2",
+    "hitl_workflow",
     "agent_builder",
     "workflow_viz",
     "message_graph_validation",
