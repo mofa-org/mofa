@@ -517,18 +517,8 @@ impl<S: GraphState> CompiledGraphImpl<S> {
         }
         Ok(())
     }
-}
 
-#[async_trait]
-impl<S: GraphState + 'static> CompiledGraph<S, serde_json::Value> for CompiledGraphImpl<S> {
-    fn id(&self) -> &str {
-        &self.id
-    }
-
-    async fn invoke(&self, input: S, config: Option<RuntimeContext>) -> AgentResult<S> {
-        let ctx =
-            config.unwrap_or_else(|| RuntimeContext::with_config(&self.id, self.config.clone()));
-
+    async fn invoke_with_context(&self, input: S, ctx: RuntimeContext) -> AgentResult<S> {
         info!(
             "Starting graph execution '{}' with execution_id={}",
             self.id, ctx.execution_id
@@ -539,7 +529,6 @@ impl<S: GraphState + 'static> CompiledGraph<S, serde_json::Value> for CompiledGr
         let default_policy = NodePolicy::default();
 
         while !current_nodes.is_empty() {
-            // Check recursion limit
             if ctx.is_recursion_limit_reached().await {
                 return Err(AgentError::Internal("Recursion limit reached".to_string()));
             }
@@ -568,9 +557,7 @@ impl<S: GraphState + 'static> CompiledGraph<S, serde_json::Value> for CompiledGr
                 }
             }
 
-            // Execute nodes
             if current_nodes.len() == 1 {
-                // Single node execution
                 let node_id = current_nodes.remove(0);
                 let node = self
                     .nodes
@@ -589,7 +576,7 @@ impl<S: GraphState + 'static> CompiledGraph<S, serde_json::Value> for CompiledGr
                     policy,
                     &self.circuit_states,
                     &node_id,
-                    None, // no event channel in invoke()
+                    None,
                 )
                 .await
                 {
@@ -602,7 +589,6 @@ impl<S: GraphState + 'static> CompiledGraph<S, serde_json::Value> for CompiledGr
                     Err(NodeExecutionOutcome::Error(e)) => return Err(e),
                 };
 
-                // Apply updates
                 self.apply_updates(&mut state, &command.updates).await?;
 
                 // Get next nodes
@@ -613,7 +599,6 @@ impl<S: GraphState + 'static> CompiledGraph<S, serde_json::Value> for CompiledGr
                     node_id, current_nodes
                 );
             } else {
-                // Parallel execution
                 let mut next_nodes = Vec::new();
                 let nodes_to_execute = std::mem::take(&mut current_nodes);
                 let parallel_results = Self::execute_parallel_nodes(
@@ -627,8 +612,6 @@ impl<S: GraphState + 'static> CompiledGraph<S, serde_json::Value> for CompiledGr
 
                 for (node_id, command) in parallel_results {
                     debug!("Applying updates from parallel node '{}'", node_id);
-
-                    // Apply updates only after all parallel nodes have completed.
                     self.apply_updates(&mut state, &command.updates).await?;
 
                     // Collect next nodes
@@ -636,7 +619,6 @@ impl<S: GraphState + 'static> CompiledGraph<S, serde_json::Value> for CompiledGr
                     next_nodes.extend(next);
                 }
 
-                // Deduplicate next nodes
                 let next_set: HashSet<String> = next_nodes.into_iter().collect();
                 current_nodes = next_set.into_iter().collect();
             }
@@ -644,6 +626,42 @@ impl<S: GraphState + 'static> CompiledGraph<S, serde_json::Value> for CompiledGr
 
         info!("Graph '{}' execution completed", self.id);
         Ok(state)
+    }
+}
+
+#[async_trait]
+impl<S: GraphState + 'static> CompiledGraph<S, serde_json::Value> for CompiledGraphImpl<S> {
+    fn id(&self) -> &str {
+        &self.id
+    }
+
+    async fn invoke(&self, input: S, config: Option<RuntimeContext>) -> AgentResult<S> {
+        let ctx =
+            config.unwrap_or_else(|| RuntimeContext::with_config(&self.id, self.config.clone()));
+        let timeout_ms = ctx.config.timeout_ms;
+
+        if timeout_ms == 0 {
+            return self.invoke_with_context(input, ctx).await;
+        }
+
+        let execution_id = ctx.execution_id.clone();
+        match tokio::time::timeout(
+            std::time::Duration::from_millis(timeout_ms),
+            self.invoke_with_context(input, ctx),
+        )
+        .await
+        {
+            Ok(result) => result,
+            Err(_) => {
+                error!(
+                    graph_id = %self.id,
+                    execution_id = %execution_id,
+                    timeout_ms,
+                    "Graph execution timed out"
+                );
+                Err(AgentError::timeout(timeout_ms))
+            }
+        }
     }
 
     fn stream(
@@ -1103,6 +1121,27 @@ mod tests {
 
     struct FlagReaderNode;
 
+    struct SlowNode {
+        name: String,
+        delay_ms: u64,
+    }
+
+    #[async_trait]
+    impl NodeFunc<JsonState> for SlowNode {
+        async fn call(
+            &self,
+            _state: &mut JsonState,
+            _ctx: &RuntimeContext,
+        ) -> AgentResult<Command> {
+            sleep(Duration::from_millis(self.delay_ms)).await;
+            Ok(Command::new().continue_())
+        }
+
+        fn name(&self) -> &str {
+            &self.name
+        }
+    }
+
     #[async_trait]
     impl NodeFunc<JsonState> for FlagReaderNode {
         async fn call(&self, state: &mut JsonState, _ctx: &RuntimeContext) -> AgentResult<Command> {
@@ -1232,6 +1271,31 @@ mod tests {
         let final_state = result.unwrap();
         assert_eq!(final_state.get_value("processed"), Some(json!(true)));
         assert_eq!(final_state.get_value("count"), Some(json!(1)));
+    }
+
+    #[tokio::test]
+    async fn test_invoke_enforces_graph_timeout() {
+        let mut graph = StateGraphImpl::<JsonState>::new("invoke_timeout_graph");
+
+        graph
+            .add_node(
+                "slow",
+                Box::new(SlowNode {
+                    name: "slow".to_string(),
+                    delay_ms: 200,
+                }),
+            )
+            .add_edge(START, "slow")
+            .add_edge("slow", END)
+            .with_config(GraphConfig::default().with_timeout(50));
+
+        let compiled = graph.compile().unwrap();
+        let result = compiled.invoke(JsonState::new(), None).await;
+
+        match result {
+            Err(AgentError::Timeout { duration_ms }) => assert_eq!(duration_ms, 50),
+            other => panic!("expected AgentError::Timeout, got {other:?}"),
+        }
     }
 
     #[tokio::test]
