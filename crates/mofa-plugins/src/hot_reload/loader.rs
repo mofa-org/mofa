@@ -11,8 +11,9 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 use tracing::{debug, info};
 
-/// Plugin load error types
+/// Plugin load error types.
 #[derive(Debug, thiserror::Error)]
+#[non_exhaustive]
 pub enum PluginLoadError {
     #[error("Failed to load library: {0}")]
     LibraryLoad(String),
@@ -37,6 +38,25 @@ pub enum PluginLoadError {
 
     #[error("Plugin not found: {0}")]
     NotFound(String),
+}
+
+/// Plain result alias for plugin-load operations (backward-compatible).
+pub type PluginLoadResult<T> = ::std::result::Result<T, PluginLoadError>;
+
+/// Error-stack–backed result alias for plugin-load operations.
+pub type PluginLoadReport<T> = ::std::result::Result<T, error_stack::Report<PluginLoadError>>;
+
+/// Extension trait to convert [`PluginLoadResult<T>`] into [`PluginLoadReport<T>`].
+pub trait IntoPluginLoadReport<T> {
+    /// Wrap the error in an `error_stack::Report`.
+    fn into_report(self) -> PluginLoadReport<T>;
+}
+
+impl<T> IntoPluginLoadReport<T> for PluginLoadResult<T> {
+    #[inline]
+    fn into_report(self) -> PluginLoadReport<T> {
+        self.map_err(error_stack::Report::new)
+    }
 }
 
 /// Required symbols for a plugin library
