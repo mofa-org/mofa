@@ -1,0 +1,9 @@
+[package]
+name = "secure_agent"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+mofa-foundation = { path = "../../../crates/mofa-foundation" }
+mofa-runtime = { path = "../../../crates/mofa-runtime" }
+tokio = { workspace = true, features = ["full"] }
