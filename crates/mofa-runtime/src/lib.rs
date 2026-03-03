@@ -25,6 +25,7 @@ pub mod fallback;
 pub mod interrupt;
 pub mod retry;
 pub mod runner;
+pub mod security;
 
 // Dora adapter module (only compiled when dora feature is enabled)
 #[cfg(feature = "dora")]
@@ -45,6 +46,9 @@ pub mod dora_adapter;
 // =============================================================================
 
 pub use interrupt::*;
+
+// Security governance module
+pub use security::{SecurityService, SecurityConfig, SecurityError, SecurityEvent};
 
 // Core agent trait - runtime executes agents implementing this trait
 pub use mofa_kernel::agent::MoFAAgent;
@@ -293,6 +297,7 @@ impl AgentBuilder {
             event_tx,
             event_rx: Some(event_rx),
             context,
+            security_service: None,
         })
     }
 
@@ -498,6 +503,8 @@ pub struct SimpleAgentRuntime<A: MoFAAgent> {
     event_tx: tokio::sync::mpsc::Sender<AgentEvent>,
     event_rx: Option<tokio::sync::mpsc::Receiver<AgentEvent>>,
     pub(crate) context: mofa_kernel::agent::AgentContext,
+    // Security service for RBAC and other security checks
+    security_service: Option<std::sync::Arc<security::SecurityService>>,
 }
 
 #[cfg(not(feature = "dora"))]
@@ -592,9 +599,48 @@ impl<A: MoFAAgent> SimpleAgentRuntime<A> {
         Ok(())
     }
 
+    /// Set the security service for RBAC and other security checks
+    pub fn with_security_service(mut self, security_service: std::sync::Arc<security::SecurityService>) -> Self {
+        self.security_service = Some(security_service);
+        self
+    }
+
     /// 处理单个事件
     /// Processes a single event
     pub async fn handle_event(&mut self, event: AgentEvent) -> GlobalResult<()> {
+        // Security interceptor: Check permissions before processing
+        if let Some(security) = &self.security_service
+            && security.is_rbac_enabled()
+            && let Some(authorizer) = security.authorizer()
+        {
+            // Check if agent has permission to execute
+            match authorizer.check_permission(&self.metadata.id, "execute", "agent").await {
+                        Ok(auth_result) if auth_result.is_denied() => {
+                            ::tracing::warn!(
+                                agent_id = %self.metadata.id,
+                                reason = %auth_result.reason().unwrap_or("unknown"),
+                                "Permission denied for agent execution"
+                            );
+                            return Err(GlobalError::Other(format!(
+                                "Permission denied: {}",
+                                auth_result.reason().unwrap_or("unknown")
+                            )));
+                        }
+                        Err(e) => {
+                            // Handle security check failure based on fail mode
+                            match security.config().fail_mode {
+                                security::types::SecurityFailMode::FailClosed => {
+                                    return Err(GlobalError::Other(format!("Security check failed: {}", e)));
+                                }
+                                security::types::SecurityFailMode::FailOpen => {
+                                    ::tracing::warn!("Security check failed, allowing due to fail-open mode: {}", e);
+                                }
+                            }
+                        }
+                        _ => {} // Permission granted, continue
+            }
+        }
+
         // 检查中断 - 注意：MoFAAgent 没有 on_interrupt 方法
         // Check interrupt - Note: MoFAAgent lacks on_interrupt method
         // 中断处理需要由 Agent 内部自行处理或通过 AgentMessaging 扩展
