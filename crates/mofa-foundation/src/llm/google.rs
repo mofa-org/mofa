@@ -103,10 +103,20 @@ impl GeminiProvider {
     }
 
     pub fn with_config(config: GeminiConfig) -> Self {
-        let client = reqwest::Client::builder()
+        let client = match reqwest::Client::builder()
             .timeout(Duration::from_secs(config.timeout_secs))
             .build()
-            .expect("Failed to build reqwest client");
+        {
+            Ok(client) => client,
+            Err(e) => {
+                tracing::error!(
+                    "Failed to build Gemini reqwest client (timeout_secs={}): {}. Falling back to default client.",
+                    config.timeout_secs,
+                    e
+                );
+                reqwest::Client::new()
+            }
+        };
         Self { client, config }
     }
 
