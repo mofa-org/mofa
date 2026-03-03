@@ -277,7 +277,10 @@ impl SimpleTool for FileWriteTool {
                 .open(&path)
                 .await
             {
-                Ok(mut file) => file.write_all(content.as_bytes()).await,
+                Ok(mut file) => match file.write_all(content.as_bytes()).await {
+                    Ok(()) => file.flush().await,
+                    Err(e) => Err(e),
+                },
                 Err(e) => Err(e),
             }
         } else {

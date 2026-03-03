@@ -1,11 +1,11 @@
 //! 任务协调器 - 阶段3: 调度分配，调用执行Agent
 //! Task Coordinator - Phase 3: Scheduling and allocation, invoking execution Agents
 
-use mofa_kernel::agent::types::error::{GlobalError, GlobalResult};
 use super::types::*;
 use crate::secretary::agent_router::{
     AgentInfo, AgentProvider, AgentRouter, CapabilityRouter, RoutingContext, RoutingDecision,
 };
+use mofa_kernel::agent::types::error::{GlobalError, GlobalResult};
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
