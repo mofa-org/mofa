@@ -17,12 +17,15 @@ use super::state::{
     WorkflowContext, WorkflowStatus, WorkflowValue,
 };
 use mofa_kernel::workflow::telemetry::{DebugEvent, TelemetryEmitter};
+use serde_json;
 use std::collections::HashMap;
 use std::sync::Arc;
-use serde_json;
 use std::time::Instant;
 use tokio::sync::{RwLock, Semaphore, mpsc, oneshot};
 use tracing::{error, info, warn};
+
+// Optional HITL integration
+use crate::hitl::handlers::WorkflowReviewHandler;
 
 /// 执行器配置
 /// Executor Configuration
@@ -57,7 +60,6 @@ impl Default for ExecutorConfig {
     }
 }
 
-
 /// 工作流执行器
 /// Workflow Executor
 pub struct WorkflowExecutor {
@@ -80,6 +82,8 @@ pub struct WorkflowExecutor {
     semaphore: Arc<Semaphore>,
     /// Profiler for execution timing (optional)
     profiler: ProfilerMode,
+    /// HITL review handler (optional)
+    review_handler: Option<Arc<WorkflowReviewHandler>>,
 }
 
 impl WorkflowExecutor {
@@ -93,6 +97,7 @@ impl WorkflowExecutor {
             event_waiters: Arc::new(RwLock::new(HashMap::new())),
             semaphore,
             profiler: ProfilerMode::Disabled,
+            review_handler: None,
         }
     }
 
@@ -120,12 +125,94 @@ impl WorkflowExecutor {
         self
     }
 
+    /// Attach a review manager for Human-in-the-Loop (HITL) support.
+    ///
+    /// When set, the executor will pause at review nodes and wait for human approval
+    /// before continuing execution. This replaces the legacy `Wait` node approach.
+    ///
+    /// # Example
+    ///
+    /// ```rust,ignore
+    /// use mofa_foundation::hitl::*;
+    /// use mofa_foundation::workflow::*;
+    ///
+    /// let store = Arc::new(InMemoryReviewStore::new());
+    /// let manager = Arc::new(ReviewManager::new(...));
+    /// let handler = Arc::new(WorkflowReviewHandler::new(manager));
+    ///
+    /// let executor = WorkflowExecutor::new(ExecutorConfig::default())
+    ///     .with_review_manager(handler);
+    /// ```
+    pub fn with_review_manager(mut self, handler: Arc<WorkflowReviewHandler>) -> Self {
+        self.review_handler = Some(handler);
+        self
+    }
+
     /// Get profiler timeline if profiling is enabled.
     pub fn profiler_timeline(&self) -> Option<&ExecutionTimeline> {
         match &self.profiler {
             ProfilerMode::Record(timeline) => Some(timeline.get_timeline()),
             ProfilerMode::Disabled => None,
         }
+    }
+
+    /// Create review context from workflow state
+    async fn create_review_context(
+        &self,
+        ctx: &WorkflowContext,
+        node_id: &str,
+        input: &WorkflowValue,
+    ) -> mofa_kernel::hitl::ReviewContext {
+        use mofa_kernel::hitl::{ExecutionStep, ExecutionTrace, ReviewContext};
+        use std::collections::HashMap;
+
+        // Create execution trace from workflow context
+        let mut steps = Vec::new();
+
+        // Get node outputs and statuses to build execution history
+        let node_outputs = ctx.get_all_outputs().await;
+        let node_statuses = ctx.get_all_node_statuses().await;
+
+        // Create steps from completed nodes
+        for (nid, output) in node_outputs {
+            if let Some(status) = node_statuses.get(&nid) {
+                if matches!(status, super::state::NodeStatus::Completed) {
+                    steps.push(ExecutionStep {
+                        step_id: nid.clone(),
+                        step_type: "workflow_node".to_string(),
+                        timestamp_ms: chrono::Utc::now().timestamp_millis() as u64,
+                        input: None,
+                        output: serde_json::to_value(&output).ok(),
+                        metadata: HashMap::new(),
+                    });
+                }
+            }
+        }
+
+        // Add current node step
+        steps.push(ExecutionStep {
+            step_id: node_id.to_string(),
+            step_type: "review_node".to_string(),
+            timestamp_ms: chrono::Utc::now().timestamp_millis() as u64,
+            input: serde_json::to_value(input).ok(),
+            output: None,
+            metadata: HashMap::new(),
+        });
+
+        // Calculate duration from paused_at if available
+        let duration_ms = if let Some(paused_at) = *ctx.paused_at.read().await {
+            let now = chrono::Utc::now();
+            now.signed_duration_since(paused_at).num_milliseconds() as u64
+        } else {
+            0
+        };
+
+        let trace = ExecutionTrace { steps, duration_ms };
+
+        ReviewContext::new(
+            trace,
+            serde_json::to_value(input).unwrap_or(serde_json::json!({})),
+        )
     }
 
     /// Emit a debug telemetry event (no-op if no emitter is set).
@@ -309,11 +396,56 @@ impl WorkflowExecutor {
             graph.id, waiting_node_id
         );
 
+        // Check if this was a unified HITL review (check for review_id in variables)
+        if let Some(review_id_value) = ctx.get_variable("review_id").await {
+            if let WorkflowValue::String(ref review_id_str) = review_id_value {
+                if let Some(ref review_handler) = self.review_handler {
+                    use mofa_kernel::hitl::ReviewRequestId;
+                    let review_id = ReviewRequestId::new(review_id_str.clone());
+
+                    // Check if review is approved
+                    match review_handler.is_approved(&review_id).await {
+                        Ok(true) => {
+                            info!(
+                                "Review {} approved, proceeding with workflow",
+                                review_id_str
+                            );
+                        }
+                        Ok(false) => {
+                            // Check if rejected
+                            if let Ok(Some(response)) =
+                                review_handler.get_review_response(&review_id).await
+                            {
+                                match response {
+                                    mofa_kernel::hitl::ReviewResponse::Rejected {
+                                        reason, ..
+                                    } => {
+                                        return Err(format!("Review rejected: {}", reason));
+                                    }
+                                    _ => {
+                                        return Err(format!(
+                                            "Review {} not approved",
+                                            review_id_str
+                                        ));
+                                    }
+                                }
+                            } else {
+                                return Err(format!("Review {} not yet resolved", review_id_str));
+                            }
+                        }
+                        Err(e) => {
+                            warn!("Failed to check review status: {}, proceeding anyway", e);
+                        }
+                    }
+                }
+            }
+        }
+
         // Calculate wait time
         if let Some(paused_at) = *ctx.paused_at.read().await {
             let duration = chrono::Utc::now().signed_duration_since(paused_at);
             let wait_duration_ms = duration.num_milliseconds().max(0) as u64;
-            *ctx.total_wait_time_ms.write().await += wait_duration_ms;  // ← accumulate
+            *ctx.total_wait_time_ms.write().await += wait_duration_ms; // ← accumulate
         }
 
         ctx.set_node_output(waiting_node_id, human_input).await;
@@ -582,9 +714,57 @@ impl WorkflowExecutor {
                 }
             }
 
-            // 2. Check for HITL "wait_for_human" node
+            // 2. Check for HITL review node (unified system or legacy Wait)
             if node.config.node_type == NodeType::Wait {
-                info!("Pausing workflow at node: {}", current_node_id);
+                // Use unified HITL system if review handler is available
+                if let Some(ref review_handler) = self.review_handler {
+                    info!(
+                        "Requesting review at node: {} (unified HITL)",
+                        current_node_id
+                    );
+
+                    // Create review context from workflow state
+                    let review_context = self
+                        .create_review_context(ctx, &current_node_id, &current_input)
+                        .await;
+
+                    // Request review
+                    match review_handler
+                        .request_node_review(&record.execution_id, &current_node_id, review_context)
+                        .await
+                    {
+                        Ok(review_id) => {
+                            info!("Review requested: {} - workflow paused", review_id.as_str());
+                            *ctx.paused_at.write().await = Some(chrono::Utc::now());
+                            *ctx.last_waiting_node.write().await = Some(current_node_id.clone());
+                            ctx.set_node_status(&current_node_id, NodeStatus::Waiting)
+                                .await;
+                            record.status = WorkflowStatus::Paused;
+
+                            // Store review ID in context variables for later retrieval
+                            ctx.set_variable(
+                                "review_id",
+                                WorkflowValue::String(review_id.as_str().to_string()),
+                            )
+                            .await;
+
+                            return Ok(WorkflowValue::Null);
+                        }
+                        Err(e) => {
+                            error!(
+                                "Failed to request review: {} - falling back to legacy Wait",
+                                e
+                            );
+                            // Fall through to legacy Wait handling
+                        }
+                    }
+                }
+
+                // Legacy Wait node handling (fallback)
+                info!(
+                    "Pausing workflow at node: {} (legacy Wait)",
+                    current_node_id
+                );
                 *ctx.paused_at.write().await = Some(chrono::Utc::now());
                 *ctx.last_waiting_node.write().await = Some(current_node_id.clone());
 
