@@ -52,6 +52,9 @@ pub mod collaboration;
 // RAG module - vector store and document chunking
 pub mod rag;
 
+// HITL module - Human-in-the-Loop system
+pub mod hitl;
+
 // Re-export config types
 pub use config::{AgentInfo, AgentYamlConfig, LLMYamlConfig, RuntimeConfig, ToolConfig};
 
