@@ -737,56 +737,56 @@ mod tests {
         assert!(matches!(result, Err(SchedulerError::NotFound(id)) if id == "nonexistent"));
     }
 }
-//! Memory-budgeted scheduler for inference orchestration
-//!
-//! This module provides admission control under memory constraints for inference
-//! requests. It is **architecturally separate** from the adapter registry
-//! (`adapter/`) because scheduling is a dynamic runtime concern, while adapter
-//! discovery is a static capability resolution concern.
-//!
-//! # Architecture
-//!
-//! ```text
-//! ┌─────────────────────────┐
-//! │   Adapter Registry      │  ← static: "which backends can run this model?"
-//! │   (adapter/)            │
-//! └──────────┬──────────────┘
-//!            │ candidates
-//!            ▼
-//! ┌─────────────────────────┐
-//! │   Memory Scheduler      │  ← dynamic: "should we admit this request now?"
-//! │   (scheduler/)          │
-//! └──────────┬──────────────┘
-//!            │ Accept / Defer / Reject
-//!            ▼
-//! ┌─────────────────────────┐
-//! │   Inference Execution   │
-//! └─────────────────────────┘
-//! ```
-//!
-//! # Phase 1: Rule-based baseline
-//!
-//! - `AdmissionDecision`: Accept / Defer / Reject with structured metadata
-//! - `MemoryPolicy`: deterministic threshold-based admission control
-//! - `StabilityControl`: cooldown/hysteresis to prevent profile thrashing
-//! - `DeferredQueue`: age-aware fairness for deferred requests
-//!
-//! # Example
-//!
-//! ```rust,ignore
-//! use mofa_foundation::scheduler::{MemoryScheduler, MemoryPolicy, MemoryBudget};
-//!
-//! let policy = MemoryPolicy::default();
-//! let budget = MemoryBudget::new(16_384); // 16 GB
-//! let mut scheduler = MemoryScheduler::new(policy, budget);
-//!
-//! let decision = scheduler.evaluate(2048); // request needs 2 GB
-//! match decision.outcome {
-//!     AdmissionOutcome::Accept => { scheduler.allocate(2048); }
-//!     AdmissionOutcome::Defer  => { scheduler.defer("req-1", 2048); }
-//!     AdmissionOutcome::Reject => { /* drop request */ }
-//! }
-//! ```
+// Memory-budgeted scheduler for inference orchestration
+//
+// This module provides admission control under memory constraints for inference
+// requests. It is **architecturally separate** from the adapter registry
+// (`adapter/`) because scheduling is a dynamic runtime concern, while adapter
+// discovery is a static capability resolution concern.
+//
+// # Architecture
+//
+// ```text
+// ┌─────────────────────────┐
+// │   Adapter Registry      │  ← static: "which backends can run this model?"
+// │   (adapter/)            │
+// └──────────┬──────────────┘
+//            │ candidates
+//            ▼
+// ┌─────────────────────────┐
+// │   Memory Scheduler      │  ← dynamic: "should we admit this request now?"
+// │   (scheduler/)          │
+// └──────────┬──────────────┘
+//            │ Accept / Defer / Reject
+//            ▼
+// ┌─────────────────────────┐
+// │   Inference Execution   │
+// └─────────────────────────┘
+// ```
+//
+// # Phase 1: Rule-based baseline
+//
+// - `AdmissionDecision`: Accept / Defer / Reject with structured metadata
+// - `MemoryPolicy`: deterministic threshold-based admission control
+// - `StabilityControl`: cooldown/hysteresis to prevent profile thrashing
+// - `DeferredQueue`: age-aware fairness for deferred requests
+//
+// # Example
+//
+// ```rust,ignore
+// use mofa_foundation::scheduler::{MemoryScheduler, MemoryPolicy, MemoryBudget};
+//
+// let policy = MemoryPolicy::default();
+// let budget = MemoryBudget::new(16_384); // 16 GB
+// let mut scheduler = MemoryScheduler::new(policy, budget);
+//
+// let decision = scheduler.evaluate(2048); // request needs 2 GB
+// match decision.outcome {
+//     AdmissionOutcome::Accept => { scheduler.allocate(2048); }
+//     AdmissionOutcome::Defer  => { scheduler.defer("req-1", 2048); }
+//     AdmissionOutcome::Reject => { /* drop request */ }
+// }
+// ```
 
 mod admission;
 mod budget;
