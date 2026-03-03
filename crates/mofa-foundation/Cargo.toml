@@ -41,6 +41,8 @@ parallel-compression = ["dep:rayon"]
 compression-cache = ["dep:sha2"]
 # Enable Linux Candle on-device ML inference (Hugging Face Candle)
 linux-candle = ["dep:candle-core", "dep:candle-transformers"]
+# Enable the OpenAI-compatible HTTP inference gateway
+gateway = ["dep:axum", "dep:tower-http"]
 
 [dependencies]
 # Workspace dependencies
@@ -57,6 +59,10 @@ tracing.workspace = true
 rand.workspace = true
 # YAML config parsing
 serde_yaml = "0.9"
+
+# HTTP server (OpenAI-compatible gateway)
+axum = { workspace = true, optional = true }
+tower-http = { version = "0.6", features = ["cors"], optional = true }
 
 # HTTP client (transcription + HTTP providers)
 reqwest = { version = "0.12", features = [
