@@ -11,8 +11,8 @@ use qdrant_client::qdrant::{
     CountPointsBuilder, CreateCollectionBuilder, DeletePointsBuilder, Distance, PointStruct,
     PointsIdsList, QueryPointsBuilder, UpsertPointsBuilder, VectorParamsBuilder,
 };
+use sha2::{Digest, Sha256};
 use std::collections::HashMap;
-use std::hash::{Hash, Hasher};
 
 /// Reserved payload keys for internal storage.
 const PAYLOAD_KEY_ORIGINAL_ID: &str = "_original_id";
@@ -50,12 +50,11 @@ pub struct QdrantVectorStore {
 
 /// Convert a string ID to a u64 point ID for Qdrant.
 ///
-/// Uses DefaultHasher for a deterministic mapping. The original string
-/// ID is always stored in the point payload so retrieval is lossless.
+/// Uses SHA-256 for stable, cross-version deterministic mapping. The original
+/// string ID is always stored in the point payload so retrieval is lossless.
 fn string_id_to_u64(id: &str) -> u64 {
-    let mut hasher = std::collections::hash_map::DefaultHasher::new();
-    id.hash(&mut hasher);
-    hasher.finish()
+    let digest = Sha256::digest(id.as_bytes());
+    u64::from_le_bytes(digest[..8].try_into().expect("SHA-256 output is at least 8 bytes"))
 }
 
 /// Extract a string value from a Qdrant payload Value.
