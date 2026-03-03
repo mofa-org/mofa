@@ -450,8 +450,9 @@ impl<'a> ToolSearcher<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use mofa_kernel::agent::components::tool::{ToolInput, ToolResult};
+    use mofa_kernel::agent::components::tool::{ToolInput, ToolMetadata, ToolResult};
     use mofa_kernel::agent::context::AgentContext;
+    use std::collections::HashSet;
 
     struct TestTool {
         name: &'static str,
@@ -460,6 +461,32 @@ mod tests {
     impl TestTool {
         fn new(name: &'static str) -> Self {
             Self { name }
+        }
+    }
+
+    struct RichTestTool {
+        name: &'static str,
+        description: &'static str,
+        tags: Vec<&'static str>,
+        is_dangerous: bool,
+        needs_confirmation: bool,
+    }
+
+    impl RichTestTool {
+        fn new(
+            name: &'static str,
+            description: &'static str,
+            tags: Vec<&'static str>,
+            is_dangerous: bool,
+            needs_confirmation: bool,
+        ) -> Self {
+            Self {
+                name,
+                description,
+                tags,
+                is_dangerous,
+                needs_confirmation,
+            }
         }
     }
 
@@ -487,6 +514,48 @@ mod tests {
         ) -> ToolResult<serde_json::Value> {
             ToolResult::success(serde_json::json!({"ok": true}))
         }
+    }
+
+    #[async_trait]
+    impl Tool for RichTestTool {
+        fn name(&self) -> &str {
+            self.name
+        }
+
+        fn description(&self) -> &str {
+            self.description
+        }
+
+        fn parameters_schema(&self) -> serde_json::Value {
+            serde_json::json!({
+                "type": "object",
+                "properties": {}
+            })
+        }
+
+        async fn execute(
+            &self,
+            _input: ToolInput<serde_json::Value>,
+            _ctx: &AgentContext,
+        ) -> ToolResult<serde_json::Value> {
+            ToolResult::success(serde_json::json!({"ok": true}))
+        }
+
+        fn metadata(&self) -> ToolMetadata {
+            ToolMetadata {
+                tags: self.tags.iter().map(|t| (*t).to_string()).collect(),
+                is_dangerous: self.is_dangerous,
+                ..Default::default()
+            }
+        }
+
+        fn requires_confirmation(&self) -> bool {
+            self.needs_confirmation
+        }
+    }
+
+    fn names_of(descriptors: Vec<ToolDescriptor>) -> HashSet<String> {
+        descriptors.into_iter().map(|d| d.name).collect()
     }
 
     #[tokio::test]
@@ -597,5 +666,133 @@ mod tests {
             registry.get_source("dup_tool"),
             Some(ToolSource::Builtin)
         ));
+    }
+
+    #[tokio::test]
+    async fn filter_by_source_covers_all_source_types() {
+        let mut registry = ToolRegistry::new();
+
+        registry
+            .register_with_source(
+                TestTool::new("builtin_tool").into_dynamic(),
+                ToolSource::Builtin,
+            )
+            .unwrap();
+        registry
+            .register_with_source(
+                TestTool::new("dynamic_tool").into_dynamic(),
+                ToolSource::Dynamic,
+            )
+            .unwrap();
+        registry
+            .register_with_source(
+                TestTool::new("plugin_tool").into_dynamic(),
+                ToolSource::Plugin {
+                    path: "/plugins/sample.rhai".to_string(),
+                },
+            )
+            .unwrap();
+        registry
+            .register_with_source(
+                TestTool::new("mcp_tool").into_dynamic(),
+                ToolSource::Mcp {
+                    endpoint: "mcp://server".to_string(),
+                },
+            )
+            .unwrap();
+
+        let builtin = names_of(registry.filter_by_source("builtin"));
+        let dynamic = names_of(registry.filter_by_source("dynamic"));
+        let plugin = names_of(registry.filter_by_source("plugin"));
+        let mcp = names_of(registry.filter_by_source("mcp"));
+
+        assert_eq!(builtin, HashSet::from([String::from("builtin_tool")]));
+        assert_eq!(dynamic, HashSet::from([String::from("dynamic_tool")]));
+        assert_eq!(plugin, HashSet::from([String::from("plugin_tool")]));
+        assert_eq!(mcp, HashSet::from([String::from("mcp_tool")]));
+    }
+
+    #[tokio::test]
+    async fn tool_searcher_validates_all_search_apis() {
+        let mut registry = ToolRegistry::new();
+
+        registry
+            .register_with_source(
+                RichTestTool::new(
+                    "WebSearch",
+                    "Find GitHub repositories quickly",
+                    vec!["search", "network"],
+                    false,
+                    false,
+                )
+                .into_dynamic(),
+                ToolSource::Dynamic,
+            )
+            .unwrap();
+
+        registry
+            .register_with_source(
+                RichTestTool::new(
+                    "FileDelete",
+                    "Delete local files",
+                    vec!["filesystem"],
+                    false,
+                    true,
+                )
+                .into_dynamic(),
+                ToolSource::Dynamic,
+            )
+            .unwrap();
+
+        registry
+            .register_with_source(
+                RichTestTool::new(
+                    "ShellExec",
+                    "Execute shell commands",
+                    vec!["shell"],
+                    true,
+                    false,
+                )
+                .into_dynamic(),
+                ToolSource::Dynamic,
+            )
+            .unwrap();
+
+        let searcher = ToolSearcher::new(&registry);
+
+        let by_name = names_of(searcher.search_by_name("web"));
+        let by_desc = names_of(searcher.search_by_description("github"));
+        let by_tag = names_of(searcher.search_by_tag("search"));
+        let dangerous = names_of(searcher.search_dangerous());
+
+        assert_eq!(by_name, HashSet::from([String::from("WebSearch")]));
+        assert_eq!(by_desc, HashSet::from([String::from("WebSearch")]));
+        assert_eq!(by_tag, HashSet::from([String::from("WebSearch")]));
+        assert_eq!(
+            dangerous,
+            HashSet::from([String::from("FileDelete"), String::from("ShellExec")])
+        );
+    }
+
+    #[tokio::test]
+    async fn registry_trait_invariants_hold_across_lifecycle() {
+        let mut registry = ToolRegistry::new();
+
+        registry
+            .register(TestTool::new("alpha").into_dynamic())
+            .unwrap();
+        registry.register(TestTool::new("beta").into_dynamic()).unwrap();
+
+        assert!(registry.contains("alpha"));
+        assert!(registry.get("alpha").is_some());
+
+        let listed_names: HashSet<String> = registry.list_names().into_iter().collect();
+        let descriptor_names: HashSet<String> = names_of(registry.list());
+
+        assert_eq!(listed_names, descriptor_names);
+
+        registry.unregister("alpha").unwrap();
+        assert!(registry.get("alpha").is_none());
+        assert!(registry.get_source("alpha").is_none());
     }
 }

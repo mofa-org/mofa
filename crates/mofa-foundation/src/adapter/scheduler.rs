@@ -198,11 +198,7 @@ impl StabilityControl {
     pub fn is_significant_change(&self, current_memory: u64) -> bool {
         match self.last_memory {
             Some(last) => {
-                let diff = if current_memory > last {
-                    current_memory - last
-                } else {
-                    last - current_memory
-                };
+                let diff = current_memory.abs_diff(last);
                 diff > self.hysteresis_mb
             }
             None => true,
