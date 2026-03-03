@@ -17,10 +17,10 @@ use super::state::{
     WorkflowContext, WorkflowStatus, WorkflowValue,
 };
 use mofa_kernel::workflow::telemetry::{DebugEvent, TelemetryEmitter};
+use serde_json;
 use std::collections::HashMap;
 use std::sync::Arc;
-use serde_json;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 use tokio::sync::{RwLock, Semaphore, mpsc, oneshot};
 use tracing::{error, info, warn};
 
@@ -56,7 +56,6 @@ impl Default for ExecutorConfig {
         }
     }
 }
-
 
 /// 工作流执行器
 /// Workflow Executor
@@ -230,11 +229,29 @@ impl WorkflowExecutor {
             context: None,
         };
 
-        // 使用基于依赖的执行
-        // Use dependency-based execution
-        let result = self
-            .execute_from_node(graph, &ctx, start_node_id, input, &mut execution_record)
-            .await;
+        // 使用基于依赖的执行，可选超时
+        // Use dependency-based execution, with optional timeout
+        let execution_future =
+            self.execute_from_node(graph, &ctx, start_node_id, input, &mut execution_record);
+
+        let result = match self.config.execution_timeout_ms {
+            Some(timeout_ms) => {
+                match tokio::time::timeout(Duration::from_millis(timeout_ms), execution_future)
+                    .await
+                {
+                    Ok(inner) => inner,
+                    Err(_elapsed) => {
+                        warn!("Workflow {} timed out after {}ms", graph.name, timeout_ms);
+                        Err(format!(
+                            "Workflow execution timed out after {}ms \
+                             (configured via execution_timeout_ms)",
+                            timeout_ms
+                        ))
+                    }
+                }
+            }
+            None => execution_future.await,
+        };
 
         let duration = start_time.elapsed();
         execution_record.ended_at = Some(
@@ -243,6 +260,9 @@ impl WorkflowExecutor {
                 .unwrap_or_default()
                 .as_millis() as u64,
         );
+
+        // Detect timeout vs normal failure for accurate status reporting
+        let timed_out = matches!(&result, Err(e) if e.contains("timed out"));
 
         let final_status = match result {
             Ok(_) => {
@@ -255,6 +275,11 @@ impl WorkflowExecutor {
                     execution_record.context = Some(ctx.clone());
                     "paused".to_string()
                 }
+            }
+            Err(ref e) if timed_out => {
+                execution_record.status = WorkflowStatus::TimedOut;
+                error!("Workflow {} timed out: {}", graph.name, e);
+                "timed_out".to_string()
             }
             Err(ref e) => {
                 execution_record.status = WorkflowStatus::Failed(e.clone());
@@ -313,7 +338,7 @@ impl WorkflowExecutor {
         if let Some(paused_at) = *ctx.paused_at.read().await {
             let duration = chrono::Utc::now().signed_duration_since(paused_at);
             let wait_duration_ms = duration.num_milliseconds().max(0) as u64;
-            *ctx.total_wait_time_ms.write().await += wait_duration_ms;  // ← accumulate
+            *ctx.total_wait_time_ms.write().await += wait_duration_ms; // ← accumulate
         }
 
         ctx.set_node_output(waiting_node_id, human_input).await;
@@ -469,15 +494,35 @@ impl WorkflowExecutor {
             context: None,
         };
 
-        let result = self
-            .execute_from_node(
-                graph,
-                &ctx,
-                start_node_id,
-                WorkflowValue::Null,
-                &mut execution_record,
-            )
-            .await;
+        let execution_future = self.execute_from_node(
+            graph,
+            &ctx,
+            start_node_id,
+            WorkflowValue::Null,
+            &mut execution_record,
+        );
+
+        let result = match self.config.execution_timeout_ms {
+            Some(timeout_ms) => {
+                match tokio::time::timeout(Duration::from_millis(timeout_ms), execution_future)
+                    .await
+                {
+                    Ok(inner) => inner,
+                    Err(_elapsed) => {
+                        warn!(
+                            "Workflow {} (resumed) timed out after {}ms",
+                            graph.name, timeout_ms
+                        );
+                        Err(format!(
+                            "Workflow execution timed out after {}ms \
+                             (configured via execution_timeout_ms)",
+                            timeout_ms
+                        ))
+                    }
+                }
+            }
+            None => execution_future.await,
+        };
 
         let duration = start_time.elapsed();
         execution_record.ended_at = Some(
@@ -487,6 +532,8 @@ impl WorkflowExecutor {
                 .as_millis() as u64,
         );
 
+        let timed_out = matches!(&result, Err(e) if e.contains("timed out"));
+
         match result {
             Ok(_) => {
                 execution_record.status = WorkflowStatus::Completed;
@@ -494,6 +541,10 @@ impl WorkflowExecutor {
                     "Workflow {} resumed and completed in {:?}",
                     graph.name, duration
                 );
+            }
+            Err(ref e) if timed_out => {
+                execution_record.status = WorkflowStatus::TimedOut;
+                error!("Workflow {} resumed and timed out: {}", graph.name, e);
             }
             Err(ref e) => {
                 execution_record.status = WorkflowStatus::Failed(e.clone());
@@ -1114,163 +1165,217 @@ impl WorkflowExecutor {
             context: None,
         };
 
-        let ctx_ref = &ctx;
         let semaphore = Arc::clone(&self.semaphore);
+        let stop_on_failure = self.config.stop_on_failure;
 
-        // 按层次执行（同一层次的节点可以并发执行）
-        // Execute by layer (nodes in same layer execute concurrently)
-        for group in groups {
-            tracing::debug!("Spawning {} parallel branches in layer", group.len());
-            let mut join_set: tokio::task::JoinSet<(NodeResult, NodeExecutionRecord)> =
-                tokio::task::JoinSet::new();
-            for node_id in &group {
-                let n_id = node_id.clone();
-                let ctx_clone = ctx_ref.clone();
-                let node_clone = graph.get_node(&n_id).cloned();
-                let semaphore = Arc::clone(&semaphore);
-                let predecessors: Vec<String> = graph
-                    .get_predecessors(&n_id)
-                    .into_iter()
-                    .map(String::from)
-                    .collect();
+        // Capture identifiers for constructing a timed-out record if needed.
+        let exec_id = execution_record.execution_id.clone();
+        let wf_id = execution_record.workflow_id.clone();
+        let record_started_at = execution_record.started_at;
+        // Clone ctx so the timeout handler can still access partial outputs
+        // after the async block consumes the original via `async move`.
+        // WorkflowContext clone is cheap — it shares underlying Arc data.
+        let ctx_for_timeout = ctx.clone();
 
-                join_set.spawn(async move {
-                    let node_start_time = std::time::SystemTime::now()
-                        .duration_since(std::time::UNIX_EPOCH)
-                        .unwrap_or_default()
-                        .as_millis() as u64;
-                    let _permit = match semaphore.acquire_owned().await {
-                        Ok(permit) => permit,
-                        Err(e) => {
-                            let result = NodeResult::failed(
-                                &n_id,
-                                &format!("Parallel semaphore closed: {}", e),
-                                0,
-                            );
-                            let record_entry = NodeExecutionRecord {
-                                node_id: n_id,
-                                started_at: node_start_time,
-                                ended_at: node_start_time,
-                                status: result.status.clone(),
-                                retry_count: result.retry_count,
-                            };
-                            return (result, record_entry);
-                        }
-                    };
+        // Build the parallel execution future as an async block so it can be
+        // wrapped in an optional `tokio::time::timeout`.
+        // `execution_record` is moved into the block; on timeout we construct
+        // a fresh record from the shared context.
+        let parallel_execution = async move {
+            // 按层次执行（同一层次的节点可以并发执行）
+            // Execute by layer (nodes in same layer execute concurrently)
+            for group in groups {
+                tracing::debug!("Spawning {} parallel branches in layer", group.len());
+                let mut join_set: tokio::task::JoinSet<(NodeResult, NodeExecutionRecord)> =
+                    tokio::task::JoinSet::new();
+                for node_id in &group {
+                    let n_id = node_id.clone();
+                    let ctx_clone = ctx.clone();
+                    let node_clone = graph.get_node(&n_id).cloned();
+                    let semaphore = Arc::clone(&semaphore);
+                    let predecessors: Vec<String> = graph
+                        .get_predecessors(&n_id)
+                        .into_iter()
+                        .map(String::from)
+                        .collect();
 
-                    let result = if let Some(node) = node_clone {
-                        if ctx_clone.get_node_status(&n_id).await == Some(NodeStatus::Completed) {
-                            info!("Skipping already completed node: {}", n_id);
-                            NodeResult::success(
-                                &n_id,
-                                ctx_clone
-                                    .get_node_output(&n_id)
-                                    .await
-                                    .unwrap_or(WorkflowValue::Null),
-                                0,
-                            )
-                        } else {
-                            let node_input = if predecessors.is_empty() {
-                                ctx_clone.get_input().await
-                            } else if predecessors.len() == 1 {
-                                ctx_clone
-                                    .get_node_output(&predecessors[0])
-                                    .await
-                                    .unwrap_or(WorkflowValue::Null)
-                            } else {
-                                let pred_refs: Vec<&str> =
-                                    predecessors.iter().map(|s| s.as_str()).collect();
-                                let outputs = ctx_clone.get_node_outputs(&pred_refs).await;
-                                WorkflowValue::Map(outputs)
-                            };
-                            let result = node.execute(&ctx_clone, node_input).await;
-                            ctx_clone
-                                .set_node_output(&n_id, result.output.clone())
-                                .await;
-                            ctx_clone
-                                .set_node_status(&n_id, result.status.clone())
-                                .await;
-                            result
-                        }
-                    } else {
-                        NodeResult::failed(&n_id, "Node not found", 0)
-                    };
-
-                    let node_end_time = std::time::SystemTime::now()
-                        .duration_since(std::time::UNIX_EPOCH)
-                        .unwrap_or_default()
-                        .as_millis() as u64;
-
-                    tracing::debug!(
-                        "Branch {} completed in {}ms",
-                        n_id,
-                        node_end_time.saturating_sub(node_start_time)
-                    );
-
-                    let record_entry = NodeExecutionRecord {
-                        node_id: n_id,
-                        started_at: node_start_time,
-                        ended_at: node_end_time,
-                        status: result.status.clone(),
-                        retry_count: result.retry_count,
-                    };
-
-                    (result, record_entry)
-                });
-            }
-
-            // Wait for all nodes in this layer to finish.
-            // Node updates are written synchronously to the WorkflowContext as each task finishes.
-            // If `stop_on_failure` is enabled, any failure will abort remaining tasks in the layer.
-            while let Some(res_join) = join_set.join_next().await {
-                let (result, record_entry) = res_join.unwrap_or_else(|e| {
-                    (
-                        NodeResult::failed("unknown", &format!("Join error or panic: {}", e), 0),
-                        NodeExecutionRecord {
-                            node_id: "unknown".to_string(),
-                            started_at: 0,
-                            ended_at: 0,
-                            status: NodeStatus::Failed(format!("Join panic: {}", e)),
-                            retry_count: 0,
-                        },
-                    )
-                });
-                execution_record.node_records.push(record_entry);
-
-                if !result.status.is_success() && self.config.stop_on_failure {
-                    join_set.abort_all();
-                    execution_record.status = WorkflowStatus::Failed(
-                        result.error.unwrap_or_else(|| "Unknown error".to_string()),
-                    );
-                    execution_record.ended_at = Some(
-                        std::time::SystemTime::now()
+                    join_set.spawn(async move {
+                        let node_start_time = std::time::SystemTime::now()
                             .duration_since(std::time::UNIX_EPOCH)
                             .unwrap_or_default()
-                            .as_millis() as u64,
-                    );
-                    execution_record.outputs = ctx_ref.get_all_outputs().await;
-                    return Ok(execution_record);
+                            .as_millis() as u64;
+                        let _permit = match semaphore.acquire_owned().await {
+                            Ok(permit) => permit,
+                            Err(e) => {
+                                let result = NodeResult::failed(
+                                    &n_id,
+                                    &format!("Parallel semaphore closed: {}", e),
+                                    0,
+                                );
+                                let record_entry = NodeExecutionRecord {
+                                    node_id: n_id,
+                                    started_at: node_start_time,
+                                    ended_at: node_start_time,
+                                    status: result.status.clone(),
+                                    retry_count: result.retry_count,
+                                };
+                                return (result, record_entry);
+                            }
+                        };
+
+                        let result = if let Some(node) = node_clone {
+                            if ctx_clone.get_node_status(&n_id).await == Some(NodeStatus::Completed)
+                            {
+                                info!("Skipping already completed node: {}", n_id);
+                                NodeResult::success(
+                                    &n_id,
+                                    ctx_clone
+                                        .get_node_output(&n_id)
+                                        .await
+                                        .unwrap_or(WorkflowValue::Null),
+                                    0,
+                                )
+                            } else {
+                                let node_input = if predecessors.is_empty() {
+                                    ctx_clone.get_input().await
+                                } else if predecessors.len() == 1 {
+                                    ctx_clone
+                                        .get_node_output(&predecessors[0])
+                                        .await
+                                        .unwrap_or(WorkflowValue::Null)
+                                } else {
+                                    let pred_refs: Vec<&str> =
+                                        predecessors.iter().map(|s| s.as_str()).collect();
+                                    let outputs = ctx_clone.get_node_outputs(&pred_refs).await;
+                                    WorkflowValue::Map(outputs)
+                                };
+                                let result = node.execute(&ctx_clone, node_input).await;
+                                ctx_clone
+                                    .set_node_output(&n_id, result.output.clone())
+                                    .await;
+                                ctx_clone
+                                    .set_node_status(&n_id, result.status.clone())
+                                    .await;
+                                result
+                            }
+                        } else {
+                            NodeResult::failed(&n_id, "Node not found", 0)
+                        };
+
+                        let node_end_time = std::time::SystemTime::now()
+                            .duration_since(std::time::UNIX_EPOCH)
+                            .unwrap_or_default()
+                            .as_millis() as u64;
+
+                        tracing::debug!(
+                            "Branch {} completed in {}ms",
+                            n_id,
+                            node_end_time.saturating_sub(node_start_time)
+                        );
+
+                        let record_entry = NodeExecutionRecord {
+                            node_id: n_id,
+                            started_at: node_start_time,
+                            ended_at: node_end_time,
+                            status: result.status.clone(),
+                            retry_count: result.retry_count,
+                        };
+
+                        (result, record_entry)
+                    });
+                }
+
+                // Wait for all nodes in this layer to finish.
+                while let Some(res_join) = join_set.join_next().await {
+                    let (result, record_entry) = res_join.unwrap_or_else(|e| {
+                        (
+                            NodeResult::failed(
+                                "unknown",
+                                &format!("Join error or panic: {}", e),
+                                0,
+                            ),
+                            NodeExecutionRecord {
+                                node_id: "unknown".to_string(),
+                                started_at: 0,
+                                ended_at: 0,
+                                status: NodeStatus::Failed(format!("Join panic: {}", e)),
+                                retry_count: 0,
+                            },
+                        )
+                    });
+                    execution_record.node_records.push(record_entry);
+
+                    if !result.status.is_success() && stop_on_failure {
+                        join_set.abort_all();
+                        execution_record.status = WorkflowStatus::Failed(
+                            result.error.unwrap_or_else(|| "Unknown error".to_string()),
+                        );
+                        execution_record.ended_at = Some(
+                            std::time::SystemTime::now()
+                                .duration_since(std::time::UNIX_EPOCH)
+                                .unwrap_or_default()
+                                .as_millis() as u64,
+                        );
+                        execution_record.outputs = ctx.get_all_outputs().await;
+                        return Ok(execution_record);
+                    }
                 }
             }
+
+            let duration = start_time.elapsed();
+            execution_record.status = WorkflowStatus::Completed;
+            execution_record.ended_at = Some(
+                std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap_or_default()
+                    .as_millis() as u64,
+            );
+
+            execution_record.outputs = ctx.get_all_outputs().await;
+
+            info!(
+                "Layered workflow {} completed in {:?}",
+                graph.name, duration
+            );
+
+            Ok(execution_record)
+        };
+
+        match self.config.execution_timeout_ms {
+            Some(timeout_ms) => {
+                match tokio::time::timeout(Duration::from_millis(timeout_ms), parallel_execution)
+                    .await
+                {
+                    Ok(inner) => inner,
+                    Err(_elapsed) => {
+                        warn!(
+                            "Parallel workflow {} timed out after {}ms",
+                            graph.name, timeout_ms
+                        );
+                        // The async block owned `execution_record`, so build a
+                        // fresh timed-out record from the shared context.
+                        let timed_out_record = ExecutionRecord {
+                            execution_id: exec_id,
+                            workflow_id: wf_id,
+                            started_at: record_started_at,
+                            ended_at: Some(
+                                std::time::SystemTime::now()
+                                    .duration_since(std::time::UNIX_EPOCH)
+                                    .unwrap_or_default()
+                                    .as_millis() as u64,
+                            ),
+                            status: WorkflowStatus::TimedOut,
+                            node_records: Vec::new(),
+                            outputs: ctx_for_timeout.get_all_outputs().await,
+                            total_wait_time_ms: 0,
+                            context: None,
+                        };
+                        Ok(timed_out_record)
+                    }
+                }
+            }
+            None => parallel_execution.await,
         }
-
-        let duration = start_time.elapsed();
-        execution_record.status = WorkflowStatus::Completed;
-        execution_record.ended_at = Some(
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap_or_default()
-                .as_millis() as u64,
-        );
-
-        execution_record.outputs = ctx.get_all_outputs().await;
-
-        info!(
-            "Layered workflow {} completed in {:?}",
-            graph.name, duration
-        );
-
-        Ok(execution_record)
     }
 }
 
@@ -1658,5 +1763,95 @@ mod tests {
             "branch_b should not observe branch_a input mutation"
         );
         assert_eq!(branch_b.get("seed").and_then(|v| v.as_i64()), Some(7));
+    }
+
+    #[tokio::test]
+    async fn test_execution_timeout_fires() {
+        let config = ExecutorConfig {
+            execution_timeout_ms: Some(100),
+            ..ExecutorConfig::default()
+        };
+        let executor = WorkflowExecutor::new(config);
+
+        let mut graph = WorkflowGraph::new("timeout_wf", "Timeout Workflow");
+        graph.add_node(WorkflowNode::start("start"));
+        graph.add_node(WorkflowNode::task(
+            "slow_task",
+            "Slow Task",
+            |_ctx, _input| async move {
+                sleep(Duration::from_millis(500)).await;
+                Ok(WorkflowValue::String("done".to_string()))
+            },
+        ));
+        graph.add_node(WorkflowNode::end("end"));
+        graph.connect("start", "slow_task");
+        graph.connect("slow_task", "end");
+
+        let result = executor.execute(&graph, WorkflowValue::Null).await.unwrap();
+
+        assert!(
+            matches!(result.status, WorkflowStatus::TimedOut),
+            "Expected TimedOut but got {:?}",
+            result.status
+        );
+    }
+
+    #[tokio::test]
+    async fn test_execution_completes_within_timeout() {
+        let config = ExecutorConfig {
+            execution_timeout_ms: Some(5000),
+            ..ExecutorConfig::default()
+        };
+        let executor = WorkflowExecutor::new(config);
+
+        let mut graph = WorkflowGraph::new("fast_wf", "Fast Workflow");
+        graph.add_node(WorkflowNode::start("start"));
+        graph.add_node(WorkflowNode::task(
+            "quick_task",
+            "Quick Task",
+            |_ctx, _input| async move { Ok(WorkflowValue::String("fast".to_string())) },
+        ));
+        graph.add_node(WorkflowNode::end("end"));
+        graph.connect("start", "quick_task");
+        graph.connect("quick_task", "end");
+
+        let result = executor.execute(&graph, WorkflowValue::Null).await.unwrap();
+
+        assert!(
+            matches!(result.status, WorkflowStatus::Completed),
+            "Expected Completed but got {:?}",
+            result.status
+        );
+    }
+
+    #[tokio::test]
+    async fn test_no_timeout_when_none() {
+        let config = ExecutorConfig {
+            execution_timeout_ms: None,
+            ..ExecutorConfig::default()
+        };
+        let executor = WorkflowExecutor::new(config);
+
+        let mut graph = WorkflowGraph::new("no_timeout_wf", "No Timeout Workflow");
+        graph.add_node(WorkflowNode::start("start"));
+        graph.add_node(WorkflowNode::task(
+            "normal_task",
+            "Normal Task",
+            |_ctx, _input| async move {
+                sleep(Duration::from_millis(50)).await;
+                Ok(WorkflowValue::Int(42))
+            },
+        ));
+        graph.add_node(WorkflowNode::end("end"));
+        graph.connect("start", "normal_task");
+        graph.connect("normal_task", "end");
+
+        let result = executor.execute(&graph, WorkflowValue::Null).await.unwrap();
+
+        assert!(
+            matches!(result.status, WorkflowStatus::Completed),
+            "Expected Completed but got {:?}",
+            result.status
+        );
     }
 }
