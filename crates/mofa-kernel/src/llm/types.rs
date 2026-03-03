@@ -1,8 +1,8 @@
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "lowercase")]
-#[derive(Default)]
+#[non_exhaustive]
 pub enum Role {
     System,
     #[default]
@@ -13,6 +13,7 @@ pub enum Role {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(untagged)]
+#[non_exhaustive]
 pub enum ContentPart {
     Text { text: String },
     Image { image_url: ImageUrl },
@@ -28,6 +29,7 @@ pub struct ImageUrl {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
+#[non_exhaustive]
 pub enum ImageDetail {
     Low,
     High,
@@ -42,6 +44,7 @@ pub struct AudioData {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(untagged)]
+#[non_exhaustive]
 pub enum MessageContent {
     Text(String),
     Parts(Vec<ContentPart>),
@@ -189,7 +192,6 @@ impl Tool {
         description: impl Into<String>,
         parameters: serde_json::Value,
     ) -> Self {
-        let parameters = parameters;
         Self {
             tool_type: "function".to_string(),
             function: FunctionDefinition {
@@ -215,6 +217,7 @@ pub struct FunctionDefinition {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(untagged)]
+#[non_exhaustive]
 pub enum ToolChoice {
     Auto,
     None,
@@ -372,6 +375,7 @@ pub struct Choice {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[non_exhaustive]
 pub enum FinishReason {
     Stop,
     Length,
@@ -442,7 +446,7 @@ pub struct EmbeddingResponse {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(untagged)]
-
+#[non_exhaustive]
 pub enum EmbeddingInput {
     Single(String),
     Multiple(Vec<String>),

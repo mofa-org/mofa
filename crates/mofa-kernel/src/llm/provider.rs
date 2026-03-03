@@ -111,3 +111,64 @@ pub struct ModelCapabilities {
     pub json_mode: bool,
     pub json_schema: bool,
 }
+
+// ─── Blanket InferenceProtocol implementation ──────────────────────────────
+
+/// Blanket implementation of [`crate::llm::irp::InferenceProtocol`] for every
+/// type that implements [`LLMProvider`].
+///
+/// This wires the existing capability flags
+/// (`supports_streaming`, `supports_tools`, `supports_vision`,
+/// `supports_embedding`) from `LLMProvider` into the newer structured
+/// [`crate::llm::irp::InferenceCapabilities`] type, and delegates the IRP
+/// dispatch methods to the provider's own `chat` / `embedding` calls.
+///
+/// Implementors of `LLMProvider` therefore get `InferenceProtocol` for free —
+/// no additional code required.
+///
+/// # Overriding individual methods
+///
+/// Because this is a *blanket* impl you cannot selectively override a single
+/// method for a type that already implements `LLMProvider`.  If you need
+/// fully custom IRP routing, implement `InferenceProtocol` directly on a
+/// newtype wrapper instead.
+#[async_trait]
+impl<T: LLMProvider> super::irp::InferenceProtocol for T {
+    /// Build [`crate::llm::irp::InferenceCapabilities`] from the provider's
+    /// boolean flags.
+    fn capabilities(&self) -> super::irp::InferenceCapabilities {
+        super::irp::InferenceCapabilities {
+            streaming: self.supports_streaming(),
+            tool_calling: self.supports_tools(),
+            multimodal: self.supports_vision(),
+            embedding: self.supports_embedding(),
+            // json_mode / json_schema are not yet surfaced on LLMProvider;
+            // default to false until the trait is extended.
+            json_mode: false,
+            json_schema: false,
+            max_context_tokens: None,
+            max_output_tokens: None,
+        }
+    }
+
+    /// Delegate to [`LLMProvider::chat`] and wrap the result.
+    async fn infer_chat(
+        &self,
+        request: super::types::ChatCompletionRequest,
+    ) -> crate::agent::AgentResult<super::irp::InferenceResponse> {
+        self.chat(request)
+            .await
+            .map(super::irp::InferenceResponse::Chat)
+    }
+
+    /// Delegate embedding request to [`LLMProvider::embedding`] and wrap the
+    /// result.
+    async fn infer_embedding(
+        &self,
+        request: super::types::EmbeddingRequest,
+    ) -> crate::agent::AgentResult<super::irp::InferenceResponse> {
+        self.embedding(request)
+            .await
+            .map(super::irp::InferenceResponse::Embedding)
+    }
+}
