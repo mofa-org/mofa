@@ -736,19 +736,27 @@ impl ExecutionEngine {
                 // Prepare input
                 let input = if step.depends_on.is_empty() {
                     initial_input.clone()
-                } else {
-                    // 使用前一个步骤的输出作为输入
-                    // Use output of the previous step as input
-                    let prev_step = step.depends_on.last().unwrap();
-                    if let Some(prev_result) = results.get(prev_step) {
-                        if let Some(output) = &prev_result.output {
-                            AgentInput::text(output.to_text())
-                        } else {
-                            initial_input.clone()
-                        }
-                    } else {
-                        initial_input.clone()
+                } else if step.depends_on.len() == 1 {
+                    // 单个依赖：直接使用其输出
+                    // Single dependency: use its output directly
+                    let dep = &step.depends_on[0];
+                    match results.get(dep).and_then(|r| r.output.as_ref()) {
+                        Some(output) => AgentInput::text(output.to_text()),
+                        None => initial_input.clone(),
                     }
+                } else {
+                    // 多个依赖：聚合所有输出为 JSON 映射
+                    // Multiple dependencies: aggregate all outputs into a JSON map
+                    let mut merged = serde_json::Map::new();
+                    for dep in &step.depends_on {
+                        let value = results
+                            .get(dep)
+                            .and_then(|r| r.output.as_ref())
+                            .map(|o| serde_json::Value::String(o.to_text()))
+                            .unwrap_or(serde_json::Value::Null);
+                        merged.insert(dep.clone(), value);
+                    }
+                    AgentInput::text(serde_json::Value::Object(merged).to_string())
                 };
 
                 // 执行步骤
@@ -894,5 +902,147 @@ mod tests {
         assert_eq!(options.max_retries, 3);
         assert_eq!(options.retry_delay_ms, 500);
         assert!(!options.tracing_enabled);
+    }
+
+    /// Agent that echoes whatever text input it receives.
+    struct EchoAgent {
+        id: String,
+        capabilities: AgentCapabilities,
+        state: AgentState,
+    }
+
+    impl EchoAgent {
+        fn new(id: &str) -> Self {
+            Self {
+                id: id.to_string(),
+                capabilities: AgentCapabilities::default(),
+                state: AgentState::Created,
+            }
+        }
+    }
+
+    #[async_trait::async_trait]
+    impl MoFAAgent for EchoAgent {
+        fn id(&self) -> &str {
+            &self.id
+        }
+
+        fn name(&self) -> &str {
+            &self.id
+        }
+
+        fn capabilities(&self) -> &AgentCapabilities {
+            &self.capabilities
+        }
+
+        fn state(&self) -> AgentState {
+            self.state.clone()
+        }
+
+        async fn initialize(&mut self, _ctx: &AgentContext) -> AgentResult<()> {
+            self.state = AgentState::Ready;
+            Ok(())
+        }
+
+        async fn execute(
+            &mut self,
+            input: AgentInput,
+            _ctx: &AgentContext,
+        ) -> AgentResult<AgentOutput> {
+            Ok(AgentOutput::text(input.to_text()))
+        }
+
+        async fn shutdown(&mut self) -> AgentResult<()> {
+            self.state = AgentState::Shutdown;
+            Ok(())
+        }
+    }
+
+    #[tokio::test]
+    async fn test_workflow_single_dependency_passes_output() {
+        let registry = Arc::new(AgentRegistry::new());
+
+        let agent_a = Arc::new(RwLock::new(TestAgent::new("agent-a", "output-from-a")));
+        let agent_b = Arc::new(RwLock::new(EchoAgent::new("agent-b")));
+        registry.register(agent_a).await.unwrap();
+        registry.register(agent_b).await.unwrap();
+
+        let workflow = Workflow {
+            id: "wf-single-dep".to_string(),
+            name: "Single Dependency".to_string(),
+            steps: vec![
+                WorkflowStep {
+                    id: "step-a".to_string(),
+                    agent_id: "agent-a".to_string(),
+                    input_transform: None,
+                    depends_on: vec![],
+                },
+                WorkflowStep {
+                    id: "step-b".to_string(),
+                    agent_id: "agent-b".to_string(),
+                    input_transform: None,
+                    depends_on: vec!["step-a".to_string()],
+                },
+            ],
+        };
+
+        let engine = ExecutionEngine::new(registry);
+        let results = engine
+            .execute_workflow(&workflow, AgentInput::text("seed"), ExecutionOptions::default())
+            .await
+            .unwrap();
+
+        // Step B should receive Step A's output directly.
+        let step_b_output = results["step-b"].output.as_ref().unwrap().to_text();
+        assert_eq!(step_b_output, "output-from-a");
+    }
+
+    #[tokio::test]
+    async fn test_workflow_fan_in_aggregates_all_dependency_outputs() {
+        let registry = Arc::new(AgentRegistry::new());
+
+        let agent_a = Arc::new(RwLock::new(TestAgent::new("agent-a", "output-from-a")));
+        let agent_b = Arc::new(RwLock::new(TestAgent::new("agent-b", "output-from-b")));
+        let agent_c = Arc::new(RwLock::new(EchoAgent::new("agent-c")));
+        registry.register(agent_a).await.unwrap();
+        registry.register(agent_b).await.unwrap();
+        registry.register(agent_c).await.unwrap();
+
+        let workflow = Workflow {
+            id: "wf-fan-in".to_string(),
+            name: "Fan-In".to_string(),
+            steps: vec![
+                WorkflowStep {
+                    id: "step-a".to_string(),
+                    agent_id: "agent-a".to_string(),
+                    input_transform: None,
+                    depends_on: vec![],
+                },
+                WorkflowStep {
+                    id: "step-b".to_string(),
+                    agent_id: "agent-b".to_string(),
+                    input_transform: None,
+                    depends_on: vec![],
+                },
+                WorkflowStep {
+                    id: "step-c".to_string(),
+                    agent_id: "agent-c".to_string(),
+                    input_transform: None,
+                    depends_on: vec!["step-a".to_string(), "step-b".to_string()],
+                },
+            ],
+        };
+
+        let engine = ExecutionEngine::new(registry);
+        let results = engine
+            .execute_workflow(&workflow, AgentInput::text("seed"), ExecutionOptions::default())
+            .await
+            .unwrap();
+
+        // Step C should receive a JSON object containing both outputs.
+        let step_c_output = results["step-c"].output.as_ref().unwrap().to_text();
+        let parsed: serde_json::Value = serde_json::from_str(&step_c_output).unwrap();
+        assert_eq!(parsed["step-a"], "output-from-a");
+        assert_eq!(parsed["step-b"], "output-from-b");
     }
 }
