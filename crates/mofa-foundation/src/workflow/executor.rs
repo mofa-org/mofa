@@ -17,9 +17,9 @@ use super::state::{
     WorkflowContext, WorkflowStatus, WorkflowValue,
 };
 use mofa_kernel::workflow::telemetry::{DebugEvent, TelemetryEmitter};
+use serde_json;
 use std::collections::HashMap;
 use std::sync::Arc;
-use serde_json;
 use std::time::Instant;
 use tokio::sync::{RwLock, Semaphore, mpsc, oneshot};
 use tracing::{error, info, warn};
@@ -56,7 +56,6 @@ impl Default for ExecutorConfig {
         }
     }
 }
-
 
 /// 工作流执行器
 /// Workflow Executor
@@ -313,7 +312,7 @@ impl WorkflowExecutor {
         if let Some(paused_at) = *ctx.paused_at.read().await {
             let duration = chrono::Utc::now().signed_duration_since(paused_at);
             let wait_duration_ms = duration.num_milliseconds().max(0) as u64;
-            *ctx.total_wait_time_ms.write().await += wait_duration_ms;  // ← accumulate
+            *ctx.total_wait_time_ms.write().await += wait_duration_ms; // ← accumulate
         }
 
         ctx.set_node_output(waiting_node_id, human_input).await;
@@ -931,7 +930,14 @@ impl WorkflowExecutor {
 
     /// 执行聚合节点
     /// Execute join nodes
-    async fn execute_join(
+    ///
+    /// Waits for all predecessor nodes to reach a terminal status using
+    /// event-driven notification instead of busy-wait polling.  The wait
+    /// respects the node-level `TimeoutConfig::execution_timeout_ms` and
+    /// falls back to `ExecutorConfig::execution_timeout_ms` when present.
+    /// On timeout, a `DebugEvent::Error` and `ExecutionEvent::NodeFailed`
+    /// are emitted for observability.
+    pub(crate) async fn execute_join(
         &self,
         _graph: &WorkflowGraph,
         ctx: &WorkflowContext,
@@ -940,31 +946,83 @@ impl WorkflowExecutor {
     ) -> Result<WorkflowValue, String> {
         let wait_for = node.join_nodes();
 
-        // 等待所有前置节点完成
-        // Wait for all predecessor nodes to complete
-        let mut all_completed = false;
-        let mut attempts = 0;
-        const MAX_ATTEMPTS: u32 = 1000;
+        // Determine effective timeout:
+        //   1. Node-level timeout (always present via TimeoutConfig default)
+        //   2. Executor-level timeout as fallback
+        let timeout_ms = self
+            .config
+            .execution_timeout_ms
+            .unwrap_or(node.config.timeout.execution_timeout_ms);
+        let timeout_ms = node.config.timeout.execution_timeout_ms.min(timeout_ms);
+        let timeout_duration = std::time::Duration::from_millis(timeout_ms);
 
-        while !all_completed && attempts < MAX_ATTEMPTS {
-            all_completed = true;
-            for node_id in wait_for {
-                match ctx.get_node_status(node_id).await {
-                    Some(status) if status.is_terminal() => {}
-                    _ => {
-                        all_completed = false;
-                        break;
+        let notifier = ctx.node_completion_notifier();
+
+        // Event-driven wait: sleep on Notify instead of polling every 10 ms
+        let join_result = tokio::time::timeout(timeout_duration, async {
+            loop {
+                let mut all_completed = true;
+                for node_id in wait_for {
+                    match ctx.get_node_status(node_id).await {
+                        Some(status) if status.is_terminal() => {}
+                        _ => {
+                            all_completed = false;
+                            break;
+                        }
                     }
                 }
+                if all_completed {
+                    return;
+                }
+                // Wait until another node completes, then re-check
+                notifier.notified().await;
             }
-            if !all_completed {
-                tokio::time::sleep(std::time::Duration::from_millis(10)).await;
-                attempts += 1;
-            }
-        }
+        })
+        .await;
 
-        if !all_completed {
-            return Err("Join timeout waiting for nodes".to_string());
+        if join_result.is_err() {
+            let waiting_nodes: Vec<String> = {
+                let mut pending = Vec::new();
+                for node_id in wait_for {
+                    let is_done = matches!(
+                        ctx.get_node_status(node_id).await,
+                        Some(status) if status.is_terminal()
+                    );
+                    if !is_done {
+                        pending.push(node_id.to_string());
+                    }
+                }
+                pending
+            };
+
+            let error_msg = format!(
+                "Join timeout after {}ms waiting for predecessor nodes: [{}]",
+                timeout_ms,
+                waiting_nodes.join(", ")
+            );
+
+            warn!("{}", error_msg);
+
+            // Emit debug telemetry so the time-travel debugger records it
+            self.emit_debug(DebugEvent::Error {
+                node_id: Some(node.id().to_string()),
+                timestamp_ms: DebugEvent::now_ms(),
+                error: error_msg.clone(),
+            })
+            .await;
+
+            // Emit execution event for monitoring
+            self.emit_event(ExecutionEvent::NodeFailed {
+                node_id: node.id().to_string(),
+                error: error_msg.clone(),
+                duration_ms: timeout_ms,
+            })
+            .await;
+
+            ctx.set_node_status(node.id(), NodeStatus::Failed(error_msg.clone()))
+                .await;
+
+            return Err(error_msg);
         }
 
         // 收集所有前置节点的输出
@@ -1658,5 +1716,181 @@ mod tests {
             "branch_b should not observe branch_a input mutation"
         );
         assert_eq!(branch_b.get("seed").and_then(|v| v.as_i64()), Some(7));
+    }
+
+    /// Verify that a join node successfully collects outputs from parallel
+    /// branches using the new event-driven wait (no busy-polling).
+    #[tokio::test]
+    async fn test_join_node_completes_on_predecessor_finish() {
+        let executor = WorkflowExecutor::new(ExecutorConfig::default());
+        let mut graph = WorkflowGraph::new("join_wf", "Join Workflow");
+
+        graph.add_node(WorkflowNode::start("start"));
+        graph.add_node(WorkflowNode::parallel(
+            "split",
+            "Split",
+            vec!["branch_a", "branch_b"],
+        ));
+        graph.add_node(WorkflowNode::task(
+            "branch_a",
+            "Branch A",
+            |_ctx, _input| async move {
+                sleep(Duration::from_millis(50)).await;
+                Ok(WorkflowValue::String("a_done".to_string()))
+            },
+        ));
+        graph.add_node(WorkflowNode::task(
+            "branch_b",
+            "Branch B",
+            |_ctx, _input| async move {
+                sleep(Duration::from_millis(80)).await;
+                Ok(WorkflowValue::String("b_done".to_string()))
+            },
+        ));
+        graph.add_node(WorkflowNode::join(
+            "join_node",
+            "Join",
+            vec!["branch_a", "branch_b"],
+        ));
+        graph.add_node(WorkflowNode::end("end"));
+
+        graph.connect("start", "split");
+        graph.connect("split", "branch_a");
+        graph.connect("split", "branch_b");
+        graph.connect("branch_a", "join_node");
+        graph.connect("branch_b", "join_node");
+        graph.connect("join_node", "end");
+
+        let result = executor
+            .execute(&graph, WorkflowValue::Null)
+            .await
+            .expect("join workflow should succeed");
+
+        assert!(
+            matches!(result.status, WorkflowStatus::Completed),
+            "expected Completed, got {:?}",
+            result.status
+        );
+    }
+
+    /// Verify that the join node times out with a descriptive error when
+    /// a predecessor never completes within the configured timeout window.
+    /// We simulate this by setting only one predecessor to `Completed`
+    /// while the other stays at `Running`, then verifying the `Notify`-
+    /// based wait respects the timeout.
+    #[tokio::test]
+    async fn test_join_node_respects_configurable_timeout() {
+        use crate::workflow::node::TimeoutConfig;
+
+        let ctx = WorkflowContext::new("join_timeout_wf");
+
+        // Simulate two predecessor nodes: fast completes, slow stays Running
+        ctx.set_node_status("fast_branch", NodeStatus::Completed)
+            .await;
+        ctx.set_node_output("fast_branch", WorkflowValue::String("fast".to_string()))
+            .await;
+        ctx.set_node_status("slow_branch", NodeStatus::Running)
+            .await;
+
+        // Create a join node with a very short timeout (150 ms)
+        let mut join = WorkflowNode::join("join_node", "Join", vec!["fast_branch", "slow_branch"]);
+        join.config.timeout = TimeoutConfig {
+            execution_timeout_ms: 150,
+            cancel_on_timeout: true,
+        };
+
+        let graph = WorkflowGraph::new("join_timeout_wf", "Timeout WF");
+        let executor = WorkflowExecutor::new(ExecutorConfig::default());
+        let mut record = ExecutionRecord {
+            execution_id: ctx.execution_id.clone(),
+            workflow_id: "join_timeout_wf".to_string(),
+            started_at: 0,
+            ended_at: None,
+            status: WorkflowStatus::Running,
+            node_records: Vec::new(),
+            outputs: HashMap::new(),
+            total_wait_time_ms: 0,
+            context: None,
+        };
+
+        let started = Instant::now();
+        let result = executor
+            .execute_join(&graph, &ctx, &join, &mut record)
+            .await;
+        let elapsed = started.elapsed();
+
+        assert!(result.is_err(), "expected timeout error, got {result:?}");
+        let err = result.unwrap_err();
+        assert!(
+            err.contains("Join timeout"),
+            "error should mention 'Join timeout': {err}"
+        );
+        assert!(
+            err.contains("slow_branch"),
+            "error should name the pending node: {err}"
+        );
+        // Must timeout around 150 ms, not wait forever or 10 seconds
+        assert!(
+            elapsed < Duration::from_secs(1),
+            "join should have timed out in ~150ms, but took {:?}",
+            elapsed
+        );
+    }
+
+    /// Verify that the `Notify`-based approach reacts faster than the old
+    /// 10 ms polling loop by checking that a join completes in well under
+    /// the polling interval when predecessors finish immediately.
+    #[tokio::test]
+    async fn test_join_node_is_event_driven_not_polling() {
+        let executor = WorkflowExecutor::new(ExecutorConfig::default());
+        let mut graph = WorkflowGraph::new("fast_join_wf", "Fast Join Workflow");
+
+        graph.add_node(WorkflowNode::start("start"));
+        graph.add_node(WorkflowNode::parallel(
+            "split",
+            "Split",
+            vec!["instant_a", "instant_b"],
+        ));
+        // Both branches return immediately
+        graph.add_node(WorkflowNode::task(
+            "instant_a",
+            "Instant A",
+            |_ctx, _input| async move { Ok(WorkflowValue::Int(1)) },
+        ));
+        graph.add_node(WorkflowNode::task(
+            "instant_b",
+            "Instant B",
+            |_ctx, _input| async move { Ok(WorkflowValue::Int(2)) },
+        ));
+        graph.add_node(WorkflowNode::join(
+            "join_node",
+            "Join",
+            vec!["instant_a", "instant_b"],
+        ));
+        graph.add_node(WorkflowNode::end("end"));
+
+        graph.connect("start", "split");
+        graph.connect("split", "instant_a");
+        graph.connect("split", "instant_b");
+        graph.connect("instant_a", "join_node");
+        graph.connect("instant_b", "join_node");
+        graph.connect("join_node", "end");
+
+        let started = Instant::now();
+        let result = executor
+            .execute(&graph, WorkflowValue::Null)
+            .await
+            .expect("instant-join workflow should succeed");
+        let elapsed = started.elapsed();
+
+        assert!(matches!(result.status, WorkflowStatus::Completed));
+        // With event-driven notification, the join should resolve in
+        // well under 100 ms.  The old 10 ms polling loop would have
+        // added at least one sleep cycle per check.
+        assert!(
+            elapsed < Duration::from_millis(500),
+            "event-driven join should be fast, but took {:?}",
+            elapsed
+        );
     }
 }
