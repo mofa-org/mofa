@@ -32,6 +32,7 @@ async-trait = { workspace = true }
 
 # Error handling
 thiserror = { workspace = true }
+error-stack = { workspace = true }
 
 # Utilities
 uuid = { workspace = true }

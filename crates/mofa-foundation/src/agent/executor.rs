@@ -234,7 +234,10 @@ impl AgentExecutor {
     }
 
     /// Register a tool
-    pub async fn register_tool(&self, tool: Arc<dyn mofa_kernel::agent::components::tool::DynTool>) -> AgentResult<()> {
+    pub async fn register_tool(
+        &self,
+        tool: Arc<dyn mofa_kernel::agent::components::tool::DynTool>,
+    ) -> AgentResult<()> {
         let mut tools = self.tools.write().await;
         tools.register(tool)
     }
@@ -398,9 +401,21 @@ impl AgentExecutor {
                     let result = {
                         let tools_guard = self.tools.read().await;
                         if let Some(tool) = tools_guard.get(&tool_call.name) {
-                            match tool.execute_dynamic(tool_call.arguments.clone(), &AgentContext::new("executor")).await {
-                                Ok(out) => mofa_kernel::agent::components::tool::ToolResult::success(out),
-                                Err(e) => mofa_kernel::agent::components::tool::ToolResult::failure(e.to_string()),
+                            match tool
+                                .execute_dynamic(
+                                    tool_call.arguments.clone(),
+                                    &AgentContext::new("executor"),
+                                )
+                                .await
+                            {
+                                Ok(out) => {
+                                    mofa_kernel::agent::components::tool::ToolResult::success(out)
+                                }
+                                Err(e) => {
+                                    mofa_kernel::agent::components::tool::ToolResult::failure(
+                                        e.to_string(),
+                                    )
+                                }
                             }
                         } else {
                             return Err(AgentError::ExecutionFailed(format!(

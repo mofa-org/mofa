@@ -11,6 +11,7 @@ use thiserror::Error;
 /// Prompt 模板错误
 /// Prompt template errors
 #[derive(Debug, Error)]
+#[non_exhaustive]
 pub enum PromptError {
     /// 模板未找到
     /// Template not found
@@ -50,9 +51,24 @@ pub enum PromptError {
     LockPoisoned(String),
 }
 
-/// Prompt 结果类型
-/// Prompt result type
+/// Plain result alias for prompt operations (backward-compatible).
 pub type PromptResult<T> = Result<T, PromptError>;
+
+/// Error-stack–backed result alias for prompt operations.
+pub type PromptReport<T> = ::std::result::Result<T, error_stack::Report<PromptError>>;
+
+/// Extension trait to convert [`PromptResult<T>`] into [`PromptReport<T>`].
+pub trait IntoPromptReport<T> {
+    /// Wrap the error in an `error_stack::Report`.
+    fn into_report(self) -> PromptReport<T>;
+}
+
+impl<T> IntoPromptReport<T> for PromptResult<T> {
+    #[inline]
+    fn into_report(self) -> PromptReport<T> {
+        self.map_err(error_stack::Report::new)
+    }
+}
 
 /// 变量类型
 /// Variable types
