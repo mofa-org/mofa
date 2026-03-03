@@ -102,6 +102,11 @@ impl ToolRegistry {
         source: ToolSource,
     ) -> AgentResult<()> {
         let name = tool.name().to_string();
+        if self.tools.contains_key(&name) {
+            return Err(AgentError::RegistrationFailed(format!(
+                "Tool '{name}' is already registered",
+            )));
+        }
         self.sources.insert(name.clone(), source);
         self.tools.insert(name, tool);
         Ok(())
@@ -571,5 +576,26 @@ mod tests {
             .expect_err("reload should fail");
         assert!(matches!(err, AgentError::NotFound(_)));
         assert!(err.to_string().contains("Plugin loader not registered"));
+    }
+
+    #[tokio::test]
+    async fn register_with_source_rejects_duplicate_tool_names() {
+        let mut registry = ToolRegistry::new();
+
+        registry
+            .register_with_source(TestTool::new("dup_tool").into_dynamic(), ToolSource::Builtin)
+            .unwrap();
+
+        let err = registry
+            .register_with_source(TestTool::new("dup_tool").into_dynamic(), ToolSource::Dynamic)
+            .expect_err("duplicate registration should fail");
+
+        assert!(matches!(err, AgentError::RegistrationFailed(_)));
+        assert!(err.to_string().contains("already registered"));
+        assert_eq!(registry.count(), 1);
+        assert!(matches!(
+            registry.get_source("dup_tool"),
+            Some(ToolSource::Builtin)
+        ));
     }
 }

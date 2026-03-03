@@ -527,25 +527,25 @@ async fn run_workflow_with_events() -> Result<(), Box<dyn std::error::Error>> {
         let mut events = Vec::new();
         while let Some(event) = event_rx.recv().await {
             match &event {
-                ExecutionEvent::WorkflowStarted { workflow_id, execution_id } => {
-                    info!("  [EVENT] Workflow started: {} ({})", workflow_id, execution_id);
-                    //   [EVENT] Workflow started: {} ({})
+                ExecutionEvent::WorkflowStarted { workflow_id, .. } => {
+                    info!("  [EVENT] Workflow started: {}", workflow_id);
+                    //   [EVENT] Workflow started: {}
                 }
-                ExecutionEvent::NodeStarted { node_id } => {
+                ExecutionEvent::NodeStarted { node_id, .. } => {
                     info!("  [EVENT] Node started: {}", node_id);
                     //   [EVENT] Node started: {}
                 }
-                ExecutionEvent::NodeCompleted { node_id, result } => {
-                    info!("  [EVENT] Node completed: {} - {:?}", node_id, result.status);
-                    //   [EVENT] Node completed: {} - {:?}
+                ExecutionEvent::NodeCompleted { node_id, duration_ms, .. } => {
+                    info!("  [EVENT] Node completed: {} ({}ms)", node_id, duration_ms);
+                    //   [EVENT] Node completed: {} ({}ms)
                 }
                 ExecutionEvent::CheckpointCreated { label } => {
                     info!("  [EVENT] Checkpoint created: {}", label);
                     //   [EVENT] Checkpoint created: {}
                 }
-                ExecutionEvent::WorkflowCompleted { workflow_id, status, .. } => {
-                    info!("  [EVENT] Workflow completed: {} - {:?}", workflow_id, status);
-                    //   [EVENT] Workflow completed: {} - {:?}
+                ExecutionEvent::WorkflowCompleted { workflow_id, .. } => {
+                    info!("  [EVENT] Workflow completed: {}", workflow_id);
+                    //   [EVENT] Workflow completed: {}
                 }
                 _ => {}
             }
