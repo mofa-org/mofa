@@ -8,8 +8,8 @@ use mofa_kernel::agent::error::{AgentError, AgentResult};
 use mofa_kernel::rag::{DocumentChunk, SearchResult, SimilarityMetric, VectorStore};
 use qdrant_client::Qdrant;
 use qdrant_client::qdrant::{
-    CountPointsBuilder, CreateCollectionBuilder, DeletePointsBuilder, Distance, PointStruct,
-    PointsIdsList, QueryPointsBuilder, UpsertPointsBuilder, VectorParamsBuilder,
+    CountPointsBuilder, CreateCollectionBuilder, DeletePointsBuilder, Distance, GetPointsBuilder,
+    PointStruct, PointsIdsList, QueryPointsBuilder, UpsertPointsBuilder, VectorParamsBuilder,
 };
 use std::collections::HashMap;
 use std::hash::{Hash, Hasher};
@@ -270,6 +270,22 @@ impl VectorStore for QdrantVectorStore {
 
     async fn delete(&mut self, id: &str) -> AgentResult<bool> {
         let point_id = string_id_to_u64(id);
+
+        // Check if the point exists before attempting deletion.
+        let existing = self
+            .client
+            .get_points(
+                GetPointsBuilder::new(&self.collection_name, vec![point_id.into()])
+                    .with_payload(false)
+                    .with_vectors(false),
+            )
+            .await
+            .map_err(|e| AgentError::Internal(format!("Qdrant get_points failed: {e}")))?;
+
+        if existing.result.is_empty() {
+            return Ok(false);
+        }
+
         self.client
             .delete_points(
                 DeletePointsBuilder::new(&self.collection_name)
