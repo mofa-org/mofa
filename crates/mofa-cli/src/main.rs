@@ -381,6 +381,20 @@ async fn run_command(cli: Cli) -> CliResult<()> {
             }
         },
 
+        Some(Commands::Vibe { action }) => match action {
+            cli::VibeCommands::Flow {
+                llm,
+                output,
+                requirement,
+            } => {
+                commands::vibe::run_flow(
+                    llm.as_deref(),
+                    output.as_deref(),
+                    requirement.as_deref(),
+                )?;
+            }
+        },
+
         None => {
             // Should have been handled by TUI check above
             // If we get here, show help
@@ -398,7 +412,7 @@ async fn run_command(cli: Cli) -> CliResult<()> {
 fn normalize_legacy_output_flags(args: &mut [String]) {
     const TOP_LEVEL_COMMANDS: &[&str] = &[
         "new", "init", "build", "run", "dataflow", "generate", "info", "db", "agent", "config",
-        "plugin", "session", "tool", "rag",
+        "plugin", "session", "tool", "rag", "vibe",
     ];
 
     let top_command_index = args

@@ -139,6 +139,12 @@ pub enum Commands {
         #[command(subcommand)]
         action: RagCommands,
     },
+
+    /// Vibe code and flow generation commands
+    Vibe {
+        #[command(subcommand)]
+        action: VibeCommands,
+    },
 }
 
 /// Generate subcommands
@@ -612,6 +618,25 @@ pub enum RagCommands {
         /// Qdrant collection name.
         #[arg(long, default_value = "mofa_documents")]
         qdrant_collection: String,
+    },
+}
+
+/// Vibe generation subcommands
+#[derive(Subcommand)]
+pub enum VibeCommands {
+    /// Generate a dataflow from a natural language requirement
+    Flow {
+        /// LLM model label to embed in generated metadata
+        #[arg(long)]
+        llm: Option<String>,
+
+        /// Output path for the generated dataflow YAML
+        #[arg(short, long)]
+        output: Option<PathBuf>,
+
+        /// Requirement text (if omitted, prompt interactively)
+        #[arg(short = 'r', long)]
+        requirement: Option<String>,
     },
 }
 
