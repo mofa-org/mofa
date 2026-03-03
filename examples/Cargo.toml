@@ -43,6 +43,9 @@ members = [
     "context_compression",
     "context_window_demo",
     "admission_gate_demo",
+    "security/secure_agent",
+    "security/rbac_only",
+    "security/pii_only",
 ]
 
 [workspace.package]
