@@ -338,6 +338,20 @@ impl ReActAgent {
         }
     }
 
+    /// 使用 LLM、配置和初始工具创建
+    /// Create with LLM, config, and initial tools
+    pub fn with_tools(
+        llm: Arc<LLMAgent>,
+        config: ReActConfig,
+        tools: HashMap<String, Arc<dyn ReActTool>>,
+    ) -> Self {
+        Self {
+            llm,
+            tools: Arc::new(RwLock::new(tools)),
+            config,
+        }
+    }
+
     /// 注册工具
     /// Register tool
     pub async fn register_tool(&self, tool: Arc<dyn ReActTool>) {
@@ -679,19 +693,14 @@ impl ReActAgentBuilder {
             .llm
             .ok_or_else(|| LLMError::ConfigError("LLM agent not set".to_string()))?;
 
-        let agent = ReActAgent::new(llm, self.config);
+        // 同步构造工具字典，避免 tokio::spawn 导致的竞态条件
+        // Construct tool map synchronously to avoid tokio::spawn race condition
+        let mut tool_map = HashMap::new();
+        for tool in self.tools {
+            tool_map.insert(tool.name().to_string(), tool);
+        }
 
-        // 在运行时注册工具
-        // Register tools at runtime
-        let tools = self.tools;
-        let agent_tools = agent.tools.clone();
-
-        tokio::spawn(async move {
-            let mut tool_map = agent_tools.write().await;
-            for tool in tools {
-                tool_map.insert(tool.name().to_string(), tool);
-            }
-        });
+        let agent = ReActAgent::with_tools(llm, self.config, tool_map);
 
         Ok(agent)
     }
@@ -751,5 +760,53 @@ mod tests {
         assert_eq!(config.max_iterations, 5);
         assert_eq!(config.temperature, 0.5);
         assert!(!config.verbose);
+    }
+
+    /// 验证 `build()` 修复了竞态条件。
+    /// Verify that `build()` fixes the race condition.
+    ///
+    /// 在修复之前，`build()` 使用 `tokio::spawn` 注册工具，导致工具不会立即生效。
+    /// Now we construct the map synchronously, so tools must be available immediately.
+    #[tokio::test]
+    async fn test_build_sync_tools_available() {
+        struct DummyTool;
+
+        #[async_trait::async_trait]
+        impl ReActTool for DummyTool {
+            fn name(&self) -> &str {
+                "dummy"
+            }
+            fn description(&self) -> &str {
+                "desc"
+            }
+            async fn execute(&self, _input: &str) -> Result<String, String> {
+                Ok("ok".to_string())
+            }
+        }
+
+        // We can't easily construct a real LLMAgent without a provider,
+        // but we can just use the internal methods directly to test the builder logic.
+        let llm = Arc::new(
+            crate::llm::LLMAgentBuilder::new()
+                .with_provider(Arc::new(crate::llm::openai::OpenAIProvider::with_config(
+                    crate::llm::openai::OpenAIConfig::new("dummy".to_string()),
+                )))
+                .build(),
+        );
+
+        let agent = ReActAgent::builder()
+            .with_llm(llm)
+            .with_tool(Arc::new(DummyTool))
+            .build()
+            .expect("build should succeed");
+
+        // Immediately check — should be 1, because token::spawn is no longer used
+        let tools = agent.get_tools().await;
+        assert_eq!(
+            tools.len(),
+            1,
+            "FIX CONFIRMED: tools are available immediately after build() is called synchronously."
+        );
+        assert_eq!(tools[0].name(), "dummy");
     }
 }
