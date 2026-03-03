@@ -1404,9 +1404,14 @@ mod tests {
         );
     }
 
+    // ── Regression test for issue #796 ──
+
+    /// Regression test: when a Command's route key AND update keys do not
+    /// match any conditional route, the router returns an error.
     #[tokio::test]
-    async fn test_conditional_routing_no_match_returns_error_invoke() {
-        let mut graph = StateGraphImpl::<JsonState>::new("route_no_match");
+    async fn test_unmatched_conditional_route_invoke_error() {
+        // ── Build a minimal graph with two conditional branches ──
+        let mut graph = StateGraphImpl::<JsonState>::new("unmatched_route_invoke");
 
         let mut routes = HashMap::new();
         routes.insert("approve".to_string(), "approved".to_string());
@@ -1417,8 +1422,12 @@ mod tests {
                 "router",
                 Box::new(StaticCommandNode {
                     name: "router".to_string(),
-                    // No route value set, and update key "unknown" matches no route
-                    command: Command::new().update("unknown", json!(true)).continue_(),
+                    // Neither the explicit route key ("nonexistent") nor the
+                    // update key ("unrelated") matches any defined route.
+                    command: Command::new()
+                        .route("nonexistent")
+                        .update("unrelated", json!(true))
+                        .continue_(),
                 }),
             )
             .add_node(
@@ -1440,10 +1449,16 @@ mod tests {
             .add_edge("approved", END)
             .add_edge("rejected", END);
 
-        let compiled = graph.compile().unwrap();
+        let compiled = graph
+            .compile()
+            .expect("graph with valid structure should compile");
         let result = compiled.invoke(JsonState::new(), None).await;
 
-        assert!(result.is_err(), "invoke should return Err when no conditional route matches");
+        // Issue #796: the implementation now returns an error when no route matches
+        assert!(
+            result.is_err(),
+            "invoke should return Err when no conditional route matches"
+        );
         let err_msg = result.unwrap_err().to_string();
         assert!(
             err_msg.contains("No conditional route matched"),
@@ -1452,9 +1467,10 @@ mod tests {
         );
     }
 
+    /// Same scenario as above but exercised through the `stream()` path.
     #[tokio::test]
-    async fn test_conditional_routing_no_match_returns_error_stream() {
-        let mut graph = StateGraphImpl::<JsonState>::new("route_no_match_stream");
+    async fn test_unmatched_conditional_route_stream_error() {
+        let mut graph = StateGraphImpl::<JsonState>::new("unmatched_route_stream");
 
         let mut routes = HashMap::new();
         routes.insert("approve".to_string(), "approved".to_string());
@@ -1465,7 +1481,10 @@ mod tests {
                 "router",
                 Box::new(StaticCommandNode {
                     name: "router".to_string(),
-                    command: Command::new().update("unknown", json!(true)).continue_(),
+                    command: Command::new()
+                        .route("nonexistent")
+                        .update("unrelated", json!(true))
+                        .continue_(),
                 }),
             )
             .add_node(
@@ -1487,9 +1506,12 @@ mod tests {
             .add_edge("approved", END)
             .add_edge("rejected", END);
 
-        let compiled = graph.compile().unwrap();
+        let compiled = graph
+            .compile()
+            .expect("graph with valid structure should compile");
         let mut stream = compiled.stream(JsonState::new(), None);
 
+        // Issue #796: the implementation now returns an error when no route matches
         let mut got_error = false;
         while let Some(event) = stream.next().await {
             if let Ok(StreamEvent::Error { error, .. }) = event {
@@ -1502,6 +1524,9 @@ mod tests {
             }
         }
 
-        assert!(got_error, "stream should emit an error event when no conditional route matches");
+        assert!(
+            got_error,
+            "stream should emit an error event when no conditional route matches"
+        );
     }
 }
