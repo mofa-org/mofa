@@ -114,6 +114,8 @@ pub mod kernel {
     }
     pub mod hitl {
         pub use mofa_kernel::hitl::*;
+    pub mod error {
+        pub use mofa_kernel::error::*;
     }
 
     // ---------------------------------------------------------------------
@@ -123,10 +125,12 @@ pub mod kernel {
         AgentCapabilities, AgentCapabilitiesBuilder, AgentContext, AgentError, AgentFactory,
         AgentInput, AgentLifecycle, AgentMessage as CoreAgentMessage, AgentMessaging,
         AgentMetadata, AgentOutput, AgentPluginSupport, AgentRequirements,
-        AgentRequirementsBuilder, AgentResult, AgentState, AgentStats, ChatCompletionRequest,
-        ChatCompletionResponse, ChatMessage, ContextConfig, CoordinationPattern, Coordinator,
-        DynAgent, ErrorCategory, ErrorContext, EventBuilder, EventBus, GlobalError, GlobalEvent,
-        GlobalMessage, GlobalResult, HealthStatus, InputType, InterruptResult, LLMProvider, Memory,
+        AgentRequirementsBuilder, AgentReport, AgentResult, AgentState, AgentStats,
+        ChatCompletionRequest, ChatCompletionResponse, ChatMessage, ContextConfig,
+        CoordinationPattern, Coordinator, DynAgent, ErrorCategory, ErrorContext, EventBuilder,
+        EventBus, GlobalError, GlobalEvent, GlobalMessage, GlobalReport, GlobalResult,
+        HealthStatus, InputType, IntoAgentReport, IntoGlobalReport, InterruptResult, LLMProvider,
+        Memory,
         MemoryItem, MemoryStats, MemoryValue, Message, MessageContent, MessageMetadata,
         MessageRole, MoFAAgent, OutputContent, OutputType, Reasoner, ReasoningResult,
         ReasoningStep, ReasoningStepType, ReasoningStrategy, TokenUsage, Tool, ToolCall,
@@ -167,6 +171,8 @@ pub mod kernel {
         ReviewRequest, ReviewRequestId, ReviewResponse, ReviewStatus, ReviewType, StoreError,
         TelemetrySnapshot,
     };
+    // Crate-level error and result types
+    pub use mofa_kernel::error::{IntoKernelReport, KernelError, KernelResult};
 }
 
 // =============================================================================
@@ -208,6 +214,11 @@ pub mod runtime {
     };
 
     pub use mofa_runtime::config::FrameworkConfig;
+
+    /// Runtime-level RAG indexing/query hooks.
+    pub mod rag {
+        pub use mofa_runtime::rag::*;
+    }
 
     // Dora runtime (only available with dora feature)
     #[cfg(feature = "dora")]
