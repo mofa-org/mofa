@@ -1708,7 +1708,8 @@ mod tests {
         snapshot
             .custom
             .insert("foo_bar".to_string(), MetricValue::Integer(2));
-        let output = render_snapshot(&snapshot);
+        let mut output = String::new();
+        render_custom_metrics(&mut output, &snapshot);
 
         assert!(output.contains("# HELP foo_bar "));
         assert!(output.contains("# HELP foo_bar_1 "));
