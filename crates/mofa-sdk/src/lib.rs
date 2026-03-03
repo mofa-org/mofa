@@ -112,6 +112,9 @@ pub mod kernel {
     pub mod storage {
         pub use mofa_kernel::storage::*;
     }
+    pub mod hitl {
+        pub use mofa_kernel::hitl::*;
+    }
 
     // ---------------------------------------------------------------------
     // Curated, commonly-used exports
@@ -156,6 +159,14 @@ pub mod kernel {
 
     // Storage trait
     pub use mofa_kernel::Storage;
+
+    // HITL (Human-in-the-Loop) types - see also crate::hitl module
+    pub use mofa_kernel::hitl::{
+        AlwaysReviewPolicy, Change, Diff, ExecutionStep, ExecutionTrace, HitlError, HitlResult,
+        NeverReviewPolicy, PerformanceData, ReviewContext, ReviewMetadata, ReviewPolicy,
+        ReviewRequest, ReviewRequestId, ReviewResponse, ReviewStatus, ReviewType, StoreError,
+        TelemetrySnapshot,
+    };
 }
 
 // =============================================================================
@@ -287,6 +298,7 @@ pub mod foundation {
     pub use super::react;
     pub use super::secretary;
     pub use super::workflow;
+    // Note: HITL is available as top-level module `crate::hitl`, not `crate::foundation::hitl`
 }
 
 // =============================================================================
