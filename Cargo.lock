@@ -4889,6 +4889,7 @@ dependencies = [
 name = "mofa-cli"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
  "assert_cmd",
  "async-trait",
  "chrono",
@@ -4973,11 +4974,13 @@ dependencies = [
  "chrono",
  "config",
  "futures",
+ "hex",
  "infer",
  "lazy_static",
  "mofa-extra",
  "mofa-kernel",
  "mofa-plugins",
+ "mofa-runtime",
  "once_cell",
  "qdrant-client",
  "ractor",
@@ -4989,6 +4992,7 @@ dependencies = [
  "serde",
  "serde_json",
  "serde_yaml",
+ "sha2",
  "sqlx",
  "sysinfo 0.31.4",
  "tempfile",
@@ -5049,6 +5053,7 @@ dependencies = [
  "rust-embed",
  "serde",
  "serde_json",
+ "sha2",
  "sysinfo 0.32.1",
  "thiserror 1.0.69",
  "tokio",
