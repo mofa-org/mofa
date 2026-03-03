@@ -1,4 +1,5 @@
 use super::*;
+use reqwest::redirect::Policy;
 use reqwest::Client;
 use serde_json::json;
 use std::net::ToSocketAddrs;
@@ -49,8 +50,11 @@ impl HttpRequestTool {
                 }),
                 requires_confirmation: true,
             },
+            // SECURITY: Disable all redirects to prevent SSRF via 302 redirect
+            // to internal/cloud-metadata endpoints (e.g., 169.254.169.254).
             client: Client::builder()
                 .timeout(std::time::Duration::from_secs(30))
+                .redirect(Policy::none())
                 .build()
                 .unwrap(),
         }
@@ -177,6 +181,24 @@ impl ToolExecutor for HttpRequestTool {
         let response = request.send().await
             .map_err(|e| mofa_kernel::plugin::PluginError::ExecutionFailed(e.to_string()))?;
         let status = response.status().as_u16();
+
+        // SECURITY: Reject any 3xx redirect response. Since we set Policy::none(),
+        // reqwest will not auto-follow redirects, but we still surface a clear error
+        // so callers understand why the request was not completed.
+        if (300..400).contains(&status) {
+            let location = response
+                .headers()
+                .get("location")
+                .and_then(|v| v.to_str().ok())
+                .unwrap_or("<unknown>")
+                .to_string();
+            return Err(mofa_kernel::plugin::PluginError::ExecutionFailed(format!(
+                "Security policy violation: HTTP redirect (status {}) to '{}' is blocked. \
+                 Redirects are disabled to prevent SSRF attacks.",
+                status, location
+            )));
+        }
+
         let headers: std::collections::HashMap<String, String> = response
             .headers()
             .iter()

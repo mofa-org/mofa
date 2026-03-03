@@ -42,7 +42,11 @@ impl ShellCommandTool {
         }
     }
 
-    /// Create with default allowed commands
+    /// Create with default allowed commands.
+    ///
+    /// SECURITY: `find`, `xargs`, `awk`, `perl`, `python*`, `ruby`, `env`, and
+    /// `bash`/`sh`/`zsh` are intentionally excluded because they can spawn
+    /// arbitrary sub-processes (e.g., `find -exec`, `xargs sh`, `awk system()`).
     pub fn new_with_defaults() -> Self {
         Self::new(vec![
             "ls".to_string(),
@@ -55,7 +59,6 @@ impl ShellCommandTool {
             "tail".to_string(),
             "wc".to_string(),
             "grep".to_string(),
-            "find".to_string(),
         ])
     }
 
@@ -63,9 +66,52 @@ impl ShellCommandTool {
         if self.allowed_commands.is_empty() {
             return false; // Default deny if no whitelist
         }
-        self.allowed_commands
-            .iter()
-            .any(|allowed| command == allowed || command.starts_with(&format!("{} ", allowed)))
+        // SECURITY: Only exact-match the base command name. The previous
+        // `starts_with("{cmd} ")` check allowed embedding extra commands
+        // after a space; we now require the command field to be a bare binary name.
+        self.allowed_commands.iter().any(|allowed| command == allowed)
+    }
+
+    /// SECURITY: Reject arguments that contain shell meta-characters or
+    /// sub-process invocation flags. This is a defence-in-depth measure:
+    /// even if the base command is whitelisted, a crafted argument list
+    /// must not be able to escape into a shell.
+    fn sanitize_args(args: &[String]) -> Result<(), String> {
+        // Characters that can trigger shell expansion or command chaining
+        // when a parent shell is involved, or that have special semantics
+        // in commands like `find -exec`.
+        const DANGEROUS_CHARS: &[char] = &[
+            '|', ';', '&', '$', '`', '>', '<', '(', ')', '{', '}', '\n',
+        ];
+
+        // Flags that allow sub-process execution in common Unix utilities.
+        const DANGEROUS_FLAGS: &[&str] = &[
+            "-exec", "-execdir", "-ok", "-okdir",  // find
+            "--exec",                                 // various
+        ];
+
+        for (i, arg) in args.iter().enumerate() {
+            // Reject any argument containing dangerous shell characters.
+            if let Some(ch) = arg.chars().find(|c| DANGEROUS_CHARS.contains(c)) {
+                return Err(format!(
+                    "Security policy violation: argument [{}] ('{}') contains \
+                     forbidden character '{}'.",
+                    i, arg, ch
+                ));
+            }
+
+            // Reject known sub-process execution flags (case-insensitive).
+            let lower = arg.to_ascii_lowercase();
+            if DANGEROUS_FLAGS.iter().any(|f| lower == *f) {
+                return Err(format!(
+                    "Security policy violation: argument [{}] ('{}') is a \
+                     forbidden execution flag.",
+                    i, arg
+                ));
+            }
+        }
+
+        Ok(())
     }
 }
 
@@ -97,6 +143,11 @@ impl ToolExecutor for ShellCommandTool {
                     .collect()
             })
             .unwrap_or_default();
+
+        // SECURITY: Sanitize every argument before spawning the process.
+        Self::sanitize_args(&args).map_err(|msg| {
+            mofa_kernel::plugin::PluginError::ExecutionFailed(msg)
+        })?;
 
         let mut cmd = Command::new(command);
         cmd.args(&args);
