@@ -8,18 +8,41 @@ use std::fmt;
 
 /// Priority level for an inference request.
 ///
-/// Higher-priority requests are preferred during admission control
-/// and may preempt deferred lower-priority requests.
+/// Controls how the [`InferenceOrchestrator`] handles the request under memory
+/// pressure. **All levels are actively enforced** by admission control:
+///
+/// | Level | Admission behaviour |
+/// |-------|---------------------|
+/// | `Low` / `Normal` | Standard dual-threshold hysteresis — may be **Deferred** when usage is between `defer_threshold` (0.75) and `reject_threshold` (0.90). |
+/// | `High` | Bypasses the Deferred band — admitted directly if usage ≤ `reject_threshold`. |
+/// | `Critical` | Same as `High`; additionally triggers priority-weighted LRU eviction to free space before rejecting. |
+///
+/// # Eviction ordering
+///
+/// When `evict_lru()` is invoked to free space for a new model load, models
+/// that were loaded for **lower-priority** sessions are candidates for eviction
+/// before models loaded for **higher-priority** sessions, regardless of recency.
+///
+/// [`InferenceOrchestrator`]: crate::inference::orchestrator::InferenceOrchestrator
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum RequestPriority {
-    /// Background tasks, batch processing
+    /// Background tasks and batch processing.
+    ///
+    /// Requests may be Deferred or evicted first under memory pressure.
     Low,
-    /// Default priority for interactive requests
+    /// Default priority for interactive requests.
+    ///
+    /// Subject to standard dual-threshold hysteresis admission control.
     #[default]
     Normal,
-    /// Latency-sensitive requests (e.g., real-time chat)
+    /// Latency-sensitive requests (e.g., real-time chat, voice pipelines).
+    ///
+    /// Bypasses the Deferred band — admitted if memory usage ≤ `reject_threshold`.
     High,
-    /// System-critical requests that should never be deferred
+    /// System-critical requests that must never be unnecessarily deferred.
+    ///
+    /// Bypasses the Deferred band and triggers priority-weighted eviction to
+    /// free space before falling back to cloud or rejecting outright.
     Critical,
 }
 
@@ -69,7 +92,10 @@ pub struct InferenceRequest {
     pub prompt: String,
     /// Estimated memory required to load this model (in MB)
     pub required_memory_mb: usize,
-    /// Request priority for admission control
+    /// Request priority for admission control.
+    ///
+    /// Determines how the orchestrator handles this request under memory pressure.
+    /// See [`RequestPriority`] for detailed semantics of each level.
     pub priority: RequestPriority,
     /// Preferred precision level (orchestrator may downgrade under pressure)
     pub preferred_precision: Precision,
