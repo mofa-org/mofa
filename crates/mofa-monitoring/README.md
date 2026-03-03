@@ -13,11 +13,34 @@ mofa-monitoring = "0.1"
 
 - Web-based dashboard for monitoring agent execution
 - Metrics collection and visualization
+- Prometheus-compatible metrics endpoint at `GET /metrics`
 - Distributed tracing support with OpenTelemetry
 - Real-time agent status monitoring
 - Health checks and alerts
 - HTTP server for dashboard UI
 - Static file embedding for frontend assets
+
+## Prometheus Endpoint
+
+`DashboardServer` now serves metrics in Prometheus text exposition format on:
+
+```text
+GET /metrics
+```
+
+The exporter maintains a background cache worker (`refresh_interval` default:
+`1s`) so scrape handlers return cached payloads instead of rebuilding metrics on
+every request.
+
+## Optional OTLP Metrics Export
+
+Enable the `otlp-metrics` feature to use the native OpenTelemetry OTLP
+metrics push exporter:
+
+```toml
+[dependencies]
+mofa-monitoring = { version = "0.1", features = ["otlp-metrics"] }
+```
 
 ## Documentation
 

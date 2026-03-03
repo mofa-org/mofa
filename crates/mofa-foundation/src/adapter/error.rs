@@ -1,9 +1,32 @@
-//! Error types for adapter registry and resolution
+//! Typed errors and result aliases for adapter registry and resolution.
 
+use error_stack::Report;
 use thiserror::Error;
 
-/// Errors that can occur during adapter operations
+// ── Adapter ──────────────────────────────────────────────────────────────────
+
+/// Result alias for adapter operations (backward-compatible).
+pub type AdapterResult<T> = ::std::result::Result<T, AdapterError>;
+
+/// Error-stack–backed result alias for adapter operations.
+pub type AdapterReport<T> = ::std::result::Result<T, Report<AdapterError>>;
+
+/// Extension trait to convert [`AdapterResult<T>`] into [`AdapterReport<T>`].
+pub trait IntoAdapterReport<T> {
+    /// Wrap the error in an `error_stack::Report`.
+    fn into_report(self) -> AdapterReport<T>;
+}
+
+impl<T> IntoAdapterReport<T> for AdapterResult<T> {
+    #[inline]
+    fn into_report(self) -> AdapterReport<T> {
+        self.map_err(Report::new)
+    }
+}
+
+/// Errors that can occur during adapter operations.
 #[derive(Debug, Error)]
+#[non_exhaustive]
 pub enum AdapterError {
     #[error("Adapter with id '{0}' already registered")]
     AlreadyRegistered(String),
@@ -18,8 +41,30 @@ pub enum AdapterError {
     ResolutionFailed(String),
 }
 
-/// Errors that can occur during adapter resolution
+// ── Resolution ──────────────────────────────────────────────────────────────
+
+/// Result alias for resolution operations (backward-compatible).
+pub type ResolutionResult<T> = ::std::result::Result<T, ResolutionError>;
+
+/// Error-stack–backed result alias for resolution operations.
+pub type ResolutionReport<T> = ::std::result::Result<T, Report<ResolutionError>>;
+
+/// Extension trait to convert [`ResolutionResult<T>`] into [`ResolutionReport<T>`].
+pub trait IntoResolutionReport<T> {
+    /// Wrap the error in an `error_stack::Report`.
+    fn into_report(self) -> ResolutionReport<T>;
+}
+
+impl<T> IntoResolutionReport<T> for ResolutionResult<T> {
+    #[inline]
+    fn into_report(self) -> ResolutionReport<T> {
+        self.map_err(Report::new)
+    }
+}
+
+/// Errors that can occur during adapter resolution.
 #[derive(Debug, Error)]
+#[non_exhaustive]
 pub enum ResolutionError {
     #[error("No compatible adapter found for the given requirements")]
     NoCompatibleAdapter,
@@ -56,15 +101,9 @@ pub enum RejectionReason {
         supported: Vec<String>,
     },
     /// Hardware constraints not met
-    HardwareConstraint {
-        constraint: String,
-        reason: String,
-    },
+    HardwareConstraint { constraint: String, reason: String },
     /// Memory requirements not met
-    MemoryInsufficient {
-        required_mb: u64,
-        available_mb: u64,
-    },
+    MemoryInsufficient { required_mb: u64, available_mb: u64 },
     /// Priority is too low
     PriorityTooLow {
         required_min_priority: i32,
@@ -75,21 +114,30 @@ pub enum RejectionReason {
 impl std::fmt::Display for RejectionReason {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            RejectionReason::ModalityMismatch { required, supported } => {
+            RejectionReason::ModalityMismatch {
+                required,
+                supported,
+            } => {
                 write!(
                     f,
                     "Modality mismatch: required '{}', supported {:?}",
                     required, supported
                 )
             }
-            RejectionReason::FormatMismatch { required, supported } => {
+            RejectionReason::FormatMismatch {
+                required,
+                supported,
+            } => {
                 write!(
                     f,
                     "Format mismatch: required '{}', supported {:?}",
                     required, supported
                 )
             }
-            RejectionReason::QuantizationMismatch { required, supported } => {
+            RejectionReason::QuantizationMismatch {
+                required,
+                supported,
+            } => {
                 write!(
                     f,
                     "Quantization mismatch: required '{}', supported {:?}",

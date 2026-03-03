@@ -20,8 +20,8 @@
 //! println!("Transcript: {}", transcript);
 //! ```
 
-use mofa_kernel::agent::types::error::{GlobalError, GlobalResult};
 use async_trait::async_trait;
+use mofa_kernel::agent::types::error::{GlobalError, GlobalResult};
 use reqwest::Client;
 use serde::Deserialize;
 use std::path::Path;
@@ -157,8 +157,7 @@ impl TranscriptionProvider for GroqTranscriptionProvider {
             warn!("Groq API error: {}", response_text);
             return Err(GlobalError::Other(format!(
                 "Groq API returned status {}: {}",
-                status,
-                response_text
+                status, response_text
             )));
         }
 
@@ -300,8 +299,7 @@ impl TranscriptionProvider for OpenAITranscriptionProvider {
             warn!("OpenAI API error: {}", response_text);
             return Err(GlobalError::Other(format!(
                 "OpenAI API returned status {}: {}",
-                status,
-                response_text
+                status, response_text
             )));
         }
 

@@ -53,7 +53,7 @@ use super::traits::{
     OrchestratorError, OrchestratorResult, PoolStatistics,
 };
 use async_trait::async_trait;
-use candle_core::{Device, DType, Tensor};
+use candle_core::{DType, Device, Tensor};
 use candle_transformers::generation::LogitsProcessor;
 use candle_transformers::models::llama as model_llama;
 use serde_json::Value;
@@ -100,10 +100,10 @@ struct CandleModelState {
     /// The loaded model (using Llama architecture as reference)
     /// In production, this would be generic over different model types
     model: model_llama::Llama,
-    
+
     /// Device the model is loaded on (CUDA or CPU)
     device: Device,
-    
+
     /// Tokenizer for preprocessing input text
     /// In production, use `tokenizers::Tokenizer` from HuggingFace
     tokenizer: Arc<DummyTokenizer>,
@@ -130,10 +130,7 @@ impl DummyTokenizer {
 
     fn decode(&self, tokens: &[u32]) -> String {
         // Simple character-level decoding
-        tokens
-            .iter()
-            .filter_map(|&t| char::from_u32(t))
-            .collect()
+        tokens.iter().filter_map(|&t| char::from_u32(t)).collect()
     }
 }
 
@@ -152,16 +149,16 @@ impl DummyTokenizer {
 pub struct LinuxCandleProvider {
     /// Unique identifier for this model
     model_id: String,
-    
+
     /// Configuration for this provider
     config: ModelProviderConfig,
-    
+
     /// Loaded model state (None if not loaded)
     state: Option<CandleModelState>,
-    
+
     /// Estimated memory usage in bytes
     memory_usage: u64,
-    
+
     /// Whether the model is currently loaded
     loaded: bool,
 }
@@ -170,7 +167,7 @@ impl LinuxCandleProvider {
     /// Create a new unloaded provider instance
     pub fn new(config: ModelProviderConfig) -> Self {
         let model_id = config.model_name.clone();
-        
+
         Self {
             model_id,
             config,
@@ -256,22 +253,22 @@ impl LinuxCandleProvider {
         // - 7B params × 2 bytes (FP16) = ~14 GB
         // - 7B params × 1 byte (INT8) = ~7 GB
         // - 7B params × 0.5 bytes (INT4/Q4) = ~3.5 GB
-        
+
         let param_count = 7_000_000_000_u64; // 7 billion parameters
-        
+
         let bytes_per_param = match self.config.quantization.as_deref() {
             Some("q4_0") | Some("q4_1") => 0.5, // 4-bit quantization
-            Some("q8_0") => 1.0,                 // 8-bit quantization
-            Some("f16") => 2.0,                  // FP16
-            Some("f32") | None => 4.0,           // FP32 (default)
+            Some("q8_0") => 1.0,                // 8-bit quantization
+            Some("f16") => 2.0,                 // FP16
+            Some("f32") | None => 4.0,          // FP32 (default)
             _ => 4.0,
         };
 
         let base_memory = (param_count as f64 * bytes_per_param) as u64;
-        
+
         // Add KV cache overhead (~10% of model size)
         let kv_cache_overhead = (base_memory as f64 * 0.1) as u64;
-        
+
         base_memory + kv_cache_overhead
     }
 }
@@ -310,7 +307,7 @@ impl ModelProvider for LinuxCandleProvider {
 
         // Step 4: Estimate memory usage
         self.memory_usage = self.estimate_memory_usage();
-        
+
         tracing::info!(
             "Model '{}' loaded successfully. Estimated memory: {} MB",
             self.model_id,
@@ -360,11 +357,15 @@ impl ModelProvider for LinuxCandleProvider {
             OrchestratorError::InferenceFailed("Model state is missing".to_string())
         })?;
 
-        tracing::debug!("Running inference on model '{}' with input: {}", self.model_id, input);
+        tracing::debug!(
+            "Running inference on model '{}' with input: {}",
+            self.model_id,
+            input
+        );
 
         // Step 1: Tokenize input
         let tokens = state.tokenizer.encode(input);
-        
+
         if tokens.is_empty() {
             return Err(OrchestratorError::InferenceFailed(
                 "Tokenization produced empty token sequence".to_string(),
@@ -377,7 +378,7 @@ impl ModelProvider for LinuxCandleProvider {
         // - Run forward pass through model
         // - Sample next token using temperature/top-p
         // - Repeat until EOS or max_tokens reached
-        
+
         // For demonstration, we'll return a mock response
         // In production:
         // let mut tokens = tokens;
@@ -397,7 +398,9 @@ impl ModelProvider for LinuxCandleProvider {
         let mock_output = format!(
             "[LinuxCandleProvider Mock Response for '{}']\nInput: {}\nTokens: {:?}\n\
              In production, this would be actual model output.",
-            self.model_id, input, &tokens[..tokens.len().min(10)]
+            self.model_id,
+            input,
+            &tokens[..tokens.len().min(10)]
         );
 
         Ok(mock_output)
@@ -410,15 +413,24 @@ impl ModelProvider for LinuxCandleProvider {
     fn get_metadata(&self) -> HashMap<String, Value> {
         let mut metadata = HashMap::new();
         metadata.insert("model_id".to_string(), Value::String(self.model_id.clone()));
-        metadata.insert("model_path".to_string(), Value::String(self.config.model_path.clone()));
-        metadata.insert("device".to_string(), Value::String(self.config.device.clone()));
+        metadata.insert(
+            "model_path".to_string(),
+            Value::String(self.config.model_path.clone()),
+        );
+        metadata.insert(
+            "device".to_string(),
+            Value::String(self.config.device.clone()),
+        );
         metadata.insert("loaded".to_string(), Value::Bool(self.loaded));
-        metadata.insert("memory_mb".to_string(), Value::Number((self.memory_usage / 1024 / 1024).into()));
-        
+        metadata.insert(
+            "memory_mb".to_string(),
+            Value::Number((self.memory_usage / 1024 / 1024).into()),
+        );
+
         if let Some(q) = &self.config.quantization {
             metadata.insert("quantization".to_string(), Value::String(q.clone()));
         }
-        
+
         metadata
     }
 
@@ -441,13 +453,13 @@ impl ModelProvider for LinuxCandleProvider {
 struct ModelEntry {
     /// The model provider instance
     provider: Box<dyn ModelProvider>,
-    
+
     /// Configuration used to create this model
     config: ModelProviderConfig,
-    
+
     /// Last time this model was accessed (for LRU eviction)
     last_accessed: Instant,
-    
+
     /// Timestamp when model was loaded
     loaded_at: Option<Instant>,
 }
@@ -498,7 +510,6 @@ pub struct ModelPool {
     idle_timeout_secs: Arc<RwLock<u64>>,
 }
 
-
 impl ModelPool {
     /// Create a new model pool with default settings
     pub fn new() -> Self {
@@ -540,10 +551,7 @@ impl ModelPool {
 
         let (loaded_count, total_memory) = {
             let models = self.models.read().await;
-            let loaded: Vec<_> = models
-                .values()
-                .filter(|e| e.provider.is_loaded())
-                .collect();
+            let loaded: Vec<_> = models.values().filter(|e| e.provider.is_loaded()).collect();
             let count = loaded.len();
             let mem: u64 = loaded.iter().map(|e| e.provider.memory_usage_bytes()).sum();
             (count, mem)
@@ -608,11 +616,7 @@ impl ModelPool {
             .max_by_key(|(_, entry)| entry.provider.memory_usage_bytes());
 
         if let Some((id, entry)) = candidate {
-            let current_q = entry
-                .config
-                .quantization
-                .as_deref()
-                .unwrap_or("f32");
+            let current_q = entry.config.quantization.as_deref().unwrap_or("f32");
 
             // Map current quantization string → DegradationLevel
             let current_level = match current_q {
@@ -647,7 +651,10 @@ impl ModelPool {
     async fn check_memory_pressure(&self, estimated_model_size: u64) -> OrchestratorResult<()> {
         let available = self.get_available_memory().await;
         let current_usage = self.get_total_model_memory().await;
-        let threshold = *self.memory_threshold.read().expect("threshold lock poisoned");
+        let threshold = *self
+            .memory_threshold
+            .read()
+            .expect("threshold lock poisoned");
 
         let projected_usage = current_usage + estimated_model_size;
 
@@ -684,15 +691,20 @@ impl ModelPool {
     /// Find the least recently used (LRU) loaded model
     async fn find_lru_candidate(&self) -> Option<String> {
         let models = self.models.read().await;
-        let idle_timeout =
-            Duration::from_secs(*self.idle_timeout_secs.read().expect("idle_timeout lock poisoned"));
+        let idle_timeout = Duration::from_secs(
+            *self
+                .idle_timeout_secs
+                .read()
+                .expect("idle_timeout lock poisoned"),
+        );
         let now = Instant::now();
 
         models
             .iter()
             .filter(|(_, entry)| {
                 // Must be loaded and idle for at least the timeout duration
-                entry.provider.is_loaded() && now.duration_since(entry.last_accessed) >= idle_timeout
+                entry.provider.is_loaded()
+                    && now.duration_since(entry.last_accessed) >= idle_timeout
             })
             .min_by_key(|(_, entry)| entry.last_accessed)
             .map(|(id, _)| id.clone())
@@ -704,7 +716,7 @@ impl ModelPool {
 
         if let Some(model_id) = candidate {
             tracing::info!("Evicting LRU model '{}' to free memory", model_id);
-            
+
             // Unload the model
             let mut models = self.models.write().await;
             if let Some(entry) = models.get_mut(&model_id) {
@@ -751,7 +763,7 @@ impl ModelOrchestrator for ModelPool {
 
     async fn register_model(&self, config: ModelProviderConfig) -> OrchestratorResult<()> {
         let model_id = config.model_name.clone();
-        
+
         tracing::info!("Registering model '{}'", model_id);
 
         // Create provider instance (unloaded)
@@ -814,14 +826,16 @@ impl ModelOrchestrator for ModelPool {
 
         // Step 3: Check memory pressure
         drop(models); // Release lock before async operations
-        
+
         let mut attempts = 0;
         const MAX_EVICTION_ATTEMPTS: usize = 5;
 
         loop {
             match self.check_memory_pressure(estimated_size).await {
                 Ok(_) => break, // Sufficient memory available
-                Err(OrchestratorError::MemoryConstrained(_)) if attempts < MAX_EVICTION_ATTEMPTS => {
+                Err(OrchestratorError::MemoryConstrained(_))
+                    if attempts < MAX_EVICTION_ATTEMPTS =>
+                {
                     tracing::warn!(
                         "Memory constrained. Attempting LRU eviction (attempt {}/{})",
                         attempts + 1,
@@ -952,10 +966,10 @@ impl ModelOrchestrator for ModelPool {
                 Some(model_id) => {
                     // Model was evicted
                     evicted_count += 1;
-                    
+
                     // Estimate freed memory (actual calculation would be better)
                     freed_bytes += 2_000_000_000; // Assume ~2GB per model
-                    
+
                     tracing::info!(
                         "Evicted model '{}'  (freed ~{} MB so far)",
                         model_id,
@@ -1021,13 +1035,21 @@ impl ModelOrchestrator for ModelPool {
 /// Extension trait to create dummy Llama models for testing
 /// This is NOT part of the public API - only for demonstration purposes
 trait LlamaDummyLoader {
-    fn load_dummy(config: model_llama::Config, cache: model_llama::Cache, device: &Device) -> Result<Self, Box<dyn std::error::Error>>
+    fn load_dummy(
+        config: model_llama::Config,
+        cache: model_llama::Cache,
+        device: &Device,
+    ) -> Result<Self, Box<dyn std::error::Error>>
     where
         Self: Sized;
 }
 
 impl LlamaDummyLoader for model_llama::Llama {
-    fn load_dummy(_config: model_llama::Config, _cache: model_llama::Cache, _device: &Device) -> Result<Self, Box<dyn std::error::Error>> {
+    fn load_dummy(
+        _config: model_llama::Config,
+        _cache: model_llama::Cache,
+        _device: &Device,
+    ) -> Result<Self, Box<dyn std::error::Error>> {
         // This is a placeholder for demonstration
         // In production, you would load actual model weights
         Err("Dummy loader - replace with actual model loading in production".into())
@@ -1115,10 +1137,10 @@ mod tests {
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     async fn test_pool_statistics() {
         let pool = ModelPool::new();
-        
+
         let config1 = create_test_config("model1");
         let config2 = create_test_config("model2");
-        
+
         pool.register_model(config1).await.unwrap();
         pool.register_model(config2).await.unwrap();
 
@@ -1131,7 +1153,7 @@ mod tests {
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     async fn test_idle_timeout_configuration() {
         let pool = ModelPool::new();
-        
+
         // Default timeout
         assert_eq!(pool.get_idle_timeout_secs(), DEFAULT_IDLE_TIMEOUT_SECS);
 
@@ -1143,7 +1165,7 @@ mod tests {
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     async fn test_memory_threshold_configuration() {
         let pool = ModelPool::new();
-        
+
         // Default threshold should be set
         let default_threshold = pool.get_memory_threshold();
         assert!(default_threshold > 0);
@@ -1157,13 +1179,17 @@ mod tests {
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     async fn test_list_loaded_models() {
         let pool = ModelPool::new();
-        
-        pool.register_model(create_test_config("model1")).await.unwrap();
-        pool.register_model(create_test_config("model2")).await.unwrap();
+
+        pool.register_model(create_test_config("model1"))
+            .await
+            .unwrap();
+        pool.register_model(create_test_config("model2"))
+            .await
+            .unwrap();
 
         // Initially, no models are loaded
         assert_eq!(pool.list_loaded_models().len(), 0);
-        
+
         // All models are registered
         assert_eq!(pool.list_models().len(), 2);
     }
@@ -1198,7 +1224,7 @@ mod tests {
         // 2. Wait for idle timeout
         // 3. Load model2 (should trigger eviction of model1)
         // 4. Verify model1 was evicted
-        
+
         // For now, we'll just verify the pool structure is correct
         let stats = pool.get_statistics().unwrap();
         assert_eq!(stats.loaded_models_count, 0);
@@ -1210,15 +1236,19 @@ mod tests {
         let pool = ModelPool::new();
 
         // Register models
-        pool.register_model(create_test_config("model1")).await.unwrap();
-        pool.register_model(create_test_config("model2")).await.unwrap();
+        pool.register_model(create_test_config("model1"))
+            .await
+            .unwrap();
+        pool.register_model(create_test_config("model2"))
+            .await
+            .unwrap();
 
         // Set short idle timeout
         pool.set_idle_timeout_secs(0).await.unwrap();
 
         // Try to trigger eviction (should succeed even with no loaded models)
         let result = pool.trigger_eviction(1_000_000_000).await;
-        
+
         // Should fail because no models are loaded
         assert!(result.is_err());
     }
@@ -1232,10 +1262,12 @@ mod tests {
         pool.set_memory_threshold(1).await.unwrap(); // 1 byte (impossible)
 
         // Try to load a model (should fail due to memory constraint)
-        pool.register_model(create_test_config("model1")).await.unwrap();
-        
+        pool.register_model(create_test_config("model1"))
+            .await
+            .unwrap();
+
         let result = pool.load_model("model1").await;
-        
+
         // Should fail with memory constrained error
         // Note: In this test with dummy models, loading will fail for other reasons
         // In production tests with real models, this would properly test memory pressure

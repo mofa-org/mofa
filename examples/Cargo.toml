@@ -39,12 +39,16 @@ members = [
     "workflow_viz",
     "message_graph_validation",
     "message_graph_executor_runtime",
-    "agent_builder",
     "context_compression",
     "context_window_demo",
+    "compression_examples",
     "admission_gate_demo",
     "integrations_demo",
+<<<<<<< HEAD
     "cron_scheduler",
+=======
+    "memory_scheduler_demo",
+>>>>>>> main
 ]
 
 [workspace.package]
