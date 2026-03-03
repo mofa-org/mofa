@@ -114,6 +114,7 @@ pub mod kernel {
     }
     pub mod hitl {
         pub use mofa_kernel::hitl::*;
+    }
     pub mod error {
         pub use mofa_kernel::error::*;
     }
