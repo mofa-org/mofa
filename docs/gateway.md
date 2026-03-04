@@ -443,9 +443,11 @@ sudo chown $USER:$USER /var/lib/mofa/control_plane_data
 sudo mkdir -p /etc/mofa
 sudo chown $USER:$USER /etc/mofa
 
-# Set up firewall rules
-sudo ufw allow 8080/tcp  # Gateway port
-sudo ufw allow 9001/tcp  # Control plane port
+# Set up firewall rules (example: restrict to your private network CIDR)
+# NOTE: Do NOT expose these ports directly to the public internet. Place the
+# gateway behind a TLS-terminating reverse proxy or VPN boundary instead.
+sudo ufw allow from 10.0.0.0/8 to any port 8080 proto tcp  # Gateway port
+sudo ufw allow from 10.0.0.0/8 to any port 9001 proto tcp  # Control plane port
 ```
 
 #### Step 2: Configuration
