@@ -55,4 +55,4 @@ mod types;
 pub use function_calling::FunctionCallingAdapter;
 pub use plugin::PluginStats;
 pub use plugin::{RhaiPlugin, RhaiPluginConfig, RhaiPluginState};
-pub use types::{PluginMetadata, RhaiPluginError, RhaiPluginResult};
+pub use types::{IntoRhaiPluginReport, PluginMetadata, RhaiPluginError, RhaiPluginReport, RhaiPluginResult};

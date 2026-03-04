@@ -32,7 +32,7 @@ kokoro = ["mofa-plugins/kokoro"]
 # Enable MCP (Model Context Protocol) client support
 mcp = ["dep:rmcp"]
 # Enable Qdrant vector database support
-qdrant = ["dep:qdrant-client"]
+qdrant = ["dep:qdrant-client", "dep:sha2"]
 # Enable accurate token counting with tiktoken
 tiktoken = ["dep:tiktoken-rs"]
 # Enable parallel processing for compression
@@ -49,6 +49,7 @@ serde.workspace = true
 serde_json.workspace = true
 uuid.workspace = true
 thiserror.workspace = true
+error-stack = { workspace = true }
 tokio.workspace = true
 futures.workspace = true
 tokio-stream = { workspace = true }

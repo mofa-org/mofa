@@ -9,6 +9,8 @@ pub mod orchestrator;
 
 // hardware discovery module
 pub mod hardware;
+// memory-budgeted scheduler for inference orchestration
+pub mod scheduler;
 
 // adapter registry module - Runtime model adapter discovery
 pub mod adapter;
@@ -49,6 +51,9 @@ pub mod collaboration;
 
 // RAG module - vector store and document chunking
 pub mod rag;
+
+// Security governance - PII redaction, content moderation, prompt guard
+pub mod security;
 
 // Re-export config types
 pub use config::{AgentInfo, AgentYamlConfig, LLMYamlConfig, RuntimeConfig, ToolConfig};
