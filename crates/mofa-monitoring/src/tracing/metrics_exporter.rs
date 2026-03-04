@@ -9,7 +9,7 @@ use opentelemetry::{
     metrics::{Counter, Meter, MeterProvider, UpDownCounter},
 };
 use opentelemetry_otlp::WithExportConfig;
-use opentelemetry_sdk::{Resource, metrics::MeterProvider as SdkMeterProvider, runtime::Tokio};
+use opentelemetry_sdk::{Resource, metrics::SdkMeterProvider, runtime::Tokio};
 use std::cmp::Ordering;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -224,7 +224,7 @@ impl OtlpMetricsExporter {
 
 struct OtlpRecorder {
     // Keep provider alive for background periodic export.
-    _meter_provider: SdkMeterProvider,
+    _meter_provider: opentelemetry_sdk::metrics::SdkMeterProvider,
     instruments: OtlpInstruments,
     cardinality: CardinalityLimits,
     last_values: StdMutex<LastSeriesState>,
@@ -232,22 +232,26 @@ struct OtlpRecorder {
 
 impl OtlpRecorder {
     fn new(config: &OtlpMetricsExporterConfig) -> Result<Self, OtlpMetricsExporterError> {
-        let exporter = opentelemetry_otlp::new_exporter()
-            .http()
+        use opentelemetry_otlp::WithExportConfig;
+        
+        let exporter = opentelemetry_otlp::MetricExporter::builder()
+            .with_http()
             .with_endpoint(config.endpoint.clone())
-            .with_timeout(config.timeout);
-
-        let meter_provider = opentelemetry_otlp::new_pipeline()
-            .metrics(Tokio)
-            .with_exporter(exporter)
-            .with_period(config.export_interval)
             .with_timeout(config.timeout)
+            .build()
+            .map_err(|err| OtlpMetricsExporterError::Internal(format!("{}", err)))?;
+
+        let meter_provider = opentelemetry_sdk::metrics::SdkMeterProvider::builder()
+            .with_reader(
+                opentelemetry_sdk::metrics::PeriodicReader::builder(exporter, Tokio)
+                    .with_interval(config.export_interval)
+                    .build()
+            )
             .with_resource(Resource::new(vec![KeyValue::new(
                 "service.name",
                 config.service_name.clone(),
             )]))
-            .build()
-            .map_err(|err| OtlpMetricsExporterError::Internal(err.to_string()))?;
+            .build();
 
         let meter = meter_provider.meter("mofa-monitoring.metrics-exporter");
         let instruments = OtlpInstruments::new(&meter);
@@ -451,31 +455,31 @@ impl OtlpInstruments {
             system_cpu_percent: meter
                 .f64_up_down_counter("mofa.system.cpu.percent")
                 .with_description("System CPU usage percentage")
-                .init(),
+                .build(),
             system_memory_bytes: meter
                 .f64_up_down_counter("mofa.system.memory.bytes")
                 .with_description("System memory usage in bytes")
-                .init(),
+                .build(),
             agent_tasks_total: meter
                 .f64_up_down_counter("mofa.agent.tasks.total")
                 .with_description("Total tasks completed by agent")
-                .init(),
+                .build(),
             workflow_executions_total: meter
                 .f64_up_down_counter("mofa.workflow.executions.total")
                 .with_description("Total workflow executions")
-                .init(),
+                .build(),
             tool_call_count: meter
                 .f64_up_down_counter("mofa.tool.calls.total")
                 .with_description("Total tool or plugin call count")
-                .init(),
+                .build(),
             llm_requests_total: meter
                 .f64_up_down_counter("mofa.llm.requests.total")
                 .with_description("Total LLM requests")
-                .init(),
+                .build(),
             dropped_series_total: meter
                 .u64_counter("mofa.exporter.dropped_series.total")
                 .with_description("Total dropped metric series due to cardinality limits")
-                .init(),
+                .build(),
         }
     }
 }
