@@ -1,3 +1,8 @@
+//! Mock tools for testing agent tool-selection logic.
+//!
+//! [`MockTool`] implements [`SimpleTool`] with a configurable stubbed result
+//! and records every invocation so tests can assert on call count and inputs.
+
 use async_trait::async_trait;
 use mofa_foundation::agent::components::tool::{SimpleTool, ToolCategory};
 use mofa_kernel::agent::components::tool::{ToolInput, ToolResult};
@@ -5,45 +10,58 @@ use serde_json::Value;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
-/// A mock tool simulating a real agent tool
+/// A mock tool that records calls and returns a configurable result.
 ///
-/// It allows developers to specify predefined execution outcomes
-/// and track inputs that were passed to it during execution.
+/// # Example
+///
+/// ```rust,ignore
+/// use mofa_testing::MockTool;
+/// use mofa_foundation::agent::components::tool::SimpleTool;
+/// use serde_json::json;
+///
+/// let tool = MockTool::new("echo", "Echoes input", json!({"type": "object"}));
+/// let result = tool.execute(ToolInput::from_json(json!({"msg": "hi"}))).await;
+/// assert!(result.success);
+/// assert_eq!(tool.call_count().await, 1);
+/// ```
 #[derive(Clone)]
 pub struct MockTool {
     name: String,
     description: String,
     schema: Value,
     category: ToolCategory,
-    /// Store execution outcomes. Could be sequential or static
+    /// The result returned by every call to [`execute`](SimpleTool::execute).
     pub stubbed_result: Arc<RwLock<ToolResult>>,
-    /// Track all inputs passed to this tool
+    /// Chronologically ordered inputs passed to this tool.
     pub call_history: Arc<RwLock<Vec<ToolInput>>>,
 }
 
 impl MockTool {
+    /// Create a mock tool with the given identity and a default "success" result.
     pub fn new(name: &str, description: &str, schema: Value) -> Self {
         Self {
             name: name.to_string(),
             description: description.to_string(),
             schema,
             category: ToolCategory::Custom,
-            stubbed_result: Arc::new(RwLock::new(ToolResult::success_text("Mock Execution Default"))),
+            stubbed_result: Arc::new(RwLock::new(ToolResult::success_text(
+                "Mock execution default",
+            ))),
             call_history: Arc::new(RwLock::new(Vec::new())),
         }
     }
 
-    /// Sets the result this tool will produce when executed.
+    /// Replace the result that will be returned on subsequent calls.
     pub async fn set_result(&self, result: ToolResult) {
         *self.stubbed_result.write().await = result;
     }
 
-    /// Retrieve the history of calls made to this tool
+    /// Retrieve a clone of the full call history.
     pub async fn history(&self) -> Vec<ToolInput> {
         self.call_history.read().await.clone()
     }
 
-    /// Check the total number of times this tool was executed
+    /// Number of times this tool has been executed.
     pub async fn call_count(&self) -> usize {
         self.call_history.read().await.len()
     }
@@ -73,16 +91,26 @@ impl SimpleTool for MockTool {
     }
 }
 
+/// Assert that a [`MockTool`] was called exactly `$expected` times.
+///
+/// Must be used inside an `async` context (uses `.await` internally).
+///
+/// # Example
+///
+/// ```rust,ignore
+/// assert_tool_called!(my_mock_tool, 2);
+/// ```
 #[macro_export]
 macro_rules! assert_tool_called {
-    ($tool:expr, $expected_count:expr) => {
+    ($tool:expr, $expected_count:expr) => {{
+        use mofa_foundation::agent::components::tool::SimpleTool as _;
         let count = $tool.call_count().await;
         assert_eq!(
             count, $expected_count,
-            "Expected tool '{}' to be called {} times, but was called {} times",
+            "Expected tool '{}' to be called {} time(s), but was called {} time(s)",
             $tool.name(),
             $expected_count,
             count
         );
-    };
+    }};
 }

@@ -1,92 +1,222 @@
-use anyhow::Result;
-use mofa_foundation::orchestrator::{ModelOrchestrator, TokenStream};
-use futures::stream;
-use std::collections::{HashMap, HashSet};
+//! Mock inference backend for deterministic agent testing.
+//!
+//! [`MockLLMBackend`] implements the full [`ModelOrchestrator`] trait so that
+//! tests can exercise agent logic (tool selection, prompt routing, etc.)
+//! without hitting a real LLM endpoint.
+
+use async_trait::async_trait;
+use mofa_foundation::orchestrator::{
+    ModelOrchestrator, ModelProviderConfig, ModelType, OrchestratorError, OrchestratorResult,
+    PoolStatistics,
+};
+use std::collections::HashSet;
 use std::sync::{Arc, RwLock};
 
-/// A mock backend that implements `ModelOrchestrator`.
-/// It allows developers to specify predefined responses for specific prompts,
-/// enabling deterministic testing of Agent workflows without hitting real APIs.
-#[derive(Clone, Default)]
+/// Deterministic mock implementation of [`ModelOrchestrator`].
+///
+/// # Match semantics
+///
+/// Responses are stored as an ordered `Vec<(key, response)>`.
+/// On [`infer`](ModelOrchestrator::infer) the *first* entry whose key is a
+/// substring of the prompt wins.  This avoids the non-determinism of
+/// `HashMap` iteration and gives callers explicit priority control.
+///
+/// # Example
+///
+/// ```rust,ignore
+/// use mofa_testing::MockLLMBackend;
+///
+/// let mut backend = MockLLMBackend::new();
+/// backend.add_response("hello", "Hi there!");
+/// backend.add_response("weather", "Sunny today.");
+/// // "hello" takes priority over "weather" if both appear in the prompt.
+/// ```
 pub struct MockLLMBackend {
-    loaded_models: Arc<RwLock<HashSet<String>>>,
-    /// Maps a prompt (or substring of a prompt) to a predefined response string
-    predefined_responses: Arc<RwLock<HashMap<String, String>>>,
-    /// Fallback response if no predefined prompt matches
-    fallback_response: String,
+    /// Ordered response rules — first match wins
+    responses: Arc<RwLock<Vec<(String, String)>>>,
+    /// Fallback when nothing matches
+    fallback: String,
+    /// Registered model IDs
+    registered: Arc<RwLock<HashSet<String>>>,
+    /// Loaded model IDs
+    loaded: Arc<RwLock<HashSet<String>>>,
+    /// Memory threshold (bytes)
+    memory_threshold: Arc<RwLock<u64>>,
+    /// Idle timeout (seconds)
+    idle_timeout_secs: Arc<RwLock<u64>>,
+}
+
+impl Default for MockLLMBackend {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl MockLLMBackend {
+    /// Create a new backend with an empty response table.
     pub fn new() -> Self {
         Self {
-            loaded_models: Arc::new(RwLock::new(HashSet::new())),
-            predefined_responses: Arc::new(RwLock::new(HashMap::new())),
-            fallback_response: "This is a fallback mock response.".to_string(),
+            responses: Arc::new(RwLock::new(Vec::new())),
+            fallback: "Mock fallback response.".into(),
+            registered: Arc::new(RwLock::new(HashSet::new())),
+            loaded: Arc::new(RwLock::new(HashSet::new())),
+            memory_threshold: Arc::new(RwLock::new(u64::MAX)),
+            idle_timeout_secs: Arc::new(RwLock::new(300)),
         }
     }
 
-    /// Add a predefined response for a given prompt substring.
-    /// If the `prompt` contains `key`, it will return `response`.
-    pub fn add_mock_response(&self, prompt_key: &str, response: &str) {
-        if let Ok(mut resps) = self.predefined_responses.write() {
-            resps.insert(prompt_key.to_string(), response.to_string());
-        }
+    /// Append a response rule.  Order determines priority (first match wins).
+    pub fn add_response(&self, prompt_substring: &str, response: &str) {
+        self.responses
+            .write()
+            .expect("lock poisoned")
+            .push((prompt_substring.to_string(), response.to_string()));
     }
 
-    /// Set the fallback response for when no predefined response matches the prompt.
-    pub fn set_fallback_response(&mut self, response: &str) {
-        self.fallback_response = response.to_string();
+    /// Replace the fallback response returned when no rule matches.
+    pub fn set_fallback(&mut self, response: &str) {
+        self.fallback = response.to_string();
+    }
+
+    /// Look up the response for a given prompt (first-match semantics).
+    fn resolve(&self, prompt: &str) -> String {
+        let rules = self.responses.read().expect("lock poisoned");
+        for (key, value) in rules.iter() {
+            if prompt.contains(key.as_str()) {
+                return value.clone();
+            }
+        }
+        self.fallback.clone()
     }
 }
 
+#[async_trait]
 impl ModelOrchestrator for MockLLMBackend {
-    fn initialize(&mut self) -> Result<()> {
+    fn name(&self) -> &str {
+        "MockLLMBackend"
+    }
+
+    // -- registration --------------------------------------------------------
+
+    async fn register_model(&self, config: ModelProviderConfig) -> OrchestratorResult<()> {
+        self.registered
+            .write()
+            .expect("lock poisoned")
+            .insert(config.model_name);
         Ok(())
     }
 
-    fn load_model(&mut self, model_id: &str) -> Result<()> {
-        if let Ok(mut models) = self.loaded_models.write() {
-            models.insert(model_id.to_string());
-        }
+    async fn unregister_model(&self, model_id: &str) -> OrchestratorResult<()> {
+        self.loaded
+            .write()
+            .expect("lock poisoned")
+            .remove(model_id);
+        self.registered
+            .write()
+            .expect("lock poisoned")
+            .remove(model_id);
         Ok(())
     }
 
-    fn unload_model(&mut self, model_id: &str) -> Result<()> {
-        if let Ok(mut models) = self.loaded_models.write() {
-            models.remove(model_id);
+    // -- lifecycle -----------------------------------------------------------
+
+    async fn load_model(&self, model_id: &str) -> OrchestratorResult<()> {
+        if !self.registered.read().expect("lock poisoned").contains(model_id) {
+            return Err(OrchestratorError::ModelNotFound(model_id.to_string()));
         }
+        self.loaded
+            .write()
+            .expect("lock poisoned")
+            .insert(model_id.to_string());
+        Ok(())
+    }
+
+    async fn unload_model(&self, model_id: &str) -> OrchestratorResult<()> {
+        self.loaded
+            .write()
+            .expect("lock poisoned")
+            .remove(model_id);
         Ok(())
     }
 
     fn is_model_loaded(&self, model_id: &str) -> bool {
-        if let Ok(models) = self.loaded_models.read() {
-            models.contains(model_id)
-        } else {
-            false
-        }
+        self.loaded
+            .read()
+            .expect("lock poisoned")
+            .contains(model_id)
     }
 
-    fn generate(&self, _model_id: &str, prompt: &str) -> Result<TokenStream> {
-        let mut final_response = self.fallback_response.clone();
+    // -- inference -----------------------------------------------------------
 
-        if let Ok(resps) = self.predefined_responses.read() {
-            for (k, v) in resps.iter() {
-                if prompt.contains(k) {
-                    final_response = v.clone();
-                    break;
-                }
-            }
-        }
+    async fn infer(&self, _model_id: &str, input: &str) -> OrchestratorResult<String> {
+        Ok(self.resolve(input))
+    }
 
-        // Return a mock output stream
-        // Tokenizer splits by space for realism
-        let tokens: Vec<Result<String>> = final_response
-            .split_whitespace()
-            .map(|s| Ok(format!("{} ", s)))
-            .collect();
+    async fn route_by_type(&self, task: &ModelType) -> OrchestratorResult<String> {
+        // Return the first registered model (deterministic since HashSet→Vec)
+        let registered = self.registered.read().expect("lock poisoned");
+        registered
+            .iter()
+            .next()
+            .cloned()
+            .ok_or_else(|| OrchestratorError::NoModelForType(task.to_string()))
+    }
 
-        // Pin the Boxed stream to comply with TokenStream alias
-        // `Send` is automatically derived because memory structures are simple
-        Ok(Box::pin(stream::iter(tokens)))
+    // -- introspection -------------------------------------------------------
+
+    fn get_statistics(&self) -> OrchestratorResult<PoolStatistics> {
+        Ok(PoolStatistics {
+            loaded_models_count: self.loaded.read().expect("lock poisoned").len(),
+            total_memory_usage: 0,
+            available_memory: u64::MAX,
+            queued_models_count: 0,
+            timestamp: chrono::Utc::now(),
+        })
+    }
+
+    fn list_models(&self) -> Vec<String> {
+        self.registered
+            .read()
+            .expect("lock poisoned")
+            .iter()
+            .cloned()
+            .collect()
+    }
+
+    fn list_loaded_models(&self) -> Vec<String> {
+        self.loaded
+            .read()
+            .expect("lock poisoned")
+            .iter()
+            .cloned()
+            .collect()
+    }
+
+    // -- memory management ---------------------------------------------------
+
+    async fn trigger_eviction(&self, _target_bytes: u64) -> OrchestratorResult<usize> {
+        // Mock: evict everything
+        let mut loaded = self.loaded.write().expect("lock poisoned");
+        let count = loaded.len();
+        loaded.clear();
+        Ok(count)
+    }
+
+    async fn set_memory_threshold(&self, bytes: u64) -> OrchestratorResult<()> {
+        *self.memory_threshold.write().expect("lock poisoned") = bytes;
+        Ok(())
+    }
+
+    fn get_memory_threshold(&self) -> u64 {
+        *self.memory_threshold.read().expect("lock poisoned")
+    }
+
+    async fn set_idle_timeout_secs(&self, secs: u64) -> OrchestratorResult<()> {
+        *self.idle_timeout_secs.write().expect("lock poisoned") = secs;
+        Ok(())
+    }
+
+    fn get_idle_timeout_secs(&self) -> u64 {
+        *self.idle_timeout_secs.read().expect("lock poisoned")
     }
 }
