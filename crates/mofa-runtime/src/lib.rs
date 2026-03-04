@@ -774,11 +774,21 @@ impl SimpleMessageBus {
             subs.remove(agent_id);
         }
 
-        let mut topics = self.topic_subscribers.write().await;
-        for subscriber_ids in topics.values_mut() {
-            subscriber_ids.retain(|id| id != agent_id);
+        {
+            let mut topics = self.topic_subscribers.write().await;
+            for subscriber_ids in topics.values_mut() {
+                subscriber_ids.retain(|id| id != agent_id);
+            }
+            topics.retain(|_, subscriber_ids| !subscriber_ids.is_empty());
         }
-        topics.retain(|_, subscriber_ids| !subscriber_ids.is_empty());
+
+        {
+            let mut streams = self.streams.write().await;
+            streams.retain(|_, stream_info| {
+                stream_info.subscribers.retain(|id| id != agent_id);
+                !stream_info.subscribers.is_empty()
+            });
+        }
     }
 
     /// 订阅主题
