@@ -8,8 +8,8 @@ use super::plugin::EventResponsePlugin;
 use super::rule_manager::{RuleAdjustmentStrategy, RuleManager};
 use mofa_kernel::plugin::{AgentPlugin, PluginContext, PluginResult};
 use std::collections::{HashMap, VecDeque};
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use tokio::sync::{RwLock, Semaphore};
 
 /// Event handling engine

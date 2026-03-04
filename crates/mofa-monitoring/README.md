@@ -28,6 +28,20 @@ mofa-monitoring = "0.1"
 GET /metrics
 ```
 
+The exporter maintains a background cache worker (`refresh_interval` default:
+`1s`) so scrape handlers return cached payloads instead of rebuilding metrics on
+every request.
+
+## Optional OTLP Metrics Export
+
+Enable the `otlp-metrics` feature to use the native OpenTelemetry OTLP
+metrics push exporter:
+
+```toml
+[dependencies]
+mofa-monitoring = { version = "0.1", features = ["otlp-metrics"] }
+```
+
 ## Documentation
 
 - [API Documentation](https://docs.rs/mofa-monitoring)

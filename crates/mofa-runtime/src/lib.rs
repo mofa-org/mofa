@@ -23,6 +23,7 @@ pub mod builder;
 pub mod config;
 pub mod fallback;
 pub mod interrupt;
+pub mod rag;
 pub mod retry;
 pub mod runner;
 
