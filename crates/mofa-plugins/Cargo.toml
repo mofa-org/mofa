@@ -22,6 +22,7 @@ serde_yaml.workspace = true
 tokio.workspace = true
 tokio-stream = { workspace = true }
 thiserror.workspace = true
+error-stack = { workspace = true }
 parking_lot.workspace = true
 notify.workspace = true
 libloading.workspace = true
@@ -34,7 +35,7 @@ rand.workspace = true
 wasmtime = { version = "40", features = ["component-model", "async"] }
 # Local dependencies
 mofa-kernel = { path = "../mofa-kernel", version = "0.1" }
-reqwest = { version = "0.12.28", features = ["json", "rustls-tls"] }
+reqwest = { workspace = true, features = ["json", "rustls-tls"] }
 chrono = { workspace = true, features = ["serde"] }
 mofa-extra = { version = "0.1", path = "../mofa-extra" }
 rhai = { version = "1.20", features = ["sync", "serde"] }

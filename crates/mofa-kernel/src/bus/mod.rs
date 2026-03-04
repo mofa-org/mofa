@@ -1,5 +1,5 @@
 pub mod error;
-pub use error::BusError;
+pub use error::{BusError, BusResult, IntoBusReport};
 
 use crate::agent::AgentMetadata;
 use crate::message::AgentMessage;
@@ -197,6 +197,15 @@ impl AgentBus {
                 Err(_) => Ok(None),
             }
         }
+    }
+
+    /// Subscribe to the global broadcast channel.
+    ///
+    /// Returns a `broadcast::Receiver` that will receive every message
+    /// published in `Broadcast` mode on this bus. Use this to bridge the
+    /// internal bus to external transports (WebSocket, Socket.IO, etc.).
+    pub fn subscribe_broadcast(&self) -> tokio::sync::broadcast::Receiver<Vec<u8>> {
+        self.broadcast_channel.subscribe()
     }
 
     pub async fn unsubscribe_topic(&self, id: &str, topic: &str) -> Result<(), BusError> {

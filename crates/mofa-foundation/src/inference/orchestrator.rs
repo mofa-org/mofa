@@ -29,12 +29,26 @@ use std::time::Duration;
 
 use crate::hardware::{HardwareCapability, detect_hardware};
 
+mod duration_secs {
+    use serde::{Deserialize, Deserializer, Serialize, Serializer};
+    use std::time::Duration;
+
+    pub fn serialize<S: Serializer>(duration: &Duration, serializer: S) -> Result<S::Ok, S::Error> {
+        duration.as_secs().serialize(serializer)
+    }
+
+    pub fn deserialize<'de, D: Deserializer<'de>>(deserializer: D) -> Result<Duration, D::Error> {
+        let secs = u64::deserialize(deserializer)?;
+        Ok(Duration::from_secs(secs))
+    }
+}
+
 use super::model_pool::ModelPool;
 use super::routing::{self, AdmissionOutcome, RoutingDecision, RoutingPolicy};
-use super::types::{InferenceRequest, InferenceResult, RoutedBackend};
+use super::types::{InferenceRequest, InferenceResult, RequestPriority, RoutedBackend};
 
 /// Configuration for the `InferenceOrchestrator`.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct OrchestratorConfig {
     /// Total memory budget for local models (in MB)
     pub memory_capacity_mb: usize,
@@ -45,6 +59,7 @@ pub struct OrchestratorConfig {
     /// Maximum number of models that can be concurrently loaded
     pub model_pool_capacity: usize,
     /// Models idle longer than this duration are candidates for eviction
+    #[serde(with = "duration_secs")]
     pub idle_timeout: Duration,
     /// The routing policy governing local vs cloud decisions
     pub routing_policy: RoutingPolicy,
@@ -150,6 +165,7 @@ impl InferenceOrchestrator {
                         model_id,
                         request.required_memory_mb,
                         request.preferred_precision,
+                        request.priority,
                     );
                 } else {
                     self.model_pool.touch(model_id);
@@ -187,10 +203,19 @@ impl InferenceOrchestrator {
     }
 
     /// Evaluate whether a local backend can admit this request based on
-    /// current memory usage and configured thresholds.
+    /// current memory usage, configured thresholds, and **request priority**.
     ///
-    /// Memory is always read from ModelPool — no separate counter to
-    /// get out of sync.
+    /// # Priority semantics
+    ///
+    /// - `Low` / `Normal`: standard dual-threshold hysteresis — may return
+    ///   [`AdmissionOutcome::Deferred`] when usage is in the `[defer, reject)` band.
+    /// - `High`: bypasses the Deferred band — admitted directly whenever usage
+    ///   is at or below `reject_threshold` (skips the defer zone entirely).
+    /// - `Critical`: same bypass as `High`; the caller (orchestrator) is
+    ///   responsible for attempting priority-weighted eviction before a final
+    ///   rejection.
+    ///
+    /// Memory is always read from ModelPool — no separate counter to get out of sync.
     fn evaluate_admission(&self, request: &InferenceRequest) -> AdmissionOutcome {
         let current_mb = self.model_pool.total_memory_mb();
         let projected_mb = current_mb + request.required_memory_mb;
@@ -202,14 +227,28 @@ impl InferenceOrchestrator {
 
         let projected_usage = projected_mb as f64 / capacity as f64;
 
-        if projected_usage <= self.config.defer_threshold {
-            AdmissionOutcome::Accepted
-        } else if projected_usage <= self.config.reject_threshold {
-            // Phase 1: Deferred is treated as a routing signal.
-            // Phase 2 will add a queue-based scheduler with retry logic.
-            AdmissionOutcome::Deferred
-        } else {
-            AdmissionOutcome::Rejected
+        match request.priority {
+            // High and Critical bypass the Deferred hysteresis band:
+            // they are admitted whenever memory is below the reject ceiling.
+            RequestPriority::High | RequestPriority::Critical => {
+                if projected_usage <= self.config.reject_threshold {
+                    AdmissionOutcome::Accepted
+                } else {
+                    AdmissionOutcome::Rejected
+                }
+            }
+            // Low and Normal use standard dual-threshold hysteresis.
+            RequestPriority::Low | RequestPriority::Normal => {
+                if projected_usage <= self.config.defer_threshold {
+                    AdmissionOutcome::Accepted
+                } else if projected_usage <= self.config.reject_threshold {
+                    // Deferred: memory is tight but may be reclaimable via eviction.
+                    // Phase 2 will add a queue-based scheduler with retry logic.
+                    AdmissionOutcome::Deferred
+                } else {
+                    AdmissionOutcome::Rejected
+                }
+            }
         }
     }
 
@@ -385,5 +424,178 @@ mod tests {
         );
         // Model should NOT be loaded locally
         assert_eq!(orch.loaded_model_count(), 0);
+    }
+
+    #[test]
+    fn test_orchestrator_config_serde_roundtrip() {
+        let config = OrchestratorConfig {
+            memory_capacity_mb: 32768,
+            defer_threshold: 0.80,
+            reject_threshold: 0.95,
+            model_pool_capacity: 10,
+            idle_timeout: Duration::from_secs(600),
+            routing_policy: RoutingPolicy::CostOptimized,
+            cloud_provider: "anthropic".to_string(),
+        };
+        let json = serde_json::to_string(&config).unwrap();
+        let back: OrchestratorConfig = serde_json::from_str(&json).unwrap();
+        assert_eq!(back, config);
+    }
+
+    #[test]
+    fn test_orchestrator_config_default_serde_roundtrip() {
+        let config = OrchestratorConfig::default();
+        let json = serde_json::to_string(&config).unwrap();
+        let back: OrchestratorConfig = serde_json::from_str(&json).unwrap();
+        assert_eq!(back, config);
+    }
+
+    #[test]
+    fn test_idle_timeout_serializes_as_seconds() {
+        let config = OrchestratorConfig {
+            idle_timeout: Duration::from_secs(120),
+            ..OrchestratorConfig::default()
+        };
+        let json = serde_json::to_string(&config).unwrap();
+        let value: serde_json::Value = serde_json::from_str(&json).unwrap();
+        assert_eq!(value["idle_timeout"], serde_json::json!(120));
+    }
+
+    // ── Priority-aware admission tests ──────────────────────────────────────────
+
+    /// Normal priority: pre-fill so projected usage is in the [defer, reject) band.
+    /// Result should be cloud fallback (Deferred → cloud under LocalFirstWithCloudFallback).
+    #[test]
+    fn test_normal_priority_deferred_in_defer_band() {
+        let mut config = test_config();
+        // Use tight thresholds and small capacity for deterministic math.
+        config.memory_capacity_mb = 10_000;
+        config.defer_threshold = 0.70;
+        config.reject_threshold = 0.90;
+        let mut orch = InferenceOrchestrator::with_hardware(config, test_hardware());
+
+        // Fill to 65% with a Normal-priority request (admitted locally).
+        let fill = InferenceRequest::new("base-model", "warmup", 6_500);
+        orch.infer(&fill);
+        assert_eq!(orch.allocated_memory_mb(), 6_500);
+
+        // Now project 6500+1000 = 7500 / 10000 = 75% → in [70%, 90%) → Deferred → cloud.
+        let req = InferenceRequest::new("extra-model", "batch", 1_000)
+            .with_priority(RequestPriority::Normal);
+        let result = orch.infer(&req);
+        assert_eq!(
+            result.routed_to,
+            RoutedBackend::Cloud {
+                provider: "openai".into()
+            },
+            "Normal priority in defer band should fall back to cloud"
+        );
+    }
+
+    /// High priority: same memory conditions as above, but bypass the defer band.
+    /// The request should be admitted locally even though usage is in [defer, reject).
+    #[test]
+    fn test_high_priority_bypasses_defer_band() {
+        let mut config = test_config();
+        config.memory_capacity_mb = 10_000;
+        config.defer_threshold = 0.70;
+        config.reject_threshold = 0.90;
+        let mut orch = InferenceOrchestrator::with_hardware(config, test_hardware());
+
+        // Fill to 65% (< 70% defer → Accepted locally).
+        let fill = InferenceRequest::new("base-model", "warmup", 6_500);
+        orch.infer(&fill);
+        assert_eq!(orch.allocated_memory_mb(), 6_500);
+
+        // Project 6500+1000 = 7500 / 10000 = 75% → in defer band.
+        // High priority bypasses defer → Accepted locally.
+        let req = InferenceRequest::new("realtime-model", "urgent", 1_000)
+            .with_priority(RequestPriority::High);
+        let result = orch.infer(&req);
+        assert_eq!(
+            result.routed_to,
+            RoutedBackend::Local {
+                model_id: "realtime-model".into()
+            },
+            "High priority should bypass defer band and be admitted locally"
+        );
+    }
+
+    /// Critical priority: same bypass behaviour as High in the defer band.
+    #[test]
+    fn test_critical_priority_bypasses_defer_band() {
+        let mut config = test_config();
+        config.memory_capacity_mb = 10_000;
+        config.defer_threshold = 0.70;
+        config.reject_threshold = 0.90;
+        let mut orch = InferenceOrchestrator::with_hardware(config, test_hardware());
+
+        let fill = InferenceRequest::new("base-model", "warmup", 6_500);
+        orch.infer(&fill);
+        assert_eq!(orch.allocated_memory_mb(), 6_500);
+
+        // Project 75% — in defer band. Critical bypasses → Accepted locally.
+        let req = InferenceRequest::new("voice-model", "CRITICAL", 1_000)
+            .with_priority(RequestPriority::Critical);
+        let result = orch.infer(&req);
+        assert_eq!(
+            result.routed_to,
+            RoutedBackend::Local {
+                model_id: "voice-model".into()
+            },
+            "Critical priority should bypass defer band and be admitted locally"
+        );
+    }
+
+    /// High priority above the reject ceiling still falls back to cloud.
+    /// Priority bypass only applies within [defer, reject); above reject, all priorities fail.
+    #[test]
+    fn test_high_priority_above_reject_threshold_falls_back_to_cloud() {
+        let mut config = test_config();
+        config.memory_capacity_mb = 10_000;
+        config.defer_threshold = 0.70;
+        config.reject_threshold = 0.90;
+        let mut orch = InferenceOrchestrator::with_hardware(config, test_hardware());
+
+        let fill = InferenceRequest::new("base-model", "warmup", 6_500);
+        orch.infer(&fill);
+        assert_eq!(orch.allocated_memory_mb(), 6_500);
+
+        // Project 6500+3000 = 9500 / 10000 = 95% → above 90% reject.
+        // Even High priority cannot override rejection → cloud fallback.
+        let req = InferenceRequest::new("huge-model", "urgent", 3_000)
+            .with_priority(RequestPriority::High);
+        let result = orch.infer(&req);
+        assert_eq!(
+            result.routed_to,
+            RoutedBackend::Cloud {
+                provider: "openai".into()
+            },
+            "High priority above reject threshold should fall back to cloud"
+        );
+    }
+
+    /// Low priority in the defer band behaves identically to Normal (falls back to cloud).
+    #[test]
+    fn test_low_priority_deferred_same_as_normal() {
+        let mut config = test_config();
+        config.memory_capacity_mb = 10_000;
+        config.defer_threshold = 0.70;
+        config.reject_threshold = 0.90;
+        let mut orch = InferenceOrchestrator::with_hardware(config, test_hardware());
+
+        let fill = InferenceRequest::new("base-model", "warmup", 6_500);
+        orch.infer(&fill);
+
+        let req = InferenceRequest::new("batch-model", "batch job", 1_000)
+            .with_priority(RequestPriority::Low);
+        let result = orch.infer(&req);
+        assert_eq!(
+            result.routed_to,
+            RoutedBackend::Cloud {
+                provider: "openai".into()
+            },
+            "Low priority in defer band should fall back to cloud"
+        );
     }
 }

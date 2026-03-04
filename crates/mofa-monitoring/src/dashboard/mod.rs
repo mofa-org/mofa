@@ -12,7 +12,9 @@
 
 mod api;
 mod assets;
+pub mod auth;
 mod metrics;
+mod prometheus;
 mod server;
 mod websocket;
 
@@ -20,9 +22,11 @@ pub use api::{
     AgentStatus, ApiError, ApiResponse, DebugSessionResponse, LLMStatus, LLMSummary, PluginStatus,
     SystemStatus,
 };
+pub use auth::{AuthInfo, AuthProvider, NoopAuthProvider, TokenAuthProvider};
 pub use metrics::{
     AgentMetrics, Gauge, Histogram, LLMMetrics, MetricType, MetricValue, MetricsCollector,
     MetricsConfig, MetricsRegistry, MetricsSnapshot, PluginMetrics, SystemMetrics, WorkflowMetrics,
 };
+pub use prometheus::{PrometheusExportConfig, PrometheusExportError, PrometheusExporter};
 pub use server::{DashboardConfig, DashboardServer, ServerState};
 pub use websocket::{WebSocketClient, WebSocketHandler, WebSocketMessage};
