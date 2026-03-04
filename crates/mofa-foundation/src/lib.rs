@@ -50,6 +50,9 @@ pub mod collaboration;
 // RAG module - vector store and document chunking
 pub mod rag;
 
+// cost module - concrete pricing registry and budget enforcer implementations
+pub mod cost;
+
 // Re-export config types
 pub use config::{AgentInfo, AgentYamlConfig, LLMYamlConfig, RuntimeConfig, ToolConfig};
 
