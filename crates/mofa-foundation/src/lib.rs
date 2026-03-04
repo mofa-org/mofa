@@ -54,6 +54,8 @@ pub mod rag;
 
 // HITL module - Human-in-the-Loop system
 pub mod hitl;
+// Security governance - PII redaction, content moderation, prompt guard
+pub mod security;
 
 // Re-export config types
 pub use config::{AgentInfo, AgentYamlConfig, LLMYamlConfig, RuntimeConfig, ToolConfig};

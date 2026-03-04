@@ -61,3 +61,5 @@ pub use metrics::*;
 // Human-in-the-Loop (HITL) module
 pub mod hitl;
 pub use hitl::*;
+// Security governance (PII redaction, content moderation, prompt guard)
+pub mod security;
