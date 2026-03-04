@@ -8,6 +8,7 @@ use super::provider::{LLMConfig, LLMProvider};
 use super::tool_executor::ToolExecutor;
 use super::types::*;
 use std::sync::Arc;
+use std::time::Duration;
 
 /// LLM 客户端
 /// LLM Client
@@ -171,6 +172,9 @@ pub struct ChatRequestBuilder {
     request: ChatCompletionRequest,
     tool_executor: Option<Arc<dyn ToolExecutor>>,
     max_tool_rounds: u32,
+    /// Per-tool-call timeout duration. If a single tool execution exceeds
+    /// this duration, it is cancelled and an error is returned for that call.
+    tool_timeout: Duration,
     // Retry configuration
     retry_policy: Option<LLMRetryPolicy>,
     retry_enabled: bool,
@@ -185,6 +189,7 @@ impl ChatRequestBuilder {
             request: ChatCompletionRequest::new(model),
             tool_executor: None,
             max_tool_rounds: 10,
+            tool_timeout: Duration::from_secs(30),
             retry_policy: None,
             retry_enabled: false,
         }
@@ -282,6 +287,24 @@ impl ChatRequestBuilder {
     /// Set maximum tool call rounds
     pub fn max_tool_rounds(mut self, rounds: u32) -> Self {
         self.max_tool_rounds = rounds;
+        self
+    }
+
+    /// Set per-tool-call timeout duration
+    ///
+    /// If a single tool execution takes longer than this, it is cancelled
+    /// and treated as an error. Default is 30 seconds.
+    ///
+    /// # Example
+    /// ```rust,ignore
+    /// let response = client.chat()
+    ///     .with_tool_executor(executor)
+    ///     .tool_timeout(Duration::from_secs(60))
+    ///     .send_with_tools()
+    ///     .await?;
+    /// ```
+    pub fn tool_timeout(mut self, timeout: Duration) -> Self {
+        self.tool_timeout = timeout;
         self
     }
 
@@ -454,13 +477,26 @@ impl ChatRequestBuilder {
                 self.request.messages.push(choice.message.clone());
             }
 
-            // 执行工具调用
-            // Execute tool calls
+            // 执行工具调用（带超时保护）
+            // Execute tool calls (with timeout protection)
             if let Some(tool_calls) = response.tool_calls() {
                 for tool_call in tool_calls {
-                    let result = executor
-                        .execute(&tool_call.function.name, &tool_call.function.arguments)
-                        .await;
+                    let tool_name = &tool_call.function.name;
+                    let tool_args = &tool_call.function.arguments;
+                    let timeout_dur = self.tool_timeout;
+
+                    let result = match tokio::time::timeout(
+                        timeout_dur,
+                        executor.execute(tool_name, tool_args),
+                    )
+                    .await
+                    {
+                        Ok(inner) => inner,
+                        Err(_) => Err(LLMError::Other(format!(
+                            "Tool '{}' timed out after {:?}",
+                            tool_name, timeout_dur
+                        ))),
+                    };
 
                     let result_str = match result {
                         Ok(r) => r,
