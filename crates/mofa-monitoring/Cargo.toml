@@ -63,6 +63,7 @@ mime_guess = "2.0"
 
 # Local dependencies
 mofa-kernel = { path = "../mofa-kernel", version = "0.1" }
+mofa-foundation = { path = "../mofa-foundation", version = "0.1" }
 futures = "0.3.31"
 
 # System metrics

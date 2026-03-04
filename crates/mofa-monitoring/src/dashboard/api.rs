@@ -9,7 +9,8 @@ use axum::{
     response::IntoResponse,
     routing::get,
 };
-use mofa_kernel::pricing::{InMemoryPricingRegistry, ProviderPricingRegistry};
+use mofa_foundation::cost::InMemoryPricingRegistry;
+use mofa_kernel::pricing::{ModelPricing, ProviderPricingRegistry};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -749,7 +750,7 @@ async fn get_cost_summary(
         let model_key = format!("{}/{}", llm.provider_name, llm.model_name);
         let estimated_cost = registry
             .get_pricing(&llm.provider_name, &llm.model_name)
-            .map(|p| p.calculate_cost(llm.prompt_tokens as u32, llm.completion_tokens as u32))
+            .map(|p: ModelPricing| p.calculate_cost(llm.prompt_tokens as u32, llm.completion_tokens as u32))
             .unwrap_or(0.0);
 
         total_cost += estimated_cost;
