@@ -1,14 +1,14 @@
-//! Rhai 规则引擎
+//! Rhai Rule Engine
 //!
-//! 提供灵活的业务规则定义和执行能力：
-//! - 条件规则评估
-//! - 规则链和规则组
-//! - 动作触发
-//! - 规则优先级管理
-//! - 规则热更新
+//! Provides flexible business rule definition and execution capabilities:
+//! - Conditional rule evaluation
+//! - Rule chains and rule groups
+//! - Action triggers
+//! - Rule priority management
+//! - Rule hot-reloading
 
 use super::engine::{RhaiScriptEngine, ScriptContext, ScriptEngineConfig};
-use anyhow::{Result, anyhow};
+use super::error::{RhaiError, RhaiResult};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -16,10 +16,60 @@ use tokio::sync::RwLock;
 use tracing::{info, warn};
 
 // ============================================================================
-// 规则定义
+// Validation Helpers
 // ============================================================================
 
-/// 规则优先级
+/// Validate that a string is a safe Rhai function identifier.
+/// Rejects anything that could be used for script injection.
+fn is_valid_rhai_identifier(name: &str) -> bool {
+    !name.is_empty()
+        && name
+            .chars()
+            .next()
+            .is_some_and(|c| c.is_ascii_alphabetic() || c == '_')
+        && name
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '_')
+}
+
+/// Escape a string so it is safe inside a Rhai double-quoted string literal.
+/// Handles backslashes, quotes, and control characters that could break the literal.
+fn escape_rhai_string(s: &str) -> String {
+    s.replace('\\', "\\\\")
+        .replace('"', "\\\"")
+        .replace('\n', "\\n")
+        .replace('\r', "\\r")
+        .replace('\t', "\\t")
+}
+
+/// Convert a serde_json::Value into a safe Rhai literal string.
+/// This avoids injection by not using the raw Display output of arbitrary JSON.
+fn json_to_rhai_literal(value: &serde_json::Value) -> String {
+    match value {
+        serde_json::Value::Null => "()".to_string(),
+        serde_json::Value::Bool(b) => b.to_string(),
+        serde_json::Value::Number(n) => n.to_string(),
+        serde_json::Value::String(s) => {
+            // Escape characters that could break out of the Rhai string literal
+            let escaped = escape_rhai_string(s);
+            format!("\"{}\"" , escaped)
+        }
+        // For complex types, serialize to a JSON string literal that the
+        // script can parse if needed.  This is safe because the outer
+        // quotes are controlled by us.
+        other => {
+            let json_str = other.to_string();
+            let escaped = escape_rhai_string(&json_str);
+            format!("\"{}\"" , escaped)
+        }
+    }
+}
+
+// ============================================================================
+// Rule Definitions
+// ============================================================================
+
+/// Rule priority
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, Default)]
 pub enum RulePriority {
     Lowest = 0,
@@ -31,75 +81,75 @@ pub enum RulePriority {
     Critical = 200,
 }
 
-/// 规则匹配模式
+/// Rule matching mode
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub enum RuleMatchMode {
-    /// 第一个匹配的规则执行后停止
+    /// Stop after executing the first matching rule
     #[default]
     FirstMatch,
-    /// 执行所有匹配的规则
+    /// Execute all matching rules
     AllMatch,
-    /// 按优先级执行所有匹配的规则
+    /// Execute all matching rules in priority order
     AllMatchOrdered,
-    /// 执行到第一个成功的规则为止
+    /// Execute until the first successful rule
     FirstSuccess,
 }
 
-/// 规则动作类型
+/// Rule action type
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type")]
 pub enum RuleAction {
-    /// 返回固定值
+    /// Return a fixed value
     ReturnValue { value: serde_json::Value },
-    /// 执行脚本并返回结果
+    /// Execute a script and return the result
     ExecuteScript { script: String },
-    /// 调用函数
+    /// Call a function
     CallFunction {
         function: String,
         args: Vec<serde_json::Value>,
     },
-    /// 修改上下文变量
+    /// Modify context variable
     SetVariable {
         name: String,
         value: serde_json::Value,
     },
-    /// 触发事件
+    /// Trigger an event
     TriggerEvent {
         event_type: String,
         data: serde_json::Value,
     },
-    /// 跳转到另一个规则
+    /// Jump to another rule
     GotoRule { rule_id: String },
-    /// 停止规则执行
+    /// Stop rule execution
     Stop,
-    /// 组合多个动作
+    /// Combine multiple actions
     Composite { actions: Vec<RuleAction> },
 }
 
-/// 规则定义
+/// Rule definition
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RuleDefinition {
-    /// 规则 ID
+    /// Rule ID
     pub id: String,
-    /// 规则名称
+    /// Rule name
     pub name: String,
-    /// 规则描述
+    /// Rule description
     #[serde(default)]
     pub description: String,
-    /// 规则优先级
+    /// Rule priority
     #[serde(default)]
     pub priority: RulePriority,
-    /// 是否启用
+    /// Whether enabled
     #[serde(default = "default_true")]
     pub enabled: bool,
-    /// 条件脚本（返回 bool）
+    /// Condition script (returns bool)
     pub condition: String,
-    /// 规则动作
+    /// Rule action
     pub action: RuleAction,
-    /// 规则标签
+    /// Rule tags
     #[serde(default)]
     pub tags: Vec<String>,
-    /// 元数据
+    /// Metadata
     #[serde(default)]
     pub metadata: HashMap<String, String>,
 }
@@ -145,28 +195,28 @@ impl RuleDefinition {
 }
 
 // ============================================================================
-// 规则组
+// Rule Groups
 // ============================================================================
 
-/// 规则组定义
+/// Rule group definition
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RuleGroupDefinition {
-    /// 组 ID
+    /// Group ID
     pub id: String,
-    /// 组名称
+    /// Group name
     pub name: String,
-    /// 组描述
+    /// Group description
     #[serde(default)]
     pub description: String,
-    /// 匹配模式
+    /// Matching mode
     #[serde(default)]
     pub match_mode: RuleMatchMode,
-    /// 组内规则 ID 列表
+    /// List of rule IDs in the group
     pub rule_ids: Vec<String>,
-    /// 是否启用
+    /// Whether enabled
     #[serde(default = "default_true")]
     pub enabled: bool,
-    /// 默认动作（没有规则匹配时执行）
+    /// Default action (executed when no rule matches)
     pub default_action: Option<RuleAction>,
 }
 
@@ -200,78 +250,78 @@ impl RuleGroupDefinition {
 }
 
 // ============================================================================
-// 规则执行结果
+// Rule Execution Results
 // ============================================================================
 
-/// 规则匹配结果
+/// Rule match result
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RuleMatchResult {
-    /// 规则 ID
+    /// Rule ID
     pub rule_id: String,
-    /// 是否匹配
+    /// Whether matched
     pub matched: bool,
-    /// 条件评估时间（毫秒）
+    /// Condition evaluation time (milliseconds)
     pub evaluation_time_ms: u64,
 }
 
-/// 规则执行结果
+/// Rule execution result
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RuleExecutionResult {
-    /// 执行的规则 ID
+    /// Executed rule ID
     pub rule_id: String,
-    /// 是否成功
+    /// Whether successful
     pub success: bool,
-    /// 动作结果
+    /// Action result
     pub result: serde_json::Value,
-    /// 错误信息
+    /// Error message
     pub error: Option<String>,
-    /// 执行时间（毫秒）
+    /// Execution time (milliseconds)
     pub execution_time_ms: u64,
-    /// 变量更新
+    /// Variable updates
     pub variable_updates: HashMap<String, serde_json::Value>,
-    /// 触发的事件
+    /// Triggered events
     pub triggered_events: Vec<(String, serde_json::Value)>,
 }
 
-/// 规则组执行结果
+/// Rule group execution result
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RuleGroupExecutionResult {
-    /// 组 ID
+    /// Group ID
     pub group_id: String,
-    /// 匹配结果列表
+    /// Match results list
     pub match_results: Vec<RuleMatchResult>,
-    /// 执行结果列表
+    /// Execution results list
     pub execution_results: Vec<RuleExecutionResult>,
-    /// 最终结果（如果有）
+    /// Final result (if any)
     pub final_result: Option<serde_json::Value>,
-    /// 是否有规则匹配
+    /// Whether any rule matched
     pub any_matched: bool,
-    /// 是否执行了默认动作
+    /// Whether default action was executed
     pub used_default: bool,
-    /// 总执行时间（毫秒）
+    /// Total execution time (milliseconds)
     pub total_time_ms: u64,
 }
 
 // ============================================================================
-// 规则引擎
+// Rule Engine
 // ============================================================================
-
-/// 规则引擎
+pub type HandlerMap =
+    Arc<RwLock<HashMap<String, Vec<Box<dyn Fn(&str, &serde_json::Value) + Send + Sync>>>>>;
+/// Rule engine
 pub struct RuleEngine {
-    /// 脚本引擎
+    /// Script engine
     engine: Arc<RhaiScriptEngine>,
-    /// 规则存储
+    /// Rule storage
     rules: Arc<RwLock<HashMap<String, RuleDefinition>>>,
-    /// 规则组存储
+    /// Rule group storage
     groups: Arc<RwLock<HashMap<String, RuleGroupDefinition>>>,
-    /// 事件处理器
-    event_handlers:
-        Arc<RwLock<HashMap<String, Vec<Box<dyn Fn(&str, &serde_json::Value) + Send + Sync>>>>>,
+    /// Event handlers
+    event_handlers: HandlerMap,
 }
 
 impl RuleEngine {
-    /// 创建规则引擎
-    pub fn new(engine_config: ScriptEngineConfig) -> Result<Self> {
+    /// Create a rule engine
+    pub fn new(engine_config: ScriptEngineConfig) -> RhaiResult<Self> {
         let engine = Arc::new(RhaiScriptEngine::new(engine_config)?);
         Ok(Self {
             engine,
@@ -281,7 +331,7 @@ impl RuleEngine {
         })
     }
 
-    /// 使用已有引擎创建
+    /// Create with an existing engine
     pub fn with_engine(engine: Arc<RhaiScriptEngine>) -> Self {
         Self {
             engine,
@@ -291,32 +341,32 @@ impl RuleEngine {
         }
     }
 
-    /// 注册规则
-    pub async fn register_rule(&self, rule: RuleDefinition) -> Result<()> {
+    /// Register a rule
+    pub async fn register_rule(&self, rule: RuleDefinition) -> RhaiResult<()> {
         let mut rules = self.rules.write().await;
         info!("Registered rule: {} ({})", rule.name, rule.id);
         rules.insert(rule.id.clone(), rule);
         Ok(())
     }
 
-    /// 批量注册规则
-    pub async fn register_rules(&self, rules: Vec<RuleDefinition>) -> Result<()> {
+    /// Batch register rules
+    pub async fn register_rules(&self, rules: Vec<RuleDefinition>) -> RhaiResult<()> {
         for rule in rules {
             self.register_rule(rule).await?;
         }
         Ok(())
     }
 
-    /// 注册规则组
-    pub async fn register_group(&self, group: RuleGroupDefinition) -> Result<()> {
+    /// Register a rule group
+    pub async fn register_group(&self, group: RuleGroupDefinition) -> RhaiResult<()> {
         let mut groups = self.groups.write().await;
         info!("Registered rule group: {} ({})", group.name, group.id);
         groups.insert(group.id.clone(), group);
         Ok(())
     }
 
-    /// 从 YAML 加载规则
-    pub async fn load_rules_from_yaml(&self, path: &str) -> Result<Vec<String>> {
+    /// Load rules from YAML
+    pub async fn load_rules_from_yaml(&self, path: &str) -> RhaiResult<Vec<String>> {
         let content = tokio::fs::read_to_string(path).await?;
         let rules: Vec<RuleDefinition> = serde_yaml::from_str(&content)?;
         let ids: Vec<String> = rules.iter().map(|r| r.id.clone()).collect();
@@ -324,8 +374,8 @@ impl RuleEngine {
         Ok(ids)
     }
 
-    /// 从 JSON 加载规则
-    pub async fn load_rules_from_json(&self, path: &str) -> Result<Vec<String>> {
+    /// Load rules from JSON
+    pub async fn load_rules_from_json(&self, path: &str) -> RhaiResult<Vec<String>> {
         let content = tokio::fs::read_to_string(path).await?;
         let rules: Vec<RuleDefinition> = serde_json::from_str(&content)?;
         let ids: Vec<String> = rules.iter().map(|r| r.id.clone()).collect();
@@ -333,12 +383,12 @@ impl RuleEngine {
         Ok(ids)
     }
 
-    /// 评估规则条件
+    /// Evaluate rule condition
     pub async fn evaluate_condition(
         &self,
         rule: &RuleDefinition,
         context: &ScriptContext,
-    ) -> Result<bool> {
+    ) -> RhaiResult<bool> {
         if !rule.enabled {
             return Ok(false);
         }
@@ -353,7 +403,7 @@ impl RuleEngine {
             return Ok(false);
         }
 
-        // 转换结果为布尔值
+        // Convert result to boolean
         Ok(match &result.value {
             serde_json::Value::Bool(b) => *b,
             serde_json::Value::Number(n) => n.as_i64().unwrap_or(0) != 0,
@@ -364,12 +414,12 @@ impl RuleEngine {
         })
     }
 
-    /// 执行规则动作
+    /// Execute rule action
     pub fn execute_action<'a>(
         &'a self,
         action: &'a RuleAction,
         context: &'a mut ScriptContext,
-    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<RuleExecutionResult>> + Send + 'a>>
+    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = RhaiResult<RuleExecutionResult>> + Send + 'a>>
     {
         Box::pin(async move {
             let start_time = std::time::Instant::now();
@@ -396,10 +446,24 @@ impl RuleEngine {
                 }
 
                 RuleAction::CallFunction { function, args } => {
-                    // 简化处理：将函数调用转换为脚本
+                    // Validate function name to prevent script injection
+                    if !is_valid_rhai_identifier(function) {
+                        return Ok(RuleExecutionResult {
+                            rule_id: String::new(),
+                            success: false,
+                            result: serde_json::Value::Null,
+                            error: Some(format!(
+                                "Invalid function name: '{}'. Must be a valid identifier.",
+                                function
+                            )),
+                            execution_time_ms: start_time.elapsed().as_millis() as u64,
+                            variable_updates,
+                            triggered_events,
+                        });
+                    }
                     let args_str = args
                         .iter()
-                        .map(|a| a.to_string())
+                        .map(json_to_rhai_literal)
                         .collect::<Vec<_>>()
                         .join(", ");
                     let script = format!("{}({})", function, args_str);
@@ -426,7 +490,7 @@ impl RuleEngine {
 
                 RuleAction::TriggerEvent { event_type, data } => {
                     triggered_events.push((event_type.clone(), data.clone()));
-                    // 调用事件处理器
+                    // Call event handlers
                     let handlers = self.event_handlers.read().await;
                     if let Some(handlers) = handlers.get(event_type) {
                         for handler in handlers {
@@ -437,7 +501,7 @@ impl RuleEngine {
                 }
 
                 RuleAction::GotoRule { rule_id } => {
-                    // 返回特殊值表示跳转
+                    // Return special value indicating jump
                     serde_json::json!({ "goto": rule_id })
                 }
 
@@ -446,10 +510,10 @@ impl RuleEngine {
                 }
 
                 RuleAction::Composite { actions } => {
-                    // 对于复合动作，顺序执行所有子动作
+                    // For composite actions, execute all sub-actions sequentially
                     let mut results = Vec::new();
                     for sub_action in actions {
-                        // 使用非递归方式处理
+                        // Use non-recursive handling
                         let sub_result = self.execute_single_action(sub_action, context).await?;
                         if !sub_result.success {
                             return Ok(sub_result);
@@ -474,12 +538,12 @@ impl RuleEngine {
         })
     }
 
-    /// 执行单个非复合动作（避免递归）
+    /// Execute a single non-composite action (avoid recursion)
     async fn execute_single_action(
         &self,
         action: &RuleAction,
         context: &mut ScriptContext,
-    ) -> Result<RuleExecutionResult> {
+    ) -> RhaiResult<RuleExecutionResult> {
         let start_time = std::time::Instant::now();
         let mut variable_updates = HashMap::new();
         let mut triggered_events = Vec::new();
@@ -504,9 +568,24 @@ impl RuleEngine {
             }
 
             RuleAction::CallFunction { function, args } => {
+                // Validate function name to prevent script injection
+                if !is_valid_rhai_identifier(function) {
+                    return Ok(RuleExecutionResult {
+                        rule_id: String::new(),
+                        success: false,
+                        result: serde_json::Value::Null,
+                        error: Some(format!(
+                            "Invalid function name: '{}'. Must be a valid identifier.",
+                            function
+                        )),
+                        execution_time_ms: start_time.elapsed().as_millis() as u64,
+                        variable_updates,
+                        triggered_events,
+                    });
+                }
                 let args_str = args
                     .iter()
-                    .map(|a| a.to_string())
+                    .map(json_to_rhai_literal)
                     .collect::<Vec<_>>()
                     .join(", ");
                 let script = format!("{}({})", function, args_str);
@@ -551,8 +630,8 @@ impl RuleEngine {
             }
 
             RuleAction::Composite { .. } => {
-                // 复合动作在这里不递归处理，返回错误
-                return Err(anyhow!("Nested composite actions are not supported"));
+                // Composite actions are not handled recursively here, return error
+                return Err(RhaiError::Other("Nested composite actions are not supported".to_string()));
             }
         };
 
@@ -567,42 +646,42 @@ impl RuleEngine {
         })
     }
 
-    /// 执行单个规则
+    /// Execute a single rule
     pub async fn execute_rule(
         &self,
         rule_id: &str,
         context: &mut ScriptContext,
-    ) -> Result<Option<RuleExecutionResult>> {
+    ) -> RhaiResult<Option<RuleExecutionResult>> {
         let rules = self.rules.read().await;
         let rule = rules
             .get(rule_id)
-            .ok_or_else(|| anyhow!("Rule not found: {}", rule_id))?
+            .ok_or_else(|| RhaiError::NotFound(format!("Rule not found: {}", rule_id)))?
             .clone();
         drop(rules);
 
-        // 评估条件
+        // Evaluate condition
         if !self.evaluate_condition(&rule, context).await? {
             return Ok(None);
         }
 
-        // 执行动作
+        // Execute action
         let mut result = self.execute_action(&rule.action, context).await?;
         result.rule_id = rule_id.to_string();
         Ok(Some(result))
     }
 
-    /// 执行规则组
+    /// Execute a rule group
     pub async fn execute_group(
         &self,
         group_id: &str,
         context: &mut ScriptContext,
-    ) -> Result<RuleGroupExecutionResult> {
+    ) -> RhaiResult<RuleGroupExecutionResult> {
         let start_time = std::time::Instant::now();
 
         let groups = self.groups.read().await;
         let group = groups
             .get(group_id)
-            .ok_or_else(|| anyhow!("Rule group not found: {}", group_id))?
+            .ok_or_else(|| RhaiError::NotFound(format!("Rule group not found: {}", group_id)))?
             .clone();
         drop(groups);
 
@@ -618,7 +697,7 @@ impl RuleEngine {
             });
         }
 
-        // 获取规则并按优先级排序
+        // Get rules and sort by priority
         let rules = self.rules.read().await;
         let mut group_rules: Vec<_> = group
             .rule_ids
@@ -627,7 +706,7 @@ impl RuleEngine {
             .collect();
         drop(rules);
 
-        // 按优先级排序（高优先级在前）
+        // Sort by priority (higher priority first)
         group_rules.sort_by(|a, b| b.priority.cmp(&a.priority));
 
         let mut match_results = Vec::new();
@@ -651,18 +730,18 @@ impl RuleEngine {
 
             any_matched = true;
 
-            // 执行动作
+            // Execute action
             let mut result = self.execute_action(&rule.action, context).await?;
             result.rule_id = rule.id.clone();
 
-            // 检查是否需要停止
+            // Check if execution should stop
             let should_stop = if let Some(obj) = result.result.as_object() {
                 obj.contains_key("stop")
             } else {
                 false
             };
 
-            // 检查是否跳转
+            // Check for rule jump
             let goto_rule = if let Some(obj) = result.result.as_object() {
                 obj.get("goto")
                     .and_then(|v| v.as_str())
@@ -679,7 +758,7 @@ impl RuleEngine {
             }
 
             if let Some(target_rule_id) = goto_rule {
-                // 执行目标规则
+                // Execute target rule
                 if let Some(goto_result) = self.execute_rule(&target_rule_id, context).await? {
                     final_result = Some(goto_result.result.clone());
                     execution_results.push(goto_result);
@@ -687,14 +766,14 @@ impl RuleEngine {
                 break;
             }
 
-            // 根据匹配模式决定是否继续
+            // Decide whether to continue based on match mode
             match group.match_mode {
                 RuleMatchMode::FirstMatch | RuleMatchMode::FirstSuccess => break,
                 RuleMatchMode::AllMatch | RuleMatchMode::AllMatchOrdered => continue,
             }
         }
 
-        // 如果没有匹配且有默认动作
+        // If no match and has default action
         let used_default = !any_matched && group.default_action.is_some();
         if let Some(ref default_action) = group.default_action
             && !any_matched
@@ -716,16 +795,16 @@ impl RuleEngine {
         })
     }
 
-    /// 执行所有匹配的规则
+    /// Execute all matching rules
     pub async fn execute_all(
         &self,
         context: &mut ScriptContext,
-    ) -> Result<Vec<RuleExecutionResult>> {
+    ) -> RhaiResult<Vec<RuleExecutionResult>> {
         let rules = self.rules.read().await;
         let mut all_rules: Vec<_> = rules.values().cloned().collect();
         drop(rules);
 
-        // 按优先级排序
+        // Sort by priority
         all_rules.sort_by(|a, b| b.priority.cmp(&a.priority));
 
         let mut results = Vec::new();
@@ -745,19 +824,19 @@ impl RuleEngine {
         Ok(results)
     }
 
-    /// 获取规则
+    /// Get a rule
     pub async fn get_rule(&self, rule_id: &str) -> Option<RuleDefinition> {
         let rules = self.rules.read().await;
         rules.get(rule_id).cloned()
     }
 
-    /// 列出所有规则
+    /// List all rules
     pub async fn list_rules(&self) -> Vec<RuleDefinition> {
         let rules = self.rules.read().await;
         rules.values().cloned().collect()
     }
 
-    /// 按标签过滤规则
+    /// Filter rules by tag
     pub async fn list_rules_by_tag(&self, tag: &str) -> Vec<RuleDefinition> {
         let rules = self.rules.read().await;
         rules
@@ -767,41 +846,41 @@ impl RuleEngine {
             .collect()
     }
 
-    /// 移除规则
+    /// Remove a rule
     pub async fn unregister_rule(&self, rule_id: &str) -> bool {
         let mut rules = self.rules.write().await;
         rules.remove(rule_id).is_some()
     }
 
-    /// 启用规则
-    pub async fn enable_rule(&self, rule_id: &str) -> Result<()> {
+    /// Enable a rule
+    pub async fn enable_rule(&self, rule_id: &str) -> RhaiResult<()> {
         let mut rules = self.rules.write().await;
         if let Some(rule) = rules.get_mut(rule_id) {
             rule.enabled = true;
             Ok(())
         } else {
-            Err(anyhow!("Rule not found: {}", rule_id))
+            Err(RhaiError::NotFound(format!("Rule not found: {}", rule_id)))
         }
     }
 
-    /// 禁用规则
-    pub async fn disable_rule(&self, rule_id: &str) -> Result<()> {
+    /// Disable a rule
+    pub async fn disable_rule(&self, rule_id: &str) -> RhaiResult<()> {
         let mut rules = self.rules.write().await;
         if let Some(rule) = rules.get_mut(rule_id) {
             rule.enabled = false;
             Ok(())
         } else {
-            Err(anyhow!("Rule not found: {}", rule_id))
+            Err(RhaiError::NotFound(format!("Rule not found: {}", rule_id)))
         }
     }
 
-    /// 规则数量
+    /// Rule count
     pub async fn rule_count(&self) -> usize {
         let rules = self.rules.read().await;
         rules.len()
     }
 
-    /// 清空所有规则
+    /// Clear all rules
     pub async fn clear(&self) {
         let mut rules = self.rules.write().await;
         let mut groups = self.groups.write().await;
@@ -811,10 +890,10 @@ impl RuleEngine {
 }
 
 // ============================================================================
-// 便捷构建器
+// Convenience Builders
 // ============================================================================
 
-/// 规则构建器
+/// Rule builder
 pub struct RuleBuilder {
     rule: RuleDefinition,
 }
@@ -911,13 +990,14 @@ impl RuleBuilder {
         self
     }
 
+    #[must_use]
     pub fn build(self) -> RuleDefinition {
         self.rule
     }
 }
 
 // ============================================================================
-// 测试
+// Tests
 // ============================================================================
 
 #[cfg(test)]
@@ -987,7 +1067,7 @@ mod tests {
     async fn test_rule_group_first_match() {
         let engine = RuleEngine::new(ScriptEngineConfig::default()).unwrap();
 
-        // 注册多个规则
+        // Register multiple rules
         let rules = vec![
             RuleBuilder::new("rule_high", "High Value")
                 .priority(RulePriority::High)
@@ -1008,14 +1088,14 @@ mod tests {
 
         engine.register_rules(rules).await.unwrap();
 
-        // 创建规则组
+        // Create rule group
         let group = RuleGroupDefinition::new("value_checker", "Value Checker")
             .with_match_mode(RuleMatchMode::FirstMatch)
             .with_rules(vec!["rule_high", "rule_medium", "rule_low"]);
 
         engine.register_group(group).await.unwrap();
 
-        // 测试高值
+        // Test high value
         let mut context = ScriptContext::new().with_variable("value", 150).unwrap();
         let result = engine
             .execute_group("value_checker", &mut context)
@@ -1026,7 +1106,7 @@ mod tests {
         assert_eq!(result.execution_results.len(), 1);
         assert_eq!(result.final_result, Some(serde_json::json!("high")));
 
-        // 测试中值
+        // Test medium value
         let mut context = ScriptContext::new().with_variable("value", 75).unwrap();
         let result = engine
             .execute_group("value_checker", &mut context)
@@ -1056,7 +1136,7 @@ mod tests {
 
         engine.register_group(group).await.unwrap();
 
-        // 测试负值，应该使用默认动作
+        // Test negative value, should use default action
         let mut context = ScriptContext::new().with_variable("value", -10).unwrap();
         let result = engine
             .execute_group("number_group", &mut context)
@@ -1108,5 +1188,220 @@ mod tests {
         assert_eq!(rule.priority, RulePriority::High);
         assert_eq!(rule.condition, "x > 10");
         assert!(rule.tags.contains(&"test".to_string()));
+    }
+
+    // ========================================================================
+    // Regression tests for C4: Rhai CallFunction script injection
+    // ========================================================================
+
+    #[test]
+    fn test_is_valid_rhai_identifier_accepts_valid_names() {
+        assert!(is_valid_rhai_identifier("foo"));
+        assert!(is_valid_rhai_identifier("my_function"));
+        assert!(is_valid_rhai_identifier("_private"));
+        assert!(is_valid_rhai_identifier("camelCase123"));
+        assert!(is_valid_rhai_identifier("A"));
+    }
+
+    #[test]
+    fn test_is_valid_rhai_identifier_rejects_empty() {
+        assert!(!is_valid_rhai_identifier(""));
+    }
+
+    #[test]
+    fn test_is_valid_rhai_identifier_rejects_injection_payloads() {
+        // Semicolons allow chaining arbitrary statements
+        assert!(!is_valid_rhai_identifier("foo(); dangerous();//"));
+        // Parentheses alone are not part of an identifier
+        assert!(!is_valid_rhai_identifier("foo()"));
+        // Spaces break out of the identifier position
+        assert!(!is_valid_rhai_identifier("foo bar"));
+        // Leading digit is not a valid identifier start
+        assert!(!is_valid_rhai_identifier("1foo"));
+        // Quotes allow string breakout
+        assert!(!is_valid_rhai_identifier("foo\""));
+        // Newlines could bypass single-line assumptions
+        assert!(!is_valid_rhai_identifier("foo\nbar"));
+    }
+
+    #[test]
+    fn test_json_to_rhai_literal_strings_are_escaped() {
+        // A plain string
+        assert_eq!(
+            json_to_rhai_literal(&serde_json::json!("hello")),
+            "\"hello\""
+        );
+        // Embedded double quotes must be escaped
+        assert_eq!(
+            json_to_rhai_literal(&serde_json::json!("say \"hi\"")),
+            r#""say \"hi\"""#
+        );
+        // Embedded backslashes must be escaped
+        assert_eq!(
+            json_to_rhai_literal(&serde_json::json!("back\\slash")),
+            r#""back\\slash""#
+        );
+        // Injection attempt via string value: closing quote + code
+        let malicious = serde_json::json!("\"); dangerous(); //");
+        let lit = json_to_rhai_literal(&malicious);
+        // The result must be a single quoted string — no unescaped quotes inside
+        assert!(lit.starts_with('"'));
+        assert!(lit.ends_with('"'));
+        // Count unescaped quotes: should be exactly 2 (open and close).
+        // A quote is considered unescaped if it is preceded by an even number
+        // of consecutive backslashes (including zero).
+        let mut unescaped_quotes: Vec<usize> = Vec::new();
+        let mut backslash_run = 0usize;
+        for (i, c) in lit.char_indices() {
+            if c == '\\' {
+                backslash_run += 1;
+            } else {
+                if c == '"' && backslash_run.is_multiple_of(2) {
+                    unescaped_quotes.push(i);
+                }
+                backslash_run = 0;
+            }
+        }
+        assert_eq!(
+            unescaped_quotes.len(),
+            2,
+            "Injection payload must be fully contained in a single string literal, got: {}",
+            lit
+        );
+    }
+
+    #[test]
+    fn test_json_to_rhai_literal_control_chars_are_escaped() {
+        // Newlines must become \n
+        assert_eq!(
+            json_to_rhai_literal(&serde_json::json!("hello\nworld")),
+            "\"hello\\nworld\""
+        );
+        // Tabs must become \t
+        assert_eq!(
+            json_to_rhai_literal(&serde_json::json!("tab\there")),
+            "\"tab\\there\""
+        );
+        // Carriage returns must become \r
+        assert_eq!(
+            json_to_rhai_literal(&serde_json::json!("carriage\rreturn")),
+            "\"carriage\\rreturn\""
+        );
+    }
+
+    #[test]
+    fn test_json_to_rhai_literal_primitives() {
+        assert_eq!(json_to_rhai_literal(&serde_json::json!(null)), "()");
+        assert_eq!(json_to_rhai_literal(&serde_json::json!(true)), "true");
+        assert_eq!(json_to_rhai_literal(&serde_json::json!(false)), "false");
+        assert_eq!(json_to_rhai_literal(&serde_json::json!(42)), "42");
+        assert_eq!(json_to_rhai_literal(&serde_json::json!(3.125)), "3.125");
+    }
+
+    #[test]
+    fn test_json_to_rhai_literal_complex_types_become_string() {
+        // Arrays and objects are serialized as quoted JSON strings
+        let arr = serde_json::json!([1, 2, 3]);
+        let lit = json_to_rhai_literal(&arr);
+        assert!(lit.starts_with('"') && lit.ends_with('"'));
+        // The inner content, when unescaped, should be valid JSON
+        let inner = &lit[1..lit.len() - 1];
+        let inner = inner.replace("\\\"", "\"").replace("\\\\", "\\");
+        assert!(serde_json::from_str::<serde_json::Value>(&inner).is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_callfunction_rejects_malicious_function_name() {
+        let engine = RuleEngine::new(ScriptEngineConfig::default()).unwrap();
+
+        // Create a rule with a CallFunction action that uses an injection payload
+        // as the function name.  Before the C4 fix, this would have been
+        // interpolated directly into a Rhai script string, executing arbitrary
+        // code.  After the fix, the engine must reject it.
+        let rule = RuleDefinition {
+            id: "inject_rule".to_string(),
+            name: "Injection Test".to_string(),
+            description: String::new(),
+            condition: "true".to_string(),
+            action: RuleAction::CallFunction {
+                function: "foo(); dangerous(); //".to_string(),
+                args: vec![],
+            },
+            priority: RulePriority::Normal,
+            enabled: true,
+            tags: vec![],
+            metadata: HashMap::new(),
+        };
+
+        engine.register_rule(rule).await.unwrap();
+
+        let mut context = ScriptContext::new();
+        let result = engine
+            .execute_rule("inject_rule", &mut context)
+            .await
+            .unwrap();
+
+        // The rule must have been evaluated (condition is `true`) but the
+        // action must fail because the function name is invalid.
+        let result = result.expect("Rule should match (condition is true)");
+        assert!(!result.success, "Malicious function name must be rejected");
+        assert!(
+            result
+                .error
+                .as_ref()
+                .unwrap()
+                .contains("Invalid function name"),
+            "Error message should mention invalid function name, got: {:?}",
+            result.error
+        );
+    }
+
+    #[tokio::test]
+    async fn test_callfunction_string_arg_injection_is_safe() {
+        let engine = RuleEngine::new(ScriptEngineConfig::default()).unwrap();
+
+        // A rule with a valid function name, but args contain an injection
+        // payload.  The engine must safely quote the argument so that it
+        // becomes a harmless string literal rather than executable code.
+        let rule = RuleDefinition {
+            id: "arg_inject_rule".to_string(),
+            name: "Arg Injection Test".to_string(),
+            description: String::new(),
+            condition: "true".to_string(),
+            action: RuleAction::CallFunction {
+                function: "identity".to_string(),
+                args: vec![serde_json::json!("\"); dangerous(); //")],
+            },
+            priority: RulePriority::Normal,
+            enabled: true,
+            tags: vec![],
+            metadata: HashMap::new(),
+        };
+
+        engine.register_rule(rule).await.unwrap();
+
+        let mut context = ScriptContext::new();
+        let result = engine
+            .execute_rule("arg_inject_rule", &mut context)
+            .await
+            .unwrap();
+
+        // The 'identity' function doesn't exist, so the script execution
+        // itself will fail — but the important thing is that the generated
+        // script is NOT `identity(""); dangerous(); //")` (which would call
+        // `dangerous()`).  If injection happened, we'd see different errors
+        // or `dangerous` in the error output.
+        let result = result.expect("Rule should match (condition is true)");
+        // Either the call fails with "function not found" for `identity`
+        // or succeeds if the engine defines it.  In no case should
+        // "dangerous" appear in error messages (which would indicate
+        // injection caused it to be parsed as a separate function call).
+        if let Some(ref err) = result.error {
+            assert!(
+                !err.contains("dangerous"),
+                "Injection payload must not be executed as code, got error: {}",
+                err
+            );
+        }
     }
 }

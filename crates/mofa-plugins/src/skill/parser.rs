@@ -1,17 +1,20 @@
 //! SKILL.md 文件解析器
+//! SKILL.md file parser
 
 use crate::skill::metadata::SkillMetadata;
-use anyhow::Result;
+use mofa_kernel::plugin::{PluginError, PluginResult};
 use regex::Regex;
 use std::fs;
 use std::path::Path;
 
 /// SKILL.md 解析器
+/// SKILL.md parser
 pub struct SkillParser;
 
 impl SkillParser {
     /// 解析 YAML frontmatter
-    pub fn parse_frontmatter(content: &str) -> Result<(SkillMetadata, String)> {
+    /// Parse YAML frontmatter
+    pub fn parse_frontmatter(content: &str) -> PluginResult<(SkillMetadata, String)> {
         // Use [\s\S]*? instead of .*? to match newlines in YAML content
         let frontmatter_regex = Regex::new(r"^---\s*\n([\s\S]*?)\n---\s*\n([\s\S]*)$").unwrap();
 
@@ -19,18 +22,28 @@ impl SkillParser {
             let yaml = &caps[1];
             let markdown = &caps[2];
 
-            let metadata: SkillMetadata = serde_yaml::from_str(yaml)
-                .map_err(|e| anyhow::anyhow!("Failed to parse YAML frontmatter: {}", e))?;
+            let metadata: SkillMetadata = serde_yaml::from_str(yaml).map_err(|e| {
+                mofa_kernel::plugin::PluginError::ExecutionFailed(format!(
+                    "Failed to parse YAML frontmatter: {}",
+                    e
+                ))
+            })?;
 
             Ok((metadata, markdown.to_string()))
         } else {
-            anyhow::bail!("SKILL.md must start with YAML frontmatter")
+            Err(PluginError::ExecutionFailed(
+                "SKILL.md must start with YAML frontmatter".to_string(),
+            ))
         }
     }
 
     /// 从 SKILL.md 文件解析元数据
-    pub fn parse_from_file(skill_md_path: impl AsRef<Path>) -> Result<(SkillMetadata, String)> {
-        let content = fs::read_to_string(skill_md_path.as_ref())?;
+    /// Parse metadata from SKILL.md file
+    pub fn parse_from_file(
+        skill_md_path: impl AsRef<Path>,
+    ) -> PluginResult<(SkillMetadata, String)> {
+        let content = fs::read_to_string(skill_md_path.as_ref())
+            .map_err(|e| PluginError::Other(e.to_string()))?;
         Self::parse_frontmatter(&content)
     }
 }

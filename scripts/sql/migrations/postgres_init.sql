@@ -1,14 +1,20 @@
 -- ============================================================================
 -- 简化的 UUID 生成函数 (兼容多版本)
+-- Simplified UUID generation function (compatible with multiple versions)
 -- ============================================================================
 CREATE OR REPLACE FUNCTION gen_uuid_v7() RETURNS UUID AS $$
 BEGIN
     -- 简化实现，避免复杂的异常处理
-    -- 检查 PostgreSQL 版本并选择适当的 UUID 生成方式
+    -- Simplified implementation to avoid complex exception handling
+    -- 检查 PostgreSQL 版本并选择适当和 UUID 生成方式
+    -- Check PostgreSQL version and select appropriate UUID generation method
     IF (SELECT current_setting('server_version_num')::int >= 170000) THEN
         -- PostgreSQL 17+ 使用原生 UUID v7
+        -- PostgreSQL 17+ uses native UUID v7
         -- 注意：PostgreSQL 17+ 的正确函数名是 uuid_generate_v7()，但需要安装扩展
+        -- Note: The correct function in PostgreSQL 17+ is uuid_generate_v7(), but requires an extension
         -- 如果函数不存在，回退到 gen_random_uuid()
+        -- If the function does not exist, fall back to gen_random_uuid()
         BEGIN
             RETURN uuid_generate_v7();
         EXCEPTION WHEN undefined_function THEN
@@ -16,6 +22,7 @@ BEGIN
         END;
     ELSE
         -- 老版本使用 UUID v4（时间排序稍弱但功能正常）
+        -- Older versions use UUID v4 (weaker time ordering but fully functional)
         RETURN gen_random_uuid();
     END IF;
 END;
@@ -23,14 +30,20 @@ $$ LANGUAGE plpgsql;
 
 -- ============================================================================
 -- 创建自定义类型 (修正语法)
+-- Create custom types (syntax correction)
 -- ============================================================================
 -- 注意：为提高兼容性，使用 VARCHAR 代替 ENUM 类型
+-- Note: Use VARCHAR instead of ENUM type to improve compatibility
 -- 允许值：
+-- Allowed values:
 --   role: 'system', 'user', 'assistant', 'tool'
+--   role: 'system', 'user', 'assistant', 'tool'
+--   status: 'success', 'failed', 'timeout', 'rate_limited', 'cancelled'
 --   status: 'success', 'failed', 'timeout', 'rate_limited', 'cancelled'
 
 -- ============================================================================
 -- 表结构创建
+-- Table structure creation
 -- ============================================================================
 
 -- Create chat session table
@@ -46,6 +59,7 @@ CREATE TABLE IF NOT EXISTS entity_chat_session (
 );
 
 -- 创建索引
+-- Create indexes
 CREATE INDEX IF NOT EXISTS idx_chat_session_user ON entity_chat_session(user_id);
 CREATE INDEX IF NOT EXISTS idx_chat_session_agent ON entity_chat_session(agent_id);
 CREATE INDEX IF NOT EXISTS idx_chat_session_tenant ON entity_chat_session(tenant_id);
@@ -111,9 +125,11 @@ CREATE INDEX IF NOT EXISTS idx_api_call_time ON entity_llm_api_call(create_time 
 
 -- ============================================================================
 -- 自动更新函数和触发器
+-- Automatic update functions and triggers
 -- ============================================================================
 
 -- 创建自动更新时间的函数
+-- Create function to automatically update time
 CREATE OR REPLACE FUNCTION update_modified_column()
 RETURNS TRIGGER AS $$
 BEGIN
@@ -123,6 +139,7 @@ END;
 $$ LANGUAGE plpgsql;
 
 -- 创建触发器
+-- Create triggers
 DROP TRIGGER IF EXISTS trigger_update_chat_session_time ON entity_chat_session;
 CREATE TRIGGER trigger_update_chat_session_time
     BEFORE UPDATE ON entity_chat_session
@@ -199,6 +216,7 @@ $$ LANGUAGE plpgsql;
 
 -- ============================================================================
 -- 成功消息
+-- Success messages
 -- ============================================================================
 
 DO $$

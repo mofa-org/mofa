@@ -3,6 +3,7 @@ use chrono::{DateTime, Local, TimeZone, Utc};
 use serde_json::json;
 
 /// 日期时间工具 - 获取当前时间、格式化日期
+/// Date and time utilities - Get current time, format dates
 pub struct DateTimeTool {
     definition: ToolDefinition,
 }
@@ -65,7 +66,7 @@ impl ToolExecutor for DateTimeTool {
     async fn execute(&self, arguments: serde_json::Value) -> PluginResult<serde_json::Value> {
         let operation = arguments["operation"]
             .as_str()
-            .ok_or_else(|| anyhow::anyhow!("Operation is required"))?;
+            .ok_or_else(|| mofa_kernel::plugin::PluginError::ExecutionFailed("Operation is required".to_string()))?;
 
         match operation {
             "now" => {
@@ -82,7 +83,7 @@ impl ToolExecutor for DateTimeTool {
             "format" => {
                 let timestamp = arguments["timestamp"]
                     .as_i64()
-                    .ok_or_else(|| anyhow::anyhow!("Timestamp is required for format operation"))?;
+                    .ok_or_else(|| mofa_kernel::plugin::PluginError::ExecutionFailed("Timestamp is required for format operation".to_string()))?;
                 let format = arguments["format"].as_str().unwrap_or("%Y-%m-%d %H:%M:%S");
                 let timezone = arguments["timezone"].as_str().unwrap_or("UTC");
 
@@ -102,12 +103,12 @@ impl ToolExecutor for DateTimeTool {
                         "formatted": f,
                         "timestamp": timestamp
                     })),
-                    None => Err(anyhow::anyhow!("Invalid timestamp")),
+                    None => Err(mofa_kernel::plugin::PluginError::ExecutionFailed("Invalid timestamp".to_string())),
                 }
             }
             "parse" => {
                 let date_string = arguments["date_string"].as_str().ok_or_else(|| {
-                    anyhow::anyhow!("date_string is required for parse operation")
+                    mofa_kernel::plugin::PluginError::ExecutionFailed("date_string is required for parse operation".to_string())
                 })?;
 
                 // Try RFC3339 first
@@ -128,17 +129,17 @@ impl ToolExecutor for DateTimeTool {
                     }));
                 }
 
-                Err(anyhow::anyhow!(
+                Err(mofa_kernel::plugin::PluginError::ExecutionFailed(format!(
                     "Could not parse date string: {}",
                     date_string
-                ))
+                )))
             }
             "add" => {
                 let timestamp = arguments["timestamp"]
                     .as_i64()
                     .unwrap_or_else(|| Utc::now().timestamp());
                 let duration = arguments["duration_seconds"].as_i64().ok_or_else(|| {
-                    anyhow::anyhow!("duration_seconds is required for add operation")
+                    mofa_kernel::plugin::PluginError::ExecutionFailed("duration_seconds is required for add operation".to_string())
                 })?;
 
                 let new_timestamp = timestamp + duration;
@@ -150,16 +151,16 @@ impl ToolExecutor for DateTimeTool {
                         "new_timestamp": new_timestamp,
                         "utc": dt.to_rfc3339()
                     })),
-                    None => Err(anyhow::anyhow!("Invalid resulting timestamp")),
+                    None => Err(mofa_kernel::plugin::PluginError::ExecutionFailed("Invalid resulting timestamp".to_string())),
                 }
             }
             "diff" => {
                 let ts1 = arguments["timestamp1"]
                     .as_i64()
-                    .ok_or_else(|| anyhow::anyhow!("timestamp1 is required for diff operation"))?;
+                    .ok_or_else(|| mofa_kernel::plugin::PluginError::ExecutionFailed("timestamp1 is required for diff operation".to_string()))?;
                 let ts2 = arguments["timestamp2"]
                     .as_i64()
-                    .ok_or_else(|| anyhow::anyhow!("timestamp2 is required for diff operation"))?;
+                    .ok_or_else(|| mofa_kernel::plugin::PluginError::ExecutionFailed("timestamp2 is required for diff operation".to_string()))?;
 
                 let diff = ts2 - ts1;
                 let days = diff / 86400;
@@ -172,7 +173,7 @@ impl ToolExecutor for DateTimeTool {
                     "diff_human": format!("{}d {}h {}m {}s", days, hours, minutes, seconds)
                 }))
             }
-            _ => Err(anyhow::anyhow!("Unknown operation: {}", operation)),
+            _ => Err(mofa_kernel::plugin::PluginError::ExecutionFailed(format!("Unknown operation: {}", operation))),
         }
     }
 }

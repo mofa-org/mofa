@@ -1,6 +1,8 @@
 //! MCP 客户端管理器
+//! MCP Client Manager
 //!
 //! 使用 `rmcp` 库管理多个 MCP 服务器连接。
+//! Manage multiple MCP server connections using the `rmcp` library.
 
 use async_trait::async_trait;
 use mofa_kernel::agent::components::mcp::{
@@ -18,18 +20,24 @@ use tokio::sync::RwLock;
 use tracing;
 
 /// 单个 MCP 服务器连接的句柄
+/// Handle for a single MCP server connection
 struct McpConnection {
     /// rmcp 运行时服务
+    /// rmcp runtime service
     service: RunningService<RoleClient, ClientInfo>,
     /// 服务器配置
+    /// Server configuration
     config: McpServerConfig,
 }
 
 /// MCP 客户端管理器
+/// MCP Client Manager
 ///
 /// 管理到多个 MCP 服务器的连接，实现内核的 `McpClient` trait。
+/// Manages connections to multiple MCP servers, implementing the kernel's `McpClient` trait.
 ///
 /// # 示例
+/// # Example
 ///
 /// ```rust,ignore
 /// use mofa_foundation::agent::tools::mcp::McpClientManager;
@@ -38,6 +46,7 @@ struct McpConnection {
 /// let mut manager = McpClientManager::new();
 ///
 /// // 连接到 GitHub MCP 服务器
+/// // Connect to GitHub MCP server
 /// let config = McpServerConfig::stdio(
 ///     "github",
 ///     "npx",
@@ -47,10 +56,12 @@ struct McpConnection {
 /// manager.connect(config).await?;
 ///
 /// // 列出可用工具
+/// // List available tools
 /// let tools = manager.list_tools("github").await?;
 /// println!("Found {} tools", tools.len());
 ///
 /// // 调用工具
+/// // Call a tool
 /// let result = manager.call_tool(
 ///     "github",
 ///     "list_repos",
@@ -59,11 +70,13 @@ struct McpConnection {
 /// ```
 pub struct McpClientManager {
     /// 已连接的 MCP 服务器
+    /// Connected MCP servers
     connections: HashMap<String, McpConnection>,
 }
 
 impl McpClientManager {
     /// 创建新的 MCP 客户端管理器
+    /// Create a new MCP client manager
     pub fn new() -> Self {
         Self {
             connections: HashMap::new(),
@@ -71,6 +84,7 @@ impl McpClientManager {
     }
 
     /// 获取连接引用 (内部辅助方法)
+    /// Get connection reference (internal helper method)
     fn get_connection(&self, server_name: &str) -> AgentResult<&McpConnection> {
         self.connections.get(server_name).ok_or_else(|| {
             AgentError::ToolNotFound(format!("MCP server '{}' not connected", server_name))
@@ -78,6 +92,7 @@ impl McpClientManager {
     }
 
     /// 创建共享的客户端管理器引用
+    /// Create a shared client manager reference
     pub fn into_shared(self) -> Arc<RwLock<Self>> {
         Arc::new(RwLock::new(self))
     }
@@ -142,9 +157,16 @@ impl McpClient for McpClientManager {
             McpTransportConfig::Http { url: _ } => {
                 // HTTP/SSE transport requires the `transport-streamable-http-client-reqwest` feature
                 // which is not included by default. For now, return an error.
+                // HTTP/SSE 传输需要 `transport-streamable-http-client-reqwest` 特性，目前尚未默认包含。
                 return Err(AgentError::ConfigError(
                     "HTTP transport is not yet supported. Use Stdio transport instead.".to_string(),
                 ));
+            }
+            _ => {
+                return Err(AgentError::ConfigError(format!(
+                    "Unsupported MCP transport for server '{}'",
+                    server_name
+                )));
             }
         };
 
@@ -236,11 +258,13 @@ impl McpClient for McpClientManager {
             })?;
 
         // Convert MCP CallToolResult content to JSON
+        // 将 MCP CallToolResult 内容转换为 JSON
         let content_values: Vec<serde_json::Value> = result
             .content
             .iter()
             .map(|content| {
                 // Each Content has a raw field that can be serialized
+                // 每个 Content 都有一个可以序列化的原始字段
                 serde_json::to_value(content)
                     .unwrap_or(serde_json::json!({"error": "serialization failed"}))
             })
@@ -256,6 +280,7 @@ impl McpClient for McpClientManager {
         }
 
         // Return the full content array as JSON
+        // 以 JSON 格式返回完整的内存数组
         Ok(serde_json::json!({
             "content": content_values,
         }))
@@ -307,6 +332,7 @@ mod tests {
         let manager = McpClientManager::new();
         let _shared = manager.into_shared();
         // Just verify it compiles and creates Arc<RwLock<>>
+        // 仅验证其是否编译并创建了 Arc<RwLock<>>
     }
 
     #[tokio::test]
@@ -329,10 +355,12 @@ mod tests {
 
         // We can't actually connect without a real MCP server, but we can test
         // the duplicate detection by using a server that can't start
+        // 我们在没有真实 MCP 服务器的情况下无法实际连接，但可以通过使用无法启动的服务器测试重复检测
         let config = McpServerConfig::stdio("test", "nonexistent-command-xyz", vec![]);
         let _ = manager.connect(config).await; // This will fail - that's okay
 
         // Test HTTP transport error
+        // 测试 HTTP 传输错误
         let http_config = McpServerConfig::http("http-test", "http://localhost:9999");
         let result = manager.connect(http_config).await;
         assert!(result.is_err()); // HTTP not yet supported

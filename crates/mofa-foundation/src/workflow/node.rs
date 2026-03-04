@@ -1,6 +1,8 @@
 //! 工作流节点定义
+//! Workflow node definitions
 //!
 //! 定义各种工作流节点类型
+//! Define various workflow node types
 
 use super::state::{NodeResult, WorkflowContext, WorkflowValue};
 use crate::llm::LLMAgent;
@@ -12,6 +14,7 @@ use std::sync::Arc;
 use tracing::{debug, info, warn};
 
 /// 节点执行函数类型
+/// Node execution function type
 pub type NodeExecutorFn = Arc<
     dyn Fn(
             WorkflowContext,
@@ -22,6 +25,7 @@ pub type NodeExecutorFn = Arc<
 >;
 
 /// 条件判断函数类型
+/// Condition evaluation function type
 pub type ConditionFn = Arc<
     dyn Fn(WorkflowContext, WorkflowValue) -> Pin<Box<dyn Future<Output = bool> + Send>>
         + Send
@@ -29,6 +33,7 @@ pub type ConditionFn = Arc<
 >;
 
 /// 数据转换函数类型
+/// Data transformation function type
 pub type TransformFn = Arc<
     dyn Fn(HashMap<String, WorkflowValue>) -> Pin<Box<dyn Future<Output = WorkflowValue> + Send>>
         + Send
@@ -36,42 +41,59 @@ pub type TransformFn = Arc<
 >;
 
 /// 节点类型枚举
+/// Node type enumeration
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum NodeType {
     /// 开始节点
+    /// Start node
     Start,
     /// 结束节点
+    /// End node
     End,
     /// 任务节点 - 执行具体任务
+    /// Task node - Executes specific task
     Task,
     /// 智能体节点 - 调用智能体
+    /// Agent node - Invokes an agent
     Agent,
     /// 条件节点 - 分支判断
+    /// Condition node - Branch logic
     Condition,
     /// 并行节点 - 并行执行多个分支
+    /// Parallel node - Executes branches in parallel
     Parallel,
     /// 聚合节点 - 等待多个分支完成
+    /// Join node - Waits for branches to complete
     Join,
     /// 循环节点 - 循环执行
+    /// Loop node - Cyclic execution
     Loop,
     /// 子工作流节点
+    /// Sub-workflow node
     SubWorkflow,
     /// 等待节点 - 等待外部事件
+    /// Wait node - Waits for external events
     Wait,
     /// 转换节点 - 数据转换
+    /// Transform node - Data transformation
     Transform,
 }
 
 /// 重试策略
+/// Retry policy
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RetryPolicy {
     /// 最大重试次数
+    /// Maximum number of retries
     pub max_retries: u32,
     /// 重试间隔（毫秒）
+    /// Retry delay (milliseconds)
     pub retry_delay_ms: u64,
     /// 是否指数退避
+    /// Whether to use exponential backoff
     pub exponential_backoff: bool,
     /// 最大重试间隔（毫秒）
+    /// Maximum retry delay (milliseconds)
     pub max_delay_ms: u64,
 }
 
@@ -102,6 +124,7 @@ impl RetryPolicy {
     }
 
     /// 计算第 n 次重试的延迟
+    /// Calculate delay for nth retry
     pub fn get_delay(&self, retry_count: u32) -> u64 {
         if self.exponential_backoff {
             let delay = self.retry_delay_ms * 2u64.pow(retry_count);
@@ -113,11 +136,14 @@ impl RetryPolicy {
 }
 
 /// 超时配置
+/// Timeout configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TimeoutConfig {
     /// 执行超时（毫秒）
+    /// Execution timeout (milliseconds)
     pub execution_timeout_ms: u64,
     /// 是否在超时时取消
+    /// Whether to cancel on timeout
     pub cancel_on_timeout: bool,
 }
 
@@ -125,27 +151,36 @@ impl Default for TimeoutConfig {
     fn default() -> Self {
         Self {
             execution_timeout_ms: 60000, // 1 分钟
+            // 1 minute
             cancel_on_timeout: true,
         }
     }
 }
 
 /// 节点配置
+/// Node configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NodeConfig {
     /// 节点 ID
+    /// Node ID
     pub id: String,
     /// 节点名称
+    /// Node name
     pub name: String,
     /// 节点类型
+    /// Node type
     pub node_type: NodeType,
     /// 节点描述
+    /// Node description
     pub description: String,
     /// 重试策略
+    /// Retry policy
     pub retry_policy: RetryPolicy,
     /// 超时配置
+    /// Timeout configuration
     pub timeout: TimeoutConfig,
     /// 自定义元数据
+    /// Custom metadata
     pub metadata: HashMap<String, String>,
 }
 
@@ -184,33 +219,47 @@ impl NodeConfig {
 }
 
 /// 工作流节点
+/// Workflow node
+#[derive(Clone)]
 pub struct WorkflowNode {
     /// 节点配置
+    /// Node configuration
     pub config: NodeConfig,
     /// 节点执行器（根据类型不同）
+    /// Node executor (varies by type)
     executor: Option<NodeExecutorFn>,
     /// 条件函数（用于条件节点）
+    /// Condition function (for condition nodes)
     condition: Option<ConditionFn>,
     /// 数据转换函数
+    /// Data transformation function
     transform: Option<TransformFn>,
     /// 循环条件（用于循环节点）
+    /// Loop condition (for loop nodes)
     loop_condition: Option<ConditionFn>,
     /// 最大循环次数
+    /// Maximum loop iterations
     max_iterations: Option<u32>,
     /// 并行分支 ID 列表
+    /// List of parallel branch IDs
     parallel_branches: Vec<String>,
     /// 聚合等待的节点 ID 列表
+    /// List of node IDs to join/wait for
     join_nodes: Vec<String>,
     /// 子工作流 ID
+    /// Sub-workflow ID
     sub_workflow_id: Option<String>,
     /// 等待事件类型
+    /// Wait event type
     wait_event_type: Option<String>,
     /// 条件分支映射：条件名 -> 目标节点 ID
+    /// Condition branch map: Name -> Target Node ID
     condition_branches: HashMap<String, String>,
 }
 
 impl WorkflowNode {
     /// 创建开始节点
+    /// Create a start node
     pub fn start(id: &str) -> Self {
         Self {
             config: NodeConfig::new(id, "Start", NodeType::Start),
@@ -228,6 +277,7 @@ impl WorkflowNode {
     }
 
     /// 创建结束节点
+    /// Create an end node
     pub fn end(id: &str) -> Self {
         Self {
             config: NodeConfig::new(id, "End", NodeType::End),
@@ -245,6 +295,7 @@ impl WorkflowNode {
     }
 
     /// 创建任务节点
+    /// Create a task node
     pub fn task<F, Fut>(id: &str, name: &str, executor: F) -> Self
     where
         F: Fn(WorkflowContext, WorkflowValue) -> Fut + Send + Sync + 'static,
@@ -266,6 +317,7 @@ impl WorkflowNode {
     }
 
     /// 创建智能体节点
+    /// Create an agent node
     pub fn agent<F, Fut>(id: &str, name: &str, agent_executor: F) -> Self
     where
         F: Fn(WorkflowContext, WorkflowValue) -> Fut + Send + Sync + 'static,
@@ -289,6 +341,7 @@ impl WorkflowNode {
     }
 
     /// 创建条件节点
+    /// Create a condition node
     pub fn condition<F, Fut>(id: &str, name: &str, condition_fn: F) -> Self
     where
         F: Fn(WorkflowContext, WorkflowValue) -> Fut + Send + Sync + 'static,
@@ -312,6 +365,7 @@ impl WorkflowNode {
     }
 
     /// 创建并行节点
+    /// Create a parallel node
     pub fn parallel(id: &str, name: &str, branches: Vec<&str>) -> Self {
         Self {
             config: NodeConfig::new(id, name, NodeType::Parallel),
@@ -329,6 +383,7 @@ impl WorkflowNode {
     }
 
     /// 创建聚合节点
+    /// Create a join node
     pub fn join(id: &str, name: &str, wait_for: Vec<&str>) -> Self {
         Self {
             config: NodeConfig::new(id, name, NodeType::Join),
@@ -346,6 +401,7 @@ impl WorkflowNode {
     }
 
     /// 创建聚合节点（带转换函数）
+    /// Create a join node (with transform)
     pub fn join_with_transform<F, Fut>(
         id: &str,
         name: &str,
@@ -372,6 +428,7 @@ impl WorkflowNode {
     }
 
     /// 创建循环节点
+    /// Create a loop node
     pub fn loop_node<F, Fut, C, CFut>(
         id: &str,
         name: &str,
@@ -401,6 +458,7 @@ impl WorkflowNode {
     }
 
     /// 创建子工作流节点
+    /// Create a sub-workflow node
     pub fn sub_workflow(id: &str, name: &str, sub_workflow_id: &str) -> Self {
         Self {
             config: NodeConfig::new(id, name, NodeType::SubWorkflow),
@@ -418,6 +476,7 @@ impl WorkflowNode {
     }
 
     /// 创建等待节点
+    /// Create a wait node
     pub fn wait(id: &str, name: &str, event_type: &str) -> Self {
         Self {
             config: NodeConfig::new(id, name, NodeType::Wait),
@@ -435,6 +494,7 @@ impl WorkflowNode {
     }
 
     /// 创建数据转换节点
+    /// Create a data transform node
     pub fn transform<F, Fut>(id: &str, name: &str, transform_fn: F) -> Self
     where
         F: Fn(HashMap<String, WorkflowValue>) -> Fut + Send + Sync + 'static,
@@ -456,9 +516,12 @@ impl WorkflowNode {
     }
 
     /// 创建 LLM 智能体节点（使用 LLMAgentBuilder）
+    /// Create LLM agent node (via LLMAgentBuilder)
     ///
     /// 这个方法接受 LLMAgentBuilder，构建 LLMAgent 并创建节点。
+    /// This method builds an LLMAgent and creates a node.
     /// Agent 将被包装在闭包中以便在工作流中执行。
+    /// Agent is wrapped in a closure for workflow execution.
     pub fn llm_agent(id: &str, name: &str, agent: Arc<LLMAgent>) -> Self {
         let agent_clone = Arc::clone(&agent);
         Self {
@@ -490,8 +553,10 @@ impl WorkflowNode {
     }
 
     /// 创建 LLM 智能体节点（使用自定义 prompt 模板）
+    /// Create LLM agent node (with custom prompt template)
     ///
     /// 允许使用 Jinja-style 模板格式化输入，例如：
+    /// Allows Jinja-style template formatting, e.g.:
     /// ```text
     /// Process this data: {{ input }}
     /// ```
@@ -509,6 +574,7 @@ impl WorkflowNode {
                 let template = prompt_template.clone();
                 Box::pin(async move {
                     // 简单的模板替换（只支持 {{ input }}）
+                    // Simple template replacement (only supports {{ input }})
                     let prompt = if template.contains("{{") {
                         let input_str = match input.as_str() {
                             Some(s) => s.to_string(),
@@ -538,24 +604,28 @@ impl WorkflowNode {
     }
 
     /// 设置描述
+    /// Set description
     pub fn with_description(mut self, desc: &str) -> Self {
         self.config.description = desc.to_string();
         self
     }
 
     /// 设置重试策略
+    /// Set retry policy
     pub fn with_retry(mut self, policy: RetryPolicy) -> Self {
         self.config.retry_policy = policy;
         self
     }
 
     /// 设置超时
+    /// Set timeout
     pub fn with_timeout(mut self, timeout_ms: u64) -> Self {
         self.config.timeout.execution_timeout_ms = timeout_ms;
         self
     }
 
     /// 添加条件分支
+    /// Add condition branch
     pub fn with_branch(mut self, condition_name: &str, target_node_id: &str) -> Self {
         self.condition_branches
             .insert(condition_name.to_string(), target_node_id.to_string());
@@ -563,41 +633,49 @@ impl WorkflowNode {
     }
 
     /// 获取节点 ID
+    /// Get node ID
     pub fn id(&self) -> &str {
         &self.config.id
     }
 
     /// 获取节点类型
+    /// Get node type
     pub fn node_type(&self) -> &NodeType {
         &self.config.node_type
     }
 
     /// 获取并行分支
+    /// Get parallel branches
     pub fn parallel_branches(&self) -> &[String] {
         &self.parallel_branches
     }
 
     /// 获取聚合等待节点
+    /// Get join/wait-for nodes
     pub fn join_nodes(&self) -> &[String] {
         &self.join_nodes
     }
 
     /// 获取条件分支
+    /// Get condition branches
     pub fn condition_branches(&self) -> &HashMap<String, String> {
         &self.condition_branches
     }
 
     /// 获取子工作流 ID
+    /// Get sub-workflow ID
     pub fn sub_workflow_id(&self) -> Option<&str> {
         self.sub_workflow_id.as_deref()
     }
 
     /// 获取等待事件类型
+    /// Get wait event type
     pub fn wait_event_type(&self) -> Option<&str> {
         self.wait_event_type.as_deref()
     }
 
     /// 执行节点
+    /// Execute node
     pub async fn execute(&self, ctx: &WorkflowContext, input: WorkflowValue) -> NodeResult {
         let start_time = std::time::Instant::now();
         let node_id = &self.config.id;
@@ -607,10 +685,12 @@ impl WorkflowNode {
         match self.config.node_type {
             NodeType::Start => {
                 // 开始节点直接传递输入
+                // Start node simply passes input through
                 NodeResult::success(node_id, input, start_time.elapsed().as_millis() as u64)
             }
             NodeType::End => {
                 // 结束节点直接传递输入
+                // End node simply passes input through
                 NodeResult::success(node_id, input, start_time.elapsed().as_millis() as u64)
             }
             NodeType::Task | NodeType::Agent => {
@@ -618,6 +698,7 @@ impl WorkflowNode {
             }
             NodeType::Condition => {
                 // 条件节点评估条件
+                // Condition node evaluates logic
                 if let Some(ref condition_fn) = self.condition {
                     let result = condition_fn(ctx.clone(), input.clone()).await;
                     let branch = if result { "true" } else { "false" };
@@ -633,6 +714,7 @@ impl WorkflowNode {
             }
             NodeType::Parallel => {
                 // 并行节点只是标记，实际并行执行由 executor 处理
+                // Parallel node is a marker; execution handled by engine
                 NodeResult::success(
                     node_id,
                     WorkflowValue::List(
@@ -646,6 +728,7 @@ impl WorkflowNode {
             }
             NodeType::Join => {
                 // 聚合节点等待所有依赖完成
+                // Join node waits for all dependencies
                 let outputs = ctx
                     .get_node_outputs(
                         &self
@@ -660,6 +743,7 @@ impl WorkflowNode {
                     transform_fn(outputs).await
                 } else {
                     // 默认将所有输入合并为 Map
+                    // Merge all inputs into a Map by default
                     WorkflowValue::Map(outputs)
                 };
 
@@ -678,16 +762,19 @@ impl WorkflowNode {
             }
             NodeType::SubWorkflow => {
                 // 子工作流执行由 executor 处理
+                // Sub-workflow execution handled by executor
                 NodeResult::success(node_id, input, start_time.elapsed().as_millis() as u64)
             }
             NodeType::Wait => {
                 // 等待节点由 executor 处理
+                // Wait node handled by executor
                 NodeResult::success(node_id, input, start_time.elapsed().as_millis() as u64)
             }
         }
     }
 
     /// 带重试的执行
+    /// Execution with retry logic
     async fn execute_with_retry(
         &self,
         ctx: &WorkflowContext,
@@ -741,6 +828,7 @@ impl WorkflowNode {
     }
 
     /// 执行循环
+    /// Execute loop logic
     async fn execute_loop(
         &self,
         ctx: &WorkflowContext,
@@ -763,6 +851,7 @@ impl WorkflowNode {
         let mut iteration = 0;
         while iteration < max_iter {
             // 检查条件
+            // Check condition
             if !condition(ctx.clone(), input.clone()).await {
                 debug!(
                     "Loop {} condition false, exiting after {} iterations",
@@ -772,6 +861,7 @@ impl WorkflowNode {
             }
 
             // 执行循环体
+            // Execute loop body
             match executor(ctx.clone(), input.clone()).await {
                 Ok(output) => {
                     input = output;
@@ -862,5 +952,6 @@ mod tests {
         assert_eq!(policy.get_delay(1), 2000);
         assert_eq!(policy.get_delay(2), 4000);
         assert_eq!(policy.get_delay(10), 30000); // capped at max
+        // capped at max
     }
 }

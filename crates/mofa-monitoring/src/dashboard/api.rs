@@ -13,8 +13,10 @@ use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
 use super::metrics::{
-    AgentMetrics, MetricsCollector, MetricsSnapshot, PluginMetrics, WorkflowMetrics,
+    AgentMetrics, LLMMetrics, MetricsCollector, MetricsSnapshot, PluginMetrics, WorkflowMetrics,
 };
+
+use mofa_kernel::workflow::telemetry::{DebugEvent, SessionRecorder};
 
 /// API response wrapper
 #[derive(Debug, Serialize)]
@@ -51,8 +53,9 @@ impl<T: Serialize> ApiResponse<T> {
     }
 }
 
-/// API error type
+/// API error type.
 #[derive(Debug, thiserror::Error)]
+#[non_exhaustive]
 pub enum ApiError {
     #[error("Not found: {0}")]
     NotFound(String),
@@ -62,6 +65,25 @@ pub enum ApiError {
 
     #[error("Internal error: {0}")]
     Internal(String),
+}
+
+/// Plain result alias for API handler operations (backward-compatible).
+pub type ApiResult<T> = ::std::result::Result<T, ApiError>;
+
+/// Error-stack–backed result alias for API operations.
+pub type ApiReport<T> = ::std::result::Result<T, error_stack::Report<ApiError>>;
+
+/// Extension trait to convert [`ApiResult<T>`] into [`ApiReport<T>`].
+pub trait IntoApiReport<T> {
+    /// Wrap the error in an `error_stack::Report`.
+    fn into_report(self) -> ApiReport<T>;
+}
+
+impl<T> IntoApiReport<T> for ApiResult<T> {
+    #[inline]
+    fn into_report(self) -> ApiReport<T> {
+        self.map_err(error_stack::Report::new)
+    }
 }
 
 impl IntoResponse for ApiError {
@@ -189,6 +211,60 @@ impl From<PluginMetrics> for PluginStatus {
     }
 }
 
+/// LLM status response - specialized for model inference metrics
+///
+/// Separate from PluginStatus because LLM metrics include model-specific
+/// inference data (tokens/s, TTFT, token counts) that don't apply to
+/// generic plugins.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LLMStatus {
+    pub plugin_id: String,
+    pub provider_name: String,
+    pub model_name: String,
+    pub state: String,
+    pub total_requests: u64,
+    pub successful_requests: u64,
+    pub failed_requests: u64,
+    pub success_rate: f64,
+    pub total_tokens: u64,
+    pub prompt_tokens: u64,
+    pub completion_tokens: u64,
+    pub avg_latency_ms: f64,
+    pub tokens_per_second: Option<f64>,
+    pub time_to_first_token_ms: Option<f64>,
+    pub requests_per_minute: f64,
+    pub error_rate: f64,
+}
+
+impl From<LLMMetrics> for LLMStatus {
+    fn from(m: LLMMetrics) -> Self {
+        let success_rate = if m.total_requests > 0 {
+            (m.successful_requests as f64 / m.total_requests as f64) * 100.0
+        } else {
+            0.0
+        };
+
+        Self {
+            plugin_id: m.plugin_id,
+            provider_name: m.provider_name,
+            model_name: m.model_name,
+            state: m.state,
+            total_requests: m.total_requests,
+            successful_requests: m.successful_requests,
+            failed_requests: m.failed_requests,
+            success_rate,
+            total_tokens: m.total_tokens,
+            prompt_tokens: m.prompt_tokens,
+            completion_tokens: m.completion_tokens,
+            avg_latency_ms: m.avg_latency_ms,
+            tokens_per_second: m.tokens_per_second,
+            time_to_first_token_ms: m.time_to_first_token_ms,
+            requests_per_minute: m.requests_per_minute,
+            error_rate: m.error_rate,
+        }
+    }
+}
+
 /// System status response
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SystemStatus {
@@ -212,6 +288,7 @@ pub struct DashboardOverview {
     pub agents_summary: AgentsSummary,
     pub workflows_summary: WorkflowsSummary,
     pub plugins_summary: PluginsSummary,
+    pub llm_summary: LLMSummary,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -240,6 +317,18 @@ pub struct PluginsSummary {
     pub total_calls: u64,
 }
 
+/// LLM summary for dashboard overview
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LLMSummary {
+    pub total_plugins: usize,
+    pub active_models: usize,
+    pub total_requests: u64,
+    pub total_tokens: u64,
+    pub avg_latency_ms: f64,
+    pub avg_tokens_per_second: f64,
+    pub total_errors: u64,
+}
+
 /// Query parameters for history endpoint
 #[derive(Debug, Deserialize)]
 pub struct HistoryQuery {
@@ -251,11 +340,19 @@ pub struct HistoryQuery {
 /// API state
 pub struct ApiState {
     pub collector: Arc<MetricsCollector>,
+    /// Optional session recorder for debug sessions
+    pub session_recorder: Option<Arc<dyn SessionRecorder>>,
 }
 
 /// Create API router
-pub fn create_api_router(collector: Arc<MetricsCollector>) -> Router {
-    let state = Arc::new(ApiState { collector });
+pub fn create_api_router(
+    collector: Arc<MetricsCollector>,
+    session_recorder: Option<Arc<dyn SessionRecorder>>,
+) -> Router {
+    let state = Arc::new(ApiState {
+        collector,
+        session_recorder,
+    });
 
     Router::new()
         // Overview
@@ -266,14 +363,21 @@ pub fn create_api_router(collector: Arc<MetricsCollector>) -> Router {
         .route("/metrics/custom", get(get_custom_metrics))
         // Agents
         .route("/agents", get(get_agents))
-        .route("/agents/:id", get(get_agent))
+        .route("/agents/{id}", get(get_agent))
         // Workflows
         .route("/workflows", get(get_workflows))
         .route("/workflows/:id", get(get_workflow))
         .route("/workflows/:id/graph", get(get_workflow_graph))
         // Plugins
         .route("/plugins", get(get_plugins))
-        .route("/plugins/:id", get(get_plugin))
+        .route("/plugins/{id}", get(get_plugin))
+        // Debug sessions
+        .route("/debug/sessions", get(get_debug_sessions))
+        .route("/debug/sessions/{id}", get(get_debug_session))
+        .route("/debug/sessions/{id}/events", get(get_debug_session_events))
+        // LLM
+        .route("/llm", get(get_llm_metrics))
+        .route("/llm/{id}", get(get_llm_plugin))
         // System
         .route("/system", get(get_system_status))
         .route("/health", get(health_check))
@@ -346,6 +450,52 @@ async fn get_overview(
         total_calls: snapshot.plugins.iter().map(|p| p.call_count).sum(),
     };
 
+    // Calculate LLM summary
+    let llm_summary = {
+        let total_requests: u64 = snapshot.llm_metrics.iter().map(|l| l.total_requests).sum();
+        let total_tokens: u64 = snapshot.llm_metrics.iter().map(|l| l.total_tokens).sum();
+        let total_errors: u64 = snapshot.llm_metrics.iter().map(|l| l.failed_requests).sum();
+        let avg_latency = if !snapshot.llm_metrics.is_empty() {
+            snapshot
+                .llm_metrics
+                .iter()
+                .map(|l| l.avg_latency_ms)
+                .sum::<f64>()
+                / snapshot.llm_metrics.len() as f64
+        } else {
+            0.0
+        };
+        let avg_tps = if !snapshot.llm_metrics.is_empty() {
+            snapshot
+                .llm_metrics
+                .iter()
+                .filter_map(|l| l.tokens_per_second)
+                .sum::<f64>()
+                / snapshot
+                    .llm_metrics
+                    .iter()
+                    .filter(|l| l.tokens_per_second.is_some())
+                    .count()
+                    .max(1) as f64
+        } else {
+            0.0
+        };
+
+        LLMSummary {
+            total_plugins: snapshot.llm_metrics.len(),
+            active_models: snapshot
+                .llm_metrics
+                .iter()
+                .filter(|l| l.state == "running")
+                .count(),
+            total_requests,
+            total_tokens,
+            avg_latency_ms: avg_latency,
+            avg_tokens_per_second: avg_tps,
+            total_errors,
+        }
+    };
+
     let system = SystemStatus {
         status: "operational".to_string(),
         uptime_secs: snapshot.system.uptime_secs,
@@ -369,6 +519,7 @@ async fn get_overview(
         agents_summary,
         workflows_summary,
         plugins_summary,
+        llm_summary,
     };
 
     Ok(Json(ApiResponse::success(overview)))
@@ -502,6 +653,30 @@ async fn get_plugin(
     Ok(Json(ApiResponse::success(plugin.into())))
 }
 
+/// Get all LLM metrics
+async fn get_llm_metrics(
+    State(state): State<Arc<ApiState>>,
+) -> Result<Json<ApiResponse<Vec<LLMStatus>>>, ApiError> {
+    let snapshot = state.collector.current().await;
+    let llm: Vec<LLMStatus> = snapshot.llm_metrics.into_iter().map(|l| l.into()).collect();
+    Ok(Json(ApiResponse::success(llm)))
+}
+
+/// Get single LLM plugin metrics
+async fn get_llm_plugin(
+    State(state): State<Arc<ApiState>>,
+    Path(id): Path<String>,
+) -> Result<Json<ApiResponse<LLMStatus>>, ApiError> {
+    let snapshot = state.collector.current().await;
+    let llm = snapshot
+        .llm_metrics
+        .into_iter()
+        .find(|l| l.plugin_id == id)
+        .ok_or_else(|| ApiError::NotFound(format!("LLM plugin {} not found", id)))?;
+
+    Ok(Json(ApiResponse::success(llm.into())))
+}
+
 /// Get system status
 async fn get_system_status(
     State(state): State<Arc<ApiState>>,
@@ -549,6 +724,103 @@ async fn health_check() -> Result<Json<ApiResponse<HealthStatus>>, ApiError> {
 pub struct HealthStatus {
     pub status: String,
     pub version: String,
+}
+
+// ============================================================================
+// Debug Session API Handlers
+// ============================================================================
+
+/// Get all debug sessions
+async fn get_debug_sessions(
+    State(state): State<Arc<ApiState>>,
+) -> Result<Json<ApiResponse<Vec<DebugSessionResponse>>>, ApiError> {
+    let recorder = state.session_recorder.as_ref().ok_or_else(|| {
+        ApiError::BadRequest("Debug session recording is not enabled".to_string())
+    })?;
+
+    let sessions = recorder
+        .list_sessions()
+        .await
+        .map_err(|e| ApiError::Internal(e.to_string()))?;
+
+    let response: Vec<DebugSessionResponse> = sessions
+        .into_iter()
+        .map(|s| DebugSessionResponse {
+            session_id: s.session_id,
+            workflow_id: s.workflow_id,
+            execution_id: s.execution_id,
+            started_at: s.started_at,
+            ended_at: s.ended_at,
+            status: s.status,
+            event_count: s.event_count,
+        })
+        .collect();
+
+    Ok(Json(ApiResponse::success(response)))
+}
+
+/// Get a specific debug session by ID
+async fn get_debug_session(
+    State(state): State<Arc<ApiState>>,
+    Path(session_id): Path<String>,
+) -> Result<Json<ApiResponse<DebugSessionResponse>>, ApiError> {
+    let recorder = state.session_recorder.as_ref().ok_or_else(|| {
+        ApiError::BadRequest("Debug session recording is not enabled".to_string())
+    })?;
+
+    let session = recorder
+        .get_session(&session_id)
+        .await
+        .map_err(|e| ApiError::Internal(e.to_string()))?
+        .ok_or_else(|| ApiError::NotFound(format!("Session not found: {}", session_id)))?;
+
+    let response = DebugSessionResponse {
+        session_id: session.session_id,
+        workflow_id: session.workflow_id,
+        execution_id: session.execution_id,
+        started_at: session.started_at,
+        ended_at: session.ended_at,
+        status: session.status,
+        event_count: session.event_count,
+    };
+
+    Ok(Json(ApiResponse::success(response)))
+}
+
+/// Get all events for a debug session
+async fn get_debug_session_events(
+    State(state): State<Arc<ApiState>>,
+    Path(session_id): Path<String>,
+) -> Result<Json<ApiResponse<Vec<DebugEvent>>>, ApiError> {
+    let recorder = state.session_recorder.as_ref().ok_or_else(|| {
+        ApiError::BadRequest("Debug session recording is not enabled".to_string())
+    })?;
+
+    // First check if session exists
+    let _session = recorder
+        .get_session(&session_id)
+        .await
+        .map_err(|e| ApiError::Internal(e.to_string()))?
+        .ok_or_else(|| ApiError::NotFound(format!("Session not found: {}", session_id)))?;
+
+    let events = recorder
+        .get_events(&session_id)
+        .await
+        .map_err(|e| ApiError::Internal(e.to_string()))?;
+
+    Ok(Json(ApiResponse::success(events)))
+}
+
+/// Debug session response type
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DebugSessionResponse {
+    pub session_id: String,
+    pub workflow_id: String,
+    pub execution_id: String,
+    pub started_at: u64,
+    pub ended_at: Option<u64>,
+    pub status: String,
+    pub event_count: u64,
 }
 
 #[cfg(test)]

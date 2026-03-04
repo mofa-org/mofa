@@ -1,6 +1,8 @@
 //! MySQL/MariaDB 存储后端
+//! MySQL/MariaDB storage backend
 //!
 //! 提供基于 MySQL/MariaDB 的持久化实现
+//! Provides a persistence implementation based on MySQL/MariaDB
 
 use super::entities::*;
 use super::traits::*;
@@ -13,6 +15,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use uuid::Uuid;
 
 /// MySQL 存储
+/// MySQL storage
 pub struct MySqlStore {
     pool: MySqlPool,
     connected: AtomicBool,

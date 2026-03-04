@@ -2,6 +2,7 @@ use super::*;
 use serde_json::json;
 
 /// JSON 处理工具 - JSON 解析和操作
+/// JSON processing utilities - JSON parsing and manipulation
 pub struct JsonTool {
     definition: ToolDefinition,
 }
@@ -89,17 +90,17 @@ impl JsonTool {
                     obj.insert(part.to_string(), new_value);
                     return Ok(());
                 }
-                return Err(anyhow::anyhow!("Cannot set value at path"));
+                return Err(mofa_kernel::plugin::PluginError::ExecutionFailed("Cannot set value at path".to_string()));
             } else {
                 // Navigate to next level
                 if let Ok(index) = part.parse::<usize>() {
                     current = current
                         .get_mut(index)
-                        .ok_or_else(|| anyhow::anyhow!("Invalid path"))?;
+                        .ok_or_else(|| mofa_kernel::plugin::PluginError::ExecutionFailed("Invalid path".to_string()))?;
                 } else {
                     current = current
                         .get_mut(*part)
-                        .ok_or_else(|| anyhow::anyhow!("Invalid path"))?;
+                        .ok_or_else(|| mofa_kernel::plugin::PluginError::ExecutionFailed("Invalid path".to_string()))?;
                 }
             }
         }
@@ -117,13 +118,13 @@ impl ToolExecutor for JsonTool {
     async fn execute(&self, arguments: serde_json::Value) -> PluginResult<serde_json::Value> {
         let operation = arguments["operation"]
             .as_str()
-            .ok_or_else(|| anyhow::anyhow!("Operation is required"))?;
+            .ok_or_else(|| mofa_kernel::plugin::PluginError::ExecutionFailed("Operation is required".to_string()))?;
 
         match operation {
             "parse" => {
                 let data = arguments["data"]
                     .as_str()
-                    .ok_or_else(|| anyhow::anyhow!("String data is required for parse"))?;
+                    .ok_or_else(|| mofa_kernel::plugin::PluginError::ExecutionFailed("String data is required for parse".to_string()))?;
                 let parsed: serde_json::Value = serde_json::from_str(data)?;
                 Ok(json!({
                     "success": true,
@@ -149,7 +150,7 @@ impl ToolExecutor for JsonTool {
             "get" => {
                 let path = arguments["path"]
                     .as_str()
-                    .ok_or_else(|| anyhow::anyhow!("Path is required for get operation"))?;
+                    .ok_or_else(|| mofa_kernel::plugin::PluginError::ExecutionFailed("Path is required for get operation".to_string()))?;
                 let data = &arguments["data"];
                 let result = Self::get_by_path(data, path);
                 Ok(json!({
@@ -160,10 +161,10 @@ impl ToolExecutor for JsonTool {
             "set" => {
                 let path = arguments["path"]
                     .as_str()
-                    .ok_or_else(|| anyhow::anyhow!("Path is required for set operation"))?;
+                    .ok_or_else(|| mofa_kernel::plugin::PluginError::ExecutionFailed("Path is required for set operation".to_string()))?;
                 let value = arguments
                     .get("value")
-                    .ok_or_else(|| anyhow::anyhow!("Value is required for set operation"))?
+                    .ok_or_else(|| mofa_kernel::plugin::PluginError::ExecutionFailed("Value is required for set operation".to_string()))?
                     .clone();
                 let mut data = arguments["data"].clone();
                 Self::set_by_path(&mut data, path, value)?;
@@ -175,11 +176,11 @@ impl ToolExecutor for JsonTool {
             "merge" => {
                 let mut data = arguments["data"]
                     .as_object()
-                    .ok_or_else(|| anyhow::anyhow!("Data must be an object for merge"))?
+                    .ok_or_else(|| mofa_kernel::plugin::PluginError::ExecutionFailed("Data must be an object for merge".to_string()))?
                     .clone();
                 let other = arguments["other"]
                     .as_object()
-                    .ok_or_else(|| anyhow::anyhow!("Other must be an object for merge"))?;
+                    .ok_or_else(|| mofa_kernel::plugin::PluginError::ExecutionFailed("Other must be an object for merge".to_string()))?;
                 for (k, v) in other {
                     data.insert(k.clone(), v.clone());
                 }
@@ -191,7 +192,7 @@ impl ToolExecutor for JsonTool {
             "keys" => {
                 let data = arguments["data"]
                     .as_object()
-                    .ok_or_else(|| anyhow::anyhow!("Data must be an object for keys"))?;
+                    .ok_or_else(|| mofa_kernel::plugin::PluginError::ExecutionFailed("Data must be an object for keys".to_string()))?;
                 let keys: Vec<&String> = data.keys().collect();
                 Ok(json!({
                     "success": true,
@@ -201,14 +202,14 @@ impl ToolExecutor for JsonTool {
             "values" => {
                 let data = arguments["data"]
                     .as_object()
-                    .ok_or_else(|| anyhow::anyhow!("Data must be an object for values"))?;
+                    .ok_or_else(|| mofa_kernel::plugin::PluginError::ExecutionFailed("Data must be an object for values".to_string()))?;
                 let values: Vec<&serde_json::Value> = data.values().collect();
                 Ok(json!({
                     "success": true,
                     "result": values
                 }))
             }
-            _ => Err(anyhow::anyhow!("Unknown operation: {}", operation)),
+            _ => Err(mofa_kernel::plugin::PluginError::ExecutionFailed(format!("Unknown operation: {}", operation))),
         }
     }
 }

@@ -1,0 +1,12 @@
+[package]
+name = "runtime_periodic_runner"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+async-trait.workspace = true
+cron = "0.12"
+tokio.workspace = true
+
+# Local dependencies
+mofa-runtime = { path = "../../crates/mofa-runtime" }

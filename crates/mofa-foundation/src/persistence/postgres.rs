@@ -1,6 +1,8 @@
 //! PostgreSQL 存储后端
+//! PostgreSQL Storage Backend
 //!
 //! 提供基于 PostgreSQL 的持久化实现
+//! Provides persistence implementation based on PostgreSQL
 
 use super::entities::*;
 use super::traits::*;
@@ -14,10 +16,13 @@ use tracing::error;
 use uuid::Uuid;
 
 /// PostgreSQL 存储
+/// PostgreSQL Storage
 ///
 /// 基于 PostgreSQL 的持久化存储实现
+/// Persistence storage implementation based on PostgreSQL
 ///
 /// # 示例
+/// # Example
 ///
 /// ```rust,ignore
 /// use mofa_foundation::persistence::PostgresStore;
@@ -25,17 +30,21 @@ use uuid::Uuid;
 /// let store = PostgresStore::connect("postgres://user:pass@localhost/db").await?;
 ///
 /// // 保存消息
+/// // Save message
 /// store.save_message(&message).await?;
 /// ```
 pub struct PostgresStore {
     /// 连接池
+    /// Connection pool
     pool: PgPool,
     /// 连接状态
+    /// Connection status
     connected: AtomicBool,
 }
 
 impl PostgresStore {
     /// 连接到 PostgreSQL 数据库
+    /// Connect to PostgreSQL database
     pub async fn connect(database_url: &str) -> PersistenceResult<Self> {
         let pool = PgPoolOptions::new()
             .max_connections(10)
@@ -50,6 +59,7 @@ impl PostgresStore {
     }
 
     /// 使用自定义连接池选项连接
+    /// Connect with custom connection pool options
     pub async fn connect_with_options(
         database_url: &str,
         max_connections: u32,
@@ -67,6 +77,7 @@ impl PostgresStore {
     }
 
     /// 从现有连接池创建
+    /// Create from an existing connection pool
     pub fn from_pool(pool: PgPool) -> Self {
         Self {
             pool,
@@ -75,16 +86,21 @@ impl PostgresStore {
     }
 
     /// 创建共享实例
+    /// Create a shared instance
     pub async fn shared(database_url: &str) -> PersistenceResult<Arc<Self>> {
         Ok(Arc::new(Self::connect(database_url).await?))
     }
 
     /// 从环境变量 DATABASE_URL 创建共享实例
+    /// Create a shared instance from DATABASE_URL environment variable
     ///
     /// 环境变量：
+    /// Environment variables:
     /// - DATABASE_URL: PostgreSQL 连接字符串（必需）
+    /// - DATABASE_URL: PostgreSQL connection string (required)
     ///
     /// # 示例
+    /// # Example
     ///
     /// ```rust,ignore
     /// use mofa_foundation::persistence::PostgresStore;
@@ -99,11 +115,15 @@ impl PostgresStore {
     }
 
     /// 从环境变量创建，支持自定义连接池大小
+    /// Create from environment variables with custom pool size
     ///
     /// 环境变量：
+    /// Environment variables:
     /// - DATABASE_URL: PostgreSQL 连接字符串（必需）
+    /// - DATABASE_URL: PostgreSQL connection string (required)
     ///
     /// # 示例
+    /// # Example
     ///
     /// ```rust,ignore
     /// use mofa_foundation::persistence::PostgresStore;
@@ -120,11 +140,13 @@ impl PostgresStore {
     }
 
     /// 获取连接池引用
+    /// Get reference to the connection pool
     pub fn pool(&self) -> &PgPool {
         &self.pool
     }
 
     /// 从行解析消息
+    /// Parse message from a row
     fn parse_message_row(row: &PgRow) -> PersistenceResult<LLMMessage> {
         let content_json: serde_json::Value = row
             .try_get("content")
@@ -166,6 +188,7 @@ impl PostgresStore {
     }
 
     /// 从行解析 API 调用
+    /// Parse API call from a row
     fn parse_api_call_row(row: &PgRow) -> PersistenceResult<LLMApiCall> {
         let status_str: String = row
             .try_get("status")
@@ -246,6 +269,7 @@ impl PostgresStore {
     }
 
     /// 从行解析会话
+    /// Parse session from a row
     fn parse_session_row(row: &PgRow) -> PersistenceResult<ChatSession> {
         let metadata: HashMap<String, serde_json::Value> = row
             .try_get::<Option<serde_json::Value>, _>("metadata")
@@ -277,6 +301,7 @@ impl PostgresStore {
     }
 
     /// 从行解析 provider
+    /// Parse provider from a row
     fn parse_provider_row(
         row: &PgRow,
     ) -> PersistenceResult<crate::persistence::entities::Provider> {
@@ -312,6 +337,7 @@ impl PostgresStore {
     }
 
     /// 从行解析 agent
+    /// Parse agent from a row
     fn parse_agent_row(row: &PgRow) -> PersistenceResult<crate::persistence::entities::Agent> {
         Ok(crate::persistence::entities::Agent {
             id: row

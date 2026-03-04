@@ -9,9 +9,24 @@ repository.workspace = true
 homepage.workspace = true
 documentation = "https://docs.rs/mofa-monitoring"
 readme = "README.md"
-keywords = ["ai", "agent", "monitoring", "dashboard", "metrics"]
+keywords = [
+    "ai",
+    "agent",
+    "monitoring",
+    "observability",
+    "dashboard",
+    "metrics",
+]
 categories = ["development-tools"]
 publish = true
+
+[features]
+default = []
+otlp-metrics = [
+    "dep:opentelemetry",
+    "dep:opentelemetry_sdk",
+    "dep:opentelemetry-otlp",
+]
 
 [dependencies]
 # Workspace dependencies
@@ -19,18 +34,28 @@ async-trait.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 tokio.workspace = true
-anyhow.workspace = true
 tracing.workspace = true
-uuid = {workspace = true, features = ["serde", "v4"]}
+uuid = { workspace = true, features = ["serde", "v4"] }
 chrono.workspace = true
 thiserror.workspace = true
+error-stack = { workspace = true }
 rand.workspace = true
 hex.workspace = true
 lazy_static.workspace = true
+sha2.workspace = true
 # HTTP server dependencies
-axum = {workspace = true, features = ["macros","ws"]}
-tower = { version = "0.4", features = ["util", "timeout"] }
-tower-http = { version = "0.5", features = ["fs", "cors", "trace"] }
+axum = { workspace = true, features = ["macros", "ws"] }
+tower = { version = "0.5", features = ["util", "timeout"] }
+reqwest = { workspace = true, features = ["json", "rustls-tls"] }
+tower-http = { version = "0.6", features = ["fs", "cors", "trace"] }
+opentelemetry = { workspace = true, optional = true }
+opentelemetry_sdk = { workspace = true, optional = true, features = ["metrics", "rt-tokio"] }
+opentelemetry-otlp = { workspace = true, optional = true, features = [
+    "metrics",
+    "http-proto",
+    "reqwest-client",
+    "reqwest-rustls",
+] }
 
 # Static file embedding
 rust-embed = { version = "8.0", features = ["compression"] }
@@ -39,6 +64,15 @@ mime_guess = "2.0"
 # Local dependencies
 mofa-kernel = { path = "../mofa-kernel", version = "0.1" }
 futures = "0.3.31"
+
+# System metrics
+sysinfo = "0.32"
+
+[dev-dependencies]
+tokio-tungstenite = "0.24"
+futures-util = "0.3"
+mofa-foundation = { path = "../mofa-foundation" }
+mofa-kernel = { path = "../mofa-kernel" }
 
 [lints]
 workspace = true

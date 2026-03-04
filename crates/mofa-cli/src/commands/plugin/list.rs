@@ -1,74 +1,104 @@
 //! `mofa plugin list` command implementation
 
+use crate::CliError;
+use crate::context::CliContext;
 use crate::output::Table;
+use crate::plugin_catalog::catalog_entries;
 use colored::Colorize;
-use serde::Serialize;
+use mofa_kernel::agent::plugins::PluginRegistry;
 
 /// Execute the `mofa plugin list` command
-pub fn run(installed_only: bool, available: bool) -> anyhow::Result<()> {
-    println!("{} Listing plugins", "→".green());
+pub async fn run(ctx: &CliContext, installed_only: bool, available: bool) -> Result<(), CliError> {
+    let show_available = available;
+    let show_installed = installed_only || !available;
 
-    if installed_only {
-        println!("  Showing installed plugins");
-    } else if available {
-        println!("  Showing available plugins");
+    if show_available {
+        println!("{} Available plugin catalog", "→".green());
+        println!();
+        print_available(ctx)?;
     }
 
-    println!();
-
-    // TODO: Implement actual plugin discovery from plugin registry
-
-    let plugins = vec![
-        PluginInfo {
-            name: "http-server".to_string(),
-            version: "0.1.0".to_string(),
-            description: "HTTP server plugin for exposing agents via REST API".to_string(),
-            installed: true,
-        },
-        PluginInfo {
-            name: "postgres-persistence".to_string(),
-            version: "0.1.0".to_string(),
-            description: "PostgreSQL persistence plugin for session storage".to_string(),
-            installed: true,
-        },
-        PluginInfo {
-            name: "web-scraper".to_string(),
-            version: "0.2.0".to_string(),
-            description: "Web scraping tool for content extraction".to_string(),
-            installed: false,
-        },
-        PluginInfo {
-            name: "code-interpreter".to_string(),
-            version: "0.1.0".to_string(),
-            description: "Sandboxed code execution environment".to_string(),
-            installed: false,
-        },
-    ];
-
-    let filtered: Vec<_> = if installed_only {
-        plugins.iter().filter(|p| p.installed).cloned().collect()
-    } else {
-        plugins
-    };
-
-    if filtered.is_empty() {
-        println!("  No plugins found.");
-        return Ok(());
+    if show_installed {
+        println!("{} Installed plugins", "→".green());
+        println!();
+        print_installed(ctx)?;
     }
 
-    let json = serde_json::to_value(&filtered)?;
-    if let Some(arr) = json.as_array() {
-        let table = Table::from_json_array(arr);
-        println!("{}", table);
+    if !show_available && !show_installed {
+        println!("{} No plugin listing requested.", "→".yellow());
     }
 
     Ok(())
 }
 
-#[derive(Debug, Clone, Serialize)]
-struct PluginInfo {
-    name: String,
-    version: String,
-    description: String,
-    installed: bool,
+fn print_available(ctx: &CliContext) -> Result<(), CliError> {
+    let entries = catalog_entries();
+    if entries.is_empty() {
+        println!("  No catalog entries available.");
+        return Ok(());
+    }
+
+    let mut table = Table::builder().headers(&["ID", "Name", "Repo", "Kind", "Description", "Installed"]);
+    for entry in entries {
+        let installed = ctx.plugin_registry.contains(&entry.id);
+        table = table.add_row(&[
+            entry.id.as_str(),
+            entry.name.as_str(),
+            entry.repo_id.as_str(),
+            entry.kind.as_str(),
+            entry.description.as_str(),
+            if installed { "yes" } else { "no" },
+        ]);
+    }
+
+    println!("{}", table.build());
+    Ok(())
+}
+
+fn print_installed(ctx: &CliContext) -> Result<(), CliError> {
+    let specs = ctx.plugin_store.list()?;
+    let mut table = Table::builder().headers(&["ID", "Kind", "Repo", "Description", "Enabled"]);
+    let mut found = false;
+    for (_, spec) in specs {
+        if !spec.enabled {
+            continue;
+        }
+        found = true;
+        table = table.add_row(&[
+            spec.id.as_str(),
+            spec.kind.as_str(),
+            spec.repo_id.as_deref().unwrap_or("local"),
+            spec.description.as_deref().unwrap_or(""),
+            "yes",
+        ]);
+    }
+
+    if found {
+        println!("{}", table.build());
+    } else {
+        println!("  No plugins installed.");
+    }
+
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::context::CliContext;
+    use tempfile::TempDir;
+
+    #[tokio::test]
+    async fn run_default_list() {
+        let temp = TempDir::new().unwrap();
+        let ctx = CliContext::with_temp_dir(temp.path()).await.unwrap();
+        run(&ctx, false, false).await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn run_available_list() {
+        let temp = TempDir::new().unwrap();
+        let ctx = CliContext::with_temp_dir(temp.path()).await.unwrap();
+        run(&ctx, false, true).await.unwrap();
+    }
 }

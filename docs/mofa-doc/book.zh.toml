@@ -1,0 +1,46 @@
+[book]
+title = "MoFA 文档"
+authors = ["MoFA Contributors"]
+language = "zh-CN"
+description = "MoFA（Modular Framework for Agents）中文文档"
+src = "src/zh"
+
+[build]
+build-dir = "book/zh"
+create-missing = false
+
+[preprocessor.mermaid]
+command = "mdbook-mermaid"
+
+[output.html]
+default-theme = "rust"
+preferred-dark-theme = "navy"
+git-repository-url = "https://github.com/mofa-org/mofa"
+edit-url-template = "https://github.com/mofa-org/mofa/edit/main/docs/mofa-doc/{path}"
+no-section-label = false
+site-url = "/mofa/zh/"
+cname = ""
+
+[output.html.fold]
+enable = true
+level = 2
+
+[output.html.search]
+enable = true
+limit-results = 30
+use-boolean-and = true
+heading-split-level = 3
+
+[output.html.redirect]
+"QuickStart.html" = "getting-started/installation.html"
+"architecture.html" = "concepts/architecture.html"
+"tutorial/README.html" = "tutorial/index.html"
+"ffi/README.html" = "ffi/index.html"
+"api-reference/kernel/README.html" = "api-reference/kernel/index.html"
+"api-reference/runtime/README.html" = "api-reference/runtime/index.html"
+"api-reference/foundation/README.html" = "api-reference/foundation/index.html"
+"api-reference/plugins/README.html" = "api-reference/plugins/index.html"
+
+[output.html.print]
+enable = true
+page-break = true

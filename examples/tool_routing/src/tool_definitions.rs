@@ -1,4 +1,4 @@
-use mofa_sdk::llm::{FunctionDefinition, Tool};
+use mofa_sdk::llm::Tool;
 use serde_json::json;
 
 pub fn create_calculator_tool() -> Tool {
@@ -68,4 +68,3 @@ pub fn create_stock_tool() -> Tool {
         }),
     )
 }
-

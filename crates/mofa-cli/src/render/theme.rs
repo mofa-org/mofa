@@ -96,17 +96,9 @@ impl Theme {
         stopping: bool,
         error: bool,
     ) -> &'static str {
-        if error {
-            ""
-        } else if running {
-            ""
-        } else if starting {
-            ""
-        } else if stopping {
-            ""
-        } else {
-            ""
-        }
+        // All states return empty string for now - can be extended for icons/symbols
+        let _ = (running, starting, stopping, error);
+        ""
     }
 }
 

@@ -2,7 +2,6 @@
 //!
 //! Type definitions for Rhai runtime plugins
 
-use anyhow::Result;
 use rhai::Dynamic;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -61,15 +60,16 @@ impl Default for PluginMetadata {
 impl PluginMetadata {
     /// Create new plugin metadata with minimal required fields
     pub fn new(id: &str, name: &str, version: &str) -> Self {
-        let mut meta = Self::default();
-        meta.id = id.to_string();
-        meta.name = name.to_string();
-        meta.version = version.to_string();
-        meta
+        Self {
+            id: id.to_string(),
+            name: name.to_string(),
+            version: version.to_string(),
+            ..Default::default()
+        }
     }
 
     /// Load metadata from Rhai global variables
-    pub fn from_rhai_vars(_vars: &HashMap<String, Dynamic>) -> Result<Self> {
+    pub fn from_rhai_vars(_vars: &HashMap<String, Dynamic>) -> RhaiPluginResult<Self> {
         // Simplified for now - will implement properly later
         Ok(Self::default())
     }
@@ -79,8 +79,9 @@ impl PluginMetadata {
 // Plugin Error Type
 // ============================================================================
 
-/// Rhai plugin error type
+/// Rhai plugin error type.
 #[derive(thiserror::Error, Debug)]
+#[non_exhaustive]
 pub enum RhaiPluginError {
     /// Script compilation error
     #[error("Compilation error: {0}")]
@@ -112,11 +113,33 @@ pub enum RhaiPluginError {
 
     /// Other error
     #[error("Other: {0}")]
-    Other(#[from] anyhow::Error),
+    Other(String),
 }
 
-/// Rhai plugin result type
+impl From<mofa_extra::rhai::RhaiError> for RhaiPluginError {
+    fn from(err: mofa_extra::rhai::RhaiError) -> Self {
+        RhaiPluginError::RhaiError(err.to_string())
+    }
+}
+
+/// Plain result alias for Rhai-plugin operations (backward-compatible).
 pub type RhaiPluginResult<T = ()> = Result<T, RhaiPluginError>;
+
+/// Error-stack–backed result alias for Rhai-plugin operations.
+pub type RhaiPluginReport<T = ()> = ::std::result::Result<T, error_stack::Report<RhaiPluginError>>;
+
+/// Extension trait to convert [`RhaiPluginResult<T>`] into [`RhaiPluginReport<T>`].
+pub trait IntoRhaiPluginReport<T> {
+    /// Wrap the error in an `error_stack::Report`.
+    fn into_report(self) -> RhaiPluginReport<T>;
+}
+
+impl<T> IntoRhaiPluginReport<T> for RhaiPluginResult<T> {
+    #[inline]
+    fn into_report(self) -> RhaiPluginReport<T> {
+        self.map_err(error_stack::Report::new)
+    }
+}
 
 // ============================================================================
 // Plugin Capabilities
@@ -139,16 +162,15 @@ pub enum PluginCapability {
     PluginManagement,
 }
 
-impl ToString for PluginCapability {
-    fn to_string(&self) -> String {
+impl std::fmt::Display for PluginCapability {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            PluginCapability::Execution => "execution",
-            PluginCapability::FileSystem => "file_system",
-            PluginCapability::Network => "network",
-            PluginCapability::SystemCommand => "system_command",
-            PluginCapability::EventSubscription => "event_subscription",
-            PluginCapability::PluginManagement => "plugin_management",
+            PluginCapability::Execution => write!(f, "execution"),
+            PluginCapability::FileSystem => write!(f, "file_system"),
+            PluginCapability::Network => write!(f, "network"),
+            PluginCapability::SystemCommand => write!(f, "system_command"),
+            PluginCapability::EventSubscription => write!(f, "event_subscription"),
+            PluginCapability::PluginManagement => write!(f, "plugin_management"),
         }
-        .to_string()
     }
 }

@@ -1,6 +1,8 @@
 //! 记忆组件
+//! Memory component
 //!
 //! 定义 Agent 的记忆/状态持久化能力
+//! Defines the Agent's memory and state persistence capabilities
 
 use async_trait::async_trait;
 use chrono::Utc;
@@ -19,9 +21,11 @@ pub use mofa_kernel::agent::AgentResult;
 
 // ============================================================================
 // 内存实现
+// In-memory implementation
 // ============================================================================
 
 /// 简单内存存储
+/// Simple in-memory storage
 pub struct InMemoryStorage {
     data: HashMap<String, MemoryItem>,
     history: HashMap<String, Vec<Message>>,
@@ -29,6 +33,7 @@ pub struct InMemoryStorage {
 
 impl InMemoryStorage {
     /// 创建新的内存存储
+    /// Create new in-memory storage
     pub fn new() -> Self {
         Self {
             data: HashMap::new(),
@@ -61,6 +66,7 @@ impl Memory for InMemoryStorage {
 
     async fn search(&self, query: &str, limit: usize) -> AgentResult<Vec<MemoryItem>> {
         // 简单的关键词匹配搜索
+        // Simple keyword matching search
         let query_lower = query.to_lowercase();
         let mut results: Vec<MemoryItem> = self
             .data
@@ -113,6 +119,7 @@ impl Memory for InMemoryStorage {
             total_sessions: self.history.len(),
             total_messages,
             memory_bytes: 0, // 简化，不计算实际内存
+                             // Simplified, no actual memory calculation
         })
     }
 
@@ -123,52 +130,76 @@ impl Memory for InMemoryStorage {
 
 // ============================================================================
 // 基于文件的持久化存储实现
+// File-based persistent storage implementation
 // ============================================================================
 
 /// 基于文件的持久化存储
+/// File-based persistent storage
 ///
 /// 文件结构:
+/// File structure:
 /// ```text
 /// memory/
 /// ├── data.json              # KV 存储 (MemoryValue items)
+///                            # KV storage (MemoryValue items)
 /// ├── MEMORY.md              # 长期记忆
+///                            # Long-term memory
 /// ├── sessions/              # 会话历史
+///                            # Session history
 /// │   ├── <session_id>.json  # 单个会话的消息历史
+///                            # Message history for a single session
 /// ├── 2024-01-15.md          # 每日笔记 (YYYY-MM-DD.md)
+///                            # Daily notes (YYYY-MM-DD.md)
 /// └── ...
 /// ```
 ///
 /// # 特性
+/// # Features
 ///
 /// - 持久化到磁盘
+/// - Persist to disk
 /// - 线程安全 (Arc<RwLock<T>>)
+/// - Thread-safe (Arc<RwLock<T>>)
 /// - 原子文件写入 (临时文件 + rename)
+/// - Atomic file writes (temp file + rename)
 /// - 懒加载 (启动时从文件加载到内存)
+/// - Lazy loading (load from file to memory at startup)
 pub struct FileBasedStorage {
     /// 基础目录
+    /// Base directory
     base_dir: PathBuf,
     /// memory 目录
+    /// memory directory
     memory_dir: PathBuf,
     /// sessions 目录
+    /// sessions directory
     sessions_dir: PathBuf,
     /// data.json 文件路径
+    /// Path to data.json
     data_file: PathBuf,
     /// MEMORY.md 文件路径 (长期记忆)
+    /// Path to MEMORY.md (Long-term memory)
     long_term_file: PathBuf,
     /// 内存数据 (key -> MemoryItem)
+    /// In-memory data (key -> MemoryItem)
     data: Arc<RwLock<HashMap<String, MemoryItem>>>,
     /// 会话历史 (session_id -> Vec<Message>)
+    /// Session history (session_id -> Vec<Message>)
     sessions: Arc<RwLock<HashMap<String, Vec<Message>>>>,
 }
 
 impl FileBasedStorage {
     /// 创建新的基于文件的存储
+    /// Create new file-based storage
     ///
     /// # 参数
+    /// # Parameters
     ///
     /// - `base_dir`: 基础目录，将在其下创建 memory/ 和 memory/sessions/
+    /// - `base_dir`: Base dir, will create memory/ and memory/sessions/ under it
     ///
     /// # 示例
+    /// # Example
     ///
     /// ```rust,ignore
     /// use mofa_foundation::agent::components::memory::FileBasedStorage;
@@ -183,6 +214,7 @@ impl FileBasedStorage {
         let long_term_file = memory_dir.join("MEMORY.md");
 
         // 创建目录
+        // Create directories
         tokio::fs::create_dir_all(&sessions_dir)
             .await
             .map_err(|e| {
@@ -190,6 +222,7 @@ impl FileBasedStorage {
             })?;
 
         // 加载现有数据
+        // Load existing data
         let data = Self::load_data(&data_file).await?;
         let sessions = Self::load_sessions(&sessions_dir).await?;
 
@@ -205,6 +238,7 @@ impl FileBasedStorage {
     }
 
     /// 从 data.json 加载数据
+    /// Load data from data.json
     async fn load_data(data_file: &Path) -> AgentResult<HashMap<String, MemoryItem>> {
         if !data_file.exists() {
             return Ok(HashMap::new());
@@ -224,6 +258,7 @@ impl FileBasedStorage {
     }
 
     /// 从 sessions 目录加载所有会话
+    /// Load all sessions from sessions directory
     async fn load_sessions(sessions_dir: &Path) -> AgentResult<HashMap<String, Vec<Message>>> {
         if !sessions_dir.exists() {
             return Ok(HashMap::new());
@@ -242,11 +277,13 @@ impl FileBasedStorage {
             let path = entry.path();
 
             // 只处理 .json 文件
+            // Only process .json files
             if path.extension().and_then(|s: &std::ffi::OsStr| s.to_str()) != Some("json") {
                 continue;
             }
 
             // 从文件名获取 session_id (例如: "session-123.json" -> "session-123")
+            // Get session_id from file name (e.g. "session-123.json" -> "session-123")
             let session_id = path
                 .file_stem()
                 .and_then(|s: &std::ffi::OsStr| s.to_str())
@@ -255,6 +292,7 @@ impl FileBasedStorage {
                 })?;
 
             // 读取会话数据
+            // Read session data
             let content = tokio::fs::read_to_string(&path).await.map_err(|e| {
                 AgentError::IoError(format!("Failed to read session file {:?}: {}", path, e))
             })?;
@@ -273,8 +311,10 @@ impl FileBasedStorage {
     }
 
     /// 持久化数据到 data.json
+    /// Persist data to data.json
     ///
     /// 使用原子写入: 写入临时文件然后 rename
+    /// Uses atomic write: write to temp file then rename
     async fn persist_data(&self) -> AgentResult<()> {
         let data = self.data.read().await;
         let json = serde_json::to_string_pretty(&*data).map_err(|e| {
@@ -283,6 +323,7 @@ impl FileBasedStorage {
         drop(data);
 
         // 原子写入: 临时文件 + rename
+        // Atomic write: temp file + rename
         let temp_file = self.data_file.with_extension("json.tmp");
         tokio::fs::write(&temp_file, json)
             .await
@@ -296,6 +337,7 @@ impl FileBasedStorage {
     }
 
     /// 持久化单个会话到文件
+    /// Persist single session to file
     async fn persist_session(&self, session_id: &str) -> AgentResult<()> {
         let sessions = self.sessions.read().await;
         let messages = sessions.get(session_id);
@@ -304,12 +346,14 @@ impl FileBasedStorage {
 
         if let Some(messages) = messages {
             // 写入会话数据
+            // Write session data
             let json = serde_json::to_string_pretty(messages).map_err(|e| {
                 AgentError::SerializationError(format!("Failed to serialize session: {}", e))
             })?;
             drop(sessions);
 
             // 原子写入
+            // Atomic write
             let temp_file = session_file.with_extension("json.tmp");
             tokio::fs::write(&temp_file, json).await.map_err(|e| {
                 AgentError::IoError(format!("Failed to write temp session file: {}", e))
@@ -322,6 +366,7 @@ impl FileBasedStorage {
                 })?;
         } else {
             // 会话不存在，删除文件
+            // Session not found, delete file
             drop(sessions);
             if session_file.exists() {
                 tokio::fs::remove_file(&session_file).await.map_err(|e| {
@@ -334,16 +379,19 @@ impl FileBasedStorage {
     }
 
     /// 获取今日日期字符串 (YYYY-MM-DD)
+    /// Get today's date string (YYYY-MM-DD)
     fn today_key() -> String {
         Utc::now().format("%Y-%m-%d").to_string()
     }
 
     /// 获取今日文件路径 (YYYY-MM-DD.md)
+    /// Get today's file path (YYYY-MM-DD.md)
     fn today_file(&self) -> PathBuf {
         self.memory_dir.join(format!("{}.md", Self::today_key()))
     }
 
     /// 读取今日笔记内容
+    /// Read today's notes content
     pub async fn read_today_file(&self) -> AgentResult<String> {
         let today_file = self.today_file();
         if today_file.exists() {
@@ -356,6 +404,7 @@ impl FileBasedStorage {
     }
 
     /// 追加内容到今日笔记
+    /// Append content to today's notes
     pub async fn append_today_file(&self, content: &str) -> AgentResult<()> {
         let today_file = self.today_file();
         let final_content = if today_file.exists() {
@@ -365,6 +414,7 @@ impl FileBasedStorage {
             format!("{}\n{}", existing, content)
         } else {
             // 新文件，添加日期头部
+            // New file, add date header
             let today = Self::today_key();
             format!("# {}\n\n{}", today, content)
         };
@@ -377,6 +427,7 @@ impl FileBasedStorage {
     }
 
     /// 读取长期记忆 (MEMORY.md)
+    /// Read long-term memory (MEMORY.md)
     pub async fn read_long_term_file(&self) -> AgentResult<String> {
         if self.long_term_file.exists() {
             tokio::fs::read_to_string(&self.long_term_file)
@@ -388,8 +439,10 @@ impl FileBasedStorage {
     }
 
     /// 写入长期记忆 (MEMORY.md)
+    /// Write long-term memory (MEMORY.md)
     pub async fn write_long_term_file(&self, content: &str) -> AgentResult<()> {
         // 确保目录存在
+        // Ensure directory exists
         tokio::fs::create_dir_all(&self.memory_dir)
             .await
             .map_err(|e| {
@@ -404,6 +457,7 @@ impl FileBasedStorage {
     }
 
     /// 获取最近 N 天的记忆
+    /// Get memories from the last N days
     pub async fn get_recent_memories_files(&self, days: u32) -> AgentResult<String> {
         let mut memories = Vec::new();
 
@@ -427,6 +481,7 @@ impl FileBasedStorage {
     }
 
     /// 列出所有记忆文件 (按日期排序，最新的在前)
+    /// List all memory files (sorted by date, newest first)
     async fn list_memory_files(&self) -> AgentResult<Vec<PathBuf>> {
         if !self.memory_dir.exists() {
             return Ok(Vec::new());
@@ -445,6 +500,7 @@ impl FileBasedStorage {
             let path = entry.path();
             if let Some(name) = path.file_name().and_then(|n: &std::ffi::OsStr| n.to_str()) {
                 // 检查是否匹配 YYYY-MM-DD.md 模式
+                // Check if matching YYYY-MM-DD.md pattern
                 if Self::is_date_file(name) {
                     files.push(path);
                 }
@@ -452,11 +508,13 @@ impl FileBasedStorage {
         }
 
         // 按文件名倒序排序 (最新的在前)
+        // Sort descending by name (newest first)
         files.sort_by(|a: &PathBuf, b: &PathBuf| b.cmp(a));
         Ok(files)
     }
 
     /// 检查文件名是否匹配日期格式 (YYYY-MM-DD.md)
+    /// Check if filename matches date format (YYYY-MM-DD.md)
     fn is_date_file(name: &str) -> bool {
         if name.len() != 13 {
             // "2024-01-15.md" = 13 bytes
@@ -467,16 +525,19 @@ impl FileBasedStorage {
     }
 
     /// 获取记忆上下文
+    /// Get memory context
     pub async fn get_memory_context(&self) -> AgentResult<String> {
         let mut parts = Vec::new();
 
         // 长期记忆
+        // Long-term memory
         let long_term = self.read_long_term_file().await?;
         if !long_term.is_empty() {
             parts.push(format!("## Long-term Memory\n{}", long_term));
         }
 
         // 今日笔记
+        // Today's notes
         let today = self.read_today_file().await?;
         if !today.is_empty() {
             parts.push(format!("## Today's Notes\n{}", today));
@@ -486,26 +547,31 @@ impl FileBasedStorage {
     }
 
     /// 读取今日笔记
+    /// Read today's notes
     pub async fn read_today(&self) -> AgentResult<String> {
         self.read_today_file().await
     }
 
     /// 追加今日笔记
+    /// Append to today's notes
     pub async fn append_today(&self, content: &str) -> AgentResult<()> {
         self.append_today_file(content).await
     }
 
     /// 读取长期记忆
+    /// Read long-term memory
     pub async fn read_long_term(&self) -> AgentResult<String> {
         self.read_long_term_file().await
     }
 
     /// 写入长期记忆
+    /// Write long-term memory
     pub async fn write_long_term(&self, content: &str) -> AgentResult<()> {
         self.write_long_term_file(content).await
     }
 
     /// 获取最近记忆
+    /// Get recent memories
     pub async fn get_recent_memories(&self, days: u32) -> AgentResult<String> {
         self.get_recent_memories_files(days).await
     }
@@ -541,6 +607,7 @@ impl Memory for FileBasedStorage {
 
     async fn search(&self, query: &str, limit: usize) -> AgentResult<Vec<MemoryItem>> {
         // 在内存数据中搜索
+        // Search in in-memory data
         let query_lower = query.to_lowercase();
         let mut results: Vec<MemoryItem> = {
             let data = self.data.read().await;
@@ -557,6 +624,7 @@ impl Memory for FileBasedStorage {
         };
 
         // 同时在 markdown 文件中搜索
+        // Search in markdown files simultaneously
         let memory_files = self.list_memory_files().await?;
         for file_path in memory_files {
             if let Ok(content) = tokio::fs::read_to_string(&file_path).await
@@ -583,6 +651,7 @@ impl Memory for FileBasedStorage {
 
     async fn clear(&mut self) -> AgentResult<()> {
         // 清空内存
+        // Clear memory
         {
             let mut data = self.data.write().await;
             data.clear();
@@ -593,6 +662,7 @@ impl Memory for FileBasedStorage {
         }
 
         // 删除所有文件
+        // Delete all files
         if self.data_file.exists() {
             tokio::fs::remove_file(&self.data_file)
                 .await

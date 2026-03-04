@@ -3,9 +3,9 @@
 //! Provides TTS capabilities using a generic TTS engine interface.
 //! This module is designed to work with multiple TTS backends.
 //!
-//! Note: The Kokoro TTS integration is currently prepared but commented out
-//! due to compatibility issues with the ort (ONNX Runtime) dependency.
-//! The plugin structure is ready for use with any TTS backend.
+//! Kokoro TTS is available behind the `kokoro` feature flag.
+//! When enabled, initialization failures are treated as hard errors so
+//! callers do not accidentally receive mock/silent synthesis.
 
 // Model cache and download modules
 pub mod cache;
@@ -250,113 +250,6 @@ impl TTSEngine for MockTTSEngine {
 }
 
 // ============================================================================
-// Kokoro TTS Engine (Prepared but Disabled)
-// ============================================================================
-//
-// The following code structure is prepared for Kokoro TTS integration.
-// It's currently disabled due to compatibility issues with the ort
-// (ONNX Runtime) dependency version used by kokoro-tts.
-//
-// To enable when dependencies are fixed:
-// 1. Uncomment kokoro-tts dependency in Cargo.toml
-// 2. Uncomment the KokoroEngine implementation below
-// 3. Update TtsPlugin::init_plugin to use KokoroEngine
-
-/*
-use std::io::Cursor;
-
-/// Kokoro TTS engine implementation
-///
-/// This is a placeholder showing how the Kokoro TTS engine would be integrated.
-/// The actual implementation would depend on the kokoro-tts crate API.
-pub struct KokoroEngine {
-    config: TTSPluginConfig,
-    voices: Vec<VoiceInfo>,
-    // kokoro: kokoro_tts::Kokoro,  // Would be initialized when dependencies are fixed
-}
-
-impl KokoroEngine {
-    /// Create a new Kokoro TTS engine
-    pub async fn new(config: TTSPluginConfig) -> PluginResult<Self> {
-        info!(
-            "Initializing Kokoro TTS engine with model version {}",
-            config.model_version
-        );
-
-        // TODO: Initialize actual Kokoro TTS instance
-        // let kokoro = kokoro_tts::Kokoro::new()
-        //     .await
-        //     .map_err(|e| anyhow::anyhow!("Failed to initialize Kokoro: {}", e))?;
-
-        let voices = vec![
-            VoiceInfo::new("default", "Default Voice", "en-US"),
-            VoiceInfo::new("af_heart", "Heart (Female)", "en-US"),
-            VoiceInfo::new("am_michael", "Michael (Male)", "en-US"),
-            VoiceInfo::new("bf_emma", "Emma (Female)", "en-US"),
-            VoiceInfo::new("bm_george", "George (Male)", "en-US"),
-            // Add more Kokoro voices as available
-        ];
-
-        Ok(Self {
-            config,
-            voices,
-            // kokoro,
-        })
-    }
-
-    /// Get the default voice
-    pub fn default_voice(&self) -> &str {
-        &self.config.default_voice
-    }
-}
-
-#[async_trait::async_trait]
-impl TTSEngine for KokoroEngine {
-    async fn synthesize(&self, text: &str, voice: &str) -> PluginResult<Vec<u8>> {
-        debug!("Synthesizing text with voice '{}': {}", voice, text);
-
-        // TODO: Replace with actual Kokoro TTS synthesis
-        // let audio = self.kokoro
-        //     .synthesize(text, voice)
-        //     .await
-        //     .map_err(|e| anyhow::anyhow!("Synthesis failed: {}", e))?;
-
-        // For now, return placeholder
-        Ok(vec![])
-    }
-
-    async fn synthesize_stream(
-        &self,
-        text: &str,
-        voice: &str,
-        callback: Box<dyn Fn(Vec<u8>) + Send + Sync>,
-    ) -> PluginResult<()> {
-        debug!("Stream synthesizing text with voice '{}': {}", voice, text);
-
-        // TODO: Replace with actual Kokoro streaming synthesis
-        // let mut stream = self.kokoro
-        //     .synthesize_stream(text, voice)
-        //     .await
-        //     .map_err(|e| anyhow::anyhow!("Stream synthesis failed: {}", e))?;
-
-        // while let Some(chunk) = stream.next().await {
-        //     callback(chunk?);
-        // }
-
-        Ok(())
-    }
-
-    async fn list_voices(&self) -> PluginResult<Vec<VoiceInfo>> {
-        Ok(self.voices.clone())
-    }
-
-    fn name(&self) -> &str {
-        "Kokoro"
-    }
-}
-*/
-
-// ============================================================================
 // Audio Playback Helper (Optional - Requires rodio feature)
 // ============================================================================
 
@@ -407,12 +300,12 @@ pub fn play_audio(audio_data: Vec<u8>) -> PluginResult<()> {
 
     let cursor = Cursor::new(audio_data);
     let (_stream, stream_handle) = OutputStream::try_default()
-        .map_err(|e| anyhow::anyhow!("Failed to get audio output: {}", e))?;
+        .map_err(|e| mofa_kernel::plugin::PluginError::ExecutionFailed(format!("Failed to get audio output: {}", e)))?;
     let sink = Sink::try_new(&stream_handle)
-        .map_err(|e| anyhow::anyhow!("Failed to create sink: {}", e))?;
+        .map_err(|e| mofa_kernel::plugin::PluginError::ExecutionFailed(format!("Failed to create sink: {}", e)))?;
 
     let source =
-        Decoder::new(cursor).map_err(|e| anyhow::anyhow!("Failed to decode audio: {}", e))?;
+        Decoder::new(cursor).map_err(|e| mofa_kernel::plugin::PluginError::ExecutionFailed(format!("Failed to decode audio: {}", e)))?;
     sink.append(source);
     sink.sleep_until_end();
 
@@ -446,7 +339,7 @@ pub fn play_audio(audio_data: Vec<u8>) -> PluginResult<()> {
 pub async fn play_audio_async(audio_data: Vec<u8>) -> PluginResult<()> {
     tokio::task::spawn_blocking(move || play_audio(audio_data))
         .await
-        .map_err(|e| anyhow::anyhow!("Playback task failed: {}", e))?
+        .map_err(|e| mofa_kernel::plugin::PluginError::ExecutionFailed(format!("Playback task failed: {}", e)))?
 }
 
 // ============================================================================
@@ -551,7 +444,7 @@ impl TTSPlugin {
         let engine = self
             .engine
             .as_ref()
-            .ok_or_else(|| anyhow::anyhow!("TTS engine not initialized"))?;
+            .ok_or_else(|| mofa_kernel::plugin::PluginError::ExecutionFailed("TTS engine not initialized".to_string()))?;
 
         self.synthesis_count += 1;
         self.total_chars_synthesized += text.len() as u64;
@@ -567,7 +460,7 @@ impl TTSPlugin {
         let engine = self
             .engine
             .as_ref()
-            .ok_or_else(|| anyhow::anyhow!("TTS engine not initialized"))?;
+            .ok_or_else(|| mofa_kernel::plugin::PluginError::ExecutionFailed("TTS engine not initialized".to_string()))?;
 
         self.synthesis_count += 1;
         self.total_chars_synthesized += text.len() as u64;
@@ -585,7 +478,7 @@ impl TTSPlugin {
         let engine = self
             .engine
             .as_ref()
-            .ok_or_else(|| anyhow::anyhow!("TTS engine not initialized"))?;
+            .ok_or_else(|| mofa_kernel::plugin::PluginError::ExecutionFailed("TTS engine not initialized".to_string()))?;
 
         self.synthesis_count += 1;
         self.total_chars_synthesized += text.len() as u64;
@@ -601,12 +494,12 @@ impl TTSPlugin {
     ///
     /// # Arguments
     /// - `text`: The text to synthesize
-    /// - `callback`: Function to call with each audio chunk (Vec<f32>)
+    /// - `callback`: Function to call with each audio chunk (`Vec<f32>`)
     ///
     /// # Example
     /// ```rust,ignore
     /// plugin.synthesize_streaming_f32("Hello", Box::new(|audio_f32| {
-    ///     // audio_f32 is Vec<f32> with values in [-1.0, 1.0]
+    ///     // audio_f32 is `Vec<f32>` with values in [-1.0, 1.0]
     ///     sink.append(SamplesBuffer::new(1, 24000, audio_f32));
     /// })).await?;
     /// ```
@@ -618,7 +511,7 @@ impl TTSPlugin {
         let engine = self
             .engine
             .as_ref()
-            .ok_or_else(|| anyhow::anyhow!("TTS engine not initialized"))?;
+            .ok_or_else(|| mofa_kernel::plugin::PluginError::ExecutionFailed("TTS engine not initialized".to_string()))?;
 
         self.synthesis_count += 1;
         self.total_chars_synthesized += text.len() as u64;
@@ -632,7 +525,7 @@ impl TTSPlugin {
                 return kokoro
                     .synthesize_stream_f32(text, voice, callback)
                     .await
-                    .map_err(|e| anyhow::anyhow!("F32 streaming failed: {}", e));
+                    .map_err(|e| mofa_kernel::plugin::PluginError::ExecutionFailed(format!("F32 streaming failed: {}", e)));
             }
         }
 
@@ -659,7 +552,7 @@ impl TTSPlugin {
         let engine = self
             .engine
             .as_ref()
-            .ok_or_else(|| anyhow::anyhow!("TTS engine not initialized"))?;
+            .ok_or_else(|| mofa_kernel::plugin::PluginError::ExecutionFailed("TTS engine not initialized".to_string()))?;
         engine.list_voices().await
     }
 
@@ -751,7 +644,7 @@ impl AgentPlugin for TTSPlugin {
         let cache_dir = self.config.cache_dir.as_ref().map(std::path::PathBuf::from);
         self.model_cache = Some(
             cache::ModelCache::new(cache_dir)
-                .map_err(|e| anyhow::anyhow!("Failed to initialize model cache: {}", e))?,
+                .map_err(|e| mofa_kernel::plugin::PluginError::ExecutionFailed(format!("Failed to initialize model cache: {}", e)))?,
         );
 
         // Initialize Hugging Face client
@@ -768,12 +661,12 @@ impl AgentPlugin for TTSPlugin {
         let cache = self
             .model_cache
             .as_ref()
-            .ok_or_else(|| anyhow::anyhow!("Model cache not initialized"))?;
+            .ok_or_else(|| mofa_kernel::plugin::PluginError::ExecutionFailed("Model cache not initialized".to_string()))?;
 
         let hf_client = self
             .hf_client
             .as_ref()
-            .ok_or_else(|| anyhow::anyhow!("HF client not initialized"))?;
+            .ok_or_else(|| mofa_kernel::plugin::PluginError::ExecutionFailed("HF client not initialized".to_string()))?;
 
         // Check if model exists in cache
         let model_exists = cache.exists(&self.config.model_url).await;
@@ -803,15 +696,15 @@ impl AgentPlugin for TTSPlugin {
             hf_client
                 .download_model(download_config, cache)
                 .await
-                .map_err(|e| anyhow::anyhow!("Failed to download model: {}", e))?;
+                .map_err(|e| mofa_kernel::plugin::PluginError::ExecutionFailed(format!("Failed to download model: {}", e)))?;
         } else if !model_exists {
             // Auto-download disabled, fail with clear error
-            return Err(anyhow::anyhow!(
+            return Err(mofa_kernel::plugin::PluginError::ExecutionFailed(format!(
                 "Model '{}' not found in cache and auto_download is disabled. \
                 Please enable auto_download or manually download the model to: {:?}",
                 self.config.model_url,
                 cache.model_path(&self.config.model_url)
-            ));
+            )));
         }
 
         // Validate cached model
@@ -819,11 +712,11 @@ impl AgentPlugin for TTSPlugin {
             && !cache
                 .validate(&self.config.model_url, Some(expected_checksum))
                 .await
-                .map_err(|e| anyhow::anyhow!("Failed to validate model: {}", e))?
+                .map_err(|e| mofa_kernel::plugin::PluginError::ExecutionFailed(format!("Failed to validate model: {}", e)))?
         {
-            return Err(anyhow::anyhow!(
+            return Err(mofa_kernel::plugin::PluginError::ExecutionFailed(
                 "Model validation failed. The cached model may be corrupted. \
-                    Try deleting the cache and re-downloading."
+                    Try deleting the cache and re-downloading.".into(),
             ));
         }
 
@@ -841,7 +734,7 @@ impl AgentPlugin for TTSPlugin {
 
                 let model_path_str = model_path
                     .to_str()
-                    .ok_or_else(|| anyhow::anyhow!("Invalid model path"))?;
+                    .ok_or_else(|| mofa_kernel::plugin::PluginError::ExecutionFailed("Invalid model path".to_string()))?;
 
                 info!(
                     "Initializing Kokoro TTS engine with model: {}, voices: {}",
@@ -854,12 +747,12 @@ impl AgentPlugin for TTSPlugin {
                         info!("Kokoro TTS engine initialized successfully");
                     }
                     Err(e) => {
-                        warn!(
-                            "Failed to initialize Kokoro engine: {}, falling back to mock engine",
+                        return Err(mofa_kernel::plugin::PluginError::ExecutionFailed(format!(
+                            "Failed to initialize Kokoro engine (model: {}, voices: {}): {}",
+                            model_path_str,
+                            voice_path,
                             e
-                        );
-                        let engine = MockTTSEngine::new(self.config.clone());
-                        self.engine = Some(Arc::new(engine));
+                        )));
                     }
                 }
             }
@@ -898,13 +791,13 @@ impl AgentPlugin for TTSPlugin {
     async fn execute(&mut self, input: String) -> PluginResult<String> {
         // Parse input as JSON command
         let command: TTSCommand = serde_json::from_str(&input)
-            .map_err(|e| anyhow::anyhow!("Invalid TTS command format: {}", e))?;
+            .map_err(|e| mofa_kernel::plugin::PluginError::ExecutionFailed(format!("Invalid TTS command format: {}", e)))?;
 
         match command.action.as_str() {
             "speak" | "synthesize" => {
                 let text = command
                     .text
-                    .ok_or_else(|| anyhow::anyhow!("Missing 'text' parameter"))?;
+                    .ok_or_else(|| mofa_kernel::plugin::PluginError::ExecutionFailed("Missing 'text' parameter".to_string()))?;
 
                 if command.play.unwrap_or(true) {
                     self.synthesize_and_play(&text).await?;
@@ -918,22 +811,24 @@ impl AgentPlugin for TTSPlugin {
             }
             "list_voices" => {
                 let voices = self.list_voices().await?;
-                let json = serde_json::to_string(&voices)?;
+                let json = serde_json::to_string(&voices)
+                    .map_err(|e| mofa_kernel::plugin::PluginError::ExecutionFailed(e.to_string()))?;
                 Ok(json)
             }
             "set_voice" => {
                 let voice = command
                     .voice
-                    .ok_or_else(|| anyhow::anyhow!("Missing 'voice' parameter"))?;
+                    .ok_or_else(|| mofa_kernel::plugin::PluginError::ExecutionFailed("Missing 'voice' parameter".to_string()))?;
                 self.set_default_voice(&voice);
                 Ok(format!("Default voice set to: {}", voice))
             }
             "stats" => {
                 let stats = self.stats();
-                let json = serde_json::to_string(&stats)?;
+                let json = serde_json::to_string(&stats)
+                    .map_err(|e| mofa_kernel::plugin::PluginError::ExecutionFailed(e.to_string()))?;
                 Ok(json)
             }
-            _ => Err(anyhow::anyhow!("Unknown action: {}", command.action)),
+            _ => Err(mofa_kernel::plugin::PluginError::ExecutionFailed(format!("Unknown action: {}", command.action))),
         }
     }
 
@@ -1027,7 +922,7 @@ impl ToolExecutor for TextToSpeechTool {
         let text = arguments
             .get("text")
             .and_then(|v| v.as_str())
-            .ok_or_else(|| anyhow::anyhow!("Missing 'text' parameter"))?;
+            .ok_or_else(|| mofa_kernel::plugin::PluginError::ExecutionFailed("Missing 'text' parameter".to_string()))?;
 
         let voice = arguments.get("voice").and_then(|v| v.as_str());
         let play = arguments
@@ -1051,7 +946,8 @@ impl ToolExecutor for TextToSpeechTool {
             }
         };
 
-        let input = serde_json::to_string(&command)?;
+        let input = serde_json::to_string(&command)
+            .map_err(|e| mofa_kernel::plugin::PluginError::ExecutionFailed(e.to_string()))?;
         Ok(serde_json::json!({
             "success": true,
             "message": format!("TTS command prepared for: {}", text),
@@ -1061,10 +957,10 @@ impl ToolExecutor for TextToSpeechTool {
 
     fn validate(&self, arguments: &serde_json::Value) -> PluginResult<()> {
         if !arguments.is_object() {
-            return Err(anyhow::anyhow!("Arguments must be an object"));
+            return Err(mofa_kernel::plugin::PluginError::ExecutionFailed("Arguments must be an object".to_string()));
         }
         if arguments.get("text").and_then(|v| v.as_str()).is_none() {
-            return Err(anyhow::anyhow!("Missing required parameter: text"));
+            return Err(mofa_kernel::plugin::PluginError::ExecutionFailed("Missing required parameter: text".to_string()));
         }
         Ok(())
     }
@@ -1077,6 +973,14 @@ impl ToolExecutor for TextToSpeechTool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::fs;
+    use tempfile::TempDir;
+
+    fn prepare_cached_model(plugin: &mut TTSPlugin, model_id: &str, cache_dir: &std::path::Path) {
+        plugin.config.model_url = model_id.to_string();
+        plugin.config.cache_dir = Some(cache_dir.to_string_lossy().to_string());
+        plugin.config.auto_download = false;
+    }
 
     #[tokio::test]
     async fn test_mock_tts_engine_creation() {
@@ -1211,5 +1115,47 @@ mod tests {
         assert_eq!(parsed.text, Some("Hello".to_string()));
         assert_eq!(parsed.voice, Some("default".to_string()));
         assert_eq!(parsed.play, Some(true));
+    }
+
+    #[cfg(feature = "kokoro")]
+    #[tokio::test]
+    async fn test_init_plugin_kokoro_mode_fails_instead_of_mock_fallback() {
+        let mut plugin = TTSPlugin::new("test_tts");
+        let cache_dir = TempDir::new().unwrap();
+        prepare_cached_model(&mut plugin, "test/kokoro.onnx", cache_dir.path());
+
+        let ctx = PluginContext::new("test_agent");
+        plugin.load(&ctx).await.unwrap();
+
+        let cached_model_path = plugin
+            .model_cache
+            .as_ref()
+            .unwrap()
+            .model_path(&plugin.config.model_url);
+        fs::write(&cached_model_path, b"fake-model-content").unwrap();
+
+        let result = plugin.init_plugin().await;
+        assert!(result.is_err());
+    }
+
+    #[cfg(not(feature = "kokoro"))]
+    #[tokio::test]
+    async fn test_init_plugin_without_kokoro_uses_mock_engine() {
+        let mut plugin = TTSPlugin::new("test_tts");
+        let cache_dir = TempDir::new().unwrap();
+        prepare_cached_model(&mut plugin, "test/kokoro.onnx", cache_dir.path());
+
+        let ctx = PluginContext::new("test_agent");
+        plugin.load(&ctx).await.unwrap();
+
+        let cached_model_path = plugin
+            .model_cache
+            .as_ref()
+            .unwrap()
+            .model_path(&plugin.config.model_url);
+        fs::write(&cached_model_path, b"fake-model-content").unwrap();
+
+        plugin.init_plugin().await.unwrap();
+        assert_eq!(plugin.engine.as_ref().unwrap().name(), "MockTTS");
     }
 }

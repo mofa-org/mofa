@@ -3,7 +3,9 @@
 //! Combines keyboard input, paste events, resize events, and draw triggers
 //! into a single async stream.
 
-use anyhow::Result;
+use crate::CliError;
+
+type Result<T> = std::result::Result<T, CliError>;
 use crossterm::event::{Event, KeyEvent, MouseEvent};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -103,7 +105,7 @@ impl TuiEventStream {
         // Spawn crossterm event poller task
         let broker_clone = Arc::clone(&broker);
         let focused_clone = Arc::clone(&terminal_focused);
-        let _ = tokio::spawn(async move {
+        tokio::spawn(async move {
             Self::poll_crossterm_events(broker_clone, focused_clone, event_tx).await;
         });
 

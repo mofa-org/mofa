@@ -63,7 +63,7 @@ pub enum PluginEvent {
     /// Plugin loaded
     Loaded {
         plugin_id: String,
-        manifest: PluginManifest,
+        manifest: Box<PluginManifest>,
     },
     /// Plugin initialized
     Initialized { plugin_id: String },
@@ -291,7 +291,7 @@ impl WasmPluginManager {
         // Emit event
         let _ = self.event_tx.send(PluginEvent::Loaded {
             plugin_id: plugin_id.clone(),
-            manifest,
+            manifest: Box::new(manifest),
         });
 
         info!("Loaded plugin: {}", plugin_id);
@@ -523,12 +523,14 @@ mod tests {
 
     /// Create a test runtime without async support for synchronous tests
     fn create_test_runtime() -> WasmResult<WasmRuntime> {
-        let mut config = RuntimeConfig::default();
-        config.execution_config = ExecutionConfig {
-            async_support: false,
-            fuel_metering: false,
-            epoch_interruption: false,
-            ..ExecutionConfig::default()
+        let config = RuntimeConfig {
+            execution_config: ExecutionConfig {
+                async_support: false,
+                fuel_metering: false,
+                epoch_interruption: false,
+                ..ExecutionConfig::default()
+            },
+            ..RuntimeConfig::default()
         };
         WasmRuntime::new(config)
     }

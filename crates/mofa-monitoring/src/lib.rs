@@ -27,8 +27,13 @@ mod dashboard;
 pub mod tracing;
 
 pub use dashboard::{
-    AgentMetrics, AgentStatus, ApiError, ApiResponse, DashboardConfig, DashboardServer, Gauge,
-    Histogram, MetricType, MetricValue, MetricsCollector, MetricsConfig, MetricsRegistry,
-    MetricsSnapshot, PluginMetrics, PluginStatus, ServerState, SystemMetrics, SystemStatus,
-    WebSocketClient, WebSocketHandler, WebSocketMessage, WorkflowMetrics,
+    AgentMetrics, AgentStatus, ApiError, ApiResponse, AuthInfo, AuthProvider, DashboardConfig,
+    DashboardServer, Gauge, Histogram, LLMMetrics, LLMStatus, LLMSummary, MetricType, MetricValue,
+    MetricsCollector, MetricsConfig, MetricsRegistry, MetricsSnapshot, NoopAuthProvider,
+    PluginMetrics, PluginStatus, PrometheusExportConfig, PrometheusExportError, PrometheusExporter,
+    ServerState, SystemMetrics, SystemStatus, TokenAuthProvider, WebSocketClient, WebSocketHandler,
+    WebSocketMessage, WorkflowMetrics,
 };
+
+#[cfg(feature = "otlp-metrics")]
+pub use tracing::CardinalityLimits;

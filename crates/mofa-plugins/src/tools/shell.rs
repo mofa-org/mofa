@@ -3,6 +3,7 @@ use serde_json::json;
 use tokio::process::Command;
 
 /// Shell 命令工具 - 执行系统命令（受限）
+/// Shell command tool - Execute system commands (restricted)
 pub struct ShellCommandTool {
     definition: ToolDefinition,
     allowed_commands: Vec<String>,
@@ -77,14 +78,14 @@ impl ToolExecutor for ShellCommandTool {
     async fn execute(&self, arguments: serde_json::Value) -> PluginResult<serde_json::Value> {
         let command = arguments["command"]
             .as_str()
-            .ok_or_else(|| anyhow::anyhow!("Command is required"))?;
+            .ok_or_else(|| mofa_kernel::plugin::PluginError::ExecutionFailed("Command is required".to_string()))?;
 
         if !self.is_command_allowed(command) {
-            return Err(anyhow::anyhow!(
+            return Err(mofa_kernel::plugin::PluginError::ExecutionFailed(format!(
                 "Command '{}' is not in the allowed commands list. Allowed: {:?}",
                 command,
                 self.allowed_commands
-            ));
+            )));
         }
 
         let args: Vec<String> = arguments

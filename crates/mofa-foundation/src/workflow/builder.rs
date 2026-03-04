@@ -1,6 +1,8 @@
 //! 工作流构建器
+//! Workflow Builder
 //!
 //! 提供流式 API 构建工作流
+//! Provides a fluent API for building workflows
 
 use super::graph::{EdgeConfig, WorkflowGraph};
 use super::node::{RetryPolicy, WorkflowNode};
@@ -11,6 +13,7 @@ use std::future::Future;
 use std::sync::Arc;
 
 /// 工作流构建器
+/// Workflow Builder
 pub struct WorkflowBuilder {
     graph: WorkflowGraph,
     current_node: Option<String>,
@@ -18,6 +21,7 @@ pub struct WorkflowBuilder {
 
 impl WorkflowBuilder {
     /// 创建新的工作流构建器
+    /// Create a new workflow builder
     pub fn new(id: &str, name: &str) -> Self {
         Self {
             graph: WorkflowGraph::new(id, name),
@@ -26,12 +30,14 @@ impl WorkflowBuilder {
     }
 
     /// 设置描述
+    /// Set description
     pub fn description(mut self, desc: &str) -> Self {
         self.graph = self.graph.with_description(desc);
         self
     }
 
     /// 添加开始节点
+    /// Add start node
     pub fn start(mut self) -> Self {
         let node = WorkflowNode::start("start");
         self.graph.add_node(node);
@@ -40,6 +46,7 @@ impl WorkflowBuilder {
     }
 
     /// 添加开始节点（自定义 ID）
+    /// Add start node (custom ID)
     pub fn start_with_id(mut self, id: &str) -> Self {
         let node = WorkflowNode::start(id);
         self.graph.add_node(node);
@@ -48,11 +55,13 @@ impl WorkflowBuilder {
     }
 
     /// 添加结束节点
+    /// Add end node
     pub fn end(mut self) -> Self {
         let node = WorkflowNode::end("end");
         self.graph.add_node(node);
 
         // 连接当前节点到结束节点
+        // Connect current node to end node
         if let Some(ref current) = self.current_node {
             self.graph.connect(current, "end");
         }
@@ -62,6 +71,7 @@ impl WorkflowBuilder {
     }
 
     /// 添加结束节点（自定义 ID）
+    /// Add end node (custom ID)
     pub fn end_with_id(mut self, id: &str) -> Self {
         let node = WorkflowNode::end(id);
         self.graph.add_node(node);
@@ -75,6 +85,7 @@ impl WorkflowBuilder {
     }
 
     /// 添加任务节点
+    /// Add task node
     pub fn task<F, Fut>(mut self, id: &str, name: &str, executor: F) -> Self
     where
         F: Fn(super::state::WorkflowContext, WorkflowValue) -> Fut + Send + Sync + 'static,
@@ -84,6 +95,7 @@ impl WorkflowBuilder {
         self.graph.add_node(node);
 
         // 连接当前节点
+        // Connect current node
         if let Some(ref current) = self.current_node {
             self.graph.connect(current, id);
         }
@@ -93,6 +105,7 @@ impl WorkflowBuilder {
     }
 
     /// 添加任务节点（带配置）
+    /// Add task node (with config)
     pub fn task_with_config<F, Fut>(
         mut self,
         id: &str,
@@ -119,6 +132,7 @@ impl WorkflowBuilder {
     }
 
     /// 添加智能体节点
+    /// Add agent node
     pub fn agent<F, Fut>(mut self, id: &str, name: &str, agent_fn: F) -> Self
     where
         F: Fn(super::state::WorkflowContext, WorkflowValue) -> Fut + Send + Sync + 'static,
@@ -136,10 +150,13 @@ impl WorkflowBuilder {
     }
 
     /// 添加 LLM 智能体节点（使用 LLMAgent）
+    /// Add LLM agent node (using LLMAgent)
     ///
     /// 允许在工作流中使用预配置的 LLMAgent。
+    /// Allows using pre-configured LLMAgent in workflow.
     ///
     /// # 示例
+    /// # Example
     ///
     /// ```rust,ignore
     /// let agent = LLMAgentBuilder::new()
@@ -167,10 +184,13 @@ impl WorkflowBuilder {
     }
 
     /// 添加 LLM 智能体节点（带 prompt 模板）
+    /// Add LLM agent node (with prompt template)
     ///
     /// 允许使用 Jinja-style 模板格式化输入。
+    /// Allows using Jinja-style templates to format input.
     ///
     /// # 示例
+    /// # Example
     ///
     /// ```rust,ignore
     /// let workflow = WorkflowBuilder::new("test", "Test")
@@ -203,6 +223,7 @@ impl WorkflowBuilder {
     }
 
     /// 添加条件节点
+    /// Add condition node
     pub fn condition<F, Fut>(mut self, id: &str, name: &str, condition_fn: F) -> ConditionBuilder
     where
         F: Fn(super::state::WorkflowContext, WorkflowValue) -> Fut + Send + Sync + 'static,
@@ -224,6 +245,7 @@ impl WorkflowBuilder {
     }
 
     /// 添加并行节点
+    /// Add parallel node
     pub fn parallel(mut self, id: &str, name: &str) -> ParallelBuilder {
         let node = WorkflowNode::parallel(id, name, vec![]);
         self.graph.add_node(node);
@@ -240,6 +262,7 @@ impl WorkflowBuilder {
     }
 
     /// 添加循环节点
+    /// Add loop node
     pub fn loop_node<F, Fut, C, CFut>(
         mut self,
         id: &str,
@@ -266,6 +289,7 @@ impl WorkflowBuilder {
     }
 
     /// 添加子工作流节点
+    /// Add sub-workflow node
     pub fn sub_workflow(mut self, id: &str, name: &str, sub_workflow_id: &str) -> Self {
         let node = WorkflowNode::sub_workflow(id, name, sub_workflow_id);
         self.graph.add_node(node);
@@ -279,6 +303,7 @@ impl WorkflowBuilder {
     }
 
     /// 添加等待节点
+    /// Add wait node
     pub fn wait(mut self, id: &str, name: &str, event_type: &str) -> Self {
         let node = WorkflowNode::wait(id, name, event_type);
         self.graph.add_node(node);
@@ -292,6 +317,7 @@ impl WorkflowBuilder {
     }
 
     /// 添加数据转换节点
+    /// Add data transform node
     pub fn transform<F, Fut>(mut self, id: &str, name: &str, transform_fn: F) -> Self
     where
         F: Fn(HashMap<String, WorkflowValue>) -> Fut + Send + Sync + 'static,
@@ -309,6 +335,7 @@ impl WorkflowBuilder {
     }
 
     /// 添加自定义节点
+    /// Add custom node
     pub fn node(mut self, node: WorkflowNode) -> Self {
         let node_id = node.id().to_string();
         self.graph.add_node(node);
@@ -322,30 +349,35 @@ impl WorkflowBuilder {
     }
 
     /// 添加边（不改变当前节点）
+    /// Add edge (without changing current node)
     pub fn edge(mut self, from: &str, to: &str) -> Self {
         self.graph.connect(from, to);
         self
     }
 
     /// 添加条件边
+    /// Add conditional edge
     pub fn conditional_edge(mut self, from: &str, to: &str, condition: &str) -> Self {
         self.graph.connect_conditional(from, to, condition);
         self
     }
 
     /// 添加错误处理边
+    /// Add error handling edge
     pub fn error_edge(mut self, from: &str, to: &str) -> Self {
         self.graph.add_edge(EdgeConfig::error(from, to));
         self
     }
 
     /// 跳转到指定节点（设置当前节点）
+    /// Jump to specified node (set current node)
     pub fn goto(mut self, node_id: &str) -> Self {
         self.current_node = Some(node_id.to_string());
         self
     }
 
     /// 从当前节点连接到指定节点
+    /// Connect current node to specified node
     pub fn then(mut self, node_id: &str) -> Self {
         if let Some(ref current) = self.current_node {
             self.graph.connect(current, node_id);
@@ -355,11 +387,14 @@ impl WorkflowBuilder {
     }
 
     /// 构建工作流图
+    /// Build workflow graph
+    #[must_use]
     pub fn build(self) -> WorkflowGraph {
         self.graph
     }
 
     /// 验证并构建
+    /// Validate and build
     pub fn build_validated(self) -> Result<WorkflowGraph, Vec<String>> {
         self.graph.validate()?;
         Ok(self.graph)
@@ -367,6 +402,7 @@ impl WorkflowBuilder {
 }
 
 /// 条件构建器
+/// Condition Builder
 pub struct ConditionBuilder {
     parent: WorkflowBuilder,
     condition_node: String,
@@ -376,6 +412,7 @@ pub struct ConditionBuilder {
 
 impl ConditionBuilder {
     /// 设置为真时的分支
+    /// Set branch for true result
     pub fn on_true<F, Fut>(mut self, id: &str, name: &str, executor: F) -> Self
     where
         F: Fn(super::state::WorkflowContext, WorkflowValue) -> Fut + Send + Sync + 'static,
@@ -391,6 +428,7 @@ impl ConditionBuilder {
     }
 
     /// 设置为假时的分支
+    /// Set branch for false result
     pub fn on_false<F, Fut>(mut self, id: &str, name: &str, executor: F) -> Self
     where
         F: Fn(super::state::WorkflowContext, WorkflowValue) -> Fut + Send + Sync + 'static,
@@ -406,6 +444,7 @@ impl ConditionBuilder {
     }
 
     /// 汇聚两个分支
+    /// Merge both branches
     pub fn merge(mut self, id: &str, name: &str) -> WorkflowBuilder {
         let node = WorkflowNode::join(
             id,
@@ -432,14 +471,17 @@ impl ConditionBuilder {
     }
 
     /// 不汇聚，返回构建器
+    /// Don't merge, return builder
     pub fn end_condition(mut self) -> WorkflowBuilder {
         // 设置当前节点为最后添加的分支
+        // Set current node to last added branch
         self.parent.current_node = self.true_branch.or(self.false_branch);
         self.parent
     }
 }
 
 /// 并行构建器
+/// Parallel Builder
 pub struct ParallelBuilder {
     parent: WorkflowBuilder,
     parallel_node: String,
@@ -448,6 +490,7 @@ pub struct ParallelBuilder {
 
 impl ParallelBuilder {
     /// 添加分支任务
+    /// Add branch task
     pub fn branch<F, Fut>(mut self, id: &str, name: &str, executor: F) -> Self
     where
         F: Fn(super::state::WorkflowContext, WorkflowValue) -> Fut + Send + Sync + 'static,
@@ -461,6 +504,7 @@ impl ParallelBuilder {
     }
 
     /// 添加分支智能体
+    /// Add branch agent
     pub fn branch_agent<F, Fut>(mut self, id: &str, name: &str, agent_fn: F) -> Self
     where
         F: Fn(super::state::WorkflowContext, WorkflowValue) -> Fut + Send + Sync + 'static,
@@ -474,10 +518,13 @@ impl ParallelBuilder {
     }
 
     /// 添加 LLM 智能体分支
+    /// Add LLM agent branch
     ///
     /// 允许在并行执行中使用预配置的 LLMAgent。
+    /// Allows using pre-configured LLMAgent in parallel execution.
     ///
     /// # 示例
+    /// # Example
     ///
     /// ```rust,ignore
     /// let workflow = WorkflowBuilder::new("test", "Test")
@@ -498,6 +545,7 @@ impl ParallelBuilder {
     }
 
     /// 汇聚所有分支
+    /// Join all branches
     pub fn join(mut self, id: &str, name: &str) -> WorkflowBuilder {
         let node = WorkflowNode::join(id, name, self.branches.iter().map(|s| s.as_str()).collect());
         self.parent.graph.add_node(node);
@@ -511,6 +559,7 @@ impl ParallelBuilder {
     }
 
     /// 汇聚并转换
+    /// Join and transform
     pub fn join_with_transform<F, Fut>(
         mut self,
         id: &str,
@@ -539,6 +588,7 @@ impl ParallelBuilder {
 }
 
 /// 简化的工作流构建宏
+/// Simplified workflow build macro
 #[macro_export]
 macro_rules! workflow {
     ($id:expr, $name:expr => {

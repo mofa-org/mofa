@@ -3,12 +3,14 @@
 //! This module contains the core App struct that manages the TUI state,
 //! handles events, and orchestrates rendering.
 
+use crate::CliError;
 use super::app_event::{AgentStatus, AppEvent, ExitMode, View};
 use super::app_event_sender::AppEventSender;
 use super::event_stream::{TuiEvent, TuiEventStream};
 use super::terminal::{restore_terminal, setup_terminal};
 use crate::widgets::{command_palette::CommandPalette, confirm_dialog::ConfirmDialog};
-use anyhow::{Context, Result};
+
+type Result<T> = std::result::Result<T, CliError>;
 use crossterm::event::{KeyCode, KeyModifiers};
 use ratatui::{
     Frame,
@@ -195,8 +197,8 @@ impl App {
 
     /// Run the main event loop
     pub async fn run(&mut self) -> Result<AppExitInfo> {
-        let mut terminal = setup_terminal().context("Failed to setup terminal")?;
-        let mut event_stream = TuiEventStream::new().context("Failed to create event stream")?;
+        let mut terminal = setup_terminal().map_err(|e| CliError::StateError(format!("Failed to setup terminal: {}", e)))?;
+        let mut event_stream = TuiEventStream::new().map_err(|e| CliError::StateError(format!("Failed to create event stream: {}", e)))?;
 
         info!("Starting TUI event loop");
 
@@ -233,7 +235,7 @@ impl App {
         }
 
         // Restore terminal
-        restore_terminal(terminal).context("Failed to restore terminal")?;
+        restore_terminal(terminal).map_err(|e| CliError::StateError(format!("Failed to restore terminal: {}", e)))?;
 
         Ok(AppExitInfo {
             mode: self.exit_mode.clone(),

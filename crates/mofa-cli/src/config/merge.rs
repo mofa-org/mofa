@@ -4,6 +4,7 @@ use super::AgentConfig;
 
 /// Configuration merge strategy
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[allow(clippy::enum_variant_names)]
 pub enum ConfigMergeStrategy {
     /// File values take precedence over environment
     FilePrecedence,

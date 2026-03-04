@@ -23,6 +23,12 @@
   <a href="https://github.com/mofa-org/mofa/stargazers">
     <img src="https://img.shields.io/github/stars/mofa-org/mofa" alt="GitHub Stars"/>
   </a>
+  <a href="https://discord.com/invite/hKJZzDMMm9">
+    <img src="https://img.shields.io/discord/1345678901234567890?color=5865F2&logo=discord&logoColor=white&label=Discord" alt="Discord"/>
+  </a>
+  <a href="https://docs.rs/mofa-sdk">
+    <img src="https://img.shields.io/docsrs/mofa-sdk" alt="docs.rs"/>
+  </a>
 </div>
 
 <h2 align="center">
@@ -43,6 +49,21 @@
  <img src="https://img.shields.io/badge/Languages-Multi_platform-yellow?style=for-the-badge" />
  <img src="https://img.shields.io/badge/Runtime-Programmable-green?style=for-the-badge" />
 </p>
+
+## 📋 Table of Contents
+
+- [Overview](#overview)
+- [Why MoFA?](#why-mofa)
+- [Core Architecture](#core-architecture)
+- [Core Features](#core-features)
+- [Quick Start](#quick-start)
+- [Roadmap](#roadmap)
+- [Ecosystem & Related Repos](#-ecosystem--related-repos)
+- [Documentation](#documentation)
+- [Security](#security)
+- [Contributing](#contributing)
+- [Community](#community)
+- [License](#license)
 
 ## Overview
 MoFA (Modular Framework for Agents) is not just another entry in the crowded agent framework landscape.
@@ -100,29 +121,34 @@ What Sets MoFA Apart:</br>
 
 MoFA adopts a **layered microkernel architecture**, achieving extreme extensibility through a **dual-layer plugin system**:
 
-```
-┌─────────────────────────────────────────────────────────┐
-│                    Business Layer                        │
-│  (User-defined Agents, Workflows, Rules)                 │
-└─────────────────────────────────────────────────────────┘
-                          ↓
-┌─────────────────────────────────────────────────────────┐
-│          Runtime Plugin Layer (Rhai Scripts)              │
-│  • Dynamic tool registration  • Rule engine  • Scripts   │
-│  • Hot-load logic    • Expression evaluation             │
-└─────────────────────────────────────────────────────────┘
-                          ↓
-┌─────────────────────────────────────────────────────────┐
-│            Compile-time Plugin Layer (Rust/WASM)         │
-│  • LLM plugins  • Tool plugins  • Storage  • Protocol    │
-│  • High-performance modules  • Native system integration  │
-└─────────────────────────────────────────────────────────┘
-                          ↓
-┌─────────────────────────────────────────────────────────┐
-│                  Microkernel (mofa-kernel)               │
-│  • Lifecycle management  • Metadata  • Communication     │
-│  • Task scheduling       • Memory management             │
-└─────────────────────────────────────────────────────────┘
+```mermaid
+block-beta
+    columns 1
+    block:business["🧩 Business Layer"]
+        A["User-defined Agents, Workflows, Rules"]
+    end
+    space
+    block:runtime["⚡ Runtime Plugin Layer (Rhai Scripts)"]
+        B["Dynamic tool registration"]
+        C["Rule engine & Scripts"]
+        D["Hot-load logic"]
+    end
+    space
+    block:compile["🔧 Compile-time Plugin Layer (Rust/WASM)"]
+        E["LLM plugins"]
+        F["Tool plugins"]
+        G["Storage & Protocol"]
+    end
+    space
+    block:kernel["🏗️ Microkernel (mofa-kernel)"]
+        H["Lifecycle management"]
+        I["Metadata & Communication"]
+        J["Task scheduling"]
+    end
+
+    business --> runtime
+    runtime --> compile
+    compile --> kernel
 ```
 
 #### Advantages of Dual-Layer Plugin System
@@ -329,6 +355,46 @@ The runtime provides comprehensive:
 
 Suitable for building production applications that need stable operation, rather than simple plugin testing or prototype development.
 
+## CLI Production Smoke Example
+
+To verify CLI production readiness from a user perspective, MoFA includes a
+black-box smoke example:
+
+- Path: `examples/cli_production_smoke`
+- Runner: invokes the built `mofa` binary in isolated `XDG_*` directories
+- Validation: exit codes + stable output tokens (no brittle full snapshots)
+
+Coverage in this smoke run:
+
+- Top-level commands: `info`, `config path`, `config list`
+- Agent commands: `start`, `status`, `list`, `restart`, `stop`
+- Session commands: `list`, `show`, `export`, `delete`
+- Plugin commands: `list`, `info`, `uninstall`
+- Tool commands: `list`, `info`
+
+Run it:
+
+```bash
+# repo root
+cargo build -p mofa-cli
+
+# examples workspace
+cd examples
+cargo run -p cli_production_smoke
+cargo test -p cli_production_smoke
+```
+
+Optional binary override:
+
+```bash
+export MOFA_BIN=/absolute/path/to/mofa
+```
+
+Limitations:
+
+- This smoke flow is manually run (not CI-gated in this PR).
+- Assertions focus on behavior and persistence effects, not exact formatting.
+
 ## Documentation
 
 - [API Documentation](https://docs.rs/mofa-sdk)
@@ -361,9 +427,30 @@ Please see our [Security Guide](docs/security.md) and [Security Policy](SECURITY
 
 We welcome contributions! Please check out our [contributing guide](CONTRIBUTING.md) for more details.
 
+We ❤️ first-time contributors! Check out our [`good-first-issue`](https://github.com/mofa-org/mofa/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22) labels to get started.
+
+## 🌐 Ecosystem & Related Repos
+
+| Repository | Description | Status |
+|---|---|---|
+| [mofa-studio](https://github.com/mofa-org/mofa-studio) | GPU-accelerated desktop voice-chat & model management app (Makepad) | 🚧 Prototype |
+| [GSoC](https://github.com/mofa-org/GSoC) | Google Summer of Code 2026 ideas & proposal guide | ✅ Active |
+| [mofa-input](https://github.com/mofa-org/mofa-input) | High-performance local AI voice input | ✅ Active |
+| [mofa-local-llm](https://github.com/mofa-org/mofa-local-llm) | Local LLM inference prototype for edge | 🚧 Experimental |
+| [makepad-chart](https://github.com/mofa-org/makepad-chart) | GPU-accelerated chart widgets for Makepad | ✅ Active |
+| [makepad-flow](https://github.com/mofa-org/makepad-flow) | Flow chart widget for visual workflow editing | ✅ Active |
+| [makepad-d3](https://github.com/mofa-org/makepad-d3) | D3-style data visualization for Makepad | ✅ Active |
+| [dora](https://github.com/mofa-org/dora) | Distributed dataflow middleware (fork of dora-rs) | ✅ Active |
+
+## 🎓 GSoC 2026
+
+MoFA is participating in **Google Summer of Code 2026** as a first-time organization! We have **6 exciting project ideas** covering plugin systems, observability dashboards, edge orchestrators, time-travel debuggers, and more.
+
+👉 **[Check out our GSoC Ideas List](https://github.com/mofa-org/GSoC/blob/main/ideas-list.md)**
+
 ## Community
 
-- GitHub Issues: [https://github.com/mofa-org/mofa/discussions](https://github.com/mofa-org/mofa/discussions)
+- GitHub Discussions: [https://github.com/mofa-org/mofa/discussions](https://github.com/mofa-org/mofa/discussions)
 - Discord: [https://discord.com/invite/hKJZzDMMm9](https://discord.com/invite/hKJZzDMMm9)
 
 ## Star History

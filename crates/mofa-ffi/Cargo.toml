@@ -9,14 +9,14 @@ repository.workspace = true
 homepage.workspace = true
 documentation = "https://docs.rs/mofa-ffi"
 readme = "README.md"
-keywords = ["ai", "agent", "ffi", "bindings", "uniffi", "multi-language"]
+keywords = ["ai", "agent", "bindings", "uniffi", "multi-language"]
 categories = ["development-tools::ffi", "api-bindings"]
 publish = true
 
 [features]
 default = []
 # Enable UniFFI cross-language bindings (Python, Kotlin, Swift, Java)
-uniffi = ["dep:uniffi", "dep:thiserror"]
+uniffi = ["dep:uniffi", "dep:thiserror", "dep:error-stack"]
 # Enable PyO3 Python bindings (native Python extension)
 python = ["dep:pyo3", "dep:pyo3-async-runtimes"]
 # Enable all FFI bindings
@@ -33,9 +33,13 @@ persistence-all = ["mofa-sdk/persistence-all"]
 # Core SDK dependency
 mofa-sdk = { path = "../mofa-sdk", version = "0.1" }
 mofa-foundation = { path = "../mofa-foundation", version = "0.1" }
+mofa-kernel = { path = "../mofa-kernel", version = "0.1" }
 
 # Async runtime
 tokio = { version = "1", features = ["full"] }
+
+# Serialization
+serde_json.workspace = true
 
 # Common dependencies
 uuid.workspace = true
@@ -44,10 +48,12 @@ async-trait = "0.1"
 # UniFFI dependencies (optional)
 uniffi = { version = "0.29", features = ["bindgen"], optional = true }
 thiserror = { version = "1.0", optional = true }
-
+error-stack = { workspace = true, optional = true }
 # PyO3 dependencies (optional)
-pyo3 = { version = "0.23", features = ["auto-initialize", "extension-module"], optional = true }
-pyo3-async-runtimes = { version = "0.23", features = ["tokio-runtime"], optional = true }
+# Note: extension-module is only for building Python wheels, not for tests
+# auto-initialize is needed for tests to work
+pyo3 = { version = "0.28", features = ["auto-initialize"], optional = true }
+pyo3-async-runtimes = { version = "0.28", features = ["tokio-runtime"], optional = true }
 
 [build-dependencies]
 uniffi = { version = "0.29", features = ["build"] }

@@ -1,13 +1,19 @@
 //! Rhai 动态工具系统
+//! Rhai Dynamic Tool System
 //!
 //! 允许通过 Rhai 脚本动态定义和执行工具，实现：
+//! Allows dynamic definition and execution of tools via Rhai scripts, enabling:
 //! - 脚本化的工具定义
+//! - Scripted tool definitions
 //! - 运行时工具注册
+//! - Runtime tool registration
 //! - 工具参数验证
+//! - Tool parameter validation
 //! - 工具执行沙箱
+//! - Tool execution sandboxing
 
 use super::engine::{RhaiScriptEngine, ScriptContext, ScriptEngineConfig};
-use anyhow::{Result, anyhow};
+use super::error::{RhaiError, RhaiResult};
 #[allow(unused_imports)]
 use rhai::{Dynamic, Engine, Map, Scope};
 use serde::{Deserialize, Serialize};
@@ -18,9 +24,11 @@ use tracing::info;
 
 // ============================================================================
 // 工具参数定义
+// Tool Parameter Definition
 // ============================================================================
 
 /// 参数类型
+/// Parameter type
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 #[derive(Default)]
@@ -36,32 +44,44 @@ pub enum ParameterType {
 }
 
 /// 工具参数定义
+/// Tool parameter definition
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ToolParameter {
     /// 参数名称
+    /// Parameter name
     pub name: String,
     /// 参数类型
+    /// Parameter type
     #[serde(default)]
     pub param_type: ParameterType,
     /// 参数描述
+    /// Parameter description
     #[serde(default)]
     pub description: String,
     /// 是否必需
+    /// Whether it is required
     #[serde(default)]
     pub required: bool,
     /// 默认值
+    /// Default value
     pub default: Option<serde_json::Value>,
     /// 枚举值（如果有）
+    /// Enum values (if any)
     pub enum_values: Option<Vec<serde_json::Value>>,
     /// 最小值（数字类型）
+    /// Minimum value (numeric types)
     pub minimum: Option<f64>,
     /// 最大值（数字类型）
+    /// Maximum value (numeric types)
     pub maximum: Option<f64>,
     /// 最小长度（字符串/数组）
+    /// Minimum length (string/array)
     pub min_length: Option<usize>,
     /// 最大长度（字符串/数组）
+    /// Maximum length (string/array)
     pub max_length: Option<usize>,
     /// 正则表达式模式（字符串）
+    /// Regex pattern (string)
     pub pattern: Option<String>,
 }
 
@@ -109,8 +129,10 @@ impl ToolParameter {
     }
 
     /// 验证参数值
-    pub fn validate(&self, value: &serde_json::Value) -> Result<()> {
+    /// Validate parameter value
+    pub fn validate(&self, value: &serde_json::Value) -> RhaiResult<()> {
         // 检查类型
+        // Check type
         match (&self.param_type, value) {
             (ParameterType::String, serde_json::Value::String(_)) => {}
             (ParameterType::Integer, serde_json::Value::Number(n)) if n.is_i64() => {}
@@ -121,94 +143,99 @@ impl ToolParameter {
             (ParameterType::Any, _) => {}
             (ParameterType::String, serde_json::Value::Null) if !self.required => {}
             _ => {
-                return Err(anyhow!(
+                return Err(RhaiError::ValidationError(format!(
                     "Parameter '{}' has invalid type, expected {:?}",
                     self.name,
                     self.param_type
-                ));
+                )));
             }
         }
 
         // 检查枚举值
+        // Check enum values
         if let Some(ref enum_values) = self.enum_values
             && !enum_values.contains(value)
         {
-            return Err(anyhow!(
+            return Err(RhaiError::ValidationError(format!(
                 "Parameter '{}' value must be one of {:?}",
                 self.name,
                 enum_values
-            ));
+            )));
         }
 
         // 检查数值范围
+        // Check numeric range
         if let serde_json::Value::Number(n) = value
             && let Some(f) = n.as_f64()
         {
             if let Some(min) = self.minimum
                 && f < min
             {
-                return Err(anyhow!("Parameter '{}' must be >= {}", self.name, min));
+                return Err(RhaiError::ValidationError(format!("Parameter '{}' must be >= {}", self.name, min)));
             }
             if let Some(max) = self.maximum
                 && f > max
             {
-                return Err(anyhow!("Parameter '{}' must be <= {}", self.name, max));
+                return Err(RhaiError::ValidationError(format!("Parameter '{}' must be <= {}", self.name, max)));
             }
         }
 
         // 检查字符串长度
+        // Check string length
         if let serde_json::Value::String(s) = value {
             if let Some(min) = self.min_length
                 && s.len() < min
             {
-                return Err(anyhow!(
+                return Err(RhaiError::ValidationError(format!(
                     "Parameter '{}' length must be >= {}",
                     self.name,
                     min
-                ));
+                )));
             }
             if let Some(max) = self.max_length
                 && s.len() > max
             {
-                return Err(anyhow!(
+                return Err(RhaiError::ValidationError(format!(
                     "Parameter '{}' length must be <= {}",
                     self.name,
                     max
-                ));
+                )));
             }
             // 检查正则表达式
+            // Check regex pattern
             if let Some(ref pattern) = self.pattern {
                 let re = regex::Regex::new(pattern)
-                    .map_err(|e| anyhow!("Invalid regex pattern: {}", e))?;
+                    .map_err(|e| RhaiError::ValidationError(format!("Invalid regex pattern: {}", e)))?;
                 if !re.is_match(s) {
-                    return Err(anyhow!(
+                    return Err(RhaiError::ValidationError(format!(
                         "Parameter '{}' does not match pattern: {}",
                         self.name,
                         pattern
-                    ));
+                    )));
                 }
             }
         }
 
         // 检查数组长度
+        // Check array length
         if let serde_json::Value::Array(arr) = value {
             if let Some(min) = self.min_length
                 && arr.len() < min
             {
-                return Err(anyhow!(
+                return Err(RhaiError::ValidationError(format!(
                     "Parameter '{}' array length must be >= {}",
                     self.name,
                     min
-                ));
+                )));
             }
             if let Some(max) = self.max_length
                 && arr.len() > max
             {
-                return Err(anyhow!(
+                return Err(RhaiError::ValidationError(format!(
                     "Parameter '{}' array length must be <= {}",
                     self.name,
                     max
-                ));
+                )));
             }
         }
 
@@ -218,34 +245,46 @@ impl ToolParameter {
 
 // ============================================================================
 // 脚本工具定义
+// Script Tool Definition
 // ============================================================================
 
 /// 脚本工具定义
+/// Script tool definition
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ScriptToolDefinition {
     /// 工具 ID
+    /// Tool ID
     pub id: String,
     /// 工具名称
+    /// Tool name
     pub name: String,
     /// 工具描述
+    /// Tool description
     pub description: String,
     /// 参数定义
+    /// Parameter definitions
     pub parameters: Vec<ToolParameter>,
     /// 脚本源代码
+    /// Script source code
     pub script: String,
     /// 入口函数名（默认 "execute"）
+    /// Entry function name (default "execute")
     #[serde(default = "default_entry_function")]
     pub entry_function: String,
     /// 是否启用缓存
+    /// Whether to enable caching
     #[serde(default = "default_true")]
     pub enable_cache: bool,
     /// 超时时间（毫秒）
+    /// Timeout (milliseconds)
     #[serde(default = "default_timeout")]
     pub timeout_ms: u64,
     /// 工具标签
+    /// Tool tags
     #[serde(default)]
     pub tags: Vec<String>,
     /// 元数据
+    /// Metadata
     #[serde(default)]
     pub metadata: HashMap<String, String>,
 }
@@ -299,18 +338,20 @@ impl ScriptToolDefinition {
     }
 
     /// 验证输入参数
-    pub fn validate_input(&self, input: &HashMap<String, serde_json::Value>) -> Result<()> {
+    /// Validate input parameters
+    pub fn validate_input(&self, input: &HashMap<String, serde_json::Value>) -> RhaiResult<()> {
         for param in &self.parameters {
             if let Some(value) = input.get(&param.name) {
                 param.validate(value)?;
             } else if param.required && param.default.is_none() {
-                return Err(anyhow!("Required parameter '{}' is missing", param.name));
+                return Err(RhaiError::ValidationError(format!("Required parameter '{}' is missing", param.name)));
             }
         }
         Ok(())
     }
 
     /// 获取带默认值的输入
+    /// Apply default values to input
     pub fn apply_defaults(&self, input: &mut HashMap<String, serde_json::Value>) {
         for param in &self.parameters {
             if !input.contains_key(&param.name)
@@ -322,6 +363,7 @@ impl ScriptToolDefinition {
     }
 
     /// 生成 JSON Schema 格式的参数描述
+    /// Generate parameter description in JSON Schema format
     pub fn to_json_schema(&self) -> serde_json::Value {
         let mut properties = serde_json::Map::new();
         let mut required = Vec::new();
@@ -377,40 +419,53 @@ impl ScriptToolDefinition {
 
 // ============================================================================
 // 工具执行结果
+// Tool Execution Result
 // ============================================================================
 
 /// 工具执行结果
+/// Tool execution result
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ToolExecutionResult {
     /// 工具 ID
+    /// Tool ID
     pub tool_id: String,
     /// 是否成功
+    /// Whether successful
     pub success: bool,
     /// 返回值
+    /// Return value
     pub result: serde_json::Value,
     /// 错误信息
+    /// Error message
     pub error: Option<String>,
     /// 执行时间（毫秒）
+    /// Execution time (ms)
     pub execution_time_ms: u64,
     /// 执行日志
+    /// Execution logs
     pub logs: Vec<String>,
 }
 
 // ============================================================================
 // 脚本工具注册表
+// Script Tool Registry
 // ============================================================================
 
 /// 脚本工具注册表
+/// Script tool registry
 pub struct ScriptToolRegistry {
     /// 脚本引擎
+    /// Script engine
     engine: Arc<RhaiScriptEngine>,
     /// 已注册的工具
+    /// Registered tools
     tools: Arc<RwLock<HashMap<String, ScriptToolDefinition>>>,
 }
 
 impl ScriptToolRegistry {
     /// 创建工具注册表
-    pub fn new(engine_config: ScriptEngineConfig) -> Result<Self> {
+    /// Create tool registry
+    pub fn new(engine_config: ScriptEngineConfig) -> RhaiResult<Self> {
         let engine = Arc::new(RhaiScriptEngine::new(engine_config)?);
         Ok(Self {
             engine,
@@ -419,6 +474,7 @@ impl ScriptToolRegistry {
     }
 
     /// 使用已有引擎创建注册表
+    /// Create registry with existing engine
     pub fn with_engine(engine: Arc<RhaiScriptEngine>) -> Self {
         Self {
             engine,
@@ -427,8 +483,10 @@ impl ScriptToolRegistry {
     }
 
     /// 注册工具
-    pub async fn register(&self, tool: ScriptToolDefinition) -> Result<()> {
+    /// Register tool
+    pub async fn register(&self, tool: ScriptToolDefinition) -> RhaiResult<()> {
         // 预编译脚本（如果启用缓存）
+        // Pre-compile script (if caching enabled)
         if tool.enable_cache {
             let script_id = format!("tool_{}", tool.id);
             self.engine
@@ -437,6 +495,7 @@ impl ScriptToolRegistry {
         }
 
         // 注册到工具表
+        // Register to tool table
         let mut tools = self.tools.write().await;
         info!("Registered script tool: {} ({})", tool.name, tool.id);
         tools.insert(tool.id.clone(), tool);
@@ -445,7 +504,8 @@ impl ScriptToolRegistry {
     }
 
     /// 批量注册工具
-    pub async fn register_batch(&self, tools: Vec<ScriptToolDefinition>) -> Result<Vec<String>> {
+    /// Batch register tools
+    pub async fn register_batch(&self, tools: Vec<ScriptToolDefinition>) -> RhaiResult<Vec<String>> {
         let mut registered = Vec::new();
         for tool in tools {
             let id = tool.id.clone();
@@ -456,7 +516,8 @@ impl ScriptToolRegistry {
     }
 
     /// 从 YAML 文件加载工具
-    pub async fn load_from_yaml(&self, path: &str) -> Result<String> {
+    /// Load tool from YAML file
+    pub async fn load_from_yaml(&self, path: &str) -> RhaiResult<String> {
         let content = tokio::fs::read_to_string(path).await?;
         let tool: ScriptToolDefinition = serde_yaml::from_str(&content)?;
         let id = tool.id.clone();
@@ -465,7 +526,8 @@ impl ScriptToolRegistry {
     }
 
     /// 从 JSON 文件加载工具
-    pub async fn load_from_json(&self, path: &str) -> Result<String> {
+    /// Load tool from JSON file
+    pub async fn load_from_json(&self, path: &str) -> RhaiResult<String> {
         let content = tokio::fs::read_to_string(path).await?;
         let tool: ScriptToolDefinition = serde_json::from_str(&content)?;
         let id = tool.id.clone();
@@ -474,7 +536,8 @@ impl ScriptToolRegistry {
     }
 
     /// 从目录加载所有工具
-    pub async fn load_from_directory(&self, dir_path: &str) -> Result<Vec<String>> {
+    /// Load all tools from directory
+    pub async fn load_from_directory(&self, dir_path: &str) -> RhaiResult<Vec<String>> {
         let mut loaded = Vec::new();
         let mut entries = tokio::fs::read_dir(dir_path).await?;
 
@@ -499,42 +562,50 @@ impl ScriptToolRegistry {
     }
 
     /// 执行工具
+    /// Execute tool
     pub async fn execute(
         &self,
         tool_id: &str,
         input: HashMap<String, serde_json::Value>,
-    ) -> Result<ToolExecutionResult> {
+    ) -> RhaiResult<ToolExecutionResult> {
         let start_time = std::time::Instant::now();
 
         // 获取工具定义
+        // Get tool definition
         let tools = self.tools.read().await;
         let tool = tools
             .get(tool_id)
-            .ok_or_else(|| anyhow!("Tool not found: {}", tool_id))?
+            .ok_or_else(|| RhaiError::NotFound(format!("Tool not found: {}", tool_id)))?
             .clone();
         drop(tools);
 
         // 准备输入
+        // Prepare input
         let mut params = input;
         tool.apply_defaults(&mut params);
 
         // 验证输入
+        // Validate input
         tool.validate_input(&params)?;
 
         // 准备上下文
+        // Prepare context
         let mut context = ScriptContext::new();
         for (key, value) in &params {
             context.set_variable(key, value.clone())?;
         }
 
         // 将所有参数作为一个 object 传入
+        // Pass all parameters as an object
         context.set_variable("params", serde_json::json!(params))?;
 
         // 执行脚本
+        // Execute script
         let script_id = format!("tool_{}", tool_id);
 
         if tool.enable_cache {
             // 尝试调用入口函数
+            // Attempt to call entry function
             let input_value = serde_json::json!(params);
             match self
                 .engine
@@ -556,6 +627,7 @@ impl ScriptToolRegistry {
                 }),
                 Err(_e) => {
                     // 如果函数调用失败，尝试直接执行
+                    // If function call fails, attempt direct execution
                     let script_result = self.engine.execute_compiled(&script_id, &context).await?;
                     if script_result.success {
                         Ok(ToolExecutionResult {
@@ -592,18 +664,21 @@ impl ScriptToolRegistry {
     }
 
     /// 获取工具定义
+    /// Get tool definition
     pub async fn get_tool(&self, tool_id: &str) -> Option<ScriptToolDefinition> {
         let tools = self.tools.read().await;
         tools.get(tool_id).cloned()
     }
 
     /// 列出所有工具
+    /// List all tools
     pub async fn list_tools(&self) -> Vec<ScriptToolDefinition> {
         let tools = self.tools.read().await;
         tools.values().cloned().collect()
     }
 
     /// 按标签过滤工具
+    /// Filter tools by tag
     pub async fn list_tools_by_tag(&self, tag: &str) -> Vec<ScriptToolDefinition> {
         let tools = self.tools.read().await;
         tools
@@ -614,12 +689,14 @@ impl ScriptToolRegistry {
     }
 
     /// 移除工具
+    /// Unregister tool
     pub async fn unregister(&self, tool_id: &str) -> bool {
         let mut tools = self.tools.write().await;
         let removed = tools.remove(tool_id).is_some();
 
         if removed {
             // 清除缓存的脚本
+            // Clear cached script
             let script_id = format!("tool_{}", tool_id);
             self.engine.remove_cached(&script_id).await;
             info!("Unregistered script tool: {}", tool_id);
@@ -629,6 +706,7 @@ impl ScriptToolRegistry {
     }
 
     /// 清空所有工具
+    /// Clear all tools
     pub async fn clear(&self) {
         let mut tools = self.tools.write().await;
         tools.clear();
@@ -636,12 +714,14 @@ impl ScriptToolRegistry {
     }
 
     /// 获取工具数量
+    /// Get tool count
     pub async fn tool_count(&self) -> usize {
         let tools = self.tools.read().await;
         tools.len()
     }
 
     /// 生成所有工具的 JSON Schema 描述（用于 LLM function calling）
+    /// Generate JSON Schema for all tools (for LLM function calling)
     pub async fn generate_tool_schemas(&self) -> Vec<serde_json::Value> {
         let tools = self.tools.read().await;
         tools
@@ -659,9 +739,11 @@ impl ScriptToolRegistry {
 
 // ============================================================================
 // 便捷构建器
+// Utility Builder
 // ============================================================================
 
 /// 工具定义构建器
+/// Tool definition builder
 pub struct ToolBuilder {
     definition: ScriptToolDefinition,
 }
@@ -727,6 +809,7 @@ impl ToolBuilder {
         self
     }
 
+    #[must_use]
     pub fn build(self) -> ScriptToolDefinition {
         self.definition
     }
@@ -734,6 +817,7 @@ impl ToolBuilder {
 
 // ============================================================================
 // 测试
+// Tests
 // ============================================================================
 
 #[cfg(test)]
@@ -801,12 +885,15 @@ mod tests {
             .with_range(0.0, 150.0);
 
         // 有效值
+        // Valid value
         assert!(param.validate(&serde_json::json!(25)).is_ok());
 
         // 超出范围
+        // Out of range
         assert!(param.validate(&serde_json::json!(200)).is_err());
 
         // 错误类型
+        // Invalid type
         assert!(param.validate(&serde_json::json!("not a number")).is_err());
     }
 
@@ -831,6 +918,7 @@ mod tests {
         registry.register(tool).await.unwrap();
 
         // 不提供 greeting 参数，使用默认值
+        // greeting parameter not provided, use default
         let mut input = HashMap::new();
         input.insert("name".to_string(), serde_json::json!("World"));
 
