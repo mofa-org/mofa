@@ -99,7 +99,7 @@ pub struct RateLimiter {
     token_bucket: Option<TokenBucketRateLimiter>,
     sliding_window: Option<SlidingWindowRateLimiter>,
     // Per-key rate limiters (for per-user/IP limiting)
-    per_key_limiters: Arc<RwLock<HashMap<String, Box<dyn RateLimiterTrait + Send + Sync>>>>,
+    per_key_limiters: Arc<RwLock<HashMap<String, Arc<dyn RateLimiterTrait + Send + Sync>>>>,
 }
 
 #[async_trait::async_trait]
@@ -154,29 +154,31 @@ impl RateLimiter {
 
     /// Try to allow a request for a specific key (per-user/IP rate limiting).
     pub async fn try_acquire_key(&self, key: &str) -> GatewayResult<bool> {
-        // Get or create a per-key rate limiter
-        let mut limiters = self.per_key_limiters.write().await;
-        
-        if !limiters.contains_key(key) {
-            // Create a new rate limiter for this key based on the strategy
-            let new_limiter: Box<dyn RateLimiterTrait + Send + Sync> = match &self.strategy {
-                RateLimitStrategy::TokenBucket { capacity, refill_rate } => {
-                    Box::new(TokenBucketRateLimiter::new(*capacity, *refill_rate))
+        // Get or create a per-key rate limiter without holding the write lock
+        // across `.await` on the limiter itself.
+        let limiter = {
+            let mut limiters = self.per_key_limiters.write().await;
+
+            let entry = limiters.entry(key.to_string()).or_insert_with(|| {
+                // Create a new rate limiter for this key based on the strategy
+                match &self.strategy {
+                    RateLimitStrategy::TokenBucket { capacity, refill_rate } => {
+                        Arc::new(TokenBucketRateLimiter::new(*capacity, *refill_rate))
+                            as Arc<dyn RateLimiterTrait + Send + Sync>
+                    }
+                    RateLimitStrategy::SlidingWindow { window_size, max_requests } => {
+                        Arc::new(SlidingWindowRateLimiter::new(*window_size, *max_requests))
+                            as Arc<dyn RateLimiterTrait + Send + Sync>
+                    }
                 }
-                RateLimitStrategy::SlidingWindow { window_size, max_requests } => {
-                    Box::new(SlidingWindowRateLimiter::new(*window_size, *max_requests))
-                }
-            };
-            limiters.insert(key.to_string(), new_limiter);
-        }
-        
-        // Use the per-key limiter
-        if let Some(limiter) = limiters.get(key) {
-            limiter.try_acquire().await
-        } else {
-            // Fallback to global if somehow not found
-            self.try_acquire().await
-        }
+            });
+
+            Arc::clone(entry)
+        };
+
+        // Use the per-key limiter outside of the lock to avoid holding a write
+        // guard across `.await`.
+        limiter.try_acquire().await
     }
 }
 
