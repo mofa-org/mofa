@@ -70,3 +70,5 @@ pub use metrics::*;
 
 // LLM protocol types and kernel-layer inference traits
 pub mod llm;
+// Security governance (PII redaction, content moderation, prompt guard)
+pub mod security;
