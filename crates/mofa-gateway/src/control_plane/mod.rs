@@ -141,10 +141,9 @@ impl ControlPlane {
             address: address.clone(),
         };
 
-        let _index = self.consensus.propose(command.clone()).await?;
-        
-        // Apply immediately (simplified - in production would wait for commit)
-        self.state_machine.write().await.apply(command).await?;
+        // Propose the command and rely on the state machine apply loop to apply
+        // committed entries once quorum is reached.
+        self.consensus.propose(command).await?;
         
         info!("Added node {} to cluster via consensus", node_id);
 
@@ -163,10 +162,9 @@ impl ControlPlane {
             node_id: node_id.clone(),
         };
 
-        let _index = self.consensus.propose(command.clone()).await?;
-        
-        // Apply immediately (simplified - in production would wait for commit)
-        self.state_machine.write().await.apply(command).await?;
+        // Propose the command; the state machine apply loop will apply it once
+        // the corresponding log entry is committed.
+        self.consensus.propose(command).await?;
         
         info!("Removed node {} from cluster via consensus", node_id);
 
@@ -190,11 +188,9 @@ impl ControlPlane {
             metadata: metadata.clone(),
         };
 
-        let _index = self.consensus.propose(command.clone()).await?;
-        
-        // Apply immediately (simplified - in production would wait for commit)
-        // This ensures the state machine is updated synchronously
-        self.state_machine.write().await.apply(command).await?;
+        // Propose the command; state changes are applied by the state machine
+        // apply loop once the entry is committed.
+        self.consensus.propose(command).await?;
         
         info!("Registered agent {} via consensus", agent_id);
 
@@ -213,10 +209,9 @@ impl ControlPlane {
             agent_id: agent_id.to_string(),
         };
 
-        let _index = self.consensus.propose(command.clone()).await?;
-        
-        // Apply immediately (simplified - in production would wait for commit)
-        self.state_machine.write().await.apply(command).await?;
+        // Propose the command and rely on the state machine apply loop to apply
+        // it once committed, keeping all nodes consistent.
+        self.consensus.propose(command).await?;
         
         info!("Unregistered agent {} via consensus", agent_id);
 
@@ -225,7 +220,11 @@ impl ControlPlane {
 
     /// Get cluster membership.
     pub async fn get_membership(&self) -> ClusterMembershipData {
-        let membership = self.membership.read().await;
+        // Derive cluster membership from the replicated state machine so that
+        // all nodes observe the same, Raft-committed view of the cluster.
+        let sm = self.state_machine.read().await;
+        let membership_manager = sm.membership();
+        let membership = membership_manager.read().await;
         membership.get_membership()
     }
 
