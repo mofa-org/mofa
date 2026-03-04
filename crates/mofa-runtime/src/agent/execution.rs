@@ -269,6 +269,7 @@ impl ExecutionResult {
 ///     info!("Output: {:?}", result.output);
 /// }
 /// ```
+#[derive(Clone)]
 pub struct ExecutionEngine {
     /// Agent 注册中心
     /// Agent Registry
@@ -571,13 +572,12 @@ impl ExecutionEngine {
         let mut handles = Vec::new();
 
         for (agent_id, input) in executions {
-            let registry = self.registry.clone();
+            let engine = self.clone();
             let opts = options.clone();
 
             let span = tracing::info_span!("agent.parallel", agent_id = %agent_id);
             let handle = tokio::spawn(
                 async move {
-                    let engine = ExecutionEngine::new(registry);
                     engine.execute(&agent_id, input, opts).await
                 }
                 .instrument(span),
