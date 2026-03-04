@@ -394,7 +394,7 @@ impl Default for CircuitBreakerConfig {
 /// ```
 pub struct CircuitBreaker {
     config: CircuitBreakerConfig,
-    state: tokio::sync::Mutex<CircuitBreakerState>,
+    state: std::sync::Mutex<CircuitBreakerState>,
 }
 
 struct CircuitBreakerState {
@@ -409,7 +409,7 @@ impl CircuitBreaker {
     pub fn new(config: CircuitBreakerConfig) -> Self {
         Self {
             config,
-            state: tokio::sync::Mutex::new(CircuitBreakerState {
+            state: std::sync::Mutex::new(CircuitBreakerState {
                 state: CircuitState::Closed,
                 consecutive_failures: 0,
                 consecutive_successes: 0,
@@ -419,8 +419,8 @@ impl CircuitBreaker {
     }
 
     /// Get the current circuit state
-    pub async fn state(&self) -> CircuitState {
-        let guard = self.state.lock().await;
+    pub fn state(&self) -> CircuitState {
+        let guard = self.state.lock().unwrap();
         guard.state
     }
 
@@ -432,7 +432,7 @@ impl CircuitBreaker {
     {
         // Check if we should allow the call
         {
-            let mut guard = self.state.lock().await;
+            let mut guard = self.state.lock().unwrap();
             match guard.state {
                 CircuitState::Open => {
                     // Check if recovery timeout has elapsed
@@ -458,18 +458,18 @@ impl CircuitBreaker {
         // Execute the operation
         match operation().await {
             Ok(value) => {
-                self.record_success().await;
+                self.record_success();
                 Ok(value)
             }
             Err(err) => {
-                self.record_failure().await;
+                self.record_failure();
                 Err(err)
             }
         }
     }
 
-    async fn record_success(&self) {
-        let mut guard = self.state.lock().await;
+    fn record_success(&self) {
+        let mut guard = self.state.lock().unwrap();
         guard.consecutive_failures = 0;
         guard.consecutive_successes += 1;
 
@@ -481,8 +481,8 @@ impl CircuitBreaker {
         }
     }
 
-    async fn record_failure(&self) {
-        let mut guard = self.state.lock().await;
+    fn record_failure(&self) {
+        let mut guard = self.state.lock().unwrap();
         guard.consecutive_failures += 1;
         guard.consecutive_successes = 0;
         guard.last_failure_time = Some(std::time::Instant::now());
@@ -498,8 +498,8 @@ impl CircuitBreaker {
     }
 
     /// Reset the circuit breaker to closed state
-    pub async fn reset(&self) {
-        let mut guard = self.state.lock().await;
+    pub fn reset(&self) {
+        let mut guard = self.state.lock().unwrap();
         guard.state = CircuitState::Closed;
         guard.consecutive_failures = 0;
         guard.consecutive_successes = 0;
@@ -671,13 +671,13 @@ mod tests {
     #[tokio::test]
     async fn test_circuit_breaker_success() {
         let cb = CircuitBreaker::new(CircuitBreakerConfig::default());
-        assert_eq!(cb.state().await, CircuitState::Closed);
+        assert_eq!(cb.state(), CircuitState::Closed);
 
         let result = cb
             .call(|| async { Ok::<_, GlobalError>("hello".to_string()) })
             .await;
         assert!(result.is_ok());
-        assert_eq!(cb.state().await, CircuitState::Closed);
+        assert_eq!(cb.state(), CircuitState::Closed);
     }
 
     #[tokio::test]
@@ -696,7 +696,7 @@ mod tests {
                 .await;
         }
 
-        assert_eq!(cb.state().await, CircuitState::Open);
+        assert_eq!(cb.state(), CircuitState::Open);
 
         // Next call should be rejected
         let result = cb
@@ -721,7 +721,7 @@ mod tests {
                 .call(|| async { Err::<String, _>(GlobalError::llm("fail")) })
                 .await;
         }
-        assert_eq!(cb.state().await, CircuitState::Open);
+        assert_eq!(cb.state(), CircuitState::Open);
 
         // Wait for recovery timeout
         tokio::time::sleep(Duration::from_millis(60)).await;
@@ -731,7 +731,7 @@ mod tests {
             .call(|| async { Ok::<_, GlobalError>("recovered".to_string()) })
             .await;
         assert!(result.is_ok());
-        assert_eq!(cb.state().await, CircuitState::Closed);
+        assert_eq!(cb.state(), CircuitState::Closed);
     }
 
     #[tokio::test]
@@ -757,7 +757,7 @@ mod tests {
         let _ = cb
             .call(|| async { Err::<String, _>(GlobalError::llm("still failing")) })
             .await;
-        assert_eq!(cb.state().await, CircuitState::Open);
+        assert_eq!(cb.state(), CircuitState::Open);
     }
 
     #[tokio::test]
@@ -771,10 +771,10 @@ mod tests {
         let _ = cb
             .call(|| async { Err::<String, _>(GlobalError::llm("fail")) })
             .await;
-        assert_eq!(cb.state().await, CircuitState::Open);
+        assert_eq!(cb.state(), CircuitState::Open);
 
-        cb.reset().await;
-        assert_eq!(cb.state().await, CircuitState::Closed);
+        cb.reset();
+        assert_eq!(cb.state(), CircuitState::Closed);
     }
 
     // -- fallback_chain tests --
