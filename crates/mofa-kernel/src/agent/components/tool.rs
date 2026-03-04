@@ -444,15 +444,14 @@ pub trait ToolRegistry: Send + Sync {
 
 // ============================================================================
 // Tool Execution Sandbox (Interface defined here only)
-// Tool Execution Sandbox (Interface defined here only)
 // ============================================================================
 
-/// Capabilities a tool may require to function.
 /// Capabilities a tool may require to function.
 ///
 /// Used by the sandbox to decide whether a tool is allowed to execute
 /// based on its declared needs vs. the sandbox configuration.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[non_exhaustive]
 pub enum SandboxCapability {
     /// Network access (HTTP, TCP, etc.)
     Network,
@@ -485,7 +484,6 @@ impl std::fmt::Display for SandboxCapability {
 }
 
 /// Resource constraints enforced by a tool sandbox.
-/// Resource constraints enforced by a tool sandbox.
 ///
 /// Concrete implementations in the foundation layer use these limits
 /// to wrap tool execution with timeouts, memory caps, and output truncation.
@@ -510,7 +508,6 @@ impl Default for SandboxResourceLimits {
 }
 
 /// Result of a sandboxed tool execution.
-/// Result of a sandboxed tool execution.
 ///
 /// Wraps the inner `ToolResult` with execution metrics and sandbox metadata,
 /// enabling callers to observe how the tool behaved within the sandbox.
@@ -526,7 +523,6 @@ pub struct SandboxedResult {
     pub capabilities_used: Vec<SandboxCapability>,
 }
 
-/// Trait for tool sandbox implementations.
 /// Trait for tool sandbox implementations.
 ///
 /// Provides an isolation layer around tool execution with configurable
