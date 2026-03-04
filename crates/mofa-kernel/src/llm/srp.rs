@@ -328,12 +328,13 @@ pub async fn stream_inference(
                             hb.reset();
 
                             let sc = chunk_to_stream_chunk(chunk);
-                            if sc.is_done() {
-                                let _ = tx.send(StreamEvent::Done).await;
-                                break;
-                            }
+                            let is_done = sc.is_done();
                             if tx.send(StreamEvent::Delta(sc)).await.is_err() {
                                 // Receiver dropped — stop silently.
+                                break;
+                            }
+                            if is_done {
+                                let _ = tx.send(StreamEvent::Done).await;
                                 break;
                             }
                         }
