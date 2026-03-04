@@ -31,6 +31,7 @@ pub struct CircuitBreaker {
     node_id: NodeId,
     state: Arc<RwLock<CircuitState>>,
     failure_count: Arc<RwLock<u32>>,
+    success_count: Arc<RwLock<u32>>,
     failure_threshold: u32,
     success_threshold: u32,
     timeout: Duration,
@@ -49,6 +50,7 @@ impl CircuitBreaker {
             node_id,
             state: Arc::new(RwLock::new(CircuitState::Closed)),
             failure_count: Arc::new(RwLock::new(0)),
+            success_count: Arc::new(RwLock::new(0)),
             failure_threshold,
             success_threshold,
             timeout,
@@ -72,6 +74,8 @@ impl CircuitBreaker {
                     *state = CircuitState::HalfOpen;
                     let mut failures = self.failure_count.write().await;
                     *failures = 0;
+                    let mut successes = self.success_count.write().await;
+                    *successes = 0;
                     return Ok(true);
                 }
                 Ok(false)
@@ -84,16 +88,22 @@ impl CircuitBreaker {
     pub async fn record_success(&self) {
         let mut state = self.state.write().await;
         let mut failures = self.failure_count.write().await;
+        let mut successes = self.success_count.write().await;
 
         match *state {
             CircuitState::Closed => {
                 // Reset failure count on success
                 *failures = 0;
+                *successes = 0;
             }
             CircuitState::HalfOpen => {
-                // If we get enough successes in half-open, close the circuit
-                if *failures == 0 {
+                // Track consecutive successes in half-open state and only close
+                // the circuit once we reach the configured success threshold.
+                *successes += 1;
+                if *successes >= self.success_threshold {
                     *state = CircuitState::Closed;
+                    *failures = 0;
+                    *successes = 0;
                 }
             }
             CircuitState::Open => {
@@ -212,7 +222,8 @@ mod tests {
         assert!(cb.try_acquire().await.unwrap());
         assert_eq!(cb.state().await, CircuitState::HalfOpen);
 
-        // Success should close it
+        // Two consecutive successes should close it (success_threshold = 2)
+        cb.record_success().await;
         cb.record_success().await;
         assert_eq!(cb.state().await, CircuitState::Closed);
     }
