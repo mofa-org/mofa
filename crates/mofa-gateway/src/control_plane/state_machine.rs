@@ -132,10 +132,13 @@ impl ReplicatedStateMachine {
                 .cloned()
                 .unwrap_or_else(|| "unknown".to_string()),
             metadata: metadata.clone(),
-            registered_at: std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap_or_default()
-                .as_millis() as u64,
+            registered_at: {
+                let millis = std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap_or_default()
+                    .as_millis();
+                u64::try_from(millis).unwrap_or(u64::MAX)
+            },
         };
 
         registry.insert(agent_id.clone(), entry);
