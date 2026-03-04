@@ -60,5 +60,4 @@ cargo check -p mofa-monitoring --offline
 cargo check -p mofa-monitoring --features otlp-metrics --offline
 cargo test -p mofa-monitoring dashboard::prometheus --offline
 cargo test -p mofa-monitoring --features otlp-metrics tracing::metrics_exporter --offline
-cargo clippy -p mofa-monitoring --features otlp-metrics --lib -- -D warnings
 ```
