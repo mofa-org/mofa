@@ -315,7 +315,9 @@ pub async fn stream_inference(
                 biased;
 
                 _ = token.cancelled() => {
-                    let _ = tx.send(StreamEvent::Cancelled).await;
+                    // Best-effort cancellation notification: do not await on a
+                    // potentially full channel to keep cancellation latency bounded.
+                    let _ = tx.try_send(StreamEvent::Cancelled);
                     break;
                 }
 
