@@ -32,6 +32,7 @@ repository = "https://github.com/mofa-org/mofa"
 homepage = "https://github.com/mofa-org/mofa"
 
 [workspace.dependencies]
+reqwest = "0.12"
 async-trait = "0.1"
 # axum 0.8+ required — uses {param} route syntax (not :param)
 axum = "0"
