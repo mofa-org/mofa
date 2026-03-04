@@ -44,6 +44,7 @@ use std::collections::HashMap;
 /// - `PubSub`: 发布-订阅模式
 /// - `PubSub`: Publish-Subscribe pattern
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[non_exhaustive]
 pub enum GlobalMessage {
     /// 点对点直接消息
     /// Point-to-point direct message
@@ -218,6 +219,7 @@ impl GlobalMessage {
 /// 支持多种内容格式，提供灵活的消息传递能力。
 /// Supports multiple content formats, providing flexible message delivery capabilities.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[non_exhaustive]
 pub enum MessageContent {
     /// 纯文本内容
     /// Plain text content
@@ -364,10 +366,7 @@ impl Default for MessageMetadata {
     fn default() -> Self {
         Self {
             id: uuid::Uuid::new_v4().to_string(),
-            timestamp: std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_millis() as u64,
+            timestamp: crate::utils::now_ms(),
             properties: HashMap::new(),
         }
     }

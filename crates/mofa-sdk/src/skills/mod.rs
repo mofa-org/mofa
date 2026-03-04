@@ -21,6 +21,7 @@ pub use mofa_plugins::skill::{
     SkillRequirements, SkillState, SkillVersion,
 };
 
+use mofa_kernel::agent::types::error::GlobalResult;
 use std::path::PathBuf;
 
 /// Skills 管理器构建器
@@ -62,13 +63,13 @@ impl SkillsManagerBuilder {
 
     /// 构建 SkillsManager
     /// Build SkillsManager
-    pub fn build(&self) -> anyhow::Result<SkillsManager> {
+    pub fn build(&self) -> GlobalResult<SkillsManager> {
         SkillsManager::new(&self.search_dirs[0])
     }
 
     /// 构建支持多目录的 SkillsManager
     /// Build SkillsManager with multi-directory support
-    pub fn build_multi(&self) -> anyhow::Result<SkillsManager> {
+    pub fn build_multi(&self) -> GlobalResult<SkillsManager> {
         if self.search_dirs.len() == 1 {
             SkillsManager::new(&self.search_dirs[0])
         } else {
@@ -79,6 +80,6 @@ impl SkillsManagerBuilder {
 
 /// 便捷函数：从目录创建 SkillsManager
 /// Convenience function: Create SkillsManager from a directory
-pub fn from_dir(skills_dir: impl AsRef<std::path::Path>) -> anyhow::Result<SkillsManager> {
+pub fn from_dir(skills_dir: impl AsRef<std::path::Path>) -> GlobalResult<SkillsManager> {
     SkillsManager::new(skills_dir)
 }

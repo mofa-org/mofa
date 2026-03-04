@@ -94,7 +94,7 @@ impl RemainingSteps {
 
 /// Graph execution configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct GraphConfig {
+pub struct GraphConfig<V = Value> {
     /// Maximum recursion depth
     pub max_steps: u32,
 
@@ -113,11 +113,12 @@ pub struct GraphConfig {
     /// Maximum parallel branches
     pub max_parallelism: usize,
 
-    /// Custom configuration values
-    pub custom: HashMap<String, Value>,
+    /// Custom configuration data
+    #[serde(default)]
+    pub custom: HashMap<String, V>,
 }
 
-impl Default for GraphConfig {
+impl<V: Clone> Default for GraphConfig<V> {
     fn default() -> Self {
         Self {
             max_steps: 100,
@@ -131,7 +132,7 @@ impl Default for GraphConfig {
     }
 }
 
-impl GraphConfig {
+impl<V: Clone> GraphConfig<V> {
     /// Create a new config with default values
     pub fn new() -> Self {
         Self::default()
@@ -169,7 +170,7 @@ impl GraphConfig {
     }
 
     /// Add a custom config value
-    pub fn with_custom(mut self, key: impl Into<String>, value: Value) -> Self {
+    pub fn with_custom(mut self, key: impl Into<String>, value: V) -> Self {
         self.custom.insert(key.into(), value);
         self
     }
@@ -184,8 +185,8 @@ impl GraphConfig {
 ///
 /// Contains non-state information about the current execution,
 /// including execution ID, current node, remaining steps, and metadata.
-#[derive(Debug)]
-pub struct RuntimeContext {
+#[derive(Debug, Clone)]
+pub struct RuntimeContext<V: Clone + Send + Sync + 'static = Value> {
     /// Unique execution ID
     pub execution_id: String,
 
@@ -199,10 +200,10 @@ pub struct RuntimeContext {
     pub remaining_steps: RemainingSteps,
 
     /// Graph configuration
-    pub config: GraphConfig,
+    pub config: GraphConfig<V>,
 
     /// Execution metadata
-    pub metadata: HashMap<String, Value>,
+    pub metadata: HashMap<String, V>,
 
     /// Parent execution ID (for sub-workflows)
     pub parent_execution_id: Option<String>,
@@ -211,7 +212,7 @@ pub struct RuntimeContext {
     pub tags: Vec<String>,
 }
 
-impl RuntimeContext {
+impl<V: Clone + Send + Sync + 'static> RuntimeContext<V> {
     /// Create a new runtime context
     pub fn new(graph_id: impl Into<String>) -> Self {
         Self {
@@ -227,7 +228,7 @@ impl RuntimeContext {
     }
 
     /// Create a context with a specific config
-    pub fn with_config(graph_id: impl Into<String>, config: GraphConfig) -> Self {
+    pub fn with_config(graph_id: impl Into<String>, config: GraphConfig<V>) -> Self {
         let remaining_steps = config.remaining_steps();
         Self {
             execution_id: Uuid::new_v4().to_string(),
@@ -245,7 +246,7 @@ impl RuntimeContext {
     pub fn for_sub_workflow(
         graph_id: impl Into<String>,
         parent_execution_id: impl Into<String>,
-        config: GraphConfig,
+        config: GraphConfig<V>,
     ) -> Self {
         let remaining_steps = config.remaining_steps();
         Self {
@@ -282,7 +283,7 @@ impl RuntimeContext {
     }
 
     /// Add metadata
-    pub fn with_metadata(mut self, key: impl Into<String>, value: Value) -> Self {
+    pub fn with_metadata(mut self, key: impl Into<String>, value: V) -> Self {
         self.metadata.insert(key.into(), value);
         self
     }
@@ -344,7 +345,7 @@ mod tests {
 
     #[test]
     fn test_graph_config() {
-        let config = GraphConfig::new()
+        let config = GraphConfig::<serde_json::Value>::new()
             .with_max_steps(50)
             .with_debug(true)
             .with_checkpoints(true, 5)
@@ -361,7 +362,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_runtime_context() {
-        let ctx = RuntimeContext::new("test_graph")
+        let ctx = RuntimeContext::<serde_json::Value>::new("test_graph")
             .with_metadata("key", serde_json::json!("value"))
             .with_tag("test");
 
@@ -376,7 +377,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_runtime_context_sub_workflow() {
-        let ctx = RuntimeContext::for_sub_workflow(
+        let ctx = RuntimeContext::<serde_json::Value>::for_sub_workflow(
             "sub_graph",
             "parent-execution-123",
             GraphConfig::default(),

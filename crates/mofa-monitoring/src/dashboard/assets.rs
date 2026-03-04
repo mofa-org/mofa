@@ -35,7 +35,459 @@ impl DashboardAssets {
     pub fn app_js() -> &'static str {
         APP_JS
     }
+
+    /// Get debugger.html
+    pub fn debugger_html() -> &'static str {
+        DEBUGGER_HTML
+    }
+
+    /// Get debugger.js
+    pub fn debugger_js() -> &'static str {
+        DEBUGGER_JS
+    }
 }
+
+/// Debugger HTML Page - with inline JavaScript
+pub const DEBUGGER_HTML: &str = r##"<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MoFA Visual Debugger</title>
+    <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+    <div class="debugger">
+        <header class="header">
+            <div class="logo">
+                <h1>🔍 MoFA Visual Debugger</h1>
+            </div>
+            <nav class="nav">
+                <a href="/" class="nav-link">Dashboard</a>
+                <a href="/debugger" class="nav-link active">Debugger</a>
+            </nav>
+            <div class="header-info">
+                <span id="connection-status" class="status-badge disconnected">Disconnected</span>
+            </div>
+        </header>
+
+        <main class="debugger-content">
+            <aside class="sessions-sidebar">
+                <h2>Sessions</h2>
+                <button id="refresh-sessions" class="btn btn-secondary">Refresh</button>
+                <div id="sessions-list" class="sessions-list">
+                    <div class="loading">Loading sessions...</div>
+                </div>
+            </aside>
+
+            <div class="debugger-main">
+                <section class="graph-section">
+                    <h2>Workflow Graph</h2>
+                    <div id="workflow-graph" class="workflow-graph">
+                        <div class="placeholder">Select a session to view workflow graph</div>
+                    </div>
+                </section>
+
+                <section class="timeline-section">
+                    <div class="timeline-controls">
+                        <button id="btn-first" class="btn btn-small" disabled>⏮ First</button>
+                        <button id="btn-prev" class="btn btn-small" disabled>◀ Prev</button>
+                        <span id="event-index" class="event-index">- / -</span>
+                        <button id="btn-next" class="btn btn-small" disabled>Next ▶</button>
+                        <button id="btn-last" class="btn btn-small" disabled>⏭ Last</button>
+                        <button id="btn-realtime" class="btn btn-small btn-primary">▶ Real-time</button>
+                    </div>
+                    <div id="event-timeline" class="event-timeline">
+                        <div class="placeholder">No events</div>
+                    </div>
+                </section>
+
+                <section class="state-section">
+                    <h2>State Inspector</h2>
+                    <div id="state-inspector" class="state-inspector">
+                        <div class="placeholder">Select an event to inspect state</div>
+                    </div>
+                </section>
+            </div>
+        </main>
+    </div>
+    <script>
+// MoFA Visual Debugger Application
+(function() {
+    var ws = null;
+    var sessions = [];
+    var currentSession = null;
+    var events = [];
+    var currentEventIndex = -1;
+    var isRealtime = false;
+    var realtimeInterval = null;
+
+    function init() {
+        connectWebSocket();
+        fetchSessions();
+        bindEvents();
+    }
+
+    function bindEvents() {
+        document.getElementById('refresh-sessions').onclick = function() {
+            fetchSessions();
+        };
+        document.getElementById('btn-first').onclick = function() { goToEvent(0); };
+        document.getElementById('btn-prev').onclick = function() { 
+            if (currentEventIndex > 0) goToEvent(currentEventIndex - 1); 
+        };
+        document.getElementById('btn-next').onclick = function() { 
+            if (currentEventIndex < events.length - 1) goToEvent(currentEventIndex + 1); 
+        };
+        document.getElementById('btn-last').onclick = function() { goToEvent(events.length - 1); };
+        document.getElementById('btn-realtime').onclick = function() { toggleRealtime(); };
+    }
+
+    function connectWebSocket() {
+        var protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        var wsUrl = protocol + '//' + window.location.host + '/ws';
+        
+        ws = new WebSocket(wsUrl);
+        
+        ws.onopen = function() {
+            updateConnectionStatus(true);
+            ws.send(JSON.stringify({
+                type: 'subscribe',
+                data: { topics: ['debug'] }
+            }));
+        };
+        
+        ws.onclose = function() {
+            updateConnectionStatus(false);
+            ws = null;
+            setTimeout(function() { connectWebSocket(); }, 3000);
+        };
+        
+        ws.onmessage = function(event) {
+            try {
+                var msg = JSON.parse(event.data);
+                handleMessage(msg);
+            } catch (e) {
+                console.error('Failed to parse message:', e);
+            }
+        };
+    }
+
+    function handleMessage(msg) {
+        if (msg.type === 'debug' && isRealtime && currentSession) {
+            events.push(msg.data);
+            updateTimeline();
+            goToEvent(events.length - 1);
+        }
+    }
+
+    function updateConnectionStatus(connected) {
+        var statusEl = document.getElementById('connection-status');
+        if (connected) {
+            statusEl.textContent = 'Connected';
+            statusEl.className = 'status-badge connected';
+        } else {
+            statusEl.textContent = 'Disconnected';
+            statusEl.className = 'status-badge disconnected';
+        }
+    }
+
+    async function fetchSessions() {
+        try {
+            var response = await fetch('/api/debug/sessions');
+            var result = await response.json();
+            
+            if (result.success) {
+                sessions = result.data || [];
+                renderSessionsList();
+            }
+        } catch (e) {
+            console.error('Error fetching sessions:', e);
+        }
+    }
+
+    function renderSessionsList() {
+        var container = document.getElementById('sessions-list');
+        
+        if (sessions.length === 0) {
+            container.innerHTML = '<div class="empty">No sessions found</div>';
+            return;
+        }
+
+        var html = '';
+        for (var i = 0; i < sessions.length; i++) {
+            var session = sessions[i];
+            var isActive = currentSession && currentSession.session_id === session.session_id;
+            var activeClass = isActive ? ' active' : '';
+            var statusClass = ' status-' + session.status;
+            var sessionTime = new Date(session.started_at).toLocaleTimeString();
+            
+            html += '<div class="session-card' + activeClass + '" ' + 
+                 'data-session-id="' + session.session_id + '">' +
+                '<div class="session-id">' + session.session_id.substring(0, 8) + '...</div>' +
+                '<div class="session-status' + statusClass + '">' + session.status + '</div>' +
+                '<div class="session-events">' + session.event_count + ' events</div>' +
+                '<div class="session-time">' + sessionTime + '</div>' +
+            '</div>';
+        }
+        container.innerHTML = html;
+
+        var cards = container.querySelectorAll('.session-card');
+        for (var i = 0; i < cards.length; i++) {
+            cards[i].onclick = (function(card) {
+                return function() { selectSession(card.dataset.sessionId); };
+            })(cards[i]);
+        }
+    }
+
+    async function selectSession(sessionId) {
+        try {
+            var response = await fetch('/api/debug/sessions/' + sessionId + '/events');
+            var result = await response.json();
+            
+            if (result.success) {
+                currentSession = null;
+                for (var i = 0; i < sessions.length; i++) {
+                    if (sessions[i].session_id === sessionId) {
+                        currentSession = sessions[i];
+                        break;
+                    }
+                }
+                events = result.data || [];
+                currentEventIndex = -1;
+                
+                renderSessionsList();
+                renderWorkflowGraph();
+                updateTimeline();
+                updateControls();
+                
+                if (events.length > 0) {
+                    goToEvent(0);
+                }
+            }
+        } catch (e) {
+            console.error('Error fetching session events:', e);
+        }
+    }
+
+    function renderWorkflowGraph() {
+        var container = document.getElementById('workflow-graph');
+        
+        if (!currentSession || events.length === 0) {
+            container.innerHTML = '<div class="placeholder">Select a session to view workflow graph</div>';
+            return;
+        }
+
+        var nodes = new Map();
+        var nodeStates = new Map();
+        
+        for (var i = 0; i < events.length; i++) {
+            var event = events[i];
+            var eventType = event.type;
+            var nodeId = event.data && event.data.node_id;
+            
+            if (nodeId) {
+                if (!nodes.has(nodeId)) {
+                    nodes.set(nodeId, { id: nodeId, events: [] });
+                }
+                nodes.get(nodeId).events.push({ event: event, index: i });
+                
+                if (eventType === 'node_start') {
+                    nodeStates.set(nodeId, 'running');
+                } else if (eventType === 'node_end') {
+                    nodeStates.set(nodeId, 'completed');
+                } else if (eventType === 'error' && event.data && event.data.node_id === nodeId) {
+                    nodeStates.set(nodeId, 'errored');
+                }
+            }
+        }
+
+        var width = container.clientWidth || 600;
+        var height = 300;
+        var nodeSpacing = 120;
+        var nodeRadius = 30;
+        
+        var nodeArray = [];
+        nodes.forEach(function(v) { nodeArray.push(v); });
+        var totalWidth = nodeArray.length * nodeSpacing;
+        var startX = (width - totalWidth) / 2 + nodeSpacing / 2;
+        
+        var svgContent = '<svg width="' + width + '" height="' + height + '">';
+        
+        for (var i = 0; i < nodeArray.length; i++) {
+            var node = nodeArray[i];
+            var x = startX + i * nodeSpacing;
+            var y = height / 2;
+            var state = nodeStates.get(node.id) || 'pending';
+            var activeEvent = events[currentEventIndex];
+            var isActive = activeEvent && activeEvent.data && activeEvent.data.node_id === node.id;
+            
+            var fillColor = '#666';
+            if (state === 'running') fillColor = '#2196f3';
+            else if (state === 'completed') fillColor = '#4caf50';
+            else if (state === 'errored') fillColor = '#f44336';
+            
+            if (isActive) fillColor = '#ff9800';
+            
+            var strokeWidth = isActive ? 3 : 0;
+            var strokeColor = isActive ? '#fff' : 'none';
+            var activeClass = isActive ? ' active' : '';
+            
+            svgContent += '<circle cx="' + x + '" cy="' + y + '" r="' + nodeRadius + '" ' +
+                'fill="' + fillColor + '" stroke="' + strokeColor + '" ' +
+                'stroke-width="' + strokeWidth + '" ' +
+                'class="node' + activeClass + '"/>' +
+                '<text x="' + x + '" y="' + (y + 5) + '" text-anchor="middle" fill="white" font-size="12">' +
+                    node.id.substring(0, 8) +
+                '</text>';
+            
+            if (i > 0) {
+                var prevX = startX + (i - 1) * nodeSpacing;
+                svgContent += '<line x1="' + (prevX + nodeRadius) + '" y1="' + y + '" ' +
+                      'x2="' + (x - nodeRadius) + '" y2="' + y + '" ' +
+                      'stroke="#666" stroke-width="2"/>';
+            }
+        }
+        
+        svgContent += '</svg>';
+        container.innerHTML = svgContent;
+    }
+
+    function updateTimeline() {
+        var container = document.getElementById('event-timeline');
+        
+        if (events.length === 0) {
+            container.innerHTML = '<div class="placeholder">No events</div>';
+            return;
+        }
+
+        var html = '';
+        for (var i = 0; i < events.length; i++) {
+            var event = events[i];
+            var isActive = i === currentEventIndex;
+            var eventType = event.type || 'unknown';
+            var nodeId = event.data && event.data.node_id || '';
+            var time = event.data && event.data.timestamp_ms ? new Date(event.data.timestamp_ms).toLocaleTimeString() : '';
+            var activeClass = isActive ? ' active' : '';
+            
+            html += '<div class="timeline-event ' + activeClass + ' ' + eventType + '" data-index="' + i + '">' +
+                '<span class="event-time">' + time + '</span>' +
+                '<span class="event-type">' + eventType + '</span>' +
+                '<span class="event-node">' + nodeId + '</span>' +
+            '</div>';
+        }
+        container.innerHTML = html;
+
+        var timelineEvents = container.querySelectorAll('.timeline-event');
+        for (var i = 0; i < timelineEvents.length; i++) {
+            timelineEvents[i].onclick = (function(idx) {
+                return function() { goToEvent(idx); };
+            })(i);
+        }
+    }
+
+    function goToEvent(index) {
+        if (index < 0 || index >= events.length) return;
+        
+        currentEventIndex = index;
+        var event = events[index];
+        
+        updateControls();
+        updateTimeline();
+        renderWorkflowGraph();
+        renderStateInspector(event);
+    }
+
+    function renderStateInspector(event) {
+        var container = document.getElementById('state-inspector');
+        
+        if (!event) {
+            container.innerHTML = '<div class="placeholder">Select an event to inspect state</div>';
+            return;
+        }
+
+        var type = event.type;
+        var data = event.data || {};
+        var stateContent = '';
+
+        if (data.state_snapshot) {
+            stateContent = '<pre>' + JSON.stringify(data.state_snapshot, null, 2) + '</pre>';
+        } else if (data.old_value !== undefined || data.new_value !== undefined) {
+            stateContent = '<div class="state-change">' +
+                '<strong>Key:</strong> ' + (data.key || 'N/A') + '<br>' +
+                '<strong>Old Value:</strong> <pre>' + JSON.stringify(data.old_value, null, 2) + '</pre>' +
+                '<strong>New Value:</strong> <pre>' + JSON.stringify(data.new_value, null, 2) + '</pre>' +
+            '</div>';
+        } else if (data.error) {
+            stateContent = '<div class="error-state"><strong>Error:</strong> ' + data.error + '</div>';
+        } else {
+            stateContent = '<pre>' + JSON.stringify(data, null, 2) + '</pre>';
+        }
+
+        var detailsHtml = '<div class="event-details"><h3>' + type + '</h3>' +
+            '<p><strong>Timestamp:</strong> ' + (data.timestamp_ms ? new Date(data.timestamp_ms).toLocaleString() : 'N/A') + '</p>';
+        
+        if (data.node_id) {
+            detailsHtml += '<p><strong>Node:</strong> ' + data.node_id + '</p>';
+        }
+        if (data.duration_ms) {
+            detailsHtml += '<p><strong>Duration:</strong> ' + data.duration_ms + 'ms</p>';
+        }
+        if (data.status) {
+            detailsHtml += '<p><strong>Status:</strong> ' + data.status + '</p>';
+        }
+        detailsHtml += '</div>';
+
+        container.innerHTML = detailsHtml +
+            '<div class="state-content"><h4>State</h4>' + stateContent + '</div>';
+    }
+
+    function updateControls() {
+        var hasEvents = events.length > 0;
+        var idx = currentEventIndex;
+        
+        document.getElementById('btn-first').disabled = !hasEvents || idx <= 0;
+        document.getElementById('btn-prev').disabled = !hasEvents || idx <= 0;
+        document.getElementById('btn-next').disabled = !hasEvents || idx >= events.length - 1;
+        document.getElementById('btn-last').disabled = !hasEvents || idx >= events.length - 1;
+        
+        var indexText = hasEvents ? (idx + 1) + ' / ' + events.length : '- / -';
+        document.getElementById('event-index').textContent = indexText;
+    }
+
+    function toggleRealtime() {
+        isRealtime = !isRealtime;
+        var btn = document.getElementById('btn-realtime');
+        
+        if (isRealtime) {
+            btn.textContent = '⏹ Stop';
+            btn.classList.add('btn-danger');
+            realtimeInterval = setInterval(function() {
+                fetchSessions();
+            }, 5000);
+        } else {
+            btn.textContent = '▶ Real-time';
+            btn.classList.remove('btn-danger');
+            if (realtimeInterval) {
+                clearInterval(realtimeInterval);
+                realtimeInterval = null;
+            }
+        }
+    }
+
+    // Initialize when DOM is ready
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', init);
+    } else {
+        init();
+    }
+})();
+    </script>
+</body>
+</html>"##;
+
+/// Debugger JavaScript - Placeholder
+pub const DEBUGGER_JS: &str = "console.log('Debugger loaded');";
 
 /// Serve embedded asset or return 404
 pub async fn serve_asset(path: String) -> impl IntoResponse {
@@ -96,6 +548,10 @@ pub const INDEX_HTML: &str = r#"<!DOCTYPE html>
             <div class="logo">
                 <h1>🤖 MoFA Dashboard</h1>
             </div>
+            <nav class="nav">
+                <a href="/" class="nav-link active">Dashboard</a>
+                <a href="/debugger" class="nav-link">🔍 Debugger</a>
+            </nav>
             <div class="header-info">
                 <span id="connection-status" class="status-badge disconnected">Disconnected</span>
                 <span id="last-update">Last update: --</span>
@@ -508,6 +964,296 @@ section h2 {
         padding: 0.75rem 0.5rem;
     }
 }
+
+/* ============================
+   Debugger Styles
+   ============================ */
+
+.debugger {
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    background: var(--bg-primary);
+}
+
+.debugger-content {
+    display: flex;
+    flex: 1;
+    overflow: hidden;
+}
+
+/* Sessions Sidebar */
+.sessions-sidebar {
+    width: 280px;
+    background: var(--bg-secondary);
+    border-right: 1px solid var(--border-color);
+    padding: 1rem;
+    overflow-y: auto;
+}
+
+.sessions-sidebar h2 {
+    font-size: 1.1rem;
+    margin-bottom: 1rem;
+    color: var(--text-primary);
+}
+
+.sessions-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.session-card {
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    padding: 0.75rem;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.session-card:hover {
+    border-color: var(--primary-color);
+}
+
+.session-card.active {
+    border-color: var(--primary-color);
+    background: rgba(33, 150, 243, 0.1);
+}
+
+.session-id {
+    font-family: monospace;
+    font-size: 0.85rem;
+    color: var(--text-primary);
+    margin-bottom: 0.25rem;
+}
+
+.session-status {
+    display: inline-block;
+    font-size: 0.75rem;
+    padding: 0.125rem 0.5rem;
+    border-radius: 3px;
+    margin-bottom: 0.25rem;
+}
+
+.status-running { background: #2196f3; color: white; }
+.status-completed { background: #4caf50; color: white; }
+.status-failed { background: #f44336; color: white; }
+
+.session-events, .session-time {
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+}
+
+/* Main Debugger Area */
+.debugger-main {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    padding: 1rem;
+    gap: 1rem;
+    overflow: hidden;
+}
+
+/* Workflow Graph */
+.graph-section {
+    flex: 1;
+    min-height: 200px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 1rem;
+}
+
+.graph-section h2 {
+    font-size: 1rem;
+    margin-bottom: 0.5rem;
+    color: var(--text-primary);
+}
+
+.workflow-graph {
+    height: calc(100% - 2rem);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.workflow-graph svg {
+    width: 100%;
+    height: 100%;
+}
+
+.workflow-graph .node {
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.workflow-graph .node:hover {
+    transform: scale(1.1);
+}
+
+/* Timeline */
+.timeline-section {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 1rem;
+}
+
+.timeline-controls {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 0.75rem;
+}
+
+.event-index {
+    font-family: monospace;
+    padding: 0.25rem 0.75rem;
+    background: var(--bg-tertiary);
+    border-radius: 4px;
+}
+
+.event-timeline {
+    display: flex;
+    gap: 0.25rem;
+    overflow-x: auto;
+    padding: 0.5rem 0;
+    min-height: 50px;
+}
+
+.timeline-event {
+    flex-shrink: 0;
+    padding: 0.25rem 0.5rem;
+    background: var(--bg-tertiary);
+    border-radius: 4px;
+    font-size: 0.7rem;
+    cursor: pointer;
+    white-space: nowrap;
+    border-left: 3px solid #666;
+}
+
+.timeline-event.workflow_start { border-left-color: #9c27b0; }
+.timeline-event.node_start { border-left-color: #2196f3; }
+.timeline-event.state_change { border-left-color: #ff9800; }
+.timeline-event.node_end { border-left-color: #4caf50; }
+.timeline-event.workflow_end { border-left-color: #9c27b0; }
+.timeline-event.error { border-left-color: #f44336; }
+
+.timeline-event:hover {
+    background: var(--bg-primary);
+}
+
+.timeline-event.active {
+    background: rgba(33, 150, 243, 0.2);
+    border-color: var(--primary-color);
+}
+
+.event-time {
+    color: var(--text-secondary);
+    margin-right: 0.25rem;
+}
+
+.event-type {
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.event-node {
+    color: var(--text-secondary);
+    margin-left: 0.25rem;
+}
+
+/* State Inspector */
+.state-section {
+    height: 200px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 1rem;
+    overflow: auto;
+}
+
+.state-section h2 {
+    font-size: 1rem;
+    margin-bottom: 0.5rem;
+    color: var(--text-primary);
+}
+
+.state-inspector {
+    font-size: 0.85rem;
+}
+
+.state-inspector pre {
+    background: var(--bg-tertiary);
+    padding: 0.75rem;
+    border-radius: 4px;
+    overflow-x: auto;
+    font-size: 0.75rem;
+}
+
+.event-details {
+    margin-bottom: 1rem;
+    padding-bottom: 0.5rem;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.event-details h3 {
+    font-size: 1rem;
+    color: var(--primary-color);
+    margin-bottom: 0.5rem;
+}
+
+.state-content h4 {
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    margin-bottom: 0.5rem;
+}
+
+.error-state {
+    color: #f44336;
+    padding: 0.5rem;
+    background: rgba(244, 67, 54, 0.1);
+    border-radius: 4px;
+}
+
+/* Placeholder */
+.placeholder {
+    color: var(--text-secondary);
+    font-style: italic;
+    text-align: center;
+    padding: 2rem;
+}
+
+.empty {
+    color: var(--text-secondary);
+    text-align: center;
+    padding: 1rem;
+}
+
+/* Nav */
+.nav {
+    display: flex;
+    gap: 0.5rem;
+}
+
+.nav-link {
+    padding: 0.5rem 1rem;
+    color: var(--text-secondary);
+    text-decoration: none;
+    border-radius: 4px;
+    transition: all 0.2s;
+}
+
+.nav-link:hover {
+    background: rgba(255, 255, 255, 0.1);
+    color: var(--text-primary);
+}
+
+.nav-link.active {
+    background: var(--primary-color);
+    color: white;
+}
 "#;
 
 /// JavaScript Application
@@ -888,6 +1634,8 @@ document.addEventListener('DOMContentLoaded', () => {
     window.dashboard = new Dashboard();
 });
 "#;
+
+#[cfg(test)]
 
 #[cfg(test)]
 mod tests {

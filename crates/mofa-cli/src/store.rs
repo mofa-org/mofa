@@ -1,7 +1,8 @@
 //! Generic file-based persisted store for CLI state.
 
-use serde::Serialize;
+use crate::CliError;
 use serde::de::DeserializeOwned;
+use serde::Serialize;
 use std::fs;
 use std::marker::PhantomData;
 use std::path::{Path, PathBuf};
@@ -12,7 +13,7 @@ pub struct PersistedStore<T> {
 }
 
 impl<T: Serialize + DeserializeOwned> PersistedStore<T> {
-    pub fn new(dir: impl AsRef<Path>) -> anyhow::Result<Self> {
+    pub fn new(dir: impl AsRef<Path>) -> Result<Self, CliError> {
         let dir = dir.as_ref().to_path_buf();
         fs::create_dir_all(&dir)?;
         Ok(Self {
@@ -21,14 +22,14 @@ impl<T: Serialize + DeserializeOwned> PersistedStore<T> {
         })
     }
 
-    pub fn save(&self, id: &str, item: &T) -> anyhow::Result<()> {
+    pub fn save(&self, id: &str, item: &T) -> Result<(), CliError> {
         let path = self.path_for(id);
         let payload = serde_json::to_vec_pretty(item)?;
         fs::write(path, payload)?;
         Ok(())
     }
 
-    pub fn get(&self, id: &str) -> anyhow::Result<Option<T>> {
+    pub fn get(&self, id: &str) -> Result<Option<T>, CliError> {
         let path = self.path_for(id);
         if !path.exists() {
             return Ok(None);
@@ -39,7 +40,7 @@ impl<T: Serialize + DeserializeOwned> PersistedStore<T> {
         Ok(Some(item))
     }
 
-    pub fn list(&self) -> anyhow::Result<Vec<(String, T)>> {
+    pub fn list(&self) -> Result<Vec<(String, T)>, CliError> {
         let mut items = Vec::new();
 
         for entry in fs::read_dir(&self.dir)? {
@@ -63,7 +64,7 @@ impl<T: Serialize + DeserializeOwned> PersistedStore<T> {
         Ok(items)
     }
 
-    pub fn delete(&self, id: &str) -> anyhow::Result<bool> {
+    pub fn delete(&self, id: &str) -> Result<bool, CliError> {
         let path = self.path_for(id);
         if !path.exists() {
             return Ok(false);

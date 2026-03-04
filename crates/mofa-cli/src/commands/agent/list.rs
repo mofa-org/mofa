@@ -1,5 +1,6 @@
 //! `mofa agent list` command implementation
 
+use crate::CliError;
 use crate::context::CliContext;
 use crate::output::Table;
 use chrono::Utc;
@@ -8,7 +9,7 @@ use serde::Serialize;
 use std::collections::BTreeMap;
 
 /// Execute the `mofa agent list` command
-pub async fn run(ctx: &CliContext, running_only: bool, _show_all: bool) -> anyhow::Result<()> {
+pub async fn run(ctx: &CliContext, running_only: bool, _show_all: bool) -> Result<(), CliError> {
     println!("{} Listing agents", "→".green());
     println!();
 
@@ -16,7 +17,7 @@ pub async fn run(ctx: &CliContext, running_only: bool, _show_all: bool) -> anyho
     let persisted_agents = ctx
         .agent_store
         .list()
-        .map_err(|e| anyhow::anyhow!("Failed to list persisted agents: {}", e))?;
+        .map_err(|e| CliError::StateError(format!("Failed to list persisted agents: {}", e)))?;
 
     let mut merged: BTreeMap<String, AgentInfo> = BTreeMap::new();
 
@@ -60,7 +61,7 @@ pub async fn run(ctx: &CliContext, running_only: bool, _show_all: bool) -> anyho
         println!("  No agents registered.");
         println!();
         println!(
-            "  Use {} to start an agent.",
+            "  Use {} to register an agent.",
             "mofa agent start <agent_id>".cyan()
         );
         return Ok(());
@@ -87,7 +88,20 @@ pub async fn run(ctx: &CliContext, running_only: bool, _show_all: bool) -> anyho
         println!("{}", table);
     }
 
+    println!();
+    println!("  Total: {} agent(s)", filtered.len());
+
     Ok(())
+}
+
+/// Format timestamp as human-readable string
+fn format_timestamp(millis: u64) -> String {
+    use chrono::{DateTime, Local};
+    use std::time::UNIX_EPOCH;
+
+    let duration = std::time::Duration::from_millis(millis);
+    let datetime = DateTime::<Local>::from(UNIX_EPOCH + duration);
+    datetime.format("%Y-%m-%d %H:%M:%S").to_string()
 }
 
 /// Formats a duration into a human-readable string (e.g., "2h 15m", "45s").

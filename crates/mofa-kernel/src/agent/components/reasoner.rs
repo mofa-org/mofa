@@ -158,10 +158,7 @@ impl ThoughtStep {
     /// 创建新的思考步骤
     /// Create a new thought step
     pub fn new(step_type: ThoughtStepType, content: impl Into<String>, step_number: usize) -> Self {
-        let now = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_millis() as u64;
+        let now = crate::utils::now_ms();
 
         Self {
             step_type,
@@ -199,6 +196,7 @@ impl ThoughtStep {
 /// 思考步骤类型
 /// Thought step type
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub enum ThoughtStepType {
     /// 思考
     /// Thought
@@ -223,6 +221,7 @@ pub enum ThoughtStepType {
 /// 决策类型
 /// Decision type
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[non_exhaustive]
 pub enum Decision {
     /// 直接响应
     /// Direct response

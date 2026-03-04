@@ -39,6 +39,10 @@ pub struct HardwareCapability {
     pub gpu_available: bool,
     /// The type of GPU detected, if any.
     pub gpu_type: Option<GpuType>,
+    /// Total system memory in bytes
+    pub total_memory_bytes: u64,
+    /// Currently available system memory in bytes
+    pub available_memory_bytes: u64,
 }
 
 /// Detects the host machine's hardware capabilities dynamically.
@@ -65,11 +69,17 @@ pub fn detect_hardware() -> HardwareCapability {
 
     let (gpu_available, gpu_type) = detect_gpu(&os);
 
+    // Fetch memory stats via sysinfo
+    let mut sys = sysinfo::System::new();
+    sys.refresh_memory();
+
     HardwareCapability {
         os,
         cpu_family,
         gpu_available,
         gpu_type,
+        total_memory_bytes: sys.total_memory(),
+        available_memory_bytes: sys.available_memory(),
     }
 }
 

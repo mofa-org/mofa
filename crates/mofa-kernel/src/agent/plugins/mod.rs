@@ -33,6 +33,7 @@ use std::sync::Arc;
 /// 插件执行阶段
 /// Plugin execution stage
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum PluginStage {
     /// 请求处理前
     /// Pre-request processing

@@ -393,6 +393,7 @@ pub fn create_reducer(reducer_type: &ReducerType) -> AgentResult<Box<dyn Reducer
             "Cannot create reducer for unknown custom type: {}",
             name
         ))),
+        _ => Err(AgentError::Internal("Unknown reducer type".to_string())),
     }
 }
 

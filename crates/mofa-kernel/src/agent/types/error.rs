@@ -30,6 +30,7 @@ use std::fmt;
 /// 整合所有层的错误类型，提供单一的错误抽象。
 /// Integrates error types from all layers, providing a single error abstraction.
 #[derive(Debug, thiserror::Error)]
+#[non_exhaustive]
 pub enum GlobalError {
     /// Agent 层错误
     /// Agent layer error
@@ -127,6 +128,7 @@ impl GlobalError {
 /// 用于错误统计和监控。
 /// Used for error statistics and monitoring.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[non_exhaustive]
 pub enum ErrorCategory {
     /// Agent 相关错误
     /// Agent related errors
@@ -170,23 +172,36 @@ impl fmt::Display for ErrorCategory {
 // GlobalResult - Global Result Type
 // ============================================================================
 
-/// 全局结果类型
-/// Global result type
+/// Plain result alias for global operations (backward-compatible).
 ///
-/// 替代 `AgentResult`, `LLMResult`, `PluginResult`，提供单一的结果类型。
-/// Replaces `AgentResult`, `LLMResult`, `PluginResult`, providing a single result type.
-pub type GlobalResult<T> = Result<T, GlobalError>;
+/// Used in public trait signatures and existing call-sites.
+/// For new code that needs full causal chains, prefer [`GlobalReport<T>`]
+/// and call [`.into_report()`](IntoGlobalReport::into_report).
+pub type GlobalResult<T> = ::std::result::Result<T, GlobalError>;
+
+/// Error-stack–backed result alias for global operations.
+///
+/// Carries a full [`error_stack::Report`] with context and causal chain.
+/// Obtain one by calling [`IntoGlobalReport::into_report`] on a [`GlobalResult`].
+pub type GlobalReport<T> = ::std::result::Result<T, error_stack::Report<GlobalError>>;
+
+/// Extension trait to upgrade a [`GlobalResult<T>`] to a [`GlobalReport<T>`].
+pub trait IntoGlobalReport<T> {
+    /// Wrap the bare `GlobalError` in an `error_stack::Report`.
+    fn into_report(self) -> GlobalReport<T>;
+}
+
+impl<T> IntoGlobalReport<T> for GlobalResult<T> {
+    #[inline]
+    fn into_report(self) -> GlobalReport<T> {
+        self.map_err(error_stack::Report::new)
+    }
+}
 
 // ============================================================================
 // 从其他错误类型转换
 // Conversion from other error types
 // ============================================================================
-
-impl From<anyhow::Error> for GlobalError {
-    fn from(err: anyhow::Error) -> Self {
-        Self::Other(err.to_string())
-    }
-}
 
 impl From<String> for GlobalError {
     fn from(s: String) -> Self {

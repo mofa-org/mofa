@@ -20,6 +20,7 @@ use mofa_sdk::secretary::{
     DispatchStrategy, LLMProvider, QueryType, ReportType, SecretaryCommand,
     SecretaryCore, TodoPriority, TodoStatus,
 };
+use mofa_sdk::kernel::GlobalResult;
 use std::io::{BufRead, Write};
 use std::sync::Arc;
 use tokio::sync::mpsc;
@@ -37,7 +38,7 @@ impl LLMProvider for MockLLMProvider {
         "mock-llm"
     }
 
-    async fn chat(&self, messages: Vec<ChatMessage>) -> anyhow::Result<String> {
+    async fn chat(&self, messages: Vec<ChatMessage>) -> GlobalResult<String> {
         // 简单的mock响应，实际项目中调用真实LLM API
         // Simple mock response; call real LLM APIs in actual projects
         let last_message = messages.last().map(|m| m.content.as_str()).unwrap_or("");
@@ -83,7 +84,7 @@ impl LLMProvider for MockLLMProvider {
 async fn handle_command(
     input_tx: &mpsc::Sender<DefaultInput>,
     cmd: &str,
-) -> anyhow::Result<bool> {
+) -> Result<bool, Box<dyn std::error::Error>> {
     let cmd = cmd.trim();
 
     // 解析命令
@@ -466,7 +467,7 @@ fn print_help() {
 
 /// 运行秘书Agent
 /// Run Secretary Agent
-async fn run_secretary() -> anyhow::Result<()> {
+async fn run_secretary() -> Result<(), Box<dyn std::error::Error>> {
     // 创建通道连接
     // Create channel connection
     let (connection, input_tx, mut output_rx) = ChannelConnection::<DefaultInput, DefaultOutput>::new_pair(64);
@@ -539,7 +540,7 @@ async fn run_secretary() -> anyhow::Result<()> {
 }
 
 #[tokio::main]
-async fn main() -> anyhow::Result<()> {
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // 初始化日志
     // Initialize logging
     tracing_subscriber::fmt()

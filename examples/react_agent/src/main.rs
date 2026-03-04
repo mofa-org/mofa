@@ -21,7 +21,6 @@
 //! cargo run -p react_agent
 //! ```
 
-use anyhow::Result;
 use async_trait::async_trait;
 use mofa_sdk::llm::{LLMAgent, LLMAgentBuilder, OpenAIConfig, OpenAIProvider};
 use mofa_sdk::react::{
@@ -241,7 +240,7 @@ Consider using web_search for more current information."#
 
 /// 示例 1: 基本 ReAct Agent 用法
 /// Example 1: Basic ReAct Agent usage
-async fn example_basic_react(llm_agent: Arc<LLMAgent>) -> Result<()> {
+async fn example_basic_react(llm_agent: Arc<LLMAgent>) -> Result<(), Box<dyn std::error::Error>> {
     info!("\n{}", "=".repeat(60));
     info!("Example 1: Basic ReAct Agent");
     info!("{}\n", "=".repeat(60));
@@ -273,7 +272,7 @@ async fn example_basic_react(llm_agent: Arc<LLMAgent>) -> Result<()> {
 
 /// 示例 2: 使用 Actor 模型
 /// Example 2: Using the Actor model
-async fn example_actor_model(llm_agent: Arc<LLMAgent>) -> Result<()> {
+async fn example_actor_model(llm_agent: Arc<LLMAgent>) -> Result<(), Box<dyn std::error::Error>> {
     info!("\n{}", "=".repeat(60));
     info!("Example 2: ReAct Actor Model");
     info!("{}\n", "=".repeat(60));
@@ -323,7 +322,7 @@ async fn example_actor_model(llm_agent: Arc<LLMAgent>) -> Result<()> {
 async fn example_auto_agent(
     llm_agent: Arc<LLMAgent>,
     react_agent: Arc<ReActAgent>,
-) -> Result<()> {
+) -> Result<(), Box<dyn std::error::Error>> {
     info!("\n{}", "=".repeat(60));
     info!("Example 3: AutoAgent - Automatic Strategy Selection");
     info!("{}\n", "=".repeat(60));
@@ -354,7 +353,7 @@ async fn example_auto_agent(
 
 /// 示例 4: 使用内置工具
 /// Example 4: Using built-in tools
-async fn example_builtin_tools(llm_agent: Arc<LLMAgent>) -> Result<()> {
+async fn example_builtin_tools(llm_agent: Arc<LLMAgent>) -> Result<(), Box<dyn std::error::Error>> {
     info!("\n{}", "=".repeat(60));
     info!("Example 4: Built-in Tools");
     info!("{}\n", "=".repeat(60));
@@ -383,7 +382,7 @@ async fn example_builtin_tools(llm_agent: Arc<LLMAgent>) -> Result<()> {
 
 /// 示例 5: 流式输出 (使用 Actor)
 /// Example 5: Streaming output (using Actor)
-async fn example_streaming(llm_agent: Arc<LLMAgent>) -> Result<()> {
+async fn example_streaming(llm_agent: Arc<LLMAgent>) -> Result<(), Box<dyn std::error::Error>> {
     info!("\n{}", "=".repeat(60));
     info!("Example 5: Streaming Output with Actor");
     info!("{}\n", "=".repeat(60));
@@ -435,7 +434,7 @@ async fn example_streaming(llm_agent: Arc<LLMAgent>) -> Result<()> {
 
 /// 示例 6: 自定义工具组合
 /// Example 6: Custom tool combination
-async fn example_custom_tools(llm_agent: Arc<LLMAgent>) -> Result<()> {
+async fn example_custom_tools(llm_agent: Arc<LLMAgent>) -> Result<(), Box<dyn std::error::Error>> {
     info!("\n{}", "=".repeat(60));
     info!("Example 6: Custom Tool Combination");
     info!("{}\n", "=".repeat(60));
@@ -479,7 +478,7 @@ When you have gathered enough information, provide a comprehensive final answer.
 ///
 /// 多个 Agent 串行执行，前一个的输出作为后一个的输入
 /// Multiple agents execute sequentially; output of the previous is input for the next.
-async fn example_chain_agent(llm_agent: Arc<LLMAgent>) -> Result<()> {
+async fn example_chain_agent(llm_agent: Arc<LLMAgent>) -> Result<(), Box<dyn std::error::Error>> {
     info!("\n{}", "=".repeat(60));
     info!("Example 7: Chain Agent (Sequential Execution)");
     info!("{}\n", "=".repeat(60));
@@ -567,7 +566,7 @@ async fn example_chain_agent(llm_agent: Arc<LLMAgent>) -> Result<()> {
 ///
 /// 多个 Agent 并行执行同一任务，然后聚合结果
 /// Multiple agents execute the same task in parallel, then aggregate results.
-async fn example_parallel_agent(llm_agent: Arc<LLMAgent>) -> Result<()> {
+async fn example_parallel_agent(llm_agent: Arc<LLMAgent>) -> Result<(), Box<dyn std::error::Error>> {
     info!("\n{}", "=".repeat(60));
     info!("Example 8: Parallel Agent (Concurrent Execution)");
     info!("{}\n", "=".repeat(60));
@@ -648,7 +647,7 @@ async fn example_parallel_agent(llm_agent: Arc<LLMAgent>) -> Result<()> {
 ///
 /// 使用 LLM 聚合多个 Agent 的结果
 /// Use LLM to aggregate results from multiple agents.
-async fn example_parallel_with_summarizer(llm_agent: Arc<LLMAgent>) -> Result<()> {
+async fn example_parallel_with_summarizer(llm_agent: Arc<LLMAgent>) -> Result<(), Box<dyn std::error::Error>> {
     info!("\n{}", "=".repeat(60));
     info!("Example 9: Parallel Agent with LLM Summarizer");
     info!("{}\n", "=".repeat(60));
@@ -703,7 +702,7 @@ async fn example_parallel_with_summarizer(llm_agent: Arc<LLMAgent>) -> Result<()
 ///
 /// 将任务拆分、并行处理、然后归约结果
 /// Split tasks, process in parallel, then reduce the results.
-async fn example_map_reduce(llm_agent: Arc<LLMAgent>) -> Result<()> {
+async fn example_map_reduce(llm_agent: Arc<LLMAgent>) -> Result<(), Box<dyn std::error::Error>> {
     info!("\n{}", "=".repeat(60));
     info!("Example 10: MapReduce Agent");
     info!("{}\n", "=".repeat(60));
@@ -807,7 +806,7 @@ fn print_result(result: &ReActResult) {
     }
 }
 
-fn create_llm_agent() -> Result<LLMAgent> {
+fn create_llm_agent() -> Result<LLMAgent, Box<dyn std::error::Error>> {
     // 从环境变量获取配置
     // Get configuration from environment variables
     let api_key = std::env::var("OPENAI_API_KEY")
@@ -841,7 +840,7 @@ fn create_llm_agent() -> Result<LLMAgent> {
 // ============================================================================
 
 #[tokio::main]
-async fn main() -> Result<()> {
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // 初始化日志
     // Initialize logging
     tracing_subscriber::fmt()

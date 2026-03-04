@@ -5,6 +5,7 @@
 //! Contains Agent capability descriptions and component trait definitions
 
 pub mod base;
+pub mod builder;
 pub mod components;
 pub mod context;
 pub mod executor;
@@ -26,6 +27,11 @@ pub use mofa_kernel::agent::types::AgentInput;
 // 重新导出组件 (从 components 模块统一导入)
 // Re-export components (unified import from components module)
 pub use components::{
+    // Context compressor trait and implementations
+    CompressionMetrics,
+    CompressionResult,
+    CompressionStrategy,
+    ContextCompressor,
     CoordinationPattern,
     // Kernel traits 和类型 (通过 components 重导出)
     // Kernel traits and types (re-exported via components)
@@ -37,6 +43,8 @@ pub use components::{
     DispatchResult,
     EchoTool,
     FileBasedStorage,
+    HierarchicalCompressor,
+    HybridCompressor,
     InMemoryStorage,
     LLMTool,
     Memory,
@@ -48,14 +56,18 @@ pub use components::{
     ParallelCoordinator,
     Reasoner,
     ReasoningResult,
+    SemanticCompressor,
     SequentialCoordinator,
     // SimpleTool 便捷接口
     // SimpleTool convenient interfaces
     SimpleTool,
     SimpleToolAdapter,
     SimpleToolRegistry,
+    SlidingWindowCompressor,
+    SummarizingCompressor,
     Task,
     ThoughtStep,
+    TokenCounter,
     Tool,
     // Foundation 扩展类型
     // Foundation extension types
@@ -70,7 +82,10 @@ pub use components::{
 };
 
 // Tool adapters and registries (Foundation implementations)
-pub use tools::{BuiltinTools, ClosureTool, FunctionTool, ToolSearcher};
+pub use tools::{
+    BuiltinTools, ClosureTool, DateTimeTool, FileReadTool, FileWriteTool, FunctionTool, HttpTool,
+    JsonParseTool, ShellTool, ToolSearcher,
+};
 
 // Re-export context module
 pub use context::{
@@ -88,6 +103,9 @@ pub use session::{
 
 // Re-export executor module
 pub use executor::{AgentExecutor, AgentExecutorConfig};
+
+// Re-export builder module
+pub use builder::{AgentBuilder, AgentProfile, AgentRegistry};
 
 // Re-export LLM types from kernel
 pub use mofa_kernel::agent::types::{

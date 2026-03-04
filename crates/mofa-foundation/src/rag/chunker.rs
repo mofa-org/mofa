@@ -65,7 +65,11 @@ impl TextChunker {
 
         let mut chunks = Vec::new();
         let chars: Vec<char> = text.chars().collect();
-        let step = self.config.chunk_size.saturating_sub(self.config.chunk_overlap).max(1);
+        let step = self
+            .config
+            .chunk_size
+            .saturating_sub(self.config.chunk_overlap)
+            .max(1);
         let mut start = 0;
 
         while start < chars.len() {

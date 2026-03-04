@@ -7,7 +7,7 @@ use mofa_plugins::{
 };
 
 #[tokio::main]
-async fn main() -> anyhow::Result<()> {
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // 创建并配置工具插件
     // Create and configure tool plugin
     let mut tool_plugin = ToolPlugin::new("medical_tool_plugin");

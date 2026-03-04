@@ -1,0 +1,14 @@
+[package]
+name = "cli_plugin_lifecycle"
+version.workspace = true
+edition.workspace = true
+description = "Demonstrates complete plugin lifecycle: install, validate, uninstall"
+
+[dependencies]
+mofa-cli = { path = "../../crates/mofa-cli", version = "0.1" }
+tempfile.workspace = true
+tokio.workspace = true
+serde_json.workspace = true
+
+[lints]
+workspace = true

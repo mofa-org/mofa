@@ -12,7 +12,13 @@ use tokio::sync::RwLock;
 // Error Types
 // =============================================================================
 
-/// MoFA error type for UniFFI
+/// MoFA error type for UniFFI.
+///
+/// Intentionally NOT `#[non_exhaustive]` — UniFFI generates exhaustive matches
+/// across the FFI boundary and requires all variants to be known at compile time.
+///
+/// At the FFI boundary every `error_stack::Report<*>` from internal code is
+/// downcast to the closest `MoFaError` category via [`From`] impls below.
 #[derive(Debug, thiserror::Error)]
 pub enum MoFaError {
     #[error("Configuration error: {0}")]
@@ -29,6 +35,41 @@ pub enum MoFaError {
     ToolError(String),
     #[error("Session error: {0}")]
     SessionError(String),
+}
+
+/// Convenience result alias for UniFFI-exposed functions.
+///
+/// Always `Result<T, MoFaError>` — `error_stack::Report` cannot cross the FFI
+/// boundary. Use the [`From`] impls below to convert internal reports here.
+pub type MoFaResult<T> = Result<T, MoFaError>;
+
+// ── FFI boundary conversions: Report<*> → MoFaError ───────────────────────────
+//
+// The full causal chain is preserved in the Display output of the Report,
+// which is forwarded as the error string. No information is silently discarded.
+
+impl From<error_stack::Report<mofa_kernel::error::KernelError>> for MoFaError {
+    fn from(r: error_stack::Report<mofa_kernel::error::KernelError>) -> Self {
+        MoFaError::RuntimeError(r.to_string())
+    }
+}
+
+impl From<error_stack::Report<mofa_kernel::agent::AgentError>> for MoFaError {
+    fn from(r: error_stack::Report<mofa_kernel::agent::AgentError>) -> Self {
+        MoFaError::RuntimeError(r.to_string())
+    }
+}
+
+impl From<error_stack::Report<mofa_kernel::agent::types::GlobalError>> for MoFaError {
+    fn from(r: error_stack::Report<mofa_kernel::agent::types::GlobalError>) -> Self {
+        MoFaError::RuntimeError(r.to_string())
+    }
+}
+
+impl From<error_stack::Report<mofa_foundation::llm::LLMError>> for MoFaError {
+    fn from(r: error_stack::Report<mofa_foundation::llm::LLMError>) -> Self {
+        MoFaError::LLMError(r.to_string())
+    }
 }
 
 // =============================================================================
@@ -68,6 +109,7 @@ impl From<&mofa_kernel::agent::types::AgentState> for AgentStatus {
             AgentState::Failed => AgentStatus::Failed,
             AgentState::Destroyed => AgentStatus::Destroyed,
             AgentState::Error(_) => AgentStatus::Error,
+            _ => AgentStatus::Error,
         }
     }
 }
@@ -114,6 +156,7 @@ impl From<&mofa_kernel::agent::types::AgentOutput> for AgentOutputInfo {
             OutputContent::Stream => ("[stream]".to_string(), "stream".to_string()),
             OutputContent::Error(e) => (e.clone(), "error".to_string()),
             OutputContent::Empty => (String::new(), "empty".to_string()),
+            _ => ("".to_string(), "unknown".to_string()),
         };
 
         let tools_used = output
@@ -248,7 +291,7 @@ pub fn is_dora_available() -> bool {
 
 /// Create a new LLM Agent Builder
 pub fn new_llm_agent_builder() -> Result<std::sync::Arc<LLMAgentBuilder>, MoFaError> {
-    Ok(LLMAgentBuilder::create())
+    LLMAgentBuilder::create()
 }
 
 // =============================================================================
@@ -509,17 +552,9 @@ impl LLMAgent {
 
     /// Get structured output info (placeholder until agent tracks last output)
     pub fn get_last_output(&self) -> Result<AgentOutputInfo, MoFaError> {
-        // Return a default output since the LLM agent doesn't currently
-        // track structured AgentOutput. This will be enhanced when the
-        // agent execution pipeline exposes richer output data.
-        Ok(AgentOutputInfo {
-            content: String::new(),
-            content_type: "empty".to_string(),
-            tools_used: Vec::new(),
-            duration_ms: 0,
-            token_usage: None,
-            metadata_json: "{}".to_string(),
-        })
+        Err(MoFaError::RuntimeError(
+            "get_last_output is not yet supported: LLMAgent does not persist structured output in this API".to_string(),
+        ))
     }
 }
 
@@ -555,15 +590,13 @@ pub struct LLMAgentBuilder {
 
 impl LLMAgentBuilder {
     /// Create a new builder
-    pub fn create() -> Arc<Self> {
-        let runtime = tokio::runtime::Runtime::new()
-            .map_err(|e| MoFaError::RuntimeError(e.to_string()))
-            .unwrap();
-
-        Arc::new(Self {
+    pub fn create() -> Result<Arc<Self>, MoFaError> {
+        let runtime =
+            tokio::runtime::Runtime::new().map_err(|e| MoFaError::RuntimeError(e.to_string()))?;
+        Ok(Arc::new(Self {
             state: Arc::new(StdMutex::new(BuilderState::default())),
             runtime: Arc::new(runtime),
-        })
+        }))
     }
 
     /// Set agent ID
@@ -824,15 +857,29 @@ pub struct SessionManager {
 
 impl SessionManager {
     /// Create a new in-memory session manager
-    pub fn new_in_memory() -> Self {
-        let runtime = tokio::runtime::Runtime::new().unwrap();
-        let storage =
-            Box::new(mofa_foundation::agent::session::MemorySessionStorage::new());
+    /// Internal fallible constructor
+    pub(crate) fn try_new_in_memory() -> Result<Self, MoFaError> {
+        let runtime =
+            tokio::runtime::Runtime::new().map_err(|e| MoFaError::RuntimeError(e.to_string()))?;
+        let storage = Box::new(mofa_foundation::agent::session::MemorySessionStorage::new());
         let manager = mofa_foundation::agent::session::SessionManager::with_storage(storage);
-
-        Self {
+        Ok(Self {
             inner: Arc::new(RwLock::new(manager)),
             runtime: Arc::new(runtime),
+        })
+    }
+
+    /// FFI-safe infallible constructor. Logs error and aborts if runtime creation fails.
+    pub fn new_in_memory() -> Self {
+        match Self::try_new_in_memory() {
+            Ok(manager) => manager,
+            Err(e) => {
+                eprintln!(
+                    "SessionManager::new_in_memory: failed to create in-memory session manager: {}",
+                    e
+                );
+                std::process::abort();
+            }
         }
     }
 
@@ -842,9 +889,9 @@ impl SessionManager {
             tokio::runtime::Runtime::new().map_err(|e| MoFaError::RuntimeError(e.to_string()))?;
 
         let manager = runtime
-            .block_on(
-                mofa_foundation::agent::session::SessionManager::with_jsonl(&workspace_path),
-            )
+            .block_on(mofa_foundation::agent::session::SessionManager::with_jsonl(
+                &workspace_path,
+            ))
             .map_err(|e| MoFaError::SessionError(e.to_string()))?;
 
         Ok(Self {
@@ -990,16 +1037,14 @@ impl ToolRegistry {
 
     /// Register a foreign-language tool via callback
     pub fn register_tool(&self, tool: Box<dyn FfiToolCallback>) -> Result<(), MoFaError> {
-        use mofa_kernel::agent::components::tool::ToolRegistry as _;
+        use mofa_kernel::agent::components::tool::{ToolExt, ToolRegistry as _};
         let adapter = CallbackToolAdapter::new(tool);
-        let tool_arc: Arc<dyn mofa_kernel::agent::components::tool::Tool> = Arc::new(adapter);
+        let tool_arc = adapter.into_dynamic();
         self.inner
             .lock()
             .unwrap()
             .register(tool_arc)
-            .map_err(|e: mofa_kernel::agent::error::AgentError| {
-                MoFaError::ToolError(e.to_string())
-            })
+            .map_err(|e: mofa_kernel::agent::error::AgentError| MoFaError::ToolError(e.to_string()))
     }
 
     /// Unregister a tool by name
@@ -1009,9 +1054,7 @@ impl ToolRegistry {
             .lock()
             .unwrap()
             .unregister(&name)
-            .map_err(|e: mofa_kernel::agent::error::AgentError| {
-                MoFaError::ToolError(e.to_string())
-            })
+            .map_err(|e: mofa_kernel::agent::error::AgentError| MoFaError::ToolError(e.to_string()))
     }
 
     /// List all registered tools
@@ -1061,24 +1104,61 @@ impl ToolRegistry {
             .get(&name)
             .ok_or_else(|| MoFaError::ToolError(format!("Tool not found: {}", name)))?;
 
-        let arguments: serde_json::Value =
-            serde_json::from_str(&arguments_json).map_err(|e| {
-                MoFaError::InvalidArgument(format!("Invalid JSON arguments: {}", e))
-            })?;
-
-        let input = mofa_kernel::agent::components::tool::ToolInput::from_json(arguments);
+        let arguments: serde_json::Value = serde_json::from_str(&arguments_json)
+            .map_err(|e| MoFaError::InvalidArgument(format!("Invalid JSON arguments: {}", e)))?;
 
         // Execute synchronously using a runtime
-        let runtime = tokio::runtime::Runtime::new()
-            .map_err(|e| MoFaError::RuntimeError(e.to_string()))?;
+        let runtime =
+            tokio::runtime::Runtime::new().map_err(|e| MoFaError::RuntimeError(e.to_string()))?;
 
         let ctx = mofa_kernel::agent::context::AgentContext::new("ffi-execution");
-        let result = runtime.block_on(tool.execute(input, &ctx));
+        let result = runtime.block_on(tool.execute_dynamic(arguments, &ctx));
 
-        Ok(FfiToolResult {
-            success: result.success,
-            output_json: result.output.to_string(),
-            error: result.error,
-        })
+        match result {
+            Ok(output) => Ok(FfiToolResult {
+                success: true,
+                output_json: output.to_string(),
+                error: None,
+            }),
+            Err(e) => Ok(FfiToolResult {
+                success: false,
+                output_json: "{}".to_string(),
+                error: Some(e.to_string()),
+            }),
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn get_last_output_returns_explicit_runtime_error() {
+        let config = LLMConfig {
+            provider: LLMProviderType::Ollama,
+            model: Some("llama2".to_string()),
+            api_key: None,
+            base_url: None,
+            deployment: None,
+            temperature: Some(0.2),
+            max_tokens: Some(128),
+            system_prompt: Some("You are a test agent".to_string()),
+        };
+
+        let agent = LLMAgent::from_config(
+            config,
+            "ffi-test-agent".to_string(),
+            "FFI Test Agent".to_string(),
+        )
+        .expect("ollama config should build without network calls");
+
+        let err = agent
+            .get_last_output()
+            .expect_err("get_last_output should return explicit unsupported error");
+
+        let msg = err.to_string();
+        assert!(msg.contains("Runtime error:"));
+        assert!(msg.contains("get_last_output is not yet supported"));
     }
 }

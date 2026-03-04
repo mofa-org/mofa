@@ -17,6 +17,7 @@ use std::path::Path;
 
 /// Configuration format detection error
 #[derive(Debug, thiserror::Error)]
+#[non_exhaustive]
 pub enum ConfigError {
     #[error("IO error: {0}")]
     Io(#[from] std::io::Error),

@@ -546,6 +546,7 @@ impl DoraRuntimeBuilder {
 
     /// 构建运行时
     /// Build runtime
+    #[must_use]
     pub fn build(self) -> DoraRuntime {
         DoraRuntime::new(self.config)
     }

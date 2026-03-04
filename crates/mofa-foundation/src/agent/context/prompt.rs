@@ -80,6 +80,8 @@ pub struct PromptContext {
     agent_name: String,
     /// Rich context for extended functionality
     rich_ctx: RichAgentContext,
+    /// Optional inline system prompt. When set, overrides workspace-based prompt building.
+    inline_prompt: Option<String>,
 }
 
 impl PromptContext {
@@ -108,6 +110,7 @@ impl PromptContext {
             always_load: Vec::new(),
             agent_name: "agent".to_string(),
             rich_ctx,
+            inline_prompt: None,
         })
     }
 
@@ -129,6 +132,7 @@ impl PromptContext {
             always_load: Vec::new(),
             agent_name,
             rich_ctx,
+            inline_prompt: None,
         })
     }
 
@@ -156,8 +160,21 @@ impl PromptContext {
         Ok(())
     }
 
+    /// Override the system prompt with a fixed inline string.
+    ///
+    /// When set, `build_system_prompt` returns this string directly instead of
+    /// assembling the prompt from workspace bootstrap files and memory.
+    pub fn set_inline_prompt(&mut self, prompt: String) {
+        self.inline_prompt = Some(prompt);
+    }
+
     /// Build the complete system prompt
     pub async fn build_system_prompt(&mut self) -> AgentResult<String> {
+        // Return the inline override immediately if one has been set.
+        if let Some(ref prompt) = self.inline_prompt {
+            return Ok(prompt.clone());
+        }
+
         let mut parts = Vec::new();
 
         // 1. Core identity
@@ -351,6 +368,7 @@ impl Clone for PromptContext {
             always_load: self.always_load.clone(),
             agent_name: self.agent_name.clone(),
             rich_ctx: RichAgentContext::new(self.rich_ctx.inner().clone()),
+            inline_prompt: self.inline_prompt.clone(),
         }
     }
 }

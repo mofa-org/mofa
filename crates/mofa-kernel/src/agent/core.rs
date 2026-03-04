@@ -549,10 +549,7 @@ impl AgentMessage {
     /// 创建新消息
     /// Create new message
     pub fn new(msg_type: impl Into<String>) -> Self {
-        let timestamp = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_millis() as i64;
+        let timestamp = crate::utils::now_ms() as i64;
 
         Self {
             msg_type: msg_type.into(),

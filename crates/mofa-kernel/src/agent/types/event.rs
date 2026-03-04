@@ -81,10 +81,7 @@ impl GlobalEvent {
     /// 创建新事件
     /// Create a new event
     pub fn new(event_type: impl Into<String>, source: impl Into<String>) -> Self {
-        let timestamp = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_millis() as u64;
+        let timestamp = crate::utils::now_ms();
 
         Self {
             event_id: uuid::Uuid::new_v4().to_string(),
@@ -188,6 +185,7 @@ impl EventBuilder {
 
     /// 构建事件
     /// Build event
+    #[must_use]
     pub fn build(self) -> GlobalEvent {
         self.event
     }
