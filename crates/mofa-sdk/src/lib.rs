@@ -1037,3 +1037,179 @@ pub mod dora {
 pub mod skills;
 
 // Public skills module with re-exports
+
+#[cfg(test)]
+mod tests {
+    use super::kernel::{
+        AgentCapabilities, AgentCapabilitiesBuilder, AgentContext, AgentError, AgentInput,
+        AgentOutput, AgentResult, AgentState, MoFAAgent,
+    };
+    use super::{llm, runtime};
+    use super::llm::LLMProvider;
+    use std::sync::{Mutex, OnceLock};
+
+    fn env_lock() -> &'static Mutex<()> {
+        static ENV_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+        ENV_LOCK.get_or_init(|| Mutex::new(()))
+    }
+
+    struct EchoAgent {
+        caps: AgentCapabilities,
+        state: AgentState,
+    }
+
+    impl EchoAgent {
+        fn new() -> Self {
+            Self {
+                caps: AgentCapabilitiesBuilder::new().build(),
+                state: AgentState::Created,
+            }
+        }
+    }
+
+    #[async_trait::async_trait]
+    impl MoFAAgent for EchoAgent {
+        fn id(&self) -> &str {
+            "echo-agent"
+        }
+
+        fn name(&self) -> &str {
+            "Echo Agent"
+        }
+
+        fn capabilities(&self) -> &AgentCapabilities {
+            &self.caps
+        }
+
+        async fn initialize(&mut self, _ctx: &AgentContext) -> AgentResult<()> {
+            self.state = AgentState::Ready;
+            Ok(())
+        }
+
+        async fn execute(
+            &mut self,
+            input: AgentInput,
+            _ctx: &AgentContext,
+        ) -> AgentResult<AgentOutput> {
+            self.state = AgentState::Executing;
+            Ok(AgentOutput::text(format!("Echo: {}", input.to_text())))
+        }
+
+        async fn shutdown(&mut self) -> AgentResult<()> {
+            self.state = AgentState::Shutdown;
+            Ok(())
+        }
+
+        fn state(&self) -> AgentState {
+            self.state.clone()
+        }
+    }
+
+    struct FailingAgent {
+        caps: AgentCapabilities,
+    }
+
+    impl FailingAgent {
+        fn new() -> Self {
+            Self {
+                caps: AgentCapabilitiesBuilder::new().build(),
+            }
+        }
+    }
+
+    #[async_trait::async_trait]
+    impl MoFAAgent for FailingAgent {
+        fn id(&self) -> &str {
+            "failing-agent"
+        }
+
+        fn name(&self) -> &str {
+            "Failing Agent"
+        }
+
+        fn capabilities(&self) -> &AgentCapabilities {
+            &self.caps
+        }
+
+        async fn initialize(&mut self, _ctx: &AgentContext) -> AgentResult<()> {
+            Ok(())
+        }
+
+        async fn execute(
+            &mut self,
+            _input: AgentInput,
+            _ctx: &AgentContext,
+        ) -> AgentResult<AgentOutput> {
+            Err(AgentError::ExecutionFailed("intentional failure".to_string()))
+        }
+
+        async fn shutdown(&mut self) -> AgentResult<()> {
+            Ok(())
+        }
+
+        fn state(&self) -> AgentState {
+            AgentState::Ready
+        }
+    }
+
+    #[tokio::test]
+    async fn run_agents_propagates_error() {
+        let result = runtime::run_agents(FailingAgent::new(), vec![AgentInput::text("x")]).await;
+        assert!(matches!(result, Err(AgentError::ExecutionFailed(_))));
+    }
+
+    #[tokio::test]
+    async fn run_agents_executes_all_inputs() {
+        let outputs = runtime::run_agents(
+            EchoAgent::new(),
+            vec![AgentInput::text("a"), AgentInput::text("b")],
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(outputs.len(), 2);
+        assert_eq!(outputs[0].to_text(), "Echo: a");
+        assert_eq!(outputs[1].to_text(), "Echo: b");
+    }
+
+    #[test]
+    fn openai_from_env_missing_key_errors() {
+        let _guard = env_lock().lock().expect("env lock poisoned");
+        unsafe {
+            std::env::remove_var("OPENAI_API_KEY");
+            std::env::remove_var("OPENAI_MODEL");
+        }
+        let result = llm::openai_from_env();
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn openai_from_env_model_override_applies() {
+        let _guard = env_lock().lock().expect("env lock poisoned");
+        unsafe {
+            std::env::set_var("OPENAI_API_KEY", "test-key");
+            std::env::set_var("OPENAI_MODEL", "gpt-4o-mini");
+        }
+
+        let provider = llm::openai_from_env().unwrap();
+        assert_eq!(provider.name(), "openai");
+        assert_eq!(provider.default_model(), "gpt-4o-mini");
+
+        unsafe {
+            std::env::remove_var("OPENAI_API_KEY");
+            std::env::remove_var("OPENAI_MODEL");
+        }
+    }
+
+    #[test]
+    fn anthropic_and_gemini_missing_keys_error() {
+        let _guard = env_lock().lock().expect("env lock poisoned");
+        unsafe {
+            std::env::remove_var("ANTHROPIC_API_KEY");
+            std::env::remove_var("GEMINI_API_KEY");
+        }
+
+        assert!(super::anthropic_from_env().is_err());
+        assert!(super::gemini_from_env().is_err());
+    }
+}
