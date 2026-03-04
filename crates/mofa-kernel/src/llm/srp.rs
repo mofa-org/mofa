@@ -292,9 +292,16 @@ pub async fn stream_inference(
     // surface, before the channel is created.
     let mut chat_stream = provider.chat_stream(request).await?;
 
-    let (tx, rx) = mpsc::channel::<StreamEvent<StreamChunk>>(config.channel_capacity);
-    let heartbeat_interval = config.heartbeat_interval;
+    // Ensure channel capacity is non-zero to avoid panics from mpsc::channel.
+    let capacity = config.channel_capacity.max(1);
+    let (tx, rx) = mpsc::channel::<StreamEvent<StreamChunk>>(capacity);
 
+    // Ensure heartbeat interval is non-zero to avoid panics from tokio::time::interval.
+    let heartbeat_interval = if config.heartbeat_interval.is_zero() {
+        Duration::from_millis(1)
+    } else {
+        config.heartbeat_interval
+    };
     tokio::spawn(async move {
         let mut hb = tokio::time::interval(heartbeat_interval);
         // Skip the very first tick so we don't immediately send a heartbeat
