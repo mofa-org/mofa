@@ -329,9 +329,16 @@ pub async fn stream_inference(
 
                             let sc = chunk_to_stream_chunk(chunk);
                             let is_done = sc.is_done();
-                            if tx.send(StreamEvent::Delta(sc)).await.is_err() {
-                                // Receiver dropped — stop silently.
-                                break;
+                            // Only emit Delta events for non-empty deltas. Some
+                            // providers send a terminal chunk with no content
+                            // (empty delta) together with a finish reason; in
+                            // that case we should not emit an empty Delta that
+                            // confuses consumers — instead emit Done below.
+                            if !sc.delta.is_empty() {
+                                if tx.send(StreamEvent::Delta(sc)).await.is_err() {
+                                    // Receiver dropped — stop silently.
+                                    break;
+                                }
                             }
                             if is_done {
                                 let _ = tx.send(StreamEvent::Done).await;
