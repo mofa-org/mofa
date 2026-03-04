@@ -54,6 +54,6 @@ pub use memory::{
 pub use plugin::{PluginInstance, PluginMetrics, WasmPlugin, WasmPluginConfig, WasmPluginState};
 pub use runtime::{CompiledModule, ModuleCache, RuntimeConfig, RuntimeStats, WasmRuntime};
 pub use types::{
-    ExecutionConfig, MemoryConfig, PluginCapability, PluginExport, PluginManifest, ResourceLimits,
-    WasmError, WasmResult, WasmType, WasmValue,
+    ExecutionConfig, IntoWasmReport, MemoryConfig, PluginCapability, PluginExport, PluginManifest,
+    ResourceLimits, WasmError, WasmReport, WasmResult, WasmType, WasmValue,
 };

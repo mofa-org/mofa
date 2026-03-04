@@ -3,7 +3,7 @@ pub mod error;
 pub mod metrics;
 
 pub use backpressure::{BusConfig, ChannelConfig, LagPolicy};
-pub use error::BusError;
+pub use error::{BusError, BusResult, IntoBusReport};
 pub use metrics::{BusMetrics, MetricsSnapshot};
 
 use backpressure::LagPolicy as LagPolicyEnum;
