@@ -238,6 +238,9 @@ async fn run_command(cli: Cli) -> CliResult<()> {
         Some(Commands::Plugin { action }) => {
             let ctx = ctx.as_ref().unwrap();
             match action {
+                cli::PluginCommands::New { name } => {
+                    commands::plugin::new::run(name.as_deref()).await?;
+                }
                 cli::PluginCommands::List {
                     installed,
                     available,
