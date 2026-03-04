@@ -225,7 +225,6 @@ impl Gateway {
     async fn start_metrics_update_loop(&self) {
         let metrics = Arc::clone(&self.metrics);
         let control_plane = self.control_plane.clone();
-        let health_checker = Arc::clone(&self.health_checker);
 
         tokio::spawn(async move {
             let mut interval = tokio::time::interval(std::time::Duration::from_secs(5));
@@ -302,24 +301,20 @@ struct ReadyResponse {
 }
 
 async fn ready_handler(State(state): State<GatewayState>) -> impl IntoResponse {
-    // Check if we have any healthy nodes
-    let membership = if let Some(ref cp) = state.control_plane {
-        cp.get_membership().await
-    } else {
-        crate::types::ClusterMembership {
-            nodes: std::collections::HashMap::new(),
-            leader: None,
-            current_term: crate::types::Term::new(0),
-        }
-    };
-    
-    {
-        // No control plane, assume ready
-        return (StatusCode::OK, Json(ReadyResponse {
-            ready: true,
-            reason: None,
-        }));
-    };
+    // If there is no control plane, report the gateway itself as ready
+    if state.control_plane.is_none() {
+        return (
+            StatusCode::OK,
+            Json(ReadyResponse {
+                ready: true,
+                reason: None,
+            }),
+        );
+    }
+
+    // Check if we have any healthy nodes from the control plane membership
+    let cp = state.control_plane.as_ref().expect("checked is_some above");
+    let membership = cp.get_membership().await;
 
     let healthy_nodes = membership
         .nodes
