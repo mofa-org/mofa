@@ -654,19 +654,34 @@ pub trait InferenceProtocol: Send + Sync {
             RequestModality::Text | RequestModality::ToolCall => {
                 let chat_req = request
                     .into_chat_request()
-                    .expect("Text/ToolCall modality always produces a ChatCompletionRequest");
+                    .ok_or_else(|| {
+                        crate::agent::AgentError::Other(
+                            "Invalid InferenceRequest: Text/ToolCall modality requires chat messages"
+                                .into(),
+                        )
+                    })?;
                 self.infer_chat(chat_req).await
             }
             RequestModality::Multimodal => {
                 let chat_req = request
                     .into_chat_request()
-                    .expect("Multimodal modality always produces a ChatCompletionRequest");
+                    .ok_or_else(|| {
+                        crate::agent::AgentError::Other(
+                            "Invalid InferenceRequest: Multimodal modality requires chat messages"
+                                .into(),
+                        )
+                    })?;
                 self.infer_multimodal(chat_req).await
             }
             RequestModality::Embedding => {
                 let emb_req = request
                     .into_embedding_request()
-                    .expect("Embedding modality always produces an EmbeddingRequest");
+                    .ok_or_else(|| {
+                        crate::agent::AgentError::Other(
+                            "Invalid InferenceRequest: Embedding modality requires embedding_input"
+                                .into(),
+                        )
+                    })?;
                 self.infer_embedding(emb_req).await
             }
             // Future non-exhaustive variants: return a clear error.
