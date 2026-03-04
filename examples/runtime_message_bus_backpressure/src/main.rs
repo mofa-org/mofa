@@ -131,12 +131,12 @@ async fn main() -> anyhow::Result<()> {
     }
 
     let auth_msg = timeout(Duration::from_millis(120), auth_rx.recv()).await;
-    if auth_msg.is_ok() {
+    if let Ok(Some(_)) = auth_msg {
         anyhow::bail!("auth agent unexpectedly received billing incident");
     }
 
     let duplicate_msg = timeout(Duration::from_millis(120), billing_rx.recv()).await;
-    if duplicate_msg.is_ok() {
+    if let Ok(Some(_)) = duplicate_msg {
         anyhow::bail!("billing agent received duplicated event from duplicate subscription");
     }
 
