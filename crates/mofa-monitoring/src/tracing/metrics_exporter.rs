@@ -3,6 +3,7 @@
 //! This placeholder keeps the server/config surface stable in PR1. The native
 //! OpenTelemetry exporter implementation is added in the next PR.
 
+#[cfg(feature = "otlp-metrics")]
 use crate::MetricsCollector;
 use std::sync::Arc;
 use std::time::Duration;
@@ -72,13 +73,18 @@ pub struct OtlpExporterHandles {
 
 /// OTLP metrics exporter placeholder. Full implementation lands in PR2.
 pub struct OtlpMetricsExporter {
+    #[cfg(feature = "otlp-metrics")]
     _collector: Arc<MetricsCollector>,
     _config: OtlpMetricsExporterConfig,
 }
 
 impl OtlpMetricsExporter {
-    pub fn new(collector: Arc<MetricsCollector>, config: OtlpMetricsExporterConfig) -> Self {
+    pub fn new(
+        #[cfg(feature = "otlp-metrics")] collector: Arc<MetricsCollector>,
+        config: OtlpMetricsExporterConfig,
+    ) -> Self {
         Self {
+            #[cfg(feature = "otlp-metrics")]
             _collector: collector,
             _config: config,
         }
