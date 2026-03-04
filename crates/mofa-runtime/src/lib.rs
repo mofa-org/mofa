@@ -1672,3 +1672,58 @@ mod test_agent_context {
         assert_eq!(val2.as_u64().unwrap(), 2);
     }
 }
+
+// Additional message-bus tests
+#[cfg(test)]
+#[cfg(not(feature = "dora"))]
+mod test_message_bus {
+    use super::*;
+    use mofa_kernel::message::AgentEvent;
+    use std::time::Duration;
+
+    #[tokio::test]
+    async fn unregister_removes_routing_and_prevents_delivery() {
+        let bus = SimpleMessageBus::new();
+        let (tx, mut rx) = tokio::sync::mpsc::channel::<AgentEvent>(4);
+        bus.register("agent-x", tx).await;
+
+        // Subscribe to topic
+        bus.subscribe("agent-x", "topic-z").await;
+
+        // Ensure subscription exists
+        {
+            let topics = bus.topic_subscribers.read().await;
+            let subs = topics.get("topic-z").cloned().unwrap_or_default();
+            assert!(subs.iter().any(|id| id == "agent-x"));
+        }
+
+        // Unregister the agent
+        bus.unregister("agent-x").await;
+
+        // Confirm routing cleaned up
+        {
+            let topics = bus.topic_subscribers.read().await;
+            assert!(!topics.get("topic-z").map(|v| v.iter().any(|id| id == "agent-x")).unwrap_or(false));
+        }
+
+        // Confirm subscribers mapping cleaned up as well
+        {
+            let subs = bus.subscribers.read().await;
+            assert!(!subs.contains_key("agent-x"), "subscriber entry should be removed");
+        }
+
+        // Publish to topic - should not be delivered
+        // Drain any pending messages that may have been queued earlier
+        while rx.try_recv().is_ok() {}
+
+        bus.publish("topic-z", AgentEvent::Custom("nada".to_string(), vec![]))
+            .await
+            .expect("publish");
+
+        match tokio::time::timeout(Duration::from_millis(100), rx.recv()).await {
+            Ok(Some(msg)) => panic!("unexpected message after unregister: {msg:?}"),
+            Ok(None) => { /* channel closed */ }
+            Err(_) => { /* timed out as expected */ }
+        }
+    }
+}
