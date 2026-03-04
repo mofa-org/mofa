@@ -3,6 +3,7 @@
 mod cli;
 mod commands;
 mod config;
+mod plugin_catalog;
 mod context;
 mod output;
 mod render;
@@ -12,12 +13,20 @@ mod tui;
 mod utils;
 mod widgets;
 
+mod error;
+pub use error::{CliError, CliResult, IntoCliReport};
+
 use clap::Parser;
 use cli::Cli;
 use colored::Colorize;
 use context::CliContext;
+use error_stack::ResultExt as _;
 
-fn main() -> anyhow::Result<()> {
+fn main() {
+    // Install the global error-stack hooks FIRST so every Report rendered
+    // afterward benefits from the configured debug output.
+    error::install_hook();
+
     let mut args: Vec<String> = std::env::args().collect();
     normalize_legacy_output_flags(&mut args);
     let cli = Cli::parse_from(args);
@@ -26,27 +35,45 @@ fn main() -> anyhow::Result<()> {
         eprintln!("Warning: '--output' is deprecated. Use '--output-format' instead.");
     }
 
-    // Initialize logging
+    // Initialize logging.
     if cli.verbose {
         tracing_subscriber::fmt().with_env_filter("debug").init();
     } else {
         tracing_subscriber::fmt().with_env_filter("info").init();
     }
 
-    let rt = tokio::runtime::Runtime::new()?;
+    let rt = match tokio::runtime::Runtime::new() {
+        Ok(rt) => rt,
+        Err(e) => {
+            let report = error_stack::Report::new(CliError::Io(e))
+                .attach("failed to initialize the async runtime");
+            eprintln!("{report:?}");
+            std::process::exit(1);
+        }
+    };
 
-    // Launch TUI if requested or no command provided
-    if cli.tui || cli.command.is_none() {
-        // Run TUI mode
-        rt.block_on(tui::run())?;
-        Ok(())
+    // Launch TUI if requested or no command provided.
+    let result: CliResult<()> = if cli.tui || cli.command.is_none() {
+        rt.block_on(async {
+            tui::run()
+                .await
+                .into_report()
+                .attach("running TUI mode")
+                .map(|_| ())
+        })
     } else {
-        // Run CLI command
         rt.block_on(run_command(cli))
+    };
+
+    if let Err(report) = result {
+        // Print the full error chain to stderr, then exit non-zero.
+        // Set RUST_BACKTRACE=1 for source locations in each frame.
+        eprintln!("{report:?}");
+        std::process::exit(1);
     }
 }
 
-async fn run_command(cli: Cli) -> anyhow::Result<()> {
+async fn run_command(cli: Cli) -> CliResult<()> {
     use cli::Commands;
 
     // Initialize context for commands that need backend services
@@ -61,7 +88,12 @@ async fn run_command(cli: Cli) -> anyhow::Result<()> {
     );
 
     let ctx = if needs_context {
-        Some(CliContext::new().await?)
+        Some(
+            CliContext::new()
+                .await
+                .into_report()
+                .attach("initializing CLI context (runtime, registry, kernel)")?,
+        )
     } else {
         None
     };
@@ -72,7 +104,9 @@ async fn run_command(cli: Cli) -> anyhow::Result<()> {
             template,
             output,
         }) => {
-            commands::new::run(&name, &template, output.as_deref())?;
+            commands::new::run(&name, &template, output.as_deref())
+                .into_report()
+                .attach_with(|| format!("scaffolding project '{name}' with template '{template}'"))?;
         }
 
         Some(Commands::Init { path }) => {
@@ -160,9 +194,21 @@ async fn run_command(cli: Cli) -> anyhow::Result<()> {
                 cli::AgentCommands::Logs {
                     agent_id,
                     tail,
-                    lines,
+                    level,
+                    grep,
+                    limit,
+                    json,
                 } => {
-                    commands::agent::logs::run(ctx, &agent_id, tail, lines).await?;
+                    commands::agent::logs::run(
+                        ctx,
+                        &agent_id,
+                        tail,
+                        level.clone(),
+                        grep.clone(),
+                        limit,
+                        json,
+                    )
+                    .await?;
                 }
             }
         }
@@ -192,6 +238,9 @@ async fn run_command(cli: Cli) -> anyhow::Result<()> {
         Some(Commands::Plugin { action }) => {
             let ctx = ctx.as_ref().unwrap();
             match action {
+                cli::PluginCommands::New { name } => {
+                    commands::plugin::new::run(name.as_deref()).await?;
+                }
                 cli::PluginCommands::List {
                     installed,
                     available,
@@ -201,12 +250,40 @@ async fn run_command(cli: Cli) -> anyhow::Result<()> {
                 cli::PluginCommands::Info { name } => {
                     commands::plugin::info::run(ctx, &name).await?;
                 }
-                cli::PluginCommands::Install { name } => {
-                    commands::plugin::install::run(ctx, &name).await?;
+                cli::PluginCommands::Install {
+                    name,
+                    checksum,
+                    verify_signature,
+                } => {
+                    commands::plugin::install::run(
+                        ctx,
+                        &name,
+                        checksum.as_deref(),
+                        verify_signature,
+                    )
+                    .await?;
                 }
                 cli::PluginCommands::Uninstall { name, force } => {
                     commands::plugin::uninstall::run(ctx, &name, force).await?;
                 }
+                cli::PluginCommands::Repository { action } => match action {
+                    cli::PluginRepositoryCommands::List => {
+                        commands::plugin::repository::list(ctx).await?;
+                    }
+                    cli::PluginRepositoryCommands::Add {
+                        id,
+                        url,
+                        description,
+                    } => {
+                        commands::plugin::repository::add(
+                            ctx,
+                            &id,
+                            &url,
+                            description.as_deref(),
+                        )
+                        .await?;
+                    }
+                },
             }
         }
 
@@ -251,6 +328,59 @@ async fn run_command(cli: Cli) -> anyhow::Result<()> {
             }
         }
 
+        Some(Commands::Rag { action }) => match action {
+            cli::RagCommands::Index {
+                input,
+                backend,
+                index_file,
+                dimensions,
+                chunk_size,
+                chunk_overlap,
+                sentence_chunks,
+                qdrant_url,
+                qdrant_api_key,
+                qdrant_collection,
+            } => {
+                commands::rag::run_index(
+                    input,
+                    &backend,
+                    &index_file,
+                    dimensions,
+                    chunk_size,
+                    chunk_overlap,
+                    sentence_chunks,
+                    qdrant_url.as_deref(),
+                    qdrant_api_key.as_deref(),
+                    &qdrant_collection,
+                )
+                .await?;
+            }
+            cli::RagCommands::Query {
+                query,
+                backend,
+                index_file,
+                dimensions,
+                top_k,
+                threshold,
+                qdrant_url,
+                qdrant_api_key,
+                qdrant_collection,
+            } => {
+                commands::rag::run_query(
+                    &query,
+                    &backend,
+                    &index_file,
+                    dimensions,
+                    top_k,
+                    threshold,
+                    qdrant_url.as_deref(),
+                    qdrant_api_key.as_deref(),
+                    &qdrant_collection,
+                )
+                .await?;
+            }
+        },
+
         None => {
             // Should have been handled by TUI check above
             // If we get here, show help
@@ -268,7 +398,7 @@ async fn run_command(cli: Cli) -> anyhow::Result<()> {
 fn normalize_legacy_output_flags(args: &mut [String]) {
     const TOP_LEVEL_COMMANDS: &[&str] = &[
         "new", "init", "build", "run", "dataflow", "generate", "info", "db", "agent", "config",
-        "plugin", "session", "tool",
+        "plugin", "session", "tool", "rag",
     ];
 
     let top_command_index = args

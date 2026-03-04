@@ -1,4 +1,3 @@
-use anyhow::Result;
 use async_trait::async_trait;
 use mofa_runtime::agent::capabilities::{AgentCapabilities, AgentCapabilitiesBuilder};
 use mofa_runtime::agent::context::AgentContext;
@@ -98,7 +97,7 @@ fn every_second_cron_expression() -> String {
 }
 
 #[tokio::main]
-async fn main() -> Result<()> {
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("=== Runtime Periodic Runner (Phase 2) Example ===");
 
     let cron_expression = every_second_cron_expression();

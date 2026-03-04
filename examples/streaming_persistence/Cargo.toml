@@ -10,6 +10,5 @@ tokio = { version = "1.37", features = ["full"] }
 futures = "0.3.30"
 uuid = { version = "1.8", features = ["v7"] }
 async-trait = "0.1"
-anyhow = "1.0"
 tracing.workspace = true
 tracing-subscriber.workspace = true

@@ -10,12 +10,15 @@ use crate::agent::error::{AgentError, AgentResult};
 use crate::agent::plugins::{PluginExecutor, PluginRegistry, SimplePluginRegistry};
 use crate::agent::registry::AgentRegistry;
 use crate::agent::types::{AgentInput, AgentOutput, AgentState};
+use crate::fallback::{FallbackStrategy, NoFallback};
+use crate::retry::{RetryConfig, RetryPolicy};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::RwLock;
 use tokio::time::timeout;
+use tracing::Instrument;
 
 /// 执行选项
 /// Execution options
@@ -41,6 +44,10 @@ pub struct ExecutionOptions {
     #[serde(default = "default_retry_delay")]
     pub retry_delay_ms: u64,
 
+    /// Policy-driven retry configuration.
+    #[serde(default)]
+    pub retry_config: Option<RetryConfig>,
+
     /// 自定义参数
     /// Custom parameters
     #[serde(default)]
@@ -62,6 +69,7 @@ impl Default for ExecutionOptions {
             tracing_enabled: true,
             max_retries: 0,
             retry_delay_ms: 1000,
+            retry_config: None,
             custom: HashMap::new(),
         }
     }
@@ -86,6 +94,16 @@ impl ExecutionOptions {
     pub fn with_retry(mut self, max_retries: usize, retry_delay_ms: u64) -> Self {
         self.max_retries = max_retries;
         self.retry_delay_ms = retry_delay_ms;
+        self.retry_config = Some(RetryConfig {
+            max_attempts: max_retries + 1,
+            policy: RetryPolicy::Fixed { delay_ms: retry_delay_ms },
+        });
+        self
+    }
+
+    /// Set a custom retry policy.
+    pub fn with_retry_config(mut self, config: RetryConfig) -> Self {
+        self.retry_config = Some(config);
         self
     }
 
@@ -94,6 +112,20 @@ impl ExecutionOptions {
     pub fn without_tracing(mut self) -> Self {
         self.tracing_enabled = false;
         self
+    }
+
+    /// Resolves the effective [`RetryConfig`] from the explicit field or
+    /// legacy `max_retries` / `retry_delay_ms` values.
+    pub(crate) fn effective_retry_config(&self) -> RetryConfig {
+        if let Some(ref cfg) = self.retry_config {
+            return cfg.clone();
+        }
+        RetryConfig {
+            max_attempts: self.max_retries + 1,
+            policy: RetryPolicy::Fixed {
+                delay_ms: self.retry_delay_ms,
+            },
+        }
     }
 }
 
@@ -244,6 +276,8 @@ pub struct ExecutionEngine {
     /// 插件执行器
     /// Plugin Executor
     plugin_executor: PluginExecutor,
+    /// Fallback strategy invoked after all retries are exhausted.
+    fallback: Arc<dyn FallbackStrategy>,
 }
 
 impl ExecutionEngine {
@@ -253,7 +287,14 @@ impl ExecutionEngine {
         Self {
             registry,
             plugin_executor: PluginExecutor::new(Arc::new(SimplePluginRegistry::new())),
+            fallback: Arc::new(NoFallback),
         }
+    }
+
+    /// Attach a [`FallbackStrategy`] that is invoked when all retries fail.
+    pub fn with_fallback(mut self, fallback: Arc<dyn FallbackStrategy>) -> Self {
+        self.fallback = fallback;
+        self
     }
 
     /// 创建带有自定义插件注册中心的执行引擎
@@ -265,6 +306,7 @@ impl ExecutionEngine {
         Self {
             registry,
             plugin_executor: PluginExecutor::new(plugin_registry),
+            fallback: Arc::new(NoFallback),
         }
     }
 
@@ -278,6 +320,7 @@ impl ExecutionEngine {
     ) -> AgentResult<ExecutionResult> {
         let execution_id = uuid::Uuid::now_v7().to_string();
         let start_time = std::time::Instant::now();
+        tracing::info!(agent_id = %agent_id, execution_id = %execution_id, "Agent execution started");
 
         // 获取 Agent
         // Get Agent
@@ -319,8 +362,9 @@ impl ExecutionEngine {
 
         // 执行 (带超时和重试)
         // Execute (with timeout and retries)
+        let retry_cfg = options.effective_retry_config();
         let result = self
-            .execute_with_options(&agent, processed_input, &ctx, &options)
+            .execute_with_options(&agent, processed_input.clone(), &ctx, &options, &retry_cfg)
             .await;
 
         let duration_ms = start_time.elapsed().as_millis() as u64;
@@ -328,7 +372,7 @@ impl ExecutionEngine {
         // 构建结果
         // Build result
         let execution_result = match result {
-            Ok(output) => {
+            Ok((output, retries)) => {
                 // 插件执行阶段3: LLM响应后
                 // Plugin Stage 3: Post-LLM response
                 let processed_output = self
@@ -349,19 +393,43 @@ impl ExecutionEngine {
                             "agent_id": agent_id,
                             "execution_id": execution_id,
                             "duration_ms": duration_ms,
+                            "retries": retries,
                         }),
                     ))
                     .await;
                 }
 
-                ExecutionResult::success(
+                let mut r = ExecutionResult::success(
                     execution_id,
                     agent_id.to_string(),
                     processed_output,
                     duration_ms,
-                )
+                );
+                r.retries = retries;
+                r
             }
             Err(e) => {
+                // Try graceful degradation before giving up.
+                let attempts = retry_cfg.max_attempts;
+                if let Some(fallback_output) = self
+                    .fallback
+                    .on_failure(agent_id, &e, attempts)
+                    .await
+                {
+                    let mut r = ExecutionResult::success(
+                        execution_id,
+                        agent_id.to_string(),
+                        fallback_output,
+                        duration_ms,
+                    );
+                    r.retries = attempts.saturating_sub(1);
+                    r.metadata
+                        .insert("fallback".into(), serde_json::json!(true));
+                    r.metadata
+                        .insert("fallback_reason".into(), serde_json::json!(e.to_string()));
+                    return Ok(r);
+                }
+
                 let status = match &e {
                     AgentError::Timeout { .. } => ExecutionStatus::Timeout,
                     AgentError::Interrupted => ExecutionStatus::Interrupted,
@@ -388,7 +456,7 @@ impl ExecutionEngine {
                     output: None,
                     error: Some(e.to_string()),
                     duration_ms,
-                    retries: 0,
+                    retries: attempts.saturating_sub(1),
                     metadata: HashMap::new(),
                 }
             }
@@ -405,25 +473,28 @@ impl ExecutionEngine {
         input: AgentInput,
         ctx: &AgentContext,
         options: &ExecutionOptions,
-    ) -> AgentResult<AgentOutput> {
+        retry_cfg: &RetryConfig,
+    ) -> AgentResult<(AgentOutput, usize)> {
+        let max_attempts = retry_cfg.max_attempts.max(1);
         let mut last_error = None;
-        let max_attempts = options.max_retries + 1;
 
         for attempt in 0..max_attempts {
+            let attempt_span = tracing::info_span!("agent.attempt", attempt = attempt, max_attempts = max_attempts);
             if attempt > 0 {
-                // 重试延迟
-                // Retry delay
-                tokio::time::sleep(Duration::from_millis(options.retry_delay_ms)).await;
+                let delay = retry_cfg.policy.delay_for(attempt - 1);
+                tokio::time::sleep(delay).await;
             }
 
-            let result = self.execute_once(agent, input.clone(), ctx, options).await;
+            let result = async {
+                self.execute_once(agent, input.clone(), ctx, options).await
+            }
+            .instrument(attempt_span)
+            .await;
 
             match result {
-                Ok(output) => return Ok(output),
+                Ok(output) => return Ok((output, attempt)),
                 Err(e) => {
-                    // 某些错误不应该重试
-                    // Certain errors should not be retried
-                    if matches!(e, AgentError::Interrupted | AgentError::ConfigError(_)) {
+                    if !e.is_retryable() {
                         return Err(e);
                     }
                     last_error = Some(e);
@@ -503,10 +574,14 @@ impl ExecutionEngine {
             let registry = self.registry.clone();
             let opts = options.clone();
 
-            let handle = tokio::spawn(async move {
-                let engine = ExecutionEngine::new(registry);
-                engine.execute(&agent_id, input, opts).await
-            });
+            let span = tracing::info_span!("agent.parallel", agent_id = %agent_id);
+            let handle = tokio::spawn(
+                async move {
+                    let engine = ExecutionEngine::new(registry);
+                    engine.execute(&agent_id, input, opts).await
+                }
+                .instrument(span),
+            );
 
             handles.push(handle);
         }
@@ -633,6 +708,8 @@ impl ExecutionEngine {
         initial_input: AgentInput,
         options: ExecutionOptions,
     ) -> AgentResult<HashMap<String, ExecutionResult>> {
+        let _workflow_span = tracing::info_span!("workflow.execute", workflow_id = %workflow.id, workflow_name = %workflow.name);
+        tracing::info!(parent: &_workflow_span, "Workflow execution started");
         let mut results: HashMap<String, ExecutionResult> = HashMap::new();
         let mut completed: Vec<String> = Vec::new();
 

@@ -9,6 +9,7 @@ pub mod validator;
 pub use loader::ConfigLoader;
 pub use validator::{ConfigValidationResult, ConfigValidator};
 
+use crate::CliError;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -106,7 +107,7 @@ impl Default for AgentConfig {
 
 impl AgentConfig {
     /// Load configuration from a file
-    pub fn from_file<P: Into<PathBuf>>(path: P) -> anyhow::Result<Self> {
+    pub fn from_file<P: Into<PathBuf>>(path: P) -> Result<Self, CliError> {
         let loader = ConfigLoader::new();
         loader.load(path.into())
     }
@@ -115,7 +116,7 @@ impl AgentConfig {
     pub fn load_merged(
         file_path: Option<PathBuf>,
         env_prefix: Option<&str>,
-    ) -> anyhow::Result<Self> {
+    ) -> Result<Self, CliError> {
         let loader = ConfigLoader::new();
         loader.load_merged(file_path, env_prefix)
     }
@@ -127,7 +128,7 @@ impl AgentConfig {
     }
 
     /// Resolve environment variables in configuration values
-    pub fn resolve_env_vars(&mut self) -> anyhow::Result<()> {
+    pub fn resolve_env_vars(&mut self) -> Result<(), CliError> {
         // Resolve API key
         if let Some(ref mut llm) = self.llm
             && let Some(ref api_key) = llm.api_key
@@ -149,20 +150,20 @@ impl AgentConfig {
 
 /// Resolve environment variable references in a string value
 /// Supports ${VAR} and $VAR syntax
-fn resolve_env_value(value: &str) -> anyhow::Result<String> {
+fn resolve_env_value(value: &str) -> Result<String, CliError> {
     let trimmed = value.trim();
 
     // Check for ${VAR} syntax
     if trimmed.starts_with("${") && trimmed.ends_with('}') {
         let var_name = &trimmed[2..trimmed.len() - 1];
         return std::env::var(var_name)
-            .map_err(|_| anyhow::anyhow!("Environment variable '{}' not found", var_name));
+            .map_err(|_| CliError::ConfigError(format!("Environment variable '{}' not found", var_name)));
     }
 
     // Check for $VAR syntax
     if let Some(var_name) = trimmed.strip_prefix('$') {
         return std::env::var(var_name)
-            .map_err(|_| anyhow::anyhow!("Environment variable '{}' not found", var_name));
+            .map_err(|_| CliError::ConfigError(format!("Environment variable '{}' not found", var_name)));
     }
 
     Ok(trimmed.to_string())

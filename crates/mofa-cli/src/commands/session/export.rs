@@ -1,5 +1,6 @@
 //! `mofa session export` command implementation
 
+use crate::CliError;
 use crate::context::CliContext;
 use colored::Colorize;
 use std::path::PathBuf;
@@ -10,7 +11,7 @@ pub async fn run(
     session_id: &str,
     output: PathBuf,
     format: &str,
-) -> anyhow::Result<()> {
+) -> Result<(), CliError> {
     println!("{} Exporting session: {}", "→".green(), session_id.cyan());
     println!("  Format: {}", format.yellow());
     println!("  Output: {}", output.display().to_string().cyan());
@@ -20,8 +21,8 @@ pub async fn run(
         .session_manager
         .get(session_id)
         .await
-        .map_err(|e| anyhow::anyhow!("Failed to load session: {}", e))?
-        .ok_or_else(|| anyhow::anyhow!("Session '{}' not found", session_id))?;
+        .map_err(|e| CliError::SessionError(format!("Failed to load session: {}", e)))?
+        .ok_or_else(|| CliError::SessionError(format!("Session '{}' not found", session_id)))?;
 
     let session_data = serde_json::json!({
         "session_id": session.key,
@@ -40,7 +41,7 @@ pub async fn run(
     let output_str = match format {
         "json" => serde_json::to_string_pretty(&session_data)?,
         "yaml" => serde_yaml::to_string(&session_data)?,
-        _ => anyhow::bail!("Unsupported export format: {}", format),
+        _ => return Err(CliError::SessionError(format!("Unsupported export format: {}", format))),
     };
 
     std::fs::write(&output, output_str)?;

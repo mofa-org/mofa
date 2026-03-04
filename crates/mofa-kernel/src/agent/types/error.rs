@@ -290,21 +290,35 @@ impl fmt::Display for ErrorCategory {
 // GlobalResult - Global Result Type
 // ============================================================================
 
-/// Global result type
+/// Plain result alias for global operations (backward-compatible).
 ///
-/// Can be used at crate boundaries to replace `AgentResult`, `LLMResult`,
-/// `PluginResult`, etc., providing a single result type.
-pub type GlobalResult<T> = Result<T, GlobalError>;
+/// Used in public trait signatures and existing call-sites.
+/// For new code that needs full causal chains, prefer [`GlobalReport<T>`]
+/// and call [`.into_report()`](IntoGlobalReport::into_report).
+pub type GlobalResult<T> = ::std::result::Result<T, GlobalError>;
+
+/// Error-stack–backed result alias for global operations.
+///
+/// Carries a full [`error_stack::Report`] with context and causal chain.
+/// Obtain one by calling [`IntoGlobalReport::into_report`] on a [`GlobalResult`].
+pub type GlobalReport<T> = ::std::result::Result<T, error_stack::Report<GlobalError>>;
+
+/// Extension trait to upgrade a [`GlobalResult<T>`] to a [`GlobalReport<T>`].
+pub trait IntoGlobalReport<T> {
+    /// Wrap the bare `GlobalError` in an `error_stack::Report`.
+    fn into_report(self) -> GlobalReport<T>;
+}
+
+impl<T> IntoGlobalReport<T> for GlobalResult<T> {
+    #[inline]
+    fn into_report(self) -> GlobalReport<T> {
+        self.map_err(error_stack::Report::new)
+    }
+}
 
 // ============================================================================
 // Conversion from other error types
 // ============================================================================
-
-impl From<anyhow::Error> for GlobalError {
-    fn from(err: anyhow::Error) -> Self {
-        Self::Other(err.to_string())
-    }
-}
 
 impl From<String> for GlobalError {
     fn from(s: String) -> Self {

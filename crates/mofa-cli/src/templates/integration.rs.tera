@@ -1,0 +1,20 @@
+#[cfg(test)]
+mod tests {
+    use {{ crate_name }}::{{ plugin_name | title | replace(from="-", to="") }}Plugin;
+    use mofa_kernel::plugin::AgentPlugin;
+
+    #[tokio::test]
+    async fn test_plugin_init() {
+        let mut plugin = {{ plugin_name | title | replace(from="-", to="") }}Plugin::default();
+        let result = plugin.init_plugin().await;
+        assert!(result.is_ok(), "Plugin should initialize successfully");
+    }
+
+    #[test]
+    fn test_plugin_metadata() {
+        let plugin = {{ plugin_name | title | replace(from="-", to="") }}Plugin::default();
+        let metadata = plugin.metadata();
+        assert_eq!(metadata.id, "{{ crate_name }}");
+        assert_eq!(metadata.description, "{{ description }}");
+    }
+}

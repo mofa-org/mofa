@@ -17,7 +17,7 @@ pub mod logging;
 
 // error module
 pub mod error;
-pub use error::{KernelError, KernelResult};
+pub use error::{IntoKernelReport, KernelError, KernelResult};
 
 // core module
 pub mod core;
@@ -41,7 +41,7 @@ pub use config::*;
 
 // Storage traits (存储接口)
 pub mod storage;
-pub use storage::Storage;
+pub use storage::{ObjectStore, Storage};
 
 // RAG traits (向量存储接口)
 pub mod rag;
@@ -64,7 +64,10 @@ pub use rag::{
 // Workflow traits (工作流接口)
 pub mod workflow;
 pub use workflow::*;
-
+pub mod llm;
 // Metrics traits for monitoring integration
 pub mod metrics;
 pub use metrics::*;
+
+// Security governance (PII redaction, content moderation, prompt guard)
+pub mod security;

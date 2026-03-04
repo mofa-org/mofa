@@ -185,7 +185,7 @@ impl<V: Clone> GraphConfig<V> {
 ///
 /// Contains non-state information about the current execution,
 /// including execution ID, current node, remaining steps, and metadata.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct RuntimeContext<V: Clone + Send + Sync + 'static = Value> {
     /// Unique execution ID
     pub execution_id: String,
