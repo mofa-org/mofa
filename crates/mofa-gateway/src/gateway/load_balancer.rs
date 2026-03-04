@@ -147,13 +147,13 @@ impl LoadBalancer {
                 Ok(selected)
             }
             LoadBalancingAlgorithm::Random => {
-                // Use a simple hash-based random selection for deterministic testing
-                // In production, use proper RNG
-                let index = (std::time::SystemTime::now()
+                // Use a simple time-based pseudo-random selection for deterministic testing.
+                // In production, prefer a real RNG instead of SystemTime-based selection.
+                let duration = std::time::SystemTime::now()
                     .duration_since(std::time::UNIX_EPOCH)
-                    .unwrap()
-                    .as_nanos() as usize)
-                    % nodes.len();
+                    .unwrap_or_default();
+                let nanos = duration.as_nanos();
+                let index = (nanos % nodes.len() as u128) as usize;
                 Ok(Some(nodes[index].clone()))
             }
         }
