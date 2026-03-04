@@ -180,4 +180,78 @@ mod tests {
         assert!(result.is_err());
         assert_eq!(call_count.load(Ordering::SeqCst), 1); // aborted after 1, not 5
     }
+
+    // ── Bounded-iteration invariant tests (#780) ──────────────────────
+
+    #[test]
+    fn test_backoff_delay_never_exceeds_max() {
+        let base_ms = 100;
+        let max_ms = 5_000;
+
+        // Without jitter
+        let p = RetryPolicy::ExponentialBackoff { base_ms, max_ms, jitter: false };
+        for attempt in 0..20 {
+            let delay = p.delay_for(attempt).as_millis() as u64;
+            assert!(
+                delay <= max_ms,
+                "attempt {attempt}: delay {delay} ms exceeded max {max_ms} ms (no jitter)",
+            );
+        }
+
+        // With jitter
+        let p = RetryPolicy::ExponentialBackoff { base_ms, max_ms, jitter: true };
+        for attempt in 0..20 {
+            let delay = p.delay_for(attempt).as_millis() as u64;
+            assert!(
+                delay <= max_ms,
+                "attempt {attempt}: delay {delay} ms exceeded max {max_ms} ms (jitter)",
+            );
+        }
+    }
+
+    #[test]
+    fn test_jitter_stays_within_bounds() {
+        let base_ms = 200;
+        let max_ms = 10_000;
+        let p = RetryPolicy::ExponentialBackoff { base_ms, max_ms, jitter: true };
+
+        for attempt in 0..20 {
+            let delay = p.delay_for(attempt).as_millis() as u64;
+
+            // Recompute the non-jittered capped value to derive bounds.
+            let exp = 1u64
+                .checked_shl(attempt as u32)
+                .and_then(|s| base_ms.checked_mul(s))
+                .unwrap_or(max_ms);
+            let capped = exp.min(max_ms);
+            let eighth = capped / 8;
+            let lower_bound = capped.saturating_sub(eighth);
+
+            assert!(
+                delay >= lower_bound,
+                "attempt {attempt}: delay {delay} ms below lower bound {lower_bound} ms",
+            );
+            assert!(
+                delay <= max_ms,
+                "attempt {attempt}: delay {delay} ms exceeded max {max_ms} ms",
+            );
+        }
+    }
+
+    #[test]
+    fn test_monotonic_growth_before_saturation_no_jitter() {
+        let base_ms = 50;
+        let max_ms = 3_200;
+        let p = RetryPolicy::ExponentialBackoff { base_ms, max_ms, jitter: false };
+
+        let mut prev_delay = 0u64;
+        for attempt in 0..20 {
+            let delay = p.delay_for(attempt).as_millis() as u64;
+            assert!(
+                delay >= prev_delay,
+                "attempt {attempt}: delay {delay} ms decreased from previous {prev_delay} ms",
+            );
+            prev_delay = delay;
+        }
+    }
 }
