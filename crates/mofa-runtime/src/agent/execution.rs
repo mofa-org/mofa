@@ -68,7 +68,7 @@ impl Default for ExecutionOptions {
             timeout_ms: None,
             tracing_enabled: true,
             max_retries: 0,
-            retry_delay_ms: 1000,
+            retry_delay_ms: default_retry_delay(),
             retry_config: None,
             custom: HashMap::new(),
         }
@@ -894,5 +894,17 @@ mod tests {
         assert_eq!(options.max_retries, 3);
         assert_eq!(options.retry_delay_ms, 500);
         assert!(!options.tracing_enabled);
+    }
+
+    #[test]
+    fn test_execution_options_retry_delay_default_is_consistent() {
+        let options_from_default = ExecutionOptions::default();
+        let options_from_serde: ExecutionOptions = serde_json::from_str("{}").unwrap();
+
+        assert_eq!(options_from_default.retry_delay_ms, default_retry_delay());
+        assert_eq!(
+            options_from_default.retry_delay_ms,
+            options_from_serde.retry_delay_ms
+        );
     }
 }
