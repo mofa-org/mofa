@@ -23,6 +23,13 @@ use rocksdb::{Options, DB};
 #[cfg(feature = "rocksdb")]
 pub struct RaftStorage {
     db: DB,
+    /// Optional temporary directory backing this RocksDB instance (tests).
+    ///
+    /// When `RaftStorage` is created via `RaftStorage::new()` for tests, we
+    /// hold on to the `TempDir` so that the directory outlives the database
+    /// and is cleaned up on drop instead of being leaked.
+    #[cfg(test)]
+    _temp_dir: Option<tempfile::TempDir>,
 }
 
 /// Persistent storage for Raft state (in-memory fallback).
@@ -55,11 +62,15 @@ impl RaftStorage {
             .path()
             .to_path_buf();
 
-        // We intentionally leak the TempDir here so the directory outlives the DB
-        // for the duration of the test process.
-        std::mem::forget(tmp_dir);
-
-        Self::open(path).expect("failed to open RocksDB-backed RaftStorage")
+        // Keep the TempDir alive inside RaftStorage so the directory outlives
+        // the DB for the duration of the test process, and is cleaned up when
+        // the storage is dropped.
+        let storage = Self::open(path).expect("failed to open RocksDB-backed RaftStorage");
+        Self {
+            db: storage.db,
+            #[cfg(test)]
+            _temp_dir: Some(tmp_dir),
+        }
     }
 
     /// Open or create a Raft storage at the given path.
@@ -72,7 +83,11 @@ impl RaftStorage {
         let db = DB::open(&opts, path)
             .map_err(|e| ConsensusError::Storage(format!("RocksDB error: {}", e)))?;
 
-        Ok(Self { db })
+        Ok(Self {
+            db,
+            #[cfg(test)]
+            _temp_dir: None,
+        })
     }
 
     /// Open or create a Raft storage (in-memory fallback).
