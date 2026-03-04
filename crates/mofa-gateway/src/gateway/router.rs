@@ -98,7 +98,6 @@ impl GatewayRouter {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::gateway::rate_limiter::RateLimiter;
     use std::time::Duration;
 
     #[tokio::test]
