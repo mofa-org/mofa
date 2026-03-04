@@ -1,0 +1,7 @@
+[package]
+name = "memory_scheduler_demo"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+mofa-foundation = { path = "../../crates/mofa-foundation" }

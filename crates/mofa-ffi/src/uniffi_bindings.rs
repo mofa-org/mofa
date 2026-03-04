@@ -12,7 +12,13 @@ use tokio::sync::RwLock;
 // Error Types
 // =============================================================================
 
-/// MoFA error type for UniFFI
+/// MoFA error type for UniFFI.
+///
+/// Intentionally NOT `#[non_exhaustive]` — UniFFI generates exhaustive matches
+/// across the FFI boundary and requires all variants to be known at compile time.
+///
+/// At the FFI boundary every `error_stack::Report<*>` from internal code is
+/// downcast to the closest `MoFaError` category via [`From`] impls below.
 #[derive(Debug, thiserror::Error)]
 pub enum MoFaError {
     #[error("Configuration error: {0}")]
@@ -29,6 +35,41 @@ pub enum MoFaError {
     ToolError(String),
     #[error("Session error: {0}")]
     SessionError(String),
+}
+
+/// Convenience result alias for UniFFI-exposed functions.
+///
+/// Always `Result<T, MoFaError>` — `error_stack::Report` cannot cross the FFI
+/// boundary. Use the [`From`] impls below to convert internal reports here.
+pub type MoFaResult<T> = Result<T, MoFaError>;
+
+// ── FFI boundary conversions: Report<*> → MoFaError ───────────────────────────
+//
+// The full causal chain is preserved in the Display output of the Report,
+// which is forwarded as the error string. No information is silently discarded.
+
+impl From<error_stack::Report<mofa_kernel::error::KernelError>> for MoFaError {
+    fn from(r: error_stack::Report<mofa_kernel::error::KernelError>) -> Self {
+        MoFaError::RuntimeError(r.to_string())
+    }
+}
+
+impl From<error_stack::Report<mofa_kernel::agent::AgentError>> for MoFaError {
+    fn from(r: error_stack::Report<mofa_kernel::agent::AgentError>) -> Self {
+        MoFaError::RuntimeError(r.to_string())
+    }
+}
+
+impl From<error_stack::Report<mofa_kernel::agent::types::GlobalError>> for MoFaError {
+    fn from(r: error_stack::Report<mofa_kernel::agent::types::GlobalError>) -> Self {
+        MoFaError::RuntimeError(r.to_string())
+    }
+}
+
+impl From<error_stack::Report<mofa_foundation::llm::LLMError>> for MoFaError {
+    fn from(r: error_stack::Report<mofa_foundation::llm::LLMError>) -> Self {
+        MoFaError::LLMError(r.to_string())
+    }
 }
 
 // =============================================================================
