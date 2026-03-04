@@ -1,7 +1,4 @@
 //! Mock tools for testing agent tool-selection logic.
-//!
-//! [`MockTool`] implements [`SimpleTool`] with a configurable stubbed result
-//! and records every invocation so tests can assert on call count and inputs.
 
 use async_trait::async_trait;
 use mofa_foundation::agent::components::tool::{SimpleTool, ToolCategory};
@@ -11,19 +8,6 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 
 /// A mock tool that records calls and returns a configurable result.
-///
-/// # Example
-///
-/// ```rust,ignore
-/// use mofa_testing::MockTool;
-/// use mofa_foundation::agent::components::tool::SimpleTool;
-/// use serde_json::json;
-///
-/// let tool = MockTool::new("echo", "Echoes input", json!({"type": "object"}));
-/// let result = tool.execute(ToolInput::from_json(json!({"msg": "hi"}))).await;
-/// assert!(result.success);
-/// assert_eq!(tool.call_count().await, 1);
-/// ```
 #[derive(Clone)]
 pub struct MockTool {
     name: String,
@@ -92,14 +76,6 @@ impl SimpleTool for MockTool {
 }
 
 /// Assert that a [`MockTool`] was called exactly `$expected` times.
-///
-/// Must be used inside an `async` context (uses `.await` internally).
-///
-/// # Example
-///
-/// ```rust,ignore
-/// assert_tool_called!(my_mock_tool, 2);
-/// ```
 #[macro_export]
 macro_rules! assert_tool_called {
     ($tool:expr, $expected_count:expr) => {{

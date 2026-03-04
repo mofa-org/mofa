@@ -1,8 +1,4 @@
 //! Mock message bus for inspecting agent-to-agent communication.
-//!
-//! [`MockAgentBus`] wraps the real [`AgentBus`] and records every message
-//! that flows through [`send_and_capture`](MockAgentBus::send_and_capture),
-//! making it simple to assert on communication patterns in tests.
 
 use mofa_kernel::bus::{AgentBus, BusError, CommunicationMode};
 use mofa_kernel::message::AgentMessage;

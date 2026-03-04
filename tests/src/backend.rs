@@ -1,8 +1,4 @@
 //! Mock inference backend for deterministic agent testing.
-//!
-//! [`MockLLMBackend`] implements the full [`ModelOrchestrator`] trait so that
-//! tests can exercise agent logic (tool selection, prompt routing, etc.)
-//! without hitting a real LLM endpoint.
 
 use async_trait::async_trait;
 use mofa_foundation::orchestrator::{
@@ -13,24 +9,6 @@ use std::collections::HashSet;
 use std::sync::{Arc, RwLock};
 
 /// Deterministic mock implementation of [`ModelOrchestrator`].
-///
-/// # Match semantics
-///
-/// Responses are stored as an ordered `Vec<(key, response)>`.
-/// On [`infer`](ModelOrchestrator::infer) the *first* entry whose key is a
-/// substring of the prompt wins.  This avoids the non-determinism of
-/// `HashMap` iteration and gives callers explicit priority control.
-///
-/// # Example
-///
-/// ```rust,ignore
-/// use mofa_testing::MockLLMBackend;
-///
-/// let mut backend = MockLLMBackend::new();
-/// backend.add_response("hello", "Hi there!");
-/// backend.add_response("weather", "Sunny today.");
-/// // "hello" takes priority over "weather" if both appear in the prompt.
-/// ```
 pub struct MockLLMBackend {
     /// Ordered response rules — first match wins
     responses: Arc<RwLock<Vec<(String, String)>>>,
