@@ -762,9 +762,8 @@ impl SimpleMessageBus {
     /// Register an agent
     pub async fn register(&self, agent_id: &str, tx: tokio::sync::mpsc::Sender<AgentEvent>) {
         let mut subs = self.subscribers.write().await;
-        subs.entry(agent_id.to_string())
-            .or_insert_with(Vec::new)
-            .push(tx);
+        subs.insert(agent_id.to_string(), vec![tx]);
+            
     }
 
     /// 订阅主题
@@ -1308,6 +1307,21 @@ mod tests {
         let _ = slow_rx.recv().await;
         send_task.await.unwrap().unwrap();
     }
+    
+    #[tokio::test]
+    async fn re_registration_replaces_stale_sender() {
+        let bus = SimpleMessageBus::new();
+
+        let (tx1, rx1) = tokio::sync::mpsc::channel(1);
+        bus.register("agent-a", tx1).await;
+        drop(rx1); // simulate agent restart
+
+        let (tx2, _rx2) = tokio::sync::mpsc::channel(1);
+        bus.register("agent-a", tx2).await;
+
+        let subs = bus.subscribers.read().await;
+        assert_eq!(subs["agent-a"].len(), 1);
+}
 }
 
 /// 智能体节点存储类型
