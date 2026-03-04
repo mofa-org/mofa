@@ -53,9 +53,14 @@ impl std::str::FromStr for RagEmbeddingProvider {
 }
 
 /// Configuration for the RAG embedding adapter.
+///
+/// Note: `provider` controls default model selection and timeout hints.
+/// The actual LLM backend is determined by the `LLMClient` passed to
+/// `LlmEmbeddingAdapter::new()`. Callers are responsible for ensuring
+/// the client matches the configured provider.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RagEmbeddingConfig {
-    /// Which provider to use.
+    /// Which provider to use (controls default model name and timeout hints).
     pub provider: RagEmbeddingProvider,
     /// Model name override.  When `None`, provider defaults are used:
     /// - OpenAI: `text-embedding-3-small`
@@ -209,15 +214,25 @@ impl LlmEmbeddingAdapter {
         }
 
         let model = self.config.resolved_model().to_string();
-        let batch_size = self.config.batch_size;
+        // Clamp batch_size to valid range in case it was deserialized unchecked
+        let batch_size = self.config.batch_size.clamp(1, 2048);
         let mut all_embeddings = Vec::with_capacity(texts.len());
+
+        // Safe u32 conversion for dimensions
+        let dimensions = self
+            .config
+            .dimensions
+            .map(|d| {
+                u32::try_from(d).map_err(|_| EmbeddingAdapterError::DimensionOverflow(d))
+            })
+            .transpose()?;
 
         for chunk in texts.chunks(batch_size) {
             let request = EmbeddingRequest {
                 model: model.clone(),
                 input: EmbeddingInput::Multiple(chunk.to_vec()),
                 encoding_format: None,
-                dimensions: self.config.dimensions.map(|d| d as u32),
+                dimensions,
                 user: None,
             };
 
@@ -233,12 +248,24 @@ impl LlmEmbeddingAdapter {
                 return Err(EmbeddingAdapterError::EmptyResponse);
             }
 
-            // Detect dimensions from first response
-            if let Some(first) = response.data.first() {
-                let _ = self.detected_dimensions.set(first.embedding.len());
-            }
+            // Detect and validate dimensions
+            let expected_dim = if let Some(det) = self.detected_dimensions.get() {
+                *det
+            } else if let Some(first) = response.data.first() {
+                let len = first.embedding.len();
+                let _ = self.detected_dimensions.set(len);
+                len
+            } else {
+                return Err(EmbeddingAdapterError::EmptyResponse);
+            };
 
             for datum in response.data {
+                if datum.embedding.len() != expected_dim {
+                    return Err(EmbeddingAdapterError::DimensionMismatch {
+                        expected: expected_dim,
+                        got: datum.embedding.len(),
+                    });
+                }
                 all_embeddings.push(datum.embedding);
             }
         }
@@ -301,6 +328,7 @@ fn simple_hash(text: &str) -> u64 {
 
 /// Errors specific to the embedding adapter layer.
 #[derive(Debug, thiserror::Error)]
+#[non_exhaustive]
 pub enum EmbeddingAdapterError {
     /// The underlying LLM provider returned an error.
     #[error("LLM embedding error: {0}")]
@@ -313,6 +341,14 @@ pub enum EmbeddingAdapterError {
     /// The embedding count doesn't match the input count.
     #[error("embedding count mismatch: expected {expected}, got {got}")]
     CountMismatch { expected: usize, got: usize },
+
+    /// An embedding vector had unexpected dimensions.
+    #[error("dimension mismatch: expected {expected}, got {got}")]
+    DimensionMismatch { expected: usize, got: usize },
+
+    /// Configured dimensions exceed u32 range.
+    #[error("dimensions value {0} overflows u32")]
+    DimensionOverflow(usize),
 
     /// The embedding request timed out.
     #[error("embedding request timed out after {0:?}")]
