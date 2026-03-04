@@ -80,8 +80,7 @@ impl AdapterStats {
         if self.success_count == 0 {
             self.ewma_memory_mb = memory_mb as f64;
         } else {
-            self.ewma_memory_mb =
-                alpha * (memory_mb as f64) + (1.0 - alpha) * self.ewma_memory_mb;
+            self.ewma_memory_mb = alpha * (memory_mb as f64) + (1.0 - alpha) * self.ewma_memory_mb;
         }
     }
 
@@ -315,14 +314,16 @@ mod tests {
             .estimated_latency_ms(100)
             .build();
 
-        let hardware = HardwareProfile::builder()
-            .available_ram_mb(16384)
-            .build();
+        let hardware = HardwareProfile::builder().available_ram_mb(16384).build();
 
-        let result = resolver.resolve(&[adapter], &ModelConfig::builder()
-            .model_id("test")
-            .required_modality(super::super::descriptor::Modality::LLM)
-            .build(), &hardware);
+        let result = resolver.resolve(
+            &[adapter],
+            &ModelConfig::builder()
+                .model_id("test")
+                .required_modality(super::super::descriptor::Modality::LLM)
+                .build(),
+            &hardware,
+        );
 
         assert!(result.is_ok());
     }
