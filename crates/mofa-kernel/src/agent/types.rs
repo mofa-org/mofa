@@ -23,7 +23,7 @@ pub use event::{execution, lifecycle, message, plugin, state};
 // 重新导出常用类型
 // Re-export common types
 pub use global::{GlobalMessage, MessageContent, MessageMetadata};
-pub use recovery::{Backoff, CircuitBreaker, CircuitBreakerConfig, CircuitState, RetryPolicy, retry, fallback_chain, ErrorRecovery};
+pub use recovery::ErrorRecovery;
 
 // ============================================================================
 // Agent 状态

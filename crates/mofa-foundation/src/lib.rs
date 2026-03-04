@@ -57,6 +57,9 @@ pub mod rag;
 // Security governance - PII redaction, content moderation, prompt guard
 pub mod security;
 
+// Error recovery strategies (Backoff, RetryPolicy, CircuitBreaker, retry, fallback_chain)
+pub mod recovery;
+
 // Re-export config types
 pub use config::{AgentInfo, AgentYamlConfig, LLMYamlConfig, RuntimeConfig, ToolConfig};
 

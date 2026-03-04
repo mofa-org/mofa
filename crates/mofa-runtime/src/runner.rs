@@ -759,7 +759,7 @@ pub async fn run_agents<T: MoFAAgent>(
 // ============================================================================
 
 use mofa_kernel::agent::types::error::{GlobalError, GlobalResult};
-use mofa_kernel::agent::types::recovery::RetryPolicy;
+use mofa_foundation::recovery::RetryPolicy;
 
 impl<T: MoFAAgent> AgentRunner<T> {
     /// Execute a task returning `GlobalResult` (unified error type).
