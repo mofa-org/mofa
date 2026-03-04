@@ -174,7 +174,7 @@ impl AnthropicProvider {
                                         } else {
                                             "image/jpeg" // Default
                                         };
-                                        let data = image_url.url.split(',').last().unwrap_or(&image_url.url);
+                                        let data = image_url.url.split(',').next_back().unwrap_or(&image_url.url);
                                         contents.push(serde_json::json!({
                                             "type": "image",
                                             "source": {
@@ -186,7 +186,7 @@ impl AnthropicProvider {
                                     }
                                     ContentPart::Audio { audio } => {
                                         let media_type = format!("audio/{}", audio.format.to_lowercase());
-                                        let data = audio.data.split(',').last().unwrap_or(&audio.data);
+                                        let data = audio.data.split(',').next_back().unwrap_or(&audio.data);
                                         // Some providers/models may not support this block, but this is the standard Anthropics structure if/when supported.
                                         contents.push(serde_json::json!({
                                             "type": "audio",
@@ -199,7 +199,7 @@ impl AnthropicProvider {
                                     }
                                     ContentPart::Video { video } => {
                                         let media_type = format!("video/{}", video.format.to_lowercase());
-                                        let data = video.data.split(',').last().unwrap_or(&video.data);
+                                        let data = video.data.split(',').next_back().unwrap_or(&video.data);
                                         contents.push(serde_json::json!({
                                             "type": "video",
                                             "source": {
@@ -928,5 +928,43 @@ data: {\"type\":\"message_stop\"}\n";
         let results3: Vec<_> = token_stream_to_text(ts3).collect().await;
         assert_eq!(results3.len(), 1);
         assert!(matches!(results3[0], Err(LLMError::SerializationError(_))));
+    }
+
+    #[test]
+    fn test_convert_messages_with_media() {
+        let messages = vec![ChatMessage::user_with_parts(vec![
+            ContentPart::Image {
+                image_url: ImageUrl {
+                    url: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==".to_string(),
+                    detail: None,
+                },
+            },
+            ContentPart::Audio {
+                audio: AudioData {
+                    data: "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA=".to_string(),
+                    format: "wav".to_string(),
+                },
+            },
+            ContentPart::Video {
+                video: VideoData {
+                    data: "data:video/mp4;base64,AAAAIGZ0eXBtcDQyAAAAAG1wNDJpc29tYXZjMQAAADhmoW9v...".to_string(),
+                    format: "mp4".to_string(),
+                },
+            },
+        ])];
+
+        let (_, converted) = AnthropicProvider::convert_messages(&messages);
+        assert_eq!(converted.len(), 1);
+        let contents = converted[0]["content"].as_array().unwrap();
+        assert_eq!(contents.len(), 3);
+
+        assert_eq!(contents[0]["type"], "image");
+        assert_eq!(contents[0]["source"]["data"], "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==");
+        
+        assert_eq!(contents[1]["type"], "audio");
+        assert_eq!(contents[1]["source"]["data"], "UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA=");
+
+        assert_eq!(contents[2]["type"], "video");
+        assert_eq!(contents[2]["source"]["data"], "AAAAIGZ0eXBtcDQyAAAAAG1wNDJpc29tYXZjMQAAADhmoW9v...");
     }
 }
