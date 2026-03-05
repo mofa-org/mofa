@@ -894,6 +894,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "codex_compression_practical"
+version = "0.1.0"
+dependencies = [
+ "mofa-foundation",
+ "mofa-kernel",
+ "tokio",
+ "tracing",
+ "tracing-subscriber 0.3.22",
+]
+
+[[package]]
 name = "colorchoice"
 version = "1.0.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3579,6 +3590,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "memory_scheduler_demo"
+version = "0.1.0"
+dependencies = [
+ "mofa-foundation",
+]
+
+[[package]]
 name = "message_graph_executor_runtime"
 version = "0.1.0"
 dependencies = [
@@ -3665,6 +3683,7 @@ dependencies = [
  "crossterm",
  "dialoguer",
  "dirs-next",
+ "error-stack",
  "flate2",
  "futures",
  "hex",
@@ -4926,6 +4945,7 @@ dependencies = [
 name = "rag_pipeline"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
  "async-trait",
  "futures",
  "mofa-foundation",

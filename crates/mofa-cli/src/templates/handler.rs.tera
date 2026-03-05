@@ -1,0 +1,10 @@
+use serde_json::Value;
+
+pub async fn handle_request(input: Value) -> anyhow::Result<Value> {
+    // Process your input here
+    let greeting = format!("Received input: {}", input);
+    Ok(serde_json::json!({
+        "status": "success",
+        "message": greeting
+    }))
+}

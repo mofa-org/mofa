@@ -70,7 +70,10 @@ mod traits;
 // Core exports
 pub use connection::{ConnectionFactory, UserConnection};
 pub use context::{SecretaryContext, SecretaryContextBuilder, SharedSecretaryContext};
-pub use error::{ConnectionError, SecretaryError};
+pub use error::{
+    ConnectionError, ConnectionResult, IntoConnectionReport,
+    IntoSecretaryReport, SecretaryError, SecretaryResult,
+};
 pub use traits::{
     EventListener, InputHandler, Middleware, PhaseHandler, PhaseResult, SecretaryBehavior,
     SecretaryEvent, SecretaryInput, SecretaryOutput, WorkflowOrchestrator, WorkflowResult,

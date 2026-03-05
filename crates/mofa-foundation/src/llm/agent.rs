@@ -25,7 +25,6 @@
 //! }
 //! ```
 
-use mofa_kernel::agent::types::error::{GlobalError, GlobalResult};
 use super::client::{ChatSession, LLMClient};
 use super::provider::{ChatStream, LLMProvider};
 use super::tool_executor::ToolExecutor;
@@ -37,6 +36,7 @@ use crate::prompt;
 use futures::{Stream, StreamExt};
 use mofa_kernel::agent::AgentMetadata;
 use mofa_kernel::agent::AgentState;
+use mofa_kernel::agent::types::error::{GlobalError, GlobalResult};
 use mofa_kernel::plugin::{AgentPlugin, PluginType};
 use mofa_plugins::tts::TTSPlugin;
 use std::collections::HashMap;

@@ -8,6 +8,7 @@
 //! When a `TelemetryEmitter` is attached via `with_telemetry()`, the
 //! executor emits `DebugEvent`s at key execution points.
 
+use super::execution_event::ExecutionEvent;
 use super::graph::WorkflowGraph;
 use super::node::{NodeType, WorkflowNode};
 use super::profiler::{ExecutionTimeline, ProfilerMode};
@@ -18,6 +19,7 @@ use super::state::{
 use mofa_kernel::workflow::telemetry::{DebugEvent, TelemetryEmitter};
 use std::collections::HashMap;
 use std::sync::Arc;
+use serde_json;
 use std::time::Instant;
 use tokio::sync::{RwLock, Semaphore, mpsc, oneshot};
 use tracing::{error, info, warn};
@@ -55,42 +57,6 @@ impl Default for ExecutorConfig {
     }
 }
 
-/// 执行事件
-/// Execution Event
-#[derive(Debug, Clone)]
-pub enum ExecutionEvent {
-    /// 工作流开始
-    /// Workflow started
-    WorkflowStarted {
-        workflow_id: String,
-        execution_id: String,
-    },
-    /// 工作流完成
-    /// Workflow completed
-    WorkflowCompleted {
-        workflow_id: String,
-        execution_id: String,
-        status: WorkflowStatus,
-    },
-    /// 节点开始
-    /// Node started
-    NodeStarted { node_id: String },
-    /// 节点完成
-    /// Node completed
-    NodeCompleted { node_id: String, result: NodeResult },
-    /// 节点失败
-    /// Node failed
-    NodeFailed { node_id: String, error: String },
-    /// 检查点创建
-    /// Checkpoint created
-    CheckpointCreated { label: String },
-    /// 外部事件
-    /// External event
-    ExternalEvent {
-        event_type: String,
-        data: WorkflowValue,
-    },
-}
 
 /// 工作流执行器
 /// Workflow Executor
@@ -212,7 +178,11 @@ impl WorkflowExecutor {
         // Emit start event
         self.emit_event(ExecutionEvent::WorkflowStarted {
             workflow_id: graph.id.clone(),
-            execution_id: ctx.execution_id.clone(),
+            workflow_name: graph.name.clone(),
+            started_at: std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_millis() as u64,
         })
         .await;
 
@@ -296,12 +266,24 @@ impl WorkflowExecutor {
 
         // 发送完成事件
         // Emit completion event
-        self.emit_event(ExecutionEvent::WorkflowCompleted {
-            workflow_id: graph.id.clone(),
-            execution_id: ctx.execution_id.clone(),
-            status: execution_record.status.clone(),
-        })
-        .await;
+        match &execution_record.status {
+            WorkflowStatus::Failed(e) => {
+                self.emit_event(ExecutionEvent::WorkflowFailed {
+                    workflow_id: graph.id.clone(),
+                    error: e.clone(),
+                    total_duration_ms: duration.as_millis() as u64,
+                })
+                .await;
+            }
+            _ => {
+                self.emit_event(ExecutionEvent::WorkflowCompleted {
+                    workflow_id: graph.id.clone(),
+                    final_output: None,
+                    total_duration_ms: duration.as_millis() as u64,
+                })
+                .await;
+            }
+        }
 
         // Emit debug telemetry: WorkflowEnd
         self.emit_debug(DebugEvent::WorkflowEnd {
@@ -398,12 +380,24 @@ impl WorkflowExecutor {
         };
         execution_record.outputs = ctx.get_all_outputs().await;
 
-        self.emit_event(ExecutionEvent::WorkflowCompleted {
-            workflow_id: graph.id.clone(),
-            execution_id: ctx.execution_id.clone(),
-            status: execution_record.status.clone(),
-        })
-        .await;
+        match &execution_record.status {
+            WorkflowStatus::Failed(e) => {
+                self.emit_event(ExecutionEvent::WorkflowFailed {
+                    workflow_id: graph.id.clone(),
+                    error: e.clone(),
+                    total_duration_ms: duration.as_millis() as u64,
+                })
+                .await;
+            }
+            _ => {
+                self.emit_event(ExecutionEvent::WorkflowCompleted {
+                    workflow_id: graph.id.clone(),
+                    final_output: None,
+                    total_duration_ms: duration.as_millis() as u64,
+                })
+                .await;
+            }
+        }
 
         self.emit_debug(DebugEvent::WorkflowEnd {
             workflow_id: graph.id.clone(),
@@ -426,7 +420,11 @@ impl WorkflowExecutor {
 
         self.emit_event(ExecutionEvent::WorkflowStarted {
             workflow_id: graph.id.clone(),
-            execution_id: ctx.execution_id.clone(),
+            workflow_name: graph.name.clone(),
+            started_at: std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_millis() as u64,
         })
         .await;
 
@@ -505,12 +503,24 @@ impl WorkflowExecutor {
 
         execution_record.outputs = ctx.get_all_outputs().await;
 
-        self.emit_event(ExecutionEvent::WorkflowCompleted {
-            workflow_id: graph.id.clone(),
-            execution_id: ctx.execution_id.clone(),
-            status: execution_record.status.clone(),
-        })
-        .await;
+        match &execution_record.status {
+            WorkflowStatus::Failed(e) => {
+                self.emit_event(ExecutionEvent::WorkflowFailed {
+                    workflow_id: graph.id.clone(),
+                    error: e.clone(),
+                    total_duration_ms: duration.as_millis() as u64,
+                })
+                .await;
+            }
+            _ => {
+                self.emit_event(ExecutionEvent::WorkflowCompleted {
+                    workflow_id: graph.id.clone(),
+                    final_output: None,
+                    total_duration_ms: duration.as_millis() as u64,
+                })
+                .await;
+            }
+        }
 
         Ok(execution_record)
     }
@@ -602,6 +612,8 @@ impl WorkflowExecutor {
                 .await;
             self.emit_event(ExecutionEvent::NodeStarted {
                 node_id: current_node_id.clone(),
+                node_name: node.config.name.clone(),
+                parent_span_id: None,
             })
             .await;
 
@@ -622,9 +634,14 @@ impl WorkflowExecutor {
                         .await;
                     ctx.set_node_status(&current_node_id, result.status.clone())
                         .await;
+                    let node_end_ms = std::time::SystemTime::now()
+                        .duration_since(std::time::UNIX_EPOCH)
+                        .unwrap_or_default()
+                        .as_millis() as u64;
                     self.emit_event(ExecutionEvent::NodeCompleted {
                         node_id: current_node_id.clone(),
-                        result: result.clone(),
+                        output: serde_json::to_value(&result.output).ok(),
+                        duration_ms: node_end_ms.saturating_sub(start_time),
                     })
                     .await;
                     if result.status.is_success() {
