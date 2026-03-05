@@ -49,7 +49,7 @@
 //! }
 //! ```
 
-mod admission;
+pub mod admission;
 mod budget;
 mod deferred;
 mod stability;

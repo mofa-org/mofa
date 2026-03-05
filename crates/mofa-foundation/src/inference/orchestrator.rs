@@ -208,7 +208,7 @@ impl InferenceOrchestrator {
     /// # Priority semantics
     ///
     /// - `Low` / `Normal`: standard dual-threshold hysteresis — may return
-    ///   [`AdmissionOutcome::Deferred`] when usage is in the `[defer, reject)` band.
+    ///   [`AdmissionOutcome::Defer`] when usage is in the `[defer, reject)` band.
     /// - `High`: bypasses the Deferred band — admitted directly whenever usage
     ///   is at or below `reject_threshold` (skips the defer zone entirely).
     /// - `Critical`: same bypass as `High`; the caller (orchestrator) is
@@ -222,7 +222,7 @@ impl InferenceOrchestrator {
         let capacity = self.config.memory_capacity_mb;
 
         if capacity == 0 {
-            return AdmissionOutcome::Rejected;
+            return AdmissionOutcome::Reject;
         }
 
         let projected_usage = projected_mb as f64 / capacity as f64;
@@ -232,21 +232,21 @@ impl InferenceOrchestrator {
             // they are admitted whenever memory is below the reject ceiling.
             RequestPriority::High | RequestPriority::Critical => {
                 if projected_usage <= self.config.reject_threshold {
-                    AdmissionOutcome::Accepted
+                    AdmissionOutcome::Accept
                 } else {
-                    AdmissionOutcome::Rejected
+                    AdmissionOutcome::Reject
                 }
             }
             // Low and Normal use standard dual-threshold hysteresis.
             RequestPriority::Low | RequestPriority::Normal => {
                 if projected_usage <= self.config.defer_threshold {
-                    AdmissionOutcome::Accepted
+                    AdmissionOutcome::Accept
                 } else if projected_usage <= self.config.reject_threshold {
                     // Deferred: memory is tight but may be reclaimable via eviction.
                     // Phase 2 will add a queue-based scheduler with retry logic.
-                    AdmissionOutcome::Deferred
+                    AdmissionOutcome::Defer
                 } else {
-                    AdmissionOutcome::Rejected
+                    AdmissionOutcome::Reject
                 }
             }
         }
