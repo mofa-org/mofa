@@ -33,5 +33,5 @@ pub mod types;
 
 // Re-export primary public API
 pub use orchestrator::{InferenceOrchestrator, OrchestratorConfig};
-pub use routing::{AdmissionOutcome, RoutingDecision, RoutingPolicy};
+pub use routing::{AdmissionOutcome, RoutingDecision};
 pub use types::{InferenceRequest, InferenceResult, Precision, RequestPriority, RoutedBackend};

@@ -27,11 +27,11 @@ pub async fn run(
         let existing = ctx.persistent_agents.get(agent_id).await;
         if let Some(agent) = existing {
             if agent.last_state == crate::state::AgentProcessState::Running {
-                    return Err(CliError::StateError(format!(
-                        "Agent '{}' is already running (PID: {})",
-                        agent_id,
-                        agent.process_id.unwrap_or(0)
-                    )));
+                return Err(CliError::StateError(format!(
+                    "Agent '{}' is already running (PID: {})",
+                    agent_id,
+                    agent.process_id.unwrap_or(0)
+                )));
             }
             println!(
                 "  {} Agent exists but is not running. Restarting...",
@@ -91,14 +91,19 @@ pub async fn run(
 
     // Check if agent already exists
     if ctx.agent_registry.contains(agent_id).await {
-        return Err(CliError::StateError(format!("Agent '{}' is already registered", agent_id)));
+        return Err(CliError::StateError(format!(
+            "Agent '{}' is already registered",
+            agent_id
+        )));
     }
 
     // Try to create via factory
     ctx.agent_registry
         .create_and_register(&selected_factory, agent_config.clone())
         .await
-        .map_err(|e| CliError::StateError(format!("Failed to start agent '{}': {}", agent_id, e)))?;
+        .map_err(|e| {
+            CliError::StateError(format!("Failed to start agent '{}': {}", agent_id, e))
+        })?;
 
     let entry = AgentConfigEntry {
         id: agent_id.to_string(),
@@ -116,16 +121,13 @@ pub async fn run(
             Ok(_) => {
                 return Err(CliError::StateError(format!(
                     "Failed to persist agent '{}': {}. Rolled back in-memory registration.",
-                    agent_id,
-                    e
+                    agent_id, e
                 )));
             }
             Err(rollback_err) => {
                 return Err(CliError::StateError(format!(
                     "Failed to persist agent '{}': {}. Rollback failed: {}",
-                    agent_id,
-                    e,
-                    rollback_err
+                    agent_id, e, rollback_err
                 )));
             }
         }

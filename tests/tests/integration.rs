@@ -38,7 +38,10 @@ async fn backend_infer_returns_matching_response() {
     let resp = backend.infer("test-llm", "say hello").await.unwrap();
     assert_eq!(resp, "Hi there!");
 
-    let resp = backend.infer("test-llm", "what is the weather?").await.unwrap();
+    let resp = backend
+        .infer("test-llm", "what is the weather?")
+        .await
+        .unwrap();
     assert_eq!(resp, "Sunny today.");
 }
 
@@ -82,7 +85,11 @@ async fn backend_register_load_unload_lifecycle() {
 
     backend.load_model("model-a").await.unwrap();
     assert!(backend.is_model_loaded("model-a"));
-    assert!(backend.list_loaded_models().contains(&"model-a".to_string()));
+    assert!(
+        backend
+            .list_loaded_models()
+            .contains(&"model-a".to_string())
+    );
 
     backend.unload_model("model-a").await.unwrap();
     assert!(!backend.is_model_loaded("model-a"));
@@ -225,9 +232,7 @@ async fn tool_custom_stub_result() {
     ))
     .await;
 
-    let result = tool
-        .execute(ToolInput::from_json(json!({"x": 1})))
-        .await;
+    let result = tool.execute(ToolInput::from_json(json!({"x": 1}))).await;
     assert!(!result.success);
 }
 

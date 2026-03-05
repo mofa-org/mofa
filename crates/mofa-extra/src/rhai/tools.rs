@@ -145,8 +145,7 @@ impl ToolParameter {
             _ => {
                 return Err(RhaiError::ValidationError(format!(
                     "Parameter '{}' has invalid type, expected {:?}",
-                    self.name,
-                    self.param_type
+                    self.name, self.param_type
                 )));
             }
         }
@@ -158,8 +157,7 @@ impl ToolParameter {
         {
             return Err(RhaiError::ValidationError(format!(
                 "Parameter '{}' value must be one of {:?}",
-                self.name,
-                enum_values
+                self.name, enum_values
             )));
         }
 
@@ -171,12 +169,18 @@ impl ToolParameter {
             if let Some(min) = self.minimum
                 && f < min
             {
-                return Err(RhaiError::ValidationError(format!("Parameter '{}' must be >= {}", self.name, min)));
+                return Err(RhaiError::ValidationError(format!(
+                    "Parameter '{}' must be >= {}",
+                    self.name, min
+                )));
             }
             if let Some(max) = self.maximum
                 && f > max
             {
-                return Err(RhaiError::ValidationError(format!("Parameter '{}' must be <= {}", self.name, max)));
+                return Err(RhaiError::ValidationError(format!(
+                    "Parameter '{}' must be <= {}",
+                    self.name, max
+                )));
             }
         }
 
@@ -188,8 +192,7 @@ impl ToolParameter {
             {
                 return Err(RhaiError::ValidationError(format!(
                     "Parameter '{}' length must be >= {}",
-                    self.name,
-                    min
+                    self.name, min
                 )));
             }
             if let Some(max) = self.max_length
@@ -197,20 +200,19 @@ impl ToolParameter {
             {
                 return Err(RhaiError::ValidationError(format!(
                     "Parameter '{}' length must be <= {}",
-                    self.name,
-                    max
+                    self.name, max
                 )));
             }
             // 检查正则表达式
             // Check regex pattern
             if let Some(ref pattern) = self.pattern {
-                let re = regex::Regex::new(pattern)
-                    .map_err(|e| RhaiError::ValidationError(format!("Invalid regex pattern: {}", e)))?;
+                let re = regex::Regex::new(pattern).map_err(|e| {
+                    RhaiError::ValidationError(format!("Invalid regex pattern: {}", e))
+                })?;
                 if !re.is_match(s) {
                     return Err(RhaiError::ValidationError(format!(
                         "Parameter '{}' does not match pattern: {}",
-                        self.name,
-                        pattern
+                        self.name, pattern
                     )));
                 }
             }
@@ -224,8 +226,7 @@ impl ToolParameter {
             {
                 return Err(RhaiError::ValidationError(format!(
                     "Parameter '{}' array length must be >= {}",
-                    self.name,
-                    min
+                    self.name, min
                 )));
             }
             if let Some(max) = self.max_length
@@ -233,8 +234,7 @@ impl ToolParameter {
             {
                 return Err(RhaiError::ValidationError(format!(
                     "Parameter '{}' array length must be <= {}",
-                    self.name,
-                    max
+                    self.name, max
                 )));
             }
         }
@@ -344,7 +344,10 @@ impl ScriptToolDefinition {
             if let Some(value) = input.get(&param.name) {
                 param.validate(value)?;
             } else if param.required && param.default.is_none() {
-                return Err(RhaiError::ValidationError(format!("Required parameter '{}' is missing", param.name)));
+                return Err(RhaiError::ValidationError(format!(
+                    "Required parameter '{}' is missing",
+                    param.name
+                )));
             }
         }
         Ok(())
@@ -505,7 +508,10 @@ impl ScriptToolRegistry {
 
     /// 批量注册工具
     /// Batch register tools
-    pub async fn register_batch(&self, tools: Vec<ScriptToolDefinition>) -> RhaiResult<Vec<String>> {
+    pub async fn register_batch(
+        &self,
+        tools: Vec<ScriptToolDefinition>,
+    ) -> RhaiResult<Vec<String>> {
         let mut registered = Vec::new();
         for tool in tools {
             let id = tool.id.clone();

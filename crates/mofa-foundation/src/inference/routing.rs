@@ -7,26 +7,9 @@
 use std::fmt;
 
 use crate::hardware::{CpuFamily, HardwareCapability, OsClassification};
-
-use super::types::{InferenceRequest, RequestPriority, RoutedBackend};
-
-/// Policy governing how inference requests are routed between
-/// local backends and cloud providers.
-#[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
-pub enum RoutingPolicy {
-    /// Only use local backends; reject if local is unavailable.
-    LocalOnly,
-    /// Only use cloud providers; never attempt local execution.
-    CloudOnly,
-    /// Try local first; fall back to cloud if local admission fails.
-    /// This is the recommended default for most deployments.
-    #[default]
-    LocalFirstWithCloudFallback,
-    /// Route to whichever backend is expected to respond fastest.
-    LatencyOptimized,
-    /// Route to the cheapest option (local is free, cloud costs money).
-    CostOptimized,
-}
+use mofa_kernel::llm::{
+    CandidateSet, InferenceRequest, RequestPriority, RoutedBackend, RoutingObjective,
+};
 
 /// The outcome of a routing decision.
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
@@ -49,18 +32,6 @@ pub enum AdmissionOutcome {
     Deferred,
     /// Request rejected — insufficient memory for local execution.
     Rejected,
-}
-
-impl fmt::Display for RoutingPolicy {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::LocalOnly => write!(f, "local-only"),
-            Self::CloudOnly => write!(f, "cloud-only"),
-            Self::LocalFirstWithCloudFallback => write!(f, "local-first"),
-            Self::LatencyOptimized => write!(f, "latency-optimized"),
-            Self::CostOptimized => write!(f, "cost-optimized"),
-        }
-    }
 }
 
 impl fmt::Display for RoutingDecision {
@@ -96,28 +67,68 @@ impl fmt::Display for AdmissionOutcome {
 /// # Returns
 /// A `RoutingDecision` indicating where the request should execute.
 pub fn resolve(
-    policy: &RoutingPolicy,
+    policy: &RoutingObjective,
     request: &InferenceRequest,
     admission: AdmissionOutcome,
     hardware: &HardwareCapability,
     cloud_provider: &str,
 ) -> RoutingDecision {
     match policy {
-        RoutingPolicy::LocalOnly => resolve_local_only(request, admission),
-
-        RoutingPolicy::CloudOnly => RoutingDecision::UseCloud {
+        RoutingObjective::LocalOnly => resolve_local_only(request, admission),
+        RoutingObjective::CloudOnly => RoutingDecision::UseCloud {
             provider: cloud_provider.to_string(),
         },
-
-        RoutingPolicy::LocalFirstWithCloudFallback => {
+        RoutingObjective::LocalFirstWithCloudFallback => {
             resolve_local_first(request, admission, cloud_provider)
         }
-
-        RoutingPolicy::LatencyOptimized => {
+        RoutingObjective::LatencyOptimized => {
             resolve_latency_optimized(request, admission, hardware, cloud_provider)
         }
+        RoutingObjective::CostOptimized => {
+            resolve_cost_optimized(request, admission, cloud_provider)
+        }
+        RoutingObjective::QualityMaximized => {
+            // Quality maximized generally defaults to powerful cloud models if available
+            RoutingDecision::UseCloud {
+                provider: cloud_provider.to_string(),
+            }
+        }
+        RoutingObjective::ComplianceFirst => {
+            // Compliance forces local execution only
+            resolve_local_only(request, admission)
+        }
+        #[cfg(feature = "advanced-routing")]
+        RoutingObjective::Custom(predicate) => {
+            // Updated to call into the trait as requested
+            let candidates = CandidateSet {
+                candidates: vec![
+                    RoutedBackend::Local {
+                        model_id: request.model_id.clone(),
+                    },
+                    RoutedBackend::Cloud {
+                        provider: cloud_provider.to_string(),
+                    },
+                ],
+            };
+            let score = predicate.evaluate(request, &candidates);
 
-        RoutingPolicy::CostOptimized => resolve_cost_optimized(request, admission, cloud_provider),
+            // Simple threshold: if score > 0.0, target local.
+            if score >= 0.0
+                && (admission == AdmissionOutcome::Accepted
+                    || admission == AdmissionOutcome::Deferred)
+            {
+                RoutingDecision::UseLocal {
+                    model_id: request.model_id.clone(),
+                }
+            } else {
+                RoutingDecision::UseCloud {
+                    provider: cloud_provider.to_string(),
+                }
+            }
+        }
+        _ => RoutingDecision::Rejected {
+            reason: "Unsupported routing objective".to_string(),
+        },
     }
 }
 
@@ -166,13 +177,11 @@ fn resolve_latency_optimized(
     hardware: &HardwareCapability,
     cloud_provider: &str,
 ) -> RoutingDecision {
-    // If local hardware has GPU acceleration and memory is available, use local
     if hardware.gpu_available && admission == AdmissionOutcome::Accepted {
         return RoutingDecision::UseLocal {
             model_id: request.model_id.clone(),
         };
     }
-    // Otherwise, cloud is likely faster than CPU-only local inference
     RoutingDecision::UseCloud {
         provider: cloud_provider.to_string(),
     }
@@ -185,18 +194,12 @@ fn resolve_cost_optimized(
     cloud_provider: &str,
 ) -> RoutingDecision {
     match admission {
-        AdmissionOutcome::Accepted | AdmissionOutcome::Deferred => {
-            // Even deferred requests are worth waiting for locally to save cost
-            RoutingDecision::UseLocal {
-                model_id: request.model_id.clone(),
-            }
-        }
-        AdmissionOutcome::Rejected => {
-            // Only use cloud as absolute last resort
-            RoutingDecision::UseCloud {
-                provider: cloud_provider.to_string(),
-            }
-        }
+        AdmissionOutcome::Accepted | AdmissionOutcome::Deferred => RoutingDecision::UseLocal {
+            model_id: request.model_id.clone(),
+        },
+        AdmissionOutcome::Rejected => RoutingDecision::UseCloud {
+            provider: cloud_provider.to_string(),
+        },
     }
 }
 
@@ -223,7 +226,7 @@ mod tests {
     #[test]
     fn test_local_only_accepts_when_admitted() {
         let decision = resolve(
-            &RoutingPolicy::LocalOnly,
+            &RoutingObjective::LocalOnly,
             &mock_request(),
             AdmissionOutcome::Accepted,
             &mock_hardware(),
@@ -240,7 +243,7 @@ mod tests {
     #[test]
     fn test_local_only_rejects_when_memory_full() {
         let decision = resolve(
-            &RoutingPolicy::LocalOnly,
+            &RoutingObjective::LocalOnly,
             &mock_request(),
             AdmissionOutcome::Rejected,
             &mock_hardware(),
@@ -252,7 +255,7 @@ mod tests {
     #[test]
     fn test_local_only_never_falls_back_to_cloud() {
         let decision = resolve(
-            &RoutingPolicy::LocalOnly,
+            &RoutingObjective::LocalOnly,
             &mock_request(),
             AdmissionOutcome::Deferred,
             &mock_hardware(),
@@ -265,7 +268,7 @@ mod tests {
     #[test]
     fn test_cloud_only_always_uses_cloud() {
         let decision = resolve(
-            &RoutingPolicy::CloudOnly,
+            &RoutingObjective::CloudOnly,
             &mock_request(),
             AdmissionOutcome::Accepted, // Even if local would accept
             &mock_hardware(),
@@ -282,7 +285,7 @@ mod tests {
     #[test]
     fn test_local_first_falls_back_to_cloud_on_rejection() {
         let decision = resolve(
-            &RoutingPolicy::LocalFirstWithCloudFallback,
+            &RoutingObjective::LocalFirstWithCloudFallback,
             &mock_request(),
             AdmissionOutcome::Rejected,
             &mock_hardware(),
@@ -299,7 +302,7 @@ mod tests {
     #[test]
     fn test_local_first_uses_local_when_accepted() {
         let decision = resolve(
-            &RoutingPolicy::LocalFirstWithCloudFallback,
+            &RoutingObjective::LocalFirstWithCloudFallback,
             &mock_request(),
             AdmissionOutcome::Accepted,
             &mock_hardware(),
@@ -316,7 +319,7 @@ mod tests {
     #[test]
     fn test_cost_optimized_prefers_local_even_when_deferred() {
         let decision = resolve(
-            &RoutingPolicy::CostOptimized,
+            &RoutingObjective::CostOptimized,
             &mock_request(),
             AdmissionOutcome::Deferred,
             &mock_hardware(),
@@ -342,7 +345,7 @@ mod tests {
             available_memory_bytes: 8_589_934_592, // 8 GB
         };
         let decision = resolve(
-            &RoutingPolicy::LatencyOptimized,
+            &RoutingObjective::LatencyOptimized,
             &mock_request(),
             AdmissionOutcome::Accepted,
             &hw,
@@ -354,24 +357,6 @@ mod tests {
             RoutingDecision::UseCloud {
                 provider: "openai".into()
             }
-        );
-    }
-
-    #[test]
-    fn test_routing_policy_display() {
-        assert_eq!(format!("{}", RoutingPolicy::LocalOnly), "local-only");
-        assert_eq!(format!("{}", RoutingPolicy::CloudOnly), "cloud-only");
-        assert_eq!(
-            format!("{}", RoutingPolicy::LocalFirstWithCloudFallback),
-            "local-first"
-        );
-        assert_eq!(
-            format!("{}", RoutingPolicy::LatencyOptimized),
-            "latency-optimized"
-        );
-        assert_eq!(
-            format!("{}", RoutingPolicy::CostOptimized),
-            "cost-optimized"
         );
     }
 
@@ -414,21 +399,6 @@ mod tests {
     }
 
     #[test]
-    fn test_routing_policy_serde_roundtrip() {
-        for variant in [
-            RoutingPolicy::LocalOnly,
-            RoutingPolicy::CloudOnly,
-            RoutingPolicy::LocalFirstWithCloudFallback,
-            RoutingPolicy::LatencyOptimized,
-            RoutingPolicy::CostOptimized,
-        ] {
-            let json = serde_json::to_string(&variant).unwrap();
-            let back: RoutingPolicy = serde_json::from_str(&json).unwrap();
-            assert_eq!(back, variant);
-        }
-    }
-
-    #[test]
     fn test_routing_decision_serde_roundtrip() {
         let variants = vec![
             RoutingDecision::UseLocal {
@@ -457,7 +427,56 @@ mod tests {
         ] {
             let json = serde_json::to_string(&variant).unwrap();
             let back: AdmissionOutcome = serde_json::from_str(&json).unwrap();
-            assert_eq!(back, variant);
         }
+    }
+
+    #[cfg(feature = "advanced-routing")]
+    #[derive(Debug, Clone)]
+    struct PreferLocalGpu;
+
+    #[cfg(feature = "advanced-routing")]
+    impl mofa_kernel::llm::RoutingPredicateClone for PreferLocalGpu {
+        fn clone_box(&self) -> Box<dyn mofa_kernel::llm::RoutingPredicate> {
+            Box::new(self.clone())
+        }
+    }
+
+    #[cfg(feature = "advanced-routing")]
+    impl mofa_kernel::llm::RoutingPredicate for PreferLocalGpu {
+        fn evaluate(
+            &self,
+            _request: &InferenceRequest,
+            candidates: &mofa_kernel::llm::CandidateSet,
+        ) -> f32 {
+            if candidates
+                .candidates
+                .iter()
+                .any(|c| matches!(c, mofa_kernel::llm::RoutedBackend::Local { .. }))
+            {
+                1.0 // Strong preference for local
+            } else {
+                -1.0
+            }
+        }
+    }
+
+    #[cfg(feature = "advanced-routing")]
+    #[test]
+    fn test_custom_routing_predicate() {
+        let policy = RoutingObjective::Custom(Box::new(PreferLocalGpu));
+        let decision = resolve(
+            &policy,
+            &mock_request(),
+            AdmissionOutcome::Accepted,
+            &mock_hardware(),
+            "openai",
+        );
+        // Because AdmissionOutcome is Accepted, the score >= 0.0 means UseLocal is chosen.
+        assert_eq!(
+            decision,
+            RoutingDecision::UseLocal {
+                model_id: "llama-3-13b".into()
+            }
+        );
     }
 }

@@ -44,3 +44,5 @@ workspace = true
 default = []
 # Config loader (formats, env substitution, merge)
 config = ["dep:config", "dep:regex", "dep:serde_yaml", "dep:toml"]
+# Enable advanced custom routing predicates using trait objects (Box<dyn RoutingPredicate>)
+advanced-routing = []

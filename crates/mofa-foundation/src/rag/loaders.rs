@@ -73,9 +73,7 @@ impl DocumentLoader for TextLoader {
         })?;
 
         if content.trim().is_empty() {
-            return Err(LoaderError::EmptyDocument(
-                path.display().to_string(),
-            ));
+            return Err(LoaderError::EmptyDocument(path.display().to_string()));
         }
 
         // Use full path for unique IDs across directories
@@ -152,9 +150,7 @@ impl DocumentLoader for MarkdownLoader {
         })?;
 
         if content.trim().is_empty() {
-            return Err(LoaderError::EmptyDocument(
-                path.display().to_string(),
-            ));
+            return Err(LoaderError::EmptyDocument(path.display().to_string()));
         }
 
         let source = path.display().to_string();
@@ -215,9 +211,7 @@ impl DocumentLoader for MarkdownLoader {
         }
 
         if documents.is_empty() {
-            return Err(LoaderError::EmptyDocument(
-                path.display().to_string(),
-            ));
+            return Err(LoaderError::EmptyDocument(path.display().to_string()));
         }
 
         Ok(documents)

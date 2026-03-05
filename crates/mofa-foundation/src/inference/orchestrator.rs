@@ -44,7 +44,7 @@ mod duration_secs {
 }
 
 use super::model_pool::ModelPool;
-use super::routing::{self, AdmissionOutcome, RoutingDecision, RoutingPolicy};
+use super::routing::{self, AdmissionOutcome, RoutingDecision};
 use super::types::{InferenceRequest, InferenceResult, RequestPriority, RoutedBackend};
 
 /// Configuration for the `InferenceOrchestrator`.
@@ -62,7 +62,7 @@ pub struct OrchestratorConfig {
     #[serde(with = "duration_secs")]
     pub idle_timeout: Duration,
     /// The routing policy governing local vs cloud decisions
-    pub routing_policy: RoutingPolicy,
+    pub routing_policy: mofa_kernel::llm::RoutingObjective,
     /// The cloud provider to use for fallback (e.g., "openai")
     pub cloud_provider: String,
 }
@@ -75,7 +75,7 @@ impl Default for OrchestratorConfig {
             reject_threshold: 0.90,
             model_pool_capacity: 5,
             idle_timeout: Duration::from_secs(300),
-            routing_policy: RoutingPolicy::default(),
+            routing_policy: mofa_kernel::llm::RoutingObjective::default(),
             cloud_provider: "openai".to_string(),
         }
     }
@@ -276,7 +276,7 @@ impl InferenceOrchestrator {
     }
 
     /// Get a reference to the active routing policy.
-    pub fn routing_policy(&self) -> &RoutingPolicy {
+    pub fn routing_policy(&self) -> &mofa_kernel::llm::RoutingObjective {
         &self.config.routing_policy
     }
 

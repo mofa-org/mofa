@@ -28,7 +28,6 @@ use std::fmt;
 #[non_exhaustive]
 pub enum GlobalError {
     // ---- Core layer errors ----
-
     /// Agent layer error
     #[error("Agent error: {0}")]
     Agent(#[from] AgentError),
@@ -46,7 +45,6 @@ pub enum GlobalError {
     Runtime(String),
 
     // ---- Infrastructure errors ----
-
     /// IO error
     #[error("IO error: {0}")]
     Io(#[from] std::io::Error),
@@ -60,7 +58,6 @@ pub enum GlobalError {
     Config(String),
 
     // ---- Domain-specific errors ----
-
     /// Persistence / storage error
     #[error("Persistence error: {0}")]
     Persistence(String),
@@ -90,7 +87,6 @@ pub enum GlobalError {
     MessageGraph(String),
 
     // ---- Catch-all ----
-
     /// Other / untyped error
     #[error("Other error: {0}")]
     Other(String),

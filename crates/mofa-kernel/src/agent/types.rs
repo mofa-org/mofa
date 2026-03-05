@@ -5,10 +5,10 @@
 //! Defines unified Agent input, output, and state types
 
 use async_trait::async_trait;
+use base64::Engine;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fmt;
-use base64::Engine;
 
 // 导出统一类型模块
 // Export unified type modules
@@ -17,7 +17,9 @@ pub mod event;
 pub mod global;
 pub mod recovery;
 
-pub use error::{ErrorCategory, ErrorContext, GlobalError, GlobalReport, GlobalResult, IntoGlobalReport};
+pub use error::{
+    ErrorCategory, ErrorContext, GlobalError, GlobalReport, GlobalResult, IntoGlobalReport,
+};
 pub use event::{EventBuilder, GlobalEvent};
 pub use event::{execution, lifecycle, message, plugin, state};
 // 重新导出常用类型
