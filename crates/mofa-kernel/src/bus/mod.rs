@@ -147,8 +147,15 @@ impl AgentBus {
                     let Some(channel) = channels.get(&mode) else {
                         continue;
                     };
-                    channel.send(message_bytes.clone())
-                        .map_err(|e| BusError::SendFailed(e.to_string()))?;
+                    if let Err(e) = channel.send(message_bytes.clone()) {
+                        tracing::warn!(
+                            subscriber = %sub_id,
+                            topic = %topic,
+                            error = %e,
+                            "PubSub: failed to deliver message to subscriber, skipping"
+                        );
+                        continue;
+                    }
                 }
             }
         }
