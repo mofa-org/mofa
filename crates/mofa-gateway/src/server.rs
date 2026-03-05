@@ -15,7 +15,7 @@ use mofa_runtime::agent::registry::AgentRegistry;
 
 /// Control-plane server configuration
 #[derive(Debug, Clone)]
-pub struct GatewayConfig {
+pub struct ServerConfig {
     /// Bind host
     pub host: String,
     /// Bind port
@@ -30,7 +30,7 @@ pub struct GatewayConfig {
     pub rate_window: Duration,
 }
 
-impl Default for GatewayConfig {
+impl Default for ServerConfig {
     fn default() -> Self {
         Self {
             host: "0.0.0.0".to_string(),
@@ -43,7 +43,7 @@ impl Default for GatewayConfig {
     }
 }
 
-impl GatewayConfig {
+impl ServerConfig {
     pub fn new() -> Self {
         Self::default()
     }
@@ -78,13 +78,13 @@ impl GatewayConfig {
 
 /// Control-plane server that exposes the agent management REST API
 pub struct GatewayServer {
-    config: GatewayConfig,
+    config: ServerConfig,
     registry: Arc<AgentRegistry>,
 }
 
 impl GatewayServer {
     /// Create a server backed by the given `AgentRegistry`.
-    pub fn new(config: GatewayConfig, registry: Arc<AgentRegistry>) -> Self {
+    pub fn new(config: ServerConfig, registry: Arc<AgentRegistry>) -> Self {
         Self { config, registry }
     }
 
@@ -161,14 +161,14 @@ mod tests {
 
     #[test]
     fn default_config() {
-        let cfg = GatewayConfig::default();
+        let cfg = ServerConfig::default();
         assert_eq!(cfg.port, 8090);
         assert!(cfg.enable_cors);
     }
 
     #[test]
     fn builder_methods() {
-        let cfg = GatewayConfig::new()
+        let cfg = ServerConfig::new()
             .with_host("127.0.0.1")
             .with_port(9000)
             .with_cors(false)
@@ -182,7 +182,7 @@ mod tests {
 
     #[test]
     fn socket_addr_parses() {
-        let cfg = GatewayConfig::new().with_host("127.0.0.1").with_port(8090);
+        let cfg = ServerConfig::new().with_host("127.0.0.1").with_port(8090);
         let addr = cfg.socket_addr();
         assert_eq!(addr.port(), 8090);
     }

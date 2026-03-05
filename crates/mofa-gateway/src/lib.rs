@@ -76,7 +76,11 @@ pub mod consensus;
 pub mod control_plane;
 pub mod error;
 pub mod gateway;
+pub mod handlers;
+pub mod middleware;
 pub mod observability;
+pub mod server;
+pub mod state;
 pub mod state_machine;
 pub mod types;
 
@@ -84,4 +88,5 @@ pub mod types;
 pub use control_plane::{ControlPlane, ControlPlaneConfig};
 pub use error::{ControlPlaneError, GatewayError, GatewayResult};
 pub use gateway::{Gateway, GatewayConfig};
+pub use server::{GatewayServer, ServerConfig};
 pub use types::*;
