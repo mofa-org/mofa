@@ -1,54 +1,54 @@
-//! MoFA Gateway - Control plane and API gateway for agent management
+//! `mofa-gateway` — MoFA Cognitive Gateway runtime.
 //!
-//! This crate provides an HTTP control plane that sits in front of running
-//! MoFA agents and exposes a REST API for lifecycle management and request
-//! routing.
+//! This crate provides the concrete implementations of the gateway kernel
+//! contracts defined in `mofa-kernel::gateway`:
 //!
-//! # Endpoints
+//! | Kernel contract | Implementation |
+//! |----------------|----------------|
+//! | [`GatewayRouter`] | [`router::TrieRouter`] |
+//! | [`CapabilityRegistry`] | [`backend::InMemoryCapabilityRegistry`] |
+//! | [`GatewayFilter`] | [`filter::ApiKeyFilter`], [`filter::RateLimitFilter`], [`filter::LoggingFilter`] |
 //!
-//! | Method   | Path                       | Description                        |
-//! |----------|----------------------------|------------------------------------|
-//! | `POST`   | `/agents`                  | Create and register an agent       |
-//! | `GET`    | `/agents`                  | List all registered agents         |
-//! | `GET`    | `/agents/{id}/status`      | Detailed status for one agent      |
-//! | `POST`   | `/agents/{id}/stop`        | Gracefully stop an agent           |
-//! | `DELETE` | `/agents/{id}`             | Remove agent from registry         |
-//! | `POST`   | `/agents/{id}/chat`        | Send a message and get a response  |
-//! | `GET`    | `/health`                  | Liveness probe                     |
-//! | `GET`    | `/ready`                   | Readiness probe                    |
+//! The [`server::GatewayServer`] wires everything together into an axum HTTP
+//! service.
 //!
-//! # Example
+//! # Quick start
 //!
 //! ```rust,no_run
-//! use mofa_gateway::{GatewayServer, GatewayConfig};
-//! use mofa_runtime::agent::registry::AgentRegistry;
-//! use std::sync::Arc;
+//! use mofa_gateway::server::{GatewayServer, GatewayServerConfig};
+//! use mofa_kernel::gateway::{
+//!     BackendKind, CapabilityDescriptor, GatewayConfig, RouteConfig,
+//! };
 //!
 //! #[tokio::main]
 //! async fn main() {
-//!     let registry = Arc::new(AgentRegistry::new());
+//!     let gateway_config = GatewayConfig::new("my-gateway")
+//!         .with_backend(CapabilityDescriptor::new(
+//!             "openai",
+//!             BackendKind::LlmOpenAI,
+//!             "https://api.openai.com",
+//!         ))
+//!         .with_route(RouteConfig::new(
+//!             "chat",
+//!             "/v1/chat/completions",
+//!             "openai",
+//!         ));
 //!
-//!     let config = GatewayConfig::new()
-//!         .with_port(8090);
+//!     let server = GatewayServer::new(GatewayServerConfig {
+//!         port: 3000,
+//!         openai_api_key: std::env::var("OPENAI_API_KEY").ok(),
+//!         ..Default::default()
+//!     });
 //!
-//!     GatewayServer::new(config, registry)
-//!         .start()
-//!         .await
-//!         .unwrap();
+//!     server.start(gateway_config).await.unwrap();
 //! }
 //! ```
 
+pub mod backend;
 pub mod error;
-pub mod handlers;
-pub mod middleware;
-pub mod server;
-pub mod state;
-
-// Task 12: Cognitive Gateway runtime components
-pub mod router;
 pub mod filter;
+pub mod router;
+pub mod server;
 
-pub use error::{GatewayError, GatewayResult};
-pub use middleware::RateLimiter;
-pub use server::{GatewayConfig, GatewayServer};
-pub use state::AppState;
+// Re-export the kernel gateway types for convenience.
+pub use mofa_kernel::gateway;

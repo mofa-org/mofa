@@ -1,189 +1,338 @@
-//! Control-plane HTTP server
+//! Axum-based HTTP gateway server.
+//!
+//! [`GatewayServer`] wires together the router, filter pipeline, and backend
+//! registry into a running axum service.
+//!
+//! # Endpoints
+//!
+//! | Method | Path | Description |
+//! |--------|------|-------------|
+//! | `GET`  | `/health` | Liveness check — always `200 OK`. |
+//! | `ANY`  | `/v1/chat/completions` | Proxy to the registered OpenAI backend. |
+//! | `GET`  | `/v1/capabilities` | List all registered backends as JSON. |
 
-use axum::{Router, http::Method};
-use std::net::SocketAddr;
+use crate::backend::{InMemoryCapabilityRegistry, OpenAiBackend};
+use crate::filter::{ApiKeyFilter, FilterPipeline, LoggingFilter, RateLimitFilter};
+use crate::router::TrieRouter;
+use axum::{
+    Json, Router,
+    body::Bytes,
+    extract::State,
+    http::{HeaderMap, Method, StatusCode, Uri},
+    response::{IntoResponse, Response},
+    routing::{any, get},
+};
+use mofa_kernel::gateway::{
+    BackendKind, CapabilityDescriptor, CapabilityRegistry, FilterAction, GatewayConfig,
+    GatewayContext, GatewayRequest, GatewayResponse, GatewayRouter, HttpMethod, RouteConfig,
+};
+use serde_json::json;
 use std::sync::Arc;
-use std::time::Duration;
-use tower_http::cors::{Any, CorsLayer};
-use tower_http::trace::TraceLayer;
-use tracing::info;
+use tokio::sync::RwLock;
+use tracing::{info, warn};
+use uuid::Uuid;
 
-use crate::handlers::{agents_router, chat_router, health_router};
-use crate::middleware::RateLimiter;
-use crate::state::AppState;
-use mofa_runtime::agent::registry::AgentRegistry;
+// ─────────────────────────────────────────────────────────────────────────────
+// Shared application state
+// ─────────────────────────────────────────────────────────────────────────────
 
-/// Control-plane server configuration
-#[derive(Debug, Clone)]
-pub struct GatewayConfig {
-    /// Bind host
-    pub host: String,
-    /// Bind port
-    pub port: u16,
-    /// Whether to enable CORS for all origins
-    pub enable_cors: bool,
-    /// Whether to enable per-request tracing logs
-    pub enable_tracing: bool,
-    /// Maximum requests allowed per client per `rate_window`
-    pub rate_max_requests: u64,
-    /// Time window for the rate limiter
-    pub rate_window: Duration,
+/// Shared state injected into every axum handler via [`State`] extractor.
+#[derive(Clone)]
+pub struct AppState {
+    router: Arc<RwLock<TrieRouter>>,
+    registry: Arc<RwLock<InMemoryCapabilityRegistry>>,
+    pipeline: Arc<FilterPipeline>,
+    openai_backend: Arc<OpenAiBackend>,
 }
 
-impl Default for GatewayConfig {
+// ─────────────────────────────────────────────────────────────────────────────
+// GatewayServerConfig
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Runtime configuration for [`GatewayServer`].
+pub struct GatewayServerConfig {
+    /// TCP port to listen on (default: 3000).
+    pub port: u16,
+    /// List of valid API keys for the built-in `ApiKeyFilter`.
+    /// When empty, authentication is **disabled** — use only in development.
+    pub api_keys: Vec<String>,
+    /// Optional OpenAI API key to inject into upstream requests.
+    pub openai_api_key: Option<String>,
+    /// OpenAI-compatible base URL (default: `https://api.openai.com`).
+    pub openai_base_url: String,
+    /// Sustained rate limit (requests/second, default: 100).
+    pub rate_per_second: u32,
+    /// Burst capacity (default: 200).
+    pub burst_capacity: u32,
+}
+
+impl Default for GatewayServerConfig {
     fn default() -> Self {
         Self {
-            host: "0.0.0.0".to_string(),
-            port: 8090,
-            enable_cors: true,
-            enable_tracing: true,
-            rate_max_requests: 100,
-            rate_window: Duration::from_secs(60),
+            port: 3000,
+            api_keys: Vec::new(),
+            openai_api_key: None,
+            openai_base_url: "https://api.openai.com".to_string(),
+            rate_per_second: 100,
+            burst_capacity: 200,
         }
     }
 }
 
-impl GatewayConfig {
-    pub fn new() -> Self {
-        Self::default()
-    }
+// ─────────────────────────────────────────────────────────────────────────────
+// GatewayServer
+// ─────────────────────────────────────────────────────────────────────────────
 
-    pub fn with_host(mut self, host: impl Into<String>) -> Self {
-        self.host = host.into();
-        self
-    }
-
-    pub fn with_port(mut self, port: u16) -> Self {
-        self.port = port;
-        self
-    }
-
-    pub fn with_cors(mut self, enable: bool) -> Self {
-        self.enable_cors = enable;
-        self
-    }
-
-    pub fn with_rate_limit(mut self, max_requests: u64, window: Duration) -> Self {
-        self.rate_max_requests = max_requests;
-        self.rate_window = window;
-        self
-    }
-
-    pub fn socket_addr(&self) -> SocketAddr {
-        format!("{}:{}", self.host, self.port)
-            .parse()
-            .unwrap_or_else(|_| SocketAddr::from(([0, 0, 0, 0], self.port)))
-    }
-}
-
-/// Control-plane server that exposes the agent management REST API
+/// High-level gateway server encapsulating router, filter pipeline, and
+/// backend registry.
 pub struct GatewayServer {
-    config: GatewayConfig,
-    registry: Arc<AgentRegistry>,
+    config: GatewayServerConfig,
 }
 
 impl GatewayServer {
-    /// Create a server backed by the given `AgentRegistry`.
-    pub fn new(config: GatewayConfig, registry: Arc<AgentRegistry>) -> Self {
-        Self { config, registry }
+    /// Create a new server from the given configuration.
+    pub fn new(config: GatewayServerConfig) -> Self {
+        Self { config }
     }
 
-    /// Build the axum `Router` without starting the server.
+    /// Build the axum [`Router`] wired to the provided [`GatewayConfig`].
     ///
-    /// Useful for integration tests that want to drive the server via
-    /// `axum::serve` or `tower::ServiceExt`.
-    pub fn build_router(&self) -> Router {
-        let rate_limiter = Arc::new(RateLimiter::new(
-            self.config.rate_max_requests,
-            self.config.rate_window,
-        ));
+    /// This method validates the config, registers routes and backends, and
+    /// constructs the filter pipeline.  Call [`start()`](Self::start) to bind
+    /// and serve.
+    pub fn build_app(&self, gateway_cfg: &GatewayConfig) -> Router {
+        gateway_cfg.validate().expect("invalid gateway config");
 
-        let state = Arc::new(AppState::new(self.registry.clone(), rate_limiter.clone()));
-
-        // Spawn background GC task for rate-limiter entries
-        let gc_limiter = rate_limiter.clone();
-        tokio::spawn(async move {
-            let mut interval = tokio::time::interval(Duration::from_secs(120));
-            loop {
-                interval.tick().await;
-                gc_limiter.gc();
-            }
-        });
-
-        let mut router = Router::new()
-            .merge(health_router())
-            .merge(agents_router())
-            .merge(chat_router())
-            .with_state(state);
-
-        if self.config.enable_tracing {
-            router = router.layer(TraceLayer::new_for_http());
+        // Build the trie router from the validated route list.
+        let mut trie = TrieRouter::new();
+        for route in &gateway_cfg.routes {
+            trie.register(route.clone())
+                .expect("duplicate route in validated config");
         }
 
-        if self.config.enable_cors {
-            let cors = CorsLayer::new()
-                .allow_origin(Any)
-                .allow_methods([
-                    Method::GET,
-                    Method::POST,
-                    Method::DELETE,
-                    Method::OPTIONS,
-                ])
-                .allow_headers(Any);
-            router = router.layer(cors);
+        // Build the capability registry.
+        let mut registry = InMemoryCapabilityRegistry::new();
+        for backend in &gateway_cfg.backends {
+            registry
+                .register(backend.clone())
+                .expect("duplicate backend in validated config");
         }
 
-        router
+        // Build the filter pipeline.
+        let mut filters: Vec<Arc<dyn mofa_kernel::gateway::GatewayFilter>> =
+            vec![Arc::new(LoggingFilter::new()), Arc::new(RateLimitFilter::new(
+                self.config.rate_per_second,
+                self.config.burst_capacity,
+            ))];
+        if !self.config.api_keys.is_empty() {
+            filters.push(Arc::new(ApiKeyFilter::new(self.config.api_keys.clone())));
+        }
+        let pipeline = FilterPipeline::new(filters);
+
+        // OpenAI backend.
+        let openai_backend = OpenAiBackend::new(
+            "openai",
+            &self.config.openai_base_url,
+            self.config.openai_api_key.clone(),
+        );
+
+        let state = AppState {
+            router: Arc::new(RwLock::new(trie)),
+            registry: Arc::new(RwLock::new(registry)),
+            pipeline: Arc::new(pipeline),
+            openai_backend: Arc::new(openai_backend),
+        };
+
+        Router::new()
+            .route("/health", get(health_handler))
+            .route("/v1/capabilities", get(list_capabilities_handler))
+            .route("/v1/chat/completions", any(proxy_handler))
+            .route("/v1/models", any(proxy_handler))
+            .route("/v1/embeddings", any(proxy_handler))
+            .with_state(state)
     }
 
-    /// Start the server and block until it exits.
-    pub async fn start(self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        let addr = self.config.socket_addr();
-        info!("MoFA control-plane starting on http://{}", addr);
-
-        let router = self.build_router();
-        let listener = tokio::net::TcpListener::bind(addr).await?;
-        axum::serve(listener, router).await?;
-        Ok(())
-    }
-
-    /// Start the server in a background Tokio task.
-    pub fn start_background(
-        self,
-    ) -> tokio::task::JoinHandle<Result<(), Box<dyn std::error::Error + Send + Sync>>> {
-        tokio::spawn(async move { self.start().await })
+    /// Bind the server to `0.0.0.0:{port}` and serve until the process exits.
+    pub async fn start(self, gateway_cfg: GatewayConfig) -> std::io::Result<()> {
+        let app = self.build_app(&gateway_cfg);
+        let addr = format!("0.0.0.0:{}", self.config.port);
+        info!(addr = %addr, "MoFA Cognitive Gateway starting");
+        let listener = tokio::net::TcpListener::bind(&addr).await?;
+        axum::serve(listener, app).await
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
+// ─────────────────────────────────────────────────────────────────────────────
+// Handlers
+// ─────────────────────────────────────────────────────────────────────────────
 
-    #[test]
-    fn default_config() {
-        let cfg = GatewayConfig::default();
-        assert_eq!(cfg.port, 8090);
-        assert!(cfg.enable_cors);
+/// `GET /health` — liveness probe.
+async fn health_handler() -> impl IntoResponse {
+    Json(json!({ "status": "ok", "service": "mofa-gateway" }))
+}
+
+/// `GET /v1/capabilities` — list registered backends.
+async fn list_capabilities_handler(State(state): State<AppState>) -> impl IntoResponse {
+    let registry = state.registry.read().await;
+    let backends: Vec<serde_json::Value> = registry
+        .list_all()
+        .iter()
+        .map(|d| {
+            json!({
+                "id": d.id,
+                "kind": format!("{:?}", d.kind),
+                "endpoint": d.endpoint,
+                "health": format!("{:?}", d.health),
+            })
+        })
+        .collect();
+    Json(json!({ "backends": backends }))
+}
+
+/// Generic proxy handler — routes request through the filter pipeline then
+/// forwards to the resolved backend.
+async fn proxy_handler(
+    State(state): State<AppState>,
+    method: Method,
+    uri: Uri,
+    headers: HeaderMap,
+    body: Bytes,
+) -> Response {
+    // Preserve query string so /v1/models?foo=bar is forwarded correctly.
+    let path = uri
+        .path_and_query()
+        .map(|pq| pq.as_str().to_string())
+        .unwrap_or_else(|| uri.path().to_string());
+
+    let http_method = match axum_method_to_kernel(&method) {
+        Some(m) => m,
+        None => {
+            return (
+                StatusCode::METHOD_NOT_ALLOWED,
+                Json(json!({ "error": format!("method '{}' is not supported", method) })),
+            )
+                .into_response();
+        }
+    };
+    let request_id = Uuid::new_v4().to_string();
+
+    let mut req = GatewayRequest::new(&request_id, &path, http_method);
+    for (name, value) in &headers {
+        if let Ok(v) = value.to_str() {
+            req = req.with_header(name.as_str(), v);
+        }
+    }
+    req = req.with_body(body.to_vec());
+
+    // Route lookup.
+    let route_match = {
+        let router = state.router.read().await;
+        router.resolve(&path, &req.method)
+    };
+
+    let Some(route_match) = route_match else {
+        return (StatusCode::NOT_FOUND, Json(json!({
+            "error": format!("no route matched '{path}'")
+        })))
+            .into_response();
+    };
+
+    let mut ctx = GatewayContext::new(req);
+    ctx.route_match = Some(route_match);
+
+    // Run the filter pipeline on the request.
+    let pipeline_result = state.pipeline.run_request(&mut ctx).await;
+    match pipeline_result {
+        Ok(FilterAction::Reject(status, msg)) => {
+            let code = StatusCode::from_u16(status).unwrap_or(StatusCode::INTERNAL_SERVER_ERROR);
+            return (code, Json(json!({ "error": msg }))).into_response();
+        }
+        Ok(FilterAction::Redirect(loc)) => {
+            return (
+                StatusCode::TEMPORARY_REDIRECT,
+                [("location", loc)],
+            )
+                .into_response();
+        }
+        Ok(FilterAction::Continue) => {}
+        // FilterAction is #[non_exhaustive]; treat unknown variants as Continue.
+        Ok(_) => {}
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({ "error": e.to_string() })),
+            )
+                .into_response();
+        }
     }
 
-    #[test]
-    fn builder_methods() {
-        let cfg = GatewayConfig::new()
-            .with_host("127.0.0.1")
-            .with_port(9000)
-            .with_cors(false)
-            .with_rate_limit(50, Duration::from_secs(30));
+    // Select backend by backend_id resolved during routing.
+    let backend_id = ctx
+        .route_match
+        .as_ref()
+        .map(|m| m.backend_id.as_str())
+        .unwrap_or("openai");
+    let upstream_result = match backend_id {
+        "openai" => state.openai_backend.forward(&ctx.request).await,
+        other => {
+            return (
+                StatusCode::BAD_GATEWAY,
+                Json(json!({ "error": format!("unsupported backend '{other}'") })),
+            )
+                .into_response();
+        }
+    };
 
-        assert_eq!(cfg.host, "127.0.0.1");
-        assert_eq!(cfg.port, 9000);
-        assert!(!cfg.enable_cors);
-        assert_eq!(cfg.rate_max_requests, 50);
+    let mut gateway_resp = match upstream_result {
+        Ok(r) => r,
+        Err(e) => {
+            return (
+                StatusCode::BAD_GATEWAY,
+                Json(json!({ "error": e.to_string() })),
+            )
+                .into_response();
+        }
+    };
+
+    // Run the filter pipeline on the response.
+    if let Err(err) = state.pipeline.run_response(&ctx, &mut gateway_resp).await {
+        warn!(
+            request_id = %request_id,
+            error = %err,
+            "response filter pipeline error (upstream response still returned)"
+        );
     }
 
-    #[test]
-    fn socket_addr_parses() {
-        let cfg = GatewayConfig::new().with_host("127.0.0.1").with_port(8090);
-        let addr = cfg.socket_addr();
-        assert_eq!(addr.port(), 8090);
+    build_axum_response(gateway_resp)
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Helpers
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Convert an axum [`Method`] to the kernel [`HttpMethod`].
+///
+/// Returns `None` for methods not in the kernel's `HttpMethod` enum
+/// (e.g. `CONNECT`, `TRACE`, `LINK`).  Callers should respond with
+/// `405 Method Not Allowed` when `None` is returned.
+fn axum_method_to_kernel(m: &Method) -> Option<HttpMethod> {
+    match m.as_str() {
+        "GET"     => Some(HttpMethod::Get),
+        "POST"    => Some(HttpMethod::Post),
+        "PUT"     => Some(HttpMethod::Put),
+        "PATCH"   => Some(HttpMethod::Patch),
+        "DELETE"  => Some(HttpMethod::Delete),
+        "HEAD"    => Some(HttpMethod::Head),
+        "OPTIONS" => Some(HttpMethod::Options),
+        _         => None,
     }
+}
+
+fn build_axum_response(resp: GatewayResponse) -> Response {
+    let status = StatusCode::from_u16(resp.status).unwrap_or(StatusCode::INTERNAL_SERVER_ERROR);
+    let mut builder = axum::response::Response::builder().status(status);
+    for (k, v) in &resp.headers {
+        builder = builder.header(k, v);
+    }
+    builder.body(axum::body::Body::from(resp.body)).unwrap()
 }

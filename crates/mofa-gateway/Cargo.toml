@@ -2,42 +2,42 @@
 name = "mofa-gateway"
 version.workspace = true
 edition.workspace = true
-description = "MoFA Gateway - Control plane and API gateway for agent management"
 authors.workspace = true
 license.workspace = true
 repository.workspace = true
 homepage.workspace = true
-documentation = "https://docs.rs/mofa-gateway"
-readme = "README.md"
-keywords = ["ai", "agent", "gateway", "api", "control-plane"]
-categories = ["development-tools", "web-programming"]
-publish = true
+description = "MoFA Cognitive Gateway — runtime implementation (Task 12)"
 
 [dependencies]
-# Workspace dependencies
-async-trait.workspace = true
+mofa-kernel = { path = "../mofa-kernel" }
+
+# HTTP server & middleware
+axum.workspace = true
+tower = "0.5"
+tower-http = { version = "0.6", features = ["trace", "cors", "timeout"] }
+
+# Async runtime
+tokio.workspace = true
+
+# HTTP client (LLM backend proxy)
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls", "stream"] }
+
+# Serialization
 serde.workspace = true
 serde_json.workspace = true
-tokio.workspace = true
-tracing.workspace = true
-uuid.workspace = true
+
+# Error handling
 thiserror.workspace = true
-chrono.workspace = true
-dashmap = { workspace = true }
 
-# HTTP server
-axum = { workspace = true, features = ["macros"] }
-tower = { version = "0.5", features = ["util"] }
-tower-http = { version = "0.6", features = ["cors", "trace", "request-id"] }
+# Logging & tracing
+tracing.workspace = true
+tracing-subscriber.workspace = true
 
-# Local dependencies
-mofa-kernel = { path = "../mofa-kernel", version = "0.1" }
-mofa-runtime = { path = "../mofa-runtime", version = "0.1" }
-mofa-monitoring = { path = "../mofa-monitoring", version = "0.1", optional = true }
+# Async traits
+async-trait.workspace = true
 
-[features]
-default = []
-monitoring = ["dep:mofa-monitoring"]
+# UUID for request-ID generation
+uuid.workspace = true
 
 [lints]
 workspace = true
