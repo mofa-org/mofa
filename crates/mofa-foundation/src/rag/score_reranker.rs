@@ -63,11 +63,9 @@ impl Reranker for ScoreReranker {
         docs.retain(|d| d.score >= self.min_score);
 
         // Sort by score descending, with deterministic tie-breaker on document.id
-        docs.sort_by(|a, b| {
-            match b.score.partial_cmp(&a.score) {
-                Some(ordering) if ordering != std::cmp::Ordering::Equal => ordering,
-                _ => a.document.id.cmp(&b.document.id),
-            }
+        docs.sort_by(|a, b| match b.score.partial_cmp(&a.score) {
+            Some(ordering) if ordering != std::cmp::Ordering::Equal => ordering,
+            _ => a.document.id.cmp(&b.document.id),
         });
 
         // Apply top-k limit
@@ -110,11 +108,7 @@ mod tests {
     #[tokio::test]
     async fn sorts_by_score_descending() {
         let reranker = ScoreReranker::default();
-        let docs = vec![
-            make_doc("a", 0.3),
-            make_doc("b", 0.9),
-            make_doc("c", 0.6),
-        ];
+        let docs = vec![make_doc("a", 0.3), make_doc("b", 0.9), make_doc("c", 0.6)];
         let result = reranker.rerank("query", docs).await.unwrap();
         assert_eq!(result[0].document.id, "b");
         assert_eq!(result[1].document.id, "c");
@@ -159,10 +153,7 @@ mod tests {
     #[tokio::test]
     async fn all_filtered_out() {
         let reranker = ScoreReranker::with_threshold(0.99);
-        let docs = vec![
-            make_doc("a", 0.5),
-            make_doc("b", 0.3),
-        ];
+        let docs = vec![make_doc("a", 0.5), make_doc("b", 0.3)];
         let result = reranker.rerank("query", docs).await.unwrap();
         assert!(result.is_empty());
     }

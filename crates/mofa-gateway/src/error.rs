@@ -1,9 +1,9 @@
 //! Gateway error types
 
 use axum::{
+    Json,
     http::StatusCode,
     response::{IntoResponse, Response},
-    Json,
 };
 use serde_json::json;
 use thiserror::Error;
@@ -53,11 +53,9 @@ impl IntoResponse for GatewayError {
                 "AGENT_OPERATION_FAILED",
                 msg.clone(),
             ),
-            GatewayError::InvalidRequest(msg) => (
-                StatusCode::BAD_REQUEST,
-                "INVALID_REQUEST",
-                msg.clone(),
-            ),
+            GatewayError::InvalidRequest(msg) => {
+                (StatusCode::BAD_REQUEST, "INVALID_REQUEST", msg.clone())
+            }
             GatewayError::Internal(msg) => (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "INTERNAL_ERROR",

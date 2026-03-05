@@ -57,12 +57,18 @@ fn chunk_to_stream_chunk(chunk: ChatCompletionChunk) -> StreamChunk {
         .and_then(|c| c.delta.content.clone())
         .unwrap_or_default();
 
-    let finish_reason = choice.and_then(|c| c.finish_reason.clone()).map(|fr| match fr {
-        super::types::FinishReason::Stop => mofa_kernel::llm::types::FinishReason::Stop,
-        super::types::FinishReason::Length => mofa_kernel::llm::types::FinishReason::Length,
-        super::types::FinishReason::ToolCalls => mofa_kernel::llm::types::FinishReason::ToolCalls,
-        super::types::FinishReason::ContentFilter => mofa_kernel::llm::types::FinishReason::ContentFilter,
-    });
+    let finish_reason = choice
+        .and_then(|c| c.finish_reason.clone())
+        .map(|fr| match fr {
+            super::types::FinishReason::Stop => mofa_kernel::llm::types::FinishReason::Stop,
+            super::types::FinishReason::Length => mofa_kernel::llm::types::FinishReason::Length,
+            super::types::FinishReason::ToolCalls => {
+                mofa_kernel::llm::types::FinishReason::ToolCalls
+            }
+            super::types::FinishReason::ContentFilter => {
+                mofa_kernel::llm::types::FinishReason::ContentFilter
+            }
+        });
 
     let usage = chunk.usage.map(|u| UsageDelta {
         prompt_tokens: Some(u.prompt_tokens),
@@ -70,26 +76,29 @@ fn chunk_to_stream_chunk(chunk: ChatCompletionChunk) -> StreamChunk {
         total_tokens: Some(u.total_tokens),
     });
 
-    let tool_calls = choice
-        .and_then(|c| c.delta.tool_calls.clone())
-        .map(|tcs| {
-            tcs.into_iter()
-                .map(|tc| mofa_kernel::llm::types::ToolCallDelta {
-                    index: tc.index,
-                    id: tc.id,
-                    call_type: tc.call_type,
-                    function: tc.function.map(|f| mofa_kernel::llm::types::FunctionCallDelta {
+    let tool_calls = choice.and_then(|c| c.delta.tool_calls.clone()).map(|tcs| {
+        tcs.into_iter()
+            .map(|tc| mofa_kernel::llm::types::ToolCallDelta {
+                index: tc.index,
+                id: tc.id,
+                call_type: tc.call_type,
+                function: tc
+                    .function
+                    .map(|f| mofa_kernel::llm::types::FunctionCallDelta {
                         name: f.name,
                         arguments: f.arguments,
                     }),
-                })
-                .collect()
-        });
+            })
+            .collect()
+    });
 
-    StreamChunk { delta, finish_reason, usage, tool_calls }
+    StreamChunk {
+        delta,
+        finish_reason,
+        usage,
+        tool_calls,
+    }
 }
-
-
 
 #[cfg(test)]
 mod tests {
@@ -99,11 +108,17 @@ mod tests {
 
     fn text_chunk(text: &str) -> ChatCompletionChunk {
         ChatCompletionChunk {
-            id: "id".into(), object: "chat.completion.chunk".into(),
-            created: 0, model: "m".into(),
+            id: "id".into(),
+            object: "chat.completion.chunk".into(),
+            created: 0,
+            model: "m".into(),
             choices: vec![ChunkChoice {
                 index: 0,
-                delta: ChunkDelta { role: None, content: Some(text.into()), tool_calls: None },
+                delta: ChunkDelta {
+                    role: None,
+                    content: Some(text.into()),
+                    tool_calls: None,
+                },
                 finish_reason: None,
             }],
             usage: None,
@@ -112,10 +127,14 @@ mod tests {
 
     fn done_chunk(reason: FinishReason, usage: Option<Usage>) -> ChatCompletionChunk {
         ChatCompletionChunk {
-            id: "id".into(), object: "chat.completion.chunk".into(),
-            created: 0, model: "m".into(),
+            id: "id".into(),
+            object: "chat.completion.chunk".into(),
+            created: 0,
+            model: "m".into(),
             choices: vec![ChunkChoice {
-                index: 0, delta: ChunkDelta::default(), finish_reason: Some(reason),
+                index: 0,
+                delta: ChunkDelta::default(),
+                finish_reason: Some(reason),
             }],
             usage,
         }
@@ -128,30 +147,38 @@ mod tests {
             Ok(text_chunk(" world")),
             Ok(done_chunk(FinishReason::Stop, None)),
         ];
-        let mut s = adapter_for_provider("openai")
-            .adapt(Box::pin(futures::stream::iter(chunks)));
+        let mut s = adapter_for_provider("openai").adapt(Box::pin(futures::stream::iter(chunks)));
 
         assert_eq!(s.next().await.unwrap().unwrap().delta, "Hello");
         assert_eq!(s.next().await.unwrap().unwrap().delta, " world");
         let done = s.next().await.unwrap().unwrap();
         assert!(done.is_done());
-        assert_eq!(done.finish_reason, Some(mofa_kernel::llm::types::FinishReason::Stop));
+        assert_eq!(
+            done.finish_reason,
+            Some(mofa_kernel::llm::types::FinishReason::Stop)
+        );
         assert!(s.next().await.is_none());
     }
 
     #[tokio::test]
     async fn adapter_maps_usage_and_tool_calls() {
         let tool_chunk = ChatCompletionChunk {
-            id: "id".into(), object: "c".into(), created: 0, model: "m".into(),
+            id: "id".into(),
+            object: "c".into(),
+            created: 0,
+            model: "m".into(),
             choices: vec![ChunkChoice {
                 index: 0,
                 delta: ChunkDelta {
-                    role: None, content: None,
+                    role: None,
+                    content: None,
                     tool_calls: Some(vec![crate::llm::types::ToolCallDelta {
-                        index: 0, id: Some("tc".into()),
+                        index: 0,
+                        id: Some("tc".into()),
                         call_type: Some("function".into()),
                         function: Some(crate::llm::types::FunctionCallDelta {
-                            name: Some("search".into()), arguments: Some("{}".into()),
+                            name: Some("search".into()),
+                            arguments: Some("{}".into()),
                         }),
                     }]),
                 },
@@ -159,11 +186,18 @@ mod tests {
             }],
             usage: None,
         };
-        let usage_chunk = done_chunk(FinishReason::Stop, Some(Usage {
-            prompt_tokens: 10, completion_tokens: 20, total_tokens: 30,
-        }));
-        let mut s = adapter_for_provider("anthropic")
-            .adapt(Box::pin(futures::stream::iter(vec![Ok(tool_chunk), Ok(usage_chunk)])));
+        let usage_chunk = done_chunk(
+            FinishReason::Stop,
+            Some(Usage {
+                prompt_tokens: 10,
+                completion_tokens: 20,
+                total_tokens: 30,
+            }),
+        );
+        let mut s = adapter_for_provider("anthropic").adapt(Box::pin(futures::stream::iter(vec![
+            Ok(tool_chunk),
+            Ok(usage_chunk),
+        ])));
 
         let tc = s.next().await.unwrap().unwrap();
         assert_eq!(tc.tool_calls.as_ref().unwrap()[0].id.as_deref(), Some("tc"));
@@ -180,8 +214,7 @@ mod tests {
             Ok(text_chunk("ok")),
             Err(LLMError::NetworkError("reset".into())),
         ];
-        let mut s = adapter_for_provider("ollama")
-            .adapt(Box::pin(futures::stream::iter(chunks)));
+        let mut s = adapter_for_provider("ollama").adapt(Box::pin(futures::stream::iter(chunks)));
 
         assert!(s.next().await.unwrap().is_ok());
         match s.next().await.unwrap().unwrap_err() {
@@ -201,14 +234,31 @@ mod tests {
     #[tokio::test]
     async fn all_finish_reasons_mapped() {
         for (src, expected) in [
-            (FinishReason::Stop, mofa_kernel::llm::types::FinishReason::Stop),
-            (FinishReason::Length, mofa_kernel::llm::types::FinishReason::Length),
-            (FinishReason::ToolCalls, mofa_kernel::llm::types::FinishReason::ToolCalls),
-            (FinishReason::ContentFilter, mofa_kernel::llm::types::FinishReason::ContentFilter),
+            (
+                FinishReason::Stop,
+                mofa_kernel::llm::types::FinishReason::Stop,
+            ),
+            (
+                FinishReason::Length,
+                mofa_kernel::llm::types::FinishReason::Length,
+            ),
+            (
+                FinishReason::ToolCalls,
+                mofa_kernel::llm::types::FinishReason::ToolCalls,
+            ),
+            (
+                FinishReason::ContentFilter,
+                mofa_kernel::llm::types::FinishReason::ContentFilter,
+            ),
         ] {
-            let mut s = adapter_for_provider("test")
-                .adapt(Box::pin(futures::stream::iter(vec![Ok(done_chunk(src, None))])));
-            assert_eq!(s.next().await.unwrap().unwrap().finish_reason, Some(expected));
+            let mut s =
+                adapter_for_provider("test").adapt(Box::pin(futures::stream::iter(vec![Ok(
+                    done_chunk(src, None),
+                )])));
+            assert_eq!(
+                s.next().await.unwrap().unwrap().finish_reason,
+                Some(expected)
+            );
         }
     }
 }

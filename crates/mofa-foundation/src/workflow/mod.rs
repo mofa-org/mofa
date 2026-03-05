@@ -69,8 +69,8 @@ pub use mofa_kernel::workflow::StateGraph;
 
 // Foundation-specific exports
 pub use builder::*;
-pub use execution_event::{ExecutionEvent, ExecutionEventEnvelope, SCHEMA_VERSION};
 pub use dsl::*;
+pub use execution_event::{ExecutionEvent, ExecutionEventEnvelope, SCHEMA_VERSION};
 pub use executor::*;
 pub use fault_tolerance::{NodePolicy, RetryBackoff};
 pub use graph::*;

@@ -131,9 +131,9 @@ impl ToolExecutor for MedicalKnowledgeTool {
     }
 
     async fn execute(&self, arguments: serde_json::Value) -> PluginResult<serde_json::Value> {
-        let action = arguments["action"]
-            .as_str()
-            .ok_or_else(|| mofa_kernel::plugin::PluginError::ExecutionFailed("Action is required".to_string()))?;
+        let action = arguments["action"].as_str().ok_or_else(|| {
+            mofa_kernel::plugin::PluginError::ExecutionFailed("Action is required".to_string())
+        })?;
 
         match action {
             // 注入知识（支持JSON数据或文件路径）
@@ -149,7 +149,8 @@ impl ToolExecutor for MedicalKnowledgeTool {
                     self.load_knowledge_from_file(file_path).await?
                 } else {
                     return Err(mofa_kernel::plugin::PluginError::ExecutionFailed(
-                        "Either knowledge JSON or file_path must be provided for inject_knowledge".into(),
+                        "Either knowledge JSON or file_path must be provided for inject_knowledge"
+                            .into(),
                     ));
                 };
 
@@ -178,7 +179,9 @@ impl ToolExecutor for MedicalKnowledgeTool {
             // Query diagnosis criteria
             "query_diagnosis" => {
                 let disease = arguments["disease"].as_str().ok_or_else(|| {
-                    mofa_kernel::plugin::PluginError::ExecutionFailed("Disease name is required for query_diagnosis".to_string())
+                    mofa_kernel::plugin::PluginError::ExecutionFailed(
+                        "Disease name is required for query_diagnosis".to_string(),
+                    )
                 })?;
 
                 let knowledge = self.knowledge.read().unwrap();
@@ -201,7 +204,9 @@ impl ToolExecutor for MedicalKnowledgeTool {
             // Query treatment plan
             "query_treatment" => {
                 let disease = arguments["disease"].as_str().ok_or_else(|| {
-                    mofa_kernel::plugin::PluginError::ExecutionFailed("Disease name is required for query_treatment".to_string())
+                    mofa_kernel::plugin::PluginError::ExecutionFailed(
+                        "Disease name is required for query_treatment".to_string(),
+                    )
                 })?;
 
                 let knowledge = self.knowledge.read().unwrap();
@@ -255,7 +260,10 @@ impl ToolExecutor for MedicalKnowledgeTool {
                 }))
             }
 
-            _ => Err(mofa_kernel::plugin::PluginError::ExecutionFailed(format!("Unsupported action: {}", action))),
+            _ => Err(mofa_kernel::plugin::PluginError::ExecutionFailed(format!(
+                "Unsupported action: {}",
+                action
+            ))),
         }
     }
 }

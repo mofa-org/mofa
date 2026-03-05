@@ -31,10 +31,11 @@ impl MockAgentBus {
         message: AgentMessage,
     ) -> Result<(), BusError> {
         // Record first so assertions see the message even if send fails
-        self.captured_messages
-            .write()
-            .await
-            .push((sender_id.to_string(), mode.clone(), message.clone()));
+        self.captured_messages.write().await.push((
+            sender_id.to_string(),
+            mode.clone(),
+            message.clone(),
+        ));
 
         self.inner.send_message(sender_id, mode, &message).await
     }

@@ -85,10 +85,7 @@ impl ModelOrchestrator for MockLLMBackend {
     }
 
     async fn unregister_model(&self, model_id: &str) -> OrchestratorResult<()> {
-        self.loaded
-            .write()
-            .expect("lock poisoned")
-            .remove(model_id);
+        self.loaded.write().expect("lock poisoned").remove(model_id);
         self.registered
             .write()
             .expect("lock poisoned")
@@ -99,7 +96,12 @@ impl ModelOrchestrator for MockLLMBackend {
     // -- lifecycle -----------------------------------------------------------
 
     async fn load_model(&self, model_id: &str) -> OrchestratorResult<()> {
-        if !self.registered.read().expect("lock poisoned").contains(model_id) {
+        if !self
+            .registered
+            .read()
+            .expect("lock poisoned")
+            .contains(model_id)
+        {
             return Err(OrchestratorError::ModelNotFound(model_id.to_string()));
         }
         self.loaded
@@ -110,10 +112,7 @@ impl ModelOrchestrator for MockLLMBackend {
     }
 
     async fn unload_model(&self, model_id: &str) -> OrchestratorResult<()> {
-        self.loaded
-            .write()
-            .expect("lock poisoned")
-            .remove(model_id);
+        self.loaded.write().expect("lock poisoned").remove(model_id);
         Ok(())
     }
 
