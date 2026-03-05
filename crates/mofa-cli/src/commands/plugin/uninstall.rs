@@ -47,10 +47,7 @@ pub async fn run(ctx: &CliContext, name: &str, force: bool) -> Result<(), CliErr
         .unregister(name)
         .map_err(|e| CliError::PluginError(format!("Failed to unregister plugin: {}", e)))?;
 
-    if !removed
-        && persisted_updated
-        && let Some(previous) = previous_spec
-    {
+    if !removed && persisted_updated && let Some(previous) = previous_spec {
         ctx.plugin_store.save(name, &previous).map_err(|e| {
             CliError::PluginError(format!(
                 "Plugin '{}' remained registered and failed to restore persisted state: {}",

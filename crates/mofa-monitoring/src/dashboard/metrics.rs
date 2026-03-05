@@ -573,7 +573,18 @@ impl MetricsCollector {
                 .unwrap_or_default()
                 .as_secs();
 
-            let mut sys = system.write().unwrap();
+            // Handle potential RwLock poisoning gracefully instead of panicking
+            let mut sys = match system.write() {
+                Ok(guard) => guard,
+                Err(poisoned) => {
+                    tracing::error!(
+                        "RwLock poisoned in metrics collection - recovering with poisoned data"
+                    );
+                    // Recover the data even though the lock is poisoned
+                    // This is safe for metrics collection - we prefer stale data over no data
+                    poisoned.into_inner()
+                }
+            };
             sys.refresh_all();
 
             let pid = Pid::from_u32(std::process::id());

@@ -14,9 +14,10 @@ use tokio::sync::RwLock;
 use tracing::{debug, info, warn};
 
 /// Agent runtime state (in-memory process tracking)
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub enum AgentProcessState {
     /// Agent is not running
+    #[default]
     Stopped,
     /// Agent is starting up
     Starting,
@@ -52,6 +53,7 @@ pub struct AgentMetadata {
     /// Path to agent configuration file
     pub config_path: Option<PathBuf>,
     /// Last known state
+    #[serde(default)]
     pub last_state: AgentProcessState,
     /// Timestamp when agent was registered (ms since epoch)
     pub registered_at: u64,
@@ -324,6 +326,26 @@ impl PersistentAgentRegistry {
 mod tests {
     use super::*;
     use tempfile::TempDir;
+
+    #[test]
+    fn test_legacy_metadata_without_last_state_deserializes() {
+        let legacy = r#"{
+            "id": "agent-legacy",
+            "name": "Legacy Agent",
+            "description": null,
+            "config_path": null,
+            "registered_at": 1710000000000,
+            "last_started": null,
+            "last_stopped": null,
+            "process_id": null,
+            "start_count": 0,
+            "tags": []
+        }"#;
+
+        let metadata: AgentMetadata = serde_json::from_str(legacy).expect("legacy metadata should deserialize");
+        assert_eq!(metadata.last_state, AgentProcessState::Stopped);
+        assert_eq!(metadata.id, "agent-legacy");
+    }
 
     #[tokio::test]
     async fn test_agent_metadata_lifecycle() {
