@@ -30,6 +30,7 @@ chrono.workspace = true
 # Local dependencies
 mofa-kernel = { path = "../mofa-kernel", version = "0.1", features = ["config"] }
 mofa-runtime = { path = "../mofa-runtime", version = "0.1" }
+mofa-monitoring = { path = "../mofa-monitoring", version = "0.1", optional = true }
 
 # Network and consensus (always available - lightweight Rust code)
 tonic = { version = "0.12", features = ["tls", "tls-roots"] }
@@ -84,6 +85,7 @@ monitoring = [
     "dep:tracing-opentelemetry",
     "dep:opentelemetry-otlp",
     "dep:opentelemetry-semantic-conventions",
+    "dep:mofa-monitoring",
 ]
 
 # Full feature set (all optional features)
