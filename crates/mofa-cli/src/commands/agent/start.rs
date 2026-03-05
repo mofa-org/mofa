@@ -1,5 +1,6 @@
 //! `mofa agent start` command implementation
 
+use crate::CliError;
 use crate::config::loader::ConfigLoader;
 use crate::context::{AgentConfigEntry, CliContext};
 use chrono::Utc;
@@ -14,7 +15,7 @@ pub async fn run(
     config_path: Option<&std::path::Path>,
     factory_type: Option<&str>,
     daemon: bool,
-) -> anyhow::Result<()> {
+) -> Result<(), CliError> {
     println!("{} Starting agent: {}", "→".green(), agent_id.cyan());
 
     if daemon {
@@ -26,11 +27,11 @@ pub async fn run(
         let existing = ctx.persistent_agents.get(agent_id).await;
         if let Some(agent) = existing {
             if agent.last_state == crate::state::AgentProcessState::Running {
-                anyhow::bail!(
-                    "Agent '{}' is already running (PID: {})",
-                    agent_id,
-                    agent.process_id.unwrap_or(0)
-                );
+                    return Err(CliError::StateError(format!(
+                        "Agent '{}' is already running (PID: {})",
+                        agent_id,
+                        agent.process_id.unwrap_or(0)
+                    )));
             }
             println!(
                 "  {} Agent exists but is not running. Restarting...",
@@ -71,10 +72,10 @@ pub async fn run(
     // Check if a matching factory type is available
     let mut factory_types = ctx.agent_registry.list_factory_types().await;
     if factory_types.is_empty() {
-        anyhow::bail!(
+        return Err(CliError::StateError(format!(
             "No agent factories registered. Cannot start agent '{}'",
             agent_id
-        );
+        )));
     }
     factory_types.sort();
 
@@ -90,14 +91,14 @@ pub async fn run(
 
     // Check if agent already exists
     if ctx.agent_registry.contains(agent_id).await {
-        anyhow::bail!("Agent '{}' is already registered", agent_id);
+        return Err(CliError::StateError(format!("Agent '{}' is already registered", agent_id)));
     }
 
     // Try to create via factory
     ctx.agent_registry
         .create_and_register(&selected_factory, agent_config.clone())
         .await
-        .map_err(|e| anyhow::anyhow!("Failed to start agent '{}': {}", agent_id, e))?;
+        .map_err(|e| CliError::StateError(format!("Failed to start agent '{}': {}", agent_id, e)))?;
 
     let entry = AgentConfigEntry {
         id: agent_id.to_string(),
@@ -113,19 +114,19 @@ pub async fn run(
         let rollback_result = ctx.agent_registry.unregister(agent_id).await;
         match rollback_result {
             Ok(_) => {
-                anyhow::bail!(
+                return Err(CliError::StateError(format!(
                     "Failed to persist agent '{}': {}. Rolled back in-memory registration.",
                     agent_id,
                     e
-                );
+                )));
             }
             Err(rollback_err) => {
-                anyhow::bail!(
+                return Err(CliError::StateError(format!(
                     "Failed to persist agent '{}': {}. Rollback failed: {}",
                     agent_id,
                     e,
                     rollback_err
-                );
+                )));
             }
         }
     }
@@ -138,16 +139,16 @@ pub async fn run(
 fn select_factory_type(
     factory_types: &[String],
     requested_factory: Option<&str>,
-) -> anyhow::Result<String> {
+) -> Result<String, CliError> {
     if let Some(requested) = requested_factory {
         if factory_types.iter().any(|factory| factory == requested) {
             return Ok(requested.to_string());
         }
-        anyhow::bail!(
+        return Err(CliError::StateError(format!(
             "Factory '{}' is not registered. Available factories: {}",
             requested,
             factory_types.join(", ")
-        );
+        )));
     }
 
     Ok(factory_types

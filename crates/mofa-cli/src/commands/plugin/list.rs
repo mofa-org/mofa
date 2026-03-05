@@ -1,85 +1,82 @@
 //! `mofa plugin list` command implementation
 
-use super::catalog::{
-    CachedPluginCatalog, CatalogService, PluginCatalogEntry, select_latest_release,
-};
+use crate::CliError;
 use crate::context::CliContext;
 use crate::output::Table;
+use crate::plugin_catalog::catalog_entries;
 use colored::Colorize;
 use mofa_kernel::agent::plugins::PluginRegistry;
-use serde::Serialize;
 
 /// Execute the `mofa plugin list` command
-pub async fn run(
-    ctx: &CliContext,
-    installed: bool,
-    available: bool,
-    refresh: bool,
-) -> anyhow::Result<()> {
-    let want_installed = installed || !available;
-    let want_available = available;
+pub async fn run(ctx: &CliContext, installed_only: bool, available: bool) -> Result<(), CliError> {
+    let show_available = available;
+    let show_installed = installed_only || !available;
 
-    if want_installed {
-        print_installed(ctx);
+    if show_available {
+        println!("{} Available plugin catalog", "→".green());
+        println!();
+        print_available(ctx)?;
     }
 
-    if want_available {
-        let service = CatalogService::new(&ctx.data_dir);
-        let cached = if refresh {
-            Some(service.sync(None, None).await?)
-        } else {
-            service.read_cache()?
-        };
+    if show_installed {
+        println!("{} Installed plugins", "→".green());
+        println!();
+        print_installed(ctx)?;
+    }
 
-        match cached {
-            Some(catalog) => print_available(&catalog),
-            None => {
-                println!(
-                    "{} No catalog found. Run `mofa plugin sync` or pass `--refresh` to fetch it.",
-                    "!".yellow()
-                );
-            }
-        }
+    if !show_available && !show_installed {
+        println!("{} No plugin listing requested.", "→".yellow());
     }
 
     Ok(())
 }
 
-fn print_installed(ctx: &CliContext) {
-    println!("{} Installed plugins", "→".green());
-    println!();
-
-    let plugins = ctx.plugin_registry.list();
-
-    if plugins.is_empty() {
-        println!("  No plugins registered.");
-        println!();
-        println!("  Plugins can be registered programmatically via the SDK.");
-        return;
+fn print_available(ctx: &CliContext) -> Result<(), CliError> {
+    let entries = catalog_entries();
+    if entries.is_empty() {
+        println!("  No catalog entries available.");
+        return Ok(());
     }
 
-    let infos: Vec<InstalledInfo> = plugins
-        .iter()
-        .map(|p| {
-            let metadata = p.metadata();
-            InstalledInfo {
-                name: p.name().to_string(),
-                version: metadata.version.clone(),
-                description: p.description().to_string(),
-                stages: metadata
-                    .stages
-                    .iter()
-                    .map(|s| format!("{:?}", s))
-                    .collect::<Vec<_>>()
-                    .join(", "),
-            }
-        })
-        .collect();
+    let mut table = Table::builder().headers(&["ID", "Name", "Repo", "Kind", "Description", "Installed"]);
+    for entry in entries {
+        let installed = ctx.plugin_registry.contains(&entry.id);
+        table = table.add_row(&[
+            entry.id.as_str(),
+            entry.name.as_str(),
+            entry.repo_id.as_str(),
+            entry.kind.as_str(),
+            entry.description.as_str(),
+            if installed { "yes" } else { "no" },
+        ]);
+    }
 
-    let json = serde_json::to_value(&infos).unwrap_or_default();
-    if let Some(arr) = json.as_array() {
-        let table = Table::from_json_array(arr);
-        println!("{}", table);
+    println!("{}", table.build());
+    Ok(())
+}
+
+fn print_installed(ctx: &CliContext) -> Result<(), CliError> {
+    let specs = ctx.plugin_store.list()?;
+    let mut table = Table::builder().headers(&["ID", "Kind", "Repo", "Description", "Enabled"]);
+    let mut found = false;
+    for (_, spec) in specs {
+        if !spec.enabled {
+            continue;
+        }
+        found = true;
+        table = table.add_row(&[
+            spec.id.as_str(),
+            spec.kind.as_str(),
+            spec.repo_id.as_deref().unwrap_or("local"),
+            spec.description.as_deref().unwrap_or(""),
+            "yes",
+        ]);
+    }
+
+    if found {
+        println!("{}", table.build());
+    } else {
+        println!("  No plugins installed.");
     }
     println!();
 }
@@ -112,12 +109,25 @@ fn print_available(catalog: &CachedPluginCatalog) {
     }
 }
 
-#[derive(Debug, Clone, Serialize)]
-struct InstalledInfo {
-    name: String,
-    version: String,
-    description: String,
-    stages: String,
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::context::CliContext;
+    use tempfile::TempDir;
+
+    #[tokio::test]
+    async fn run_default_list() {
+        let temp = TempDir::new().unwrap();
+        let ctx = CliContext::with_temp_dir(temp.path()).await.unwrap();
+        run(&ctx, false, false).await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn run_available_list() {
+        let temp = TempDir::new().unwrap();
+        let ctx = CliContext::with_temp_dir(temp.path()).await.unwrap();
+        run(&ctx, false, true).await.unwrap();
+    }
 }
 
 #[derive(Debug, Clone, Serialize)]

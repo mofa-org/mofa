@@ -5,4 +5,6 @@ pub mod info;
 pub mod install;
 pub mod list;
 pub mod sync;
+pub mod new;
+pub mod repository;
 pub mod uninstall;

@@ -1,5 +1,6 @@
 //! `mofa agent list` command implementation
 
+use crate::CliError;
 use crate::context::CliContext;
 use crate::output::Table;
 use chrono::Utc;
@@ -8,7 +9,7 @@ use serde::Serialize;
 use std::collections::BTreeMap;
 
 /// Execute the `mofa agent list` command
-pub async fn run(ctx: &CliContext, running_only: bool, _show_all: bool) -> anyhow::Result<()> {
+pub async fn run(ctx: &CliContext, running_only: bool, _show_all: bool) -> Result<(), CliError> {
     println!("{} Listing agents", "→".green());
     println!();
 
@@ -16,7 +17,7 @@ pub async fn run(ctx: &CliContext, running_only: bool, _show_all: bool) -> anyho
     let persisted_agents = ctx
         .agent_store
         .list()
-        .map_err(|e| anyhow::anyhow!("Failed to list persisted agents: {}", e))?;
+        .map_err(|e| CliError::StateError(format!("Failed to list persisted agents: {}", e)))?;
 
     let mut merged: BTreeMap<String, AgentInfo> = BTreeMap::new();
 

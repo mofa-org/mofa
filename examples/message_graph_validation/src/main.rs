@@ -1,11 +1,10 @@
-use anyhow::Result;
 use mofa_kernel::{
     DeliveryMode, DeliveryPolicy, MessageEnvelope, MessageGraph, MessageGraphError, MessageNode,
     MessageNodeKind, MessageState, RouteRule, single_message_update, GraphState,
 };
 use serde_json::json;
 
-fn build_order_routing_graph() -> Result<MessageGraph> {
+fn build_order_routing_graph() -> Result<MessageGraph, Box<dyn std::error::Error>> {
     let mut graph = MessageGraph::new("order-routing").with_max_hops(8);
 
     graph.add_node(
@@ -94,7 +93,7 @@ fn build_invalid_graph() -> MessageGraph {
     graph
 }
 
-fn main() -> Result<()> {
+fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Use case 1: practical route selection in an order pipeline.
     let compiled = build_order_routing_graph()?.compile()?;
 

@@ -1,9 +1,10 @@
 //! `mofa run` command implementation
 
+use crate::CliError;
 use colored::Colorize;
 
 /// Execute the `mofa run` command
-pub fn run(config: &std::path::Path, _dora: bool) -> anyhow::Result<()> {
+pub fn run(config: &std::path::Path, _dora: bool) -> Result<(), CliError> {
     println!(
         "{} Running agent with config: {}",
         "→".green(),
@@ -27,7 +28,7 @@ pub fn run(config: &std::path::Path, _dora: bool) -> anyhow::Result<()> {
 
 /// Execute the `mofa dataflow` command (requires dora feature)
 #[cfg(feature = "dora")]
-pub fn run_dataflow(file: &std::path::Path, uv: bool) -> anyhow::Result<()> {
+pub fn run_dataflow(file: &std::path::Path, uv: bool) -> Result<(), CliError> {
     use mofa_sdk::dora::{DoraRuntime, RuntimeConfig};
 
     println!("{} Running dataflow: {}", "→".green(), file.display());
@@ -42,7 +43,7 @@ pub fn run_dataflow(file: &std::path::Path, uv: bool) -> anyhow::Result<()> {
                 Ok(())
             }
             Err(e) => {
-                anyhow::bail!("Dataflow failed: {}", e)
+                return Err(CliError::Other(format!("Dataflow failed: {}", e)))
             }
         }
     })

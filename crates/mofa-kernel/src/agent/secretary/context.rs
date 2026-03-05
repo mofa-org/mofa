@@ -180,6 +180,7 @@ impl<State> SecretaryContextBuilder<State> {
 
     /// 构建上下文
     /// Builds the context
+    #[must_use]
     pub fn build(self) -> SecretaryContext<State> {
         SecretaryContext {
             state: self.state,

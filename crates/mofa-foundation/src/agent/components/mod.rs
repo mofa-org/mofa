@@ -14,6 +14,7 @@
 //! - Foundation 层提供具体实现（DirectReasoner, SequentialCoordinator, SimpleToolRegistry 等）
 //! - Foundation layer provides concrete implementations (DirectReasoner, SequentialCoordinator, SimpleToolRegistry, etc.)
 
+pub mod context_compressor;
 pub mod coordinator;
 pub mod memory;
 pub mod reasoner;
@@ -25,6 +26,23 @@ pub mod tool;
 // 重新导出 Kernel 层类型 (直接导入以确保可见性)
 // Re-export Kernel layer types (direct import to ensure visibility)
 // ============================================================================
+
+// Context compressor - Kernel trait and types
+pub use mofa_kernel::agent::components::context_compressor::{
+    CompressionMetrics, CompressionResult, CompressionStrategy, ContextCompressor,
+};
+
+// Context compressor - Foundation implementations
+pub use context_compressor::{
+    HierarchicalCompressor, HybridCompressor, SemanticCompressor, SlidingWindowCompressor,
+    SummarizingCompressor, TokenCounter,
+};
+
+#[cfg(feature = "tiktoken")]
+pub use context_compressor::TikTokenCounter;
+
+#[cfg(feature = "compression-cache")]
+pub use context_compressor::{CompressionCache, CacheStats};
 
 // Coordinator - Kernel trait 和类型
 // Coordinator - Kernel trait and types

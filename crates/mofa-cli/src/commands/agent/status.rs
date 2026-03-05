@@ -1,10 +1,11 @@
 //! `mofa agent status` command implementation
 
+use crate::CliError;
 use crate::context::CliContext;
 use colored::Colorize;
 
 /// Execute the `mofa agent status` command
-pub async fn run(ctx: &CliContext, agent_id: Option<&str>) -> anyhow::Result<()> {
+pub async fn run(ctx: &CliContext, agent_id: Option<&str>) -> Result<(), CliError> {
     if let Some(id) = agent_id {
         // Show status for a specific agent
         println!("{} Agent status: {}", "→".green(), id.cyan());
@@ -32,7 +33,7 @@ pub async fn run(ctx: &CliContext, agent_id: Option<&str>) -> anyhow::Result<()>
             }
             None => {
                 let persisted = ctx.agent_store.get(id).map_err(|e| {
-                    anyhow::anyhow!("Failed to load persisted agent '{}': {}", id, e)
+                    CliError::StateError(format!("Failed to load persisted agent '{}': {}", id, e))
                 })?;
 
                 if let Some(entry) = persisted {

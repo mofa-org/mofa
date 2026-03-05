@@ -13,7 +13,7 @@
 //! use mofa_sdk::llm::LLMAgentBuilder;
 //!
 //! #[tokio::main]
-//! async fn main() -> anyhow::Result<()> {
+//! async fn main() -> GlobalResult<()> {
 //!     let agent = LLMAgentBuilder::from_env()?
 //!         .with_id("my-llm-agent")
 //!         .with_system_prompt("You are a helpful assistant.")
@@ -36,6 +36,7 @@ use crate::prompt;
 use futures::{Stream, StreamExt};
 use mofa_kernel::agent::AgentMetadata;
 use mofa_kernel::agent::AgentState;
+use mofa_kernel::agent::types::error::{GlobalError, GlobalResult};
 use mofa_kernel::plugin::{AgentPlugin, PluginType};
 use mofa_plugins::tts::TTSPlugin;
 use std::collections::HashMap;
@@ -601,7 +602,10 @@ impl LLMAgent {
             let sess_store_clone = sess_store.clone();
 
             let session_uuid = uuid::Uuid::parse_str(&sid).unwrap_or_else(|_| {
-                tracing::warn!("⚠️ 无效的 session_id 格式 '{}', 将生成新的 UUID", sid);
+                tracing::warn!(
+                    "⚠️ Invalid session_id format '{}', generating a new UUID",
+                    sid
+                );
                 // ⚠️ Invalid session_id format '{}', will generate new UUID
                 uuid::Uuid::now_v7()
             });
@@ -618,11 +622,11 @@ impl LLMAgent {
                 sess_store,
                 config.context_window_size,
             )
-                .await
+            .await
             {
                 Ok(loaded_session) => {
                     tracing::info!(
-                        "✅ 从数据库加载会话: {} ({} 条消息)",
+                        "✅ Session loaded from database: {} ({} messages)",
                         // ✅ Session loaded from database: {} ({} messages)
                         sid,
                         loaded_session.messages().len()
@@ -632,7 +636,11 @@ impl LLMAgent {
                 Err(e) => {
                     // 会话不存在，创建新会话（使用用户指定的ID和从persistence获取的user_id/agent_id）
                     // Session not found; create new session (using specified ID and user_id/agent_id from persistence)
-                    tracing::info!("📝 创建新会话并持久化: {} (数据库中不存在: {})", sid, e);
+                    tracing::info!(
+                        "📝 Creating new session and persisting: {} (not found in DB: {})",
+                        sid,
+                        e
+                    );
                     // 📝 Creating new session and persisting: {} (doesn't exist in DB: {})
 
                     // Clone stores again for the fallback case
@@ -651,7 +659,7 @@ impl LLMAgent {
                         sess_store_clone,
                         config.context_window_size,
                     )
-                        .await
+                    .await
                     {
                         Ok(mut new_session) => {
                             if let Some(ref prompt) = config.system_prompt {
@@ -660,7 +668,10 @@ impl LLMAgent {
                             new_session
                         }
                         Err(persist_err) => {
-                            tracing::error!("❌ 持久化会话失败: {}, 降级为内存会话", persist_err);
+                            tracing::error!(
+                                "❌ Failed to persist session: {}, falling back to in-memory session",
+                                persist_err
+                            );
                             // ❌ Persisting session failed: {}, falling back to in-memory session
                             // 降级：如果持久化失败，创建内存会话
                             // Fallback: If persistence fails, create in-memory session
@@ -1527,9 +1538,9 @@ impl LLMAgent {
                 tokio::time::Duration::from_secs(30),
                 tts_handle._stream_handle,
             )
-                .await
-                .map_err(|_| LLMError::Other("TTS stream processing timeout".to_string()))
-                .and_then(|r| r.map_err(|e| LLMError::Other(format!("TTS stream task failed: {}", e))));
+            .await
+            .map_err(|_| LLMError::Other("TTS stream processing timeout".to_string()))
+            .and_then(|r| r.map_err(|e| LLMError::Other(format!("TTS stream task failed: {}", e))));
 
             Ok(())
         }
@@ -2547,7 +2558,7 @@ impl LLMAgentBuilder {
     /// use std::sync::Arc;
     /// use uuid::Uuid;
     ///
-    /// # async fn example() -> anyhow::Result<()> {
+    /// # async fn example() -> GlobalResult<()> {
     /// let store = Arc::new(PostgresStore::connect("postgres://localhost/mofa").await?);
     /// let user_id = Uuid::now_v7();
     /// let tenant_id = Uuid::now_v7();
@@ -2772,6 +2783,7 @@ impl LLMAgentBuilder {
     /// # Panics
     /// 如果未设置 provider 则 panic
     /// Panics if the provider is not set
+    #[must_use]
     pub fn build(self) -> LLMAgent {
         let provider = self
             .provider
@@ -2978,7 +2990,7 @@ impl LLMAgentBuilder {
             persistence_tenant_id,
             self.persistence_agent_id,
         )
-            .await;
+        .await;
 
         // 设置Prompt模板插件
         // Set Prompt template plugin
@@ -3030,9 +3042,9 @@ impl LLMAgentBuilder {
                 // Identify persistence plugin via metadata
                 if plugin.metadata().plugin_type == PluginType::Storage
                     && plugin
-                    .metadata()
-                    .capabilities
-                    .contains(&"message_persistence".to_string())
+                        .metadata()
+                        .capabilities
+                        .contains(&"message_persistence".to_string())
                 {
                     // 这里我们无法直接调用泛型 PersistencePlugin 的 load_history
                     // We cannot directly call the generic PersistencePlugin's load_history
@@ -3041,7 +3053,9 @@ impl LLMAgentBuilder {
                     // 历史加载将由 LLMAgent 在首次运行时通过 store 完成
                     // History loading will be handled by LLMAgent via store on first run
                     tracing::info!("📦 检测到持久化插件，将在 agent 初始化后加载历史");
-                    tracing::info!("📦 Persistence plugin detected; history will load after agent init");
+                    tracing::info!(
+                        "📦 Persistence plugin detected; history will load after agent init"
+                    );
                     break;
                 }
             }

@@ -212,7 +212,7 @@ impl FunctionCallingAdapter {
         self.engine
             .compile_and_cache(&self.script_id, "function_calling_script", script_content)
             .await
-            .map_err(|e| anyhow::anyhow!("Failed to compile script '{}': {}", self.script_id, e))
+            .map_err(|e| mofa_kernel::plugin::PluginError::ExecutionFailed(format!("Failed to compile script '{}': {}", self.script_id, e)))
     }
 }
 

@@ -1,3 +1,4 @@
+use mofa_kernel::agent::types::error::{GlobalError, GlobalResult};
 use mofa_kernel::message::{AgentEvent, AgentMessage, SchedulingStatus, TaskPriority, TaskRequest};
 use mofa_kernel::{AgentBus, CommunicationMode};
 use std::collections::{BinaryHeap, HashMap};
@@ -18,7 +19,7 @@ impl Ord for PriorityTask {
         self.priority
             .cmp(&other.priority)
             .then_with(|| other.submit_time.cmp(&self.submit_time)) // 同优先级先提交先执行
-            // First-in-first-out for tasks with the same priority
+        // First-in-first-out for tasks with the same priority
     }
 }
 
@@ -33,14 +34,14 @@ impl PartialOrd for PriorityTask {
 pub struct PriorityScheduler {
     task_queue: Arc<RwLock<BinaryHeap<PriorityTask>>>, // 优先级任务队列
     // Priority task queue
-    agent_load: Arc<RwLock<HashMap<String, usize>>>,   // 智能体当前负载（执行中的任务数）
+    agent_load: Arc<RwLock<HashMap<String, usize>>>, // 智能体当前负载（执行中的任务数）
     // Current agent load (number of tasks being executed)
     bus: Arc<AgentBus>,
     task_status: Arc<RwLock<HashMap<String, SchedulingStatus>>>, // 任务状态跟踪
     // Task status tracking
-    role_mapping: Arc<RwLock<HashMap<String, Vec<String>>>>,     // 角色-智能体映射
+    role_mapping: Arc<RwLock<HashMap<String, Vec<String>>>>, // 角色-智能体映射
     // Role-to-agent mapping
-    agent_tasks: Arc<RwLock<HashMap<String, Vec<String>>>>,      // Agent-to-task mapping
+    agent_tasks: Arc<RwLock<HashMap<String, Vec<String>>>>, // Agent-to-task mapping
     task_priorities: Arc<RwLock<HashMap<String, TaskPriority>>>, // Task priority tracking
 }
 
@@ -59,7 +60,7 @@ impl PriorityScheduler {
 
     /// 1. 提交任务到优先级队列
     /// 1. Submit task to the priority queue
-    pub async fn submit_task(&self, task: TaskRequest) -> anyhow::Result<()> {
+    pub async fn submit_task(&self, task: TaskRequest) -> GlobalResult<()> {
         let priority_task = PriorityTask {
             priority: task.priority.clone(),
             task: task.clone(),
@@ -76,17 +77,21 @@ impl PriorityScheduler {
             .insert(task.task_id, SchedulingStatus::Pending);
         // 提交后立即触发调度
         // Trigger scheduling immediately after submission
-        self.schedule().await?;
+        self.schedule()
+            .await
+            .map_err(|e| GlobalError::Other(e.to_string()))?;
         Ok(())
     }
 
     /// 2. 核心调度逻辑：选高优先级任务 + 选负载最低的智能体
     /// 2. Core logic: select high-priority task + select lowest-load agent
-    pub async fn schedule(&self) -> anyhow::Result<()> {
+    pub async fn schedule(&self) -> GlobalResult<()> {
         let mut task_queue = self.task_queue.write().await;
         let mut agent_load = self.agent_load.write().await;
         let mut task_status = self.task_status.write().await;
         let mut agent_tasks = self.agent_tasks.write().await;
+        let role_map = self.role_mapping.read().await;
+        let task_priorities = self.task_priorities.read().await;
 
         while let Some(priority_task) = task_queue.pop() {
             let task = priority_task.task.clone(); // Clone instead of moving
@@ -98,24 +103,65 @@ impl PriorityScheduler {
                 continue;
             }
 
-            // 选择负载最低的可用智能体（同角色内）
-            // Select the available agent with the lowest load (within the same role)
-            let target_agent = self.select_low_load_agent("worker").await?;
-            if target_agent.is_empty() {
+            // 选择负载最低的可用智能体（同角色内）— 内联以避免死锁
+            // Select the available agent with the lowest load — inlined to avoid deadlock
+            let sorted_agents = {
+                let agents = match role_map.get("worker") {
+                    Some(a) => a,
+                    None => {
+                        task_queue.push(priority_task);
+                        break;
+                    }
+                };
+                let mut sorted = agents.clone();
+                sorted.sort_by_key(|agent_id| agent_load.get(agent_id).cloned().unwrap_or(0));
+                sorted
+            };
+            if sorted_agents.is_empty() {
                 // 无可用智能体，重新入队
                 // No agent available, re-enqueue the task
                 task_queue.push(priority_task);
                 break;
             }
-            let target_agent = target_agent[0].clone();
+            let target_agent = sorted_agents[0].clone();
 
-            // 检查是否需要抢占：如果目标智能体有低优先级任务在运行
-            // Check for preemption: if the target agent has low-priority tasks running
-            self.preempt_low_priority_task(&target_agent, &task).await?;
+            // 检查是否需要抢占 — 内联以避免死锁
+            // Check for preemption — inlined to avoid deadlock
+            if let Some(&load) = agent_load.get(&target_agent) {
+                if load > 0 {
+                    if let Some(tasks_on_agent) = agent_tasks.get(&target_agent) {
+                        let preemptable_task = tasks_on_agent
+                            .iter()
+                            .filter(|tid| task_status.get(*tid) == Some(&SchedulingStatus::Running))
+                            .filter(|tid| {
+                                if let Some(task_priority) = task_priorities.get(*tid) {
+                                    task.priority > *task_priority
+                                } else {
+                                    false
+                                }
+                            })
+                            .min_by_key(|tid| task_priorities.get(*tid).cloned())
+                            .cloned();
+
+                        if let Some(low_priority_task_id) = preemptable_task {
+                            let preempt_msg = AgentMessage::Event(AgentEvent::TaskPreempted(
+                                low_priority_task_id.clone(),
+                            ));
+                            self.bus
+                                .send_message(
+                                    "scheduler",
+                                    CommunicationMode::PointToPoint(target_agent.clone()),
+                                    &preempt_msg,
+                                )
+                                .await
+                                .map_err(|e| GlobalError::Other(e.to_string()))?;
+                        }
+                    }
+                }
+            }
 
             // 发送任务给目标智能体
             // Send task to the target agent
-            // Convert TaskRequest to AgentMessage::TaskRequest variant
             let task_msg = AgentMessage::TaskRequest {
                 task_id: task.task_id.clone(),
                 content: task.content.clone(),
@@ -126,27 +172,25 @@ impl PriorityScheduler {
                     CommunicationMode::PointToPoint(target_agent.clone()),
                     &task_msg,
                 )
-                .await?;
+                .await
+                .map_err(|e| GlobalError::Other(e.to_string()))?;
 
             // 更新状态和负载
-            // Update task status and agent loa
+            // Update task status and agent load
             task_status.insert(task_id.clone(), SchedulingStatus::Running);
             *agent_load.entry(target_agent.clone()).or_insert(0) += 1;
-            agent_tasks
-                .entry(target_agent)
-                .or_default()
-                .push(task_id);
+            agent_tasks.entry(target_agent).or_default().push(task_id);
         }
         Ok(())
     }
 
     /// 3. 负载均衡：选择同角色内负载最低的智能体
     /// 3. Load balancing: select the lowest-load agent within the same role
-    async fn select_low_load_agent(&self, role: &str) -> anyhow::Result<Vec<String>> {
+    async fn select_low_load_agent(&self, role: &str) -> GlobalResult<Vec<String>> {
         let role_map = self.role_mapping.read().await;
         let agents = role_map
             .get(role)
-            .ok_or_else(|| anyhow::anyhow!("No agent for role: {}", role))?;
+            .ok_or_else(|| GlobalError::Other(format!("No agent for role: {}", role)))?;
         let agent_load = self.agent_load.read().await;
 
         // 按负载升序排序，取负载最低的
@@ -162,7 +206,7 @@ impl PriorityScheduler {
         &self,
         agent_id: &str,
         high_priority_task: &TaskRequest,
-    ) -> anyhow::Result<()> {
+    ) -> GlobalResult<()> {
         // 简化实现：直接发送抢占事件
         // Simplified implementation: directly send a preemption event
         let agent_load = self.agent_load.read().await;
@@ -206,7 +250,8 @@ impl PriorityScheduler {
                         CommunicationMode::PointToPoint(agent_id.to_string()),
                         &preempt_msg,
                     )
-                    .await?;
+                    .await
+                    .map_err(|e| GlobalError::Other(e.to_string()))?;
             }
         }
         Ok(())
@@ -214,24 +259,127 @@ impl PriorityScheduler {
 
     /// 5. 任务完成后更新状态和负载
     /// 5. Update status and load upon task completion
-    pub async fn on_task_completed(&self, agent_id: &str, task_id: &str) -> anyhow::Result<()> {
-        let mut agent_load = self.agent_load.write().await;
-        let mut task_status = self.task_status.write().await;
-        let mut agent_tasks = self.agent_tasks.write().await;
+    pub async fn on_task_completed(&self, agent_id: &str, task_id: &str) -> GlobalResult<()> {
+        // Scope lock guards so they are dropped before calling schedule(),
+        // which needs to acquire the same locks — avoids deadlock.
+        {
+            let mut agent_load = self.agent_load.write().await;
+            let mut task_status = self.task_status.write().await;
+            let mut agent_tasks = self.agent_tasks.write().await;
 
-        agent_load
-            .entry(agent_id.to_string())
-            .and_modify(|count| *count = count.saturating_sub(1));
-        task_status.insert(task_id.to_string(), SchedulingStatus::Completed);
+            agent_load
+                .entry(agent_id.to_string())
+                .and_modify(|count| *count = count.saturating_sub(1));
+            task_status.insert(task_id.to_string(), SchedulingStatus::Completed);
 
-        // Remove completed task from agent's task list
-        if let Some(tasks) = agent_tasks.get_mut(agent_id) {
-            tasks.retain(|t| t != task_id);
-        }
+            // Remove completed task from agent's task list
+            if let Some(tasks) = agent_tasks.get_mut(agent_id) {
+                tasks.retain(|t| t != task_id);
+            }
+        } // All lock guards dropped here
 
         // 任务完成后再次触发调度，处理队列中的下一个任务
         // Trigger scheduling again after completion to handle the next task
-        self.schedule().await?;
+        self.schedule()
+            .await
+            .map_err(|e| GlobalError::Other(e.to_string()))?;
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use mofa_kernel::message::TaskPriority;
+    use std::collections::HashMap;
+    use tokio::time::{Duration, timeout};
+
+    fn make_task(id: &str, priority: TaskPriority) -> TaskRequest {
+        TaskRequest {
+            task_id: id.to_string(),
+            content: "test".to_string(),
+            priority,
+            deadline: None,
+            metadata: HashMap::new(),
+        }
+    }
+
+    /// Proves Site 1+2 deadlock is fixed: submit_task → schedule() no longer
+    /// tries to re-acquire locks held by schedule() itself.
+    /// Without the fix this test would hang forever.
+    #[tokio::test]
+    async fn test_submit_task_does_not_deadlock() {
+        let bus = Arc::new(AgentBus::new());
+        let scheduler = PriorityScheduler::new(bus).await;
+
+        let task = make_task("t1", TaskPriority::Normal);
+        let result = timeout(Duration::from_secs(2), scheduler.submit_task(task)).await;
+        assert!(result.is_ok(), "submit_task should complete, not deadlock");
+    }
+
+    /// Proves Site 3 deadlock is fixed: on_task_completed() drops its locks
+    /// before calling schedule(), so schedule() can acquire them again.
+    /// Without the fix this test would hang forever.
+    #[tokio::test]
+    async fn test_on_task_completed_does_not_deadlock() {
+        let bus = Arc::new(AgentBus::new());
+        let scheduler = PriorityScheduler::new(bus).await;
+
+        // Pre-populate state as if a task was scheduled to an agent.
+        {
+            let mut load = scheduler.agent_load.write().await;
+            load.insert("agent-1".to_string(), 1);
+        }
+        {
+            let mut status = scheduler.task_status.write().await;
+            status.insert("t1".to_string(), SchedulingStatus::Running);
+        }
+        {
+            let mut tasks = scheduler.agent_tasks.write().await;
+            tasks.insert("agent-1".to_string(), vec!["t1".to_string()]);
+        }
+
+        let result = timeout(
+            Duration::from_secs(2),
+            scheduler.on_task_completed("agent-1", "t1"),
+        )
+        .await;
+        assert!(
+            result.is_ok(),
+            "on_task_completed should complete, not deadlock"
+        );
+
+        // Verify state was updated correctly.
+        let load = scheduler.agent_load.read().await;
+        assert_eq!(*load.get("agent-1").unwrap(), 0);
+        let status = scheduler.task_status.read().await;
+        assert_eq!(*status.get("t1").unwrap(), SchedulingStatus::Completed);
+    }
+
+    /// Verifies the priority queue orders tasks correctly (higher priority first).
+    #[tokio::test]
+    async fn test_priority_ordering() {
+        let mut heap = std::collections::BinaryHeap::new();
+        let now = std::time::Instant::now();
+
+        heap.push(PriorityTask {
+            priority: TaskPriority::Low,
+            task: make_task("low", TaskPriority::Low),
+            submit_time: now,
+        });
+        heap.push(PriorityTask {
+            priority: TaskPriority::Critical,
+            task: make_task("critical", TaskPriority::Critical),
+            submit_time: now,
+        });
+        heap.push(PriorityTask {
+            priority: TaskPriority::Medium,
+            task: make_task("medium", TaskPriority::Medium),
+            submit_time: now,
+        });
+
+        assert_eq!(heap.pop().unwrap().task.task_id, "critical");
+        assert_eq!(heap.pop().unwrap().task.task_id, "medium");
+        assert_eq!(heap.pop().unwrap().task.task_id, "low");
     }
 }

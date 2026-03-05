@@ -133,6 +133,12 @@ pub enum Commands {
         #[command(subcommand)]
         action: ToolCommands,
     },
+
+    /// RAG indexing and retrieval
+    Rag {
+        #[command(subcommand)]
+        action: RagCommands,
+    },
 }
 
 /// Generate subcommands
@@ -278,9 +284,21 @@ pub enum AgentCommands {
         #[arg(short, long)]
         tail: bool,
 
-        /// Number of recent lines to display
-        #[arg(short = 'n', long, default_value = "50")]
-        lines: usize,
+        /// Filter by log level (INFO, DEBUG, ERROR, WARN)
+        #[arg(long)]
+        level: Option<String>,
+
+        /// Search for text in logs
+        #[arg(long)]
+        grep: Option<String>,
+
+        /// Limit number of lines to display
+        #[arg(long)]
+        limit: Option<usize>,
+
+        /// Output logs as JSON
+        #[arg(long)]
+        json: bool,
     },
 }
 
@@ -329,6 +347,12 @@ pub enum ConfigValueCommands {
 /// Plugin management subcommands
 #[derive(Subcommand)]
 pub enum PluginCommands {
+    /// Create a new plugin project interactively
+    New {
+        /// Optional name of the plugin (will prompt if not provided)
+        name: Option<String>,
+    },
+
     /// List plugins
     List {
         /// Show installed plugins only
@@ -352,8 +376,16 @@ pub enum PluginCommands {
 
     /// Install a plugin
     Install {
-        /// Plugin name or path
+        /// Plugin name, path, or URL
         name: String,
+
+        /// Expected SHA256 checksum for verification
+        #[arg(long)]
+        checksum: Option<String>,
+
+        /// Verify plugin signature (if available)
+        #[arg(long)]
+        verify_signature: bool,
     },
 
     /// Sync plugin catalog from the remote repository
@@ -375,6 +407,32 @@ pub enum PluginCommands {
         /// Force removal without confirmation
         #[arg(long)]
         force: bool,
+    },
+
+    /// Manage plugin repositories
+    Repository {
+        #[command(subcommand)]
+        action: PluginRepositoryCommands,
+    },
+}
+
+/// Plugin repository management subcommands
+#[derive(Subcommand)]
+pub enum PluginRepositoryCommands {
+    /// List configured plugin repositories
+    List,
+
+    /// Add a plugin repository
+    Add {
+        /// Repository identifier
+        id: String,
+
+        /// Repository URL
+        url: String,
+
+        /// Optional description for the repository
+        #[arg(short, long)]
+        description: Option<String>,
     },
 }
 
@@ -503,6 +561,91 @@ pub enum ToolCommands {
     },
 }
 
+/// RAG management subcommands
+#[derive(Subcommand)]
+pub enum RagCommands {
+    /// Index one or more documents into a RAG backend.
+    Index {
+        /// Input text files to index.
+        #[arg(short = 'i', long = "input", required = true)]
+        input: Vec<PathBuf>,
+
+        /// Backend to use: `in-memory` or `qdrant`.
+        #[arg(long, default_value = "in-memory", value_parser = ["in-memory", "qdrant"])]
+        backend: String,
+
+        /// Local index file path for `in-memory` backend.
+        #[arg(long, default_value = ".mofa/rag-index.json")]
+        index_file: PathBuf,
+
+        /// Embedding vector dimensions.
+        #[arg(long, default_value_t = 64)]
+        dimensions: usize,
+
+        /// Chunk size in characters.
+        #[arg(long, default_value_t = 512)]
+        chunk_size: usize,
+
+        /// Chunk overlap in characters.
+        #[arg(long, default_value_t = 64)]
+        chunk_overlap: usize,
+
+        /// Use sentence-based chunking instead of character windows.
+        #[arg(long)]
+        sentence_chunks: bool,
+
+        /// Qdrant URL (required for `qdrant` backend).
+        #[arg(long)]
+        qdrant_url: Option<String>,
+
+        /// Qdrant API key.
+        #[arg(long)]
+        qdrant_api_key: Option<String>,
+
+        /// Qdrant collection name.
+        #[arg(long, default_value = "mofa_documents")]
+        qdrant_collection: String,
+    },
+
+    /// Query indexed documents from a RAG backend.
+    Query {
+        /// Query text.
+        query: String,
+
+        /// Backend to use: `in-memory` or `qdrant`.
+        #[arg(long, default_value = "in-memory", value_parser = ["in-memory", "qdrant"])]
+        backend: String,
+
+        /// Local index file path for `in-memory` backend.
+        #[arg(long, default_value = ".mofa/rag-index.json")]
+        index_file: PathBuf,
+
+        /// Embedding vector dimensions (used for qdrant query embedding).
+        #[arg(long, default_value_t = 64)]
+        dimensions: usize,
+
+        /// Number of results to return.
+        #[arg(long, default_value_t = 5)]
+        top_k: usize,
+
+        /// Optional score threshold.
+        #[arg(long)]
+        threshold: Option<f32>,
+
+        /// Qdrant URL (required for `qdrant` backend).
+        #[arg(long)]
+        qdrant_url: Option<String>,
+
+        /// Qdrant API key.
+        #[arg(long)]
+        qdrant_api_key: Option<String>,
+
+        /// Qdrant collection name.
+        #[arg(long, default_value = "mofa_documents")]
+        qdrant_collection: String,
+    },
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -567,5 +710,29 @@ mod tests {
             "json",
         ]);
         assert!(parsed.is_ok(), "session export -o ... should still parse");
+    }
+
+    #[test]
+    fn test_rag_index_parses() {
+        let parsed = Cli::try_parse_from([
+            "mofa",
+            "rag",
+            "index",
+            "--input",
+            "doc1.txt",
+            "--input",
+            "doc2.txt",
+            "--backend",
+            "in-memory",
+            "--index-file",
+            ".mofa/rag.json",
+        ]);
+        assert!(parsed.is_ok(), "rag index command should parse");
+    }
+
+    #[test]
+    fn test_rag_query_parses() {
+        let parsed = Cli::try_parse_from(["mofa", "rag", "query", "what is mofa", "--top-k", "3"]);
+        assert!(parsed.is_ok(), "rag query command should parse");
     }
 }

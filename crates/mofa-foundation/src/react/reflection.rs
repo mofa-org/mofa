@@ -183,7 +183,11 @@ impl ReflectionAgent {
 
         for round in 0..self.config.max_rounds {
             if self.config.verbose {
-                tracing::info!("[Reflection] Round {} - critiquing draft (len={})", round + 1, draft.len());
+                tracing::info!(
+                    "[Reflection] Round {} - critiquing draft (len={})",
+                    round + 1,
+                    draft.len()
+                );
             }
 
             let critique = self.run_critique(critic_agent, &task, &draft).await?;
@@ -192,7 +196,10 @@ impl ReflectionAgent {
                 || critique.to_lowercase().contains("no more improvements")
             {
                 if self.config.verbose {
-                    tracing::info!("[Reflection] Stopping early - critic satisfied at round {}", round + 1);
+                    tracing::info!(
+                        "[Reflection] Stopping early - critic satisfied at round {}",
+                        round + 1
+                    );
                 }
                 step_number += 1;
                 steps.push(ReflectionStep {
@@ -230,7 +237,11 @@ impl ReflectionAgent {
 
         let duration_ms = start.elapsed().as_millis() as u64;
         if self.config.verbose {
-            tracing::info!("[Reflection] Completed in {} rounds, {}ms", steps.len(), duration_ms);
+            tracing::info!(
+                "[Reflection] Completed in {} rounds, {}ms",
+                steps.len(),
+                duration_ms
+            );
         }
 
         let rounds = steps.len();
@@ -250,12 +261,7 @@ impl ReflectionAgent {
         self.generator.ask(task).await
     }
 
-    async fn run_critique(
-        &self,
-        critic: &LLMAgent,
-        task: &str,
-        draft: &str,
-    ) -> LLMResult<String> {
+    async fn run_critique(&self, critic: &LLMAgent, task: &str, draft: &str) -> LLMResult<String> {
         let prompt = self
             .config
             .critic_prompt_template

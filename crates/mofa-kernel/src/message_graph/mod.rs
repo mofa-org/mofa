@@ -12,10 +12,13 @@
 use crate::agent::error::{AgentError, AgentResult};
 use crate::workflow::{GraphState, StateUpdate};
 use async_trait::async_trait;
+use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::{HashMap, HashSet, VecDeque};
-use serde::de::DeserializeOwned;
+
+mod executor;
+pub use executor::*;
 
 /// Canonical messages key for StateGraph-based message state.
 pub const MESSAGES_KEY: &str = "messages";
@@ -130,7 +133,11 @@ pub fn messages_update(messages: &[MessageEnvelope]) -> AgentResult<StateUpdate>
 
 #[async_trait]
 impl GraphState for MessageState {
-    async fn apply_update<V: Serialize + Send + Sync + 'static>(&mut self, key: &str, value: V) -> AgentResult<()> {
+    async fn apply_update<V: Serialize + Send + Sync + 'static>(
+        &mut self,
+        key: &str,
+        value: V,
+    ) -> AgentResult<()> {
         if key != MESSAGES_KEY {
             let json_value = serde_json::to_value(&value).map_err(|e| {
                 AgentError::InvalidInput(format!("Failed to serialize value for key '{key}': {e}"))
@@ -594,6 +601,17 @@ impl CompiledMessageGraph {
             .unwrap_or_default();
 
         Ok(edges)
+    }
+
+    pub fn has_outgoing_edges(&self, node_id: &str) -> Result<bool, MessageGraphError> {
+        if !self.nodes.contains_key(node_id) {
+            return Err(MessageGraphError::MissingNode(node_id.to_string()));
+        }
+        Ok(self
+            .adjacency
+            .get(node_id)
+            .map(|outgoing| !outgoing.is_empty())
+            .unwrap_or(false))
     }
 }
 

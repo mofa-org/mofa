@@ -2,6 +2,8 @@
 //!
 //! Provides various output formats for CLI commands including JSON, tables, and progress indicators.
 
+use crate::CliError;
+
 mod json;
 mod progress;
 mod table;
@@ -59,7 +61,7 @@ impl CommandResult {
 }
 
 /// Format result for display
-pub fn format_result<T: JsonOutput>(result: &T, format: OutputFormat) -> anyhow::Result<String> {
+pub fn format_result<T: JsonOutput>(result: &T, format: OutputFormat) -> Result<String, CliError> {
     match format {
         OutputFormat::Text => Ok(format_text(result)),
         OutputFormat::Json => Ok(format_json(result)),

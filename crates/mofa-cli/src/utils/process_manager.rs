@@ -1,6 +1,8 @@
 //! Agent process manager - handles spawning and managing agent runtime processes
 
-use anyhow::{Result, bail};
+use crate::CliError;
+
+type Result<T> = std::result::Result<T, CliError>;
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use tracing::{debug, info, warn};
@@ -41,18 +43,18 @@ impl AgentProcessManager {
             // Try to find config in default locations
             let default_path = self.config_dir.join(format!("{}.yaml", agent_id));
             if !default_path.exists() {
-                bail!(
+                return Err(CliError::StateError(format!(
                     "No configuration found for agent '{}' at {}",
                     agent_id,
                     default_path.display()
-                );
+                )));
             }
             default_path
         };
 
         // Verify config file exists
         if !config.exists() {
-            bail!("Agent configuration not found at: {}", config.display());
+            return Err(CliError::StateError(format!("Agent configuration not found at: {}", config.display())));
         }
 
         info!(
@@ -84,7 +86,7 @@ impl AgentProcessManager {
         // Spawn the process
         let mut child = cmd
             .spawn()
-            .map_err(|e| anyhow::anyhow!("Failed to start agent '{}' process: {}", agent_id, e))?;
+            .map_err(|e| CliError::StateError(format!("Failed to start agent '{}' process: {}", agent_id, e)))?;
 
         // Get the child process ID
         let pid = child.id();
@@ -128,11 +130,11 @@ impl AgentProcessManager {
                 }
                 Err(e) => {
                     warn!("Failed to send {:?} to process {}: {}", signal, pid, e);
-                    Err(anyhow::anyhow!(
+                    Err(CliError::StateError(format!(
                         "Failed to terminate process {}: {}",
                         pid,
                         e
-                    ))
+                    )))
                 }
             }
         }
@@ -152,13 +154,13 @@ impl AgentProcessManager {
                 info!("Successfully terminated process {}", pid);
                 Ok(())
             } else {
-                bail!("Failed to terminate process {}", pid)
+                return Err(CliError::StateError(format!("Failed to terminate process {}", pid)));
             }
         }
 
         #[cfg(not(any(unix, windows)))]
         {
-            bail!("Agent process termination not supported on this platform")
+            return Err(CliError::StateError("Agent process termination not supported on this platform".to_string()));
         }
     }
 
@@ -197,13 +199,13 @@ impl AgentProcessManager {
     /// Validate agent configuration
     pub fn validate_config(&self, config_path: &Path) -> Result<()> {
         if !config_path.exists() {
-            bail!("Configuration file not found: {}", config_path.display());
+            return Err(CliError::StateError(format!("Configuration file not found: {}", config_path.display())));
         }
 
         // Try to load and parse as YAML
         let content = std::fs::read_to_string(config_path)?;
         serde_yaml::from_str::<serde_yaml::Value>(&content)
-            .map_err(|e| anyhow::anyhow!("Invalid YAML in config: {}", e))?;
+            .map_err(|e| CliError::StateError(format!("Invalid YAML in config: {}", e)))?;
 
         Ok(())
     }
