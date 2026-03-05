@@ -1,11 +1,16 @@
 //! `mofa plugin sync` command implementation
 
 use super::catalog::{CatalogService, DEFAULT_CATALOG_URL, DEFAULT_TIMEOUT_SECS};
+use crate::CliError;
 use crate::context::CliContext;
 use colored::Colorize;
 
 /// Execute the `mofa plugin sync` command
-pub async fn run(ctx: &CliContext, url: Option<&str>, timeout: Option<u64>) -> anyhow::Result<()> {
+pub async fn run(
+    ctx: &CliContext,
+    url: Option<&str>,
+    timeout: Option<u64>,
+) -> Result<(), CliError> {
     let service = CatalogService::new(&ctx.data_dir);
     let catalog_url = url.unwrap_or(DEFAULT_CATALOG_URL);
     let timeout_secs = timeout.unwrap_or(DEFAULT_TIMEOUT_SECS);

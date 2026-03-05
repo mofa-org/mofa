@@ -1,29 +1,33 @@
 //! `mofa tool disable` command implementation
 
+use crate::CliError;
 use crate::context::CliContext;
 use colored::Colorize;
 use mofa_kernel::agent::components::tool::ToolRegistry;
 
 /// Execute the `mofa tool disable` command
-pub async fn run(ctx: &mut CliContext, name: &str, force: bool) -> anyhow::Result<()> {
+pub async fn run(ctx: &mut CliContext, name: &str, force: bool) -> Result<(), CliError> {
     let name = name.trim();
     if name.is_empty() {
-        anyhow::bail!("Tool name cannot be empty");
+        return Err(CliError::ToolError("Tool name cannot be empty".into()));
     }
 
     // Check if it exists in the store
     let mut spec = match ctx.tool_store.get(name)? {
         Some(s) => s,
         None => {
-            anyhow::bail!(
+            return Err(CliError::ToolError(format!(
                 "Tool '{}' is not registered. Only installed tools can be disabled.",
                 name
-            );
+            )));
         }
     };
 
     if !spec.enabled {
-        anyhow::bail!("Tool '{}' is already disabled", name);
+        return Err(CliError::ToolError(format!(
+            "Tool '{}' is already disabled",
+            name
+        )));
     }
 
     if !force {
@@ -45,11 +49,10 @@ pub async fn run(ctx: &mut CliContext, name: &str, force: bool) -> anyhow::Resul
     // Update the spec and persist it
     spec.enabled = false;
     if let Err(e) = ctx.tool_store.save(name, &spec) {
-        anyhow::bail!(
+        return Err(CliError::ToolError(format!(
             "Failed to persist tool '{}' state over to disabled: {}",
-            name,
-            e
-        );
+            name, e
+        )));
     }
 
     println!("{} Tool '{}' disabled successfully", "✓".green(), name);

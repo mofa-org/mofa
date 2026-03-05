@@ -1,5 +1,6 @@
 //! `mofa tool enable` command implementation
 
+use crate::CliError;
 use crate::context::CliContext;
 use colored::Colorize;
 use mofa_foundation::agent::components::tool::EchoTool;
@@ -7,25 +8,28 @@ use mofa_foundation::agent::tools::registry::ToolSource;
 use mofa_kernel::agent::components::tool::{ToolExt, ToolRegistry};
 
 /// Execute the `mofa tool enable` command
-pub async fn run(ctx: &mut CliContext, name: &str) -> anyhow::Result<()> {
+pub async fn run(ctx: &mut CliContext, name: &str) -> Result<(), CliError> {
     let name = name.trim();
     if name.is_empty() {
-        anyhow::bail!("Tool name cannot be empty");
+        return Err(CliError::ToolError("Tool name cannot be empty".into()));
     }
 
     // Check if it exists in the store
     let mut spec = match ctx.tool_store.get(name)? {
         Some(s) => s,
         None => {
-            anyhow::bail!(
+            return Err(CliError::ToolError(format!(
                 "Tool '{}' is not registered. Only installed tools can be enabled.",
                 name
-            );
+            )));
         }
     };
 
     if spec.enabled {
-        anyhow::bail!("Tool '{}' is already enabled", name);
+        return Err(CliError::ToolError(format!(
+            "Tool '{}' is already enabled",
+            name
+        )));
     }
 
     println!("{} Enabling tool: {}", "→".green(), name.cyan());
@@ -33,7 +37,10 @@ pub async fn run(ctx: &mut CliContext, name: &str) -> anyhow::Result<()> {
     // Update the spec and persist it
     spec.enabled = true;
     if let Err(e) = ctx.tool_store.save(name, &spec) {
-        anyhow::bail!("Failed to persist tool '{}': {}", name, e);
+        return Err(CliError::ToolError(format!(
+            "Failed to persist tool '{}': {}",
+            name, e
+        )));
     }
 
     // Register active tool in memory mapping
@@ -46,7 +53,10 @@ pub async fn run(ctx: &mut CliContext, name: &str) -> anyhow::Result<()> {
                 // Best effort rollback
                 spec.enabled = false;
                 let _ = ctx.tool_store.save(name, &spec);
-                anyhow::bail!("Failed to register tool '{}': {}. Rolled back.", name, e);
+                return Err(CliError::ToolError(format!(
+                    "Failed to register tool '{}': {}. Rolled back.",
+                    name, e
+                )));
             }
         }
         _ => {

@@ -1,5 +1,6 @@
 //! Plugin catalog types, cache handling, and resolution helpers
 
+use crate::CliError;
 use chrono::{DateTime, Utc};
 use semver::Version;
 use serde::{Deserialize, Serialize};
@@ -100,21 +101,34 @@ impl CatalogService {
         &self,
         url: &str,
         timeout: Duration,
-    ) -> anyhow::Result<PluginCatalog> {
-        let client = reqwest::Client::builder().timeout(timeout).build()?;
+    ) -> Result<PluginCatalog, CliError> {
+        let client = reqwest::Client::builder()
+            .timeout(timeout)
+            .build()
+            .map_err(|e| CliError::PluginError(format!("Failed to build HTTP client: {}", e)))?;
 
-        let resp = client.get(url).send().await?;
+        let resp = client
+            .get(url)
+            .send()
+            .await
+            .map_err(|e| CliError::PluginError(format!("Failed to fetch catalog: {}", e)))?;
         let status = resp.status();
         if !status.is_success() {
-            anyhow::bail!("Failed to fetch catalog (status {}): {}", status, url);
+            return Err(CliError::PluginError(format!(
+                "Failed to fetch catalog (status {}): {}",
+                status, url
+            )));
         }
 
-        let catalog: PluginCatalog = resp.json().await?;
+        let catalog: PluginCatalog = resp
+            .json()
+            .await
+            .map_err(|e| CliError::PluginError(format!("Failed to parse catalog JSON: {}", e)))?;
         validate_catalog(&catalog)?;
         Ok(catalog)
     }
 
-    pub fn read_cache(&self) -> anyhow::Result<Option<CachedPluginCatalog>> {
+    pub fn read_cache(&self) -> Result<Option<CachedPluginCatalog>, CliError> {
         if !self.cache_path.exists() {
             return Ok(None);
         }
@@ -124,7 +138,7 @@ impl CatalogService {
         Ok(Some(cached))
     }
 
-    pub fn write_cache(&self, cached: &CachedPluginCatalog) -> anyhow::Result<()> {
+    pub fn write_cache(&self, cached: &CachedPluginCatalog) -> Result<(), CliError> {
         if let Some(parent) = self.cache_path.parent() {
             fs::create_dir_all(parent)?;
         }
@@ -137,7 +151,7 @@ impl CatalogService {
         &self,
         url: Option<&str>,
         timeout_secs: Option<u64>,
-    ) -> anyhow::Result<CachedPluginCatalog> {
+    ) -> Result<CachedPluginCatalog, CliError> {
         let catalog_url = url.unwrap_or(DEFAULT_CATALOG_URL);
         let timeout = Duration::from_secs(timeout_secs.unwrap_or(DEFAULT_TIMEOUT_SECS));
         let catalog = self.fetch_remote(catalog_url, timeout).await?;
@@ -155,7 +169,7 @@ impl CatalogService {
         catalog: &PluginCatalog,
         name: &str,
         version: Option<&str>,
-    ) -> anyhow::Result<Option<ResolvedPlugin>> {
+    ) -> Result<Option<ResolvedPlugin>, CliError> {
         let entry = match catalog.plugins.iter().find(|p| p.id == name) {
             Some(entry) => entry,
             None => return Ok(None),
@@ -164,7 +178,12 @@ impl CatalogService {
         let release = select_release(&entry.releases, version);
         let release = match release {
             Some(r) => r,
-            None => anyhow::bail!("No matching release found for plugin '{}'", name),
+            None => {
+                return Err(CliError::PluginError(format!(
+                    "No matching release found for plugin '{}'",
+                    name
+                )));
+            }
         };
 
         let kind = entry.kind.clone().unwrap_or_else(|| entry.id.clone());
@@ -179,10 +198,12 @@ impl CatalogService {
     }
 }
 
-fn validate_catalog(catalog: &PluginCatalog) -> anyhow::Result<()> {
+fn validate_catalog(catalog: &PluginCatalog) -> Result<(), CliError> {
     for entry in &catalog.plugins {
         if entry.id.trim().is_empty() {
-            anyhow::bail!("Catalog entry missing id");
+            return Err(CliError::PluginError(
+                "Catalog entry missing id".to_string(),
+            ));
         }
     }
     Ok(())
