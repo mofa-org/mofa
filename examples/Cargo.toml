@@ -46,6 +46,7 @@ members = [
     "admission_gate_demo",
     "integrations_demo",
     "memory_scheduler_demo",
+    "rag_retrieval_demo",
 ]
 
 [workspace.package]
