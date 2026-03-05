@@ -1,79 +1,57 @@
-//! Gateway error types
+//! `mofa-gateway` implementation error type.
+//!
+//! [`GatewayImplError`] covers *runtime* failures that occur after
+//! configuration has been validated: network errors, upstream timeouts,
+//! serialisation failures during proxying, etc.
+//!
+//! Configuration failures (wrong IDs, duplicate routes, …) are represented
+//! by [`mofa_kernel::gateway::GatewayError`] and live in the kernel crate.
 
-use axum::{
-    http::StatusCode,
-    response::{IntoResponse, Response},
-    Json,
-};
-use serde_json::json;
 use thiserror::Error;
 
-/// Gateway-level errors
+/// Runtime error type for `mofa-gateway`.
 #[derive(Debug, Error)]
-pub enum GatewayError {
-    #[error("agent not found: {0}")]
-    AgentNotFound(String),
+#[non_exhaustive]
+pub enum GatewayImplError {
+    /// The upstream backend returned an HTTP error status.
+    #[error("upstream '{backend_id}' returned HTTP {status}: {message}")]
+    UpstreamError {
+        backend_id: String,
+        status: u16,
+        message: String,
+    },
 
-    #[error("agent already exists: {0}")]
-    AgentAlreadyExists(String),
+    /// A network-level error communicating with the upstream backend.
+    #[error("upstream '{backend_id}' network error: {source}")]
+    NetworkError {
+        backend_id: String,
+        #[source]
+        source: reqwest::Error,
+    },
 
-    #[error("rate limit exceeded for client {0}")]
-    RateLimitExceeded(String),
+    /// No alive backend could be found for the requested route.
+    #[error("no healthy backend available for route '{route_id}'")]
+    NoHealthyBackend { route_id: String },
 
-    #[error("agent operation failed: {0}")]
-    AgentOperationFailed(String),
+    /// The inbound request could not be routed (no matching route).
+    #[error("no route matched path '{path}' method '{method}'")]
+    RoutingFailure { path: String, method: String },
 
-    #[error("invalid request: {0}")]
-    InvalidRequest(String),
+    /// A filter in the chain returned an unrecoverable error.
+    #[error("filter '{filter_name}' failed: {message}")]
+    FilterError {
+        filter_name: String,
+        message: String,
+    },
 
-    #[error("internal error: {0}")]
+    /// JSON (de)serialisation error inside the proxy.
+    #[error("serialisation error: {0}")]
+    Serialization(#[from] serde_json::Error),
+
+    /// Generic internal error with a human-readable message.
+    #[error("internal gateway error: {0}")]
     Internal(String),
 }
 
-impl IntoResponse for GatewayError {
-    fn into_response(self) -> Response {
-        let (status, code, message) = match &self {
-            GatewayError::AgentNotFound(id) => (
-                StatusCode::NOT_FOUND,
-                "AGENT_NOT_FOUND",
-                format!("agent '{}' not found", id),
-            ),
-            GatewayError::AgentAlreadyExists(id) => (
-                StatusCode::CONFLICT,
-                "AGENT_ALREADY_EXISTS",
-                format!("agent '{}' already exists", id),
-            ),
-            GatewayError::RateLimitExceeded(client) => (
-                StatusCode::TOO_MANY_REQUESTS,
-                "RATE_LIMIT_EXCEEDED",
-                format!("rate limit exceeded for client '{}'", client),
-            ),
-            GatewayError::AgentOperationFailed(msg) => (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "AGENT_OPERATION_FAILED",
-                msg.clone(),
-            ),
-            GatewayError::InvalidRequest(msg) => (
-                StatusCode::BAD_REQUEST,
-                "INVALID_REQUEST",
-                msg.clone(),
-            ),
-            GatewayError::Internal(msg) => (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "INTERNAL_ERROR",
-                msg.clone(),
-            ),
-        };
-
-        let body = Json(json!({
-            "error": {
-                "code": code,
-                "message": message,
-            }
-        }));
-
-        (status, body).into_response()
-    }
-}
-
-pub type GatewayResult<T> = Result<T, GatewayError>;
+/// Convenience alias.
+pub type GatewayResult<T> = Result<T, GatewayImplError>;
