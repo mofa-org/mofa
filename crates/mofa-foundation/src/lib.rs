@@ -55,8 +55,8 @@ pub mod rag;
 // Structured output: JSON schema validator and agent executor
 pub mod schema_validator;
 pub mod agent_executor;
-pub use schema_validator::SchemaValidator;
-pub use agent_executor::AgentExecutor;
+pub use schema_validator::{SchemaError, SchemaValidator};
+pub use agent_executor::{AgentExecutor, ExecutorError};
 
 // Re-export config types
 pub use config::{AgentInfo, AgentYamlConfig, LLMYamlConfig, RuntimeConfig, ToolConfig};
