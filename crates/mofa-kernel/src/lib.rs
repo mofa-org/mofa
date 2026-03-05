@@ -64,7 +64,7 @@ pub use rag::{
 // Workflow traits (工作流接口)
 pub mod workflow;
 pub use workflow::*;
-
+pub mod llm;
 // Metrics traits for monitoring integration
 pub mod metrics;
 pub use metrics::*;
@@ -72,3 +72,5 @@ pub use metrics::*;
 // Structured output parsing with JSON schema validation
 pub mod structured_output;
 pub use structured_output::StructuredOutput;
+// Security governance (PII redaction, content moderation, prompt guard)
+pub mod security;

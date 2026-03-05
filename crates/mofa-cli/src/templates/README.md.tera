@@ -1,0 +1,25 @@
+# {{ plugin_name }}
+
+{{ description }}
+
+## Features
+- Implements `AgentPlugin` trait from `mofa-kernel`
+- Fully async ready
+- Template type: {{ template_type }}
+
+## Getting Started
+
+To compile your plugin, run:
+```sh
+cargo build
+```
+
+To run your tests:
+```sh
+cargo test
+```
+
+## Adding to MoFA
+If this is within a MoFA workspace, it will be automatically available for your Agents to load via `config.yml`.
+
+> scaffolded with `mofa plugin new`

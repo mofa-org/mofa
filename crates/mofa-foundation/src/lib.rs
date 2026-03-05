@@ -57,6 +57,8 @@ pub mod schema_validator;
 pub mod agent_executor;
 pub use schema_validator::{SchemaError, SchemaValidator};
 pub use agent_executor::{AgentExecutor, ExecutorError};
+// Security governance - PII redaction, content moderation, prompt guard
+pub mod security;
 
 // Re-export config types
 pub use config::{AgentInfo, AgentYamlConfig, LLMYamlConfig, RuntimeConfig, ToolConfig};
