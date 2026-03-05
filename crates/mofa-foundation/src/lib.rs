@@ -55,6 +55,10 @@ pub mod rag;
 // Security governance - PII redaction, content moderation, prompt guard
 pub mod security;
 
+// Agent capability manifest and discovery registry
+pub mod capability_registry;
+pub use capability_registry::CapabilityRegistry;
+
 // Re-export config types
 pub use config::{AgentInfo, AgentYamlConfig, LLMYamlConfig, RuntimeConfig, ToolConfig};
 

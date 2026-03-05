@@ -32,6 +32,7 @@ pub use message_graph::*;
 
 // Agent Framework (统一 Agent 框架)
 pub mod agent;
+pub use agent::{AgentManifest, AgentManifestBuilder};
 
 // Global Configuration System (全局配置系统)
 #[cfg(feature = "config")]
