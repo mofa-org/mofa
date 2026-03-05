@@ -109,6 +109,25 @@ mofa generate dataflow --output my-dataflow.yml
 mofa info
 ```
 
+### Plugins
+
+```bash
+# Fetch remote catalog (cached locally)
+mofa plugin sync
+
+# List installed plugins
+mofa plugin list
+
+# List available plugins from the catalog (refresh if needed)
+mofa plugin list --available --refresh
+
+# Install by name (optional version suffix)
+mofa plugin install http-plugin@1.0.0
+
+# Uninstall
+mofa plugin uninstall http-plugin
+```
+
 # 创建 Rust LLM 项目
 mofa new my-rust-agent --template llm
 
