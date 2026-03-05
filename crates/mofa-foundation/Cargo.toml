@@ -32,7 +32,7 @@ kokoro = ["mofa-plugins/kokoro"]
 # Enable MCP (Model Context Protocol) client support
 mcp = ["dep:rmcp"]
 # Enable Qdrant vector database support
-qdrant = ["dep:qdrant-client", "dep:sha2"]
+qdrant = ["dep:qdrant-client"]
 # Enable accurate token counting with tiktoken
 tiktoken = ["dep:tiktoken-rs"]
 # Enable parallel processing for compression
