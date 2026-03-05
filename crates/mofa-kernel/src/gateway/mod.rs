@@ -24,11 +24,17 @@
 //! └─────────────────────────────────────────────────────────────┘
 //! ```
 
+pub mod capability;
 pub mod error;
+pub mod filter;
+pub mod router;
 
 // ── Flat re-exports ────────────────────────────────────────────────────────
 
+pub use capability::{BackendHealth, BackendKind, CapabilityDescriptor, CapabilityRegistry};
 pub use error::GatewayError;
+pub use filter::{FilterAction, FilterChainConfig, FilterOrder, GatewayFilter};
+pub use router::{GatewayRouter, RouteConfig};
 
 // types module is pub so implementors in mofa-gateway can use the structs
 pub mod types;
