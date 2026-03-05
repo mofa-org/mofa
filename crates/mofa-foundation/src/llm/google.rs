@@ -416,3 +416,46 @@ impl LLMProvider for GeminiProvider {
         })
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_convert_messages_with_media() {
+        let messages = vec![ChatMessage::user_with_parts(vec![
+            ContentPart::Image {
+                image_url: ImageUrl {
+                    url: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==".to_string(),
+                    detail: None,
+                },
+            },
+            ContentPart::Audio {
+                audio: AudioData {
+                    data: "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA=".to_string(),
+                    format: "wav".to_string(),
+                },
+            },
+            ContentPart::Video {
+                video: VideoData {
+                    data: "data:video/mp4;base64,AAAAIGZ0eXBtcDQyAAAAAG1wNDJpc29tYXZjMQAAADhmoW9v...".to_string(),
+                    format: "mp4".to_string(),
+                },
+            },
+        ])];
+
+        let (_, contents) = GeminiProvider::convert_messages(&messages);
+        assert_eq!(contents.len(), 1);
+        let parts = contents[0]["parts"].as_array().unwrap();
+        assert_eq!(parts.len(), 3);
+
+        assert_eq!(parts[0]["inlineData"]["mimeType"], "image/png");
+        assert_eq!(parts[0]["inlineData"]["data"], "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==");
+        
+        assert_eq!(parts[1]["inlineData"]["mimeType"], "audio/wav");
+        assert_eq!(parts[1]["inlineData"]["data"], "UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA=");
+
+        assert_eq!(parts[2]["inlineData"]["mimeType"], "video/mp4");
+        assert_eq!(parts[2]["inlineData"]["data"], "AAAAIGZ0eXBtcDQyAAAAAG1wNDJpc29tYXZjMQAAADhmoW9v...");
+    }
+}

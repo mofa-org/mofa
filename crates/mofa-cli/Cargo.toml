@@ -41,6 +41,7 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 serde_yaml = "0.9"
 toml = "0.8"
+json5 = "0.4"
 
 
 # Utilities
@@ -58,7 +59,7 @@ tera = "1.19"
 nix = { version = "0.29", features = ["process", "signal"] }
 
 # Plugin installation
-reqwest = { version = "0.12", features = ["rustls-tls", "stream"] }
+reqwest = { workspace = true, features = ["rustls-tls", "stream"] }
 flate2 = "1.0"
 tar = "0.4"
 zip = "2.1"

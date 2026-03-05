@@ -1,21 +1,16 @@
 #![allow(dead_code, unused_imports, improper_ctypes_definitions)]
-//! 插件机制模块
 //! Plugin mechanism module
 //!
-//! 提供完整的插件系统，支持：
 //! Provides a complete plugin system, supporting:
-//! - 插件生命周期管理
 //! - Plugin lifecycle management
-//! - 多种插件类型（LLM、Tool、Storage、Memory 等）
 //! - Various plugin types (LLM, Tool, Storage, Memory, etc.)
-//! - 插件注册与发现
 //! - Plugin registration and discovery
-//! - 插件间通信与依赖管理
 //! - Inter-plugin communication and dependency management
-//! - 事件钩子机制
 //! - Event hook mechanism
-//! - Agent Skills 支持
 //! - Agent Skills support
+
+// Unified error conversions (GlobalError <-> plugin errors)
+pub mod error_conversions;
 
 pub mod hot_reload;
 pub mod skill;
