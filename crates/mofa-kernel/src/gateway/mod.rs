@@ -23,11 +23,35 @@
 //! │  OpenAiBackend  (reqwest proxy)                             │
 //! └─────────────────────────────────────────────────────────────┘
 //! ```
+//!
+//! # Quick start
+//!
+//! ```rust,no_run
+//! use mofa_kernel::gateway::{
+//!     GatewayConfig, RouteConfig, CapabilityDescriptor, BackendKind,
+//!     FilterChainConfig,
+//! };
+//!
+//! let config = GatewayConfig::new("my-gateway")
+//!     .with_backend(CapabilityDescriptor::new(
+//!         "openai",
+//!         BackendKind::LlmOpenAI,
+//!         "https://api.openai.com",
+//!     ))
+//!     .with_route(RouteConfig::new(
+//!         "chat",
+//!         "/v1/chat/completions",
+//!         "openai",
+//!     ));
+//!
+//! config.validate().expect("gateway config is valid");
+//! ```
 
 pub mod capability;
 pub mod error;
 pub mod filter;
 pub mod router;
+pub mod validation;
 
 // ── Flat re-exports ────────────────────────────────────────────────────────
 
@@ -35,6 +59,7 @@ pub use capability::{BackendHealth, BackendKind, CapabilityDescriptor, Capabilit
 pub use error::GatewayError;
 pub use filter::{FilterAction, FilterChainConfig, FilterOrder, GatewayFilter};
 pub use router::{GatewayRouter, RouteConfig};
+pub use validation::{GatewayConfig, RateLimitConfig};
 
 // types module is pub so implementors in mofa-gateway can use the structs
 pub mod types;
