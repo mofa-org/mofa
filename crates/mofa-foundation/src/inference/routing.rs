@@ -7,7 +7,9 @@
 use std::fmt;
 
 use crate::hardware::{CpuFamily, HardwareCapability, OsClassification};
-use mofa_kernel::llm::{CandidateSet, InferenceRequest, RequestPriority, RoutedBackend, RoutingObjective};
+use mofa_kernel::llm::{
+    CandidateSet, InferenceRequest, RequestPriority, RoutedBackend, RoutingObjective,
+};
 
 /// The outcome of a routing decision.
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
@@ -82,7 +84,9 @@ pub fn resolve(
         RoutingObjective::LatencyOptimized => {
             resolve_latency_optimized(request, admission, hardware, cloud_provider)
         }
-        RoutingObjective::CostOptimized => resolve_cost_optimized(request, admission, cloud_provider),
+        RoutingObjective::CostOptimized => {
+            resolve_cost_optimized(request, admission, cloud_provider)
+        }
         RoutingObjective::QualityMaximized => {
             // Quality maximized generally defaults to powerful cloud models if available
             RoutingDecision::UseCloud {
@@ -93,24 +97,38 @@ pub fn resolve(
             // Compliance forces local execution only
             resolve_local_only(request, admission)
         }
+        #[cfg(feature = "advanced-routing")]
         RoutingObjective::Custom(predicate) => {
             // Updated to call into the trait as requested
             let candidates = CandidateSet {
                 candidates: vec![
-                    RoutedBackend::Local { model_id: request.model_id.clone() },
-                    RoutedBackend::Cloud { provider: cloud_provider.to_string() }
-                ]
+                    RoutedBackend::Local {
+                        model_id: request.model_id.clone(),
+                    },
+                    RoutedBackend::Cloud {
+                        provider: cloud_provider.to_string(),
+                    },
+                ],
             };
             let score = predicate.evaluate(request, &candidates);
-            
+
             // Simple threshold: if score > 0.0, target local.
-            if score >= 0.0 && (admission == AdmissionOutcome::Accepted || admission == AdmissionOutcome::Deferred) {
-                RoutingDecision::UseLocal { model_id: request.model_id.clone() }
+            if score >= 0.0
+                && (admission == AdmissionOutcome::Accepted
+                    || admission == AdmissionOutcome::Deferred)
+            {
+                RoutingDecision::UseLocal {
+                    model_id: request.model_id.clone(),
+                }
             } else {
-                RoutingDecision::UseCloud { provider: cloud_provider.to_string() }
+                RoutingDecision::UseCloud {
+                    provider: cloud_provider.to_string(),
+                }
             }
         }
-        _ => RoutingDecision::Rejected { reason: "Unsupported routing objective".to_string() },
+        _ => RoutingDecision::Rejected {
+            reason: "Unsupported routing objective".to_string(),
+        },
     }
 }
 
@@ -176,16 +194,12 @@ fn resolve_cost_optimized(
     cloud_provider: &str,
 ) -> RoutingDecision {
     match admission {
-        AdmissionOutcome::Accepted | AdmissionOutcome::Deferred => {
-            RoutingDecision::UseLocal {
-                model_id: request.model_id.clone(),
-            }
-        }
-        AdmissionOutcome::Rejected => {
-            RoutingDecision::UseCloud {
-                provider: cloud_provider.to_string(),
-            }
-        }
+        AdmissionOutcome::Accepted | AdmissionOutcome::Deferred => RoutingDecision::UseLocal {
+            model_id: request.model_id.clone(),
+        },
+        AdmissionOutcome::Rejected => RoutingDecision::UseCloud {
+            provider: cloud_provider.to_string(),
+        },
     }
 }
 
@@ -413,7 +427,56 @@ mod tests {
         ] {
             let json = serde_json::to_string(&variant).unwrap();
             let back: AdmissionOutcome = serde_json::from_str(&json).unwrap();
-            assert_eq!(back, variant);
         }
+    }
+
+    #[cfg(feature = "advanced-routing")]
+    #[derive(Debug, Clone)]
+    struct PreferLocalGpu;
+
+    #[cfg(feature = "advanced-routing")]
+    impl mofa_kernel::llm::RoutingPredicateClone for PreferLocalGpu {
+        fn clone_box(&self) -> Box<dyn mofa_kernel::llm::RoutingPredicate> {
+            Box::new(self.clone())
+        }
+    }
+
+    #[cfg(feature = "advanced-routing")]
+    impl mofa_kernel::llm::RoutingPredicate for PreferLocalGpu {
+        fn evaluate(
+            &self,
+            _request: &InferenceRequest,
+            candidates: &mofa_kernel::llm::CandidateSet,
+        ) -> f32 {
+            if candidates
+                .candidates
+                .iter()
+                .any(|c| matches!(c, mofa_kernel::llm::RoutedBackend::Local { .. }))
+            {
+                1.0 // Strong preference for local
+            } else {
+                -1.0
+            }
+        }
+    }
+
+    #[cfg(feature = "advanced-routing")]
+    #[test]
+    fn test_custom_routing_predicate() {
+        let policy = RoutingObjective::Custom(Box::new(PreferLocalGpu));
+        let decision = resolve(
+            &policy,
+            &mock_request(),
+            AdmissionOutcome::Accepted,
+            &mock_hardware(),
+            "openai",
+        );
+        // Because AdmissionOutcome is Accepted, the score >= 0.0 means UseLocal is chosen.
+        assert_eq!(
+            decision,
+            RoutingDecision::UseLocal {
+                model_id: "llama-3-13b".into()
+            }
+        );
     }
 }

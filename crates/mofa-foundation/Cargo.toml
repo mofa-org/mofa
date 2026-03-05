@@ -39,8 +39,10 @@ tiktoken = ["dep:tiktoken-rs"]
 parallel-compression = ["dep:rayon"]
 # Enable compression caching for embeddings and summaries
 compression-cache = ["dep:sha2"]
-# Enable Linux Candle on-device ML inference (Hugging Face Candle)
+# Candle ML framework for on-device inference (Linux only, optional)
 linux-candle = ["dep:candle-core", "dep:candle-transformers"]
+# Enable custom dynamic routing objectives
+advanced-routing = ["mofa-kernel/advanced-routing"]
 
 [dependencies]
 # Workspace dependencies

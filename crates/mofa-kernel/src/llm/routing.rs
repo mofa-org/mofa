@@ -23,9 +23,31 @@ where
 
 /// Represents custom filtering/routing logic that can be provided by the user.
 /// It MUST be `Send + Sync` to participate in multi-threaded execution.
+///
+/// # Example
+///
+/// ```rust
+/// use mofa_kernel::llm::{CandidateSet, InferenceRequest, RoutingPredicate};
+///
+/// #[derive(Debug, Clone)]
+/// struct PreferLocalGpu;
+///
+/// impl RoutingPredicate for PreferLocalGpu {
+///     fn evaluate(&self, request: &InferenceRequest, candidates: &CandidateSet) -> f32 {
+///         // Return a score > 0.0 to prefer local, and < 0.0 for cloud.
+///         if candidates.candidates.iter().any(|c| matches!(c, mofa_kernel::llm::RoutedBackend::Local { .. })) {
+///             1.0 // Strong preference for local
+///         } else {
+///             -1.0
+///         }
+///     }
+/// }
+/// ```
 pub trait RoutingPredicate: Send + Sync + fmt::Debug + RoutingPredicateClone {
     /// Evaluates candidate backends against a specific inference request.
     /// Returns a score or admissibility metric for the candidates.
+    /// In general, returning a score >= 0.0 signals preference for a Local candidate
+    /// (if available in the CandidateSet), while < 0.0 signals Cloud.
     fn evaluate(&self, request: &InferenceRequest, candidates: &CandidateSet) -> f32;
 }
 
@@ -46,6 +68,7 @@ pub enum RoutingObjective {
     LatencyOptimized,
     QualityMaximized,
     ComplianceFirst,
+    #[cfg(feature = "advanced-routing")]
     Custom(Box<dyn RoutingPredicate>),
 }
 
@@ -65,6 +88,7 @@ impl Clone for RoutingObjective {
             Self::LatencyOptimized => Self::LatencyOptimized,
             Self::QualityMaximized => Self::QualityMaximized,
             Self::ComplianceFirst => Self::ComplianceFirst,
+            #[cfg(feature = "advanced-routing")]
             Self::Custom(predicate) => Self::Custom(predicate.clone()),
         }
     }
@@ -80,6 +104,7 @@ impl fmt::Debug for RoutingObjective {
             Self::LatencyOptimized => write!(f, "LatencyOptimized"),
             Self::QualityMaximized => write!(f, "QualityMaximized"),
             Self::ComplianceFirst => write!(f, "ComplianceFirst"),
+            #[cfg(feature = "advanced-routing")]
             Self::Custom(predicate) => write!(f, "Custom({:?})", predicate),
         }
     }
@@ -98,13 +123,14 @@ impl PartialEq for RoutingObjective {
             // We cannot easily compare two trait objects, so we consider them unequal
             // by default for PartialEq, unless they are the exact same pointer.
             // But since this is just an enum for policy equality checking, false is safe.
+            #[cfg(feature = "advanced-routing")]
             (Self::Custom(_), Self::Custom(_)) => false,
             _ => false,
         }
     }
 }
 
-use serde::{Deserialize, Serialize, Serializer, Deserializer, de::Error};
+use serde::{Deserialize, Deserializer, Serialize, Serializer, de::Error};
 
 impl Serialize for RoutingObjective {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
@@ -114,11 +140,14 @@ impl Serialize for RoutingObjective {
         match self {
             Self::LocalOnly => serializer.serialize_str("local_only"),
             Self::CloudOnly => serializer.serialize_str("cloud_only"),
-            Self::LocalFirstWithCloudFallback => serializer.serialize_str("local_first_with_cloud_fallback"),
+            Self::LocalFirstWithCloudFallback => {
+                serializer.serialize_str("local_first_with_cloud_fallback")
+            }
             Self::CostOptimized => serializer.serialize_str("cost_optimized"),
             Self::LatencyOptimized => serializer.serialize_str("latency_optimized"),
             Self::QualityMaximized => serializer.serialize_str("quality_maximized"),
             Self::ComplianceFirst => serializer.serialize_str("compliance_first"),
+            #[cfg(feature = "advanced-routing")]
             Self::Custom(_) => serializer.serialize_str("custom"),
         }
     }
@@ -144,7 +173,9 @@ impl<'de> Deserialize<'de> for RoutingObjective {
             "cost-optimized" => Ok(Self::CostOptimized),
             "latency-optimized" => Ok(Self::LatencyOptimized),
             // Custom predicates cannot be deserialized cleanly this way.
-            _ => Err(D::Error::custom("unknown or unsupported routing objective variant")),
+            _ => Err(D::Error::custom(
+                "unknown or unsupported routing objective variant",
+            )),
         }
     }
 }
