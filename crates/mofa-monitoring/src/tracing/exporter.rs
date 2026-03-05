@@ -612,6 +612,7 @@ impl TracingExporter for CompositeExporter {
 pub struct BatchExporter {
     exporter: Arc<dyn TracingExporter>,
     sender: mpsc::Sender<SpanData>,
+    _task: tokio::task::JoinHandle<()>,
 }
 
 impl BatchExporter {
@@ -624,18 +625,32 @@ impl BatchExporter {
 
         // 启动后台导出任务
         // Start background export task
-        tokio::spawn(async move {
+        let task = tokio::spawn(async move {
             let mut buffer = Vec::with_capacity(batch_size);
             let mut interval = tokio::time::interval(export_interval);
 
             loop {
                 tokio::select! {
-                    Some(span) = receiver.recv() => {
-                        buffer.push(span);
-                        if buffer.len() >= batch_size {
-                            let to_export: Vec<_> = std::mem::take(&mut buffer);
-                            if let Err(e) = exporter_clone.export(to_export).await {
-                                error!("Failed to export spans: {}", e);
+                    msg = receiver.recv() => {
+                        match msg {
+                            Some(span) => {
+                                buffer.push(span);
+                                if buffer.len() >= batch_size {
+                                    let to_export: Vec<_> = std::mem::take(&mut buffer);
+                                    if let Err(e) = exporter_clone.export(to_export).await {
+                                        error!("Failed to export spans: {}", e);
+                                    }
+                                }
+                            }
+                            // All senders dropped: flush remaining spans and exit.
+                            None => {
+                                if !buffer.is_empty() {
+                                    let to_export: Vec<_> = std::mem::take(&mut buffer);
+                                    if let Err(e) = exporter_clone.export(to_export).await {
+                                        error!("Failed to export spans on shutdown: {}", e);
+                                    }
+                                }
+                                break;
                             }
                         }
                     }
@@ -651,7 +666,7 @@ impl BatchExporter {
             }
         });
 
-        Self { exporter, sender }
+        Self { exporter, sender, _task: task }
     }
 
     pub async fn record(&self, span: SpanData) -> Result<(), String> {

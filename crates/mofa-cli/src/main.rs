@@ -238,6 +238,9 @@ async fn run_command(cli: Cli) -> CliResult<()> {
         Some(Commands::Plugin { action }) => {
             let ctx = ctx.as_ref().unwrap();
             match action {
+                cli::PluginCommands::New { name } => {
+                    commands::plugin::new::run(name.as_deref()).await?;
+                }
                 cli::PluginCommands::List {
                     installed,
                     available,
@@ -325,6 +328,59 @@ async fn run_command(cli: Cli) -> CliResult<()> {
             }
         }
 
+        Some(Commands::Rag { action }) => match action {
+            cli::RagCommands::Index {
+                input,
+                backend,
+                index_file,
+                dimensions,
+                chunk_size,
+                chunk_overlap,
+                sentence_chunks,
+                qdrant_url,
+                qdrant_api_key,
+                qdrant_collection,
+            } => {
+                commands::rag::run_index(
+                    input,
+                    &backend,
+                    &index_file,
+                    dimensions,
+                    chunk_size,
+                    chunk_overlap,
+                    sentence_chunks,
+                    qdrant_url.as_deref(),
+                    qdrant_api_key.as_deref(),
+                    &qdrant_collection,
+                )
+                .await?;
+            }
+            cli::RagCommands::Query {
+                query,
+                backend,
+                index_file,
+                dimensions,
+                top_k,
+                threshold,
+                qdrant_url,
+                qdrant_api_key,
+                qdrant_collection,
+            } => {
+                commands::rag::run_query(
+                    &query,
+                    &backend,
+                    &index_file,
+                    dimensions,
+                    top_k,
+                    threshold,
+                    qdrant_url.as_deref(),
+                    qdrant_api_key.as_deref(),
+                    &qdrant_collection,
+                )
+                .await?;
+            }
+        },
+
         None => {
             // Should have been handled by TUI check above
             // If we get here, show help
@@ -342,7 +398,7 @@ async fn run_command(cli: Cli) -> CliResult<()> {
 fn normalize_legacy_output_flags(args: &mut [String]) {
     const TOP_LEVEL_COMMANDS: &[&str] = &[
         "new", "init", "build", "run", "dataflow", "generate", "info", "db", "agent", "config",
-        "plugin", "session", "tool",
+        "plugin", "session", "tool", "rag",
     ];
 
     let top_command_index = args

@@ -36,6 +36,7 @@ qdrant = ["mofa-foundation/qdrant"]
 mofa-runtime = { path = "../mofa-runtime", version = "0.1" }
 mofa-foundation = { path = "../mofa-foundation", version = "0.1" }
 mofa-kernel = { path = "../mofa-kernel", version = "0.1", features = ["config"] }
+error-stack = { workspace = true }
 mofa-plugins = { path = "../mofa-plugins", version = "0.1" }
 mofa-extra = { path = "../mofa-extra", version = "0.1", features = ["rhai-scripting"] }
 mofa-monitoring = { path = "../mofa-monitoring", version = "0.1", optional = true }

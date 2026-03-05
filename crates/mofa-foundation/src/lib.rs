@@ -9,6 +9,8 @@ pub mod orchestrator;
 
 // hardware discovery module
 pub mod hardware;
+// memory-budgeted scheduler for inference orchestration
+pub mod scheduler;
 
 // adapter registry module - Runtime model adapter discovery
 pub mod adapter;
@@ -51,6 +53,7 @@ pub mod collaboration;
 pub mod rag;
 
 // Security module - security governance (RBAC, PII, moderation, prompt guard)
+// Security governance - PII redaction, content moderation, prompt guard
 pub mod security;
 
 // Re-export config types
