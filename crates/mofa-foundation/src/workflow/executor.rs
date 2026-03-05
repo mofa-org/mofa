@@ -43,6 +43,9 @@ pub struct ExecutorConfig {
     /// 执行超时（毫秒）
     /// Execution timeout (milliseconds)
     pub execution_timeout_ms: Option<u64>,
+    /// Per-node execution timeout (milliseconds). If a single node takes
+    /// longer than this, it is cancelled and marked as failed. Default: 120s.
+    pub node_timeout_ms: u64,
 }
 
 impl Default for ExecutorConfig {
@@ -53,6 +56,7 @@ impl Default for ExecutorConfig {
             enable_checkpoints: true,
             checkpoint_interval: 5,
             execution_timeout_ms: None,
+            node_timeout_ms: 120_000,
         }
     }
 }
@@ -629,7 +633,31 @@ impl WorkflowExecutor {
                 }
                 NodeType::Wait => self.execute_wait(ctx, node, current_input.clone()).await,
                 _ => {
-                    let result = node.execute(ctx, current_input.clone()).await;
+                    let node_timeout = std::time::Duration::from_millis(
+                        self.config.node_timeout_ms,
+                    );
+                    let result = match tokio::time::timeout(
+                        node_timeout,
+                        node.execute(ctx, current_input.clone()),
+                    )
+                    .await
+                    {
+                        Ok(r) => r,
+                        Err(_) => {
+                            warn!(
+                                "Node {} timed out after {:?}",
+                                current_node_id, node_timeout
+                            );
+                            NodeResult::failed(
+                                &current_node_id,
+                                &format!(
+                                    "Node timed out after {:?}",
+                                    node_timeout
+                                ),
+                                node_timeout.as_millis() as u64,
+                            )
+                        }
+                    };
                     ctx.set_node_output(&current_node_id, result.output.clone())
                         .await;
                     ctx.set_node_status(&current_node_id, result.status.clone())
