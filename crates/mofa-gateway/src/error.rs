@@ -4,6 +4,12 @@
 //! handling standards: using `thiserror` with `#[non_exhaustive]` enums for
 //! API stability.
 
+use axum::{
+    http::StatusCode,
+    response::{IntoResponse, Response},
+    Json,
+};
+use serde::Serialize;
 use thiserror::Error;
 
 /// Errors that can occur in control plane operations.
@@ -106,6 +112,22 @@ pub enum ConsensusError {
 #[derive(Error, Debug)]
 #[non_exhaustive]
 pub enum GatewayError {
+    /// Invalid request parameters or payload.
+    #[error("Invalid request: {0}")]
+    InvalidRequest(String),
+
+    /// Agent with the given ID already exists.
+    #[error("Agent already exists: {0}")]
+    AgentAlreadyExists(String),
+
+    /// Agent operation failed (create, start, stop, etc.).
+    #[error("Agent operation failed: {0}")]
+    AgentOperationFailed(String),
+
+    /// Agent not found in the registry.
+    #[error("Agent not found: {0}")]
+    AgentNotFound(String),
+
     /// Error in load balancing algorithm.
     #[error("Load balancing error: {0}")]
     LoadBalancing(String),
@@ -169,3 +191,40 @@ impl From<std::io::Error> for ControlPlaneError {
 }
 
 // RocksDB error conversion is handled in storage module
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Axum integration: convert GatewayError to HTTP responses
+// ─────────────────────────────────────────────────────────────────────────────
+
+#[derive(Serialize)]
+struct ErrorResponse {
+    error: String,
+}
+
+impl IntoResponse for GatewayError {
+    fn into_response(self) -> Response {
+        let status = match self {
+            GatewayError::InvalidRequest(_) => StatusCode::BAD_REQUEST,
+            GatewayError::AgentAlreadyExists(_) => StatusCode::CONFLICT,
+            GatewayError::AgentNotFound(_) => StatusCode::NOT_FOUND,
+            GatewayError::AgentOperationFailed(_) => StatusCode::INTERNAL_SERVER_ERROR,
+            GatewayError::RateLimitExceeded(_) => StatusCode::TOO_MANY_REQUESTS,
+            GatewayError::CircuitBreakerOpen(_) => StatusCode::SERVICE_UNAVAILABLE,
+            GatewayError::NoHealthyNodes(_) => StatusCode::SERVICE_UNAVAILABLE,
+            GatewayError::UnhealthyNode(_) => StatusCode::SERVICE_UNAVAILABLE,
+            GatewayError::NoAvailableNodes(_) => StatusCode::SERVICE_UNAVAILABLE,
+            GatewayError::HealthCheckFailed(_) => StatusCode::SERVICE_UNAVAILABLE,
+            GatewayError::RoutingFailed(_) => StatusCode::BAD_GATEWAY,
+            GatewayError::Timeout(_) => StatusCode::REQUEST_TIMEOUT,
+            GatewayError::Network(_) => StatusCode::BAD_GATEWAY,
+            GatewayError::LoadBalancing(_) => StatusCode::INTERNAL_SERVER_ERROR,
+            GatewayError::Internal(_) => StatusCode::INTERNAL_SERVER_ERROR,
+        };
+
+        let body = Json(ErrorResponse {
+            error: self.to_string(),
+        });
+
+        (status, body).into_response()
+    }
+}
