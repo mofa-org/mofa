@@ -27,7 +27,9 @@ use std::sync::Arc;
 use std::time::Instant;
 
 use crate::orchestrator::linux_candle::ModelPool;
-use crate::orchestrator::traits::{ModelOrchestrator, ModelType, OrchestratorError, OrchestratorResult};
+use crate::orchestrator::traits::{
+    ModelOrchestrator, ModelType, OrchestratorError, OrchestratorResult,
+};
 
 // ============================================================================
 // Pipeline Stage

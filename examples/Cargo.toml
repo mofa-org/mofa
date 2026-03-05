@@ -40,9 +40,13 @@ members = [
     "message_graph_validation",
     "message_graph_executor_runtime",
     "context_compression",
+    "control_plane",
     "context_window_demo",
+    "compression_examples",
     "admission_gate_demo",
     "planning_loop",
+    "integrations_demo",
+    "memory_scheduler_demo",
 ]
 
 [workspace.package]
@@ -50,6 +54,7 @@ version = "0.1.0"
 edition = "2024"
 
 [workspace.dependencies]
+anyhow = "1.0"
 async-trait = "0.1"
 axum = "0"
 serde = { version = "1.0", features = ["derive"] }

@@ -28,6 +28,7 @@ mofa-foundation = { path = "../mofa-foundation", version = "0.1" }
 config.workspace = true
 tokio = { workspace = true }
 thiserror = { workspace = true }
+error-stack = { workspace = true }
 async-trait = { workspace = true }
 chrono = { workspace = true }
 
@@ -40,6 +41,7 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 serde_yaml = "0.9"
 toml = "0.8"
+json5 = "0.4"
 
 
 # Utilities
@@ -51,12 +53,13 @@ dialoguer = "0.11"
 indicatif = "0.17"
 comfy-table = "7"
 dirs-next = "2"
+tera = "1.19"
 
 # Process management
 nix = { version = "0.29", features = ["process", "signal"] }
 
 # Plugin installation
-reqwest = { version = "0.12", features = ["rustls-tls", "stream"] }
+reqwest = { workspace = true, features = ["rustls-tls", "stream"] }
 flate2 = "1.0"
 tar = "0.4"
 zip = "2.1"
@@ -83,7 +86,6 @@ crossterm = { version = "0.29", features = ["bracketed-paste", "event-stream"] }
 tokio-stream = "0.1"
 
 [dev-dependencies]
-anyhow.workspace = true
 assert_cmd = "2"
 predicates = "3"
 tempfile = "3"
@@ -92,6 +94,7 @@ tempfile = "3"
 default = []
 dora = ["mofa-sdk/dora"]
 db = ["dep:sqlx"]
+qdrant = ["mofa-foundation/qdrant"]
 
 [lints]
 workspace = true
