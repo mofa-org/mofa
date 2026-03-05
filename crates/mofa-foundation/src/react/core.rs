@@ -5,6 +5,7 @@ use crate::llm::{LLMAgent, LLMError, LLMResult, Tool};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
+use std::time::Duration;
 use tokio::sync::RwLock;
 use tracing::Instrument;
 
@@ -261,6 +262,8 @@ pub struct ReActConfig {
     /// 每步最大 token 数
     /// Max tokens per step
     pub max_tokens_per_step: Option<u32>,
+    /// Per-tool-call timeout. Default: 30 seconds.
+    pub tool_timeout: Duration,
 }
 
 impl Default for ReActConfig {
@@ -272,6 +275,7 @@ impl Default for ReActConfig {
             system_prompt: None,
             verbose: true,
             max_tokens_per_step: Some(2048),
+            tool_timeout: Duration::from_secs(30),
         }
     }
 }
@@ -566,18 +570,26 @@ Rules:
         ParsedResponse::Thought(response.to_string())
     }
 
-    /// 执行工具
-    /// Execute tool
+    /// 执行工具（带超时保护）
+    /// Execute tool (with timeout protection)
     async fn execute_tool(&self, tool_name: &str, input: &str) -> String {
         let span = tracing::info_span!("react.tool_call", tool = %tool_name);
+        let timeout_dur = self.config.tool_timeout;
+
         async {
             let tools = self.tools.read().await;
 
             match tools.get(tool_name) {
-                Some(tool) => match tool.execute(input).await {
-                    Ok(result) => result,
-                    Err(e) => format!("Tool error: {}", e),
-                },
+                Some(tool) => {
+                    match tokio::time::timeout(timeout_dur, tool.execute(input)).await {
+                        Ok(Ok(result)) => result,
+                        Ok(Err(e)) => format!("Tool error: {}", e),
+                        Err(_) => format!(
+                            "Tool '{}' timed out after {:?}",
+                            tool_name, timeout_dur
+                        ),
+                    }
+                }
                 None => format!(
                     "Tool '{}' not found. Available tools: {:?}",
                     tool_name,

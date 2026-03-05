@@ -10,6 +10,7 @@ use mofa_kernel::agent::components::tool::{Tool, ToolInput, ToolMetadata, ToolRe
 use mofa_kernel::agent::context::AgentContext;
 use std::collections::HashMap;
 use std::sync::Arc;
+use std::time::Duration;
 use tokio::sync::RwLock;
 
 use super::McpClientManager;
@@ -46,6 +47,8 @@ pub struct McpToolAdapter {
     /// MCP 客户端管理器 (共享引用)
     /// MCP client manager (shared reference)
     client: Arc<RwLock<McpClientManager>>,
+    /// Per-call timeout for MCP tool execution. Default: 30s.
+    timeout_duration: Duration,
 }
 
 impl McpToolAdapter {
@@ -60,7 +63,14 @@ impl McpToolAdapter {
             server_name: server_name.into(),
             tool_info,
             client,
+            timeout_duration: Duration::from_secs(30),
         }
+    }
+
+    /// Set a custom timeout for this MCP tool.
+    pub fn with_timeout(mut self, timeout: Duration) -> Self {
+        self.timeout_duration = timeout;
+        self
     }
 
     /// 获取服务器名称
@@ -88,12 +98,20 @@ impl Tool for McpToolAdapter {
         use mofa_kernel::agent::components::mcp::McpClient;
 
         let client = self.client.read().await;
-        match client
-            .call_tool(&self.server_name, &self.tool_info.name, input.arguments)
-            .await
+        let timeout_dur = self.timeout_duration;
+
+        match tokio::time::timeout(
+            timeout_dur,
+            client.call_tool(&self.server_name, &self.tool_info.name, input.arguments),
+        )
+        .await
         {
-            Ok(output) => ToolResult::success(output),
-            Err(e) => ToolResult::failure(format!("MCP tool call failed: {}", e)),
+            Ok(Ok(output)) => ToolResult::success(output),
+            Ok(Err(e)) => ToolResult::failure(format!("MCP tool call failed: {}", e)),
+            Err(_) => ToolResult::failure(format!(
+                "MCP tool '{}' on server '{}' timed out after {:?}",
+                self.tool_info.name, self.server_name, timeout_dur
+            )),
         }
     }
 
