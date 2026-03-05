@@ -82,7 +82,8 @@ macro_rules! assert_tool_called {
         use mofa_foundation::agent::components::tool::SimpleTool as _;
         let count = $tool.call_count().await;
         assert_eq!(
-            count, $expected_count,
+            count,
+            $expected_count,
             "Expected tool '{}' to be called {} time(s), but was called {} time(s)",
             $tool.name(),
             $expected_count,

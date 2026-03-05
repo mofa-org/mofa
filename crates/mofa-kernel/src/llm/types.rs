@@ -231,7 +231,6 @@ pub struct ToolChoiceFunction {
     pub name: String,
 }
 
-
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct ChatCompletionRequest {
     pub model: String,

@@ -14,7 +14,6 @@ use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 use tracing::warn;
 
-
 // =============================================================================
 // Compiled Regex Patterns
 // =============================================================================
@@ -24,17 +23,15 @@ static EMAIL_RE: Lazy<Regex> =
     Lazy::new(|| Regex::new(r"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}").unwrap());
 
 // Phone: US formats (xxx-xxx-xxxx, (xxx) xxx-xxxx, +1xxxxxxxxxx, etc.)
-static PHONE_RE: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(r"(?:\+?1[-.\s]?)?\(?[2-9]\d{2}\)?[-.\s]?\d{3}[-.\s]?\d{4}").unwrap()
-});
+static PHONE_RE: Lazy<Regex> =
+    Lazy::new(|| Regex::new(r"(?:\+?1[-.\s]?)?\(?[2-9]\d{2}\)?[-.\s]?\d{3}[-.\s]?\d{4}").unwrap());
 
 // Credit card: 13-19 digit sequences (with optional separators)
 static CREDIT_CARD_RE: Lazy<Regex> =
     Lazy::new(|| Regex::new(r"\b\d{4}[-\s]?\d{4}[-\s]?\d{4}[-\s]?\d{1,7}\b").unwrap());
 
 // SSN: xxx-xx-xxxx
-static SSN_RE: Lazy<Regex> =
-    Lazy::new(|| Regex::new(r"\b\d{3}-\d{2}-\d{4}\b").unwrap());
+static SSN_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"\b\d{3}-\d{2}-\d{4}\b").unwrap());
 
 // IPv4
 static IPV4_RE: Lazy<Regex> = Lazy::new(|| {
@@ -50,8 +47,10 @@ static IPV6_RE: Lazy<Regex> = Lazy::new(|| {
 
 // API keys: common formats (sk-..., ghp_..., AKIA..., xoxb-...)
 static API_KEY_RE: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(r"\b(?:sk-[a-zA-Z0-9]{20,}|ghp_[a-zA-Z0-9]{36,}|AKIA[A-Z0-9]{16}|xoxb-[a-zA-Z0-9-]+)\b")
-        .unwrap()
+    Regex::new(
+        r"\b(?:sk-[a-zA-Z0-9]{20,}|ghp_[a-zA-Z0-9]{36,}|AKIA[A-Z0-9]{16}|xoxb-[a-zA-Z0-9-]+)\b",
+    )
+    .unwrap()
 });
 
 // =============================================================================
@@ -153,7 +152,8 @@ impl PiiDetector for RegexPiiDetector {
                 for re in regexes {
                     for m in re.find_iter(text) {
                         // Extra validation for credit cards (Luhn check)
-                        if *category == SensitiveDataCategory::CreditCard && !luhn_check(m.as_str()) {
+                        if *category == SensitiveDataCategory::CreditCard && !luhn_check(m.as_str())
+                        {
                             continue;
                         }
 
@@ -197,7 +197,11 @@ impl RegexPiiRedactor {
         }
     }
 
-    fn apply_strategy(original: &str, category: &SensitiveDataCategory, strategy: &RedactionStrategy) -> String {
+    fn apply_strategy(
+        original: &str,
+        category: &SensitiveDataCategory,
+        strategy: &RedactionStrategy,
+    ) -> String {
         match strategy {
             RedactionStrategy::Mask => Self::mask_value(original, category),
             RedactionStrategy::Hash => {
@@ -312,7 +316,10 @@ mod tests {
     #[tokio::test]
     async fn detect_email() {
         let detector = RegexPiiDetector::with_categories(vec![SensitiveDataCategory::Email]);
-        let matches = detector.detect("Contact: john@example.com or support@test.org").await.unwrap();
+        let matches = detector
+            .detect("Contact: john@example.com or support@test.org")
+            .await
+            .unwrap();
         assert_eq!(matches.len(), 2);
         assert_eq!(matches[0].original, "john@example.com");
         assert_eq!(matches[1].original, "support@test.org");
@@ -321,14 +328,16 @@ mod tests {
     #[tokio::test]
     async fn detect_phone() {
         let detector = RegexPiiDetector::with_categories(vec![SensitiveDataCategory::Phone]);
-        let matches = detector.detect("Call 555-123-4567 or (555) 987-6543").await.unwrap();
+        let matches = detector
+            .detect("Call 555-123-4567 or (555) 987-6543")
+            .await
+            .unwrap();
         assert_eq!(matches.len(), 2);
     }
 
     #[tokio::test]
     async fn detect_credit_card_with_luhn() {
-        let detector =
-            RegexPiiDetector::with_categories(vec![SensitiveDataCategory::CreditCard]);
+        let detector = RegexPiiDetector::with_categories(vec![SensitiveDataCategory::CreditCard]);
         // Valid Visa test number
         let matches = detector.detect("Card: 4111 1111 1111 1111").await.unwrap();
         assert_eq!(matches.len(), 1);
@@ -349,7 +358,10 @@ mod tests {
     #[tokio::test]
     async fn detect_ip_address() {
         let detector = RegexPiiDetector::with_categories(vec![SensitiveDataCategory::IpAddress]);
-        let matches = detector.detect("Server at 192.168.1.1 and 10.0.0.1").await.unwrap();
+        let matches = detector
+            .detect("Server at 192.168.1.1 and 10.0.0.1")
+            .await
+            .unwrap();
         assert_eq!(matches.len(), 2);
     }
 
@@ -454,8 +466,7 @@ mod tests {
 
     #[tokio::test]
     async fn redact_credit_card_mask() {
-        let redactor =
-            RegexPiiRedactor::with_categories(vec![SensitiveDataCategory::CreditCard]);
+        let redactor = RegexPiiRedactor::with_categories(vec![SensitiveDataCategory::CreditCard]);
         let result = redactor
             .redact("Card: 4111111111111111", &RedactionStrategy::Mask)
             .await
