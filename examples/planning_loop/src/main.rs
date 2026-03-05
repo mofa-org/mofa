@@ -246,8 +246,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     info!("");
     info!("━━━ Scenario 1: Batch execution with collected events ━━━");
 
-    let planner = Arc::new(ResearchPlanner);
-    let step_executor = Arc::new(SimulatedStepExecutor);
+    let planner: Arc<dyn Planner> = Arc::new(ResearchPlanner);
+    let step_executor: Arc<dyn StepExecutor> = Arc::new(SimulatedStepExecutor);
     let config = PlanningConfig::new()
         .with_max_replans(2)
         .with_max_parallel_steps(4)
