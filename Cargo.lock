@@ -6012,6 +6012,7 @@ dependencies = [
  "error-stack",
  "eyre",
  "flume 0.10.14",
+ "mofa-foundation",
  "mofa-kernel",
  "mofa-monitoring",
  "mofa-plugins",
