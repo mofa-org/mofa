@@ -33,9 +33,12 @@ impl ProxyHandler {
     ///
     /// This method:
     /// 1. Constructs the target URL by combining backend base_url with the request path
-    /// 2. Copies relevant headers from the incoming request
+    /// 2. Copies relevant headers from the incoming request (excluding hop-by-hop headers)
     /// 3. Forwards the request body
     /// 4. Returns the backend's response
+    ///
+    /// Note: Response bodies are fully buffered into memory before being returned.
+    /// This prevents true streaming but ensures compatibility with axum's response handling.
     pub async fn forward(
         &self,
         request: Request<Body>,
@@ -66,6 +69,7 @@ impl ProxyHandler {
             backend = %self.backend.name,
             method = %proxy_request.method(),
             url = %proxy_request.uri(),
+            status = tracing::field::Empty,
         );
         let _enter = span.enter();
 
@@ -120,9 +124,18 @@ impl ProxyHandler {
         // Build axum response with headers
         let mut response_builder = Response::builder().status(parts.status);
         
-        // Copy headers
+        // Copy headers, filtering out hop-by-hop headers
         for (key, value) in parts.headers.iter() {
-            response_builder = response_builder.header(key.clone(), value.clone());
+            // Skip hop-by-hop headers that shouldn't be forwarded
+            let skip = matches!(
+                key.as_str(),
+                "connection" | "keep-alive" | "proxy-authenticate" | "proxy-authorization"
+                    | "te" | "trailers" | "transfer-encoding" | "upgrade"
+            );
+            
+            if !skip {
+                response_builder = response_builder.header(key.clone(), value.clone());
+            }
         }
         
         // Set body - body_bytes is moved here
@@ -180,22 +193,15 @@ impl ProxyHandler {
     /// Copy headers from source to destination, excluding hop-by-hop headers.
     fn copy_headers(&self, source: &HeaderMap, dest: &mut HeaderMap) {
         for (key, value) in source.iter() {
-            // Skip hop-by-hop headers that shouldn't be forwarded
+            // Skip hop-by-hop headers and host header
             let skip = matches!(
-                key.as_str().to_lowercase().as_str(),
+                key.as_str(),
                 "connection" | "keep-alive" | "proxy-authenticate" | "proxy-authorization"
-                    | "te" | "trailers" | "transfer-encoding" | "upgrade"
+                    | "te" | "trailers" | "transfer-encoding" | "upgrade" | "host"
             );
 
             if !skip {
                 dest.insert(key.clone(), value.clone());
-            }
-        }
-
-        // Add X-Forwarded-For header if not present
-        if !dest.contains_key("x-forwarded-for") {
-            if let Some(forwarded_for) = source.get("x-forwarded-for") {
-                dest.insert("x-forwarded-for", forwarded_for.clone());
             }
         }
     }
