@@ -13,7 +13,7 @@ pub enum RetryPolicy {
     Fixed { delay_ms: u64 },
     /// Delay increases linearly: `base_ms * attempt`.
     Linear { base_ms: u64 },
-    /// Exponential backoff capped at `max_ms`, with optional ±12.5% pseudo-jitter.
+    /// Exponential backoff capped at `max_ms`, with optional ±12.5% randomized jitter.
     ExponentialBackoff {
         base_ms: u64,
         max_ms: u64,
@@ -38,13 +38,10 @@ impl RetryPolicy {
                     .unwrap_or(*max_ms);
                 let capped = exp.min(*max_ms);
                 if *jitter {
+                    use rand::Rng;
                     let eighth = capped / 8;
-                    if attempt.is_multiple_of(2) {
-                        capped.saturating_add(eighth)
-                    } else {
-                        capped.saturating_sub(eighth)
-                    }
-                    .min(*max_ms)
+                    let offset = rand::thread_rng().gen_range(0..=2 * eighth);
+                    capped.saturating_sub(eighth).saturating_add(offset).min(*max_ms)
                 } else {
                     capped
                 }
@@ -256,27 +253,50 @@ mod tests {
         let max_ms = 10_000;
         let p = RetryPolicy::ExponentialBackoff { base_ms, max_ms, jitter: true };
 
-        for attempt in 0..20 {
-            let delay = p.delay_for(attempt).as_millis() as u64;
+        // Run multiple iterations since jitter is now randomized.
+        for _ in 0..50 {
+            for attempt in 0..20 {
+                let delay = p.delay_for(attempt).as_millis() as u64;
 
-            // Recompute the non-jittered capped value to derive bounds.
-            let exp = 1u64
-                .checked_shl(attempt as u32)
-                .and_then(|s| base_ms.checked_mul(s))
-                .unwrap_or(max_ms);
-            let capped = exp.min(max_ms);
-            let eighth = capped / 8;
-            let lower_bound = capped.saturating_sub(eighth);
+                let exp = 1u64
+                    .checked_shl(attempt as u32)
+                    .and_then(|s| base_ms.checked_mul(s))
+                    .unwrap_or(max_ms);
+                let capped = exp.min(max_ms);
+                let eighth = capped / 8;
+                let lower_bound = capped.saturating_sub(eighth);
 
-            assert!(
-                delay >= lower_bound,
-                "attempt {attempt}: delay {delay} ms below lower bound {lower_bound} ms",
-            );
-            assert!(
-                delay <= max_ms,
-                "attempt {attempt}: delay {delay} ms exceeded max {max_ms} ms",
-            );
+                assert!(
+                    delay >= lower_bound,
+                    "attempt {attempt}: delay {delay} ms below lower bound {lower_bound} ms",
+                );
+                assert!(
+                    delay <= max_ms,
+                    "attempt {attempt}: delay {delay} ms exceeded max {max_ms} ms",
+                );
+            }
         }
+    }
+
+    #[test]
+    fn test_jitter_produces_varying_delays() {
+        let p = RetryPolicy::ExponentialBackoff {
+            base_ms: 1000,
+            max_ms: 10_000,
+            jitter: true,
+        };
+
+        // Collect several delays for the same attempt number.
+        let delays: Vec<u64> = (0..20)
+            .map(|_| p.delay_for(3).as_millis() as u64)
+            .collect();
+
+        // With randomized jitter, not all 20 samples should be identical.
+        let distinct: std::collections::HashSet<u64> = delays.iter().copied().collect();
+        assert!(
+            distinct.len() > 1,
+            "expected varying jitter delays, but all 20 samples were identical: {delays:?}",
+        );
     }
 
     #[test]
