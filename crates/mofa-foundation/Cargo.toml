@@ -120,6 +120,9 @@ qdrant-client = { version = "1.17", optional = true }
 base64 = "0.22"
 infer = "0.16"
 
+# JSON Schema validation for structured output
+jsonschema = { version = "0.17", default-features = false }
+
 
 # System information for memory monitoring
 sysinfo = "0.31"

@@ -330,11 +330,17 @@ impl PriorityScheduler {
             let mut agent_load = self.agent_load.write().await;
             let mut task_status = self.task_status.write().await;
             let mut agent_tasks = self.agent_tasks.write().await;
+            let mut task_priorities = self.task_priorities.write().await;
 
             agent_load
                 .entry(agent_id.to_string())
                 .and_modify(|count| *count = count.saturating_sub(1));
-            task_status.insert(task_id.to_string(), SchedulingStatus::Completed);
+
+            // Remove completed task metadata to prevent unbounded map growth.
+            // Completed tasks are never re-queued, so these entries serve no
+            // further purpose and would otherwise accumulate indefinitely.
+            task_status.remove(task_id);
+            task_priorities.remove(task_id);
 
             // Remove completed task from agent's task list
             if let Some(tasks) = agent_tasks.get_mut(agent_id) {
@@ -416,8 +422,11 @@ mod tests {
         // Verify state was updated correctly.
         let load = scheduler.agent_load.read().await;
         assert_eq!(*load.get("agent-1").unwrap(), 0);
+        // Completed task metadata is evicted — entry must not linger in the map.
         let status = scheduler.task_status.read().await;
-        assert_eq!(*status.get("t1").unwrap(), SchedulingStatus::Completed);
+        assert!(status.get("t1").is_none(), "task_status entry should be removed on completion");
+        let priorities = scheduler.task_priorities.read().await;
+        assert!(priorities.get("t1").is_none(), "task_priorities entry should be removed on completion");
     }
 
     /// Verifies the priority queue orders tasks correctly (higher priority first).

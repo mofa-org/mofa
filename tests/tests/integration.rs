@@ -1,7 +1,4 @@
 //! Integration tests for the mofa-testing framework.
-//!
-//! Covers MockLLMBackend, MockAgentBus, and MockTool to ensure
-//! all public APIs behave correctly and deterministically.
 
 use mofa_foundation::agent::components::tool::SimpleTool;
 use mofa_foundation::orchestrator::{ModelOrchestrator, ModelProviderConfig, ModelType};
