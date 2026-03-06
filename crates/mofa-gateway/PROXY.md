@@ -104,6 +104,9 @@ gateway.start().await?;
 ### Environment Variables
 
 ```bash
+# Enable local LLM proxy (default: false)
+export MOFA_LOCAL_LLM_ENABLED="true"
+
 # Backend URL (default: http://localhost:8000)
 export MOFA_LOCAL_LLM_URL="http://localhost:8000"
 
