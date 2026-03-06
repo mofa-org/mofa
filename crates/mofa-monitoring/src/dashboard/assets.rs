@@ -1636,7 +1636,6 @@ document.addEventListener('DOMContentLoaded', () => {
 "#;
 
 #[cfg(test)]
-
 #[cfg(test)]
 mod tests {
     use super::*;

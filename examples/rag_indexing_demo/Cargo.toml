@@ -1,0 +1,14 @@
+[package]
+name = "rag_indexing_demo"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+mofa-foundation = { path = "../../crates/mofa-foundation" }
+mofa-kernel = { path = "../../crates/mofa-kernel" }
+
+tokio.workspace = true
+async-trait = "0.1"
+
+[lints]
+workspace = true

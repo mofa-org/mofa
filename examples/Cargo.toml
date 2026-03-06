@@ -40,13 +40,18 @@ members = [
     "message_graph_validation",
     "message_graph_executor_runtime",
     "context_compression",
+    "structured_output",
     "control_plane",
     "context_window_demo",
     "compression_examples",
     "admission_gate_demo",
     "integrations_demo",
+    "native_dataflow",
+    "mcp_tools",
     "memory_scheduler_demo",
     "capability_discovery",
+    "rag_retrieval_demo",
+    "rag_indexing_demo",
 ]
 
 [workspace.package]

@@ -47,20 +47,9 @@ pub use storage::{ObjectStore, Storage};
 // RAG traits (向量存储接口)
 pub mod rag;
 pub use rag::{
-	Document,
-	DocumentChunk,
-	GenerateInput,
-	Generator,
-	RagPipeline,
-	RagPipelineOutput,
-	Reranker,
-	Retriever,
-	ScoredDocument,
-	SearchResult,
-	SimilarityMetric,
-	VectorStore,
+    Document, DocumentChunk, GenerateInput, Generator, RagPipeline, RagPipelineOutput, Reranker,
+    Retriever, ScoredDocument, SearchResult, SimilarityMetric, VectorStore,
 };
-
 
 // Workflow traits (工作流接口)
 pub mod workflow;
@@ -70,5 +59,12 @@ pub mod llm;
 pub mod metrics;
 pub use metrics::*;
 
+// Structured output parsing with JSON schema validation
+pub mod structured_output;
+pub use structured_output::StructuredOutput;
 // Security governance (PII redaction, content moderation, prompt guard)
 pub mod security;
+
+// Gateway routing abstractions (kernel-level traits for agent request dispatch)
+pub mod gateway;
+pub use gateway::{GatewayRoute, HttpMethod, RegistryError, RouteRegistry, RoutingContext};
