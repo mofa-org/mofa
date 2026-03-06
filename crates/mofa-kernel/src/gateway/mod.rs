@@ -1,25 +1,31 @@
 //! Kernel-level gateway abstractions for agent request dispatch.
 //!
-//! This module defines the trait boundary between the gateway transport layer
-//! (HTTP, gRPC, MQTT, …) and the agent runtime.  By keeping routing logic in
-//! the kernel, alternative transports and unit tests can reason about routing
-//! without depending on the full HTTP stack.
-//!
-//! # Types
-//!
 //! | Type | Description |
 //! |------|-------------|
-//! | [`GatewayRoute`] | A routing rule mapping a path + method to an agent |
+//! | [`GatewayRoute`] | Routing rule mapping path + method to an agent |
 //! | [`RouteRegistry`] | Trait for registering, looking up, and listing routes |
-//! | [`RoutingContext`] | Per-request dispatch context (path, method, headers, correlation ID) |
+//! | [`RoutingContext`] | Per-request dispatch context |
 //! | [`HttpMethod`] | HTTP method enum |
 //! | [`RegistryError`] | Error type for registry operations |
+//! | [`RequestEnvelope`] | Typed inbound request envelope |
+//! | [`GatewayResponse`] | Typed response for logging and metrics |
+//! | [`AuthClaims`] | Verified identity produced by any auth backend |
+//! | [`AuthProvider`] | Async trait for authenticating requests |
+//! | [`ApiKeyStore`] | Persistence trait for API key lifecycle |
+//! | [`AuthError`] | Auth failure error enum |
 
+pub mod auth;
+pub mod envelope;
 pub mod error;
 pub mod route;
 
 #[cfg(test)]
 mod tests;
 
+pub use auth::{ApiKeyStore, AuthClaims, AuthError, AuthProvider};
+pub use envelope::{GatewayResponse, RequestEnvelope};
 pub use error::RegistryError;
 pub use route::{GatewayRoute, HttpMethod, RouteRegistry, RoutingContext};
+
+pub mod routing;
+pub use routing::RoutingStrategy;
