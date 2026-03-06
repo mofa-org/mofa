@@ -5,6 +5,7 @@
 
 pub mod chunker;
 pub mod embedding_adapter;
+pub mod indexing;
 pub mod loaders;
 pub mod pipeline_adapters;
 pub mod recursive_chunker;
@@ -21,6 +22,10 @@ pub use chunker::{ChunkConfig, TextChunker};
 pub use embedding_adapter::{
     deterministic_chunk_id, EmbeddingAdapterError, LlmEmbeddingAdapter, RagEmbeddingConfig,
     RagEmbeddingProvider,
+};
+pub use indexing::{
+    index_documents, IndexDocument, IndexMode, IndexResult, RagIndexConfig,
+    RagOrchestrationError,
 };
 pub use loaders::{DocumentLoader, LoaderError, LoaderResult, MarkdownLoader, TextLoader};
 pub use pipeline_adapters::{InMemoryRetriever, SimpleGenerator};
