@@ -6,6 +6,8 @@
 pub mod chunker;
 pub mod default_reranker;
 pub mod embedding_adapter;
+pub mod retrieval;
+pub mod indexing;
 pub mod loaders;
 pub mod pipeline_adapters;
 pub mod recursive_chunker;
@@ -22,6 +24,12 @@ pub use default_reranker::IdentityReranker;
 pub use embedding_adapter::{
     EmbeddingAdapterError, LlmEmbeddingAdapter, RagEmbeddingConfig, RagEmbeddingProvider,
     deterministic_chunk_id,
+};
+pub use retrieval::{
+    query_documents, RagQueryConfig, RetrievalResult, RetrievedChunk,};
+pub use indexing::{
+    index_documents, IndexDocument, IndexMode, IndexResult, RagIndexConfig,
+    RagOrchestrationError,
 };
 pub use loaders::{DocumentLoader, LoaderError, LoaderResult, MarkdownLoader, TextLoader};
 pub use pipeline_adapters::{InMemoryRetriever, SimpleGenerator};

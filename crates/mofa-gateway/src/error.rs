@@ -1,33 +1,204 @@
-//! Gateway error types
+//! Error types for the control plane and gateway.
+//!
+//! This module provides comprehensive error handling following MoFA's error
+//! handling standards: using `thiserror` with `#[non_exhaustive]` enums for
+//! API stability.
 
 use axum::{
     Json,
     http::StatusCode,
     response::{IntoResponse, Response},
 };
-use serde_json::json;
+use serde::Serialize;
 use thiserror::Error;
 
-/// Gateway-level errors
-#[derive(Debug, Error)]
+/// Errors that can occur in control plane operations.
+#[derive(Error, Debug)]
+#[non_exhaustive]
+pub enum ControlPlaneError {
+    /// Error from the consensus engine.
+    #[error("Consensus error: {0}")]
+    Consensus(#[from] ConsensusError),
+
+    /// Error in state machine operations.
+    #[error("State machine error: {0}")]
+    StateMachine(String),
+
+    /// Error in cluster membership management.
+    #[error("Cluster membership error: {0}")]
+    Membership(String),
+
+    /// Requested node was not found in the cluster.
+    #[error("Node not found: {0}")]
+    NodeNotFound(String),
+
+    /// Operation requires leader role but this node is not the leader.
+    #[error("Not the leader")]
+    NotLeader,
+
+    /// Leader election did not complete within the timeout period.
+    #[error("Leader election timeout")]
+    LeaderElectionTimeout,
+
+    /// Network communication error.
+    #[error("Network error: {0}")]
+    Network(String),
+
+    /// Storage operation error.
+    #[error("Storage error: {0}")]
+    Storage(String),
+
+    /// Configuration error.
+    #[error("Configuration error: {0}")]
+    Config(String),
+
+    /// Internal control plane error.
+    #[error("Internal error: {0}")]
+    Internal(String),
+}
+
+/// Errors that can occur in consensus operations.
+#[derive(Error, Debug)]
+#[non_exhaustive]
+pub enum ConsensusError {
+    /// Operation requires leader role but this node is not the leader.
+    #[error("Not leader - current leader is {0}")]
+    NotLeader(String),
+
+    /// Failed to replicate log entries to followers.
+    #[error("Log replication failed: {0}")]
+    ReplicationFailed(String),
+
+    /// Leader election process failed.
+    #[error("Leader election failed: {0}")]
+    ElectionFailed(String),
+
+    /// Quorum (majority) of nodes not available for consensus.
+    #[error("Quorum not reached: have {have}, need {need}")]
+    QuorumNotReached {
+        /// Number of nodes currently available.
+        have: usize,
+        /// Number of nodes required for quorum.
+        need: usize,
+    },
+
+    /// Term number mismatch indicates stale request or split-brain scenario.
+    #[error("Term mismatch: expected {expected}, got {got}")]
+    TermMismatch {
+        /// Expected term number.
+        expected: u64,
+        /// Actual term number received.
+        got: u64,
+    },
+
+    /// Requested log entry does not exist at the given index.
+    #[error("Log entry not found at index {0}")]
+    LogEntryNotFound(u64),
+
+    /// Network partition detected - cluster is split.
+    #[error("Network partition detected")]
+    NetworkPartition,
+
+    /// Storage operation error.
+    #[error("Storage error: {0}")]
+    Storage(String),
+
+    /// Internal consensus engine error.
+    #[error("Internal consensus error: {0}")]
+    Internal(String),
+}
+
+/// Errors that can occur in gateway operations.
+#[derive(Error, Debug)]
+#[non_exhaustive]
 pub enum GatewayError {
-    #[error("agent not found: {0}")]
-    AgentNotFound(String),
-
-    #[error("agent already exists: {0}")]
-    AgentAlreadyExists(String),
-
-    #[error("rate limit exceeded for client {0}")]
-    RateLimitExceeded(String),
-
-    #[error("agent operation failed: {0}")]
-    AgentOperationFailed(String),
-
-    #[error("invalid request: {0}")]
+    /// Invalid request parameters or payload.
+    #[error("Invalid request: {0}")]
     InvalidRequest(String),
 
-    #[error("internal error: {0}")]
+    /// Agent with the given ID already exists.
+    #[error("Agent already exists: {0}")]
+    AgentAlreadyExists(String),
+
+    /// Agent operation failed (create, start, stop, etc.).
+    #[error("Agent operation failed: {0}")]
+    AgentOperationFailed(String),
+
+    /// Agent not found in the registry.
+    #[error("Agent not found: {0}")]
+    AgentNotFound(String),
+
+    /// Error in load balancing algorithm.
+    #[error("Load balancing error: {0}")]
+    LoadBalancing(String),
+
+    /// Request rate limit exceeded.
+    #[error("Rate limit exceeded: {0}")]
+    RateLimitExceeded(String),
+
+    /// Circuit breaker is open for the target node.
+    #[error("Circuit breaker open: {0}")]
+    CircuitBreakerOpen(String),
+
+    /// No healthy nodes available for routing.
+    #[error("No healthy nodes available: {0}")]
+    NoHealthyNodes(String),
+
+    /// Target node is marked as unhealthy.
+    #[error("Unhealthy node: {0}")]
+    UnhealthyNode(String),
+
+    /// No nodes available in the load balancer.
+    #[error("No available nodes: {0}")]
+    NoAvailableNodes(String),
+
+    /// Health check for a node failed.
+    #[error("Node health check failed: {0}")]
+    HealthCheckFailed(String),
+
+    /// Request routing to backend failed.
+    #[error("Request routing failed: {0}")]
+    RoutingFailed(String),
+
+    /// Operation timed out.
+    #[error("Timeout: {0}")]
+    Timeout(String),
+
+    /// Network communication error.
+    #[error("Network error: {0}")]
+    Network(String),
+
+    /// Internal gateway error.
+    #[error("Internal gateway error: {0}")]
     Internal(String),
+}
+
+/// Result type for control plane operations.
+pub type ControlPlaneResult<T> = Result<T, ControlPlaneError>;
+
+/// Result type for consensus operations.
+pub type ConsensusResult<T> = Result<T, ConsensusError>;
+
+/// Result type for gateway operations.
+pub type GatewayResult<T> = Result<T, GatewayError>;
+
+// From impl is automatically generated by #[from] attribute above
+
+impl From<std::io::Error> for ControlPlaneError {
+    fn from(err: std::io::Error) -> Self {
+        ControlPlaneError::Storage(err.to_string())
+    }
+}
+
+// RocksDB error conversion is handled in storage module
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Axum integration: convert GatewayError to HTTP responses
+// ─────────────────────────────────────────────────────────────────────────────
+
+#[derive(Serialize)]
+struct ErrorResponse {
+    error: String,
 }
 
 impl IntoResponse for GatewayError {
@@ -63,15 +234,10 @@ impl IntoResponse for GatewayError {
             ),
         };
 
-        let body = Json(json!({
-            "error": {
-                "code": code,
-                "message": message,
-            }
-        }));
+        let body = Json(ErrorResponse {
+            error: self.to_string(),
+        });
 
         (status, body).into_response()
     }
 }
-
-pub type GatewayResult<T> = Result<T, GatewayError>;

@@ -33,9 +33,13 @@ pub struct ChatRequest {
 /// Response returned by the chat endpoint
 #[derive(Debug, Serialize)]
 pub struct ChatResponse {
+    /// ID of the agent that processed the request.
     pub agent_id: String,
+    /// Session identifier for multi-turn conversations.
     pub session_id: String,
+    /// Agent output as a JSON value.
     pub output: Value,
+    /// Request processing time in milliseconds.
     pub duration_ms: u64,
 }
 

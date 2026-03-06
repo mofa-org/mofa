@@ -168,7 +168,7 @@ impl GeminiProvider {
                                         let data = image_url
                                             .url
                                             .split(',')
-                                            .next_back()
+                                            .last()
                                             .unwrap_or(&image_url.url);
                                         gemini_parts.push(serde_json::json!({
                                             "inlineData": {

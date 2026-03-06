@@ -21,6 +21,12 @@ pub async fn run(
         return Err(CliError::PluginError("Plugin name cannot be empty".into()));
     }
 
+    if verify_signature {
+        return Err(CliError::PluginError(
+            "Signature verification requested with --verify-signature, but this feature is not implemented yet. Remove the flag or use --checksum for integrity verification.".into(),
+        ));
+    }
+
     println!("{} Installing plugin: {}", "→".green(), normalized.cyan());
 
     let plugin_source = determine_plugin_source(normalized)?;
@@ -110,7 +116,7 @@ pub async fn run(
         }
         PluginSource::Url(url) => {
             println!("  {} Source: URL", "•".bright_black());
-            install_from_url(&ctx.data_dir, &plugin_id, &url, checksum, verify_signature).await?
+            install_from_url(&ctx.data_dir, &plugin_id, &url, checksum).await?
         }
         PluginSource::Registry(_) => unreachable!(),
     };
@@ -225,7 +231,6 @@ async fn install_from_url(
     plugin_name: &str,
     url: &str,
     expected_checksum: Option<&str>,
-    verify_signature: bool,
 ) -> Result<PathBuf, CliError> {
     let plugins_dir = data_dir.join("plugins");
     tokio::fs::create_dir_all(&plugins_dir)
@@ -282,14 +287,6 @@ async fn install_from_url(
             )));
         }
         println!("  {} Checksum verified", "✓".green());
-    }
-
-    if verify_signature {
-        println!(
-            "  {} Signature verification not yet implemented",
-            "⚠".yellow()
-        );
-        println!("  {} Consider using --checksum for now", "•".bright_black());
     }
 
     // Determine if it's an archive or single file
@@ -583,6 +580,16 @@ mod tests {
 
         let err = run(&ctx, "   ", None, false).await.unwrap_err();
         assert!(err.to_string().contains("cannot be empty"));
+    }
+
+    #[tokio::test]
+    async fn test_install_rejects_verify_signature_until_implemented() {
+        let temp = TempDir::new().unwrap();
+        let ctx = CliContext::with_temp_dir(temp.path()).await.unwrap();
+
+        let err = run(&ctx, "http-plugin", None, true).await.unwrap_err();
+        assert!(err.to_string().contains("not implemented yet"));
+        assert!(err.to_string().contains("--verify-signature"));
     }
 
     #[tokio::test]

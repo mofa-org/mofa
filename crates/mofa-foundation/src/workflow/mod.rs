@@ -77,7 +77,9 @@ pub use graph::*;
 pub use node::*;
 pub use profiler::*;
 pub use reducers::*;
-pub use session_recorder::InMemorySessionRecorder;
+pub use session_recorder::{
+    FileSessionRecorder, FileSessionRecorderConfig, InMemorySessionRecorder,
+};
 pub use state::*;
 pub use state_graph::{CompiledGraphImpl, StateGraphImpl};
 pub use telemetry::{ChannelTelemetryEmitter, RecordingTelemetryEmitter};

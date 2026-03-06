@@ -46,23 +46,36 @@ pub struct CreateAgentRequest {
 /// Serialisable representation of an agent returned by GET /agents
 #[derive(Debug, Serialize)]
 pub struct AgentDto {
+    /// Unique agent identifier.
     pub id: String,
+    /// Human-readable agent name.
     pub name: String,
+    /// Optional agent description.
     pub description: Option<String>,
+    /// Optional agent version string.
     pub version: Option<String>,
+    /// Current lifecycle state of the agent.
     pub state: String,
+    /// Capability tags associated with the agent.
     pub tags: Vec<String>,
 }
 
 /// Serialisable status detail returned by GET /agents/{id}/status
 #[derive(Debug, Serialize)]
 pub struct AgentStatusDto {
+    /// Unique agent identifier.
     pub id: String,
+    /// Human-readable agent name.
     pub name: String,
+    /// Optional agent description.
     pub description: Option<String>,
+    /// Optional agent version string.
     pub version: Option<String>,
+    /// Current lifecycle state of the agent.
     pub state: String,
+    /// Capability tags associated with the agent.
     pub tags: Vec<String>,
+    /// Reasoning strategies supported by the agent.
     pub reasoning_strategies: Vec<String>,
 }
 
