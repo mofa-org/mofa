@@ -32,6 +32,7 @@ pub use instrumentation::{
 #[cfg(feature = "otlp-metrics")]
 pub use metrics_exporter::{
     CardinalityLimits, OtlpExporterHandles, OtlpMetricsExporter, OtlpMetricsExporterConfig,
+    OtlpMetricsExporterError,
 };
 pub use propagator::{B3Propagator, HeaderCarrier, TracePropagator, W3CTraceContextPropagator};
 pub use span::{Span, SpanAttribute, SpanBuilder, SpanEvent, SpanKind, SpanLink, SpanStatus};

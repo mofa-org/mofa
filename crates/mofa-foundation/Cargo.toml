@@ -32,7 +32,7 @@ kokoro = ["mofa-plugins/kokoro"]
 # Enable MCP (Model Context Protocol) client support
 mcp = ["dep:rmcp"]
 # Enable Qdrant vector database support
-qdrant = ["dep:qdrant-client"]
+qdrant = ["dep:qdrant-client", "dep:sha2"]
 # Enable accurate token counting with tiktoken
 tiktoken = ["dep:tiktoken-rs"]
 # Enable parallel processing for compression
@@ -59,7 +59,7 @@ rand.workspace = true
 serde_yaml = "0.9"
 
 # HTTP client (transcription + HTTP providers)
-reqwest = { version = "0.12", features = [
+reqwest = { workspace = true, features = [
     "multipart",
     "json",
     "gzip",
@@ -120,6 +120,9 @@ qdrant-client = { version = "1.17", optional = true }
 # Image encoding and MIME detection
 base64 = "0.22"
 infer = "0.16"
+
+# JSON Schema validation for structured output
+jsonschema = { version = "0.17", default-features = false }
 
 
 # System information for memory monitoring

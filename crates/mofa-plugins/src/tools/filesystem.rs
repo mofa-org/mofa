@@ -1,5 +1,6 @@
 use super::*;
 use serde_json::json;
+use std::path::{Path, PathBuf};
 use tokio::fs;
 
 /// 文件系统工具 - 读写文件、列出目录
@@ -48,20 +49,72 @@ impl FileSystemTool {
         ]))
     }
 
+    fn resolve_path(path: &Path) -> Option<PathBuf> {
+        if let Ok(canonical) = path.canonicalize() {
+            return Some(canonical);
+        }
+
+        let mut remaining: Vec<std::ffi::OsString> = Vec::new();
+        let mut current = path.to_path_buf();
+        loop {
+            if let Some(parent) = current.parent() {
+                let name = current
+                    .file_name()
+                    .unwrap_or_else(|| std::ffi::OsStr::new(""));
+
+                // Reject `..` in unresolved tail to prevent traversal escape.
+                if name == ".." {
+                    return None;
+                }
+
+                remaining.push(name.to_os_string());
+                current = parent.to_path_buf();
+                if let Ok(canonical_parent) = current.canonicalize() {
+                    let mut resolved = canonical_parent;
+                    for component in remaining.into_iter().rev() {
+                        resolved.push(component);
+                    }
+                    return Some(resolved);
+                }
+            } else {
+                return None;
+            }
+        }
+    }
+
     fn is_path_allowed(&self, path: &str) -> bool {
         if self.allowed_paths.is_empty() {
-            return false; // Default deny if no paths specified
+            return false;
         }
-        let path = match std::path::Path::new(path).canonicalize() {
-            Ok(p) => p,
-            Err(_) => return false, // Deny if path cannot be resolved
+
+        let raw = Path::new(path);
+
+        let resolved = match Self::resolve_path(raw) {
+            Some(p) => p,
+            None => return false,
         };
+
+        if raw.is_symlink() {
+            match raw.canonicalize() {
+                Ok(canonical_target) => {
+                    if !self.path_under_allowed_root(&canonical_target) {
+                        return false;
+                    }
+                }
+                Err(_) => return false,
+            }
+        }
+
+        self.path_under_allowed_root(&resolved)
+    }
+
+    fn path_under_allowed_root(&self, resolved: &Path) -> bool {
         self.allowed_paths.iter().any(|allowed| {
-            let allowed_path = match std::path::Path::new(allowed).canonicalize() {
+            let allowed_path = match Path::new(allowed).canonicalize() {
                 Ok(p) => p,
                 Err(_) => return false,
             };
-            path.starts_with(allowed_path)
+            resolved.starts_with(&allowed_path)
         })
     }
 }
@@ -159,5 +212,102 @@ impl ToolExecutor for FileSystemTool {
             }
             _ => Err(mofa_kernel::plugin::PluginError::ExecutionFailed(format!("Unknown operation: {}", operation))),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs as stdfs;
+    use tempfile::TempDir;
+
+    /// tool whose allowed root is a temp directory.
+    fn tool_in(root: &std::path::Path) -> FileSystemTool {
+        FileSystemTool::new(vec![root.to_string_lossy().to_string()])
+    }
+
+    #[test]
+    fn write_to_new_file_inside_allowed_root_is_permitted() {
+        let tmp = TempDir::new().unwrap();
+        let tool = tool_in(tmp.path());
+
+        let new_file = tmp.path().join("does_not_exist.txt");
+        assert!(
+            tool.is_path_allowed(&new_file.to_string_lossy()),
+            "Writing a new file inside an allowed root should be permitted"
+        );
+    }
+
+    // symlink escaping allowed root must be denied
+    #[cfg(unix)]
+    #[test]
+    fn symlink_inside_root_pointing_outside_is_denied() {
+        let allowed = TempDir::new().unwrap();
+        let outside = TempDir::new().unwrap();
+        let secret = outside.path().join("secret.txt");
+        stdfs::write(&secret, "sensitive data").unwrap();
+
+        let link = allowed.path().join("link");
+        std::os::unix::fs::symlink(&secret, &link).unwrap();
+
+        let tool = tool_in(allowed.path());
+        assert!(
+            !tool.is_path_allowed(&link.to_string_lossy()),
+            "Symlink whose target is outside allowed root must be denied"
+        );
+    }
+
+    // end to end write and symlink delete
+    #[tokio::test]
+    async fn execute_write_new_file_succeeds() {
+        let tmp = TempDir::new().unwrap();
+        let tool = tool_in(tmp.path());
+        let new_file = tmp.path().join("new.txt");
+
+        let result = tool
+            .execute(json!({
+                "operation": "write",
+                "path": new_file.to_string_lossy(),
+                "content": "hello world"
+            }))
+            .await;
+
+        assert!(result.is_ok(), "Write to new file should succeed: {:?}", result.err());
+        assert_eq!(stdfs::read_to_string(&new_file).unwrap(), "hello world");
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn execute_delete_symlink_escaping_root_is_denied() {
+        let allowed = TempDir::new().unwrap();
+        let outside = TempDir::new().unwrap();
+        let target = outside.path().join("important.txt");
+        stdfs::write(&target, "do not delete").unwrap();
+
+        let link = allowed.path().join("escape_link");
+        std::os::unix::fs::symlink(&target, &link).unwrap();
+
+        let tool = tool_in(allowed.path());
+        let result = tool
+            .execute(json!({
+                "operation": "delete",
+                "path": link.to_string_lossy(),
+            }))
+            .await;
+
+        assert!(result.is_err(), "Delete via escaping symlink must be denied");
+        assert!(target.exists(), "Target file outside root must not be deleted");
+    }
+
+    #[test]
+    fn dotdot_traversal_escape_is_denied() {
+        let tmp = TempDir::new().unwrap();
+        let tool = tool_in(tmp.path());
+
+        let escape = tmp.path().join("..").join("outside").join("file.txt");
+        assert!(
+            !tool.is_path_allowed(&escape.to_string_lossy()),
+            "Path with .. escaping allowed root must be denied"
+        );
     }
 }

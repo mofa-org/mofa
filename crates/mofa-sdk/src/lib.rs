@@ -206,6 +206,11 @@ pub mod runtime {
 
     pub use mofa_runtime::config::FrameworkConfig;
 
+    /// Runtime-level RAG indexing/query hooks.
+    pub mod rag {
+        pub use mofa_runtime::rag::*;
+    }
+
     // Dora runtime (only available with dora feature)
     #[cfg(feature = "dora")]
     pub use mofa_runtime::{AgentRuntime, MoFARuntime};
