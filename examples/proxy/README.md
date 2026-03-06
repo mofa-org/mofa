@@ -92,17 +92,17 @@ cd mofa-local-llm && cargo run --release
 cd mofa/crates/mofa-gateway
 cargo run --example gateway_local_llm_proxy
 
-# 3. Run examples (in this terminal)
-cd mofa/examples/proxy
+# 3. Run examples (from workspace root)
+cd mofa
 
 # Rust example
-cargo run --example proxy_client_examples
+cargo run -p mofa-gateway --example proxy_client_examples
 
 # Python example
-python proxy_python_client.py
+python examples/proxy/proxy_python_client.py
 
 # JavaScript example
-node proxy_javascript_client.js
+node examples/proxy/proxy_javascript_client.js
 ```
 
 ## Features Demonstrated
