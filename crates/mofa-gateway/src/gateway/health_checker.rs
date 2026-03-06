@@ -200,7 +200,9 @@ impl HealthChecker {
         };
         
         // Send HTTP GET request
-        let request = format!("GET /health HTTP/1.1\r\nHost: {}\r\nConnection: close\r\n\r\n", address);
+        // Use the IP address from SocketAddr, not the original hostname
+        let host_header = format!("{}", address.ip());
+        let request = format!("GET /health HTTP/1.1\r\nHost: {}\r\nConnection: close\r\n\r\n", host_header);
         
         // Write request with timeout
         match timeout(timeout_duration, stream.write_all(request.as_bytes())).await {
