@@ -178,7 +178,7 @@ impl AnthropicProvider {
                                         let data = image_url
                                             .url
                                             .split(',')
-                                            .last()
+                                            .next_back()
                                             .unwrap_or(&image_url.url);
                                         contents.push(serde_json::json!({
                                             "type": "image",
@@ -193,7 +193,7 @@ impl AnthropicProvider {
                                         let media_type =
                                             format!("audio/{}", audio.format.to_lowercase());
                                         let data =
-                                            audio.data.split(',').last().unwrap_or(&audio.data);
+                                            audio.data.split(',').next_back().unwrap_or(&audio.data);
                                         // Some providers/models may not support this block, but this is the standard Anthropics structure if/when supported.
                                         contents.push(serde_json::json!({
                                             "type": "audio",
@@ -208,7 +208,7 @@ impl AnthropicProvider {
                                         let media_type =
                                             format!("video/{}", video.format.to_lowercase());
                                         let data =
-                                            video.data.split(',').last().unwrap_or(&video.data);
+                                            video.data.split(',').next_back().unwrap_or(&video.data);
                                         contents.push(serde_json::json!({
                                             "type": "video",
                                             "source": {

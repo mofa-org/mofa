@@ -168,7 +168,7 @@ impl GeminiProvider {
                                         let data = image_url
                                             .url
                                             .split(',')
-                                            .last()
+                                            .next_back()
                                             .unwrap_or(&image_url.url);
                                         gemini_parts.push(serde_json::json!({
                                             "inlineData": {
@@ -181,7 +181,7 @@ impl GeminiProvider {
                                         let mime_type =
                                             format!("audio/{}", audio.format.to_lowercase());
                                         let data =
-                                            audio.data.split(',').last().unwrap_or(&audio.data);
+                                            audio.data.split(',').next_back().unwrap_or(&audio.data);
                                         gemini_parts.push(serde_json::json!({
                                             "inlineData": {
                                                 "mimeType": mime_type,
@@ -193,7 +193,7 @@ impl GeminiProvider {
                                         let mime_type =
                                             format!("video/{}", video.format.to_lowercase());
                                         let data =
-                                            video.data.split(',').last().unwrap_or(&video.data);
+                                            video.data.split(',').next_back().unwrap_or(&video.data);
                                         gemini_parts.push(serde_json::json!({
                                             "inlineData": {
                                                 "mimeType": mime_type,

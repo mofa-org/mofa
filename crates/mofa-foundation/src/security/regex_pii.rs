@@ -85,7 +85,7 @@ fn luhn_check(number: &str) -> bool {
         double = !double;
     }
 
-    sum % 10 == 0
+    sum.is_multiple_of(10)
 }
 
 // =============================================================================

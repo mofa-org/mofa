@@ -150,11 +150,10 @@ fn detect_rocm() -> Option<u64> {
     // rocm-smi CSV: GPU,VRAM Total Memory (B),VRAM Used Memory (B)
     for line in stdout.lines().skip(1) {
         let parts: Vec<&str> = line.split(',').collect();
-        if parts.len() >= 2 {
-            if let Ok(bytes) = parts[1].trim().parse::<u64>() {
+        if parts.len() >= 2
+            && let Ok(bytes) = parts[1].trim().parse::<u64>() {
                 return Some(bytes);
             }
-        }
     }
 
     Some(0)
