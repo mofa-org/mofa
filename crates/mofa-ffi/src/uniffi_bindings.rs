@@ -961,30 +961,32 @@ impl SessionManager {
 /// Adapter that wraps a foreign FfiToolCallback into the kernel Tool trait
 struct CallbackToolAdapter {
     callback: Box<dyn FfiToolCallback>,
+    /// Cached name to avoid `Box::leak` on every `name()` call
+    cached_name: String,
+    /// Cached description to avoid `Box::leak` on every `description()` call
+    cached_description: String,
 }
 
 impl CallbackToolAdapter {
     fn new(callback: Box<dyn FfiToolCallback>) -> Self {
-        Self { callback }
+        let cached_name = callback.name();
+        let cached_description = callback.description();
+        Self {
+            callback,
+            cached_name,
+            cached_description,
+        }
     }
 }
 
 #[async_trait::async_trait]
 impl mofa_kernel::agent::components::tool::Tool for CallbackToolAdapter {
     fn name(&self) -> &str {
-        // We store the name in a leaked string to return a &str.
-        // This is acceptable for long-lived tool registrations.
-        // Use a thread-local cache to avoid repeated leaking.
-        // For simplicity, we just leak once per name.
-        let name = self.callback.name();
-        // SAFETY: We need a &str with 'static lifetime for the trait.
-        // Tools are long-lived so this small leak is acceptable.
-        Box::leak(name.into_boxed_str())
+        &self.cached_name
     }
 
     fn description(&self) -> &str {
-        let desc = self.callback.description();
-        Box::leak(desc.into_boxed_str())
+        &self.cached_description
     }
 
     fn parameters_schema(&self) -> serde_json::Value {
