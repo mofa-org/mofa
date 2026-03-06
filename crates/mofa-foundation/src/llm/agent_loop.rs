@@ -18,6 +18,7 @@ use crate::llm::types::{
 use mofa_kernel::agent::types::error::{GlobalError, GlobalResult};
 use std::collections::HashMap;
 use std::path::Path;
+use std::time::Duration;
 
 /// Type alias for tool handler function in SimpleToolExecutor
 pub type SimpleToolHandler = Box<dyn Fn(&str) -> GlobalResult<String> + Send + Sync>;
@@ -35,6 +36,9 @@ pub struct AgentLoopConfig {
     pub temperature: Option<f32>,
     /// Maximum tokens to generate
     pub max_tokens: Option<u32>,
+    /// Per-tool-call timeout. If a single tool execution exceeds this
+    /// duration, it is cancelled and an error is returned. Default: 30s.
+    pub tool_timeout: Duration,
 }
 
 impl Default for AgentLoopConfig {
@@ -44,6 +48,7 @@ impl Default for AgentLoopConfig {
             default_model: "gpt-4o-mini".to_string(),
             temperature: Some(0.7),
             max_tokens: None,
+            tool_timeout: Duration::from_secs(30),
         }
     }
 }
@@ -295,10 +300,23 @@ impl AgentLoop {
         Ok("I've completed processing but hit the maximum iteration limit.".to_string())
     }
 
-    /// Execute a tool call
+    /// Execute a tool call (with timeout protection)
     async fn execute_tool(&self, name: &str, arguments: &str) -> LLMResult<String> {
         let span = tracing::info_span!("agent_loop.tool_call", tool = %name);
-        self.tools.execute(name, arguments).instrument(span).await
+        let timeout_dur = self.config.tool_timeout;
+
+        match tokio::time::timeout(
+            timeout_dur,
+            self.tools.execute(name, arguments).instrument(span),
+        )
+        .await
+        {
+            Ok(result) => result,
+            Err(_) => Err(crate::llm::types::LLMError::Other(format!(
+                "Tool '{}' timed out after {:?}",
+                name, timeout_dur
+            ))),
+        }
     }
 
     /// Build a vision message with images
@@ -472,6 +490,7 @@ mod tests {
             default_model: "gpt-4".to_string(),
             temperature: Some(0.5),
             max_tokens: Some(1000),
+            tool_timeout: Duration::from_secs(60),
         };
         assert_eq!(config.max_tool_iterations, 5);
         assert_eq!(config.default_model, "gpt-4");

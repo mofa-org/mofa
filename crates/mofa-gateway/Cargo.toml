@@ -2,12 +2,91 @@
 name = "mofa-gateway"
 version.workspace = true
 edition.workspace = true
+description = "MoFA Framework-Level Control Plane and Gateway - Distributed coordination and request routing"
 authors.workspace = true
 license.workspace = true
 repository.workspace = true
 homepage.workspace = true
+documentation = "https://docs.rs/mofa-gateway"
+readme = "CRATE_OVERVIEW.md"
+keywords = ["ai", "agent", "gateway", "control-plane", "distributed", "consensus", "raft"]
+categories = ["asynchronous", "network-programming", "distributed-computing"]
+publish = true
 
 [dependencies]
+# Workspace dependencies
+async-trait.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+bincode.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+uuid.workspace = true
+thiserror.workspace = true
+eyre.workspace = true
+axum.workspace = true
+chrono.workspace = true
+
+# Local dependencies
+mofa-kernel = { path = "../mofa-kernel", version = "0.1", features = ["config"] }
+mofa-runtime = { path = "../mofa-runtime", version = "0.1" }
+mofa-monitoring = { path = "../mofa-monitoring", version = "0.1", optional = true }
+
+# Network and consensus (always available - lightweight Rust code)
+tonic = { version = "0.12", features = ["tls", "tls-roots"] }
+prost = "0.13"
+prost-types = "0.13"
+tower-http = { version = "0.6", features = ["cors", "trace", "compression-gzip"] }
+tracing-subscriber.workspace = true
+prometheus = { version = "0.13", default-features = false }
+
+# HTTP and routing
+tower = "0.5"
+hyper = { version = "1.8", features = ["full"] }
+hyper-util = "0.1"
+
+# Utilities
+dashmap = "5.5"
+parking_lot = "0.12"
+bytes = "1.7"
+futures = "0.3"
+rand = "0.8"
+
+# Storage (optional - can use in-memory for testing)
+rocksdb = { version = "0.22", optional = true }
+tempfile = { workspace = true, optional = true }
+
+# Metrics and observability (optional)
+opentelemetry = { workspace = true, optional = true }
+opentelemetry_sdk = { workspace = true, optional = true }
+tracing-opentelemetry = { workspace = true, optional = true }
+opentelemetry-otlp = { workspace = true, optional = true }
+opentelemetry-semantic-conventions = { workspace = true, optional = true }
+
+[build-dependencies]
+tonic-build = "0.12"
 
 [lints]
 workspace = true
+
+[features]
+# Default: simple gateway mode (no optional dependencies)
+# Gateway features (routing, load balancing, rate limiting) are always available
+# Distributed features (Raft, ControlPlane) are always available but optional at runtime
+default = []
+
+# Persistent storage (RocksDB) - optional external dependency
+rocksdb = ["dep:rocksdb", "dep:tempfile"]
+
+# Observability (OpenTelemetry tracing) - optional external dependencies
+monitoring = [
+    "dep:opentelemetry",
+    "dep:opentelemetry_sdk",
+    "dep:tracing-opentelemetry",
+    "dep:opentelemetry-otlp",
+    "dep:opentelemetry-semantic-conventions",
+    "dep:mofa-monitoring",
+]
+
+# Full feature set (all optional features)
+full = ["rocksdb", "monitoring"]

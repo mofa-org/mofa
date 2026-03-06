@@ -58,10 +58,20 @@ pub mod llm;
 pub mod metrics;
 pub use metrics::*;
 
+<<<<<<< feat/token-cost-tracker
 // Provider pricing registry (LLM cost calculation)
 pub mod pricing;
 
 // Budget configuration & enforcement
 pub mod budget;
+=======
+// Structured output parsing with JSON schema validation
+pub mod structured_output;
+pub use structured_output::StructuredOutput;
+>>>>>>> main
 // Security governance (PII redaction, content moderation, prompt guard)
 pub mod security;
+
+// Gateway routing abstractions (kernel-level traits for agent request dispatch)
+pub mod gateway;
+pub use gateway::{GatewayRoute, HttpMethod, RegistryError, RouteRegistry, RoutingContext};
