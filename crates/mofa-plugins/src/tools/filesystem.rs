@@ -48,20 +48,101 @@ impl FileSystemTool {
         ]))
     }
 
+    /// Determine whether `path` resides within one of the allowed base directories.
+    ///
+    /// SECURITY: Two-phase resolution strategy:
+    ///   1. If the path already exists on disk, `canonicalize()` it directly so
+    ///      symlinks and `..` are fully resolved, then verify containment.
+    ///   2. If the path does **not** exist (e.g., a new file or directory to be
+    ///      created), walk up to the nearest **existing** ancestor, canonicalize
+    ///      that ancestor, append the remaining relative tail, and verify:
+    ///      (a) the tail contains no `..` components (prevents sandbox escape),
+    ///      (b) the resulting logical path starts with an allowed base directory.
+    ///
+    /// This avoids the deadlock where `canonicalize()` fails on a path that has
+    /// not been created yet, which previously caused `mkdir` and `write` for new
+    /// paths to be unconditionally denied.
     fn is_path_allowed(&self, path: &str) -> bool {
+        use std::path::{Component, Path, PathBuf};
+
         if self.allowed_paths.is_empty() {
             return false; // Default deny if no paths specified
         }
-        let path = match std::path::Path::new(path).canonicalize() {
+
+        let target = Path::new(path);
+
+        // --- Phase 1: path already exists – use strict canonicalize. ---
+        if target.exists() {
+            let canonical = match target.canonicalize() {
+                Ok(p) => p,
+                Err(_) => return false,
+            };
+            return self.starts_with_allowed(&canonical);
+        }
+
+        // --- Phase 2: path does not exist – resolve via nearest existing ancestor. ---
+        //
+        // Walk up from the requested path until we find a component that exists,
+        // collecting the "tail" of not-yet-created segments.
+        let mut ancestor: &Path = target.as_ref();
+        let mut tail_parts: Vec<&std::ffi::OsStr> = Vec::new();
+
+        loop {
+            match ancestor.parent() {
+                Some(parent) => {
+                    // Collect the file-name component that sits on top of `parent`.
+                    if let Some(name) = ancestor.file_name() {
+                        tail_parts.push(name);
+                    } else {
+                        // No file_name (e.g., root or prefix) – deny.
+                        return false;
+                    }
+                    ancestor = parent;
+                    if ancestor.exists() {
+                        break;
+                    }
+                }
+                None => {
+                    // Reached filesystem root without finding an existing dir.
+                    return false;
+                }
+            }
+        }
+
+        // Canonicalize the existing ancestor (resolves symlinks / `..`).
+        let canonical_ancestor = match ancestor.canonicalize() {
             Ok(p) => p,
-            Err(_) => return false, // Deny if path cannot be resolved
+            Err(_) => return false,
         };
+
+        // Reconstruct the full logical path from canonical ancestor + tail.
+        // tail_parts were collected bottom-up, so reverse them.
+        let mut resolved: PathBuf = canonical_ancestor;
+        for part in tail_parts.iter().rev() {
+            resolved.push(part);
+        }
+
+        // SECURITY: Ensure no component in the unresolved tail is `..`.
+        // An attacker could craft something like `/allowed/../../etc/shadow`; the
+        // ancestor resolution above would stop at `/allowed`, but the tail would
+        // contain `..` segments that escape the sandbox.
+        for component in resolved.components() {
+            if matches!(component, Component::ParentDir) {
+                return false;
+            }
+        }
+
+        self.starts_with_allowed(&resolved)
+    }
+
+    /// Check whether `canonical` starts with at least one allowed base directory.
+    fn starts_with_allowed(&self, canonical: &std::path::Path) -> bool {
         self.allowed_paths.iter().any(|allowed| {
             let allowed_path = match std::path::Path::new(allowed).canonicalize() {
                 Ok(p) => p,
                 Err(_) => return false,
             };
-            path.starts_with(allowed_path)
+            canonical.starts_with(allowed_path)
         })
     }
 }
