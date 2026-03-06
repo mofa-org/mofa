@@ -1,7 +1,12 @@
-//! Filter pipeline module.
-//!
-//! Concrete filter implementations (auth, rate_limit, logger) are added
-//! in Phase 6 — this module provides the pipeline executor.
+//! Filter module.
+
+mod auth;
+mod logger;
+mod rate_limit;
+
+pub use auth::ApiKeyFilter;
+pub use logger::LoggingFilter;
+pub use rate_limit::RateLimitFilter;
 
 use mofa_kernel::gateway::{FilterAction, GatewayContext, GatewayError, GatewayFilter, GatewayResponse};
 use std::sync::Arc;
