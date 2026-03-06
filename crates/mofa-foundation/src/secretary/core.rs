@@ -277,11 +277,10 @@ where
         let handle_clone = handle.clone();
 
         let span = tracing::info_span!("secretary.event_loop");
-        let join_handle =
-            tokio::spawn(
-                async move { self.run_event_loop(connection, handle_clone, stop_rx).await }
-                    .instrument(span),
-            );
+        let join_handle = tokio::spawn(
+            async move { self.run_event_loop(connection, handle_clone, stop_rx).await }
+                .instrument(span),
+        );
 
         (handle, join_handle)
     }

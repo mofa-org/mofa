@@ -11,7 +11,9 @@ pub mod memory;
 pub mod reasoner;
 pub mod tool;
 
-pub use context_compressor::{CompressionStrategy, ContextCompressor};
+pub use context_compressor::{
+    CompressionMetrics, CompressionResult, CompressionStrategy, ContextCompressor,
+};
 pub use coordinator::{CoordinationPattern, Coordinator, DispatchResult, Task};
 pub use mcp::{McpClient, McpServerConfig, McpServerInfo, McpToolInfo, McpTransportConfig};
 pub use memory::{Memory, MemoryItem, MemoryStats, MemoryValue, Message, MessageRole};

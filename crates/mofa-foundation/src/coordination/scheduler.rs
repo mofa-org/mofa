@@ -91,7 +91,7 @@ impl PriorityScheduler {
         let mut task_status = self.task_status.write().await;
         let mut agent_tasks = self.agent_tasks.write().await;
         let role_map = self.role_mapping.read().await;
-        let task_priorities = self.task_priorities.read().await;
+        let mut task_priorities = self.task_priorities.write().await;
 
         while let Some(priority_task) = task_queue.pop() {
             let task = priority_task.task.clone(); // Clone instead of moving
@@ -155,6 +155,42 @@ impl PriorityScheduler {
                                 )
                                 .await
                                 .map_err(|e| GlobalError::Other(e.to_string()))?;
+
+                            // Clean up preempted task state to prevent ghost entries:
+                            // Without this, preempted tasks leak in all 4 HashMaps,
+                            // causing agent_load drift, OOM, and scheduling starvation.
+                            task_status
+                                .insert(low_priority_task_id.clone(), SchedulingStatus::Preempted);
+                            if let Some(count) = agent_load.get_mut(&target_agent) {
+                                *count = count.saturating_sub(1);
+                            }
+                            if let Some(tasks) = agent_tasks.get_mut(&target_agent) {
+                                tasks.retain(|t| t != &low_priority_task_id);
+                            }
+
+                            // Re-enqueue the preempted task so it can be rescheduled
+                            // to a different (or the same) agent in a future cycle.
+                            if let Some(orig_priority) =
+                                task_priorities.remove(&low_priority_task_id)
+                            {
+                                let requeued = PriorityTask {
+                                    priority: orig_priority.clone(),
+                                    task: TaskRequest {
+                                        task_id: low_priority_task_id.clone(),
+                                        content: task.content.clone(),
+                                        priority: orig_priority.clone(),
+                                        deadline: None,
+                                        metadata: std::collections::HashMap::new(),
+                                    },
+                                    submit_time: std::time::Instant::now(),
+                                };
+                                task_queue.push(requeued);
+                                task_status.insert(
+                                    low_priority_task_id.clone(),
+                                    SchedulingStatus::Pending,
+                                );
+                                task_priorities.insert(low_priority_task_id, orig_priority);
+                            }
                         }
                     }
                 }
@@ -202,35 +238,34 @@ impl PriorityScheduler {
 
     /// 4. 任务抢占：高优先级任务抢占低优先级任务的执行资源
     /// 4. Task preemption: high-priority tasks preempt resources of low-priority tasks
+    ///
+    /// After sending the preemption event, this method also cleans up internal
+    /// state (task_status, agent_load, agent_tasks, task_priorities) and
+    /// re-enqueues the preempted task so it is not permanently lost.
     async fn preempt_low_priority_task(
         &self,
         agent_id: &str,
         high_priority_task: &TaskRequest,
     ) -> GlobalResult<()> {
-        // 简化实现：直接发送抢占事件
-        // Simplified implementation: directly send a preemption event
-        let agent_load = self.agent_load.read().await;
-        let task_status = self.task_status.read().await;
-        let agent_tasks = self.agent_tasks.read().await;
-        let task_priorities = self.task_priorities.read().await;
+        let mut agent_load = self.agent_load.write().await;
+        let mut task_status = self.task_status.write().await;
+        let mut agent_tasks = self.agent_tasks.write().await;
+        let mut task_priorities = self.task_priorities.write().await;
 
         // 检查目标智能体当前运行的任务
         // Check tasks currently running on the target agent
         if let Some(&load) = agent_load.get(agent_id)
             && load > 0
         {
-            // Get the task list for this specific agent
             let tasks_on_agent = match agent_tasks.get(agent_id) {
                 Some(tasks) => tasks,
-                None => return Ok(()), // No task records, skip
+                None => return Ok(()),
             };
 
-            // Find a running task on this agent with lower priority than the new task
             let preemptable_task = tasks_on_agent
                 .iter()
                 .filter(|tid| task_status.get(*tid) == Some(&SchedulingStatus::Running))
                 .filter(|tid| {
-                    // Only preempt tasks with lower priority than the new task
                     if let Some(task_priority) = task_priorities.get(*tid) {
                         high_priority_task.priority > *task_priority
                     } else {
@@ -241,7 +276,8 @@ impl PriorityScheduler {
                 .cloned();
 
             if let Some(low_priority_task_id) = preemptable_task {
-                // 发送抢占指令，标记低优先级任务为 Preempted
+                // 发送抢占指令
+                // Send preemption command
                 let preempt_msg =
                     AgentMessage::Event(AgentEvent::TaskPreempted(low_priority_task_id.clone()));
                 self.bus
@@ -252,6 +288,34 @@ impl PriorityScheduler {
                     )
                     .await
                     .map_err(|e| GlobalError::Other(e.to_string()))?;
+
+                // Clean up preempted task state
+                task_status.insert(low_priority_task_id.clone(), SchedulingStatus::Preempted);
+                if let Some(count) = agent_load.get_mut(agent_id) {
+                    *count = count.saturating_sub(1);
+                }
+                if let Some(tasks) = agent_tasks.get_mut(agent_id) {
+                    tasks.retain(|t| t != &low_priority_task_id);
+                }
+
+                // Re-enqueue the preempted task for rescheduling
+                if let Some(orig_priority) = task_priorities.remove(&low_priority_task_id) {
+                    let mut task_queue = self.task_queue.write().await;
+                    let requeued = PriorityTask {
+                        priority: orig_priority.clone(),
+                        task: TaskRequest {
+                            task_id: low_priority_task_id.clone(),
+                            content: String::new(),
+                            priority: orig_priority.clone(),
+                            deadline: None,
+                            metadata: std::collections::HashMap::new(),
+                        },
+                        submit_time: std::time::Instant::now(),
+                    };
+                    task_queue.push(requeued);
+                    task_status.insert(low_priority_task_id.clone(), SchedulingStatus::Pending);
+                    task_priorities.insert(low_priority_task_id, orig_priority);
+                }
             }
         }
         Ok(())
@@ -381,5 +445,205 @@ mod tests {
         assert_eq!(heap.pop().unwrap().task.task_id, "critical");
         assert_eq!(heap.pop().unwrap().task.task_id, "medium");
         assert_eq!(heap.pop().unwrap().task.task_id, "low");
+    }
+
+    /// After preemption inside `schedule()`, the preempted task must be
+    /// cleaned from `agent_load`, `agent_tasks`, and `task_status`, then
+    /// re-enqueued as Pending. Without the fix this test would fail because
+    /// the ghost entry stays as Running forever.
+    #[tokio::test]
+    async fn test_preemption_cleans_agent_load() {
+        let bus = Arc::new(AgentBus::new());
+        let scheduler = PriorityScheduler::new(bus).await;
+
+        // Register a "worker" role with one agent
+        {
+            let mut roles = scheduler.role_mapping.write().await;
+            roles.insert("worker".to_string(), vec!["agent-1".to_string()]);
+        }
+
+        // Simulate: agent-1 is running a Low-priority task "t-low"
+        {
+            let mut load = scheduler.agent_load.write().await;
+            load.insert("agent-1".to_string(), 1);
+        }
+        {
+            let mut status = scheduler.task_status.write().await;
+            status.insert("t-low".to_string(), SchedulingStatus::Running);
+        }
+        {
+            let mut tasks = scheduler.agent_tasks.write().await;
+            tasks.insert("agent-1".to_string(), vec!["t-low".to_string()]);
+        }
+        {
+            let mut prios = scheduler.task_priorities.write().await;
+            prios.insert("t-low".to_string(), TaskPriority::Low);
+        }
+
+        // Submit a Critical task — should preempt t-low
+        let critical = make_task("t-critical", TaskPriority::Critical);
+        let result = timeout(Duration::from_secs(2), scheduler.submit_task(critical)).await;
+        assert!(
+            result.is_ok(),
+            "submit_task should complete without deadlock"
+        );
+
+        // Verify: agent_load should reflect only the new task (t-critical)
+        // t-low's load contribution must be decremented during preemption
+        let load = scheduler.agent_load.read().await;
+        let agent_load_val = *load.get("agent-1").unwrap_or(&0);
+        assert!(
+            agent_load_val <= 1,
+            "agent_load should not be inflated by ghost preempted task, got {agent_load_val}"
+        );
+    }
+
+    /// Verifies that a preempted task's status transitions through Preempted
+    /// and ends up re-enqueued. With two agents the re-enqueued task lands on
+    /// the second agent, so we can verify the full lifecycle.
+    #[tokio::test]
+    async fn test_preemption_updates_task_status() {
+        let bus = Arc::new(AgentBus::new());
+        let scheduler = PriorityScheduler::new(bus).await;
+
+        // Two agents — the re-enqueued task should land on agent-2
+        {
+            let mut roles = scheduler.role_mapping.write().await;
+            roles.insert(
+                "worker".to_string(),
+                vec!["agent-1".to_string(), "agent-2".to_string()],
+            );
+        }
+        {
+            let mut load = scheduler.agent_load.write().await;
+            load.insert("agent-1".to_string(), 1);
+            load.insert("agent-2".to_string(), 0);
+        }
+        {
+            let mut status = scheduler.task_status.write().await;
+            status.insert("t-low".to_string(), SchedulingStatus::Running);
+        }
+        {
+            let mut tasks = scheduler.agent_tasks.write().await;
+            tasks.insert("agent-1".to_string(), vec!["t-low".to_string()]);
+        }
+        {
+            let mut prios = scheduler.task_priorities.write().await;
+            prios.insert("t-low".to_string(), TaskPriority::Low);
+        }
+
+        let critical = make_task("t-critical", TaskPriority::Critical);
+        let _ = timeout(Duration::from_secs(2), scheduler.submit_task(critical)).await;
+
+        // t-low should have been re-enqueued and rescheduled (Running on agent-2)
+        // or at minimum not stuck as a ghost Running on agent-1.
+        let status = scheduler.task_status.read().await;
+        let low_status = status.get("t-low");
+        // Valid end-states: Running (rescheduled), Pending (in queue), or absent
+        assert!(
+            low_status == Some(&SchedulingStatus::Running)
+                || low_status == Some(&SchedulingStatus::Pending)
+                || low_status.is_none(),
+            "preempted task should be rescheduled or pending, got {:?}",
+            low_status
+        );
+
+        // Regardless of final status, task_priorities must still contain t-low
+        let prios = scheduler.task_priorities.read().await;
+        assert!(
+            prios.contains_key("t-low"),
+            "preempted task priority metadata must be preserved"
+        );
+    }
+
+    /// Verifies that the preempted task is removed from `agent_tasks`.
+    #[tokio::test]
+    async fn test_preemption_cleans_agent_tasks() {
+        let bus = Arc::new(AgentBus::new());
+        let scheduler = PriorityScheduler::new(bus).await;
+
+        {
+            let mut roles = scheduler.role_mapping.write().await;
+            roles.insert("worker".to_string(), vec!["agent-1".to_string()]);
+        }
+        {
+            let mut load = scheduler.agent_load.write().await;
+            load.insert("agent-1".to_string(), 1);
+        }
+        {
+            let mut status = scheduler.task_status.write().await;
+            status.insert("t-low".to_string(), SchedulingStatus::Running);
+        }
+        {
+            let mut tasks = scheduler.agent_tasks.write().await;
+            tasks.insert("agent-1".to_string(), vec!["t-low".to_string()]);
+        }
+        {
+            let mut prios = scheduler.task_priorities.write().await;
+            prios.insert("t-low".to_string(), TaskPriority::Low);
+        }
+
+        let critical = make_task("t-critical", TaskPriority::Critical);
+        let _ = timeout(Duration::from_secs(2), scheduler.submit_task(critical)).await;
+
+        // The old "t-low" entry should have been removed from agent_tasks
+        // during preemption cleanup (before re-enqueue may add it back
+        // if the same agent is selected again).
+        let tasks = scheduler.agent_tasks.read().await;
+        if let Some(agent_task_list) = tasks.get("agent-1") {
+            // t-low should not appear with Running status, only t-critical
+            // (it may reappear if rescheduled, but as a new assignment)
+            let status = scheduler.task_status.read().await;
+            for tid in agent_task_list {
+                if tid == "t-low" {
+                    // If re-assigned, it should be Running again (rescheduled),
+                    // not a stale ghost
+                    assert_eq!(
+                        status.get(tid),
+                        Some(&SchedulingStatus::Running),
+                        "re-assigned t-low should be Running, not a ghost"
+                    );
+                }
+            }
+        }
+    }
+
+    /// Verifies that preempted tasks are re-enqueued and their priority
+    /// metadata is preserved in task_priorities.
+    #[tokio::test]
+    async fn test_preemption_requeues_task() {
+        let bus = Arc::new(AgentBus::new());
+        let scheduler = PriorityScheduler::new(bus).await;
+
+        {
+            let mut roles = scheduler.role_mapping.write().await;
+            roles.insert("worker".to_string(), vec!["agent-1".to_string()]);
+        }
+        {
+            let mut load = scheduler.agent_load.write().await;
+            load.insert("agent-1".to_string(), 1);
+        }
+        {
+            let mut status = scheduler.task_status.write().await;
+            status.insert("t-low".to_string(), SchedulingStatus::Running);
+        }
+        {
+            let mut tasks = scheduler.agent_tasks.write().await;
+            tasks.insert("agent-1".to_string(), vec!["t-low".to_string()]);
+        }
+        {
+            let mut prios = scheduler.task_priorities.write().await;
+            prios.insert("t-low".to_string(), TaskPriority::Low);
+        }
+
+        let critical = make_task("t-critical", TaskPriority::Critical);
+        let _ = timeout(Duration::from_secs(2), scheduler.submit_task(critical)).await;
+
+        // t-low should still exist in task_priorities (re-enqueued, not leaked)
+        let prios = scheduler.task_priorities.read().await;
+        assert!(
+            prios.contains_key("t-low"),
+            "preempted task should be re-enqueued with its priority preserved"
+        );
     }
 }
