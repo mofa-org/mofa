@@ -47,8 +47,10 @@ members = [
     "admission_gate_demo",
     "integrations_demo",
     "native_dataflow",
+    "mcp_tools",
     "memory_scheduler_demo",
     "cdp_demo",
+    "rag_retrieval_demo",
     "rag_indexing_demo",
 ]
 
