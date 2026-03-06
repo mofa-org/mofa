@@ -31,7 +31,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .init();
 
     println!("🚀 Starting MoFA Gateway with Custom Proxy Configuration");
-    println!("=" .repeat(60));
+    println!("{}", "=".repeat(60));
 
     // Read configuration from environment or use defaults
     let backend_url = env::var("MOFA_LOCAL_LLM_URL")
