@@ -40,6 +40,12 @@ pub struct GatewayConfig {
     pub enable_rate_limiting: bool,
     /// Enable circuit breakers.
     pub enable_circuit_breakers: bool,
+    /// Gateway-level default request timeout in milliseconds.
+    ///
+    /// Applied to every route that does not carry its own
+    /// `RouteDeadline::request_timeout_ms`.  `None` means no default timeout
+    /// is enforced (requests may wait indefinitely).
+    pub default_request_timeout_ms: Option<u64>,
 }
 
 impl Default for GatewayConfig {
@@ -49,6 +55,7 @@ impl Default for GatewayConfig {
             load_balancing: LoadBalancingAlgorithm::RoundRobin,
             enable_rate_limiting: true,
             enable_circuit_breakers: true,
+            default_request_timeout_ms: Some(30_000),
         }
     }
 }

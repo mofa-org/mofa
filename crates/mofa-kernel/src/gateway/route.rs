@@ -12,6 +12,26 @@ use std::collections::HashMap;
 use super::error::RegistryError;
 
 // ─────────────────────────────────────────────────────────────────────────────
+// RouteDeadline
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Per-route deadline policy.
+///
+/// All fields are `Option<u64>` (milliseconds).  A `None` value means "inherit
+/// the gateway-level default".  Setting a field to `Some(0)` disables that
+/// particular check for the route.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub struct RouteDeadline {
+    /// Maximum wall-clock time (ms) from envelope admission to final response.
+    /// Enforced at the dispatch layer; exceeding it yields HTTP 504.
+    pub request_timeout_ms: Option<u64>,
+    /// Time (ms) allowed to establish a connection to the agent backend.
+    pub connect_timeout_ms: Option<u64>,
+    /// Time (ms) allowed between successive response chunks for streaming routes.
+    pub idle_timeout_ms: Option<u64>,
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // HTTP method
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -100,6 +120,9 @@ pub struct GatewayRoute {
     /// returned by [`RouteRegistry::list_active`] and never matched at
     /// dispatch time.
     pub enabled: bool,
+    /// Optional per-route deadline policy.  `None` means use the
+    /// gateway-level default configured in `GatewayConfig`.
+    pub deadline: Option<RouteDeadline>,
 }
 
 impl GatewayRoute {
@@ -117,12 +140,19 @@ impl GatewayRoute {
             method,
             priority: 0,
             enabled: true,
+            deadline: None,
         }
     }
 
     /// Set the routing priority.
     pub fn with_priority(mut self, priority: i32) -> Self {
         self.priority = priority;
+        self
+    }
+
+    /// Attach a per-route deadline policy.
+    pub fn with_deadline(mut self, deadline: RouteDeadline) -> Self {
+        self.deadline = Some(deadline);
         self
     }
 
