@@ -63,6 +63,9 @@ tracing-opentelemetry = { workspace = true, optional = true }
 opentelemetry-otlp = { workspace = true, optional = true }
 opentelemetry-semantic-conventions = { workspace = true, optional = true }
 
+[dev-dependencies]
+reqwest = { version = "0.12", features = ["json"] }
+
 [build-dependencies]
 tonic-build = "0.12"
 
