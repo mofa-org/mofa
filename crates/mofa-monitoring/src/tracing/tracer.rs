@@ -10,6 +10,7 @@ use super::propagator::TracePropagator;
 use super::span::{Span, SpanBuilder, SpanData, SpanKind};
 use std::collections::HashMap;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
 use tokio::sync::RwLock;
 
 /// 采样策略
@@ -194,6 +195,7 @@ pub struct BatchSpanProcessor {
     buffer: Arc<RwLock<Vec<SpanData>>>,
     batch_size: usize,
     max_queue_size: usize,
+    dropped_count: AtomicU64,
 }
 
 impl BatchSpanProcessor {
@@ -207,6 +209,7 @@ impl BatchSpanProcessor {
             buffer: Arc::new(RwLock::new(Vec::new())),
             batch_size,
             max_queue_size,
+            dropped_count: AtomicU64::new(0),
         }
     }
 
@@ -219,6 +222,15 @@ impl BatchSpanProcessor {
                 None
             }
         };
+
+        let dropped = self.dropped_count.swap(0, Ordering::Relaxed);
+        if dropped > 0 {
+            tracing::warn!(
+                dropped_spans = dropped,
+                max_queue_size = self.max_queue_size,
+                "BatchSpanProcessor: dropped spans since last flush because buffer was full"
+            );
+        }
 
         if let Some(spans) = to_export {
             self.exporter.export(spans).await?;
@@ -240,6 +252,8 @@ impl SpanProcessor for BatchSpanProcessor {
             let mut buffer = self.buffer.write().await;
             if buffer.len() < self.max_queue_size {
                 buffer.push(span);
+            } else {
+                self.dropped_count.fetch_add(1, Ordering::Relaxed);
             }
         }
 
@@ -258,6 +272,15 @@ impl SpanProcessor for BatchSpanProcessor {
             let mut buffer = self.buffer.write().await;
             buffer.drain(..).collect()
         };
+
+        let dropped = self.dropped_count.swap(0, Ordering::Relaxed);
+        if dropped > 0 {
+            tracing::warn!(
+                dropped_spans = dropped,
+                max_queue_size = self.max_queue_size,
+                "BatchSpanProcessor: dropped spans since last flush because buffer was full"
+            );
+        }
 
         if !to_export.is_empty() {
             self.exporter.export(to_export).await?;
