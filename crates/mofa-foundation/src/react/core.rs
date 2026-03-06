@@ -5,6 +5,7 @@ use crate::llm::{LLMAgent, LLMError, LLMResult, Tool};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
+use std::time::Duration;
 use tokio::sync::RwLock;
 use tracing::Instrument;
 
@@ -261,6 +262,8 @@ pub struct ReActConfig {
     /// 每步最大 token 数
     /// Max tokens per step
     pub max_tokens_per_step: Option<u32>,
+    /// Per-tool-call timeout. Default: 30 seconds.
+    pub tool_timeout: Duration,
 }
 
 impl Default for ReActConfig {
@@ -272,6 +275,7 @@ impl Default for ReActConfig {
             system_prompt: None,
             verbose: true,
             max_tokens_per_step: Some(2048),
+            tool_timeout: Duration::from_secs(30),
         }
     }
 }
@@ -334,6 +338,20 @@ impl ReActAgent {
         Self {
             llm,
             tools: Arc::new(RwLock::new(HashMap::new())),
+            config,
+        }
+    }
+
+    /// 使用 LLM、配置和初始工具创建
+    /// Create with LLM, config, and initial tools
+    pub fn with_tools(
+        llm: Arc<LLMAgent>,
+        config: ReActConfig,
+        tools: HashMap<String, Arc<dyn ReActTool>>,
+    ) -> Self {
+        Self {
+            llm,
+            tools: Arc::new(RwLock::new(tools)),
             config,
         }
     }
@@ -566,18 +584,26 @@ Rules:
         ParsedResponse::Thought(response.to_string())
     }
 
-    /// 执行工具
-    /// Execute tool
+    /// 执行工具（带超时保护）
+    /// Execute tool (with timeout protection)
     async fn execute_tool(&self, tool_name: &str, input: &str) -> String {
         let span = tracing::info_span!("react.tool_call", tool = %tool_name);
+        let timeout_dur = self.config.tool_timeout;
+
         async {
             let tools = self.tools.read().await;
 
             match tools.get(tool_name) {
-                Some(tool) => match tool.execute(input).await {
-                    Ok(result) => result,
-                    Err(e) => format!("Tool error: {}", e),
-                },
+                Some(tool) => {
+                    match tokio::time::timeout(timeout_dur, tool.execute(input)).await {
+                        Ok(Ok(result)) => result,
+                        Ok(Err(e)) => format!("Tool error: {}", e),
+                        Err(_) => format!(
+                            "Tool '{}' timed out after {:?}",
+                            tool_name, timeout_dur
+                        ),
+                    }
+                }
                 None => format!(
                     "Tool '{}' not found. Available tools: {:?}",
                     tool_name,
@@ -679,19 +705,14 @@ impl ReActAgentBuilder {
             .llm
             .ok_or_else(|| LLMError::ConfigError("LLM agent not set".to_string()))?;
 
-        let agent = ReActAgent::new(llm, self.config);
+        // 同步构造工具字典，避免 tokio::spawn 导致的竞态条件
+        // Construct tool map synchronously to avoid tokio::spawn race condition
+        let mut tool_map = HashMap::new();
+        for tool in self.tools {
+            tool_map.insert(tool.name().to_string(), tool);
+        }
 
-        // 在运行时注册工具
-        // Register tools at runtime
-        let tools = self.tools;
-        let agent_tools = agent.tools.clone();
-
-        tokio::spawn(async move {
-            let mut tool_map = agent_tools.write().await;
-            for tool in tools {
-                tool_map.insert(tool.name().to_string(), tool);
-            }
-        });
+        let agent = ReActAgent::with_tools(llm, self.config, tool_map);
 
         Ok(agent)
     }
@@ -751,5 +772,53 @@ mod tests {
         assert_eq!(config.max_iterations, 5);
         assert_eq!(config.temperature, 0.5);
         assert!(!config.verbose);
+    }
+
+    /// 验证 `build()` 修复了竞态条件。
+    /// Verify that `build()` fixes the race condition.
+    ///
+    /// 在修复之前，`build()` 使用 `tokio::spawn` 注册工具，导致工具不会立即生效。
+    /// Now we construct the map synchronously, so tools must be available immediately.
+    #[tokio::test]
+    async fn test_build_sync_tools_available() {
+        struct DummyTool;
+
+        #[async_trait::async_trait]
+        impl ReActTool for DummyTool {
+            fn name(&self) -> &str {
+                "dummy"
+            }
+            fn description(&self) -> &str {
+                "desc"
+            }
+            async fn execute(&self, _input: &str) -> Result<String, String> {
+                Ok("ok".to_string())
+            }
+        }
+
+        // We can't easily construct a real LLMAgent without a provider,
+        // but we can just use the internal methods directly to test the builder logic.
+        let llm = Arc::new(
+            crate::llm::LLMAgentBuilder::new()
+                .with_provider(Arc::new(crate::llm::openai::OpenAIProvider::with_config(
+                    crate::llm::openai::OpenAIConfig::new("dummy".to_string()),
+                )))
+                .build(),
+        );
+
+        let agent = ReActAgent::builder()
+            .with_llm(llm)
+            .with_tool(Arc::new(DummyTool))
+            .build()
+            .expect("build should succeed");
+
+        // Immediately check — should be 1, because token::spawn is no longer used
+        let tools = agent.get_tools().await;
+        assert_eq!(
+            tools.len(),
+            1,
+            "FIX CONFIRMED: tools are available immediately after build() is called synchronously."
+        );
+        assert_eq!(tools[0].name(), "dummy");
     }
 }

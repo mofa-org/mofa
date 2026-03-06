@@ -210,8 +210,7 @@ fn validate_config_file(path: &PathBuf) -> Result<(), CliError> {
                 "json" => serde_json::from_str::<Value>(&substituted)
                     .map_err(|e| CliError::ConfigError(format!("JSON parsing error: {}", e))),
                 "json5" => {
-                    // Try to parse as JSON5 (fall back to JSON for validation)
-                    serde_json::from_str::<Value>(&substituted)
+                    json5::from_str::<Value>(&substituted)
                         .map_err(|e| CliError::ConfigError(format!("JSON5 parsing error: {}", e)))
                 }
                 "ini" => {
@@ -234,10 +233,10 @@ fn validate_config_file(path: &PathBuf) -> Result<(), CliError> {
         }
     };
 
+    let config = result?;
+
     // Validate required fields
-    if let Ok(config) = result
-        && let Some(obj) = config.as_object()
-    {
+    if let Some(obj) = config.as_object() {
         // Check for agent section
         if !obj.contains_key("agent") {
             return Err(CliError::ConfigError("Missing required 'agent' section".into()));
@@ -255,4 +254,92 @@ fn validate_config_file(path: &PathBuf) -> Result<(), CliError> {
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+        use super::validate_config_file;
+        use crate::CliError;
+        use std::fs;
+        use std::path::PathBuf;
+        use tempfile::TempDir;
+
+        fn write_temp_json5(content: &str) -> (TempDir, PathBuf) {
+                let dir = TempDir::new().expect("create temp dir");
+                let path = dir.path().join("agent.json5");
+                fs::write(&path, content).expect("write json5 file");
+                (dir, path)
+        }
+
+        #[test]
+        fn accepts_json5_comments() {
+                let json5 = r#"
+                {
+                    // comment
+                    agent: {
+                        id: "agent-1",
+                        name: "Agent One"
+                    }
+                }
+                "#;
+
+                let (_dir, path) = write_temp_json5(json5);
+                let result = validate_config_file(&path);
+
+                assert!(result.is_ok(), "expected JSON5 with comments to be valid");
+        }
+
+        #[test]
+        fn accepts_json5_trailing_commas() {
+                let json5 = r#"
+                {
+                    agent: {
+                        id: "agent-1",
+                        name: "Agent One",
+                    },
+                }
+                "#;
+
+                let (_dir, path) = write_temp_json5(json5);
+                let result = validate_config_file(&path);
+
+                assert!(result.is_ok(), "expected JSON5 with trailing commas to be valid");
+        }
+
+        #[test]
+        fn accepts_json5_unquoted_keys() {
+                let json5 = r#"
+                {
+                    agent: {
+                        id: "agent-1",
+                        name: "Agent One"
+                    }
+                }
+                "#;
+
+                let (_dir, path) = write_temp_json5(json5);
+                let result = validate_config_file(&path);
+
+                assert!(result.is_ok(), "expected JSON5 with unquoted keys to be valid");
+        }
+
+        #[test]
+        fn rejects_invalid_json5() {
+                let invalid = r#"
+                {
+                    agent: {
+                        id: "agent-1",
+                        name: "Agent One,
+                    }
+                }
+                "#;
+
+                let (_dir, path) = write_temp_json5(invalid);
+                let result = validate_config_file(&path);
+
+                match result {
+                        Err(CliError::ConfigError(_)) => {}
+                        other => panic!("expected ConfigError, got: {:?}", other),
+                }
+        }
 }

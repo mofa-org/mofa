@@ -39,6 +39,7 @@ use serde_json::Value;
 use std::collections::HashMap;
 use std::path::Path;
 use std::sync::Arc;
+use std::time::Duration;
 use tokio::sync::RwLock;
 
 use crate::agent::base::BaseAgent;
@@ -70,6 +71,9 @@ pub struct AgentExecutorConfig {
     /// When the estimated token count exceeds this value and a compressor is
     /// configured, compression is triggered automatically.  Defaults to 4096.
     pub max_context_tokens: usize,
+    /// Per-tool-call timeout. If a single tool execution exceeds this
+    /// duration, it is cancelled and an error is returned. Default: 30s.
+    pub tool_timeout: Duration,
 }
 
 impl Default for AgentExecutorConfig {
@@ -81,6 +85,7 @@ impl Default for AgentExecutorConfig {
             temperature: None,
             max_tokens: None,
             max_context_tokens: 4096,
+            tool_timeout: Duration::from_secs(30),
         }
     }
 }
@@ -426,19 +431,30 @@ impl AgentExecutor {
                             if let Some(governance) = &self.governance {
                                 governance.authorize_tool(&tool_call.name, &tool.metadata())?;
                             }
-                            match tool
-                                .execute_dynamic(
+                            let timeout_dur = self.config.tool_timeout;
+                            match tokio::time::timeout(
+                                timeout_dur,
+                                tool.execute_dynamic(
                                     tool_call.arguments.clone(),
                                     &AgentContext::new("executor"),
-                                )
-                                .await
+                                ),
+                            )
+                            .await
                             {
-                                Ok(out) => {
+                                Ok(Ok(out)) => {
                                     mofa_kernel::agent::components::tool::ToolResult::success(out)
                                 }
-                                Err(e) => {
+                                Ok(Err(e)) => {
                                     mofa_kernel::agent::components::tool::ToolResult::failure(
                                         e.to_string(),
+                                    )
+                                }
+                                Err(_) => {
+                                    mofa_kernel::agent::components::tool::ToolResult::failure(
+                                        format!(
+                                            "Tool '{}' timed out after {:?}",
+                                            tool_call.name, timeout_dur
+                                        ),
                                     )
                                 }
                             }
