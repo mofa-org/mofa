@@ -72,6 +72,7 @@ pub struct Gateway {
     control_plane: Option<Arc<crate::control_plane::ControlPlane>>,
     metrics: crate::observability::SharedMetrics,
     shutdown_tx: Option<tokio::sync::oneshot::Sender<()>>,
+    bound_addr: Option<std::net::SocketAddr>,
 }
 
 impl Gateway {
@@ -127,6 +128,7 @@ impl Gateway {
             control_plane,
             metrics,
             shutdown_tx: None,
+            bound_addr: None,
         })
     }
 
@@ -266,7 +268,12 @@ impl Gateway {
             .await
             .map_err(|e| GatewayError::Network(format!("Failed to bind to {}: {}", self.config.listen_addr, e)))?;
 
-        tracing::info!("Gateway HTTP server listening on {}", self.config.listen_addr);
+        // Get the actual bound address (important when using port 0 for random port)
+        let bound_addr = listener.local_addr()
+            .map_err(|e| GatewayError::Network(format!("Failed to get bound address: {}", e)))?;
+        self.bound_addr = Some(bound_addr);
+
+        tracing::info!("Gateway HTTP server listening on {}", bound_addr);
 
         // Spawn server task
         let server = axum::serve(listener, app)
@@ -295,6 +302,11 @@ impl Gateway {
     /// Get the router (for testing).
     pub fn router(&self) -> &Arc<GatewayRouter> {
         &self.router
+    }
+
+    /// Get the bound address (actual listening address, useful when using port 0).
+    pub fn bound_addr(&self) -> Option<std::net::SocketAddr> {
+        self.bound_addr
     }
 
     /// Get metrics collector.
