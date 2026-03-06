@@ -55,10 +55,8 @@ pub struct StateGraphImpl<S: GraphState> {
     entry_point: Option<NodeId>,
     /// Finish points (nodes that connect to END)
     finish_points: Vec<NodeId>,
-    /// 图配置
     /// Graph configuration
     config: GraphConfig,
-    /// 每节点的容错策略
     /// Per-node fault-tolerance policies
     policies: HashMap<NodeId, NodePolicy>,
 }
@@ -158,11 +156,8 @@ impl<S: GraphState> StateGraphImpl<S> {
         reachable
     }
 
-    /// 为特定节点附加容错策略
     /// Attach a fault-tolerance policy to a specific node.
     ///
-    /// 策略是可选的：没有策略的节点以默认行为执行
-    /// （无重试，无断路器）。
     /// Policies are optional: nodes without a policy execute with default
     /// behavior (no retry, no circuit breaker).
     pub fn with_policy(&mut self, node_id: impl Into<String>, policy: NodePolicy) -> &mut Self {
@@ -238,7 +233,7 @@ impl<S: GraphState + 'static> mofa_kernel::workflow::StateGraph for StateGraphIm
     fn add_conditional_edges(
         &mut self,
         from: impl Into<String>,
-        conditions: HashMap<String, String>,
+        conditions: Vec<(String, String)>,
     ) -> &mut Self {
         let from_id = from.into();
         debug!(
@@ -307,17 +302,16 @@ impl<S: GraphState + 'static> mofa_kernel::workflow::StateGraph for StateGraphIm
                     node_id
                 )));
             }
-            if let Some(ref fallback) = policy.fallback_node
-                && !self.nodes.contains_key(fallback)
-            {
-                return Err(AgentError::ValidationFailed(format!(
-                    "Fallback node '{}' for node '{}' does not exist in graph",
-                    fallback, node_id
-                )));
+            if let Some(ref fallback) = policy.fallback_node {
+                if !self.nodes.contains_key(fallback) {
+                    return Err(AgentError::ValidationFailed(format!(
+                        "Fallback node '{}' for node '{}' does not exist in graph",
+                        fallback, node_id
+                    )));
+                }
             }
         }
 
-        // 创建已编译的图
         // Create compiled graph
         let max_par = self.config.max_parallelism.max(1);
         Ok(CompiledGraphImpl {
@@ -342,27 +336,24 @@ impl<S: GraphState + 'static> mofa_kernel::workflow::StateGraph for StateGraphIm
     }
 }
 
-/// 已编译的可执行图
 /// Compiled graph ready for execution
 pub struct CompiledGraphImpl<S: GraphState> {
-    /// 图 ID / Graph ID
+    /// Graph ID
     id: String,
-    /// 节点函数 / Node functions
+    /// Node functions
     nodes: Arc<HashMap<NodeId, Arc<dyn NodeFunc<S>>>>,
-    /// 边 / Edges
+    /// Edges
     edges: Arc<HashMap<NodeId, EdgeTarget>>,
-    /// 归约器 / Reducers
+    /// Reducers
     reducers: Arc<HashMap<String, Box<dyn Reducer>>>,
-    /// 入口点 / Entry point
+    /// Entry point
     entry_point: NodeId,
-    /// 配置 / Configuration
+    /// Configuration
     config: GraphConfig,
-    /// 每节点的容错策略 / Per-node fault-tolerance policies
+    /// Per-node fault-tolerance policies
     policies: Arc<HashMap<NodeId, NodePolicy>>,
-    /// 每节点的断路器状态（跨调用共享）
     /// Per-node circuit breaker state (shared across invocations)
     circuit_states: CircuitBreakerRegistry,
-    /// 并行分支的并发信号量
     /// Concurrency semaphore for parallel branches
     parallelism_semaphore: Arc<Semaphore>,
     /// Optional telemetry emitter for runtime checkpoint events.
@@ -389,7 +380,6 @@ impl<S: GraphState> CompiledGraphImpl<S> {
         }
     }
 
-    /// 并行执行多个节点，强制执行并发限制
     /// Execute multiple nodes in parallel, enforcing max_parallelism via semaphore.
     ///
     /// NOTE: Parallel nodes run without per-node retry/circuit-breaker protection.
@@ -447,12 +437,86 @@ impl<S: GraphState> CompiledGraphImpl<S> {
             .collect()
     }
 
+    /// Resolve conditional routing.
+    ///
+    /// Route selection priority:
+    /// 1. `command.route` when non-empty and present in `routes`
+    /// 2. Legacy fallback by matching `command.updates[*].key` to route labels
+    /// 3. Error if no match (strict routing)
+    ///
+    /// An empty route string is treated as "no explicit route" and falls back to legacy behavior.
+    fn resolve_conditional_next_nodes(
+        current_node: &str,
+        command: &Command,
+        routes: &[(String, String)],
+    ) -> AgentResult<Vec<String>> {
+        debug!(
+            "Routing from '{}': route={:?}, updates={:?}",
+            current_node,
+            command.route,
+            command
+                .updates
+                .iter()
+                .map(|u| u.key.as_str())
+                .collect::<Vec<_>>()
+        );
+
+        if let Some(route_name) = command.route.as_deref() {
+            if route_name.is_empty() {
+                debug!(
+                    "Empty conditional route from node '{}'; falling back to legacy update-key routing",
+                    current_node
+                );
+            } else if let Some((_, target)) = routes.iter().find(|(route, _)| route == route_name) {
+                return Ok(vec![target.clone()]);
+            } else {
+                warn!(
+                    "No conditional edge found for route '{}' from node '{}'",
+                    route_name, current_node
+                );
+            }
+        }
+
+        for update in &command.updates {
+            if let Some((_, target)) = routes.iter().find(|(route, _)| route == &update.key) {
+                debug!(
+                    "Legacy conditional routing via update key '{}' from node '{}'",
+                    update.key, current_node
+                );
+                if command
+                    .route
+                    .as_deref()
+                    .map(|route| route.is_empty())
+                    .unwrap_or(true)
+                {
+                    debug!(
+                        "Legacy routing used for node '{}'. Consider using Command::route() for explicit routing.",
+                        current_node
+                    );
+                }
+                return Ok(vec![target.clone()]);
+            }
+        }
+
+        // No route matched — report error instead of silent fallback
+        let update_keys: Vec<&str> = command.updates.iter().map(|u| u.key.as_str()).collect();
+        let route_keys: Vec<&String> = routes.iter().map(|(r, _)| r).collect();
+        warn!(
+            node_id = current_node,
+            ?update_keys,
+            ?route_keys,
+            "Conditional routing: no route matched for node"
+        );
+        Err(AgentError::Internal(format!(
+            "No conditional route matched for node '{}': update keys {:?}, available routes {:?}",
+            current_node, update_keys, route_keys
+        )))
+    }
+
     /// Get the next node(s) based on the current node and command
     fn get_next_nodes(&self, current_node: &str, command: &Command) -> AgentResult<Vec<String>> {
         match &command.control {
-            ControlFlow::Goto(target) => {
-                Ok(vec![target.clone()])
-            }
+            ControlFlow::Goto(target) => Ok(vec![target.clone()]),
             ControlFlow::Return => {
                 Ok(vec![]) // End execution
             }
@@ -466,31 +530,7 @@ impl<S: GraphState> CompiledGraphImpl<S> {
                     Some(EdgeTarget::Single(target)) => Ok(vec![target.clone()]),
                     Some(EdgeTarget::Parallel(targets)) => Ok(targets.clone()),
                     Some(EdgeTarget::Conditional(routes)) => {
-                        // Priority 1: explicit route decision
-                        if let Some(decision) = command.route_value() {
-                            if let Some(target) = routes.get(decision) {
-                                return Ok(vec![target.clone()]);
-                            }
-                        }
-                        // Priority 2: legacy key-name matching (backward compatible)
-                        for update in &command.updates {
-                            if let Some(target) = routes.get(&update.key) {
-                                return Ok(vec![target.clone()]);
-                            }
-                        }
-                        // No route matched — report error instead of silent fallback
-                        let update_keys: Vec<&str> = command.updates.iter().map(|u| u.key.as_str()).collect();
-                        let route_keys: Vec<&String> = routes.keys().collect();
-                        warn!(
-                            node_id = current_node,
-                            ?update_keys,
-                            ?route_keys,
-                            "Conditional routing: no route matched for node"
-                        );
-                        Err(AgentError::Internal(format!(
-                            "No conditional route matched for node '{}': update keys {:?}, available routes {:?}",
-                            current_node, update_keys, route_keys
-                        )))
+                        Self::resolve_conditional_next_nodes(current_node, command, routes)
                     }
                     None => Ok(vec![]),
                     _ => Ok(vec![]),
@@ -687,31 +727,7 @@ impl<S: GraphState + 'static> CompiledGraph<S, serde_json::Value> for CompiledGr
                             Some(EdgeTarget::Single(target)) => Ok(vec![target.clone()]),
                             Some(EdgeTarget::Parallel(targets)) => Ok(targets.clone()),
                             Some(EdgeTarget::Conditional(routes)) => {
-                                // Priority 1: explicit route decision
-                                if let Some(decision) = command.route_value() {
-                                    if let Some(target) = routes.get(decision) {
-                                        return Ok(vec![target.clone()]);
-                                    }
-                                }
-                                // Priority 2: legacy key-name matching (backward compatible)
-                                for update in &command.updates {
-                                    if let Some(target) = routes.get(&update.key) {
-                                        return Ok(vec![target.clone()]);
-                                    }
-                                }
-                                // No route matched — report error instead of silent fallback
-                                let update_keys: Vec<&str> = command.updates.iter().map(|u| u.key.as_str()).collect();
-                                let route_keys: Vec<&String> = routes.keys().collect();
-                                warn!(
-                                    node_id = current_node,
-                                    ?update_keys,
-                                    ?route_keys,
-                                    "Conditional routing: no route matched for node"
-                                );
-                                Err(AgentError::Internal(format!(
-                                    "No conditional route matched for node '{}': update keys {:?}, available routes {:?}",
-                                    current_node, update_keys, route_keys
-                                )))
+                                Self::resolve_conditional_next_nodes(current_node, command, routes)
                             }
                             None => Ok(vec![]),
                             _ => Ok(vec![]),
@@ -763,7 +779,6 @@ impl<S: GraphState + 'static> CompiledGraph<S, serde_json::Value> for CompiledGr
                         return;
                     }
 
-                    // 使用重试/断路器执行节点
                     // Execute node with retry/circuit-breaker
                     let policy = policies.get(&node_id).unwrap_or(&default_policy);
                     let command = match execute_with_policy(
@@ -880,10 +895,7 @@ impl<S: GraphState + 'static> CompiledGraph<S, serde_json::Value> for CompiledGr
                         Ok(results) => results,
                         Err(e) => {
                             let _ = tx
-                                .send(Ok(StreamEvent::Error {
-                                    node_id: None,
-                                    error: e.to_string(),
-                                }))
+                                .send(Err(e))
                                 .await;
                             return;
                         }
@@ -1020,7 +1032,7 @@ impl<S: GraphState + 'static> CompiledGraph<S, serde_json::Value> for CompiledGr
 mod tests {
     use super::*;
     use futures::StreamExt;
-    use mofa_kernel::workflow::telemetry::TelemetryEmitter;
+    use mofa_kernel::workflow::telemetry::{DebugEvent, TelemetryEmitter};
     use mofa_kernel::workflow::GraphConfig;
     use mofa_kernel::workflow::{JsonState, StateGraph};
     use serde_json::json;
@@ -1036,12 +1048,12 @@ mod tests {
     }
 
     #[async_trait]
-    impl NodeFunc<JsonState> for TestNode {
+    impl NodeFunc<JsonState, Value> for TestNode {
         async fn call(
             &self,
             _state: &mut JsonState,
-            _ctx: &RuntimeContext,
-        ) -> AgentResult<Command> {
+            _ctx: &RuntimeContext<Value>,
+        ) -> AgentResult<Command<Value>> {
             let mut cmd = Command::new();
             for update in &self.updates {
                 cmd = cmd.update(update.key.clone(), update.value.clone());
@@ -1061,12 +1073,12 @@ mod tests {
     }
 
     #[async_trait]
-    impl NodeFunc<JsonState> for StaticCommandNode {
+    impl NodeFunc<JsonState, Value> for StaticCommandNode {
         async fn call(
             &self,
             _state: &mut JsonState,
-            _ctx: &RuntimeContext,
-        ) -> AgentResult<Command> {
+            _ctx: &RuntimeContext<Value>,
+        ) -> AgentResult<Command<Value>> {
             Ok(self.command.clone())
         }
 
@@ -1082,12 +1094,12 @@ mod tests {
     }
 
     #[async_trait]
-    impl NodeFunc<JsonState> for ConcurrencyProbeNode {
+    impl NodeFunc<JsonState, Value> for ConcurrencyProbeNode {
         async fn call(
             &self,
             _state: &mut JsonState,
-            _ctx: &RuntimeContext,
-        ) -> AgentResult<Command> {
+            _ctx: &RuntimeContext<Value>,
+        ) -> AgentResult<Command<Value>> {
             let concurrent = self.active.fetch_add(1, Ordering::SeqCst) + 1;
             self.max_active.fetch_max(concurrent, Ordering::SeqCst);
             sleep(Duration::from_millis(100)).await;
@@ -1104,8 +1116,12 @@ mod tests {
     struct FlagReaderNode;
 
     #[async_trait]
-    impl NodeFunc<JsonState> for FlagReaderNode {
-        async fn call(&self, state: &mut JsonState, _ctx: &RuntimeContext) -> AgentResult<Command> {
+    impl NodeFunc<JsonState, Value> for FlagReaderNode {
+        async fn call(
+            &self,
+            state: &mut JsonState,
+            _ctx: &RuntimeContext<Value>,
+        ) -> AgentResult<Command<Value>> {
             let saw_flag = state.get_value::<bool>("flag").unwrap_or(false);
             Ok(Command::new()
                 .update("reader_saw_flag", json!(saw_flag))
@@ -1120,8 +1136,12 @@ mod tests {
     struct LoopNode;
 
     #[async_trait]
-    impl NodeFunc<JsonState> for LoopNode {
-        async fn call(&self, state: &mut JsonState, _ctx: &RuntimeContext) -> AgentResult<Command> {
+    impl NodeFunc<JsonState, Value> for LoopNode {
+        async fn call(
+            &self,
+            state: &mut JsonState,
+            _ctx: &RuntimeContext<Value>,
+        ) -> AgentResult<Command<Value>> {
             let count = state
                 .get_value::<serde_json::Value>("count")
                 .and_then(|v| v.as_u64())
@@ -1161,6 +1181,32 @@ mod tests {
             false
         }
     }
+
+    struct RouteNode {
+        name: String,
+        updates: Vec<StateUpdate>,
+        route: String,
+    }
+
+    #[async_trait]
+    impl NodeFunc<JsonState, Value> for RouteNode {
+        async fn call(
+            &self,
+            _state: &mut JsonState,
+            _ctx: &RuntimeContext<Value>,
+        ) -> AgentResult<Command<Value>> {
+            let mut cmd = Command::new();
+            for update in &self.updates {
+                cmd = cmd.update(update.key.clone(), update.value.clone());
+            }
+            Ok(cmd.route(self.route.clone()).continue_())
+        }
+
+        fn name(&self) -> &str {
+            &self.name
+        }
+    }
+
 
     #[tokio::test]
     async fn test_state_graph_build_and_compile() {
@@ -1337,15 +1383,165 @@ mod tests {
         );
     }
 
-    // ── Explicit route selection tests (issue #554) ──
+    // ── Conditional Routing Tests ──
+
+    #[tokio::test]
+    async fn test_conditional_routing_uses_route_value_not_update_key() {
+        let mut graph = StateGraphImpl::<JsonState>::new("route_graph");
+
+        graph
+            .add_node(
+                "decide",
+                Box::new(RouteNode {
+                    name: "decide".to_string(),
+                    // This update key collides with a route label and should NOT control routing.
+                    updates: vec![StateUpdate::new("approve", json!(true))],
+                    route: "reject".to_string(),
+                }),
+            )
+            .add_node(
+                "approved",
+                Box::new(TestNode {
+                    name: "approved".to_string(),
+                    updates: vec![StateUpdate::new("decision", json!("approved"))],
+                }),
+            )
+            .add_node(
+                "rejected",
+                Box::new(TestNode {
+                    name: "rejected".to_string(),
+                    updates: vec![StateUpdate::new("decision", json!("rejected"))],
+                }),
+            )
+            .add_edge(START, "decide")
+            .add_conditional_edges(
+                "decide",
+                vec![
+                    ("approve".to_string(), "approved".to_string()),
+                    ("reject".to_string(), "rejected".to_string()),
+                ],
+            )
+            .add_edge("approved", END)
+            .add_edge("rejected", END);
+
+        let compiled = graph.compile().unwrap();
+        let final_state = compiled.invoke(JsonState::new(), None).await.unwrap();
+
+        assert_eq!(final_state.get_value("decision"), Some(json!("rejected")));
+    }
+
+    #[tokio::test]
+    async fn test_conditional_routing_legacy_update_key_fallback() {
+        let mut graph = StateGraphImpl::<JsonState>::new("legacy_route_graph");
+
+        graph
+            .add_node(
+                "decide",
+                Box::new(TestNode {
+                    name: "decide".to_string(),
+                    // No explicit command.route; legacy update key fallback should select this route.
+                    updates: vec![StateUpdate::new("approve", json!(true))],
+                }),
+            )
+            .add_node(
+                "approved",
+                Box::new(TestNode {
+                    name: "approved".to_string(),
+                    updates: vec![StateUpdate::new("decision", json!("approved"))],
+                }),
+            )
+            .add_node(
+                "rejected",
+                Box::new(TestNode {
+                    name: "rejected".to_string(),
+                    updates: vec![StateUpdate::new("decision", json!("rejected"))],
+                }),
+            )
+            .add_edge(START, "decide")
+            .add_conditional_edges(
+                "decide",
+                vec![
+                    ("approve".to_string(), "approved".to_string()),
+                    ("reject".to_string(), "rejected".to_string()),
+                ],
+            )
+            .add_edge("approved", END)
+            .add_edge("rejected", END);
+
+        let compiled = graph.compile().unwrap();
+        let final_state = compiled.invoke(JsonState::new(), None).await.unwrap();
+
+        assert_eq!(final_state.get_value("decision"), Some(json!("approved")));
+
+        let mut stream = compiled.stream(JsonState::new(), None);
+        let mut stream_final_state: Option<JsonState> = None;
+        while let Some(event) = stream.next().await {
+            if let Ok(StreamEvent::End { final_state }) = event {
+                stream_final_state = Some(final_state);
+            }
+        }
+
+        let stream_final_state: JsonState =
+            stream_final_state.expect("stream should emit a final end event with state");
+        assert_eq!(
+            stream_final_state.get_value("decision"),
+            Some(json!("approved"))
+        );
+    }
+
+    #[tokio::test]
+    async fn test_conditional_routing_empty_route_falls_back_to_legacy_update_key() {
+        let mut graph = StateGraphImpl::<JsonState>::new("empty_route_graph");
+
+        graph
+            .add_node(
+                "decide",
+                Box::new(RouteNode {
+                    name: "decide".to_string(),
+                    // Empty route should not match any conditional edge; fallback should still work.
+                    updates: vec![StateUpdate::new("approve", json!(true))],
+                    route: "".to_string(),
+                }),
+            )
+            .add_node(
+                "approved",
+                Box::new(TestNode {
+                    name: "approved".to_string(),
+                    updates: vec![StateUpdate::new("decision", json!("approved"))],
+                }),
+            )
+            .add_node(
+                "rejected",
+                Box::new(TestNode {
+                    name: "rejected".to_string(),
+                    updates: vec![StateUpdate::new("decision", json!("rejected"))],
+                }),
+            )
+            .add_edge(START, "decide")
+            .add_conditional_edges(
+                "decide",
+                vec![
+                    ("approve".to_string(), "approved".to_string()),
+                    ("reject".to_string(), "rejected".to_string()),
+                ],
+            )
+            .add_edge("approved", END)
+            .add_edge("rejected", END);
+
+        let compiled = graph.compile().unwrap();
+        let final_state = compiled.invoke(JsonState::new(), None).await.unwrap();
+
+        assert_eq!(final_state.get_value("decision"), Some(json!("approved")));
+    }
 
     #[tokio::test]
     async fn test_conditional_routing_prefers_route_value_in_invoke() {
         let mut graph = StateGraphImpl::<JsonState>::new("route_invoke");
 
-        let mut routes = HashMap::new();
-        routes.insert("approve".to_string(), "approved".to_string());
-        routes.insert("reject".to_string(), "rejected".to_string());
+        let routes = vec![
+            ("approve".to_string(), "approved".to_string()),
+            ("reject".to_string(), "rejected".to_string()),
+        ];
 
         graph
             .add_node(
@@ -1392,9 +1588,10 @@ mod tests {
     async fn test_conditional_routing_legacy_fallback_when_route_absent() {
         let mut graph = StateGraphImpl::<JsonState>::new("route_fallback");
 
-        let mut routes = HashMap::new();
-        routes.insert("approve".to_string(), "approved".to_string());
-        routes.insert("reject".to_string(), "rejected".to_string());
+        let routes = vec![
+            ("approve".to_string(), "approved".to_string()),
+            ("reject".to_string(), "rejected".to_string()),
+        ];
 
         graph
             .add_node(
@@ -1437,9 +1634,10 @@ mod tests {
     async fn test_conditional_routing_stream_respects_route_value() {
         let mut graph = StateGraphImpl::<JsonState>::new("route_stream");
 
-        let mut routes = HashMap::new();
-        routes.insert("approve".to_string(), "approved".to_string());
-        routes.insert("reject".to_string(), "rejected".to_string());
+        let routes = vec![
+            ("approve".to_string(), "approved".to_string()),
+            ("reject".to_string(), "rejected".to_string()),
+        ];
 
         graph
             .add_node(
@@ -1489,9 +1687,10 @@ mod tests {
     async fn test_conditional_routing_no_match_returns_error_invoke() {
         let mut graph = StateGraphImpl::<JsonState>::new("route_no_match");
 
-        let mut routes = HashMap::new();
-        routes.insert("approve".to_string(), "approved".to_string());
-        routes.insert("reject".to_string(), "rejected".to_string());
+        let routes = vec![
+            ("approve".to_string(), "approved".to_string()),
+            ("reject".to_string(), "rejected".to_string()),
+        ];
 
         graph
             .add_node(
@@ -1524,7 +1723,10 @@ mod tests {
         let compiled = graph.compile().unwrap();
         let result = compiled.invoke(JsonState::new(), None).await;
 
-        assert!(result.is_err(), "invoke should return Err when no conditional route matches");
+        assert!(
+            result.is_err(),
+            "invoke should return Err when no conditional route matches"
+        );
         let err_msg = result.unwrap_err().to_string();
         assert!(
             err_msg.contains("No conditional route matched"),
@@ -1537,9 +1739,10 @@ mod tests {
     async fn test_conditional_routing_no_match_returns_error_stream() {
         let mut graph = StateGraphImpl::<JsonState>::new("route_no_match_stream");
 
-        let mut routes = HashMap::new();
-        routes.insert("approve".to_string(), "approved".to_string());
-        routes.insert("reject".to_string(), "rejected".to_string());
+        let routes = vec![
+            ("approve".to_string(), "approved".to_string()),
+            ("reject".to_string(), "rejected".to_string()),
+        ];
 
         graph
             .add_node(
@@ -1583,6 +1786,9 @@ mod tests {
             }
         }
 
-        assert!(got_error, "stream should emit an error event when no conditional route matches");
+        assert!(
+            got_error,
+            "stream should emit an error event when no conditional route matches"
+        );
     }
 }
