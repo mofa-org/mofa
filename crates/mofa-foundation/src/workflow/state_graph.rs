@@ -450,9 +450,7 @@ impl<S: GraphState> CompiledGraphImpl<S> {
     /// Get the next node(s) based on the current node and command
     fn get_next_nodes(&self, current_node: &str, command: &Command) -> AgentResult<Vec<String>> {
         match &command.control {
-            ControlFlow::Goto(target) => {
-                Ok(vec![target.clone()])
-            }
+            ControlFlow::Goto(target) => Ok(vec![target.clone()]),
             ControlFlow::Return => {
                 Ok(vec![]) // End execution
             }
@@ -467,10 +465,10 @@ impl<S: GraphState> CompiledGraphImpl<S> {
                     Some(EdgeTarget::Parallel(targets)) => Ok(targets.clone()),
                     Some(EdgeTarget::Conditional(routes)) => {
                         // Priority 1: explicit route decision
-                        if let Some(decision) = command.route_value() {
-                            if let Some(target) = routes.get(decision) {
-                                return Ok(vec![target.clone()]);
-                            }
+                        if let Some(decision) = command.route_value()
+                            && let Some(target) = routes.get(decision)
+                        {
+                            return Ok(vec![target.clone()]);
                         }
                         // Priority 2: legacy key-name matching (backward compatible)
                         for update in &command.updates {
@@ -479,7 +477,8 @@ impl<S: GraphState> CompiledGraphImpl<S> {
                             }
                         }
                         // No route matched — report error instead of silent fallback
-                        let update_keys: Vec<&str> = command.updates.iter().map(|u| u.key.as_str()).collect();
+                        let update_keys: Vec<&str> =
+                            command.updates.iter().map(|u| u.key.as_str()).collect();
                         let route_keys: Vec<&String> = routes.keys().collect();
                         warn!(
                             node_id = current_node,
@@ -671,6 +670,9 @@ impl<S: GraphState + 'static> CompiledGraph<S, serde_json::Value> for CompiledGr
     ) -> mofa_kernel::workflow::graph::GraphStream<'_, S, serde_json::Value> {
         let ctx =
             config.unwrap_or_else(|| RuntimeContext::with_config(&self.id, self.config.clone()));
+        let timeout_ms = ctx.config.timeout_ms;
+        let execution_id = ctx.execution_id.clone();
+        let graph_id = self.id.clone();
 
         let nodes = self.nodes.clone();
         let reducers = self.reducers.clone();
@@ -686,9 +688,11 @@ impl<S: GraphState + 'static> CompiledGraph<S, serde_json::Value> for CompiledGr
         // Spawn execution task
         let stream_span = tracing::info_span!("state_graph.stream");
         tokio::spawn(async move {
-            let mut state = input;
-            let mut current_nodes = vec![entry_point];
-            let default_policy = NodePolicy::default();
+            let timeout_tx = tx.clone();
+            let stream_task = async move {
+                let mut state = input;
+                let mut current_nodes = vec![entry_point];
+                let default_policy = NodePolicy::default();
 
             // Helper function to get next nodes based on command and edges
             let get_next_nodes = |current_node: &str, command: &Command| -> AgentResult<Vec<String>> {
@@ -706,10 +710,10 @@ impl<S: GraphState + 'static> CompiledGraph<S, serde_json::Value> for CompiledGr
                             Some(EdgeTarget::Parallel(targets)) => Ok(targets.clone()),
                             Some(EdgeTarget::Conditional(routes)) => {
                                 // Priority 1: explicit route decision
-                                if let Some(decision) = command.route_value() {
-                                    if let Some(target) = routes.get(decision) {
-                                        return Ok(vec![target.clone()]);
-                                    }
+                                if let Some(decision) = command.route_value()
+                                    && let Some(target) = routes.get(decision)
+                                {
+                                    return Ok(vec![target.clone()]);
                                 }
                                 // Priority 2: legacy key-name matching (backward compatible)
                                 for update in &command.updates {
@@ -970,8 +974,29 @@ impl<S: GraphState + 'static> CompiledGraph<S, serde_json::Value> for CompiledGr
                 current_nodes = node_set.into_iter().collect();
             }
 
-            // Send final event
-            let _ = tx.send(Ok(StreamEvent::End { final_state: state })).await;
+                // Send final event
+                let _ = tx.send(Ok(StreamEvent::End { final_state: state })).await;
+            };
+
+            if timeout_ms == 0 {
+                stream_task.await;
+                return;
+            }
+
+            match tokio::time::timeout(std::time::Duration::from_millis(timeout_ms), stream_task)
+                .await
+            {
+                Ok(()) => {}
+                Err(_) => {
+                    error!(
+                        graph_id = %graph_id,
+                        execution_id = %execution_id,
+                        timeout_ms,
+                        "Graph stream timed out"
+                    );
+                    let _ = timeout_tx.send(Err(AgentError::timeout(timeout_ms))).await;
+                }
+            }
         }.instrument(stream_span));
 
         // Convert receiver to stream
@@ -1299,6 +1324,42 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_stream_enforces_graph_timeout() {
+        let mut graph = StateGraphImpl::<JsonState>::new("stream_timeout_graph");
+
+        graph
+            .add_node(
+                "slow",
+                Box::new(SlowNode {
+                    name: "slow".to_string(),
+                    delay_ms: 200,
+                }),
+            )
+            .add_edge(START, "slow")
+            .add_edge("slow", END)
+            .with_config(GraphConfig::default().with_timeout(50));
+
+        let compiled = graph.compile().unwrap();
+        let mut stream = compiled.stream(JsonState::new(), None);
+        let mut saw_timeout = false;
+        let mut saw_end = false;
+
+        while let Some(event) = stream.next().await {
+            match event {
+                Err(AgentError::Timeout { duration_ms }) => {
+                    assert_eq!(duration_ms, 50);
+                    saw_timeout = true;
+                }
+                Ok(StreamEvent::End { .. }) => saw_end = true,
+                _ => {}
+            }
+        }
+
+        assert!(saw_timeout, "stream should emit a timeout error");
+        assert!(!saw_end, "timed out stream should not emit an end event");
+    }
+
+    #[tokio::test]
     async fn test_parallel_nodes_execute_concurrently_in_invoke() {
         let active = Arc::new(AtomicUsize::new(0));
         let max_active = Arc::new(AtomicUsize::new(0));
@@ -1588,7 +1649,10 @@ mod tests {
         let compiled = graph.compile().unwrap();
         let result = compiled.invoke(JsonState::new(), None).await;
 
-        assert!(result.is_err(), "invoke should return Err when no conditional route matches");
+        assert!(
+            result.is_err(),
+            "invoke should return Err when no conditional route matches"
+        );
         let err_msg = result.unwrap_err().to_string();
         assert!(
             err_msg.contains("No conditional route matched"),
@@ -1647,6 +1711,9 @@ mod tests {
             }
         }
 
-        assert!(got_error, "stream should emit an error event when no conditional route matches");
+        assert!(
+            got_error,
+            "stream should emit an error event when no conditional route matches"
+        );
     }
 }
