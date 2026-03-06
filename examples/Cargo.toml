@@ -47,6 +47,7 @@ members = [
     "admission_gate_demo",
     "integrations_demo",
     "cron_scheduler",
+    "native_dataflow",
     "memory_scheduler_demo",
 ]
 
