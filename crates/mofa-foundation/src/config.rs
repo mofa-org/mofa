@@ -212,7 +212,8 @@ impl AgentYamlConfig {
     /// Load config from file (auto-detect format)
     pub fn from_file(path: impl AsRef<Path>) -> GlobalResult<Self> {
         let path_str = path.as_ref().to_string_lossy().to_string();
-        load_config(&path_str).map_err(|e| GlobalError::Other(format!("Failed to load config: {}", e)))
+        load_config(&path_str)
+            .map_err(|e| GlobalError::Other(format!("Failed to load config: {}", e)))
     }
 
     /// 从字符串解析配置 (指定格式)
@@ -227,10 +228,16 @@ impl AgentYamlConfig {
             "ini" => FileFormat::Ini,
             "ron" => FileFormat::Ron,
             "json5" => FileFormat::Json5,
-            _ => return Err(GlobalError::Other(format!("Unsupported config format: {}", format))),
+            _ => {
+                return Err(GlobalError::Other(format!(
+                    "Unsupported config format: {}",
+                    format
+                )));
+            }
         };
 
-        from_str(content, file_format).map_err(|e| GlobalError::Other(format!("Failed to parse config: {}", e)))
+        from_str(content, file_format)
+            .map_err(|e| GlobalError::Other(format!("Failed to parse config: {}", e)))
     }
 
     /// 从字符串解析配置 (自动检测为 YAML)

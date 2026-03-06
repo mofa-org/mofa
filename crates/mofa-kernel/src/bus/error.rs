@@ -1,6 +1,25 @@
-//! Typed errors for the agent communication bus.
+//! Typed errors and result aliases for the agent communication bus.
 
+use error_stack::Report;
 use thiserror::Error;
+
+/// Error-stack–backed result alias for bus operations.
+///
+/// Equivalent to `Result<T, error_stack::Report<BusError>>`.
+pub type BusResult<T> = ::std::result::Result<T, Report<BusError>>;
+
+/// Extension trait to convert `Result<T, BusError>` into [`BusResult<T>`].
+pub trait IntoBusReport<T> {
+    /// Wrap the error in an `error_stack::Report`.
+    fn into_report(self) -> BusResult<T>;
+}
+
+impl<T> IntoBusReport<T> for ::std::result::Result<T, BusError> {
+    #[inline]
+    fn into_report(self) -> BusResult<T> {
+        self.map_err(Report::new)
+    }
+}
 
 /// Errors that can occur on the agent communication bus.
 #[derive(Debug, Error)]
