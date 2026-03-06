@@ -134,6 +134,12 @@ pub enum Commands {
         action: ToolCommands,
     },
 
+    /// Gateway management (OpenAI-compatible API)
+    Gateway {
+        #[command(subcommand)]
+        action: GatewayCommands,
+    },
+
     /// RAG indexing and retrieval
     Rag {
         #[command(subcommand)]
@@ -527,6 +533,29 @@ pub enum ToolCommands {
     Info {
         /// Tool name
         name: String,
+    },
+}
+
+/// Gateway management subcommands
+#[derive(Subcommand)]
+pub enum GatewayCommands {
+    /// Serve OpenAI-compatible gateway endpoint
+    Serve {
+        /// Gateway host address
+        #[arg(long, default_value = "0.0.0.0")]
+        host: String,
+
+        /// Gateway port
+        #[arg(long, default_value_t = 8000)]
+        port: u16,
+
+        /// Backend spec (repeatable): `url`, `url@weight`, or `name=url@weight`
+        #[arg(long = "backend", required = true)]
+        backends: Vec<String>,
+
+        /// Global requests-per-minute limit
+        #[arg(long, default_value_t = 120)]
+        rpm: u32,
     },
 }
 

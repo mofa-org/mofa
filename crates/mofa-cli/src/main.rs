@@ -328,6 +328,17 @@ async fn run_command(cli: Cli) -> CliResult<()> {
             }
         }
 
+        Some(Commands::Gateway { action }) => match action {
+            cli::GatewayCommands::Serve {
+                host,
+                port,
+                backends,
+                rpm,
+            } => {
+                commands::gateway::run_serve(&host, port, &backends, rpm).await?;
+            }
+        },
+
         Some(Commands::Rag { action }) => match action {
             cli::RagCommands::Index {
                 input,
@@ -398,7 +409,7 @@ async fn run_command(cli: Cli) -> CliResult<()> {
 fn normalize_legacy_output_flags(args: &mut [String]) {
     const TOP_LEVEL_COMMANDS: &[&str] = &[
         "new", "init", "build", "run", "dataflow", "generate", "info", "db", "agent", "config",
-        "plugin", "session", "tool", "rag",
+        "plugin", "session", "tool", "gateway", "rag",
     ];
 
     let top_command_index = args
