@@ -248,10 +248,28 @@ impl OtlpMetricsExporter {
 
 struct OtlpRecorder {
     // Keep provider alive for background periodic export.
-    _meter_provider: opentelemetry_sdk::metrics::SdkMeterProvider,
+    // Wrapped in Option so Drop can take ownership and shut down in a background
+    // thread, avoiding blocking the async runtime (SdkMeterProvider::shutdown is
+    // synchronous and may wait for an in-flight HTTP export to complete).
+    meter_provider: StdMutex<Option<opentelemetry_sdk::metrics::SdkMeterProvider>>,
     instruments: OtlpInstruments,
     cardinality: CardinalityLimits,
     last_values: StdMutex<LastSeriesState>,
+}
+
+impl Drop for OtlpRecorder {
+    fn drop(&mut self) {
+        if let Ok(mut guard) = self.meter_provider.lock() {
+            if let Some(provider) = guard.take() {
+                // Shutdown in a background OS thread so we never block a tokio
+                // worker thread (e.g. when an async task holding this recorder
+                // is aborted).
+                std::thread::spawn(move || {
+                    let _ = provider.shutdown();
+                });
+            }
+        }
+    }
 }
 
 impl OtlpRecorder {
@@ -281,7 +299,7 @@ impl OtlpRecorder {
         let instruments = OtlpInstruments::new(&meter);
 
         Ok(Self {
-            _meter_provider: meter_provider,
+            meter_provider: StdMutex::new(Some(meter_provider)),
             instruments,
             cardinality: config.cardinality.clone(),
             last_values: StdMutex::new(LastSeriesState::default()),
