@@ -65,6 +65,15 @@ pub mod security;
 // Error recovery strategies (Backoff, RetryPolicy, CircuitBreaker, retry, fallback_chain)
 pub mod recovery;
 
+// Gateway implementations (rate limiter, routing strategies)
+pub mod gateway;
+pub use gateway::{
+    AgentScorer, CapabilityMatchRouter, ConfigDiff, ConfigError, GatewayConfig, GatewayConfigLoader,
+    KeyStrategy, RateLimitDecision, RateLimiter,
+    RateLimitProfile, RateLimiterConfig, RouteConfig as GatewayRouteConfig, RouterRegistry,
+    TokenBucketRateLimiter, WeightedRoundRobinRouter, diff_configs,
+};
+
 // Re-export config types
 pub use config::{AgentInfo, AgentYamlConfig, LLMYamlConfig, RuntimeConfig, ToolConfig};
 
