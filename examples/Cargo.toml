@@ -48,6 +48,7 @@ members = [
     "integrations_demo",
     "native_dataflow",
     "memory_scheduler_demo",
+    "inference_orchestration",
 ]
 
 [workspace.package]
