@@ -179,11 +179,19 @@ impl OtlpMetricsExporter {
             return Err(OtlpMetricsExporterError::AlreadyStarted);
         };
 
-        let recorder = match OtlpRecorder::new(&self.config) {
-            Ok(recorder) => Arc::new(recorder),
-            Err(err) => {
+        // Run OTLP initialization in spawn_blocking to prevent blocking the async runtime
+        // if OpenTelemetry SDK initialization performs synchronous network operations
+        let config = self.config.clone();
+        let recorder = match tokio::task::spawn_blocking(move || OtlpRecorder::new(&config)).await {
+            Ok(Ok(recorder)) => Arc::new(recorder),
+            Ok(Err(err)) => {
                 *self.last_error.write().await = Some(err.to_string());
                 return Err(err);
+            }
+            Err(err) => {
+                let error_msg = format!("Failed to initialize OTLP recorder: {}", err);
+                *self.last_error.write().await = Some(error_msg.clone());
+                return Err(OtlpMetricsExporterError::Internal(error_msg));
             }
         };
 
