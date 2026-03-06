@@ -30,6 +30,7 @@ members = [
     "llm_tts_streaming",
     "agent_from_database_streaming",
     "workflow_dsl",
+    "classic_agentic_patterns",
     "reflection_agent",
     "tool_routing",
     "runtime_message_bus_backpressure",

@@ -74,7 +74,10 @@ use mofa_sdk::patterns::ChainOfThought;
 let agent = ChainOfThought::builder()
     .with_llm(client)
     .with_steps(5)
-    .build();
+    .build()?;
+
+let result = agent.run("解释退避重试为什么更稳定").await?;
+println!("{}", result.to_markdown_trace());
 ```
 
 ## Router 模式
@@ -86,12 +89,15 @@ use mofa_sdk::patterns::Router;
 
 let router = Router::builder()
     .with_classifier(classifier_agent)
-    .with_route("technical", tech_agent)
-    .with_route("billing", billing_agent)
-    .with_default(general_agent)
-    .build();
+    .with_route_llm("technical", tech_agent)
+    .describe_route("technical", "工程策略、实现设计与权衡")
+    .with_route_llm("billing", billing_agent)
+    .describe_route("billing", "发票、付款与账户调整")
+    .with_default_llm(general_agent)
+    .build()?;
 
-let output = router.execute(input, &ctx).await?;
+let output = router.run("为什么我被重复扣费了？").await?;
+println!("{}", output.to_markdown_trace());
 ```
 
 ## 自定义模式

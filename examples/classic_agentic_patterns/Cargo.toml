@@ -1,0 +1,14 @@
+[package]
+name = "classic_agentic_patterns"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+mofa-sdk = { path = "../../crates/mofa-sdk" }
+
+tokio.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+
+[lints]
+workspace = true

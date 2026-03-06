@@ -57,6 +57,36 @@ let config = ReflectionConfig::default()
     .with_verbose(true);              // Log each step
 ```
 
+## Classic Pattern Showcase
+
+Combined demonstration of the newly implemented Chain-of-Thought and Router patterns.
+
+**Location:** `examples/classic_agentic_patterns/`
+
+```rust
+use mofa_sdk::patterns::{ChainOfThought, Router};
+
+// Build a deliberate reasoner
+let chain = ChainOfThought::builder()
+    .with_llm(reasoning_agent)
+    .with_steps(3)
+    .build()?;
+
+// Build an expert router
+let router = Router::builder()
+    .with_classifier(classifier_agent)
+    .with_route_llm("technical", technical_agent)
+    .with_route_llm("billing", billing_agent)
+    .with_default_llm(general_agent)
+    .build()?;
+```
+
+### What It Demonstrates
+
+1. **Chain-of-Thought**: Produces an inspectable multi-step reasoning trace before synthesis.
+2. **Router**: Classifies a task and dispatches it to the best expert with a structured route decision.
+3. **Reviewer-friendly output**: Both patterns render markdown traces that can be pasted directly into docs or PRs.
+
 ## Human-in-the-Loop Secretary
 
 Secretary agent with human decision points.
@@ -242,6 +272,9 @@ let agent = LLMAgentBuilder::from_config(&config).build_async().await?;
 export OPENAI_API_KEY=sk-xxx
 cargo run -p reflection_agent
 
+# Classic pattern showcase
+cargo run -p classic_agentic_patterns
+
 # HITL Secretary
 cargo run -p hitl_secretary
 
@@ -259,6 +292,7 @@ cargo run -p config
 
 | Example | Description |
 |---------|-------------|
+| `classic_agentic_patterns` | Chain-of-thought + router showcase |
 | `reflection_agent` | Self-improving agent pattern |
 | `hitl_secretary` | Human-in-the-loop secretary |
 | `agent_with_plugins_and_rhai` | Combined plugins + Rhai |

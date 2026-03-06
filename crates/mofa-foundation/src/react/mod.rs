@@ -101,20 +101,27 @@
 //! ```
 
 mod actor;
+pub mod chain_of_thought;
 mod core;
 pub mod patterns;
 pub mod reflection;
+pub mod router;
 pub mod tools;
 
 pub use actor::*;
+pub use chain_of_thought::*;
 pub use core::*;
 pub use patterns::*;
 pub use reflection::*;
+pub use router::*;
 pub use tools::*;
 
 /// 便捷 prelude 模块
 /// Convenient prelude module
 pub mod prelude {
+    pub use super::chain_of_thought::{
+        ChainOfThought, ChainOfThoughtBuilder, ChainOfThoughtConfig, ChainOfThoughtResult,
+    };
     pub use super::patterns::{
         AgentOutput, AgentUnit, AggregationStrategy, ChainAgent, ChainResult, ChainStepResult,
         MapReduceAgent, MapReduceResult, ParallelAgent, ParallelResult, ParallelStepResult,
@@ -123,5 +130,6 @@ pub mod prelude {
     pub use super::reflection::{
         ReflectionAgent, ReflectionAgentBuilder, ReflectionConfig, ReflectionResult, ReflectionStep,
     };
+    pub use super::router::{Router, RouterBuilder, RouterConfig, RouterDecision, RouterResult};
     pub use super::tools::prelude::*;
 }
