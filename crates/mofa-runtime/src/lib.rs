@@ -33,6 +33,9 @@ pub mod runner;
 #[cfg(feature = "dora")]
 pub mod dora_adapter;
 
+// Native dataflow module — always compiled, zero Dora dependency
+pub mod native_dataflow;
+
 // =============================================================================
 // Re-exports from Kernel (minimal, only what runtime needs)
 // =============================================================================
