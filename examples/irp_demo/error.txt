@@ -1,0 +1,30 @@
+    Checking irp_demo v0.1.0 (D:\PersonalStudy\projects\mofa\examples\irp_demo)
+warning: unused import: `ChunkDelta`
+  --> irp_demo\src\main.rs:16:73
+   |
+16 |     ChatCompletionRequest, ChatCompletionResponse, ChatMessage, Choice, ChunkDelta, Tool,
+   |                                                                         ^^^^^^^^^^
+   |
+   = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+error[E0308]: mismatched types
+  --> irp_demo\src\main.rs:58:26
+   |
+58 |                   message: mofa_kernel::llm::types::ChunkDelta {
+   |  __________________________^
+59 | |                     role: Some(mofa_kernel::llm::types::Role::Assistant),
+60 | |                     content: Some(text),
+61 | |                     tool_calls: None,
+62 | |                 },
+   | |_________________^ expected `ChatMessage`, found `ChunkDelta`
+
+error[E0063]: missing field `logprobs` in initializer of `Choice`
+  --> irp_demo\src\main.rs:56:27
+   |
+56 |             choices: vec![Choice {
+   |                           ^^^^^^ missing `logprobs`
+
+Some errors have detailed explanations: E0063, E0308.
+For more information about an error, try `rustc --explain E0063`.
+warning: `irp_demo` (bin "irp_demo") generated 1 warning
+error: could not compile `irp_demo` (bin "irp_demo") due to 2 previous errors; 1 warning emitted
