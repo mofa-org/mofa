@@ -72,6 +72,7 @@
 #![warn(missing_docs)]
 #![warn(clippy::all)]
 
+pub mod admin;
 pub mod consensus;
 pub mod control_plane;
 pub mod error;

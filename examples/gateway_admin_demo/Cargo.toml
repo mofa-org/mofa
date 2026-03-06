@@ -1,0 +1,22 @@
+[package]
+name = "gateway_admin_demo"
+version.workspace = true
+edition.workspace = true
+
+[[bin]]
+name = "gateway_admin_demo"
+path = "src/main.rs"
+
+[dependencies]
+mofa-gateway = { path = "../../crates/mofa-gateway" }
+
+tokio.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+serde_json.workspace = true
+axum = { workspace = true }
+tower = { version = "0.5", features = ["util"] }
+http-body-util = "0.1"
+
+[lints]
+workspace = true

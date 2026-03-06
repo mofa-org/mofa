@@ -51,6 +51,7 @@ members = [
     "memory_scheduler_demo",
     "rag_retrieval_demo",
     "rag_indexing_demo",
+    "gateway_admin_demo",
 ]
 
 [workspace.package]
