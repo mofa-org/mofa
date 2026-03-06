@@ -5924,6 +5924,7 @@ dependencies = [
  "prost",
  "prost-types",
  "rand 0.8.5",
+ "reqwest",
  "rocksdb",
  "serde",
  "serde_json",
