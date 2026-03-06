@@ -171,7 +171,7 @@ fn colorize_log_line(line: &str) -> String {
         line.yellow().to_string()
     } else if upper.contains("INFO") {
         line.green().to_string()
-    } else if upper.contains("DEBUG") || upper.contains(" TRACE ") {
+    } else if upper.contains("DEBUG") || matches_log_level(line, "TRACE") {
         line.bright_black().to_string()
     } else {
         line.to_string()
@@ -392,5 +392,17 @@ mod tests {
         let result = run(&ctx, "new-agent", false, None, None, None, false).await;
         // Should succeed but show message about no logs
         assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_colorize_log_line_dims_trace_prefix_without_spaces() {
+        let line = "TRACE module::op starting";
+        assert_eq!(colorize_log_line(line), line.bright_black().to_string());
+    }
+
+    #[test]
+    fn test_colorize_log_line_dims_bracketed_trace_prefix() {
+        let line = "[TRACE] module::op starting";
+        assert_eq!(colorize_log_line(line), line.bright_black().to_string());
     }
 }
