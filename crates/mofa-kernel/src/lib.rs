@@ -79,6 +79,7 @@ pub mod security;
 pub mod gateway;
 pub use gateway::{
     ApiKeyStore, AuthClaims, AuthError, AuthProvider, GatewayResponse, GatewayRoute, HttpMethod,
+    RoutingStrategy,
     RegistryError, RequestEnvelope, RouteRegistry,
     RoutingContext,
 };

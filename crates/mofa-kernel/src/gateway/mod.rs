@@ -26,3 +26,6 @@ pub use auth::{ApiKeyStore, AuthClaims, AuthError, AuthProvider};
 pub use envelope::{GatewayResponse, RequestEnvelope};
 pub use error::RegistryError;
 pub use route::{GatewayRoute, HttpMethod, RouteRegistry, RoutingContext};
+
+pub mod routing;
+pub use routing::RoutingStrategy;
