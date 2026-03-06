@@ -45,6 +45,7 @@ members = [
     "context_window_demo",
     "compression_examples",
     "admission_gate_demo",
+    "planning_loop",
     "integrations_demo",
     "native_dataflow",
     "memory_scheduler_demo",
