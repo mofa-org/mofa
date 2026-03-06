@@ -45,6 +45,18 @@ pub enum GlobalError {
     #[error("Serialization error: {0}")]
     Serialization(#[from] serde_json::Error),
 
+    /// DSL 错误
+    #[error("DSL error: {0}")]
+    Dsl(String),
+
+    /// Persistence 层错误
+    #[error("Persistence error: {0}")]
+    Persistence(String),
+
+    /// Prompt 错误
+    #[error("Prompt error: {0}")]
+    Prompt(String),
+
     /// 其他错误
     #[error("Other error: {0}")]
     Other(String),
@@ -75,6 +87,9 @@ impl GlobalError {
             Self::Runtime(_) => ErrorCategory::Runtime,
             Self::Io(_) => ErrorCategory::Io,
             Self::Serialization(_) => ErrorCategory::Serialization,
+            Self::Dsl(_) => ErrorCategory::Workflow,
+            Self::Persistence(_) => ErrorCategory::Persistence,
+            Self::Prompt(_) => ErrorCategory::Workflow,
             Self::Other(_) => ErrorCategory::Other,
         }
     }
@@ -114,6 +129,10 @@ pub enum ErrorCategory {
     Io,
     /// 序列化错误
     Serialization,
+    /// Workflow 相关错误
+    Workflow,
+    /// Persistence 相关错误
+    Persistence,
     /// 其他错误
     Other,
 }
@@ -127,6 +146,8 @@ impl fmt::Display for ErrorCategory {
             Self::Runtime => write!(f, "runtime"),
             Self::Io => write!(f, "io"),
             Self::Serialization => write!(f, "serialization"),
+            Self::Workflow => write!(f, "workflow"),
+            Self::Persistence => write!(f, "persistence"),
             Self::Other => write!(f, "other"),
         }
     }

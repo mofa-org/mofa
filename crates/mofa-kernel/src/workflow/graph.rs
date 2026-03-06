@@ -75,8 +75,8 @@ pub trait NodeFunc<S: GraphState>: Send + Sync {
 pub enum EdgeTarget {
     /// Single target node
     Single(String),
-    /// Conditional edges with route names to node IDs
-    Conditional(HashMap<String, String>),
+    /// Conditional edges with route names to node IDs (declaration order preserved)
+    Conditional(Vec<(String, String)>),
     /// Multiple parallel targets
     Parallel(Vec<String>),
 }
@@ -88,7 +88,7 @@ impl EdgeTarget {
     }
 
     /// Create conditional edges
-    pub fn conditional(routes: HashMap<String, String>) -> Self {
+    pub fn conditional(routes: Vec<(String, String)>) -> Self {
         Self::Conditional(routes)
     }
 
@@ -106,7 +106,7 @@ impl EdgeTarget {
     pub fn targets(&self) -> Vec<&str> {
         match self {
             Self::Single(t) => vec![t],
-            Self::Conditional(routes) => routes.values().map(|s| s.as_str()).collect(),
+            Self::Conditional(routes) => routes.iter().map(|(_, t)| t.as_str()).collect(),
             Self::Parallel(targets) => targets.iter().map(|s| s.as_str()).collect(),
         }
     }
@@ -169,19 +169,22 @@ pub trait StateGraph: Send + Sync {
     ///
     /// # Arguments
     /// * `from` - Source node ID
-    /// * `conditions` - Map of condition names to target node IDs
+    /// * `conditions` - Ordered list of condition names to target node IDs
     ///
     /// # Example
     /// ```rust,ignore
-    /// graph.add_conditional_edges("classify", HashMap::from([
-    ///     ("type_a".to_string(), "handle_a".to_string()),
-    ///     ("type_b".to_string(), "handle_b".to_string()),
-    /// ]));
+    /// graph.add_conditional_edges(
+    ///     "classify",
+    ///     vec![
+    ///         ("type_a".to_string(), "handle_a".to_string()),
+    ///         ("type_b".to_string(), "handle_b".to_string()),
+    ///     ],
+    /// );
     /// ```
     fn add_conditional_edges(
         &mut self,
         from: impl Into<String>,
-        conditions: HashMap<String, String>,
+        conditions: Vec<(String, String)>,
     ) -> &mut Self;
 
     /// Add parallel edges from a node
@@ -274,6 +277,20 @@ pub enum StreamEvent<S: GraphState> {
         node_id: Option<String>,
         error: String,
     },
+    /// A node is being retried after a transient failure
+    NodeRetry {
+        node_id: String,
+        attempt: u32,
+        error: String,
+    },
+    /// A node failed permanently and execution is falling back
+    NodeFallback {
+        from_node: String,
+        to_node: String,
+        reason: String,
+    },
+    /// A node's circuit breaker has opened due to repeated failures
+    CircuitOpen { node_id: String },
 }
 
 /// Result of a single step execution
@@ -304,9 +321,10 @@ mod tests {
 
     #[test]
     fn test_edge_target_conditional() {
-        let mut routes = HashMap::new();
-        routes.insert("condition_a".to_string(), "node_a".to_string());
-        routes.insert("condition_b".to_string(), "node_b".to_string());
+        let routes = vec![
+            ("condition_a".to_string(), "node_a".to_string()),
+            ("condition_b".to_string(), "node_b".to_string()),
+        ];
 
         let target = EdgeTarget::conditional(routes);
         assert!(target.is_conditional());
