@@ -71,3 +71,7 @@ pub use metrics::*;
 
 // Security governance (PII redaction, content moderation, prompt guard)
 pub mod security;
+
+// Gateway kernel contract (Task 12)
+pub mod gateway;
+pub use gateway::GatewayError;
