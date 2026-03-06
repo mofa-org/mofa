@@ -48,6 +48,7 @@ members = [
     "integrations_demo",
     "native_dataflow",
     "memory_scheduler_demo",
+    "rag_retrieval_demo",
     "rag_indexing_demo",
 ]
 
