@@ -19,7 +19,7 @@ async fn create_test_gateway(local_llm_url: &str) -> Gateway {
     let mut config = GatewayConfig::default();
     config.enable_local_llm_proxy = true;
     config.local_llm_backend_url = Some(local_llm_url.to_string());
-    config.listen_addr = "127.0.0.1:0".parse().unwrap(); // Random port
+    config.listen_addr = "127.0.0.1:8080".parse().unwrap();
     
     Gateway::new(config).await.expect("Failed to create gateway")
 }
