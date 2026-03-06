@@ -143,7 +143,7 @@ pub enum Commands {
     /// Vibe code and flow generation commands
     Vibe {
         #[command(subcommand)]
-        action: VibeCommands,
+        action: Option<VibeCommands>,
     },
 }
 
@@ -626,13 +626,36 @@ pub enum RagCommands {
 pub enum VibeCommands {
     /// Generate a dataflow from a natural language requirement
     Flow {
-        /// LLM model label to embed in generated metadata
+        /// LLM model to use for flow generation
         #[arg(long)]
         llm: Option<String>,
 
         /// Output path for the generated dataflow YAML
         #[arg(short, long)]
         output: Option<PathBuf>,
+
+        /// Requirement text (if omitted, prompt interactively)
+        #[arg(short = 'r', long)]
+        requirement: Option<String>,
+    },
+
+    /// Generate an agent from a natural language requirement
+    Agent {
+        /// LLM model to use for agent generation
+        #[arg(long)]
+        llm: Option<String>,
+
+        /// Maximum optimization rounds hint
+        #[arg(long)]
+        max_rounds: Option<u32>,
+
+        /// Output directory for generated agent files
+        #[arg(short, long)]
+        output: Option<PathBuf>,
+
+        /// Optional base agent path
+        #[arg(short, long)]
+        base: Option<PathBuf>,
 
         /// Requirement text (if omitted, prompt interactively)
         #[arg(short = 'r', long)]
@@ -728,5 +751,47 @@ mod tests {
     fn test_rag_query_parses() {
         let parsed = Cli::try_parse_from(["mofa", "rag", "query", "what is mofa", "--top-k", "3"]);
         assert!(parsed.is_ok(), "rag query command should parse");
+    }
+
+    #[test]
+    fn test_bare_vibe_parses_for_interactive_mode() {
+        let parsed = Cli::try_parse_from(["mofa", "vibe"]);
+        assert!(parsed.is_ok(), "bare vibe command should parse");
+    }
+
+    #[test]
+    fn test_vibe_flow_parses() {
+        let parsed = Cli::try_parse_from([
+            "mofa",
+            "vibe",
+            "flow",
+            "--llm",
+            "gpt-4o-mini",
+            "--output",
+            "flows/generated.yml",
+            "--requirement",
+            "build a multilingual translation flow",
+        ]);
+        assert!(parsed.is_ok(), "vibe flow should parse");
+    }
+
+    #[test]
+    fn test_vibe_agent_parses() {
+        let parsed = Cli::try_parse_from([
+            "mofa",
+            "vibe",
+            "agent",
+            "--llm",
+            "gpt-4o-mini",
+            "--max-rounds",
+            "4",
+            "--output",
+            "agents/new-agent",
+            "--base",
+            "agents/base-agent",
+            "--requirement",
+            "build a support triage agent",
+        ]);
+        assert!(parsed.is_ok(), "vibe agent should parse");
     }
 }
