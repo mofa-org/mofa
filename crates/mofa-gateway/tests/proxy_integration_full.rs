@@ -40,9 +40,13 @@ async fn test_proxy_models_list_success() {
     // Give gateway time to start
     sleep(Duration::from_millis(100)).await;
 
+    // Get the actual bound address (important when using random port)
+    let bound_addr = gateway.bound_addr().expect("Gateway should have bound address");
+    let gateway_url = format!("http://{}", bound_addr);
+
     // Test /v1/models endpoint
     let response = client
-        .get("http://localhost:8080/v1/models")
+        .get(format!("{}/v1/models", gateway_url))
         .send()
         .await
         .expect("Failed to send request");
@@ -69,9 +73,12 @@ async fn test_proxy_model_info_success() {
     gateway.start().await.expect("Failed to start gateway");
     sleep(Duration::from_millis(100)).await;
 
+    let bound_addr = gateway.bound_addr().expect("Gateway should have bound address");
+    let gateway_url = format!("http://{}", bound_addr);
+
     // Test /v1/models/:model_id endpoint
     let response = client
-        .get("http://localhost:8080/v1/models/test-model")
+        .get(format!("{}/v1/models/test-model", gateway_url))
         .send()
         .await
         .expect("Failed to send request");
@@ -99,6 +106,9 @@ async fn test_proxy_chat_completions_success() {
     gateway.start().await.expect("Failed to start gateway");
     sleep(Duration::from_millis(100)).await;
 
+    let bound_addr = gateway.bound_addr().expect("Gateway should have bound address");
+    let gateway_url = format!("http://{}", bound_addr);
+
     // Test /v1/chat/completions endpoint
     let request_body = serde_json::json!({
         "model": "test-model",
@@ -109,7 +119,7 @@ async fn test_proxy_chat_completions_success() {
     });
 
     let response = client
-        .post("http://localhost:8080/v1/chat/completions")
+        .post(format!("{}/v1/chat/completions", gateway_url))
         .json(&request_body)
         .send()
         .await
@@ -132,11 +142,14 @@ async fn test_proxy_backend_down() {
     gateway.start().await.expect("Failed to start gateway");
     sleep(Duration::from_millis(500)).await; // Give time for health check to fail
 
+    let bound_addr = gateway.bound_addr().expect("Gateway should have bound address");
+    let gateway_url = format!("http://{}", bound_addr);
+
     let client = reqwest::Client::new();
     
     // Request should fail gracefully
     let response = client
-        .get("http://localhost:8080/v1/models")
+        .get(format!("{}/v1/models", gateway_url))
         .send()
         .await
         .expect("Failed to send request");
@@ -182,9 +195,12 @@ async fn test_health_check_integration() {
     gateway.start().await.expect("Failed to start gateway");
     sleep(Duration::from_millis(500)).await; // Give time for health check
 
+    let bound_addr = gateway.bound_addr().expect("Gateway should have bound address");
+    let gateway_url = format!("http://{}", bound_addr);
+
     // Gateway health should be OK
     let response = client
-        .get("http://localhost:8080/health")
+        .get(format!("{}/health", gateway_url))
         .send()
         .await
         .expect("Failed to send request");
@@ -201,13 +217,16 @@ async fn test_circuit_breaker_opens_on_failures() {
     gateway.start().await.expect("Failed to start gateway");
     sleep(Duration::from_millis(500)).await; // Give time for initial setup
 
+    let bound_addr = gateway.bound_addr().expect("Gateway should have bound address");
+    let gateway_url = format!("http://{}", bound_addr);
+
     let client = reqwest::Client::new();
     
     // Make multiple requests to trigger circuit breaker
     let mut failure_count = 0;
     for i in 0..5 {
         let response = client
-            .get("http://localhost:8080/v1/models")
+            .get(format!("{}/v1/models", gateway_url))
             .send()
             .await
             .expect("Failed to send request");
@@ -228,7 +247,7 @@ async fn test_circuit_breaker_opens_on_failures() {
     // Circuit breaker test - verify requests complete quickly
     let start = std::time::Instant::now();
     let _response = client
-        .get("http://localhost:8080/v1/models")
+        .get(format!("{}/v1/models", gateway_url))
         .send()
         .await
         .expect("Failed to send request");
@@ -253,13 +272,17 @@ async fn test_concurrent_requests() {
     gateway.start().await.expect("Failed to start gateway");
     sleep(Duration::from_millis(100)).await;
 
+    let bound_addr = gateway.bound_addr().expect("Gateway should have bound address");
+    let gateway_url = format!("http://{}", bound_addr);
+
     // Send multiple concurrent requests
     let mut handles = vec![];
     for i in 0..10 {
         let client = client.clone();
+        let gateway_url = gateway_url.clone();
         let handle = tokio::spawn(async move {
             let response = client
-                .get("http://localhost:8080/v1/models")
+                .get(format!("{}/v1/models", gateway_url))
                 .send()
                 .await;
             (i, response)
