@@ -200,8 +200,12 @@ impl HealthChecker {
         };
         
         // Send HTTP GET request
-        // Use the IP address from SocketAddr, not the original hostname
-        let host_header = format!("{}", address.ip());
+        // Format Host header with port when not default
+        let host_header = if address.port() == 80 || address.port() == 443 {
+            address.ip().to_string()
+        } else {
+            format!("{}:{}", address.ip(), address.port())
+        };
         let request = format!("GET /health HTTP/1.1\r\nHost: {}\r\nConnection: close\r\n\r\n", host_header);
         
         // Write request with timeout
