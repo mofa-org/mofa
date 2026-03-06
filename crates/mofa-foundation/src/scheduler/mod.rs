@@ -19,10 +19,8 @@ use mofa_kernel::agent::core::MoFAAgent;
 use mofa_kernel::agent::types::{AgentInput, AgentOutput};
 use mofa_kernel::scheduler::{
     AgentScheduler, Clock, MissedTickPolicy, ScheduleDefinition, ScheduleHandle, ScheduleInfo,
-    SchedulerError, SystemClock,
+    ScheduledAgentRunner, SchedulerError, SystemClock,
 };
-use mofa_runtime::agent::execution::{ExecutionEngine, ExecutionOptions, ExecutionResult};
-use mofa_runtime::agent::registry::AgentRegistry;
 
 // ============================================================================
 // ScheduleEntry - Internal state for each registered schedule
@@ -120,8 +118,8 @@ impl ScheduleEntry {
 /// ).await.unwrap();
 /// ```
 pub struct CronScheduler {
-    /// Reference to the agent registry for agent lookup and execution.
-    registry: Arc<AgentRegistry>,
+    /// Runner used to execute agents on each scheduled tick.
+    runner: Arc<dyn ScheduledAgentRunner>,
     /// Global semaphore capping total concurrent agent executions.
     global_semaphore: Arc<Semaphore>,
     /// Map of schedule_id -> internal schedule state.
@@ -131,25 +129,25 @@ pub struct CronScheduler {
 }
 
 impl CronScheduler {
-    /// Create a new scheduler with the given agent registry and global concurrency limit.
+    /// Create a new scheduler with the given runner and global concurrency limit.
     ///
     /// # Parameters
     ///
-    /// - `registry`: Agent registry for looking up and executing agents
+    /// - `runner`: Implementation of [`ScheduledAgentRunner`] used to execute agents
     /// - `global_max_concurrent`: Maximum total concurrent agent executions across all schedules.
     ///   Pass `usize::MAX` to disable the global limit.
     ///
     /// # Panics
     ///
     /// Panics if `global_max_concurrent` is 0.
-    pub fn new(registry: Arc<AgentRegistry>, global_max_concurrent: usize) -> Self {
+    pub fn new(runner: Arc<dyn ScheduledAgentRunner>, global_max_concurrent: usize) -> Self {
         assert!(
             global_max_concurrent > 0,
             "global_max_concurrent must be > 0"
         );
 
         Self {
-            registry,
+            runner,
             global_semaphore: Arc::new(Semaphore::new(global_max_concurrent)),
             schedules: Arc::new(RwLock::new(HashMap::new())),
             clock: Arc::new(SystemClock),
@@ -159,7 +157,7 @@ impl CronScheduler {
     /// Create a scheduler with a custom clock (primarily for testing).
     #[cfg(test)]
     fn with_clock(
-        registry: Arc<AgentRegistry>,
+        runner: Arc<dyn ScheduledAgentRunner>,
         global_max_concurrent: usize,
         clock: Arc<dyn Clock>,
     ) -> Self {
@@ -169,7 +167,7 @@ impl CronScheduler {
         );
 
         Self {
-            registry,
+            runner,
             global_semaphore: Arc::new(Semaphore::new(global_max_concurrent)),
             schedules: Arc::new(RwLock::new(HashMap::new())),
             clock,
@@ -184,10 +182,8 @@ impl CronScheduler {
 #[async_trait]
 impl AgentScheduler for CronScheduler {
     async fn register(&self, def: ScheduleDefinition) -> Result<ScheduleHandle, SchedulerError> {
-        // Validate agent exists
-        if self.registry.get(&def.agent_id).await.is_none() {
-            return Err(SchedulerError::AgentNotFound(def.agent_id));
-        }
+        // Note: agent existence is validated at execution time by the runner.
+        // We cannot check it here without access to the registry.
 
         // Validate cron expression if provided
         if let Some(cron_expr) = &def.cron_expression {
@@ -284,7 +280,7 @@ impl CronScheduler {
         mut cancel_rx: oneshot::Receiver<()>,
         per_schedule_semaphore: Arc<Semaphore>,
     ) -> JoinHandle<()> {
-        let registry = Arc::clone(&self.registry);
+        let runner = Arc::clone(&self.runner);
         let global_semaphore = Arc::clone(&self.global_semaphore);
         let schedule_id = def.schedule_id.clone();
         let agent_id = def.agent_id.clone();
@@ -334,16 +330,15 @@ impl CronScheduler {
                                 };
 
                                 // Execute agent
-                                let registry_clone = Arc::clone(&registry);
+                                let runner_clone = Arc::clone(&runner);
                                 let agent_id_clone = agent_id.clone();
                                 let input_clone = input_template.clone();
                                 let schedule_id_clone = schedule_id.clone();
 
                                 tokio::spawn(async move {
-                                    let engine = ExecutionEngine::new(registry_clone);
-                                    match engine.execute(&agent_id_clone, input_clone, Default::default()).await {
-                                        Ok(result) => {
-                                            tracing::info!("Schedule {} executed successfully: {:?}", schedule_id_clone, result.status);
+                                    match runner_clone.run_scheduled(&agent_id_clone, input_clone).await {
+                                        Ok(()) => {
+                                            tracing::info!("Schedule {} executed successfully", schedule_id_clone);
                                         }
                                         Err(e) => {
                                             tracing::error!("Schedule {} execution failed: {}", schedule_id_clone, e);
@@ -410,112 +405,32 @@ impl ScheduleTiming {
 mod tests {
     use super::*;
     use mofa_kernel::agent::types::AgentInput;
-    use std::sync::atomic::{AtomicU32, Ordering};
-    use tokio::sync::RwLock;
 
-    // Mock agent for testing
-    struct MockAgent {
-        id: String,
-        call_count: AtomicU32,
-        capabilities: mofa_kernel::agent::capabilities::AgentCapabilities,
-        state: mofa_kernel::agent::types::AgentState,
-    }
-
-    impl MockAgent {
-        fn new(id: impl Into<String>) -> Self {
-            Self {
-                id: id.into(),
-                call_count: AtomicU32::new(0),
-                capabilities: mofa_kernel::agent::capabilities::AgentCapabilities::default(),
-                state: mofa_kernel::agent::types::AgentState::Ready,
-            }
-        }
-    }
+    /// Minimal mock runner for unit tests — always succeeds immediately.
+    struct MockRunner;
 
     #[async_trait]
-    impl MoFAAgent for MockAgent {
-        fn id(&self) -> &str {
-            &self.id
-        }
-        fn name(&self) -> &str {
-            &self.id
-        }
-        fn capabilities(&self) -> &mofa_kernel::agent::capabilities::AgentCapabilities {
-            &self.capabilities
-        }
-
-        async fn initialize(
-            &mut self,
-            _ctx: &AgentContext,
-        ) -> mofa_kernel::agent::error::AgentResult<()> {
-            self.state = mofa_kernel::agent::types::AgentState::Ready;
-            Ok(())
-        }
-
-        async fn execute(
-            &mut self,
+    impl ScheduledAgentRunner for MockRunner {
+        async fn run_scheduled(
+            &self,
+            _agent_id: &str,
             _input: AgentInput,
-            _ctx: &AgentContext,
-        ) -> mofa_kernel::agent::error::AgentResult<AgentOutput> {
-            self.call_count.fetch_add(1, Ordering::SeqCst);
-            Ok(AgentOutput::text("executed"))
-        }
-
-        async fn shutdown(&mut self) -> mofa_kernel::agent::error::AgentResult<()> {
-            self.state = mofa_kernel::agent::types::AgentState::ShuttingDown;
+        ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             Ok(())
         }
-
-        async fn interrupt(
-            &mut self,
-        ) -> mofa_kernel::agent::error::AgentResult<mofa_kernel::agent::types::InterruptResult>
-        {
-            Ok(mofa_kernel::agent::types::InterruptResult::Acknowledged)
-        }
-
-        fn state(&self) -> mofa_kernel::agent::types::AgentState {
-            self.state.clone()
-        }
     }
 
-    async fn make_test_scheduler(global_cap: usize) -> CronScheduler {
-        let registry = Arc::new(AgentRegistry::new());
-
-        // Register mock agents
-        let counter_agent = Arc::new(RwLock::new(MockAgent::new("counter-agent")));
-        let slow_agent = Arc::new(RwLock::new(MockAgent::new("slow-agent")));
-
-        registry.register(counter_agent).await.unwrap();
-        registry.register(slow_agent).await.unwrap();
-
-        CronScheduler::new(registry, global_cap)
+    fn make_test_scheduler(global_cap: usize) -> CronScheduler {
+        CronScheduler::new(Arc::new(MockRunner), global_cap)
     }
 
-    #[tokio::test]
-    async fn test_register_agent_not_found() {
-        let scheduler = make_test_scheduler(10).await;
-        let result = scheduler
-            .register(
-                ScheduleDefinition::new_interval(
-                    "test",
-                    "nonexistent-agent",
-                    1000,
-                    1,
-                    AgentInput::text("test"),
-                    MissedTickPolicy::Skip,
-                )
-                .unwrap(),
-            )
-            .await;
-
-        assert!(
-            matches!(result, Err(SchedulerError::AgentNotFound(id)) if id == "nonexistent-agent")
-        );
-    }
+    // test_register_agent_not_found is omitted: CronScheduler no longer has
+    // direct registry access to validate agent existence at registration time.
+    // That validation happens inside the runner at execution time.
 
     #[tokio::test]
     async fn test_register_duplicate_schedule() {
-        let scheduler = make_test_scheduler(10).await;
+        let scheduler = make_test_scheduler(10);
 
         // First registration should succeed
         let _handle1 = scheduler
@@ -553,7 +468,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_register_invalid_cron() {
-        let scheduler = make_test_scheduler(10).await;
+        let scheduler = make_test_scheduler(10);
         let result = scheduler
             .register(
                 ScheduleDefinition::new_cron(
@@ -573,28 +488,28 @@ mod tests {
 
     #[tokio::test]
     async fn test_list_empty() {
-        let scheduler = make_test_scheduler(10).await;
+        let scheduler = make_test_scheduler(10);
         let list = scheduler.list().await;
         assert!(list.is_empty());
     }
 
     #[tokio::test]
     async fn test_pause_nonexistent() {
-        let scheduler = make_test_scheduler(10).await;
+        let scheduler = make_test_scheduler(10);
         let result = scheduler.pause("nonexistent").await;
         assert!(matches!(result, Err(SchedulerError::NotFound(id)) if id == "nonexistent"));
     }
 
     #[tokio::test]
     async fn test_resume_nonexistent() {
-        let scheduler = make_test_scheduler(10).await;
+        let scheduler = make_test_scheduler(10);
         let result = scheduler.resume_schedule("nonexistent").await;
         assert!(matches!(result, Err(SchedulerError::NotFound(id)) if id == "nonexistent"));
     }
 
     #[tokio::test]
     async fn test_unregister_nonexistent() {
-        let scheduler = make_test_scheduler(10).await;
+        let scheduler = make_test_scheduler(10);
         let result = scheduler.unregister("nonexistent").await;
         assert!(matches!(result, Err(SchedulerError::NotFound(id)) if id == "nonexistent"));
     }

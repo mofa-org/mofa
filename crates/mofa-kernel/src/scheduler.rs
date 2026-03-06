@@ -362,6 +362,30 @@ pub enum SchedulerError {
 }
 
 // ---------------------------------------------------------------------------
+// ScheduledAgentRunner
+// ---------------------------------------------------------------------------
+
+/// Minimal execution interface required by [`CronScheduler`] to fire an agent
+/// by ID.
+///
+/// Lives in `mofa-kernel` so that `mofa-foundation`'s `CronScheduler` can hold
+/// an `Arc<dyn ScheduledAgentRunner>` without importing the concrete
+/// `ExecutionEngine` from `mofa-runtime`, which would create a cyclic crate
+/// dependency.  `mofa-runtime`'s `ExecutionEngine` implements this trait.
+#[async_trait::async_trait]
+pub trait ScheduledAgentRunner: Send + Sync {
+    /// Run the agent identified by `agent_id` with the given `input`.
+    ///
+    /// Errors are boxed so that callers in `mofa-foundation` do not need to
+    /// know the concrete error type defined in `mofa-runtime`.
+    async fn run_scheduled(
+        &self,
+        agent_id: &str,
+        input: AgentInput,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>>;
+}
+
+// ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
 
