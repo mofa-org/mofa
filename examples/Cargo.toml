@@ -49,6 +49,7 @@ members = [
     "native_dataflow",
     "memory_scheduler_demo",
     "provider_hcp_demo",
+    "rag_indexing_demo",
 ]
 
 [workspace.package]
