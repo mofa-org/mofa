@@ -78,6 +78,7 @@ pub mod security;
 // Gateway routing abstractions (kernel-level traits for agent request dispatch)
 pub mod gateway;
 pub use gateway::{
-    GatewayResponse, GatewayRoute, HttpMethod, RegistryError, RequestEnvelope, RouteRegistry,
+    ApiKeyStore, AuthClaims, AuthError, AuthProvider, GatewayResponse, GatewayRoute, HttpMethod,
+    RegistryError, RequestEnvelope, RouteRegistry,
     RoutingContext,
 };
