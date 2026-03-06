@@ -199,7 +199,7 @@ impl Gateway {
             
             // Parse backend URL to get socket address for health checking
             // Use proper URI parser to extract host and port
-            if let Ok(uri) = backend.base_url.parse::<http::Uri>() {
+            if let Ok(uri) = backend.base_url.parse::<axum::http::Uri>() {
                 if let Some(authority) = uri.authority() {
                     let host_str = authority.host();
                     let port = authority.port_u16().unwrap_or_else(|| {
