@@ -43,3 +43,6 @@ pub use error::RegistryError;
 pub use route::{GatewayRoute, HttpMethod, RouteRegistry, RoutingContext};
 pub use config_error::GatewayConfigError;
 pub use types::{GatewayContext, GatewayRequest, GatewayResponse, RouteMatch};
+
+pub mod routing;
+pub use routing::RoutingStrategy;

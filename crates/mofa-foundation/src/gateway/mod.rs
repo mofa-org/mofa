@@ -9,3 +9,6 @@ pub mod rate_limiter;
 pub use rate_limiter::{
     KeyStrategy, RateLimitDecision, RateLimiter, RateLimiterConfig, TokenBucketRateLimiter,
 };
+
+pub mod routing;
+pub use routing::{AgentScorer, CapabilityMatchRouter, RouterRegistry, WeightedRoundRobinRouter};
