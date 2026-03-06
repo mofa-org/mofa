@@ -74,3 +74,7 @@ pub mod structured_output;
 pub use structured_output::StructuredOutput;
 // Security governance (PII redaction, content moderation, prompt guard)
 pub mod security;
+
+// Gateway routing abstractions (kernel-level traits for agent request dispatch)
+pub mod gateway;
+pub use gateway::{GatewayRoute, HttpMethod, RegistryError, RouteRegistry, RoutingContext};
