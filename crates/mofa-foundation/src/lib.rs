@@ -85,7 +85,10 @@ pub use metrics::{
 
 // Gateway implementations (rate limiter, routing strategies)
 pub mod gateway;
-pub use gateway::TokenBucketRateLimiter;
+pub use gateway::{
+    AgentScorer, CapabilityMatchRouter, RouterRegistry, TokenBucketRateLimiter,
+    WeightedRoundRobinRouter,
+};
 
 // Re-export config types
 pub use config::{AgentInfo, AgentYamlConfig, LLMYamlConfig, RuntimeConfig, ToolConfig};
