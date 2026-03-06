@@ -5,6 +5,7 @@ edition.workspace = true
 
 [dependencies]
 tokio.workspace = true
+anyhow = "1"
 
 # Local dependencies
 mofa-sdk = { path = "../../crates/mofa-sdk" }
