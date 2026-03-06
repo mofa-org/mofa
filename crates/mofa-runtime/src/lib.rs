@@ -2,6 +2,8 @@ use mofa_kernel::agent::types::error::{GlobalError, GlobalResult};
 #[cfg(feature = "monitoring")]
 pub use mofa_monitoring::*;
 
+// Unified error conversions (GlobalError <-> runtime errors)
+pub mod error_conversions;
 // =============================================================================
 // MoFA Runtime - Agent Lifecycle and Execution Management
 // =============================================================================
@@ -30,6 +32,9 @@ pub mod runner;
 // Dora adapter module (only compiled when dora feature is enabled)
 #[cfg(feature = "dora")]
 pub mod dora_adapter;
+
+// Native dataflow module — always compiled, zero Dora dependency
+pub mod native_dataflow;
 
 // =============================================================================
 // Re-exports from Kernel (minimal, only what runtime needs)
