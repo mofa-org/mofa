@@ -44,6 +44,10 @@ pub mod middleware;
 pub mod server;
 pub mod state;
 
+// Task 12: Cognitive Gateway runtime
+pub mod router;
+pub mod filter;
+
 pub use error::{GatewayError, GatewayResult};
 pub use middleware::RateLimiter;
 pub use server::{GatewayConfig, GatewayServer};
