@@ -654,7 +654,7 @@ impl ModelPool {
         let threshold = *self
             .memory_threshold
             .read()
-            .expect("threshold lock poisoned");
+            .map_err(|e| OrchestratorError::Other(format!("threshold lock poisoned: {e}")))?;
 
         let projected_usage = current_usage + estimated_model_size;
 
@@ -691,12 +691,10 @@ impl ModelPool {
     /// Find the least recently used (LRU) loaded model
     async fn find_lru_candidate(&self) -> Option<String> {
         let models = self.models.read().await;
-        let idle_timeout = Duration::from_secs(
-            *self
-                .idle_timeout_secs
-                .read()
-                .expect("idle_timeout lock poisoned"),
-        );
+        let idle_timeout = match self.idle_timeout_secs.read() {
+            Ok(val) => Duration::from_secs(*val),
+            Err(_) => return None,
+        };
         let now = Instant::now();
 
         models
@@ -997,7 +995,7 @@ impl ModelOrchestrator for ModelPool {
         let mut threshold = self
             .memory_threshold
             .write()
-            .expect("threshold lock poisoned");
+            .map_err(|e| OrchestratorError::Other(format!("threshold lock poisoned: {e}")))?;
         *threshold = bytes;
         tracing::info!("Memory threshold set to {} MB", bytes / 1024 / 1024);
         Ok(())
@@ -1014,7 +1012,7 @@ impl ModelOrchestrator for ModelPool {
         let mut timeout = self
             .idle_timeout_secs
             .write()
-            .expect("idle_timeout lock poisoned");
+            .map_err(|e| OrchestratorError::Other(format!("idle_timeout lock poisoned: {e}")))?;
         *timeout = secs;
         tracing::info!("Idle timeout set to {} seconds", secs);
         Ok(())

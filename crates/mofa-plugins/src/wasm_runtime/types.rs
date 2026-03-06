@@ -166,8 +166,9 @@ impl fmt::Display for WasmType {
     }
 }
 
-/// WASM runtime errors
+/// WASM runtime errors.
 #[derive(Debug, Error)]
+#[non_exhaustive]
 pub enum WasmError {
     #[error("Failed to compile WASM module: {0}")]
     CompilationError(String),
@@ -224,8 +225,24 @@ pub enum WasmError {
     Internal(String),
 }
 
-/// WASM result type
+/// Plain result alias for WASM operations (backward-compatible).
 pub type WasmResult<T> = Result<T, WasmError>;
+
+/// Error-stack–backed result alias for WASM operations.
+pub type WasmReport<T> = ::std::result::Result<T, error_stack::Report<WasmError>>;
+
+/// Extension trait to convert [`WasmResult<T>`] into [`WasmReport<T>`].
+pub trait IntoWasmReport<T> {
+    /// Wrap the error in an `error_stack::Report`.
+    fn into_report(self) -> WasmReport<T>;
+}
+
+impl<T> IntoWasmReport<T> for WasmResult<T> {
+    #[inline]
+    fn into_report(self) -> WasmReport<T> {
+        self.map_err(error_stack::Report::new)
+    }
+}
 
 /// Plugin capabilities
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]

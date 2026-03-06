@@ -1,0 +1,17 @@
+use serde::{Deserialize, Serialize};
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PluginConfig {
+    pub enabled: bool,
+    // Add specific configurations here
+    pub custom_value: String,
+}
+
+impl Default for PluginConfig {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            custom_value: "example-value".into(),
+        }
+    }
+}
