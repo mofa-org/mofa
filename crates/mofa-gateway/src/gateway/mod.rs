@@ -198,12 +198,15 @@ impl Gateway {
             let local_llm_node_id = NodeId::from("mofa-local-llm");
             
             // Parse backend URL to get socket address for health checking
-            if let Ok(uri) = backend.base_url.parse::<axum::http::Uri>() {
+            // Use proper URI parser to extract host and port
+            if let Ok(uri) = backend.base_url.parse::<http::Uri>() {
                 if let Some(authority) = uri.authority() {
                     let host_str = authority.host();
-                    let port = authority.port_u16().unwrap_or(if uri.scheme_str() == Some("https") { 443 } else { 80 });
+                    let port = authority.port_u16().unwrap_or_else(|| {
+                        if uri.scheme_str() == Some("https") { 443 } else { 80 }
+                    });
                     
-                    // Convert hostname to IP if needed
+                    // Convert localhost to 127.0.0.1 for SocketAddr parsing
                     let host_ip = match host_str {
                         "localhost" => "127.0.0.1",
                         _ => host_str,
