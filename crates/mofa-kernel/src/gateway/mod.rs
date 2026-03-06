@@ -25,6 +25,12 @@
 //! | [`FilterOrder`] | Numeric ordering slot for filters |
 //! | [`FilterAction`] | Continue / Reject / Redirect action from a filter |
 //! | [`FilterChainConfig`] | Named ordered list of filter names |
+//! | [`BackendKind`] | Classification of a backend service |
+//! | [`BackendHealth`] | Last-known health state of a backend |
+//! | [`CapabilityDescriptor`] | Full description of a registered backend |
+//! | [`CapabilityRegistry`] | Trait for backend discovery and management |
+//! | [`GatewayConfig`] | Top-level gateway configuration container |
+//! | [`RateLimitConfig`] | Token-bucket rate-limit parameters |
 
 pub mod error;
 pub mod route;
@@ -32,6 +38,8 @@ mod config_error;
 mod types;
 mod router;
 mod filter;
+mod capability;
+mod validation;
 
 #[cfg(test)]
 mod tests;
@@ -42,3 +50,5 @@ pub use config_error::GatewayConfigError;
 pub use types::{GatewayContext, GatewayRequest, GatewayResponse, RouteMatch};
 pub use router::{GatewayRouter, RouteConfig};
 pub use filter::{FilterAction, FilterChainConfig, FilterOrder, GatewayFilter};
+pub use capability::{BackendHealth, BackendKind, CapabilityDescriptor, CapabilityRegistry};
+pub use validation::{GatewayConfig, RateLimitConfig};
