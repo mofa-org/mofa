@@ -467,11 +467,8 @@ mod tests {
 
         let mut rx = ctx.subscribe("test_event").await;
 
-        ctx.emit_event(AgentEvent::<String>::new(
-            "test_event",
-            "hello".to_string(),
-        ))
-        .await;
+        ctx.emit_event(AgentEvent::<String>::new("test_event", "hello".to_string()))
+            .await;
 
         let event = rx.recv().await.unwrap();
         assert_eq!(event.event_type, "test_event");
