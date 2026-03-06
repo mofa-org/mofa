@@ -8,7 +8,7 @@ Prerequisites:
 1. Install OpenAI SDK: pip install openai
 2. Start mofa-local-llm server
 3. Start gateway: cargo run --example gateway_local_llm_proxy
-4. Run this script: python examples/proxy_python_client.py
+4. Run this script: python examples/proxy/proxy_python_client.py
 """
 
 from openai import OpenAI
