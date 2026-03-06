@@ -1,0 +1,15 @@
+[package]
+name = "srp_demo"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+mofa-kernel = { path = "../../crates/mofa-kernel", features = ["streaming"] }
+tokio = { version = "1", features = ["full", "rt-multi-thread", "macros"] }
+tokio-util = "0.7.12"
+tokio-stream = "0.1"
+futures = "0.3"
+async-trait = "0.1.83"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
