@@ -8,7 +8,7 @@
  * 1. Install OpenAI SDK: npm install openai
  * 2. Start mofa-local-llm server
  * 3. Start gateway: cargo run --example gateway_local_llm_proxy
- * 4. Run this script: node examples/proxy_javascript_client.js
+ * 4. Run this script: node examples/proxy/proxy_javascript_client.js
  */
 
 const OpenAI = require('openai');
