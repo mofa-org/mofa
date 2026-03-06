@@ -30,14 +30,14 @@ use serde_json::json;
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("🚀 MoFA Gateway Proxy - Client Examples");
-    println!("=" .repeat(60));
+    println!("{}", "=".repeat(60));
 
     let gateway_url = "http://localhost:8080";
     let client = Client::new();
 
     // Example 1: List all available models
     println!("\n📋 Example 1: List All Models");
-    println!("-" .repeat(60));
+    println!("{}", "-".repeat(60));
     
     match list_models(&client, gateway_url).await {
         Ok(models) => {
@@ -51,7 +51,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Example 2: Get specific model information
     println!("\n📋 Example 2: Get Model Information");
-    println!("-" .repeat(60));
+    println!("{}", "-".repeat(60));
     
     let model_id = "qwen2.5-0.5b-instruct";
     match get_model_info(&client, gateway_url, model_id).await {
@@ -66,7 +66,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Example 3: Simple chat completion
     println!("\n📋 Example 3: Simple Chat Completion");
-    println!("-" .repeat(60));
+    println!("{}", "-".repeat(60));
     
     let messages = vec![
         json!({"role": "user", "content": "What is Rust programming language?"}),
@@ -90,7 +90,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Example 4: Chat with system message
     println!("\n📋 Example 4: Chat with System Message");
-    println!("-" .repeat(60));
+    println!("{}", "-".repeat(60));
     
     let messages = vec![
         json!({"role": "system", "content": "You are a helpful coding assistant."}),
@@ -108,7 +108,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Example 5: Multi-turn conversation
     println!("\n📋 Example 5: Multi-turn Conversation");
-    println!("-" .repeat(60));
+    println!("{}", "-".repeat(60));
     
     let messages = vec![
         json!({"role": "user", "content": "What is 2+2?"}),
@@ -127,7 +127,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Example 6: Error handling - invalid model
     println!("\n📋 Example 6: Error Handling - Invalid Model");
-    println!("-" .repeat(60));
+    println!("{}", "-".repeat(60));
     
     match get_model_info(&client, gateway_url, "non-existent-model").await {
         Ok(_) => println!("✅ Model found (unexpected)"),
@@ -136,7 +136,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Example 7: Check gateway health
     println!("\n📋 Example 7: Gateway Health Check");
-    println!("-" .repeat(60));
+    println!("{}", "-".repeat(60));
     
     match check_health(&client, gateway_url).await {
         Ok(health) => {
@@ -146,7 +146,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         Err(e) => println!("❌ Error: {}", e),
     }
 
-    println!("\n" + &"=".repeat(60));
+    println!("\n{}", "=".repeat(60));
     println!("✨ All examples completed!");
     println!("\n💡 Tips:");
     println!("  - Use RUST_LOG=debug for detailed logs");
