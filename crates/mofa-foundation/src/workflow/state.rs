@@ -8,7 +8,7 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
-use tokio::sync::RwLock;
+use tokio::sync::{Notify, RwLock};
 
 /// 工作流数据值
 /// Workflow data value
@@ -295,6 +295,12 @@ pub struct WorkflowContext {
     /// Last waiting node (for resume)
     pub last_waiting_node: Arc<RwLock<Option<String>>>,
     pub total_wait_time_ms: Arc<RwLock<u64>>,
+    /// Notifier for node status transitions.
+    ///
+    /// Woken whenever a node reaches a terminal status (`Completed`,
+    /// `Failed`, `Skipped`, or `Cancelled`), allowing join nodes to
+    /// wait without busy-polling.
+    node_completion_notify: Arc<Notify>,
 }
 
 /// 可序列化的工作流上下文快照
@@ -348,6 +354,7 @@ impl WorkflowContext {
             paused_at: Arc::new(RwLock::new(snapshot.paused_at)),
             last_waiting_node: Arc::new(RwLock::new(snapshot.last_waiting_node)),
             total_wait_time_ms: Arc::new(RwLock::new(snapshot.total_wait_time_ms)),
+            node_completion_notify: Arc::new(Notify::new()),
         }
     }
 }
@@ -369,6 +376,7 @@ impl WorkflowContext {
             paused_at: Arc::new(RwLock::new(None)),
             last_waiting_node: Arc::new(RwLock::new(None)),
             total_wait_time_ms: Arc::new(RwLock::new(0)),
+            node_completion_notify: Arc::new(Notify::new()),
         }
     }
 
@@ -411,9 +419,25 @@ impl WorkflowContext {
 
     /// 设置节点状态
     /// Set node status
+    ///
+    /// When the status is terminal (`Completed`, `Failed`, `Skipped`,
+    /// or `Cancelled`), all tasks awaiting [`node_completion_notifier`]
+    /// are woken so that join nodes can react without polling.
     pub async fn set_node_status(&self, node_id: &str, status: NodeStatus) {
-        let mut statuses = self.node_statuses.write().await;
-        statuses.insert(node_id.to_string(), status);
+        let is_terminal = status.is_terminal();
+        {
+            let mut statuses = self.node_statuses.write().await;
+            statuses.insert(node_id.to_string(), status);
+        }
+        if is_terminal {
+            self.node_completion_notify.notify_waiters();
+        }
+    }
+
+    /// Returns a handle to the internal [`Notify`] that fires whenever
+    /// a node reaches a terminal status.
+    pub fn node_completion_notifier(&self) -> Arc<Notify> {
+        Arc::clone(&self.node_completion_notify)
     }
 
     /// 获取节点状态
@@ -510,6 +534,7 @@ impl Clone for WorkflowContext {
             paused_at: self.paused_at.clone(),
             last_waiting_node: self.last_waiting_node.clone(),
             total_wait_time_ms: self.total_wait_time_ms.clone(),
+            node_completion_notify: self.node_completion_notify.clone(),
         }
     }
 }
@@ -674,5 +699,57 @@ mod tests {
 
         let v: WorkflowValue = 3.14f64.into();
         assert_eq!(v.as_f64(), Some(3.14));
+    }
+
+    /// Setting a terminal status (`Completed`, `Failed`, etc.) must wake
+    /// any task waiting on `node_completion_notifier()`.
+    #[tokio::test]
+    async fn test_notify_fires_on_terminal_status() {
+        let ctx = WorkflowContext::new("notify_test");
+        let notifier = ctx.node_completion_notifier();
+        let ctx_clone = ctx.clone();
+
+        // Spawn a waiter that blocks on the notifier
+        let waiter = tokio::spawn(async move {
+            notifier.notified().await;
+            // After being notified, the status should be visible
+            ctx_clone
+                .get_node_status("node_a")
+                .await
+                .expect("status should be set")
+        });
+
+        // Brief yield so the waiter registers
+        tokio::task::yield_now().await;
+
+        // Set a terminal status — this must wake the waiter
+        ctx.set_node_status("node_a", NodeStatus::Completed).await;
+
+        let status = tokio::time::timeout(std::time::Duration::from_secs(1), waiter)
+            .await
+            .expect("waiter should finish within 1 s")
+            .expect("waiter task should not panic");
+
+        assert!(status.is_terminal(), "expected terminal status");
+    }
+
+    /// Non-terminal statuses (`Running`, `Pending`) must NOT wake waiters.
+    #[tokio::test]
+    async fn test_notify_does_not_fire_on_non_terminal_status() {
+        let ctx = WorkflowContext::new("no_notify_test");
+        let notifier = ctx.node_completion_notifier();
+
+        // Set a non-terminal status
+        ctx.set_node_status("node_a", NodeStatus::Running).await;
+
+        // The notifier should NOT be signalled, so a short timeout
+        // should expire
+        let result =
+            tokio::time::timeout(std::time::Duration::from_millis(50), notifier.notified()).await;
+
+        assert!(
+            result.is_err(),
+            "notifier should NOT fire for non-terminal status"
+        );
     }
 }
