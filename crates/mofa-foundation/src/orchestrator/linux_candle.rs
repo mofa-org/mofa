@@ -1361,6 +1361,7 @@ impl LocalInferenceBackend for LinuxCandleProvider {
         })?;
 
         let output = rt.block_on(async { self.infer(&request.prompt).await })?;
+        let output_len = output.len();
 
         // Convert to InferenceResponse
         let precision = request.preferred_precision;
@@ -1368,7 +1369,7 @@ impl LocalInferenceBackend for LinuxCandleProvider {
             output,
             self.model_id.clone(),
             precision,
-            output.len(), // Estimate token count
+            output_len, // Estimate token count
         );
 
         Ok(response)
