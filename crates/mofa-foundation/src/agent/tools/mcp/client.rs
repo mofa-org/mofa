@@ -236,11 +236,12 @@ impl McpClient for McpClientManager {
 
         let params = CallToolRequestParams {
             name: tool_name.to_string().into(),
-            arguments: if arguments.is_object() {
-                Some(arguments.as_object().unwrap().clone())
-            } else {
-                Some(serde_json::Map::new())
-            },
+            arguments: Some(
+                arguments
+                    .as_object()
+                    .map(|m| m.clone())
+                    .unwrap_or_default(),
+            ),
             meta: None,
             task: None,
         };

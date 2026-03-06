@@ -6,6 +6,7 @@
 pub mod chunker;
 pub mod embedding_adapter;
 pub mod retrieval;
+pub mod indexing;
 pub mod loaders;
 pub mod pipeline_adapters;
 pub mod recursive_chunker;
@@ -25,6 +26,8 @@ pub use embedding_adapter::{
 };
 pub use retrieval::{
     query_documents, RagQueryConfig, RetrievalResult, RetrievedChunk,
+pub use indexing::{
+    index_documents, IndexDocument, IndexMode, IndexResult, RagIndexConfig,
     RagOrchestrationError,
 };
 pub use loaders::{DocumentLoader, LoaderError, LoaderResult, MarkdownLoader, TextLoader};
