@@ -4,6 +4,7 @@
 //! in mofa-kernel, along with utilities for document chunking.
 
 pub mod chunker;
+pub mod embedding_adapter;
 pub mod loaders;
 pub mod pipeline_adapters;
 pub mod recursive_chunker;
@@ -17,6 +18,10 @@ pub mod vector_store;
 pub mod qdrant_store;
 
 pub use chunker::{ChunkConfig, TextChunker};
+pub use embedding_adapter::{
+    deterministic_chunk_id, EmbeddingAdapterError, LlmEmbeddingAdapter, RagEmbeddingConfig,
+    RagEmbeddingProvider,
+};
 pub use loaders::{DocumentLoader, LoaderError, LoaderResult, MarkdownLoader, TextLoader};
 pub use pipeline_adapters::{InMemoryRetriever, SimpleGenerator};
 pub use recursive_chunker::{RecursiveChunker, RecursiveChunkConfig};

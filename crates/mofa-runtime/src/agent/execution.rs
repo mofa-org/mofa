@@ -59,7 +59,7 @@ fn default_tracing() -> bool {
 }
 
 fn default_retry_delay() -> u64 {
-    3000
+    1000
 }
 
 impl Default for ExecutionOptions {
@@ -68,7 +68,7 @@ impl Default for ExecutionOptions {
             timeout_ms: None,
             tracing_enabled: true,
             max_retries: 0,
-            retry_delay_ms: 1000,
+            retry_delay_ms: default_retry_delay(),
             retry_config: None,
             custom: HashMap::new(),
         }
@@ -96,7 +96,9 @@ impl ExecutionOptions {
         self.retry_delay_ms = retry_delay_ms;
         self.retry_config = Some(RetryConfig {
             max_attempts: max_retries + 1,
-            policy: RetryPolicy::Fixed { delay_ms: retry_delay_ms },
+            policy: RetryPolicy::Fixed {
+                delay_ms: retry_delay_ms,
+            },
         });
         self
     }
@@ -269,6 +271,7 @@ impl ExecutionResult {
 ///     info!("Output: {:?}", result.output);
 /// }
 /// ```
+#[derive(Clone)]
 pub struct ExecutionEngine {
     /// Agent 注册中心
     /// Agent Registry
@@ -411,10 +414,8 @@ impl ExecutionEngine {
             Err(e) => {
                 // Try graceful degradation before giving up.
                 let attempts = retry_cfg.max_attempts;
-                if let Some(fallback_output) = self
-                    .fallback
-                    .on_failure(agent_id, &e, attempts)
-                    .await
+                if let Some(fallback_output) =
+                    self.fallback.on_failure(agent_id, &e, attempts).await
                 {
                     let mut r = ExecutionResult::success(
                         execution_id,
@@ -479,17 +480,19 @@ impl ExecutionEngine {
         let mut last_error = None;
 
         for attempt in 0..max_attempts {
-            let attempt_span = tracing::info_span!("agent.attempt", attempt = attempt, max_attempts = max_attempts);
+            let attempt_span = tracing::info_span!(
+                "agent.attempt",
+                attempt = attempt,
+                max_attempts = max_attempts
+            );
             if attempt > 0 {
                 let delay = retry_cfg.policy.delay_for(attempt - 1);
                 tokio::time::sleep(delay).await;
             }
 
-            let result = async {
-                self.execute_once(agent, input.clone(), ctx, options).await
-            }
-            .instrument(attempt_span)
-            .await;
+            let result = async { self.execute_once(agent, input.clone(), ctx, options).await }
+                .instrument(attempt_span)
+                .await;
 
             match result {
                 Ok(output) => return Ok((output, attempt)),
@@ -571,13 +574,12 @@ impl ExecutionEngine {
         let mut handles = Vec::new();
 
         for (agent_id, input) in executions {
-            let registry = self.registry.clone();
+            let engine = self.clone();
             let opts = options.clone();
 
             let span = tracing::info_span!("agent.parallel", agent_id = %agent_id);
             let handle = tokio::spawn(
                 async move {
-                    let engine = ExecutionEngine::new(registry);
                     engine.execute(&agent_id, input, opts).await
                 }
                 .instrument(span),
@@ -894,5 +896,17 @@ mod tests {
         assert_eq!(options.max_retries, 3);
         assert_eq!(options.retry_delay_ms, 500);
         assert!(!options.tracing_enabled);
+    }
+
+    #[test]
+    fn test_execution_options_retry_delay_default_is_consistent() {
+        let options_from_default = ExecutionOptions::default();
+        let options_from_serde: ExecutionOptions = serde_json::from_str("{}").unwrap();
+
+        assert_eq!(options_from_default.retry_delay_ms, default_retry_delay());
+        assert_eq!(
+            options_from_default.retry_delay_ms,
+            options_from_serde.retry_delay_ms
+        );
     }
 }

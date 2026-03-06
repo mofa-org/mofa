@@ -2689,6 +2689,19 @@ checksum = "06d2e3287df1c007e74221c49ca10a95d557349e54b3a75dc2fb14712c751f04"
 
 [[package]]
 name = "dashmap"
+version = "5.5.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "978747c1d849a7d2ee5e8adc0159961c48fb7e5db2f06af6723b80123bb53856"
+dependencies = [
+ "cfg-if",
+ "hashbrown 0.14.5",
+ "lock_api",
+ "once_cell",
+ "parking_lot_core",
+]
+
+[[package]]
+name = "dashmap"
 version = "6.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5041cc499144891f3790297212f32a74fb938e5136a14943f338ef9e0ae276cf"
@@ -4639,19 +4652,6 @@ dependencies = [
 
 [[package]]
 name = "hyper-tls"
-version = "0.5.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d6183ddfa99b85da61a140bea0efc93fdf56ceaa041b37d553518030827f9905"
-dependencies = [
- "bytes",
- "hyper 0.14.32",
- "native-tls",
- "tokio",
- "tokio-native-tls",
-]
-
-[[package]]
-name = "hyper-tls"
 version = "0.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "70206fc6890eaca9fde8a0bf71caa2ddfc9fe045ac9e5c70df101a7dbde866e0"
@@ -5424,12 +5424,13 @@ checksum = "b6d2cec3eae94f9f509c767b45932f1ada8350c4bdb85af2fcab4a3c14807981"
 
 [[package]]
 name = "libredox"
-version = "0.1.12"
+version = "0.1.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3d0b95e02c851351f877147b7deea7b1afb1df71b63aa5f8270716e0c5720616"
+checksum = "1744e39d1d6a9948f4f388969627434e31128196de472883b39f148769bfe30a"
 dependencies = [
  "bitflags 2.11.0",
  "libc",
+ "plain",
  "redox_syscall 0.7.3",
 ]
 
@@ -5775,6 +5776,7 @@ dependencies = [
  "futures",
  "hex",
  "indicatif",
+ "json5",
  "mofa-foundation",
  "mofa-kernel",
  "mofa-runtime",
@@ -5884,6 +5886,23 @@ dependencies = [
 [[package]]
 name = "mofa-gateway"
 version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "axum 0.8.8",
+ "chrono",
+ "dashmap 5.5.3",
+ "mofa-kernel",
+ "mofa-monitoring",
+ "mofa-runtime",
+ "serde",
+ "serde_json",
+ "thiserror 1.0.69",
+ "tokio",
+ "tower 0.5.3",
+ "tower-http",
+ "tracing",
+ "uuid",
+]
 
 [[package]]
 name = "mofa-integrations"
@@ -5929,6 +5948,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "mofa-local-llm"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "chrono",
+ "mofa-foundation",
+ "serde",
+ "serde_json",
+ "sysinfo 0.31.4",
+ "thiserror 1.0.69",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
 name = "mofa-macros"
 version = "0.1.0"
 
@@ -5951,7 +5985,7 @@ dependencies = [
  "opentelemetry-otlp",
  "opentelemetry_sdk",
  "rand 0.8.5",
- "reqwest 0.11.27",
+ "reqwest 0.12.28",
  "rust-embed",
  "serde",
  "serde_json",
@@ -6024,6 +6058,7 @@ dependencies = [
  "error-stack",
  "eyre",
  "flume 0.10.14",
+ "mofa-foundation",
  "mofa-kernel",
  "mofa-monitoring",
  "mofa-plugins",
@@ -6061,6 +6096,20 @@ dependencies = [
 [[package]]
 name = "mofa-smith"
 version = "0.1.0"
+
+[[package]]
+name = "mofa-testing"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "chrono",
+ "mofa-foundation",
+ "mofa-kernel",
+ "serde",
+ "serde_json",
+ "tokio",
+]
 
 [[package]]
 name = "nanorand"
@@ -7609,7 +7658,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6102314f700f3e8df466c49110830b18cbfc172f88f27a9d7383e455663b1be7"
 dependencies = [
  "bon",
- "dashmap",
+ "dashmap 6.1.0",
  "futures",
  "js-sys",
  "once_cell",
@@ -8002,12 +8051,10 @@ dependencies = [
  "http-body 0.4.6",
  "hyper 0.14.32",
  "hyper-rustls 0.24.2",
- "hyper-tls 0.5.0",
  "ipnet",
  "js-sys",
  "log",
  "mime",
- "native-tls",
  "once_cell",
  "percent-encoding",
  "pin-project-lite",
@@ -8020,14 +8067,12 @@ dependencies = [
  "sync_wrapper 0.1.2",
  "system-configuration 0.5.1",
  "tokio",
- "tokio-native-tls",
  "tokio-rustls 0.24.1",
  "tower-service",
  "url",
  "wasm-bindgen",
  "wasm-bindgen-futures",
  "web-sys",
- "webpki-roots 0.25.4",
  "winreg",
 ]
 
@@ -8048,7 +8093,7 @@ dependencies = [
  "http-body-util",
  "hyper 1.8.1",
  "hyper-rustls 0.27.7",
- "hyper-tls 0.6.0",
+ "hyper-tls",
  "hyper-util",
  "js-sys",
  "log",
@@ -10501,6 +10546,7 @@ dependencies = [
  "tower-layer",
  "tower-service",
  "tracing",
+ "uuid",
 ]
 
 [[package]]
@@ -11682,12 +11728,6 @@ checksum = "804f18a4ac2676ffb4e8b5b5fa9ae38af06df08162314f96a68d2a363e21a8ca"
 dependencies = [
  "rustls-pki-types",
 ]
-
-[[package]]
-name = "webpki-roots"
-version = "0.25.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5f20c57d8d7db6d3b86154206ae5d8fba62dd39573114de97c2cb0578251f8e1"
 
 [[package]]
 name = "webpki-roots"

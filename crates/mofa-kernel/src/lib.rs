@@ -70,5 +70,8 @@ pub use metrics::*;
 
 // LLM protocol types and kernel-layer inference traits
 pub mod llm;
+// Structured output parsing with JSON schema validation
+pub mod structured_output;
+pub use structured_output::StructuredOutput;
 // Security governance (PII redaction, content moderation, prompt guard)
 pub mod security;
