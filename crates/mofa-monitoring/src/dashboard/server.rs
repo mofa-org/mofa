@@ -189,6 +189,12 @@ impl DashboardServer {
         self.ws_handler.clone()
     }
 
+    /// Override Prometheus exporter settings.
+    pub fn with_prometheus_export_config(mut self, config: PrometheusExportConfig) -> Self {
+        self.prometheus_export_config = config;
+        self
+    }
+
     /// Get the Prometheus exporter (if initialized)
     pub fn prometheus_exporter(&self) -> Option<Arc<PrometheusExporter>> {
         self.prometheus_exporter.clone()
@@ -207,12 +213,6 @@ impl DashboardServer {
     /// Attach a session recorder for debug sessions
     pub fn with_session_recorder(mut self, recorder: Arc<dyn SessionRecorder>) -> Self {
         self.session_recorder = Some(recorder);
-        self
-    }
-
-    /// Override Prometheus exporter settings.
-    pub fn with_prometheus_export_config(mut self, config: PrometheusExportConfig) -> Self {
-        self.prometheus_export_config = config;
         self
     }
 
