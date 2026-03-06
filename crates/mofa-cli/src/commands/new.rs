@@ -5,11 +5,7 @@ use colored::Colorize;
 use std::path::{Path, PathBuf};
 
 /// Execute the `mofa new` command
-pub fn run(
-    name: &str,
-    template: &str,
-    output: Option<&std::path::Path>,
-) -> Result<(), CliError> {
+pub fn run(name: &str, template: &str, output: Option<&std::path::Path>) -> Result<(), CliError> {
     let project_dir = output
         .map(|p| p.join(name))
         .unwrap_or_else(|| PathBuf::from(name));

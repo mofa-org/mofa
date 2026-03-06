@@ -1358,6 +1358,8 @@ mod tests {
         let compressor = SlidingWindowCompressor::new(2);
         let long_content = "a".repeat(10_000);
         let msgs = vec![make_msg("system", "sys"), make_msg("user", &long_content)];
+        // Even though the single message exceeds the token budget, the window
+        // compressor keeps it because it is within window_size.
         let result = compressor.compress(msgs, 1).await.unwrap();
         assert_eq!(result.len(), 2);
     }
@@ -1400,9 +1402,9 @@ mod tests {
         assert_eq!(result[0].role, "system");
         assert!(
             result[1]
-            .content
-            .as_ref()
-            .unwrap()
+                .content
+                .as_ref()
+                .unwrap()
                 .starts_with("[Conversation summary]")
         );
     }
@@ -1413,6 +1415,8 @@ mod tests {
         let compressor = SummarizingCompressor::new(llm).with_keep_recent(10);
         let long_content = "x".repeat(50_000);
         let msgs = vec![make_msg("system", "sys"), make_msg("user", &long_content)];
+        // Only 1 conversation message which is <= keep_recent=10, so no
+        // summarisation happens; messages are returned as-is even over budget.
         let result = compressor.compress(msgs.clone(), 1).await.unwrap();
         assert_eq!(result.len(), 2);
     }

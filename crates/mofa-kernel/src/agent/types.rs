@@ -5,10 +5,10 @@
 //! Defines unified Agent input, output, and state types
 
 use async_trait::async_trait;
+use base64::Engine;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fmt;
-use base64::Engine;
 
 // 导出统一类型模块
 // Export unified type modules
