@@ -54,9 +54,9 @@ impl Default for GatewayConfig {
             enable_rate_limiting: true,
             enable_circuit_breakers: true,
             enable_local_llm_proxy: std::env::var("MOFA_LOCAL_LLM_ENABLED")
-                .unwrap_or_else(|_| "true".to_string())
-                .parse()
-                .unwrap_or(true),
+                .ok()
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(false),
             local_llm_backend_url: std::env::var("MOFA_LOCAL_LLM_URL").ok(),
         }
     }
@@ -198,35 +198,35 @@ impl Gateway {
             let local_llm_node_id = NodeId::from("mofa-local-llm");
             
             // Parse backend URL to get socket address for health checking
-            // Extract host and port from URL string (simple parsing)
-            let url_str = backend.base_url.trim_start_matches("http://").trim_start_matches("https://");
-            let (host, port) = if let Some(colon_pos) = url_str.find(':') {
-                let host = &url_str[..colon_pos];
-                let port_str = &url_str[colon_pos + 1..];
-                let port: u16 = port_str.parse().unwrap_or(8000);
-                (host, port)
+            if let Ok(uri) = backend.base_url.parse::<axum::http::Uri>() {
+                if let Some(authority) = uri.authority() {
+                    let host_str = authority.host();
+                    let port = authority.port_u16().unwrap_or(if uri.scheme_str() == Some("https") { 443 } else { 80 });
+                    
+                    // Convert hostname to IP if needed
+                    let host_ip = match host_str {
+                        "localhost" => "127.0.0.1",
+                        _ => host_str,
+                    };
+                    
+                    if let Ok(addr) = format!("{}:{}", host_ip, port).parse::<std::net::SocketAddr>() {
+                        self.health_checker.register_node_address(local_llm_node_id.clone(), addr).await;
+                        tracing::debug!("Registered mofa-local-llm health check address: {}", addr);
+                    } else {
+                        tracing::warn!("Failed to parse mofa-local-llm address: {}:{}", host_ip, port);
+                    }
+                } else {
+                    tracing::warn!("Failed to extract authority from mofa-local-llm URL: {}", backend.base_url);
+                }
             } else {
-                (url_str, 8000)
-            };
-            
-            // Convert localhost to 127.0.0.1 for SocketAddr parsing
-            let host_ip = match host {
-                "localhost" => "127.0.0.1",
-                _ => host,
-            };
-            
-            if let Ok(addr) = format!("{}:{}", host_ip, port).parse::<std::net::SocketAddr>() {
-                self.health_checker.register_node_address(local_llm_node_id.clone(), addr).await;
-                tracing::debug!("Registered mofa-local-llm health check address: {}", addr);
-            } else {
-                tracing::warn!("Failed to parse mofa-local-llm address: {}:{}", host_ip, port);
+                tracing::warn!("Failed to parse mofa-local-llm URL: {}", backend.base_url);
             }
             
             // Register node for health checking
             self.health_checker.register_node(local_llm_node_id.clone()).await;
             
             // Create circuit breaker for mofa-local-llm
-            let breaker = self.circuit_breakers.get_or_create(&local_llm_node_id).await;
+            let _breaker = self.circuit_breakers.get_or_create(&local_llm_node_id).await;
 
             // Create proxy handler and add to app_state
             let proxy_handler = Arc::new(ProxyHandler::new(backend.to_proxy_backend()));
