@@ -40,6 +40,10 @@ pub struct GatewayConfig {
     pub enable_rate_limiting: bool,
     /// Enable circuit breakers.
     pub enable_circuit_breakers: bool,
+    /// Enable mofa-local-llm proxy.
+    pub enable_local_llm_proxy: bool,
+    /// mofa-local-llm backend URL (default: http://localhost:8000).
+    pub local_llm_backend_url: Option<String>,
 }
 
 impl Default for GatewayConfig {
@@ -49,6 +53,11 @@ impl Default for GatewayConfig {
             load_balancing: LoadBalancingAlgorithm::RoundRobin,
             enable_rate_limiting: true,
             enable_circuit_breakers: true,
+            enable_local_llm_proxy: std::env::var("MOFA_LOCAL_LLM_ENABLED")
+                .unwrap_or_else(|_| "true".to_string())
+                .parse()
+                .unwrap_or(true),
+            local_llm_backend_url: std::env::var("MOFA_LOCAL_LLM_URL").ok(),
         }
     }
 }
@@ -136,18 +145,21 @@ impl Gateway {
         use tower_http::trace::TraceLayer;
 
         // Build HTTP router
-        let app_state = GatewayState {
+        let mut app_state = GatewayState {
             router: Arc::clone(&self.router),
             load_balancer: Arc::clone(&self.load_balancer),
             health_checker: Arc::clone(&self.health_checker),
+            circuit_breakers: Arc::clone(&self.circuit_breakers),
             control_plane: self.control_plane.clone(),
             metrics: Arc::clone(&self.metrics),
+            local_llm_proxy: None,
+            local_llm_node_id: None,
         };
 
         // Start metrics update loop
         self.start_metrics_update_loop().await;
 
-        let app = Router::new()
+        let mut app = Router::new()
             // Health check endpoints
             .route("/health", get(health_handler))
             .route("/ready", get(ready_handler))
@@ -161,8 +173,74 @@ impl Gateway {
             .route("/api/v1/cluster/nodes", get(list_nodes_handler))
             .route("/api/v1/cluster/status", get(cluster_status_handler))
             // Request routing endpoint (for proxying)
-            .route("/api/v1/route", post(route_request_handler))
-            .with_state(app_state)
+            .route("/api/v1/route", post(route_request_handler));
+
+        // Add mofa-local-llm proxy routes if enabled
+        if self.config.enable_local_llm_proxy {
+            use crate::handlers::local_llm::{proxy_local_llm_chat, proxy_local_llm_model_info, proxy_local_llm_models};
+            use crate::proxy::{LocalLLMBackend, ProxyHandler};
+            use crate::types::NodeId;
+            use std::sync::Arc;
+
+            // Create local-llm backend configuration
+            let backend = if let Some(ref url) = self.config.local_llm_backend_url {
+                LocalLLMBackend::new(url)
+            } else {
+                LocalLLMBackend::default()
+            };
+
+            tracing::info!(
+                backend_url = %backend.base_url,
+                "Enabling mofa-local-llm proxy"
+            );
+
+            // Register mofa-local-llm as a node for health checking
+            let local_llm_node_id = NodeId::from("mofa-local-llm");
+            
+            // Parse backend URL to get socket address for health checking
+            // Extract host and port from URL string (simple parsing)
+            let url_str = backend.base_url.trim_start_matches("http://").trim_start_matches("https://");
+            let (host, port) = if let Some(colon_pos) = url_str.find(':') {
+                let host = &url_str[..colon_pos];
+                let port_str = &url_str[colon_pos + 1..];
+                let port: u16 = port_str.parse().unwrap_or(8000);
+                (host, port)
+            } else {
+                (url_str, 8000)
+            };
+            
+            // Convert localhost to 127.0.0.1 for SocketAddr parsing
+            let host_ip = match host {
+                "localhost" => "127.0.0.1",
+                _ => host,
+            };
+            
+            if let Ok(addr) = format!("{}:{}", host_ip, port).parse::<std::net::SocketAddr>() {
+                self.health_checker.register_node_address(local_llm_node_id.clone(), addr).await;
+                tracing::debug!("Registered mofa-local-llm health check address: {}", addr);
+            } else {
+                tracing::warn!("Failed to parse mofa-local-llm address: {}:{}", host_ip, port);
+            }
+            
+            // Register node for health checking
+            self.health_checker.register_node(local_llm_node_id.clone()).await;
+            
+            // Create circuit breaker for mofa-local-llm
+            let breaker = self.circuit_breakers.get_or_create(&local_llm_node_id).await;
+
+            // Create proxy handler and add to app_state
+            let proxy_handler = Arc::new(ProxyHandler::new(backend.to_proxy_backend()));
+            app_state.local_llm_proxy = Some(Arc::clone(&proxy_handler));
+            app_state.local_llm_node_id = Some(local_llm_node_id);
+
+            // Add local-llm routes
+            app = app
+                .route("/v1/chat/completions", post(proxy_local_llm_chat))
+                .route("/v1/models", get(proxy_local_llm_models))
+                .route("/v1/models/:model_id", get(proxy_local_llm_model_info));
+        }
+
+        let app = app.with_state(app_state)
             .layer(TraceLayer::new_for_http())
             .layer(
                 CorsLayer::new()
@@ -263,12 +341,23 @@ impl Gateway {
 
 /// Application state for HTTP handlers.
 #[derive(Clone)]
-struct GatewayState {
-    router: Arc<GatewayRouter>,
-    load_balancer: Arc<LoadBalancer>,
-    health_checker: Arc<HealthChecker>,
-    control_plane: Option<Arc<crate::control_plane::ControlPlane>>,
-    metrics: crate::observability::SharedMetrics,
+pub struct GatewayState {
+    /// Request router for selecting backend nodes.
+    pub router: Arc<GatewayRouter>,
+    /// Load balancer for distributing requests.
+    pub load_balancer: Arc<LoadBalancer>,
+    /// Health checker for monitoring node availability.
+    pub health_checker: Arc<HealthChecker>,
+    /// Circuit breaker registry for failure protection.
+    pub circuit_breakers: Arc<CircuitBreakerRegistry>,
+    /// Optional control plane for distributed coordination.
+    pub control_plane: Option<Arc<crate::control_plane::ControlPlane>>,
+    /// Metrics collector for observability.
+    pub metrics: crate::observability::SharedMetrics,
+    /// Optional proxy handler for mofa-local-llm backend.
+    pub local_llm_proxy: Option<Arc<crate::proxy::ProxyHandler>>,
+    /// Node ID for mofa-local-llm backend in health checker.
+    pub local_llm_node_id: Option<crate::types::NodeId>,
 }
 
 // HTTP Handlers
