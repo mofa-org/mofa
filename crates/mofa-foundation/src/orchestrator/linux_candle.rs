@@ -1272,3 +1272,142 @@ mod tests {
         assert!(result.is_err());
     }
 }
+
+// ============================================================================
+// LocalInferenceBackend Implementation
+// ============================================================================
+
+use crate::inference::local_backend::{
+    BackendResult, InferenceChunk, InferenceResponse, LocalInferenceBackend,
+};
+use crate::inference::types::InferenceRequest;
+use futures::Stream;
+use std::pin::Pin;
+
+/// Streaming response adapter for LinuxCandleProvider
+///
+/// Wraps the synchronous generation to provide a streaming interface.
+struct CandleStreamAdapter {
+    /// The generated output text
+    output: String,
+    /// Whether the stream has been consumed
+    consumed: bool,
+}
+
+impl CandleStreamAdapter {
+    fn new(output: String) -> Self {
+        Self {
+            output,
+            consumed: false,
+        }
+    }
+}
+
+impl Stream for CandleStreamAdapter {
+    type Item = BackendResult<InferenceChunk>;
+
+    fn poll_next(
+        mut self: Pin<&mut Self>,
+        _cx: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<Option<Self::Item>> {
+        if self.consumed {
+            return std::task::Poll::Ready(None);
+        }
+        self.consumed = true;
+        let chunk = InferenceChunk::with_tokens(&self.output, true, self.output.len());
+        std::task::Poll::Ready(Some(Ok(chunk)))
+    }
+}
+
+impl LocalInferenceBackend for LinuxCandleProvider {
+    fn load_model(&self, model_id: &str) -> BackendResult<()> {
+        // Validate model_id matches
+        if model_id != self.model_id {
+            return Err(OrchestratorError::ModelNotFound(format!(
+                "Model '{}' not found, expected '{}'",
+                model_id, self.model_id
+            )));
+        }
+
+        // Use blocking runtime to call async load
+        // Note: This assumes we're in a Tokio runtime context
+        let rt = tokio::runtime::Runtime::new().map_err(|e| {
+            OrchestratorError::ModelLoadFailed(format!("Failed to create runtime: {}", e))
+        })?;
+
+        rt.block_on(async {
+            let mut provider = Self {
+                model_id: self.model_id.clone(),
+                config: self.config.clone(),
+                state: None,
+                memory_usage: 0,
+                loaded: false,
+            };
+            provider.load().await
+        })
+    }
+
+    fn generate(&self, request: InferenceRequest) -> BackendResult<InferenceResponse> {
+        // Validate model is loaded
+        if !self.loaded {
+            return Err(OrchestratorError::InferenceFailed(
+                "Model is not loaded. Call load_model first.".to_string(),
+            ));
+        }
+
+        // Use blocking runtime
+        let rt = tokio::runtime::Runtime::new().map_err(|e| {
+            OrchestratorError::InferenceFailed(format!("Failed to create runtime: {}", e))
+        })?;
+
+        let output = rt.block_on(async { self.infer(&request.prompt).await })?;
+
+        // Convert to InferenceResponse
+        let precision = request.preferred_precision;
+        let response = InferenceResponse::new(
+            output,
+            self.model_id.clone(),
+            precision,
+            output.len(), // Estimate token count
+        );
+
+        Ok(response)
+    }
+
+    fn generate_stream(
+        &self,
+        request: InferenceRequest,
+    ) -> BackendResult<Box<dyn Stream<Item = InferenceChunk> + Send>> {
+        // Generate the response first, then wrap in stream
+        let response = self.generate(request)?;
+
+        let stream = CandleStreamAdapter::new(response.output);
+        Ok(Box::new(stream))
+    }
+
+    fn unload_model(&self, model_id: &str) -> BackendResult<()> {
+        // Validate model_id
+        if model_id != self.model_id {
+            return Err(OrchestratorError::ModelNotFound(format!(
+                "Model '{}' not found",
+                model_id
+            )));
+        }
+
+        // Use blocking runtime
+        let rt = tokio::runtime::Runtime::new().map_err(|e| {
+            OrchestratorError::InferenceFailed(format!("Failed to create runtime: {}", e))
+        })?;
+
+        rt.block_on(async {
+            let mut provider = Self {
+                model_id: self.model_id.clone(),
+                config: self.config.clone(),
+                state: None,
+                memory_usage: 0,
+                loaded: false,
+            };
+            provider.unload().await
+        })
+    }
+}

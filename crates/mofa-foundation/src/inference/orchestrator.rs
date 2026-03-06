@@ -28,6 +28,7 @@
 use std::time::Duration;
 
 use crate::hardware::{HardwareCapability, detect_hardware};
+use crate::inference::local_backend::LocalInferenceBackend;
 
 mod duration_secs {
     use serde::{Deserialize, Deserializer, Serialize, Serializer};
@@ -96,6 +97,8 @@ pub struct InferenceOrchestrator {
     config: OrchestratorConfig,
     model_pool: ModelPool,
     hardware: HardwareCapability,
+    /// Optional local inference backend for actual model execution
+    local_backend: Option<Box<dyn LocalInferenceBackend>>,
 }
 
 impl InferenceOrchestrator {
@@ -117,6 +120,7 @@ impl InferenceOrchestrator {
             config,
             model_pool,
             hardware,
+            local_backend: None,
         }
     }
 
@@ -128,7 +132,20 @@ impl InferenceOrchestrator {
             config,
             model_pool,
             hardware,
+            local_backend: None,
         }
+    }
+
+    /// Set a local inference backend for actual model execution.
+    ///
+    /// When a local backend is set, the orchestrator will use it for
+    /// local inference requests instead of the simulated response.
+    ///
+    /// # Arguments
+    /// * `backend` - A boxed local inference backend
+    pub fn with_local_backend(mut self, backend: Box<dyn LocalInferenceBackend>) -> Self {
+        self.local_backend = Some(backend);
+        self
     }
 
     /// The single entry point for inference.
@@ -171,11 +188,26 @@ impl InferenceOrchestrator {
                     self.model_pool.touch(model_id);
                 }
 
-                InferenceResult {
-                    output: format!(
+                // Use local backend if available, otherwise use simulated response
+                let output = if let Some(ref backend) = self.local_backend {
+                    // Load model in backend if needed
+                    let _ = backend.load_model(model_id);
+                    
+                    // Execute inference
+                    match backend.generate(request.clone()) {
+                        Ok(response) => response.output,
+                        Err(e) => format!("[local error:{}] {}", model_id, e),
+                    }
+                } else {
+                    // Fallback to simulated response for backwards compatibility
+                    format!(
                         "[local:{}] Inference result for: {}",
                         model_id, request.prompt
-                    ),
+                    )
+                };
+
+                InferenceResult {
+                    output,
                     routed_to: RoutedBackend::Local {
                         model_id: model_id.clone(),
                     },

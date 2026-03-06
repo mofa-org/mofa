@@ -25,7 +25,12 @@ pub use embedding_adapter::{
     RagEmbeddingProvider,
 };
 pub use retrieval::{
+<<<<<<< HEAD
     query_documents, RagQueryConfig, RetrievalResult, RetrievedChunk,};
+=======
+    query_documents, RagQueryConfig, RetrievalResult, RetrievedChunk,
+};
+>>>>>>> 4f34a449 (feat(inference): introduce LocalInferenceBackend trait and integrate LinuxCandleProvider)
 pub use indexing::{
     index_documents, IndexDocument, IndexMode, IndexResult, RagIndexConfig,
     RagOrchestrationError,
