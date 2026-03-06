@@ -46,7 +46,7 @@ async fn test_gateway_with_local_llm_proxy_disabled() {
 async fn test_proxy_handler_health_check_no_backend() {
     // Test health check when backend is not available
     // Use a valid but non-listening port to simulate an unavailable backend
-    let backend = LocalLLMBackend::new("http://localhost:9999");
+    let backend = LocalLLMBackend::new("http://localhost:9999"); // Valid port but likely unused
     let handler = ProxyHandler::new(backend.to_proxy_backend());
 
     // Health check should return false (backend not available) without erroring
