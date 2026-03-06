@@ -202,6 +202,9 @@ pub enum WorkflowStatus {
     /// 已取消
     /// Cancelled
     Cancelled,
+    /// 执行超时
+    /// Workflow exceeded the configured execution timeout
+    TimedOut,
 }
 
 /// 节点执行结果
