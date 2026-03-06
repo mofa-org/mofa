@@ -1,0 +1,83 @@
+[
+  {
+    "name": "mofa-monitoring",
+    "path": "crates/mofa-monitoring",
+    "deps": [
+      "mofa-kernel",
+      "mofa-foundation",
+      "mofa-kernel"
+    ]
+  },
+  {
+    "name": "mofa-kernel",
+    "path": "crates/mofa-kernel",
+    "deps": []
+  },
+  {
+    "name": "mofa-foundation",
+    "path": "crates/mofa-foundation",
+    "deps": [
+      "mofa-kernel",
+      "mofa-extra",
+      "mofa-plugins"
+    ]
+  },
+  {
+    "name": "mofa-runtime",
+    "path": "crates/mofa-runtime",
+    "deps": [
+      "mofa-kernel",
+      "mofa-plugins",
+      "mofa-monitoring"
+    ]
+  },
+  {
+    "name": "mofa-cli",
+    "path": "crates/mofa-cli",
+    "deps": [
+      "mofa-sdk",
+      "mofa-kernel",
+      "mofa-runtime",
+      "mofa-foundation"
+    ]
+  },
+  {
+    "name": "mofa-plugins",
+    "path": "crates/mofa-plugins",
+    "deps": [
+      "mofa-kernel",
+      "mofa-extra"
+    ]
+  },
+  {
+    "name": "mofa-macros",
+    "path": "crates/mofa-macros",
+    "deps": []
+  },
+  {
+    "name": "mofa-sdk",
+    "path": "crates/mofa-sdk",
+    "deps": [
+      "mofa-runtime",
+      "mofa-foundation",
+      "mofa-kernel",
+      "mofa-plugins",
+      "mofa-extra",
+      "mofa-monitoring"
+    ]
+  },
+  {
+    "name": "mofa-ffi",
+    "path": "crates/mofa-ffi",
+    "deps": [
+      "mofa-sdk",
+      "mofa-foundation",
+      "mofa-kernel"
+    ]
+  },
+  {
+    "name": "mofa-extra",
+    "path": "crates/mofa-extra",
+    "deps": []
+  }
+]
