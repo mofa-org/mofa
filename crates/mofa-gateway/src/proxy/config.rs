@@ -13,8 +13,6 @@ pub struct ProxyBackend {
     pub health_check_endpoint: Option<String>,
     /// Request timeout.
     pub timeout: Duration,
-    /// Maximum number of retries on failure.
-    pub retries: u32,
 }
 
 impl ProxyBackend {
@@ -25,7 +23,6 @@ impl ProxyBackend {
             base_url: base_url.into(),
             health_check_endpoint: None,
             timeout: Duration::from_secs(60),
-            retries: 3,
         }
     }
 
@@ -38,12 +35,6 @@ impl ProxyBackend {
     /// Set the request timeout.
     pub fn with_timeout(mut self, timeout: Duration) -> Self {
         self.timeout = timeout;
-        self
-    }
-
-    /// Set the maximum number of retries.
-    pub fn with_retries(mut self, retries: u32) -> Self {
-        self.retries = retries;
         self
     }
 }
