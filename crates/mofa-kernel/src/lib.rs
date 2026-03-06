@@ -83,5 +83,5 @@ pub use gateway::{GatewayRoute, HttpMethod, RegistryError, RouteRegistry, Routin
 pub mod scheduler;
 pub use scheduler::{
     AgentScheduler, Clock, MissedTickPolicy, ScheduleDefinition,
-    ScheduleHandle, ScheduleInfo, SchedulerError, SystemClock,
+    ScheduleHandle, ScheduleInfo, SchedulerError,
 };

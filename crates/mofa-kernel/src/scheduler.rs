@@ -28,20 +28,6 @@ pub trait Clock: Send + Sync {
     fn now_millis(&self) -> u64;
 }
 
-/// The default [`Clock`] implementation backed by the system clock.
-pub struct SystemClock;
-
-impl Clock for SystemClock {
-    fn now_millis(&self) -> u64 {
-        std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_millis()
-            .try_into()
-            .unwrap_or(u64::MAX)
-    }
-}
-
 // ---------------------------------------------------------------------------
 // ScheduleDefinition
 // ---------------------------------------------------------------------------
@@ -258,7 +244,6 @@ pub struct ScheduleInfo {
 ///
 /// Callers that need to be generic over the scheduler backend (e.g. tests using a
 /// `MockScheduler`) depend only on this trait.
-#[async_trait::async_trait]
 pub trait AgentScheduler: Send + Sync {
     /// Register a new schedule. Returns a [`ScheduleHandle`] that, when dropped or
     /// cancelled, stops the background task.
@@ -297,7 +282,7 @@ pub trait AgentScheduler: Send + Sync {
     /// # Errors
     ///
     /// Returns [`SchedulerError::NotFound`] if the schedule ID is not known.
-    async fn resume_schedule(&self, schedule_id: &str) -> Result<(), SchedulerError>;
+    async fn resume(&self, schedule_id: &str) -> Result<(), SchedulerError>;
 }
 
 // ---------------------------------------------------------------------------
@@ -538,23 +523,4 @@ mod tests {
         assert!(handle.cancel());
     }
 
-    // ------------------------------------------------------------------
-    // 7. SystemClock returns a plausible timestamp
-    // ------------------------------------------------------------------
-
-    #[test]
-    fn system_clock_returns_nonzero_millis() {
-        let clock = SystemClock;
-        let ts = clock.now_millis();
-        // Must be after 2020-01-01 (1_577_836_800_000 ms) and not overflow
-        assert!(ts > 1_577_836_800_000, "timestamp looks too old: {ts}");
-    }
-
-    #[test]
-    fn system_clock_advances_monotonically() {
-        let clock = SystemClock;
-        let t1 = clock.now_millis();
-        let t2 = clock.now_millis();
-        assert!(t2 >= t1, "clock went backwards: {t1} > {t2}");
-    }
 }
