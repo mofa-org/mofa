@@ -139,7 +139,8 @@ pub struct CompiledModule {
 
 impl CompiledModule {
     pub fn new(name: &str, module: Module, source_bytes: &[u8], compile_time_ms: u64) -> Self {
-        let source_hash = format!("{:x}", md5_hash(source_bytes));
+        // SECURITY: Use SHA-256 for collision-resistant cache keys.
+        let source_hash = sha256_hash(source_bytes);
 
         Self {
             name: name.to_string(),
@@ -349,8 +350,8 @@ impl WasmRuntime {
 
     /// Compile a WASM module from bytes
     pub async fn compile(&self, name: &str, bytes: &[u8]) -> WasmResult<Arc<CompiledModule>> {
-        // Check cache first
-        let hash = format!("{:x}", md5_hash(bytes));
+        // Check cache first using a cryptographic hash to prevent cache poisoning.
+        let hash = sha256_hash(bytes);
         if let Some(cached) = self.cache.get_by_hash(&hash).await {
             debug!("Using cached module for {}", name);
             return Ok(cached);
@@ -542,14 +543,25 @@ fn create_plugin_from_module(
     ))
 }
 
-/// Simple MD5 hash for cache keys (using sha2 since md5 not available)
-fn md5_hash(data: &[u8]) -> u64 {
-    use std::collections::hash_map::DefaultHasher;
-    use std::hash::{Hash, Hasher};
+/// Compute a cryptographic SHA-256 digest of `data` and return it as a
+/// lowercase hex string.  This replaces the old `DefaultHasher`-based
+/// function whose 64-bit output was trivially collisible, enabling
+/// cache-poisoning attacks against compiled WASM modules.
+fn sha256_hash(data: &[u8]) -> String {
+    use sha2::{Digest, Sha256};
 
-    let mut hasher = DefaultHasher::new();
-    data.hash(&mut hasher);
-    hasher.finish()
+    let mut hasher = Sha256::new();
+    hasher.update(data);
+    let digest = hasher.finalize(); // [u8; 32]
+
+    // Format the 256-bit digest as a 64-char lowercase hex string.
+    digest
+        .iter()
+        .fold(String::with_capacity(64), |mut acc, byte| {
+            use std::fmt::Write;
+            let _ = write!(acc, "{:02x}", byte);
+            acc
+        })
 }
 
 #[cfg(test)]
