@@ -330,7 +330,7 @@ impl GlobalPromptRegistry {
     pub fn get(&self, id: &str) -> PromptResult<PromptTemplate> {
         self.inner
             .read()
-            .expect("Failed to acquire read lock on prompt registry")
+            .map_err(|e| PromptError::LockPoisoned(e.to_string()))?
             .get(id)
             .cloned()
     }
@@ -340,7 +340,7 @@ impl GlobalPromptRegistry {
     pub fn render(&self, id: &str, vars: &[(&str, &str)]) -> PromptResult<String> {
         self.inner
             .read()
-            .expect("Failed to acquire read lock on prompt registry")
+            .map_err(|e| PromptError::LockPoisoned(e.to_string()))?
             .render(id, vars)
     }
 
@@ -367,7 +367,7 @@ impl GlobalPromptRegistry {
     pub fn load_from_file(&self, path: impl AsRef<Path>) -> PromptResult<()> {
         self.inner
             .write()
-            .expect("Failed to acquire write lock on prompt registry")
+            .map_err(|e| PromptError::LockPoisoned(e.to_string()))?
             .load_from_file(path)
     }
 

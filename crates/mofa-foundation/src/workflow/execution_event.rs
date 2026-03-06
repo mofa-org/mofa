@@ -90,6 +90,11 @@ pub enum ExecutionEvent {
         total_duration_ms: u64,
     },
 
+    /// Checkpoint created during workflow execution
+    CheckpointCreated {
+        label: String,
+    },
+
     /// Retry attempt for a node
     NodeRetrying {
         node_id: String,
