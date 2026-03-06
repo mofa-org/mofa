@@ -200,7 +200,7 @@ impl HealthChecker {
         };
         
         // Send HTTP GET request
-        // Format Host header with port when not default
+        // Host header should include port when non-default
         let host_header = if address.port() == 80 || address.port() == 443 {
             address.ip().to_string()
         } else {
