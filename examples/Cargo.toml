@@ -49,6 +49,7 @@ members = [
     "cron_scheduler",
     "native_dataflow",
     "memory_scheduler_demo",
+    "rag_indexing_demo",
 ]
 
 [workspace.package]

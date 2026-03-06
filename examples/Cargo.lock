@@ -380,8 +380,6 @@ dependencies = [
  "http 1.4.0",
  "http-body 1.0.1",
  "http-body-util",
- "hyper 1.8.1",
- "hyper-util",
  "itoa",
  "matchit 0.7.3",
  "memchr",
@@ -421,7 +419,6 @@ dependencies = [
  "sync_wrapper 1.0.2",
  "tower-layer",
  "tower-service",
- "tracing",
 ]
 
 [[package]]
@@ -5560,6 +5557,7 @@ dependencies = [
 name = "runtime_message_bus_backpressure"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
  "mofa-sdk",
  "tokio",
 ]
