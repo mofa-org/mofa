@@ -11,6 +11,7 @@ async fn test_gateway_with_local_llm_proxy_enabled() {
     let mut config = GatewayConfig::default();
     config.enable_local_llm_proxy = true;
     config.local_llm_backend_url = Some("http://localhost:8000".to_string());
+    config.listen_addr = "127.0.0.1:0".parse().unwrap(); // Random port to avoid conflicts
 
     // Create gateway
     let mut gateway = Gateway::new(config).await.unwrap();
@@ -30,6 +31,7 @@ async fn test_gateway_with_local_llm_proxy_disabled() {
     // Create gateway config with local-llm proxy disabled
     let mut config = GatewayConfig::default();
     config.enable_local_llm_proxy = false;
+    config.listen_addr = "127.0.0.1:0".parse().unwrap(); // Random port to avoid conflicts
 
     // Create gateway
     let mut gateway = Gateway::new(config).await.unwrap();
