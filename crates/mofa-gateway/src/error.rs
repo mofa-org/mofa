@@ -227,6 +227,41 @@ impl IntoResponse for GatewayError {
             GatewayError::InvalidRequest(msg) => {
                 (StatusCode::BAD_REQUEST, "INVALID_REQUEST", msg.clone())
             }
+            GatewayError::LoadBalancing(msg) => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "LOAD_BALANCING_ERROR",
+                msg.clone(),
+            ),
+            GatewayError::CircuitBreakerOpen(msg) => (
+                StatusCode::SERVICE_UNAVAILABLE,
+                "CIRCUIT_BREAKER_OPEN",
+                msg.clone(),
+            ),
+            GatewayError::NoHealthyNodes(msg) => (
+                StatusCode::SERVICE_UNAVAILABLE,
+                "NO_HEALTHY_NODES",
+                msg.clone(),
+            ),
+            GatewayError::UnhealthyNode(msg) => (
+                StatusCode::SERVICE_UNAVAILABLE,
+                "UNHEALTHY_NODE",
+                msg.clone(),
+            ),
+            GatewayError::NoAvailableNodes(msg) => (
+                StatusCode::SERVICE_UNAVAILABLE,
+                "NO_AVAILABLE_NODES",
+                msg.clone(),
+            ),
+            GatewayError::HealthCheckFailed(msg) => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "HEALTH_CHECK_FAILED",
+                msg.clone(),
+            ),
+            GatewayError::RoutingFailed(msg) => {
+                (StatusCode::BAD_GATEWAY, "ROUTING_FAILED", msg.clone())
+            }
+            GatewayError::Timeout(msg) => (StatusCode::GATEWAY_TIMEOUT, "TIMEOUT", msg.clone()),
+            GatewayError::Network(msg) => (StatusCode::BAD_GATEWAY, "NETWORK_ERROR", msg.clone()),
             GatewayError::Internal(msg) => (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "INTERNAL_ERROR",
