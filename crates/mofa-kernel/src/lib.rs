@@ -69,6 +69,12 @@ pub mod llm;
 pub mod metrics;
 pub use metrics::*;
 
+// Structured output parsing with JSON schema validation
+pub mod structured_output;
+pub use structured_output::StructuredOutput;
+// Security governance (PII redaction, content moderation, prompt guard)
+pub mod security;
+
 // Scheduler kernel contract (traits, types, errors for periodic agent execution)
 pub mod scheduler;
 pub use scheduler::{

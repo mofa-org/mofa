@@ -74,6 +74,9 @@ jobs:
       - name: Build examples
         run: cargo build --examples
 
+      - name: Run targeted examples compile smoke tests
+        run: cargo test --manifest-path examples/cli_production_smoke/Cargo.toml --test examples_compile
+
   docs:
     name: Documentation
     runs-on: ubuntu-latest
