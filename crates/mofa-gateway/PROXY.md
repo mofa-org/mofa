@@ -52,8 +52,8 @@ cargo run --release
 ### 2. Start Gateway with Proxy Enabled
 
 ```bash
-# Run the example
-cd mofa/crates/mofa-gateway
+# Run the example (from workspace root)
+cd crates/mofa-gateway
 cargo run --example gateway_local_llm_proxy
 
 # Gateway runs on http://localhost:8080
