@@ -235,7 +235,7 @@ pub fn admin_router() -> Router<Arc<AdminState>> {
     Router::new()
         .route("/admin/routes", get(list_routes).post(register_route))
         .route(
-            "/admin/routes/{id}",
+            "/admin/routes/:id",
             delete(deregister_route).patch(toggle_route),
         )
         .route("/admin/health", get(admin_health))
