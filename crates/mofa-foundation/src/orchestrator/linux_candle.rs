@@ -1304,7 +1304,7 @@ impl CandleStreamAdapter {
 }
 
 impl Stream for CandleStreamAdapter {
-    type Item = BackendResult<InferenceChunk>;
+    type Item = InferenceChunk;
 
     fn poll_next(
         mut self: Pin<&mut Self>,
@@ -1315,7 +1315,7 @@ impl Stream for CandleStreamAdapter {
         }
         self.consumed = true;
         let chunk = InferenceChunk::with_tokens(&self.output, true, self.output.len());
-        std::task::Poll::Ready(Some(Ok(chunk)))
+        std::task::Poll::Ready(Some(chunk))
     }
 }
 

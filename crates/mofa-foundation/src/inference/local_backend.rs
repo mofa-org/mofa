@@ -164,7 +164,7 @@ pub trait LocalInferenceBackend: Send + Sync {
     fn generate_stream(
         &self,
         request: InferenceRequest,
-    ) -> BackendResult<Box<dyn Stream<Item = Result<InferenceChunk, OrchestratorError>> + Send>>;
+    ) -> BackendResult<Box<dyn Stream<Item = InferenceChunk> + Send>>;
 
     /// Unload a model from memory.
     ///
