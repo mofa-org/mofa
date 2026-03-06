@@ -4,6 +4,8 @@
     non_camel_case_types,
     ambiguous_glob_reexports
 )]
+// Unified error conversions (GlobalError <-> domain errors)
+pub mod error_conversions;
 // orchestrator module - Model Lifecycle & Allocation
 pub mod orchestrator;
 
@@ -59,6 +61,9 @@ pub use schema_validator::{SchemaError, SchemaValidator};
 pub use agent_executor::{AgentExecutor, ExecutorError};
 // Security governance - PII redaction, content moderation, prompt guard
 pub mod security;
+
+// Error recovery strategies (Backoff, RetryPolicy, CircuitBreaker, retry, fallback_chain)
+pub mod recovery;
 
 // Re-export config types
 pub use config::{AgentInfo, AgentYamlConfig, LLMYamlConfig, RuntimeConfig, ToolConfig};

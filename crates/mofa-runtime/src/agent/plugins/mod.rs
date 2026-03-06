@@ -115,6 +115,7 @@ impl PluginRegistry for SimplePluginRegistry {
 
 /// 插件执行器
 /// Plugin executor
+#[derive(Clone)]
 pub struct PluginExecutor {
     pub registry: Arc<dyn PluginRegistry>,
 }

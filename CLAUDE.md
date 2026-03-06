@@ -65,7 +65,7 @@ mofa/
 │   ├── mofa-ffi/           # FFI bindings (UniFFI for Python, Java, Go, Kotlin, Swift)
 │   ├── mofa-macros/        # Procedural macros
 │   ├── mofa-monitoring/    # Monitoring and observability
-│   └── mofa-extra/         # Additional utilities
+│   └── mofa-extra/         # Rhai scripting engine, dynamic tool system, rule engine, scripted workflow nodes
 ├── examples/               # Usage examples (27+ examples)
 └── docs/                   # Documentation
 ```
@@ -88,6 +88,7 @@ MoFA uses a layered microkernel architecture:
 - **`mofa-foundation`**: LLM integration (OpenAI provider), agent abstractions, persistence layer (PostgreSQL/MySQL/SQLite)
 - **`mofa-plugins`**: Dual-layer plugin system with Rhai scripting engine integration
 - **`mofa-kernel`**: Core runtime with metadata, lifecycle, and communication primitives
+- **`mofa-extra`**: Extended utilities — Rhai scripting engine integration, dynamic tool system, rule engine, and scripted workflow nodes (enabled via `rhai-scripting` feature flag)
 
 ### Multi-Agent Coordination Patterns
 
