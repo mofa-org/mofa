@@ -214,7 +214,7 @@ impl GatewayContext {
     }
 
     /// Convenience: write a serializable attribute.
-    pub fn set_attr<T: serde::Serialize>(&mut self, key: impl Into<String>, val: &T) {
+    pub fn set_attr<T: serde::Serialize>(&mut self, key: impl Into<String>, val: T) {
         if let Ok(v) = serde_json::to_value(val) {
             self.attributes.insert(key.into(), v);
         }
