@@ -13,6 +13,12 @@ use tracing::{debug, warn};
 
 const OTHER_LABEL_VALUE: &str = "__other__";
 
+/// Default cardinality limits for exported label dimensions.
+const DEFAULT_AGENT_ID_LIMIT: usize = 100;
+const DEFAULT_WORKFLOW_ID_LIMIT: usize = 100;
+const DEFAULT_PLUGIN_OR_TOOL_LIMIT: usize = 100;
+const DEFAULT_PROVIDER_MODEL_LIMIT: usize = 50;
+
 /// Cardinality limits for exported label dimensions.
 #[derive(Debug, Clone)]
 #[non_exhaustive]
@@ -30,10 +36,10 @@ pub struct CardinalityLimits {
 impl Default for CardinalityLimits {
     fn default() -> Self {
         Self {
-            agent_id: 100,
-            workflow_id: 100,
-            plugin_or_tool: 100,
-            provider_model: 50,
+            agent_id: DEFAULT_AGENT_ID_LIMIT,
+            workflow_id: DEFAULT_WORKFLOW_ID_LIMIT,
+            plugin_or_tool: DEFAULT_PLUGIN_OR_TOOL_LIMIT,
+            provider_model: DEFAULT_PROVIDER_MODEL_LIMIT,
         }
     }
 }

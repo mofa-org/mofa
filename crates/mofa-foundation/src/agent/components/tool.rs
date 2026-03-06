@@ -26,6 +26,7 @@ use std::sync::Arc;
 ///
 /// Foundation-specific extension for tool categorization
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub enum ToolCategory {
     /// File operations (read, write, edit)
     File,
