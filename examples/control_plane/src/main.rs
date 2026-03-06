@@ -59,7 +59,7 @@ use mofa_kernel::agent::types::{AgentInput, AgentOutput, AgentState};
 
 use mofa_runtime::agent::registry::AgentRegistry;
 
-use mofa_gateway::{GatewayConfig, GatewayServer};
+use mofa_gateway::{GatewayServer, ServerConfig};
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Echo agent: echoes the input back as its output
@@ -163,7 +163,7 @@ async fn main() -> Result<()> {
     info!("available agent types: {:?}", registry.list_factory_types().await);
 
     // Start the gateway (blocks until Ctrl-C)
-    let config = GatewayConfig::new()
+    let config = ServerConfig::new()
         .with_host("127.0.0.1")
         .with_port(8090);
 
