@@ -4,6 +4,7 @@ members = [
     "crates/mofa-monitoring",
     "crates/mofa-kernel",
     "crates/mofa-foundation",
+    "crates/mofa-integrations",
     "crates/mofa-runtime",
     "crates/mofa-cli",
     "crates/mofa-plugins",
@@ -38,6 +39,7 @@ reqwest = "0.12"
 async-trait = "0.1"
 # axum 0.8+ required — uses {param} route syntax (not :param)
 axum = "0"
+socketioxide = "0.15"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 serde_yaml = "0.9"

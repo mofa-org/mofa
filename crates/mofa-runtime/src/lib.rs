@@ -24,6 +24,7 @@ pub mod agent;
 pub mod builder;
 pub mod config;
 pub mod fallback;
+pub mod integrations;
 pub mod interrupt;
 pub mod rag;
 pub mod retry;
@@ -62,6 +63,11 @@ pub use mofa_kernel::message::{AgentEvent, AgentMessage};
 
 // Plugin system - runtime supports plugins
 pub use mofa_kernel::plugin::AgentPlugin;
+
+#[cfg(feature = "integrations-s3")]
+pub use mofa_integrations::s3::{S3Config, S3ObjectStore};
+#[cfg(feature = "integrations-socketio")]
+pub use mofa_integrations::socketio::{SocketIoBridge, SocketIoConfig};
 
 // Import from mofa-foundation
 // Import from mofa-kernel

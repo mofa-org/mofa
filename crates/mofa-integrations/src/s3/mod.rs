@@ -13,10 +13,10 @@
 
 use async_trait::async_trait;
 use aws_config::BehaviorVersion;
+use aws_sdk_s3::Client;
 use aws_sdk_s3::config::Builder as S3Builder;
 use aws_sdk_s3::presigning::PresigningConfig;
 use aws_sdk_s3::primitives::ByteStream;
-use aws_sdk_s3::Client;
 use mofa_kernel::ObjectStore;
 use mofa_kernel::agent::error::{AgentError, AgentResult};
 use std::time::Duration;
@@ -150,7 +150,9 @@ impl ObjectStore for S3ObjectStore {
                     .body
                     .collect()
                     .await
-                    .map_err(|e| Self::err(format!("S3 body read failed for key '{}': {}", key, e)))?
+                    .map_err(|e| {
+                        Self::err(format!("S3 body read failed for key '{}': {}", key, e))
+                    })?
                     .into_bytes();
                 Ok(Some(bytes.to_vec()))
             }
@@ -160,7 +162,10 @@ impl ObjectStore for S3ObjectStore {
                 if service_err.is_no_such_key() {
                     Ok(None)
                 } else {
-                    Err(Self::err(format!("S3 get failed for key '{}': {}", key, service_err)))
+                    Err(Self::err(format!(
+                        "S3 get failed for key '{}': {}",
+                        key, service_err
+                    )))
                 }
             }
         }
@@ -239,5 +244,25 @@ impl ObjectStore for S3ObjectStore {
             .map_err(|e| Self::err(format!("presign failed for key '{}': {}", key, e)))?;
 
         Ok(presigned.uri().to_string())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::S3Config;
+
+    #[test]
+    fn endpoint_enables_path_style_for_minio() {
+        let cfg = S3Config::new("us-east-1", "bucket").with_endpoint("http://localhost:9000");
+        assert_eq!(cfg.endpoint_url.as_deref(), Some("http://localhost:9000"));
+        assert!(cfg.force_path_style);
+    }
+
+    #[test]
+    fn path_style_can_be_overridden() {
+        let cfg = S3Config::new("us-east-1", "bucket")
+            .with_endpoint("http://localhost:9000")
+            .with_path_style(false);
+        assert!(!cfg.force_path_style);
     }
 }
