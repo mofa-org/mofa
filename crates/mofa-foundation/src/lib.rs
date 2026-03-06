@@ -68,8 +68,10 @@ pub mod recovery;
 // Gateway implementations (rate limiter, routing strategies)
 pub mod gateway;
 pub use gateway::{
-    AgentScorer, CapabilityMatchRouter, KeyStrategy, RateLimitDecision, RateLimiter,
-    RateLimiterConfig, RouterRegistry, TokenBucketRateLimiter, WeightedRoundRobinRouter,
+    AgentScorer, CapabilityMatchRouter, ConfigDiff, ConfigError, GatewayConfig, GatewayConfigLoader,
+    KeyStrategy, RateLimitDecision, RateLimiter,
+    RateLimitProfile, RateLimiterConfig, RouteConfig as GatewayRouteConfig, RouterRegistry,
+    TokenBucketRateLimiter, WeightedRoundRobinRouter, diff_configs,
 };
 
 // Re-export config types

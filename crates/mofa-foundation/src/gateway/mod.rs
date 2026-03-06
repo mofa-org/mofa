@@ -12,3 +12,9 @@ pub use rate_limiter::{
 
 pub mod routing;
 pub use routing::{AgentScorer, CapabilityMatchRouter, RouterRegistry, WeightedRoundRobinRouter};
+
+pub mod config;
+pub use config::{
+    ConfigDiff, ConfigError, GatewayConfig, GatewayConfigLoader, RateLimitProfile, RouteConfig,
+    diff_configs,
+};

@@ -1,0 +1,51 @@
+# gateway.example.toml
+#
+# Example two-route gateway configuration demonstrating:
+#   - Route 1: weighted round-robin across two chat agent instances
+#   - Route 2: capability-match routing to the best-fit search agent
+#
+# Copy this file to gateway.toml and adjust to your deployment.
+
+# Name of the auth provider to use for all routes (unless overridden per-route).
+default_auth_provider = "api_key"
+
+# ─── Routes ──────────────────────────────────────────────────────────────────
+
+[[routes]]
+# Route 1: load-balance chat requests across two instances using weighted
+# round-robin (agent-chat-a gets 3x more traffic than agent-chat-b).
+id            = "chat"
+path_pattern  = "/v1/chat"
+method        = "POST"
+agent_id      = "agent-chat-a"   # primary agent; WRR strategy picks from the pool
+strategy      = "weighted_round_robin"
+timeout_ms    = 10000
+rate_limit    = "standard"
+enabled       = true
+
+[[routes]]
+# Route 2: route search requests to whichever agent best matches the task
+# description in the request payload. Falls back to agent-search-default
+# when no agent scores above 0.7.
+id            = "search"
+path_pattern  = "/v1/search"
+method        = "GET"
+agent_id      = "agent-search-default"  # fallback agent for capability-match
+strategy      = "capability_match"
+timeout_ms    = 5000
+rate_limit    = "search_tier"
+enabled       = true
+
+# ─── Rate-limit profiles ─────────────────────────────────────────────────────
+
+[rate_limit_profiles.standard]
+# 100-token burst, 10 tokens/second refill, keyed per client IP.
+capacity    = 100
+refill_rate = 10
+strategy    = "PerClient"
+
+[rate_limit_profiles.search_tier]
+# Tighter limit for the search route — 20-token burst, 5 tokens/second.
+capacity    = 20
+refill_rate = 5
+strategy    = "PerAgent"
