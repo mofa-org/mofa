@@ -44,31 +44,37 @@ impl Default for ServerConfig {
 }
 
 impl ServerConfig {
+    /// Create a new `ServerConfig` with default values.
     pub fn new() -> Self {
         Self::default()
     }
 
+    /// Set the bind host address.
     pub fn with_host(mut self, host: impl Into<String>) -> Self {
         self.host = host.into();
         self
     }
 
+    /// Set the bind port.
     pub fn with_port(mut self, port: u16) -> Self {
         self.port = port;
         self
     }
 
+    /// Enable or disable CORS for all origins.
     pub fn with_cors(mut self, enable: bool) -> Self {
         self.enable_cors = enable;
         self
     }
 
+    /// Configure the rate limiter: maximum requests per client per window.
     pub fn with_rate_limit(mut self, max_requests: u64, window: Duration) -> Self {
         self.rate_max_requests = max_requests;
         self.rate_window = window;
         self
     }
 
+    /// Return the resolved `SocketAddr` for this configuration.
     pub fn socket_addr(&self) -> SocketAddr {
         format!("{}:{}", self.host, self.port)
             .parse()
