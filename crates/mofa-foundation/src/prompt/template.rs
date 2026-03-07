@@ -73,6 +73,7 @@ impl<T> IntoPromptReport<T> for PromptResult<T> {
 /// 变量类型
 /// Variable types
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[non_exhaustive]
 #[serde(rename_all = "lowercase")]
 pub enum VariableType {
     /// 字符串类型
