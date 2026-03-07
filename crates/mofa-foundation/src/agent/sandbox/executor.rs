@@ -61,13 +61,20 @@ impl SandboxedToolExecutor {
     }
 
     /// Truncate tool output if it exceeds the configured maximum size.
+    ///
+    /// Uses `is_char_boundary()` to find a safe UTF-8 truncation point,
+    /// preventing panics on multi-byte characters (e.g. emoji, CJK).
     fn maybe_truncate_output(&self, result: &mut ToolResult) -> bool {
         if let Some(max_bytes) = self.config.resource_limits.max_output_bytes {
             let output_str = result.to_string_output();
             if output_str.len() as u64 > max_bytes {
-                let truncated = &output_str[..max_bytes as usize];
-                result.output =
-                    serde_json::Value::String(format!("{}... [truncated]", truncated));
+                // Walk backward to find a valid UTF-8 char boundary
+                let mut end = max_bytes as usize;
+                while end > 0 && !output_str.is_char_boundary(end) {
+                    end -= 1;
+                }
+                let truncated = &output_str[..end];
+                result.output = serde_json::Value::String(format!("{}... [truncated]", truncated));
                 return true;
             }
         }
@@ -330,7 +337,10 @@ mod tests {
         let result = sandbox.execute_sandboxed(&tool, input, &ctx).await;
 
         assert!(result.is_err());
-        assert!(matches!(result.unwrap_err(), AgentError::CapabilityDenied(_)));
+        assert!(matches!(
+            result.unwrap_err(),
+            AgentError::CapabilityDenied(_)
+        ));
     }
 
     #[tokio::test]
