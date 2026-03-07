@@ -8,15 +8,15 @@ use mofa_kernel::security::{
     ContentModerator, ContentPolicy, ModerationCategory, ModerationVerdict, PromptGuard,
     SecurityResult,
 };
-use once_cell::sync::Lazy;
 use regex::Regex;
+use std::sync::LazyLock;
 
 // =============================================================================
 // Prompt Injection Patterns
 // =============================================================================
 
 /// Common prompt injection patterns (case-insensitive).
-static INJECTION_PATTERNS: Lazy<Vec<(Regex, &'static str)>> = Lazy::new(|| {
+static INJECTION_PATTERNS: LazyLock<Vec<(Regex, &'static str)>> = LazyLock::new(|| {
     vec![
         (
             Regex::new(r"(?i)ignore\s+(all\s+)?(previous|prior|above|earlier)\s+(instructions?|prompts?|rules?|guidelines?)")
