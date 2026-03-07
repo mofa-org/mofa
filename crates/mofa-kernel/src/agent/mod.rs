@@ -181,6 +181,11 @@ pub use core::{
     AgentPluginSupport,
     MoFAAgent,
 };
+pub use coordination::{
+    AgentMemory, ConflictDetector, ConflictInfo, CoordinationError, CoordinationGovernor,
+    CoordinationResult, GovernanceConfig, HandoffContext, HandoffPacket, HandoffProtocol,
+    MemoryObject, MemoryRef, ResolutionStrategy,
+};
 pub use error::{AgentError, AgentResult};
 pub use traits::{AgentMetadata, AgentStats, DynAgent, HealthStatus};
 pub use types::event::execution as execution_events;
