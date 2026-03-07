@@ -10,7 +10,8 @@
 //! - Configuration merging from multiple sources
 //! - Support for all major configuration formats
 
-use config::{Config as Cfg, Environment, File, FileFormat};
+use config::{Config as Cfg, Environment, File};
+pub use config::FileFormat;
 use regex::Regex;
 use serde::de::DeserializeOwned;
 use std::path::Path;
@@ -166,11 +167,6 @@ where
 /// ```rust,no_run
 /// use mofa_kernel::config::{from_str, FileFormat};
 ///
-/// let toml = r#"
-/// name = "test"
-/// port = 8080
-/// "#;
-///
 /// #[derive(serde::Deserialize)]
 /// struct MyConfig {
 ///     name: String,
@@ -178,6 +174,11 @@ where
 /// }
 ///
 /// # fn demo() -> Result<(), mofa_kernel::config::ConfigError> {
+/// let toml = r#"
+/// name = "test"
+/// port = 8080
+/// "#;
+///
 /// let _config: MyConfig = from_str(toml, FileFormat::Toml)?;
 /// # Ok(()) }
 /// ```
@@ -208,9 +209,6 @@ where
 /// use mofa_kernel::config::merge_configs;
 /// use config::FileFormat;
 ///
-/// let base = r#"{ "name": "base", "port": 8080 }"#;
-/// let override = r#"{ "port": 9090 }"#;
-///
 /// #[derive(serde::Deserialize, Debug)]
 /// struct MyConfig {
 ///     name: String,
@@ -218,7 +216,10 @@ where
 /// }
 ///
 /// # fn demo() -> Result<(), mofa_kernel::config::ConfigError> {
-/// let _config: MyConfig = merge_configs(&[(base, FileFormat::Json), (override, FileFormat::Json)])?;
+/// let base = r#"{ "name": "base", "port": 8080 }"#;
+/// let override_cfg = r#"{ "port": 9090 }"#;
+/// let _config: MyConfig =
+///     merge_configs(&[(base, FileFormat::Json), (override_cfg, FileFormat::Json)])?;
 /// # Ok(()) }
 /// // config.name == "base", config.port == 9090
 /// ```
