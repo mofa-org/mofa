@@ -10,6 +10,8 @@ use tracing::info;
 
 use super::state::ControlPlaneState;
 
+// Compile-time assertion to ensure ControlPlaneState is Send + Sync + 'static.
+// This guarantees the state can be safely shared across async tasks in Axum.
 const _: () = {
     fn assert_state_bounds<T: Send + Sync + 'static>() {}
     #[allow(dead_code)]
