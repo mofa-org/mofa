@@ -1,0 +1,35 @@
+# cargo-deny configuration for MoFA
+# https://embarkstudios.github.io/cargo-deny/
+
+[advisories]
+# Check for known security vulnerabilities
+yanked = "warn"
+ignore = []
+
+[licenses]
+# Allow permissive licenses compatible with Apache-2.0
+allow = [
+    "MIT",
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "ISC",
+    "Zlib",
+    "Unicode-3.0",
+    "CC0-1.0",
+    "MPL-2.0",
+    "OFL-1.1",
+    "Unlicense",
+]
+confidence-threshold = 0.8
+
+[bans]
+# Disallow multiple versions of the same crate
+multiple-versions = "warn"
+wildcards = "allow"
+
+[sources]
+# Only allow crates from crates.io by default
+unknown-registry = "deny"
+unknown-git = "deny"

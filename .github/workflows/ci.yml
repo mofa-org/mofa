@@ -109,3 +109,31 @@ jobs:
 
       - name: Check docs intra-doc links
         run: cargo doc --workspace --no-deps --all-features --document-private-items
+
+  # Security audit - check for CVEs and license compliance
+  security:
+    name: Security Audit
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache dependencies
+        uses: actions/cache@v5
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-security-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Run cargo audit (CVE check)
+        uses: rustsec/audit-check@v2
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Run cargo deny (license + advisory check)
+        uses: EmbarkStudios/cargo-deny-action@v2
