@@ -239,5 +239,5 @@ async fn tool_assert_macro_passes() {
     tool.execute(ToolInput::from_json(json!({}))).await;
     tool.execute(ToolInput::from_json(json!({}))).await;
 
-    mofa_testing::assert_tool_called!(tool, 2);
+    mofa_testing::assert_tool_call_count!(tool, 2);
 }
