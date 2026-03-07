@@ -171,7 +171,7 @@ fn colorize_log_line(line: &str) -> String {
         line.yellow().to_string()
     } else if upper.contains("INFO") {
         line.green().to_string()
-    } else if upper.contains("DEBUG") || matches_log_level(line, "TRACE") {
+    } else if upper.contains("DEBUG") || upper.contains("TRACE") {
         line.bright_black().to_string()
     } else {
         line.to_string()
