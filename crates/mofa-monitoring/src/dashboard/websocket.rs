@@ -243,15 +243,12 @@ impl WebSocketHandler {
         self: Arc<Self>,
         mut rx: mpsc::Receiver<DebugEvent>,
     ) -> tokio::task::JoinHandle<()> {
-        let broadcast_tx = self.broadcast_tx.clone();
         info!("Starting debug event forwarder");
 
         tokio::spawn(async move {
             while let Some(event) = rx.recv().await {
                 let msg = WebSocketMessage::Debug(event);
-                if let Err(e) = broadcast_tx.send(msg) {
-                    debug!("Failed to broadcast debug event: {}", e);
-                }
+                self.broadcast("debug", msg).await;
             }
             info!("Debug event forwarder stopped");
         })
@@ -267,11 +264,11 @@ impl WebSocketHandler {
             loop {
                 ticker.tick().await;
 
-                // Collect and broadcast metrics
+                // Collect and broadcast metrics to subscribed clients only
                 let snapshot = self.collector.current().await;
                 let msg = WebSocketMessage::Metrics(snapshot);
 
-                let _ = self.broadcast_tx.send(msg);
+                self.broadcast("metrics", msg).await;
             }
         })
     }
