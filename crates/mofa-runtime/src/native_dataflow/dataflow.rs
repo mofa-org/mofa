@@ -20,9 +20,9 @@
 use crate::native_dataflow::error::{DataflowError, DataflowResult};
 use crate::native_dataflow::node::{NativeNode, NodeConfig};
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
-use tokio::sync::{Mutex, RwLock, mpsc};
+use tokio::sync::{mpsc, Mutex, RwLock};
 use tokio::task::JoinHandle;
 use tracing::{error, info};
 
@@ -92,6 +92,7 @@ pub struct NativeDataflow {
     router_tx: mpsc::Sender<RouterMessage>,
     router_rx: Mutex<Option<mpsc::Receiver<RouterMessage>>>,
     router_handle: Mutex<Option<JoinHandle<()>>>,
+    forwarder_handles: Mutex<Vec<JoinHandle<()>>>,
 }
 
 impl NativeDataflow {
@@ -106,6 +107,7 @@ impl NativeDataflow {
             router_tx,
             router_rx: Mutex::new(Some(router_rx)),
             router_handle: Mutex::new(None),
+            forwarder_handles: Mutex::new(Vec::new()),
         }
     }
 
@@ -140,7 +142,10 @@ impl NativeDataflow {
             )));
         }
         nodes.insert(node_id.clone(), Arc::new(node));
-        info!("Added node '{}' to dataflow '{}'", node_id, self.config.dataflow_id);
+        info!(
+            "Added node '{}' to dataflow '{}'",
+            node_id, self.config.dataflow_id
+        );
         Ok(())
     }
 
@@ -175,6 +180,26 @@ impl NativeDataflow {
                 target_node
             )));
         }
+
+        let source = nodes.get(source_node).ok_or_else(|| {
+            DataflowError::DataflowError(format!("Source node '{}' not found", source_node))
+        })?;
+        if !source.config().outputs.iter().any(|p| p == source_output) {
+            return Err(DataflowError::DataflowError(format!(
+                "Source output '{}' not found on node '{}'",
+                source_output, source_node
+            )));
+        }
+
+        let target = nodes.get(target_node).ok_or_else(|| {
+            DataflowError::DataflowError(format!("Target node '{}' not found", target_node))
+        })?;
+        if !target.config().inputs.iter().any(|p| p == target_input) {
+            return Err(DataflowError::DataflowError(format!(
+                "Target input '{}' not found on node '{}'",
+                target_input, target_node
+            )));
+        }
         drop(nodes);
 
         let conn = NodeConnection {
@@ -203,16 +228,39 @@ impl NativeDataflow {
         let nodes = self.nodes.read().await;
         let connections = self.connections.read().await;
         for conn in connections.iter() {
-            if !nodes.contains_key(&conn.source_node) {
-                return Err(DataflowError::DataflowError(format!(
+            let source = nodes.get(&conn.source_node).ok_or_else(|| {
+                DataflowError::DataflowError(format!(
                     "Source node '{}' not found in connection",
                     conn.source_node
+                ))
+            })?;
+            if !source
+                .config()
+                .outputs
+                .iter()
+                .any(|p| p == &conn.source_output)
+            {
+                return Err(DataflowError::DataflowError(format!(
+                    "Source output '{}' not found on node '{}'",
+                    conn.source_output, conn.source_node
                 )));
             }
-            if !nodes.contains_key(&conn.target_node) {
-                return Err(DataflowError::DataflowError(format!(
+
+            let target = nodes.get(&conn.target_node).ok_or_else(|| {
+                DataflowError::DataflowError(format!(
                     "Target node '{}' not found in connection",
                     conn.target_node
+                ))
+            })?;
+            if !target
+                .config()
+                .inputs
+                .iter()
+                .any(|p| p == &conn.target_input)
+            {
+                return Err(DataflowError::DataflowError(format!(
+                    "Target input '{}' not found on node '{}'",
+                    conn.target_input, conn.target_node
                 )));
             }
         }
@@ -245,6 +293,8 @@ impl NativeDataflow {
             })?;
         }
         drop(nodes);
+
+        self.wire_output_routes().await?;
 
         {
             let mut state = self.state.write().await;
@@ -282,10 +332,7 @@ impl NativeDataflow {
                         if let Some(target) = node_map.get(&conn.target_node) {
                             let port = conn.target_input.clone();
                             if let Err(e) = target.inject_raw(port, msg.data.clone()).await {
-                                error!(
-                                    "Router failed to deliver to '{}': {}",
-                                    conn.target_node, e
-                                );
+                                error!("Router failed to deliver to '{}': {}", conn.target_node, e);
                             }
                         }
                     }
@@ -294,6 +341,70 @@ impl NativeDataflow {
         });
 
         *self.router_handle.lock().await = Some(handle);
+    }
+
+    /// Wire source node outputs into router input so messages can be dispatched
+    /// according to declared graph connections.
+    async fn wire_output_routes(&self) -> DataflowResult<()> {
+        let unique_source_outputs: HashSet<(String, String)> = {
+            let conns = self.connections.read().await;
+            conns
+                .iter()
+                .map(|c| (c.source_node.clone(), c.source_output.clone()))
+                .collect()
+        };
+
+        let source_bindings = {
+            let nodes = self.nodes.read().await;
+            let mut bindings = Vec::with_capacity(unique_source_outputs.len());
+
+            for (source_node, source_output) in unique_source_outputs {
+                let node = nodes.get(&source_node).cloned().ok_or_else(|| {
+                    DataflowError::DataflowError(format!(
+                        "Source node '{}' missing while wiring output routes",
+                        source_node
+                    ))
+                })?;
+                bindings.push((source_node, source_output, node));
+            }
+
+            bindings
+        };
+
+        let mut new_handles = Vec::with_capacity(source_bindings.len());
+        for (source_node, source_output, node) in source_bindings {
+            let (tx, mut rx) = mpsc::channel(self.config.default_buffer_size);
+            node.register_output_channel(source_output.clone(), tx)
+                .await?;
+
+            let router_tx = self.router_tx.clone();
+            let source_node_id = source_node.clone();
+            let source_output_id = source_output.clone();
+
+            let handle = tokio::spawn(async move {
+                while let Some(data) = rx.recv().await {
+                    let msg = RouterMessage {
+                        source_node: source_node_id.clone(),
+                        source_output: source_output_id.clone(),
+                        data,
+                    };
+
+                    if router_tx.send(msg).await.is_err() {
+                        break;
+                    }
+                }
+            });
+
+            new_handles.push(handle);
+        }
+
+        let mut old_handles = self.forwarder_handles.lock().await;
+        for handle in old_handles.drain(..) {
+            handle.abort();
+        }
+        *old_handles = new_handles;
+
+        Ok(())
     }
 
     /// Return a reference-counted handle to a node by id.
@@ -311,7 +422,9 @@ impl NativeDataflow {
         {
             let state = self.state.read().await;
             if *state != DataflowState::Running {
-                return Err(DataflowError::DataflowError("Dataflow not running".to_string()));
+                return Err(DataflowError::DataflowError(
+                    "Dataflow not running".to_string(),
+                ));
             }
         }
 
@@ -330,7 +443,9 @@ impl NativeDataflow {
         {
             let state = self.state.read().await;
             if *state != DataflowState::Paused {
-                return Err(DataflowError::DataflowError("Dataflow not paused".to_string()));
+                return Err(DataflowError::DataflowError(
+                    "Dataflow not paused".to_string(),
+                ));
             }
         }
 
@@ -357,6 +472,12 @@ impl NativeDataflow {
 
         if let Some(handle) = self.router_handle.lock().await.take() {
             handle.abort();
+        }
+        {
+            let mut forwarders = self.forwarder_handles.lock().await;
+            for handle in forwarders.drain(..) {
+                handle.abort();
+            }
         }
 
         *self.state.write().await = DataflowState::Stopped;
@@ -458,6 +579,7 @@ impl DataflowBuilder {
 #[cfg(test)]
 mod tests {
     use super::{DataflowBuilder, DataflowState, NodeConfig};
+    use mofa_kernel::message::AgentEvent;
     use std::time::Duration;
 
     fn node(id: &str, inputs: &[&str], outputs: &[&str]) -> NodeConfig {
@@ -547,5 +669,64 @@ mod tests {
             .await;
 
         assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_unknown_source_output_rejected() {
+        let result = DataflowBuilder::new("bad_output")
+            .add_node_config(node("a", &[], &["out"]))
+            .add_node_config(node("b", &["in"], &[]))
+            .connect("a", "missing_out", "b", "in")
+            .build()
+            .await;
+
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_unknown_target_input_rejected() {
+        let result = DataflowBuilder::new("bad_input")
+            .add_node_config(node("a", &[], &["out"]))
+            .add_node_config(node("b", &["in"], &[]))
+            .connect("a", "out", "b", "missing_in")
+            .build()
+            .await;
+
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_connected_output_routes_to_target_input() {
+        let df = DataflowBuilder::new("routing")
+            .add_node_config(node("a", &[], &["out"]))
+            .add_node_config(node("b", &["in"], &[]))
+            .connect("a", "out", "b", "in")
+            .build_and_start()
+            .await
+            .unwrap();
+
+        let producer = df.get_node("a").await.unwrap();
+        let consumer = df.get_node("b").await.unwrap();
+        let consumer_el = consumer.create_event_loop();
+
+        producer
+            .send_output("out", b"hello".to_vec())
+            .await
+            .unwrap();
+
+        let event = tokio::time::timeout(Duration::from_secs(1), consumer_el.next_event())
+            .await
+            .expect("timed out waiting for routed event")
+            .expect("expected routed event");
+
+        match event {
+            AgentEvent::Custom(port, data) => {
+                assert_eq!(port, "in");
+                assert_eq!(data, b"hello".to_vec());
+            }
+            other => panic!("expected AgentEvent::Custom, got: {:?}", other),
+        }
+
+        df.stop().await.unwrap();
     }
 }

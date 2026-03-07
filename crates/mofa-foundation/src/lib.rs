@@ -54,6 +54,8 @@ pub mod collaboration;
 // RAG module - vector store and document chunking
 pub mod rag;
 
+// swarm module - Multi-agent swarm orchestration
+pub mod swarm;
 // Structured output: JSON schema validator and agent executor
 pub mod schema_validator;
 pub mod agent_executor;
@@ -62,6 +64,9 @@ pub use agent_executor::{AgentExecutor, ExecutorError};
 // Security governance - PII redaction, content moderation, prompt guard
 pub mod security;
 
+// Agent capability manifest and discovery registry
+pub mod capability_registry;
+pub use capability_registry::CapabilityRegistry;
 // Error recovery strategies (Backoff, RetryPolicy, CircuitBreaker, retry, fallback_chain)
 pub mod recovery;
 
