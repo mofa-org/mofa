@@ -14,7 +14,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::{RwLock, broadcast, mpsc};
-use tracing::{debug, error, info, warn};
+use tracing::{Instrument, debug, error, info, info_span, warn};
 
 use super::auth::{AuthInfo, AuthProvider, NoopAuthProvider};
 use mofa_kernel::workflow::telemetry::DebugEvent;
@@ -307,7 +307,30 @@ impl WebSocketHandler {
         auth_info: Option<AuthInfo>,
     ) {
         let client_id = uuid::Uuid::now_v7().to_string();
-        info!("WebSocket client connected: {}", client_id);
+        let authenticated = auth_info.is_some();
+
+        let span = info_span!(
+            "ws_connection",
+            client_id = %client_id,
+            authenticated = authenticated,
+        );
+
+        self.handle_socket_inner(socket, auth_info, client_id)
+            .instrument(span)
+            .await;
+    }
+
+    /// Inner connection handler, runs inside the `ws_connection` span.
+    async fn handle_socket_inner(
+        self: Arc<Self>,
+        socket: WebSocket,
+        auth_info: Option<AuthInfo>,
+        client_id: String,
+    ) {
+        info!(
+            client_id = %client_id,
+            "WebSocket client connected"
+        );
 
         let (mut sender, mut receiver) = socket.split();
 
@@ -407,11 +430,20 @@ impl WebSocketHandler {
         }
 
         // Cleanup
+        let subscription_count;
         {
             let mut clients = self.clients.write().await;
+            subscription_count = clients
+                .get(&client_id)
+                .map(|c| c.subscriptions.len())
+                .unwrap_or(0);
             clients.remove(&client_id);
         }
-        info!("WebSocket client disconnected: {}", client_id);
+        info!(
+            client_id = %client_id,
+            subscriptions = subscription_count,
+            "WebSocket client disconnected"
+        );
     }
 }
 
