@@ -5,23 +5,33 @@ use mofa_foundation::orchestrator::{
     ModelOrchestrator, ModelProviderConfig, ModelType, OrchestratorError, OrchestratorResult,
     PoolStatistics,
 };
-use std::collections::HashSet;
+use std::collections::{HashSet, VecDeque};
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, RwLock};
 
+type ResponseSequences = Vec<(String, VecDeque<String>)>;
+
 /// Deterministic mock implementation of [`ModelOrchestrator`].
+///
+/// Supports first-match response rules, sequenced responses, failure injection,
+/// rate limiting, and call counting.
 pub struct MockLLMBackend {
-    /// Ordered response rules — first match wins
     responses: Arc<RwLock<Vec<(String, String)>>>,
-    /// Fallback when nothing matches
     fallback: String,
-    /// Registered model IDs
     registered: Arc<RwLock<HashSet<String>>>,
-    /// Loaded model IDs
     loaded: Arc<RwLock<HashSet<String>>>,
-    /// Memory threshold (bytes)
     memory_threshold: Arc<RwLock<u64>>,
-    /// Idle timeout (seconds)
     idle_timeout_secs: Arc<RwLock<u64>>,
+    failure_queue: Arc<RwLock<VecDeque<OrchestratorError>>>,
+    failure_patterns: Arc<RwLock<Vec<(String, OrchestratorError)>>>,
+    response_sequences: Arc<RwLock<ResponseSequences>>,
+    call_count: Arc<AtomicUsize>,
+    rate_limit: Arc<RwLock<Option<RateLimit>>>,
+}
+
+struct RateLimit {
+    max_calls: usize,
+    window_calls: usize,
 }
 
 impl Default for MockLLMBackend {
@@ -40,10 +50,15 @@ impl MockLLMBackend {
             loaded: Arc::new(RwLock::new(HashSet::new())),
             memory_threshold: Arc::new(RwLock::new(u64::MAX)),
             idle_timeout_secs: Arc::new(RwLock::new(300)),
+            failure_queue: Arc::new(RwLock::new(VecDeque::new())),
+            failure_patterns: Arc::new(RwLock::new(Vec::new())),
+            response_sequences: Arc::new(RwLock::new(Vec::new())),
+            call_count: Arc::new(AtomicUsize::new(0)),
+            rate_limit: Arc::new(RwLock::new(None)),
         }
     }
 
-    /// Append a response rule.  Order determines priority (first match wins).
+    /// Append a response rule. Order determines priority (first match wins).
     pub fn add_response(&self, prompt_substring: &str, response: &str) {
         self.responses
             .write()
@@ -56,8 +71,75 @@ impl MockLLMBackend {
         self.fallback = response.to_string();
     }
 
-    /// Look up the response for a given prompt (first-match semantics).
+    /// Queue errors to be returned by the next N `infer()` calls (FIFO).
+    pub fn fail_next(&self, count: usize, error: OrchestratorError) {
+        let mut queue = self.failure_queue.write().expect("lock poisoned");
+        for _ in 0..count {
+            queue.push_back(error.clone());
+        }
+    }
+
+    /// Fail any `infer()` call whose prompt contains the given substring.
+    pub fn fail_on(&self, prompt_substring: &str, error: OrchestratorError) {
+        self.failure_patterns
+            .write()
+            .expect("lock poisoned")
+            .push((prompt_substring.to_string(), error));
+    }
+
+    /// Add a sequence of responses for a prompt pattern.
+    /// Each matching call consumes the next value; the last value repeats forever.
+    pub fn add_response_sequence(&self, prompt_substring: &str, responses: Vec<&str>) {
+        let deque: VecDeque<String> = responses.into_iter().map(String::from).collect();
+        self.response_sequences
+            .write()
+            .expect("lock poisoned")
+            .push((prompt_substring.to_string(), deque));
+    }
+
+    /// Set a rate limit: after `max_calls` invocations, subsequent calls fail.
+    /// Call [`reset_rate_limit`] to clear the counter.
+    pub fn set_rate_limit(&self, max_calls: usize) {
+        *self.rate_limit.write().expect("lock poisoned") = Some(RateLimit {
+            max_calls,
+            window_calls: 0,
+        });
+    }
+
+    /// Reset the rate limit call counter without removing the limit.
+    pub fn reset_rate_limit(&self) {
+        if let Some(rl) = self.rate_limit.write().expect("lock poisoned").as_mut() {
+            rl.window_calls = 0;
+        }
+    }
+
+    /// Total number of `infer()` calls made.
+    pub fn call_count(&self) -> usize {
+        self.call_count.load(Ordering::Relaxed)
+    }
+
+    /// Reset the call counter to zero.
+    pub fn reset_call_count(&self) {
+        self.call_count.store(0, Ordering::Relaxed);
+    }
+
+    /// Look up the response for a given prompt.
+    /// Sequence responses take priority over static rules.
     fn resolve(&self, prompt: &str) -> String {
+        // Check sequences first
+        let mut seqs = self.response_sequences.write().expect("lock poisoned");
+        for (key, deque) in seqs.iter_mut() {
+            if prompt.contains(key.as_str()) {
+                if deque.len() > 1 {
+                    return deque.pop_front().expect("deque non-empty");
+                } else if let Some(last) = deque.front() {
+                    return last.clone();
+                }
+            }
+        }
+        drop(seqs);
+
+        // Then static rules
         let rules = self.responses.read().expect("lock poisoned");
         for (key, value) in rules.iter() {
             if prompt.contains(key.as_str()) {
@@ -85,10 +167,7 @@ impl ModelOrchestrator for MockLLMBackend {
     }
 
     async fn unregister_model(&self, model_id: &str) -> OrchestratorResult<()> {
-        self.loaded
-            .write()
-            .expect("lock poisoned")
-            .remove(model_id);
+        self.loaded.write().expect("lock poisoned").remove(model_id);
         self.registered
             .write()
             .expect("lock poisoned")
@@ -99,7 +178,12 @@ impl ModelOrchestrator for MockLLMBackend {
     // -- lifecycle -----------------------------------------------------------
 
     async fn load_model(&self, model_id: &str) -> OrchestratorResult<()> {
-        if !self.registered.read().expect("lock poisoned").contains(model_id) {
+        if !self
+            .registered
+            .read()
+            .expect("lock poisoned")
+            .contains(model_id)
+        {
             return Err(OrchestratorError::ModelNotFound(model_id.to_string()));
         }
         self.loaded
@@ -110,10 +194,7 @@ impl ModelOrchestrator for MockLLMBackend {
     }
 
     async fn unload_model(&self, model_id: &str) -> OrchestratorResult<()> {
-        self.loaded
-            .write()
-            .expect("lock poisoned")
-            .remove(model_id);
+        self.loaded.write().expect("lock poisoned").remove(model_id);
         Ok(())
     }
 
@@ -127,6 +208,40 @@ impl ModelOrchestrator for MockLLMBackend {
     // -- inference -----------------------------------------------------------
 
     async fn infer(&self, _model_id: &str, input: &str) -> OrchestratorResult<String> {
+        self.call_count.fetch_add(1, Ordering::Relaxed);
+
+        // 1. Drain failure queue (FIFO)
+        {
+            let mut queue = self.failure_queue.write().expect("lock poisoned");
+            if let Some(err) = queue.pop_front() {
+                return Err(err);
+            }
+        }
+
+        // 2. Check pattern-based failures
+        {
+            let patterns = self.failure_patterns.read().expect("lock poisoned");
+            for (key, err) in patterns.iter() {
+                if input.contains(key.as_str()) {
+                    return Err(err.clone());
+                }
+            }
+        }
+
+        // 3. Check rate limit
+        {
+            let mut rl = self.rate_limit.write().expect("lock poisoned");
+            if let Some(limit) = rl.as_mut() {
+                limit.window_calls += 1;
+                if limit.window_calls > limit.max_calls {
+                    return Err(OrchestratorError::Other(format!(
+                        "Rate limit exceeded: {} calls (max {})",
+                        limit.window_calls, limit.max_calls
+                    )));
+                }
+            }
+        }
+
         Ok(self.resolve(input))
     }
 

@@ -47,9 +47,9 @@ impl ToolExecutor for RhaiScriptTool {
     }
 
     async fn execute(&self, arguments: serde_json::Value) -> PluginResult<serde_json::Value> {
-        let script = arguments["script"]
-            .as_str()
-            .ok_or_else(|| mofa_kernel::plugin::PluginError::ExecutionFailed("Script is required".into()))?;
+        let script = arguments["script"].as_str().ok_or_else(|| {
+            mofa_kernel::plugin::PluginError::ExecutionFailed("Script is required".into())
+        })?;
 
         let mut context = ScriptContext::new();
 
@@ -57,7 +57,9 @@ impl ToolExecutor for RhaiScriptTool {
         if let Some(vars) = arguments.get("variables").and_then(|v| v.as_object()) {
             for (key, value) in vars {
                 // Convert JSON values to Rhai-compatible types
-                let me = |e: mofa_extra::rhai::RhaiError| mofa_kernel::plugin::PluginError::ExecutionFailed(e.to_string());
+                let me = |e: mofa_extra::rhai::RhaiError| {
+                    mofa_kernel::plugin::PluginError::ExecutionFailed(e.to_string())
+                };
                 match value {
                     serde_json::Value::Number(n) => {
                         if let Some(i) = n.as_i64() {
@@ -80,7 +82,10 @@ impl ToolExecutor for RhaiScriptTool {
             }
         }
 
-        let result = self.engine.execute(script, &context).await
+        let result = self
+            .engine
+            .execute(script, &context)
+            .await
             .map_err(|e| mofa_kernel::plugin::PluginError::ExecutionFailed(e.to_string()))?;
 
         Ok(json!({

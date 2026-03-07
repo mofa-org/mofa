@@ -61,5 +61,12 @@ pub use metrics::*;
 // Human-in-the-Loop (HITL) module
 pub mod hitl;
 pub use hitl::*;
+// Structured output parsing with JSON schema validation
+pub mod structured_output;
+pub use structured_output::StructuredOutput;
 // Security governance (PII redaction, content moderation, prompt guard)
 pub mod security;
+
+// Gateway routing abstractions (kernel-level traits for agent request dispatch)
+pub mod gateway;
+pub use gateway::{GatewayRoute, HttpMethod, RegistryError, RouteRegistry, RoutingContext};

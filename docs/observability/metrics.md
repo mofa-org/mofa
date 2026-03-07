@@ -25,7 +25,7 @@ Default hard limits:
 - `agent_id`: 100
 - `workflow_id`: 100
 - `plugin_or_tool`: 100
-- `provider+model`: 50
+- distinct `(provider, model)` pairs: 50
 
 When a limit is exceeded, overflow series keep their original label key(s)
 but replace value(s) with `__other__` (for example

@@ -9,7 +9,7 @@ use opentelemetry::{
     metrics::{Counter, Meter, MeterProvider, UpDownCounter},
 };
 use opentelemetry_otlp::WithExportConfig;
-use opentelemetry_sdk::{Resource, metrics::MeterProvider as SdkMeterProvider, runtime::Tokio};
+use opentelemetry_sdk::{Resource, metrics::SdkMeterProvider, runtime::Tokio};
 use std::cmp::Ordering;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -127,6 +127,10 @@ pub struct OtlpMetricsExporter {
 
 impl OtlpMetricsExporter {
     pub fn new(collector: Arc<MetricsCollector>, mut config: OtlpMetricsExporterConfig) -> Self {
+        if config.endpoint.trim().is_empty() {
+            warn!("OtlpMetricsExporterConfig.endpoint is empty; using default endpoint");
+            config.endpoint = OtlpMetricsExporterConfig::default().endpoint;
+        }
         if config.max_queue_size == 0 {
             warn!("OtlpMetricsExporterConfig.max_queue_size=0 is invalid; clamping to 1");
             config.max_queue_size = 1;
@@ -134,6 +138,18 @@ impl OtlpMetricsExporter {
         if config.batch_size == 0 {
             warn!("OtlpMetricsExporterConfig.batch_size=0 is invalid; clamping to 1");
             config.batch_size = 1;
+        }
+        if config.collect_interval.is_zero() {
+            warn!("OtlpMetricsExporterConfig.collect_interval=0 is invalid; clamping to 1s");
+            config.collect_interval = Duration::from_secs(1);
+        }
+        if config.export_interval.is_zero() {
+            warn!("OtlpMetricsExporterConfig.export_interval=0 is invalid; clamping to 1s");
+            config.export_interval = Duration::from_secs(1);
+        }
+        if config.timeout.is_zero() {
+            warn!("OtlpMetricsExporterConfig.timeout=0 is invalid; clamping to 1s");
+            config.timeout = Duration::from_secs(1);
         }
 
         let (sender, receiver) = mpsc::channel(config.max_queue_size);
@@ -163,11 +179,19 @@ impl OtlpMetricsExporter {
             return Err(OtlpMetricsExporterError::AlreadyStarted);
         };
 
-        let recorder = match OtlpRecorder::new(&self.config) {
-            Ok(recorder) => Arc::new(recorder),
-            Err(err) => {
+        // Run OTLP initialization in spawn_blocking to prevent blocking the async runtime
+        // if OpenTelemetry SDK initialization performs synchronous network operations
+        let config = self.config.clone();
+        let recorder = match tokio::task::spawn_blocking(move || OtlpRecorder::new(&config)).await {
+            Ok(Ok(recorder)) => Arc::new(recorder),
+            Ok(Err(err)) => {
                 *self.last_error.write().await = Some(err.to_string());
                 return Err(err);
+            }
+            Err(err) => {
+                let error_msg = format!("Failed to initialize OTLP recorder: {}", err);
+                *self.last_error.write().await = Some(error_msg.clone());
+                return Err(OtlpMetricsExporterError::Internal(error_msg));
             }
         };
 
@@ -224,36 +248,58 @@ impl OtlpMetricsExporter {
 
 struct OtlpRecorder {
     // Keep provider alive for background periodic export.
-    _meter_provider: SdkMeterProvider,
+    // Wrapped in Option so Drop can take ownership and shut down in a background
+    // thread, avoiding blocking the async runtime (SdkMeterProvider::shutdown is
+    // synchronous and may wait for an in-flight HTTP export to complete).
+    meter_provider: StdMutex<Option<opentelemetry_sdk::metrics::SdkMeterProvider>>,
     instruments: OtlpInstruments,
     cardinality: CardinalityLimits,
     last_values: StdMutex<LastSeriesState>,
 }
 
+impl Drop for OtlpRecorder {
+    fn drop(&mut self) {
+        if let Ok(mut guard) = self.meter_provider.lock() {
+            if let Some(provider) = guard.take() {
+                // Shutdown in a background OS thread so we never block a tokio
+                // worker thread (e.g. when an async task holding this recorder
+                // is aborted).
+                std::thread::spawn(move || {
+                    let _ = provider.shutdown();
+                });
+            }
+        }
+    }
+}
+
 impl OtlpRecorder {
     fn new(config: &OtlpMetricsExporterConfig) -> Result<Self, OtlpMetricsExporterError> {
-        let exporter = opentelemetry_otlp::new_exporter()
-            .http()
+        use opentelemetry_otlp::WithExportConfig;
+        
+        let exporter = opentelemetry_otlp::MetricExporter::builder()
+            .with_http()
             .with_endpoint(config.endpoint.clone())
-            .with_timeout(config.timeout);
-
-        let meter_provider = opentelemetry_otlp::new_pipeline()
-            .metrics(Tokio)
-            .with_exporter(exporter)
-            .with_period(config.export_interval)
             .with_timeout(config.timeout)
+            .build()
+            .map_err(|err| OtlpMetricsExporterError::Internal(format!("{}", err)))?;
+
+        let meter_provider = opentelemetry_sdk::metrics::SdkMeterProvider::builder()
+            .with_reader(
+                opentelemetry_sdk::metrics::PeriodicReader::builder(exporter, Tokio)
+                    .with_interval(config.export_interval)
+                    .build()
+            )
             .with_resource(Resource::new(vec![KeyValue::new(
                 "service.name",
                 config.service_name.clone(),
             )]))
-            .build()
-            .map_err(|err| OtlpMetricsExporterError::Internal(err.to_string()))?;
+            .build();
 
         let meter = meter_provider.meter("mofa-monitoring.metrics-exporter");
         let instruments = OtlpInstruments::new(&meter);
 
         Ok(Self {
-            _meter_provider: meter_provider,
+            meter_provider: StdMutex::new(Some(meter_provider)),
             instruments,
             cardinality: config.cardinality.clone(),
             last_values: StdMutex::new(LastSeriesState::default()),
@@ -451,31 +497,31 @@ impl OtlpInstruments {
             system_cpu_percent: meter
                 .f64_up_down_counter("mofa.system.cpu.percent")
                 .with_description("System CPU usage percentage")
-                .init(),
+                .build(),
             system_memory_bytes: meter
                 .f64_up_down_counter("mofa.system.memory.bytes")
                 .with_description("System memory usage in bytes")
-                .init(),
+                .build(),
             agent_tasks_total: meter
                 .f64_up_down_counter("mofa.agent.tasks.total")
                 .with_description("Total tasks completed by agent")
-                .init(),
+                .build(),
             workflow_executions_total: meter
                 .f64_up_down_counter("mofa.workflow.executions.total")
                 .with_description("Total workflow executions")
-                .init(),
+                .build(),
             tool_call_count: meter
                 .f64_up_down_counter("mofa.tool.calls.total")
                 .with_description("Total tool or plugin call count")
-                .init(),
+                .build(),
             llm_requests_total: meter
                 .f64_up_down_counter("mofa.llm.requests.total")
                 .with_description("Total LLM requests")
-                .init(),
+                .build(),
             dropped_series_total: meter
                 .u64_counter("mofa.exporter.dropped_series.total")
                 .with_description("Total dropped metric series due to cardinality limits")
-                .init(),
+                .build(),
         }
     }
 }
