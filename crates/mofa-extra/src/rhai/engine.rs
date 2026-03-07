@@ -14,6 +14,10 @@ use std::time::{Duration, Instant};
 use tokio::sync::RwLock;
 use tracing::{debug, error, info, warn};
 
+thread_local! {
+    static EXECUTION_START: std::cell::RefCell<Option<Instant>> = std::cell::RefCell::new(None);
+}
+
 // ============================================================================
 // 脚本引擎配置
 // Script Engine Configuration
@@ -309,9 +313,6 @@ pub struct RhaiScriptEngine {
     /// 日志收集器
     /// Log collector
     logs: Arc<RwLock<Vec<String>>>,
-    /// 执行开始时间（每次执行前重置）
-    /// Execution start time (reset before each execution)
-    execution_start: Arc<Mutex<Instant>>,
 }
 
 impl RhaiScriptEngine {
@@ -320,13 +321,9 @@ impl RhaiScriptEngine {
     pub fn new(config: ScriptEngineConfig) -> RhaiResult<Self> {
         let mut engine = Engine::new();
 
-        // 执行开始时间句柄（在 on_progress 回调中使用）
-        // Execution start time handle (used in the on_progress callback)
-        let execution_start = Arc::new(Mutex::new(Instant::now()));
-
         // 应用安全限制
         // Apply security limits
-        Self::apply_security_limits(&mut engine, &config.security, execution_start.clone());
+        Self::apply_security_limits(&mut engine, &config.security);
 
         // 注册内置函数
         // Register built-in functions
@@ -343,7 +340,6 @@ impl RhaiScriptEngine {
             script_cache: Arc::new(RwLock::new(HashMap::new())),
             global_scope,
             logs,
-            execution_start,
         })
     }
 
@@ -352,7 +348,6 @@ impl RhaiScriptEngine {
     fn apply_security_limits(
         engine: &mut Engine,
         security: &ScriptSecurityConfig,
-        execution_start: Arc<Mutex<Instant>>,
     ) {
         engine.set_max_call_levels(security.max_call_stack_depth);
         engine.set_max_operations(security.max_operations);
@@ -368,7 +363,9 @@ impl RhaiScriptEngine {
         if security.max_execution_time_ms > 0 {
             let max_duration = Duration::from_millis(security.max_execution_time_ms);
             engine.on_progress(move |_ops| {
-                let elapsed = execution_start.lock().unwrap().elapsed();
+                let elapsed = EXECUTION_START.with(|start| {
+                    start.borrow().map(|s| s.elapsed()).unwrap_or_default()
+                });
                 if elapsed >= max_duration {
                     Some(Dynamic::UNIT)
                 } else {
@@ -558,9 +555,6 @@ impl RhaiScriptEngine {
     /// 执行脚本
     /// Execute script
     pub async fn execute(&self, source: &str, context: &ScriptContext) -> RhaiResult<ScriptResult> {
-        // 重置执行开始时间（用于 on_progress 超时检查）
-        // Reset execution start time (for on_progress timeout check)
-        *self.execution_start.lock().unwrap() = Instant::now();
         let start_time = Instant::now();
 
         // 清空日志
@@ -575,9 +569,15 @@ impl RhaiScriptEngine {
         let mut scope = self.global_scope.clone();
         self.prepare_scope(&mut scope, context);
 
+        // 重置执行开始时间（用于 on_progress 超时检查）
+        // Reset execution start time (for on_progress timeout check)
+        EXECUTION_START.with(|start| *start.borrow_mut() = Some(start_time));
+
         // 执行脚本
         // Execute the script
         let result = self.engine.eval_with_scope::<Dynamic>(&mut scope, source);
+
+        EXECUTION_START.with(|start| *start.borrow_mut() = None);
 
         let execution_time_ms = start_time.elapsed().as_millis() as u64;
         let logs = self.logs.read().await.clone();
@@ -617,9 +617,6 @@ impl RhaiScriptEngine {
             .get(script_id)
             .ok_or_else(|| RhaiError::NotFound(format!("Script not found: {}", script_id)))?;
 
-        // 重置执行开始时间（用于 on_progress 超时检查）
-        // Reset execution start time (for on_progress timeout check)
-        *self.execution_start.lock().unwrap() = Instant::now();
         let start_time = Instant::now();
 
         // 清空日志
@@ -634,11 +631,17 @@ impl RhaiScriptEngine {
         let mut scope = self.global_scope.clone();
         self.prepare_scope(&mut scope, context);
 
+        // 重置执行开始时间（用于 on_progress 超时检查）
+        // Reset execution start time (for on_progress timeout check)
+        EXECUTION_START.with(|start| *start.borrow_mut() = Some(start_time));
+
         // 执行已编译的 AST
         // Execute the compiled AST
         let result = self
             .engine
             .eval_ast_with_scope::<Dynamic>(&mut scope, &compiled.ast);
+
+        EXECUTION_START.with(|start| *start.borrow_mut() = None);
 
         let execution_time_ms = start_time.elapsed().as_millis() as u64;
         let logs = self.logs.read().await.clone();
@@ -689,12 +692,16 @@ impl RhaiScriptEngine {
         // Convert arguments
         let dynamic_args: Vec<Dynamic> = args.iter().map(json_to_dynamic).collect();
 
+        EXECUTION_START.with(|start| *start.borrow_mut() = Some(Instant::now()));
+
         // 调用函数
         // Call function
         let result: Dynamic = self
             .engine
             .call_fn(&mut scope, &compiled.ast, function_name, dynamic_args)
             .map_err(|e| RhaiError::ExecutionError(e.to_string()))?;
+
+        EXECUTION_START.with(|start| *start.borrow_mut() = None);
 
         // 转换结果
         // Convert result

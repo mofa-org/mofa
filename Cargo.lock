@@ -4889,6 +4889,7 @@ dependencies = [
 name = "mofa-cli"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
  "assert_cmd",
  "async-trait",
  "chrono",
@@ -5049,6 +5050,7 @@ dependencies = [
  "rust-embed",
  "serde",
  "serde_json",
+ "sha2",
  "sysinfo 0.32.1",
  "thiserror 1.0.69",
  "tokio",
