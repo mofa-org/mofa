@@ -66,6 +66,7 @@ impl fmt::Display for RoutingPolicy {
             Self::LocalFirstWithCloudFallback => write!(f, "local-first"),
             Self::LatencyOptimized => write!(f, "latency-optimized"),
             Self::CostOptimized => write!(f, "cost-optimized"),
+            Self::DegradationLadder => write!(f, "degradation-ladder"),
         }
     }
 }
@@ -74,6 +75,11 @@ impl fmt::Display for RoutingDecision {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::UseLocal { model_id } => write!(f, "local({})", model_id),
+            Self::UseLocalDegraded {
+                model_id,
+                degraded_precision,
+                ..
+            } => write!(f, "local-degraded({}@{})", model_id, degraded_precision),
             Self::UseCloud { provider } => write!(f, "cloud({})", provider),
             Self::Rejected { reason } => write!(f, "rejected({})", reason),
         }
@@ -212,7 +218,7 @@ fn resolve_degradation_ladder(
     cloud_provider: &str,
 ) -> RoutingDecision {
     // If the model fits at the preferred precision, use it directly.
-    if admission == AdmissionOutcome::Accepted {
+    if admission == AdmissionOutcome::Accept {
         return RoutingDecision::UseLocal {
             model_id: request.model_id.clone(),
         };
@@ -508,6 +514,9 @@ mod tests {
             let json = serde_json::to_string(&variant).unwrap();
             let back: RoutingDecision = serde_json::from_str(&json).unwrap();
             assert_eq!(back, variant);
+        }
+    }
+
     // ==================================================================
     // DegradationLadder policy tests
     // ==================================================================
@@ -517,7 +526,7 @@ mod tests {
         let decision = resolve(
             &RoutingPolicy::DegradationLadder,
             &mock_request(),
-            AdmissionOutcome::Accepted,
+            AdmissionOutcome::Accept,
             &mock_hardware(),
             "openai",
         );
@@ -536,7 +545,7 @@ mod tests {
         let decision = resolve(
             &RoutingPolicy::DegradationLadder,
             &mock_request(), // F16, 13312 MB
-            AdmissionOutcome::Deferred,
+            AdmissionOutcome::Defer,
             &mock_hardware(), // 8 GB available
             "openai",
         );
@@ -581,7 +590,7 @@ mod tests {
         let decision = resolve(
             &RoutingPolicy::DegradationLadder,
             &mock_request(),
-            AdmissionOutcome::Rejected,
+            AdmissionOutcome::Reject,
             &constrained_hw,
             "openai",
         );
@@ -613,7 +622,7 @@ mod tests {
         let decision = resolve(
             &RoutingPolicy::DegradationLadder,
             &mock_request(),
-            AdmissionOutcome::Rejected,
+            AdmissionOutcome::Reject,
             &tiny_hw,
             "openai",
         );
@@ -640,7 +649,7 @@ mod tests {
         let decision = resolve(
             &RoutingPolicy::DegradationLadder,
             &req,
-            AdmissionOutcome::Rejected,
+            AdmissionOutcome::Reject,
             &constrained_hw,
             "openai",
         );
