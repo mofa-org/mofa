@@ -43,6 +43,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         load_balancing: LoadBalancingAlgorithm::RoundRobin,
         enable_rate_limiting: true,
         enable_circuit_breakers: true,
+        default_request_timeout_ms: Some(30_000),
     };
 
     // Create gateway instance (without control plane for this example)

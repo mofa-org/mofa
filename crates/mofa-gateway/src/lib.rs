@@ -74,6 +74,7 @@
 
 pub mod consensus;
 pub mod control_plane;
+pub mod deadline;
 pub mod error;
 pub mod gateway;
 pub mod handlers;
