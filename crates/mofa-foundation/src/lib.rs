@@ -90,6 +90,12 @@ pub use orchestrator::{
     OrchestratorError, OrchestratorResult, PoolStatistics,
 };
 
+pub mod speech_registry;
+pub mod voice_pipeline;
+
+pub use speech_registry::SpeechAdapterRegistry;
+pub use voice_pipeline::{VoicePipeline, VoicePipelineConfig, VoicePipelineResult};
+
 // Re-export Linux implementation and pipeline when available
 #[cfg(all(target_os = "linux", feature = "linux-candle"))]
 pub use orchestrator::{
