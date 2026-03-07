@@ -67,3 +67,10 @@ pub mod security;
 // Gateway routing abstractions (kernel-level traits for agent request dispatch)
 pub mod gateway;
 pub use gateway::{GatewayRoute, HttpMethod, RegistryError, RouteRegistry, RoutingContext};
+
+// Scheduler kernel contract (traits, types, errors for periodic agent execution)
+pub mod scheduler;
+pub use scheduler::{
+    AgentScheduler, Clock, MissedTickPolicy, ScheduleDefinition,
+    ScheduleHandle, ScheduleInfo, SchedulerError,
+};
