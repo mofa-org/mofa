@@ -319,6 +319,7 @@ mod tests {
             match chunk.unwrap() {
                 GeneratorChunk::Text(text) => collected.push_str(&text),
                 GeneratorChunk::Done => break,
+                _ => {}
             }
         }
         assert!(collected.contains("Q: hello"));
