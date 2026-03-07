@@ -975,4 +975,60 @@ mod tests {
         let provider = OpenAIProvider::new("test-key");
         assert_eq!(provider.name(), "openai");
     }
+
+    /// streaming integration test for any OpenAI-compatible provider
+    ///   OPENAI_COMPAT_API_KEY=<key>
+    ///   cargo test -p mofa-foundation -- test_openai_compat_streaming_real --ignored --nocapture
+    #[tokio::test]
+    #[ignore = "requires OPENAI_COMPAT_API_KEY, OPENAI_COMPAT_BASE_URL, OPENAI_COMPAT_MODEL env vars"]
+    async fn test_openai_compat_streaming_real() {
+        use futures::StreamExt;
+        use crate::llm::provider::LLMProvider;
+
+        let api_key = std::env::var("OPENAI_COMPAT_API_KEY")
+            .expect("Set OPENAI_COMPAT_API_KEY to run this test");
+        let base_url = std::env::var("OPENAI_COMPAT_BASE_URL")
+            .expect("Set OPENAI_COMPAT_BASE_URL (e.g. https://api.groq.com/openai/v1)");
+        let model = std::env::var("OPENAI_COMPAT_MODEL")
+            .expect("Set OPENAI_COMPAT_MODEL (e.g. llama-3.3-70b-versatile)");
+
+        let provider = OpenAIProvider::with_config(
+            OpenAIConfig::new(api_key)
+                .with_base_url(&base_url)
+                .with_model(&model),
+        );
+
+        let request = super::super::types::ChatCompletionRequest::new(&model)
+            .system("You are a concise assistant.")
+            .user("Count from 1 to 5. Just numbers separated by spaces, nothing else.")
+            .max_tokens(30);
+
+        let mut stream = provider
+            .chat_stream(request)
+            .await
+            .expect("chat_stream() should succeed");
+
+        let mut full_text = String::new();
+        let mut chunk_count = 0usize;
+        let mut got_finish_reason = false;
+
+        while let Some(result) = stream.next().await {
+            let chunk = result.expect("stream item should not be an error");
+            chunk_count += 1;
+            if let Some(choice) = chunk.choices.first() {
+                if let Some(content) = &choice.delta.content {
+                    print!("{}", content);
+                    full_text.push_str(content);
+                }
+                if choice.finish_reason.is_some() {
+                    got_finish_reason = true;
+                }
+            }
+        }
+        println!("\n{} chunks received", chunk_count);
+
+        assert!(!full_text.is_empty(), "Should have received non empty content");
+        assert!(chunk_count > 1, "Should have received multiple chunks (streaming)");
+        assert!(got_finish_reason, "Stream should end with a finish_reason chunk");
+    }
 }
