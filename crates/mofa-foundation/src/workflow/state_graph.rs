@@ -418,6 +418,10 @@ impl<S: GraphState> CompiledGraphImpl<S> {
             let node_id = node_id.clone();
             let sem = semaphore.clone();
 
+            let node_span = tracing::info_span!(
+                "workflow.node",
+                node_id = %node_id,
+            );
             join_set.spawn(async move {
                 // Acquire semaphore permit to enforce max_parallelism
                 let _permit = sem.acquire().await.map_err(|_| {
@@ -425,7 +429,7 @@ impl<S: GraphState> CompiledGraphImpl<S> {
                 })?;
                 let command = node.call(&mut isolated_state, &node_ctx).await?;
                 Ok::<(usize, String, Command), AgentError>((index, node_id, command))
-            });
+            }.instrument(node_span));
         }
 
         let mut ordered_results: Vec<Option<(String, Command)>> = vec![None; node_ids.len()];
@@ -525,9 +529,22 @@ impl<S: GraphState + 'static> CompiledGraph<S, serde_json::Value> for CompiledGr
         &self.id
     }
 
+    #[tracing::instrument(
+        name = "workflow.invoke",
+        skip_all,
+        fields(
+            graph_id = %self.id,
+            execution_id = tracing::field::Empty,
+        )
+    )]
     async fn invoke(&self, input: S, config: Option<RuntimeContext>) -> AgentResult<S> {
         let ctx =
             config.unwrap_or_else(|| RuntimeContext::with_config(&self.id, self.config.clone()));
+
+        tracing::Span::current().record(
+            "execution_id",
+            tracing::field::display(&ctx.execution_id),
+        );
 
         info!(
             "Starting graph execution '{}' with execution_id={}",
@@ -666,7 +683,13 @@ impl<S: GraphState + 'static> CompiledGraph<S, serde_json::Value> for CompiledGr
         let (tx, rx) = tokio::sync::mpsc::channel(100);
 
         // Spawn execution task
-        let stream_span = tracing::info_span!("state_graph.stream");
+        let graph_id_owned = self.id.clone();
+        let exec_id_owned = ctx.execution_id.clone();
+        let stream_span = tracing::info_span!(
+            "state_graph.stream",
+            graph_id = %graph_id_owned,
+            execution_id = %exec_id_owned,
+        );
         tokio::spawn(async move {
             let mut state = input;
             let mut current_nodes = vec![entry_point];
