@@ -507,6 +507,46 @@ impl Default for SandboxResourceLimits {
     }
 }
 
+/// Captures the full context of a tool invocation for policy evaluation.
+///
+/// Bundles the tool identity, arguments, metadata, and caller info so that
+/// the sandbox policy can make decisions based on *what* is being called,
+/// *how* it is being called, and *who* is calling it.
+///
+/// # Example
+///
+/// ```rust,ignore
+/// let invocation = ToolInvocation {
+///     tool_name: tool.name().to_string(),
+///     arguments: serde_json::json!({"url": "https://example.com"}),
+///     metadata: tool.metadata(),
+///     caller_id: ctx.agent_id().to_string(),
+/// };
+/// ```
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ToolInvocation {
+    /// Name of the tool being invoked
+    pub tool_name: String,
+    /// Arguments passed to the tool
+    pub arguments: serde_json::Value,
+    /// Static metadata declared by the tool
+    pub metadata: ToolMetadata,
+    /// Identity of the caller (agent ID, user ID, etc.)
+    pub caller_id: String,
+}
+
+impl ToolInvocation {
+    /// Create a new invocation from a tool, its input, and a caller ID.
+    pub fn new(tool: &dyn Tool, input: &ToolInput, caller_id: impl Into<String>) -> Self {
+        Self {
+            tool_name: tool.name().to_string(),
+            arguments: input.arguments.clone(),
+            metadata: tool.metadata(),
+            caller_id: caller_id.into(),
+        }
+    }
+}
+
 /// Result of a sandboxed tool execution.
 ///
 /// Wraps the inner `ToolResult` with execution metrics and sandbox metadata,
@@ -534,36 +574,39 @@ pub struct SandboxedResult {
 /// # Example
 ///
 /// ```rust,ignore
-/// use mofa_kernel::agent::components::tool::{ToolSandbox, ToolInput};
+/// use mofa_kernel::agent::components::tool::{ToolSandbox, ToolInvocation};
 ///
-/// // Foundation provides the concrete implementation
 /// let sandbox = SandboxedToolExecutor::new(config);
 ///
-/// // Execute tool within sandbox constraints
-/// let result = sandbox.execute_sandboxed(&tool, input, &ctx).await?;
+/// let invocation = ToolInvocation::new(&tool, &input, "agent-1");
+/// let result = sandbox.execute_sandboxed(&tool, invocation, &ctx).await?;
 /// println!("Took {}ms", result.execution_time_ms);
 /// ```
 #[async_trait]
 pub trait ToolSandbox: Send + Sync {
     /// Execute a tool within sandbox constraints.
     ///
+    /// The `invocation` provides the full call context (tool name, arguments,
+    /// metadata, caller ID) for policy evaluation. The `tool` reference is
+    /// used for actual execution after the policy check passes.
+    ///
     /// Implementations should:
-    /// 1. Check capabilities via `check_capabilities()`
+    /// 1. Evaluate the invocation against the sandbox policy
     /// 2. Wrap execution with a timeout
     /// 3. Capture execution metrics
     /// 4. Truncate output if it exceeds limits
     async fn execute_sandboxed(
         &self,
         tool: &dyn Tool,
-        input: ToolInput,
+        invocation: ToolInvocation,
         ctx: &AgentContext,
     ) -> AgentResult<SandboxedResult>;
 
-    /// Check if a tool's required capabilities are allowed by this sandbox.
+    /// Check if a tool invocation is allowed by this sandbox's policy.
     ///
     /// Returns `Ok(())` if all capabilities are satisfied, or an error
     /// describing which capability was denied.
-    fn check_capabilities(&self, tool: &dyn Tool) -> AgentResult<()>;
+    fn check_invocation(&self, invocation: &ToolInvocation) -> AgentResult<()>;
 
     /// Get the current resource limits for this sandbox.
     fn resource_limits(&self) -> &SandboxResourceLimits;
@@ -645,5 +688,29 @@ mod tests {
         assert_eq!(result.execution_time_ms, 42);
         assert!(!result.output_truncated);
         assert_eq!(result.capabilities_used.len(), 1);
+    }
+
+    #[test]
+    fn test_tool_invocation_construction() {
+        let invocation = ToolInvocation {
+            tool_name: "http_fetch".to_string(),
+            arguments: serde_json::json!({"url": "https://example.com"}),
+            metadata: ToolMetadata::default().needs_network(),
+            caller_id: "agent-1".to_string(),
+        };
+
+        assert_eq!(invocation.tool_name, "http_fetch");
+        assert_eq!(invocation.caller_id, "agent-1");
+        assert!(invocation.metadata.requires_network);
+        assert_eq!(
+            invocation.arguments["url"].as_str(),
+            Some("https://example.com")
+        );
+
+        // Round-trip serialization
+        let json = serde_json::to_string(&invocation).unwrap();
+        let deserialized: ToolInvocation = serde_json::from_str(&json).unwrap();
+        assert_eq!(deserialized.tool_name, "http_fetch");
+        assert_eq!(deserialized.caller_id, "agent-1");
     }
 }
