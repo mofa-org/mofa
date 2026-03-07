@@ -236,7 +236,14 @@ pub async fn stop_agent(
         .ok_or_else(|| GatewayError::AgentNotFound(id.clone()))?;
 
     {
-        let mut agent = agent_arc.write().await;
+        let mut agent = match agent_arc.try_write() {
+            Ok(guard) => guard,
+            Err(_) => {
+                return Err(GatewayError::AgentOperationFailed(
+                    "Agent is currently executing a task and cannot be cleanly stopped at this moment. Please wait for execution to finish.".into(),
+                ));
+            }
+        };
         let current = agent.state();
         if current == AgentState::Shutdown || current == AgentState::ShuttingDown {
             return Ok((
@@ -277,8 +284,9 @@ pub async fn delete_agent(
 
     // Attempt graceful stop first, ignore errors (agent may already be stopped)
     if let Some(agent_arc) = state.registry.get(&id).await {
-        let mut agent = agent_arc.write().await;
-        let _ = agent.shutdown().await;
+        if let Ok(mut agent) = agent_arc.try_write() {
+            let _ = agent.shutdown().await;
+        }
     }
 
     state
