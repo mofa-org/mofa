@@ -184,6 +184,7 @@ impl PeriodicRunConfig {
 /// 间隔调度的补偿策略
 /// Missed tick policy for interval scheduling
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[non_exhaustive]
 pub enum PeriodicMissedTickPolicy {
     /// 尽快补跑遗漏 tick
     /// Try to catch up missed ticks as fast as possible
@@ -210,6 +211,7 @@ impl From<PeriodicMissedTickPolicy> for MissedTickBehavior {
 /// Cron 调度错过触发点时的策略
 /// Misfire policy for cron scheduling
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[non_exhaustive]
 pub enum CronMisfirePolicy {
     /// 丢弃错过的触发点，继续等待下一次计划触发
     /// Drop missed triggers and wait for the next scheduled trigger

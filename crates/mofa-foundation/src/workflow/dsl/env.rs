@@ -2,13 +2,13 @@
 //!
 //! Supports ${VAR_NAME} syntax in workflow definitions.
 
-use once_cell::sync::Lazy;
 use regex::Regex;
 use std::collections::HashMap;
+use std::sync::LazyLock;
 
 /// Regex for matching ${VAR_NAME} patterns
-static ENV_VAR_REGEX: Lazy<Regex> =
-    Lazy::new(|| Regex::new(r"\$\{([A-Za-z_][A-Za-z0-9_]*)\}").unwrap());
+static ENV_VAR_REGEX: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"\$\{([A-Za-z_][A-Za-z0-9_]*)\}").unwrap());
 
 /// Substitute environment variables in a string
 ///
