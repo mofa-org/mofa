@@ -64,6 +64,9 @@ pub use agent_executor::{AgentExecutor, ExecutorError};
 // Security governance - PII redaction, content moderation, prompt guard
 pub mod security;
 
+// Agent capability manifest and discovery registry
+pub mod capability_registry;
+pub use capability_registry::CapabilityRegistry;
 // Error recovery strategies (Backoff, RetryPolicy, CircuitBreaker, retry, fallback_chain)
 pub mod recovery;
 
