@@ -23,6 +23,8 @@ pub mod error_conversions;
 pub mod agent;
 pub mod builder;
 pub mod config;
+#[cfg(feature = "gateway")]
+pub mod control_plane;
 pub mod fallback;
 pub mod interrupt;
 pub mod rag;
@@ -1709,13 +1711,21 @@ mod test_message_bus {
         // Confirm routing cleaned up
         {
             let topics = bus.topic_subscribers.read().await;
-            assert!(!topics.get("topic-z").map(|v| v.iter().any(|id| id == "agent-x")).unwrap_or(false));
+            assert!(
+                !topics
+                    .get("topic-z")
+                    .map(|v| v.iter().any(|id| id == "agent-x"))
+                    .unwrap_or(false)
+            );
         }
 
         // Confirm subscribers mapping cleaned up as well
         {
             let subs = bus.subscribers.read().await;
-            assert!(!subs.contains_key("agent-x"), "subscriber entry should be removed");
+            assert!(
+                !subs.contains_key("agent-x"),
+                "subscriber entry should be removed"
+            );
         }
 
         // Publish to topic - should not be delivered
