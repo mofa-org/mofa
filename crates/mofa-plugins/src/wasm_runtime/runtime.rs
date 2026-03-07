@@ -215,12 +215,11 @@ impl ModuleCache {
         // Evict if at capacity (FIFO: remove oldest inserted entry)
         if modules.len() >= self.max_entries {
             if let Some((evicted_name, evicted_module)) = modules.shift_remove_index(0) {
-                drop(modules);
-                self.by_hash.write().await.remove(&evicted_module.source_hash);
-                let mut modules = self.modules.write().await;
                 modules.insert(name.clone(), arc);
                 drop(modules);
-                self.by_hash.write().await.insert(hash, name);
+                let mut by_hash = self.by_hash.write().await;
+                by_hash.remove(&evicted_module.source_hash);
+                by_hash.insert(hash, name);
                 tracing::debug!(
                     evicted = %evicted_name,
                     "ModuleCache: evicted oldest module to make room"
