@@ -219,13 +219,6 @@ fn validate_config_file(path: &PathBuf) -> Result<(), CliError> {
                 return Err(CliError::ConfigError(
                         "RON format validation is not yet supported. Please use YAML, TOML, or JSON format for validated configuration.".into()
                     ));
-                }
-                _ => {
-                    return Err(CliError::ConfigError(format!(
-                        "Unsupported config format: {}",
-                        ext
-                    )));
-                }
             }
             _ => {
                 return Err(CliError::ConfigError(format!(
