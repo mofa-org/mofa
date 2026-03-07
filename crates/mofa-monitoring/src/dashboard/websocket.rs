@@ -1,12 +1,11 @@
-//! WebSocket handler for real-time updates
-//!
-//! Provides WebSocket support for live monitoring data
+//! WebSocket handler for real-time monitoring updates with optional auth.
 
 use axum::{
     extract::{
-        State,
+        Query, State,
         ws::{Message, WebSocket, WebSocketUpgrade},
     },
+    http::StatusCode,
     response::IntoResponse,
 };
 use futures::{SinkExt, StreamExt};
@@ -15,8 +14,9 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::{RwLock, broadcast, mpsc};
-use tracing::{debug, error, info};
+use tracing::{Instrument, debug, error, info, info_span, warn};
 
+use super::auth::{AuthInfo, AuthProvider, NoopAuthProvider};
 use mofa_kernel::workflow::telemetry::DebugEvent;
 
 use super::metrics::{MetricsCollector, MetricsSnapshot};
@@ -115,6 +115,8 @@ pub struct WebSocketClient {
     pub connected_at: u64,
     /// Subscribed topics
     pub subscriptions: Vec<String>,
+    /// Auth info (populated when auth is enabled)
+    pub auth_info: Option<AuthInfo>,
     /// Message sender
     sender: mpsc::Sender<WebSocketMessage>,
 }
@@ -128,8 +130,14 @@ impl WebSocketClient {
                 .unwrap_or_default()
                 .as_secs(),
             subscriptions: vec!["metrics".to_string()], // Default subscription
+            auth_info: None,
             sender,
         }
+    }
+
+    pub fn with_auth_info(mut self, info: AuthInfo) -> Self {
+        self.auth_info = Some(info);
+        self
     }
 
     pub async fn send(
@@ -145,6 +153,13 @@ impl WebSocketClient {
     }
 }
 
+/// Query parameters for the WebSocket upgrade request.
+#[derive(Debug, Deserialize)]
+pub struct WsQueryParams {
+    /// Authentication token.
+    token: Option<String>,
+}
+
 /// WebSocket handler state
 pub struct WebSocketHandler {
     /// Connected clients
@@ -155,10 +170,12 @@ pub struct WebSocketHandler {
     broadcast_tx: broadcast::Sender<WebSocketMessage>,
     /// Update interval
     update_interval: Duration,
+    /// Authentication provider
+    auth: Arc<dyn AuthProvider>,
 }
 
 impl WebSocketHandler {
-    pub fn new(collector: Arc<MetricsCollector>) -> Self {
+    pub fn new(collector: Arc<MetricsCollector>, auth: Arc<dyn AuthProvider>) -> Self {
         let (broadcast_tx, _) = broadcast::channel(1024);
 
         Self {
@@ -166,6 +183,7 @@ impl WebSocketHandler {
             collector,
             broadcast_tx,
             update_interval: Duration::from_secs(1),
+            auth,
         }
     }
 
@@ -225,15 +243,12 @@ impl WebSocketHandler {
         self: Arc<Self>,
         mut rx: mpsc::Receiver<DebugEvent>,
     ) -> tokio::task::JoinHandle<()> {
-        let broadcast_tx = self.broadcast_tx.clone();
         info!("Starting debug event forwarder");
 
         tokio::spawn(async move {
             while let Some(event) = rx.recv().await {
                 let msg = WebSocketMessage::Debug(event);
-                if let Err(e) = broadcast_tx.send(msg) {
-                    debug!("Failed to broadcast debug event: {}", e);
-                }
+                self.broadcast("debug", msg).await;
             }
             info!("Debug event forwarder stopped");
         })
@@ -249,27 +264,73 @@ impl WebSocketHandler {
             loop {
                 ticker.tick().await;
 
-                // Collect and broadcast metrics
+                // Collect and broadcast metrics to subscribed clients only
                 let snapshot = self.collector.current().await;
                 let msg = WebSocketMessage::Metrics(snapshot);
 
-                let _ = self.broadcast_tx.send(msg);
+                self.broadcast("metrics", msg).await;
             }
         })
     }
 
-    /// Handle WebSocket upgrade
+    /// Handle WebSocket upgrade, validating `?token=` when auth is enabled.
     pub async fn handle_upgrade(
         ws: WebSocketUpgrade,
+        Query(params): Query<WsQueryParams>,
         State(handler): State<Arc<WebSocketHandler>>,
     ) -> impl IntoResponse {
-        ws.on_upgrade(move |socket| handler.handle_socket(socket))
+        if handler.auth.is_enabled() {
+            let token = params.token.unwrap_or_default();
+            match handler.auth.validate(&token).await {
+                Ok(auth_info) => {
+                    info!("WebSocket auth succeeded for {}", auth_info.client_id);
+                    ws.on_upgrade(move |socket| {
+                        handler.handle_socket_with_auth(socket, Some(auth_info))
+                    })
+                    .into_response()
+                }
+                Err(reason) => {
+                    warn!("WebSocket auth failed: {}", reason);
+                    StatusCode::FORBIDDEN.into_response()
+                }
+            }
+        } else {
+            ws.on_upgrade(move |socket| handler.handle_socket_with_auth(socket, None))
+                .into_response()
+        }
     }
 
-    /// Handle individual WebSocket connection
-    async fn handle_socket(self: Arc<Self>, socket: WebSocket) {
+    /// Handle individual WebSocket connection with optional auth info.
+    async fn handle_socket_with_auth(
+        self: Arc<Self>,
+        socket: WebSocket,
+        auth_info: Option<AuthInfo>,
+    ) {
         let client_id = uuid::Uuid::now_v7().to_string();
-        info!("WebSocket client connected: {}", client_id);
+        let authenticated = auth_info.is_some();
+
+        let span = info_span!(
+            "ws_connection",
+            client_id = %client_id,
+            authenticated = authenticated,
+        );
+
+        self.handle_socket_inner(socket, auth_info, client_id)
+            .instrument(span)
+            .await;
+    }
+
+    /// Inner connection handler, runs inside the `ws_connection` span.
+    async fn handle_socket_inner(
+        self: Arc<Self>,
+        socket: WebSocket,
+        auth_info: Option<AuthInfo>,
+        client_id: String,
+    ) {
+        info!(
+            client_id = %client_id,
+            "WebSocket client connected"
+        );
 
         let (mut sender, mut receiver) = socket.split();
 
@@ -277,7 +338,10 @@ impl WebSocketHandler {
         let (tx, mut rx) = mpsc::channel::<WebSocketMessage>(256);
 
         // Register client
-        let client = WebSocketClient::new(client_id.clone(), tx);
+        let mut client = WebSocketClient::new(client_id.clone(), tx);
+        if let Some(info) = auth_info {
+            client = client.with_auth_info(info);
+        }
         {
             let mut clients = self.clients.write().await;
             clients.insert(client_id.clone(), client);
@@ -287,7 +351,7 @@ impl WebSocketHandler {
         let mut broadcast_rx = self.broadcast_tx.subscribe();
 
         // Task to send messages to client
-        let send_task = tokio::spawn(async move {
+        let mut send_task = tokio::spawn(async move {
             loop {
                 tokio::select! {
                     // Messages from direct send
@@ -298,10 +362,20 @@ impl WebSocketHandler {
                         }
                     }
                     // Messages from broadcast
-                    Ok(msg) = broadcast_rx.recv() => {
-                        let json = serde_json::to_string(&msg).unwrap_or_default();
-                        if sender.send(Message::Text(json.into())).await.is_err() {
-                            break;
+                    result = broadcast_rx.recv() => {
+                        match result {
+                            Ok(msg) => {
+                                let json = serde_json::to_string(&msg).unwrap_or_default();
+                                if sender.send(Message::Text(json.into())).await.is_err() {
+                                    break;
+                                }
+                            }
+                            Err(broadcast::error::RecvError::Lagged(n)) => {
+                                warn!("WebSocket broadcast lagged by {} messages", n);
+                            }
+                            Err(broadcast::error::RecvError::Closed) => {
+                                break;
+                            }
                         }
                     }
                 }
@@ -311,7 +385,7 @@ impl WebSocketHandler {
         // Task to receive messages from client
         let clients = self.clients.clone();
         let client_id_clone = client_id.clone();
-        let receive_task = tokio::spawn(async move {
+        let mut receive_task = tokio::spawn(async move {
             while let Some(result) = receiver.next().await {
                 match result {
                     Ok(Message::Text(text)) => {
@@ -359,31 +433,49 @@ impl WebSocketHandler {
             }
         });
 
-        // Wait for either task to complete
+        // Wait for either task to complete, then abort the other.
+        // Dropping a JoinHandle only detaches the task — it does NOT
+        // cancel it, so the "losing" task would keep running as an
+        // orphan (sending to a closed socket or processing messages
+        // for a disconnected client).
         tokio::select! {
-            _ = send_task => {}
-            _ = receive_task => {}
+            _ = &mut send_task => {
+                receive_task.abort();
+            }
+            _ = &mut receive_task => {
+                send_task.abort();
+            }
         }
 
         // Cleanup
+        let subscription_count;
         {
             let mut clients = self.clients.write().await;
+            subscription_count = clients
+                .get(&client_id)
+                .map(|c| c.subscriptions.len())
+                .unwrap_or(0);
             clients.remove(&client_id);
         }
-        info!("WebSocket client disconnected: {}", client_id);
+        info!(
+            client_id = %client_id,
+            subscriptions = subscription_count,
+            "WebSocket client disconnected"
+        );
     }
 }
 
-/// Create WebSocket route handler
+/// Create WebSocket route handler with the given auth provider.
 pub fn create_websocket_handler(
     collector: Arc<MetricsCollector>,
+    auth: Arc<dyn AuthProvider>,
 ) -> (Arc<WebSocketHandler>, axum::routing::MethodRouter) {
-    let handler = Arc::new(WebSocketHandler::new(collector));
+    let handler = Arc::new(WebSocketHandler::new(collector, auth));
     let handler_clone = handler.clone();
 
-    let route = axum::routing::get(move |ws: WebSocketUpgrade| {
+    let route = axum::routing::get(move |ws: WebSocketUpgrade, query: Query<WsQueryParams>| {
         let h = handler_clone.clone();
-        async move { WebSocketHandler::handle_upgrade(ws, State(h)).await }
+        async move { WebSocketHandler::handle_upgrade(ws, query, State(h)).await }
     });
 
     (handler, route)
@@ -419,7 +511,8 @@ mod tests {
     #[tokio::test]
     async fn test_websocket_handler_client_count() {
         let collector = Arc::new(MetricsCollector::new(Default::default()));
-        let handler = WebSocketHandler::new(collector);
+        let auth: Arc<dyn AuthProvider> = Arc::new(NoopAuthProvider);
+        let handler = WebSocketHandler::new(collector, auth);
 
         assert_eq!(handler.client_count().await, 0);
     }
@@ -484,5 +577,41 @@ mod tests {
         );
 
         update_handle.abort();
+    }
+
+    /// Integration test: verifies that a WebSocket connection is rejected
+    /// with 403 when auth is enabled and no valid token is provided.
+    #[tokio::test]
+    async fn test_websocket_auth_reject() {
+        use crate::dashboard::auth::TokenAuthProvider;
+        use crate::dashboard::server::DashboardServer;
+
+        let auth: Arc<dyn AuthProvider> = Arc::new(TokenAuthProvider::new("test-secret"));
+        let config = crate::dashboard::server::DashboardConfig::new()
+            .with_host("127.0.0.1")
+            .with_port(0)
+            .with_auth(auth);
+
+        let mut server = DashboardServer::new(config);
+        let router = server.build_router();
+
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("failed to bind");
+        let addr = listener.local_addr().unwrap();
+
+        tokio::spawn(async move {
+            axum::serve(listener, router).await.unwrap();
+        });
+
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+
+        // Attempt connection without a token — should fail
+        let ws_url = format!("ws://{}/ws", addr);
+        let result = tokio_tungstenite::connect_async(&ws_url).await;
+        assert!(
+            result.is_err(),
+            "Expected WebSocket connection to be rejected without token"
+        );
     }
 }

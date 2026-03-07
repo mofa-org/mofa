@@ -1,0 +1,42 @@
+[package]
+name = "mofa-local-llm"
+version.workspace = true
+edition.workspace = true
+description = "MoFA Linux inference backend with CUDA, ROCm, and Vulkan hardware detection"
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+keywords = ["ai", "inference", "llm", "cuda", "rocm"]
+categories = ["science", "hardware-support"]
+publish = true
+
+[features]
+default = []
+# Enable CUDA backend (NVIDIA GPUs)
+cuda = []
+# Enable ROCm backend (AMD GPUs)
+rocm = []
+# Enable Vulkan compute backend (cross-vendor fallback)
+vulkan = []
+
+[dependencies]
+async-trait.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+chrono.workspace = true
+
+# System information for hardware detection and memory monitoring
+sysinfo = "0.31"
+
+mofa-foundation = { path = "../mofa-foundation", version = "0.1" }
+
+[dev-dependencies]
+tokio = { version = "1", features = ["full", "rt-multi-thread"] }
+
+[[bench]]
+name = "inference_throughput"
+harness = false

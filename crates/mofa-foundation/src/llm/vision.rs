@@ -7,7 +7,7 @@
 //! - Multi-modal message builders
 
 use crate::llm::types::{ChatMessage, ContentPart, ImageDetail, ImageUrl, MessageContent, Role};
-use anyhow::Result;
+use mofa_kernel::agent::types::error::{GlobalError, GlobalResult};
 use std::path::Path;
 
 /// Encode an image file as a data URL
@@ -23,7 +23,7 @@ use std::path::Path;
 /// let url = encode_image_data_url(Path::new("/path/to/image.png"))?;
 /// assert!(url.starts_with("data:image/png;base64,"));
 /// ```
-pub fn encode_image_data_url(path: &Path) -> Result<String> {
+pub fn encode_image_data_url(path: &Path) -> GlobalResult<String> {
     use base64::Engine;
     use base64::engine::general_purpose::STANDARD_NO_PAD;
     use std::fs;
@@ -31,7 +31,7 @@ pub fn encode_image_data_url(path: &Path) -> Result<String> {
     let bytes = fs::read(path)?;
 
     let mime_type = infer::get_from_path(path)?
-        .ok_or_else(|| anyhow::anyhow!("Unknown MIME type for: {:?}", path))?
+        .ok_or_else(|| GlobalError::Other(format!("Unknown MIME type for: {:?}", path)))?
         .mime_type()
         .to_string();
 
@@ -46,7 +46,7 @@ pub fn encode_image_data_url(path: &Path) -> Result<String> {
 ///
 /// # Returns
 /// An ImageUrl struct suitable for use in ContentPart
-pub fn encode_image_url(path: &Path) -> Result<ImageUrl> {
+pub fn encode_image_url(path: &Path) -> GlobalResult<ImageUrl> {
     let url = encode_image_data_url(path)?;
     Ok(ImageUrl { url, detail: None })
 }
@@ -67,7 +67,7 @@ pub fn encode_image_url(path: &Path) -> Result<ImageUrl> {
 ///     &["/path/to/image.png".to_string()]
 /// )?;
 /// ```
-pub fn build_vision_message(text: &str, image_paths: &[String]) -> Result<MessageContent> {
+pub fn build_vision_message(text: &str, image_paths: &[String]) -> GlobalResult<MessageContent> {
     let mut parts = vec![ContentPart::Text {
         text: text.to_string(),
     }];
@@ -97,7 +97,7 @@ pub fn build_vision_message(text: &str, image_paths: &[String]) -> Result<Messag
 ///     &["/path/to/image.jpg".to_string()]
 /// )?;
 /// ```
-pub fn build_vision_chat_message(text: &str, image_paths: &[String]) -> Result<ChatMessage> {
+pub fn build_vision_chat_message(text: &str, image_paths: &[String]) -> GlobalResult<ChatMessage> {
     let content = build_vision_message(text, image_paths)?;
 
     Ok(ChatMessage {
@@ -117,7 +117,7 @@ pub fn build_vision_chat_message(text: &str, image_paths: &[String]) -> Result<C
 ///
 /// # Returns
 /// A ChatMessage with text and one image
-pub fn build_vision_chat_message_single(text: &str, image_path: &str) -> Result<ChatMessage> {
+pub fn build_vision_chat_message_single(text: &str, image_path: &str) -> GlobalResult<ChatMessage> {
     build_vision_chat_message(text, &[image_path.to_string()])
 }
 
@@ -190,9 +190,9 @@ pub fn is_image_file(path: &Path) -> bool {
 ///
 /// # Returns
 /// The MIME type string or an error
-pub fn get_mime_type(path: &Path) -> Result<String> {
+pub fn get_mime_type(path: &Path) -> GlobalResult<String> {
     infer::get_from_path(path)?
-        .ok_or_else(|| anyhow::anyhow!("Unknown MIME type for: {:?}", path))
+        .ok_or_else(|| GlobalError::Other(format!("Unknown MIME type for: {:?}", path)))
         .map(|info| info.mime_type().to_string())
 }
 

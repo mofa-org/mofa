@@ -277,7 +277,16 @@ impl SimpleTool for FileWriteTool {
                 .open(&path)
                 .await
             {
-                Ok(mut file) => file.write_all(content.as_bytes()).await,
+                Ok(mut file) => {
+                    // Ensure appended bytes are flushed and committed before returning success.
+                    if let Err(e) = file.write_all(content.as_bytes()).await {
+                        Err(e)
+                    } else if let Err(e) = file.flush().await {
+                        Err(e)
+                    } else {
+                        file.sync_all().await
+                    }
+                }
                 Err(e) => Err(e),
             }
         } else {
@@ -488,9 +497,7 @@ impl SimpleTool for JsonParseTool {
                     current = match current.get(key) {
                         Some(v) => v,
                         None => {
-                            return ToolResult::failure(format!(
-                                "key not found at path '{path}'"
-                            ))
+                            return ToolResult::failure(format!("key not found at path '{path}'"));
                         }
                     };
                 }
@@ -760,9 +767,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_datetime_missing_operation() {
-        let result = DateTimeTool
-            .execute(ToolInput::from_json(json!({})))
-            .await;
+        let result = DateTimeTool.execute(ToolInput::from_json(json!({}))).await;
         assert!(!result.success);
     }
 
@@ -875,7 +880,9 @@ mod tests {
         let path = dir.path().join("append.txt").to_string_lossy().to_string();
 
         let w1 = FileWriteTool
-            .execute(ToolInput::from_json(json!({"path": path, "content": "line1\n"})))
+            .execute(ToolInput::from_json(
+                json!({"path": path, "content": "line1\n"}),
+            ))
             .await;
         assert!(w1.success, "{:?}", w1.error);
 
@@ -886,13 +893,24 @@ mod tests {
             .await;
         assert!(w2.success, "{:?}", w2.error);
 
-        let read = FileReadTool
-            .execute(ToolInput::from_json(json!({"path": path})))
-            .await;
-        assert!(read.success);
-        let content = read.output["content"].as_str().unwrap();
-        assert!(content.contains("line1"));
-        assert!(content.contains("line2"));
+        // Retry briefly in case slower filesystems delay visible updates.
+        let mut content = String::new();
+        let mut ok = false;
+        for _ in 0..8 {
+            let read = FileReadTool
+                .execute(ToolInput::from_json(json!({"path": path})))
+                .await;
+            assert!(read.success);
+            content = read.output["content"].as_str().unwrap_or_default().to_string();
+            if content.contains("line2") {
+                ok = true;
+                break;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+        }
+        assert!(ok, "content={content:?}");
+        assert!(content.contains("line1"), "content={content:?}");
+        assert!(content.contains("line2"), "content={content:?}");
     }
 
     #[tokio::test]
@@ -918,29 +936,45 @@ mod tests {
 
     #[tokio::test]
     async fn test_shell_echo() {
-        let result = ShellTool
-            .execute(ToolInput::from_json(json!({
+        let input = if cfg!(windows) {
+            json!({
+                "command": "cmd",
+                "args": ["/c", "echo hello shell"]
+            })
+        } else {
+            json!({
                 "command": "echo",
                 "args": ["hello shell"]
-            })))
-            .await;
+            })
+        };
+
+        let result = ShellTool.execute(ToolInput::from_json(input)).await;
         assert!(result.success, "{:?}", result.error);
-        assert!(result.output["stdout"]
-            .as_str()
-            .unwrap()
-            .contains("hello shell"));
+        assert!(
+            result.output["stdout"]
+                .as_str()
+                .unwrap()
+                .contains("hello shell")
+        );
     }
 
     #[tokio::test]
     async fn test_shell_nonzero_exit() {
-        let result = ShellTool
-            .execute(ToolInput::from_json(json!({
+        let input = if cfg!(windows) {
+            json!({
+                "command": "cmd",
+                "args": ["/c", "exit 1"]
+            })
+        } else {
+            json!({
                 "command": "sh",
                 "args": ["-c", "exit 1"]
-            })))
-            .await;
+            })
+        };
+
+        let result = ShellTool.execute(ToolInput::from_json(input)).await;
         assert!(!result.success);
-        assert!(result.error.as_deref().unwrap().contains("exit"));
+        assert!(result.error.as_deref().unwrap().contains("exited"));
     }
 
     #[tokio::test]
@@ -955,9 +989,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_shell_missing_command() {
-        let result = ShellTool
-            .execute(ToolInput::from_json(json!({})))
-            .await;
+        let result = ShellTool.execute(ToolInput::from_json(json!({}))).await;
         assert!(!result.success);
         assert!(result.error.as_deref().unwrap().contains("command"));
     }

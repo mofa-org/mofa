@@ -84,6 +84,7 @@ use crate::llm::{LLMAgent, LLMError, LLMResult};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
+use tracing::Instrument;
 
 /// Type alias for mapper function in MapReduceAgent
 pub type MapFunction = Arc<dyn Fn(&str) -> Vec<String> + Send + Sync>;
@@ -669,30 +670,34 @@ impl ParallelAgent {
             let task_input = self.prepare_task(&name, &task);
             let verbose = self.verbose;
 
-            let handle = tokio::spawn(async move {
-                if verbose {
-                    tracing::info!("[Parallel] Agent '{}' starting", name);
-                }
+            let span = tracing::info_span!("parallel_agent.branch", agent_name = %name);
+            let handle = tokio::spawn(
+                async move {
+                    if verbose {
+                        tracing::info!("[Parallel] Agent '{}' starting", name);
+                    }
 
-                let result = agent.run(&task_input).await;
+                    let result = agent.run(&task_input).await;
 
-                if verbose {
-                    match &result {
-                        Ok(output) => {
-                            tracing::info!(
-                                "[Parallel] Agent '{}' completed in {}ms",
-                                name,
-                                output.duration_ms
-                            );
-                        }
-                        Err(e) => {
-                            tracing::warn!("[Parallel] Agent '{}' failed: {}", name, e);
+                    if verbose {
+                        match &result {
+                            Ok(output) => {
+                                tracing::info!(
+                                    "[Parallel] Agent '{}' completed in {}ms",
+                                    name,
+                                    output.duration_ms
+                                );
+                            }
+                            Err(e) => {
+                                tracing::warn!("[Parallel] Agent '{}' failed: {}", name, e);
+                            }
                         }
                     }
-                }
 
-                (name, task_input, result)
-            });
+                    (name, task_input, result)
+                }
+                .instrument(span),
+            );
 
             handles.push(handle);
         }
@@ -1176,30 +1181,34 @@ impl MapReduceAgent {
             let semaphore = semaphore.clone();
             let verbose = self.verbose;
 
-            let handle = tokio::spawn(async move {
-                let _permit = if let Some(ref sem) = semaphore {
-                    Some(sem.acquire().await)
-                } else {
-                    None
-                };
+            let span = tracing::info_span!("map_reduce.worker", sub_task_idx = idx);
+            let handle = tokio::spawn(
+                async move {
+                    let _permit = if let Some(ref sem) = semaphore {
+                        Some(sem.acquire().await)
+                    } else {
+                        None
+                    };
 
-                if verbose {
-                    tracing::info!("[MapReduce] Processing sub-task {}", idx + 1);
-                }
+                    if verbose {
+                        tracing::info!("[MapReduce] Processing sub-task {}", idx + 1);
+                    }
 
-                let result = worker.run(&sub_task).await;
+                    let result = worker.run(&sub_task).await;
 
-                if verbose {
-                    match &result {
-                        Ok(_) => tracing::info!("[MapReduce] Sub-task {} completed", idx + 1),
-                        Err(e) => {
-                            tracing::warn!("[MapReduce] Sub-task {} failed: {}", idx + 1, e)
+                    if verbose {
+                        match &result {
+                            Ok(_) => tracing::info!("[MapReduce] Sub-task {} completed", idx + 1),
+                            Err(e) => {
+                                tracing::warn!("[MapReduce] Sub-task {} failed: {}", idx + 1, e)
+                            }
                         }
                     }
-                }
 
-                (idx, sub_task, result)
-            });
+                    (idx, sub_task, result)
+                }
+                .instrument(span),
+            );
 
             handles.push(handle);
         }

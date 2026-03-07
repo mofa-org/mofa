@@ -1,5 +1,6 @@
 //! `mofa db` command implementation
 
+use crate::CliError;
 use crate::cli::DatabaseType;
 use colored::Colorize;
 use std::path::PathBuf;
@@ -9,7 +10,7 @@ pub fn run_init(
     db_type: DatabaseType,
     output: Option<PathBuf>,
     database_url: Option<String>,
-) -> anyhow::Result<()> {
+) -> Result<(), CliError> {
     let sql = get_migration_sql(db_type);
 
     if let Some(url) = database_url {
@@ -32,12 +33,12 @@ pub fn run_init(
         #[cfg(not(feature = "db"))]
         {
             let _ = url; // suppress unused variable warning
-            anyhow::bail!(
+            return Err(CliError::Other(format!(
                 "Direct database execution requires the 'db' feature.\n\
                  Build with: cargo install mofa-cli --features db\n\
                  Or output to file: mofa db init -t {} -o migration.sql",
                 db_type
-            );
+            )));
         }
     } else if let Some(output_path) = output {
         // Write SQL to file
@@ -61,7 +62,7 @@ pub fn run_init(
 }
 
 /// Execute the `mofa db schema` command
-pub fn run_schema(db_type: DatabaseType) -> anyhow::Result<()> {
+pub fn run_schema(db_type: DatabaseType) -> Result<(), CliError> {
     let sql = get_migration_sql(db_type);
     println!("-- MoFA {} Schema", db_type.to_string().to_uppercase());
     println!("-- Copy and execute this SQL to initialize your database\n");
@@ -93,7 +94,7 @@ fn mask_password(url: &str) -> String {
 }
 
 #[cfg(feature = "db")]
-async fn execute_migration(db_type: DatabaseType, url: &str, sql: &str) -> anyhow::Result<()> {
+async fn execute_migration(db_type: DatabaseType, url: &str, sql: &str) -> Result<(), CliError> {
     match db_type {
         DatabaseType::Postgres => {
             use sqlx::Executor;
@@ -103,7 +104,7 @@ async fn execute_migration(db_type: DatabaseType, url: &str, sql: &str) -> anyho
                 .max_connections(1)
                 .connect(url)
                 .await
-                .map_err(|e| anyhow::anyhow!("Failed to connect to PostgreSQL: {}", e))?;
+                .map_err(|e| CliError::Other(format!("Failed to connect to PostgreSQL: {}", e)))?;
 
             // Execute each statement separately for PostgreSQL
             for statement in sql.split(';') {
@@ -111,7 +112,7 @@ async fn execute_migration(db_type: DatabaseType, url: &str, sql: &str) -> anyho
                 if !stmt.is_empty() && !stmt.starts_with("--") {
                     pool.execute(stmt)
                         .await
-                        .map_err(|e| anyhow::anyhow!("SQL error: {}", e))?;
+                        .map_err(|e| CliError::Other(format!("SQL error: {}", e)))?;
                 }
             }
 
@@ -125,7 +126,7 @@ async fn execute_migration(db_type: DatabaseType, url: &str, sql: &str) -> anyho
                 .max_connections(1)
                 .connect(url)
                 .await
-                .map_err(|e| anyhow::anyhow!("Failed to connect to MySQL: {}", e))?;
+                .map_err(|e| CliError::Other(format!("Failed to connect to MySQL: {}", e)))?;
 
             // Execute each statement separately for MySQL
             for statement in sql.split(';') {
@@ -133,7 +134,7 @@ async fn execute_migration(db_type: DatabaseType, url: &str, sql: &str) -> anyho
                 if !stmt.is_empty() && !stmt.starts_with("--") && !stmt.starts_with("SELECT") {
                     pool.execute(stmt)
                         .await
-                        .map_err(|e| anyhow::anyhow!("SQL error: {}", e))?;
+                        .map_err(|e| CliError::Other(format!("SQL error: {}", e)))?;
                 }
             }
 
@@ -147,7 +148,7 @@ async fn execute_migration(db_type: DatabaseType, url: &str, sql: &str) -> anyho
                 .max_connections(1)
                 .connect(url)
                 .await
-                .map_err(|e| anyhow::anyhow!("Failed to connect to SQLite: {}", e))?;
+                .map_err(|e| CliError::Other(format!("Failed to connect to SQLite: {}", e)))?;
 
             // Execute each statement separately for SQLite
             for statement in sql.split(';') {
@@ -155,7 +156,7 @@ async fn execute_migration(db_type: DatabaseType, url: &str, sql: &str) -> anyho
                 if !stmt.is_empty() && !stmt.starts_with("--") {
                     pool.execute(stmt)
                         .await
-                        .map_err(|e| anyhow::anyhow!("SQL error: {}", e))?;
+                        .map_err(|e| CliError::Other(format!("SQL error: {}", e)))?;
                 }
             }
 

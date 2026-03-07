@@ -185,6 +185,7 @@ impl EventBuilder {
 
     /// 构建事件
     /// Build event
+    #[must_use]
     pub fn build(self) -> GlobalEvent {
         self.event
     }

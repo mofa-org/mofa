@@ -15,18 +15,22 @@ use std::time::Duration;
 use tower::ServiceBuilder;
 use tower_http::cors::{Any, CorsLayer};
 use tower_http::trace::TraceLayer;
-use tracing::info;
+use tracing::{info, warn};
 
 use mofa_kernel::workflow::telemetry::{DebugEvent, SessionRecorder};
 
 use super::api::create_api_router;
 use super::assets::{INDEX_HTML, serve_asset};
+use super::auth::{AuthProvider, NoopAuthProvider};
 use super::metrics::{MetricsCollector, MetricsConfig};
+use super::prometheus::{PrometheusExportConfig, PrometheusExporter};
 use super::websocket::{WebSocketHandler, create_websocket_handler};
+#[cfg(feature = "otlp-metrics")]
+use crate::tracing::{OtlpExporterHandles, OtlpMetricsExporter, OtlpMetricsExporterConfig};
 use tokio::sync::mpsc;
 
 /// Dashboard server configuration
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct DashboardConfig {
     /// Server host
     pub host: String,
@@ -40,6 +44,27 @@ pub struct DashboardConfig {
     pub ws_update_interval: Duration,
     /// Enable request tracing
     pub enable_tracing: bool,
+    /// WebSocket authentication provider (default: NoopAuthProvider)
+    pub auth_provider: Arc<dyn AuthProvider>,
+    /// Prometheus export configuration
+    pub prometheus_export_config: PrometheusExportConfig,
+    /// Optional OTLP metrics exporter configuration
+    #[cfg(feature = "otlp-metrics")]
+    pub otlp_metrics_exporter: Option<OtlpMetricsExporterConfig>,
+}
+
+impl std::fmt::Debug for DashboardConfig {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("DashboardConfig")
+            .field("host", &self.host)
+            .field("port", &self.port)
+            .field("enable_cors", &self.enable_cors)
+            .field("ws_update_interval", &self.ws_update_interval)
+            .field("enable_tracing", &self.enable_tracing)
+            .field("auth_enabled", &self.auth_provider.is_enabled())
+            .field("prometheus_export_config", &self.prometheus_export_config)
+            .finish()
+    }
 }
 
 impl Default for DashboardConfig {
@@ -51,6 +76,10 @@ impl Default for DashboardConfig {
             metrics_config: MetricsConfig::default(),
             ws_update_interval: Duration::from_secs(1),
             enable_tracing: true,
+            auth_provider: Arc::new(NoopAuthProvider),
+            prometheus_export_config: PrometheusExportConfig::default(),
+            #[cfg(feature = "otlp-metrics")]
+            otlp_metrics_exporter: None,
         }
     }
 }
@@ -85,6 +114,18 @@ impl DashboardConfig {
         self
     }
 
+    /// Set the WebSocket authentication provider.
+    pub fn with_auth(mut self, provider: Arc<dyn AuthProvider>) -> Self {
+        self.auth_provider = provider;
+        self
+    }
+
+    #[cfg(feature = "otlp-metrics")]
+    pub fn with_otlp_metrics_exporter(mut self, config: OtlpMetricsExporterConfig) -> Self {
+        self.otlp_metrics_exporter = Some(config);
+        self
+    }
+
     pub fn socket_addr(&self) -> SocketAddr {
         format!("{}:{}", self.host, self.port)
             .parse()
@@ -104,7 +145,14 @@ pub struct ServerState {
 pub struct DashboardServer {
     config: DashboardConfig,
     collector: Arc<MetricsCollector>,
+    prometheus_export_config: PrometheusExportConfig,
     ws_handler: Option<Arc<WebSocketHandler>>,
+    prometheus_exporter: Option<Arc<PrometheusExporter>>,
+    prometheus_worker: Option<tokio::task::JoinHandle<()>>,
+    #[cfg(feature = "otlp-metrics")]
+    otlp_metrics_exporter: Option<Arc<OtlpMetricsExporter>>,
+    #[cfg(feature = "otlp-metrics")]
+    otlp_metrics_handles: Option<OtlpExporterHandles>,
     session_recorder: Option<Arc<dyn SessionRecorder>>,
     debug_event_rx: Option<mpsc::Receiver<DebugEvent>>,
 }
@@ -113,11 +161,19 @@ impl DashboardServer {
     /// Create a new dashboard server
     pub fn new(config: DashboardConfig) -> Self {
         let collector = Arc::new(MetricsCollector::new(config.metrics_config.clone()));
+        let prometheus_export_config = config.prometheus_export_config.clone();
 
         Self {
             config,
             collector,
+            prometheus_export_config,
             ws_handler: None,
+            prometheus_exporter: None,
+            prometheus_worker: None,
+            #[cfg(feature = "otlp-metrics")]
+            otlp_metrics_exporter: None,
+            #[cfg(feature = "otlp-metrics")]
+            otlp_metrics_handles: None,
             session_recorder: None,
             debug_event_rx: None,
         }
@@ -131,6 +187,22 @@ impl DashboardServer {
     /// Get the WebSocket handler (if started)
     pub fn ws_handler(&self) -> Option<Arc<WebSocketHandler>> {
         self.ws_handler.clone()
+    }
+
+    /// Override Prometheus exporter settings.
+    pub fn with_prometheus_export_config(mut self, config: PrometheusExportConfig) -> Self {
+        self.prometheus_export_config = config;
+        self
+    }
+
+    /// Get the Prometheus exporter (if initialized)
+    pub fn prometheus_exporter(&self) -> Option<Arc<PrometheusExporter>> {
+        self.prometheus_exporter.clone()
+    }
+
+    #[cfg(feature = "otlp-metrics")]
+    pub fn otlp_metrics_exporter(&self) -> Option<Arc<OtlpMetricsExporter>> {
+        self.otlp_metrics_exporter.clone()
     }
 
     /// Get the session recorder (if configured)
@@ -162,11 +234,22 @@ impl DashboardServer {
     /// Build the router
     pub fn build_router(&mut self) -> Router {
         // Create WebSocket handler
-        let (ws_handler, ws_route) = create_websocket_handler(self.collector.clone());
+        let (ws_handler, ws_route) =
+            create_websocket_handler(self.collector.clone(), self.config.auth_provider.clone());
         self.ws_handler = Some(ws_handler.clone());
 
         // API routes
         let api_router = create_api_router(self.collector.clone(), self.session_recorder.clone());
+        let prometheus_exporter = if let Some(exporter) = &self.prometheus_exporter {
+            exporter.clone()
+        } else {
+            let exporter = Arc::new(PrometheusExporter::new(
+                self.collector.clone(),
+                self.prometheus_export_config.clone(),
+            ));
+            self.prometheus_exporter = Some(exporter.clone());
+            exporter
+        };
 
         // Build main router
         let mut router = Router::new()
@@ -178,7 +261,18 @@ impl DashboardServer {
             .route("/styles.css", get(serve_styles))
             .route("/app.js", get(serve_app_js))
             .route("/debugger.js", get(serve_debugger_js))
-            .route("/assets/{*path}", get(serve_static))
+            .route("/assets/*path", get(serve_static))
+            // Prometheus endpoint
+            .route(
+                "/metrics",
+                get({
+                    let exporter = prometheus_exporter.clone();
+                    move || {
+                        let exporter = exporter.clone();
+                        async move { serve_prometheus_metrics(exporter).await }
+                    }
+                }),
+            )
             // API routes
             .nest("/api", api_router)
             // WebSocket
@@ -215,7 +309,30 @@ impl DashboardServer {
         tokio::spawn(async move {
             collector.start_collection();
         });
+        if let Some(exporter) = &self.prometheus_exporter {
+            if let Err(err) = exporter.refresh_once().await {
+                warn!("initial /metrics cache refresh failed: {}", err);
+            }
+            if let Some(handle) = self.prometheus_worker.take() {
+                handle.abort();
+            }
+            self.prometheus_worker = Some(exporter.clone().start());
+        }
 
+        #[cfg(feature = "otlp-metrics")]
+        if let Some(config) = &self.config.otlp_metrics_exporter {
+            let otlp_exporter = Arc::new(OtlpMetricsExporter::new(
+                self.collector.clone(),
+                config.clone(),
+            ));
+            match otlp_exporter.clone().start().await {
+                Ok(handles) => {
+                    self.otlp_metrics_exporter = Some(otlp_exporter);
+                    self.otlp_metrics_handles = Some(handles);
+                }
+                Err(err) => warn!("failed to start OTLP metrics exporter: {}", err),
+            }
+        }
         // Start WebSocket updates
         if let Some(ws_handler) = &self.ws_handler {
             let handler_for_task = Arc::clone(ws_handler);
@@ -224,7 +341,7 @@ impl DashboardServer {
             });
 
             // Start debug event forwarder if debug events receiver is provided
-            if let Some(debug_rx) = self.debug_event_rx {
+            if let Some(debug_rx) = self.debug_event_rx.take() {
                 let debug_handler = Arc::clone(ws_handler);
                 tokio::spawn(async move {
                     debug_handler.start_debug_event_forwarder(debug_rx);
@@ -246,6 +363,20 @@ impl DashboardServer {
         self,
     ) -> tokio::task::JoinHandle<Result<(), Box<dyn std::error::Error + Send + Sync>>> {
         tokio::spawn(async move { self.start().await })
+    }
+}
+
+impl Drop for DashboardServer {
+    fn drop(&mut self) {
+        if let Some(handle) = self.prometheus_worker.take() {
+            handle.abort();
+        }
+
+        #[cfg(feature = "otlp-metrics")]
+        if let Some(handles) = self.otlp_metrics_handles.take() {
+            handles.sampler.abort();
+            handles.exporter.abort();
+        }
     }
 }
 
@@ -299,6 +430,18 @@ async fn serve_static(Path(path): Path<String>) -> impl IntoResponse {
     serve_asset(path).await
 }
 
+/// Serve Prometheus metrics text exposition.
+async fn serve_prometheus_metrics(exporter: Arc<PrometheusExporter>) -> impl IntoResponse {
+    (
+        StatusCode::OK,
+        [(
+            header::CONTENT_TYPE,
+            "text/plain; version=0.0.4; charset=utf-8",
+        )],
+        exporter.render_cached().await,
+    )
+}
+
 /// Create a simple dashboard server with default configuration
 pub fn create_dashboard(port: u16) -> DashboardServer {
     let config = DashboardConfig::new().with_port(port);
@@ -345,6 +488,8 @@ mod tests {
         let server = DashboardServer::new(config);
 
         assert!(server.ws_handler.is_none());
+        assert!(server.prometheus_exporter.is_none());
+        assert!(server.prometheus_worker.is_none());
         assert!(server.session_recorder.is_none());
     }
 }

@@ -10,15 +10,15 @@ use super::propagator::TracePropagator;
 use super::span::{Span, SpanBuilder, SpanData, SpanKind};
 use std::collections::HashMap;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
 use tokio::sync::RwLock;
 
 /// 采样策略
 /// Sampling strategy
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone)]
 pub enum SamplingStrategy {
     /// 始终采样
     /// Always sample
-    #[default]
     AlwaysOn,
     /// 从不采样
     /// Never sample
@@ -28,10 +28,20 @@ pub enum SamplingStrategy {
     Probabilistic(f64),
     /// 基于速率限制采样
     /// Rate-limiting based sampling
-    RateLimiting { traces_per_second: f64 },
+    RateLimiting { 
+        traces_per_second: u64,
+        /// Holds (timestamp_secs << 32) | (count)
+        state: Arc<AtomicU64>
+    },
     /// 父级决定
     /// Parent-based decision
     ParentBased { root: Box<SamplingStrategy> },
+}
+
+impl Default for SamplingStrategy {
+    fn default() -> Self {
+        SamplingStrategy::AlwaysOn
+    }
 }
 
 impl SamplingStrategy {
@@ -53,11 +63,34 @@ impl SamplingStrategy {
                     .fold(0u64, |acc, &b| acc.wrapping_mul(31).wrapping_add(b as u64));
                 (hash as f64 / u64::MAX as f64) < *probability
             }
-            SamplingStrategy::RateLimiting { traces_per_second } => {
-                // 简化实现：使用概率近似
-                // Simplified implementation: using probability approximation
-                let probability = (*traces_per_second / 1000.0).min(1.0);
-                rand::random::<f64>() < probability
+            SamplingStrategy::RateLimiting { traces_per_second, state } => {
+                let now_secs = std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap_or_default()
+                    .as_secs();
+                
+                let mut current = state.load(Ordering::Relaxed);
+                loop {
+                    let current_secs = current >> 32;
+                    let current_count = current & 0xFFFFFFFF;
+                    
+                    let (new_secs, new_count) = if current_secs != now_secs {
+                        // New second window
+                        (now_secs, 1)
+                    } else {
+                        // Same second window
+                        if current_count >= *traces_per_second {
+                            return false; // Rate limit exceeded
+                        }
+                        (current_secs, current_count + 1)
+                    };
+                    
+                    let new_state = (new_secs << 32) | new_count;
+                    match state.compare_exchange_weak(current, new_state, Ordering::SeqCst, Ordering::Relaxed) {
+                        Ok(_) => return true,
+                        Err(v) => current = v,
+                    }
+                }
             }
             SamplingStrategy::ParentBased { root } => {
                 if let Some(parent) = parent_context {
@@ -194,6 +227,7 @@ pub struct BatchSpanProcessor {
     buffer: Arc<RwLock<Vec<SpanData>>>,
     batch_size: usize,
     max_queue_size: usize,
+    dropped_count: AtomicU64,
 }
 
 impl BatchSpanProcessor {
@@ -207,6 +241,7 @@ impl BatchSpanProcessor {
             buffer: Arc::new(RwLock::new(Vec::new())),
             batch_size,
             max_queue_size,
+            dropped_count: AtomicU64::new(0),
         }
     }
 
@@ -219,6 +254,15 @@ impl BatchSpanProcessor {
                 None
             }
         };
+
+        let dropped = self.dropped_count.swap(0, Ordering::Relaxed);
+        if dropped > 0 {
+            tracing::warn!(
+                dropped_spans = dropped,
+                max_queue_size = self.max_queue_size,
+                "BatchSpanProcessor: dropped spans since last flush because buffer was full"
+            );
+        }
 
         if let Some(spans) = to_export {
             self.exporter.export(spans).await?;
@@ -240,6 +284,8 @@ impl SpanProcessor for BatchSpanProcessor {
             let mut buffer = self.buffer.write().await;
             if buffer.len() < self.max_queue_size {
                 buffer.push(span);
+            } else {
+                self.dropped_count.fetch_add(1, Ordering::Relaxed);
             }
         }
 
@@ -258,6 +304,15 @@ impl SpanProcessor for BatchSpanProcessor {
             let mut buffer = self.buffer.write().await;
             buffer.drain(..).collect()
         };
+
+        let dropped = self.dropped_count.swap(0, Ordering::Relaxed);
+        if dropped > 0 {
+            tracing::warn!(
+                dropped_spans = dropped,
+                max_queue_size = self.max_queue_size,
+                "BatchSpanProcessor: dropped spans since last flush because buffer was full"
+            );
+        }
 
         if !to_export.is_empty() {
             self.exporter.export(to_export).await?;
@@ -405,11 +460,19 @@ impl TracerProvider {
     /// 获取或创建 Tracer
     /// Get or create a Tracer
     pub async fn tracer(&self, name: &str) -> Arc<Tracer> {
+        // Fast path: read lock only
         {
             let tracers = self.tracers.read().await;
             if let Some(tracer) = tracers.get(name) {
                 return tracer.clone();
             }
+        }
+
+        // Slow path: acquire write lock and re-check to avoid creating
+        // duplicate tracers under concurrent access
+        let mut tracers = self.tracers.write().await;
+        if let Some(tracer) = tracers.get(name) {
+            return tracer.clone();
         }
 
         let tracer = Arc::new(Tracer::new(
@@ -420,11 +483,7 @@ impl TracerProvider {
             self.processor.clone(),
         ));
 
-        {
-            let mut tracers = self.tracers.write().await;
-            tracers.insert(name.to_string(), tracer.clone());
-        }
-
+        tracers.insert(name.to_string(), tracer.clone());
         tracer
     }
 

@@ -4,11 +4,21 @@
     non_camel_case_types,
     ambiguous_glob_reexports
 )]
+// Unified error conversions (GlobalError <-> domain errors)
+pub mod error_conversions;
 // orchestrator module - Model Lifecycle & Allocation
 pub mod orchestrator;
 
 // hardware discovery module
 pub mod hardware;
+// memory-budgeted scheduler for inference orchestration
+pub mod scheduler;
+
+// adapter registry module - Runtime model adapter discovery
+pub mod adapter;
+
+// inference orchestration module - Unified Inference Routing & Lifecycle
+pub mod inference;
 
 // prompt module
 pub mod prompt;
@@ -44,6 +54,22 @@ pub mod collaboration;
 // RAG module - vector store and document chunking
 pub mod rag;
 
+// swarm module - Multi-agent swarm orchestration
+pub mod swarm;
+// Structured output: JSON schema validator and agent executor
+pub mod schema_validator;
+pub mod agent_executor;
+pub use schema_validator::{SchemaError, SchemaValidator};
+pub use agent_executor::{AgentExecutor, ExecutorError};
+// Security governance - PII redaction, content moderation, prompt guard
+pub mod security;
+
+// Agent capability manifest and discovery registry
+pub mod capability_registry;
+pub use capability_registry::CapabilityRegistry;
+// Error recovery strategies (Backoff, RetryPolicy, CircuitBreaker, retry, fallback_chain)
+pub mod recovery;
+
 // Re-export config types
 pub use config::{AgentInfo, AgentYamlConfig, LLMYamlConfig, RuntimeConfig, ToolConfig};
 
@@ -56,6 +82,19 @@ pub use messaging::{
 pub use prompt::{
     ConversationBuilder, GlobalPromptRegistry, PromptBuilder, PromptComposition, PromptError,
     PromptRegistry, PromptResult, PromptTemplate, PromptVariable, VariableType,
+};
+
+// Re-export orchestrator types (GSoC 2026 Edge Model Orchestrator)
+pub use orchestrator::{
+    DegradationLevel, ModelOrchestrator, ModelProvider, ModelProviderConfig, ModelType,
+    OrchestratorError, OrchestratorResult, PoolStatistics,
+};
+
+// Re-export Linux implementation and pipeline when available
+#[cfg(all(target_os = "linux", feature = "linux-candle"))]
+pub use orchestrator::{
+    InferencePipeline, LinuxCandleProvider, ModelPool, PipelineBuilder, PipelineOutput,
+    PipelineStage,
 };
 
 // Re-export secretary types for convenience

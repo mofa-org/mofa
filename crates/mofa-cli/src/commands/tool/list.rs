@@ -1,5 +1,6 @@
 //! `mofa tool list` command implementation
 
+use crate::CliError;
 use crate::context::CliContext;
 use crate::output::Table;
 use colored::Colorize;
@@ -7,7 +8,7 @@ use mofa_kernel::agent::components::tool::ToolRegistry;
 use serde::Serialize;
 
 /// Execute the `mofa tool list` command
-pub async fn run(ctx: &CliContext, _available: bool, _enabled: bool) -> anyhow::Result<()> {
+pub async fn run(ctx: &CliContext, _available: bool, _enabled: bool) -> Result<(), CliError> {
     println!("{} Listing tools", "→".green());
     println!();
 

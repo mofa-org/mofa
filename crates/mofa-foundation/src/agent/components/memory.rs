@@ -119,7 +119,7 @@ impl Memory for InMemoryStorage {
             total_sessions: self.history.len(),
             total_messages,
             memory_bytes: 0, // 简化，不计算实际内存
-            // Simplified, no actual memory calculation
+                             // Simplified, no actual memory calculation
         })
     }
 

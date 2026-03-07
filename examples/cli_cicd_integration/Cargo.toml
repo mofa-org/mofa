@@ -1,0 +1,14 @@
+[package]
+name = "cli_cicd_integration"
+version.workspace = true
+edition.workspace = true
+description = "Demonstrates CLI usage in CI/CD pipelines for production deployments"
+
+[dependencies]
+mofa-cli = { path = "../../crates/mofa-cli", version = "0.1" }
+tempfile.workspace = true
+tokio.workspace = true
+serde_json.workspace = true
+
+[lints]
+workspace = true
