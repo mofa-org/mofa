@@ -54,6 +54,8 @@ pub mod collaboration;
 // RAG module - vector store and document chunking
 pub mod rag;
 
+// swarm module - Multi-agent swarm orchestration
+pub mod swarm;
 // Structured output: JSON schema validator and agent executor
 pub mod schema_validator;
 pub mod agent_executor;
