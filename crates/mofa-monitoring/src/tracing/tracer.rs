@@ -460,11 +460,19 @@ impl TracerProvider {
     /// 获取或创建 Tracer
     /// Get or create a Tracer
     pub async fn tracer(&self, name: &str) -> Arc<Tracer> {
+        // Fast path: read lock only
         {
             let tracers = self.tracers.read().await;
             if let Some(tracer) = tracers.get(name) {
                 return tracer.clone();
             }
+        }
+
+        // Slow path: acquire write lock and re-check to avoid creating
+        // duplicate tracers under concurrent access
+        let mut tracers = self.tracers.write().await;
+        if let Some(tracer) = tracers.get(name) {
+            return tracer.clone();
         }
 
         let tracer = Arc::new(Tracer::new(
@@ -475,11 +483,7 @@ impl TracerProvider {
             self.processor.clone(),
         ));
 
-        {
-            let mut tracers = self.tracers.write().await;
-            tracers.insert(name.to_string(), tracer.clone());
-        }
-
+        tracers.insert(name.to_string(), tracer.clone());
         tracer
     }
 
