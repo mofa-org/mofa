@@ -106,7 +106,9 @@ async fn run_command(cli: Cli) -> CliResult<()> {
         }) => {
             commands::new::run(&name, &template, output.as_deref())
                 .into_report()
-                .attach_with(|| format!("scaffolding project '{name}' with template '{template}'"))?;
+                .attach_with(|| {
+                    format!("scaffolding project '{name}' with template '{template}'")
+                })?;
         }
 
         Some(Commands::Init { path }) => {
@@ -376,6 +378,43 @@ async fn run_command(cli: Cli) -> CliResult<()> {
             }
         },
 
+        Some(Commands::Vibe { action }) => match action {
+            None => {
+                commands::vibe::run_tui()
+                    .await
+                    .into_report()
+                    .attach("running interactive vibe mode")?;
+            }
+            Some(cli::VibeCommands::Flow {
+                llm,
+                output,
+                requirement,
+            }) => {
+                commands::vibe::run_flow(llm.as_deref(), output.as_deref(), requirement.as_deref())
+                    .await
+                    .into_report()
+                    .attach("running vibe flow generation")?;
+            }
+            Some(cli::VibeCommands::Agent {
+                llm,
+                max_rounds,
+                output,
+                base,
+                requirement,
+            }) => {
+                commands::vibe::run_agent(
+                    llm.as_deref(),
+                    max_rounds,
+                    output.as_deref(),
+                    base.as_deref(),
+                    requirement.as_deref(),
+                )
+                .await
+                .into_report()
+                .attach("running vibe agent generation")?;
+            }
+        },
+
         None => {
             // Should have been handled by TUI check above
             // If we get here, show help
@@ -393,7 +432,7 @@ async fn run_command(cli: Cli) -> CliResult<()> {
 fn normalize_legacy_output_flags(args: &mut [String]) {
     const TOP_LEVEL_COMMANDS: &[&str] = &[
         "new", "init", "build", "run", "dataflow", "generate", "info", "db", "agent", "config",
-        "plugin", "session", "tool", "rag",
+        "plugin", "session", "tool", "rag", "vibe",
     ];
 
     let top_command_index = args
@@ -420,6 +459,8 @@ fn normalize_legacy_output_flags(args: &mut [String]) {
         // normalisation for those subcommands.  All other `session` subcommands (e.g. `list`)
         // use the global output-format flag and should be normalised.
         Some("session") => !matches!(sub_command, Some("show") | Some("export")),
+        // `vibe` uses local file/directory outputs, not global output-format values.
+        Some("vibe") => false,
         _ => false,
     };
 
@@ -648,5 +689,30 @@ mod tests {
         ];
         normalize_legacy_output_flags(&mut args);
         assert_eq!(args[4], "-o=json");
+    }
+
+    #[test]
+    fn test_do_not_normalize_vibe_short_output_path() {
+        let mut args = vec![
+            "mofa".to_string(),
+            "vibe".to_string(),
+            "flow".to_string(),
+            "-o".to_string(),
+            "generated.yml".to_string(),
+        ];
+        normalize_legacy_output_flags(&mut args);
+        assert_eq!(args[3], "-o");
+    }
+
+    #[test]
+    fn test_do_not_normalize_vibe_equals_output_path() {
+        let mut args = vec![
+            "mofa".to_string(),
+            "vibe".to_string(),
+            "flow".to_string(),
+            "--output=json".to_string(),
+        ];
+        normalize_legacy_output_flags(&mut args);
+        assert_eq!(args[3], "--output=json");
     }
 }
