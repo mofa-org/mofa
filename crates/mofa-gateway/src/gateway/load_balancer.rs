@@ -265,4 +265,34 @@ mod tests {
         assert!(node2_count >= node3_count);
         assert!(node3_count > 0);
     }
+
+    #[tokio::test]
+    async fn test_wrr_large_weight_no_truncation() {
+        let lb = LoadBalancer::new(LoadBalancingAlgorithm::WeightedRoundRobin);
+        lb.add_node(NodeId::new("heavy")).await;
+        lb.add_node(NodeId::new("light")).await;
+
+        // Weight that exceeds i32::MAX — would silently become negative
+        // with the old `as i32` cast, inverting this node's priority.
+        lb.set_node_weight(&NodeId::new("heavy"), u32::MAX).await;
+        lb.set_node_weight(&NodeId::new("light"), 1).await;
+
+        let mut heavy_count = 0u32;
+        for _ in 0..20 {
+            if let Ok(Some(node)) = lb.select_node().await {
+                if node == NodeId::new("heavy") {
+                    heavy_count += 1;
+                }
+            }
+        }
+
+        // With i64 arithmetic, the u32::MAX weight is preserved correctly
+        // and the heavy node is selected proportionally.
+        // Before this fix, `u32::MAX as i32` silently became -1, causing
+        // the high-weight node to NEVER be selected (0/20).
+        assert!(
+            heavy_count >= 10,
+            "high-weight node must not be starved by truncation, got {heavy_count}/20"
+        );
+    }
 }
