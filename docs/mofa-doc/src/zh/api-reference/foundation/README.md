@@ -21,8 +21,9 @@ ReAct 智能体模式实现。
 ### secretary
 用于人在回路工作流的秘书智能体模式。
 
-- `SecretaryAgent` — 秘书智能体
-- `SecretaryConfig` — 配置
+- `DefaultSecretaryBuilder` — 构建秘书行为
+- `SecretaryCore` — 事件循环运行时
+- `DefaultInput` / `DefaultOutput` — 消息契约
 
 ### persistence
 用于状态和会话管理的持久化层。
