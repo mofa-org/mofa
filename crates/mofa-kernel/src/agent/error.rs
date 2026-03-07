@@ -130,6 +130,11 @@ pub enum AgentError {
     /// Other errors
     #[error("{0}")]
     Other(String),
+
+    /// 工作流执行错误
+    /// Workflow execution error
+    #[error(transparent)]
+    Workflow(#[from] crate::workflow::error::WorkflowError),
 }
 
 impl AgentError {

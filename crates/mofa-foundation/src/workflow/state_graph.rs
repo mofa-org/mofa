@@ -11,7 +11,7 @@ use mofa_kernel::workflow::{
     Reducer, RuntimeContext, START, StateUpdate, StepResult, StreamEvent,
 };
 use serde_json::Value;
-use std::collections::{HashMap, HashSet};
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::pin::Pin;
 use std::sync::Arc;
 use tokio::sync::{RwLock, Semaphore};
@@ -129,6 +129,52 @@ impl<S: GraphState> StateGraphImpl<S> {
             }
         }
 
+        // Check for cyclic dependencies
+        if let Err(cycle_err) = self.topological_sort() {
+            // Find the exact nodes participating in the cycle to enhance error message
+            let mut in_degree: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
+            for node_id in self.nodes.keys() {
+                in_degree.insert(node_id.clone(), 0);
+            }
+            for target in self.edges.values() {
+                for target_id in target.targets() {
+                    *in_degree.entry(target_id.to_string()).or_default() += 1;
+                }
+            }
+            
+            let mut queue = std::collections::VecDeque::new();
+            for (node_id, &degree) in &in_degree {
+                if degree == 0 {
+                    queue.push_back(node_id.clone());
+                }
+            }
+            
+            while let Some(node) = queue.pop_front() {
+                if let Some(target) = self.edges.get(&node) {
+                    for target_id in target.targets() {
+                        if let Some(degree) = in_degree.get_mut(&target_id.to_string()) {
+                            *degree -= 1;
+                            if *degree == 0 {
+                                queue.push_back(target_id.to_string());
+                            }
+                        }
+                    }
+                }
+            }
+            
+            // Nodes with in_degree > 0 are part of a cycle
+            let cyclic_nodes: Vec<String> = in_degree.into_iter()
+                .filter(|(_, degree)| *degree > 0)
+                .map(|(node, _)| node)
+                .collect();
+                
+            return Err(AgentError::Workflow(
+                mofa_kernel::workflow::error::WorkflowError::CyclicDependency {
+                    agents: cyclic_nodes
+                }
+            ));
+        }
+
         if errors.is_empty() {
             Ok(())
         } else {
@@ -142,19 +188,66 @@ impl<S: GraphState> StateGraphImpl<S> {
         let mut stack = vec![start.to_string()];
 
         while let Some(node_id) = stack.pop() {
-            if reachable.insert(node_id.clone())
-                && let Some(edge_target) = self.edges.get(&node_id)
-            {
-                let targets = edge_target.targets();
-                for target in targets {
-                    if target != END && !reachable.contains(target) {
-                        stack.push(target.to_string());
+            if reachable.insert(node_id.clone()) {
+                if let Some(edge_target) = self.edges.get(&node_id) {
+                    let targets = edge_target.targets();
+                    for target in targets {
+                        if target != END && !reachable.contains(&target.to_string()) {
+                            stack.push(target.to_string());
+                        }
                     }
                 }
             }
         }
 
         reachable
+    }
+
+    /// Topological sort to detect cycles
+    fn topological_sort(&self) -> Result<Vec<String>, String> {
+        let mut in_degree: HashMap<String, usize> = HashMap::new();
+        let mut queue: VecDeque<String> = VecDeque::new();
+        let mut result: Vec<String> = Vec::new();
+
+        for node_id in self.nodes.keys() {
+            in_degree.insert(node_id.clone(), 0);
+        }
+        for target in self.edges.values() {
+            for target_id in target.targets() {
+                if target_id != END {
+                    *in_degree.entry(target_id.to_string()).or_insert(0) += 1;
+                }
+            }
+        }
+
+        for (node_id, &degree) in &in_degree {
+            if degree == 0 {
+                queue.push_back(node_id.clone());
+            }
+        }
+
+        while let Some(node_id) = queue.pop_front() {
+            result.push(node_id.clone());
+
+            if let Some(edge_target) = self.edges.get(&node_id) {
+                for target_id in edge_target.targets() {
+                    if target_id != END {
+                        if let Some(degree) = in_degree.get_mut(&target_id.to_string()) {
+                            *degree -= 1;
+                            if *degree == 0 {
+                                queue.push_back(target_id.to_string());
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        if result.len() != self.nodes.len() {
+            return Err("Graph contains a cycle".to_string());
+        }
+
+        Ok(result)
     }
 
     /// 为特定节点附加容错策略
@@ -1366,5 +1459,51 @@ mod tests {
             final_state.get_value::<serde_json::Value>("decision"),
             Some(json!("approved"))
         );
+    }
+    #[tokio::test]
+    async fn test_state_graph_cycle_detection() {
+        let mut graph = StateGraphImpl::<JsonState>::new("cycle_test");
+
+        graph
+            .add_node(
+                "agent_a",
+                Box::new(TestNode {
+                    name: "agent_a".to_string(),
+                    updates: vec![],
+                }),
+            )
+            .add_node(
+                "agent_b",
+                Box::new(TestNode {
+                    name: "agent_b".to_string(),
+                    updates: vec![],
+                }),
+            )
+            .add_node(
+                "agent_c",
+                Box::new(TestNode {
+                    name: "agent_c".to_string(),
+                    updates: vec![],
+                }),
+            )
+            .add_edge(START, "agent_a")
+            .add_edge("agent_a", "agent_b")
+            .add_edge("agent_b", "agent_c")
+            .add_edge("agent_c", "agent_a"); // Create cycle A -> B -> C -> A
+
+        let result = graph.validate();
+        
+        assert!(result.is_err());
+        
+        let err = result.unwrap_err();
+        match err {
+            AgentError::Workflow(mofa_kernel::workflow::error::WorkflowError::CyclicDependency { agents }) => {
+                assert_eq!(agents.len(), 3);
+                assert!(agents.contains(&"agent_a".to_string()));
+                assert!(agents.contains(&"agent_b".to_string()));
+                assert!(agents.contains(&"agent_c".to_string()));
+            },
+            _ => panic!("Expected CyclicDependency error, got {:?}", err),
+        }
     }
 }

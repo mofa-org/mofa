@@ -42,6 +42,7 @@
 
 pub mod command;
 pub mod context;
+pub mod error;
 pub mod graph;
 pub mod reducer;
 pub mod state;
@@ -50,6 +51,7 @@ pub mod telemetry;
 // Re-export public API
 pub use command::{Command, ControlFlow, SendCommand};
 pub use context::{GraphConfig, RemainingSteps, RuntimeContext};
+pub use error::WorkflowError;
 pub use graph::{
     CompiledGraph, END, EdgeTarget, NodeFunc, START, StateGraph, StepResult, StreamEvent,
 };
