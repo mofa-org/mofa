@@ -103,10 +103,20 @@ impl GeminiProvider {
     }
 
     pub fn with_config(config: GeminiConfig) -> Self {
-        let client = reqwest::Client::builder()
+        let client = match reqwest::Client::builder()
             .timeout(Duration::from_secs(config.timeout_secs))
             .build()
-            .expect("Failed to build reqwest client");
+        {
+            Ok(client) => client,
+            Err(e) => {
+                tracing::error!(
+                    "Failed to build Gemini reqwest client (timeout_secs={}): {}. Falling back to default client.",
+                    config.timeout_secs,
+                    e
+                );
+                reqwest::Client::new()
+            }
+        };
         Self { client, config }
     }
 
@@ -141,10 +151,12 @@ impl GeminiProvider {
                             for part in parts {
                                 match part {
                                     ContentPart::Text { text } => {
-                                        gemini_parts.push(serde_json::json!({"text": text.clone()}));
+                                        gemini_parts
+                                            .push(serde_json::json!({"text": text.clone()}));
                                     }
                                     ContentPart::Image { image_url } => {
-                                        let mime_type = if image_url.url.contains("data:image/jpeg") {
+                                        let mime_type = if image_url.url.contains("data:image/jpeg")
+                                        {
                                             "image/jpeg"
                                         } else if image_url.url.contains("data:image/png") {
                                             "image/png"
@@ -153,7 +165,11 @@ impl GeminiProvider {
                                         } else {
                                             "image/jpeg"
                                         };
-                                        let data = image_url.url.split(',').last().unwrap_or(&image_url.url);
+                                        let data = image_url
+                                            .url
+                                            .split(',')
+                                            .last()
+                                            .unwrap_or(&image_url.url);
                                         gemini_parts.push(serde_json::json!({
                                             "inlineData": {
                                                 "mimeType": mime_type,
@@ -162,8 +178,10 @@ impl GeminiProvider {
                                         }));
                                     }
                                     ContentPart::Audio { audio } => {
-                                        let mime_type = format!("audio/{}", audio.format.to_lowercase());
-                                        let data = audio.data.split(',').last().unwrap_or(&audio.data);
+                                        let mime_type =
+                                            format!("audio/{}", audio.format.to_lowercase());
+                                        let data =
+                                            audio.data.split(',').last().unwrap_or(&audio.data);
                                         gemini_parts.push(serde_json::json!({
                                             "inlineData": {
                                                 "mimeType": mime_type,
@@ -172,8 +190,10 @@ impl GeminiProvider {
                                         }));
                                     }
                                     ContentPart::Video { video } => {
-                                        let mime_type = format!("video/{}", video.format.to_lowercase());
-                                        let data = video.data.split(',').last().unwrap_or(&video.data);
+                                        let mime_type =
+                                            format!("video/{}", video.format.to_lowercase());
+                                        let data =
+                                            video.data.split(',').last().unwrap_or(&video.data);
                                         gemini_parts.push(serde_json::json!({
                                             "inlineData": {
                                                 "mimeType": mime_type,
@@ -404,5 +424,48 @@ impl LLMProvider for GeminiProvider {
                 json_schema: false,
             },
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_convert_messages_with_media() {
+        let messages = vec![ChatMessage::user_with_parts(vec![
+            ContentPart::Image {
+                image_url: ImageUrl {
+                    url: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==".to_string(),
+                    detail: None,
+                },
+            },
+            ContentPart::Audio {
+                audio: AudioData {
+                    data: "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA=".to_string(),
+                    format: "wav".to_string(),
+                },
+            },
+            ContentPart::Video {
+                video: VideoData {
+                    data: "data:video/mp4;base64,AAAAIGZ0eXBtcDQyAAAAAG1wNDJpc29tYXZjMQAAADhmoW9v...".to_string(),
+                    format: "mp4".to_string(),
+                },
+            },
+        ])];
+
+        let (_, contents) = GeminiProvider::convert_messages(&messages);
+        assert_eq!(contents.len(), 1);
+        let parts = contents[0]["parts"].as_array().unwrap();
+        assert_eq!(parts.len(), 3);
+
+        assert_eq!(parts[0]["inlineData"]["mimeType"], "image/png");
+        assert_eq!(parts[0]["inlineData"]["data"], "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==");
+        
+        assert_eq!(parts[1]["inlineData"]["mimeType"], "audio/wav");
+        assert_eq!(parts[1]["inlineData"]["data"], "UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA=");
+
+        assert_eq!(parts[2]["inlineData"]["mimeType"], "video/mp4");
+        assert_eq!(parts[2]["inlineData"]["data"], "AAAAIGZ0eXBtcDQyAAAAAG1wNDJpc29tYXZjMQAAADhmoW9v...");
     }
 }

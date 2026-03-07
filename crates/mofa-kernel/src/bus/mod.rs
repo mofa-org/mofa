@@ -1,5 +1,5 @@
 pub mod error;
-pub use error::BusError;
+pub use error::{BusError, BusResult, IntoBusReport};
 
 use crate::agent::AgentMetadata;
 use crate::message::AgentMessage;
@@ -101,8 +101,8 @@ impl AgentBus {
         mode: CommunicationMode,
         message: &AgentMessage,
     ) -> Result<(), BusError> {
-        let message_bytes = bincode::serialize(message)
-            .map_err(|e| BusError::Serialization(e.to_string()))?;
+        let message_bytes =
+            bincode::serialize(message).map_err(|e| BusError::Serialization(e.to_string()))?;
 
         match mode {
             // 点对点模式：根据接收方 ID 查找通道并发送
@@ -124,20 +124,22 @@ impl AgentBus {
                 };
                 // 2. 发送消息
                 // 2. Send the message
-                channel.send(message_bytes)
+                channel
+                    .send(message_bytes)
                     .map_err(|e| BusError::SendFailed(e.to_string()))?;
             }
             CommunicationMode::Broadcast => {
                 // 使用全局广播通道
                 // Use the global broadcast channel
-                self.broadcast_channel.send(message_bytes)
+                self.broadcast_channel
+                    .send(message_bytes)
                     .map_err(|e| BusError::SendFailed(e.to_string()))?;
             }
             CommunicationMode::PubSub(ref topic) => {
                 let topic_subs = self.topic_subscribers.read().await;
-                let subscribers = topic_subs
-                    .get(topic)
-                    .ok_or_else(|| BusError::ChannelNotFound(format!("No subscribers for topic: {}", topic)))?;
+                let subscribers = topic_subs.get(topic).ok_or_else(|| {
+                    BusError::ChannelNotFound(format!("No subscribers for topic: {}", topic))
+                })?;
                 let agent_channels = self.agent_channels.read().await;
 
                 for sub_id in subscribers {
@@ -147,8 +149,15 @@ impl AgentBus {
                     let Some(channel) = channels.get(&mode) else {
                         continue;
                     };
-                    channel.send(message_bytes.clone())
-                        .map_err(|e| BusError::SendFailed(e.to_string()))?;
+                    if let Err(e) = channel.send(message_bytes.clone()) {
+                        tracing::warn!(
+                            subscriber = %sub_id,
+                            topic = %topic,
+                            error = %e,
+                            "PubSub: failed to deliver message to subscriber, skipping"
+                        );
+                        continue;
+                    }
                 }
             }
         }

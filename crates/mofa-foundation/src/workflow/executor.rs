@@ -8,6 +8,7 @@
 //! When a `TelemetryEmitter` is attached via `with_telemetry()`, the
 //! executor emits `DebugEvent`s at key execution points.
 
+use super::execution_event::ExecutionEvent;
 use super::graph::WorkflowGraph;
 use super::node::{NodeType, WorkflowNode};
 use super::profiler::{ExecutionTimeline, ProfilerMode};
@@ -18,6 +19,7 @@ use super::state::{
 use mofa_kernel::workflow::telemetry::{DebugEvent, TelemetryEmitter};
 use std::collections::HashMap;
 use std::sync::Arc;
+use serde_json;
 use std::time::Instant;
 use tokio::sync::{RwLock, Semaphore, mpsc, oneshot};
 use tracing::{error, info, warn};
@@ -41,6 +43,9 @@ pub struct ExecutorConfig {
     /// 执行超时（毫秒）
     /// Execution timeout (milliseconds)
     pub execution_timeout_ms: Option<u64>,
+    /// Per-node execution timeout (milliseconds). If a single node takes
+    /// longer than this, it is cancelled and marked as failed. Default: 120s.
+    pub node_timeout_ms: u64,
 }
 
 impl Default for ExecutorConfig {
@@ -51,46 +56,11 @@ impl Default for ExecutorConfig {
             enable_checkpoints: true,
             checkpoint_interval: 5,
             execution_timeout_ms: None,
+            node_timeout_ms: 120_000,
         }
     }
 }
 
-/// 执行事件
-/// Execution Event
-#[derive(Debug, Clone)]
-pub enum ExecutionEvent {
-    /// 工作流开始
-    /// Workflow started
-    WorkflowStarted {
-        workflow_id: String,
-        execution_id: String,
-    },
-    /// 工作流完成
-    /// Workflow completed
-    WorkflowCompleted {
-        workflow_id: String,
-        execution_id: String,
-        status: WorkflowStatus,
-    },
-    /// 节点开始
-    /// Node started
-    NodeStarted { node_id: String },
-    /// 节点完成
-    /// Node completed
-    NodeCompleted { node_id: String, result: NodeResult },
-    /// 节点失败
-    /// Node failed
-    NodeFailed { node_id: String, error: String },
-    /// 检查点创建
-    /// Checkpoint created
-    CheckpointCreated { label: String },
-    /// 外部事件
-    /// External event
-    ExternalEvent {
-        event_type: String,
-        data: WorkflowValue,
-    },
-}
 
 /// 工作流执行器
 /// Workflow Executor
@@ -212,7 +182,11 @@ impl WorkflowExecutor {
         // Emit start event
         self.emit_event(ExecutionEvent::WorkflowStarted {
             workflow_id: graph.id.clone(),
-            execution_id: ctx.execution_id.clone(),
+            workflow_name: graph.name.clone(),
+            started_at: std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_millis() as u64,
         })
         .await;
 
@@ -262,9 +236,23 @@ impl WorkflowExecutor {
 
         // 使用基于依赖的执行
         // Use dependency-based execution
-        let result = self
-            .execute_from_node(graph, &ctx, start_node_id, input, &mut execution_record)
-            .await;
+        let result = if let Some(timeout_ms) = self.config.execution_timeout_ms {
+            match tokio::time::timeout(
+                std::time::Duration::from_millis(timeout_ms),
+                self.execute_from_node(graph, &ctx, start_node_id, input, &mut execution_record),
+            )
+            .await
+            {
+                Ok(inner) => inner,
+                Err(_) => Err(format!(
+                    "Workflow execution timed out after {}ms",
+                    timeout_ms
+                )),
+            }
+        } else {
+            self.execute_from_node(graph, &ctx, start_node_id, input, &mut execution_record)
+                .await
+        };
 
         let duration = start_time.elapsed();
         execution_record.ended_at = Some(
@@ -296,12 +284,24 @@ impl WorkflowExecutor {
 
         // 发送完成事件
         // Emit completion event
-        self.emit_event(ExecutionEvent::WorkflowCompleted {
-            workflow_id: graph.id.clone(),
-            execution_id: ctx.execution_id.clone(),
-            status: execution_record.status.clone(),
-        })
-        .await;
+        match &execution_record.status {
+            WorkflowStatus::Failed(e) => {
+                self.emit_event(ExecutionEvent::WorkflowFailed {
+                    workflow_id: graph.id.clone(),
+                    error: e.clone(),
+                    total_duration_ms: duration.as_millis() as u64,
+                })
+                .await;
+            }
+            _ => {
+                self.emit_event(ExecutionEvent::WorkflowCompleted {
+                    workflow_id: graph.id.clone(),
+                    final_output: None,
+                    total_duration_ms: duration.as_millis() as u64,
+                })
+                .await;
+            }
+        }
 
         // Emit debug telemetry: WorkflowEnd
         self.emit_debug(DebugEvent::WorkflowEnd {
@@ -331,7 +331,7 @@ impl WorkflowExecutor {
         if let Some(paused_at) = *ctx.paused_at.read().await {
             let duration = chrono::Utc::now().signed_duration_since(paused_at);
             let wait_duration_ms = duration.num_milliseconds().max(0) as u64;
-            *ctx.total_wait_time_ms.write().await += wait_duration_ms;  // ← accumulate
+            *ctx.total_wait_time_ms.write().await += wait_duration_ms; // ← accumulate
         }
 
         ctx.set_node_output(waiting_node_id, human_input).await;
@@ -398,12 +398,24 @@ impl WorkflowExecutor {
         };
         execution_record.outputs = ctx.get_all_outputs().await;
 
-        self.emit_event(ExecutionEvent::WorkflowCompleted {
-            workflow_id: graph.id.clone(),
-            execution_id: ctx.execution_id.clone(),
-            status: execution_record.status.clone(),
-        })
-        .await;
+        match &execution_record.status {
+            WorkflowStatus::Failed(e) => {
+                self.emit_event(ExecutionEvent::WorkflowFailed {
+                    workflow_id: graph.id.clone(),
+                    error: e.clone(),
+                    total_duration_ms: duration.as_millis() as u64,
+                })
+                .await;
+            }
+            _ => {
+                self.emit_event(ExecutionEvent::WorkflowCompleted {
+                    workflow_id: graph.id.clone(),
+                    final_output: None,
+                    total_duration_ms: duration.as_millis() as u64,
+                })
+                .await;
+            }
+        }
 
         self.emit_debug(DebugEvent::WorkflowEnd {
             workflow_id: graph.id.clone(),
@@ -426,7 +438,11 @@ impl WorkflowExecutor {
 
         self.emit_event(ExecutionEvent::WorkflowStarted {
             workflow_id: graph.id.clone(),
-            execution_id: ctx.execution_id.clone(),
+            workflow_name: graph.name.clone(),
+            started_at: std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_millis() as u64,
         })
         .await;
 
@@ -505,12 +521,24 @@ impl WorkflowExecutor {
 
         execution_record.outputs = ctx.get_all_outputs().await;
 
-        self.emit_event(ExecutionEvent::WorkflowCompleted {
-            workflow_id: graph.id.clone(),
-            execution_id: ctx.execution_id.clone(),
-            status: execution_record.status.clone(),
-        })
-        .await;
+        match &execution_record.status {
+            WorkflowStatus::Failed(e) => {
+                self.emit_event(ExecutionEvent::WorkflowFailed {
+                    workflow_id: graph.id.clone(),
+                    error: e.clone(),
+                    total_duration_ms: duration.as_millis() as u64,
+                })
+                .await;
+            }
+            _ => {
+                self.emit_event(ExecutionEvent::WorkflowCompleted {
+                    workflow_id: graph.id.clone(),
+                    final_output: None,
+                    total_duration_ms: duration.as_millis() as u64,
+                })
+                .await;
+            }
+        }
 
         Ok(execution_record)
     }
@@ -602,6 +630,8 @@ impl WorkflowExecutor {
                 .await;
             self.emit_event(ExecutionEvent::NodeStarted {
                 node_id: current_node_id.clone(),
+                node_name: node.config.name.clone(),
+                parent_span_id: None,
             })
             .await;
 
@@ -617,14 +647,43 @@ impl WorkflowExecutor {
                 }
                 NodeType::Wait => self.execute_wait(ctx, node, current_input.clone()).await,
                 _ => {
-                    let result = node.execute(ctx, current_input.clone()).await;
+                    let node_timeout = std::time::Duration::from_millis(
+                        self.config.node_timeout_ms,
+                    );
+                    let result = match tokio::time::timeout(
+                        node_timeout,
+                        node.execute(ctx, current_input.clone()),
+                    )
+                    .await
+                    {
+                        Ok(r) => r,
+                        Err(_) => {
+                            warn!(
+                                "Node {} timed out after {:?}",
+                                current_node_id, node_timeout
+                            );
+                            NodeResult::failed(
+                                &current_node_id,
+                                &format!(
+                                    "Node timed out after {:?}",
+                                    node_timeout
+                                ),
+                                node_timeout.as_millis() as u64,
+                            )
+                        }
+                    };
                     ctx.set_node_output(&current_node_id, result.output.clone())
                         .await;
                     ctx.set_node_status(&current_node_id, result.status.clone())
                         .await;
+                    let node_end_ms = std::time::SystemTime::now()
+                        .duration_since(std::time::UNIX_EPOCH)
+                        .unwrap_or_default()
+                        .as_millis() as u64;
                     self.emit_event(ExecutionEvent::NodeCompleted {
                         node_id: current_node_id.clone(),
-                        result: result.clone(),
+                        output: serde_json::to_value(&result.output).ok(),
+                        duration_ms: node_end_ms.saturating_sub(start_time),
                     })
                     .await;
                     if result.status.is_success() {
@@ -1641,5 +1700,72 @@ mod tests {
             "branch_b should not observe branch_a input mutation"
         );
         assert_eq!(branch_b.get("seed").and_then(|v| v.as_i64()), Some(7));
+    }
+
+    #[tokio::test]
+    async fn test_execution_timeout_enforcement() {
+        let config = ExecutorConfig {
+            execution_timeout_ms: Some(100),
+            ..ExecutorConfig::default()
+        };
+        let executor = WorkflowExecutor::new(config);
+
+        let mut graph = WorkflowGraph::new("timeout_wf", "Timeout Workflow");
+        graph.add_node(WorkflowNode::start("start"));
+        graph.add_node(WorkflowNode::task(
+            "slow_task",
+            "Slow Task",
+            |_ctx, _input| async move {
+                sleep(Duration::from_millis(500)).await;
+                Ok(WorkflowValue::String("done".to_string()))
+            },
+        ));
+        graph.add_node(WorkflowNode::end("end"));
+        graph.connect("start", "slow_task");
+        graph.connect("slow_task", "end");
+
+        let record = executor
+            .execute(&graph, WorkflowValue::Null)
+            .await
+            .expect("execute() should return Ok(record) even on timeout");
+
+        match &record.status {
+            WorkflowStatus::Failed(msg) => {
+                assert!(
+                    msg.contains("timed out"),
+                    "Expected timeout message, got: {}",
+                    msg
+                );
+            }
+            other => panic!("Expected Failed status with timeout, got: {:?}", other),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_no_timeout_when_none() {
+        let config = ExecutorConfig {
+            execution_timeout_ms: None,
+            ..ExecutorConfig::default()
+        };
+        let executor = WorkflowExecutor::new(config);
+
+        let mut graph = WorkflowGraph::new("no_timeout_wf", "No Timeout Workflow");
+        graph.add_node(WorkflowNode::start("start"));
+        graph.add_node(WorkflowNode::task(
+            "fast_task",
+            "Fast Task",
+            |_ctx, _input| async move {
+                Ok(WorkflowValue::String("fast".to_string()))
+            },
+        ));
+        graph.add_node(WorkflowNode::end("end"));
+        graph.connect("start", "fast_task");
+        graph.connect("fast_task", "end");
+
+        let result = executor
+            .execute(&graph, WorkflowValue::Null)
+            .await
+            .expect("Should complete without timeout");
+        assert!(matches!(result.status, WorkflowStatus::Completed));
     }
 }

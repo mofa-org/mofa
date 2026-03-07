@@ -121,8 +121,9 @@ pub struct ReloadResult {
     pub attempts: u32,
 }
 
-/// Reload error types
+/// Reload error types.
 #[derive(Debug, thiserror::Error)]
+#[non_exhaustive]
 pub enum ReloadError {
     #[error("Plugin not found: {0}")]
     PluginNotFound(String),
@@ -147,6 +148,25 @@ pub enum ReloadError {
 
     #[error("Internal error: {0}")]
     Internal(String),
+}
+
+/// Error-stack–backed result alias for reload operations.
+///
+/// Obtain one by calling [`IntoReloadReport::into_report`] on a
+/// `Result<T, ReloadError>`.
+pub type ReloadReport<T> = ::std::result::Result<T, error_stack::Report<ReloadError>>;
+
+/// Extension trait to upgrade a `Result<T, ReloadError>` into a [`ReloadReport<T>`].
+pub trait IntoReloadReport<T> {
+    /// Wrap the error in an `error_stack::Report`.
+    fn into_report(self) -> ReloadReport<T>;
+}
+
+impl<T> IntoReloadReport<T> for ::std::result::Result<T, ReloadError> {
+    #[inline]
+    fn into_report(self) -> ReloadReport<T> {
+        self.map_err(error_stack::Report::new)
+    }
 }
 
 /// Loaded plugin entry
@@ -848,9 +868,12 @@ impl HotReloadManager {
     /// Execute a plugin
     pub async fn execute(&self, plugin_id: &str, input: String) -> PluginResult<String> {
         let mut plugins = self.loaded_plugins.write().await;
-        let entry = plugins
-            .get_mut(plugin_id)
-            .ok_or_else(|| mofa_kernel::plugin::PluginError::ExecutionFailed(format!("Plugin {} not found", plugin_id)))?;
+        let entry = plugins.get_mut(plugin_id).ok_or_else(|| {
+            mofa_kernel::plugin::PluginError::ExecutionFailed(format!(
+                "Plugin {} not found",
+                plugin_id
+            ))
+        })?;
 
         entry.plugin.plugin_mut().execute(input).await
     }

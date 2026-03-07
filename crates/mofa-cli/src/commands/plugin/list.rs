@@ -38,7 +38,8 @@ fn print_available(ctx: &CliContext) -> Result<(), CliError> {
         return Ok(());
     }
 
-    let mut table = Table::builder().headers(&["ID", "Name", "Repo", "Kind", "Description", "Installed"]);
+    let mut table =
+        Table::builder().headers(&["ID", "Name", "Repo", "Kind", "Description", "Installed"]);
     for entry in entries {
         let installed = ctx.plugin_registry.contains(&entry.id);
         table = table.add_row(&[

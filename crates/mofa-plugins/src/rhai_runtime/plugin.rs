@@ -460,13 +460,16 @@ impl RhaiPlugin {
     async fn execute_script(&self, input: String) -> PluginResult<String> {
         // Create context with input
         let mut context = ScriptContext::new();
-        context = context.with_variable("input", input.clone()).map_err(|e| mofa_kernel::plugin::PluginError::ExecutionFailed(e.to_string()))?;
+        context = context
+            .with_variable("input", input.clone())
+            .map_err(|e| mofa_kernel::plugin::PluginError::ExecutionFailed(e.to_string()))?;
 
         // Compile and cache the script (idempotent when already cached)
         let script_id = format!("{}_exec", self.id);
         self.engine
             .compile_and_cache(&script_id, "execute", &self.cached_content)
-            .await.map_err(|e| mofa_kernel::plugin::PluginError::ExecutionFailed(e.to_string()))?;
+            .await
+            .map_err(|e| mofa_kernel::plugin::PluginError::ExecutionFailed(e.to_string()))?;
 
         // Try to call the execute function with the input
         match self
@@ -484,7 +487,9 @@ impl RhaiPlugin {
                     "Rhai plugin {} executed successfully via call_function",
                     self.id
                 );
-                Ok(serde_json::to_string_pretty(&result).map_err(|e| mofa_kernel::plugin::PluginError::ExecutionFailed(e.to_string()))?)
+                Ok(serde_json::to_string_pretty(&result).map_err(|e| {
+                    mofa_kernel::plugin::PluginError::ExecutionFailed(e.to_string())
+                })?)
             }
             Err(e) => {
                 warn!(
@@ -493,7 +498,13 @@ impl RhaiPlugin {
                 );
 
                 // Fallback: execute the whole script directly
-                let result = self.engine.execute(&self.cached_content, &context).await.map_err(|e| mofa_kernel::plugin::PluginError::ExecutionFailed(e.to_string()))?;
+                let result = self
+                    .engine
+                    .execute(&self.cached_content, &context)
+                    .await
+                    .map_err(|e| {
+                        mofa_kernel::plugin::PluginError::ExecutionFailed(e.to_string())
+                    })?;
 
                 if !result.success {
                     return Err(mofa_kernel::plugin::PluginError::ExecutionFailed(format!(
@@ -502,7 +513,9 @@ impl RhaiPlugin {
                     )));
                 }
 
-                Ok(serde_json::to_string_pretty(&result.value).map_err(|e| mofa_kernel::plugin::PluginError::ExecutionFailed(e.to_string()))?)
+                Ok(serde_json::to_string_pretty(&result.value).map_err(|e| {
+                    mofa_kernel::plugin::PluginError::ExecutionFailed(e.to_string())
+                })?)
             }
         }
     }
@@ -593,7 +606,8 @@ impl AgentPlugin for RhaiPlugin {
         *self.plugin_context.write().await = Some(ctx.clone());
 
         // Extract metadata from script
-        self.extract_metadata().await
+        self.extract_metadata()
+            .await
             .map_err(|e| mofa_kernel::plugin::PluginError::ExecutionFailed(e.to_string()))?;
 
         let mut state = self.state.write().await;
@@ -604,7 +618,9 @@ impl AgentPlugin for RhaiPlugin {
     async fn init_plugin(&mut self) -> PluginResult<()> {
         let mut state = self.state.write().await;
         if *state != RhaiPluginState::Loaded {
-            return Err(mofa_kernel::plugin::PluginError::ExecutionFailed("Plugin not loaded".to_string()));
+            return Err(mofa_kernel::plugin::PluginError::ExecutionFailed(
+                "Plugin not loaded".to_string(),
+            ));
         }
 
         *state = RhaiPluginState::Initializing;
@@ -628,7 +644,9 @@ impl AgentPlugin for RhaiPlugin {
     async fn start(&mut self) -> PluginResult<()> {
         let mut state = self.state.write().await;
         if *state != RhaiPluginState::Running && *state != RhaiPluginState::Paused {
-            return Err(mofa_kernel::plugin::PluginError::ExecutionFailed("Plugin not ready to start".to_string()));
+            return Err(mofa_kernel::plugin::PluginError::ExecutionFailed(
+                "Plugin not ready to start".to_string(),
+            ));
         }
 
         // Call start function if exists
@@ -648,7 +666,9 @@ impl AgentPlugin for RhaiPlugin {
     async fn stop(&mut self) -> PluginResult<()> {
         let mut state = self.state.write().await;
         if *state != RhaiPluginState::Running {
-            return Err(mofa_kernel::plugin::PluginError::ExecutionFailed("Plugin not running".to_string()));
+            return Err(mofa_kernel::plugin::PluginError::ExecutionFailed(
+                "Plugin not running".to_string(),
+            ));
         }
 
         // Call stop function if exists
@@ -686,7 +706,9 @@ impl AgentPlugin for RhaiPlugin {
         {
             let state = self.state.read().await;
             if *state != RhaiPluginState::Running {
-                return Err(mofa_kernel::plugin::PluginError::ExecutionFailed("Plugin not running".to_string()));
+                return Err(mofa_kernel::plugin::PluginError::ExecutionFailed(
+                    "Plugin not running".to_string(),
+                ));
             }
         }
 

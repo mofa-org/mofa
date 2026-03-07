@@ -40,6 +40,22 @@ pub enum RhaiError {
 /// Convenience result alias for the Rhai subsystem.
 pub type RhaiResult<T> = Result<T, RhaiError>;
 
+/// Error-stack–backed result alias for the Rhai subsystem.
+pub type RhaiReport<T> = ::std::result::Result<T, error_stack::Report<RhaiError>>;
+
+/// Extension trait to convert [`RhaiResult<T>`] into [`RhaiReport<T>`].
+pub trait IntoRhaiReport<T> {
+    /// Wrap the error in an `error_stack::Report`.
+    fn into_report(self) -> RhaiReport<T>;
+}
+
+impl<T> IntoRhaiReport<T> for RhaiResult<T> {
+    #[inline]
+    fn into_report(self) -> RhaiReport<T> {
+        self.map_err(error_stack::Report::new)
+    }
+}
+
 // Conversion helpers
 impl From<serde_json::Error> for RhaiError {
     fn from(err: serde_json::Error) -> Self {
