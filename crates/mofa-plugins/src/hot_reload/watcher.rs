@@ -318,6 +318,16 @@ impl PluginWatcher {
                                     Some(WatchEvent::new(WatchEventKind::Removed, path.clone()))
                                 }
                                 EventKind::Modify(ModifyKind::Name(RenameMode::From)) => {
+                                    // If a previous From was never paired with a To,
+                                    // the source file effectively disappeared.
+                                    if let Some(orphaned) = rename_from.take() {
+                                        warn!("Orphaned rename-from path, treating as removal: {:?}", orphaned);
+                                        let evt = WatchEvent::new(WatchEventKind::Removed, orphaned);
+                                        if event_tx.send(evt).await.is_err() {
+                                            error!("Failed to send watch event");
+                                            return;
+                                        }
+                                    }
                                     rename_from = Some(path.clone());
                                     None
                                 }
