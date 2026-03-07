@@ -328,7 +328,7 @@ impl WebSocketHandler {
         let mut broadcast_rx = self.broadcast_tx.subscribe();
 
         // Task to send messages to client
-        let send_task = tokio::spawn(async move {
+        let mut send_task = tokio::spawn(async move {
             loop {
                 tokio::select! {
                     // Messages from direct send
@@ -352,7 +352,7 @@ impl WebSocketHandler {
         // Task to receive messages from client
         let clients = self.clients.clone();
         let client_id_clone = client_id.clone();
-        let receive_task = tokio::spawn(async move {
+        let mut receive_task = tokio::spawn(async move {
             while let Some(result) = receiver.next().await {
                 match result {
                     Ok(Message::Text(text)) => {
@@ -400,10 +400,18 @@ impl WebSocketHandler {
             }
         });
 
-        // Wait for either task to complete
+        // Wait for either task to complete, then abort the other.
+        // Dropping a JoinHandle only detaches the task — it does NOT
+        // cancel it, so the "losing" task would keep running as an
+        // orphan (sending to a closed socket or processing messages
+        // for a disconnected client).
         tokio::select! {
-            _ = send_task => {}
-            _ = receive_task => {}
+            _ = &mut send_task => {
+                receive_task.abort();
+            }
+            _ = &mut receive_task => {
+                send_task.abort();
+            }
         }
 
         // Cleanup
