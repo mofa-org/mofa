@@ -9,6 +9,7 @@
 
 use crate::error::GatewayResult;
 use crate::types::{LoadBalancingAlgorithm, NodeId};
+use rand::Rng;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
@@ -147,13 +148,7 @@ impl LoadBalancer {
                 Ok(selected)
             }
             LoadBalancingAlgorithm::Random => {
-                // Use a simple time-based pseudo-random selection for deterministic testing.
-                // In production, prefer a real RNG instead of SystemTime-based selection.
-                let duration = std::time::SystemTime::now()
-                    .duration_since(std::time::UNIX_EPOCH)
-                    .unwrap_or_default();
-                let nanos = duration.as_nanos();
-                let index = (nanos % nodes.len() as u128) as usize;
+                let index = rand::thread_rng().gen_range(0..nodes.len());
                 Ok(Some(nodes[index].clone()))
             }
         }
@@ -294,5 +289,29 @@ mod tests {
             heavy_count >= 10,
             "high-weight node must not be starved by truncation, got {heavy_count}/20"
         );
+    }
+
+    #[tokio::test]
+    async fn test_random_distribution() {
+        let lb = LoadBalancer::new(LoadBalancingAlgorithm::Random);
+        lb.add_node(NodeId::new("node-1")).await;
+        lb.add_node(NodeId::new("node-2")).await;
+        lb.add_node(NodeId::new("node-3")).await;
+
+        let mut counts = HashMap::new();
+        for _ in 0..300 {
+            let node = lb.select_node().await.unwrap().unwrap();
+            *counts.entry(node).or_insert(0u32) += 1;
+        }
+
+        // Every node should be selected at least once over 300 trials
+        assert!(counts.contains_key(&NodeId::new("node-1")));
+        assert!(counts.contains_key(&NodeId::new("node-2")));
+        assert!(counts.contains_key(&NodeId::new("node-3")));
+
+        // No single node should dominate (> 60% would indicate bias)
+        for count in counts.values() {
+            assert!(*count < 180, "Node selected {} times out of 300 — distribution is biased", count);
+        }
     }
 }
