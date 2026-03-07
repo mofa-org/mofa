@@ -12,8 +12,8 @@
 //! 1. **仅定义 Trait** — 内核层不包含具体实现代码。
 //! 2. **`Send + Sync`** — all traits are safe for concurrent access.
 //! 2. **`Send + Sync`** — 所有 Trait 均可安全并发访问。
-//! 3. **`i64` timestamps** — milliseconds since epoch, consistent with `crate::utils::now_ms()`.
-//! 3. **`i64` 时间戳** — 自 epoch 起的毫秒数，与 `crate::utils::now_ms()` 一致。
+//! 3. **`u64` timestamps** — milliseconds since epoch, consistent with `crate::utils::now_ms()`.
+//! 3. **`u64` 时间戳** — 自 epoch 起的毫秒数，与 `crate::utils::now_ms()` 一致。
 //! 4. **Error integration** — maps into [`AgentError`] via `From<CoordinationError>`.
 //! 4. **错误集成** — 通过 `From<CoordinationError>` 映射到 [`AgentError`]。
 //!
@@ -71,7 +71,7 @@ pub struct MemoryObject {
 
     /// Timestamp in milliseconds since epoch.
     /// 自 epoch 起的毫秒时间戳。
-    pub timestamp: i64,
+    pub timestamp: u64,
 }
 
 /// Context passed during an agent-to-agent handoff.
@@ -145,7 +145,7 @@ pub struct HandoffPacket {
 
     /// Timestamp in milliseconds since epoch.
     /// 自 epoch 起的毫秒时间戳。
-    pub timestamp: i64,
+    pub timestamp: u64,
 }
 
 /// Information about a detected conflict between memory entries.
@@ -170,7 +170,7 @@ pub struct ConflictInfo {
 
     /// When the conflict was detected (ms since epoch).
     /// 检测到冲突的时间（自 epoch 起的毫秒数）。
-    pub detected_at: i64,
+    pub detected_at: u64,
 
     /// Workflow where the conflict occurred.
     /// 发生冲突的工作流。
@@ -179,6 +179,7 @@ pub struct ConflictInfo {
 
 /// Strategy for resolving a detected conflict.
 /// 解决检测到的冲突的策略。
+#[non_exhaustive]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ResolutionStrategy {
     /// Keep the existing value, discard incoming.
@@ -234,6 +235,7 @@ impl Default for GovernanceConfig {
 ///
 /// These are mapped into [`AgentError::CoordinationError`] via `From` impl.
 /// 这些错误通过 `From` 实现映射到 [`AgentError::CoordinationError`]。
+#[non_exhaustive]
 #[derive(Debug, Error)]
 pub enum CoordinationError {
     /// Shared memory operation failed.
@@ -478,7 +480,7 @@ mod tests {
                 owner_agent: agent_id.to_string(),
                 content: content.to_string(),
                 workflow_id: workflow_id.to_string(),
-                timestamp: crate::utils::now_ms() as i64,
+                timestamp: crate::utils::now_ms(),
             };
             self.entries.lock().unwrap().insert(id, obj);
             Ok(MemoryRef::new(id))
@@ -582,7 +584,7 @@ mod tests {
             confidence: 0.92,
             memory_refs: vec![MemoryRef::new(Uuid::new_v4())],
             next_task: "Generate report".to_string(),
-            timestamp: crate::utils::now_ms() as i64,
+            timestamp: crate::utils::now_ms(),
         };
 
         let json = serde_json::to_string(&packet).unwrap();
@@ -598,7 +600,7 @@ mod tests {
             memory_ref: MemoryRef::new(Uuid::new_v4()),
             existing_value: "value A".to_string(),
             incoming_value: "value B".to_string(),
-            detected_at: crate::utils::now_ms() as i64,
+            detected_at: crate::utils::now_ms(),
             workflow_id: "wf-1".to_string(),
         };
 

@@ -843,6 +843,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "coordination_demo"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "mofa-kernel",
+ "serde",
+ "tokio",
+ "uuid",
+]
+
+[[package]]
 name = "core-foundation"
 version = "0.9.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2902,6 +2914,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ad38eb12aea514a0466ea40a80fd8cc83637065948eb4a426e4aa46261175227"
 dependencies = [
  "rustix",
+]
+
+[[package]]
+name = "message_graph_validation"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "futures",
+ "mofa-kernel",
+ "serde_json",
 ]
 
 [[package]]
@@ -6314,6 +6336,18 @@ name = "virtue"
 version = "0.0.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "051eb1abcf10076295e815102942cc58f9d5e3b4560e46e53c21e8ff6f3af7b1"
+
+[[package]]
+name = "visual_debugger_demo"
+version = "0.1.0"
+dependencies = [
+ "mofa-foundation",
+ "mofa-kernel",
+ "serde_json",
+ "tokio",
+ "tracing",
+ "tracing-subscriber 0.3.22",
+]
 
 [[package]]
 name = "walkdir"

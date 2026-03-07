@@ -143,6 +143,10 @@ pub mod types;
 // Component modules
 pub mod components;
 
+// 协调模块
+// Coordination module
+pub mod coordination;
+
 // 配置模块
 // Configuration modules
 pub mod config;
