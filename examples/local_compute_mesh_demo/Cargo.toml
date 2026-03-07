@@ -1,0 +1,16 @@
+[package]
+name = "local_compute_mesh_demo"
+version.workspace = true
+edition.workspace = true
+description = "Scaffold example for MoFA Local Compute Mesh Demo"
+
+[dependencies]
+tokio.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+serde_yaml.workspace = true
+
+[lints]
+workspace = true
