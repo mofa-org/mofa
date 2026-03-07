@@ -740,7 +740,6 @@ pub mod react {
     pub use mofa_foundation::react::*;
 }
 
-/// Classic agentic patterns re-exported from the foundation layer.
 pub mod patterns {
     //! High-level agentic patterns with ergonomic builders.
     //!

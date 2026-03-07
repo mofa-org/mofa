@@ -258,6 +258,9 @@ where
 // FallbackChain - Execute a chain of fallback operations
 // ============================================================================
 
+type BoxedFallbackFuture<T> = std::pin::Pin<Box<dyn Future<Output = GlobalResult<T>> + Send>>;
+type FallbackOperation<T> = Box<dyn FnOnce() -> BoxedFallbackFuture<T> + Send>;
+
 /// Execute a series of fallback operations, returning the first success.
 ///
 /// Each operation in the chain is tried in order. If one fails, the next
@@ -272,9 +275,7 @@ where
 ///     Box::new(|| Box::pin(cached_fallback())),
 /// ]).await;
 /// ```
-pub async fn fallback_chain<T>(
-    operations: Vec<Box<dyn FnOnce() -> std::pin::Pin<Box<dyn Future<Output = GlobalResult<T>> + Send>> + Send>>,
-) -> GlobalResult<T> {
+pub async fn fallback_chain<T>(operations: Vec<FallbackOperation<T>>) -> GlobalResult<T> {
     let mut last_error = GlobalError::Other("no fallback operations provided".to_string());
 
     for operation in operations {

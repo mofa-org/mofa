@@ -189,9 +189,10 @@ pub async fn query_documents<S: VectorStore>(
         .into_iter()
         .map(RetrievedChunk::from)
         .filter(|chunk| {
-            config.metadata_filter.iter().all(|(key, value)| {
-                chunk.metadata.get(key).map(|v| v == value).unwrap_or(false)
-            })
+            config
+                .metadata_filter
+                .iter()
+                .all(|(key, value)| chunk.metadata.get(key).map(|v| v == value).unwrap_or(false))
         })
         .collect();
 
@@ -231,10 +232,11 @@ fn pack_context(
         let separator_cost = if parts.is_empty() { 0 } else { SEPARATOR.len() };
         let cost = chunk.text.len() + separator_cost;
 
-        if let Some(budget) = max_chars {
-            if total_chars + cost > budget && !packed.is_empty() {
-                break;
-            }
+        if let Some(budget) = max_chars
+            && total_chars + cost > budget
+            && !packed.is_empty()
+        {
+            break;
         }
 
         packed.push(chunk.clone());
@@ -260,47 +262,76 @@ mod tests {
 
     // -- Mock embedder --
 
-    struct MockProvider { dimensions: usize }
+    struct MockProvider {
+        dimensions: usize,
+    }
 
     #[async_trait]
     impl crate::llm::provider::LLMProvider for MockProvider {
-        fn name(&self) -> &str { "mock" }
-        fn default_model(&self) -> &str { "mock-embed" }
-        fn supports_streaming(&self) -> bool { false }
-        fn supports_tools(&self) -> bool { false }
-        fn supports_vision(&self) -> bool { false }
+        fn name(&self) -> &str {
+            "mock"
+        }
+        fn default_model(&self) -> &str {
+            "mock-embed"
+        }
+        fn supports_streaming(&self) -> bool {
+            false
+        }
+        fn supports_tools(&self) -> bool {
+            false
+        }
+        fn supports_vision(&self) -> bool {
+            false
+        }
 
         async fn chat(
-            &self, _r: crate::llm::types::ChatCompletionRequest,
+            &self,
+            _r: crate::llm::types::ChatCompletionRequest,
         ) -> crate::llm::types::LLMResult<crate::llm::types::ChatCompletionResponse> {
             Err(crate::llm::types::LLMError::Other("not supported".into()))
         }
         async fn chat_stream(
-            &self, _r: crate::llm::types::ChatCompletionRequest,
+            &self,
+            _r: crate::llm::types::ChatCompletionRequest,
         ) -> crate::llm::types::LLMResult<crate::llm::provider::ChatStream> {
             Err(crate::llm::types::LLMError::Other("not supported".into()))
         }
         async fn embedding(
-            &self, request: crate::llm::types::EmbeddingRequest,
+            &self,
+            request: crate::llm::types::EmbeddingRequest,
         ) -> crate::llm::types::LLMResult<crate::llm::types::EmbeddingResponse> {
             let inputs = match request.input {
                 crate::llm::types::EmbeddingInput::Single(s) => vec![s],
                 crate::llm::types::EmbeddingInput::Multiple(v) => v,
             };
-            let data = inputs.iter().map(|text| {
-                let mut vec = vec![0.0f32; self.dimensions];
-                for (i, b) in text.bytes().enumerate() {
-                    vec[i % self.dimensions] += b as f32 / 255.0;
-                }
-                let norm = vec.iter().map(|x| x * x).sum::<f32>().sqrt();
-                if norm > 0.0 { for v in &mut vec { *v /= norm; } }
-                crate::llm::types::EmbeddingData {
-                    object: "embedding".into(), embedding: vec, index: 0,
-                }
-            }).collect();
+            let data = inputs
+                .iter()
+                .map(|text| {
+                    let mut vec = vec![0.0f32; self.dimensions];
+                    for (i, b) in text.bytes().enumerate() {
+                        vec[i % self.dimensions] += b as f32 / 255.0;
+                    }
+                    let norm = vec.iter().map(|x| x * x).sum::<f32>().sqrt();
+                    if norm > 0.0 {
+                        for v in &mut vec {
+                            *v /= norm;
+                        }
+                    }
+                    crate::llm::types::EmbeddingData {
+                        object: "embedding".into(),
+                        embedding: vec,
+                        index: 0,
+                    }
+                })
+                .collect();
             Ok(crate::llm::types::EmbeddingResponse {
-                object: "list".into(), data, model: request.model,
-                usage: crate::llm::types::EmbeddingUsage { prompt_tokens: 0, total_tokens: 0 },
+                object: "list".into(),
+                data,
+                model: request.model,
+                usage: crate::llm::types::EmbeddingUsage {
+                    prompt_tokens: 0,
+                    total_tokens: 0,
+                },
             })
         }
     }
@@ -317,7 +348,14 @@ mod tests {
         chunks: HashMap<String, DocumentChunk>,
         dimensions: Option<usize>,
     }
-    impl TestStore { fn new() -> Self { Self { chunks: HashMap::new(), dimensions: None } } }
+    impl TestStore {
+        fn new() -> Self {
+            Self {
+                chunks: HashMap::new(),
+                dimensions: None,
+            }
+        }
+    }
 
     #[async_trait]
     impl VectorStore for TestStore {
@@ -325,29 +363,67 @@ mod tests {
             if let Some(d) = self.dimensions {
                 if chunk.embedding.len() != d {
                     return Err(AgentError::InvalidInput(format!(
-                        "dim mismatch: {} vs {}", d, chunk.embedding.len())));
+                        "dim mismatch: {} vs {}",
+                        d,
+                        chunk.embedding.len()
+                    )));
                 }
-            } else { self.dimensions = Some(chunk.embedding.len()); }
+            } else {
+                self.dimensions = Some(chunk.embedding.len());
+            }
             self.chunks.insert(chunk.id.clone(), chunk);
             Ok(())
         }
-        async fn search(&self, qe: &[f32], top_k: usize, threshold: Option<f32>) -> AgentResult<Vec<SearchResult>> {
-            let mut results: Vec<SearchResult> = self.chunks.values().map(|c| {
-                let score: f32 = c.embedding.iter().zip(qe.iter()).map(|(a, b)| a * b).sum();
-                SearchResult { id: c.id.clone(), text: c.text.clone(), score, metadata: c.metadata.clone() }
-            }).filter(|r| threshold.map(|t| r.score >= t).unwrap_or(true)).collect();
-            results.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(std::cmp::Ordering::Equal));
+        async fn search(
+            &self,
+            qe: &[f32],
+            top_k: usize,
+            threshold: Option<f32>,
+        ) -> AgentResult<Vec<SearchResult>> {
+            let mut results: Vec<SearchResult> = self
+                .chunks
+                .values()
+                .map(|c| {
+                    let score: f32 = c.embedding.iter().zip(qe.iter()).map(|(a, b)| a * b).sum();
+                    SearchResult {
+                        id: c.id.clone(),
+                        text: c.text.clone(),
+                        score,
+                        metadata: c.metadata.clone(),
+                    }
+                })
+                .filter(|r| threshold.map(|t| r.score >= t).unwrap_or(true))
+                .collect();
+            results.sort_by(|a, b| {
+                b.score
+                    .partial_cmp(&a.score)
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            });
             results.truncate(top_k);
             Ok(results)
         }
-        async fn delete(&mut self, id: &str) -> AgentResult<bool> { Ok(self.chunks.remove(id).is_some()) }
-        async fn clear(&mut self) -> AgentResult<()> { self.chunks.clear(); self.dimensions = None; Ok(()) }
-        async fn count(&self) -> AgentResult<usize> { Ok(self.chunks.len()) }
-        fn similarity_metric(&self) -> SimilarityMetric { SimilarityMetric::DotProduct }
+        async fn delete(&mut self, id: &str) -> AgentResult<bool> {
+            Ok(self.chunks.remove(id).is_some())
+        }
+        async fn clear(&mut self) -> AgentResult<()> {
+            self.chunks.clear();
+            self.dimensions = None;
+            Ok(())
+        }
+        async fn count(&self) -> AgentResult<usize> {
+            Ok(self.chunks.len())
+        }
+        fn similarity_metric(&self) -> SimilarityMetric {
+            SimilarityMetric::DotProduct
+        }
     }
 
     /// Helper: embed text and insert into a TestStore
-    async fn seed_store(store: &mut TestStore, adapter: &LlmEmbeddingAdapter, entries: &[(&str, &str, &[(&str, &str)])]) {
+    async fn seed_store(
+        store: &mut TestStore,
+        adapter: &LlmEmbeddingAdapter,
+        entries: &[(&str, &str, &[(&str, &str)])],
+    ) {
         for (id, text, meta) in entries {
             let emb = adapter.embed_one(text).await.unwrap();
             let mut chunk = DocumentChunk::new(*id, *text, emb);
@@ -364,7 +440,9 @@ mod tests {
     async fn query_empty_store() {
         let store = TestStore::new();
         let adapter = make_adapter(16);
-        let result = query_documents(&store, &adapter, "hello", &RagQueryConfig::default()).await.unwrap();
+        let result = query_documents(&store, &adapter, "hello", &RagQueryConfig::default())
+            .await
+            .unwrap();
         assert!(result.chunks.is_empty());
         assert!(result.context.is_empty());
     }
@@ -373,12 +451,24 @@ mod tests {
     async fn query_returns_relevant_results() {
         let mut store = TestStore::new();
         let adapter = make_adapter(16);
-        seed_store(&mut store, &adapter, &[
-            ("rust-0", "Rust programming language systems", &[]),
-            ("python-0", "Python scripting language", &[]),
-        ]).await;
+        seed_store(
+            &mut store,
+            &adapter,
+            &[
+                ("rust-0", "Rust programming language systems", &[]),
+                ("python-0", "Python scripting language", &[]),
+            ],
+        )
+        .await;
 
-        let result = query_documents(&store, &adapter, "Rust systems", &RagQueryConfig::default().with_top_k(2)).await.unwrap();
+        let result = query_documents(
+            &store,
+            &adapter,
+            "Rust systems",
+            &RagQueryConfig::default().with_top_k(2),
+        )
+        .await
+        .unwrap();
         assert!(!result.chunks.is_empty());
         assert!(!result.context.is_empty());
         assert_eq!(result.query, "Rust systems");
@@ -388,7 +478,9 @@ mod tests {
     async fn query_rejects_empty_query() {
         let store = TestStore::new();
         let adapter = make_adapter(16);
-        let err = query_documents(&store, &adapter, "  ", &RagQueryConfig::default()).await.unwrap_err();
+        let err = query_documents(&store, &adapter, "  ", &RagQueryConfig::default())
+            .await
+            .unwrap_err();
         assert!(matches!(err, RagOrchestrationError::InvalidInput(_)));
     }
 
@@ -396,15 +488,27 @@ mod tests {
     async fn query_with_metadata_filter() {
         let mut store = TestStore::new();
         let adapter = make_adapter(16);
-        seed_store(&mut store, &adapter, &[
-            ("a", "Rust lang", &[("category", "systems")]),
-            ("b", "Python lang", &[("category", "scripting")]),
-        ]).await;
+        seed_store(
+            &mut store,
+            &adapter,
+            &[
+                ("a", "Rust lang", &[("category", "systems")]),
+                ("b", "Python lang", &[("category", "scripting")]),
+            ],
+        )
+        .await;
 
-        let config = RagQueryConfig::default().with_top_k(10).with_filter("category", "systems");
-        let result = query_documents(&store, &adapter, "language", &config).await.unwrap();
+        let config = RagQueryConfig::default()
+            .with_top_k(10)
+            .with_filter("category", "systems");
+        let result = query_documents(&store, &adapter, "language", &config)
+            .await
+            .unwrap();
         for chunk in &result.chunks {
-            assert_eq!(chunk.metadata.get("category").map(String::as_str), Some("systems"));
+            assert_eq!(
+                chunk.metadata.get("category").map(String::as_str),
+                Some("systems")
+            );
         }
     }
 
@@ -413,14 +517,23 @@ mod tests {
         let mut store = TestStore::new();
         let adapter = make_adapter(16);
         // Seed multiple chunks so budget can trim
-        seed_store(&mut store, &adapter, &[
-            ("c1", "AAAAAAAAAA", &[]),
-            ("c2", "BBBBBBBBBB", &[]),
-            ("c3", "CCCCCCCCCC", &[]),
-        ]).await;
+        seed_store(
+            &mut store,
+            &adapter,
+            &[
+                ("c1", "AAAAAAAAAA", &[]),
+                ("c2", "BBBBBBBBBB", &[]),
+                ("c3", "CCCCCCCCCC", &[]),
+            ],
+        )
+        .await;
 
-        let config = RagQueryConfig::default().with_top_k(10).with_max_context_chars(15);
-        let result = query_documents(&store, &adapter, "AAAA", &config).await.unwrap();
+        let config = RagQueryConfig::default()
+            .with_top_k(10)
+            .with_max_context_chars(15);
+        let result = query_documents(&store, &adapter, "AAAA", &config)
+            .await
+            .unwrap();
         assert!(result.context_bytes <= 15 || result.chunks.len() == 1);
     }
 
@@ -435,7 +548,12 @@ mod tests {
 
     #[test]
     fn pack_context_single_chunk() {
-        let chunks = vec![RetrievedChunk { id: "1".into(), text: "Hello".into(), score: 1.0, metadata: HashMap::new() }];
+        let chunks = vec![RetrievedChunk {
+            id: "1".into(),
+            text: "Hello".into(),
+            score: 1.0,
+            metadata: HashMap::new(),
+        }];
         let (packed, ctx) = pack_context(&chunks, None);
         assert_eq!(packed.len(), 1);
         assert_eq!(ctx, "Hello");
@@ -444,8 +562,18 @@ mod tests {
     #[test]
     fn pack_context_multiple_with_separator() {
         let chunks = vec![
-            RetrievedChunk { id: "1".into(), text: "First".into(), score: 1.0, metadata: HashMap::new() },
-            RetrievedChunk { id: "2".into(), text: "Second".into(), score: 0.9, metadata: HashMap::new() },
+            RetrievedChunk {
+                id: "1".into(),
+                text: "First".into(),
+                score: 1.0,
+                metadata: HashMap::new(),
+            },
+            RetrievedChunk {
+                id: "2".into(),
+                text: "Second".into(),
+                score: 0.9,
+                metadata: HashMap::new(),
+            },
         ];
         let (packed, ctx) = pack_context(&chunks, None);
         assert_eq!(packed.len(), 2);
@@ -457,8 +585,18 @@ mod tests {
     #[test]
     fn pack_context_budget_truncates() {
         let chunks = vec![
-            RetrievedChunk { id: "1".into(), text: "Short".into(), score: 1.0, metadata: HashMap::new() },
-            RetrievedChunk { id: "2".into(), text: "Much longer text here".into(), score: 0.9, metadata: HashMap::new() },
+            RetrievedChunk {
+                id: "1".into(),
+                text: "Short".into(),
+                score: 1.0,
+                metadata: HashMap::new(),
+            },
+            RetrievedChunk {
+                id: "2".into(),
+                text: "Much longer text here".into(),
+                score: 0.9,
+                metadata: HashMap::new(),
+            },
         ];
         let (packed, _) = pack_context(&chunks, Some(8));
         assert_eq!(packed.len(), 1);

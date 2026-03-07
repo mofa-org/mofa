@@ -187,22 +187,22 @@ impl Router {
     }
 
     fn parse_decision(&self, raw: &str) -> RouterDecision {
-        if let Ok(value) = serde_json::from_str::<serde_json::Value>(raw) {
-            if let Some(route) = value.get("route").and_then(|route| route.as_str()) {
-                return RouterDecision {
-                    requested_route: route.to_string(),
-                    resolved_route: route.to_string(),
-                    reason: value
-                        .get("reason")
-                        .and_then(|reason| reason.as_str())
-                        .map(ToOwned::to_owned),
-                    confidence: value
-                        .get("confidence")
-                        .and_then(|confidence| confidence.as_f64())
-                        .map(|confidence| confidence as f32),
-                    used_default: false,
-                };
-            }
+        if let Ok(value) = serde_json::from_str::<serde_json::Value>(raw)
+            && let Some(route) = value.get("route").and_then(|route| route.as_str())
+        {
+            return RouterDecision {
+                requested_route: route.to_string(),
+                resolved_route: route.to_string(),
+                reason: value
+                    .get("reason")
+                    .and_then(|reason| reason.as_str())
+                    .map(ToOwned::to_owned),
+                confidence: value
+                    .get("confidence")
+                    .and_then(|confidence| confidence.as_f64())
+                    .map(|confidence| confidence as f32),
+                used_default: false,
+            };
         }
 
         let trimmed = raw.trim();
