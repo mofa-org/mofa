@@ -24,7 +24,7 @@ pub struct LoadBalancer {
     // Node weights for weighted round-robin
     node_weights: Arc<RwLock<HashMap<NodeId, u32>>>,
     // Weighted round-robin state (current weight for each node)
-    weighted_current_weights: Arc<RwLock<HashMap<NodeId, i32>>>,
+    weighted_current_weights: Arc<RwLock<HashMap<NodeId, i64>>>,
 }
 
 impl LoadBalancer {
@@ -119,24 +119,24 @@ impl LoadBalancer {
                 }
                 
                 // Find node with maximum (current_weight + weight)
-                let mut max_effective_weight = i32::MIN;
+                let mut max_effective_weight = i64::MIN;
                 let mut selected = None;
-                
+
                 for node in nodes.iter() {
-                    let weight = weights.get(node).copied().unwrap_or(1) as i32;
+                    let weight = i64::from(weights.get(node).copied().unwrap_or(1));
                     let current = current_weights.get(node).copied().unwrap_or(0);
                     let effective_weight = current + weight;
-                    
+
                     if effective_weight > max_effective_weight {
                         max_effective_weight = effective_weight;
                         selected = Some(node.clone());
                     }
                 }
-                
+
                 // Decrease current weight of selected node by sum of all weights
                 if let Some(ref selected_node) = selected {
-                    let total_weight: i32 = nodes.iter()
-                        .map(|n| weights.get(n).copied().unwrap_or(1) as i32)
+                    let total_weight: i64 = nodes.iter()
+                        .map(|n| i64::from(weights.get(n).copied().unwrap_or(1)))
                         .sum();
                     
                     if let Some(current) = current_weights.get_mut(selected_node) {
