@@ -450,9 +450,7 @@ impl<S: GraphState> CompiledGraphImpl<S> {
     /// Get the next node(s) based on the current node and command
     fn get_next_nodes(&self, current_node: &str, command: &Command) -> AgentResult<Vec<String>> {
         match &command.control {
-            ControlFlow::Goto(target) => {
-                Ok(vec![target.clone()])
-            }
+            ControlFlow::Goto(target) => Ok(vec![target.clone()]),
             ControlFlow::Return => {
                 Ok(vec![]) // End execution
             }
@@ -471,6 +469,7 @@ impl<S: GraphState> CompiledGraphImpl<S> {
                             if let Some(target) = routes.get(decision) {
                                 return Ok(vec![target.clone()]);
                             }
+                        }
                         // Priority 2: legacy key-name matching (backward compatible)
                         for update in &command.updates {
                             if let Some(target) = routes.get(&update.key) {
@@ -478,7 +477,8 @@ impl<S: GraphState> CompiledGraphImpl<S> {
                             }
                         }
                         // No route matched — report error instead of silent fallback
-                        let update_keys: Vec<&str> = command.updates.iter().map(|u| u.key.as_str()).collect();
+                        let update_keys: Vec<&str> =
+                            command.updates.iter().map(|u| u.key.as_str()).collect();
                         let route_keys: Vec<&String> = routes.keys().collect();
                         warn!(
                             node_id = current_node,
@@ -691,6 +691,7 @@ impl<S: GraphState + 'static> CompiledGraph<S, serde_json::Value> for CompiledGr
                                     if let Some(target) = routes.get(decision) {
                                         return Ok(vec![target.clone()]);
                                     }
+                                }
                                 // Priority 2: legacy key-name matching (backward compatible)
                                 for update in &command.updates {
                                     if let Some(target) = routes.get(&update.key) {
@@ -1018,8 +1019,8 @@ impl<S: GraphState + 'static> CompiledGraph<S, serde_json::Value> for CompiledGr
 mod tests {
     use super::*;
     use futures::StreamExt;
-    use mofa_kernel::workflow::telemetry::TelemetryEmitter;
     use mofa_kernel::workflow::GraphConfig;
+    use mofa_kernel::workflow::telemetry::TelemetryEmitter;
     use mofa_kernel::workflow::{JsonState, StateGraph};
     use serde_json::json;
     use std::collections::HashMap;
@@ -1522,7 +1523,10 @@ mod tests {
         let compiled = graph.compile().unwrap();
         let result = compiled.invoke(JsonState::new(), None).await;
 
-        assert!(result.is_err(), "invoke should return Err when no conditional route matches");
+        assert!(
+            result.is_err(),
+            "invoke should return Err when no conditional route matches"
+        );
         let err_msg = result.unwrap_err().to_string();
         assert!(
             err_msg.contains("No conditional route matched"),
@@ -1581,6 +1585,9 @@ mod tests {
             }
         }
 
-        assert!(got_error, "stream should emit an error event when no conditional route matches");
+        assert!(
+            got_error,
+            "stream should emit an error event when no conditional route matches"
+        );
     }
 }
