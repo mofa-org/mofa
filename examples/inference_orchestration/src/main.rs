@@ -9,7 +9,7 @@
 
 use mofa_foundation::inference::{
     InferenceOrchestrator, InferenceRequest, OrchestratorConfig, RequestPriority,
-    RoutingPolicy,
+    RoutedBackend, RoutingPolicy,
 };
 use std::time::Duration;
 use tracing::{info, warn};
@@ -116,6 +116,70 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         orchestrator_cost.infer(&InferenceRequest::new("fill", "warmup", 11_264));
         let res_cost = orchestrator_cost.infer(&InferenceRequest::new("small", "wait", 2_048));
         info!("CostOptimized under defer contention: {:?}", res_cost.routed_to);
+    }
+
+    tokio::time::sleep(Duration::from_millis(500)).await;
+
+    // Use Case 6: Cloud Fallback Retry
+    {
+        info!("--- Use Case 6: Cloud Fallback Retry ---");
+        // The orchestrator is configured with cloud_retry_attempts = 2 by default,
+        // meaning up to 3 total cloud calls before giving up.
+        //
+        // In Phase 1 the cloud backend is simulated, so we demonstrate the config.
+        // In Phase 2, when a real LLM client is wired in, transient HTTP 503s or
+        // rate-limit errors will automatically be retried up to this many times.
+        let mut retry_config = config.clone();
+        retry_config.cloud_retry_attempts = 2;   // up to 2 retries (3 total attempts)
+        retry_config.cloud_retry_delay_ms = 100; // 100 ms between retries in production
+        let mut orch = InferenceOrchestrator::new(retry_config.clone());
+
+        // Fill memory so the request falls back to cloud.
+        orch.infer(&InferenceRequest::new("fill-model", "warm up", 12_000));
+
+        let req = InferenceRequest::new("gpt-4o", "What is 2+2?", 4_000);
+        let result = orch.infer(&req);
+        info!(
+            "Cloud result (attempt #{}): {:?}  [config: max_retries={}]",
+            result.cloud_attempt_count,
+            result.routed_to,
+            retry_config.cloud_retry_attempts,
+        );
+    }
+
+    tokio::time::sleep(Duration::from_millis(500)).await;
+
+    // Use Case 7: Global Policy Downgrade Switch
+    {
+        info!("--- Use Case 7: Global Policy Downgrade Switch (force_cloud) ---");
+        // `set_force_cloud(true)` is the \"break-glass\" mechanism for local outages.
+        // It bypasses routing policy AND admission control — every request goes to
+        // cloud until the switch is cleared, regardless of available memory.
+        let mut orch = InferenceOrchestrator::new(config.clone());
+        info!("Before force_cloud: routing_policy = {}", orch.routing_policy());
+
+        // Without the switch: a small request fits locally.
+        let req = InferenceRequest::new("llama-3-8b", "Hello!", 4_096);
+        let normal = orch.infer(&req);
+        info!("Normal routing: {:?}", normal.routed_to);
+
+        // Activate the global downgrade switch.
+        orch.set_force_cloud(true);
+        warn!(
+            "⚠  force_cloud activated — all traffic redirected to cloud (is_force_cloud={})",
+            orch.is_force_cloud()
+        );
+
+        let forced = orch.infer(&InferenceRequest::new("llama-3-8b", "Hello again!", 4_096));
+        info!("Forced routing: {:?}  (local model count={})", forced.routed_to, orch.loaded_model_count());
+        assert!(
+            matches!(forced.routed_to, RoutedBackend::Cloud { .. }),
+            "force_cloud must override LocalFirst policy"
+        );
+
+        // Restore normal routing.
+        orch.set_force_cloud(false);
+        info!("force_cloud cleared — normal routing restored (is_force_cloud={})", orch.is_force_cloud());
     }
 
     info!("Demonstration complete.");

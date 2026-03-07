@@ -75,6 +75,9 @@ struct MockState {
     embedding_responses: VecDeque<AgentResult<EmbeddingResponse>>,
     /// FIFO queue of results for [`LLMProvider::health_check`].
     health_responses: VecDeque<AgentResult<bool>>,
+    /// Number of `chat()` calls that should return a transient error before
+    /// succeeding.  Decremented on each call until it reaches zero.
+    fail_first_n: u32,
 }
 
 impl Default for MockState {
@@ -88,6 +91,7 @@ impl Default for MockState {
             stream_sequences: VecDeque::new(),
             embedding_responses: VecDeque::new(),
             health_responses: VecDeque::new(),
+            fail_first_n: 0,
         }
     }
 }
@@ -222,6 +226,11 @@ impl LLMProvider for MockLLMProvider {
     async fn chat(&self, request: ChatCompletionRequest) -> AgentResult<ChatCompletionResponse> {
         let mut state = self.state.lock().expect("mock state mutex poisoned");
         state.chat_calls.push(request);
+        // Simulate a transient failure if the counter is non-zero.
+        if state.fail_first_n > 0 {
+            state.fail_first_n -= 1;
+            return Err(AgentError::Other("transient cloud error (injected)".to_string()));
+        }
         if let Some(queued) = state.chat_responses.pop_front() {
             queued
         } else {
@@ -427,6 +436,25 @@ impl MockLLMProviderBuilder {
     /// `Ok(true)` fires once the queue is empty.
     pub fn health_responds_with(mut self, result: AgentResult<bool>) -> Self {
         self.state.health_responses.push_back(result);
+        self
+    }
+
+    /// Make the first `n` calls to [`LLMProvider::chat`] return a transient
+    /// error (`AgentError::Other("transient cloud error (injected)")`) before
+    /// falling back to the normal response queue.
+    ///
+    /// Useful for testing the orchestrator retry mechanism without touching the
+    /// queued-response infrastructure.
+    ///
+    /// # Example
+    /// ```rust,ignore
+    /// let mock = MockLLMProvider::builder()
+    ///     .fail_first_n_calls(2)   // first 2 calls fail
+    ///     .respond_with("ok")
+    ///     .build();
+    /// ```
+    pub fn fail_first_n_calls(mut self, n: u32) -> Self {
+        self.state.fail_first_n = n;
         self
     }
 

@@ -65,6 +65,15 @@ pub struct OrchestratorConfig {
     pub routing_policy: RoutingPolicy,
     /// The cloud provider to use for fallback (e.g., "openai")
     pub cloud_provider: String,
+    /// How many times to retry a cloud call that returns a transient error
+    /// before propagating the failure as a hard rejection.
+    ///
+    /// `0` means no retries: the first cloud failure is immediately fatal.
+    pub cloud_retry_attempts: u32,
+    /// Delay between retry attempts, in milliseconds.
+    ///
+    /// Set to `0` in unit tests to keep them instantaneous.
+    pub cloud_retry_delay_ms: u64,
 }
 
 impl Default for OrchestratorConfig {
@@ -77,6 +86,8 @@ impl Default for OrchestratorConfig {
             idle_timeout: Duration::from_secs(300),
             routing_policy: RoutingPolicy::default(),
             cloud_provider: "openai".to_string(),
+            cloud_retry_attempts: 2,
+            cloud_retry_delay_ms: 0,
         }
     }
 }
@@ -96,6 +107,16 @@ pub struct InferenceOrchestrator {
     config: OrchestratorConfig,
     model_pool: ModelPool,
     hardware: HardwareCapability,
+    /// When `true`, all requests bypass routing policy and go directly to
+    /// cloud regardless of local admission status.
+    ///
+    /// Activate in production with [`set_force_cloud`] during a local
+    /// hardware outage or memory emergency.  Cleared by passing `false`.
+    force_cloud: bool,
+    /// Test-only injection counter: the next N cloud calls will be simulated
+    /// as transient failures before succeeding.  In production code this is
+    /// always `0`.  Use [`inject_cloud_failures`] from tests.
+    cloud_call_fails: usize,
 }
 
 impl InferenceOrchestrator {
@@ -117,6 +138,8 @@ impl InferenceOrchestrator {
             config,
             model_pool,
             hardware,
+            force_cloud: false,
+            cloud_call_fails: 0,
         }
     }
 
@@ -128,7 +151,44 @@ impl InferenceOrchestrator {
             config,
             model_pool,
             hardware,
+            force_cloud: false,
+            cloud_call_fails: 0,
         }
+    }
+
+    /// Activate (or deactivate) the global cloud-downgrade switch.
+    ///
+    /// When `enabled` is `true`, **all subsequent `infer()` calls** bypass the
+    /// configured [`RoutingPolicy`] and go directly to cloud, regardless of
+    /// local memory availability.  This is the recommended "break-glass"
+    /// mechanism for local hardware outages.
+    ///
+    /// Calling `set_force_cloud(false)` restores normal routing.
+    pub fn set_force_cloud(&mut self, enabled: bool) {
+        self.force_cloud = enabled;
+    }
+
+    /// Returns `true` when the global cloud-downgrade switch is active.
+    pub fn is_force_cloud(&self) -> bool {
+        self.force_cloud
+    }
+
+    /// Inject `n` simulated transient cloud failures for testing.
+    ///
+    /// The next `n` cloud calls made by [`execute_cloud`] will return a
+    /// simulated failure before the retry loop eventually succeeds (or
+    /// exhausts retries).  This field is always `0` in production paths.
+    ///
+    /// # Example
+    /// ```rust,ignore
+    /// // Fail once, then succeed on the first retry.
+    /// orch.inject_cloud_failures(1);
+    /// let result = orch.infer(&request);
+    /// assert_eq!(result.cloud_attempt_count, 2);
+    /// ```
+    #[cfg(test)]
+    pub fn inject_cloud_failures(&mut self, n: usize) {
+        self.cloud_call_fails = n;
     }
 
     /// The single entry point for inference.
@@ -140,6 +200,14 @@ impl InferenceOrchestrator {
     /// In this Phase 1 implementation, actual model execution is simulated.
     /// Real backend integration (MLX, OpenAI) will be wired in Phase 2.
     pub fn infer(&mut self, request: &InferenceRequest) -> InferenceResult {
+        // ── Global downgrade switch ──────────────────────────────────────────
+        // When force_cloud is active the entire routing pipeline is bypassed:
+        // admission control, model pool eviction and policy resolution are all
+        // skipped.  Every request goes straight to the cloud retry path.
+        if self.force_cloud {
+            return self.execute_cloud(request, &self.config.cloud_provider.clone());
+        }
+
         // Step 1: Evict idle models to free memory before admission check
         self.model_pool.evict_idle();
 
@@ -180,26 +248,78 @@ impl InferenceOrchestrator {
                         model_id: model_id.clone(),
                     },
                     actual_precision: request.preferred_precision,
+                    cloud_attempt_count: 0,
                 }
             }
-            RoutingDecision::UseCloud { provider } => InferenceResult {
-                output: format!(
-                    "[cloud:{}] Inference result for: {}",
-                    provider, request.prompt
-                ),
-                routed_to: RoutedBackend::Cloud {
-                    provider: provider.clone(),
-                },
-                actual_precision: request.preferred_precision,
-            },
+            RoutingDecision::UseCloud { provider } => {
+                self.execute_cloud(request, &provider.clone())
+            }
             RoutingDecision::Rejected { reason } => InferenceResult {
                 output: format!("[rejected] {}", reason),
                 routed_to: RoutedBackend::Rejected {
                     reason: reason.clone(),
                 },
                 actual_precision: request.preferred_precision,
+                cloud_attempt_count: 0,
             },
         }
+    }
+
+    /// Execute a cloud inference call with automatic retry on transient failure.
+    ///
+    /// Makes up to `1 + config.cloud_retry_attempts` attempts.  Between each
+    /// attempt it sleeps for `config.cloud_retry_delay_ms` milliseconds (set
+    /// to `0` in tests for instant retries).
+    ///
+    /// # Phase 1 note
+    /// Real cloud clients are not yet wired in Phase 1, so "success" vs
+    /// "failure" is determined by `cloud_call_fails` (a test-only injection
+    /// counter; always `0` in production paths).  In Phase 2 this method will
+    /// call the cloud LLM client and inspect returned errors.
+    fn execute_cloud(&mut self, request: &InferenceRequest, provider: &str) -> InferenceResult {
+        let max_attempts = 1 + self.config.cloud_retry_attempts as usize;
+        let delay = Duration::from_millis(self.config.cloud_retry_delay_ms);
+
+        for attempt in 1..=max_attempts {
+            // Phase 1 simulation: check whether this call is injected to fail.
+            if self.cloud_call_fails > 0 {
+                self.cloud_call_fails -= 1;
+                if attempt < max_attempts {
+                    // Transient failure — delay then retry.
+                    if !delay.is_zero() {
+                        std::thread::sleep(delay);
+                    }
+                    continue;
+                }
+                // All retries exhausted.
+                let reason = format!(
+                    "Cloud provider '{}' failed after {} attempt(s)",
+                    provider, attempt
+                );
+                return InferenceResult {
+                    output: format!("[rejected] {}", reason),
+                    routed_to: RoutedBackend::Rejected { reason },
+                    actual_precision: request.preferred_precision,
+                    cloud_attempt_count: attempt,
+                };
+            }
+
+            // Success path.
+            return InferenceResult {
+                output: format!(
+                    "[cloud:{}] Inference result for: {}",
+                    provider, request.prompt
+                ),
+                routed_to: RoutedBackend::Cloud {
+                    provider: provider.to_string(),
+                },
+                actual_precision: request.preferred_precision,
+                cloud_attempt_count: attempt,
+            };
+        }
+
+        // Unreachable in practice, but satisfies the compiler.
+        unreachable!("execute_cloud loop must return before here")
     }
 
     /// Evaluate whether a local backend can admit this request based on
@@ -311,6 +431,8 @@ mod tests {
             idle_timeout: Duration::from_secs(300),
             routing_policy: RoutingPolicy::LocalFirstWithCloudFallback,
             cloud_provider: "openai".to_string(),
+            cloud_retry_attempts: 2,
+            cloud_retry_delay_ms: 0,
         }
     }
 
@@ -436,6 +558,8 @@ mod tests {
             idle_timeout: Duration::from_secs(600),
             routing_policy: RoutingPolicy::CostOptimized,
             cloud_provider: "anthropic".to_string(),
+            cloud_retry_attempts: 3,
+            cloud_retry_delay_ms: 500,
         };
         let json = serde_json::to_string(&config).unwrap();
         let back: OrchestratorConfig = serde_json::from_str(&json).unwrap();
@@ -596,6 +720,133 @@ mod tests {
                 provider: "openai".into()
             },
             "Low priority in defer band should fall back to cloud"
+        );
+    }
+
+    // ── Retry mechanism tests ────────────────────────────────────────────────
+
+    /// Cloud succeeds on the second attempt after one injected transient failure.
+    /// `cloud_attempt_count` must equal 2.
+    #[test]
+    fn test_cloud_retry_succeeds_after_one_failure() {
+        let mut config = test_config();
+        config.cloud_retry_attempts = 2;
+        config.cloud_retry_delay_ms = 0;
+        let mut orch = InferenceOrchestrator::with_hardware(config, test_hardware());
+
+        // force_cloud guarantees we always go through execute_cloud regardless of memory.
+        orch.set_force_cloud(true);
+        // Inject 1 failure: attempt 1 fails, attempt 2 succeeds.
+        orch.inject_cloud_failures(1);
+
+        let req = InferenceRequest::new("model", "retry test", 500);
+        let result = orch.infer(&req);
+
+        assert_eq!(
+            result.routed_to,
+            RoutedBackend::Cloud { provider: "openai".into() },
+            "cloud should succeed on retry"
+        );
+        assert_eq!(result.cloud_attempt_count, 2, "should have taken 2 attempts");
+    }
+
+    /// When all retries are exhausted the result is `Rejected`.
+    #[test]
+    fn test_cloud_retry_exhausted_returns_rejected() {
+        let mut config = test_config();
+        config.cloud_retry_attempts = 1; // max 2 attempts total
+        config.cloud_retry_delay_ms = 0;
+        let mut orch = InferenceOrchestrator::with_hardware(config, test_hardware());
+
+        orch.set_force_cloud(true);
+        // Inject 3 failures — more than max_attempts (2), so all retries exhaust.
+        orch.inject_cloud_failures(3);
+
+        let req = InferenceRequest::new("model", "exhausted", 500);
+        let result = orch.infer(&req);
+
+        assert!(
+            matches!(result.routed_to, RoutedBackend::Rejected { .. }),
+            "all retries exhausted should give Rejected"
+        );
+        assert_eq!(result.cloud_attempt_count, 2, "should record all 2 attempts");
+        assert!(result.output.contains("failed after"));
+    }
+
+    /// With `cloud_retry_attempts = 0`, the first cloud failure is immediately fatal.
+    #[test]
+    fn test_zero_retries_propagates_first_cloud_failure() {
+        let mut config = test_config();
+        config.cloud_retry_attempts = 0; // no retries
+        config.cloud_retry_delay_ms = 0;
+        let mut orch = InferenceOrchestrator::with_hardware(config, test_hardware());
+
+        orch.set_force_cloud(true);
+        orch.inject_cloud_failures(1);
+
+        let result = orch.infer(&InferenceRequest::new("model", "no-retry", 500));
+        assert!(
+            matches!(result.routed_to, RoutedBackend::Rejected { .. }),
+            "zero retries: first failure should be immediately rejected"
+        );
+        assert_eq!(result.cloud_attempt_count, 1);
+    }
+
+    // ── Global downgrade switch tests ────────────────────────────────────────
+
+    /// `force_cloud = true` overrides `LocalFirstWithCloudFallback` even when
+    /// local memory is plentiful.
+    #[test]
+    fn test_force_cloud_overrides_local_first_policy() {
+        let mut orch = InferenceOrchestrator::with_hardware(test_config(), test_hardware());
+        // No models loaded → local would normally be chosen.
+        assert_eq!(orch.allocated_memory_mb(), 0);
+
+        orch.set_force_cloud(true);
+        assert!(orch.is_force_cloud());
+
+        let result = orch.infer(&InferenceRequest::new("llama-3-7b", "Hello", 4_096));
+        assert_eq!(
+            result.routed_to,
+            RoutedBackend::Cloud { provider: "openai".into() },
+            "force_cloud should override LocalFirst even with free memory"
+        );
+        // No model should have been loaded locally.
+        assert_eq!(orch.loaded_model_count(), 0);
+    }
+
+    /// `force_cloud = true` also overrides `LocalOnly` policy.
+    #[test]
+    fn test_force_cloud_overrides_local_only_policy() {
+        let mut config = test_config();
+        config.routing_policy = RoutingPolicy::LocalOnly;
+        let mut orch = InferenceOrchestrator::with_hardware(config, test_hardware());
+
+        orch.set_force_cloud(true);
+
+        let result = orch.infer(&InferenceRequest::new("llama-3-7b", "Urgent", 4_096));
+        assert_eq!(
+            result.routed_to,
+            RoutedBackend::Cloud { provider: "openai".into() },
+            "force_cloud should override LocalOnly policy"
+        );
+    }
+
+    /// Clearing the switch with `set_force_cloud(false)` restores normal routing.
+    #[test]
+    fn test_clearing_force_cloud_restores_normal_routing() {
+        let mut orch = InferenceOrchestrator::with_hardware(test_config(), test_hardware());
+
+        orch.set_force_cloud(true);
+        orch.set_force_cloud(false);
+        assert!(!orch.is_force_cloud());
+
+        // With a small request and empty local memory, routing should pick local.
+        let result = orch.infer(&InferenceRequest::new("llama-3-7b", "Back to normal", 4_096));
+        assert_eq!(
+            result.routed_to,
+            RoutedBackend::Local { model_id: "llama-3-7b".into() },
+            "after clearing force_cloud, routing should be local again"
         );
     }
 }

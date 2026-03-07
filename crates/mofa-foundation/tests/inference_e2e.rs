@@ -400,3 +400,91 @@ async fn was_called_transitions_from_false_to_true_on_first_invocation() {
 
     assert!(mock.was_called(), "should be marked called after chat()");
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// § 8  Retry mechanism
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// `fail_first_n_calls(1)` causes the first `chat()` call to fail with a typed
+/// transient error.  The second call succeeds with the default canned response.
+///
+/// This mirrors the orchestrator contract: one queued failure → retry succeeds.
+#[tokio::test]
+async fn fail_first_n_calls_1_errors_first_then_succeeds() {
+    let mock = MockLLMProvider::builder().fail_first_n_calls(1).build();
+
+    // First call: transient failure.
+    let first = mock.chat(ChatCompletionRequest::new("m").user("first")).await;
+    assert!(first.is_err(), "first call with fail_first_n=1 should error");
+    match first.unwrap_err() {
+        AgentError::Other(msg) => assert!(msg.contains("transient"), "error must say 'transient': {msg}"),
+        other => panic!("unexpected error variant: {other:?}"),
+    }
+
+    // Second call: normal success (counter now zero, falls through to default).
+    let second = mock.chat(ChatCompletionRequest::new("m").user("second")).await.unwrap();
+    assert_eq!(second.content(), Some("This is a mock response."));
+
+    // Both calls are recorded.
+    assert_eq!(mock.chat_call_count(), 2);
+}
+
+/// `fail_first_n_calls(2)` fails the first two calls, then succeeds on the third.
+#[tokio::test]
+async fn fail_first_n_calls_2_errors_twice_then_succeeds() {
+    let mock = MockLLMProvider::builder().fail_first_n_calls(2).build();
+
+    let r1 = mock.chat(ChatCompletionRequest::new("m").user("1")).await;
+    let r2 = mock.chat(ChatCompletionRequest::new("m").user("2")).await;
+    let r3 = mock.chat(ChatCompletionRequest::new("m").user("3")).await;
+
+    assert!(r1.is_err(), "call 1 should fail");
+    assert!(r2.is_err(), "call 2 should fail");
+    assert!(r3.is_ok(),  "call 3 should succeed after counter is exhausted");
+    assert_eq!(mock.chat_call_count(), 3);
+}
+
+/// The failure counter interleaves correctly with the queued-response mechanism.
+///
+/// Queue: [n_fails=1], then respond_with("after-retry").
+/// Expected: call 1 → Err, call 2 → "after-retry".
+#[tokio::test]
+async fn fail_first_n_calls_interleaves_with_queued_responses() {
+    let mock = MockLLMProvider::builder()
+        .fail_first_n_calls(1)
+        .respond_with("after-retry")
+        .build();
+
+    let r1 = mock.chat(ChatCompletionRequest::new("m").user("fail")).await;
+    let r2 = mock.chat(ChatCompletionRequest::new("m").user("ok")).await.unwrap();
+
+    assert!(r1.is_err(), "first call should be the injected failure");
+    assert_eq!(r2.content(), Some("after-retry"), "second call should get queued response");
+    assert_eq!(mock.chat_call_count(), 2);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// § 9  Global downgrade switch — MockLLMProvider observability
+// ─────────────────────────────────────────────────────────────────────────────
+// The following tests verify the MockLLMProvider correctly tracks call counts
+// in scenarios that mirror the force_cloud path exercised in the orchestrator.
+// Full integration coverage of force_cloud routing is in orchestrator.rs tests.
+
+/// When a mock is called repeatedly its call count always increases monotonically,
+/// independent of `fail_first_n`.  This guarantees the downgrade path accounts
+/// for every attempt.
+#[tokio::test]
+async fn chat_call_count_increases_for_every_attempt_including_failures() {
+    let mock = MockLLMProvider::builder().fail_first_n_calls(3).build();
+
+    for i in 0..5 {
+        let _ = mock.chat(ChatCompletionRequest::new("m").user(format!("req-{i}"))).await;
+    }
+
+    assert_eq!(
+        mock.chat_call_count(),
+        5,
+        "all 5 calls should be recorded even when the first 3 fail"
+    );
+}
+
