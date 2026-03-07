@@ -127,9 +127,9 @@ impl PriorityScheduler {
 
             // 检查是否需要抢占 — 内联以避免死锁
             // Check for preemption — inlined to avoid deadlock
-            if let Some(&load) = agent_load.get(&target_agent) {
-                if load > 0 {
-                    if let Some(tasks_on_agent) = agent_tasks.get(&target_agent) {
+            if let Some(&load) = agent_load.get(&target_agent)
+                && load > 0
+                    && let Some(tasks_on_agent) = agent_tasks.get(&target_agent) {
                         let preemptable_task = tasks_on_agent
                             .iter()
                             .filter(|tid| task_status.get(*tid) == Some(&SchedulingStatus::Running))
@@ -193,8 +193,6 @@ impl PriorityScheduler {
                             }
                         }
                     }
-                }
-            }
 
             // 发送任务给目标智能体
             // Send task to the target agent

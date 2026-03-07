@@ -48,8 +48,10 @@ impl fmt::Display for SensitiveDataCategory {
 /// Strategy for redacting detected sensitive data.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[non_exhaustive]
+#[derive(Default)]
 pub enum RedactionStrategy {
     /// Mask with asterisks, preserving partial structure (e.g. `j***@example.com`)
+    #[default]
     Mask,
     /// Replace with a deterministic hash prefix (8 hex chars)
     Hash,
@@ -59,11 +61,6 @@ pub enum RedactionStrategy {
     Replace(String),
 }
 
-impl Default for RedactionStrategy {
-    fn default() -> Self {
-        Self::Mask
-    }
-}
 
 /// A single match of sensitive data within a text.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

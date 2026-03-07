@@ -1072,23 +1072,20 @@ impl ContextCompressor for HierarchicalCompressor {
                             .temperature(0.3)
                             .max_tokens(256);
 
-                    match self.llm.chat(summary_request).await {
-                        Ok(response) => {
-                            if let Some(summary) = response.content() {
-                                let summary_msg = ChatMessage {
-                                    role: msg.role.clone(),
-                                    content: Some(format!("[Compressed] {}", summary)),
-                                    tool_call_id: None,
-                                    tool_calls: None,
-                                };
-                                let summary_tokens = self.count_tokens(&[summary_msg.clone()]);
-                                if current_tokens + summary_tokens <= max_tokens {
-                                    compressed.push(summary_msg);
-                                    current_tokens += summary_tokens;
-                                }
+                    if let Ok(response) = self.llm.chat(summary_request).await {
+                        if let Some(summary) = response.content() {
+                            let summary_msg = ChatMessage {
+                                role: msg.role.clone(),
+                                content: Some(format!("[Compressed] {}", summary)),
+                                tool_call_id: None,
+                                tool_calls: None,
+                            };
+                            let summary_tokens = self.count_tokens(&[summary_msg.clone()]);
+                            if current_tokens + summary_tokens <= max_tokens {
+                                compressed.push(summary_msg);
+                                current_tokens += summary_tokens;
                             }
                         }
-                        Err(_) => {}
                     }
                 }
             }

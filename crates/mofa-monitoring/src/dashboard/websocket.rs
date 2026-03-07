@@ -337,14 +337,14 @@ impl WebSocketHandler {
                     // Messages from direct send
                     Some(msg) = rx.recv() => {
                         let json = serde_json::to_string(&msg).unwrap_or_default();
-                        if sender.send(Message::Text(json.into())).await.is_err() {
+                        if sender.send(Message::Text(json)).await.is_err() {
                             break;
                         }
                     }
                     // Messages from broadcast
                     Ok(msg) = broadcast_rx.recv() => {
                         let json = serde_json::to_string(&msg).unwrap_or_default();
-                        if sender.send(Message::Text(json.into())).await.is_err() {
+                        if sender.send(Message::Text(json)).await.is_err() {
                             break;
                         }
                     }

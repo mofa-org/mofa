@@ -149,8 +149,8 @@ impl AdapterRegistry {
             }
 
             // Step 3: Check quantization support (hard constraint, if specified)
-            if let Some(ref required_quant) = config.required_quantization {
-                if !adapter.supports_quantization(required_quant) {
+            if let Some(ref required_quant) = config.required_quantization
+                && !adapter.supports_quantization(required_quant) {
                     rejections.push(RejectionReason::QuantizationMismatch {
                         required: required_quant.clone(),
                         supported: adapter
@@ -160,7 +160,6 @@ impl AdapterRegistry {
                             .collect(),
                     });
                 }
-            }
 
             // Step 4: Check hardware compatibility (hard constraint)
             if !adapter.supports_hardware(hardware) {
@@ -171,14 +170,13 @@ impl AdapterRegistry {
             }
 
             // Step 5: Check priority threshold (soft constraint)
-            if let Some(min_priority) = config.min_priority {
-                if adapter.priority < min_priority {
+            if let Some(min_priority) = config.min_priority
+                && adapter.priority < min_priority {
                     rejections.push(RejectionReason::PriorityTooLow {
                         required_min_priority: min_priority,
                         adapter_priority: adapter.priority,
                     });
                 }
-            }
 
             // Step 6: Check experimental flag
             if adapter.experimental && !config.allow_experimental {
