@@ -74,6 +74,16 @@ impl MockTool {
             .push((input_pattern, error_msg.to_string()));
     }
 
+    /// Returns the most recent call's input, or `None` if never called.
+    pub async fn last_call(&self) -> Option<ToolInput> {
+        self.call_history.read().await.last().cloned()
+    }
+
+    /// Returns the Nth call (0-indexed), or `None` if out of bounds.
+    pub async fn nth_call(&self, n: usize) -> Option<ToolInput> {
+        self.call_history.read().await.get(n).cloned()
+    }
+
     /// Add a sequence of results. Each call consumes the next entry;
     /// when exhausted, falls back to `stubbed_result`.
     pub async fn add_result_sequence(&self, results: Vec<ToolResult>) {
