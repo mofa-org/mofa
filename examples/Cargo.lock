@@ -673,6 +673,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "capability_discovery"
+version = "0.1.0"
+dependencies = [
+ "mofa-foundation",
+ "mofa-kernel",
+ "tokio",
+]
+
+[[package]]
 name = "castaway"
 version = "0.2.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1143,6 +1152,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "convert_case"
+version = "0.10.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "633458d4ef8c78b72454de2d54fd6ab2e60f9e02be22f3c6104cdc8a4e0fceb9"
+dependencies = [
+ "unicode-segmentation",
+]
+
+[[package]]
 name = "coordination_demo"
 version = "0.1.0"
 dependencies = [
@@ -1152,12 +1170,6 @@ dependencies = [
  "serde",
  "tokio",
  "uuid",
-name = "convert_case"
-version = "0.10.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "633458d4ef8c78b72454de2d54fd6ab2e60f9e02be22f3c6104cdc8a4e0fceb9"
-dependencies = [
- "unicode-segmentation",
 ]
 
 [[package]]
@@ -3657,10 +3669,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "message_graph_validation"
-version = "0.1.0"
-dependencies = [
- "anyhow",
 name = "memmem"
 version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
