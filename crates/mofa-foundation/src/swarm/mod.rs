@@ -3,6 +3,8 @@
 pub mod config;
 pub mod dag;
 pub mod patterns;
+pub mod executor;
+
 
 // Re-export core types
 pub use config::{
@@ -11,3 +13,4 @@ pub use config::{
 };
 pub use dag::{DependencyEdge, DependencyKind, SwarmSubtask, SubtaskDAG, SubtaskStatus};
 pub use patterns::CoordinationPattern;
+pub use executor::{run_sequential, run_parallel, ExecutionResult, SubtaskOutput};
