@@ -151,6 +151,9 @@ pub mod config;
 // Registry
 pub mod registry;
 
+// Agent capability manifest
+pub mod manifest;
+
 // 工具系统
 // Tool system
 
@@ -181,7 +184,7 @@ pub use core::{
     AgentPluginSupport,
     MoFAAgent,
 };
-pub use error::{AgentError, AgentResult};
+pub use error::{AgentError, AgentReport, AgentResult, IntoAgentReport};
 pub use traits::{AgentMetadata, AgentStats, DynAgent, HealthStatus};
 pub use types::event::execution as execution_events;
 // Event type constants are available via types::event::lifecycle, types::event::execution, etc.
@@ -204,7 +207,9 @@ pub use types::{
     GlobalError,
     GlobalEvent,
     GlobalMessage,
+    GlobalReport,
     GlobalResult,
+    IntoGlobalReport,
     InputType,
     InterruptResult,
     LLMProvider,
@@ -235,6 +240,9 @@ pub use components::{
 // 重新导出工厂接口
 // Re-export factory interface
 pub use registry::AgentFactory;
+
+// Re-export manifest types
+pub use manifest::{AgentManifest, AgentManifestBuilder};
 
 // 重新导出配置
 // Re-export configuration

@@ -11,9 +11,11 @@ members = [
     "crates/mofa-sdk",
     "crates/mofa-ffi",
     "crates/mofa-extra",
+    "tests",
     "crates/mofa-gateway",
     "crates/mofa-smith",
     "crates/mofa-integrations",
+    "crates/mofa-local-llm",
 ]
 exclude = ["examples"]
 [workspace.lints.rust]
@@ -27,10 +29,12 @@ version = "0.1.0"
 edition = "2024"
 authors = ["MoFA Contributors <contributors@mofa.org>"]
 license = "Apache-2.0"
+rust-version = "1.85"
 repository = "https://github.com/mofa-org/mofa"
 homepage = "https://github.com/mofa-org/mofa"
 
 [workspace.dependencies]
+reqwest = "0.12"
 async-trait = "0.1"
 # axum 0.8+ required — uses {param} route syntax (not :param)
 axum = "0"
@@ -60,12 +64,19 @@ libloading = "0.8"
 sha2 = "0.10"
 tempfile = "3.8"
 
-# OpenTelemetry for distributed tracing
-opentelemetry = { version = "0.21", features = ["trace", "metrics"] }
-opentelemetry_sdk = { version = "0.21", features = ["rt-tokio"] }
-opentelemetry-otlp = { version = "0.14", features = ["tonic"] }
-opentelemetry-jaeger = { version = "0.20", features = ["rt-tokio"] }
-tracing-opentelemetry = "0.22"
+# OpenTelemetry for distributed tracing (compatible versions)
+opentelemetry = { version = "0.27", features = ["trace", "metrics"] }
+opentelemetry_sdk = { version = "0.27", features = ["rt-tokio"] }
+opentelemetry-otlp = { version = "0.27", features = ["tonic"] }
+opentelemetry-semantic-conventions = "0.27"
+opentelemetry-jaeger = { version = "0.26", features = ["rt-tokio"] }
+tracing-opentelemetry = "0.28"
+
+# HTTP and observability
+prometheus = "0.13"
+tower = "0.5"
+tower-http = { version = "0.6", features = ["cors", "trace", "compression-gzip"] }
+
 rand = "0.8"
 chrono = { version = "0.4", features = ["serde"] }
 hex = "0.4"

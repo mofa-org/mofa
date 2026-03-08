@@ -6,6 +6,7 @@
 use async_trait::async_trait;
 use futures::Stream;
 use mofa_kernel::agent::error::{AgentError, AgentResult};
+use mofa_kernel::workflow::telemetry::{DebugEvent, TelemetryEmitter};
 use mofa_kernel::workflow::{
     Command, CompiledGraph, ControlFlow, END, EdgeTarget, GraphConfig, GraphState, NodeFunc,
     Reducer, RuntimeContext, START, StateUpdate, StepResult, StreamEvent,
@@ -429,6 +430,7 @@ impl<S: GraphState + 'static> mofa_kernel::workflow::StateGraph for StateGraphIm
             policies: Arc::new(self.policies),
             circuit_states: new_circuit_registry(),
             parallelism_semaphore: Arc::new(Semaphore::new(max_par)),
+            telemetry: None,
         })
     }
 }
@@ -456,9 +458,17 @@ pub struct CompiledGraphImpl<S: GraphState> {
     /// 并行分支的并发信号量
     /// Concurrency semaphore for parallel branches
     parallelism_semaphore: Arc<Semaphore>,
+    /// Optional telemetry emitter for runtime checkpoint events.
+    telemetry: Option<Arc<dyn TelemetryEmitter>>,
 }
 
 impl<S: GraphState> CompiledGraphImpl<S> {
+    /// Attach a telemetry emitter for checkpoint events during invocation.
+    pub fn with_telemetry(mut self, telemetry: Arc<dyn TelemetryEmitter>) -> Self {
+        self.telemetry = Some(telemetry);
+        self
+    }
+
     fn build_node_context(base: &RuntimeContext, node_id: &str) -> RuntimeContext {
         RuntimeContext {
             execution_id: base.execution_id.clone(),
@@ -561,7 +571,7 @@ impl<S: GraphState> CompiledGraphImpl<S> {
                                 return Ok(vec![target.clone()]);
                             }
                         }
-                        
+
                         // No route matched — report error instead of silent fallback
                         let update_keys: Vec<&str> = command.updates.iter().map(|u| u.key.as_str()).collect();
                         let route_keys: Vec<&String> = routes.keys().collect();
@@ -628,6 +638,29 @@ impl<S: GraphState + 'static> CompiledGraph<S, serde_json::Value> for CompiledGr
                 return Err(AgentError::Internal("Recursion limit reached".to_string()));
             }
             ctx.decrement_steps().await;
+            if let Some(emitter) = &self.telemetry
+                && emitter.is_enabled()
+                && ctx.config.checkpoint_enabled
+                && ctx.config.checkpoint_interval > 0
+            {
+                let remaining = ctx.remaining_steps.current().await;
+                let steps_taken = ctx.config.max_steps.saturating_sub(remaining);
+                if steps_taken > 0 && steps_taken % ctx.config.checkpoint_interval == 0 {
+                    emitter
+                        .emit(DebugEvent::StateChange {
+                            node_id: "__checkpoint__".to_string(),
+                            timestamp_ms: DebugEvent::now_ms(),
+                            key: "__checkpoint_step".to_string(),
+                            old_value: None,
+                            new_value: serde_json::json!({
+                                "step": steps_taken,
+                                "interval": ctx.config.checkpoint_interval,
+                                "remaining_steps": remaining
+                            }),
+                        })
+                        .await;
+                }
+            }
 
             // Execute nodes
             if current_nodes.len() == 1 {
@@ -760,7 +793,7 @@ impl<S: GraphState + 'static> CompiledGraph<S, serde_json::Value> for CompiledGr
                                         return Ok(vec![target.clone()]);
                                     }
                                 }
-                                
+
                                 // No route matched — report error instead of silent fallback
                                 let update_keys: Vec<&str> = command.updates.iter().map(|u| u.key.as_str()).collect();
                                 let route_keys: Vec<&String> = routes.keys().collect();
@@ -1082,10 +1115,13 @@ impl<S: GraphState + 'static> CompiledGraph<S, serde_json::Value> for CompiledGr
 mod tests {
     use super::*;
     use futures::StreamExt;
+    use mofa_kernel::workflow::telemetry::TelemetryEmitter;
+    use mofa_kernel::workflow::GraphConfig;
     use mofa_kernel::workflow::{JsonState, StateGraph};
     use serde_json::json;
     use std::collections::HashMap;
     use std::sync::atomic::{AtomicUsize, Ordering};
+    use tokio::sync::Mutex;
     use tokio::time::{Duration, sleep};
 
     // Simple test node
@@ -1173,6 +1209,51 @@ mod tests {
 
         fn name(&self) -> &str {
             "flag_reader"
+        }
+    }
+
+    struct LoopNode;
+
+    #[async_trait]
+    impl NodeFunc<JsonState> for LoopNode {
+        async fn call(&self, state: &mut JsonState, _ctx: &RuntimeContext) -> AgentResult<Command> {
+            let count = state
+                .get_value::<serde_json::Value>("count")
+                .and_then(|v| v.as_u64())
+                .unwrap_or(0)
+                + 1;
+            let command = Command::new().update("count", json!(count));
+            if count >= 12 {
+                Ok(command.return_())
+            } else {
+                Ok(command.goto("loop"))
+            }
+        }
+
+        fn name(&self) -> &str {
+            "loop"
+        }
+    }
+
+    #[derive(Default)]
+    struct CollectingEmitter {
+        events: Arc<Mutex<Vec<DebugEvent>>>,
+    }
+
+    #[async_trait]
+    impl TelemetryEmitter for CollectingEmitter {
+        async fn emit(&self, event: DebugEvent) {
+            self.events.lock().await.push(event);
+        }
+    }
+
+    struct DisabledEmitter;
+
+    #[async_trait]
+    impl TelemetryEmitter for DisabledEmitter {
+        async fn emit(&self, _event: DebugEvent) {}
+        fn is_enabled(&self) -> bool {
+            false
         }
     }
 
