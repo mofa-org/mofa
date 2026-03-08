@@ -17,10 +17,9 @@ use mofa_foundation::security::{
     DefaultAuthorizer, KeywordModerator, RbacPolicy, RegexPiiDetector, RegexPiiRedactor,
     RegexPromptGuard, Role,
 };
-use mofa_runtime::security::{
-    SecurityAuditLogger, SecurityConfig, SecurityService,
-    traits::{Authorizer, ContentModerator, PiiDetector, PiiRedactor, PromptGuard},
-    types::{ModerationVerdict, RedactionStrategy, SecurityFailMode},
+use mofa_kernel::security::{
+    Authorizer, ContentModerator, ContentPolicy, ModerationVerdict, PiiDetector, PiiRedactor,
+    PromptGuard, RedactionStrategy, SensitiveDataCategory,
 };
 
 /// Real-world scenario: Customer Support Agent with Security Governance
@@ -97,11 +96,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let pii_redactor = RegexPiiRedactor::new()
         .with_default_strategy(RedactionStrategy::Hash) // Hash for audit trail
         .with_category_strategy(
-            mofa_runtime::security::types::SensitiveDataCategory::SSN,
+            SensitiveDataCategory::Ssn,
             RedactionStrategy::Remove, // Remove SSNs entirely (GDPR requirement)
         )
         .with_category_strategy(
-            mofa_runtime::security::types::SensitiveDataCategory::CreditCard,
+            SensitiveDataCategory::CreditCard,
             RedactionStrategy::Hash, // Hash credit cards
         );
 
@@ -133,12 +132,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("  Detected {} PII items", detections.len());
 
     // Redact PII before sending to LLM
-    let redacted_ticket = pii_redactor.redact(customer_ticket, RedactionStrategy::Hash).await?;
+    let redacted_ticket = pii_redactor.redact(customer_ticket, &RedactionStrategy::Hash).await?;
     println!("  Redacted ticket (safe for LLM):");
-    println!("    {}", redacted_ticket.text.lines().take(5).collect::<Vec<_>>().join("\n    "));
-    println!("  Redacted {} items across {} categories", 
-             redacted_ticket.redaction_count, 
-             redacted_ticket.redacted_categories.len());
+    println!("    {}", redacted_ticket.redacted_text.lines().take(5).collect::<Vec<_>>().join("\n    "));
+    println!("  Redacted {} items", redacted_ticket.matches.len());
     println!();
 
     // ============================================================================
@@ -160,13 +157,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         ("Flagged content", "This is urgent and needs escalation"),
     ];
 
+    let policy = ContentPolicy::default();
     for (label, message) in messages {
-        let result = moderator.moderate(message).await?;
-        match &result.verdict {
+        let result = moderator.moderate(message, &policy).await?;
+        match &result {
             ModerationVerdict::Allow => println!("  {}: Allowed", label),
-            ModerationVerdict::Flag(reason) => println!("  {}: Flagged - {}", label, reason),
-            ModerationVerdict::Block(reason) => println!("  {}: Blocked - {}", label, reason),
-            _ => println!("  {}: Unknown verdict", label),
+            ModerationVerdict::Flag { reason, .. } => println!("  {}: Flagged - {}", label, reason),
+            ModerationVerdict::Block { reason, .. } => println!("  {}: Blocked - {}", label, reason),
         }
     }
     println!();
@@ -185,44 +182,27 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     ];
 
     for (label, query) in queries {
-        let result = prompt_guard.check_injection(query).await?;
-        if result.is_suspicious {
-            println!("  {}: INJECTION DETECTED (confidence: {:.2})", label, result.confidence);
-            if let Some(reason) = &result.reason {
+        let result = prompt_guard.check_prompt(query).await?;
+        match &result {
+            ModerationVerdict::Block { reason, .. } => {
+                println!("  {}: INJECTION DETECTED", label);
                 println!("      Reason: {}", reason);
             }
-        } else {
-            println!("  {}: Safe (confidence: {:.2})", label, result.confidence);
+            _ => println!("  {}: Safe", label),
         }
     }
     println!();
 
     // ============================================================================
-    // Step 5: Complete Security Service Integration
+    // Step 5: Security Components Summary
     // ============================================================================
-    println!("Step 5: Creating production security service...");
+    println!("Step 5: Security components configured...");
 
-    let security_config = SecurityConfig::strict() // Production: strict mode
-        .with_rbac_enabled(true)
-        .with_pii_redaction_enabled(true)
-        .with_content_moderation_enabled(true)
-        .with_prompt_guard_enabled(true)
-        .with_audit_logging_enabled(true)
-        .with_fail_mode(SecurityFailMode::FailClosed); // Fail closed for security
-
-    let security_service = SecurityService::new(security_config)
-        .with_authorizer(authorizer)
-        .with_pii_detector(pii_detector)
-        .with_pii_redactor(pii_redactor)
-        .with_content_moderator(moderator)
-        .with_prompt_guard(prompt_guard);
-
-    println!("  Security Service configured:");
-    println!("     - RBAC: {}", security_service.is_rbac_enabled());
-    println!("     - PII Redaction: {}", security_service.is_pii_enabled());
-    println!("     - Content Moderation: {}", security_service.is_moderation_enabled());
-    println!("     - Prompt Guard: {}", security_service.is_prompt_guard_enabled());
-    println!("     - Fail Mode: {:?}", security_service.config().fail_mode);
+    println!("  Security Components:");
+    println!("     - RBAC: Enabled (DefaultAuthorizer)");
+    println!("     - PII Redaction: Enabled (RegexPiiRedactor)");
+    println!("     - Content Moderation: Enabled (KeywordModerator)");
+    println!("     - Prompt Guard: Enabled (RegexPromptGuard)");
     println!();
 
     // ============================================================================
@@ -240,57 +220,38 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("  ┌─────────────────────────────────────────────────┐");
     println!("  │ 1. RBAC Check: Agent permission verification    │");
     
-    if let Some(auth) = security_service.authorizer() {
-        let perm_result = auth
-            .check_permission("agent-alice", "execute", "tool:respond_ticket")
-            .await?;
-        if perm_result.is_allowed() {
-            println!("  │    Permission granted                              │");
-            SecurityAuditLogger::log_permission_check(
-                "agent-alice", "execute", "tool:respond_ticket", true, None
-            );
-        }
+    let perm_result = authorizer
+        .check_permission("agent-alice", "execute", "tool:respond_ticket")
+        .await?;
+    if perm_result.is_allowed() {
+        println!("  │    Permission granted                              │");
     }
 
     println!("  │ 2. PII Detection & Redaction                      │");
-    if let Some(redactor) = security_service.pii_redactor() {
-        let redacted = redactor.redact(customer_message, RedactionStrategy::Hash).await?;
-        println!("  │    Redacted {} PII items                        │", redacted.redaction_count);
-        SecurityAuditLogger::log_pii_redaction(
-            redacted.redaction_count,
-            redacted.redacted_categories
-        );
-    }
+    let redacted = pii_redactor.redact(customer_message, &RedactionStrategy::Hash).await?;
+    println!("  │    Redacted {} PII items                        │", redacted.matches.len());
 
     println!("  │ 3. Content Moderation                              │");
-    if let Some(moderator) = security_service.content_moderator() {
-        let mod_result = moderator.moderate(customer_message).await?;
-        match &mod_result.verdict {
-            ModerationVerdict::Allow => println!("  │    Content allowed                                 │"),
-            ModerationVerdict::Flag(r) => {
-                println!("  │    Content flagged: {}                    │", r);
-                SecurityAuditLogger::log_content_moderation("flag", Some(r));
-            }
-            ModerationVerdict::Block(r) => {
-                println!("  │    Content blocked: {}                     │", r);
-                SecurityAuditLogger::log_content_moderation("block", Some(r));
-            }
-            _ => println!("  │    Unknown moderation verdict                    │"),
+    let mod_result = moderator.moderate(customer_message, &policy).await?;
+    match &mod_result {
+        ModerationVerdict::Allow => println!("  │    Content allowed                                 │"),
+        ModerationVerdict::Flag { reason, .. } => {
+            println!("  │    Content flagged: {}                    │", reason);
+        }
+        ModerationVerdict::Block { reason, .. } => {
+            println!("  │    Content blocked: {}                     │", reason);
         }
     }
 
     println!("  │ 4. Prompt Injection Check                          │");
-    if let Some(guard) = security_service.prompt_guard() {
-        let injection_result = guard.check_injection(customer_message).await?;
-        if injection_result.is_suspicious {
+    let injection_result = prompt_guard.check_prompt(customer_message).await?;
+    if injection_result.is_blocked() {
+        if let ModerationVerdict::Block { reason, .. } = &injection_result {
             println!("  │    Injection detected!                           │");
-            SecurityAuditLogger::log_prompt_injection(
-                injection_result.confidence,
-                injection_result.reason.as_deref().unwrap_or("unknown")
-            );
-        } else {
-            println!("  │    No injection detected                         │");
+            println!("  │    Reason: {}                                    │", reason);
         }
+    } else {
+        println!("  │    No injection detected                         │");
     }
 
     println!("  │ 5. Message approved for LLM processing          │");

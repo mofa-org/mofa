@@ -9,7 +9,7 @@
 //! Run with: `cargo run --example rbac_only`
 
 use mofa_foundation::security::{DefaultAuthorizer, RbacPolicy, Role};
-use mofa_runtime::security::traits::Authorizer;
+use mofa_kernel::security::Authorizer;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {

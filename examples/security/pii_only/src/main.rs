@@ -10,9 +10,9 @@
 //! Run with: `cargo run --example pii_only`
 
 use mofa_foundation::security::{RegexPiiDetector, RegexPiiRedactor};
-use mofa_runtime::security::{
-    traits::{PiiDetector, PiiRedactor},
-    types::{RedactionStrategy, SensitiveDataCategory},
+use mofa_kernel::security::{
+    PiiDetector, PiiRedactor, RedactionMatch, RedactionResult, RedactionStrategy,
+    SensitiveDataCategory,
 };
 
 #[tokio::main]
@@ -49,11 +49,21 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     println!("  Detected {} PII items:\n", detections.len());
     for detection in &detections {
-        println!("    - {}: {} (position: {}-{})", 
-                 detection.category.name(), 
-                 detection.value,
-                 detection.start,
-                 detection.end);
+        println!(
+            "    - {}: {} (position: {}-{})",
+            match detection.category {
+                SensitiveDataCategory::Email => "email",
+                SensitiveDataCategory::Phone => "phone",
+                SensitiveDataCategory::CreditCard => "credit_card",
+                SensitiveDataCategory::Ssn => "ssn",
+                SensitiveDataCategory::IpAddress => "ip_address",
+                SensitiveDataCategory::ApiKey => "api_key",
+                SensitiveDataCategory::Custom(ref s) => s,
+            },
+            detection.original,
+            detection.start,
+            detection.end
+        );
     }
     println!();
 
@@ -66,20 +76,35 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         ("Mask", RedactionStrategy::Mask),
         ("Hash", RedactionStrategy::Hash),
         ("Remove", RedactionStrategy::Remove),
-        ("Replace", RedactionStrategy::Replace),
+        ("Replace", RedactionStrategy::Replace("[REDACTED]".to_string())),
     ];
 
     for (name, strategy) in strategies {
         let redactor = RegexPiiRedactor::new()
-            .with_default_strategy(strategy);
+            .with_default_strategy(strategy.clone());
 
-        let result = redactor.redact(sample_text, strategy).await?;
+        let result = redactor.redact(sample_text, &strategy).await?;
 
         println!("  Strategy: {}", name);
-        println!("    Redacted {} items", result.redaction_count);
-        println!("    Categories: {}", result.redacted_categories.join(", "));
+        println!("    Redacted {} items", result.matches.len());
+        let categories: Vec<String> = result
+            .matches
+            .iter()
+            .map(|m| match m.category {
+                SensitiveDataCategory::Email => "email".to_string(),
+                SensitiveDataCategory::Phone => "phone".to_string(),
+                SensitiveDataCategory::CreditCard => "credit_card".to_string(),
+                SensitiveDataCategory::Ssn => "ssn".to_string(),
+                SensitiveDataCategory::IpAddress => "ip_address".to_string(),
+                SensitiveDataCategory::ApiKey => "api_key".to_string(),
+                SensitiveDataCategory::Custom(ref s) => format!("custom:{}", s),
+            })
+            .collect::<std::collections::HashSet<_>>()
+            .into_iter()
+            .collect();
+        println!("    Categories: {}", categories.join(", "));
         println!("    Sample output:");
-        println!("      {}", result.text.lines().skip(2).next().unwrap_or(""));
+        println!("      {}", result.redacted_text.lines().skip(2).next().unwrap_or(""));
         println!();
     }
 
@@ -91,7 +116,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let gdpr_redactor = RegexPiiRedactor::new()
         .with_default_strategy(RedactionStrategy::Hash)
         .with_category_strategy(
-            SensitiveDataCategory::SSN,
+            SensitiveDataCategory::Ssn,
             RedactionStrategy::Remove, // GDPR: Remove SSNs entirely
         )
         .with_category_strategy(
@@ -103,13 +128,28 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             RedactionStrategy::Hash, // Hash credit cards
         );
 
-    let gdpr_result = gdpr_redactor.redact(sample_text, RedactionStrategy::Hash).await?;
+    let gdpr_result = gdpr_redactor.redact(sample_text, &RedactionStrategy::Hash).await?;
 
     println!("  GDPR-compliant redaction:");
-    println!("    Redacted {} items", gdpr_result.redaction_count);
-    println!("    Categories: {}", gdpr_result.redacted_categories.join(", "));
+    println!("    Redacted {} items", gdpr_result.matches.len());
+    let categories: Vec<String> = gdpr_result
+        .matches
+        .iter()
+        .map(|m| match m.category {
+            SensitiveDataCategory::Email => "email".to_string(),
+            SensitiveDataCategory::Phone => "phone".to_string(),
+            SensitiveDataCategory::CreditCard => "credit_card".to_string(),
+            SensitiveDataCategory::Ssn => "ssn".to_string(),
+            SensitiveDataCategory::IpAddress => "ip_address".to_string(),
+            SensitiveDataCategory::ApiKey => "api_key".to_string(),
+            SensitiveDataCategory::Custom(ref s) => format!("custom:{}", s),
+        })
+        .collect::<std::collections::HashSet<_>>()
+        .into_iter()
+        .collect();
+    println!("    Categories: {}", categories.join(", "));
     println!("    Redacted text:");
-    for line in gdpr_result.text.lines().skip(2).take(8) {
+    for line in gdpr_result.redacted_text.lines().skip(2).take(8) {
         if !line.trim().is_empty() {
             println!("      {}", line);
         }
@@ -136,11 +176,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let ticket_redacted = RegexPiiRedactor::new()
         .with_default_strategy(RedactionStrategy::Mask)
-        .redact(ticket, RedactionStrategy::Mask)
+        .redact(ticket, &RedactionStrategy::Mask)
         .await?;
 
     println!("    Redacted text (safe for LLM):");
-    println!("      {}", ticket_redacted.text.lines().skip(1).next().unwrap_or(""));
+    println!("      {}", ticket_redacted.redacted_text.lines().skip(1).next().unwrap_or(""));
     println!();
 
     // Scenario 2: Log file with PII
@@ -156,11 +196,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let log_redacted = RegexPiiRedactor::new()
         .with_default_strategy(RedactionStrategy::Hash)
-        .redact(log_entry, RedactionStrategy::Hash)
+        .redact(log_entry, &RedactionStrategy::Hash)
         .await?;
 
     println!("    Redacted log (safe for storage):");
-    for line in log_redacted.text.lines().skip(1).take(3) {
+    for line in log_redacted.redacted_text.lines().skip(1).take(3) {
         if !line.trim().is_empty() {
             println!("      {}", line);
         }
@@ -179,7 +219,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let start = Instant::now();
     for _ in 0..100 {
-        let _ = redactor.redact(&test_text, RedactionStrategy::Mask).await?;
+        let _ = redactor.redact(&test_text, &RedactionStrategy::Mask).await?;
     }
     let elapsed = start.elapsed();
 
