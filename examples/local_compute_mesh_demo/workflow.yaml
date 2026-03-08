@@ -1,0 +1,44 @@
+# Workflow Configuration for Local Compute Mesh Demo
+#
+# This workflow demonstrates the compute mesh pipeline:
+# User Prompt → Workflow Engine → Inference Router → Local Backend → Response
+
+workflow:
+  name: local_compute_mesh_demo
+  description: Example workflow for demonstrating MoFA compute mesh architecture
+  version: "1.0"
+  steps:
+    - id: user_prompt
+      type: input
+      description: Accept user prompt
+
+    - id: workflow_processing
+      type: workflow
+      description: Process prompt through workflow engine
+
+    - id: generate_response
+      type: inference
+      prompt: "Explain photosynthesis in simple terms."
+
+    - id: response
+      type: output
+      description: Return generated response
+
+# Pipeline Architecture:
+#
+# User Prompt → Workflow Engine → Inference Router → Local Backend → Response
+#
+# This workflow demonstrates:
+# 1. User input handling
+# 2. Workflow processing
+# 3. Inference routing with prompt
+# 4. Response generation
+#
+# Running the demo:
+#   cargo run -p local_compute_mesh_demo
+#
+# Expected output:
+#   [workflow] executing step: generate_response
+#   [router] selected backend: local(llama-3-7b)
+#   [inference] generating response...
+#   [result] Photosynthesis is the process by which plants convert light into energy.
