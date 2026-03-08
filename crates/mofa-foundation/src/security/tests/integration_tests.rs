@@ -128,21 +128,23 @@ async fn test_public_chatbot_moderation() {
         .add_flagged("warning")
         .add_flagged("concern");
 
+    let policy = ContentPolicy::default();
+    
     // Legitimate query - should pass
     let query1 = "What is the weather forecast for tomorrow?";
-    let result1 = moderator.moderate(query1).await.unwrap();
-    assert!(matches!(result1.verdict, ModerationVerdict::Allow));
+    let result1 = moderator.moderate(query1, &policy).await.unwrap();
+    assert!(matches!(result1, ModerationVerdict::Allow));
 
     // Toxic content - should be blocked
     let query2 = "This is hate speech content";
-    let result2 = moderator.moderate(query2).await.unwrap();
-    assert!(result2.verdict.is_blocked());
+    let result2 = moderator.moderate(query2, &policy).await.unwrap();
+    assert!(result2.is_blocked());
 
     // Borderline content - should be flagged but allowed
     let query3 = "I have a concern about the service";
-    let result3 = moderator.moderate(query3).await.unwrap();
-    assert!(matches!(result3.verdict, ModerationVerdict::Flag(_)));
-    assert!(result3.verdict.is_allowed()); // Flagged but not blocked
+    let result3 = moderator.moderate(query3, &policy).await.unwrap();
+    assert!(matches!(result3, ModerationVerdict::Flag { .. }));
+    assert!(!result3.is_blocked()); // Flagged but not blocked
 }
 
 /// Test Scenario 4: Prompt injection defense in LLM agent
@@ -321,8 +323,9 @@ async fn test_edge_cases_and_error_handling() {
     // Case insensitivity
     let moderator = KeywordModerator::new()
         .add_blocked("SPAM");
-    let result = moderator.moderate("This is spam content").await.unwrap();
-    assert!(result.verdict.is_blocked());
+    let policy = ContentPolicy::default();
+    let result = moderator.moderate("This is spam content", &policy).await.unwrap();
+    assert!(result.is_blocked());
 }
 
 /// Test Scenario 8: Performance under load
@@ -357,9 +360,10 @@ async fn test_performance_under_load() {
     assert!(redaction_time.as_millis() < 2000, "Redaction should be fast");
 
     // Benchmark moderation
+    let policy = ContentPolicy::default();
     let start = Instant::now();
     for _ in 0..100 {
-        let _ = moderator.moderate(&test_text).await.unwrap();
+        let _ = moderator.moderate(&test_text, &policy).await.unwrap();
     }
     let moderation_time = start.elapsed();
     println!("Moderation: {:?} for 100 iterations", moderation_time);
