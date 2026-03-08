@@ -21,6 +21,7 @@ use std::time::Duration;
 
 use mofa_foundation::inference::Precision;
 use mofa_foundation::inference::model_pool::ModelPool;
+use mofa_foundation::inference::RequestPriority;
 
 fn main() {
     println!("=== MoFA ModelPool Lifecycle Demo ===\n");
@@ -43,13 +44,13 @@ fn main() {
     // ---------------------------------------------------------------
     println!("--- Loading models A and B ---");
 
-    let evicted = pool.load("model-A", 4096, Precision::F16);
+    let evicted = pool.load("model-A", 4096, Precision::F16, RequestPriority::Normal);
     println!("  Loaded model-A (4096 MB, F16)  evicted: {:?}", evicted);
 
     // Small sleep so model-B has a strictly later timestamp than model-A
     thread::sleep(Duration::from_millis(10));
 
-    let evicted = pool.load("model-B", 2048, Precision::Q8);
+    let evicted = pool.load("model-B", 2048, Precision::Q8, RequestPriority::Normal);
     println!("  Loaded model-B (2048 MB, Q8)   evicted: {:?}", evicted);
 
     println!(
@@ -65,7 +66,7 @@ fn main() {
     // ---------------------------------------------------------------
     println!("--- Loading model-C (should evict LRU model-A) ---");
 
-    let evicted = pool.load("model-C", 8192, Precision::F32);
+    let evicted = pool.load("model-C", 8192, Precision::F32, RequestPriority::Normal);
     println!("  Loaded model-C (8192 MB, F32)  evicted: {:?}", evicted);
     println!(
         "  model-A loaded? {}  model-B loaded? {}  model-C loaded? {}",
@@ -89,7 +90,7 @@ fn main() {
     pool.touch("model-B");
     thread::sleep(Duration::from_millis(10));
 
-    let evicted = pool.load("model-D", 1024, Precision::Q4);
+    let evicted = pool.load("model-D", 1024, Precision::Q4, RequestPriority::Normal);
     println!("  Loaded model-D (1024 MB, Q4)   evicted: {:?}", evicted);
     println!(
         "  model-B loaded? {}  model-C loaded? {}  model-D loaded? {}",
@@ -146,9 +147,9 @@ fn main() {
     // 7. Memory-pressure eviction (evict_until_below)
     // ---------------------------------------------------------------
     println!("--- Memory-pressure eviction ---");
-    pool.load("heavy-1", 5000, Precision::F16);
+    pool.load("heavy-1", 5000, Precision::F16, RequestPriority::Normal);
     thread::sleep(Duration::from_millis(10));
-    pool.load("heavy-2", 7000, Precision::F16);
+    pool.load("heavy-2", 7000, Precision::F16, RequestPriority::Normal);
     println!(
         "  Loaded heavy-1 (5000 MB) and heavy-2 (7000 MB)  total={} MB",
         pool.total_memory_mb()
