@@ -159,10 +159,10 @@ impl AgentProcessManager {
                 info!("Successfully terminated process {}", pid);
                 Ok(())
             } else {
-                return Err(CliError::StateError(format!(
+                Err(CliError::StateError(format!(
                     "Failed to terminate process {}",
                     pid
-                )));
+                )))
             }
         }
 

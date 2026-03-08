@@ -189,7 +189,6 @@ impl Tool {
         description: impl Into<String>,
         parameters: serde_json::Value,
     ) -> Self {
-        let parameters = parameters;
         Self {
             tool_type: "function".to_string(),
             function: FunctionDefinition {
@@ -230,7 +229,6 @@ pub enum ToolChoice {
 pub struct ToolChoiceFunction {
     pub name: String,
 }
-
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct ChatCompletionRequest {
@@ -442,7 +440,6 @@ pub struct EmbeddingResponse {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(untagged)]
-
 pub enum EmbeddingInput {
     Single(String),
     Multiple(Vec<String>),
