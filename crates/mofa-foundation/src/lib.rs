@@ -10,6 +10,9 @@ pub mod orchestrator;
 // hardware discovery module
 pub mod hardware;
 
+// memory-budgeted scheduler for inference orchestration
+pub mod scheduler;
+
 // adapter registry module - Runtime model adapter discovery
 pub mod adapter;
 
@@ -53,10 +56,10 @@ pub mod rag;
 // swarm module - Multi-agent swarm orchestration
 pub mod swarm;
 // Structured output: JSON schema validator and agent executor
-pub mod schema_validator;
 pub mod agent_executor;
-pub use schema_validator::{SchemaError, SchemaValidator};
+pub mod schema_validator;
 pub use agent_executor::{AgentExecutor, ExecutorError};
+pub use schema_validator::{SchemaError, SchemaValidator};
 // Security governance - PII redaction, content moderation, prompt guard
 pub mod security;
 
@@ -71,10 +74,10 @@ pub mod metrics;
 
 // Re-export metrics types
 pub use metrics::{
-    AgentMetrics, BusinessMetrics, CircuitBreakerEvent, CircuitBreakerMetrics,
-    CircuitBreakerState, LatencyPercentiles, MetricBuilder, MetricsBackend, MetricsCollector,
-    ModelPoolEvent, ModelPoolMetrics, RetryMetrics, RoutingMetrics, SchedulerMetrics, StepStatus,
-    StepTiming, TokenUsage, ToolMetrics, WorkflowMetrics,
+    AgentMetrics, BusinessMetrics, CircuitBreakerEvent, CircuitBreakerMetrics, CircuitBreakerState,
+    LatencyPercentiles, MetricBuilder, MetricsBackend, MetricsCollector, ModelPoolEvent,
+    ModelPoolMetrics, RetryMetrics, RoutingMetrics, SchedulerMetrics, StepStatus, StepTiming,
+    TokenUsage, ToolMetrics, WorkflowMetrics,
 };
 
 // Re-export config types
