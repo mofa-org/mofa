@@ -562,10 +562,18 @@ impl<S: GraphState> CompiledGraphImpl<S> {
                             }
                         }
                         
-                        // No route matched
+                        // No route matched — report error instead of silent fallback
+                        let update_keys: Vec<&str> = command.updates.iter().map(|u| u.key.as_str()).collect();
+                        let route_keys: Vec<&String> = routes.keys().collect();
+                        warn!(
+                            node_id = current_node,
+                            ?update_keys,
+                            ?route_keys,
+                            "Conditional routing: no route matched for node"
+                        );
                         Err(AgentError::NotFound(format!(
-                            "No conditional route matched for node '{}'",
-                            current_node
+                            "No conditional route matched for node '{}': update keys {:?}, available routes {:?}",
+                            current_node, update_keys, route_keys
                         )))
                     }
                     None => Ok(vec![]),
@@ -753,10 +761,18 @@ impl<S: GraphState + 'static> CompiledGraph<S, serde_json::Value> for CompiledGr
                                     }
                                 }
                                 
-                                // No route matched
+                                // No route matched — report error instead of silent fallback
+                                let update_keys: Vec<&str> = command.updates.iter().map(|u| u.key.as_str()).collect();
+                                let route_keys: Vec<&String> = routes.keys().collect();
+                                warn!(
+                                    node_id = current_node,
+                                    ?update_keys,
+                                    ?route_keys,
+                                    "Conditional routing: no route matched for node"
+                                );
                                 Err(AgentError::NotFound(format!(
-                                    "No conditional route matched for node '{}'",
-                                    current_node
+                                    "No conditional route matched for node '{}': update keys {:?}, available routes {:?}",
+                                    current_node, update_keys, route_keys
                                 )))
                             }
                             None => Ok(vec![]),
@@ -887,11 +903,11 @@ impl<S: GraphState + 'static> CompiledGraph<S, serde_json::Value> for CompiledGr
                     }
 
                     match get_next_nodes(&node_id, &command) {
-                        Ok(next) => next_nodes.extend(next),
+                        Ok(nodes) => next_nodes.extend(nodes),
                         Err(e) => {
                             let _ = tx
                                 .send(Ok(StreamEvent::Error {
-                                    node_id: Some(node_id),
+                                    node_id: Some(node_id.clone()),
                                     error: e.to_string(),
                                 }))
                                 .await;
@@ -979,11 +995,11 @@ impl<S: GraphState + 'static> CompiledGraph<S, serde_json::Value> for CompiledGr
                         }
 
                         match get_next_nodes(&node_id, &command) {
-                            Ok(next) => next_nodes.extend(next),
+                            Ok(nodes) => next_nodes.extend(nodes),
                             Err(e) => {
                                 let _ = tx
                                     .send(Ok(StreamEvent::Error {
-                                        node_id: Some(node_id),
+                                        node_id: Some(node_id.clone()),
                                         error: e.to_string(),
                                     }))
                                     .await;
