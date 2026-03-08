@@ -1,7 +1,9 @@
 pub mod analyzer;
 pub mod config;
 pub mod dag;
+pub mod hitl;
 pub mod patterns;
+pub mod scheduler;
 pub mod telemetry;
 
 pub use analyzer::TaskAnalyzer;
@@ -10,8 +12,11 @@ pub use config::{
     SwarmResult, SwarmStatus,
 };
 pub use dag::{DependencyEdge, DependencyKind, SubtaskDAG, SubtaskStatus, SwarmSubtask};
+pub use hitl::{
+    ApprovalDecision, ApprovalHandler, ApprovalOutcome, ApprovalRequest,
+    ChannelApprovalHandler, ExecutionResult, SubtaskOutput, run_sequential_with_hitl,
+};
 pub use patterns::CoordinationPattern;
-pub mod scheduler;
 pub use scheduler::{
     FailurePolicy, ParallelScheduler, SchedulerSummary, SequentialScheduler, SubtaskExecutorFn,
     SwarmScheduler, SwarmSchedulerConfig, TaskExecutionResult, TaskOutcome,
