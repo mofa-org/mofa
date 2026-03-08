@@ -65,6 +65,7 @@ impl EmbeddingProvider for DeterministicEmbeddingProvider {
 
 /// Chunking strategy used during document ingestion.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum ChunkingStrategy {
     /// Character-window chunking with overlap.
     Characters,

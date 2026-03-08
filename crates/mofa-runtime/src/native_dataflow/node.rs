@@ -14,6 +14,9 @@ use std::time::Duration;
 use tokio::sync::{RwLock, mpsc};
 use tracing::{debug, info};
 
+/// Default capacity for the internal event buffer of a native node.
+pub const DEFAULT_NODE_EVENT_BUFFER_SIZE: usize = 1024;
+
 /// Configuration for a native dataflow node.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NodeConfig {
@@ -40,7 +43,7 @@ impl Default for NodeConfig {
             name: "native_node".to_string(),
             inputs: vec![],
             outputs: vec![],
-            event_buffer_size: 1024,
+            event_buffer_size: DEFAULT_NODE_EVENT_BUFFER_SIZE,
             default_timeout: Duration::from_secs(30),
             custom_config: HashMap::new(),
         }
@@ -49,6 +52,7 @@ impl Default for NodeConfig {
 
 /// Lifecycle state of a native node.
 #[derive(Debug, Clone, PartialEq)]
+#[non_exhaustive]
 pub enum NodeState {
     Created,
     Initializing,

@@ -117,7 +117,7 @@ impl MedicalKnowledgeTool {
     /// Save medical knowledge to a file
     async fn save_knowledge_to_file(&self, knowledge: &MedicalKnowledge) -> PluginResult<()> {
         let content = serde_json::to_string_pretty(knowledge)?;
-        let path = self.knowledge_path.read().unwrap();
+        let path = self.knowledge_path.read().unwrap_or_else(|e| e.into_inner());
         fs::write(&*path, content)?; // 解引用RwLockReadGuard
         // Dereference RwLockReadGuard
         Ok(())
@@ -165,7 +165,7 @@ impl ToolExecutor for MedicalKnowledgeTool {
 
                 // 更新内存中的知识
                 // Update knowledge in memory
-                let mut knowledge = self.knowledge.write().unwrap();
+                let mut knowledge = self.knowledge.write().unwrap_or_else(|e| e.into_inner());
                 knowledge.diagnoses = new_knowledge.diagnoses;
                 knowledge.treatments = new_knowledge.treatments;
 
@@ -184,7 +184,7 @@ impl ToolExecutor for MedicalKnowledgeTool {
                     )
                 })?;
 
-                let knowledge = self.knowledge.read().unwrap();
+                let knowledge = self.knowledge.read().unwrap_or_else(|e| e.into_inner());
 
                 if let Some(diagnosis) = knowledge
                     .diagnoses
@@ -209,7 +209,7 @@ impl ToolExecutor for MedicalKnowledgeTool {
                     )
                 })?;
 
-                let knowledge = self.knowledge.read().unwrap();
+                let knowledge = self.knowledge.read().unwrap_or_else(|e| e.into_inner());
 
                 if let Some(treatment) = knowledge
                     .treatments
@@ -235,7 +235,7 @@ impl ToolExecutor for MedicalKnowledgeTool {
                 } else {
                     // 使用当前知识文件路径
                     // Use current knowledge file path
-                    let path = self.knowledge_path.read().unwrap();
+                    let path = self.knowledge_path.read().unwrap_or_else(|e| e.into_inner());
                     path.to_str()
                         .unwrap_or("medical_knowledge.json")
                         .to_string()
@@ -250,7 +250,7 @@ impl ToolExecutor for MedicalKnowledgeTool {
 
                 // 更新内存中的知识
                 // Update knowledge in memory
-                let mut knowledge = self.knowledge.write().unwrap();
+                let mut knowledge = self.knowledge.write().unwrap_or_else(|e| e.into_inner());
                 knowledge.diagnoses = new_knowledge.diagnoses;
                 knowledge.treatments = new_knowledge.treatments;
 
