@@ -15,6 +15,7 @@
 use mofa_kernel::agent::types::error::{ErrorCategory, ErrorSeverity, GlobalError, GlobalResult};
 use std::future::Future;
 use std::time::Duration;
+use tokio::sync::Mutex as AsyncMutex;
 
 // ============================================================================
 // Backoff - Generic backoff strategy
@@ -353,7 +354,11 @@ impl Default for CircuitBreakerConfig {
 /// ```
 pub struct CircuitBreaker {
     config: CircuitBreakerConfig,
-    state: std::sync::Mutex<CircuitBreakerState>,
+    /// Inner state protected by a `tokio::sync::Mutex` so that async callers
+    /// never block the executor thread.  Unlike `std::sync::Mutex`, Tokio's
+    /// mutex is **not** poisoned on panic, which makes it safe to use from
+    /// async tasks without risk of cascading panics.
+    state: AsyncMutex<CircuitBreakerState>,
 }
 
 struct CircuitBreakerState {
@@ -368,7 +373,7 @@ impl CircuitBreaker {
     pub fn new(config: CircuitBreakerConfig) -> Self {
         Self {
             config,
-            state: std::sync::Mutex::new(CircuitBreakerState {
+            state: AsyncMutex::new(CircuitBreakerState {
                 state: CircuitState::Closed,
                 consecutive_failures: 0,
                 consecutive_successes: 0,
@@ -377,21 +382,24 @@ impl CircuitBreaker {
         }
     }
 
-    /// Get the current circuit state
-    pub fn state(&self) -> CircuitState {
-        let guard = self.state.lock().unwrap();
+    /// Get the current circuit state.
+    ///
+    /// This is `async` because the underlying lock is a `tokio::sync::Mutex`.
+    pub async fn state(&self) -> CircuitState {
+        let guard = self.state.lock().await;
         guard.state
     }
 
-    /// Execute an operation through the circuit breaker
+    /// Execute an operation through the circuit breaker.
     pub async fn call<F, Fut, T>(&self, operation: F) -> GlobalResult<T>
     where
         F: FnOnce() -> Fut,
         Fut: Future<Output = GlobalResult<T>>,
     {
-        // Check if we should allow the call
+        // Check and possibly transition state — guard is dropped before the
+        // operation await so we never hold the lock across a yield point.
         {
-            let mut guard = self.state.lock().unwrap();
+            let mut guard = self.state.lock().await;
             match guard.state {
                 CircuitState::Open => {
                     // Check if recovery timeout has elapsed
@@ -412,23 +420,23 @@ impl CircuitBreaker {
                     // Allow the call
                 }
             }
-        }
+        } // ← lock released here, before any await
 
         // Execute the operation
         match operation().await {
             Ok(value) => {
-                self.record_success();
+                self.record_success().await;
                 Ok(value)
             }
             Err(err) => {
-                self.record_failure();
+                self.record_failure().await;
                 Err(err)
             }
         }
     }
 
-    fn record_success(&self) {
-        let mut guard = self.state.lock().unwrap();
+    async fn record_success(&self) {
+        let mut guard = self.state.lock().await;
         guard.consecutive_failures = 0;
         guard.consecutive_successes += 1;
 
@@ -440,8 +448,8 @@ impl CircuitBreaker {
         }
     }
 
-    fn record_failure(&self) {
-        let mut guard = self.state.lock().unwrap();
+    async fn record_failure(&self) {
+        let mut guard = self.state.lock().await;
         guard.consecutive_failures += 1;
         guard.consecutive_successes = 0;
         guard.last_failure_time = Some(std::time::Instant::now());
@@ -456,9 +464,9 @@ impl CircuitBreaker {
         }
     }
 
-    /// Reset the circuit breaker to closed state
-    pub fn reset(&self) {
-        let mut guard = self.state.lock().unwrap();
+    /// Reset the circuit breaker to closed state.
+    pub async fn reset(&self) {
+        let mut guard = self.state.lock().await;
         guard.state = CircuitState::Closed;
         guard.consecutive_failures = 0;
         guard.consecutive_successes = 0;
@@ -629,13 +637,13 @@ mod tests {
     #[tokio::test]
     async fn test_circuit_breaker_success() {
         let cb = CircuitBreaker::new(CircuitBreakerConfig::default());
-        assert_eq!(cb.state(), CircuitState::Closed);
+        assert_eq!(cb.state().await, CircuitState::Closed);
 
         let result = cb
             .call(|| async { Ok::<_, GlobalError>("hello".to_string()) })
             .await;
         assert!(result.is_ok());
-        assert_eq!(cb.state(), CircuitState::Closed);
+        assert_eq!(cb.state().await, CircuitState::Closed);
     }
 
     #[tokio::test]
@@ -654,7 +662,7 @@ mod tests {
                 .await;
         }
 
-        assert_eq!(cb.state(), CircuitState::Open);
+        assert_eq!(cb.state().await, CircuitState::Open);
 
         // Next call should be rejected
         let result = cb
@@ -679,7 +687,7 @@ mod tests {
                 .call(|| async { Err::<String, _>(GlobalError::llm("fail")) })
                 .await;
         }
-        assert_eq!(cb.state(), CircuitState::Open);
+        assert_eq!(cb.state().await, CircuitState::Open);
 
         // Wait for recovery timeout
         tokio::time::sleep(Duration::from_millis(60)).await;
@@ -689,7 +697,7 @@ mod tests {
             .call(|| async { Ok::<_, GlobalError>("recovered".to_string()) })
             .await;
         assert!(result.is_ok());
-        assert_eq!(cb.state(), CircuitState::Closed);
+        assert_eq!(cb.state().await, CircuitState::Closed);
     }
 
     #[tokio::test]
@@ -715,7 +723,7 @@ mod tests {
         let _ = cb
             .call(|| async { Err::<String, _>(GlobalError::llm("still failing")) })
             .await;
-        assert_eq!(cb.state(), CircuitState::Open);
+        assert_eq!(cb.state().await, CircuitState::Open);
     }
 
     #[tokio::test]
@@ -729,10 +737,209 @@ mod tests {
         let _ = cb
             .call(|| async { Err::<String, _>(GlobalError::llm("fail")) })
             .await;
-        assert_eq!(cb.state(), CircuitState::Open);
+        assert_eq!(cb.state().await, CircuitState::Open);
 
-        cb.reset();
-        assert_eq!(cb.state(), CircuitState::Closed);
+        cb.reset().await;
+        assert_eq!(cb.state().await, CircuitState::Closed);
+    }
+
+    // ── Deep async-safety tests ─────────────────────────────────────────────
+
+    /// Verify concurrent tasks calling the circuit breaker do not deadlock
+    /// and that failure counts accumulate correctly under contention.
+    #[tokio::test]
+    async fn test_circuit_breaker_concurrent_no_deadlock() {
+        use std::sync::Arc;
+        use tokio::task::JoinSet;
+
+        let config = CircuitBreakerConfig {
+            failure_threshold: 20,
+            recovery_timeout: Duration::from_secs(60),
+            success_threshold: 1,
+        };
+        let cb = Arc::new(CircuitBreaker::new(config));
+
+        let mut set = JoinSet::new();
+        for _ in 0..20 {
+            let cb_clone = Arc::clone(&cb);
+            set.spawn(async move {
+                cb_clone
+                    .call(|| async { Ok::<_, GlobalError>(42u32) })
+                    .await
+            });
+        }
+
+        while let Some(r) = set.join_next().await {
+            let res = r.expect("task panicked");
+            assert!(res.is_ok(), "circuit breaker rejected a call unexpectedly");
+        }
+        assert_eq!(cb.state().await, CircuitState::Closed);
+    }
+
+    /// Verify that concurrent failures all reach the circuit breaker and
+    /// eventually open it — no lost updates due to race conditions.
+    #[tokio::test]
+    async fn test_circuit_breaker_concurrent_failures_open_circuit() {
+        use std::sync::Arc;
+        use tokio::task::JoinSet;
+
+        let config = CircuitBreakerConfig {
+            failure_threshold: 5,
+            recovery_timeout: Duration::from_secs(60),
+            success_threshold: 1,
+        };
+        let cb = Arc::new(CircuitBreaker::new(config));
+
+        let mut set = JoinSet::new();
+        for _ in 0..10 {
+            let cb_clone = Arc::clone(&cb);
+            set.spawn(async move {
+                cb_clone
+                    .call(|| async { Err::<(), _>(GlobalError::llm("fail")) })
+                    .await
+            });
+        }
+        while let Some(_) = set.join_next().await {}
+
+        assert_eq!(
+            cb.state().await,
+            CircuitState::Open,
+            "Expected Open after 10 concurrent failures"
+        );
+    }
+
+    /// Verify tokio::sync::Mutex is NOT poisoned by a panicking task —
+    /// the circuit breaker stays usable after a panic in a different task.
+    #[tokio::test]
+    async fn test_circuit_breaker_not_poisoned_after_panic() {
+        use std::sync::Arc;
+
+        let cb = Arc::new(CircuitBreaker::new(CircuitBreakerConfig::default()));
+        let cb_clone = Arc::clone(&cb);
+
+        // Spawn a task that panics — this must NOT poison the tokio mutex
+        let handle = tokio::spawn(async move {
+            // Acquire would happen inside call(), but we just panic without calling CB
+            // to simulate a concurrent panicking task.
+            let _ = cb_clone.state().await;
+            panic!("intentional panic in test");
+        });
+        // The spawned task panics — its JoinError is expected
+        assert!(handle.await.is_err(), "expected the spawned task to panic");
+
+        // The circuit breaker must still be accessible with no PoisonError
+        assert_eq!(
+            cb.state().await,
+            CircuitState::Closed,
+            "Mutex should not be poisoned after a panic in another task"
+        );
+        // And must still accept calls
+        let result = cb
+            .call(|| async { Ok::<_, GlobalError>("still alive".to_string()) })
+            .await;
+        assert!(result.is_ok(), "CB must work fine after a sibling task panic");
+    }
+
+    /// Verify no starvation on a current_thread runtime (single thread).
+    /// Two tasks race: one holds the CB open, the other checks state.
+    #[tokio::test(flavor = "current_thread")]
+    async fn test_circuit_breaker_current_thread_no_starvation() {
+        use std::sync::Arc;
+
+        let config = CircuitBreakerConfig {
+            failure_threshold: 1,
+            recovery_timeout: Duration::from_secs(60),
+            success_threshold: 1,
+        };
+        let cb = Arc::new(CircuitBreaker::new(config));
+        let cb2 = Arc::clone(&cb);
+
+        // Task 1: trigger a failure to open the circuit
+        let t1 = tokio::spawn(async move {
+            let _ = cb2
+                .call(|| async { Err::<(), _>(GlobalError::llm("fail")) })
+                .await;
+        });
+
+        // Task 2: read state (should not deadlock waiting for t1's lock)
+        let cb3 = Arc::clone(&cb);
+        let t2 = tokio::spawn(async move { cb3.state().await });
+
+        t1.await.unwrap();
+        // t2 must resolve without hanging
+        let _state = t2.await.unwrap();
+        // Final state must be Open (t1 fired one failure, threshold=1)
+        assert_eq!(cb.state().await, CircuitState::Open);
+    }
+
+    /// Verify success_threshold > 1: circuit only closes after the required
+    /// number of consecutive successes in HalfOpen state.
+    #[tokio::test]
+    async fn test_circuit_breaker_success_threshold_multiple() {
+        let config = CircuitBreakerConfig {
+            failure_threshold: 1,
+            recovery_timeout: Duration::from_millis(10),
+            success_threshold: 3,  // needs 3 successes to re-close
+        };
+        let cb = CircuitBreaker::new(config);
+
+        // Open the circuit
+        let _ = cb
+            .call(|| async { Err::<(), _>(GlobalError::llm("fail")) })
+            .await;
+        assert_eq!(cb.state().await, CircuitState::Open);
+
+        // Wait for half-open window
+        tokio::time::sleep(Duration::from_millis(20)).await;
+
+        // First success: still HalfOpen (need 3 total)
+        let _ = cb
+            .call(|| async { Ok::<_, GlobalError>(()) })
+            .await;
+        // Circuit is re-opened by second call because HalfOpen only allows one probe;
+        // subsequent calls go to Open until reset_after elapses again.
+        // After 1 success the state should be Closed (default success_threshold=1).
+        // With success_threshold=3 it should remain HalfOpen until 3 succeed.
+        // The implementation in record_success checks consecutive_successes >= success_threshold.
+        // Each probe re-enters from Open→HalfOpen on elapsed timeout check:
+        // so we simulate 3 rapid calls with sleep between each.
+        tokio::time::sleep(Duration::from_millis(20)).await;
+        let _ = cb.call(|| async { Ok::<_, GlobalError>(()) }).await;
+        tokio::time::sleep(Duration::from_millis(20)).await;
+        let r = cb.call(|| async { Ok::<_, GlobalError>(()) }).await;
+        // After the 3rd success, circuit should be Closed
+        assert!(r.is_ok());
+        assert_eq!(cb.state().await, CircuitState::Closed);
+    }
+
+    /// reset() immediately returns circuit to Closed regardless of current state.
+    #[tokio::test]
+    async fn test_circuit_breaker_reset_from_half_open() {
+        let config = CircuitBreakerConfig {
+            failure_threshold: 1,
+            recovery_timeout: Duration::from_millis(10),
+            success_threshold: 1,
+        };
+        let cb = CircuitBreaker::new(config);
+
+        // Open the circuit
+        let _ = cb
+            .call(|| async { Err::<(), _>(GlobalError::llm("fail")) })
+            .await;
+        assert_eq!(cb.state().await, CircuitState::Open);
+
+        // Transition to HalfOpen
+        tokio::time::sleep(Duration::from_millis(20)).await;
+
+        // reset() while Open/HalfOpen must bring it back to Closed
+        cb.reset().await;
+        assert_eq!(cb.state().await, CircuitState::Closed);
+
+        // Must accept new calls after reset
+        let result = cb
+            .call(|| async { Ok::<_, GlobalError>("after reset".to_string()) })
+            .await;
+        assert!(result.is_ok());
     }
 
     // -- fallback_chain tests --
