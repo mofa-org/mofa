@@ -5,8 +5,7 @@
 //! Provides business-specific functions to extend the kernel's CoreAgentContext
 
 use mofa_kernel::agent::context::AgentContext;
-use mofa_runtime::security::traits::{Authorizer, AuthorizationResult};
-use mofa_runtime::security::error::{SecurityError, SecurityResult};
+use mofa_kernel::security::{Authorizer, AuthorizationResult, SecurityError, SecurityResult};
 use serde::{Serialize, de::DeserializeOwned};
 use std::collections::HashMap;
 use std::sync::Arc;

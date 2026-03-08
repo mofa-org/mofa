@@ -7,10 +7,9 @@ use crate::security::{
     DefaultAuthorizer, KeywordModerator, RbacPolicy, RegexPiiDetector, RegexPiiRedactor,
     RegexPromptGuard, Role,
 };
-use mofa_runtime::security::{
-    SecurityConfig, SecurityService,
-    traits::{Authorizer, ContentModerator, PiiDetector, PiiRedactor, PromptGuard},
-    types::{ModerationVerdict, RedactionStrategy, SecurityFailMode},
+use mofa_kernel::security::{
+    Authorizer, ContentModerator, ContentPolicy, ModerationVerdict, PiiDetector, PiiRedactor,
+    PromptGuard, RedactionStrategy,
 };
 
 /// Test Scenario 1: Multi-tenant SaaS with role-based access
@@ -82,11 +81,11 @@ async fn test_customer_support_pii_redaction() {
     let redactor = RegexPiiRedactor::new()
         .with_default_strategy(RedactionStrategy::Mask)
         .with_category_strategy(
-            mofa_runtime::security::types::SensitiveDataCategory::CreditCard,
+            mofa_kernel::security::SensitiveDataCategory::CreditCard,
             RedactionStrategy::Hash, // Hash credit cards for audit trail
         )
         .with_category_strategy(
-            mofa_runtime::security::types::SensitiveDataCategory::SSN,
+            mofa_kernel::security::SensitiveDataCategory::Ssn,
             RedactionStrategy::Remove, // Remove SSNs entirely
         );
 
@@ -100,18 +99,18 @@ async fn test_customer_support_pii_redaction() {
         Please help resolve this billing issue.
     "#;
 
-    let redacted = redactor.redact(ticket, RedactionStrategy::Mask).await.unwrap();
+    let redacted = redactor.redact(ticket, &RedactionStrategy::Mask).await.unwrap();
 
     // Verify PII was redacted
-    assert!(!redacted.text.contains("john.doe@example.com"));
-    assert!(!redacted.text.contains("(555) 123-4567"));
-    assert!(!redacted.text.contains("123-45-6789")); // SSN removed
-    assert!(redacted.text.contains("John Doe")); // Name preserved (not PII in this context)
-    assert!(redacted.redaction_count >= 3);
+    assert!(!redacted.redacted_text.contains("john.doe@example.com"));
+    assert!(!redacted.redacted_text.contains("(555) 123-4567"));
+    assert!(!redacted.redacted_text.contains("123-45-6789")); // SSN removed
+    assert!(redacted.redacted_text.contains("John Doe")); // Name preserved (not PII in this context)
+    assert!(redacted.matches.len() >= 3);
 
     // Verify context preserved
-    assert!(redacted.text.contains("billing issue"));
-    assert!(redacted.text.contains("Customer:"));
+    assert!(redacted.redacted_text.contains("billing issue"));
+    assert!(redacted.redacted_text.contains("Customer:"));
 }
 
 /// Test Scenario 3: Content moderation in public-facing chatbot
@@ -165,8 +164,8 @@ async fn test_llm_agent_injection_defense() {
     ];
 
     for query in legitimate_queries {
-        let result = guard.check_injection(query).await.unwrap();
-        assert!(!result.is_suspicious, "Legitimate query '{}' should not be flagged", query);
+        let result = guard.check_prompt(query).await.unwrap();
+        assert!(result.is_allowed(), "Legitimate query '{}' should not be flagged", query);
     }
 
     // Injection attempts - should be detected
@@ -178,15 +177,12 @@ async fn test_llm_agent_injection_defense() {
     ];
 
     for attempt in injection_attempts {
-        let result = guard.check_injection(attempt).await.unwrap();
-        // Injection attempts should show some detection signal (either suspicious flag or confidence > 0)
-        // Note: Some sophisticated attacks may have lower confidence, but should still be detected
+        let result = guard.check_prompt(attempt).await.unwrap();
+        // Injection attempts should be blocked
         assert!(
-            result.is_suspicious || result.confidence > 0.0,
-            "Injection attempt should show some detection signal: '{}' (suspicious: {}, confidence: {})",
-            attempt,
-            result.is_suspicious,
-            result.confidence
+            result.is_blocked(),
+            "Injection attempt should be blocked: '{}'",
+            attempt
         );
     }
 }
@@ -234,17 +230,18 @@ async fn test_end_to_end_security_pipeline() {
     assert!(perm_result.is_allowed(), "Agent should have permission");
 
     // Step 2: Redact PII
-    let redacted = pii_redactor.redact(customer_message, RedactionStrategy::Mask).await.unwrap();
-    assert!(redacted.redaction_count >= 2, "Should redact email and phone");
-    assert!(!redacted.text.contains("customer@example.com"));
+    let redacted = pii_redactor.redact(customer_message, &RedactionStrategy::Mask).await.unwrap();
+    assert!(redacted.matches.len() >= 2, "Should redact email and phone");
+    assert!(!redacted.redacted_text.contains("customer@example.com"));
 
     // Step 3: Moderate content
-    let mod_result = moderator.moderate(&redacted.text).await.unwrap();
-    assert!(mod_result.verdict.is_allowed(), "Clean content should pass");
+    let policy = ContentPolicy::default();
+    let mod_result = moderator.moderate(&redacted.redacted_text, &policy).await.unwrap();
+    assert!(mod_result.is_allowed(), "Clean content should pass");
 
     // Step 4: Check for injection
-    let injection_result = prompt_guard.check_injection(&redacted.text).await.unwrap();
-    assert!(!injection_result.is_suspicious, "Legitimate message should not be flagged");
+    let injection_result = prompt_guard.check_prompt(&redacted.redacted_text).await.unwrap();
+    assert!(injection_result.is_allowed(), "Legitimate message should not be flagged");
 
     println!("✅ End-to-end security pipeline test passed");
 }
@@ -319,7 +316,7 @@ async fn test_edge_cases_and_error_handling() {
     let unicode_text = "Email: 用户@例子.com, Phone: +1-555-123-4567";
     let detections = detector.detect(unicode_text).await.unwrap();
     // Should still detect phone number
-    assert!(detections.iter().any(|d| matches!(d.category, mofa_runtime::security::types::SensitiveDataCategory::Phone)));
+    assert!(detections.iter().any(|d| matches!(d.category, mofa_kernel::security::SensitiveDataCategory::Phone)));
 
     // Case insensitivity
     let moderator = KeywordModerator::new()
@@ -353,7 +350,7 @@ async fn test_performance_under_load() {
     // Benchmark redaction
     let start = Instant::now();
     for _ in 0..100 {
-        let _ = redactor.redact(&test_text, RedactionStrategy::Mask).await.unwrap();
+        let _ = redactor.redact(&test_text, &RedactionStrategy::Mask).await.unwrap();
     }
     let redaction_time = start.elapsed();
     println!("Redaction: {:?} for 100 iterations", redaction_time);
@@ -369,6 +366,10 @@ async fn test_performance_under_load() {
     assert!(moderation_time.as_millis() < 500, "Moderation should be very fast");
 }
 
+// NOTE: SecurityConfig and SecurityService are runtime-specific types
+// These tests are commented out until we have a kernel-level equivalent
+// or move these tests to runtime tests
+/*
 /// Test Scenario 9: Security service configuration scenarios
 ///
 /// Tests different security configurations for different environments
@@ -399,6 +400,7 @@ async fn test_security_configurations() {
     assert!(!custom_config.content_moderation_enabled);
     assert!(!custom_config.prompt_guard_enabled);
 }
+*/
 
 /// Test Scenario 10: Real-world compliance scenario
 ///
@@ -408,11 +410,11 @@ async fn test_gdpr_compliance_scenario() {
     let redactor = RegexPiiRedactor::new()
         .with_default_strategy(RedactionStrategy::Hash) // Hash for audit trail
         .with_category_strategy(
-            mofa_runtime::security::types::SensitiveDataCategory::Email,
+            mofa_kernel::security::SensitiveDataCategory::Email,
             RedactionStrategy::Hash, // Hash emails
         )
         .with_category_strategy(
-            mofa_runtime::security::types::SensitiveDataCategory::SSN,
+            mofa_kernel::security::SensitiveDataCategory::Ssn,
             RedactionStrategy::Remove, // Remove SSNs entirely
         );
 
@@ -427,19 +429,19 @@ async fn test_gdpr_compliance_scenario() {
         Credit Card: 5555-5555-5555-4444
     "#;
 
-    let redacted = redactor.redact(customer_data, RedactionStrategy::Hash).await.unwrap();
+    let redacted = redactor.redact(customer_data, &RedactionStrategy::Hash).await.unwrap();
 
     // Verify GDPR compliance: No raw PII in output
-    assert!(!redacted.text.contains("jane.doe@example.com"));
-    assert!(!redacted.text.contains("987-65-4321")); // SSN removed
-    assert!(!redacted.text.contains("5555-5555-5555-4444"));
+    assert!(!redacted.redacted_text.contains("jane.doe@example.com"));
+    assert!(!redacted.redacted_text.contains("987-65-4321")); // SSN removed
+    assert!(!redacted.redacted_text.contains("5555-5555-5555-4444"));
 
     // Verify hashes present (for audit)
-    assert!(redacted.text.contains("[HASH:"));
+    assert!(redacted.redacted_text.contains("[HASH:"));
 
     // Verify non-PII preserved
-    assert!(redacted.text.contains("Customer ID: CUST-12345"));
-    assert!(redacted.text.contains("Jane Doe")); // Name is not always PII
+    assert!(redacted.redacted_text.contains("Customer ID: CUST-12345"));
+    assert!(redacted.redacted_text.contains("Jane Doe")); // Name is not always PII
 
     println!("✅ GDPR compliance test passed");
 }
