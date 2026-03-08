@@ -5873,7 +5873,6 @@ dependencies = [
  "mofa-extra",
  "mofa-kernel",
  "mofa-plugins",
- "mofa-runtime",
  "num_enum_derive",
  "once_cell",
  "petgraph 0.7.1",
