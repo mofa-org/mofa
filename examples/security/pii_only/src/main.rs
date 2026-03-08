@@ -11,8 +11,7 @@
 
 use mofa_foundation::security::{RegexPiiDetector, RegexPiiRedactor};
 use mofa_kernel::security::{
-    PiiDetector, PiiRedactor, RedactionMatch, RedactionResult, RedactionStrategy,
-    SensitiveDataCategory,
+    PiiDetector, PiiRedactor, RedactionStrategy, SensitiveDataCategory,
 };
 
 #[tokio::main]
@@ -59,6 +58,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 SensitiveDataCategory::IpAddress => "ip_address",
                 SensitiveDataCategory::ApiKey => "api_key",
                 SensitiveDataCategory::Custom(ref s) => s,
+                _ => "unknown",
             },
             detection.original,
             detection.start,
@@ -98,6 +98,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 SensitiveDataCategory::IpAddress => "ip_address".to_string(),
                 SensitiveDataCategory::ApiKey => "api_key".to_string(),
                 SensitiveDataCategory::Custom(ref s) => format!("custom:{}", s),
+                _ => "unknown".to_string(),
             })
             .collect::<std::collections::HashSet<_>>()
             .into_iter()
