@@ -35,6 +35,7 @@ chrono = { workspace = true }
 # CLI
 clap = { version = "4", features = ["derive", "env"] }
 colored = "2"
+anyhow = "1"
 
 # Serialization
 serde = { workspace = true }

@@ -3,9 +3,9 @@
 mod cli;
 mod commands;
 mod config;
-mod plugin_catalog;
 mod context;
 mod output;
+mod plugin_catalog;
 mod render;
 mod state;
 mod store;
@@ -99,14 +99,24 @@ async fn run_command(cli: Cli) -> CliResult<()> {
     };
 
     match cli.command {
-        Some(Commands::New {
-            name,
-            template,
-            output,
-        }) => {
-            commands::new::run(&name, &template, output.as_deref())
-                .into_report()
-                .attach_with(|| format!("scaffolding project '{name}' with template '{template}'"))?;
+        Some(Commands::New { kind }) => {
+            match kind {
+                cli::NewKind::Agent { name, dry_run } => {
+                    commands::new_agent::run(&name, dry_run)
+                        .into_report()
+                        .attach_with(|| format!("scaffolding agent '{name}'"))?;
+                }
+                cli::NewKind::Plugin { name, plugin_type, dry_run } => {
+                    commands::new_plugin::run(&name, &plugin_type, dry_run)
+                        .into_report()
+                        .attach_with(|| format!("scaffolding plugin '{name}'"))?;
+                }
+                cli::NewKind::Workflow { name, dry_run } => {
+                    commands::new_workflow::run(&name, dry_run)
+                        .into_report()
+                        .attach_with(|| format!("scaffolding workflow '{name}'"))?;
+                }
+            }
         }
 
         Some(Commands::Init { path }) => {
@@ -275,13 +285,8 @@ async fn run_command(cli: Cli) -> CliResult<()> {
                         url,
                         description,
                     } => {
-                        commands::plugin::repository::add(
-                            ctx,
-                            &id,
-                            &url,
-                            description.as_deref(),
-                        )
-                        .await?;
+                        commands::plugin::repository::add(ctx, &id, &url, description.as_deref())
+                            .await?;
                     }
                 },
             }

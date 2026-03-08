@@ -37,18 +37,10 @@ pub struct Cli {
 /// Available CLI commands
 #[derive(Subcommand)]
 pub enum Commands {
-    /// Create a new MoFA agent project
+    /// Scaffold a new MoFA component
     New {
-        /// Project name
-        name: String,
-
-        /// Project template
-        #[arg(short, long, default_value = "basic")]
-        template: String,
-
-        /// Output directory
-        #[arg(short, long)]
-        output: Option<PathBuf>,
+        #[command(subcommand)]
+        kind: NewKind,
     },
 
     /// Initialize MoFA in an existing project
@@ -156,6 +148,44 @@ pub enum GenerateCommands {
         /// Output file
         #[arg(short, long, default_value = "dataflow.yml")]
         output: PathBuf,
+    },
+}
+
+/// New scaffolding subcommands
+#[derive(Subcommand)]
+pub enum NewKind {
+    /// Scaffold a new MoFA agent
+    Agent {
+        /// Name of the agent
+        name: String,
+
+        /// Dry run: print generated files to stdout without writing
+        #[arg(long)]
+        dry_run: bool,
+    },
+    
+    /// Scaffold a compile-time Rust plugin or a runtime Rhai script plugin
+    Plugin {
+        /// Name of the plugin
+        name: String,
+
+        /// Type of the plugin [compile-time|runtime]
+        #[arg(long = "type")]
+        plugin_type: String,
+
+        /// Dry run: print generated files to stdout without writing
+        #[arg(long)]
+        dry_run: bool,
+    },
+
+    /// Scaffold a YAML workflow definition
+    Workflow {
+        /// Name of the workflow
+        name: String,
+
+        /// Dry run: print generated files to stdout without writing
+        #[arg(long)]
+        dry_run: bool,
     },
 }
 
