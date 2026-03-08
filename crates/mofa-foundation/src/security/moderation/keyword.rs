@@ -3,9 +3,9 @@
 //! Simple keyword-based content moderation using configurable word lists.
 
 use async_trait::async_trait;
-use mofa_runtime::security::error::{SecurityError, SecurityResult};
-use mofa_runtime::security::traits::{ContentModerator, ModerationResult};
-use mofa_runtime::security::types::ModerationVerdict;
+use mofa_kernel::security::{
+    ContentModerator, ContentPolicy, ModerationCategory, ModerationVerdict, SecurityResult,
+};
 use std::collections::HashSet;
 
 /// Keyword-based content moderator
@@ -113,22 +113,30 @@ impl Default for KeywordModerator {
 
 #[async_trait]
 impl ContentModerator for KeywordModerator {
-    async fn moderate(&self, content: &str) -> SecurityResult<ModerationResult> {
+    async fn moderate(&self, content: &str, policy: &ContentPolicy) -> SecurityResult<ModerationVerdict> {
+        // Check if moderation is enabled for this policy
+        if !policy.enabled_categories.contains(&ModerationCategory::Toxic) {
+            return Ok(ModerationVerdict::Allow);
+        }
+
         // Check blocked keywords first (highest priority)
         if let Some(reason) = self.check_blocked(content) {
-            return Ok(ModerationResult::new(ModerationVerdict::Block(reason)));
+            return Ok(ModerationVerdict::Block {
+                category: ModerationCategory::Toxic,
+                reason,
+            });
         }
 
         // Check flagged keywords
         if let Some(reason) = self.check_flagged(content) {
-            return Ok(ModerationResult::with_metadata(
-                ModerationVerdict::Flag(reason),
-                serde_json::json!({"moderator": "keyword"}),
-            ));
+            return Ok(ModerationVerdict::Flag {
+                category: ModerationCategory::Toxic,
+                reason,
+            });
         }
 
         // Content is allowed
-        Ok(ModerationResult::new(ModerationVerdict::Allow))
+        Ok(ModerationVerdict::Allow)
     }
 }
 
@@ -142,8 +150,9 @@ mod tests {
             .add_blocked("spam")
             .add_blocked("scam");
 
-        let result = moderator.moderate("This is spam content").await.unwrap();
-        assert!(result.verdict.is_blocked());
+        let policy = ContentPolicy::default();
+        let result = moderator.moderate("This is spam content", &policy).await.unwrap();
+        assert!(result.is_blocked());
     }
 
     #[tokio::test]
@@ -151,9 +160,10 @@ mod tests {
         let moderator = KeywordModerator::new()
             .add_flagged("warning");
 
-        let result = moderator.moderate("This has a warning").await.unwrap();
-        assert!(result.verdict.is_allowed());
-        assert!(matches!(result.verdict, ModerationVerdict::Flag(_)));
+        let policy = ContentPolicy::default();
+        let result = moderator.moderate("This has a warning", &policy).await.unwrap();
+        assert!(!result.is_blocked());
+        assert!(matches!(result, ModerationVerdict::Flag { .. }));
     }
 
     #[tokio::test]
@@ -161,9 +171,10 @@ mod tests {
         let moderator = KeywordModerator::new()
             .add_blocked("spam");
 
-        let result = moderator.moderate("This is clean content").await.unwrap();
-        assert!(result.verdict.is_allowed());
-        assert!(matches!(result.verdict, ModerationVerdict::Allow));
+        let policy = ContentPolicy::default();
+        let result = moderator.moderate("This is clean content", &policy).await.unwrap();
+        assert!(result.is_allowed());
+        assert!(matches!(result, ModerationVerdict::Allow));
     }
 
     #[tokio::test]
@@ -171,7 +182,8 @@ mod tests {
         let moderator = KeywordModerator::new()
             .add_blocked("SPAM");
 
-        let result = moderator.moderate("This is spam content").await.unwrap();
-        assert!(result.verdict.is_blocked());
+        let policy = ContentPolicy::default();
+        let result = moderator.moderate("This is spam content", &policy).await.unwrap();
+        assert!(result.is_blocked());
     }
 }

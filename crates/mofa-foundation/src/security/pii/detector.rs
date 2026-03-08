@@ -7,9 +7,9 @@ use crate::security::pii::patterns::{
     SSN_PATTERN, validate_luhn,
 };
 use async_trait::async_trait;
-use mofa_runtime::security::error::{SecurityError, SecurityResult};
-use mofa_runtime::security::traits::PiiDetector;
-use mofa_runtime::security::types::{DetectedPii, SensitiveDataCategory};
+use mofa_kernel::security::{
+    PiiDetector, RedactionMatch, SecurityResult, SensitiveDataCategory,
+};
 
 /// Regex-based PII detector
 pub struct RegexPiiDetector {
@@ -39,33 +39,41 @@ impl RegexPiiDetector {
     }
 
     /// Detect email addresses
-    fn detect_emails(&self, text: &str) -> Vec<DetectedPii> {
+    fn detect_emails(&self, text: &str) -> Vec<RedactionMatch> {
         EMAIL_PATTERN
             .find_iter(text)
-            .map(|m| DetectedPii {
-                category: SensitiveDataCategory::Email,
-                value: m.as_str().to_string(),
-                start: m.start(),
-                end: m.end(),
+            .map(|m| {
+                let original = m.as_str().to_string();
+                RedactionMatch {
+                    category: SensitiveDataCategory::Email,
+                    start: m.start(),
+                    end: m.end(),
+                    original: original.clone(),
+                    replacement: original, // Will be replaced during redaction
+                }
             })
             .collect()
     }
 
     /// Detect phone numbers
-    fn detect_phones(&self, text: &str) -> Vec<DetectedPii> {
+    fn detect_phones(&self, text: &str) -> Vec<RedactionMatch> {
         PHONE_PATTERN
             .find_iter(text)
-            .map(|m| DetectedPii {
-                category: SensitiveDataCategory::Phone,
-                value: m.as_str().to_string(),
-                start: m.start(),
-                end: m.end(),
+            .map(|m| {
+                let original = m.as_str().to_string();
+                RedactionMatch {
+                    category: SensitiveDataCategory::Phone,
+                    start: m.start(),
+                    end: m.end(),
+                    original: original.clone(),
+                    replacement: original, // Will be replaced during redaction
+                }
             })
             .collect()
     }
 
     /// Detect credit card numbers
-    fn detect_credit_cards(&self, text: &str) -> Vec<DetectedPii> {
+    fn detect_credit_cards(&self, text: &str) -> Vec<RedactionMatch> {
         CREDIT_CARD_PATTERN
             .find_iter(text)
             .filter(|m| {
@@ -77,30 +85,38 @@ impl RegexPiiDetector {
                     true
                 }
             })
-            .map(|m| DetectedPii {
-                category: SensitiveDataCategory::CreditCard,
-                value: m.as_str().to_string(),
-                start: m.start(),
-                end: m.end(),
+            .map(|m| {
+                let original = m.as_str().to_string();
+                RedactionMatch {
+                    category: SensitiveDataCategory::CreditCard,
+                    start: m.start(),
+                    end: m.end(),
+                    original: original.clone(),
+                    replacement: original, // Will be replaced during redaction
+                }
             })
             .collect()
     }
 
     /// Detect SSNs
-    fn detect_ssns(&self, text: &str) -> Vec<DetectedPii> {
+    fn detect_ssns(&self, text: &str) -> Vec<RedactionMatch> {
         SSN_PATTERN
             .find_iter(text)
-            .map(|m| DetectedPii {
-                category: SensitiveDataCategory::SSN,
-                value: m.as_str().to_string(),
-                start: m.start(),
-                end: m.end(),
+            .map(|m| {
+                let original = m.as_str().to_string();
+                RedactionMatch {
+                    category: SensitiveDataCategory::Ssn,
+                    start: m.start(),
+                    end: m.end(),
+                    original: original.clone(),
+                    replacement: original, // Will be replaced during redaction
+                }
             })
             .collect()
     }
 
     /// Detect IP addresses
-    fn detect_ip_addresses(&self, text: &str) -> Vec<DetectedPii> {
+    fn detect_ip_addresses(&self, text: &str) -> Vec<RedactionMatch> {
         IP_ADDRESS_PATTERN
             .find_iter(text)
             .filter(|m| {
@@ -113,24 +129,32 @@ impl RegexPiiDetector {
                     part.parse::<u8>().is_ok()
                 })
             })
-            .map(|m| DetectedPii {
-                category: SensitiveDataCategory::IpAddress,
-                value: m.as_str().to_string(),
-                start: m.start(),
-                end: m.end(),
+            .map(|m| {
+                let original = m.as_str().to_string();
+                RedactionMatch {
+                    category: SensitiveDataCategory::IpAddress,
+                    start: m.start(),
+                    end: m.end(),
+                    original: original.clone(),
+                    replacement: original, // Will be replaced during redaction
+                }
             })
             .collect()
     }
 
     /// Detect API keys
-    fn detect_api_keys(&self, text: &str) -> Vec<DetectedPii> {
+    fn detect_api_keys(&self, text: &str) -> Vec<RedactionMatch> {
         API_KEY_PATTERN
             .find_iter(text)
-            .map(|m| DetectedPii {
-                category: SensitiveDataCategory::ApiKey,
-                value: m.as_str().to_string(),
-                start: m.start(),
-                end: m.end(),
+            .map(|m| {
+                let original = m.as_str().to_string();
+                RedactionMatch {
+                    category: SensitiveDataCategory::ApiKey,
+                    start: m.start(),
+                    end: m.end(),
+                    original: original.clone(),
+                    replacement: original, // Will be replaced during redaction
+                }
             })
             .collect()
     }
@@ -144,7 +168,7 @@ impl Default for RegexPiiDetector {
 
 #[async_trait]
 impl PiiDetector for RegexPiiDetector {
-    async fn detect(&self, text: &str) -> SecurityResult<Vec<DetectedPii>> {
+    async fn detect(&self, text: &str) -> SecurityResult<Vec<RedactionMatch>> {
         let mut all_detections = Vec::new();
 
         // Run all detectors
@@ -174,7 +198,7 @@ mod tests {
 
         assert_eq!(results.len(), 2);
         assert_eq!(results[0].category, SensitiveDataCategory::Email);
-        assert_eq!(results[0].value, "user@example.com");
+        assert_eq!(results[0].original, "user@example.com");
     }
 
     #[tokio::test]

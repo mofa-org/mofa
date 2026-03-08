@@ -4,11 +4,11 @@
 
 use crate::security::pii::detector::RegexPiiDetector;
 use async_trait::async_trait;
-use mofa_runtime::security::error::{SecurityError, SecurityResult};
-use mofa_runtime::security::traits::{PiiDetector, PiiRedactor, RedactionResult};
-use mofa_runtime::security::types::{RedactionStrategy, SensitiveDataCategory};
+use mofa_kernel::security::{
+    PiiDetector, PiiRedactor, RedactionMatch, RedactionResult, RedactionStrategy, SecurityResult,
+    SensitiveDataCategory,
+};
 use sha2::{Digest, Sha256};
-use std::collections::HashSet;
 
 /// Regex-based PII redactor
 pub struct RegexPiiRedactor {
@@ -46,16 +46,14 @@ impl RegexPiiRedactor {
     }
 
     /// Get the strategy for a specific category
-    fn get_strategy(&self, category: &SensitiveDataCategory) -> RedactionStrategy {
+    fn get_strategy(&self, category: &SensitiveDataCategory) -> &RedactionStrategy {
         self.category_strategies
             .get(category)
-            .copied()
-            .unwrap_or(self.default_strategy)
+            .unwrap_or(&self.default_strategy)
     }
 
     /// Redact a single PII value
-    fn redact_value(&self, value: &str, category: &SensitiveDataCategory) -> String {
-        let strategy = self.get_strategy(category);
+    fn redact_value(&self, value: &str, category: &SensitiveDataCategory, strategy: &RedactionStrategy) -> String {
         match strategy {
             RedactionStrategy::Mask => "[REDACTED]".to_string(),
             RedactionStrategy::Hash => {
@@ -65,20 +63,8 @@ impl RegexPiiRedactor {
                 format!("[HASH:{}]", hex::encode(&hash[..8]))
             }
             RedactionStrategy::Remove => "".to_string(),
-            RedactionStrategy::Replace => {
-                // For Replace strategy, use a category-specific placeholder
-                match category {
-                    SensitiveDataCategory::Email => "[EMAIL]".to_string(),
-                    SensitiveDataCategory::Phone => "[PHONE]".to_string(),
-                    SensitiveDataCategory::CreditCard => "[CARD]".to_string(),
-                    SensitiveDataCategory::SSN => "[SSN]".to_string(),
-                    SensitiveDataCategory::IpAddress => "[IP]".to_string(),
-                    SensitiveDataCategory::ApiKey => "[API_KEY]".to_string(),
-                    SensitiveDataCategory::Custom(name) => format!("[{}]", name.to_uppercase()),
-                    _ => "[REDACTED]".to_string(), // Fallback for any future categories
-                }
-            }
-            _ => "[REDACTED]".to_string(), // Fallback for future strategies
+            RedactionStrategy::Replace(placeholder) => placeholder.clone(),
+            _ => "[REDACTED]".to_string(), // Handle future variants
         }
     }
 }
@@ -91,53 +77,45 @@ impl Default for RegexPiiRedactor {
 
 #[async_trait]
 impl PiiRedactor for RegexPiiRedactor {
-    async fn redact(&self, text: &str, strategy: RedactionStrategy) -> SecurityResult<RedactionResult> {
+    async fn redact(&self, text: &str, strategy: &RedactionStrategy) -> SecurityResult<RedactionResult> {
         // Detect all PII
-        let detections = self.detector.detect(text).await?;
+        let mut matches = self.detector.detect(text).await?;
 
-        if detections.is_empty() {
-            return Ok(RedactionResult::new(
-                text.to_string(),
-                0,
-                Vec::new(),
-            ));
+        if matches.is_empty() {
+            return Ok(RedactionResult {
+                original_text: text.to_string(),
+                redacted_text: text.to_string(),
+                matches: Vec::new(),
+            });
         }
 
         // Use provided strategy as override for this call
         let mut redacted_text = text.to_string();
-        let mut redaction_count = 0;
-        let mut redacted_categories = HashSet::new();
 
-        // Process detections in reverse order to maintain correct indices
-        for detection in detections.iter().rev() {
-            redacted_categories.insert(detection.category.name().to_string());
+        // Process matches in reverse order to maintain correct indices
+        for match_item in matches.iter_mut().rev() {
+            // Get the strategy for this category (or use provided strategy)
+            let effective_strategy = self.category_strategies
+                .get(&match_item.category)
+                .unwrap_or(strategy);
             
-            // Use the provided strategy for this call
-            let effective_strategy = strategy;
+            let replacement = self.redact_value(&match_item.original, &match_item.category, effective_strategy);
             
-            let replacement = match effective_strategy {
-                RedactionStrategy::Mask => "[REDACTED]".to_string(),
-                RedactionStrategy::Hash => {
-                    let mut hasher = Sha256::new();
-                    hasher.update(detection.value.as_bytes());
-                    let hash = hasher.finalize();
-                    format!("[HASH:{}]", hex::encode(&hash[..8]))
-                }
-                RedactionStrategy::Remove => "".to_string(),
-                RedactionStrategy::Replace => self.redact_value(&detection.value, &detection.category),
-                _ => "[REDACTED]".to_string(), // Fallback for future strategies
-            };
+            // Update the match with the replacement
+            match_item.replacement = replacement.clone();
 
             // Replace in reverse order to maintain indices
-            redacted_text.replace_range(detection.start..detection.end, &replacement);
-            redaction_count += 1;
+            redacted_text.replace_range(match_item.start..match_item.end, &replacement);
         }
 
-        Ok(RedactionResult::new(
+        // Reverse matches back to original order
+        matches.reverse();
+
+        Ok(RedactionResult {
+            original_text: text.to_string(),
             redacted_text,
-            redaction_count,
-            redacted_categories.into_iter().collect(),
-        ))
+            matches,
+        })
     }
 }
 
@@ -149,51 +127,50 @@ mod tests {
     async fn test_redact_mask() {
         let redactor = RegexPiiRedactor::new();
         let text = "Email: user@example.com";
-        let result = redactor.redact(text, RedactionStrategy::Mask).await.unwrap();
+        let result = redactor.redact(text, &RedactionStrategy::Mask).await.unwrap();
 
-        assert_eq!(result.redaction_count, 1);
-        assert!(result.text.contains("[REDACTED]"));
-        assert!(!result.text.contains("user@example.com"));
+        assert_eq!(result.matches.len(), 1);
+        assert!(result.redacted_text.contains("[REDACTED]"));
+        assert!(!result.redacted_text.contains("user@example.com"));
     }
 
     #[tokio::test]
     async fn test_redact_hash() {
         let redactor = RegexPiiRedactor::new();
         let text = "Email: user@example.com";
-        let result = redactor.redact(text, RedactionStrategy::Hash).await.unwrap();
+        let result = redactor.redact(text, &RedactionStrategy::Hash).await.unwrap();
 
-        assert_eq!(result.redaction_count, 1);
-        assert!(result.text.contains("[HASH:"));
-        assert!(!result.text.contains("user@example.com"));
+        assert_eq!(result.matches.len(), 1);
+        assert!(result.redacted_text.contains("[HASH:"));
+        assert!(!result.redacted_text.contains("user@example.com"));
     }
 
     #[tokio::test]
     async fn test_redact_remove() {
         let redactor = RegexPiiRedactor::new();
         let text = "Email: user@example.com";
-        let result = redactor.redact(text, RedactionStrategy::Remove).await.unwrap();
+        let result = redactor.redact(text, &RedactionStrategy::Remove).await.unwrap();
 
-        assert_eq!(result.redaction_count, 1);
-        assert!(!result.text.contains("user@example.com"));
+        assert_eq!(result.matches.len(), 1);
+        assert!(!result.redacted_text.contains("user@example.com"));
     }
 
     #[tokio::test]
     async fn test_redact_multiple() {
         let redactor = RegexPiiRedactor::new();
         let text = "Email: user@example.com, Phone: (555) 123-4567";
-        let result = redactor.redact(text, RedactionStrategy::Mask).await.unwrap();
+        let result = redactor.redact(text, &RedactionStrategy::Mask).await.unwrap();
 
-        assert_eq!(result.redaction_count, 2);
-        assert_eq!(result.redacted_categories.len(), 2);
+        assert_eq!(result.matches.len(), 2);
     }
 
     #[tokio::test]
     async fn test_redact_no_pii() {
         let redactor = RegexPiiRedactor::new();
         let text = "No sensitive data here";
-        let result = redactor.redact(text, RedactionStrategy::Mask).await.unwrap();
+        let result = redactor.redact(text, &RedactionStrategy::Mask).await.unwrap();
 
-        assert_eq!(result.redaction_count, 0);
-        assert_eq!(result.text, text);
+        assert_eq!(result.matches.len(), 0);
+        assert_eq!(result.redacted_text, text);
     }
 }

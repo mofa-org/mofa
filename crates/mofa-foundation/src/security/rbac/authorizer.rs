@@ -4,8 +4,7 @@
 
 use crate::security::rbac::policy::RbacPolicy;
 use async_trait::async_trait;
-use mofa_runtime::security::traits::{Authorizer, AuthorizationResult};
-use mofa_runtime::security::error::{SecurityError, SecurityResult};
+use mofa_kernel::security::{Authorizer, AuthorizationResult, SecurityResult};
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
