@@ -49,6 +49,7 @@ members = [
     "native_dataflow",
     "mcp_tools",
     "memory_scheduler_demo",
+    "capability_discovery",
     "rag_retrieval_demo",
     "rag_indexing_demo",
 ]

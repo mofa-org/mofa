@@ -5877,6 +5877,7 @@ dependencies = [
  "num_enum_derive",
  "once_cell",
  "parking_lot",
+ "petgraph 0.7.1",
  "qdrant-client",
  "ractor",
  "rand 0.8.5",
@@ -7015,6 +7016,8 @@ checksum = "3672b37090dbd86368a4145bc067582552b29c27377cad4e0a306c97f9bd7772"
 dependencies = [
  "fixedbitset 0.5.7",
  "indexmap 2.13.0",
+ "serde",
+ "serde_derive",
 ]
 
 [[package]]

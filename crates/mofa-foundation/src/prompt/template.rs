@@ -373,10 +373,9 @@ impl PromptTemplate {
     /// 获取模板中所有变量名（从内容中解析）
     /// Get all template variable names (parse from content)
     pub fn extract_variables(&self) -> Vec<String> {
-        let re = regex::Regex::new(r"\{(\w+)\}").unwrap();
         let mut vars = std::collections::HashSet::new();
 
-        for cap in re.captures_iter(&self.content) {
+        for cap in super::regex::VARIABLE_PLACEHOLDER_RE.captures_iter(&self.content) {
             vars.insert(cap[1].to_string());
         }
 
@@ -442,14 +441,13 @@ impl PromptTemplate {
 
         // 然后处理模板中存在但未在 variables 中预定义的变量
         // Then handle variables in template not predefined in variables
-        let re = regex::Regex::new(r"\{(\w+)\}").unwrap();
         let defined_vars: std::collections::HashSet<_> =
             self.variables.iter().map(|v| v.name.as_str()).collect();
 
         // 收集所有未定义但在模板中出现的变量
         // Collect all undefined variables appearing in template
         let mut missing = Vec::new();
-        for cap in re.captures_iter(&result.clone()) {
+        for cap in super::regex::VARIABLE_PLACEHOLDER_RE.captures_iter(&result.clone()) {
             let var_name = &cap[1];
             if !defined_vars.contains(var_name) {
                 if let Some(&value) = vars.get(var_name) {
@@ -510,11 +508,10 @@ impl PromptTemplate {
 
         // 检查模板中的未定义变量
         // Check undefined variables in template
-        let re = regex::Regex::new(r"\{(\w+)\}").unwrap();
         let defined_vars: std::collections::HashSet<_> =
             self.variables.iter().map(|v| v.name.as_str()).collect();
 
-        for cap in re.captures_iter(&self.content) {
+        for cap in super::regex::VARIABLE_PLACEHOLDER_RE.captures_iter(&self.content) {
             let var_name = &cap[1];
             // 如果变量未在预定义列表中，且未在提供的变量中
             // If variable not in predefined list and not in provided variables
