@@ -40,6 +40,8 @@ members = [
     "message_graph_validation",
     "message_graph_executor_runtime",
     "context_compression",
+    "structured_output",
+    "control_plane",
     "context_window_demo",
     "compression_examples",
     "admission_gate_demo",
@@ -47,7 +49,12 @@ members = [
     "security/rbac_only",
     "security/pii_only",
     "integrations_demo",
+    "native_dataflow",
+    "mcp_tools",
     "memory_scheduler_demo",
+    "capability_discovery",
+    "rag_retrieval_demo",
+    "rag_indexing_demo",
 ]
 
 [workspace.package]
@@ -55,6 +62,7 @@ version = "0.1.0"
 edition = "2024"
 
 [workspace.dependencies]
+anyhow = "1.0"
 async-trait = "0.1"
 axum = "0"
 serde = { version = "1.0", features = ["derive"] }

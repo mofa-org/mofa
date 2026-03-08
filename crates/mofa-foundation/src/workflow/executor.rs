@@ -43,6 +43,9 @@ pub struct ExecutorConfig {
     /// 执行超时（毫秒）
     /// Execution timeout (milliseconds)
     pub execution_timeout_ms: Option<u64>,
+    /// Per-node execution timeout (milliseconds). If a single node takes
+    /// longer than this, it is cancelled and marked as failed. Default: 120s.
+    pub node_timeout_ms: u64,
 }
 
 impl Default for ExecutorConfig {
@@ -53,6 +56,7 @@ impl Default for ExecutorConfig {
             enable_checkpoints: true,
             checkpoint_interval: 5,
             execution_timeout_ms: None,
+            node_timeout_ms: 120_000,
         }
     }
 }
@@ -232,9 +236,23 @@ impl WorkflowExecutor {
 
         // 使用基于依赖的执行
         // Use dependency-based execution
-        let result = self
-            .execute_from_node(graph, &ctx, start_node_id, input, &mut execution_record)
-            .await;
+        let result = if let Some(timeout_ms) = self.config.execution_timeout_ms {
+            match tokio::time::timeout(
+                std::time::Duration::from_millis(timeout_ms),
+                self.execute_from_node(graph, &ctx, start_node_id, input, &mut execution_record),
+            )
+            .await
+            {
+                Ok(inner) => inner,
+                Err(_) => Err(format!(
+                    "Workflow execution timed out after {}ms",
+                    timeout_ms
+                )),
+            }
+        } else {
+            self.execute_from_node(graph, &ctx, start_node_id, input, &mut execution_record)
+                .await
+        };
 
         let duration = start_time.elapsed();
         execution_record.ended_at = Some(
@@ -313,7 +331,7 @@ impl WorkflowExecutor {
         if let Some(paused_at) = *ctx.paused_at.read().await {
             let duration = chrono::Utc::now().signed_duration_since(paused_at);
             let wait_duration_ms = duration.num_milliseconds().max(0) as u64;
-            *ctx.total_wait_time_ms.write().await += wait_duration_ms;  // ← accumulate
+            *ctx.total_wait_time_ms.write().await += wait_duration_ms; // ← accumulate
         }
 
         ctx.set_node_output(waiting_node_id, human_input).await;
@@ -629,7 +647,31 @@ impl WorkflowExecutor {
                 }
                 NodeType::Wait => self.execute_wait(ctx, node, current_input.clone()).await,
                 _ => {
-                    let result = node.execute(ctx, current_input.clone()).await;
+                    let node_timeout = std::time::Duration::from_millis(
+                        self.config.node_timeout_ms,
+                    );
+                    let result = match tokio::time::timeout(
+                        node_timeout,
+                        node.execute(ctx, current_input.clone()),
+                    )
+                    .await
+                    {
+                        Ok(r) => r,
+                        Err(_) => {
+                            warn!(
+                                "Node {} timed out after {:?}",
+                                current_node_id, node_timeout
+                            );
+                            NodeResult::failed(
+                                &current_node_id,
+                                &format!(
+                                    "Node timed out after {:?}",
+                                    node_timeout
+                                ),
+                                node_timeout.as_millis() as u64,
+                            )
+                        }
+                    };
                     ctx.set_node_output(&current_node_id, result.output.clone())
                         .await;
                     ctx.set_node_status(&current_node_id, result.status.clone())
@@ -1658,5 +1700,72 @@ mod tests {
             "branch_b should not observe branch_a input mutation"
         );
         assert_eq!(branch_b.get("seed").and_then(|v| v.as_i64()), Some(7));
+    }
+
+    #[tokio::test]
+    async fn test_execution_timeout_enforcement() {
+        let config = ExecutorConfig {
+            execution_timeout_ms: Some(100),
+            ..ExecutorConfig::default()
+        };
+        let executor = WorkflowExecutor::new(config);
+
+        let mut graph = WorkflowGraph::new("timeout_wf", "Timeout Workflow");
+        graph.add_node(WorkflowNode::start("start"));
+        graph.add_node(WorkflowNode::task(
+            "slow_task",
+            "Slow Task",
+            |_ctx, _input| async move {
+                sleep(Duration::from_millis(500)).await;
+                Ok(WorkflowValue::String("done".to_string()))
+            },
+        ));
+        graph.add_node(WorkflowNode::end("end"));
+        graph.connect("start", "slow_task");
+        graph.connect("slow_task", "end");
+
+        let record = executor
+            .execute(&graph, WorkflowValue::Null)
+            .await
+            .expect("execute() should return Ok(record) even on timeout");
+
+        match &record.status {
+            WorkflowStatus::Failed(msg) => {
+                assert!(
+                    msg.contains("timed out"),
+                    "Expected timeout message, got: {}",
+                    msg
+                );
+            }
+            other => panic!("Expected Failed status with timeout, got: {:?}", other),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_no_timeout_when_none() {
+        let config = ExecutorConfig {
+            execution_timeout_ms: None,
+            ..ExecutorConfig::default()
+        };
+        let executor = WorkflowExecutor::new(config);
+
+        let mut graph = WorkflowGraph::new("no_timeout_wf", "No Timeout Workflow");
+        graph.add_node(WorkflowNode::start("start"));
+        graph.add_node(WorkflowNode::task(
+            "fast_task",
+            "Fast Task",
+            |_ctx, _input| async move {
+                Ok(WorkflowValue::String("fast".to_string()))
+            },
+        ));
+        graph.add_node(WorkflowNode::end("end"));
+        graph.connect("start", "fast_task");
+        graph.connect("fast_task", "end");
+
+        let result = executor
+            .execute(&graph, WorkflowValue::Null)
+            .await
+            .expect("Should complete without timeout");
+        assert!(matches!(result.status, WorkflowStatus::Completed));
     }
 }

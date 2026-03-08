@@ -14,7 +14,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::{RwLock, broadcast, mpsc};
-use tracing::{debug, error, info, warn};
+use tracing::{Instrument, debug, error, info, info_span, warn};
 
 use super::auth::{AuthInfo, AuthProvider, NoopAuthProvider};
 use mofa_kernel::workflow::telemetry::DebugEvent;
@@ -243,15 +243,12 @@ impl WebSocketHandler {
         self: Arc<Self>,
         mut rx: mpsc::Receiver<DebugEvent>,
     ) -> tokio::task::JoinHandle<()> {
-        let broadcast_tx = self.broadcast_tx.clone();
         info!("Starting debug event forwarder");
 
         tokio::spawn(async move {
             while let Some(event) = rx.recv().await {
                 let msg = WebSocketMessage::Debug(event);
-                if let Err(e) = broadcast_tx.send(msg) {
-                    debug!("Failed to broadcast debug event: {}", e);
-                }
+                self.broadcast("debug", msg).await;
             }
             info!("Debug event forwarder stopped");
         })
@@ -267,11 +264,11 @@ impl WebSocketHandler {
             loop {
                 ticker.tick().await;
 
-                // Collect and broadcast metrics
+                // Collect and broadcast metrics to subscribed clients only
                 let snapshot = self.collector.current().await;
                 let msg = WebSocketMessage::Metrics(snapshot);
 
-                let _ = self.broadcast_tx.send(msg);
+                self.broadcast("metrics", msg).await;
             }
         })
     }
@@ -310,7 +307,30 @@ impl WebSocketHandler {
         auth_info: Option<AuthInfo>,
     ) {
         let client_id = uuid::Uuid::now_v7().to_string();
-        info!("WebSocket client connected: {}", client_id);
+        let authenticated = auth_info.is_some();
+
+        let span = info_span!(
+            "ws_connection",
+            client_id = %client_id,
+            authenticated = authenticated,
+        );
+
+        self.handle_socket_inner(socket, auth_info, client_id)
+            .instrument(span)
+            .await;
+    }
+
+    /// Inner connection handler, runs inside the `ws_connection` span.
+    async fn handle_socket_inner(
+        self: Arc<Self>,
+        socket: WebSocket,
+        auth_info: Option<AuthInfo>,
+        client_id: String,
+    ) {
+        info!(
+            client_id = %client_id,
+            "WebSocket client connected"
+        );
 
         let (mut sender, mut receiver) = socket.split();
 
@@ -331,7 +351,7 @@ impl WebSocketHandler {
         let mut broadcast_rx = self.broadcast_tx.subscribe();
 
         // Task to send messages to client
-        let send_task = tokio::spawn(async move {
+        let mut send_task = tokio::spawn(async move {
             loop {
                 tokio::select! {
                     // Messages from direct send
@@ -342,10 +362,20 @@ impl WebSocketHandler {
                         }
                     }
                     // Messages from broadcast
-                    Ok(msg) = broadcast_rx.recv() => {
-                        let json = serde_json::to_string(&msg).unwrap_or_default();
-                        if sender.send(Message::Text(json.into())).await.is_err() {
-                            break;
+                    result = broadcast_rx.recv() => {
+                        match result {
+                            Ok(msg) => {
+                                let json = serde_json::to_string(&msg).unwrap_or_default();
+                                if sender.send(Message::Text(json.into())).await.is_err() {
+                                    break;
+                                }
+                            }
+                            Err(broadcast::error::RecvError::Lagged(n)) => {
+                                warn!("WebSocket broadcast lagged by {} messages", n);
+                            }
+                            Err(broadcast::error::RecvError::Closed) => {
+                                break;
+                            }
                         }
                     }
                 }
@@ -355,7 +385,7 @@ impl WebSocketHandler {
         // Task to receive messages from client
         let clients = self.clients.clone();
         let client_id_clone = client_id.clone();
-        let receive_task = tokio::spawn(async move {
+        let mut receive_task = tokio::spawn(async move {
             while let Some(result) = receiver.next().await {
                 match result {
                     Ok(Message::Text(text)) => {
@@ -403,18 +433,35 @@ impl WebSocketHandler {
             }
         });
 
-        // Wait for either task to complete
+        // Wait for either task to complete, then abort the other.
+        // Dropping a JoinHandle only detaches the task — it does NOT
+        // cancel it, so the "losing" task would keep running as an
+        // orphan (sending to a closed socket or processing messages
+        // for a disconnected client).
         tokio::select! {
-            _ = send_task => {}
-            _ = receive_task => {}
+            _ = &mut send_task => {
+                receive_task.abort();
+            }
+            _ = &mut receive_task => {
+                send_task.abort();
+            }
         }
 
         // Cleanup
+        let subscription_count;
         {
             let mut clients = self.clients.write().await;
+            subscription_count = clients
+                .get(&client_id)
+                .map(|c| c.subscriptions.len())
+                .unwrap_or(0);
             clients.remove(&client_id);
         }
-        info!("WebSocket client disconnected: {}", client_id);
+        info!(
+            client_id = %client_id,
+            subscriptions = subscription_count,
+            "WebSocket client disconnected"
+        );
     }
 }
 

@@ -512,7 +512,11 @@ impl MetricsCollector {
     }
 
     /// Set LLM metrics source for pulling from persistence
-    pub fn with_llm_metrics_source(mut self, source: Arc<dyn LLMMetricsSource>, provider_name: String) -> Self {
+    pub fn with_llm_metrics_source(
+        mut self,
+        source: Arc<dyn LLMMetricsSource>,
+        provider_name: String,
+    ) -> Self {
         self.llm_metrics_source = Some(source);
         self.provider_name = provider_name;
         self
@@ -525,7 +529,7 @@ impl MetricsCollector {
     /// Update agent metrics
     pub async fn update_agent(&self, metrics: AgentMetrics) {
         let mut agents = self.agent_metrics.write().await;
-        agents.insert(metrics.agent_id.clone(), metrics);   
+        agents.insert(metrics.agent_id.clone(), metrics);
     }
 
     /// Update LLM metrics

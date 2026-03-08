@@ -1,0 +1,11 @@
+[package]
+name = "native_dataflow"
+version.workspace = true
+edition.workspace = true
+description = "Demonstrates mofa-runtime native dataflow without Dora-rs"
+
+[dependencies]
+mofa-runtime = { path = "../../crates/mofa-runtime" }
+tokio.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true

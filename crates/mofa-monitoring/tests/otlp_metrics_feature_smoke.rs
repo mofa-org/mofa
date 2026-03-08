@@ -32,7 +32,12 @@ async fn otlp_exporter_start_returns_join_handles() {
         OtlpMetricsExporterConfig::default(),
     ));
 
-    let handles = exporter.start().await.expect("exporter should start");
+    // Add timeout to prevent hanging if OTLP initialization blocks
+    let start_future = exporter.start();
+    let handles = tokio::time::timeout(Duration::from_secs(5), start_future)
+        .await
+        .expect("exporter.start() should complete within 5 seconds")
+        .expect("exporter should start");
 
     // Workers are long-running loops by design; verify they start, then stop them.
     tokio::time::sleep(Duration::from_millis(25)).await;

@@ -69,6 +69,13 @@ pub enum KernelError {
     /// A secretary-layer error.
     #[error("Secretary error: {0}")]
     Secretary(#[from] crate::agent::secretary::SecretaryError),
+
+    /// A gateway configuration or routing error.
+    #[error("Gateway error: {0}")]
+    Gateway(#[from] crate::gateway::GatewayConfigError),
+    /// A scheduler error.
+    #[error("Scheduler error: {0}")]
+    Scheduler(#[from] crate::scheduler::SchedulerError),
 }
 
 impl From<crate::agent::types::error::GlobalError> for KernelError {
@@ -81,6 +88,14 @@ impl From<crate::agent::types::error::GlobalError> for KernelError {
             GlobalError::LLM(msg)
             | GlobalError::Plugin(msg)
             | GlobalError::Runtime(msg)
+            | GlobalError::Config(msg)
+            | GlobalError::Persistence(msg)
+            | GlobalError::Prompt(msg)
+            | GlobalError::Dsl(msg)
+            | GlobalError::Wasm(msg)
+            | GlobalError::Rhai(msg)
+            | GlobalError::Dora(msg)
+            | GlobalError::MessageGraph(msg)
             | GlobalError::Other(msg) => KernelError::Internal(msg),
         }
     }
