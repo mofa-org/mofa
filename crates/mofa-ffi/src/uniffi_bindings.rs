@@ -601,7 +601,7 @@ impl LLMAgentBuilder {
 
     /// Set agent ID
     pub fn set_id(self: Arc<Self>, id: String) -> Arc<Self> {
-        let mut state = self.state.lock().unwrap();
+        let mut state = self.state.lock().unwrap_or_else(|e| e.into_inner());
         state.agent_id = Some(id);
         drop(state);
         self
@@ -609,7 +609,7 @@ impl LLMAgentBuilder {
 
     /// Set agent name
     pub fn set_name(self: Arc<Self>, name: String) -> Arc<Self> {
-        let mut state = self.state.lock().unwrap();
+        let mut state = self.state.lock().unwrap_or_else(|e| e.into_inner());
         state.name = Some(name);
         drop(state);
         self
@@ -617,7 +617,7 @@ impl LLMAgentBuilder {
 
     /// Set system prompt
     pub fn set_system_prompt(self: Arc<Self>, prompt: String) -> Arc<Self> {
-        let mut state = self.state.lock().unwrap();
+        let mut state = self.state.lock().unwrap_or_else(|e| e.into_inner());
         state.system_prompt = Some(prompt);
         drop(state);
         self
@@ -625,7 +625,7 @@ impl LLMAgentBuilder {
 
     /// Set temperature
     pub fn set_temperature(self: Arc<Self>, temperature: f32) -> Arc<Self> {
-        let mut state = self.state.lock().unwrap();
+        let mut state = self.state.lock().unwrap_or_else(|e| e.into_inner());
         state.temperature = Some(temperature);
         drop(state);
         self
@@ -633,7 +633,7 @@ impl LLMAgentBuilder {
 
     /// Set max tokens
     pub fn set_max_tokens(self: Arc<Self>, max_tokens: u32) -> Arc<Self> {
-        let mut state = self.state.lock().unwrap();
+        let mut state = self.state.lock().unwrap_or_else(|e| e.into_inner());
         state.max_tokens = Some(max_tokens);
         drop(state);
         self
@@ -641,7 +641,7 @@ impl LLMAgentBuilder {
 
     /// Set initial session ID
     pub fn set_session_id(self: Arc<Self>, session_id: String) -> Arc<Self> {
-        let mut state = self.state.lock().unwrap();
+        let mut state = self.state.lock().unwrap_or_else(|e| e.into_inner());
         state.session_id = Some(session_id);
         drop(state);
         self
@@ -649,7 +649,7 @@ impl LLMAgentBuilder {
 
     /// Set user ID
     pub fn set_user_id(self: Arc<Self>, user_id: String) -> Arc<Self> {
-        let mut state = self.state.lock().unwrap();
+        let mut state = self.state.lock().unwrap_or_else(|e| e.into_inner());
         state.user_id = Some(user_id);
         drop(state);
         self
@@ -657,7 +657,7 @@ impl LLMAgentBuilder {
 
     /// Set tenant ID
     pub fn set_tenant_id(self: Arc<Self>, tenant_id: String) -> Arc<Self> {
-        let mut state = self.state.lock().unwrap();
+        let mut state = self.state.lock().unwrap_or_else(|e| e.into_inner());
         state.tenant_id = Some(tenant_id);
         drop(state);
         self
@@ -665,7 +665,7 @@ impl LLMAgentBuilder {
 
     /// Set context window size (in rounds)
     pub fn set_context_window_size(self: Arc<Self>, size: u32) -> Arc<Self> {
-        let mut state = self.state.lock().unwrap();
+        let mut state = self.state.lock().unwrap_or_else(|e| e.into_inner());
         state.context_window_size = Some(size as usize);
         drop(state);
         self
@@ -678,7 +678,7 @@ impl LLMAgentBuilder {
         base_url: Option<String>,
         model: Option<String>,
     ) -> Result<Arc<Self>, MoFaError> {
-        let mut state = self.state.lock().unwrap();
+        let mut state = self.state.lock().unwrap_or_else(|e| e.into_inner());
         state.openai_api_key = Some(api_key);
         state.openai_base_url = base_url;
         state.openai_model = model;
@@ -691,7 +691,7 @@ impl LLMAgentBuilder {
         use mofa_foundation::llm::{LLMAgentBuilder, OpenAIConfig, OpenAIProvider};
         use std::sync::Arc as StdArc;
 
-        let state = self.state.lock().unwrap();
+        let state = self.state.lock().unwrap_or_else(|e| e.into_inner());
 
         let agent_id = state
             .agent_id
@@ -776,17 +776,17 @@ impl Session {
 
     /// Get the session key
     pub fn get_key(&self) -> String {
-        self.inner.lock().unwrap().key.clone()
+        self.inner.lock().unwrap_or_else(|e| e.into_inner()).key.clone()
     }
 
     /// Add a message to the session
     pub fn add_message(&self, role: String, content: String) {
-        self.inner.lock().unwrap().add_message(role, content);
+        self.inner.lock().unwrap_or_else(|e| e.into_inner()).add_message(role, content);
     }
 
     /// Get message history (most recent N messages)
     pub fn get_history(&self, max_messages: u32) -> Vec<SessionMessageInfo> {
-        let session = self.inner.lock().unwrap();
+        let session = self.inner.lock().unwrap_or_else(|e| e.into_inner());
         session
             .get_history(max_messages as usize)
             .iter()
@@ -800,17 +800,17 @@ impl Session {
 
     /// Clear all messages
     pub fn clear(&self) {
-        self.inner.lock().unwrap().clear();
+        self.inner.lock().unwrap_or_else(|e| e.into_inner()).clear();
     }
 
     /// Get the number of messages
     pub fn message_count(&self) -> u32 {
-        self.inner.lock().unwrap().len() as u32
+        self.inner.lock().unwrap_or_else(|e| e.into_inner()).len() as u32
     }
 
     /// Check if empty
     pub fn is_empty(&self) -> bool {
-        self.inner.lock().unwrap().is_empty()
+        self.inner.lock().unwrap_or_else(|e| e.into_inner()).is_empty()
     }
 
     /// Set metadata value (JSON string)
@@ -818,7 +818,7 @@ impl Session {
         let value: serde_json::Value = serde_json::from_str(&value_json).map_err(|e| {
             MoFaError::InvalidArgument(format!("Invalid JSON for metadata value: {}", e))
         })?;
-        self.inner.lock().unwrap().metadata.insert(key, value);
+        self.inner.lock().unwrap_or_else(|e| e.into_inner()).metadata.insert(key, value);
         Ok(())
     }
 
@@ -834,7 +834,7 @@ impl Session {
 
     /// Convert to the inner foundation Session (for saving)
     fn to_inner(&self) -> mofa_foundation::agent::session::Session {
-        self.inner.lock().unwrap().clone()
+        self.inner.lock().unwrap_or_else(|e| e.into_inner()).clone()
     }
 
     /// Create from an inner foundation Session
@@ -1078,19 +1078,19 @@ impl ToolRegistry {
     /// Get tool names
     pub fn list_tool_names(&self) -> Vec<String> {
         use mofa_kernel::agent::components::tool::ToolRegistry as _;
-        self.inner.lock().unwrap().list_names()
+        self.inner.lock().unwrap_or_else(|e| e.into_inner()).list_names()
     }
 
     /// Check if a tool exists
     pub fn has_tool(&self, name: String) -> bool {
         use mofa_kernel::agent::components::tool::ToolRegistry as _;
-        self.inner.lock().unwrap().contains(&name)
+        self.inner.lock().unwrap_or_else(|e| e.into_inner()).contains(&name)
     }
 
     /// Get the number of registered tools
     pub fn tool_count(&self) -> u32 {
         use mofa_kernel::agent::components::tool::ToolRegistry as _;
-        self.inner.lock().unwrap().count() as u32
+        self.inner.lock().unwrap_or_else(|e| e.into_inner()).count() as u32
     }
 
     /// Execute a tool by name with JSON arguments
@@ -1101,7 +1101,7 @@ impl ToolRegistry {
     ) -> Result<FfiToolResult, MoFaError> {
         use mofa_kernel::agent::components::tool::ToolRegistry as _;
 
-        let registry = self.inner.lock().unwrap();
+        let registry = self.inner.lock().unwrap_or_else(|e| e.into_inner());
         let tool = registry
             .get(&name)
             .ok_or_else(|| MoFaError::ToolError(format!("Tool not found: {}", name)))?;

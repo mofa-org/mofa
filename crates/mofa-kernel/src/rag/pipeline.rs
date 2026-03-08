@@ -167,7 +167,7 @@ mod tests {
     #[async_trait]
     impl Retriever for FakeRetriever {
         async fn retrieve(&self, _query: &str, top_k: usize) -> AgentResult<Vec<ScoredDocument>> {
-            let mut guard = self.last_top_k.lock().unwrap();
+            let mut guard = self.last_top_k.lock().unwrap_or_else(|e| e.into_inner());
             *guard = Some(top_k);
             Ok(self.docs.iter().take(top_k).cloned().collect())
         }
@@ -252,7 +252,7 @@ mod tests {
         );
         let _ = pipeline.run_with_top_k("hello", 2).await.unwrap();
 
-        let seen = *top_k_ref.lock().unwrap();
+        let seen = *top_k_ref.lock().unwrap_or_else(|e| e.into_inner());
         assert_eq!(seen, Some(2));
     }
 
