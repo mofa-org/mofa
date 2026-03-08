@@ -11,7 +11,7 @@ use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 async fn test_state_machine_agent_registration() {
     use std::sync::Arc;
     use tokio::sync::RwLock;
-    
+
     let sm = Arc::new(RwLock::new(ReplicatedStateMachine::new()));
 
     // Register an agent
@@ -179,11 +179,7 @@ async fn test_health_checker_integration() {
     use mofa_gateway::types::NodeStatus;
     use std::time::Duration;
 
-    let checker = HealthChecker::new(
-        Duration::from_secs(5),
-        Duration::from_secs(1),
-        3,
-    );
+    let checker = HealthChecker::new(Duration::from_secs(5), Duration::from_secs(1), 3);
 
     let node_id = NodeId::new("node-1");
     checker.register_node(node_id.clone()).await;
@@ -229,7 +225,7 @@ async fn test_circuit_breaker_integration() {
 
     // Record success to reset failure count (but circuit may still be open due to timeout)
     breaker.record_success().await;
-    
+
     // Note: In a real scenario, we'd wait for the timeout period before the circuit
     // transitions to half-open. For this test, we just verify the basic open/close behavior.
 }

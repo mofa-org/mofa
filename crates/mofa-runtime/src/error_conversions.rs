@@ -44,8 +44,8 @@ impl From<crate::agent::config::loader::AgentConfigError> for GlobalError {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::ConfigError;
     use crate::agent::config::loader::AgentConfigError;
+    use crate::config::ConfigError;
     use mofa_kernel::agent::types::error::ErrorCategory;
 
     #[test]

@@ -579,10 +579,7 @@ impl ExecutionEngine {
 
             let span = tracing::info_span!("agent.parallel", agent_id = %agent_id);
             let handle = tokio::spawn(
-                async move {
-                    engine.execute(&agent_id, input, opts).await
-                }
-                .instrument(span),
+                async move { engine.execute(&agent_id, input, opts).await }.instrument(span),
             );
 
             handles.push(handle);

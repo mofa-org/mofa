@@ -277,7 +277,11 @@ mod tests {
             }))
             .await;
 
-        assert!(result.is_ok(), "Write to new file should succeed: {:?}", result.err());
+        assert!(
+            result.is_ok(),
+            "Write to new file should succeed: {:?}",
+            result.err()
+        );
         assert_eq!(stdfs::read_to_string(&new_file).unwrap(), "hello world");
     }
 
@@ -300,8 +304,14 @@ mod tests {
             }))
             .await;
 
-        assert!(result.is_err(), "Delete via escaping symlink must be denied");
-        assert!(target.exists(), "Target file outside root must not be deleted");
+        assert!(
+            result.is_err(),
+            "Delete via escaping symlink must be denied"
+        );
+        assert!(
+            target.exists(),
+            "Target file outside root must not be deleted"
+        );
     }
 
     #[test]

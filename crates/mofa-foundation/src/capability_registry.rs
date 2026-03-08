@@ -68,10 +68,7 @@ impl CapabilityRegistry {
     /// the manifest's description and capability tags. Returns results sorted
     /// by descending relevance score, excluding zero-score entries.
     pub fn query(&self, query: &str) -> Vec<&AgentManifest> {
-        let keywords: Vec<String> = query
-            .split_whitespace()
-            .map(|w| w.to_lowercase())
-            .collect();
+        let keywords: Vec<String> = query.split_whitespace().map(|w| w.to_lowercase()).collect();
 
         let mut scored: Vec<(usize, &AgentManifest)> = self
             .manifests
@@ -89,11 +86,7 @@ impl CapabilityRegistry {
                     .iter()
                     .filter(|kw| haystack.contains(kw.as_str()))
                     .count();
-                if score > 0 {
-                    Some((score, m))
-                } else {
-                    None
-                }
+                if score > 0 { Some((score, m)) } else { None }
             })
             .collect();
 

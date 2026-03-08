@@ -1,9 +1,9 @@
 //! SubtaskDAG: Directed Acyclic Graph for task decomposition
 
 use chrono::{DateTime, Utc};
+use petgraph::Direction;
 use petgraph::graph::{DiGraph, NodeIndex};
 use petgraph::visit::EdgeRef;
-use petgraph::Direction;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use uuid::Uuid;
@@ -14,19 +14,15 @@ use mofa_kernel::agent::types::error::{GlobalError, GlobalResult};
 /// Status of an individual subtask in the DAG
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[derive(Default)]
 pub enum SubtaskStatus {
+    #[default]
     Pending,
     Ready,
     Running,
     Completed,
     Failed(String),
     Skipped,
-}
-
-impl Default for SubtaskStatus {
-    fn default() -> Self {
-        Self::Pending
-    }
 }
 
 /// A single subtask node in the DAG
@@ -228,7 +224,10 @@ impl SubtaskDAG {
     /// Get the topological execution order
     pub fn topological_order(&self) -> GlobalResult<Vec<NodeIndex>> {
         petgraph::algo::toposort(&self.graph, None).map_err(|cycle| {
-            GlobalError::Other(format!("DAG contains a cycle at node {:?}", cycle.node_id()))
+            GlobalError::Other(format!(
+                "DAG contains a cycle at node {:?}",
+                cycle.node_id()
+            ))
         })
     }
 
@@ -382,7 +381,10 @@ mod tests {
         dag.mark_complete(b);
         // c is still pending; d must NOT be in ready list
         let ready_after_b = dag.ready_tasks();
-        assert!(!ready_after_b.contains(&d), "d should not be ready while c is pending");
+        assert!(
+            !ready_after_b.contains(&d),
+            "d should not be ready while c is pending"
+        );
 
         dag.mark_complete(c);
         assert_eq!(dag.ready_tasks(), vec![d]); // now d is ready

@@ -15,10 +15,11 @@ use tokio::sync::RwLock;
 
 /// 采样策略
 /// Sampling strategy
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub enum SamplingStrategy {
     /// 始终采样
     /// Always sample
+    #[default]
     AlwaysOn,
     /// 从不采样
     /// Never sample
@@ -28,20 +29,14 @@ pub enum SamplingStrategy {
     Probabilistic(f64),
     /// 基于速率限制采样
     /// Rate-limiting based sampling
-    RateLimiting { 
+    RateLimiting {
         traces_per_second: u64,
         /// Holds (timestamp_secs << 32) | (count)
-        state: Arc<AtomicU64>
+        state: Arc<AtomicU64>,
     },
     /// 父级决定
     /// Parent-based decision
     ParentBased { root: Box<SamplingStrategy> },
-}
-
-impl Default for SamplingStrategy {
-    fn default() -> Self {
-        SamplingStrategy::AlwaysOn
-    }
 }
 
 impl SamplingStrategy {
@@ -63,17 +58,20 @@ impl SamplingStrategy {
                     .fold(0u64, |acc, &b| acc.wrapping_mul(31).wrapping_add(b as u64));
                 (hash as f64 / u64::MAX as f64) < *probability
             }
-            SamplingStrategy::RateLimiting { traces_per_second, state } => {
+            SamplingStrategy::RateLimiting {
+                traces_per_second,
+                state,
+            } => {
                 let now_secs = std::time::SystemTime::now()
                     .duration_since(std::time::UNIX_EPOCH)
                     .unwrap_or_default()
                     .as_secs();
-                
+
                 let mut current = state.load(Ordering::Relaxed);
                 loop {
                     let current_secs = current >> 32;
                     let current_count = current & 0xFFFFFFFF;
-                    
+
                     let (new_secs, new_count) = if current_secs != now_secs {
                         // New second window
                         (now_secs, 1)
@@ -84,9 +82,14 @@ impl SamplingStrategy {
                         }
                         (current_secs, current_count + 1)
                     };
-                    
+
                     let new_state = (new_secs << 32) | new_count;
-                    match state.compare_exchange_weak(current, new_state, Ordering::SeqCst, Ordering::Relaxed) {
+                    match state.compare_exchange_weak(
+                        current,
+                        new_state,
+                        Ordering::SeqCst,
+                        Ordering::Relaxed,
+                    ) {
                         Ok(_) => return true,
                         Err(v) => current = v,
                     }

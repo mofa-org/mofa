@@ -80,7 +80,11 @@ impl ReplicatedStateMachine {
     }
 
     /// Apply add node command.
-    async fn apply_add_node(&self, node_id: NodeId, address: NodeAddress) -> ControlPlaneResult<()> {
+    async fn apply_add_node(
+        &self,
+        node_id: NodeId,
+        address: NodeAddress,
+    ) -> ControlPlaneResult<()> {
         let mut membership = self.membership.write().await;
 
         // Check if node already exists
@@ -163,11 +167,20 @@ impl ReplicatedStateMachine {
     }
 
     /// Apply update agent state command.
-    async fn apply_update_agent_state(&self, agent_id: &str, state: &str) -> ControlPlaneResult<()> {
+    async fn apply_update_agent_state(
+        &self,
+        agent_id: &str,
+        state: &str,
+    ) -> ControlPlaneResult<()> {
         let mut registry = self.agent_registry.write().await;
         if let Some(entry) = registry.get_mut(agent_id) {
-            entry.metadata.insert("state".to_string(), state.to_string());
-            debug!("Applied update_agent_state command: {} = {}", agent_id, state);
+            entry
+                .metadata
+                .insert("state".to_string(), state.to_string());
+            debug!(
+                "Applied update_agent_state command: {} = {}",
+                agent_id, state
+            );
         } else {
             warn!("Agent {} not found for state update", agent_id);
         }

@@ -44,9 +44,9 @@ mod duration_secs {
 }
 
 use super::model_pool::ModelPool;
-use crate::scheduler::AdmissionOutcome;
 use super::routing::{self, RoutingDecision, RoutingPolicy};
 use super::types::{InferenceRequest, InferenceResult, RequestPriority, RoutedBackend};
+use crate::scheduler::AdmissionOutcome;
 
 /// Configuration for the `InferenceOrchestrator`.
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]

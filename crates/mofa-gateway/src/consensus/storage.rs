@@ -17,7 +17,7 @@ use std::path::Path;
 
 // RocksDB is optional - use cfg feature gate
 #[cfg(feature = "rocksdb")]
-use rocksdb::{Options, DB};
+use rocksdb::{DB, Options};
 
 /// Persistent storage for Raft state.
 #[cfg(feature = "rocksdb")]
@@ -58,9 +58,7 @@ impl RaftStorage {
         // TempDir cleans up on drop, but we keep the path alive for the DB.
         let tmp_dir = tempfile::TempDir::new()
             .expect("failed to create temporary directory for RaftStorage tests");
-        let path = tmp_dir
-            .path()
-            .to_path_buf();
+        let path = tmp_dir.path().to_path_buf();
 
         // Keep the TempDir alive inside RaftStorage so the directory outlives
         // the DB for the duration of the test process, and is cleaned up when

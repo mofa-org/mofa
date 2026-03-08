@@ -50,8 +50,8 @@
 //! ```
 
 mod admission;
-pub mod clock;
 mod budget;
+pub mod clock;
 mod deferred;
 mod stability;
 

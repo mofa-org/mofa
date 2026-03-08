@@ -769,7 +769,6 @@ impl SimpleMessageBus {
     pub async fn register(&self, agent_id: &str, tx: tokio::sync::mpsc::Sender<AgentEvent>) {
         let mut subs = self.subscribers.write().await;
         subs.insert(agent_id.to_string(), vec![tx]);
-            
     }
 
     /// Unregister an agent and clean up its topic subscriptions
@@ -1371,7 +1370,7 @@ mod tests {
         let _ = slow_rx.recv().await;
         send_task.await.unwrap().unwrap();
     }
-    
+
     #[tokio::test]
     async fn re_registration_replaces_stale_sender() {
         let bus = SimpleMessageBus::new();
@@ -1385,7 +1384,7 @@ mod tests {
 
         let subs = bus.subscribers.read().await;
         assert_eq!(subs["agent-a"].len(), 1);
-}
+    }
 }
 
 /// 智能体节点存储类型
@@ -1723,13 +1722,21 @@ mod test_message_bus {
         // Confirm routing cleaned up
         {
             let topics = bus.topic_subscribers.read().await;
-            assert!(!topics.get("topic-z").map(|v| v.iter().any(|id| id == "agent-x")).unwrap_or(false));
+            assert!(
+                !topics
+                    .get("topic-z")
+                    .map(|v| v.iter().any(|id| id == "agent-x"))
+                    .unwrap_or(false)
+            );
         }
 
         // Confirm subscribers mapping cleaned up as well
         {
             let subs = bus.subscribers.read().await;
-            assert!(!subs.contains_key("agent-x"), "subscriber entry should be removed");
+            assert!(
+                !subs.contains_key("agent-x"),
+                "subscriber entry should be removed"
+            );
         }
 
         // Publish to topic - should not be delivered

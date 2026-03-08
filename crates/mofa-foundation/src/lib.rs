@@ -57,10 +57,10 @@ pub mod rag;
 // swarm module - Multi-agent swarm orchestration
 pub mod swarm;
 // Structured output: JSON schema validator and agent executor
-pub mod schema_validator;
 pub mod agent_executor;
-pub use schema_validator::{SchemaError, SchemaValidator};
+pub mod schema_validator;
 pub use agent_executor::{AgentExecutor, ExecutorError};
+pub use schema_validator::{SchemaError, SchemaValidator};
 // Security governance - PII redaction, content moderation, prompt guard
 pub mod security;
 
