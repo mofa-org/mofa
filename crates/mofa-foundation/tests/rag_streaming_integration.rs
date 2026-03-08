@@ -189,7 +189,7 @@ async fn integration_real_llm_streaming() {
         elapsed,
         resp
     );
-    assert!(resp.len() > 0);
+    assert!(!resp.is_empty());
 }
 
 #[tokio::test]
@@ -206,7 +206,7 @@ async fn integration_concurrent_streaming_load() {
         let text = format!("Doc #{} content", i);
         let emb = simple_embedding(&text, dims);
         store
-            .upsert(DocumentChunk::new(&format!("d{}", i), &text, emb))
+            .upsert(DocumentChunk::new(format!("d{}", i), &text, emb))
             .await
             .unwrap();
     }
@@ -254,7 +254,7 @@ async fn integration_large_document_processing_performance() {
         let text = "x".repeat(100);
         let emb = simple_embedding(&text, dims);
         store
-            .upsert(DocumentChunk::new(&format!("d{}", i), &text, emb))
+            .upsert(DocumentChunk::new(format!("d{}", i), &text, emb))
             .await
             .unwrap();
     }
@@ -265,7 +265,7 @@ async fn integration_large_document_processing_performance() {
 
     let start = Instant::now();
     let (_docs, mut s) = pipeline.run_streaming("hello", 5).await.unwrap();
-    while let Some(_) = s.next().await {}
+    while s.next().await.is_some() {}
     let elapsed = start.elapsed();
     println!("processed 1000 docs retrieval+stream in {:?}", elapsed);
     assert!(elapsed.as_secs() < 10);

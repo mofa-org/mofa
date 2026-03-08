@@ -231,11 +231,10 @@ fn pack_context(
         let separator_cost = if parts.is_empty() { 0 } else { SEPARATOR.len() };
         let cost = chunk.text.len() + separator_cost;
 
-        if let Some(budget) = max_chars {
-            if total_chars + cost > budget && !packed.is_empty() {
+        if let Some(budget) = max_chars
+            && total_chars + cost > budget && !packed.is_empty() {
                 break;
             }
-        }
 
         packed.push(chunk.clone());
         parts.push(chunk.text.as_str());

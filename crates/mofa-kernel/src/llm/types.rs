@@ -189,7 +189,6 @@ impl Tool {
         description: impl Into<String>,
         parameters: serde_json::Value,
     ) -> Self {
-        let parameters = parameters;
         Self {
             tool_type: "function".to_string(),
             function: FunctionDefinition {
@@ -230,7 +229,6 @@ pub enum ToolChoice {
 pub struct ToolChoiceFunction {
     pub name: String,
 }
-
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct ChatCompletionRequest {
@@ -442,7 +440,6 @@ pub struct EmbeddingResponse {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(untagged)]
-
 pub enum EmbeddingInput {
     Single(String),
     Multiple(Vec<String>),
@@ -549,7 +546,9 @@ mod tests {
         if let Some(MessageContent::Parts(parts)) = &msg.content {
             assert_eq!(parts.len(), 2);
             assert!(matches!(&parts[0], ContentPart::Text { text } if text == "describe this"));
-            assert!(matches!(&parts[1], ContentPart::Image { image_url } if image_url.url == "https://img.example.com/a.png"));
+            assert!(
+                matches!(&parts[1], ContentPart::Image { image_url } if image_url.url == "https://img.example.com/a.png")
+            );
         } else {
             panic!("expected Parts content");
         }
@@ -671,9 +670,7 @@ mod tests {
     fn request_builder_tools_replaces() {
         let t1 = Tool::function("a", "d", json!({}));
         let t2 = Tool::function("b", "d", json!({}));
-        let req = ChatCompletionRequest::new("m")
-            .tool(t1)
-            .tools(vec![t2]);
+        let req = ChatCompletionRequest::new("m").tool(t1).tools(vec![t2]);
         assert_eq!(req.tools.as_ref().unwrap().len(), 1);
         assert_eq!(req.tools.as_ref().unwrap()[0].function.name, "b");
     }
@@ -788,10 +785,7 @@ mod tests {
 
     #[test]
     fn image_detail_serializes_lowercase() {
-        assert_eq!(
-            serde_json::to_string(&ImageDetail::Low).unwrap(),
-            "\"low\""
-        );
+        assert_eq!(serde_json::to_string(&ImageDetail::Low).unwrap(), "\"low\"");
         assert_eq!(
             serde_json::to_string(&ImageDetail::High).unwrap(),
             "\"high\""

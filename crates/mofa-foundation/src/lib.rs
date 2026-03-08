@@ -2,7 +2,13 @@
     dead_code,
     unused_imports,
     non_camel_case_types,
-    ambiguous_glob_reexports
+    ambiguous_glob_reexports,
+    clippy::type_complexity,
+    clippy::collapsible_if,
+    clippy::cloned_ref_to_slice_refs,
+    clippy::field_reassign_with_default,
+    clippy::assertions_on_constants,
+    clippy::needless_range_loop
 )]
 // Unified error conversions (GlobalError <-> domain errors)
 pub mod error_conversions;
@@ -56,10 +62,10 @@ pub mod rag;
 // swarm module - Multi-agent swarm orchestration
 pub mod swarm;
 // Structured output: JSON schema validator and agent executor
-pub mod schema_validator;
 pub mod agent_executor;
-pub use schema_validator::{SchemaError, SchemaValidator};
+pub mod schema_validator;
 pub use agent_executor::{AgentExecutor, ExecutorError};
+pub use schema_validator::{SchemaError, SchemaValidator};
 // Security governance - PII redaction, content moderation, prompt guard
 pub mod security;
 

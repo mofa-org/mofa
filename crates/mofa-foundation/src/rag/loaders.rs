@@ -167,8 +167,8 @@ impl DocumentLoader for MarkdownLoader {
         let mut section_index = 0usize;
 
         for line in content.lines() {
-            if let Some(level) = Self::heading_level(line) {
-                if level <= self.split_level {
+            if let Some(level) = Self::heading_level(line)
+                && level <= self.split_level {
                     // Save previous section
                     if !current_content.trim().is_empty() {
                         let mut metadata = HashMap::new();
@@ -191,7 +191,6 @@ impl DocumentLoader for MarkdownLoader {
                     current_content = format!("{line}\n");
                     continue;
                 }
-            }
 
             current_content.push_str(line);
             current_content.push('\n');
@@ -266,7 +265,7 @@ mod tests {
         let f = write_temp("content");
         let loader = TextLoader::new();
         let docs = loader.load(f.path()).unwrap();
-        assert!(docs[0].metadata.get("source").unwrap().len() > 0);
+        assert!(!docs[0].metadata.get("source").unwrap().is_empty());
     }
 
     #[test]

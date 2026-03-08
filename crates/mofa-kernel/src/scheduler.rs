@@ -180,7 +180,10 @@ pub struct ScheduleHandle {
 
 impl ScheduleHandle {
     /// Create a new handle (used by `CronScheduler` in foundation).
-    pub fn new(schedule_id: impl Into<String>, cancel_tx: tokio::sync::oneshot::Sender<()>) -> Self {
+    pub fn new(
+        schedule_id: impl Into<String>,
+        cancel_tx: tokio::sync::oneshot::Sender<()>,
+    ) -> Self {
         Self {
             schedule_id: schedule_id.into(),
             cancel_tx,
@@ -244,6 +247,7 @@ pub struct ScheduleInfo {
 ///
 /// Callers that need to be generic over the scheduler backend (e.g. tests using a
 /// `MockScheduler`) depend only on this trait.
+#[allow(async_fn_in_trait)]
 pub trait AgentScheduler: Send + Sync {
     /// Register a new schedule. Returns a [`ScheduleHandle`] that, when dropped or
     /// cancelled, stops the background task.
@@ -253,10 +257,7 @@ pub trait AgentScheduler: Send + Sync {
     /// - [`SchedulerError::AlreadyExists`] — `def.schedule_id` is already registered.
     /// - [`SchedulerError::AgentNotFound`] — the agent is not in the registry.
     /// - [`SchedulerError::InvalidCron`] — the cron expression is syntactically invalid.
-    async fn register(
-        &self,
-        def: ScheduleDefinition,
-    ) -> Result<ScheduleHandle, SchedulerError>;
+    async fn register(&self, def: ScheduleDefinition) -> Result<ScheduleHandle, SchedulerError>;
 
     /// Stop and remove a schedule.
     ///
@@ -522,5 +523,4 @@ mod tests {
         // _rx is still in scope, so the send should succeed
         assert!(handle.cancel());
     }
-
 }

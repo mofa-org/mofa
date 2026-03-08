@@ -1325,7 +1325,7 @@ mod tests {
         // Jitter should keep delay within reasonable bounds
         let delay = strategy.delay(1).as_millis();
         assert!(
-            delay >= 1800 && delay <= 2200,
+            (1800..=2200).contains(&delay),
             "Delay {} out of range",
             delay
         );

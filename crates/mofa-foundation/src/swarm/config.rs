@@ -78,17 +78,14 @@ impl Default for SLAConfig {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 #[non_exhaustive]
+#[derive(Default)]
 pub enum HITLMode {
     None,
     Required,
+    #[default]
     Optional,
 }
 
-impl Default for HITLMode {
-    fn default() -> Self {
-        Self::Optional
-    }
-}
 
 // Swarm Result
 /// Result of a swarm orchestration run

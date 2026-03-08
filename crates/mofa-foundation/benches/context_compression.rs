@@ -1,6 +1,7 @@
 //! Benchmarks for context compression strategies
 //!
 //! Run with: `cargo bench --package mofa-foundation --bench context_compression`
+#![allow(clippy::needless_range_loop)]
 
 use criterion::{BenchmarkId, Criterion, black_box, criterion_group, criterion_main};
 use mofa_foundation::agent::components::{

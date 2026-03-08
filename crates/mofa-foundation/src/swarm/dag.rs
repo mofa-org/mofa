@@ -14,7 +14,9 @@ use mofa_kernel::agent::types::error::{GlobalError, GlobalResult};
 /// Status of an individual subtask in the DAG
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[derive(Default)]
 pub enum SubtaskStatus {
+    #[default]
     Pending,
     Ready,
     Running,
@@ -23,11 +25,6 @@ pub enum SubtaskStatus {
     Skipped,
 }
 
-impl Default for SubtaskStatus {
-    fn default() -> Self {
-        Self::Pending
-    }
-}
 
 /// A single subtask node in the DAG
 #[derive(Debug, Clone, Serialize, Deserialize)]

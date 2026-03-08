@@ -1072,24 +1072,20 @@ impl ContextCompressor for HierarchicalCompressor {
                             .temperature(0.3)
                             .max_tokens(256);
 
-                    match self.llm.chat(summary_request).await {
-                        Ok(response) => {
-                            if let Some(summary) = response.content() {
-                                let summary_msg = ChatMessage {
-                                    role: msg.role.clone(),
-                                    content: Some(format!("[Compressed] {}", summary)),
-                                    tool_call_id: None,
-                                    tool_calls: None,
-                                };
-                                let summary_tokens = self.count_tokens(&[summary_msg.clone()]);
-                                if current_tokens + summary_tokens <= max_tokens {
-                                    compressed.push(summary_msg);
-                                    current_tokens += summary_tokens;
-                                }
+                    if let Ok(response) = self.llm.chat(summary_request).await
+                        && let Some(summary) = response.content() {
+                            let summary_msg = ChatMessage {
+                                role: msg.role.clone(),
+                                content: Some(format!("[Compressed] {}", summary)),
+                                tool_call_id: None,
+                                tool_calls: None,
+                            };
+                            let summary_tokens = self.count_tokens(&[summary_msg.clone()]);
+                            if current_tokens + summary_tokens <= max_tokens {
+                                compressed.push(summary_msg);
+                                current_tokens += summary_tokens;
                             }
                         }
-                        Err(_) => {}
-                    }
                 }
             }
         }
@@ -1642,7 +1638,7 @@ mod tests {
         // SlidingWindowCompressor with window_size=2 should compress to: 1 system + 2*2 = 5 messages max
         // But token budget might allow more, so just check it's compressed and system is preserved
         assert!(result.len() <= 21);
-        assert!(result.len() >= 1);
+        assert!(!result.is_empty());
         assert_eq!(result[0].role, "system");
     }
 
