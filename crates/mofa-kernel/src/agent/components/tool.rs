@@ -593,6 +593,176 @@ pub trait ToolRegistry: Send + Sync {
     }
 }
 
+// ============================================================================
+// Tool Execution Sandbox (Interface defined here only)
+// ============================================================================
+
+/// Capabilities a tool may require to function.
+///
+/// Used by the sandbox to decide whether a tool is allowed to execute
+/// based on its declared needs vs. the sandbox configuration.
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[non_exhaustive]
+pub enum SandboxCapability {
+    /// Network access (HTTP, TCP, etc.)
+    Network,
+    /// Filesystem read access
+    FileSystemRead,
+    /// Filesystem write access
+    FileSystemWrite,
+    /// Process spawning / exec
+    ProcessExec,
+    /// Environment variable access
+    EnvAccess,
+    /// Unlimited execution time (bypass timeout)
+    UnlimitedTime,
+    /// Custom capability
+    Custom(String),
+}
+
+impl std::fmt::Display for SandboxCapability {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            SandboxCapability::Network => write!(f, "network"),
+            SandboxCapability::FileSystemRead => write!(f, "fs_read"),
+            SandboxCapability::FileSystemWrite => write!(f, "fs_write"),
+            SandboxCapability::ProcessExec => write!(f, "process_exec"),
+            SandboxCapability::EnvAccess => write!(f, "env_access"),
+            SandboxCapability::UnlimitedTime => write!(f, "unlimited_time"),
+            SandboxCapability::Custom(s) => write!(f, "custom:{}", s),
+        }
+    }
+}
+
+/// Resource constraints enforced by a tool sandbox.
+///
+/// Concrete implementations in the foundation layer use these limits
+/// to wrap tool execution with timeouts, memory caps, and output truncation.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SandboxResourceLimits {
+    /// Maximum execution time in milliseconds
+    pub max_execution_time_ms: u64,
+    /// Maximum memory usage in bytes (advisory — enforcement is platform-dependent)
+    pub max_memory_bytes: Option<u64>,
+    /// Maximum output size in bytes (output is truncated beyond this limit)
+    pub max_output_bytes: Option<u64>,
+}
+
+impl Default for SandboxResourceLimits {
+    fn default() -> Self {
+        Self {
+            max_execution_time_ms: 30_000,            // 30 seconds
+            max_memory_bytes: Some(50 * 1024 * 1024), // 50 MB
+            max_output_bytes: Some(1024 * 1024),      // 1 MB
+        }
+    }
+}
+
+/// Captures the full context of a tool invocation for policy evaluation.
+///
+/// Bundles the tool identity, arguments, metadata, and caller info so that
+/// the sandbox policy can make decisions based on *what* is being called,
+/// *how* it is being called, and *who* is calling it.
+///
+/// # Example
+///
+/// ```rust,ignore
+/// let invocation = ToolInvocation {
+///     tool_name: tool.name().to_string(),
+///     arguments: serde_json::json!({"url": "https://example.com"}),
+///     metadata: tool.metadata(),
+///     caller_id: ctx.agent_id().to_string(),
+/// };
+/// ```
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ToolInvocation {
+    /// Name of the tool being invoked
+    pub tool_name: String,
+    /// Arguments passed to the tool
+    pub arguments: serde_json::Value,
+    /// Static metadata declared by the tool
+    pub metadata: ToolMetadata,
+    /// Identity of the caller (agent ID, user ID, etc.)
+    pub caller_id: String,
+}
+
+impl ToolInvocation {
+    /// Create a new invocation from a tool, its input, and a caller ID.
+    pub fn new(tool: &dyn Tool, input: &ToolInput, caller_id: impl Into<String>) -> Self {
+        Self {
+            tool_name: tool.name().to_string(),
+            arguments: input.arguments.clone(),
+            metadata: tool.metadata(),
+            caller_id: caller_id.into(),
+        }
+    }
+}
+
+/// Result of a sandboxed tool execution.
+///
+/// Wraps the inner `ToolResult` with execution metrics and sandbox metadata,
+/// enabling callers to observe how the tool behaved within the sandbox.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SandboxedResult {
+    /// The inner tool result
+    pub result: ToolResult,
+    /// Actual execution time in milliseconds
+    pub execution_time_ms: u64,
+    /// Whether the output was truncated due to size limits
+    pub output_truncated: bool,
+    /// Capabilities that were checked during execution
+    pub capabilities_used: Vec<SandboxCapability>,
+}
+
+/// Trait for tool sandbox implementations.
+///
+/// Provides an isolation layer around tool execution with configurable
+/// security policies, timeouts, and capability checks.
+///
+/// Concrete implementations are provided by the foundation layer.
+/// The kernel only defines this interface.
+///
+/// # Example
+///
+/// ```rust,ignore
+/// use mofa_kernel::agent::components::tool::{ToolSandbox, ToolInvocation};
+///
+/// let sandbox = SandboxedToolExecutor::new(config);
+///
+/// let invocation = ToolInvocation::new(&tool, &input, "agent-1");
+/// let result = sandbox.execute_sandboxed(&tool, invocation, &ctx).await?;
+/// println!("Took {}ms", result.execution_time_ms);
+/// ```
+#[async_trait]
+pub trait ToolSandbox: Send + Sync {
+    /// Execute a tool within sandbox constraints.
+    ///
+    /// The `invocation` provides the full call context (tool name, arguments,
+    /// metadata, caller ID) for policy evaluation. The `tool` reference is
+    /// used for actual execution after the policy check passes.
+    ///
+    /// Implementations should:
+    /// 1. Evaluate the invocation against the sandbox policy
+    /// 2. Wrap execution with a timeout
+    /// 3. Capture execution metrics
+    /// 4. Truncate output if it exceeds limits
+    async fn execute_sandboxed(
+        &self,
+        tool: &dyn Tool,
+        invocation: ToolInvocation,
+        ctx: &AgentContext,
+    ) -> AgentResult<SandboxedResult>;
+
+    /// Check if a tool invocation is allowed by this sandbox's policy.
+    ///
+    /// Returns `Ok(())` if all capabilities are satisfied, or an error
+    /// describing which capability was denied.
+    fn check_invocation(&self, invocation: &ToolInvocation) -> AgentResult<()>;
+
+    /// Get the current resource limits for this sandbox.
+    fn resource_limits(&self) -> &SandboxResourceLimits;
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -618,5 +788,80 @@ mod tests {
         let failure = ToolResult::failure("Something went wrong");
         assert!(!failure.success);
         assert!(failure.error.is_some());
+    }
+
+    #[test]
+    fn test_sandbox_capability_serialization() {
+        // Round-trip serialize/deserialize
+        let caps = vec![
+            SandboxCapability::Network,
+            SandboxCapability::FileSystemRead,
+            SandboxCapability::FileSystemWrite,
+            SandboxCapability::ProcessExec,
+            SandboxCapability::EnvAccess,
+            SandboxCapability::UnlimitedTime,
+            SandboxCapability::Custom("gpu".to_string()),
+        ];
+
+        let json = serde_json::to_string(&caps).unwrap();
+        let deserialized: Vec<SandboxCapability> = serde_json::from_str(&json).unwrap();
+        assert_eq!(caps, deserialized);
+    }
+
+    #[test]
+    fn test_sandbox_capability_display() {
+        assert_eq!(SandboxCapability::Network.to_string(), "network");
+        assert_eq!(SandboxCapability::FileSystemRead.to_string(), "fs_read");
+        assert_eq!(SandboxCapability::ProcessExec.to_string(), "process_exec");
+        assert_eq!(
+            SandboxCapability::Custom("gpu".to_string()).to_string(),
+            "custom:gpu"
+        );
+    }
+
+    #[test]
+    fn test_sandbox_resource_limits_defaults() {
+        let limits = SandboxResourceLimits::default();
+        assert_eq!(limits.max_execution_time_ms, 30_000);
+        assert_eq!(limits.max_memory_bytes, Some(50 * 1024 * 1024));
+        assert_eq!(limits.max_output_bytes, Some(1024 * 1024));
+    }
+
+    #[test]
+    fn test_sandboxed_result_construction() {
+        let result = SandboxedResult {
+            result: ToolResult::success_text("hello"),
+            execution_time_ms: 42,
+            output_truncated: false,
+            capabilities_used: vec![SandboxCapability::Network],
+        };
+        assert!(result.result.success);
+        assert_eq!(result.execution_time_ms, 42);
+        assert!(!result.output_truncated);
+        assert_eq!(result.capabilities_used.len(), 1);
+    }
+
+    #[test]
+    fn test_tool_invocation_construction() {
+        let invocation = ToolInvocation {
+            tool_name: "http_fetch".to_string(),
+            arguments: serde_json::json!({"url": "https://example.com"}),
+            metadata: ToolMetadata::default().needs_network(),
+            caller_id: "agent-1".to_string(),
+        };
+
+        assert_eq!(invocation.tool_name, "http_fetch");
+        assert_eq!(invocation.caller_id, "agent-1");
+        assert!(invocation.metadata.requires_network);
+        assert_eq!(
+            invocation.arguments["url"].as_str(),
+            Some("https://example.com")
+        );
+
+        // Round-trip serialization
+        let json = serde_json::to_string(&invocation).unwrap();
+        let deserialized: ToolInvocation = serde_json::from_str(&json).unwrap();
+        assert_eq!(deserialized.tool_name, "http_fetch");
+        assert_eq!(deserialized.caller_id, "agent-1");
     }
 }
