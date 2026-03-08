@@ -592,4 +592,3 @@ pub enum PluginEvent {
 
 #[cfg(test)]
 mod tests;
-
