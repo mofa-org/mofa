@@ -19,11 +19,19 @@
 //! | [`GatewayResponse`] | Outbound HTTP response model |
 //! | [`GatewayContext`] | Per-request mutable context for filter chains |
 //! | [`RouteMatch`] | Result of a successful route lookup |
+//! | [`RouteConfig`] | Route definition used by [`GatewayRouter`] |
+//! | [`GatewayRouter`] | Trait for path-based request routing |
+//! | [`GatewayFilter`] | Trait for request/response filter pipeline |
+//! | [`FilterOrder`] | Numeric ordering slot for filters |
+//! | [`FilterAction`] | Continue / Reject / Redirect action from a filter |
+//! | [`FilterChainConfig`] | Named ordered list of filter names |
 
 pub mod error;
 pub mod route;
 mod config_error;
 mod types;
+mod router;
+mod filter;
 
 #[cfg(test)]
 mod tests;
@@ -32,3 +40,5 @@ pub use error::RegistryError;
 pub use route::{GatewayRoute, HttpMethod, RouteRegistry, RoutingContext};
 pub use config_error::GatewayConfigError;
 pub use types::{GatewayContext, GatewayRequest, GatewayResponse, RouteMatch};
+pub use router::{GatewayRouter, RouteConfig};
+pub use filter::{FilterAction, FilterChainConfig, FilterOrder, GatewayFilter};

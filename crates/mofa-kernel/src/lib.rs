@@ -68,8 +68,9 @@ pub mod security;
 // Gateway routing abstractions (kernel-level traits for agent request dispatch)
 pub mod gateway;
 pub use gateway::{
-    GatewayConfigError, GatewayContext, GatewayRequest, GatewayResponse, GatewayRoute, HttpMethod,
-    RegistryError, RouteMatch, RouteRegistry, RoutingContext,
+    FilterAction, FilterChainConfig, FilterOrder, GatewayConfigError, GatewayContext, GatewayFilter,
+    GatewayRequest, GatewayResponse, GatewayRoute, GatewayRouter, HttpMethod, RegistryError,
+    RouteConfig, RouteMatch, RouteRegistry, RoutingContext,
 };
 
 // Scheduler kernel contract (traits, types, errors for periodic agent execution)
