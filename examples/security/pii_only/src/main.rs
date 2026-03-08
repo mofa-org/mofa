@@ -144,6 +144,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             SensitiveDataCategory::IpAddress => "ip_address".to_string(),
             SensitiveDataCategory::ApiKey => "api_key".to_string(),
             SensitiveDataCategory::Custom(ref s) => format!("custom:{}", s),
+            _ => "unknown".to_string(),
         })
         .collect::<std::collections::HashSet<_>>()
         .into_iter()
