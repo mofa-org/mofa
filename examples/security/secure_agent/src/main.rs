@@ -164,6 +164,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             ModerationVerdict::Allow => println!("  {}: Allowed", label),
             ModerationVerdict::Flag { reason, .. } => println!("  {}: Flagged - {}", label, reason),
             ModerationVerdict::Block { reason, .. } => println!("  {}: Blocked - {}", label, reason),
+            _ => println!("  {}: Unknown verdict", label),
         }
     }
     println!();
@@ -241,6 +242,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         ModerationVerdict::Block { reason, .. } => {
             println!("  │    Content blocked: {}                     │", reason);
         }
+        _ => println!("  │    Unknown moderation verdict                    │"),
     }
 
     println!("  │ 4. Prompt Injection Check                          │");
