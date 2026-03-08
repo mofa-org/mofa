@@ -50,9 +50,15 @@ impl<T: Serialize + DeserializeOwned> PersistedStore<T> {
                 continue;
             }
 
-            let id = match path.file_stem().and_then(|stem| stem.to_str()) {
-                Some(stem) => stem.to_string(),
+            let file_stem = match path.file_stem().and_then(|stem| stem.to_str()) {
+                Some(stem) => stem,
                 None => continue,
+            };
+
+            // Attempt to decode as hex. If it fails, assume it's a legacy unencoded file.
+            let id = match hex::decode(file_stem) {
+                Ok(bytes) => String::from_utf8(bytes).unwrap_or_else(|_| file_stem.to_string()),
+                Err(_) => file_stem.to_string(),
             };
 
             let payload = fs::read(path)?;
@@ -75,24 +81,13 @@ impl<T: Serialize + DeserializeOwned> PersistedStore<T> {
     }
 
     fn path_for(&self, id: &str) -> PathBuf {
-        let safe_id: String = id
-            .chars()
-            .map(|c| {
-                if c.is_ascii_alphanumeric() || c == '-' || c == '_' || c == '.' {
-                    c
-                } else {
-                    '_'
-                }
-            })
-            .collect();
-
-        let file_name = if safe_id.is_empty() {
+        let safe_id = if id.is_empty() {
             "_".to_string()
         } else {
-            safe_id
+            hex::encode(id)
         };
 
-        self.dir.join(format!("{}.json", file_name))
+        self.dir.join(format!("{}.json", safe_id))
     }
 }
 
@@ -240,5 +235,32 @@ mod tests {
                 value: 7
             })
         );
+    }
+
+    #[test]
+    fn test_special_characters_no_collision() {
+        let temp = TempDir::new().unwrap();
+        let store = PersistedStore::<TestEntry>::new(temp.path()).unwrap();
+
+        let e1 = TestEntry { name: "1".into(), value: 1 };
+        let e2 = TestEntry { name: "2".into(), value: 2 };
+
+        store.save("agent@node", &e1).unwrap();
+        store.save("agent#node", &e2).unwrap();
+
+        // They should remain distinct
+        assert_eq!(store.get("agent@node").unwrap().unwrap(), e1);
+        assert_eq!(store.get("agent#node").unwrap().unwrap(), e2);
+
+        // list should return both
+        let items = store.list().unwrap();
+        assert_eq!(items.len(), 2);
+        
+        // Assert items are decoded correctly
+        let (id1, _) = &items[0];
+        let (id2, _) = &items[1];
+        assert!(id1 == "agent#node" || id1 == "agent@node");
+        assert!(id2 == "agent#node" || id2 == "agent@node");
+        assert_ne!(id1, id2);
     }
 }
