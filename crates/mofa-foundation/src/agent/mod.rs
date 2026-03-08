@@ -97,7 +97,8 @@ pub use context::rich::{ComponentOutput, ExecutionMetrics};
 
 // Re-export session module
 pub use session::{
-    JsonlSessionStorage, MemorySessionStorage, Session, SessionManager, SessionMessage,
+    CompressionSnapshot, JsonlSessionStorage, MemorySessionStorage, Session, SessionCompressionPolicy,
+    SessionManager, SessionMessage,
     SessionStorage,
 };
 

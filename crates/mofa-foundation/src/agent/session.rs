@@ -39,6 +39,48 @@ impl SessionMessage {
     }
 }
 
+/// Snapshot of a single context compression operation for audit/recovery.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CompressionSnapshot {
+    #[serde(default = "Utc::now")]
+    pub compressed_at: DateTime<Utc>,
+    pub message_count_before: usize,
+    pub message_count_after: usize,
+    pub dropped_message_count: usize,
+    pub summary: String,
+    pub original_messages: Vec<SessionMessage>,
+}
+
+/// Policy for automatic long-session compression.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SessionCompressionPolicy {
+    /// Compress once session message count exceeds this threshold.
+    pub trigger_message_count: usize,
+    /// Keep this many most-recent messages verbatim.
+    pub keep_last_messages: usize,
+    /// Messages containing these terms are always pinned.
+    pub pinned_terms: Vec<String>,
+    /// Maximum number of dropped messages included in textual summary.
+    pub max_summary_messages: usize,
+}
+
+impl Default for SessionCompressionPolicy {
+    fn default() -> Self {
+        Self {
+            trigger_message_count: 120,
+            keep_last_messages: 40,
+            pinned_terms: vec![
+                "error".to_string(),
+                "failed".to_string(),
+                "todo".to_string(),
+                "decision".to_string(),
+                "tool".to_string(),
+            ],
+            max_summary_messages: 8,
+        }
+    }
+}
+
 /// Conversation session
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Session {
@@ -53,6 +95,8 @@ pub struct Session {
 }
 
 impl Session {
+    const SNAPSHOTS_KEY: &'static str = "_compression_snapshots";
+
     /// Create a new session
     pub fn new(key: impl Into<String>) -> Self {
         let key = key.into();
@@ -96,6 +140,128 @@ impl Session {
     pub fn is_empty(&self) -> bool {
         self.messages.is_empty()
     }
+
+    /// Returns previously recorded compression snapshots.
+    pub fn compression_snapshots(&self) -> Vec<CompressionSnapshot> {
+        self.metadata
+            .get(Self::SNAPSHOTS_KEY)
+            .and_then(|v| serde_json::from_value(v.clone()).ok())
+            .unwrap_or_default()
+    }
+
+    /// Compress history when the configured threshold is exceeded.
+    ///
+    /// Returns `true` when compression was applied.
+    pub fn compress_if_needed(&mut self, policy: &SessionCompressionPolicy) -> bool {
+        if self.messages.len() <= policy.trigger_message_count {
+            return false;
+        }
+
+        let keep_last = policy.keep_last_messages.min(self.messages.len());
+        let split_index = self.messages.len().saturating_sub(keep_last);
+        let older = &self.messages[..split_index];
+        let recent = &self.messages[split_index..];
+
+        let pinned_terms: Vec<String> = policy
+            .pinned_terms
+            .iter()
+            .map(|term| term.to_lowercase())
+            .collect();
+
+        let mut pinned = Vec::new();
+        let mut dropped = Vec::new();
+        for msg in older {
+            let content_lc = msg.content.to_lowercase();
+            let is_pinned = pinned_terms
+                .iter()
+                .any(|term| !term.is_empty() && content_lc.contains(term));
+            if is_pinned {
+                pinned.push(msg.clone());
+            } else {
+                dropped.push(msg.clone());
+            }
+        }
+
+        if dropped.is_empty() {
+            return false;
+        }
+
+        let summary = build_summary(&dropped, policy.max_summary_messages);
+        let original_messages = self.messages.clone();
+
+        let mut compressed = Vec::with_capacity(1 + pinned.len() + recent.len());
+        compressed.push(SessionMessage::new("system", summary.clone()));
+        compressed.extend(pinned);
+        compressed.extend_from_slice(recent);
+
+        let snapshot = CompressionSnapshot {
+            compressed_at: Utc::now(),
+            message_count_before: original_messages.len(),
+            message_count_after: compressed.len(),
+            dropped_message_count: dropped.len(),
+            summary,
+            original_messages,
+        };
+
+        let mut snapshots = self.compression_snapshots();
+        snapshots.push(snapshot);
+        self.metadata.insert(
+            Self::SNAPSHOTS_KEY.to_string(),
+            serde_json::to_value(snapshots).unwrap_or(Value::Array(vec![])),
+        );
+        self.messages = compressed;
+        self.updated_at = Utc::now();
+        true
+    }
+
+    /// Restore the last compression snapshot.
+    ///
+    /// Returns `true` when a snapshot was restored.
+    pub fn restore_last_compression(&mut self) -> AgentResult<bool> {
+        let mut snapshots = self.compression_snapshots();
+        let Some(snapshot) = snapshots.pop() else {
+            return Ok(false);
+        };
+
+        self.messages = snapshot.original_messages;
+        self.updated_at = Utc::now();
+        self.metadata.insert(
+            Self::SNAPSHOTS_KEY.to_string(),
+            serde_json::to_value(snapshots).map_err(|e| {
+                AgentError::SerializationError(format!(
+                    "failed to serialize compression snapshots: {}",
+                    e
+                ))
+            })?,
+        );
+        Ok(true)
+    }
+}
+
+fn build_summary(messages: &[SessionMessage], max_items: usize) -> String {
+    let mut lines = Vec::new();
+    lines.push(format!(
+        "Compressed {} older messages to keep context window within budget.",
+        messages.len()
+    ));
+
+    for msg in messages.iter().take(max_items.max(1)) {
+        let mut content = msg.content.clone();
+        if content.len() > 180 {
+            content.truncate(180);
+            content.push_str("...");
+        }
+        lines.push(format!("- [{}] {}", msg.role, content));
+    }
+
+    if messages.len() > max_items.max(1) {
+        lines.push(format!(
+            "- ... {} additional messages omitted from summary.",
+            messages.len() - max_items.max(1)
+        ));
+    }
+
+    lines.join("\n")
 }
 
 // ============================================================================
@@ -587,5 +753,52 @@ mod tests {
         let keys = manager.list().await.unwrap();
         assert!(keys.contains(&"canonical:key".to_string()));
         assert!(!keys.contains(&"alias".to_string()));
+    }
+
+    #[tokio::test]
+    async fn test_session_compression_creates_audit_snapshot() {
+        let mut session = Session::new("compress:test");
+        for i in 0..8 {
+            session.add_message("user", format!("message {}", i));
+        }
+
+        let policy = SessionCompressionPolicy {
+            trigger_message_count: 5,
+            keep_last_messages: 3,
+            pinned_terms: vec!["message 1".to_string()],
+            max_summary_messages: 2,
+        };
+        let applied = session.compress_if_needed(&policy);
+        assert!(applied);
+        assert!(session.messages.len() < 8);
+
+        let snapshots = session.compression_snapshots();
+        assert_eq!(snapshots.len(), 1);
+        assert_eq!(snapshots[0].message_count_before, 8);
+        assert!(snapshots[0].dropped_message_count > 0);
+    }
+
+    #[tokio::test]
+    async fn test_session_compression_restore() {
+        let mut session = Session::new("restore:test");
+        for i in 0..6 {
+            session.add_message("assistant", format!("step {}", i));
+        }
+        let original = session.messages.clone();
+
+        let policy = SessionCompressionPolicy {
+            trigger_message_count: 4,
+            keep_last_messages: 2,
+            pinned_terms: vec![],
+            max_summary_messages: 3,
+        };
+        assert!(session.compress_if_needed(&policy));
+        assert_ne!(session.messages.len(), original.len());
+
+        let restored = session.restore_last_compression().unwrap();
+        assert!(restored);
+        assert_eq!(session.messages.len(), original.len());
+        assert_eq!(session.messages[0].content, original[0].content);
+        assert!(session.compression_snapshots().is_empty());
     }
 }
