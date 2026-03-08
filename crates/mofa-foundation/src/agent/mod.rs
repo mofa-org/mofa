@@ -9,6 +9,7 @@ pub mod builder;
 pub mod components;
 pub mod context;
 pub mod executor;
+pub mod sandbox;
 pub mod session;
 pub mod tools;
 

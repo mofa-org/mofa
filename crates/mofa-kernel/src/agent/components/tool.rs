@@ -593,6 +593,137 @@ pub trait ToolRegistry: Send + Sync {
     }
 }
 
+// ============================================================================
+// Tool Execution Sandbox (Interface defined here only)
+// Tool Execution Sandbox (Interface defined here only)
+// ============================================================================
+
+/// Capabilities a tool may require to function.
+/// Capabilities a tool may require to function.
+///
+/// Used by the sandbox to decide whether a tool is allowed to execute
+/// based on its declared needs vs. the sandbox configuration.
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum SandboxCapability {
+    /// Network access (HTTP, TCP, etc.)
+    Network,
+    /// Filesystem read access
+    FileSystemRead,
+    /// Filesystem write access
+    FileSystemWrite,
+    /// Process spawning / exec
+    ProcessExec,
+    /// Environment variable access
+    EnvAccess,
+    /// Unlimited execution time (bypass timeout)
+    UnlimitedTime,
+    /// Custom capability
+    Custom(String),
+}
+
+impl std::fmt::Display for SandboxCapability {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            SandboxCapability::Network => write!(f, "network"),
+            SandboxCapability::FileSystemRead => write!(f, "fs_read"),
+            SandboxCapability::FileSystemWrite => write!(f, "fs_write"),
+            SandboxCapability::ProcessExec => write!(f, "process_exec"),
+            SandboxCapability::EnvAccess => write!(f, "env_access"),
+            SandboxCapability::UnlimitedTime => write!(f, "unlimited_time"),
+            SandboxCapability::Custom(s) => write!(f, "custom:{}", s),
+        }
+    }
+}
+
+/// Resource constraints enforced by a tool sandbox.
+/// Resource constraints enforced by a tool sandbox.
+///
+/// Concrete implementations in the foundation layer use these limits
+/// to wrap tool execution with timeouts, memory caps, and output truncation.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SandboxResourceLimits {
+    /// Maximum execution time in milliseconds
+    pub max_execution_time_ms: u64,
+    /// Maximum memory usage in bytes (advisory — enforcement is platform-dependent)
+    pub max_memory_bytes: Option<u64>,
+    /// Maximum output size in bytes (output is truncated beyond this limit)
+    pub max_output_bytes: Option<u64>,
+}
+
+impl Default for SandboxResourceLimits {
+    fn default() -> Self {
+        Self {
+            max_execution_time_ms: 30_000,            // 30 seconds
+            max_memory_bytes: Some(50 * 1024 * 1024), // 50 MB
+            max_output_bytes: Some(1024 * 1024),      // 1 MB
+        }
+    }
+}
+
+/// Result of a sandboxed tool execution.
+/// Result of a sandboxed tool execution.
+///
+/// Wraps the inner `ToolResult` with execution metrics and sandbox metadata,
+/// enabling callers to observe how the tool behaved within the sandbox.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SandboxedResult {
+    /// The inner tool result
+    pub result: ToolResult,
+    /// Actual execution time in milliseconds
+    pub execution_time_ms: u64,
+    /// Whether the output was truncated due to size limits
+    pub output_truncated: bool,
+    /// Capabilities that were checked during execution
+    pub capabilities_used: Vec<SandboxCapability>,
+}
+
+/// Trait for tool sandbox implementations.
+/// Trait for tool sandbox implementations.
+///
+/// Provides an isolation layer around tool execution with configurable
+/// security policies, timeouts, and capability checks.
+///
+/// Concrete implementations are provided by the foundation layer.
+/// The kernel only defines this interface.
+///
+/// # Example
+///
+/// ```rust,ignore
+/// use mofa_kernel::agent::components::tool::{ToolSandbox, ToolInput};
+///
+/// // Foundation provides the concrete implementation
+/// let sandbox = SandboxedToolExecutor::new(config);
+///
+/// // Execute tool within sandbox constraints
+/// let result = sandbox.execute_sandboxed(&tool, input, &ctx).await?;
+/// println!("Took {}ms", result.execution_time_ms);
+/// ```
+#[async_trait]
+pub trait ToolSandbox: Send + Sync {
+    /// Execute a tool within sandbox constraints.
+    ///
+    /// Implementations should:
+    /// 1. Check capabilities via `check_capabilities()`
+    /// 2. Wrap execution with a timeout
+    /// 3. Capture execution metrics
+    /// 4. Truncate output if it exceeds limits
+    async fn execute_sandboxed(
+        &self,
+        tool: &dyn Tool,
+        input: ToolInput,
+        ctx: &AgentContext,
+    ) -> AgentResult<SandboxedResult>;
+
+    /// Check if a tool's required capabilities are allowed by this sandbox.
+    ///
+    /// Returns `Ok(())` if all capabilities are satisfied, or an error
+    /// describing which capability was denied.
+    fn check_capabilities(&self, tool: &dyn Tool) -> AgentResult<()>;
+
+    /// Get the current resource limits for this sandbox.
+    fn resource_limits(&self) -> &SandboxResourceLimits;
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -618,5 +749,56 @@ mod tests {
         let failure = ToolResult::failure("Something went wrong");
         assert!(!failure.success);
         assert!(failure.error.is_some());
+    }
+
+    #[test]
+    fn test_sandbox_capability_serialization() {
+        // Round-trip serialize/deserialize
+        let caps = vec![
+            SandboxCapability::Network,
+            SandboxCapability::FileSystemRead,
+            SandboxCapability::FileSystemWrite,
+            SandboxCapability::ProcessExec,
+            SandboxCapability::EnvAccess,
+            SandboxCapability::UnlimitedTime,
+            SandboxCapability::Custom("gpu".to_string()),
+        ];
+
+        let json = serde_json::to_string(&caps).unwrap();
+        let deserialized: Vec<SandboxCapability> = serde_json::from_str(&json).unwrap();
+        assert_eq!(caps, deserialized);
+    }
+
+    #[test]
+    fn test_sandbox_capability_display() {
+        assert_eq!(SandboxCapability::Network.to_string(), "network");
+        assert_eq!(SandboxCapability::FileSystemRead.to_string(), "fs_read");
+        assert_eq!(SandboxCapability::ProcessExec.to_string(), "process_exec");
+        assert_eq!(
+            SandboxCapability::Custom("gpu".to_string()).to_string(),
+            "custom:gpu"
+        );
+    }
+
+    #[test]
+    fn test_sandbox_resource_limits_defaults() {
+        let limits = SandboxResourceLimits::default();
+        assert_eq!(limits.max_execution_time_ms, 30_000);
+        assert_eq!(limits.max_memory_bytes, Some(50 * 1024 * 1024));
+        assert_eq!(limits.max_output_bytes, Some(1024 * 1024));
+    }
+
+    #[test]
+    fn test_sandboxed_result_construction() {
+        let result = SandboxedResult {
+            result: ToolResult::success_text("hello"),
+            execution_time_ms: 42,
+            output_truncated: false,
+            capabilities_used: vec![SandboxCapability::Network],
+        };
+        assert!(result.result.success);
+        assert_eq!(result.execution_time_ms, 42);
+        assert!(!result.output_truncated);
+        assert_eq!(result.capabilities_used.len(), 1);
     }
 }
