@@ -82,7 +82,11 @@ mod tests {
             let msg = err.to_string();
             let global: GlobalError = err.into();
             assert_eq!(global.category(), ErrorCategory::LLM);
-            assert!(global.to_string().contains(&msg.split(": ").last().unwrap_or("")));
+            assert!(
+                global
+                    .to_string()
+                    .contains(&msg.split(": ").last().unwrap_or(""))
+            );
         }
     }
 

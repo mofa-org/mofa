@@ -125,12 +125,20 @@ impl RateLimiter {
     /// Create a new rate limiter with the given strategy.
     pub fn new(strategy: RateLimitStrategy) -> Self {
         let (token_bucket, sliding_window) = match strategy {
-            RateLimitStrategy::TokenBucket { capacity, refill_rate } => {
-                (Some(TokenBucketRateLimiter::new(capacity, refill_rate)), None)
-            }
-            RateLimitStrategy::SlidingWindow { window_size, max_requests } => {
-                (None, Some(SlidingWindowRateLimiter::new(window_size, max_requests)))
-            }
+            RateLimitStrategy::TokenBucket {
+                capacity,
+                refill_rate,
+            } => (
+                Some(TokenBucketRateLimiter::new(capacity, refill_rate)),
+                None,
+            ),
+            RateLimitStrategy::SlidingWindow {
+                window_size,
+                max_requests,
+            } => (
+                None,
+                Some(SlidingWindowRateLimiter::new(window_size, max_requests)),
+            ),
         };
 
         Self {
@@ -162,14 +170,16 @@ impl RateLimiter {
             let entry = limiters.entry(key.to_string()).or_insert_with(|| {
                 // Create a new rate limiter for this key based on the strategy
                 match &self.strategy {
-                    RateLimitStrategy::TokenBucket { capacity, refill_rate } => {
-                        Arc::new(TokenBucketRateLimiter::new(*capacity, *refill_rate))
-                            as Arc<dyn RateLimiterTrait + Send + Sync>
-                    }
-                    RateLimitStrategy::SlidingWindow { window_size, max_requests } => {
-                        Arc::new(SlidingWindowRateLimiter::new(*window_size, *max_requests))
-                            as Arc<dyn RateLimiterTrait + Send + Sync>
-                    }
+                    RateLimitStrategy::TokenBucket {
+                        capacity,
+                        refill_rate,
+                    } => Arc::new(TokenBucketRateLimiter::new(*capacity, *refill_rate))
+                        as Arc<dyn RateLimiterTrait + Send + Sync>,
+                    RateLimitStrategy::SlidingWindow {
+                        window_size,
+                        max_requests,
+                    } => Arc::new(SlidingWindowRateLimiter::new(*window_size, *max_requests))
+                        as Arc<dyn RateLimiterTrait + Send + Sync>,
                 }
             });
 

@@ -150,10 +150,10 @@ fn detect_rocm() -> Option<u64> {
     // rocm-smi CSV: GPU,VRAM Total Memory (B),VRAM Used Memory (B)
     for line in stdout.lines().skip(1) {
         let parts: Vec<&str> = line.split(',').collect();
-        if parts.len() >= 2 {
-            if let Ok(bytes) = parts[1].trim().parse::<u64>() {
-                return Some(bytes);
-            }
+        if parts.len() >= 2
+            && let Ok(bytes) = parts[1].trim().parse::<u64>()
+        {
+            return Some(bytes);
         }
     }
 
@@ -233,8 +233,7 @@ mod tests {
     fn test_detect_backend_is_first_available() {
         let info = HardwareInfo::detect();
         assert_eq!(
-            info.backend,
-            info.available_backends[0],
+            info.backend, info.available_backends[0],
             "best backend must be first in available list"
         );
     }

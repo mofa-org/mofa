@@ -120,8 +120,8 @@ pub async fn chat(
         "chat request completed"
     );
 
-    let output_value = serde_json::to_value(&output.content)
-        .unwrap_or_else(|_| json!(output.content.to_text()));
+    let output_value =
+        serde_json::to_value(&output.content).unwrap_or_else(|_| json!(output.content.to_text()));
 
     let response = ChatResponse {
         agent_id: id,

@@ -71,8 +71,8 @@ mod traits;
 pub use connection::{ConnectionFactory, UserConnection};
 pub use context::{SecretaryContext, SecretaryContextBuilder, SharedSecretaryContext};
 pub use error::{
-    ConnectionError, ConnectionResult, IntoConnectionReport,
-    IntoSecretaryReport, SecretaryError, SecretaryResult,
+    ConnectionError, ConnectionResult, IntoConnectionReport, IntoSecretaryReport, SecretaryError,
+    SecretaryResult,
 };
 pub use traits::{
     EventListener, InputHandler, Middleware, PhaseHandler, PhaseResult, SecretaryBehavior,

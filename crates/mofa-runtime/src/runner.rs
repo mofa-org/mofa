@@ -774,8 +774,8 @@ pub async fn run_agents<T: MoFAAgent>(
 // GlobalResult-based APIs (Phase 4 unified error handling)
 // ============================================================================
 
-use mofa_kernel::agent::types::error::{GlobalError, GlobalResult};
 use mofa_foundation::recovery::RetryPolicy;
+use mofa_kernel::agent::types::error::{GlobalError, GlobalResult};
 
 impl<T: MoFAAgent> AgentRunner<T> {
     /// Execute a task returning `GlobalResult` (unified error type).
@@ -844,9 +844,7 @@ pub async fn run_agents_global<T: MoFAAgent>(
     agent: T,
     inputs: Vec<AgentInput>,
 ) -> GlobalResult<Vec<AgentOutput>> {
-    let mut runner = AgentRunner::new(agent)
-        .await
-        .map_err(GlobalError::from)?;
+    let mut runner = AgentRunner::new(agent).await.map_err(GlobalError::from)?;
 
     let mut outputs = Vec::with_capacity(inputs.len());
     for input in inputs {
@@ -1388,8 +1386,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_resume_failure_preserves_paused_state() {
-        let agent = LifecycleTestAgent::new("lc-002", "Failing Resume Agent")
-            .with_failing_resume();
+        let agent = LifecycleTestAgent::new("lc-002", "Failing Resume Agent").with_failing_resume();
         let mut runner = AgentRunner::new(agent).await.unwrap();
 
         // Move into Running, then pause.
@@ -1409,8 +1406,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_pause_failure_preserves_running_state() {
-        let agent = LifecycleTestAgent::new("lc-003", "Failing Pause Agent")
-            .with_failing_pause();
+        let agent = LifecycleTestAgent::new("lc-003", "Failing Pause Agent").with_failing_pause();
         let mut runner = AgentRunner::new(agent).await.unwrap();
 
         // Move into Running.
