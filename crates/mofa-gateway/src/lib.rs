@@ -87,6 +87,7 @@ pub mod types;
 // Task 12: Cognitive Gateway — kernel trait implementations
 pub mod router;
 pub mod filter;
+pub mod backend;
 
 // Re-export main types
 pub use control_plane::{ControlPlane, ControlPlaneConfig};
@@ -94,5 +95,6 @@ pub use error::{ControlPlaneError, GatewayError, GatewayResult};
 pub use gateway::{Gateway, GatewayConfig};
 pub use router::TrieRouter;
 pub use filter::FilterPipeline;
+pub use backend::{InMemoryCapabilityRegistry, OpenAiBackend};
 pub use server::{GatewayServer, ServerConfig};
 pub use types::*;

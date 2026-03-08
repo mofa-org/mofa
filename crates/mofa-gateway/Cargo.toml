@@ -44,6 +44,7 @@ prometheus = { version = "0.13", default-features = false }
 tower = "0.5"
 hyper = { version = "1.8", features = ["full"] }
 hyper-util = "0.1"
+reqwest = { workspace = true, features = ["json"] }
 
 # Utilities
 dashmap = "5.5"
