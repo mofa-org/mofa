@@ -7,6 +7,7 @@ use crate::agent::error::{AgentError, AgentResult};
 
 /// Delay strategy between retry attempts.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[non_exhaustive]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum RetryPolicy {
     /// Same delay every attempt.

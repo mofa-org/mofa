@@ -152,6 +152,7 @@ impl RhaiPluginConfig {
 
 /// Rhai plugin source type
 #[derive(Debug, Clone)]
+#[non_exhaustive]
 pub enum RhaiPluginSource {
     /// Inline script content
     Inline(String),
@@ -175,6 +176,7 @@ impl RhaiPluginSource {
 
 /// Rhai plugin state
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum RhaiPluginState {
     /// Plugin is unloaded
     Unloaded,
