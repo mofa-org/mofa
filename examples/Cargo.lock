@@ -673,6 +673,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "capability_discovery"
+version = "0.1.0"
+dependencies = [
+ "mofa-foundation",
+ "mofa-kernel",
+ "tokio",
+]
+
+[[package]]
 name = "castaway"
 version = "0.2.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3819,7 +3828,6 @@ dependencies = [
  "mofa-extra",
  "mofa-kernel",
  "mofa-plugins",
- "mofa-runtime",
  "once_cell",
  "petgraph 0.7.1",
  "qdrant-client",
