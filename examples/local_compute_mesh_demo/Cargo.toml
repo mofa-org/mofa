@@ -1,0 +1,16 @@
+[package]
+name = "local_compute_mesh_demo"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+async-trait.workspace = true
+
+# Local dependencies
+mofa-foundation = { path = "../../crates/mofa-foundation" }
+
+# Workspace dependencies
+tokio.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+reqwest = { version = "0.12", features = ["json"] }
