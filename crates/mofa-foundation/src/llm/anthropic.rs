@@ -178,7 +178,7 @@ impl AnthropicProvider {
                                         let data = image_url
                                             .url
                                             .split(',')
-                                            .last()
+                                            .next_back()
                                             .unwrap_or(&image_url.url);
                                         contents.push(serde_json::json!({
                                             "type": "image",
@@ -192,8 +192,11 @@ impl AnthropicProvider {
                                     ContentPart::Audio { audio } => {
                                         let media_type =
                                             format!("audio/{}", audio.format.to_lowercase());
-                                        let data =
-                                            audio.data.split(',').last().unwrap_or(&audio.data);
+                                        let data = audio
+                                            .data
+                                            .split(',')
+                                            .next_back()
+                                            .unwrap_or(&audio.data);
                                         // Some providers/models may not support this block, but this is the standard Anthropics structure if/when supported.
                                         contents.push(serde_json::json!({
                                             "type": "audio",
@@ -207,8 +210,11 @@ impl AnthropicProvider {
                                     ContentPart::Video { video } => {
                                         let media_type =
                                             format!("video/{}", video.format.to_lowercase());
-                                        let data =
-                                            video.data.split(',').last().unwrap_or(&video.data);
+                                        let data = video
+                                            .data
+                                            .split(',')
+                                            .next_back()
+                                            .unwrap_or(&video.data);
                                         contents.push(serde_json::json!({
                                             "type": "video",
                                             "source": {
@@ -869,9 +875,9 @@ data: {\"type\":\"message_stop\"}";
     /// Integration: SSE text to parse_sse_event to adapter to bridge
     #[tokio::test]
     async fn sse_through_adapter_and_bridge() {
-        use crate::llm::stream_adapter::{adapter_for_provider, StreamAdapter};
-        use crate::llm::stream_bridge::{token_stream_to_events, token_stream_to_text};
         use crate::llm::agent::StreamEvent;
+        use crate::llm::stream_adapter::{StreamAdapter, adapter_for_provider};
+        use crate::llm::stream_bridge::{token_stream_to_events, token_stream_to_text};
         use futures::StreamExt;
 
         let raw = "\
@@ -898,7 +904,11 @@ data: {\"type\":\"message_stop\"}\n";
             Box::pin(futures::stream::iter(chunks.clone().into_iter().map(Ok)));
         let token_stream = adapter_for_provider("anthropic").adapt(chat_stream);
         let texts: Vec<String> = token_stream_to_text(token_stream)
-            .collect::<Vec<_>>().await.into_iter().map(|r| r.unwrap()).collect();
+            .collect::<Vec<_>>()
+            .await
+            .into_iter()
+            .map(|r| r.unwrap())
+            .collect();
         assert_eq!(texts, vec!["Hello", " world"]);
 
         // events path
@@ -906,7 +916,11 @@ data: {\"type\":\"message_stop\"}\n";
             Box::pin(futures::stream::iter(chunks.into_iter().map(Ok)));
         let token_stream2 = adapter_for_provider("anthropic").adapt(chat_stream2);
         let events: Vec<StreamEvent> = token_stream_to_events(token_stream2)
-            .collect::<Vec<_>>().await.into_iter().map(|r| r.unwrap()).collect();
+            .collect::<Vec<_>>()
+            .await
+            .into_iter()
+            .map(|r| r.unwrap())
+            .collect();
         assert!(matches!(events[0], StreamEvent::Text(ref s) if s == "Hello"));
         assert!(matches!(events[1], StreamEvent::Text(ref s) if s == " world"));
         assert!(matches!(events[2], StreamEvent::Done(_)));
@@ -916,13 +930,13 @@ data: {\"type\":\"message_stop\"}\n";
     /// Negative path: Anthropic errors + timeout through adapter to bridge
     #[tokio::test]
     async fn sse_error_and_timeout_through_pipeline() {
-        use crate::llm::stream_adapter::{adapter_for_provider, StreamAdapter};
+        use crate::llm::stream_adapter::{StreamAdapter, adapter_for_provider};
         use crate::llm::stream_bridge::token_stream_to_text;
         use futures::StreamExt;
 
         let good_chunk = process_sse_text(
             "event: content_block_delta\n\
-             data: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"ok\"}}\n"
+             data: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"ok\"}}\n",
         );
 
         // Network error mid stream
@@ -930,28 +944,23 @@ data: {\"type\":\"message_stop\"}\n";
             Ok(good_chunk[0].clone()),
             Err(LLMError::NetworkError("connection reset".into())),
         ];
-        let ts = adapter_for_provider("anthropic")
-            .adapt(Box::pin(futures::stream::iter(items)));
+        let ts = adapter_for_provider("anthropic").adapt(Box::pin(futures::stream::iter(items)));
         let results: Vec<_> = token_stream_to_text(ts).collect().await;
         assert_eq!(results.len(), 2);
         assert_eq!(results[0].as_ref().unwrap(), "ok");
         let err = results[1].as_ref().unwrap_err();
         assert!(matches!(err, LLMError::NetworkError(msg) if msg == "connection reset"));
 
-        let items2: Vec<LLMResult<ChatCompletionChunk>> = vec![
-            Err(LLMError::Timeout("30s exceeded".into())),
-        ];
-        let ts2 = adapter_for_provider("anthropic")
-            .adapt(Box::pin(futures::stream::iter(items2)));
+        let items2: Vec<LLMResult<ChatCompletionChunk>> =
+            vec![Err(LLMError::Timeout("30s exceeded".into()))];
+        let ts2 = adapter_for_provider("anthropic").adapt(Box::pin(futures::stream::iter(items2)));
         let results2: Vec<_> = token_stream_to_text(ts2).collect().await;
         assert_eq!(results2.len(), 1);
         assert!(matches!(results2[0], Err(LLMError::NetworkError(_))));
 
-        let items3: Vec<LLMResult<ChatCompletionChunk>> = vec![
-            Err(LLMError::SerializationError("bad json".into())),
-        ];
-        let ts3 = adapter_for_provider("anthropic")
-            .adapt(Box::pin(futures::stream::iter(items3)));
+        let items3: Vec<LLMResult<ChatCompletionChunk>> =
+            vec![Err(LLMError::SerializationError("bad json".into()))];
+        let ts3 = adapter_for_provider("anthropic").adapt(Box::pin(futures::stream::iter(items3)));
         let results3: Vec<_> = token_stream_to_text(ts3).collect().await;
         assert_eq!(results3.len(), 1);
         assert!(matches!(results3[0], Err(LLMError::SerializationError(_))));
@@ -986,12 +995,21 @@ data: {\"type\":\"message_stop\"}\n";
         assert_eq!(contents.len(), 3);
 
         assert_eq!(contents[0]["type"], "image");
-        assert_eq!(contents[0]["source"]["data"], "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==");
-        
+        assert_eq!(
+            contents[0]["source"]["data"],
+            "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="
+        );
+
         assert_eq!(contents[1]["type"], "audio");
-        assert_eq!(contents[1]["source"]["data"], "UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA=");
+        assert_eq!(
+            contents[1]["source"]["data"],
+            "UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA="
+        );
 
         assert_eq!(contents[2]["type"], "video");
-        assert_eq!(contents[2]["source"]["data"], "AAAAIGZ0eXBtcDQyAAAAAG1wNDJpc29tYXZjMQAAADhmoW9v...");
+        assert_eq!(
+            contents[2]["source"]["data"],
+            "AAAAIGZ0eXBtcDQyAAAAAG1wNDJpc29tYXZjMQAAADhmoW9v..."
+        );
     }
 }

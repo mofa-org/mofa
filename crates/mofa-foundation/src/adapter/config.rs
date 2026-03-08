@@ -103,6 +103,12 @@ impl ModelConfigBuilder {
     }
 }
 
+impl Default for ModelConfigBuilder {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 /// Hardware profile describing available hardware resources
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct HardwareProfile {
@@ -238,6 +244,12 @@ impl HardwareProfileBuilder {
     }
 }
 
+impl Default for HardwareProfileBuilder {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 /// Preferred hardware characteristics
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct HardwarePreferences {
@@ -304,6 +316,12 @@ impl HardwarePreferencesBuilder {
 
     pub fn build(self) -> HardwarePreferences {
         self.preferences
+    }
+}
+
+impl Default for HardwarePreferencesBuilder {
+    fn default() -> Self {
+        Self::new()
     }
 }
 

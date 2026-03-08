@@ -122,18 +122,17 @@ pub mod kernel {
     pub use mofa_kernel::agent::{
         AgentCapabilities, AgentCapabilitiesBuilder, AgentContext, AgentError, AgentFactory,
         AgentInput, AgentLifecycle, AgentMessage as CoreAgentMessage, AgentMessaging,
-        AgentMetadata, AgentOutput, AgentPluginSupport, AgentRequirements,
-        AgentRequirementsBuilder, AgentReport, AgentResult, AgentState, AgentStats,
-        ChatCompletionRequest, ChatCompletionResponse, ChatMessage, ContextConfig,
-        CoordinationPattern, Coordinator, DynAgent, ErrorCategory, ErrorContext, EventBuilder,
-        EventBus, GlobalError, GlobalEvent, GlobalMessage, GlobalReport, GlobalResult,
-        HealthStatus, InputType, IntoAgentReport, IntoGlobalReport, InterruptResult, LLMProvider,
-        Memory,
-        MemoryItem, MemoryStats, MemoryValue, Message, MessageContent, MessageMetadata,
-        MessageRole, MoFAAgent, OutputContent, OutputType, Reasoner, ReasoningResult,
-        ReasoningStep, ReasoningStepType, ReasoningStrategy, TokenUsage, Tool, ToolCall,
-        ToolDefinition, ToolDescriptor, ToolInput, ToolMetadata, ToolResult, ToolUsage,
-        execution_events, lifecycle, message_events, plugin_events, state_events,
+        AgentMetadata, AgentOutput, AgentPluginSupport, AgentReport, AgentRequirements,
+        AgentRequirementsBuilder, AgentResult, AgentState, AgentStats, ChatCompletionRequest,
+        ChatCompletionResponse, ChatMessage, ContextConfig, CoordinationPattern, Coordinator,
+        DynAgent, ErrorCategory, ErrorContext, EventBuilder, EventBus, GlobalError, GlobalEvent,
+        GlobalMessage, GlobalReport, GlobalResult, HealthStatus, InputType, InterruptResult,
+        IntoAgentReport, IntoGlobalReport, LLMProvider, Memory, MemoryItem, MemoryStats,
+        MemoryValue, Message, MessageContent, MessageMetadata, MessageRole, MoFAAgent,
+        OutputContent, OutputType, Reasoner, ReasoningResult, ReasoningStep, ReasoningStepType,
+        ReasoningStrategy, TokenUsage, Tool, ToolCall, ToolDefinition, ToolDescriptor, ToolInput,
+        ToolMetadata, ToolResult, ToolUsage, execution_events, lifecycle, message_events,
+        plugin_events, state_events,
     };
 
     // Core AgentConfig (runtime-level, lightweight)
@@ -739,6 +738,18 @@ pub mod react {
     //! Agents solve problems through a "Think-Act-Observe" cycle.
 
     pub use mofa_foundation::react::*;
+}
+
+pub mod patterns {
+    //! High-level agentic patterns with ergonomic builders.
+    //!
+    //! These patterns target common MoFA use cases such as deliberate reasoning
+    //! and expert routing, while keeping the runtime surface small.
+
+    pub use mofa_foundation::react::{
+        ChainOfThought, ChainOfThoughtBuilder, ChainOfThoughtConfig, ChainOfThoughtResult, Router,
+        RouterBuilder, RouterConfig, RouterDecision, RouterResult,
+    };
 }
 
 // Re-export collaboration module from mofa-foundation (always available)

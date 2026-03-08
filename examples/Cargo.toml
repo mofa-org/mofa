@@ -30,6 +30,7 @@ members = [
     "llm_tts_streaming",
     "agent_from_database_streaming",
     "workflow_dsl",
+    "classic_agentic_patterns",
     "reflection_agent",
     "tool_routing",
     "runtime_message_bus_backpressure",
@@ -110,7 +111,7 @@ type_complexity = "allow"
 
 await_holding_lock = "warn"
 dbg_macro = "warn"
-empty_enum = "warn"
+empty_enums = "warn"
 enum_glob_use = "warn"
 exit = "warn"
 filter_map_next = "warn"

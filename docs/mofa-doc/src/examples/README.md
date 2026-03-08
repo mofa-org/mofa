@@ -38,7 +38,7 @@ Web dashboards and metrics collection.
 LLM streaming with text-to-speech integration.
 
 ### Advanced Patterns
-Reflection agents and human-in-the-loop workflows.
+Reflection agents, chain-of-thought reasoning, router dispatch, and human-in-the-loop workflows.
 
 ## Running Examples
 
