@@ -44,6 +44,7 @@ pub mod command;
 pub mod context;
 pub mod error;
 pub mod graph;
+pub mod policy;
 pub mod reducer;
 pub mod state;
 pub mod telemetry;
@@ -55,6 +56,7 @@ pub use error::WorkflowError;
 pub use graph::{
     CompiledGraph, END, EdgeTarget, NodeFunc, START, StateGraph, StepResult, StreamEvent,
 };
+pub use policy::{CircuitBreakerState, CircuitState, NodePolicy, RetryCondition};
 pub use reducer::{Reducer, ReducerType, StateUpdate};
 pub use state::{GraphState, JsonState, StateSchema};
 pub use telemetry::{DebugEvent, DebugSession, SessionRecorder, TelemetryEmitter};

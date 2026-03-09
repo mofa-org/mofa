@@ -68,13 +68,18 @@ pub mod security;
 // Gateway routing abstractions (kernel-level traits for agent request dispatch)
 pub mod gateway;
 pub use gateway::{
-    GatewayConfigError, GatewayContext, GatewayRequest, GatewayResponse, GatewayRoute, HttpMethod,
-    RegistryError, RouteMatch, RouteRegistry, RoutingContext,
+    AgentResponse, ApiKeyStore, AuthClaims, AuthError, AuthProvider, GatewayConfigError,
+    GatewayContext, GatewayRequest, GatewayResponse, GatewayRoute, HttpMethod, RegistryError,
+    RequestEnvelope, RouteMatch, RouteRegistry, RoutingContext,
 };
 
 // Scheduler kernel contract (traits, types, errors for periodic agent execution)
 pub mod scheduler;
 pub use scheduler::{
     AgentScheduler, Clock, MissedTickPolicy, ScheduleDefinition,
-    ScheduleHandle, ScheduleInfo, SchedulerError,
+    ScheduleHandle, ScheduleInfo, ScheduledAgentRunner, SchedulerError,
 };
+
+// Speech kernel contracts (traits and types for TTS/ASR)
+pub mod speech;
+pub use speech::{AsrAdapter, TtsAdapter};

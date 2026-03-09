@@ -4,13 +4,12 @@
     non_camel_case_types,
     ambiguous_glob_reexports
 )]
-// Unified error conversions (GlobalError <-> domain errors)
-pub mod error_conversions;
 // orchestrator module - Model Lifecycle & Allocation
 pub mod orchestrator;
 
 // hardware discovery module
 pub mod hardware;
+
 // memory-budgeted scheduler for inference orchestration
 pub mod scheduler;
 
@@ -57,10 +56,10 @@ pub mod rag;
 // swarm module - Multi-agent swarm orchestration
 pub mod swarm;
 // Structured output: JSON schema validator and agent executor
-pub mod schema_validator;
 pub mod agent_executor;
-pub use schema_validator::{SchemaError, SchemaValidator};
+pub mod schema_validator;
 pub use agent_executor::{AgentExecutor, ExecutorError};
+pub use schema_validator::{SchemaError, SchemaValidator};
 // Security governance - PII redaction, content moderation, prompt guard
 pub mod security;
 
@@ -69,6 +68,17 @@ pub mod capability_registry;
 pub use capability_registry::CapabilityRegistry;
 // Error recovery strategies (Backoff, RetryPolicy, CircuitBreaker, retry, fallback_chain)
 pub mod recovery;
+
+// Metrics and telemetry module
+pub mod metrics;
+
+// Re-export metrics types
+pub use metrics::{
+    AgentMetrics, BusinessMetrics, CircuitBreakerEvent, CircuitBreakerMetrics, CircuitBreakerState,
+    LatencyPercentiles, MetricBuilder, MetricsBackend, MetricsCollector, ModelPoolEvent,
+    ModelPoolMetrics, RetryMetrics, RoutingMetrics, SchedulerMetrics, StepStatus, StepTiming,
+    TokenUsage, ToolMetrics, WorkflowMetrics,
+};
 
 // Re-export config types
 pub use config::{AgentInfo, AgentYamlConfig, LLMYamlConfig, RuntimeConfig, ToolConfig};
@@ -89,6 +99,12 @@ pub use orchestrator::{
     DegradationLevel, ModelOrchestrator, ModelProvider, ModelProviderConfig, ModelType,
     OrchestratorError, OrchestratorResult, PoolStatistics,
 };
+
+pub mod speech_registry;
+pub mod voice_pipeline;
+
+pub use speech_registry::SpeechAdapterRegistry;
+pub use voice_pipeline::{VoicePipeline, VoicePipelineConfig, VoicePipelineResult};
 
 // Re-export Linux implementation and pipeline when available
 #[cfg(all(target_os = "linux", feature = "linux-candle"))]
@@ -141,3 +157,6 @@ pub use secretary::{
     extract_json_block,
     parse_llm_json,
 };
+
+// Re-export scheduler types for convenience
+pub use scheduler::CronScheduler;
