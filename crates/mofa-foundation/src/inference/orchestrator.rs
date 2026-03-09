@@ -245,6 +245,33 @@ impl InferenceOrchestrator {
         }
     }
 
+    /// The single entry point for streaming inference.
+    ///
+    /// Behaves exactly like `infer()`, except instead of returning a single
+    /// complete string, it returns a stream of token chunks as they are generated.
+    /// In this Phase 1 iteration, it yields fake chunks based on the prompt.
+    pub fn infer_stream(
+        &mut self,
+        request: &InferenceRequest,
+    ) -> (
+        InferenceResult,
+        std::pin::Pin<Box<dyn futures::Stream<Item = String> + Send + Sync>>,
+    ) {
+        // Run full admission/routing logic
+        let base_result = self.infer(request);
+
+        // Phase 1 simulated string stream based on the generated output
+        let output_str = base_result.output.clone();
+
+        let words: Vec<String> = output_str
+            .split_whitespace()
+            .map(|w| format!("{w} "))
+            .collect();
+        let stream = futures::stream::iter(words);
+
+        (base_result, Box::pin(stream))
+    }
+
     /// Evaluate whether a local backend can admit this request based on
     /// current memory usage, configured thresholds, and **request priority**.
     ///

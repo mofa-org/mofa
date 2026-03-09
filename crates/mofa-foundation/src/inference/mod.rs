@@ -8,7 +8,6 @@
 //! - **Model Pool** (`model_pool.rs`): LRU model cache with idle-timeout eviction
 //! - **Orchestrator** (`orchestrator.rs`): Central control plane tying everything together
 //! - **Types** (`types.rs`): Shared request/response types
-//! - **Gateway** (`gateway/`): OpenAI-compatible HTTP API layer (feature = `gateway`)
 //!
 //! # Quick Start
 //!
@@ -32,18 +31,8 @@ pub mod orchestrator;
 pub mod routing;
 pub mod types;
 
-/// OpenAI-compatible HTTP gateway for the inference stack.
-///
-/// Enable with `features = ["gateway"]` in your `Cargo.toml`.
-/// Exposes `POST /v1/chat/completions` and `GET /v1/models`.
-#[cfg(feature = "gateway")]
-pub mod gateway;
-
 // Re-export primary public API
-pub use orchestrator::{InferenceOrchestrator, OrchestratorConfig};
 pub use crate::scheduler::AdmissionOutcome;
+pub use orchestrator::{InferenceOrchestrator, OrchestratorConfig};
 pub use routing::{RoutingDecision, RoutingPolicy};
 pub use types::{InferenceRequest, InferenceResult, Precision, RequestPriority, RoutedBackend};
-
-#[cfg(feature = "gateway")]
-pub use gateway::{GatewayConfig, GatewayServer};

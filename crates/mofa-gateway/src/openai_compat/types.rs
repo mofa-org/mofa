@@ -6,8 +6,8 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::inference::types::RequestPriority;
-use crate::inference::{OrchestratorConfig, RoutingPolicy};
+use mofa_foundation::inference::types::RequestPriority;
+use mofa_foundation::inference::{OrchestratorConfig, RoutingPolicy};
 
 // ──────────────────────────────────────────────────────────────────────────────
 // Request types
@@ -243,6 +243,8 @@ pub struct GatewayConfig {
     pub orchestrator_config: OrchestratorConfig,
     /// Models to advertise on the `/v1/models` endpoint.
     pub available_models: Vec<String>,
+    /// Optional API key for static bearer token authentication.
+    pub api_key: Option<String>,
 }
 
 impl Default for GatewayConfig {
@@ -253,6 +255,7 @@ impl Default for GatewayConfig {
             rate_limit_rpm: 60,
             orchestrator_config: OrchestratorConfig::default(),
             available_models: vec!["mofa-local".to_string()],
+            api_key: None,
         }
     }
 }
@@ -279,6 +282,12 @@ impl GatewayConfig {
     /// Set available models list.
     pub fn with_models(mut self, models: Vec<String>) -> Self {
         self.available_models = models;
+        self
+    }
+
+    /// Set the API key for authentication.
+    pub fn with_api_key(mut self, key: impl Into<String>) -> Self {
+        self.api_key = Some(key.into());
         self
     }
 }

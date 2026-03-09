@@ -1,12 +1,13 @@
 //! Gateway server entrypoint — builds the axum Router and binds to a TCP port.
 
 use std::net::SocketAddr;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
+use tokio::sync::Mutex;
 
 use axum::Router;
 use axum::routing::{get, post};
 
-use crate::inference::orchestrator::InferenceOrchestrator;
+use mofa_foundation::inference::orchestrator::InferenceOrchestrator;
 
 use super::handler::{AppState, chat_completions, list_models};
 use super::rate_limiter::TokenBucketLimiter;
@@ -19,12 +20,12 @@ use super::types::GatewayConfig;
 /// # Example
 ///
 /// ```rust,no_run
-/// use mofa_foundation::inference::gateway::{GatewayConfig, GatewayServer};
+/// use mofa_gateway::openai_compat::{GatewayConfig, GatewayServer};
 ///
 /// #[tokio::main]
 /// async fn main() {
 ///     let config = GatewayConfig::default().with_port(8080).with_rpm(120);
-///     GatewayServer::new(config).serve().await.unwrap();
+///     let _ = GatewayServer::new(config).serve().await;
 /// }
 /// ```
 pub struct GatewayServer {
@@ -48,6 +49,7 @@ impl GatewayServer {
                 self.config.rate_limit_rpm,
             ))),
             available_models: self.config.available_models.clone(),
+            api_key: self.config.api_key.clone(),
         };
 
         Router::new()
@@ -70,7 +72,8 @@ impl GatewayServer {
         tracing::info!("  POST /v1/chat/completions");
         tracing::info!("  GET  /v1/models");
 
-        axum::Server::bind(&addr).serve(router).await?;
+        let listener = tokio::net::TcpListener::bind(&addr).await?;
+        axum::serve(listener, router).await?;
 
         Ok(())
     }

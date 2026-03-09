@@ -12,8 +12,9 @@
 
 use std::convert::Infallible;
 use std::net::IpAddr;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use std::time::Instant;
+use tokio::sync::Mutex;
 
 use axum::Json;
 use axum::extract::{ConnectInfo, State};
@@ -22,8 +23,8 @@ use axum::response::sse::{Event, KeepAlive, Sse};
 use axum::response::{IntoResponse, Response};
 use futures::stream;
 
-use crate::inference::orchestrator::InferenceOrchestrator;
-use crate::inference::types::InferenceRequest;
+use mofa_foundation::inference::orchestrator::InferenceOrchestrator;
+use mofa_foundation::inference::types::InferenceRequest;
 
 use super::rate_limiter::TokenBucketLimiter;
 use super::types::{
@@ -44,6 +45,8 @@ pub struct AppState {
     pub limiter: Arc<Mutex<TokenBucketLimiter>>,
     /// Models advertised on the `/v1/models` endpoint.
     pub available_models: Vec<String>,
+    /// Optional static API key for authentication.
+    pub api_key: Option<String>,
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
@@ -92,14 +95,14 @@ fn estimate_tokens(s: &str) -> u32 {
 ///
 /// Returns `None` if the request is allowed, or a `429` `Response` if the
 /// bucket for this IP is exhausted.
-fn check_rate_limit(
+async fn check_rate_limit(
     limiter: &Arc<Mutex<TokenBucketLimiter>>,
     client_ip: IpAddr,
 ) -> Option<Response> {
-    let allowed = limiter
-        .lock()
-        .map(|mut l| l.check_and_consume(client_ip))
-        .unwrap_or(true); // if lock poisoned, allow to avoid false denials
+    let allowed = {
+        let mut l = limiter.lock().await;
+        l.check_and_consume(client_ip)
+    };
 
     if allowed {
         None
@@ -143,11 +146,27 @@ pub async fn list_models(State(state): State<AppState>) -> impl IntoResponse {
 /// full JSON response or a Server-Sent Event stream depending on `stream`.
 pub async fn chat_completions(
     State(state): State<AppState>,
+    headers_map: HeaderMap,
     ConnectInfo(addr): ConnectInfo<std::net::SocketAddr>,
     Json(req): Json<ChatCompletionRequest>,
 ) -> Response {
+    // ── Authentication ────────────────────────────────────────────────────────
+    if let Some(expected_key) = &state.api_key {
+        let auth_header = headers_map
+            .get(axum::http::header::AUTHORIZATION)
+            .and_then(|h| h.to_str().ok())
+            .unwrap_or("");
+
+        let provided_key = auth_header.strip_prefix("Bearer ").unwrap_or("").trim();
+
+        if provided_key != expected_key {
+            let err = GatewayErrorBody::new("Invalid API key provided", "authentication_error");
+            return (StatusCode::UNAUTHORIZED, Json(err)).into_response();
+        }
+    }
+
     // ── Rate limit ────────────────────────────────────────────────────────────
-    if let Some(denied) = check_rate_limit(&state.limiter, addr.ip()) {
+    if let Some(denied) = check_rate_limit(&state.limiter, addr.ip()).await {
         return denied;
     }
 
@@ -164,28 +183,30 @@ pub async fn chat_completions(
 
     // ── Invoke orchestrator ───────────────────────────────────────────────────
     let start = Instant::now();
-    let result = state
-        .orchestrator
-        .lock()
-        .map(|mut orch| orch.infer(&inference_req));
-
-    let (result, latency_ms) = match result {
-        Ok(r) => (r, start.elapsed().as_millis() as u64),
-        Err(_) => {
-            let err = GatewayErrorBody::server_error("orchestrator lock poisoned");
-            return (StatusCode::INTERNAL_SERVER_ERROR, Json(err)).into_response();
-        }
-    };
-
-    let backend_label = result.routed_to.to_string();
-    let output_text = result.output.clone();
-    let model_used = req.model.clone();
-    let headers = mofa_headers(&backend_label, latency_ms);
-
-    // ── Route to streaming or non-streaming path ──────────────────────────────
     if req.stream {
-        build_streaming_response(output_text, model_used, headers)
+        let (result, token_stream) = {
+            let mut orch = state.orchestrator.lock().await;
+            orch.infer_stream(&inference_req)
+        };
+        let latency_ms = start.elapsed().as_millis() as u64;
+
+        let backend_label = result.routed_to.to_string();
+        let model_used = req.model.clone();
+        let headers = mofa_headers(&backend_label, latency_ms);
+
+        build_streaming_response(token_stream, model_used, headers)
     } else {
+        let result = {
+            let mut orch = state.orchestrator.lock().await;
+            orch.infer(&inference_req)
+        };
+        let latency_ms = start.elapsed().as_millis() as u64;
+
+        let backend_label = result.routed_to.to_string();
+        let output_text = result.output.clone();
+        let model_used = req.model.clone();
+        let headers = mofa_headers(&backend_label, latency_ms);
+
         build_nstream_response(output_text, model_used, prompt, headers)
     }
 }
@@ -232,34 +253,44 @@ fn build_nstream_response(
 // SSE streaming response builder
 // ──────────────────────────────────────────────────────────────────────────────
 
-fn build_streaming_response(output: String, model: String, headers: HeaderMap) -> Response {
+fn build_streaming_response(
+    token_stream: std::pin::Pin<Box<dyn futures::Stream<Item = String> + Send + Sync>>,
+    model: String,
+    headers: HeaderMap,
+) -> Response {
     let id = completion_id();
     let created = unix_now();
 
-    // Split into word-level tokens to simulate real streaming.
-    let words: Vec<String> = output.split_whitespace().map(|w| format!("{w} ")).collect();
+    let id_clone = id.clone();
+    let model_clone = model.clone();
+    let created_clone = created;
 
-    let mut chunks: Vec<ChatCompletionChunk> = Vec::new();
+    let id_pre = id.clone();
+    let model_pre = model.clone();
 
-    // Role preamble chunk
-    chunks.push(ChatCompletionChunk {
-        id: id.clone(),
-        object: "chat.completion.chunk".to_string(),
-        created,
-        model: model.clone(),
-        choices: vec![ChunkChoice {
-            index: 0,
-            delta: Delta {
-                role: Some("assistant".to_string()),
-                content: None,
-            },
-            finish_reason: None,
-        }],
+    let pre_stream = stream::once(async move {
+        let role_chunk = ChatCompletionChunk {
+            id: id_pre,
+            object: "chat.completion.chunk".to_string(),
+            created,
+            model: model_pre,
+            choices: vec![ChunkChoice {
+                index: 0,
+                delta: Delta {
+                    role: Some("assistant".to_string()),
+                    content: None,
+                },
+                finish_reason: None,
+            }],
+        };
+        Ok::<_, Infallible>(
+            Event::default().data(serde_json::to_string(&role_chunk).unwrap_or_default()),
+        )
     });
 
-    // Content chunks
-    for word in words {
-        chunks.push(ChatCompletionChunk {
+    use futures::StreamExt;
+    let events_stream = token_stream.map(move |word| {
+        let chunk = ChatCompletionChunk {
             id: id.clone(),
             object: "chat.completion.chunk".to_string(),
             created,
@@ -272,34 +303,37 @@ fn build_streaming_response(output: String, model: String, headers: HeaderMap) -
                 },
                 finish_reason: None,
             }],
-        });
-    }
+        };
+        Ok::<_, Infallible>(
+            Event::default().data(serde_json::to_string(&chunk).unwrap_or_default()),
+        )
+    });
 
-    // Stop chunk
-    chunks.push(ChatCompletionChunk {
-        id: id.clone(),
+    let stop_chunk = ChatCompletionChunk {
+        id: id_clone,
         object: "chat.completion.chunk".to_string(),
-        created,
-        model: model.clone(),
+        created: created_clone,
+        model: model_clone,
         choices: vec![ChunkChoice {
             index: 0,
             delta: Delta::default(),
             finish_reason: Some("stop".to_string()),
         }],
+    };
+
+    let stop_event = stream::once(async move {
+        Ok::<_, Infallible>(
+            Event::default().data(serde_json::to_string(&stop_chunk).unwrap_or_default()),
+        )
     });
 
-    // Convert chunks to SSE events + terminal [DONE] marker
-    let events: Vec<Result<Event, Infallible>> = chunks
-        .into_iter()
-        .map(|c| {
-            Ok::<_, Infallible>(
-                Event::default().data(serde_json::to_string(&c).unwrap_or_default()),
-            )
-        })
-        .chain(std::iter::once(Ok(Event::default().data("[DONE]"))))
-        .collect();
+    let done_event = stream::once(async { Ok::<_, Infallible>(Event::default().data("[DONE]")) });
 
-    let stream = stream::iter(events);
+    let stream = pre_stream
+        .chain(events_stream)
+        .chain(stop_event)
+        .chain(done_event);
+
     let mut sse_resp = Sse::new(stream)
         .keep_alive(KeepAlive::default())
         .into_response();
@@ -315,37 +349,44 @@ fn build_streaming_response(output: String, model: String, headers: HeaderMap) -
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::inference::gateway::rate_limiter::TokenBucketLimiter;
-    use crate::inference::orchestrator::{InferenceOrchestrator, OrchestratorConfig};
+    use crate::openai_compat::rate_limiter::TokenBucketLimiter;
+    use mofa_foundation::inference::orchestrator::{InferenceOrchestrator, OrchestratorConfig};
     use std::net::{IpAddr, Ipv4Addr};
 
     fn make_state(rpm: u32) -> AppState {
         let config = OrchestratorConfig::default();
-        let orchestrator = Arc::new(Mutex::new(InferenceOrchestrator::new(config)));
-        let limiter = Arc::new(Mutex::new(TokenBucketLimiter::new(rpm)));
+        let orchestrator = Arc::new(tokio::sync::Mutex::new(InferenceOrchestrator::new(config)));
+        let limiter = Arc::new(tokio::sync::Mutex::new(TokenBucketLimiter::new(rpm)));
         AppState {
             orchestrator,
             limiter,
             available_models: vec!["mofa-local".to_string(), "gpt-4o".to_string()],
+            api_key: None,
         }
     }
 
-    #[test]
-    fn test_check_rate_limit_allows_within_budget() {
+    fn make_state_with_auth(rpm: u32, key: &str) -> AppState {
+        let mut state = make_state(rpm);
+        state.api_key = Some(key.to_string());
+        state
+    }
+
+    #[tokio::test]
+    async fn test_check_rate_limit_allows_within_budget() {
         let state = make_state(5);
         let ip = IpAddr::V4(Ipv4Addr::new(1, 2, 3, 4));
         for _ in 0..5 {
-            assert!(check_rate_limit(&state.limiter, ip).is_none());
+            assert!(check_rate_limit(&state.limiter, ip).await.is_none());
         }
     }
 
-    #[test]
-    fn test_check_rate_limit_rejects_over_budget() {
+    #[tokio::test]
+    async fn test_check_rate_limit_rejects_over_budget() {
         let state = make_state(2);
         let ip = IpAddr::V4(Ipv4Addr::new(9, 9, 9, 9));
-        check_rate_limit(&state.limiter, ip);
-        check_rate_limit(&state.limiter, ip);
-        let result = check_rate_limit(&state.limiter, ip);
+        check_rate_limit(&state.limiter, ip).await;
+        check_rate_limit(&state.limiter, ip).await;
+        let result = check_rate_limit(&state.limiter, ip).await;
         assert!(result.is_some(), "3rd request should be denied at 2 RPM");
     }
 
@@ -414,5 +455,61 @@ mod tests {
         let last_event = all.last().unwrap().as_ref().unwrap();
         let dbg = format!("{last_event:?}");
         assert!(dbg.contains("[DONE]"), "stream must end with [DONE]: {dbg}");
+    }
+
+    #[tokio::test]
+    async fn test_auth_failure_with_wrong_key() {
+        let state = make_state_with_auth(10, "secret-key");
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            axum::http::header::AUTHORIZATION,
+            "Bearer wrong-key".parse().unwrap(),
+        );
+
+        let req = ChatCompletionRequest {
+            model: "test".to_string(),
+            messages: vec![ChatMessage {
+                role: "user".to_string(),
+                content: "hi".to_string(),
+            }],
+            stream: false,
+            priority: crate::openai_compat::types::RequestPriorityParam::Normal,
+            max_tokens: None,
+            temperature: None,
+        };
+
+        let addr = std::net::SocketAddr::from(([127, 0, 0, 1], 8080));
+        let resp = chat_completions(State(state), headers, ConnectInfo(addr), Json(req)).await;
+
+        assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
+    }
+
+    #[tokio::test]
+    async fn test_auth_success() {
+        let state = make_state_with_auth(10, "secret-key");
+        let mut headers = HeaderMap::new();
+        // Test with Bearer prefix
+        headers.insert(
+            axum::http::header::AUTHORIZATION,
+            "Bearer secret-key".parse().unwrap(),
+        );
+
+        let req = ChatCompletionRequest {
+            model: "test".to_string(),
+            messages: vec![ChatMessage {
+                role: "user".to_string(),
+                content: "hi".to_string(),
+            }],
+            stream: false,
+            priority: crate::openai_compat::types::RequestPriorityParam::Normal,
+            max_tokens: None,
+            temperature: None,
+        };
+
+        let addr = std::net::SocketAddr::from(([127, 0, 0, 1], 8080));
+        let resp = chat_completions(State(state), headers, ConnectInfo(addr), Json(req)).await;
+
+        // It should reach orchestrator error if we don't mock it, but NOT auth error
+        assert_ne!(resp.status(), StatusCode::UNAUTHORIZED);
     }
 }

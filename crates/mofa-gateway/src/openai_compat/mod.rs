@@ -8,7 +8,7 @@
 //! # Quick Start
 //!
 //! ```rust,no_run
-//! use mofa_foundation::inference::gateway::{GatewayConfig, GatewayServer};
+//! use mofa_gateway::openai_compat::{GatewayConfig, GatewayServer};
 //!
 //! #[tokio::main]
 //! async fn main() {
@@ -16,7 +16,8 @@
 //!         .with_port(8080)
 //!         .with_rpm(120);
 //!
-//!     GatewayServer::new(config).serve().await.unwrap();
+//!     // In a real app, handle the result appropriately
+//!     let _ = GatewayServer::new(config).serve().await;
 //! }
 //! ```
 //!
