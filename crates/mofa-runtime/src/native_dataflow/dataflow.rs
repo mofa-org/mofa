@@ -22,7 +22,7 @@ use crate::native_dataflow::node::{NativeNode, NodeConfig};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
-use tokio::sync::{mpsc, Mutex, RwLock};
+use tokio::sync::{Mutex, RwLock, mpsc};
 use tokio::task::JoinHandle;
 use tracing::{error, info};
 
@@ -332,12 +332,11 @@ impl NativeDataflow {
                 for conn in conns.iter() {
                     if conn.source_node == msg.source_node
                         && conn.source_output == msg.source_output
+                        && let Some(target) = node_map.get(&conn.target_node)
                     {
-                        if let Some(target) = node_map.get(&conn.target_node) {
-                            let port = conn.target_input.clone();
-                            if let Err(e) = target.inject_raw(port, msg.data.clone()).await {
-                                error!("Router failed to deliver to '{}': {}", conn.target_node, e);
-                            }
+                        let port = conn.target_input.clone();
+                        if let Err(e) = target.inject_raw(port, msg.data.clone()).await {
+                            error!("Router failed to deliver to '{}': {}", conn.target_node, e);
                         }
                     }
                 }

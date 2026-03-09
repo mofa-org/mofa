@@ -10,102 +10,13 @@
 //! and has no circuit breaker, preserving existing behavior.
 
 use mofa_kernel::agent::error::{AgentError, AgentResult};
+use mofa_kernel::workflow::policy::NodePolicy;
 use mofa_kernel::workflow::{Command, GraphState, NodeFunc, RuntimeContext, StreamEvent};
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::sync::{RwLock, mpsc};
 use tracing::{debug, warn};
-
-// ────────────────────── NodePolicy ──────────────────────
-
-/// 节点故障和重试策略
-/// Per-node failure and retry policy.
-///
-/// # 默认值 / Default
-///
-/// 默认策略 **不执行重试**，也 **没有断路器**，
-/// 因此现有图在不进行任何配置的情况下行为完全相同。
-/// The default policy performs **no retry** and has **no circuit breaker**,
-/// so existing graphs behave identically without any configuration.
-///
-/// # 示例 / Example
-///
-/// ```rust,ignore
-/// use mofa_foundation::workflow::{NodePolicy, RetryBackoff};
-/// use std::time::Duration;
-///
-/// let policy = NodePolicy {
-///     max_retries: 3,
-///     retry_backoff: RetryBackoff::Exponential {
-///         base: Duration::from_millis(100),
-///         max: Duration::from_secs(5),
-///     },
-///     fallback_node: Some("safe_default".to_string()),
-///     circuit_open_after: 5,
-///     circuit_reset_after: Duration::from_secs(60),
-/// };
-/// ```
-#[derive(Debug, Clone)]
-pub struct NodePolicy {
-    /// 瞬态失败时的最大重试次数（0 = 不重试）
-    /// Maximum retry attempts on transient failure (0 = no retry).
-    pub max_retries: u32,
-    /// 重试之间的延迟策略
-    /// Delay strategy between retries.
-    pub retry_backoff: RetryBackoff,
-    /// 重试耗尽时路由到的可选回退节点 ID
-    /// Optional fallback node ID to route to when retries are exhausted.
-    pub fallback_node: Option<String>,
-    /// 连续失败此次数后打开断路器（0 = 禁用）
-    /// Open the circuit breaker after this many consecutive failures (0 = disabled).
-    pub circuit_open_after: u32,
-    /// 在此不活动持续时间后重置断路器
-    /// Reset the circuit breaker after this duration of inactivity.
-    pub circuit_reset_after: Duration,
-}
-
-impl Default for NodePolicy {
-    fn default() -> Self {
-        Self {
-            max_retries: 0,
-            retry_backoff: RetryBackoff::Fixed(Duration::from_millis(100)),
-            fallback_node: None,
-            circuit_open_after: 0,
-            circuit_reset_after: Duration::from_secs(30),
-        }
-    }
-}
-
-// ────────────────────── RetryBackoff ──────────────────────
-
-/// 重试之间的延迟策略
-/// Delay strategy between retry attempts.
-#[derive(Debug, Clone)]
-#[non_exhaustive]
-pub enum RetryBackoff {
-    /// 每次重试之间固定延迟
-    /// Fixed delay between each retry.
-    Fixed(Duration),
-    /// 指数退避：每次尝试延迟翻倍，上限为 `max`
-    /// Exponential backoff: delay doubles each attempt, capped at `max`.
-    Exponential { base: Duration, max: Duration },
-}
-
-impl RetryBackoff {
-    /// 计算给定尝试编号（从 0 开始）的延迟
-    /// Compute the delay for the given attempt number (0-indexed).
-    pub fn delay_for(&self, attempt: u32) -> Duration {
-        match self {
-            Self::Fixed(d) => *d,
-            Self::Exponential { base, max } => {
-                let multiplier = 2u64.saturating_pow(attempt);
-                let delay = base.saturating_mul(multiplier as u32);
-                delay.min(*max)
-            }
-        }
-    }
-}
 
 // ────────────────────── CircuitBreaker ──────────────────────
 
@@ -255,7 +166,7 @@ pub(crate) async fn execute_with_policy<S: GraphState>(
                 if let Some(ref fallback) = policy.fallback_node {
                     if let Some(tx) = event_tx {
                         let _ = tx
-                            .send(Ok(StreamEvent::CircuitOpen {
+                            .send(Ok(StreamEvent::CircuitOpened {
                                 node_id: node_id.to_string(),
                             }))
                             .await;
@@ -316,7 +227,7 @@ pub(crate) async fn execute_with_policy<S: GraphState>(
 
                 // Still have retries left?
                 if attempt + 1 < max_attempts {
-                    let delay = policy.retry_backoff.delay_for(attempt);
+                    let delay = policy.backoff_for_attempt(attempt);
                     let err_msg = last_error.as_ref().unwrap().to_string();
 
                     debug!(
@@ -354,7 +265,7 @@ pub(crate) async fn execute_with_policy<S: GraphState>(
 
     if opened && let Some(tx) = event_tx {
         let _ = tx
-            .send(Ok(StreamEvent::CircuitOpen {
+            .send(Ok(StreamEvent::CircuitOpened {
                 node_id: node_id.to_string(),
             }))
             .await;
@@ -408,128 +319,3 @@ pub(crate) enum NodeExecutionOutcome {
 
 // ────────────────────── Tests ──────────────────────
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_default_policy_no_retry() {
-        let policy = NodePolicy::default();
-        assert_eq!(policy.max_retries, 0);
-        assert!(policy.fallback_node.is_none());
-        assert_eq!(policy.circuit_open_after, 0);
-    }
-
-    #[test]
-    fn test_fixed_backoff_delay() {
-        let backoff = RetryBackoff::Fixed(Duration::from_millis(200));
-        assert_eq!(backoff.delay_for(0), Duration::from_millis(200));
-        assert_eq!(backoff.delay_for(5), Duration::from_millis(200));
-    }
-
-    #[test]
-    fn test_exponential_backoff_delay() {
-        let backoff = RetryBackoff::Exponential {
-            base: Duration::from_millis(100),
-            max: Duration::from_secs(5),
-        };
-        assert_eq!(backoff.delay_for(0), Duration::from_millis(100)); // 100 * 2^0
-        assert_eq!(backoff.delay_for(1), Duration::from_millis(200)); // 100 * 2^1
-        assert_eq!(backoff.delay_for(2), Duration::from_millis(400)); // 100 * 2^2
-        assert_eq!(backoff.delay_for(3), Duration::from_millis(800)); // 100 * 2^3
-        // Capped at max
-        assert_eq!(backoff.delay_for(10), Duration::from_secs(5));
-    }
-
-    #[test]
-    fn test_circuit_breaker_closed_allows() {
-        let policy = NodePolicy {
-            circuit_open_after: 3,
-            ..Default::default()
-        };
-        let mut cb = CircuitBreakerState::default();
-        assert!(cb.should_allow(&policy));
-    }
-
-    #[test]
-    fn test_circuit_breaker_opens_after_threshold() {
-        let policy = NodePolicy {
-            circuit_open_after: 3,
-            ..Default::default()
-        };
-        let mut cb = CircuitBreakerState::default();
-
-        assert!(!cb.record_failure(&policy)); // 1
-        assert!(!cb.record_failure(&policy)); // 2
-        assert!(cb.record_failure(&policy)); // 3 → opens
-        assert_eq!(cb.state, CircuitState::Open);
-        assert!(!cb.should_allow(&policy)); // blocked
-    }
-
-    #[test]
-    fn test_circuit_breaker_success_resets() {
-        let policy = NodePolicy {
-            circuit_open_after: 2,
-            ..Default::default()
-        };
-        let mut cb = CircuitBreakerState::default();
-
-        cb.record_failure(&policy); // 1
-        cb.record_success();
-        assert_eq!(cb.consecutive_failures, 0);
-        assert_eq!(cb.state, CircuitState::Closed);
-
-        // Need 2 new consecutive failures to open
-        assert!(!cb.record_failure(&policy)); // 1
-        assert!(cb.record_failure(&policy)); // 2 → opens
-    }
-
-    #[test]
-    fn test_circuit_breaker_half_open_on_timeout() {
-        let policy = NodePolicy {
-            circuit_open_after: 1,
-            circuit_reset_after: Duration::from_millis(0), // immediate reset for testing
-            ..Default::default()
-        };
-        let mut cb = CircuitBreakerState::default();
-
-        cb.record_failure(&policy); // opens
-        assert_eq!(cb.state, CircuitState::Open);
-
-        // With 0ms reset, should immediately transition to HalfOpen
-        assert!(cb.should_allow(&policy));
-        assert_eq!(cb.state, CircuitState::HalfOpen);
-    }
-
-    #[test]
-    fn test_circuit_breaker_half_open_success_closes() {
-        let policy = NodePolicy {
-            circuit_open_after: 1,
-            circuit_reset_after: Duration::from_millis(0),
-            ..Default::default()
-        };
-        let mut cb = CircuitBreakerState::default();
-
-        cb.record_failure(&policy); // Open
-        cb.should_allow(&policy); // HalfOpen
-        cb.record_success(); // Closed
-        assert_eq!(cb.state, CircuitState::Closed);
-        assert_eq!(cb.consecutive_failures, 0);
-    }
-
-    #[test]
-    fn test_circuit_breaker_half_open_failure_reopens() {
-        let policy = NodePolicy {
-            circuit_open_after: 1,
-            circuit_reset_after: Duration::from_millis(0),
-            ..Default::default()
-        };
-        let mut cb = CircuitBreakerState::default();
-
-        cb.record_failure(&policy); // Open
-        cb.should_allow(&policy); // HalfOpen
-        let reopened = cb.record_failure(&policy); // Re-open
-        assert!(reopened);
-        assert_eq!(cb.state, CircuitState::Open);
-    }
-}

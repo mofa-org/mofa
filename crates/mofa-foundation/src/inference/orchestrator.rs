@@ -44,8 +44,9 @@ mod duration_secs {
 }
 
 use super::model_pool::ModelPool;
-use super::routing::{self, AdmissionOutcome, RoutingDecision, RoutingPolicy};
+use super::routing::{self, RoutingDecision, RoutingPolicy};
 use super::types::{InferenceRequest, InferenceResult, RequestPriority, RoutedBackend};
+use crate::scheduler::AdmissionOutcome;
 
 /// Configuration for the `InferenceOrchestrator`.
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
@@ -182,6 +183,48 @@ impl InferenceOrchestrator {
                     actual_precision: request.preferred_precision,
                 }
             }
+            RoutingDecision::UseLocalDegraded {
+                model_id,
+                degraded_precision,
+                quality_warning,
+            } => {
+                // Estimate degraded memory footprint
+                let degraded_memory_mb = ((request.required_memory_mb as f64)
+                    * (degraded_precision.bytes_per_param()
+                        / request.preferred_precision.bytes_per_param()))
+                .ceil() as usize;
+
+                // Load the model at degraded precision
+                if !self.model_pool.is_loaded(model_id) {
+                    self.model_pool.load(
+                        model_id,
+                        degraded_memory_mb,
+                        *degraded_precision,
+                        request.priority,
+                    );
+                } else {
+                    self.model_pool.touch(model_id);
+                }
+
+                tracing::warn!(
+                    model_id,
+                    from = %request.preferred_precision,
+                    to = %degraded_precision,
+                    "{}",
+                    quality_warning
+                );
+
+                InferenceResult {
+                    output: format!(
+                        "[local-degraded:{}@{}] Inference result for: {}",
+                        model_id, degraded_precision, request.prompt
+                    ),
+                    routed_to: RoutedBackend::Local {
+                        model_id: model_id.clone(),
+                    },
+                    actual_precision: *degraded_precision,
+                }
+            }
             RoutingDecision::UseCloud { provider } => InferenceResult {
                 output: format!(
                     "[cloud:{}] Inference result for: {}",
@@ -208,7 +251,7 @@ impl InferenceOrchestrator {
     /// # Priority semantics
     ///
     /// - `Low` / `Normal`: standard dual-threshold hysteresis — may return
-    ///   [`AdmissionOutcome::Deferred`] when usage is in the `[defer, reject)` band.
+    ///   [`AdmissionOutcome::Defer`] when usage is in the `[defer, reject)` band.
     /// - `High`: bypasses the Deferred band — admitted directly whenever usage
     ///   is at or below `reject_threshold` (skips the defer zone entirely).
     /// - `Critical`: same bypass as `High`; the caller (orchestrator) is
@@ -222,7 +265,7 @@ impl InferenceOrchestrator {
         let capacity = self.config.memory_capacity_mb;
 
         if capacity == 0 {
-            return AdmissionOutcome::Rejected;
+            return AdmissionOutcome::Reject;
         }
 
         let projected_usage = projected_mb as f64 / capacity as f64;
@@ -232,21 +275,21 @@ impl InferenceOrchestrator {
             // they are admitted whenever memory is below the reject ceiling.
             RequestPriority::High | RequestPriority::Critical => {
                 if projected_usage <= self.config.reject_threshold {
-                    AdmissionOutcome::Accepted
+                    AdmissionOutcome::Accept
                 } else {
-                    AdmissionOutcome::Rejected
+                    AdmissionOutcome::Reject
                 }
             }
             // Low and Normal use standard dual-threshold hysteresis.
             RequestPriority::Low | RequestPriority::Normal => {
                 if projected_usage <= self.config.defer_threshold {
-                    AdmissionOutcome::Accepted
+                    AdmissionOutcome::Accept
                 } else if projected_usage <= self.config.reject_threshold {
                     // Deferred: memory is tight but may be reclaimable via eviction.
                     // Phase 2 will add a queue-based scheduler with retry logic.
-                    AdmissionOutcome::Deferred
+                    AdmissionOutcome::Defer
                 } else {
-                    AdmissionOutcome::Rejected
+                    AdmissionOutcome::Reject
                 }
             }
         }

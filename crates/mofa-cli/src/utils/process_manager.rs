@@ -7,6 +7,17 @@ use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use tracing::{debug, info, warn};
 
+#[cfg(windows)]
+fn windows_taskkill_args(pid: u32, force: bool) -> Vec<String> {
+    let mut args = Vec::with_capacity(3);
+    if force {
+        args.push("/F".to_string());
+    }
+    args.push("/PID".to_string());
+    args.push(pid.to_string());
+    args
+}
+
 /// Manages agent runtime processes
 pub struct AgentProcessManager {
     /// Directory containing agent configurations
@@ -150,19 +161,17 @@ impl AgentProcessManager {
 
             // On Windows, use taskkill command
             let status = Command::new("taskkill")
-                .arg(if force { "/F" } else { "" })
-                .arg("/PID")
-                .arg(pid.to_string())
+                .args(windows_taskkill_args(pid, force))
                 .status()?;
 
             if status.success() {
                 info!("Successfully terminated process {}", pid);
                 Ok(())
             } else {
-                return Err(CliError::StateError(format!(
+                Err(CliError::StateError(format!(
                     "Failed to terminate process {}",
                     pid
-                )));
+                )))
             }
         }
 
@@ -266,5 +275,23 @@ mod tests {
         let manager = AgentProcessManager::new(temp_dir.path().to_path_buf());
         let result = manager.validate_config(&config_path);
         assert!(result.is_err());
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn test_windows_taskkill_args_without_force_omits_empty_placeholder() {
+        assert_eq!(
+            windows_taskkill_args(4242, false),
+            vec!["/PID".to_string(), "4242".to_string()]
+        );
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn test_windows_taskkill_args_with_force_includes_force_flag() {
+        assert_eq!(
+            windows_taskkill_args(4242, true),
+            vec!["/F".to_string(), "/PID".to_string(), "4242".to_string()]
+        );
     }
 }
