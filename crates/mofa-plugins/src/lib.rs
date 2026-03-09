@@ -1707,4 +1707,44 @@ mod tests {
         assert_eq!(config.get_i64("timeout"), Some(30));
         assert_eq!(config.get_bool("enabled"), Some(true));
     }
+
+
+    #[tokio::test]
+    async fn test_openaisse_streaming_response() {
+        // little check for existence of api key
+        let config = LLMPluginConfig::default();
+
+        let api_key = config
+            .api_key
+            .clone()
+            .or_else(|| std::env::var("OPENAI_API_KEY").ok())
+            .or_else(|| std::env::var("API_KEY").ok());
+        if api_key.is_none() {
+            println!("Skipping Test : Open API Key is not set.");
+            return;
+        }
+
+        let client = OpenAIClient::new(LLMPluginConfig::default());
+
+        let chunks = Arc::new(Mutex::new(Vec::new()));
+        let chunks_clone = chunks.clone();
+
+        client
+            .generate_stream(
+                "Testing Streaming",
+                Box::new(move |chunk| {
+                    chunks_clone.lock().unwrap().push(chunk);
+                }),
+            )
+            .await
+            .unwrap();
+
+        let collected = chunks.lock().unwrap();
+
+        assert!(!collected.is_empty());
+
+        let full = collected.join("");
+        assert!(full.contains("Testing"));
+    }
+
 }
