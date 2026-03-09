@@ -1,0 +1,15 @@
+[package]
+name = "local_compute_mesh_demo"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+mofa-sdk = { path = "../../crates/mofa-sdk", version = "0.1" }
+mofa-foundation = { path = "../../crates/mofa-foundation", version = "0.1" }
+tokio = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+uuid = { workspace = true }
+async-trait = { workspace = true }
