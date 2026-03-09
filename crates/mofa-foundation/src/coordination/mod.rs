@@ -26,9 +26,9 @@ pub struct AgentCoordinator {
     // 维护协同拓扑：角色→智能体ID列表
     // Maintain coordination topology: Role -> Agent ID list
     role_mapping: Arc<RwLock<HashMap<String, Vec<String>>>>,
-    // 维护任务状态：任务ID→执行智能体ID+状态
-    // Maintain task status: Task ID -> Executor Agent ID + Status
-    task_tracker: Arc<RwLock<HashMap<String, (String, TaskStatus)>>>,
+    // 维护任务状态：任务ID→执行智能体ID+状态（列表）
+    // Maintain task status: Task ID -> list of (Executor Agent ID, Status)
+    task_tracker: Arc<RwLock<HashMap<String, Vec<(String, TaskStatus)>>>>,
     // 优先级调度器
     // Priority scheduler
     scheduler: scheduler::PriorityScheduler,
@@ -98,12 +98,13 @@ impl AgentCoordinator {
             .await
             .map_err(|e| GlobalError::Other(e.to_string()))?;
 
-        // 4. 跟踪任务状态（简化示例）
-        // 4. Track task status (Simplified example)
+        // 4. 跟踪任务状态
+        // 4. Track task status for all workers
         if let AgentMessage::TaskRequest { task_id, .. } = task_msg {
             let mut tracker = self.task_tracker.write().await;
+            let entries = tracker.entry(task_id.clone()).or_default();
             for worker_id in workers {
-                tracker.insert(task_id.clone(), (worker_id.clone(), TaskStatus::Pending));
+                entries.push((worker_id.clone(), TaskStatus::Pending));
             }
         }
         Ok(())

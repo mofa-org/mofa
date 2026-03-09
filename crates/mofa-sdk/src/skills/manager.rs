@@ -2,8 +2,8 @@
 //! Skills Manager - SDK Layer Unified API
 
 use super::{DisclosureController, RequirementCheck, SkillMetadata};
-use std::path::{Path, PathBuf};
 use mofa_kernel::agent::types::error::{GlobalError, GlobalResult};
+use std::path::{Path, PathBuf};
 
 /// Skills Manager - SDK 层统一 API
 /// Skills Manager - SDK Layer Unified API
@@ -38,7 +38,9 @@ impl SkillsManager {
         // Directory existence not required (supports empty directories)
         let mut controller = DisclosureController::new(skills_dir);
         if skills_dir.exists() {
-            controller.scan_metadata().map_err(|e| GlobalError::Other(e.to_string()))?;
+            controller
+                .scan_metadata()
+                .map_err(|e| GlobalError::Other(e.to_string()))?;
         }
 
         Ok(Self { controller })
@@ -311,7 +313,9 @@ impl SkillsManager {
     /// 重新扫描 Skills 目录
     /// Rescan Skills directory
     pub fn rescan(&mut self) -> GlobalResult<usize> {
-        self.controller.scan_metadata().map_err(|e| GlobalError::Other(e.to_string()))
+        self.controller
+            .scan_metadata()
+            .map_err(|e| GlobalError::Other(e.to_string()))
     }
 
     /// 重新扫描 Skills 目录（异步版本）
