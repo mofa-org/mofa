@@ -163,16 +163,18 @@ pub async fn chat_completions(
 
         let provided_key = auth_header.strip_prefix("Bearer ").unwrap_or("").trim();
 
-        // Constant-time comparison to prevent timing side-channel attacks.
-        let keys_match = provided_key.len() == expected_key.len()
-            && provided_key
-                .as_bytes()
-                .iter()
-                .zip(expected_key.as_bytes())
-                .fold(0u8, |acc, (a, b)| acc | (a ^ b))
-                == 0;
+        // Constant-time comparison via `subtle` to prevent timing side-channel attacks.
+        // Pad both values to equal length so no information is leaked about key length.
+        use subtle::ConstantTimeEq;
+        let max_len = provided_key.len().max(expected_key.len());
+        let mut a = vec![0u8; max_len];
+        let mut b = vec![0u8; max_len];
+        a[..provided_key.len()].copy_from_slice(provided_key.as_bytes());
+        b[..expected_key.len()].copy_from_slice(expected_key.as_bytes());
+        let len_ok = (provided_key.len() == expected_key.len()) as u8;
+        let keys_match = a.ct_eq(&b).unwrap_u8() & len_ok;
 
-        if !keys_match {
+        if keys_match != 1 {
             let err = GatewayErrorBody::new("Invalid API key provided", "authentication_error");
             return (StatusCode::UNAUTHORIZED, Json(err)).into_response();
         }

@@ -245,11 +245,12 @@ impl InferenceOrchestrator {
         }
     }
 
-    /// The single entry point for streaming inference.
+    /// Phase-1 simulated streaming entry point.
     ///
-    /// Behaves exactly like `infer()`, except instead of returning a single
-    /// complete string, it returns a stream of token chunks as they are generated.
-    /// In this Phase 1 iteration, it yields fake chunks based on the prompt.
+    /// **Warning**: This method splits the fully-generated output by whitespace
+    /// to simulate token-level SSE. It will be replaced by real incremental
+    /// decoding in Phase 2. Hidden from public documentation until then.
+    #[doc(hidden)]
     pub fn infer_stream(
         &mut self,
         request: &InferenceRequest,
