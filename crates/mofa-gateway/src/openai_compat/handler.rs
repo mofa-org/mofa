@@ -15,6 +15,7 @@ use std::net::IpAddr;
 use std::sync::Arc;
 use std::time::Instant;
 use tokio::sync::Mutex;
+use tokio::sync::RwLock;
 
 use axum::Json;
 use axum::extract::{ConnectInfo, State};
@@ -40,7 +41,10 @@ use super::types::{
 #[derive(Clone)]
 pub struct AppState {
     /// The inference orchestrator, protected for concurrent handler access.
-    pub orchestrator: Arc<Mutex<InferenceOrchestrator>>,
+    ///
+    /// Uses `RwLock` so that read-only paths (e.g., `list_models`) do not
+    /// contend with inference requests.
+    pub orchestrator: Arc<RwLock<InferenceOrchestrator>>,
     /// Per-IP token-bucket rate limiter.
     pub limiter: Arc<Mutex<TokenBucketLimiter>>,
     /// Models advertised on the `/v1/models` endpoint.
@@ -185,7 +189,7 @@ pub async fn chat_completions(
     let start = Instant::now();
     if req.stream {
         let (result, token_stream) = {
-            let mut orch = state.orchestrator.lock().await;
+            let mut orch = state.orchestrator.write().await;
             orch.infer_stream(&inference_req)
         };
         let latency_ms = start.elapsed().as_millis() as u64;
@@ -197,7 +201,7 @@ pub async fn chat_completions(
         build_streaming_response(token_stream, model_used, headers)
     } else {
         let result = {
-            let mut orch = state.orchestrator.lock().await;
+            let mut orch = state.orchestrator.write().await;
             orch.infer(&inference_req)
         };
         let latency_ms = start.elapsed().as_millis() as u64;
@@ -283,9 +287,15 @@ fn build_streaming_response(
                 finish_reason: None,
             }],
         };
-        Ok::<_, Infallible>(
-            Event::default().data(serde_json::to_string(&role_chunk).unwrap_or_default()),
-        )
+        match serde_json::to_string(&role_chunk) {
+            Ok(json) => Ok::<_, Infallible>(Event::default().data(json)),
+            Err(e) => {
+                tracing::error!(error = %e, "failed to serialize SSE role chunk");
+                Ok::<_, Infallible>(
+                    Event::default().data(r#"{"error":"internal serialization error"}"#),
+                )
+            }
+        }
     });
 
     use futures::StreamExt;
@@ -304,9 +314,15 @@ fn build_streaming_response(
                 finish_reason: None,
             }],
         };
-        Ok::<_, Infallible>(
-            Event::default().data(serde_json::to_string(&chunk).unwrap_or_default()),
-        )
+        match serde_json::to_string(&chunk) {
+            Ok(json) => Ok::<_, Infallible>(Event::default().data(json)),
+            Err(e) => {
+                tracing::error!(error = %e, "failed to serialize SSE content chunk");
+                Ok::<_, Infallible>(
+                    Event::default().data(r#"{"error":"internal serialization error"}"#),
+                )
+            }
+        }
     });
 
     let stop_chunk = ChatCompletionChunk {
@@ -322,9 +338,15 @@ fn build_streaming_response(
     };
 
     let stop_event = stream::once(async move {
-        Ok::<_, Infallible>(
-            Event::default().data(serde_json::to_string(&stop_chunk).unwrap_or_default()),
-        )
+        match serde_json::to_string(&stop_chunk) {
+            Ok(json) => Ok::<_, Infallible>(Event::default().data(json)),
+            Err(e) => {
+                tracing::error!(error = %e, "failed to serialize SSE stop chunk");
+                Ok::<_, Infallible>(
+                    Event::default().data(r#"{"error":"internal serialization error"}"#),
+                )
+            }
+        }
     });
 
     let done_event = stream::once(async { Ok::<_, Infallible>(Event::default().data("[DONE]")) });
@@ -355,8 +377,8 @@ mod tests {
 
     fn make_state(rpm: u32) -> AppState {
         let config = OrchestratorConfig::default();
-        let orchestrator = Arc::new(tokio::sync::Mutex::new(InferenceOrchestrator::new(config)));
-        let limiter = Arc::new(tokio::sync::Mutex::new(TokenBucketLimiter::new(rpm)));
+        let orchestrator = Arc::new(RwLock::new(InferenceOrchestrator::new(config)));
+        let limiter = Arc::new(Mutex::new(TokenBucketLimiter::new(rpm)));
         AppState {
             orchestrator,
             limiter,

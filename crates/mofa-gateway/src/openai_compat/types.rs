@@ -81,6 +81,7 @@ impl ChatCompletionRequest {
 /// Serializable counterpart to [`RequestPriority`] for JSON deserialization.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
+#[non_exhaustive]
 pub enum RequestPriorityParam {
     Low,
     #[default]
@@ -290,6 +291,29 @@ impl GatewayConfig {
         self.api_key = Some(key.into());
         self
     }
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Typed gateway error
+// ──────────────────────────────────────────────────────────────────────────────
+
+/// Typed error for [`GatewayServer::serve`](super::server::GatewayServer::serve).
+///
+/// Replaces `Box<dyn Error>` so callers can match on specific failure modes.
+#[derive(Debug, thiserror::Error)]
+#[non_exhaustive]
+pub enum GatewayError {
+    /// The configured `host:port` string could not be parsed as a [`SocketAddr`](std::net::SocketAddr).
+    #[error("invalid listen address: {0}")]
+    AddrParse(#[from] std::net::AddrParseError),
+
+    /// TCP bind failed (e.g., port already in use).
+    #[error("failed to bind TCP listener: {0}")]
+    Bind(std::io::Error),
+
+    /// The axum server returned an error.
+    #[error("server error: {0}")]
+    Serve(std::io::Error),
 }
 
 // ──────────────────────────────────────────────────────────────────────────────

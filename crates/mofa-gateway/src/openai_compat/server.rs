@@ -3,6 +3,7 @@
 use std::net::SocketAddr;
 use std::sync::Arc;
 use tokio::sync::Mutex;
+use tokio::sync::RwLock;
 
 use axum::Router;
 use axum::routing::{get, post};
@@ -11,7 +12,7 @@ use mofa_foundation::inference::orchestrator::InferenceOrchestrator;
 
 use super::handler::{AppState, chat_completions, list_models};
 use super::rate_limiter::TokenBucketLimiter;
-use super::types::GatewayConfig;
+use super::types::{GatewayConfig, GatewayError};
 
 /// The MoFA inference gateway server.
 ///
@@ -44,7 +45,7 @@ impl GatewayServer {
     pub fn build_router(&self) -> Router {
         let orchestrator = InferenceOrchestrator::new(self.config.orchestrator_config.clone());
         let state = AppState {
-            orchestrator: Arc::new(Mutex::new(orchestrator)),
+            orchestrator: Arc::new(RwLock::new(orchestrator)),
             limiter: Arc::new(Mutex::new(TokenBucketLimiter::new(
                 self.config.rate_limit_rpm,
             ))),
@@ -60,9 +61,9 @@ impl GatewayServer {
 
     /// Bind to the configured host:port and serve requests.
     ///
-    /// Uses `axum::Server` (hyper-backed) which is the axum 0.6 API.
-    /// Runs until interrupted.
-    pub async fn serve(self) -> Result<(), Box<dyn std::error::Error>> {
+    /// Returns a typed [`GatewayError`] on failure so callers can match
+    /// on specific failure modes.
+    pub async fn serve(self) -> Result<(), GatewayError> {
         let addr: SocketAddr = format!("{}:{}", self.config.host, self.config.port).parse()?;
         let router = self
             .build_router()
@@ -72,8 +73,12 @@ impl GatewayServer {
         tracing::info!("  POST /v1/chat/completions");
         tracing::info!("  GET  /v1/models");
 
-        let listener = tokio::net::TcpListener::bind(&addr).await?;
-        axum::serve(listener, router).await?;
+        let listener = tokio::net::TcpListener::bind(&addr)
+            .await
+            .map_err(GatewayError::Bind)?;
+        axum::serve(listener, router)
+            .await
+            .map_err(GatewayError::Serve)?;
 
         Ok(())
     }

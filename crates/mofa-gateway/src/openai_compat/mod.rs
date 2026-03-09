@@ -42,6 +42,6 @@ pub mod types;
 
 pub use server::GatewayServer;
 pub use types::{
-    ChatCompletionRequest, ChatCompletionResponse, GatewayConfig, GatewayErrorBody,
+    ChatCompletionRequest, ChatCompletionResponse, GatewayConfig, GatewayError, GatewayErrorBody,
     ModelListResponse,
 };
