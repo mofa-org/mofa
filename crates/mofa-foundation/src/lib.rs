@@ -80,6 +80,12 @@ pub use metrics::{
     TokenUsage, ToolMetrics, WorkflowMetrics,
 };
 
+// Gateway implementations (rate limiter, routing strategies)
+pub mod gateway;
+pub use gateway::{
+    KeyStrategy, RateLimitDecision, RateLimiter, RateLimiterConfig, TokenBucketRateLimiter,
+};
+
 // Re-export config types
 pub use config::{AgentInfo, AgentYamlConfig, LLMYamlConfig, RuntimeConfig, ToolConfig};
 
