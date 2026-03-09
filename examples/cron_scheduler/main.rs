@@ -17,6 +17,7 @@ use mofa_kernel::agent::context::AgentContext;
 use mofa_kernel::agent::core::MoFAAgent;
 use mofa_kernel::agent::types::{AgentInput, AgentOutput};
 use mofa_kernel::scheduler::{AgentScheduler, ScheduleDefinition};
+use mofa_runtime::agent::execution::ExecutionEngine;
 use mofa_runtime::agent::registry::AgentRegistry;
 use tokio::signal;
 
@@ -110,7 +111,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("Registered logging agent");
 
     // Create scheduler with persistence and telemetry
-    let scheduler = CronScheduler::new(registry, 10) // Global concurrency limit of 10
+    let engine = Arc::new(ExecutionEngine::new(Arc::clone(&registry)));
+    let scheduler = CronScheduler::new(engine, 10) // Global concurrency limit of 10
         .with_persistence("schedules.json"); // Enable persistence
 
     println!("Created scheduler with persistence enabled");
