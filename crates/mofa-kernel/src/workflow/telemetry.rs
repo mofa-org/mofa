@@ -276,8 +276,9 @@ impl SessionQuery {
         true
     }
 
-    /// Apply limit and offset to an iterator of sessions.
-    pub fn paginate(&self, sessions: Vec<DebugSession>) -> Vec<DebugSession> {
+    /// Sort sessions by `started_at` descending, then apply offset and limit.
+    pub fn paginate(&self, mut sessions: Vec<DebugSession>) -> Vec<DebugSession> {
+        sessions.sort_by(|a, b| b.started_at.cmp(&a.started_at));
         let offset = self.offset.unwrap_or(0);
         let iter = sessions.into_iter().skip(offset);
         match self.limit {
@@ -605,28 +606,48 @@ mod tests {
 
     #[test]
     fn test_session_query_paginate() {
+        // sessions created in ascending order: s0(0), s1(100), ..., s9(900)
         let sessions: Vec<DebugSession> = (0..10)
             .map(|i| make_session(&format!("s{i}"), "wf", "completed", i * 100, Some(i * 100 + 50)))
             .collect();
 
-        // limit only
+        // limit only — sorted descending, so newest (s9) comes first
         let q = SessionQuery { limit: Some(3), ..Default::default() };
-        assert_eq!(q.paginate(sessions.clone()).len(), 3);
+        let result = q.paginate(sessions.clone());
+        assert_eq!(result.len(), 3);
+        assert_eq!(result[0].session_id, "s9");
+        assert_eq!(result[1].session_id, "s8");
+        assert_eq!(result[2].session_id, "s7");
 
-        // offset only
+        // offset only — skip 7 newest, leaving 3 oldest
         let q = SessionQuery { offset: Some(7), ..Default::default() };
         assert_eq!(q.paginate(sessions.clone()).len(), 3);
 
-        // limit + offset
+        // limit + offset — skip 5 newest, take next 2
         let q = SessionQuery { limit: Some(2), offset: Some(5), ..Default::default() };
         let result = q.paginate(sessions.clone());
         assert_eq!(result.len(), 2);
-        assert_eq!(result[0].session_id, "s5");
-        assert_eq!(result[1].session_id, "s6");
+        assert_eq!(result[0].session_id, "s4");
+        assert_eq!(result[1].session_id, "s3");
 
         // no limit or offset returns all
         let q = SessionQuery::default();
         assert_eq!(q.paginate(sessions).len(), 10);
+    }
+
+    #[test]
+    fn test_paginate_sorts_descending_regardless_of_input_order() {
+        // feed sessions in random order
+        let sessions = vec![
+            make_session("mid", "wf", "completed", 500, Some(550)),
+            make_session("old", "wf", "completed", 100, Some(150)),
+            make_session("new", "wf", "completed", 900, Some(950)),
+        ];
+        let q = SessionQuery::default();
+        let result = q.paginate(sessions);
+        assert_eq!(result[0].session_id, "new");
+        assert_eq!(result[1].session_id, "mid");
+        assert_eq!(result[2].session_id, "old");
     }
 
     #[test]
