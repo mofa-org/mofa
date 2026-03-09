@@ -41,6 +41,10 @@ tempfile = "3"
 workspace = true
 
 [features]
-default = []
+default = ["runtime-tokio"]
+# Tokio async runtime (default)
+runtime-tokio = []
+# Enable custom runtime support
+custom-runtime = []
 # Config loader (formats, env substitution, merge)
 config = ["dep:config", "dep:regex", "dep:serde_yaml", "dep:toml"]
