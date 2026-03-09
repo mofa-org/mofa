@@ -566,12 +566,14 @@ mod tests {
 // ```
 
 mod admission;
+pub mod clock;
 mod budget;
 mod deferred;
 mod stability;
 
 pub use admission::{AdmissionDecision, AdmissionOutcome};
 pub use budget::MemoryBudget;
+pub use clock::SystemClock;
 pub use deferred::{DeferredQueue, DeferredRequest};
 pub use stability::StabilityControl;
 
