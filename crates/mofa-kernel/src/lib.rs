@@ -79,3 +79,7 @@ pub use scheduler::{
     AgentScheduler, Clock, MissedTickPolicy, ScheduleDefinition,
     ScheduleHandle, ScheduleInfo, SchedulerError,
 };
+
+// Speech kernel contracts (traits and types for TTS/ASR)
+pub mod speech;
+pub use speech::{AsrAdapter, TtsAdapter};
