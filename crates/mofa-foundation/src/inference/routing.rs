@@ -7,6 +7,7 @@
 use std::fmt;
 
 use crate::hardware::{CpuFamily, HardwareCapability, OsClassification};
+use crate::scheduler::AdmissionOutcome;
 
 use super::types::{InferenceRequest, RequestPriority, RoutedBackend};
 
@@ -39,18 +40,6 @@ pub enum RoutingDecision {
     Rejected { reason: String },
 }
 
-/// Represents the memory scheduler's admission outcome when evaluating
-/// whether a local backend can handle a request.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
-pub enum AdmissionOutcome {
-    /// Request accepted — sufficient memory for local execution.
-    Accepted,
-    /// Request deferred — memory is tight, but may be reclaimable.
-    Deferred,
-    /// Request rejected — insufficient memory for local execution.
-    Rejected,
-}
-
 impl fmt::Display for RoutingPolicy {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
@@ -69,16 +58,6 @@ impl fmt::Display for RoutingDecision {
             Self::UseLocal { model_id } => write!(f, "local({})", model_id),
             Self::UseCloud { provider } => write!(f, "cloud({})", provider),
             Self::Rejected { reason } => write!(f, "rejected({})", reason),
-        }
-    }
-}
-
-impl fmt::Display for AdmissionOutcome {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::Accepted => write!(f, "accepted"),
-            Self::Deferred => write!(f, "deferred"),
-            Self::Rejected => write!(f, "rejected"),
         }
     }
 }
@@ -124,16 +103,16 @@ pub fn resolve(
 /// LocalOnly: only use local backends; reject if admission fails.
 fn resolve_local_only(request: &InferenceRequest, admission: AdmissionOutcome) -> RoutingDecision {
     match admission {
-        AdmissionOutcome::Accepted => RoutingDecision::UseLocal {
+        AdmissionOutcome::Accept => RoutingDecision::UseLocal {
             model_id: request.model_id.clone(),
         },
-        AdmissionOutcome::Deferred => RoutingDecision::Rejected {
+        AdmissionOutcome::Defer => RoutingDecision::Rejected {
             reason: format!(
                 "Local admission deferred for '{}' and cloud fallback is disabled (LocalOnly policy)",
                 request.model_id
             ),
         },
-        AdmissionOutcome::Rejected => RoutingDecision::Rejected {
+        AdmissionOutcome::Reject => RoutingDecision::Rejected {
             reason: format!(
                 "Local admission rejected for '{}' ({}MB required) and cloud fallback is disabled (LocalOnly policy)",
                 request.model_id, request.required_memory_mb
@@ -149,10 +128,10 @@ fn resolve_local_first(
     cloud_provider: &str,
 ) -> RoutingDecision {
     match admission {
-        AdmissionOutcome::Accepted => RoutingDecision::UseLocal {
+        AdmissionOutcome::Accept => RoutingDecision::UseLocal {
             model_id: request.model_id.clone(),
         },
-        AdmissionOutcome::Deferred | AdmissionOutcome::Rejected => RoutingDecision::UseCloud {
+        AdmissionOutcome::Defer | AdmissionOutcome::Reject => RoutingDecision::UseCloud {
             provider: cloud_provider.to_string(),
         },
     }
@@ -167,7 +146,7 @@ fn resolve_latency_optimized(
     cloud_provider: &str,
 ) -> RoutingDecision {
     // If local hardware has GPU acceleration and memory is available, use local
-    if hardware.gpu_available && admission == AdmissionOutcome::Accepted {
+    if hardware.gpu_available && admission == AdmissionOutcome::Accept {
         return RoutingDecision::UseLocal {
             model_id: request.model_id.clone(),
         };
@@ -185,13 +164,13 @@ fn resolve_cost_optimized(
     cloud_provider: &str,
 ) -> RoutingDecision {
     match admission {
-        AdmissionOutcome::Accepted | AdmissionOutcome::Deferred => {
+        AdmissionOutcome::Accept | AdmissionOutcome::Defer => {
             // Even deferred requests are worth waiting for locally to save cost
             RoutingDecision::UseLocal {
                 model_id: request.model_id.clone(),
             }
         }
-        AdmissionOutcome::Rejected => {
+        AdmissionOutcome::Reject => {
             // Only use cloud as absolute last resort
             RoutingDecision::UseCloud {
                 provider: cloud_provider.to_string(),
@@ -225,7 +204,7 @@ mod tests {
         let decision = resolve(
             &RoutingPolicy::LocalOnly,
             &mock_request(),
-            AdmissionOutcome::Accepted,
+            AdmissionOutcome::Accept,
             &mock_hardware(),
             "openai",
         );
@@ -242,7 +221,7 @@ mod tests {
         let decision = resolve(
             &RoutingPolicy::LocalOnly,
             &mock_request(),
-            AdmissionOutcome::Rejected,
+            AdmissionOutcome::Reject,
             &mock_hardware(),
             "openai",
         );
@@ -254,7 +233,7 @@ mod tests {
         let decision = resolve(
             &RoutingPolicy::LocalOnly,
             &mock_request(),
-            AdmissionOutcome::Deferred,
+            AdmissionOutcome::Defer,
             &mock_hardware(),
             "openai",
         );
@@ -267,7 +246,7 @@ mod tests {
         let decision = resolve(
             &RoutingPolicy::CloudOnly,
             &mock_request(),
-            AdmissionOutcome::Accepted, // Even if local would accept
+            AdmissionOutcome::Accept, // Even if local would accept
             &mock_hardware(),
             "openai",
         );
@@ -284,7 +263,7 @@ mod tests {
         let decision = resolve(
             &RoutingPolicy::LocalFirstWithCloudFallback,
             &mock_request(),
-            AdmissionOutcome::Rejected,
+            AdmissionOutcome::Reject,
             &mock_hardware(),
             "openai",
         );
@@ -301,7 +280,7 @@ mod tests {
         let decision = resolve(
             &RoutingPolicy::LocalFirstWithCloudFallback,
             &mock_request(),
-            AdmissionOutcome::Accepted,
+            AdmissionOutcome::Accept,
             &mock_hardware(),
             "openai",
         );
@@ -318,7 +297,7 @@ mod tests {
         let decision = resolve(
             &RoutingPolicy::CostOptimized,
             &mock_request(),
-            AdmissionOutcome::Deferred,
+            AdmissionOutcome::Defer,
             &mock_hardware(),
             "openai",
         );
@@ -344,7 +323,7 @@ mod tests {
         let decision = resolve(
             &RoutingPolicy::LatencyOptimized,
             &mock_request(),
-            AdmissionOutcome::Accepted,
+            AdmissionOutcome::Accept,
             &hw,
             "openai",
         );
@@ -408,9 +387,9 @@ mod tests {
 
     #[test]
     fn test_admission_outcome_display() {
-        assert_eq!(format!("{}", AdmissionOutcome::Accepted), "accepted");
-        assert_eq!(format!("{}", AdmissionOutcome::Deferred), "deferred");
-        assert_eq!(format!("{}", AdmissionOutcome::Rejected), "rejected");
+        assert_eq!(format!("{}", AdmissionOutcome::Accept), "Accept");
+        assert_eq!(format!("{}", AdmissionOutcome::Defer), "Defer");
+        assert_eq!(format!("{}", AdmissionOutcome::Reject), "Reject");
     }
 
     #[test]
@@ -451,9 +430,9 @@ mod tests {
     #[test]
     fn test_admission_outcome_serde_roundtrip() {
         for variant in [
-            AdmissionOutcome::Accepted,
-            AdmissionOutcome::Deferred,
-            AdmissionOutcome::Rejected,
+            AdmissionOutcome::Accept,
+            AdmissionOutcome::Defer,
+            AdmissionOutcome::Reject,
         ] {
             let json = serde_json::to_string(&variant).unwrap();
             let back: AdmissionOutcome = serde_json::from_str(&json).unwrap();

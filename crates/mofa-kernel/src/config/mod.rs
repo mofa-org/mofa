@@ -14,6 +14,15 @@ use config::{Config as Cfg, Environment, File, FileFormat};
 use regex::Regex;
 use serde::de::DeserializeOwned;
 use std::path::Path;
+use std::sync::LazyLock;
+
+/// Cached regex for braced env var syntax: `${VAR_NAME}`
+static ENV_VAR_BRACED_RE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"\$\{([A-Za-z_][A-Za-z0-9_]*)\}").unwrap());
+
+/// Cached regex for simple env var syntax: `$VAR_NAME`
+static ENV_VAR_SIMPLE_RE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"\$([A-Za-z_][A-Za-z0-9_]*)\b").unwrap());
 
 /// Configuration format detection error
 #[derive(Debug, thiserror::Error)]
@@ -94,8 +103,7 @@ pub fn substitute_env_vars(content: &str) -> String {
     let mut result = content.to_string();
 
     // Match ${VAR_NAME} pattern (braced syntax - higher priority)
-    let re_braced = Regex::new(r"\$\{([A-Za-z_][A-Za-z0-9_]*)\}").unwrap();
-    result = re_braced
+    result = ENV_VAR_BRACED_RE
         .replace_all(&result, |caps: &regex::Captures| {
             let var_name = &caps[1];
             std::env::var(var_name).unwrap_or_else(|_| caps[0].to_string())
@@ -104,8 +112,7 @@ pub fn substitute_env_vars(content: &str) -> String {
 
     // Match $VAR_NAME pattern (non-braced, but only if not already substituted)
     // This regex matches $ followed by a valid identifier name
-    let re_simple = Regex::new(r"\$([A-Za-z_][A-Za-z0-9_]*)\b").unwrap();
-    result = re_simple
+    result = ENV_VAR_SIMPLE_RE
         .replace_all(&result, |caps: &regex::Captures| {
             let var_name = &caps[1];
             std::env::var(var_name).unwrap_or_else(|_| caps[0].to_string())

@@ -6,6 +6,12 @@ use mofa_kernel::plugin::{PluginError, PluginResult};
 use regex::Regex;
 use std::fs;
 use std::path::Path;
+use std::sync::LazyLock;
+
+/// Cached regex for SKILL.md YAML frontmatter parsing.
+/// Use [\s\S]*? instead of .*? to match newlines in YAML content.
+static FRONTMATTER_RE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"^---\s*\n([\s\S]*?)\n---\s*\n([\s\S]*)$").unwrap());
 
 /// SKILL.md 解析器
 /// SKILL.md parser
@@ -15,10 +21,7 @@ impl SkillParser {
     /// 解析 YAML frontmatter
     /// Parse YAML frontmatter
     pub fn parse_frontmatter(content: &str) -> PluginResult<(SkillMetadata, String)> {
-        // Use [\s\S]*? instead of .*? to match newlines in YAML content
-        let frontmatter_regex = Regex::new(r"^---\s*\n([\s\S]*?)\n---\s*\n([\s\S]*)$").unwrap();
-
-        if let Some(caps) = frontmatter_regex.captures(content) {
+        if let Some(caps) = FRONTMATTER_RE.captures(content) {
             let yaml = &caps[1];
             let markdown = &caps[2];
 
