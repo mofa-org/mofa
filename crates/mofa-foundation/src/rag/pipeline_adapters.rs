@@ -58,7 +58,7 @@ impl Retriever for InMemoryRetriever {
                 };
 
                 let mut ranked = item.clone();
-                ranked.score = ranked.score + lexical;
+                ranked.score += lexical;
                 ranked
             })
             .collect::<Vec<_>>();

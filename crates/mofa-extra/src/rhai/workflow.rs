@@ -328,7 +328,7 @@ impl ScriptWorkflowNode {
             return Err(RhaiError::ExecutionError(
                 result
                     .error
-                    .unwrap_or_else(|| "Condition execution failed".into())
+                    .unwrap_or_else(|| "Condition execution failed".into()),
             ));
         }
 
@@ -617,7 +617,10 @@ impl ScriptWorkflowExecutor {
 
                 if !result.success {
                     state.error = result.error;
-                    return Err(RhaiError::ExecutionError(format!("Node {} execution failed", node_id)));
+                    return Err(RhaiError::ExecutionError(format!(
+                        "Node {} execution failed",
+                        node_id
+                    )));
                 }
 
                 // 保存节点输出
@@ -645,8 +648,7 @@ impl ScriptWorkflowExecutor {
                 let error_detail = error.unwrap_or_else(|| "unknown error".to_string());
                 return Err(RhaiError::ExecutionError(format!(
                     "Node {} execution failed: {}",
-                    node_id,
-                    error_detail
+                    node_id, error_detail
                 )));
             }
 

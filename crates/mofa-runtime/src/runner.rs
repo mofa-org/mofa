@@ -98,6 +98,7 @@ use tokio::time::{Duration, MissedTickBehavior};
 /// 运行器状态
 /// Runner state
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum RunnerState {
     /// 已创建
     /// Created
@@ -558,7 +559,15 @@ impl<T: MoFAAgent> AgentRunner<T> {
     where
         T: AgentLifecycle,
     {
-        *self.state.write().await = RunnerState::Stopping;
+        // 检查状态
+        // Check state
+        let current_state = self.state().await;
+        if !matches!(current_state, RunnerState::Running) {
+            return Err(AgentError::ValidationFailed(format!(
+                "Cannot pause in state: {:?}",
+                current_state
+            )));
+        }
 
         self.agent
             .pause()
@@ -578,13 +587,22 @@ impl<T: MoFAAgent> AgentRunner<T> {
     where
         T: AgentLifecycle,
     {
-        *self.state.write().await = RunnerState::Running;
+        // 检查状态
+        // Check state
+        let current_state = self.state().await;
+        if !matches!(current_state, RunnerState::Paused) {
+            return Err(AgentError::ValidationFailed(format!(
+                "Cannot resume in state: {:?}",
+                current_state
+            )));
+        }
 
         self.agent
             .resume()
             .await
             .map_err(|e| AgentError::Other(format!("Resume failed: {}", e)))?;
 
+        *self.state.write().await = RunnerState::Running;
         Ok(())
     }
 
@@ -594,8 +612,6 @@ impl<T: MoFAAgent> AgentRunner<T> {
     /// 优雅关闭，释放资源。
     /// Graceful shutdown, releases resources.
     pub async fn shutdown(mut self) -> AgentResult<()> {
-        *self.state.write().await = RunnerState::Stopping;
-
         self.agent
             .shutdown()
             .await
@@ -752,6 +768,93 @@ pub async fn run_agents<T: MoFAAgent>(
     let results = runner.execute_batch(inputs).await;
     runner.shutdown().await?;
     results.into_iter().collect()
+}
+
+// ============================================================================
+// GlobalResult-based APIs (Phase 4 unified error handling)
+// ============================================================================
+
+use mofa_kernel::agent::types::error::{GlobalError, GlobalResult};
+use mofa_foundation::recovery::RetryPolicy;
+
+impl<T: MoFAAgent> AgentRunner<T> {
+    /// Execute a task returning `GlobalResult` (unified error type).
+    ///
+    /// This is the recommended entry point for new code that wants to use
+    /// the unified error handling strategy. Errors are automatically
+    /// converted from `AgentError` to `GlobalError::Agent`.
+    pub async fn execute_global(&mut self, input: AgentInput) -> GlobalResult<AgentOutput> {
+        self.execute(input).await.map_err(GlobalError::from)
+    }
+
+    /// Execute with automatic retry on retryable errors.
+    ///
+    /// Uses the kernel-level `RetryPolicy` for backoff and retry decisions.
+    /// Only retries when `GlobalError::is_retryable()` returns true
+    /// (e.g., LLM timeouts, runtime errors, WASM/Rhai errors).
+    ///
+    /// # Example
+    ///
+    /// ```rust,ignore
+    /// let policy = RetryPolicy::builder()
+    ///     .max_attempts(3)
+    ///     .backoff(Backoff::exponential(100, 5000))
+    ///     .build();
+    ///
+    /// let output = runner.execute_with_retry(input, policy).await?;
+    /// ```
+    pub async fn execute_with_retry(
+        &mut self,
+        input: AgentInput,
+        policy: RetryPolicy,
+    ) -> GlobalResult<AgentOutput> {
+        let mut last_error = None;
+
+        for attempt in 0..policy.max_attempts {
+            // Backoff delay on retries
+            if attempt > 0 {
+                let delay = policy.backoff.delay_for(attempt - 1);
+                if !delay.is_zero() {
+                    tokio::time::sleep(delay).await;
+                }
+            }
+
+            match self.execute(input.clone()).await {
+                Ok(output) => return Ok(output),
+                Err(agent_err) => {
+                    let global_err = GlobalError::from(agent_err);
+                    let is_last = attempt + 1 >= policy.max_attempts;
+                    if is_last || !policy.should_retry(&global_err) {
+                        return Err(global_err);
+                    }
+                    last_error = Some(global_err);
+                }
+            }
+        }
+
+        Err(last_error.unwrap_or_else(|| GlobalError::Other("retry loop exhausted".to_string())))
+    }
+}
+
+/// Create and run Agent with unified `GlobalResult` return type.
+///
+/// Same as [`run_agents`] but returns `GlobalResult` instead of `AgentResult`,
+/// enabling seamless integration with the unified error handling system.
+pub async fn run_agents_global<T: MoFAAgent>(
+    agent: T,
+    inputs: Vec<AgentInput>,
+) -> GlobalResult<Vec<AgentOutput>> {
+    let mut runner = AgentRunner::new(agent)
+        .await
+        .map_err(GlobalError::from)?;
+
+    let mut outputs = Vec::with_capacity(inputs.len());
+    for input in inputs {
+        outputs.push(runner.execute_global(input).await?);
+    }
+
+    runner.shutdown().await.map_err(GlobalError::from)?;
+    Ok(outputs)
 }
 
 // ============================================================================
@@ -1168,5 +1271,179 @@ mod tests {
             "run-once policy should catch up immediately, gap={}ms",
             run_once_gap
         );
+    }
+
+    // ========================================================================
+    // Lifecycle (pause / resume) tests
+    // ========================================================================
+
+    /// An agent whose pause and resume operations can be configured to fail.
+    struct LifecycleTestAgent {
+        id: String,
+        name: String,
+        state: AgentState,
+        capabilities: AgentCapabilities,
+        fail_pause: bool,
+        fail_resume: bool,
+    }
+
+    impl LifecycleTestAgent {
+        fn new(id: &str, name: &str) -> Self {
+            Self {
+                id: id.to_string(),
+                name: name.to_string(),
+                state: AgentState::Created,
+                capabilities: AgentCapabilitiesBuilder::new().build(),
+                fail_pause: false,
+                fail_resume: false,
+            }
+        }
+
+        fn with_failing_pause(mut self) -> Self {
+            self.fail_pause = true;
+            self
+        }
+
+        fn with_failing_resume(mut self) -> Self {
+            self.fail_resume = true;
+            self
+        }
+    }
+
+    #[async_trait::async_trait]
+    impl MoFAAgent for LifecycleTestAgent {
+        fn id(&self) -> &str {
+            &self.id
+        }
+
+        fn name(&self) -> &str {
+            &self.name
+        }
+
+        fn capabilities(&self) -> &AgentCapabilities {
+            &self.capabilities
+        }
+
+        async fn initialize(&mut self, _ctx: &AgentContext) -> AgentResult<()> {
+            self.state = AgentState::Ready;
+            Ok(())
+        }
+
+        async fn execute(
+            &mut self,
+            input: AgentInput,
+            _ctx: &AgentContext,
+        ) -> AgentResult<AgentOutput> {
+            self.state = AgentState::Executing;
+            let text = input.to_text();
+            Ok(AgentOutput::text(format!("Echo: {}", text)))
+        }
+
+        async fn shutdown(&mut self) -> AgentResult<()> {
+            self.state = AgentState::Shutdown;
+            Ok(())
+        }
+
+        fn state(&self) -> AgentState {
+            self.state.clone()
+        }
+    }
+
+    #[async_trait::async_trait]
+    impl AgentLifecycle for LifecycleTestAgent {
+        async fn pause(&mut self) -> AgentResult<()> {
+            if self.fail_pause {
+                return Err(AgentError::Other("simulated pause failure".to_string()));
+            }
+            self.state = AgentState::Paused;
+            Ok(())
+        }
+
+        async fn resume(&mut self) -> AgentResult<()> {
+            if self.fail_resume {
+                return Err(AgentError::Other("simulated resume failure".to_string()));
+            }
+            self.state = AgentState::Ready;
+            Ok(())
+        }
+    }
+
+    #[tokio::test]
+    async fn test_pause_resume_success() {
+        let agent = LifecycleTestAgent::new("lc-001", "Lifecycle Agent");
+        let mut runner = AgentRunner::new(agent).await.unwrap();
+
+        // Move the runner into Running state first.
+        runner.execute(AgentInput::text("warmup")).await.unwrap();
+        assert_eq!(runner.state().await, RunnerState::Running);
+
+        // Pause should succeed and transition to Paused.
+        runner.pause().await.unwrap();
+        assert_eq!(runner.state().await, RunnerState::Paused);
+
+        // Resume should succeed and transition back to Running.
+        runner.resume().await.unwrap();
+        assert_eq!(runner.state().await, RunnerState::Running);
+    }
+
+    #[tokio::test]
+    async fn test_resume_failure_preserves_paused_state() {
+        let agent = LifecycleTestAgent::new("lc-002", "Failing Resume Agent")
+            .with_failing_resume();
+        let mut runner = AgentRunner::new(agent).await.unwrap();
+
+        // Move into Running, then pause.
+        runner.execute(AgentInput::text("warmup")).await.unwrap();
+        runner.pause().await.unwrap();
+        assert_eq!(runner.state().await, RunnerState::Paused);
+
+        // Resume fails — the runner must stay Paused.
+        let err = runner.resume().await.unwrap_err();
+        assert!(
+            format!("{}", err).contains("Resume failed"),
+            "unexpected error: {}",
+            err
+        );
+        assert_eq!(runner.state().await, RunnerState::Paused);
+    }
+
+    #[tokio::test]
+    async fn test_pause_failure_preserves_running_state() {
+        let agent = LifecycleTestAgent::new("lc-003", "Failing Pause Agent")
+            .with_failing_pause();
+        let mut runner = AgentRunner::new(agent).await.unwrap();
+
+        // Move into Running.
+        runner.execute(AgentInput::text("warmup")).await.unwrap();
+        assert_eq!(runner.state().await, RunnerState::Running);
+
+        // Pause fails — the runner must stay Running.
+        let err = runner.pause().await.unwrap_err();
+        assert!(
+            format!("{}", err).contains("Pause failed"),
+            "unexpected error: {}",
+            err
+        );
+        assert_eq!(runner.state().await, RunnerState::Running);
+    }
+
+    #[tokio::test]
+    async fn test_resume_rejected_when_not_paused() {
+        let agent = LifecycleTestAgent::new("lc-004", "Not Paused Agent");
+        let mut runner = AgentRunner::new(agent).await.unwrap();
+
+        // Runner starts in Created state — resume should be rejected.
+        let err = runner.resume().await.unwrap_err();
+        assert!(matches!(err, AgentError::ValidationFailed(_)));
+    }
+
+    #[tokio::test]
+    async fn test_pause_rejected_when_not_running() {
+        let agent = LifecycleTestAgent::new("lc-005", "Not Running Agent");
+        let mut runner = AgentRunner::new(agent).await.unwrap();
+
+        // Runner starts in Created state — pause should be rejected.
+        let err = runner.pause().await.unwrap_err();
+        assert!(matches!(err, AgentError::ValidationFailed(_)));
     }
 }

@@ -156,14 +156,16 @@ fn resolve_env_value(value: &str) -> Result<String, CliError> {
     // Check for ${VAR} syntax
     if trimmed.starts_with("${") && trimmed.ends_with('}') {
         let var_name = &trimmed[2..trimmed.len() - 1];
-        return std::env::var(var_name)
-            .map_err(|_| CliError::ConfigError(format!("Environment variable '{}' not found", var_name)));
+        return std::env::var(var_name).map_err(|_| {
+            CliError::ConfigError(format!("Environment variable '{}' not found", var_name))
+        });
     }
 
     // Check for $VAR syntax
     if let Some(var_name) = trimmed.strip_prefix('$') {
-        return std::env::var(var_name)
-            .map_err(|_| CliError::ConfigError(format!("Environment variable '{}' not found", var_name)));
+        return std::env::var(var_name).map_err(|_| {
+            CliError::ConfigError(format!("Environment variable '{}' not found", var_name))
+        });
     }
 
     Ok(trimmed.to_string())
