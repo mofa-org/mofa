@@ -54,16 +54,15 @@ pub mod collaboration;
 // RAG module - vector store and document chunking
 pub mod rag;
 
-<<<<<<< feat/token-cost-tracker
 // cost module - concrete pricing registry and budget enforcer implementations
 pub mod cost;
-=======
+
 // Structured output: JSON schema validator and agent executor
 pub mod schema_validator;
 pub mod agent_executor;
 pub use schema_validator::{SchemaError, SchemaValidator};
 pub use agent_executor::{AgentExecutor, ExecutorError};
->>>>>>> main
+
 // Security governance - PII redaction, content moderation, prompt guard
 pub mod security;
 
