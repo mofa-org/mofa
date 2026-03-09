@@ -184,13 +184,14 @@ pub async fn run_parallel(
         let mut first_error: Option<String> = None;
 
         for (pool_idx, agent, id, idx, outcome) in results {
+            let agent_id = agent.id().to_string();
             restore_pairs.push((pool_idx, agent));
             match outcome {
                 Ok(text) => {
                     dag.mark_complete_with_output(idx, Some(text.clone()));
                     outputs.push(SubtaskOutput {
                         subtask_id: id.clone(),
-                        agent_id: String::new(),
+                        agent_id,
                         output: text,
                     });
                 }
@@ -448,6 +449,37 @@ mod tests {
         ];
 
         assert!(run_parallel(&mut dag, &mut agents, &ctx()).await.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_par_outputs_carry_correct_agent_ids() {
+        let mut dag = SubtaskDAG::new("agent-id-check");
+        dag.add_task(SwarmSubtask::new("t1", "Task 1"));
+        dag.add_task(SwarmSubtask::new("t2", "Task 2"));
+
+        let mut agents: Vec<Box<dyn MoFAAgent>> =
+            vec![simple_agent("alpha"), simple_agent("beta")];
+
+        let result = run_parallel(&mut dag, &mut agents, &ctx()).await.unwrap();
+        assert_eq!(result.completed, 2);
+
+        for out in &result.outputs {
+            assert!(
+                !out.agent_id.is_empty(),
+                "agent_id was empty for subtask '{}'",
+                out.subtask_id
+            );
+        }
+
+        let valid_ids = ["alpha", "beta"];
+        for out in &result.outputs {
+            assert!(
+                valid_ids.contains(&out.agent_id.as_str()),
+                "unexpected agent_id '{}' for subtask '{}'",
+                out.agent_id,
+                out.subtask_id
+            );
+        }
     }
 
     // API integration tests
