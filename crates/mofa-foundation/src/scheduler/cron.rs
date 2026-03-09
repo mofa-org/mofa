@@ -708,4 +708,113 @@ mod tests {
         entry.paused.store(true, Ordering::Release);
         assert_eq!(entry.to_info(&clock).next_run_ms, None);
     }
+
+    // ── Persistence integration tests ────────────────────────────────────────
+
+    fn make_persisted_scheduler(path: &std::path::Path) -> CronScheduler {
+        CronScheduler::new(Arc::new(MockRunner), 10)
+            .with_persistence(path)
+    }
+
+    /// Registering a schedule persists it so a fresh scheduler can reload it via `start()`.
+    #[tokio::test]
+    async fn test_register_persists_and_start_reloads() {
+        let dir = tempfile::TempDir::new().unwrap();
+        let path = dir.path().join("schedules.json");
+
+        // First scheduler: register and let it write to disk.
+        {
+            let s = make_persisted_scheduler(&path);
+            s.register(
+                ScheduleDefinition::new_interval(
+                    "s1",
+                    "agent",
+                    60_000,
+                    1,
+                    AgentInput::text("x"),
+                    MissedTickPolicy::Skip,
+                )
+                .unwrap(),
+            )
+            .await
+            .unwrap();
+            assert_eq!(s.list().await.len(), 1);
+        }
+
+        // Second scheduler: start() must load the persisted schedule.
+        let s2 = make_persisted_scheduler(&path);
+        s2.start().await.unwrap();
+        let schedules = s2.list().await;
+        assert_eq!(schedules.len(), 1, "reloaded schedule list should have 1 entry");
+        assert_eq!(schedules[0].schedule_id, "s1");
+    }
+
+    /// `unregister` must update the persistence file so that a fresh scheduler
+    /// started from the same file does NOT reload the removed schedule.
+    #[tokio::test]
+    async fn test_unregister_removes_from_persistence() {
+        let dir = tempfile::TempDir::new().unwrap();
+        let path = dir.path().join("schedules.json");
+
+        // Register two schedules.
+        {
+            let s = make_persisted_scheduler(&path);
+            for id in ["keep", "remove"] {
+                s.register(
+                    ScheduleDefinition::new_interval(
+                        id,
+                        "agent",
+                        60_000,
+                        1,
+                        AgentInput::text("x"),
+                        MissedTickPolicy::Skip,
+                    )
+                    .unwrap(),
+                )
+                .await
+                .unwrap();
+            }
+
+            // Unregister one — this must write the updated list to disk.
+            s.unregister("remove").await.unwrap();
+            assert_eq!(s.list().await.len(), 1);
+        }
+
+        // Fresh scheduler: only "keep" should reload.
+        let s2 = make_persisted_scheduler(&path);
+        s2.start().await.unwrap();
+        let schedules = s2.list().await;
+        assert_eq!(schedules.len(), 1, "removed schedule must not be reloaded");
+        assert_eq!(schedules[0].schedule_id, "keep");
+    }
+
+    /// After unregistering all schedules the persistence file should be written
+    /// (as an empty array), and `start()` on a fresh scheduler is a no-op.
+    #[tokio::test]
+    async fn test_unregister_all_leaves_empty_file() {
+        let dir = tempfile::TempDir::new().unwrap();
+        let path = dir.path().join("schedules.json");
+
+        {
+            let s = make_persisted_scheduler(&path);
+            s.register(
+                ScheduleDefinition::new_interval(
+                    "only",
+                    "agent",
+                    60_000,
+                    1,
+                    AgentInput::text("x"),
+                    MissedTickPolicy::Skip,
+                )
+                .unwrap(),
+            )
+            .await
+            .unwrap();
+            s.unregister("only").await.unwrap();
+        }
+
+        let s2 = make_persisted_scheduler(&path);
+        s2.start().await.unwrap();
+        assert!(s2.list().await.is_empty(), "empty file must reload as zero schedules");
+    }
 }
