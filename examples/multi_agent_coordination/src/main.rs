@@ -50,8 +50,17 @@ use mofa_sdk::runtime::SimpleRuntime;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
+use std::sync::LazyLock;
 use tokio::sync::RwLock;
 use tracing::{debug, error, info};
+
+// ============================================================================
+// Cached regex (per project standards: avoid recompiling on each use)
+// ============================================================================
+
+/// Cached regex for worker ID pattern (worker_N).
+static WORKER_ID_RE: LazyLock<regex::Regex> =
+    LazyLock::new(|| regex::Regex::new(r"worker_\d+").unwrap());
 
 // ============================================================================
 // 核心类型定义
@@ -304,8 +313,7 @@ impl MasterAgent {
 
         // 尝试正则匹配
         // Try regex matching
-        let re = regex::Regex::new(r"worker_\d+").unwrap();
-        if let Some(captures) = re.captures(response) {
+        if let Some(captures) = WORKER_ID_RE.captures(response) {
             let id = captures.get(0).unwrap().as_str();
             if workers.contains_key(id) {
                 return Ok(id.to_string());
