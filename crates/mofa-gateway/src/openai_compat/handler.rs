@@ -163,7 +163,16 @@ pub async fn chat_completions(
 
         let provided_key = auth_header.strip_prefix("Bearer ").unwrap_or("").trim();
 
-        if provided_key != expected_key {
+        // Constant-time comparison to prevent timing side-channel attacks.
+        let keys_match = provided_key.len() == expected_key.len()
+            && provided_key
+                .as_bytes()
+                .iter()
+                .zip(expected_key.as_bytes())
+                .fold(0u8, |acc, (a, b)| acc | (a ^ b))
+                == 0;
+
+        if !keys_match {
             let err = GatewayErrorBody::new("Invalid API key provided", "authentication_error");
             return (StatusCode::UNAUTHORIZED, Json(err)).into_response();
         }

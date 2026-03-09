@@ -12,7 +12,7 @@ use mofa_foundation::inference::orchestrator::InferenceOrchestrator;
 
 use super::handler::{AppState, chat_completions, list_models};
 use super::rate_limiter::TokenBucketLimiter;
-use super::types::{GatewayConfig, GatewayError};
+use super::types::{GatewayConfig, OpenAiGatewayError};
 
 /// The MoFA inference gateway server.
 ///
@@ -61,9 +61,9 @@ impl GatewayServer {
 
     /// Bind to the configured host:port and serve requests.
     ///
-    /// Returns a typed [`GatewayError`] on failure so callers can match
+    /// Returns a typed [`OpenAiGatewayError`] on failure so callers can match
     /// on specific failure modes.
-    pub async fn serve(self) -> Result<(), GatewayError> {
+    pub async fn serve(self) -> Result<(), OpenAiGatewayError> {
         let addr: SocketAddr = format!("{}:{}", self.config.host, self.config.port).parse()?;
         let router = self
             .build_router()
@@ -75,10 +75,10 @@ impl GatewayServer {
 
         let listener = tokio::net::TcpListener::bind(&addr)
             .await
-            .map_err(GatewayError::Bind)?;
+            .map_err(OpenAiGatewayError::Bind)?;
         axum::serve(listener, router)
             .await
-            .map_err(GatewayError::Serve)?;
+            .map_err(OpenAiGatewayError::Serve)?;
 
         Ok(())
     }

@@ -74,6 +74,8 @@ impl ChatCompletionRequest {
             RequestPriorityParam::Normal => RequestPriority::Normal,
             RequestPriorityParam::High => RequestPriority::High,
             RequestPriorityParam::Critical => RequestPriority::Critical,
+            // Future-proof: treat unknown variants as Normal.
+            _ => RequestPriority::Normal,
         }
     }
 }
@@ -83,10 +85,14 @@ impl ChatCompletionRequest {
 #[serde(rename_all = "lowercase")]
 #[non_exhaustive]
 pub enum RequestPriorityParam {
+    /// Low priority — may be deferred when memory is tight.
     Low,
+    /// Normal (default) priority.
     #[default]
     Normal,
+    /// High priority — bypasses the defer band.
     High,
+    /// Critical priority — bypasses the defer band; eviction may be attempted.
     Critical,
 }
 
@@ -170,17 +176,23 @@ pub struct Delta {
 /// Gateway error body, following the OpenAI error envelope convention.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GatewayErrorBody {
+    /// The error detail envelope.
     pub error: GatewayErrorDetail,
 }
 
+/// Inner error detail within a [`GatewayErrorBody`].
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GatewayErrorDetail {
+    /// Human-readable error message.
     pub message: String,
+    /// Machine-readable error type (e.g., `"rate_limit_error"`).
     pub r#type: String,
+    /// Optional error code for finer-grained programmatic handling.
     pub code: Option<String>,
 }
 
 impl GatewayErrorBody {
+    /// Create a new error body with the given message and type.
     pub fn new(message: impl Into<String>, err_type: impl Into<String>) -> Self {
         Self {
             error: GatewayErrorDetail {
@@ -191,6 +203,7 @@ impl GatewayErrorBody {
         }
     }
 
+    /// Construct a rate-limit error body.
     pub fn rate_limited() -> Self {
         Self::new(
             "Rate limit exceeded. Please slow down your requests.",
@@ -198,10 +211,12 @@ impl GatewayErrorBody {
         )
     }
 
+    /// Construct an invalid-request error body.
     pub fn invalid_request(msg: impl Into<String>) -> Self {
         Self::new(msg, "invalid_request_error")
     }
 
+    /// Construct a server error body.
     pub fn server_error(msg: impl Into<String>) -> Self {
         Self::new(msg, "server_error")
     }
@@ -214,16 +229,22 @@ impl GatewayErrorBody {
 /// Response for `GET /v1/models`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ModelListResponse {
+    /// Always `"list"`.
     pub object: String,
+    /// The list of available model objects.
     pub data: Vec<ModelObject>,
 }
 
 /// An entry in the models list.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ModelObject {
+    /// Model identifier.
     pub id: String,
+    /// Always `"model"`.
     pub object: String,
+    /// Unix timestamp of model creation.
     pub created: u64,
+    /// Owner of the model.
     pub owned_by: String,
 }
 
@@ -299,10 +320,11 @@ impl GatewayConfig {
 
 /// Typed error for [`GatewayServer::serve`](super::server::GatewayServer::serve).
 ///
-/// Replaces `Box<dyn Error>` so callers can match on specific failure modes.
+/// Uses distinct variants so callers can match on specific failure modes
+/// instead of dealing with an opaque `Box<dyn Error>`.
 #[derive(Debug, thiserror::Error)]
 #[non_exhaustive]
-pub enum GatewayError {
+pub enum OpenAiGatewayError {
     /// The configured `host:port` string could not be parsed as a [`SocketAddr`](std::net::SocketAddr).
     #[error("invalid listen address: {0}")]
     AddrParse(#[from] std::net::AddrParseError),

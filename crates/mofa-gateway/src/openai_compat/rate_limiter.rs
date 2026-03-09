@@ -23,7 +23,7 @@ struct Bucket {
 ///
 /// ```rust,ignore
 /// use std::sync::{Arc, Mutex};
-/// use mofa_foundation::inference::gateway::rate_limiter::TokenBucketLimiter;
+/// use mofa_gateway::openai_compat::rate_limiter::TokenBucketLimiter;
 ///
 /// let limiter = Arc::new(Mutex::new(TokenBucketLimiter::new(60)));
 /// let allowed = limiter.lock().unwrap().check_and_consume("127.0.0.1".parse().unwrap());
