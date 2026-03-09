@@ -77,7 +77,7 @@ pub use gateway::{
 pub mod scheduler;
 pub use scheduler::{
     AgentScheduler, Clock, MissedTickPolicy, ScheduleDefinition,
-    ScheduleHandle, ScheduleInfo, SchedulerError,
+    ScheduleHandle, ScheduleInfo, ScheduledAgentRunner, SchedulerError,
 };
 
 // Speech kernel contracts (traits and types for TTS/ASR)

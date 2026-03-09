@@ -157,3 +157,6 @@ pub use secretary::{
     extract_json_block,
     parse_llm_json,
 };
+
+// Re-export scheduler types for convenience
+pub use scheduler::CronScheduler;

@@ -5864,6 +5864,7 @@ dependencies = [
  "chrono",
  "config",
  "criterion",
+ "cron",
  "error-stack",
  "futures",
  "infer",
