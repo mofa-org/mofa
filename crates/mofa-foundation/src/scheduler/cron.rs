@@ -20,6 +20,7 @@ use mofa_kernel::scheduler::{
 };
 
 use super::clock::SystemClock;
+use super::persistence::SchedulePersistence;
 
 // ============================================================================
 // ScheduleEntry - Internal state for each registered schedule
@@ -259,11 +260,14 @@ impl AgentScheduler for CronScheduler {
     }
 
     async fn unregister(&self, schedule_id: &str) -> Result<(), SchedulerError> {
-        let mut schedules = self.schedules.write().await;
-        let entry = schedules
-            .remove(schedule_id)
-            .ok_or_else(|| SchedulerError::NotFound(schedule_id.to_string()))?;
-        drop(entry); // Drop aborts the background task via the Drop impl.
+        {
+            let mut schedules = self.schedules.write().await;
+            let entry = schedules
+                .remove(schedule_id)
+                .ok_or_else(|| SchedulerError::NotFound(schedule_id.to_string()))?;
+            drop(entry); // Drop aborts the background task via the Drop impl.
+        }
+        self.save_to_disk().await;
         Ok(())
     }
 
@@ -342,7 +346,7 @@ impl CronScheduler {
         Ok(())
     }
 
-    /// Persist all current schedule definitions to the configured file.
+    /// Persist all current schedule definitions to the configured file using atomic writes.
     ///
     /// No-op when no persistence path is set. On I/O or serialisation failure
     /// a warning is logged but the error is not propagated — in-memory state
@@ -357,19 +361,13 @@ impl CronScheduler {
             schedules.values().map(|e| e.definition.clone()).collect()
         };
 
-        match serde_json::to_string_pretty(&defs) {
-            Ok(json) => {
-                if let Err(e) = tokio::fs::write(path, json).await {
-                    tracing::warn!(
-                        "CronScheduler: failed to persist schedules to {:?}: {}",
-                        path,
-                        e
-                    );
-                }
-            }
-            Err(e) => {
-                tracing::warn!("CronScheduler: failed to serialize schedules: {}", e);
-            }
+        let backend = SchedulePersistence::new(path);
+        if let Err(e) = backend.save(&defs).await {
+            tracing::warn!(
+                "CronScheduler: failed to persist schedules to {:?}: {}",
+                path,
+                e
+            );
         }
     }
 }
@@ -421,18 +419,31 @@ impl CronScheduler {
                                                 "Global concurrency limit reached for schedule {}",
                                                 schedule_id
                                             );
+                                            #[cfg(feature = "scheduler-telemetry")]
+                                            metrics::counter!(
+                                                "mofa_scheduler_missed_ticks_total",
+                                                "schedule_id" => schedule_id.clone(),
+                                                "reason" => "global_limit",
+                                            ).increment(1);
                                             continue;
                                         }
                                     };
 
+                                let per_schedule_semaphore_clone = Arc::clone(&per_schedule_semaphore);
                                 let schedule_permit =
-                                    match Arc::clone(&per_schedule_semaphore).try_acquire_owned() {
+                                    match Arc::clone(&per_schedule_semaphore_clone).try_acquire_owned() {
                                         Ok(p) => p,
                                         Err(_) => {
                                             tracing::debug!(
                                                 "Per-schedule concurrency limit reached for schedule {}",
                                                 schedule_id
                                             );
+                                            #[cfg(feature = "scheduler-telemetry")]
+                                            metrics::counter!(
+                                                "mofa_scheduler_missed_ticks_total",
+                                                "schedule_id" => schedule_id.clone(),
+                                                "reason" => "per_schedule_limit",
+                                            ).increment(1);
                                             drop(global_permit);
                                             continue;
                                         }
@@ -445,6 +456,12 @@ impl CronScheduler {
                                 let last_run_ms_clone = Arc::clone(&last_run_ms);
 
                                 tokio::spawn(async move {
+                                    #[cfg(feature = "scheduler-telemetry")]
+                                    metrics::gauge!(
+                                        "mofa_scheduler_active_runs",
+                                        "schedule_id" => schedule_id_clone.clone(),
+                                    ).increment(1.0);
+
                                     match runner_clone
                                         .run_scheduled(&agent_id_clone, input_clone)
                                         .await
@@ -455,6 +472,17 @@ impl CronScheduler {
                                             )
                                             .unwrap_or(u64::MAX);
                                             last_run_ms_clone.store(now, Ordering::Relaxed);
+                                            #[cfg(feature = "scheduler-telemetry")]
+                                            {
+                                                metrics::counter!(
+                                                    "mofa_scheduler_executions_total",
+                                                    "schedule_id" => schedule_id_clone.clone(),
+                                                ).increment(1);
+                                                metrics::gauge!(
+                                                    "mofa_scheduler_last_run_timestamp_ms",
+                                                    "schedule_id" => schedule_id_clone.clone(),
+                                                ).set(now as f64);
+                                            }
                                             tracing::info!(
                                                 "Schedule {} executed successfully",
                                                 schedule_id_clone
@@ -468,6 +496,13 @@ impl CronScheduler {
                                             );
                                         }
                                     }
+
+                                    #[cfg(feature = "scheduler-telemetry")]
+                                    metrics::gauge!(
+                                        "mofa_scheduler_active_runs",
+                                        "schedule_id" => schedule_id_clone.clone(),
+                                    ).decrement(1.0);
+
                                     // Permits released on drop.
                                     drop(schedule_permit);
                                     drop(global_permit);

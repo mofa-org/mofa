@@ -143,12 +143,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Print telemetry info if enabled
     #[cfg(feature = "scheduler-telemetry")]
     {
-        println!("Telemetry enabled - Prometheus metrics available:");
-        println!("   - mofa_scheduler_executions_total");
-        println!("   - mofa_scheduler_missed_ticks_total");
-        println!("   - mofa_scheduler_active_runs");
-        println!("   - mofa_scheduler_last_run_timestamp_ms");
-        println!("   - mofa_scheduler_execution_duration_seconds");
+        println!("Telemetry enabled - Prometheus metrics recorded per schedule_id label:");
+        println!("   - mofa_scheduler_executions_total       (counter)");
+        println!("   - mofa_scheduler_missed_ticks_total     (counter, reason label)");
+        println!("   - mofa_scheduler_active_runs            (gauge)");
+        println!("   - mofa_scheduler_last_run_timestamp_ms  (gauge)");
+        println!("   Wire a metrics-exporter (e.g. metrics-exporter-prometheus) to expose these.");
     }
 
     #[cfg(not(feature = "scheduler-telemetry"))]
