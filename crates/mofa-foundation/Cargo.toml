@@ -145,7 +145,7 @@ candle-core = { version = "0.8", optional = true }
 candle-transformers = { version = "0.8", optional = true }
 
 # Cron expression parsing for scheduled agent execution
-cron = "0.12"
+cron.workspace = true
 
 [lints]
 workspace = true

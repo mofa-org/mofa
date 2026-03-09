@@ -5,7 +5,7 @@ edition.workspace = true
 
 [dependencies]
 async-trait.workspace = true
-cron = "0.12"
+cron.workspace = true
 tokio.workspace = true
 
 # Local dependencies
