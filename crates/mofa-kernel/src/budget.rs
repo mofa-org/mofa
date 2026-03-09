@@ -6,6 +6,7 @@ use thiserror::Error;
 
 /// Per-agent budget limits (all optional)
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct BudgetConfig {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub max_cost_per_session: Option<f64>,
@@ -22,24 +23,30 @@ impl BudgetConfig {
         Self::default()
     }
 
-    pub fn with_max_cost_per_session(mut self, max_usd: f64) -> Self {
+    pub fn with_max_cost_per_session(mut self, max_usd: f64) -> Result<Self, &'static str> {
+        if !max_usd.is_finite() || max_usd < 0.0 {
+            return Err("max_usd must be a finite, non-negative value");
+        }
         self.max_cost_per_session = Some(max_usd);
-        self
+        Ok(self)
     }
 
-    pub fn with_max_cost_per_day(mut self, max_usd: f64) -> Self {
+    pub fn with_max_cost_per_day(mut self, max_usd: f64) -> Result<Self, &'static str> {
+        if !max_usd.is_finite() || max_usd < 0.0 {
+            return Err("max_usd must be a finite, non-negative value");
+        }
         self.max_cost_per_day = Some(max_usd);
-        self
+        Ok(self)
     }
 
-    pub fn with_max_tokens_per_session(mut self, max_tokens: u64) -> Self {
+    pub fn with_max_tokens_per_session(mut self, max_tokens: u64) -> Result<Self, &'static str> {
         self.max_tokens_per_session = Some(max_tokens);
-        self
+        Ok(self)
     }
 
-    pub fn with_max_tokens_per_day(mut self, max_tokens: u64) -> Self {
+    pub fn with_max_tokens_per_day(mut self, max_tokens: u64) -> Result<Self, &'static str> {
         self.max_tokens_per_day = Some(max_tokens);
-        self
+        Ok(self)
     }
 
     pub fn has_limits(&self) -> bool {
@@ -52,6 +59,7 @@ impl BudgetConfig {
 
 /// Current budget usage for an agent
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct BudgetStatus {
     pub session_cost: f64,
     pub daily_cost: f64,
@@ -61,6 +69,22 @@ pub struct BudgetStatus {
 }
 
 impl BudgetStatus {
+    pub fn new(
+        session_cost: f64,
+        daily_cost: f64,
+        session_tokens: u64,
+        daily_tokens: u64,
+        config: BudgetConfig,
+    ) -> Self {
+        Self {
+            session_cost,
+            daily_cost,
+            session_tokens,
+            daily_tokens,
+            config,
+        }
+    }
+
     pub fn remaining_session_cost(&self) -> Option<f64> {
         self.config
             .max_cost_per_session
@@ -137,12 +161,20 @@ mod tests {
     fn test_budget_config_with_limits() {
         let config = BudgetConfig::default()
             .with_max_cost_per_session(10.0)
-            .with_max_cost_per_day(100.0)
-            .with_max_tokens_per_session(50_000)
-            .with_max_tokens_per_day(500_000);
+            .and_then(|c| c.with_max_cost_per_day(100.0))
+            .and_then(|c| c.with_max_tokens_per_session(50_000))
+            .and_then(|c| c.with_max_tokens_per_day(500_000))
+            .unwrap();
         assert!(config.has_limits());
         assert_eq!(config.max_cost_per_session, Some(10.0));
         assert_eq!(config.max_cost_per_day, Some(100.0));
+    }
+
+    #[test]
+    fn test_budget_config_rejects_negative() {
+        assert!(BudgetConfig::default().with_max_cost_per_session(-1.0).is_err());
+        assert!(BudgetConfig::default().with_max_cost_per_day(f64::NEG_INFINITY).is_err());
+        assert!(BudgetConfig::default().with_max_cost_per_session(f64::NAN).is_err());
     }
 
     #[test]
@@ -154,7 +186,8 @@ mod tests {
             daily_tokens: 250_000,
             config: BudgetConfig::default()
                 .with_max_cost_per_session(10.0)
-                .with_max_cost_per_day(100.0),
+                .and_then(|c| c.with_max_cost_per_day(100.0))
+                .unwrap(),
         };
         assert!(!status.is_exceeded());
     }
@@ -166,7 +199,7 @@ mod tests {
             daily_cost: 50.0,
             session_tokens: 0,
             daily_tokens: 0,
-            config: BudgetConfig::default().with_max_cost_per_session(10.0),
+            config: BudgetConfig::default().with_max_cost_per_session(10.0).unwrap(),
         };
         assert!(status.is_exceeded());
     }
@@ -178,7 +211,7 @@ mod tests {
             daily_cost: 0.0,
             session_tokens: 0,
             daily_tokens: 0,
-            config: BudgetConfig::default().with_max_cost_per_session(10.0),
+            config: BudgetConfig::default().with_max_cost_per_session(10.0).unwrap(),
         };
         assert!((status.remaining_session_cost().unwrap() - 7.0).abs() < 0.001);
     }

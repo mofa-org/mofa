@@ -134,13 +134,13 @@ impl BudgetEnforcer {
                 _ => (0.0, 0),
             }
         };
-        BudgetStatus {
+        BudgetStatus::new(
             session_cost,
             daily_cost,
             session_tokens,
             daily_tokens,
-            config,
-        }
+            config
+        )
     }
 
     pub async fn reset_session(&self, agent_id: &str) {
@@ -185,7 +185,7 @@ mod tests {
         enforcer
             .set_budget(
                 "agent-1",
-                BudgetConfig::default().with_max_cost_per_session(10.0),
+                BudgetConfig::default().with_max_cost_per_session(10.0).unwrap(),
             )
             .await;
         enforcer.record_usage("agent-1", 5.0, 1000).await;
@@ -198,7 +198,7 @@ mod tests {
         enforcer
             .set_budget(
                 "agent-1",
-                BudgetConfig::default().with_max_cost_per_session(10.0),
+                BudgetConfig::default().with_max_cost_per_session(10.0).unwrap(),
             )
             .await;
         enforcer.record_usage("agent-1", 11.0, 5000).await;
@@ -219,7 +219,7 @@ mod tests {
         enforcer
             .set_budget(
                 "agent-1",
-                BudgetConfig::default().with_max_tokens_per_session(1000),
+                BudgetConfig::default().with_max_tokens_per_session(1000).unwrap(),
             )
             .await;
         enforcer.record_usage("agent-1", 0.0, 1500).await;
@@ -232,7 +232,7 @@ mod tests {
         enforcer
             .set_budget(
                 "agent-1",
-                BudgetConfig::default().with_max_cost_per_session(10.0),
+                BudgetConfig::default().with_max_cost_per_session(10.0).unwrap(),
             )
             .await;
         enforcer.record_usage("agent-1", 11.0, 5000).await;
@@ -249,7 +249,8 @@ mod tests {
                 "agent-1",
                 BudgetConfig::default()
                     .with_max_cost_per_session(10.0)
-                    .with_max_tokens_per_session(50_000),
+                    .and_then(|c| c.with_max_tokens_per_session(50_000))
+                    .unwrap(),
             )
             .await;
         enforcer.record_usage("agent-1", 3.50, 2000).await;
