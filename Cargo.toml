@@ -57,6 +57,7 @@ crossbeam-channel = "0.5"
 dashmap = "5.5"
 eyre = "0.6"
 flume = "0.10"
+tokio-util="0.7"
 
 # Hot-reload support
 notify = { version = "6.1", features = ["serde"] }

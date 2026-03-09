@@ -110,8 +110,8 @@ pub struct ReActActorState {
     current_task_id: Option<String>,
     /// 取消标志
     /// Cancellation flag
-    #[allow(dead_code)]
-    cancelled: bool,
+    /// cancellation token for the currently running task 
+    cancellation_token:Option<tokio_util::sync::CancellationToken>,
 }
 
 impl ReActActorState {
@@ -124,7 +124,7 @@ impl ReActActorState {
             is_running: false,
             completed_tasks: 0,
             current_task_id: None,
-            cancelled: false,
+            cancellation_token: None,
         }
     }
 
@@ -210,80 +210,83 @@ async fn handle_message(
     state: &mut ReActActorState,
 ) -> Result<(), ActorProcessingErr> {
     match message {
-        ReActMessage::RunTask { task, reply } => {
-            if state.is_running {
-                let _ = reply.send(Err(LLMError::Other(
-                    "Agent is already running a task".to_string(),
-                )));
-                return Ok(());
-            }
-
-            state.is_running = true;
-            state.cancelled = false;
-            state.current_task_id = Some(uuid::Uuid::now_v7().to_string());
-
-            let result = match state.ensure_agent().await {
-                Ok(agent) => agent.run(&task).await,
-                Err(e) => Err(e),
-            };
-
-            state.is_running = false;
-            state.current_task_id = None;
-
-            if result.is_ok() {
-                state.completed_tasks += 1;
-            }
-
-            let _ = reply.send(result);
+           ReActMessage::RunTask { task, reply } => {
+        if state.is_running {
+            let _ = reply.send(Err(LLMError::Other(
+                "Agent is already running a task".to_string(),
+            )));
+            return Ok(());
         }
 
-        ReActMessage::RunTaskStreaming {
-            task,
-            step_tx,
-            reply,
-        } => {
-            if state.is_running {
-                let _ = reply.send(Err(LLMError::Other(
-                    "Agent is already running a task".to_string(),
-                )));
-                return Ok(());
-            }
+        state.is_running = true;
+        
+        // Create token and store it
+        let token = tokio_util::sync::CancellationToken::new();
+        state.cancellation_token = Some(token.clone());
+        
+        state.current_task_id = Some(uuid::Uuid::now_v7().to_string());
 
-            state.is_running = true;
-            state.cancelled = false;
-            let task_id = uuid::Uuid::now_v7().to_string();
-            state.current_task_id = Some(task_id.clone());
+        let result = match state.ensure_agent().await {
+            Ok(agent) => agent.run_with_cancellation(&task, token).await,
+            Err(e) => Err(e),
+        };
 
-            // 执行带步骤回调的任务
-            // Execute task with step callbacks
-            let result = match state.ensure_agent().await {
-                Ok(agent) => {
-                    // 运行任务
-                    // Run the task
-                    let result = agent.run(&task).await;
+        state.is_running = false;
+        state.current_task_id = None;
+        state.cancellation_token = None;
 
-                    // 发送所有步骤
-                    // Send all the steps
-                    if let Ok(ref res) = result {
-                        for step in &res.steps {
-                            let _ = step_tx.send(step.clone()).await;
-                        }
+        if result.is_ok() {
+            state.completed_tasks += 1;
+        }
+
+        let _ = reply.send(result);
+    }
+
+            ReActMessage::RunTaskStreaming {
+        task,
+        step_tx,
+        reply,
+    } => {
+        if state.is_running {
+            let _ = reply.send(Err(LLMError::Other(
+                "Agent is already running a task".to_string(),
+            )));
+            return Ok(());
+        }
+
+        state.is_running = true;
+        
+        // Create token and store it
+        let token = tokio_util::sync::CancellationToken::new();
+        state.cancellation_token = Some(token.clone());
+        
+        let task_id = uuid::Uuid::now_v7().to_string();
+        state.current_task_id = Some(task_id.clone());
+
+        let result = match state.ensure_agent().await {
+            Ok(agent) => {
+                let result = agent.run_with_cancellation(&task, token).await;
+
+                if let Ok(ref res) = result {
+                    for step in &res.steps {
+                        let _ = step_tx.send(step.clone()).await;
                     }
-
-                    result
                 }
-                Err(e) => Err(e),
-            };
-
-            state.is_running = false;
-            state.current_task_id = None;
-
-            if result.is_ok() {
-                state.completed_tasks += 1;
+                result
             }
+            Err(e) => Err(e),
+        };
 
-            let _ = reply.send(result);
+        state.is_running = false;
+        state.current_task_id = None;
+        state.cancellation_token = None;
+
+        if result.is_ok() {
+            state.completed_tasks += 1;
         }
+
+        let _ = reply.send(result);
+    }
 
         ReActMessage::RegisterTool { tool } => {
             if let Some(ref agent) = state.agent {
@@ -312,7 +315,9 @@ async fn handle_message(
         }
 
         ReActMessage::CancelTask => {
-            state.cancelled = true;
+            if let Some(ref token)=state.cancellation_token{
+                token.cancel();
+            }
         }
 
         ReActMessage::Stop => {
