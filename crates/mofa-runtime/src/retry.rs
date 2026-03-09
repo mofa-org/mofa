@@ -14,7 +14,11 @@ pub enum RetryPolicy {
     /// Delay increases linearly: `base_ms * attempt`.
     Linear { base_ms: u64 },
     /// Exponential backoff capped at `max_ms`, with optional ±12.5% pseudo-jitter.
-    ExponentialBackoff { base_ms: u64, max_ms: u64, jitter: bool },
+    ExponentialBackoff {
+        base_ms: u64,
+        max_ms: u64,
+        jitter: bool,
+    },
 }
 
 impl RetryPolicy {
@@ -23,7 +27,11 @@ impl RetryPolicy {
         let ms = match self {
             RetryPolicy::Fixed { delay_ms } => *delay_ms,
             RetryPolicy::Linear { base_ms } => base_ms.saturating_mul((attempt + 1) as u64),
-            RetryPolicy::ExponentialBackoff { base_ms, max_ms, jitter } => {
+            RetryPolicy::ExponentialBackoff {
+                base_ms,
+                max_ms,
+                jitter,
+            } => {
                 let exp = 1u64
                     .checked_shl(attempt as u32)
                     .and_then(|s| base_ms.checked_mul(s))
@@ -62,7 +70,10 @@ pub struct RetryConfig {
 
 impl Default for RetryConfig {
     fn default() -> Self {
-        Self { max_attempts: 1, policy: RetryPolicy::default() }
+        Self {
+            max_attempts: 1,
+            policy: RetryPolicy::default(),
+        }
     }
 }
 
@@ -71,7 +82,11 @@ impl RetryConfig {
     pub fn exponential(max_attempts: usize, base_ms: u64, max_ms: u64) -> Self {
         Self {
             max_attempts,
-            policy: RetryPolicy::ExponentialBackoff { base_ms, max_ms, jitter: true },
+            policy: RetryPolicy::ExponentialBackoff {
+                base_ms,
+                max_ms,
+                jitter: true,
+            },
         }
     }
 }
@@ -110,8 +125,8 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::sync::atomic::{AtomicUsize, Ordering};
     use std::sync::Arc;
+    use std::sync::atomic::{AtomicUsize, Ordering};
 
     #[test]
     fn test_fixed_policy_delay() {
@@ -129,7 +144,11 @@ mod tests {
 
     #[test]
     fn test_exponential_policy_delay() {
-        let p = RetryPolicy::ExponentialBackoff { base_ms: 100, max_ms: 800, jitter: false };
+        let p = RetryPolicy::ExponentialBackoff {
+            base_ms: 100,
+            max_ms: 800,
+            jitter: false,
+        };
         assert_eq!(p.delay_for(0), Duration::from_millis(100));
         assert_eq!(p.delay_for(1), Duration::from_millis(200));
         assert_eq!(p.delay_for(3), Duration::from_millis(800));
@@ -137,7 +156,11 @@ mod tests {
 
     #[test]
     fn test_jitter_does_not_exceed_cap() {
-        let p = RetryPolicy::ExponentialBackoff { base_ms: 500, max_ms: 1_000, jitter: true };
+        let p = RetryPolicy::ExponentialBackoff {
+            base_ms: 500,
+            max_ms: 1_000,
+            jitter: true,
+        };
         for attempt in 0..10 {
             assert!(p.delay_for(attempt).as_millis() <= 1_000);
         }
@@ -147,15 +170,26 @@ mod tests {
     async fn test_retry_helper_succeeds_on_second_attempt() {
         let call_count = Arc::new(AtomicUsize::new(0));
         let cc = call_count.clone();
-        let config = RetryConfig { max_attempts: 3, policy: RetryPolicy::Fixed { delay_ms: 0 } };
+        let config = RetryConfig {
+            max_attempts: 3,
+            policy: RetryPolicy::Fixed { delay_ms: 0 },
+        };
 
-        let result = retry_with_policy(&config, |e| e.is_retryable(), || {
-            let cc = cc.clone();
-            async move {
-                let n = cc.fetch_add(1, Ordering::SeqCst);
-                if n == 0 { Err(AgentError::ResourceUnavailable("busy".into())) } else { Ok(42u32) }
-            }
-        })
+        let result = retry_with_policy(
+            &config,
+            |e| e.is_retryable(),
+            || {
+                let cc = cc.clone();
+                async move {
+                    let n = cc.fetch_add(1, Ordering::SeqCst);
+                    if n == 0 {
+                        Err(AgentError::ResourceUnavailable("busy".into()))
+                    } else {
+                        Ok(42u32)
+                    }
+                }
+            },
+        )
         .await;
 
         assert_eq!(result.unwrap(), 42);
@@ -166,18 +200,99 @@ mod tests {
     async fn test_retry_helper_fails_on_non_retryable() {
         let call_count = Arc::new(AtomicUsize::new(0));
         let cc = call_count.clone();
-        let config = RetryConfig { max_attempts: 5, policy: RetryPolicy::Fixed { delay_ms: 0 } };
+        let config = RetryConfig {
+            max_attempts: 5,
+            policy: RetryPolicy::Fixed { delay_ms: 0 },
+        };
 
-        let result: AgentResult<u32> = retry_with_policy(&config, |e| e.is_retryable(), || {
-            let cc = cc.clone();
-            async move {
-                cc.fetch_add(1, Ordering::SeqCst);
-                Err(AgentError::ConfigError("bad config".into()))
-            }
-        })
+        let result: AgentResult<u32> = retry_with_policy(
+            &config,
+            |e| e.is_retryable(),
+            || {
+                let cc = cc.clone();
+                async move {
+                    cc.fetch_add(1, Ordering::SeqCst);
+                    Err(AgentError::ConfigError("bad config".into()))
+                }
+            },
+        )
         .await;
 
         assert!(result.is_err());
         assert_eq!(call_count.load(Ordering::SeqCst), 1); // aborted after 1, not 5
+    }
+
+    // ── Bounded-iteration invariant tests (#780) ──────────────────────
+
+    #[test]
+    fn test_backoff_delay_never_exceeds_max() {
+        let base_ms = 100;
+        let max_ms = 5_000;
+
+        // Without jitter
+        let p = RetryPolicy::ExponentialBackoff { base_ms, max_ms, jitter: false };
+        for attempt in 0..20 {
+            let delay = p.delay_for(attempt).as_millis() as u64;
+            assert!(
+                delay <= max_ms,
+                "attempt {attempt}: delay {delay} ms exceeded max {max_ms} ms (no jitter)",
+            );
+        }
+
+        // With jitter
+        let p = RetryPolicy::ExponentialBackoff { base_ms, max_ms, jitter: true };
+        for attempt in 0..20 {
+            let delay = p.delay_for(attempt).as_millis() as u64;
+            assert!(
+                delay <= max_ms,
+                "attempt {attempt}: delay {delay} ms exceeded max {max_ms} ms (jitter)",
+            );
+        }
+    }
+
+    #[test]
+    fn test_jitter_stays_within_bounds() {
+        let base_ms = 200;
+        let max_ms = 10_000;
+        let p = RetryPolicy::ExponentialBackoff { base_ms, max_ms, jitter: true };
+
+        for attempt in 0..20 {
+            let delay = p.delay_for(attempt).as_millis() as u64;
+
+            // Recompute the non-jittered capped value to derive bounds.
+            let exp = 1u64
+                .checked_shl(attempt as u32)
+                .and_then(|s| base_ms.checked_mul(s))
+                .unwrap_or(max_ms);
+            let capped = exp.min(max_ms);
+            let eighth = capped / 8;
+            let lower_bound = capped.saturating_sub(eighth);
+
+            assert!(
+                delay >= lower_bound,
+                "attempt {attempt}: delay {delay} ms below lower bound {lower_bound} ms",
+            );
+            assert!(
+                delay <= max_ms,
+                "attempt {attempt}: delay {delay} ms exceeded max {max_ms} ms",
+            );
+        }
+    }
+
+    #[test]
+    fn test_monotonic_growth_before_saturation_no_jitter() {
+        let base_ms = 50;
+        let max_ms = 3_200;
+        let p = RetryPolicy::ExponentialBackoff { base_ms, max_ms, jitter: false };
+
+        let mut prev_delay = 0u64;
+        for attempt in 0..20 {
+            let delay = p.delay_for(attempt).as_millis() as u64;
+            assert!(
+                delay >= prev_delay,
+                "attempt {attempt}: delay {delay} ms decreased from previous {prev_delay} ms",
+            );
+            prev_delay = delay;
+        }
     }
 }

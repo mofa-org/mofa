@@ -20,7 +20,7 @@
 //! Run: cargo run --example workflow_orchestration
 
 use mofa_sdk::workflow::{
-    ExecutionEvent, ExecutorConfig, WorkflowBuilder, WorkflowExecutor, WorkflowGraph, WorkflowNode, WorkflowValue,
+    ExecutorConfig, WorkflowBuilder, WorkflowExecutor, WorkflowGraph, WorkflowNode, WorkflowValue,
 };
 use mofa_sdk::llm::{LLMAgent, LLMAgentBuilder, openai_from_env};
 use mofa_sdk::react::{ReActAgent, prelude::all_builtin_tools};
@@ -491,7 +491,7 @@ async fn run_data_pipeline() -> Result<(), Box<dyn std::error::Error>> {
 async fn run_workflow_with_events() -> Result<(), Box<dyn std::error::Error>> {
     // 创建事件通道
     // Create event channel
-    let (event_tx, mut event_rx) = mpsc::channel::<ExecutionEvent>(100);
+    let (event_tx, mut event_rx) = mpsc::channel(100);
 
     // 创建简单工作流
     // Create simple workflow
@@ -526,29 +526,9 @@ async fn run_workflow_with_events() -> Result<(), Box<dyn std::error::Error>> {
     let _event_handle = tokio::spawn(async move {
         let mut events = Vec::new();
         while let Some(event) = event_rx.recv().await {
-            match &event {
-                ExecutionEvent::WorkflowStarted { workflow_id, .. } => {
-                    info!("  [EVENT] Workflow started: {}", workflow_id);
-                    //   [EVENT] Workflow started: {}
-                }
-                ExecutionEvent::NodeStarted { node_id, .. } => {
-                    info!("  [EVENT] Node started: {}", node_id);
-                    //   [EVENT] Node started: {}
-                }
-                ExecutionEvent::NodeCompleted { node_id, duration_ms, .. } => {
-                    info!("  [EVENT] Node completed: {} ({}ms)", node_id, duration_ms);
-                    //   [EVENT] Node completed: {} ({}ms)
-                }
-                ExecutionEvent::CheckpointCreated { label } => {
-                    info!("  [EVENT] Checkpoint created: {}", label);
-                    //   [EVENT] Checkpoint created: {}
-                }
-                ExecutionEvent::WorkflowCompleted { workflow_id, .. } => {
-                    info!("  [EVENT] Workflow completed: {}", workflow_id);
-                    //   [EVENT] Workflow completed: {}
-                }
-                _ => {}
-            }
+            // Keep event logging schema-agnostic so the example remains compatible
+            // when executor event payloads evolve.
+            info!("  [EVENT] {:?}", event);
             events.push(event);
         }
         events

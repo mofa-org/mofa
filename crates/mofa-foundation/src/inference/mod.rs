@@ -41,7 +41,8 @@ pub mod gateway;
 
 // Re-export primary public API
 pub use orchestrator::{InferenceOrchestrator, OrchestratorConfig};
-pub use routing::{AdmissionOutcome, RoutingDecision, RoutingPolicy};
+pub use crate::scheduler::AdmissionOutcome;
+pub use routing::{RoutingDecision, RoutingPolicy};
 pub use types::{InferenceRequest, InferenceResult, Precision, RequestPriority, RoutedBackend};
 
 #[cfg(feature = "gateway")]

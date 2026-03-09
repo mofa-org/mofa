@@ -174,10 +174,9 @@ impl PromptBuilder {
 
         // 查找所有变量
         // Find all variables
-        let re = regex::Regex::new(r"\{(\w+)\}").unwrap();
         let mut missing = Vec::new();
 
-        for cap in re.captures_iter(content) {
+        for cap in super::regex::VARIABLE_PLACEHOLDER_RE.captures_iter(content) {
             let var_name = &cap[1];
             if let Some(value) = self.variables.get(var_name) {
                 let placeholder = format!("{{{}}}", var_name);
@@ -280,11 +279,10 @@ impl PromptBuilder {
     /// 获取所有需要的变量名
     /// Get all required variable names
     pub fn required_variables(&self) -> Vec<String> {
-        let re = regex::Regex::new(r"\{(\w+)\}").unwrap();
         let mut vars = std::collections::HashSet::new();
 
         for entry in &self.messages {
-            for cap in re.captures_iter(&entry.content) {
+            for cap in super::regex::VARIABLE_PLACEHOLDER_RE.captures_iter(&entry.content) {
                 vars.insert(cap[1].to_string());
             }
         }
