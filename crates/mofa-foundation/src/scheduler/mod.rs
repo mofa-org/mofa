@@ -19,7 +19,7 @@ use mofa_kernel::agent::core::MoFAAgent;
 use mofa_kernel::agent::types::{AgentInput, AgentOutput};
 use mofa_kernel::scheduler::{
     AgentScheduler, Clock, MissedTickPolicy, ScheduleDefinition, ScheduleHandle, ScheduleInfo,
-    ScheduledAgentRunner, SchedulerError, SystemClock,
+    ScheduledAgentRunner, SchedulerError,
 };
 
 // ============================================================================
@@ -179,7 +179,6 @@ impl CronScheduler {
 // AgentScheduler trait implementation
 // ============================================================================
 
-#[async_trait]
 impl AgentScheduler for CronScheduler {
     async fn register(&self, def: ScheduleDefinition) -> Result<ScheduleHandle, SchedulerError> {
         // Note: agent existence is validated at execution time by the runner.
@@ -257,7 +256,7 @@ impl AgentScheduler for CronScheduler {
         Ok(())
     }
 
-    async fn resume_schedule(&self, schedule_id: &str) -> Result<(), SchedulerError> {
+    async fn resume(&self, schedule_id: &str) -> Result<(), SchedulerError> {
         let schedules = self.schedules.read().await;
         let entry = schedules
             .get(schedule_id)
@@ -503,7 +502,7 @@ mod tests {
     #[tokio::test]
     async fn test_resume_nonexistent() {
         let scheduler = make_test_scheduler(10);
-        let result = scheduler.resume_schedule("nonexistent").await;
+        let result = scheduler.resume("nonexistent").await;
         assert!(matches!(result, Err(SchedulerError::NotFound(id)) if id == "nonexistent"));
     }
 
