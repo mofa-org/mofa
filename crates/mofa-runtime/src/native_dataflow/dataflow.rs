@@ -26,6 +26,9 @@ use tokio::sync::{Mutex, RwLock, mpsc};
 use tokio::task::JoinHandle;
 use tracing::{error, info};
 
+/// Default channel buffer size for dataflow router.
+const DEFAULT_DATAFLOW_BUFFER_SIZE: usize = 1024;
+
 /// Configuration for a [`NativeDataflow`].
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DataflowConfig {
@@ -44,7 +47,7 @@ impl Default for DataflowConfig {
         Self {
             dataflow_id: uuid::Uuid::now_v7().to_string(),
             name: "native_dataflow".to_string(),
-            default_buffer_size: 1024,
+            default_buffer_size: DEFAULT_DATAFLOW_BUFFER_SIZE,
             custom_config: HashMap::new(),
         }
     }
@@ -52,6 +55,7 @@ impl Default for DataflowConfig {
 
 /// Lifecycle state of a [`NativeDataflow`].
 #[derive(Debug, Clone, PartialEq)]
+#[non_exhaustive]
 pub enum DataflowState {
     Created,
     Building,

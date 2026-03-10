@@ -11,6 +11,9 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::{RwLock, broadcast};
 
+/// Default channel capacity for message bus (inbound/outbound broadcast channels).
+const DEFAULT_MESSAGE_BUS_CAPACITY: usize = 100;
+
 /// Generic message bus for bidirectional messaging
 #[derive(Clone)]
 pub struct MessageBus<T, U>
@@ -46,9 +49,9 @@ where
         }
     }
 
-    /// Create with default capacity (100)
+    /// Create with default capacity
     pub fn default_capacity() -> Self {
-        Self::new(100)
+        Self::new(DEFAULT_MESSAGE_BUS_CAPACITY)
     }
 
     /// Publish an inbound message

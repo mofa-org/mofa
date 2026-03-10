@@ -78,6 +78,7 @@ use uuid::Uuid;
 /// Dora 运行时模式
 /// Dora runtime mode
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[non_exhaustive]
 pub enum RuntimeMode {
     /// 嵌入式模式：使用 Daemon::run_dataflow 单进程运行
     /// Embedded mode: Single process execution using Daemon::run_dataflow
@@ -195,6 +196,7 @@ impl Default for EmbeddedConfig {
 /// 日志目标类型
 /// Log destination type
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[non_exhaustive]
 pub enum LogDestinationType {
     /// 使用 tracing 输出日志
     /// Output logs using tracing
@@ -237,6 +239,7 @@ impl Default for DistributedConfig {
 /// 运行时状态
 /// Runtime state
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[non_exhaustive]
 pub enum RuntimeState {
     #[default]
     Created,

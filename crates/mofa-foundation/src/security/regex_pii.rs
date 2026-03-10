@@ -8,8 +8,8 @@ use mofa_kernel::security::{
     PiiDetector, PiiRedactor, RedactionMatch, RedactionResult, RedactionStrategy, SecurityResult,
     SensitiveDataCategory,
 };
-use once_cell::sync::Lazy;
 use regex::Regex;
+use std::sync::LazyLock;
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 use tracing::warn;
@@ -19,38 +19,43 @@ use tracing::warn;
 // =============================================================================
 
 // Email: RFC 5322 simplified
-static EMAIL_RE: Lazy<Regex> =
-    Lazy::new(|| Regex::new(r"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}").unwrap());
+static EMAIL_RE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}").unwrap());
 
 // Phone: US formats (xxx-xxx-xxxx, (xxx) xxx-xxxx, +1xxxxxxxxxx, etc.)
-static PHONE_RE: Lazy<Regex> =
-    Lazy::new(|| Regex::new(r"(?:\+?1[-.\s]?)?\(?[2-9]\d{2}\)?[-.\s]?\d{3}[-.\s]?\d{4}").unwrap());
+
+static PHONE_RE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"(?:\+?1[-.\s]?)?\(?[2-9]\d{2}\)?[-.\s]?\d{3}[-.\s]?\d{4}").unwrap()
+});
+
 
 // Credit card: 13-19 digit sequences (with optional separators)
-static CREDIT_CARD_RE: Lazy<Regex> =
-    Lazy::new(|| Regex::new(r"\b\d{4}[-\s]?\d{4}[-\s]?\d{4}[-\s]?\d{1,7}\b").unwrap());
+static CREDIT_CARD_RE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"\b\d{4}[-\s]?\d{4}[-\s]?\d{4}[-\s]?\d{1,7}\b").unwrap());
 
 // SSN: xxx-xx-xxxx
-static SSN_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"\b\d{3}-\d{2}-\d{4}\b").unwrap());
+
+static SSN_RE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"\b\d{3}-\d{2}-\d{4}\b").unwrap());
 
 // IPv4
-static IPV4_RE: Lazy<Regex> = Lazy::new(|| {
+static IPV4_RE: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r"\b(?:(?:25[0-5]|2[0-4]\d|[01]?\d\d?)\.){3}(?:25[0-5]|2[0-4]\d|[01]?\d\d?)\b")
         .unwrap()
 });
 
 // IPv6 (simplified: 8 groups of hex or with :: abbreviation)
-static IPV6_RE: Lazy<Regex> = Lazy::new(|| {
+static IPV6_RE: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r"(?i)(?:[0-9a-f]{1,4}:){7}[0-9a-f]{1,4}|(?:[0-9a-f]{1,4}:){1,7}:|(?:[0-9a-f]{1,4}:){1,6}:[0-9a-f]{1,4}|::(?:[0-9a-f]{1,4}:){0,5}[0-9a-f]{1,4}|::")
         .unwrap()
 });
 
 // API keys: common formats (sk-..., ghp_..., AKIA..., xoxb-...)
-static API_KEY_RE: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(
-        r"\b(?:sk-[a-zA-Z0-9]{20,}|ghp_[a-zA-Z0-9]{36,}|AKIA[A-Z0-9]{16}|xoxb-[a-zA-Z0-9-]+)\b",
-    )
-    .unwrap()
+
+static API_KEY_RE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"\b(?:sk-[a-zA-Z0-9]{20,}|ghp_[a-zA-Z0-9]{36,}|AKIA[A-Z0-9]{16}|xoxb-[a-zA-Z0-9-]+)\b")
+        .unwrap()
+
 });
 
 // =============================================================================

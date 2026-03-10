@@ -38,6 +38,7 @@ use tracing::info;
 
 /// Lifecycle state of the native runtime.
 #[derive(Debug, Clone, PartialEq)]
+#[non_exhaustive]
 pub enum RuntimeState {
     /// Runtime created but not yet started.
     Idle,
