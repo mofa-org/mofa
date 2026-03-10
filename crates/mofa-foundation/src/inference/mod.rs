@@ -34,5 +34,5 @@ pub mod types;
 // Re-export primary public API
 pub use crate::scheduler::AdmissionOutcome;
 pub use orchestrator::{InferenceOrchestrator, OrchestratorConfig};
-pub use routing::{RoutingDecision, RoutingPolicy};
+pub use routing::{MemorySnapshot, RoutingDecision, RoutingPolicy};
 pub use types::{InferenceRequest, InferenceResult, Precision, RequestPriority, RoutedBackend};

@@ -44,7 +44,7 @@ mod duration_secs {
 }
 
 use super::model_pool::ModelPool;
-use super::routing::{self, RoutingDecision, RoutingPolicy};
+use super::routing::{self, MemorySnapshot, RoutingDecision, RoutingPolicy};
 use super::types::{InferenceRequest, InferenceResult, RequestPriority, RoutedBackend};
 use crate::scheduler::AdmissionOutcome;
 
@@ -148,13 +148,24 @@ impl InferenceOrchestrator {
         // Memory is always derived from ModelPool (single source of truth)
         let admission = self.evaluate_admission(request);
 
-        // Step 3: Resolve routing based on policy + admission + hardware
+        // Step 3: Compute a live memory snapshot from ModelPool
+        // This ensures the degradation ladder sees the CURRENT available
+        // memory, not the stale HardwareCapability boot-time snapshot (#1114).
+        let allocated_mb = self.model_pool.total_memory_mb();
+        let memory = MemorySnapshot {
+            capacity_mb: self.config.memory_capacity_mb,
+            allocated_mb,
+            available_mb: self.config.memory_capacity_mb.saturating_sub(allocated_mb),
+        };
+
+        // Step 4: Resolve routing based on policy + admission + hardware + live memory
         let decision = routing::resolve(
             &self.config.routing_policy,
             request,
             admission,
             &self.hardware,
             &self.config.cloud_provider,
+            &memory,
         );
 
         // Step 4: Execute based on routing decision
