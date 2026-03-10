@@ -82,6 +82,7 @@ chrono = { version = "0.4", features = ["serde"] }
 cron = "0.12"
 hex = "0.4"
 lazy_static = "1.4"
+tokenizers = "0.15"
 
 # Actor framework for ReAct agents
 ractor = "0"

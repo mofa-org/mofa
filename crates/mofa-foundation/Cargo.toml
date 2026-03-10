@@ -40,7 +40,7 @@ parallel-compression = ["dep:rayon"]
 # Enable compression caching for embeddings and summaries
 compression-cache = ["dep:sha2"]
 # Enable Linux Candle on-device ML inference (Hugging Face Candle)
-linux-candle = ["dep:candle-core", "dep:candle-transformers"]
+linux-candle = ["dep:candle-core", "dep:candle-transformers", "dep:tokenizers"]
 
 [dependencies]
 # Workspace dependencies
@@ -143,6 +143,7 @@ sha2 = { version = "0.10", optional = true }
 # Enable with: features = ["linux-candle"]
 candle-core = { version = "0.8", optional = true }
 candle-transformers = { version = "0.8", optional = true }
+tokenizers = { workspace = true, optional = true }
 
 # Cron expression parsing for scheduled agent execution
 cron.workspace = true
