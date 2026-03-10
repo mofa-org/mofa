@@ -322,18 +322,6 @@ impl SubtaskDAG {
             .count()
     }
 
-    /// Number of tasks that have reached a terminal state (Completed, Failed, or Skipped)
-    pub fn terminal_count(&self) -> usize {
-        self.graph
-            .node_weights()
-            .filter(|t| {
-                matches!(
-                    t.status,
-                    SubtaskStatus::Completed | SubtaskStatus::Failed(_) | SubtaskStatus::Skipped
-                )
-            })
-            .count()
-    }
 
     /// Skip all Pending/Ready tasks that transitively depend on `failed_idx`
     /// through hard (Sequential/DataFlow) edges. Returns the number of tasks skipped.
