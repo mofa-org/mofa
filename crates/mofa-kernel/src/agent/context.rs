@@ -370,24 +370,26 @@ impl<S: Send + Sync + 'static + Clone> EventBus<S> {
     }
 
     /// 发送事件
-    /// Emit an event
+    /// Emit an event to all subscribers, pruning dead (closed) senders.
     pub async fn emit(&self, event: AgentEvent<S>) {
-        let subscribers = self.subscribers.read().await;
-
-        // 发送给类型特定订阅者
-        // Send to type-specific subscribers
-        if let Some(senders) = subscribers.get(&event.event_type) {
-            for sender in senders {
-                let _ = sender.send(event.clone()).await;
+        // Collect live senders under a brief write lock, pruning any closed
+        // (dropped) receivers at the same time. The lock is released before
+        // any `.await` so that concurrent `subscribe()` callers are never
+        // starved.
+        let snapshot: Vec<mpsc::Sender<AgentEvent<S>>> = {
+            let mut subscribers = self.subscribers.write().await;
+            let mut live = Vec::new();
+            for key in [event.event_type.as_str(), "*"] {
+                if let Some(senders) = subscribers.get_mut(key) {
+                    senders.retain(|tx| !tx.is_closed());
+                    live.extend(senders.iter().cloned());
+                }
             }
-        }
+            live
+        }; // write lock released here, before any .await
 
-        // 发送给通配订阅者
-        // Send to wildcard subscribers
-        if let Some(senders) = subscribers.get("*") {
-            for sender in senders {
-                let _ = sender.send(event.clone()).await;
-            }
+        for sender in &snapshot {
+            let _ = sender.send(event.clone()).await;
         }
     }
 
@@ -467,13 +469,87 @@ mod tests {
 
         let mut rx = ctx.subscribe("test_event").await;
 
-        ctx.emit_event(AgentEvent::<String>::new(
-            "test_event",
-            serde_json::json!({"msg": "hello"}).to_string(),
-        ))
-        .await;
+        ctx.emit_event(AgentEvent::<String>::new("test_event", "hello".to_string()))
+            .await;
 
         let event = rx.recv().await.unwrap();
         assert_eq!(event.event_type, "test_event");
+    }
+
+    /// Dead senders (from dropped receivers) must be pruned from the
+    /// subscribers Vec on the next `emit()` call so that memory does not
+    /// grow without bound and sends do not block on closed channels.
+    #[tokio::test]
+    async fn test_event_bus_dead_sender_pruned_on_emit() {
+        let bus = EventBus::new();
+
+        // Subscribe twice and immediately drop both receivers.
+        let _rx1 = bus.subscribe("ping").await;
+        let _rx2 = bus.subscribe("ping").await;
+        drop(_rx1);
+        drop(_rx2);
+
+        // Keep one live receiver so the Vec stays in the map.
+        let mut live_rx = bus.subscribe("ping").await;
+
+        // Emit — this should prune the two dead senders.
+        bus.emit(AgentEvent::new("ping", serde_json::json!(null)))
+            .await;
+
+        // The live receiver must still receive the event.
+        let event = live_rx
+            .recv()
+            .await
+            .expect("live receiver should get event");
+        assert_eq!(event.event_type, "ping");
+
+        // Verify internal Vec was pruned to exactly 1 entry.
+        let subs = bus.subscribers.read().await;
+        let len = subs.get("ping").map(|v| v.len()).unwrap_or(0);
+        assert_eq!(len, 1, "dead senders should have been pruned");
+    }
+
+    /// A concurrent `subscribe()` call must not be starved while `emit()` is
+    /// sending to its snapshot of senders.
+    #[tokio::test]
+    async fn test_event_bus_subscribe_not_starved_during_emit() {
+        use std::sync::Arc;
+        use tokio::time::{Duration, timeout};
+
+        let bus = Arc::new(EventBus::new());
+
+        // Keep a live receiver so emit() always has at least one destination
+        // and the sends don't block (channel capacity 100 > 5 emits).
+        let mut rx = bus.subscribe("ev").await;
+
+        let bus2 = bus.clone();
+        let emit_handle = tokio::spawn(async move {
+            for _ in 0u8..5 {
+                bus2.emit(AgentEvent::new("ev", serde_json::json!(null)))
+                    .await;
+            }
+        });
+
+        // subscribe() must complete well within the timeout even while
+        // emit() is running concurrently in another task.
+        let bus3 = bus.clone();
+        let subscribe_result =
+            timeout(
+                Duration::from_secs(2),
+                async move { bus3.subscribe("ev").await },
+            )
+            .await;
+
+        assert!(
+            subscribe_result.is_ok(),
+            "subscribe() was starved by emit()"
+        );
+
+        emit_handle.await.unwrap();
+
+        // Drain so the test exits cleanly.
+        for _ in 0u8..5 {
+            let _ = rx.recv().await;
+        }
     }
 }

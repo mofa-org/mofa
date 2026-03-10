@@ -1,11 +1,11 @@
-//! dora-rs 适配层错误类型定义
-//! Error type definitions for the dora-rs adapter layer
+//! Error type definitions for the dora-rs adapter layer.
 
+use error_stack::Report;
 use thiserror::Error;
 
-/// dora-rs 适配层错误类型
-/// Error types for the dora-rs adapter layer
+/// Error types for the dora-rs adapter layer.
 #[derive(Error, Debug)]
+#[non_exhaustive]
 pub enum DoraError {
     #[error("Node initialization failed: {0}")]
     NodeInitError(String),
@@ -83,6 +83,21 @@ impl From<tokio::sync::broadcast::error::SendError<Vec<u8>>> for DoraError {
     }
 }
 
-/// dora-rs 适配层结果类型
-/// Result type for the dora-rs adapter layer
+/// Plain result alias for dora operations (backward-compatible).
 pub type DoraResult<T> = Result<T, DoraError>;
+
+/// Error-stack–backed result alias for dora operations.
+pub type DoraReport<T> = ::std::result::Result<T, Report<DoraError>>;
+
+/// Extension trait to convert [`DoraResult<T>`] into [`DoraReport<T>`].
+pub trait IntoDoraReport<T> {
+    /// Wrap the error in an `error_stack::Report`.
+    fn into_report(self) -> DoraReport<T>;
+}
+
+impl<T> IntoDoraReport<T> for DoraResult<T> {
+    #[inline]
+    fn into_report(self) -> DoraReport<T> {
+        self.map_err(Report::new)
+    }
+}

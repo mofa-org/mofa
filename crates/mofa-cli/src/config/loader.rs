@@ -2,8 +2,8 @@
 //!
 //! Supports multiple configuration formats: YAML, TOML, JSON, INI, RON, JSON5
 
-use crate::CliError;
 use super::AgentConfig;
+use crate::CliError;
 use mofa_kernel::config::{detect_format, from_str};
 use std::path::{Path, PathBuf};
 
@@ -99,9 +99,8 @@ impl ConfigFile {
             ConfigFormat::Json5 => config::FileFormat::Json5,
         };
 
-        from_str(&self.content, file_format).map_err(|e| {
-            CliError::ConfigError(format!("Failed to parse configuration: {}", e))
-        })
+        from_str(&self.content, file_format)
+            .map_err(|e| CliError::ConfigError(format!("Failed to parse configuration: {}", e)))
     }
 }
 

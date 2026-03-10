@@ -42,11 +42,28 @@ mod schema;
 pub use parser::*;
 pub use schema::*;
 
-/// Result type for DSL operations
+/// Plain result alias for DSL operations (backward-compatible).
 pub type DslResult<T> = Result<T, DslError>;
 
-/// Errors that can occur during DSL parsing
+/// Error-stack–backed result alias for DSL operations.
+pub type DslReport<T> = ::std::result::Result<T, error_stack::Report<DslError>>;
+
+/// Extension trait to convert [`DslResult<T>`] into [`DslReport<T>`].
+pub trait IntoDslReport<T> {
+    /// Wrap the error in an `error_stack::Report`.
+    fn into_report(self) -> DslReport<T>;
+}
+
+impl<T> IntoDslReport<T> for DslResult<T> {
+    #[inline]
+    fn into_report(self) -> DslReport<T> {
+        self.map_err(error_stack::Report::new)
+    }
+}
+
+/// Errors that can occur during DSL parsing.
 #[derive(Debug, thiserror::Error)]
+#[non_exhaustive]
 pub enum DslError {
     #[error("IO error: {0}")]
     Io(#[from] std::io::Error),

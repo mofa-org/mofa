@@ -27,9 +27,7 @@ fn is_valid_rhai_identifier(name: &str) -> bool {
             .chars()
             .next()
             .is_some_and(|c| c.is_ascii_alphabetic() || c == '_')
-        && name
-            .chars()
-            .all(|c| c.is_ascii_alphanumeric() || c == '_')
+        && name.chars().all(|c| c.is_ascii_alphanumeric() || c == '_')
 }
 
 /// Escape a string so it is safe inside a Rhai double-quoted string literal.
@@ -52,7 +50,7 @@ fn json_to_rhai_literal(value: &serde_json::Value) -> String {
         serde_json::Value::String(s) => {
             // Escape characters that could break out of the Rhai string literal
             let escaped = escape_rhai_string(s);
-            format!("\"{}\"" , escaped)
+            format!("\"{}\"", escaped)
         }
         // For complex types, serialize to a JSON string literal that the
         // script can parse if needed.  This is safe because the outer
@@ -60,7 +58,7 @@ fn json_to_rhai_literal(value: &serde_json::Value) -> String {
         other => {
             let json_str = other.to_string();
             let escaped = escape_rhai_string(&json_str);
-            format!("\"{}\"" , escaped)
+            format!("\"{}\"", escaped)
         }
     }
 }
@@ -419,8 +417,9 @@ impl RuleEngine {
         &'a self,
         action: &'a RuleAction,
         context: &'a mut ScriptContext,
-    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = RhaiResult<RuleExecutionResult>> + Send + 'a>>
-    {
+    ) -> std::pin::Pin<
+        Box<dyn std::future::Future<Output = RhaiResult<RuleExecutionResult>> + Send + 'a>,
+    > {
         Box::pin(async move {
             let start_time = std::time::Instant::now();
             let mut variable_updates = HashMap::new();
@@ -631,7 +630,9 @@ impl RuleEngine {
 
             RuleAction::Composite { .. } => {
                 // Composite actions are not handled recursively here, return error
-                return Err(RhaiError::Other(format!("Nested composite actions are not supported")));
+                return Err(RhaiError::Other(
+                    "Nested composite actions are not supported".to_string(),
+                ));
             }
         };
 
@@ -1256,7 +1257,7 @@ mod tests {
             if c == '\\' {
                 backslash_run += 1;
             } else {
-                if c == '"' && backslash_run % 2 == 0 {
+                if c == '"' && backslash_run.is_multiple_of(2) {
                     unescaped_quotes.push(i);
                 }
                 backslash_run = 0;
@@ -1295,7 +1296,7 @@ mod tests {
         assert_eq!(json_to_rhai_literal(&serde_json::json!(true)), "true");
         assert_eq!(json_to_rhai_literal(&serde_json::json!(false)), "false");
         assert_eq!(json_to_rhai_literal(&serde_json::json!(42)), "42");
-        assert_eq!(json_to_rhai_literal(&serde_json::json!(3.14)), "3.14");
+        assert_eq!(json_to_rhai_literal(&serde_json::json!(3.125)), "3.125");
     }
 
     #[test]

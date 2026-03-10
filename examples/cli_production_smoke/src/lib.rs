@@ -8,6 +8,7 @@ use tempfile::TempDir;
 
 pub type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
 
+#[allow(unused_macros)]
 macro_rules! bail {
     ($($arg:tt)*) => {
         return Err(format!($($arg)*).into())
@@ -108,6 +109,11 @@ impl SmokeEnvironment {
             .env("XDG_CONFIG_HOME", &self.xdg_config_home)
             .env("XDG_DATA_HOME", &self.xdg_data_home)
             .env("XDG_CACHE_HOME", &self.xdg_cache_home)
+            .env("APPDATA", &self.xdg_config_home)
+            .env("LOCALAPPDATA", &self.xdg_data_home)
+            .env("MOFA_CONFIG_DIR", self.xdg_config_home.join("mofa"))
+            .env("MOFA_DATA_DIR", self.xdg_data_home.join("mofa"))
+            .env("MOFA_CACHE_DIR", self.xdg_cache_home.join("mofa"))
             .env("NO_COLOR", "1")
             .env("CLICOLOR", "0")
             .output()

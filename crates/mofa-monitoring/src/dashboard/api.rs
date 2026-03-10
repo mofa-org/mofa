@@ -16,7 +16,7 @@ use super::metrics::{
     AgentMetrics, LLMMetrics, MetricsCollector, MetricsSnapshot, PluginMetrics, WorkflowMetrics,
 };
 
-use mofa_kernel::workflow::telemetry::{DebugEvent, SessionRecorder};
+use mofa_kernel::workflow::telemetry::{DebugEvent, SessionQuery, SessionRecorder};
 
 /// API response wrapper
 #[derive(Debug, Serialize)]
@@ -53,8 +53,9 @@ impl<T: Serialize> ApiResponse<T> {
     }
 }
 
-/// API error type
+/// API error type.
 #[derive(Debug, thiserror::Error)]
+#[non_exhaustive]
 pub enum ApiError {
     #[error("Not found: {0}")]
     NotFound(String),
@@ -64,6 +65,25 @@ pub enum ApiError {
 
     #[error("Internal error: {0}")]
     Internal(String),
+}
+
+/// Plain result alias for API handler operations (backward-compatible).
+pub type ApiResult<T> = ::std::result::Result<T, ApiError>;
+
+/// Error-stack–backed result alias for API operations.
+pub type ApiReport<T> = ::std::result::Result<T, error_stack::Report<ApiError>>;
+
+/// Extension trait to convert [`ApiResult<T>`] into [`ApiReport<T>`].
+pub trait IntoApiReport<T> {
+    /// Wrap the error in an `error_stack::Report`.
+    fn into_report(self) -> ApiReport<T>;
+}
+
+impl<T> IntoApiReport<T> for ApiResult<T> {
+    #[inline]
+    fn into_report(self) -> ApiReport<T> {
+        self.map_err(error_stack::Report::new)
+    }
 }
 
 impl IntoResponse for ApiError {
@@ -690,16 +710,26 @@ pub struct HealthStatus {
 // Debug Session API Handlers
 // ============================================================================
 
-/// Get all debug sessions
+/// Get debug sessions with optional filtering and pagination.
+///
+/// Query parameters:
+/// - `workflow_id` — filter by workflow graph ID
+/// - `status` — filter by status ("running", "completed", "failed")
+/// - `from` — only sessions started at or after this timestamp (ms)
+/// - `to` — only sessions started at or before this timestamp (ms)
+/// - `min_duration_ms` — only sessions longer than this threshold
+/// - `limit` — max results (for pagination)
+/// - `offset` — skip N results (for pagination)
 async fn get_debug_sessions(
     State(state): State<Arc<ApiState>>,
+    Query(query): Query<SessionQuery>,
 ) -> Result<Json<ApiResponse<Vec<DebugSessionResponse>>>, ApiError> {
     let recorder = state.session_recorder.as_ref().ok_or_else(|| {
         ApiError::BadRequest("Debug session recording is not enabled".to_string())
     })?;
 
     let sessions = recorder
-        .list_sessions()
+        .query_sessions(&query)
         .await
         .map_err(|e| ApiError::Internal(e.to_string()))?;
 

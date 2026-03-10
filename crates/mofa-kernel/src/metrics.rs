@@ -42,5 +42,7 @@ pub trait LLMMetricsSource: Send + Sync {
     /// Returns a summary of all LLM API calls stored in the source.
     /// The implementation should handle aggregation of individual call records
     /// into summary statistics.
-    async fn get_llm_statistics(&self) -> Result<LLMStatsSummary, Box<dyn std::error::Error + Send + Sync>>;
+    async fn get_llm_statistics(
+        &self,
+    ) -> Result<LLMStatsSummary, Box<dyn std::error::Error + Send + Sync>>;
 }

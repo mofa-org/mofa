@@ -188,6 +188,8 @@ impl AgentBuilder {
         let node = DoraAgentNode::new(node_config);
         let interrupt = node.interrupt().clone();
 
+        let context = mofa_kernel::agent::AgentContext::new(self.agent_id.clone());
+
         Ok(AgentRuntime {
             agent,
             node: Arc::new(node),
@@ -195,6 +197,7 @@ impl AgentBuilder {
             config,
             interrupt,
             plugins: self.plugins,
+            context,
         })
     }
 
@@ -214,6 +217,8 @@ impl AgentBuilder {
         let metadata = self.build_metadata();
         let config = self.build_config();
         let interrupt = AgentInterrupt::new();
+        let context = mofa_kernel::agent::AgentContext::new(self.agent_id.clone());
+        let (event_tx, event_rx) = tokio::sync::mpsc::channel(self.max_concurrent_tasks * 10);
 
         Ok(SimpleAgentRuntime {
             agent,
@@ -225,6 +230,9 @@ impl AgentBuilder {
             outputs: self.outputs,
             max_concurrent_tasks: self.max_concurrent_tasks,
             default_timeout: self.default_timeout,
+            event_tx,
+            event_rx: Some(event_rx),
+            context,
         })
     }
 
@@ -241,6 +249,40 @@ impl AgentBuilder {
     }
 }
 
+#[cfg(test)]
+#[cfg(not(feature = "dora"))]
+mod simple_message_bus_tests {
+    use super::*;
+    use mofa_kernel::message::AgentEvent;
+    use std::time::Duration;
+
+    #[tokio::test]
+    async fn subscribe_is_idempotent() {
+        let bus = SimpleMessageBus::new();
+        let (tx, mut rx) = tokio::sync::mpsc::channel::<AgentEvent>(4);
+        bus.register("agent1", tx).await;
+
+        // Subscribe twice
+        bus.subscribe("agent1", "topic-a").await;
+        bus.subscribe("agent1", "topic-a").await;
+
+        // Publish once; the agent should receive exactly one delivery
+        bus.publish("topic-a", AgentEvent::Custom("hi".to_string(), vec![]))
+            .await
+            .expect("publish");
+
+        // First receive should succeed
+        let first = tokio::time::timeout(Duration::from_millis(100), rx.recv())
+            .await
+            .expect("expected first message within timeout");
+        assert!(first.is_some());
+
+        // Second receive should time out (no duplicate delivery)
+        let second = tokio::time::timeout(Duration::from_millis(100), rx.recv()).await;
+        assert!(second.is_err(), "did not expect a second message");
+    }
+}
+
 /// 智能体运行时
 /// Agent Runtime
 #[cfg(feature = "dora")]
@@ -251,6 +293,7 @@ pub struct AgentRuntime<A: MoFAAgent> {
     config: AgentConfig,
     interrupt: AgentInterrupt,
     plugins: Vec<Box<dyn AgentPlugin>>,
+    context: mofa_kernel::agent::AgentContext,
 }
 
 #[cfg(feature = "dora")]
@@ -314,11 +357,10 @@ impl<A: MoFAAgent> AgentRuntime<A> {
     /// 运行事件循环
     /// Run event loop
     pub async fn run_event_loop(&mut self) -> DoraResult<()> {
-        // 创建 CoreAgentContext 并初始化智能体
-        // Create CoreAgentContext and initialize agent
-        let context = mofa_kernel::agent::AgentContext::new(self.metadata.id.clone());
+        // 使用已存储的 CoreAgentContext 初始化智能体
+        // Initialize agent with the stored CoreAgentContext
         self.agent
-            .initialize(&context)
+            .initialize(&self.context)
             .await
             .map_err(|e| DoraError::Internal(e.to_string()))?;
 
@@ -363,7 +405,7 @@ impl<A: MoFAAgent> AgentRuntime<A> {
                     };
 
                     self.agent
-                        .execute(input, &context)
+                        .execute(input, &self.context)
                         .await
                         .map_err(|e| DoraError::Internal(e.to_string()))?;
                 }
@@ -425,6 +467,9 @@ pub struct SimpleAgentRuntime<A: MoFAAgent> {
     outputs: Vec<String>,
     max_concurrent_tasks: usize,
     default_timeout: Duration,
+    event_tx: tokio::sync::mpsc::Sender<AgentEvent>,
+    event_rx: Option<tokio::sync::mpsc::Receiver<AgentEvent>>,
+    pub(crate) context: mofa_kernel::agent::AgentContext,
 }
 
 #[cfg(not(feature = "dora"))]
@@ -487,7 +532,10 @@ impl<A: MoFAAgent> SimpleAgentRuntime<A> {
     /// Initialize plugins
     pub async fn init_plugins(&mut self) -> GlobalResult<()> {
         for plugin in &mut self.plugins {
-            plugin.init_plugin().await.map_err(|e| GlobalError::Other(e.to_string()))?;
+            plugin
+                .init_plugin()
+                .await
+                .map_err(|e| GlobalError::Other(e.to_string()))?;
         }
         Ok(())
     }
@@ -495,10 +543,9 @@ impl<A: MoFAAgent> SimpleAgentRuntime<A> {
     /// 启动运行时
     /// Start runtime
     pub async fn start(&mut self) -> GlobalResult<()> {
-        // 创建 CoreAgentContext 并初始化智能体
-        // Create CoreAgentContext and initialize agent
-        let context = mofa_kernel::agent::AgentContext::new(self.metadata.id.clone());
-        self.agent.initialize(&context).await?;
+        // 初始化智能体 - 使用存储的 context
+        // Initialize agent - using stored context
+        self.agent.initialize(&self.context).await?;
         // 初始化插件
         // Initialize plugins
         self.init_plugins().await?;
@@ -520,7 +567,6 @@ impl<A: MoFAAgent> SimpleAgentRuntime<A> {
         // Convert event to input and execute
         use mofa_kernel::agent::types::AgentInput;
 
-        let context = mofa_kernel::agent::AgentContext::new(self.metadata.id.clone());
         let input = match event {
             AgentEvent::TaskReceived(task) => AgentInput::text(task.content),
             AgentEvent::Shutdown => {
@@ -531,7 +577,7 @@ impl<A: MoFAAgent> SimpleAgentRuntime<A> {
             _ => AgentInput::text(format!("{:?}", event)),
         };
 
-        let _output = self.agent.execute(input, &context).await?;
+        let _output = self.agent.execute(input, &self.context).await?;
         Ok(())
     }
 
@@ -562,14 +608,13 @@ impl<A: MoFAAgent> SimpleAgentRuntime<A> {
                     // 将事件转换为输入并执行
                     // Convert event to input and execute
                     use mofa_kernel::agent::types::AgentInput;
-                    let context = mofa_kernel::agent::AgentContext::new(self.metadata.id.clone());
                     let input = match event {
                         AgentEvent::TaskReceived(task) => AgentInput::text(task.content),
                         AgentEvent::Custom(data, _) => AgentInput::text(data),
                         _ => AgentInput::text(format!("{:?}", event)),
                     };
 
-                    self.agent.execute(input, &context).await?;
+                    self.agent.execute(input, &self.context).await?;
                 }
                 Ok(None) => {
                     // 通道关闭
@@ -650,22 +695,26 @@ impl SimpleMessageBus {
 
     /// 注册智能体
     /// Register agent
+    ///
+    /// Replaces any existing senders for `agent_id` so that stale clones from
+    /// previous registrations (e.g. after an agent restart) do not accumulate
+    /// in the Vec and leak memory.
     pub async fn register(&self, agent_id: &str, tx: tokio::sync::mpsc::Sender<AgentEvent>) {
         let mut subs = self.subscribers.write().await;
-        subs.entry(agent_id.to_string())
-            .or_insert_with(Vec::new)
-            .push(tx);
+        subs.insert(agent_id.to_string(), vec![tx]);
     }
 
     /// 订阅主题
     /// Subscribe to topic
     pub async fn subscribe(&self, agent_id: &str, topic: &str) {
         let mut topics = self.topic_subscribers.write().await;
-        topics
-            .entry(topic.to_string())
-            .or_insert_with(Vec::new)
-            .push(agent_id.to_string());
+        let subscriber_ids = topics.entry(topic.to_string()).or_insert_with(Vec::new);
+        if !subscriber_ids.iter().any(|id| id == agent_id) {
+            subscriber_ids.push(agent_id.to_string());
+        }
     }
+
+    
 
     /// 发送点对点消息
     /// Send point-to-point message

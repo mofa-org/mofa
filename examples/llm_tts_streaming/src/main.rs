@@ -8,10 +8,13 @@
 
 use mofa_sdk::llm::{LLMAgentBuilder, openai_from_env};
 use mofa_sdk::plugins::{KokoroTTS, TTSPlugin};
-use rodio::{OutputStream, Sink, buffer::SamplesBuffer};
 use std::env;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use uuid::Uuid;
+
+#[cfg(feature = "audio-playback")]
+use rodio::{OutputStream, Sink, buffer::SamplesBuffer};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -40,8 +43,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             .with_plugin(TTSPlugin::with_engine("tts", kokoro_engine, Some("zf_088")))
             .build()
     );
-    let (_output_stream, stream_handle) = OutputStream::try_default()?;
-    let audio_sink = Arc::new(Sink::try_new(&stream_handle)?);
+    let rendered_chunks = Arc::new(AtomicUsize::new(0));
+
+    #[cfg(not(feature = "audio-playback"))]
+    println!("Audio playback disabled. Rebuild with --features audio-playback to hear output.");
 
     let session_id = agent.current_session_id().await;
     println!("Using session: {}", session_id);
@@ -75,26 +80,24 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         print!("AI: ");
 
-        // 中断现有播放并清空音频队列
-        // Interrupt current playback and clear the audio queue
+        // 中断现有 TTS 合成
+        // Interrupt ongoing TTS synthesis
         agent.interrupt_tts().await?;
-        audio_sink.stop();  // 停止当前播放并清空队列
-        // Stop the current playback and clear the queue
 
-        let sink_clone = audio_sink.clone();
+        let rendered_chunks_clone = rendered_chunks.clone();
         agent.chat_with_tts_callback(
             &session_id,
             input,
-            move |audio_f32| {
-                sink_clone.append(SamplesBuffer::new(1, 24000, audio_f32));
+            move |_audio_f32| {
+                rendered_chunks_clone.fetch_add(1, Ordering::Relaxed);
             }
         ).await?;
 
-        // 启动播放（非阻塞）
-        // Start playback (non-blocking)
-        audio_sink.play();
-        // 不再使用 sleep_until_end()，让音频在后台播放
-        // No longer using sleep_until_end(), let audio play in the background
+        println!(
+            "[info] Generated {} audio chunks for this response",
+            rendered_chunks.load(Ordering::Relaxed)
+        );
+        rendered_chunks.store(0, Ordering::Relaxed);
     }
     agent.remove_session(&session_id).await?;
     Ok(())
