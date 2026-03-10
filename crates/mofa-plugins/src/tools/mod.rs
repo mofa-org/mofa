@@ -13,6 +13,7 @@ pub mod datetime;
 mod duck_search;
 pub mod filesystem;
 pub mod http;
+pub mod ocr;
 pub mod json;
 pub mod medical_knowledge;
 mod postgres;
@@ -31,6 +32,7 @@ pub use medical_knowledge::MedicalKnowledgeTool;
 pub use response_optimizer::ResponseOptimizerTool;
 pub use rhai::RhaiScriptTool;
 pub use shell::ShellCommandTool;
+pub use ocr::OcrTool;
 
 /// Convenience function to create a ToolPlugin with all built-in tools
 pub fn create_builtin_tool_plugin(plugin_id: &str) -> PluginResult<ToolPlugin> {
@@ -46,6 +48,7 @@ pub fn create_builtin_tool_plugin(plugin_id: &str) -> PluginResult<ToolPlugin> {
     tool_plugin.register_tool(JsonTool::new());
     tool_plugin.register_tool(ResponseOptimizerTool::new());
     tool_plugin.register_tool(MedicalKnowledgeTool::new());
+    tool_plugin.register_tool(OcrTool::new());
 
     Ok(tool_plugin)
 }
