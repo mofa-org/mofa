@@ -1,9 +1,17 @@
-use mofa_foundation::orchestrator::{LinuxCandleProvider, ModelProvider, ModelProviderConfig, ModelType};
+#[cfg(all(target_os = "linux", feature = "linux-candle"))]
+use mofa_foundation::orchestrator::{
+    LinuxCandleProvider, ModelProvider, ModelProviderConfig, ModelType,
+};
+#[cfg(all(target_os = "linux", feature = "linux-candle"))]
 use serde_json::Value;
+#[cfg(all(target_os = "linux", feature = "linux-candle"))]
 use std::collections::HashMap;
+#[cfg(all(target_os = "linux", feature = "linux-candle"))]
 use std::env;
+#[cfg(all(target_os = "linux", feature = "linux-candle"))]
 use std::path::PathBuf;
 
+#[cfg(all(target_os = "linux", feature = "linux-candle"))]
 fn default_models_dir() -> PathBuf {
     if let Ok(cwd) = env::current_dir() {
         let candidate = cwd.join("models");
@@ -17,6 +25,7 @@ fn default_models_dir() -> PathBuf {
         .join("models")
 }
 
+#[cfg(all(target_os = "linux", feature = "linux-candle"))]
 fn build_chat_prompt(user_prompt: &str) -> String {
     // Qwen's instruct style chat framing so generation stays in assistant mode
     format!(
@@ -24,6 +33,7 @@ fn build_chat_prompt(user_prompt: &str) -> String {
     )
 }
 
+#[cfg(all(target_os = "linux", feature = "linux-candle"))]
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Prefer project-root ./models when invoked from the repo, but keep env overrides available.
@@ -71,4 +81,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     provider.unload().await?;
     Ok(())
+}
+
+#[cfg(not(all(target_os = "linux", feature = "linux-candle")))]
+fn main() {
+    eprintln!(
+        "This example requires a Linux target with the `linux-candle` feature enabled."
+    );
+    std::process::exit(1);
 }
