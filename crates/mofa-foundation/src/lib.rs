@@ -82,9 +82,7 @@ pub use metrics::{
 
 // Gateway implementations (rate limiter, routing strategies)
 pub mod gateway;
-pub use gateway::{
-    KeyStrategy, RateLimitDecision, RateLimiter, RateLimiterConfig, TokenBucketRateLimiter,
-};
+pub use gateway::TokenBucketRateLimiter;
 
 // Re-export config types
 pub use config::{AgentInfo, AgentYamlConfig, LLMYamlConfig, RuntimeConfig, ToolConfig};

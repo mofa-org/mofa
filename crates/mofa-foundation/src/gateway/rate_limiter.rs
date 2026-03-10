@@ -1,4 +1,4 @@
-//! Token-bucket rate limiter with per-agent and per-client quota enforcement.
+//! Token-bucket rate limiter — concrete implementation of the kernel contract.
 //!
 //! # How it works
 //!
@@ -9,92 +9,18 @@
 //!
 //! # Keying strategies
 //!
-//! Two strategies are supported and can be composed:
+//! Two strategies are supported:
 //!
 //! - [`KeyStrategy::PerAgent`] — one bucket per `agent_id` (from the matched route)
 //! - [`KeyStrategy::PerClient`] — one bucket per caller IP string
 //!
-//! Both strategies use the same underlying `TokenBucketRateLimiter`; the
-//! caller is responsible for passing the correct key.
+//! The caller is responsible for passing the correct key to
+//! [`TokenBucketRateLimiter::check_and_consume`].
 
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
 use dashmap::DashMap;
-use serde::{Deserialize, Serialize};
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Public API types
-// ─────────────────────────────────────────────────────────────────────────────
-
-/// The outcome of a rate-limit check.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum RateLimitDecision {
-    /// Request is within quota.
-    Allowed {
-        /// Tokens remaining in the bucket after this request.
-        remaining: u32,
-    },
-    /// Request exceeds quota.
-    Denied {
-        /// Milliseconds the caller should wait before retrying.
-        retry_after_ms: u64,
-    },
-}
-
-impl RateLimitDecision {
-    /// Returns `true` if the request was allowed.
-    pub fn is_allowed(&self) -> bool {
-        matches!(self, Self::Allowed { .. })
-    }
-}
-
-/// Which dimension to key the rate limiter on.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[non_exhaustive]
-pub enum KeyStrategy {
-    /// One bucket per agent ID (from the matched route).
-    PerAgent,
-    /// One bucket per originating client IP address.
-    PerClient,
-}
-
-/// Configuration for a [`TokenBucketRateLimiter`].
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct RateLimiterConfig {
-    /// Maximum number of tokens (burst size).
-    pub capacity: u32,
-    /// Number of tokens added per second (sustained rate).
-    pub refill_rate: u32,
-    /// Keying strategy.
-    pub strategy: KeyStrategy,
-}
-
-impl Default for RateLimiterConfig {
-    fn default() -> Self {
-        Self {
-            capacity: 100,
-            refill_rate: 10,
-            strategy: KeyStrategy::PerClient,
-        }
-    }
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// RateLimiter trait
-// ─────────────────────────────────────────────────────────────────────────────
-
-/// Kernel-adjacent contract for rate limiting.
-///
-/// Implementations must be `Send + Sync` so they can be held behind an `Arc`
-/// and called from multiple Tokio tasks concurrently.
-pub trait RateLimiter: Send + Sync {
-    /// Attempt to consume one token from the bucket identified by `key`.
-    ///
-    /// Returns [`RateLimitDecision::Allowed`] when a token was successfully
-    /// consumed, or [`RateLimitDecision::Denied`] with a retry hint when the
-    /// bucket is empty.
-    fn check_and_consume(&self, key: &str) -> RateLimitDecision;
-}
+pub use mofa_kernel::{GatewayRateLimiter, KeyStrategy, RateLimitDecision, RateLimiterConfig};
 
 // ─────────────────────────────────────────────────────────────────────────────
 // TokenBucket (internal per-key state)
@@ -130,7 +56,6 @@ impl TokenBucket {
                 remaining: self.tokens as u32,
             }
         } else {
-            // Time until next token is available.
             let deficit = 1.0 - self.tokens;
             let wait_secs = deficit / self.refill_rate;
             let retry_after_ms = (wait_secs * 1000.0).ceil() as u64;
@@ -146,7 +71,7 @@ impl TokenBucket {
 /// Lock-free token-bucket rate limiter backed by [`DashMap`].
 ///
 /// Each unique key gets its own bucket lazily created on first access.
-/// Refill is computed on demand — no background timer, no spawned tasks.
+/// Implements [`GatewayRateLimiter`] from `mofa-kernel`.
 pub struct TokenBucketRateLimiter {
     buckets: DashMap<String, TokenBucket>,
     capacity: u32,
@@ -164,7 +89,7 @@ impl TokenBucketRateLimiter {
     }
 }
 
-impl RateLimiter for TokenBucketRateLimiter {
+impl GatewayRateLimiter for TokenBucketRateLimiter {
     fn check_and_consume(&self, key: &str) -> RateLimitDecision {
         self.buckets
             .entry(key.to_string())
@@ -181,6 +106,7 @@ impl RateLimiter for TokenBucketRateLimiter {
 mod tests {
     use std::sync::Arc;
     use std::thread;
+    use std::time::Duration;
 
     use super::*;
 
@@ -261,8 +187,6 @@ mod tests {
         let rl = limiter(1, 1000); // 1000 tokens/sec — refills very fast
         rl.check_and_consume("client-a"); // drain
 
-        // Sleep just long enough for the 1000 tokens/sec rate to refill at
-        // least one token (1ms should add 1 token).
         thread::sleep(Duration::from_millis(5));
 
         let decision = rl.check_and_consume("client-a");
