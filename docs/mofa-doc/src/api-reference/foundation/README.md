@@ -21,8 +21,9 @@ ReAct agent pattern implementation.
 ### secretary
 Secretary agent pattern for human-in-the-loop workflows.
 
-- `SecretaryAgent` — Secretary agent
-- `SecretaryConfig` — Configuration
+- `DefaultSecretaryBuilder` — Build secretary behavior
+- `SecretaryCore` — Event-loop runtime
+- `DefaultInput` / `DefaultOutput` — Message contracts
 
 ### persistence
 Persistence layer for state and session management.

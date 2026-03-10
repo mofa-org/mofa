@@ -203,10 +203,14 @@ impl ConsensusEngine {
         // Use node ID hash to ensure different nodes get different timeouts
         // This prevents all nodes from timing out simultaneously
         let timeout_range = config.election_timeout_ms.1 - config.election_timeout_ms.0;
-        let mut hasher = DefaultHasher::new();
-        node_id.hash(&mut hasher);
-        let node_hash = hasher.finish();
-        let timeout_ms = config.election_timeout_ms.0 + (node_hash % timeout_range);
+        let timeout_ms = if timeout_range == 0 {
+            config.election_timeout_ms.0
+        } else {
+            let mut hasher = DefaultHasher::new();
+            node_id.hash(&mut hasher);
+            let node_hash = hasher.finish();
+            config.election_timeout_ms.0 + (node_hash % timeout_range)
+        };
         let timeout = Duration::from_millis(timeout_ms);
 
         debug!("Follower {} waiting {}ms for heartbeat", node_id, timeout_ms);

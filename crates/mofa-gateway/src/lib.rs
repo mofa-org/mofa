@@ -84,6 +84,9 @@ pub mod state;
 pub mod state_machine;
 pub mod types;
 
+#[cfg(feature = "openai-compat")]
+pub mod openai_compat;
+
 // Re-export main types
 pub use control_plane::{ControlPlane, ControlPlaneConfig};
 pub use error::{ControlPlaneError, GatewayError, GatewayResult};

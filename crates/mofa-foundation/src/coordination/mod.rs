@@ -1,5 +1,7 @@
 use mofa_kernel::agent::types::error::{GlobalError, GlobalResult};
 mod scheduler;
+#[cfg(test)]
+mod tests;
 use mofa_kernel::message::{AgentMessage, TaskRequest, TaskStatus};
 use mofa_kernel::{AgentBus, CommunicationMode};
 use std::collections::HashMap;
@@ -26,9 +28,9 @@ pub struct AgentCoordinator {
     // 维护协同拓扑：角色→智能体ID列表
     // Maintain coordination topology: Role -> Agent ID list
     role_mapping: Arc<RwLock<HashMap<String, Vec<String>>>>,
-    // 维护任务状态：任务ID→执行智能体ID+状态
-    // Maintain task status: Task ID -> Executor Agent ID + Status
-    task_tracker: Arc<RwLock<HashMap<String, (String, TaskStatus)>>>,
+    // 维护任务状态：任务ID→执行智能体ID+状态（列表）
+    // Maintain task status: Task ID -> list of (Executor Agent ID, Status)
+    task_tracker: Arc<RwLock<HashMap<String, Vec<(String, TaskStatus)>>>>,
     // 优先级调度器
     // Priority scheduler
     scheduler: scheduler::PriorityScheduler,
@@ -65,7 +67,7 @@ impl AgentCoordinator {
         match &self.strategy {
             CoordinationStrategy::MasterSlave => self.master_slave_coordinate(task_msg).await,
             CoordinationStrategy::Pipeline => self.pipeline_coordinate(task_msg).await,
-            _ => Ok(()),
+            CoordinationStrategy::PeerToPeer => self.peer_to_peer_coordinate(task_msg).await,
         }
     }
 
@@ -98,12 +100,13 @@ impl AgentCoordinator {
             .await
             .map_err(|e| GlobalError::Other(e.to_string()))?;
 
-        // 4. 跟踪任务状态（简化示例）
-        // 4. Track task status (Simplified example)
+        // 4. 跟踪任务状态
+        // 4. Track task status for all workers
         if let AgentMessage::TaskRequest { task_id, .. } = task_msg {
             let mut tracker = self.task_tracker.write().await;
+            let entries = tracker.entry(task_id.clone()).or_default();
             for worker_id in workers {
-                tracker.insert(task_id.clone(), (worker_id.clone(), TaskStatus::Pending));
+                entries.push((worker_id.clone(), TaskStatus::Pending));
             }
         }
         Ok(())
@@ -154,6 +157,37 @@ impl AgentCoordinator {
                 .map_err(|e| GlobalError::Other(e.to_string()))?
             {
                 last_output = Some(result);
+            }
+        }
+        Ok(())
+    }
+
+    /// Peer-to-peer coordination logic
+    async fn peer_to_peer_coordinate(&self, task_msg: &AgentMessage) -> GlobalResult<()> {
+        let role_map = self.role_mapping.read().await;
+
+        let peers = role_map
+            .get("peer")
+            .ok_or_else(|| GlobalError::Other("No peer agents registered".to_string()))?;
+
+        // Send point to point to all peers to avoid broadcast leakage
+        for peer_id in peers {
+            self.bus
+                .send_message(
+                    "coordinator",
+                    CommunicationMode::PointToPoint(peer_id.clone()),
+                    task_msg,
+                )
+                .await
+                .map_err(|e| GlobalError::Other(e.to_string()))?;
+        }
+
+        // Track task status
+        if let AgentMessage::TaskRequest { task_id, .. } = task_msg {
+            let mut tracker = self.task_tracker.write().await;
+            let entries = tracker.entry(task_id.clone()).or_default();
+            for peer_id in peers {
+                entries.push((peer_id.clone(), TaskStatus::Pending));
             }
         }
         Ok(())
