@@ -370,6 +370,8 @@ impl ReActAgent {
         tools.values().cloned().collect()
     }
 
+    
+  
     /// 执行任务
     /// Execute task
     pub async fn run(&self, task: impl Into<String>) -> LLMResult<ReActResult> {
@@ -468,6 +470,113 @@ impl ReActAgent {
             start_time.elapsed().as_millis() as u64,
         ))
     }
+
+      pub async fn run_with_cancellation(&self, task: impl Into<String>,cancel_token: tokio_util::sync::CancellationToken,) -> LLMResult<ReActResult> {
+        let task = task.into();
+        let task_id = uuid::Uuid::now_v7().to_string();
+        let start_time = std::time::Instant::now();
+
+        let mut steps = Vec::new();
+        let mut step_number = 0;
+
+        // 构建系统提示词
+        // Build system prompt
+        let system_prompt = self.build_system_prompt().await;
+
+        // 构建初始消息
+        // Build initial messages
+        let mut conversation = vec![format!("Task: {}", task)];
+
+        for iteration in 0..self.config.max_iterations {
+            step_number += 1;
+            if cancel_token.is_cancelled() {
+        return Ok(ReActResult::failed(
+            task_id, &task,
+            "Task was cancelled",
+            steps, iteration,
+            start_time.elapsed().as_millis() as u64,
+        ));
+    }
+
+            // 获取 LLM 响应
+            // Get LLM response
+            let prompt = self.build_prompt(&system_prompt, &conversation).await;
+            let response = self.llm.ask(&prompt).await?;
+
+            // 解析响应
+            // Parse response
+            let parsed = self.parse_response(&response);
+
+            match parsed {
+                ParsedResponse::Thought(thought) => {
+                    steps.push(ReActStep::thought(&thought, step_number));
+                    conversation.push(format!("Thought: {}", thought));
+
+                    if self.config.verbose {
+                        tracing::info!("Thought: {}", thought);
+                    }
+                }
+                ParsedResponse::Action { tool, input } => {
+                    steps.push(ReActStep::action(&tool, &input, step_number));
+                    conversation.push(format!("Action: {}[{}]", tool, input));
+
+                    if self.config.verbose {
+                        tracing::info!("Action: {}[{}]", tool, input);
+                    }
+
+                    // 执行工具
+                    // Execute tool
+                    step_number += 1;
+                    let observation = self.execute_tool(&tool, &input).await;
+                    steps.push(ReActStep::observation(&observation, step_number));
+                    conversation.push(format!("Observation: {}", observation));
+
+                    if self.config.verbose {
+                        tracing::info!("Observation: {}", observation);
+                    }
+                }
+                ParsedResponse::FinalAnswer(answer) => {
+                    steps.push(ReActStep::final_answer(&answer, step_number));
+
+                    if self.config.verbose {
+                        tracing::info!("Final Answer: {}", answer);
+                    }
+
+                    return Ok(ReActResult::success(
+                        task_id,
+                        &task,
+                        answer,
+                        steps,
+                        iteration + 1,
+                        start_time.elapsed().as_millis() as u64,
+                    ));
+                }
+                ParsedResponse::Error(err) => {
+                    return Ok(ReActResult::failed(
+                        task_id,
+                        &task,
+                        err,
+                        steps,
+                        iteration + 1,
+                        start_time.elapsed().as_millis() as u64,
+                    ));
+                }
+            }
+        }
+
+        // 达到最大迭代次数
+        // Max iterations reached
+        Ok(ReActResult::failed(
+            task_id,
+            &task,
+            format!("Max iterations ({}) exceeded", self.config.max_iterations),
+            steps,
+            self.config.max_iterations,
+            start_time.elapsed().as_millis() as u64,
+        ))
+    } 
+
+
 
     /// 构建系统提示词
     /// Build system prompt

@@ -58,6 +58,7 @@ tracing.workspace = true
 rand.workspace = true
 # YAML config parsing
 serde_yaml = "0.9"
+tokio-util.workspace=true
 
 
 # HTTP client (transcription + HTTP providers)
