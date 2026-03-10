@@ -258,13 +258,29 @@ impl SubtaskDAG {
             .count()
     }
 
-    /// Fraction of tasks completed
+    /// Number of tasks in any terminal state (Completed, Skipped, or Failed)
+    pub fn terminal_count(&self) -> usize {
+        self.graph
+            .node_weights()
+            .filter(|t| {
+                matches!(
+                    t.status,
+                    SubtaskStatus::Completed | SubtaskStatus::Skipped | SubtaskStatus::Failed(_)
+                )
+            })
+            .count()
+    }
+
+    /// Fraction of tasks that have reached a terminal state.
+    ///
+    /// Uses the same terminal-state definition as `is_complete`: a task
+    /// counts toward progress when it is Completed, Skipped, or Failed.
     pub fn progress(&self) -> f64 {
         let total = self.task_count();
         if total == 0 {
             return 1.0;
         }
-        self.completed_count() as f64 / total as f64
+        self.terminal_count() as f64 / total as f64
     }
 
     /// Iterate over all tasks with their node indices
@@ -607,6 +623,30 @@ mod tests {
         assert_eq!(dag.progress(), 1.0);
 
         let _ = (a, b, c, d);
+    }
+
+    #[test]
+    fn test_progress_counts_failed_and_skipped_as_terminal() {
+        let mut dag = SubtaskDAG::new("mixed");
+        let a = dag.add_task(SwarmSubtask::new("a", "A"));
+        let b = dag.add_task(SwarmSubtask::new("b", "B"));
+        let c = dag.add_task(SwarmSubtask::new("c", "C"));
+        let d = dag.add_task(SwarmSubtask::new("d", "D"));
+
+        dag.mark_complete(a);
+        dag.mark_failed(b, "error");
+        dag.mark_skipped(c);
+        // d stays pending
+
+        // 3 of 4 tasks are terminal
+        assert!((dag.progress() - 0.75).abs() < f64::EPSILON);
+        assert_eq!(dag.terminal_count(), 3);
+        assert_eq!(dag.completed_count(), 1);
+        assert!(!dag.is_complete()); // d is still pending
+
+        dag.mark_complete(d);
+        assert_eq!(dag.progress(), 1.0);
+        assert!(dag.is_complete());
     }
 
     #[test]
