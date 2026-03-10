@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 /// Per-agent budget limits (all optional)
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct BudgetConfig {
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -58,7 +58,7 @@ impl BudgetConfig {
 }
 
 /// Current budget usage for an agent
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct BudgetStatus {
     pub session_cost: f64,

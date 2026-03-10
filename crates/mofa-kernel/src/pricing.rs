@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
 /// Per-model pricing (USD per 1,000 tokens)
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct ModelPricing {
     pub input_cost_per_1k_tokens: f64,
@@ -47,7 +47,7 @@ impl ModelPricing {
 }
 
 /// Detailed cost breakdown for a single LLM call
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct CostBreakdown {
     pub input_cost: f64,

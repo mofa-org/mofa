@@ -147,7 +147,7 @@ impl BudgetEnforcer {
         self.session_usage.write().await.remove(agent_id);
     }
 
-    pub async fn reset_all(&self, agent_id: &str) {
+    pub async fn reset_usage(&self, agent_id: &str) {
         self.session_usage.write().await.remove(agent_id);
         self.daily_usage.write().await.remove(agent_id);
     }

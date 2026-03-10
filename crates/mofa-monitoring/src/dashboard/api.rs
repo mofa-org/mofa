@@ -750,7 +750,11 @@ async fn get_cost_summary(
         let model_key = format!("{}/{}", llm.provider_name, llm.model_name);
         let estimated_cost = registry
             .get_pricing(&llm.provider_name, &llm.model_name)
-            .map(|p: ModelPricing| p.calculate_cost(llm.prompt_tokens as u32, llm.completion_tokens as u32))
+            .map(|p: ModelPricing| {
+                let pt = u32::try_from(llm.prompt_tokens).unwrap_or(u32::MAX);
+                let ct = u32::try_from(llm.completion_tokens).unwrap_or(u32::MAX);
+                p.calculate_cost(pt, ct)
+            })
             .unwrap_or(0.0);
 
         total_cost += estimated_cost;
