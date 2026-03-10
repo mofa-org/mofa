@@ -95,6 +95,18 @@ dictionary ChatMessage {
     string content;
 };
 
+// LLM configuration for constructing agents
+dictionary LLMConfig {
+    LLMProviderType provider;
+    string? model;
+    string? api_key;
+    string? base_url;
+    string? deployment;
+    float? temperature;
+    u32? max_tokens;
+    string? system_prompt;
+};
+
 // ============================================================================
 // Session Management Types
 // ============================================================================
@@ -167,6 +179,14 @@ interface LLMAgentBuilder {
     // Set context window size (in rounds)
     LLMAgentBuilder set_context_window_size(u32 size);
 
+    // Set OpenAI provider configuration
+    [Throws=MoFaError]
+    LLMAgentBuilder set_openai_provider(
+        string api_key,
+        string? base_url,
+        string? model
+    );
+
     // Build the LLMAgent synchronously
     [Throws=MoFaError]
     LLMAgent build();
@@ -178,6 +198,14 @@ interface LLMAgentBuilder {
 
 // LLM Agent - the main interface for LLM interactions
 interface LLMAgent {
+    // Create from configuration file (agent.yml)
+    [Throws=MoFaError, Name=from_config_file]
+    constructor(string config_path);
+
+    // Create from config dictionary and explicit identity
+    [Throws=MoFaError, Name=from_config]
+    constructor(LLMConfig config, string agent_id, string name);
+
     // Get agent ID
     [Throws=MoFaError]
     string agent_id();
