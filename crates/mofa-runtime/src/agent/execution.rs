@@ -772,6 +772,27 @@ impl ExecutionEngine {
     }
 }
 
+// ---------------------------------------------------------------------------
+// ScheduledAgentRunner implementation
+// ---------------------------------------------------------------------------
+
+/// Allow `ExecutionEngine` to be used directly as the runner inside
+/// `CronScheduler` (which lives in `mofa-foundation`) without creating a
+/// cyclic crate dependency.
+#[async_trait::async_trait]
+impl mofa_kernel::scheduler::ScheduledAgentRunner for ExecutionEngine {
+    async fn run_scheduled(
+        &self,
+        agent_id: &str,
+        input: mofa_kernel::agent::types::AgentInput,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        self.execute(agent_id, input, ExecutionOptions::default())
+            .await
+            .map(|_| ())
+            .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

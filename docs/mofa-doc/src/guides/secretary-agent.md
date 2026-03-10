@@ -4,13 +4,19 @@ The Secretary Agent pattern enables human-in-the-loop workflows where AI manages
 
 ## Overview
 
-The Secretary Agent acts as an intelligent coordinator that:
+The current Secretary API is event-loop based:
 
-1. **Receives Ideas** — Records tasks and todos
-2. **Clarifies Requirements** — Generates project documents
-3. **Schedules Dispatch** — Calls execution agents
-4. **Monitors Feedback** — Pushes key decisions to humans
-5. **Acceptance Report** — Updates todos and status
+1. Build behavior with `DefaultSecretaryBuilder`
+2. Start runtime with `SecretaryCore`
+3. Exchange messages through `DefaultInput` and `DefaultOutput`
+
+This pattern maps to the five work phases:
+
+1. Receive ideas
+2. Clarify requirements
+3. Schedule dispatch
+4. Monitor feedback and decisions
+5. Generate acceptance reports
 
 ```mermaid
 graph LR
@@ -30,214 +36,184 @@ graph LR
 
 ## Basic Usage
 
-### Creating a Secretary Agent
-
 ```rust
-use mofa_sdk::secretary::{SecretaryAgent, SecretaryConfig};
-use mofa_sdk::llm::openai_from_env;
-
-let config = SecretaryConfig {
-    human_feedback_enabled: true,
-    max_delegations: 5,
-    check_interval: Duration::from_secs(30),
+use mofa_sdk::secretary::{
+    AgentInfo,
+    ChannelConnection,
+    DefaultInput,
+    DefaultOutput,
+    DefaultSecretaryBuilder,
+    SecretaryCommand,
+    SecretaryCore,
+    TodoPriority,
 };
 
-let secretary = SecretaryAgent::builder()
-    .with_llm(openai_from_env()?)
-    .with_config(config)
-    .with_delegation_target("researcher", researcher_agent)
-    .with_delegation_target("writer", writer_agent)
-    .build();
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // 1) Register executors
+    let mut backend = AgentInfo::new("backend_agent", "Backend Agent");
+    backend.capabilities = vec!["backend".to_string(), "api".to_string()];
+    backend.available = true;
+    backend.performance_score = 0.9;
+
+    // 2) Build secretary behavior
+    let behavior = DefaultSecretaryBuilder::new()
+        .with_name("Project Secretary")
+        .with_auto_clarify(true)
+        .with_auto_dispatch(true)
+        .with_executor(backend)
+        .build();
+
+    // 3) Start core loop
+    let (conn, input_tx, mut output_rx) = ChannelConnection::new_pair(32);
+    let (handle, join_handle) = SecretaryCore::new(behavior).start(conn).await;
+
+    // Phase 1: Receive idea
+    input_tx
+        .send(DefaultInput::Idea {
+            content: "Build a GitHub issue summarizer CLI".to_string(),
+            priority: Some(TodoPriority::High),
+            metadata: None,
+        })
+        .await?;
+
+    // Phase 2 and 3: Trigger clarify and dispatch for a specific todo
+    input_tx
+        .send(DefaultInput::Command(SecretaryCommand::Clarify {
+            todo_id: "todo_1".to_string(),
+        }))
+        .await?;
+    input_tx
+        .send(DefaultInput::Command(SecretaryCommand::Dispatch {
+            todo_id: "todo_1".to_string(),
+        }))
+        .await?;
+
+    // Phase 4 and 5: Handle feedback, decisions, and reports
+    while let Some(output) = output_rx.recv().await {
+        match output {
+            DefaultOutput::Acknowledgment { message } => {
+                println!("ack: {}", message);
+            }
+            DefaultOutput::DecisionRequired { decision } => {
+                println!("decision required: {}", decision.description);
+
+                // Human responds by sending a Decision input
+                input_tx
+                    .send(DefaultInput::Decision {
+                        decision_id: decision.id,
+                        selected_option: 0,
+                        comment: Some("approved".to_string()),
+                    })
+                    .await?;
+            }
+            DefaultOutput::StatusUpdate { todo_id, status } => {
+                println!("{} => {:?}", todo_id, status);
+            }
+            DefaultOutput::TaskCompleted { todo_id, result } => {
+                println!("completed {}: {}", todo_id, result.summary);
+            }
+            DefaultOutput::Report { report } => {
+                println!("report: {}", report.content);
+                break;
+            }
+            DefaultOutput::Error { message } => {
+                eprintln!("error: {}", message);
+            }
+            DefaultOutput::Message { content } => {
+                println!("message: {}", content);
+            }
+        }
+    }
+
+    handle.stop().await;
+    join_handle.abort();
+    Ok(())
+}
 ```
 
-### Processing Tasks
-
-```rust
-use mofa_sdk::kernel::{AgentInput, AgentContext};
-
-let ctx = AgentContext::new("exec-001");
-let mut secretary = secretary.await?;
-
-// Initialize
-secretary.initialize(&ctx).await?;
-
-// Process a task
-let input = AgentInput::text("I want to build a web scraper for news articles");
-let output = secretary.execute(input, &ctx).await?;
-
-println!("{}", output.as_text().unwrap());
-
-// Shutdown
-secretary.shutdown().await?;
-```
-
-## The Five Phases
+## The Five Phases in API Terms
 
 ### Phase 1: Receive Ideas
 
-The secretary records incoming ideas and creates a todo list:
-
-```rust
-// User input
-let idea = "Build a CLI tool that summarizes GitHub issues";
-
-// Secretary creates todos
-// - [ ] Research existing solutions
-// - [ ] Design CLI interface
-// - [ ] Implement core functionality
-// - [ ] Add tests
-// - [ ] Document usage
-```
+Use `DefaultInput::Idea` to submit user tasks.
 
 ### Phase 2: Clarify Requirements
 
-The secretary generates clarifying questions:
-
-```rust
-let questions = secretary.clarify_requirements(&idea).await?;
-
-// Questions might include:
-// - What programming language?
-// - Which LLM provider for summarization?
-// - Should it handle private repos?
-```
+Use `DefaultInput::Command(SecretaryCommand::Clarify { .. })`.
 
 ### Phase 3: Schedule Dispatch
 
-Tasks are delegated to specialized agents:
-
-```rust
-// Secretary decides which agent to use
-let dispatch = secretary.schedule_dispatch(&todos).await?;
-
-// {
-//   "research": ["Research existing solutions"],
-//   "developer": ["Implement core functionality"],
-//   "writer": ["Document usage"]
-// }
-```
+Use `DefaultInput::Command(SecretaryCommand::Dispatch { .. })`.
 
 ### Phase 4: Monitor Feedback
 
-The secretary monitors progress and flags important decisions:
-
-```rust
-// Set up feedback handler
-secretary.on_decision(|decision| {
-    println!("Decision needed: {}", decision.question);
-    // Present to human
-    let choice = prompt_human(&decision.options);
-    async move { choice }
-}).await;
-
-// Secretary will pause and wait for human input on key decisions
-```
+Handle `DefaultOutput::DecisionRequired` and send back `DefaultInput::Decision`.
 
 ### Phase 5: Acceptance Report
 
-Final status and todo updates:
-
-```rust
-let report = secretary.generate_report().await?;
-
-// {
-//   "completed": ["Research", "Core implementation"],
-//   "in_progress": ["Documentation"],
-//   "blocked": [],
-//   "next_steps": ["Add error handling"]
-// }
-```
+Use `DefaultInput::Command(SecretaryCommand::GenerateReport { .. })` and consume `DefaultOutput::Report`.
 
 ## Human Feedback Integration
 
-### Sync Mode (Blocking)
+Human feedback is handled through message exchange:
+
+1. Receive `DefaultOutput::DecisionRequired`
+2. Ask a human for choice
+3. Send `DefaultInput::Decision`
 
 ```rust
-use mofa_sdk::secretary::HumanFeedback;
+if let DefaultOutput::DecisionRequired { decision } = output {
+    let selected_option = 0; // Replace with real human input
 
-let feedback = HumanFeedback::sync(|decision| {
-    print!("{} [y/n]: ", decision.question);
-    let mut input = String::new();
-    std::io::stdin().read_line(&mut input).unwrap();
-    input.trim() == "y"
-});
-
-secretary.with_human_feedback(feedback);
-```
-
-### Async Mode (Non-blocking)
-
-```rust
-use mofa_sdk::secretary::AsyncFeedback;
-
-let feedback = AsyncFeedback::new()
-    .with_webhook("https://your-app.com/approve")
-    .with_timeout(Duration::from_minutes(30));
-
-secretary.with_async_feedback(feedback);
-```
-
-### File-based Feedback
-
-```rust
-use mofa_sdk::secretary::FileFeedback;
-
-let feedback = FileFeedback::new("./feedback_queue/")
-    .with_poll_interval(Duration::from_secs(5));
-
-// Secretary writes decisions to ./feedback_queue/pending/
-// Human writes responses to ./feedback_queue/resolved/
+    input_tx
+        .send(DefaultInput::Decision {
+            decision_id: decision.id,
+            selected_option,
+            comment: Some("approved by operator".to_string()),
+        })
+        .await?;
+}
 ```
 
 ## Delegation
 
-### Registering Agents
+Register executors through the builder and let dispatch commands route tasks:
 
 ```rust
-secretary
-    .with_delegation_target("researcher", ResearcherAgent::new())
-    .with_delegation_target("coder", CoderAgent::new())
-    .with_delegation_target("reviewer", ReviewerAgent::new());
-```
+use mofa_sdk::secretary::{AgentInfo, DefaultSecretaryBuilder, DispatchStrategy};
 
-### Delegation Rules
+let mut researcher = AgentInfo::new("researcher", "Research Agent");
+researcher.capabilities = vec!["research".to_string()];
+researcher.available = true;
+researcher.performance_score = 0.85;
 
-```rust
-use mofa_sdk::secretary::DelegationRule;
+let mut writer = AgentInfo::new("writer", "Writer Agent");
+writer.capabilities = vec!["writing".to_string()];
+writer.available = true;
+writer.performance_score = 0.9;
 
-let rule = DelegationRule::new()
-    .when_tag("code", delegate_to("coder"))
-    .when_tag("research", delegate_to("researcher"))
-    .when_complexity_gt(0.8, require_human_approval())
-    .default(delegate_to("general"));
-
-secretary.with_delegation_rules(rule);
+let behavior = DefaultSecretaryBuilder::new()
+    .with_dispatch_strategy(DispatchStrategy::CapabilityFirst)
+    .with_executor(researcher)
+    .with_executor(writer)
+    .build();
 ```
 
 ## Configuration
 
-```rust
-pub struct SecretaryConfig {
-    /// Enable human feedback loop
-    pub human_feedback_enabled: bool,
+Use builder methods instead of a standalone config struct:
 
-    /// Maximum delegations before requiring approval
-    pub max_delegations: usize,
-
-    /// How often to check for feedback
-    pub check_interval: Duration,
-
-    /// Auto-approve low-risk decisions
-    pub auto_approve_threshold: f32,
-
-    /// Keep context size manageable
-    pub context_window: usize,
-}
-```
+- `.with_name(...)`
+- `.with_llm(...)`
+- `.with_auto_clarify(...)`
+- `.with_auto_dispatch(...)`
+- `.with_dispatch_strategy(...)`
+- `.with_executor(...)`
 
 ## Examples
 
-See the complete example in `examples/secretary_agent/`:
+See the complete runtime example in `examples/secretary_agent/`:
 
 ```bash
 cargo run -p secretary_agent
@@ -245,6 +221,6 @@ cargo run -p secretary_agent
 
 ## See Also
 
-- [Workflows](../concepts/workflows.md) — Workflow orchestration
-- [Multi-Agent Systems](multi-agent.md) — Coordination patterns
-- [Tutorial Chapter 6](../tutorial/06-multi-agent.md) — Multi-agent tutorial
+- [Workflows](../concepts/workflows.md) - Workflow orchestration
+- [Multi-Agent Systems](multi-agent.md) - Coordination patterns
+- [Tutorial Chapter 6](../tutorial/06-multi-agent.md) - Multi-agent tutorial
