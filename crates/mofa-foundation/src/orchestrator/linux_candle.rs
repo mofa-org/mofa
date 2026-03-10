@@ -53,17 +53,21 @@ use super::traits::{
     OrchestratorError, OrchestratorResult, PoolStatistics,
 };
 use async_trait::async_trait;
-use candle_core::{DType, Device, Tensor};
+use candle_core::{quantized::gguf_file, Device, Tensor};
 use candle_transformers::generation::LogitsProcessor;
-use candle_transformers::models::llama as model_llama;
+use candle_transformers::models::quantized_qwen2;
 use serde_json::Value;
 use std::collections::HashMap;
+use std::fs::File;
+use candle_core::IndexOp;
 use std::path::PathBuf;
 use std::sync::{Arc, RwLock};
 use std::time::{Duration, Instant};
 use sysinfo::{MemoryRefreshKind, RefreshKind, System};
 use tokio::sync::RwLock as AsyncRwLock;
 use tokio::time::sleep;
+use tokio::sync::Mutex as AsyncMutex;
+use tokenizers::Tokenizer;
 
 // ============================================================================
 // Constants
@@ -87,51 +91,28 @@ const DEFAULT_TOP_P: f64 = 0.9;
 
 /// Maximum number of tokens to generate
 const DEFAULT_MAX_TOKENS: usize = 256;
+const DEFAULT_STOP_MARKERS: [&str; 5] = ["<|im_end|>", "<|im_start|>", "Human:", "User:", "Assistant:"];
 
 // ============================================================================
 // Internal Model State
 // ============================================================================
 
-/// Internal state of a loaded Candle model
+/// Internal state of a loaded Candle model.
 ///
 /// This structure holds the actual model weights, tokenizer, and device information.
 /// It is not exposed directly; instead, it's wrapped by `LinuxCandleProvider`.
 struct CandleModelState {
-    /// The loaded model (using Llama architecture as reference)
-    /// In production, this would be generic over different model types
-    model: model_llama::Llama,
+    /// The loaded model (Qwen2 GGUF, quantized).
+    model: quantized_qwen2::ModelWeights,
 
     /// Device the model is loaded on (CUDA or CPU)
     device: Device,
 
     /// Tokenizer for preprocessing input text
-    /// In production, use `tokenizers::Tokenizer` from HuggingFace
-    tokenizer: Arc<DummyTokenizer>,
-}
+    tokenizer: Arc<Tokenizer>,
 
-/// Placeholder tokenizer for demonstration
-///
-/// In production, replace with `tokenizers::Tokenizer` from the `tokenizers` crate:
-/// ```ignore
-/// use tokenizers::Tokenizer;
-/// let tokenizer = Tokenizer::from_file(tokenizer_path)?;
-/// ```
-struct DummyTokenizer;
-
-impl DummyTokenizer {
-    fn encode(&self, text: &str) -> Vec<u32> {
-        // Simple character-level tokenization for demo
-        // In production, use proper BPE/WordPiece tokenizer
-        text.chars()
-            .map(|c| c as u32)
-            .take(512) // Limit context
-            .collect()
-    }
-
-    fn decode(&self, tokens: &[u32]) -> String {
-        // Simple character-level decoding
-        tokens.iter().filter_map(|&t| char::from_u32(t)).collect()
-    }
+    /// Optional EOS token id for early stopping
+    eos_token_id: Option<u32>,
 }
 
 // ============================================================================
@@ -154,7 +135,7 @@ pub struct LinuxCandleProvider {
     config: ModelProviderConfig,
 
     /// Loaded model state (None if not loaded)
-    state: Option<CandleModelState>,
+    state: Option<Arc<AsyncMutex<CandleModelState>>>,
 
     /// Estimated memory usage in bytes
     memory_usage: u64,
@@ -201,14 +182,11 @@ impl LinuxCandleProvider {
         Ok(Device::Cpu)
     }
 
-    /// Load the Llama model from disk
-    ///
-    /// In production, this would:
-    /// 1. Check if model is cached locally
-    /// 2. Download from Hugging Face Hub if needed
-    /// 3. Load safetensors/GGUF weights
-    /// 4. Apply quantization if specified
-    fn load_model_weights(&self, device: &Device) -> OrchestratorResult<model_llama::Llama> {
+    /// Load a Qwen2 GGUF model from disk
+    fn load_model_weights(
+        &self,
+        device: &Device,
+    ) -> OrchestratorResult<(quantized_qwen2::ModelWeights, Option<u32>)> {
         let model_path = PathBuf::from(&self.config.model_path);
 
         // Check if model file exists
@@ -219,27 +197,89 @@ impl LinuxCandleProvider {
             )));
         }
 
-        // NOTE:
-        // The current LinuxCandleProvider does not yet implement real model weight loading.
-        // Previously this function attempted to construct a Llama model via `Llama::load_dummy`,
-        // but that implementation always returns an error and cannot be used for inference.
-        //
-        // To avoid misleading, guaranteed failures from a dummy loader, we now explicitly
-        // return a clear ModelLoadFailed error indicating that this provider is not yet
-        // functional for model loading. When implementing real loading, replace this with
-        // a call to the appropriate `Llama::load(...)` / GGUF loader using `model_path`.
-        tracing::warn!(
-            "LinuxCandleProvider model loading is not yet implemented; \
-             cannot load model from {} on device {:?}",
-            self.config.model_path,
-            device
-        );
+        let mut reader = File::open(&model_path).map_err(|e| {
+            OrchestratorError::ModelLoadFailed(format!(
+                "Failed to open model file '{}': {}",
+                self.config.model_path, e
+            ))
+        })?;
 
-        Err(OrchestratorError::ModelLoadFailed(
-            "LinuxCandleProvider: model loading is not yet implemented; \
-             this provider is currently non-functional for inference."
-                .to_string(),
-        ))
+        let ct = gguf_file::Content::read(&mut reader).map_err(|e| {
+            OrchestratorError::ModelLoadFailed(format!(
+                "Failed to read GGUF header for '{}': {}",
+                self.config.model_path, e
+            ))
+        })?;
+
+        let architecture = match ct.metadata.get("general.architecture") {
+            Some(gguf_file::Value::String(v)) => v.as_str(),
+            _ => "unknown",
+        };
+
+        if architecture != "qwen2" {
+            return Err(OrchestratorError::ModelLoadFailed(format!(
+                "Unsupported GGUF architecture '{}' for model '{}'. Expected 'qwen2'.",
+                architecture, self.config.model_path
+            )));
+        }
+
+        let eos_token_id = match ct.metadata.get("tokenizer.ggml.eos_token_id") {
+            Some(v) => v.to_u32().ok().map(|v| v as u32),
+            None => None,
+        };
+
+        let model = quantized_qwen2::ModelWeights::from_gguf(ct, &mut reader, device).map_err(
+            |e| {
+                OrchestratorError::ModelLoadFailed(format!(
+                    "Failed to load Qwen2 GGUF model '{}': {}",
+                    self.config.model_path, e
+                ))
+            },
+        )?;
+
+        Ok((model, eos_token_id))
+    }
+
+    fn load_tokenizer(&self) -> OrchestratorResult<Tokenizer> {
+        let explicit_path = self
+            .config
+            .extra_config
+            .get("tokenizer_path")
+            .and_then(|v| v.as_str())
+            .map(PathBuf::from)
+            .or_else(|| {
+                self.config
+                    .extra_config
+                    .get("tokenizer_json")
+                    .and_then(|v| v.as_str())
+                    .map(PathBuf::from)
+            });
+
+        let tokenizer_path = if let Some(path) = explicit_path {
+            path
+        } else {
+            let model_path = PathBuf::from(&self.config.model_path);
+            let fallback = model_path
+                .parent()
+                .map(|dir| dir.join("tokenizer.json"))
+                .unwrap_or_else(|| PathBuf::from("tokenizer.json"));
+            fallback
+        };
+
+        if !tokenizer_path.exists() {
+            return Err(OrchestratorError::ConfigError(format!(
+                "Tokenizer not found at '{}'. Provide extra_config['tokenizer_path'] or place tokenizer.json next to the model.",
+                tokenizer_path.display()
+            )));
+        }
+
+        Tokenizer::from_file(&tokenizer_path).map_err(|e| {
+            OrchestratorError::ModelLoadFailed(format!(
+                "Failed to load tokenizer from '{}': {}",
+                tokenizer_path.display(),
+                e
+            ))
+        })
     }
 
     /// Estimate memory usage of the loaded model
@@ -249,6 +289,10 @@ impl LinuxCandleProvider {
     /// - Adding KV cache size
     /// - Adding activation memory overhead
     fn estimate_memory_usage(&self) -> u64 {
+        if let Ok(meta) = std::fs::metadata(&self.config.model_path) {
+            return meta.len();
+        }
+
         // Rough estimation for a 7B parameter model:
         // - 7B params × 2 bytes (FP16) = ~14 GB
         // - 7B params × 1 byte (INT8) = ~7 GB
@@ -270,6 +314,41 @@ impl LinuxCandleProvider {
         let kv_cache_overhead = (base_memory as f64 * 0.1) as u64;
 
         base_memory + kv_cache_overhead
+    }
+
+    fn max_new_tokens(&self) -> usize {
+        self.config
+            .extra_config
+            .get("max_new_tokens")
+            .and_then(|v| v.as_u64())
+            .map(|v| v as usize)
+            .unwrap_or(DEFAULT_MAX_TOKENS)
+    }
+
+    fn stop_markers(&self) -> Vec<String> {
+        if let Some(Value::Array(values)) = self.config.extra_config.get("stop_sequences") {
+            let markers: Vec<String> = values
+                .iter()
+                .filter_map(|value| value.as_str().map(ToOwned::to_owned))
+                .collect();
+            if !markers.is_empty() {
+                return markers;
+            }
+        }
+
+        DEFAULT_STOP_MARKERS
+            .iter()
+            .map(|marker| marker.to_string())
+            .collect()
+    }
+
+    fn trim_at_stop_markers(&self, text: &str, stop_markers: &[String]) -> String {
+        let cut = stop_markers
+            .iter()
+            .filter_map(|marker| text.find(marker))
+            .min()
+            .unwrap_or(text.len());
+        text[..cut].trim().to_string()
     }
 }
 
@@ -299,11 +378,16 @@ impl ModelProvider for LinuxCandleProvider {
         let device = self.select_device()?;
 
         // Step 2: Load model weights
-        let model = self.load_model_weights(&device)?;
+        let (model, eos_token_id) = self.load_model_weights(&device)?;
 
         // Step 3: Initialize tokenizer
-        // In production: Tokenizer::from_file(tokenizer_path)?
-        let tokenizer = Arc::new(DummyTokenizer);
+        let tokenizer = Arc::new(self.load_tokenizer()?);
+        let eos_token_id = eos_token_id.or_else(|| {
+            tokenizer
+                .token_to_id("<|im_end|>")
+                .or_else(|| tokenizer.token_to_id("</s>"))
+                .or_else(|| tokenizer.token_to_id("<|endoftext|>"))
+        });
 
         // Step 4: Estimate memory usage
         self.memory_usage = self.estimate_memory_usage();
@@ -315,11 +399,12 @@ impl ModelProvider for LinuxCandleProvider {
         );
 
         // Step 5: Store state
-        self.state = Some(CandleModelState {
+        self.state = Some(Arc::new(AsyncMutex::new(CandleModelState {
             model,
             device,
             tokenizer,
-        });
+            eos_token_id,
+        })));
         self.loaded = true;
 
         Ok(())
@@ -356,6 +441,7 @@ impl ModelProvider for LinuxCandleProvider {
         let state = self.state.as_ref().ok_or_else(|| {
             OrchestratorError::InferenceFailed("Model state is missing".to_string())
         })?;
+        let mut state = state.lock().await;
 
         tracing::debug!(
             "Running inference on model '{}' with input: {}",
@@ -364,7 +450,11 @@ impl ModelProvider for LinuxCandleProvider {
         );
 
         // Step 1: Tokenize input
-        let tokens = state.tokenizer.encode(input);
+        let encoding = state
+            .tokenizer
+            .encode(input, true)
+            .map_err(|e| OrchestratorError::InferenceFailed(format!("Tokenizer error: {e}")))?;
+        let mut tokens: Vec<u32> = encoding.get_ids().iter().map(|&t| t as u32).collect();
 
         if tokens.is_empty() {
             return Err(OrchestratorError::InferenceFailed(
@@ -372,38 +462,62 @@ impl ModelProvider for LinuxCandleProvider {
             ));
         }
 
-        // Step 2: Run inference
-        // In production, implement proper autoregressive generation:
-        // - Create input tensor from tokens
-        // - Run forward pass through model
-        // - Sample next token using temperature/top-p
-        // - Repeat until EOS or max_tokens reached
+        // Step 2: Enforce max context length if configured
+        if let Some(max_context) = self.config.max_context_length {
+            if tokens.len() > max_context {
+                tokens = tokens[tokens.len() - max_context..].to_vec();
+            }
+        }
 
-        // For demonstration, we'll return a mock response
-        // In production:
-        // let mut tokens = tokens;
-        // let mut generated = Vec::new();
-        // for _ in 0..DEFAULT_MAX_TOKENS {
-        //     let input_tensor = Tensor::new(&tokens, &state.device)?;
-        //     let logits = state.model.forward(&input_tensor)?;
-        //     let next_token = sample_token(&logits, DEFAULT_TEMPERATURE, DEFAULT_TOP_P)?;
-        //     if next_token == EOS_TOKEN {
-        //         break;
-        //     }
-        //     generated.push(next_token);
-        //     tokens.push(next_token);
-        // }
-        // let output = state.tokenizer.decode(&generated);
+        // Step 3: Autoregressive generation
+        let mut logits_processor =
+            LogitsProcessor::new(299792458, Some(DEFAULT_TEMPERATURE), Some(DEFAULT_TOP_P));
+        let mut generated: Vec<u32> = Vec::new();
+        let mut all_tokens = tokens.clone();
+        let stop_markers = self.stop_markers();
 
-        let mock_output = format!(
-            "[LinuxCandleProvider Mock Response for '{}']\nInput: {}\nTokens: {:?}\n\
-             In production, this would be actual model output.",
-            self.model_id,
-            input,
-            &tokens[..tokens.len().min(10)]
-        );
+        for _ in 0..self.max_new_tokens() {
+            let input_tensor = Tensor::new(all_tokens.as_slice(), &state.device)
+                .map_err(|e| OrchestratorError::InferenceFailed(format!("Tensor error: {e}")))?
+                .reshape((1, all_tokens.len()))
+                .map_err(|e| OrchestratorError::InferenceFailed(format!("Tensor reshape error: {e}")))?;
 
-        Ok(mock_output)
+            let logits = state
+                .model
+                .forward(&input_tensor, 0)
+                .map_err(|e| OrchestratorError::InferenceFailed(format!("Model forward error: {e}")))?;
+            let logits = logits
+                .i(0)
+                .map_err(|e| OrchestratorError::InferenceFailed(format!("Logits shape error: {e}")))?;
+
+            let next_token = logits_processor
+                .sample(&logits)
+                .map_err(|e| OrchestratorError::InferenceFailed(format!("Sampling error: {e}")))?;
+
+            if let Some(eos) = state.eos_token_id {
+                if next_token == eos {
+                    break;
+                }
+            }
+
+            generated.push(next_token);
+            all_tokens.push(next_token);
+
+            // Decode the partial assistant output so that role markers do not fall into the response
+            let partial = state
+                .tokenizer
+                .decode(&generated, true)
+                .map_err(|e| OrchestratorError::InferenceFailed(format!("Decode error: {e}")))?;
+            if stop_markers.iter().any(|marker| partial.contains(marker)) {
+                break;
+            }
+        }
+
+        let output = state
+            .tokenizer
+            .decode(&generated, true)
+            .map_err(|e| OrchestratorError::InferenceFailed(format!("Decode error: {e}")))?;
+        Ok(self.trim_at_stop_markers(&output, &stop_markers))
     }
 
     fn memory_usage_bytes(&self) -> u64 {
@@ -462,6 +576,9 @@ struct ModelEntry {
 
     /// Timestamp when model was loaded
     loaded_at: Option<Instant>,
+
+    /// Number of active inferences in-flight
+    active_inferences: usize,
 }
 
 /// Production-ready model pool with LRU eviction and memory management
@@ -703,6 +820,7 @@ impl ModelPool {
                 // Must be loaded and idle for at least the timeout duration
                 entry.provider.is_loaded()
                     && now.duration_since(entry.last_accessed) >= idle_timeout
+                    && entry.active_inferences == 0
             })
             .min_by_key(|(_, entry)| entry.last_accessed)
             .map(|(id, _)| id.clone())
@@ -718,6 +836,14 @@ impl ModelPool {
             // Unload the model
             let mut models = self.models.write().await;
             if let Some(entry) = models.get_mut(&model_id) {
+                if entry.active_inferences > 0 {
+                    tracing::warn!(
+                        "Skipping eviction for model '{}' ({} active inferences)",
+                        model_id,
+                        entry.active_inferences
+                    );
+                    return Ok(None);
+                }
                 entry.provider.unload().await?;
                 tracing::info!("Successfully evicted model '{}'", model_id);
                 return Ok(Some(model_id));
@@ -772,9 +898,16 @@ impl ModelOrchestrator for ModelPool {
             config,
             last_accessed: Instant::now(),
             loaded_at: None,
+            active_inferences: 0,
         };
 
         let mut models = self.models.write().await;
+        if models.contains_key(&model_id) {
+            return Err(OrchestratorError::ConfigError(format!(
+                "Model '{}' is already registered",
+                model_id
+            )));
+        }
         models.insert(model_id.clone(), entry);
 
         tracing::info!("Model '{}' registered successfully", model_id);
@@ -786,6 +919,14 @@ impl ModelOrchestrator for ModelPool {
 
         let mut models = self.models.write().await;
         if let Some(mut entry) = models.remove(model_id) {
+            let active = entry.active_inferences;
+            if active > 0 {
+                models.insert(model_id.to_string(), entry);
+                return Err(OrchestratorError::ModelBusy(format!(
+                    "Model '{}' has {} active inferences",
+                    model_id, active
+                )));
+            }
             // Unload if loaded
             if entry.provider.is_loaded() {
                 entry.provider.unload().await?;
@@ -802,6 +943,9 @@ impl ModelOrchestrator for ModelPool {
 
         // Step 1: Get mutable access to the model
         let mut models = self.models.write().await;
+        if models.contains_key(model_id) == false {
+            return Err(OrchestratorError::ModelNotFound(model_id.to_string()));
+        }
         let entry = models
             .get_mut(model_id)
             .ok_or_else(|| OrchestratorError::ModelNotFound(model_id.to_string()))?;
@@ -880,6 +1024,13 @@ impl ModelOrchestrator for ModelPool {
             .get_mut(model_id)
             .ok_or_else(|| OrchestratorError::ModelNotFound(model_id.to_string()))?;
 
+        if entry.active_inferences > 0 {
+            return Err(OrchestratorError::ModelBusy(format!(
+                "Model '{}' has {} active inferences",
+                model_id, entry.active_inferences
+            )));
+        }
+
         entry.provider.unload().await?;
         entry.loaded_at = None;
 
@@ -910,16 +1061,28 @@ impl ModelOrchestrator for ModelPool {
             let mut models = self.models.write().await;
             if let Some(entry) = models.get_mut(model_id) {
                 entry.last_accessed = Instant::now();
+                entry.active_inferences += 1;
             }
         }
 
         // Step 3: Run inference
-        let models = self.models.read().await;
-        let entry = models
-            .get(model_id)
-            .ok_or_else(|| OrchestratorError::ModelNotFound(model_id.to_string()))?;
+        let result = {
+            let models = self.models.read().await;
+            let entry = models
+                .get(model_id)
+                .ok_or_else(|| OrchestratorError::ModelNotFound(model_id.to_string()))?;
+            entry.provider.infer(input).await
+        };
 
-        entry.provider.infer(input).await
+        // Step 4: Decrement active inference count
+        {
+            let mut models = self.models.write().await;
+            if let Some(entry) = models.get_mut(model_id) {
+                entry.active_inferences = entry.active_inferences.saturating_sub(1);
+            }
+        }
+
+        result
     }
 
     fn get_statistics(&self) -> OrchestratorResult<PoolStatistics> {
@@ -1027,34 +1190,6 @@ impl ModelOrchestrator for ModelPool {
 }
 
 // ============================================================================
-// Helper extension for loading dummy Llama model (for testing)
-// ============================================================================
-
-/// Extension trait to create dummy Llama models for testing
-/// This is NOT part of the public API - only for demonstration purposes
-trait LlamaDummyLoader {
-    fn load_dummy(
-        config: model_llama::Config,
-        cache: model_llama::Cache,
-        device: &Device,
-    ) -> Result<Self, Box<dyn std::error::Error>>
-    where
-        Self: Sized;
-}
-
-impl LlamaDummyLoader for model_llama::Llama {
-    fn load_dummy(
-        _config: model_llama::Config,
-        _cache: model_llama::Cache,
-        _device: &Device,
-    ) -> Result<Self, Box<dyn std::error::Error>> {
-        // This is a placeholder for demonstration
-        // In production, you would load actual model weights
-        Err("Dummy loader - replace with actual model loading in production".into())
-    }
-}
-
-// ============================================================================
 // Tests
 // ============================================================================
 
@@ -1123,6 +1258,17 @@ mod tests {
         // Unregister
         pool.unregister_model("model1").await.unwrap();
         assert_eq!(pool.list_models().len(), 0);
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn test_register_duplicate_model_fails() {
+        let pool = ModelPool::new();
+        let config = create_test_config("dup_model");
+
+        pool.register_model(config.clone()).await.unwrap();
+        let result = pool.register_model(config).await;
+
+        assert!(matches!(result, Err(OrchestratorError::ConfigError(_))));
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
@@ -1249,6 +1395,101 @@ mod tests {
 
         // Should fail because no models are loaded
         assert!(result.is_err());
+    }
+
+    // provider used to exercise pool state
+    struct TestProvider {
+        model_id: String,
+        model_type: ModelType,
+        loaded: bool,
+        memory: u64,
+    }
+
+    impl TestProvider {
+        fn new(model_id: &str, model_type: ModelType, loaded: bool) -> Self {
+            Self {
+                model_id: model_id.to_string(),
+                model_type,
+                loaded,
+                memory: 123,
+            }
+        }
+    }
+
+    #[async_trait]
+    impl ModelProvider for TestProvider {
+        fn name(&self) -> &str {
+            "TestProvider"
+        }
+
+        fn model_id(&self) -> &str {
+            &self.model_id
+        }
+
+        fn model_type(&self) -> &ModelType {
+            &self.model_type
+        }
+
+        async fn load(&mut self) -> OrchestratorResult<()> {
+            self.loaded = true;
+            Ok(())
+        }
+
+        async fn unload(&mut self) -> OrchestratorResult<()> {
+            self.loaded = false;
+            Ok(())
+        }
+
+        fn is_loaded(&self) -> bool {
+            self.loaded
+        }
+
+        async fn infer(&self, _input: &str) -> OrchestratorResult<String> {
+            if !self.loaded {
+                return Err(OrchestratorError::InferenceFailed(
+                    "Model is not loaded".to_string(),
+                ));
+            }
+            Ok("ok".to_string())
+        }
+
+        fn memory_usage_bytes(&self) -> u64 {
+            self.memory
+        }
+
+        fn get_metadata(&self) -> HashMap<String, Value> {
+            HashMap::new()
+        }
+
+        async fn health_check(&self) -> OrchestratorResult<bool> {
+            Ok(self.loaded)
+        }
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn test_unload_busy_model_fails() {
+        let pool = ModelPool::new();
+        // Disable threshold based rejection so this test stays focused on the busy model guard.
+        pool.set_memory_threshold(u64::MAX).await.unwrap();
+
+        let config = create_test_config("busy_model");
+        let entry = ModelEntry {
+            provider: Box::new(TestProvider::new("busy_model", ModelType::Llm, true)),
+            config,
+            last_accessed: Instant::now(),
+            loaded_at: Some(Instant::now()),
+            // flight request
+            active_inferences: 1,
+        };
+
+        // Inject the model
+        let mut models = pool.models.write().await;
+        models.insert("busy_model".to_string(), entry);
+        drop(models);
+
+        let result = pool.unload_model("busy_model").await;
+        // Busy models should fail fast rather than unloading underneath an active request.
+        assert!(matches!(result, Err(OrchestratorError::ModelBusy(_))));
     }
 
     /// Test: Memory pressure detection

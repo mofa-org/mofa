@@ -140,6 +140,10 @@ pub enum OrchestratorError {
     #[error("Pool at capacity: {0}")]
     PoolCapacityExceeded(String),
 
+    /// Model is currently busy (active inference in progress)
+    #[error("Model is busy: {0}")]
+    ModelBusy(String),
+
     /// LRU eviction failed
     #[error("LRU eviction failed: {0}")]
     EvictionFailed(String),
