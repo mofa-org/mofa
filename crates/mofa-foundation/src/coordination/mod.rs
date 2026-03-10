@@ -1,5 +1,7 @@
 use mofa_kernel::agent::types::error::{GlobalError, GlobalResult};
 mod scheduler;
+#[cfg(test)]
+mod tests;
 use mofa_kernel::message::{AgentMessage, TaskRequest, TaskStatus};
 use mofa_kernel::{AgentBus, CommunicationMode};
 use std::collections::HashMap;
@@ -65,7 +67,7 @@ impl AgentCoordinator {
         match &self.strategy {
             CoordinationStrategy::MasterSlave => self.master_slave_coordinate(task_msg).await,
             CoordinationStrategy::Pipeline => self.pipeline_coordinate(task_msg).await,
-            _ => Ok(()),
+            CoordinationStrategy::PeerToPeer => self.peer_to_peer_coordinate(task_msg).await,
         }
     }
 
@@ -155,6 +157,37 @@ impl AgentCoordinator {
                 .map_err(|e| GlobalError::Other(e.to_string()))?
             {
                 last_output = Some(result);
+            }
+        }
+        Ok(())
+    }
+
+    /// Peer-to-peer coordination logic
+    async fn peer_to_peer_coordinate(&self, task_msg: &AgentMessage) -> GlobalResult<()> {
+        let role_map = self.role_mapping.read().await;
+
+        let peers = role_map
+            .get("peer")
+            .ok_or_else(|| GlobalError::Other("No peer agents registered".to_string()))?;
+
+        // Send point to point to all peers to avoid broadcast leakage
+        for peer_id in peers {
+            self.bus
+                .send_message(
+                    "coordinator",
+                    CommunicationMode::PointToPoint(peer_id.clone()),
+                    task_msg,
+                )
+                .await
+                .map_err(|e| GlobalError::Other(e.to_string()))?;
+        }
+
+        // Track task status
+        if let AgentMessage::TaskRequest { task_id, .. } = task_msg {
+            let mut tracker = self.task_tracker.write().await;
+            let entries = tracker.entry(task_id.clone()).or_default();
+            for peer_id in peers {
+                entries.push((peer_id.clone(), TaskStatus::Pending));
             }
         }
         Ok(())
