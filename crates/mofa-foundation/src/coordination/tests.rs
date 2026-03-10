@@ -1,10 +1,10 @@
 #[cfg(test)]
 mod tests {
     use super::*;
-    use mofa_kernel::message::AgentMessage;
     use mofa_kernel::AgentBus;
     use mofa_kernel::CommunicationMode;
     use mofa_kernel::agent::{AgentCapabilities, AgentMetadata, AgentState};
+    use mofa_kernel::message::AgentMessage;
     use std::sync::Arc;
     use tokio::time::{Duration, timeout};
 
@@ -16,7 +16,8 @@ mod tests {
         register_peer_channel(&bus, "peer_2").await;
         register_peer_channel(&bus, "peer_3").await;
 
-        let coordinator = AgentCoordinator::new(bus.clone(), CoordinationStrategy::PeerToPeer).await;
+        let coordinator =
+            AgentCoordinator::new(bus.clone(), CoordinationStrategy::PeerToPeer).await;
 
         coordinator.register_role("peer_1", "peer").await.unwrap();
         coordinator.register_role("peer_2", "peer").await.unwrap();
@@ -33,12 +34,21 @@ mod tests {
 
         // Send after receivers are subscribed
         let result = coordinator.coordinate_task(&task_msg).await;
-        
+
         assert!(result.is_ok());
 
-        let msg_1 = timeout(Duration::from_secs(1), recv_1).await.unwrap().unwrap();
-        let msg_2 = timeout(Duration::from_secs(1), recv_2).await.unwrap().unwrap();
-        let msg_3 = timeout(Duration::from_secs(1), recv_3).await.unwrap().unwrap();
+        let msg_1 = timeout(Duration::from_secs(1), recv_1)
+            .await
+            .unwrap()
+            .unwrap();
+        let msg_2 = timeout(Duration::from_secs(1), recv_2)
+            .await
+            .unwrap()
+            .unwrap();
+        let msg_3 = timeout(Duration::from_secs(1), recv_3)
+            .await
+            .unwrap()
+            .unwrap();
         assert!(msg_1.expect("peer_1 missing message").is_some());
         assert!(msg_2.expect("peer_2 missing message").is_some());
         assert!(msg_3.expect("peer_3 missing message").is_some());

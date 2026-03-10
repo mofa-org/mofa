@@ -7,11 +7,8 @@ use mofa_local_llm::{ComputeBackend, HardwareInfo, LinuxInferenceConfig, LinuxLo
 use std::time::Instant;
 
 fn bench_backend(backend: ComputeBackend, model_path: &str, prompts: &[&str]) {
-    let config = LinuxInferenceConfig::new(
-        format!("bench-{}", backend),
-        model_path,
-    )
-    .with_backend(backend.clone());
+    let config = LinuxInferenceConfig::new(format!("bench-{}", backend), model_path)
+        .with_backend(backend.clone());
 
     let provider = match LinuxLocalProvider::new(config) {
         Ok(p) => p,
@@ -63,8 +60,8 @@ fn main() {
     );
     println!();
 
-    let model_path = std::env::var("BENCH_MODEL_PATH")
-        .unwrap_or_else(|_| "/tmp/bench-model.gguf".into());
+    let model_path =
+        std::env::var("BENCH_MODEL_PATH").unwrap_or_else(|_| "/tmp/bench-model.gguf".into());
 
     let prompts = [
         "explain the difference between CUDA and ROCm in two sentences",

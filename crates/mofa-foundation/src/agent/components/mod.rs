@@ -44,7 +44,7 @@ pub use context_compressor::{
 pub use context_compressor::TikTokenCounter;
 
 #[cfg(feature = "compression-cache")]
-pub use context_compressor::{CompressionCache, CacheStats};
+pub use context_compressor::{CacheStats, CompressionCache};
 
 // Coordinator - Kernel trait 和类型
 // Coordinator - Kernel trait and types

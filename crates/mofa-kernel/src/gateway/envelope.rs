@@ -71,11 +71,7 @@ impl RequestEnvelope {
     ///
     /// `route_id` is typically empty at construction time and filled in by
     /// the routing middleware once a matching route has been found.
-    pub fn new(
-        route_id: impl Into<String>,
-        payload: serde_json::Value,
-        origin_ip: IpAddr,
-    ) -> Self {
+    pub fn new(route_id: impl Into<String>, payload: serde_json::Value, origin_ip: IpAddr) -> Self {
         Self {
             correlation_id: Uuid::new_v4().to_string(),
             route_id: route_id.into(),
@@ -101,9 +97,7 @@ impl RequestEnvelope {
 
     /// Returns `true` if a deadline is set and has already passed.
     pub fn is_expired(&self) -> bool {
-        self.deadline
-            .map(|d| Instant::now() > d)
-            .unwrap_or(false)
+        self.deadline.map(|d| Instant::now() > d).unwrap_or(false)
     }
 
     /// Return the deadline as milliseconds since UNIX epoch, suitable for
@@ -230,10 +224,7 @@ mod tests {
             env.headers.get("content-type"),
             Some(&"application/json".to_string())
         );
-        assert_eq!(
-            env.headers.get("x-api-key"),
-            Some(&"secret".to_string())
-        );
+        assert_eq!(env.headers.get("x-api-key"), Some(&"secret".to_string()));
     }
 
     #[test]
