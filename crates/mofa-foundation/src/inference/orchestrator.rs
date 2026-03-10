@@ -292,18 +292,10 @@ impl InferenceOrchestrator {
                         model_id: model_id.clone(),
                     },
                     actual_precision: *degraded_precision,
+                    cloud_attempt_count: 0,
                 }
             }
-            RoutingDecision::UseCloud { provider } => InferenceResult {
-                output: format!(
-                    "[cloud:{}] Inference result for: {}",
-                    provider, request.prompt
-                ),
-                routed_to: RoutedBackend::Cloud {
-                    provider: provider.clone(),
-                },
-                actual_precision: request.preferred_precision,
-            },
+            RoutingDecision::UseCloud { provider } => self.execute_cloud(request, provider),
             RoutingDecision::Rejected { reason } => InferenceResult {
                 output: format!("[rejected] {}", reason),
                 routed_to: RoutedBackend::Rejected {
@@ -312,6 +304,45 @@ impl InferenceOrchestrator {
                 actual_precision: request.preferred_precision,
                 cloud_attempt_count: 0,
             },
+        }
+    }
+
+    /// Execute a request against a cloud provider, handling retries for transient failures.
+    fn execute_cloud(&mut self, request: &InferenceRequest, provider: &str) -> InferenceResult {
+        let max_attempts = 1 + self.config.cloud_retry_attempts;
+        let mut attempts = 0;
+
+        for _ in 0..max_attempts {
+            attempts += 1;
+            
+            // Check for injected failures in tests
+            #[cfg(test)]
+            {
+                if self.cloud_call_fails > 0 {
+                    self.cloud_call_fails -= 1;
+                    continue; // Skip this attempt (simulated failure)
+                }
+            }
+            
+            return InferenceResult {
+                output: format!(
+                    "[cloud:{}] Inference result for: {}",
+                    provider, request.prompt
+                ),
+                routed_to: RoutedBackend::Cloud {
+                    provider: provider.to_string(),
+                },
+                actual_precision: request.preferred_precision,
+                cloud_attempt_count: attempts,
+            };
+        }
+
+        // All retries exhausted
+        InferenceResult {
+            output: format!("[rejected] Cloud fallback failed after {} attempts", attempts),
+            routed_to: RoutedBackend::Rejected { reason: "Cloud fallback failed".to_string() },
+            actual_precision: request.preferred_precision,
+            cloud_attempt_count: attempts,
         }
     }
 
