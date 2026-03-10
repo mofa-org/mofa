@@ -1,0 +1,25 @@
+[package]
+name = "obsidian_git_sync"
+version.workspace = true
+edition.workspace = true
+description = "Git-based Obsidian multi-device sync agent"
+
+[[bin]]
+name = "obsidian_git_sync"
+path = "src/main.rs"
+
+[dependencies]
+mofa-sdk = { path = "../../crates/mofa-sdk" }
+
+tokio.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+serde_json.workspace = true
+async-trait.workspace = true
+chrono.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
+
+[lints]
+workspace = true
