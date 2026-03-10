@@ -47,6 +47,8 @@ chrono.workspace = true
 cron = "0.12"
 html2text = "0.16.7"
 pdf-extract = "0.10.0"
+cron.workspace = true
+
 [lints]
 workspace = true
 

@@ -137,7 +137,7 @@ impl SimpleTool for MockTool {
 
 /// Assert that a [`MockTool`] was called exactly `$expected` times.
 #[macro_export]
-macro_rules! assert_tool_called {
+macro_rules! assert_tool_call_count {
     ($tool:expr, $expected_count:expr) => {{
         use mofa_foundation::agent::components::tool::SimpleTool as _;
         let count = $tool.call_count().await;

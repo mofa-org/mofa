@@ -135,7 +135,7 @@ impl std::fmt::Display for QuantizationProfile {
 }
 
 /// Hardware constraints for adapter execution
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub struct HardwareConstraint {
     /// Minimum RAM required in MB
     pub min_ram_mb: Option<u64>,
@@ -151,19 +151,6 @@ pub struct HardwareConstraint {
     pub gpu_required: bool,
 }
 
-impl Default for HardwareConstraint {
-    fn default() -> Self {
-        Self {
-            min_ram_mb: None,
-            min_vram_mb: None,
-            required_os: None,
-            required_cpu_features: None,
-            required_gpu_type: None,
-            gpu_required: false,
-        }
-    }
-}
-
 impl HardwareConstraint {
     /// Create a new hardware constraint builder
     pub fn builder() -> HardwareConstraintBuilder {
@@ -173,17 +160,17 @@ impl HardwareConstraint {
     /// Check if this hardware constraint is satisfied by the given requirements
     pub fn is_satisfied_by(&self, profile: &super::HardwareProfile) -> bool {
         // Check RAM requirement
-        if let Some(min_ram) = self.min_ram_mb {
-            if profile.available_ram_mb < min_ram {
-                return false;
-            }
+        if let Some(min_ram) = self.min_ram_mb
+            && profile.available_ram_mb < min_ram
+        {
+            return false;
         }
 
         // Check VRAM requirement
-        if let Some(min_vram) = self.min_vram_mb {
-            if profile.available_vram_mb.unwrap_or(0) < min_vram {
-                return false;
-            }
+        if let Some(min_vram) = self.min_vram_mb
+            && profile.available_vram_mb.unwrap_or(0) < min_vram
+        {
+            return false;
         }
 
         // Check GPU requirement
@@ -203,10 +190,11 @@ impl HardwareConstraint {
         }
 
         // Check OS requirement
-        if let Some(ref required_os) = self.required_os {
-            if !required_os.is_empty() && !required_os.contains(&profile.os) {
-                return false;
-            }
+        if let Some(ref required_os) = self.required_os
+            && !required_os.is_empty()
+            && !required_os.contains(&profile.os)
+        {
+            return false;
         }
 
         true
@@ -217,6 +205,12 @@ impl HardwareConstraint {
 #[derive(Debug)]
 pub struct HardwareConstraintBuilder {
     constraint: HardwareConstraint,
+}
+
+impl Default for HardwareConstraintBuilder {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl HardwareConstraintBuilder {
@@ -316,6 +310,12 @@ impl AdapterDescriptor {
 #[derive(Debug)]
 pub struct AdapterDescriptorBuilder {
     descriptor: AdapterDescriptor,
+}
+
+impl Default for AdapterDescriptorBuilder {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl AdapterDescriptorBuilder {

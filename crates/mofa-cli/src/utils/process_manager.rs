@@ -7,6 +7,17 @@ use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use tracing::{debug, info, warn};
 
+#[cfg(windows)]
+fn windows_taskkill_args(pid: u32, force: bool) -> Vec<String> {
+    let mut args = Vec::with_capacity(3);
+    if force {
+        args.push("/F".to_string());
+    }
+    args.push("/PID".to_string());
+    args.push(pid.to_string());
+    args
+}
+
 /// Manages agent runtime processes
 pub struct AgentProcessManager {
     /// Directory containing agent configurations
@@ -54,7 +65,10 @@ impl AgentProcessManager {
 
         // Verify config file exists
         if !config.exists() {
-            return Err(CliError::StateError(format!("Agent configuration not found at: {}", config.display())));
+            return Err(CliError::StateError(format!(
+                "Agent configuration not found at: {}",
+                config.display()
+            )));
         }
 
         info!(
@@ -84,9 +98,12 @@ impl AgentProcessManager {
         }
 
         // Spawn the process
-        let mut child = cmd
-            .spawn()
-            .map_err(|e| CliError::StateError(format!("Failed to start agent '{}' process: {}", agent_id, e)))?;
+        let mut child = cmd.spawn().map_err(|e| {
+            CliError::StateError(format!(
+                "Failed to start agent '{}' process: {}",
+                agent_id, e
+            ))
+        })?;
 
         // Get the child process ID
         let pid = child.id();
@@ -132,8 +149,7 @@ impl AgentProcessManager {
                     warn!("Failed to send {:?} to process {}: {}", signal, pid, e);
                     Err(CliError::StateError(format!(
                         "Failed to terminate process {}: {}",
-                        pid,
-                        e
+                        pid, e
                     )))
                 }
             }
@@ -145,22 +161,25 @@ impl AgentProcessManager {
 
             // On Windows, use taskkill command
             let status = Command::new("taskkill")
-                .arg(if force { "/F" } else { "" })
-                .arg("/PID")
-                .arg(pid.to_string())
+                .args(windows_taskkill_args(pid, force))
                 .status()?;
 
             if status.success() {
                 info!("Successfully terminated process {}", pid);
                 Ok(())
             } else {
-                return Err(CliError::StateError(format!("Failed to terminate process {}", pid)));
+                Err(CliError::StateError(format!(
+                    "Failed to terminate process {}",
+                    pid
+                )))
             }
         }
 
         #[cfg(not(any(unix, windows)))]
         {
-            return Err(CliError::StateError("Agent process termination not supported on this platform".to_string()));
+            return Err(CliError::StateError(
+                "Agent process termination not supported on this platform".to_string(),
+            ));
         }
     }
 
@@ -199,7 +218,10 @@ impl AgentProcessManager {
     /// Validate agent configuration
     pub fn validate_config(&self, config_path: &Path) -> Result<()> {
         if !config_path.exists() {
-            return Err(CliError::StateError(format!("Configuration file not found: {}", config_path.display())));
+            return Err(CliError::StateError(format!(
+                "Configuration file not found: {}",
+                config_path.display()
+            )));
         }
 
         // Try to load and parse as YAML
@@ -253,5 +275,23 @@ mod tests {
         let manager = AgentProcessManager::new(temp_dir.path().to_path_buf());
         let result = manager.validate_config(&config_path);
         assert!(result.is_err());
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn test_windows_taskkill_args_without_force_omits_empty_placeholder() {
+        assert_eq!(
+            windows_taskkill_args(4242, false),
+            vec!["/PID".to_string(), "4242".to_string()]
+        );
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn test_windows_taskkill_args_with_force_includes_force_flag() {
+        assert_eq!(
+            windows_taskkill_args(4242, true),
+            vec!["/F".to_string(), "/PID".to_string(), "4242".to_string()]
+        );
     }
 }

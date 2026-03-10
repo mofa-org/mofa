@@ -25,11 +25,11 @@ impl Default for RecursiveChunkConfig {
             chunk_size: 1000,
             chunk_overlap: 200,
             separators: vec![
-                "\n\n".into(),  // Paragraph
-                "\n".into(),    // Line
-                ". ".into(),    // Sentence
-                ", ".into(),    // Clause
-                " ".into(),     // Word
+                "\n\n".into(), // Paragraph
+                "\n".into(),   // Line
+                ". ".into(),   // Sentence
+                ", ".into(),   // Clause
+                " ".into(),    // Word
             ],
         }
     }
@@ -63,17 +63,9 @@ impl RecursiveChunkConfig {
 ///
 /// This produces higher-quality chunks than fixed-size splitting because
 /// it preserves semantic boundaries where possible.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct RecursiveChunker {
     config: RecursiveChunkConfig,
-}
-
-impl Default for RecursiveChunker {
-    fn default() -> Self {
-        Self {
-            config: RecursiveChunkConfig::default(),
-        }
-    }
 }
 
 impl RecursiveChunker {
@@ -217,7 +209,8 @@ mod tests {
     fn splits_at_paragraph_boundary() {
         let config = RecursiveChunkConfig::new(50, 0);
         let chunker = RecursiveChunker::new(config);
-        let text = "First paragraph content.\n\nSecond paragraph content.\n\nThird paragraph content.";
+        let text =
+            "First paragraph content.\n\nSecond paragraph content.\n\nThird paragraph content.";
         let chunks = chunker.chunk(text);
         assert!(chunks.len() >= 2);
         // Each chunk should be under the size limit
@@ -253,8 +246,7 @@ mod tests {
 
     #[test]
     fn custom_separators() {
-        let config = RecursiveChunkConfig::new(20, 0)
-            .with_separators(vec!["|".into(), " ".into()]);
+        let config = RecursiveChunkConfig::new(20, 0).with_separators(vec!["|".into(), " ".into()]);
         let chunker = RecursiveChunker::new(config);
         let text = "part one content|part two content|part three content here";
         let chunks = chunker.chunk(text);
@@ -263,8 +255,7 @@ mod tests {
 
     #[test]
     fn hard_split_fallback() {
-        let config = RecursiveChunkConfig::new(5, 0)
-            .with_separators(vec![]); // No separators → immediate hard split
+        let config = RecursiveChunkConfig::new(5, 0).with_separators(vec![]); // No separators → immediate hard split
         let chunker = RecursiveChunker::new(config);
         let text = "abcdefghijklmnopqrst"; // 20 chars, no separators
         let chunks = chunker.chunk(text);

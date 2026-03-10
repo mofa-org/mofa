@@ -1,0 +1,13 @@
+[package]
+name = "capability_discovery"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+mofa-foundation = { path = "../../crates/mofa-foundation" }
+mofa-kernel = { path = "../../crates/mofa-kernel" }
+
+tokio.workspace = true
+
+[lints]
+workspace = true
