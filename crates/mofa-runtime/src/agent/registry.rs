@@ -607,7 +607,7 @@ mod tests {
         }
 
         async fn execute(
-            &mut self,
+            &self,
             _input: AgentInput,
             _ctx: &AgentContext,
         ) -> AgentResult<AgentOutput> {

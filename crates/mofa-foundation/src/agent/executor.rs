@@ -259,7 +259,7 @@ impl AgentExecutor {
 
     /// Process a user message
     pub async fn process_message(
-        &mut self,
+        &self,
         session_key: &str,
         message: &str,
     ) -> AgentResult<String> {
@@ -538,7 +538,7 @@ impl MoFAAgent for AgentExecutor {
     }
 
     async fn execute(
-        &mut self,
+        &self,
         input: AgentInput,
         _ctx: &AgentContext,
     ) -> AgentResult<AgentOutput> {

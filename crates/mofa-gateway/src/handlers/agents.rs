@@ -223,7 +223,7 @@ pub async fn stop_agent(
     State(state): State<Arc<AppState>>,
     Path(id): Path<String>,
     headers: HeaderMap,
-) -> Result<impl IntoResponse, GatewayError> {
+) -> Result<axum::response::Response, GatewayError> {
     let client = client_key(&headers);
     if !state.rate_limiter.check(&client) {
         return Err(GatewayError::RateLimitExceeded(client));
@@ -239,9 +239,12 @@ pub async fn stop_agent(
         let mut agent = match agent_arc.try_write() {
             Ok(guard) => guard,
             Err(_) => {
-                return Err(GatewayError::AgentOperationFailed(
-                    "Agent is currently executing a task and cannot be cleanly stopped at this moment. Please wait for execution to finish.".into(),
-                ));
+                let err_msg = "Agent is currently executing a task and cannot be cleanly stopped at this moment.";
+                return Ok((
+                    StatusCode::CONFLICT,
+                    [("retry-after", "5")],
+                    Json(json!({ "id": id, "error": err_msg })),
+                ).into_response());
             }
         };
         let current = agent.state();
@@ -249,7 +252,7 @@ pub async fn stop_agent(
             return Ok((
                 StatusCode::OK,
                 Json(json!({ "id": id, "status": "already_stopped" })),
-            ));
+            ).into_response());
         }
         agent
             .shutdown()
@@ -262,7 +265,7 @@ pub async fn stop_agent(
     Ok((
         StatusCode::OK,
         Json(json!({ "id": id, "status": "stopped" })),
-    ))
+    ).into_response())
 }
 
 /// DELETE /agents/{id}
@@ -284,8 +287,13 @@ pub async fn delete_agent(
 
     // Attempt graceful stop first, ignore errors (agent may already be stopped)
     if let Some(agent_arc) = state.registry.get(&id).await {
-        if let Ok(mut agent) = agent_arc.try_write() {
-            let _ = agent.shutdown().await;
+        match agent_arc.try_write() {
+            Ok(mut agent) => {
+                let _ = agent.shutdown().await;
+            }
+            Err(_) => {
+                tracing::warn!("skipping shutdown for agent {}, busy executing", id);
+            }
         }
     }
 
