@@ -291,6 +291,9 @@ pub async fn fallback_chain<T>(
     Err(last_error)
 }
 
+type BoxedFallbackFuture<T> = std::pin::Pin<Box<dyn Future<Output = GlobalResult<T>> + Send>>;
+type FallbackOperation<T> = Box<dyn FnOnce() -> BoxedFallbackFuture<T> + Send>;
+
 // ============================================================================
 // CircuitBreaker - Prevent cascading failures
 // ============================================================================

@@ -695,11 +695,13 @@ impl SimpleMessageBus {
 
     /// 注册智能体
     /// Register agent
+    ///
+    /// Replaces any existing senders for `agent_id` so that stale clones from
+    /// previous registrations (e.g. after an agent restart) do not accumulate
+    /// in the Vec and leak memory.
     pub async fn register(&self, agent_id: &str, tx: tokio::sync::mpsc::Sender<AgentEvent>) {
         let mut subs = self.subscribers.write().await;
-        subs.entry(agent_id.to_string())
-            .or_insert_with(Vec::new)
-            .push(tx);
+        subs.insert(agent_id.to_string(), vec![tx]);
     }
 
     /// 订阅主题

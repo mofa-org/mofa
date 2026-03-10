@@ -178,7 +178,7 @@ impl AnthropicProvider {
                                         let data = image_url
                                             .url
                                             .split(',')
-                                            .last()
+                                            .next_back()
                                             .unwrap_or(&image_url.url);
                                         contents.push(serde_json::json!({
                                             "type": "image",

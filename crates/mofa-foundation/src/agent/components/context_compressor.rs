@@ -889,8 +889,8 @@ impl ContextCompressor for SemanticCompressor {
             assigned[i] = true;
 
             if let Some(Some(emb_i)) = embeddings.get(i) {
-                for j in (i + 1)..to_compress.len() {
-                    if assigned[j] {
+                for (j, assigned_j) in assigned.iter_mut().enumerate().skip(i + 1) {
+                    if *assigned_j {
                         continue;
                     }
 
@@ -898,7 +898,7 @@ impl ContextCompressor for SemanticCompressor {
                         let similarity = Self::cosine_similarity(emb_i, emb_j);
                         if similarity >= self.similarity_threshold {
                             cluster.push(j);
-                            assigned[j] = true;
+                            *assigned_j = true;
                         }
                     }
                 }
@@ -1067,16 +1067,16 @@ impl ContextCompressor for HierarchicalCompressor {
         let mut compressed = Vec::new();
         let mut current_tokens = system_msgs
             .iter()
-            .map(|m| self.count_tokens(&[m.clone()]))
+            .map(|m| self.count_tokens(std::slice::from_ref(m)))
             .sum::<usize>();
 
         for (score, msg) in scored {
-            let msg_tokens = self.count_tokens(&[msg.clone()]);
+            let msg_tokens = self.count_tokens(std::slice::from_ref(&msg));
             let estimated_total = current_tokens
                 + msg_tokens
                 + recent
                     .iter()
-                    .map(|m| self.count_tokens(&[m.clone()]))
+                    .map(|m| self.count_tokens(std::slice::from_ref(m)))
                     .sum::<usize>();
 
             if estimated_total <= max_tokens {
@@ -1096,23 +1096,20 @@ impl ContextCompressor for HierarchicalCompressor {
                             .temperature(0.3)
                             .max_tokens(256);
 
-                    match self.llm.chat(summary_request).await {
-                        Ok(response) => {
-                            if let Some(summary) = response.content() {
-                                let summary_msg = ChatMessage {
-                                    role: msg.role.clone(),
-                                    content: Some(format!("[Compressed] {}", summary)),
-                                    tool_call_id: None,
-                                    tool_calls: None,
-                                };
-                                let summary_tokens = self.count_tokens(&[summary_msg.clone()]);
-                                if current_tokens + summary_tokens <= max_tokens {
-                                    compressed.push(summary_msg);
-                                    current_tokens += summary_tokens;
-                                }
-                            }
+                    if let Ok(response) = self.llm.chat(summary_request).await
+                        && let Some(summary) = response.content()
+                    {
+                        let summary_msg = ChatMessage {
+                            role: msg.role.clone(),
+                            content: Some(format!("[Compressed] {}", summary)),
+                            tool_call_id: None,
+                            tool_calls: None,
+                        };
+                        let summary_tokens = self.count_tokens(std::slice::from_ref(&summary_msg));
+                        if current_tokens + summary_tokens <= max_tokens {
+                            compressed.push(summary_msg);
+                            current_tokens += summary_tokens;
                         }
-                        Err(_) => {}
                     }
                 }
             }

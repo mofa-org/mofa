@@ -276,3 +276,154 @@ impl IntoResponse for GatewayError {
         (status, body).into_response()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use axum::http::StatusCode;
+
+    // --- ControlPlaneError Display ---
+
+    #[test]
+    fn control_plane_error_display() {
+        let err = ControlPlaneError::StateMachine("bad state".into());
+        assert_eq!(err.to_string(), "State machine error: bad state");
+
+        let err = ControlPlaneError::NodeNotFound("node-1".into());
+        assert_eq!(err.to_string(), "Node not found: node-1");
+
+        let err = ControlPlaneError::NotLeader;
+        assert_eq!(err.to_string(), "Not the leader");
+
+        let err = ControlPlaneError::LeaderElectionTimeout;
+        assert_eq!(err.to_string(), "Leader election timeout");
+    }
+
+    // --- ConsensusError Display ---
+
+    #[test]
+    fn consensus_error_display() {
+        let err = ConsensusError::NotLeader("node-2".into());
+        assert_eq!(err.to_string(), "Not leader - current leader is node-2");
+
+        let err = ConsensusError::QuorumNotReached { have: 1, need: 3 };
+        assert_eq!(
+            err.to_string(),
+            "Quorum not reached: have 1, need 3"
+        );
+
+        let err = ConsensusError::TermMismatch {
+            expected: 5,
+            got: 3,
+        };
+        assert_eq!(err.to_string(), "Term mismatch: expected 5, got 3");
+
+        let err = ConsensusError::LogEntryNotFound(42);
+        assert_eq!(err.to_string(), "Log entry not found at index 42");
+
+        let err = ConsensusError::NetworkPartition;
+        assert_eq!(err.to_string(), "Network partition detected");
+    }
+
+    // --- GatewayError Display ---
+
+    #[test]
+    fn gateway_error_display() {
+        let err = GatewayError::InvalidRequest("missing field".into());
+        assert_eq!(err.to_string(), "Invalid request: missing field");
+
+        let err = GatewayError::AgentNotFound("agent-1".into());
+        assert_eq!(err.to_string(), "Agent not found: agent-1");
+
+        let err = GatewayError::RateLimitExceeded("10 req/s".into());
+        assert_eq!(err.to_string(), "Rate limit exceeded: 10 req/s");
+
+        let err = GatewayError::Timeout("30s".into());
+        assert_eq!(err.to_string(), "Timeout: 30s");
+    }
+
+    // --- From conversions ---
+
+    #[test]
+    fn consensus_error_into_control_plane_error() {
+        let consensus_err = ConsensusError::NetworkPartition;
+        let cp_err: ControlPlaneError = consensus_err.into();
+        assert!(matches!(cp_err, ControlPlaneError::Consensus(_)));
+        assert!(cp_err.to_string().contains("Network partition detected"));
+    }
+
+    #[test]
+    fn io_error_into_control_plane_error() {
+        let io_err = std::io::Error::new(std::io::ErrorKind::NotFound, "file missing");
+        let cp_err: ControlPlaneError = io_err.into();
+        assert!(matches!(cp_err, ControlPlaneError::Storage(_)));
+        assert!(cp_err.to_string().contains("file missing"));
+    }
+
+    // --- GatewayError -> HTTP status code mapping ---
+
+    #[test]
+    fn gateway_error_status_bad_request() {
+        let resp = GatewayError::InvalidRequest("bad".into()).into_response();
+        assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
+    }
+
+    #[test]
+    fn gateway_error_status_conflict() {
+        let resp = GatewayError::AgentAlreadyExists("a".into()).into_response();
+        assert_eq!(resp.status(), StatusCode::CONFLICT);
+    }
+
+    #[test]
+    fn gateway_error_status_not_found() {
+        let resp = GatewayError::AgentNotFound("a".into()).into_response();
+        assert_eq!(resp.status(), StatusCode::NOT_FOUND);
+    }
+
+    #[test]
+    fn gateway_error_status_too_many_requests() {
+        let resp = GatewayError::RateLimitExceeded("limit".into()).into_response();
+        assert_eq!(resp.status(), StatusCode::TOO_MANY_REQUESTS);
+    }
+
+    #[test]
+    fn gateway_error_status_service_unavailable() {
+        for err in [
+            GatewayError::CircuitBreakerOpen("cb".into()),
+            GatewayError::NoHealthyNodes("none".into()),
+            GatewayError::UnhealthyNode("n".into()),
+            GatewayError::NoAvailableNodes("none".into()),
+            GatewayError::HealthCheckFailed("hc".into()),
+        ] {
+            let resp = err.into_response();
+            assert_eq!(resp.status(), StatusCode::SERVICE_UNAVAILABLE);
+        }
+    }
+
+    #[test]
+    fn gateway_error_status_bad_gateway() {
+        let resp = GatewayError::RoutingFailed("route".into()).into_response();
+        assert_eq!(resp.status(), StatusCode::BAD_GATEWAY);
+
+        let resp = GatewayError::Network("net".into()).into_response();
+        assert_eq!(resp.status(), StatusCode::BAD_GATEWAY);
+    }
+
+    #[test]
+    fn gateway_error_status_request_timeout() {
+        let resp = GatewayError::Timeout("30s".into()).into_response();
+        assert_eq!(resp.status(), StatusCode::REQUEST_TIMEOUT);
+    }
+
+    #[test]
+    fn gateway_error_status_internal_server_error() {
+        for err in [
+            GatewayError::AgentOperationFailed("op".into()),
+            GatewayError::LoadBalancing("lb".into()),
+            GatewayError::Internal("err".into()),
+        ] {
+            let resp = err.into_response();
+            assert_eq!(resp.status(), StatusCode::INTERNAL_SERVER_ERROR);
+        }
+    }
+}

@@ -63,17 +63,9 @@ impl RecursiveChunkConfig {
 ///
 /// This produces higher-quality chunks than fixed-size splitting because
 /// it preserves semantic boundaries where possible.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct RecursiveChunker {
     config: RecursiveChunkConfig,
-}
-
-impl Default for RecursiveChunker {
-    fn default() -> Self {
-        Self {
-            config: RecursiveChunkConfig::default(),
-        }
-    }
 }
 
 impl RecursiveChunker {

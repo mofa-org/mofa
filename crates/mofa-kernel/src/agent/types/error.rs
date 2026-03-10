@@ -418,6 +418,7 @@ impl std::error::Error for ContextualError {
 // ============================================================================
 
 /// Extension trait to attach context to any `Result<T, GlobalError>`
+#[allow(clippy::result_large_err)]
 pub trait WithContext<T> {
     /// Attach context to the error
     fn with_context(self, ctx: ErrorContext) -> Result<T, ContextualError>;
@@ -426,6 +427,7 @@ pub trait WithContext<T> {
     fn context(self, msg: impl Into<String>) -> Result<T, ContextualError>;
 }
 
+#[allow(clippy::result_large_err)]
 impl<T> WithContext<T> for Result<T, GlobalError> {
     fn with_context(self, ctx: ErrorContext) -> Result<T, ContextualError> {
         self.map_err(|err| ContextualError {

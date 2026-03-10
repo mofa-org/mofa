@@ -72,7 +72,7 @@ pub use builder::*;
 pub use dsl::*;
 pub use execution_event::{ExecutionEvent, ExecutionEventEnvelope, SCHEMA_VERSION};
 pub use executor::*;
-pub use fault_tolerance::{NodePolicy, RetryBackoff};
+pub use mofa_kernel::workflow::policy::NodePolicy;
 pub use graph::*;
 pub use node::*;
 pub use profiler::*;

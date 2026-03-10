@@ -98,6 +98,7 @@ use tokio::time::{Duration, MissedTickBehavior};
 /// 运行器状态
 /// Runner state
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum RunnerState {
     /// 已创建
     /// Created
