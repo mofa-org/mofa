@@ -3,27 +3,21 @@ use serde_json::json;
 use std::path::Path;
 use tokio::process::Command;
 
-
-
-// OCR TOOL : Extract texts from images using tessaract cli 
+// OCR TOOL : Extract texts from images using tessaract cli
 // tools utilised : tessaract : For this to be utilised user needs to have tesseract cli installed
-// This keeps dependencies light 
+// This keeps dependencies light
 
-pub struct OcrTool{
+pub struct OcrTool {
     definition: ToolDefinition,
 }
 
-
-impl Default for OcrTool{
-    fn default()->Self{
+impl Default for OcrTool {
+    fn default() -> Self {
         Self::new()
-
     }
-
-
 }
 
-impl OcrTool{
+impl OcrTool {
     pub fn new() -> Self {
         Self {
             definition: ToolDefinition {
@@ -41,8 +35,6 @@ impl OcrTool{
                         "lang": {
                             "type": "string",
                             "description": "Tesseract language code (e.g. 'eng', 'chi_sim'). Defaults to 'eng'."
-                       
-                       
                         },
                         "psm": {
                             "type": "integer",
@@ -55,8 +47,6 @@ impl OcrTool{
             },
         }
     }
-    
-
 
     fn build_command(
         &self,
@@ -64,12 +54,11 @@ impl OcrTool{
         image_path: &str,
         lang: &str,
         psm: Option<i64>,
-        )-> Command{
-
-        let mut cmd= Command::new(tesseract_path);
+    ) -> Command {
+        let mut cmd = Command::new(tesseract_path);
         cmd.arg(image_path).arg("-");
 
-        if !lang.is_empty(){
+        if !lang.is_empty() {
             cmd.arg("-l").arg(lang);
         }
         if let Some(psm_value) = psm {
@@ -79,28 +68,16 @@ impl OcrTool{
         }
 
         cmd
-
-
     }
-
-
-
-
-
-
 }
 
 #[async_trait::async_trait]
-impl ToolExecutor for OcrTool{
-    fn definition(&self)-> &ToolDefinition{
+impl ToolExecutor for OcrTool {
+    fn definition(&self) -> &ToolDefinition {
         &self.definition
     }
 
-    async fn execute(
-        &self,
-        arguments: serde_json::Value
-        )-> PluginResult<serde_json::Value>{
-
+    async fn execute(&self, arguments: serde_json::Value) -> PluginResult<serde_json::Value> {
         //few checks before runnign command
         let image_path = arguments["image_path"].as_str().ok_or_else(|| {
             mofa_kernel::plugin::PluginError::ExecutionFailed(
@@ -108,9 +85,10 @@ impl ToolExecutor for OcrTool{
             )
         })?;
         if !Path::new(image_path).exists() {
-            return Err(mofa_kernel::plugin::PluginError::ExecutionFailed(
-                format!("Image file not found: {}", image_path),
-            ));
+            return Err(mofa_kernel::plugin::PluginError::ExecutionFailed(format!(
+                "Image file not found: {}",
+                image_path
+            )));
         }
 
         let lang = arguments
@@ -120,9 +98,8 @@ impl ToolExecutor for OcrTool{
 
         let psm = arguments.get("psm").and_then(|v| v.as_i64());
 
-
-//main operation related to tessaract
-//locating tessaract-> not found= error -> else utilising
+        //main operation related to tessaract
+        //locating tessaract-> not found= error -> else utilising
 
         let tesseract_path = which::which("tesseract").map_err(|e| {
             mofa_kernel::plugin::PluginError::ExecutionFailed(format!(
@@ -131,25 +108,24 @@ impl ToolExecutor for OcrTool{
             ))
         })?;
 
-
         //main operations
 
         let mut cmd = self.build_command(&tesseract_path, image_path, lang, psm);
         let output = cmd.output().await?;
 
-
         let stdout = String::from_utf8_lossy(&output.stdout).to_string();
         let stderr = String::from_utf8_lossy(&output.stderr).to_string();
 
-
         if !output.status.success() {
-            return Err(mofa_kernel::plugin::PluginError::ExecutionFailed(
-                format!(
-                    "Tesseract exited with non-zero status {:?}: {}",
-                    output.status.code(),
-                    if stderr.is_empty() { stdout.clone() } else { stderr.clone() }
-                ),
-            ));
+            return Err(mofa_kernel::plugin::PluginError::ExecutionFailed(format!(
+                "Tesseract exited with non-zero status {:?}: {}",
+                output.status.code(),
+                if stderr.is_empty() {
+                    stdout.clone()
+                } else {
+                    stderr.clone()
+                }
+            )));
         }
 
         //outputing success
@@ -165,9 +141,5 @@ impl ToolExecutor for OcrTool{
 
 
         }))
-
-
     }
-
-
 }
