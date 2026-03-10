@@ -8,7 +8,7 @@ use super::template::{PromptComposition, PromptError, PromptResult, PromptTempla
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::Path;
-use std::sync::{Arc, RwLock};
+use std::sync::{Arc, RwLock, RwLockReadGuard, RwLockWriteGuard};
 
 /// Prompt 注册中心
 /// Prompt Registry
@@ -316,131 +316,113 @@ impl GlobalPromptRegistry {
         Self::default()
     }
 
-    /// 注册模板
-    /// Register a template
-    pub fn register(&self, template: PromptTemplate) {
+    /// Acquire a read lock on the inner registry.
+    fn read_registry(&self) -> PromptResult<RwLockReadGuard<'_, PromptRegistry>> {
+        self.inner
+            .read()
+            .map_err(|e| PromptError::LockPoisoned(e.to_string()))
+    }
+
+    /// Acquire a write lock on the inner registry.
+    fn write_registry(&self) -> PromptResult<RwLockWriteGuard<'_, PromptRegistry>> {
         self.inner
             .write()
-            .expect("Failed to acquire write lock on prompt registry")
-            .register(template);
+            .map_err(|e| PromptError::LockPoisoned(e.to_string()))
+    }
+
+    /// 注册模板
+    /// Register a template
+    pub fn register(&self, template: PromptTemplate) -> PromptResult<()> {
+        self.write_registry()?.register(template);
+        Ok(())
     }
 
     /// 获取模板（克隆）
     /// Get a template (cloned)
     pub fn get(&self, id: &str) -> PromptResult<PromptTemplate> {
-        self.inner
-            .read()
-            .map_err(|e| PromptError::LockPoisoned(e.to_string()))?
-            .get(id)
-            .cloned()
+        self.read_registry()?.get(id).cloned()
     }
 
     /// 渲染模板
     /// Render a template
     pub fn render(&self, id: &str, vars: &[(&str, &str)]) -> PromptResult<String> {
-        self.inner
-            .read()
-            .map_err(|e| PromptError::LockPoisoned(e.to_string()))?
-            .render(id, vars)
+        self.read_registry()?.render(id, vars)
     }
 
     /// 检查是否包含
     /// Check if it contains
-    pub fn contains(&self, id: &str) -> bool {
-        self.inner
-            .read()
-            .expect("Failed to acquire read lock on prompt registry")
-            .contains(id)
+    pub fn contains(&self, id: &str) -> PromptResult<bool> {
+        Ok(self.read_registry()?.contains(id))
     }
 
     /// 删除模板
     /// Remove a template
-    pub fn remove(&self, id: &str) -> Option<PromptTemplate> {
-        self.inner
-            .write()
-            .expect("Failed to acquire write lock on prompt registry")
-            .remove(id)
+    pub fn remove(&self, id: &str) -> PromptResult<Option<PromptTemplate>> {
+        Ok(self.write_registry()?.remove(id))
     }
 
     /// 从文件加载
     /// Load from a file
     pub fn load_from_file(&self, path: impl AsRef<Path>) -> PromptResult<()> {
-        self.inner
-            .write()
-            .map_err(|e| PromptError::LockPoisoned(e.to_string()))?
-            .load_from_file(path)
+        self.write_registry()?.load_from_file(path)
     }
 
     /// 从 YAML 加载
     /// Load from YAML
     pub fn load_from_yaml(&self, yaml: &str) -> PromptResult<()> {
-        self.inner
-            .write()
-            .expect("Failed to acquire write lock on prompt registry")
-            .load_from_yaml(yaml)
+        self.write_registry()?.load_from_yaml(yaml)
     }
 
     /// 获取所有模板 ID
     /// Get all template IDs
-    pub fn list_ids(&self) -> Vec<String> {
-        self.inner
-            .read()
-            .unwrap()
+    pub fn list_ids(&self) -> PromptResult<Vec<String>> {
+        Ok(self
+            .read_registry()?
             .list_ids()
             .iter()
             .map(|s| s.to_string())
-            .collect()
+            .collect())
     }
 
     /// 按标签查找
     /// Find by tag
-    pub fn find_by_tag(&self, tag: &str) -> Vec<PromptTemplate> {
-        self.inner
-            .read()
-            .unwrap()
+    pub fn find_by_tag(&self, tag: &str) -> PromptResult<Vec<PromptTemplate>> {
+        Ok(self
+            .read_registry()?
             .find_by_tag(tag)
             .iter()
             .map(|t| (*t).clone())
-            .collect()
+            .collect())
     }
 
     /// 搜索模板
     /// Search templates
-    pub fn search(&self, query: &str) -> Vec<PromptTemplate> {
-        self.inner
-            .read()
-            .unwrap()
+    pub fn search(&self, query: &str) -> PromptResult<Vec<PromptTemplate>> {
+        Ok(self
+            .read_registry()?
             .search(query)
             .iter()
             .map(|t| (*t).clone())
-            .collect()
+            .collect())
     }
 
     /// 模板数量
     /// Number of templates
-    pub fn len(&self) -> usize {
-        self.inner
-            .read()
-            .expect("Failed to acquire read lock on prompt registry")
-            .len()
+    pub fn len(&self) -> PromptResult<usize> {
+        Ok(self.read_registry()?.len())
     }
 
     /// 是否为空
     /// Whether it is empty
-    pub fn is_empty(&self) -> bool {
-        self.inner
-            .read()
-            .expect("Failed to acquire read lock on prompt registry")
-            .is_empty()
+    pub fn is_empty(&self) -> PromptResult<bool> {
+        Ok(self.read_registry()?.is_empty())
     }
 
     /// 清空
     /// Clear
-    pub fn clear(&self) {
-        self.inner
-            .write()
-            .expect("Failed to acquire write lock on prompt registry")
-            .clear();
+    pub fn clear(&self) -> PromptResult<()> {
+        self.write_registry()?.clear();
+        Ok(())
     }
 }
 
@@ -602,11 +584,222 @@ compositions:
     fn test_global_registry() {
         let registry = GlobalPromptRegistry::new();
 
-        registry.register(PromptTemplate::new("test").with_content("Hello, {name}!"));
+        registry
+            .register(PromptTemplate::new("test").with_content("Hello, {name}!"))
+            .unwrap();
 
-        assert!(registry.contains("test"));
+        assert!(registry.contains("test").unwrap());
 
         let result = registry.render("test", &[("name", "World")]).unwrap();
         assert_eq!(result, "Hello, World!");
+    }
+
+    #[test]
+    fn test_global_registry_register_and_get() {
+        let registry = GlobalPromptRegistry::new();
+
+        let template = PromptTemplate::new("greet")
+            .with_content("Hi, {user}!")
+            .with_tag("greeting");
+
+        registry.register(template).unwrap();
+
+        let retrieved = registry.get("greet").unwrap();
+        assert_eq!(retrieved.id, "greet");
+    }
+
+    #[test]
+    fn test_global_registry_get_nonexistent_returns_error() {
+        let registry = GlobalPromptRegistry::new();
+        assert!(registry.get("does-not-exist").is_err());
+    }
+
+    #[test]
+    fn test_global_registry_contains() {
+        let registry = GlobalPromptRegistry::new();
+
+        assert!(!registry.contains("missing").unwrap());
+
+        registry
+            .register(PromptTemplate::new("present").with_content("here"))
+            .unwrap();
+
+        assert!(registry.contains("present").unwrap());
+    }
+
+    #[test]
+    fn test_global_registry_remove() {
+        let registry = GlobalPromptRegistry::new();
+
+        registry
+            .register(
+                PromptTemplate::new("removable")
+                    .with_content("bye")
+                    .with_tag("temp"),
+            )
+            .unwrap();
+
+        assert!(registry.contains("removable").unwrap());
+
+        let removed = registry.remove("removable").unwrap();
+        assert!(removed.is_some());
+        assert!(!registry.contains("removable").unwrap());
+
+        // Removing again returns None
+        let removed_again = registry.remove("removable").unwrap();
+        assert!(removed_again.is_none());
+    }
+
+    #[test]
+    fn test_global_registry_len_and_is_empty() {
+        let registry = GlobalPromptRegistry::new();
+
+        assert!(registry.is_empty().unwrap());
+        assert_eq!(registry.len().unwrap(), 0);
+
+        registry
+            .register(PromptTemplate::new("a").with_content("A"))
+            .unwrap();
+        registry
+            .register(PromptTemplate::new("b").with_content("B"))
+            .unwrap();
+
+        assert!(!registry.is_empty().unwrap());
+        assert_eq!(registry.len().unwrap(), 2);
+    }
+
+    #[test]
+    fn test_global_registry_list_ids() {
+        let registry = GlobalPromptRegistry::new();
+
+        registry
+            .register(PromptTemplate::new("alpha").with_content("A"))
+            .unwrap();
+        registry
+            .register(PromptTemplate::new("beta").with_content("B"))
+            .unwrap();
+
+        let mut ids = registry.list_ids().unwrap();
+        ids.sort();
+        assert_eq!(ids, vec!["alpha", "beta"]);
+    }
+
+    #[test]
+    fn test_global_registry_find_by_tag() {
+        let registry = GlobalPromptRegistry::new();
+
+        registry
+            .register(
+                PromptTemplate::new("t1")
+                    .with_content("T1")
+                    .with_tag("shared")
+                    .with_tag("unique-a"),
+            )
+            .unwrap();
+        registry
+            .register(
+                PromptTemplate::new("t2")
+                    .with_content("T2")
+                    .with_tag("shared"),
+            )
+            .unwrap();
+
+        let shared = registry.find_by_tag("shared").unwrap();
+        assert_eq!(shared.len(), 2);
+
+        let unique = registry.find_by_tag("unique-a").unwrap();
+        assert_eq!(unique.len(), 1);
+
+        let none = registry.find_by_tag("nonexistent").unwrap();
+        assert!(none.is_empty());
+    }
+
+    #[test]
+    fn test_global_registry_search() {
+        let registry = GlobalPromptRegistry::new();
+
+        registry
+            .register(
+                PromptTemplate::new("code-review")
+                    .with_name("Code Review")
+                    .with_description("Review code"),
+            )
+            .unwrap();
+        registry
+            .register(
+                PromptTemplate::new("chat")
+                    .with_name("Chat Bot")
+                    .with_description("General chat"),
+            )
+            .unwrap();
+
+        let results = registry.search("code").unwrap();
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].id, "code-review");
+    }
+
+    #[test]
+    fn test_global_registry_render() {
+        let registry = GlobalPromptRegistry::new();
+
+        registry
+            .register(PromptTemplate::new("tmpl").with_content("Hello, {who}!"))
+            .unwrap();
+
+        let rendered = registry.render("tmpl", &[("who", "Rust")]).unwrap();
+        assert_eq!(rendered, "Hello, Rust!");
+
+        // Rendering a non-existent template returns an error
+        assert!(registry.render("missing", &[]).is_err());
+    }
+
+    #[test]
+    fn test_global_registry_clear() {
+        let registry = GlobalPromptRegistry::new();
+
+        registry
+            .register(PromptTemplate::new("x").with_content("X"))
+            .unwrap();
+        registry
+            .register(PromptTemplate::new("y").with_content("Y"))
+            .unwrap();
+
+        assert_eq!(registry.len().unwrap(), 2);
+
+        registry.clear().unwrap();
+
+        assert_eq!(registry.len().unwrap(), 0);
+        assert!(registry.is_empty().unwrap());
+    }
+
+    #[test]
+    fn test_global_registry_load_from_yaml() {
+        let registry = GlobalPromptRegistry::new();
+
+        let yaml = r#"
+templates:
+  - id: hello
+    content: "Hello, {name}!"
+    variables:
+      - name: name
+        required: true
+  - id: bye
+    content: "Bye, {name}!"
+    variables:
+      - name: name
+        default: friend
+"#;
+
+        registry.load_from_yaml(yaml).unwrap();
+
+        assert_eq!(registry.len().unwrap(), 2);
+        assert!(registry.contains("hello").unwrap());
+        assert!(registry.contains("bye").unwrap());
+
+        let rendered = registry.render("hello", &[("name", "MoFA")]).unwrap();
+        assert_eq!(rendered, "Hello, MoFA!");
+
+        let rendered_default = registry.render("bye", &[]).unwrap();
+        assert_eq!(rendered_default, "Bye, friend!");
     }
 }
