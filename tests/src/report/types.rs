@@ -41,6 +41,29 @@ pub struct TestReport {
 }
 
 impl TestReport {
+    /// Merge multiple reports into a single aggregated report.
+    /// Results are concatenated in order. Total duration is the max of all suites.
+    /// Timestamp is taken from the first report (or 0 if empty).
+    pub fn merge(suite_name: impl Into<String>, reports: &[TestReport]) -> TestReport {
+        let mut results = Vec::new();
+        let mut total_duration = Duration::from_secs(0);
+        let timestamp = reports.first().map(|r| r.timestamp).unwrap_or(0);
+
+        for report in reports {
+            results.extend(report.results.clone());
+            if report.total_duration > total_duration {
+                total_duration = report.total_duration;
+            }
+        }
+
+        TestReport {
+            suite_name: suite_name.into(),
+            results,
+            total_duration,
+            timestamp,
+        }
+    }
+
     /// Total number of test cases.
     pub fn total(&self) -> usize {
         self.results.len()
