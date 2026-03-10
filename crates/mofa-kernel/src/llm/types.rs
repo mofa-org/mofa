@@ -860,6 +860,9 @@ mod protocol_version_tests {
         let env: MessageEnvelope<u32> = serde_json::from_str(future_json).unwrap();
         let mapped: MessageEnvelope<String> = env.map(|n| n.to_string());
         assert_eq!(mapped.version, ProtocolVersion::Unknown);
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
