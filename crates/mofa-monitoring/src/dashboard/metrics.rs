@@ -274,6 +274,8 @@ pub struct WorkflowMetrics {
     pub running_instances: u32,
     /// Nodes in workflow
     pub node_count: u32,
+    /// Captured Workflow Graph Topology (JSON representation)
+    pub graph_json: Option<serde_json::Value>,
 }
 
 /// Plugin metrics

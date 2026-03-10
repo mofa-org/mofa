@@ -1,0 +1,340 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MoFA Workflow Visualizer</title>
+    <!-- Use basic CSS, standard font -->
+    <style>
+        body { margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f8f9fa; }
+        #canvas-container { width: 100vw; height: 100vh; overflow: hidden; display: flex; flex-direction: column; }
+        #header { background-color: #343a40; color: white; padding: 10px 20px; display: flex; justify-content: space-between; align-items: center; }
+        #workflow-selector { padding: 5px; font-size: 14px; }
+        #d3-container { flex: 1; position: relative; }
+        
+        /* Node styles */
+        .node rect { stroke: #333; stroke-width: 1.5px; rx: 5; ry: 5; }
+        .node text { font-size: 12px; pointer-events: none; }
+        .node .title { font-weight: bold; font-size: 14px; }
+        
+        /* Edge styles */
+        .link { fill: none; stroke: #999; stroke-width: 2px; }
+        .link.conditional { stroke-dasharray: 4,4; }
+        .link.error { stroke: #e74c3c; stroke-dasharray: 2,2; }
+        
+        /* Node Colors by Type */
+        .color-Start { fill: #2ecc71; }
+        .color-End { fill: #e74c3c; }
+        .color-Task { fill: #3498db; }
+        .color-Agent { fill: #9b59b6; }
+        .color-Condition { fill: #f1c40f; }
+        .color-Parallel { fill: #1abc9c; }
+        .color-Join { fill: #16a085; }
+        .color-Default { fill: #ecf0f1; }
+
+        /* Execution Status Overrides */
+        .status-running rect { stroke: #f39c12; stroke-width: 3px; filter: drop-shadow(0 0 5px #f39c12); }
+        .status-completed rect { stroke: #27ae60; stroke-width: 3px; }
+        .status-failed rect { stroke: #c0392b; stroke-width: 3px; }
+
+        .tooltip { position: absolute; text-align: left; padding: 8px; font-size: 12px; background: white; border: 1px solid #ddd; box-shadow: 2px 2px 6px rgba(0,0,0,0.1); border-radius: 4px; pointer-events: none; opacity: 0; z-index: 10; max-width: 300px; }
+        .legend { position: absolute; bottom: 20px; left: 20px; background: white; padding: 10px; border-radius: 5px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); border: 1px solid #ddd; }
+        .legend-item { display: flex; align-items: center; margin-bottom: 5px; font-size: 12px; }
+        .legend-color { width: 15px; height: 15px; margin-right: 8px; border: 1px solid #333; border-radius: 3px; }
+        
+        /* Loading overlay */
+        #loading { position: absolute; top: 0; left: 0; right: 0; bottom: 0; background: rgba(255,255,255,0.8); display: flex; justify-content: center; align-items: center; font-size: 20px; font-weight: bold; z-index: 20; display: none; }
+    </style>
+    <!-- Exclude heavy dependencies and just use D3 and Dagre for layout -->
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/dagre/0.8.5/dagre.min.js"></script>
+</head>
+<body>
+    <div id="canvas-container">
+        <div id="header">
+            <h2>🎨 MoFA Workflow Visualizer</h2>
+            <div>
+                <label for="workflow-selector">Select Workflow: </label>
+                <select id="workflow-selector">
+                    <option value="">Loading workflows...</option>
+                </select>
+            </div>
+        </div>
+        <div id="d3-container">
+            <svg id="svg" width="100%" height="100%"></svg>
+            <div id="tooltip" class="tooltip"></div>
+            <div id="loading">Loading graph data...</div>
+            <div class="legend">
+                <h4>Node Types</h4>
+                <div class="legend-item"><div class="legend-color color-Start"></div> Start</div>
+                <div class="legend-item"><div class="legend-color color-Task"></div> Task</div>
+                <div class="legend-item"><div class="legend-color color-Agent"></div> Agent</div>
+                <div class="legend-item"><div class="legend-color color-Condition"></div> Condition</div>
+                <div class="legend-item"><div class="legend-color color-Parallel"></div> Parallel/Join</div>
+                <div class="legend-item"><div class="legend-color color-End"></div> End</div>
+                <hr>
+                <div class="legend-item"><em>* Refreshing real-time state via API</em></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = '/api'; // Use relative path if hosted together
+        let currentSimulatorInterval = null;
+
+        // Configuration
+        const NODE_WIDTH = 150;
+        const NODE_HEIGHT = 60;
+
+        // Initialize UI
+        async function fetchWorkflows() {
+            try {
+                const res = await fetch(`${API_BASE}/workflows`);
+                const json = await res.json();
+                if (json.success && json.data) {
+                    const selector = document.getElementById('workflow-selector');
+                    selector.innerHTML = '<option value="">-- Select a Workflow --</option>';
+                    json.data.forEach(wf => {
+                        const opt = document.createElement('option');
+                        opt.value = wf.workflow_id;
+                        opt.textContent = `${wf.name} (${wf.workflow_id})`;
+                        selector.appendChild(opt);
+                    });
+
+                    // Add a default Mock graph if API fails to provide one
+                    const mockOpt = document.createElement('option');
+                    mockOpt.value = "mock_demo";
+                    mockOpt.textContent = "Demo Mock Workflow";
+                    selector.appendChild(mockOpt);
+                }
+            } catch (err) {
+                console.error("Failed to fetch workflows", err);
+            }
+        }
+
+        async function loadGraph(workflowId) {
+            document.getElementById('loading').style.display = 'flex';
+            
+            // Allow a demo mock
+            if (workflowId === "mock_demo") {
+                renderGraph(getMockGraph());
+                document.getElementById('loading').style.display = 'none';
+                return;
+            }
+
+            try {
+                const res = await fetch(`${API_BASE}/workflows/${workflowId}/graph`);
+                const json = await res.json();
+                if (json.success && json.data) {
+                    renderGraph(json.data);
+                } else {
+                    alert("Graph data not found. Ensure WorkflowMetrics stores `graph_json`.");
+                    renderGraph({ nodes: [], edges: [] });
+                }
+            } catch (err) {
+                console.error("Failed to load graph", err);
+                alert("Error loading graph. See console.");
+            } finally {
+                document.getElementById('loading').style.display = 'none';
+            }
+        }
+
+        function renderGraph(graphData) {
+            // Setup SVG
+            const svg = d3.select("#svg");
+            svg.selectAll("*").remove(); // Clear previous
+            
+            const width = document.getElementById("d3-container").clientWidth;
+            const height = document.getElementById("d3-container").clientHeight;
+
+            // Setup Zoom
+            const zoom = d3.zoom().on("zoom", (event) => {
+                g.attr("transform", event.transform);
+            });
+            svg.call(zoom);
+            
+            // Add arrow markers
+            const defs = svg.append("defs");
+            defs.append("marker")
+                .attr("id", "arrow")
+                .attr("viewBox", "0 -5 10 10")
+                .attr("refX", NODE_WIDTH / 2 + 10)
+                .attr("refY", 0)
+                .attr("markerWidth", 6)
+                .attr("markerHeight", 6)
+                .attr("orient", "auto")
+                .append("path")
+                .attr("d", "M0,-5L10,0L0,5")
+                .attr("fill", "#999");
+                
+            const g = svg.append("g");
+
+            // Use Dagre for layout
+            const gDagre = new dagre.graphlib.Graph();
+            gDagre.setGraph({ rankdir: 'TB', marginx: 20, marginy: 20, ranksep: 60, nodesep: 60 });
+            gDagre.setDefaultEdgeLabel(() => ({}));
+
+            // Add nodes to dagre
+            graphData.nodes.forEach(node => {
+                gDagre.setNode(node.id, { 
+                    label: node.name, 
+                    width: NODE_WIDTH, 
+                    height: NODE_HEIGHT, 
+                    data: node 
+                });
+            });
+
+            // Add edges to dagre
+            graphData.edges.forEach(edge => {
+                gDagre.setEdge(edge.from, edge.to, { data: edge });
+            });
+
+            // Calculate layout
+            dagre.layout(gDagre);
+
+            // Draw Edges
+            const edgeSelection = g.selectAll(".link")
+                .data(gDagre.edges().map(e => gDagre.edge(e)))
+                .enter().append("path")
+                .attr("class", d => {
+                    let cls = "link";
+                    if (d.data?.edge_type) {
+                        if (typeof d.data.edge_type === 'object' && d.data.edge_type.Conditional) cls += " conditional";
+                        if (d.data.edge_type === 'Error') cls += " error";
+                    }
+                    return cls;
+                })
+                .attr("marker-end", "url(#arrow)")
+                .attr("d", d => {
+                    // Curved paths
+                    const generator = d3.line().x(p => p.x).y(p => p.y).curve(d3.curveBasis);
+                    return generator(d.points);
+                });
+
+            // Draw Edge Labels
+            g.selectAll(".edge-label")
+                .data(gDagre.edges().map(e => gDagre.edge(e)))
+                .enter().append("text")
+                .attr("class", "edge-label")
+                .style("font-size", "10px")
+                .style("fill", "#555")
+                .attr("x", d => {
+                    if (d.points.length > 1) return d.points[Math.floor(d.points.length / 2)].x;
+                    return 0;
+                })
+                .attr("y", d => {
+                    if (d.points.length > 1) return d.points[Math.floor(d.points.length / 2)].y - 5;
+                    return 0;
+                })
+                .text(d => d.data?.label || "");
+
+            // Draw Nodes
+            const nodeSelection = g.selectAll(".node")
+                .data(gDagre.nodes().map(v => gDagre.node(v)))
+                .enter().append("g")
+                .attr("class", "node")
+                .attr("id", d => `node-${d.data.id}`)
+                .attr("transform", d => `translate(${d.x},${d.y})`)
+                .on("mouseover", showTooltip)
+                .on("mouseout", hideTooltip);
+
+            nodeSelection.append("rect")
+                .attr("class", d => `color-${d.data.node_type || 'Default'}`)
+                .attr("x", -NODE_WIDTH / 2)
+                .attr("y", -NODE_HEIGHT / 2)
+                .attr("width", NODE_WIDTH)
+                .attr("height", NODE_HEIGHT);
+
+            nodeSelection.append("text")
+                .attr("class", "title")
+                .attr("text-anchor", "middle")
+                .attr("y", -5)
+                .style("fill", "#fff")
+                .style("text-shadow", "1px 1px 2px #000") // readibility
+                .text(d => d.data.name.length > 20 ? d.data.name.substring(0, 17) + '...' : d.data.name);
+                
+            nodeSelection.append("text")
+                .attr("text-anchor", "middle")
+                .attr("y", 15)
+                .style("fill", "#eee")
+                .text(d => d.data.node_type);
+
+            // Center graph
+            if (gDagre.nodes().length > 0) {
+                const graphWidth = gDagre.graph().width;
+                const graphHeight = gDagre.graph().height;
+                const scale = Math.min(1, Math.min(width / graphWidth, height / graphHeight) * 0.9);
+                const tx = (width - graphWidth * scale) / 2;
+                const ty = (height - graphHeight * scale) / 2;
+                svg.call(zoom.transform, d3.zoomIdentity.translate(tx, ty).scale(scale));
+            }
+        }
+
+        function showTooltip(event, d) {
+            const tooltip = d3.select("#tooltip");
+            tooltip.transition().duration(200).style("opacity", .9);
+            
+            let html = `<strong>${d.data.name}</strong><br/>
+                        ID: ${d.data.id}<br/>
+                        Type: ${d.data.node_type}<br/>`;
+            if (d.data.description) {
+                html += `<hr/><em>${d.data.description}</em>`;
+            }
+            
+            // Execution simulation placeholder
+            const currentStatus = d3.select(`#node-${d.data.id}`).attr("data-status");
+            if (currentStatus) {
+                html += `<hr/><strong>Status:</strong> ${currentStatus}`;
+            }
+
+            tooltip.html(html)
+                .style("left", (event.pageX + 10) + "px")
+                .style("top", (event.pageY - 28) + "px");
+        }
+
+        function hideTooltip() {
+            d3.select("#tooltip").transition().duration(500).style("opacity", 0);
+        }
+
+        // --- Demo Mock Data --- //
+        function getMockGraph() {
+            return {
+                id: "demo1",
+                name: "Demo Workflow",
+                nodes: [
+                    {id: "n1", name: "Start Request", node_type: "Start", description: "Entry point"},
+                    {id: "n2", name: "Validate Data", node_type: "Task", description: "Format checking"},
+                    {id: "n3", name: "Is Valid?", node_type: "Condition", description: "Check if valid"},
+                    {id: "n4", name: "Log Error", node_type: "Task", description: "Log failure"},
+                    {id: "n5", name: "Analyze (LLM)", node_type: "Agent", description: "LLM Agent call"},
+                    {id: "n6", name: "Translate (LLM)", node_type: "Agent", description: "LLM Translator"},
+                    {id: "n7", name: "Format Report", node_type: "Task", description: "JSON format"},
+                    {id: "n8", name: "End", node_type: "End", description: "Done"}
+                ],
+                edges: [
+                    {from: "n1", to: "n2", edge_type: "Normal"},
+                    {from: "n2", to: "n3", edge_type: "Normal"},
+                    {from: "n3", to: "n4", edge_type: {Conditional: "false"}, label: "false"},
+                    {from: "n3", to: "n5", edge_type: {Conditional: "true"}, label: "true"},
+                    {from: "n3", to: "n6", edge_type: {Conditional: "true"}, label: "true"},
+                    {from: "n5", to: "n7", edge_type: "Normal"},
+                    {from: "n6", to: "n7", edge_type: "Normal"},
+                    {from: "n7", to: "n8", edge_type: "Normal"},
+                    {from: "n4", to: "n8", edge_type: "Normal"}
+                ]
+            };
+        }
+
+        // Connect events
+        document.getElementById('workflow-selector').addEventListener('change', (e) => {
+            if (e.target.value) {
+                loadGraph(e.target.value);
+            } else {
+                d3.select("#svg").selectAll("*").remove();
+            }
+        });
+
+        fetchWorkflows();
+    </script>
+</body>
+</html>

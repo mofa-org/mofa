@@ -61,6 +61,35 @@ impl Default for ExecutorConfig {
     }
 }
 
+/// 执行事件
+#[derive(Debug, Clone)]
+pub enum ExecutionEvent {
+    /// 工作流开始
+    WorkflowStarted {
+        workflow_id: String,
+        execution_id: String,
+        graph_json: Option<serde_json::Value>,
+    },
+    /// 工作流完成
+    WorkflowCompleted {
+        workflow_id: String,
+        execution_id: String,
+        status: WorkflowStatus,
+    },
+    /// 节点开始
+    NodeStarted { node_id: String },
+    /// 节点完成
+    NodeCompleted { node_id: String, result: NodeResult },
+    /// 节点失败
+    NodeFailed { node_id: String, error: String },
+    /// 检查点创建
+    CheckpointCreated { label: String },
+    /// 外部事件
+    ExternalEvent {
+        event_type: String,
+        data: WorkflowValue,
+    },
+}
 
 /// 工作流执行器
 /// Workflow Executor

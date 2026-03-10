@@ -9,6 +9,27 @@ use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet, VecDeque};
 use tracing::{debug, warn};
 
+/// 工作流节点 DTO (用于序列化和 UI 可视化)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WorkflowNodeDto {
+    pub id: String,
+    pub name: String,
+    pub node_type: String,
+    pub description: String,
+}
+
+/// 工作流图 DTO (用于序列化和 UI 可视化)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WorkflowGraphDto {
+    pub id: String,
+    pub name: String,
+    pub description: String,
+    pub nodes: Vec<WorkflowNodeDto>,
+    pub edges: Vec<EdgeConfig>,
+    pub start_node: Option<String>,
+    pub end_nodes: Vec<String>,
+}
+
 /// 边类型
 /// Edge type
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -571,63 +592,53 @@ impl WorkflowGraph {
         dot
     }
 
-    /// Export to JSON format (for web visualization)
-    pub fn to_json(&self) -> serde_json::Value {
-        let nodes: Vec<serde_json::Value> = self
+    /// 导出为 JSON DTO 格式（用于可视化 UI）
+    pub fn to_json_dto(&self) -> WorkflowGraphDto {
+        let mut nodes: Vec<WorkflowNodeDto> = self
             .nodes
-            .iter()
-            .map(|(node_id, node)| {
-                let node_type_str = match node.node_type() {
-                    NodeType::Start => "start",
-                    NodeType::End => "end",
-                    NodeType::Task => "task",
-                    NodeType::Agent => "agent",
-                    NodeType::Condition => "condition",
-                    NodeType::Parallel => "parallel",
-                    NodeType::Join => "join",
-                    NodeType::Loop => "loop",
-                    NodeType::Wait => "wait",
-                    NodeType::Transform => "transform",
-                    NodeType::SubWorkflow => "sub_workflow",
-                };
-                serde_json::json!({
-                    "id": node_id,
-                    "name": node.config.name,
-                    "type": node_type_str,
-                    "description": node.config.description,
-                })
+            .values()
+            .map(|node| WorkflowNodeDto {
+                id: node.config.id.clone(),
+                name: node.config.name.clone(),
+                // Convert NodeType enum to string representation
+                node_type: match node.node_type() {
+                    NodeType::Start => "Start".to_string(),
+                    NodeType::End => "End".to_string(),
+                    NodeType::Task => "Task".to_string(),
+                    NodeType::Agent => "Agent".to_string(),
+                    NodeType::Condition => "Condition".to_string(),
+                    NodeType::Parallel => "Parallel".to_string(),
+                    NodeType::Join => "Join".to_string(),
+                    NodeType::Loop => "Loop".to_string(),
+                    NodeType::SubWorkflow => "SubWorkflow".to_string(),
+                    NodeType::Wait => "Wait".to_string(),
+                    NodeType::Transform => "Transform".to_string(),
+                },
+                description: node.config.description.clone(),
             })
             .collect();
+            
+        // Sort nodes by ID for deterministic output
+        nodes.sort_by(|a, b| a.id.cmp(&b.id));
 
-        let edges: Vec<serde_json::Value> = self
+        let mut edges_flat: Vec<EdgeConfig> = self
             .edges
             .values()
-            .flatten()
-            .map(|edge| {
-                let edge_type_str = match &edge.edge_type {
-                    EdgeType::Normal => "normal",
-                    EdgeType::Conditional(_) => "conditional",
-                    EdgeType::Error => "error",
-                    EdgeType::Default => "default",
-                };
-                serde_json::json!({
-                    "from": edge.from,
-                    "to": edge.to,
-                    "edge_type": edge_type_str,
-                    "label": edge.label,
-                })
-            })
+            .flat_map(|e| e.clone())
             .collect();
+            
+        // Sort edges for deterministic output
+        edges_flat.sort_by(|a, b| a.from.cmp(&b.from).then(a.to.cmp(&b.to)));
 
-        serde_json::json!({
-            "id": self.id,
-            "name": self.name,
-            "description": self.description,
-            "nodes": nodes,
-            "edges": edges,
-            "start_node": self.start_node,
-            "end_nodes": self.end_nodes,
-        })
+        WorkflowGraphDto {
+            id: self.id.clone(),
+            name: self.name.clone(),
+            description: self.description.clone(),
+            nodes,
+            edges: edges_flat,
+            start_node: self.start_node.clone(),
+            end_nodes: self.end_nodes.clone(),
+        }
     }
 }
 
