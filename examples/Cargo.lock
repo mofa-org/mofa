@@ -915,6 +915,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "cli_doctor_demo"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "colored",
+ "serde",
+ "serde_json",
+ "tempfile",
+]
+
+[[package]]
 name = "cli_plugin_lifecycle"
 version = "0.1.0"
 dependencies = [
@@ -3770,6 +3781,7 @@ dependencies = [
 name = "mofa-cli"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
  "async-trait",
  "chrono",
  "clap",
