@@ -44,6 +44,7 @@ linux-candle = ["dep:candle-core", "dep:candle-transformers"]
 # Enable HTTP API endpoints for HITL (requires axum)
 http-api = ["dep:axum"]
 
+
 [dependencies]
 # Workspace dependencies
 async-trait.workspace = true
@@ -59,6 +60,7 @@ tracing.workspace = true
 rand.workspace = true
 # YAML config parsing
 serde_yaml = "0.9"
+
 
 # HTTP client (transcription + HTTP providers)
 reqwest = { workspace = true, features = [
@@ -154,6 +156,9 @@ parking_lot.workspace = true
 # Enable with: features = ["linux-candle"]
 candle-core = { version = "0.8", optional = true }
 candle-transformers = { version = "0.8", optional = true }
+
+# Cron expression parsing for scheduled agent execution
+cron.workspace = true
 
 [lints]
 workspace = true

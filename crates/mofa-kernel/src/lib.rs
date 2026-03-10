@@ -62,6 +62,12 @@ pub use metrics::*;
 // Human-in-the-Loop (HITL) module
 pub mod hitl;
 pub use hitl::*;
+// Provider pricing registry (LLM cost calculation)
+pub mod pricing;
+
+// Budget configuration & enforcement
+pub mod budget;
+
 // Structured output parsing with JSON schema validation
 pub mod structured_output;
 pub use structured_output::StructuredOutput;
@@ -71,13 +77,18 @@ pub mod security;
 // Gateway routing abstractions (kernel-level traits for agent request dispatch)
 pub mod gateway;
 pub use gateway::{
-    GatewayConfigError, GatewayContext, GatewayRequest, GatewayResponse, GatewayRoute, HttpMethod,
-    RegistryError, RouteMatch, RouteRegistry, RoutingContext,
+    AgentResponse, ApiKeyStore, AuthClaims, AuthError, AuthProvider, GatewayConfigError,
+    GatewayContext, GatewayRequest, GatewayResponse, GatewayRoute, HttpMethod, RegistryError,
+    RequestEnvelope, RouteMatch, RouteRegistry, RoutingContext,
 };
 
 // Scheduler kernel contract (traits, types, errors for periodic agent execution)
 pub mod scheduler;
 pub use scheduler::{
     AgentScheduler, Clock, MissedTickPolicy, ScheduleDefinition,
-    ScheduleHandle, ScheduleInfo, SchedulerError,
+    ScheduleHandle, ScheduleInfo, ScheduledAgentRunner, SchedulerError,
 };
+
+// Speech kernel contracts (traits and types for TTS/ASR)
+pub mod speech;
+pub use speech::{AsrAdapter, TtsAdapter};

@@ -225,6 +225,9 @@ pub struct ChainAgent {
     /// 是否详细输出
     /// Enable verbose output
     verbose: bool,
+    /// 超时时间 (毫秒)
+    /// Timeout in milliseconds
+    timeout_ms: Option<u64>,
 }
 
 /// 输入转换函数类型
@@ -240,6 +243,7 @@ impl ChainAgent {
             transform: None,
             continue_on_error: false,
             verbose: true,
+            timeout_ms: None,
         }
     }
 
@@ -300,6 +304,13 @@ impl ChainAgent {
         self
     }
 
+    /// 设置超时时间
+    /// Set timeout duration
+    pub fn with_timeout_ms(mut self, timeout_ms: u64) -> Self {
+        self.timeout_ms = Some(timeout_ms);
+        self
+    }
+
     /// 执行链式 Agent
     /// Run Chain Agent
     pub async fn run(&self, initial_task: impl Into<String>) -> LLMResult<ChainResult> {
@@ -319,7 +330,22 @@ impl ChainAgent {
 
             // 执行 Agent
             // Execute Agent
-            let result = agent.run(&current_input).await;
+            let result = if let Some(t_ms) = self.timeout_ms {
+                match tokio::time::timeout(
+                    std::time::Duration::from_millis(t_ms),
+                    agent.run(&current_input),
+                )
+                .await
+                {
+                    Ok(res) => res,
+                    Err(_) => Err(crate::llm::types::LLMError::Timeout(format!(
+                        "Agent '{}' timed out after {}ms in chain",
+                        name, t_ms
+                    ))),
+                }
+            } else {
+                agent.run(&current_input).await
+            };
 
             match result {
                 Ok(output) => {
@@ -1334,10 +1360,24 @@ mod tests {
     fn test_chain_agent_builder() {
         let chain = ChainAgent::new()
             .with_continue_on_error(true)
+            .with_timeout_ms(1000)
             .with_verbose(false);
 
         assert!(chain.is_empty());
         assert!(!chain.verbose);
+        assert!(chain.continue_on_error);
+        assert_eq!(chain.timeout_ms, Some(1000));
+    }
+
+    #[test]
+    fn test_chain_agent_timeout_config() {
+        let chain = ChainAgent::new()
+            .with_continue_on_error(true)
+            .with_timeout_ms(1500)
+            .with_verbose(false);
+
+        assert!(chain.is_empty());
+        assert_eq!(chain.timeout_ms, Some(1500));
         assert!(chain.continue_on_error);
     }
 
