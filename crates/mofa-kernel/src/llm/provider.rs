@@ -90,6 +90,17 @@ pub trait LLMProvider: Send + Sync {
     }
 }
 
+#[async_trait]
+impl<T: LLMProvider + ?Sized> crate::llm::hcp::HealthProbe for T {
+    async fn check_health(&self) -> AgentResult<crate::llm::hcp::HealthStatus> {
+        match self.health_check().await {
+            Ok(true) => Ok(crate::llm::hcp::HealthStatus::Healthy),
+            Ok(false) => Ok(crate::llm::hcp::HealthStatus::Degraded),
+            Err(_) => Ok(crate::llm::hcp::HealthStatus::Unhealthy),
+        }
+    }
+}
+
 /// Model information
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct ModelInfo {
