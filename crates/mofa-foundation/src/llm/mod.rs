@@ -328,6 +328,10 @@ pub mod token_budget;
 pub mod vision;
 pub mod stream_adapter;
 pub mod stream_bridge;
+pub mod sse;
+#[cfg(feature = "websocket")]
+pub mod ws;
+
 // Audio processing
 pub mod transcription;
 
@@ -344,6 +348,9 @@ pub use stream_bridge::{stream_error_to_llm_error, token_stream_to_events, token
 pub use tool_executor::ToolExecutor;
 pub use tool_schema::{normalize_schema, parse_schema, validate_schema};
 pub use types::*;
+pub use sse::{SseStream, decode_sse, transport_error_to_llm_error};
+#[cfg(feature = "websocket")]
+pub use ws::{WsStream, decode_ws};
 
 // Re-export 标准 LLM Agent
 // Re-export standard LLM Agent

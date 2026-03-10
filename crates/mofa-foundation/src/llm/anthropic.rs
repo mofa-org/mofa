@@ -470,57 +470,38 @@ fn parse_sse_event(
 
 /// Parse raw SSE lines from a byte stream into `ChatCompletionChunk` items
 fn parse_anthropic_sse(resp: reqwest::Response) -> ChatStream {
-    // State: (response, line_buffer, event_type, msg_id, model)
+    use crate::llm::sse::{decode_sse, transport_error_to_llm_error};
+    use futures::StreamExt;
+
+    let sse_stream = decode_sse(resp);
+
     let stream = futures::stream::unfold(
-        (
-            resp,
-            String::new(),
-            String::new(),
-            String::new(),
-            String::new(),
-        ),
-        |(mut resp, mut buf, mut event_type, mut msg_id, mut model)| async move {
+        (sse_stream, String::new(), String::new()),
+        |(mut sse, mut msg_id, mut model)| async move {
+            use std::pin::Pin;
+
             loop {
-                // Try to extract a complete line from the buffer.
-                if let Some(newline_pos) = buf.find('\n') {
-                    let line = buf[..newline_pos].trim_end_matches('\r').to_string();
-                    buf = buf[newline_pos + 1..].to_string();
+                let frame = Pin::as_mut(&mut sse).next().await?;
 
-                    if line.is_empty() {
-                        continue;
-                    }
-
-                    if let Some(rest) = line.strip_prefix("event: ") {
-                        event_type = rest.to_string();
-                        continue;
-                    }
-
-                    if let Some(json_str) = line.strip_prefix("data: ") {
-                        let chunk = parse_sse_event(&event_type, json_str, &mut msg_id, &mut model);
-
-                        if let Some(SseAction::Stop) = chunk {
-                            return None;
+                match frame {
+                    Ok(f) => {
+                        let action = parse_sse_event(
+                            &f.event_type,
+                            &f.data,
+                            &mut msg_id,
+                            &mut model,
+                        );
+                        match action {
+                            Some(SseAction::Emit(chunk)) => {
+                                return Some((chunk, (sse, msg_id, model)));
+                            }
+                            Some(SseAction::Stop) => return None,
+                            None => continue,
                         }
-                        if let Some(SseAction::Emit(c)) = chunk {
-                            return Some((c, (resp, buf, event_type, msg_id, model)));
-                        }
-                        continue;
-                    }
-
-                    continue;
-                }
-
-                // Need more bytes from the network
-                match resp.chunk().await {
-                    Ok(Some(bytes)) => {
-                        buf.push_str(&String::from_utf8_lossy(&bytes));
-                    }
-                    Ok(None) => {
-                        return None;
                     }
                     Err(e) => {
-                        let err: LLMError = LLMError::NetworkError(e.to_string());
-                        return Some((Err(err), (resp, buf, event_type, msg_id, model)));
+                        let err = transport_error_to_llm_error(e);
+                        return Some((Err(err), (sse, msg_id, model)));
                     }
                 }
             }
@@ -1011,5 +992,49 @@ data: {\"type\":\"message_stop\"}\n";
             contents[2]["source"]["data"],
             "AAAAIGZ0eXBtcDQyAAAAAG1wNDJpc29tYXZjMQAAADhmoW9v..."
         );
+    }
+
+    /// integration test hits the Anthropic API over the network
+    #[tokio::test]
+    #[ignore = "requires ANTHROPIC_API_KEY env var and network access"]
+    async fn test_anthropic_streaming_real() {
+        use futures::StreamExt;
+        use crate::llm::provider::LLMProvider;
+
+        let api_key = std::env::var("ANTHROPIC_API_KEY")
+            .expect("Set ANTHROPIC_API_KEY to run this test");
+
+        let provider = AnthropicProvider::new(api_key);
+        let request = ChatCompletionRequest::new("claude-3-5-haiku-20241022")
+            .user("Count from 1 to 5. Just the numbers separated by spaces, nothing else.")
+            .max_tokens(30);
+
+        let mut stream = provider
+            .chat_stream(request)
+            .await
+            .expect("chat_stream() should succeed");
+
+        let mut full_text = String::new();
+        let mut chunk_count = 0usize;
+        let mut got_finish_reason = false;
+
+        while let Some(result) = stream.next().await {
+            let chunk = result.expect("stream item should not be an error");
+            chunk_count += 1;
+            if let Some(choice) = chunk.choices.first() {
+                if let Some(content) = &choice.delta.content {
+                    print!("{}", content);
+                    full_text.push_str(content);
+                }
+                if choice.finish_reason.is_some() {
+                    got_finish_reason = true;
+                }
+            }
+        }
+        println!("\n {} chunks received: ", chunk_count);
+
+        assert!(!full_text.is_empty(), "Should have received non-empty content");
+        assert!(chunk_count > 1, "Should have received multiple streaming chunks");
+        assert!(got_finish_reason, "Stream should end with a finish_reason chunk");
     }
 }

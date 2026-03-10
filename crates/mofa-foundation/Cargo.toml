@@ -41,6 +41,8 @@ parallel-compression = ["dep:rayon"]
 compression-cache = ["dep:sha2"]
 # Enable Linux Candle on-device ML inference (Hugging Face Candle)
 linux-candle = ["dep:candle-core", "dep:candle-transformers"]
+# Enable WebSocket transport for streaming providers
+websocket = ["dep:tokio-tungstenite"]
 
 
 [dependencies]
@@ -68,6 +70,10 @@ reqwest = { workspace = true, features = [
     "brotli",
     "deflate",
 ] }
+http = "1"
+
+# WebSocket transport (optional)
+tokio-tungstenite = { version = "0.24", optional = true }
 
 # Config parsing (multi-format)
 config.workspace = true
