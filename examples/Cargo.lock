@@ -87,6 +87,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "agent_memory"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "mofa-foundation",
+ "mofa-kernel",
+ "tokio",
+ "tracing",
+ "tracing-subscriber 0.3.22",
+]
+
+[[package]]
 name = "agent_with_plugins_and_rhai"
 version = "0.1.0"
 dependencies = [
@@ -912,6 +924,17 @@ dependencies = [
  "serde_json",
  "tempfile",
  "tokio",
+]
+
+[[package]]
+name = "cli_doctor_demo"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "colored",
+ "serde",
+ "serde_json",
+ "tempfile",
 ]
 
 [[package]]
@@ -3756,6 +3779,7 @@ dependencies = [
 name = "mofa-cli"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
  "async-trait",
  "chrono",
  "clap",

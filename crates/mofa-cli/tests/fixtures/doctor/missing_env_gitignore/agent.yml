@@ -1,0 +1,3 @@
+agent:
+  id: insecure-env-agent
+  name: Insecure Env Agent
