@@ -8,7 +8,7 @@ use tower_http::cors::{Any, CorsLayer};
 use tower_http::trace::TraceLayer;
 use tracing::info;
 
-use crate::handlers::{agents_router, chat_router, health_router};
+use crate::handlers::{agents_router, chat_router, health_router, openai_router};
 use crate::middleware::RateLimiter;
 use crate::state::AppState;
 use mofa_runtime::agent::registry::AgentRegistry;
@@ -120,6 +120,7 @@ impl GatewayServer {
             .merge(health_router())
             .merge(agents_router())
             .merge(chat_router())
+            .merge(openai_router())
             .with_state(state);
 
         if self.config.enable_tracing {
@@ -129,12 +130,7 @@ impl GatewayServer {
         if self.config.enable_cors {
             let cors = CorsLayer::new()
                 .allow_origin(Any)
-                .allow_methods([
-                    Method::GET,
-                    Method::POST,
-                    Method::DELETE,
-                    Method::OPTIONS,
-                ])
+                .allow_methods([Method::GET, Method::POST, Method::DELETE, Method::OPTIONS])
                 .allow_headers(Any);
             router = router.layer(cors);
         }
