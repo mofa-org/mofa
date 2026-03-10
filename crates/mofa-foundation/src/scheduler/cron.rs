@@ -158,10 +158,15 @@ pub struct CronScheduler {
     schedules: Arc<RwLock<HashMap<String, ScheduleEntry>>>,
     /// Clock for time operations (injectable for testing).
     clock: Arc<dyn Clock>,
-    /// Optional path to a JSON file where schedule definitions are persisted.
-    /// When set, definitions are saved after every successful `register()` and
-    /// reloaded by [`CronScheduler::start`].
-    persistence_path: Option<std::path::PathBuf>,
+    /// Optional persistence backend. When set, definitions are saved after every
+    /// successful `register()` / `unregister()` call and reloaded by
+    /// [`CronScheduler::start`]. Bundles both `file_path` and `tmp_path` so
+    /// `save_to_disk` never has to reconstruct it.
+    persistence: Option<SchedulePersistence>,
+    /// Handles returned by `register()` during [`CronScheduler::start`].
+    /// Kept alive here so the cancel-on-drop `ScheduleHandle` design does not
+    /// immediately abort the just-started tasks.
+    startup_handles: Arc<RwLock<Vec<ScheduleHandle>>>,
 }
 
 impl CronScheduler {
@@ -186,7 +191,8 @@ impl CronScheduler {
             global_semaphore: Arc::new(Semaphore::new(global_max_concurrent)),
             schedules: Arc::new(RwLock::new(HashMap::new())),
             clock: Arc::new(SystemClock),
-            persistence_path: None,
+            persistence: None,
+            startup_handles: Arc::new(RwLock::new(Vec::new())),
         }
     }
 
@@ -206,7 +212,8 @@ impl CronScheduler {
             global_semaphore: Arc::new(Semaphore::new(global_max_concurrent)),
             schedules: Arc::new(RwLock::new(HashMap::new())),
             clock,
-            persistence_path: None,
+            persistence: None,
+            startup_handles: Arc::new(RwLock::new(Vec::new())),
         }
     }
 }
@@ -309,7 +316,7 @@ impl CronScheduler {
     /// successful [`AgentScheduler::register`] call and reloaded by
     /// [`CronScheduler::start`].
     pub fn with_persistence(mut self, path: impl Into<std::path::PathBuf>) -> Self {
-        self.persistence_path = Some(path.into());
+        self.persistence = Some(SchedulePersistence::new(path.into()));
         self
     }
 
@@ -324,22 +331,17 @@ impl CronScheduler {
     /// Returns [`SchedulerError::PersistenceError`] if the file exists but
     /// cannot be read or parsed.
     pub async fn start(&self) -> Result<(), SchedulerError> {
-        let Some(ref path) = self.persistence_path else {
+        let Some(ref backend) = self.persistence else {
             return Ok(());
         };
 
-        let content = match tokio::fs::read_to_string(path).await {
-            Ok(c) => c,
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(()),
-            Err(e) => return Err(SchedulerError::PersistenceError(e.to_string())),
-        };
+        let defs = backend.load().await?;
 
-        let defs: Vec<ScheduleDefinition> = serde_json::from_str(&content)
-            .map_err(|e| SchedulerError::PersistenceError(e.to_string()))?;
-
+        let mut handles = self.startup_handles.write().await;
         for def in defs {
             match self.register(def).await {
-                Ok(_) | Err(SchedulerError::AlreadyExists(_)) => {}
+                Ok(handle) => handles.push(handle),
+                Err(SchedulerError::AlreadyExists(_)) => {}
                 Err(e) => return Err(e),
             }
         }
@@ -352,7 +354,7 @@ impl CronScheduler {
     /// a warning is logged but the error is not propagated — in-memory state
     /// is always the authoritative source of truth for the running scheduler.
     async fn save_to_disk(&self) {
-        let Some(ref path) = self.persistence_path else {
+        let Some(ref backend) = self.persistence else {
             return;
         };
 
@@ -361,11 +363,10 @@ impl CronScheduler {
             schedules.values().map(|e| e.definition.clone()).collect()
         };
 
-        let backend = SchedulePersistence::new(path);
         if let Err(e) = backend.save(&defs).await {
             tracing::warn!(
                 "CronScheduler: failed to persist schedules to {:?}: {}",
-                path,
+                backend.file_path(),
                 e
             );
         }
@@ -429,9 +430,8 @@ impl CronScheduler {
                                         }
                                     };
 
-                                let per_schedule_semaphore_clone = Arc::clone(&per_schedule_semaphore);
                                 let schedule_permit =
-                                    match Arc::clone(&per_schedule_semaphore_clone).try_acquire_owned() {
+                                    match Arc::clone(&per_schedule_semaphore).try_acquire_owned() {
                                         Ok(p) => p,
                                         Err(_) => {
                                             tracing::debug!(

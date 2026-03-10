@@ -41,6 +41,11 @@ impl SchedulePersistence {
         }
     }
 
+    /// Return the canonical path to the persistence file.
+    pub fn file_path(&self) -> &Path {
+        &self.file_path
+    }
+
     /// Save schedule definitions to disk using atomic writes.
     ///
     /// The write process is:
