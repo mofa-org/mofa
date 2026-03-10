@@ -8,6 +8,9 @@ use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use tokio::sync::{RwLock, broadcast};
 
+/// Default capacity for broadcast channels in the agent bus.
+const DEFAULT_BROADCAST_CHANNEL_CAPACITY: usize = 100;
+
 /// 通信模式枚举
 /// Communication mode enumeration
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
@@ -44,7 +47,7 @@ impl AgentBus {
     /// 创建通信总线实例
     /// Create a communication bus instance
     pub fn new() -> Self {
-        let (broadcast_sender, _) = broadcast::channel(100);
+        let (broadcast_sender, _) = broadcast::channel(DEFAULT_BROADCAST_CHANNEL_CAPACITY);
         Self {
             agent_channels: Arc::new(RwLock::new(HashMap::new())),
             topic_subscribers: Arc::new(RwLock::new(HashMap::new())),
@@ -77,7 +80,7 @@ impl AgentBus {
 
         // 创建新的广播通道
         // Create a new broadcast channel
-        let (sender, _) = broadcast::channel(100);
+        let (sender, _) = broadcast::channel(DEFAULT_BROADCAST_CHANNEL_CAPACITY);
         entry.insert(mode.clone(), sender);
 
         // PubSub 模式需注册订阅者映射
