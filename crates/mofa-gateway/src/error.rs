@@ -253,14 +253,14 @@ impl IntoResponse for GatewayError {
                 msg.clone(),
             ),
             GatewayError::HealthCheckFailed(msg) => (
-                StatusCode::INTERNAL_SERVER_ERROR,
+                StatusCode::SERVICE_UNAVAILABLE,
                 "HEALTH_CHECK_FAILED",
                 msg.clone(),
             ),
             GatewayError::RoutingFailed(msg) => {
                 (StatusCode::BAD_GATEWAY, "ROUTING_FAILED", msg.clone())
             }
-            GatewayError::Timeout(msg) => (StatusCode::GATEWAY_TIMEOUT, "TIMEOUT", msg.clone()),
+            GatewayError::Timeout(msg) => (StatusCode::REQUEST_TIMEOUT, "TIMEOUT", msg.clone()),
             GatewayError::Network(msg) => (StatusCode::BAD_GATEWAY, "NETWORK_ERROR", msg.clone()),
             GatewayError::Internal(msg) => (
                 StatusCode::INTERNAL_SERVER_ERROR,
