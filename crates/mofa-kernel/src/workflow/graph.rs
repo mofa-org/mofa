@@ -11,6 +11,7 @@ use std::pin::Pin;
 
 use crate::agent::error::AgentResult;
 
+use super::policy::NodePolicy;
 use super::{Command, GraphConfig, GraphState, Reducer, RuntimeContext};
 
 /// Type alias for the boxed stream returned by graph execution.
@@ -215,6 +216,29 @@ pub trait StateGraph: Send + Sync {
     /// Set the graph configuration
     fn with_config(&mut self, config: GraphConfig) -> &mut Self;
 
+    /// Attach a fault-tolerance [`NodePolicy`] to a specific node.
+    ///
+    /// Policies are opt-in and the default is a no-op (errors propagate as-is).
+    ///
+    /// # Example
+    ///
+    /// ```rust,ignore
+    /// use mofa_kernel::workflow::policy::{NodePolicy, RetryCondition};
+    ///
+    /// graph.with_node_policy("llm_call", NodePolicy {
+    ///     max_retries: 3,
+    ///     retry_backoff_ms: 200,
+    ///     retry_condition: RetryCondition::OnTransient(vec!["timeout".to_string()]),
+    ///     fallback_node: Some("fallback_handler".to_string()),
+    ///     circuit_open_after: 5,
+    ///     ..Default::default()
+    /// });
+    /// ```
+    fn with_node_policy(&mut self, node_id: impl Into<String>, policy: NodePolicy) -> &mut Self;
+
+    /// Retrieve the [`NodePolicy`] for a node, if one has been set.
+    fn node_policy(&self, node_id: &str) -> Option<&NodePolicy>;
+
     /// Get the graph ID
     fn id(&self) -> &str;
 
@@ -288,23 +312,34 @@ pub enum StreamEvent<S: GraphState, V = serde_json::Value> {
         node_id: Option<String>,
         error: String,
     },
-    /// 瞬态失败后正在重试节点
-    /// A node is being retried after a transient failure
+    /// A node execution failed and is being retried.
     NodeRetry {
+        /// The node being retried
         node_id: String,
+        /// Which retry attempt this is (1-indexed)
         attempt: u32,
+        /// Error message from the failed attempt
         error: String,
     },
-    /// 节点永久失败，执行正在回退
-    /// A node failed permanently and execution is falling back
+    /// Execution has been routed from a failed node to its fallback node.
     NodeFallback {
+        /// The primary node that failed
         from_node: String,
+        /// The fallback node receiving execution
         to_node: String,
+        /// Human-readable reason for the fallback
         reason: String,
     },
-    /// 由于重复失败，节点的断路器已打开
-    /// A node's circuit breaker has opened due to repeated failures
-    CircuitOpen { node_id: String },
+    /// A node's circuit breaker has opened due to repeated failures.
+    CircuitOpened {
+        /// The node whose circuit is now open
+        node_id: String,
+    },
+    /// A node's circuit breaker has returned to the Closed state.
+    CircuitClosed {
+        /// The node whose circuit is now closed
+        node_id: String,
+    },
 }
 
 /// Result of a single step execution
