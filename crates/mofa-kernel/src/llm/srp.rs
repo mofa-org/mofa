@@ -10,36 +10,13 @@
 //! * tolerating slow or stalled backends via periodic keepalives
 //!   (`StreamEvent::Heartbeat`)
 //!
-//! # Feature flag
-//!
-//! This module requires the **`streaming`** Cargo feature:
-//!
-//! ```toml
-//! [dependencies]
-//! mofa-kernel = { version = "…", features = ["streaming"] }
-//! ```
+//!   (`StreamEvent::Heartbeat`)
 //!
 //! # Quick start
 //!
 //! ```rust,ignore
-//! use mofa_kernel::llm::srp::{stream_inference, SrpConfig, StreamEvent};
-//! use tokio_util::sync::CancellationToken;
-//! use futures::StreamExt;
-//!
-//! let token = CancellationToken::new();
-//! let mut events = stream_inference(&provider, request, token.clone(), SrpConfig::default())
-//!     .await
-//!     .expect("stream started");
-//!
-//! while let Some(event) = events.next().await {
-//!     match event {
-//!         StreamEvent::Delta(chunk) => print!("{}", chunk.delta),
-//!         StreamEvent::Done         => break,
-//!         StreamEvent::Cancelled    => { eprintln!("cancelled"); break; }
-//!         StreamEvent::Heartbeat    => { /* still alive */ }
-//!         _                         => {} // #[non_exhaustive] catch-all
-//!     }
-//! }
+//! use mofa_kernel::llm::srp::{SrpConfig, StreamEvent};
+//! // Handled entirely via LLMClient in mofa_foundation
 //! ```
 
 use std::time::Duration;
@@ -48,15 +25,6 @@ use async_trait::async_trait;
 use futures::StreamExt as _;
 use thiserror::Error;
 use tokio::sync::mpsc;
-use tokio_stream::wrappers::ReceiverStream;
-use tokio_util::sync::CancellationToken;
-use tracing::warn;
-
-use crate::agent::{AgentError, AgentResult};
-
-use super::provider::LLMProvider;
-use super::streaming::StreamChunk;
-use super::types::ChatCompletionRequest;
 
 // ─── StreamEvent ──────────────────────────────────────────────────────────
 
@@ -184,7 +152,7 @@ impl<T: Send + 'static> InferenceSink<T> for mpsc::Sender<StreamEvent<T>> {
 
 // ─── SrpConfig ────────────────────────────────────────────────────────────
 
-/// Configuration for [`stream_inference`].
+/// Configuration for the Streaming Response Protocol.
 ///
 /// ```rust
 /// use std::time::Duration;
@@ -223,157 +191,12 @@ impl Default for SrpConfig {
     }
 }
 
-// ─── stream_inference ─────────────────────────────────────────────────────
-
-/// Map [`LLMProvider::chat_stream`] output into [`StreamEvent`] framing.
-///
-/// Spawns a background task that drives the underlying provider stream and
-/// forwards events over a bounded [`mpsc`] channel.  The returned
-/// [`ReceiverStream`] is the consumer side of that channel.
-///
-/// # Back-pressure
-///
-/// The internal channel has capacity [`SrpConfig::channel_capacity`].  When
-/// the channel is full the producer task awaits, propagating back-pressure to
-/// the underlying provider connection.
-///
-/// # Cancellation
-///
-/// Pass a [`CancellationToken`] that you control.  Calling
-/// `token.cancel()` causes the background task to emit
-/// [`StreamEvent::Cancelled`] and terminate on the **next select iteration**,
-/// which typically takes less than one microsecond after the token is
-/// signalled.
-///
-/// # Heartbeats
-///
-/// If no delta arrives within [`SrpConfig::heartbeat_interval`], the
-/// protocol emits [`StreamEvent::Heartbeat`].  The interval resets on every
-/// received delta so that active streams never send spurious heartbeats.
-///
-/// # Errors
-///
-/// Returns `Err` only if starting the underlying stream itself fails (e.g.
-/// the provider does not support streaming).  Errors that arise *during*
-/// streaming are logged with [`tracing::warn`] and cause the stream to
-/// terminate with [`StreamEvent::Done`].
-///
-/// # Example
-///
-/// ```rust,ignore
-/// use std::time::Duration;
-/// use mofa_kernel::llm::srp::{stream_inference, SrpConfig, StreamEvent};
-/// use tokio_util::sync::CancellationToken;
-/// use futures::StreamExt;
-///
-/// let token = CancellationToken::new();
-/// let mut stream = stream_inference(
-///     &provider,
-///     request,
-///     token.clone(),
-///     SrpConfig { heartbeat_interval: Duration::from_secs(5), ..Default::default() },
-/// ).await?;
-///
-/// while let Some(event) = stream.next().await {
-///     match event {
-///         StreamEvent::Delta(chunk) => print!("{}", chunk.delta),
-///         StreamEvent::Done         => break,
-///         _                         => {}
-///     }
-/// }
-/// ```
-pub async fn stream_inference(
-    provider: &dyn LLMProvider,
-    request: ChatCompletionRequest,
-    token: CancellationToken,
-    config: SrpConfig,
-) -> AgentResult<ReceiverStream<StreamEvent<StreamChunk>>> {
-    // Initiate the underlying stream — this is where auth / network errors
-    // surface, before the channel is created.
-    let mut chat_stream = provider.chat_stream(request).await?;
-
-    // Ensure channel capacity is non-zero to avoid panics from mpsc::channel.
-    let capacity = config.channel_capacity.max(1);
-    let (tx, rx) = mpsc::channel::<StreamEvent<StreamChunk>>(capacity);
-
-    // Ensure heartbeat interval is non-zero to avoid panics from tokio::time::interval.
-    let heartbeat_interval = if config.heartbeat_interval.is_zero() {
-        Duration::from_millis(1)
-    } else {
-        config.heartbeat_interval
-    };
-    tokio::spawn(async move {
-        let mut hb = tokio::time::interval(heartbeat_interval);
-        // Skip the very first tick so we don't immediately send a heartbeat
-        // before any real work has happened.
-        hb.tick().await;
-
-        loop {
-            tokio::select! {
-                // Cancellation is checked first (biased) so a cancelled token
-                // always takes priority over a pending stream item.
-                biased;
-
-                _ = token.cancelled() => {
-                    // Best-effort cancellation notification: do not await on a
-                    // potentially full channel to keep cancellation latency bounded.
-                    let _ = tx.try_send(StreamEvent::Cancelled);
-                    break;
-                }
-
-                item = chat_stream.next() => {
-                    match item {
-                        Some(Ok(chunk)) => {
-                            // Reset the heartbeat timer — we got real data.
-                            hb.reset();
-
-                            let sc = chunk_to_stream_chunk(chunk);
-                            let is_done = sc.is_done();
-                            // Only emit Delta events for non-empty deltas. Some
-                            // providers send a terminal chunk with no content
-                            // (empty delta) together with a finish reason; in
-                            // that case we should not emit an empty Delta that
-                            // confuses consumers — instead emit Done below.
-                            if !sc.delta.is_empty() {
-                                if tx.send(StreamEvent::Delta(sc)).await.is_err() {
-                                    // Receiver dropped — stop silently.
-                                    break;
-                                }
-                            }
-                            if is_done {
-                                let _ = tx.send(StreamEvent::Done).await;
-                                break;
-                            }
-                        }
-                        Some(Err(e)) => {
-                            warn!("srp: stream error from provider: {e}");
-                            let _ = tx.send(StreamEvent::Done).await;
-                            break;
-                        }
-                        None => {
-                            let _ = tx.send(StreamEvent::Done).await;
-                            break;
-                        }
-                    }
-                }
-
-                _ = hb.tick() => {
-                    if tx.send(StreamEvent::Heartbeat).await.is_err() {
-                        break;
-                    }
-                }
-            }
-        }
-    });
-
-    Ok(ReceiverStream::new(rx))
-}
-
 // ─── Internal helpers ─────────────────────────────────────────────────────
 
-/// Convert a raw [`ChatCompletionChunk`](super::types::ChatCompletionChunk)
+/// Convert a raw `ChatCompletionChunk`
 /// into the provider-agnostic [`StreamChunk`].
-fn chunk_to_stream_chunk(chunk: super::types::ChatCompletionChunk) -> StreamChunk {
+pub fn chunk_to_stream_chunk(chunk: super::types::ChatCompletionChunk) -> super::streaming::StreamChunk {
+    use super::streaming::StreamChunk;
     let first = chunk.choices.into_iter().next();
     StreamChunk {
         delta: first
@@ -392,95 +215,11 @@ fn chunk_to_stream_chunk(chunk: super::types::ChatCompletionChunk) -> StreamChun
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::agent::AgentResult;
-    use crate::llm::provider::LLMProvider;
     use crate::llm::streaming::StreamChunk;
     use crate::llm::types::{
-        ChatCompletionChunk, ChatCompletionRequest, ChatCompletionResponse, ChunkChoice,
-        ChunkDelta, EmbeddingRequest, EmbeddingResponse, FinishReason,
+        ChatCompletionChunk, ChunkChoice, ChunkDelta, FinishReason,
     };
-    use futures::StreamExt as _;
     use std::time::Duration;
-    use tokio::time::timeout;
-
-    // ── Mock provider ─────────────────────────────────────────────────────
-
-    /// A minimal `LLMProvider` that streams a fixed set of `ChatCompletionChunk`s.
-    struct MockProvider {
-        chunks: Vec<ChatCompletionChunk>,
-    }
-
-    impl MockProvider {
-        fn text_chunks(words: &[&str]) -> Self {
-            let mut chunks: Vec<ChatCompletionChunk> = words
-                .iter()
-                .map(|w| ChatCompletionChunk {
-                    choices: vec![ChunkChoice {
-                        index: 0,
-                        delta: ChunkDelta {
-                            role: None,
-                            content: Some(w.to_string()),
-                            tool_calls: None,
-                        },
-                        finish_reason: None,
-                    }],
-                })
-                .collect();
-
-            // Terminal chunk with finish_reason = Stop
-            chunks.push(ChatCompletionChunk {
-                choices: vec![ChunkChoice {
-                    index: 0,
-                    delta: ChunkDelta { role: None, content: None, tool_calls: None },
-                    finish_reason: Some(FinishReason::Stop),
-                }],
-            });
-
-            Self { chunks }
-        }
-
-        /// Provider whose stream never yields (always pending).
-        fn pending() -> Self {
-            Self { chunks: vec![] }
-        }
-    }
-
-    #[async_trait::async_trait]
-    impl LLMProvider for MockProvider {
-        fn name(&self) -> &str {
-            "mock"
-        }
-
-        async fn chat(
-            &self,
-            _request: ChatCompletionRequest,
-        ) -> AgentResult<ChatCompletionResponse> {
-            Ok(ChatCompletionResponse { choices: vec![] })
-        }
-
-        fn supports_streaming(&self) -> bool {
-            true
-        }
-
-        async fn chat_stream(
-            &self,
-            _request: ChatCompletionRequest,
-        ) -> AgentResult<crate::llm::provider::ChatStream> {
-            let items = self.chunks.clone();
-            if items.is_empty() {
-                // Return a stream that pends forever so cancellation tests work.
-                let s = futures::stream::pending::<AgentResult<ChatCompletionChunk>>();
-                return Ok(Box::pin(s));
-            }
-            Ok(Box::pin(futures::stream::iter(
-                items.into_iter().map(Ok::<_, crate::agent::error::AgentError>),
-            )))
-        }
-    }
-
-    fn default_request() -> ChatCompletionRequest {
-        ChatCompletionRequest::new("gpt-4o")
-    }
 
     // ── StreamEvent traits ────────────────────────────────────────────────
 
@@ -576,149 +315,6 @@ mod tests {
         )
         .await;
         assert_eq!(result, Err(SinkError::Closed));
-    }
-
-    // ── stream_inference round-trip ───────────────────────────────────────
-
-    #[tokio::test]
-    async fn stream_inference_delivers_delta_and_done() {
-        let provider = MockProvider::text_chunks(&["Hello", " world"]);
-        let token = CancellationToken::new();
-        let cfg = SrpConfig { heartbeat_interval: Duration::from_secs(60), ..Default::default() };
-
-        let mut stream = stream_inference(&provider, default_request(), token, cfg)
-            .await
-            .expect("stream started");
-
-        let mut deltas = Vec::new();
-        while let Some(event) = stream.next().await {
-            match event {
-                StreamEvent::Delta(chunk) => deltas.push(chunk.delta.clone()),
-                StreamEvent::Done => break,
-                StreamEvent::Cancelled => panic!("unexpected Cancelled"),
-                StreamEvent::Heartbeat => {}
-                _ => {}
-            }
-        }
-
-        assert_eq!(deltas, vec!["Hello", " world"]);
-    }
-
-    #[tokio::test]
-    async fn stream_inference_done_event_closes_stream() {
-        let provider = MockProvider::text_chunks(&["tok"]);
-        let token = CancellationToken::new();
-        let cfg = SrpConfig::default();
-
-        let mut events: Vec<String> = vec![];
-        let mut stream = stream_inference(&provider, default_request(), token, cfg)
-            .await
-            .unwrap();
-
-        while let Some(event) = stream.next().await {
-            match &event {
-                StreamEvent::Delta(_) => events.push("delta".into()),
-                StreamEvent::Done => {
-                    events.push("done".into());
-                    break;
-                }
-                _ => {}
-            }
-        }
-
-        assert!(events.contains(&"done".to_string()));
-    }
-
-    // ── Cancellation ─────────────────────────────────────────────────────
-
-    /// Cancellation must terminate the stream in < 5 ms (real time).
-    ///
-    /// We use a provider whose stream never yields so the only termination
-    /// signal is the CancellationToken.  The token is cancelled before we
-    /// even poll, so the first event should be Cancelled.
-    #[tokio::test]
-    async fn cancellation_terminates_stream_quickly() {
-        let provider = MockProvider::pending();
-        let token = CancellationToken::new();
-        let cfg = SrpConfig {
-            // Long heartbeat so it never fires in this test.
-            heartbeat_interval: Duration::from_secs(3600),
-            channel_capacity: 4,
-        };
-
-        let mut stream = stream_inference(&provider, default_request(), token.clone(), cfg)
-            .await
-            .expect("stream started");
-
-        // Cancel immediately — the background task should pick it up on the
-        // next select iteration (biased; cancellation has highest priority).
-        token.cancel();
-
-        let result = timeout(Duration::from_millis(100), stream.next()).await;
-        assert!(result.is_ok(), "stream should produce an event within 100ms");
-
-        match result.unwrap() {
-            Some(StreamEvent::Cancelled) => { /* success */ }
-            other => panic!("expected Cancelled, got {other:?}"),
-        }
-    }
-
-    #[tokio::test]
-    async fn pre_cancelled_token_sends_cancelled_before_deltas() {
-        let provider = MockProvider::text_chunks(&["hello"]);
-        // Token is already cancelled before stream_inference is called.
-        let token = CancellationToken::new();
-        token.cancel();
-
-        let cfg = SrpConfig { heartbeat_interval: Duration::from_secs(60), ..Default::default() };
-        let mut stream = stream_inference(&provider, default_request(), token, cfg)
-            .await
-            .unwrap();
-
-        // The very first event must be Cancelled (biased select, cancellation wins).
-        let first = timeout(Duration::from_millis(100), stream.next())
-            .await
-            .expect("event within 100ms")
-            .expect("some event");
-
-        assert!(
-            matches!(first, StreamEvent::Cancelled),
-            "expected Cancelled as first event, got {first:?}"
-        );
-    }
-
-    // ── Heartbeat ─────────────────────────────────────────────────────────
-
-    #[tokio::test]
-    async fn heartbeat_emitted_on_stalled_stream() {
-        // Use a very short heartbeat interval and a slow/pending stream.
-        tokio::time::pause();
-
-        let provider = MockProvider::pending();
-        let token = CancellationToken::new();
-        let cfg = SrpConfig {
-            heartbeat_interval: Duration::from_millis(10),
-            channel_capacity: 4,
-        };
-
-        let mut stream = stream_inference(&provider, default_request(), token.clone(), cfg)
-            .await
-            .unwrap();
-
-        // Advance simulated time past the heartbeat interval.
-        tokio::time::advance(Duration::from_millis(50)).await;
-
-        let event = timeout(Duration::from_millis(200), stream.next())
-            .await
-            .expect("event within 200ms")
-            .expect("some event");
-
-        assert!(
-            matches!(event, StreamEvent::Heartbeat),
-            "expected Heartbeat, got {event:?}"
-        );
-
-        token.cancel();
     }
 
     // ── chunk_to_stream_chunk helper ──────────────────────────────────────

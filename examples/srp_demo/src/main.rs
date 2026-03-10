@@ -8,13 +8,13 @@
 
 use async_trait::async_trait;
 use futures::StreamExt;
-use mofa_kernel::agent::AgentResult;
-use mofa_kernel::llm::provider::LLMProvider;
-use mofa_kernel::llm::srp::{stream_inference, SrpConfig, StreamEvent};
-use mofa_kernel::llm::types::{
+use mofa_foundation::llm::{LLMProvider, LLMClient, LLMResult};
+use mofa_foundation::llm::types::{
     ChatCompletionChunk, ChatCompletionRequest, ChatCompletionResponse, ChunkChoice, ChunkDelta,
     EmbeddingRequest, EmbeddingResponse, FinishReason,
 };
+use mofa_kernel::llm::srp::{SrpConfig, StreamEvent};
+use std::sync::Arc;
 use std::time::Duration;
 use tokio::time::sleep;
 use tokio_util::sync::CancellationToken;
@@ -34,11 +34,11 @@ impl LLMProvider for MockStreamingProvider {
         "SRPMockAI"
     }
 
-    async fn chat(&self, _r: ChatCompletionRequest) -> AgentResult<ChatCompletionResponse> {
+    async fn chat(&self, _r: ChatCompletionRequest) -> LLMResult<ChatCompletionResponse> {
         unimplemented!("Not used in streaming demo")
     }
 
-    async fn embedding(&self, _r: EmbeddingRequest) -> AgentResult<EmbeddingResponse> {
+    async fn embedding(&self, _r: EmbeddingRequest) -> LLMResult<EmbeddingResponse> {
         unimplemented!("Not used in streaming demo")
     }
 
@@ -49,7 +49,7 @@ impl LLMProvider for MockStreamingProvider {
     async fn chat_stream(
         &self,
         request: ChatCompletionRequest,
-    ) -> AgentResult<mofa_kernel::llm::provider::ChatStream> {
+    ) -> LLMResult<mofa_foundation::llm::provider::ChatStream> {
         // Our mock detects which scenario is running via the `model` parameter.
         let stream = match request.model.as_str() {
             "happy-path" => Box::pin(futures::stream::unfold(
@@ -66,21 +66,21 @@ impl LLMProvider for MockStreamingProvider {
                         None
                     }
                 },
-            )) as mofa_kernel::llm::provider::ChatStream,
+            )) as mofa_foundation::llm::provider::ChatStream,
 
             "slow-model" => Box::pin(futures::stream::unfold((), |()| async {
                 // This model never returns data; it just sleeps forever to simulate a stall,
                 // which will trigger Heartbeats.
                 sleep(Duration::from_secs(60)).await;
-                None::<((AgentResult<ChatCompletionChunk>), ())>
-            })) as mofa_kernel::llm::provider::ChatStream,
+                None::<(LLMResult<ChatCompletionChunk>, ())>
+            })) as mofa_foundation::llm::provider::ChatStream,
 
             "cancellation-model" => Box::pin(futures::stream::unfold((), |()| async {
                 // Returns very slowly, giving enough time for the client task to cancel.
                 sleep(Duration::from_secs(1)).await;
                 let chunk = Self::text_chunk("Slow chunk...", None);
                 Some((Ok(chunk), ()))
-            })) as mofa_kernel::llm::provider::ChatStream,
+            })) as mofa_foundation::llm::provider::ChatStream,
 
             _ => panic!("Unknown mock scenario"),
         };
@@ -92,6 +92,10 @@ impl LLMProvider for MockStreamingProvider {
 impl MockStreamingProvider {
     fn text_chunk(text: &str, finish_reason: Option<FinishReason>) -> ChatCompletionChunk {
         ChatCompletionChunk {
+            id: "mock_id".to_string(),
+            object: "chat.completion.chunk".to_string(),
+            created: 1234567890,
+            model: "mock-model".to_string(),
             choices: vec![ChunkChoice {
                 index: 0,
                 delta: ChunkDelta {
@@ -101,6 +105,7 @@ impl MockStreamingProvider {
                 },
                 finish_reason,
             }],
+            usage: None,
         }
     }
 }
@@ -113,17 +118,23 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     info!("Starting Streaming Response Protocol (SRP) demonstration...\n");
 
-    let provider = MockStreamingProvider;
+    let provider = Arc::new(MockStreamingProvider);
+    let client = LLMClient::new(provider.clone());
 
     // ==========================================
     // Scenario 1: Happy Path
     // ==========================================
     info!("--- Scenario 1: Normal Happy Path Stream ---");
-    let req1 = ChatCompletionRequest::new("happy-path");
     let token1 = CancellationToken::new();
     let config1 = SrpConfig::default();
 
-    let mut stream1 = stream_inference(&provider, req1, token1.clone(), config1).await?;
+    // For the mock, we need to artificially modify the request model before sending, but since
+    // our builder doesn't expose `model`, we can just ensure our client takes a model in `ChatRequestBuilder::new` if we bypass the client, but `LLMClient::chat()` uses `config.default_model`. Let's create `ChatRequestBuilder` directly.
+    let mut stream1 = mofa_foundation::llm::ChatRequestBuilder::new(provider.clone(), "happy-path")
+        .with_srp_config(SrpConfig::default())
+        .with_cancellation_token(token1.clone())
+        .send_srp_stream()
+        .await?;
     let mut generated_text = String::new();
 
     while let Some(event) = stream1.next().await {
@@ -148,7 +159,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Scenario 2: Heartbeats
     // ==========================================
     info!("--- Scenario 2: Handling a stalled model with Heartbeats ---");
-    let req2 = ChatCompletionRequest::new("slow-model");
     let token2 = CancellationToken::new();
     
     // We set a very short heartbeat interval (400ms) to trigger it easily,
@@ -158,7 +168,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         channel_capacity: 64,
     };
 
-    let mut stream2 = stream_inference(&provider, req2, token2.clone(), config2).await?;
+    let mut stream2 = mofa_foundation::llm::ChatRequestBuilder::new(provider.clone(), "slow-model")
+        .with_srp_config(config2)
+        .with_cancellation_token(token2.clone())
+        .send_srp_stream()
+        .await?;
     let mut heartbeat_count = 0;
 
     while let Some(event) = stream2.next().await {
@@ -186,12 +200,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Scenario 3: Mid-stream Cancellation
     // ==========================================
     info!("--- Scenario 3: Client driven cancellation ---");
-    let req3 = ChatCompletionRequest::new("cancellation-model");
     let token3 = CancellationToken::new();
     let token_clone = token3.clone();
     let config3 = SrpConfig::default();
 
-    let mut stream3 = stream_inference(&provider, req3, token_clone, config3).await?;
+    let mut stream3 = mofa_foundation::llm::ChatRequestBuilder::new(provider.clone(), "cancellation-model")
+        .with_srp_config(config3)
+        .with_cancellation_token(token_clone)
+        .send_srp_stream()
+        .await?;
 
     // We start the stream, but in 700ms an external factor (e.g. a user clicking "Stop Generating" or
     // a timeout in the supervisor) triggers the cancellation token.

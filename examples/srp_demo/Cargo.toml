@@ -5,7 +5,8 @@ edition = "2024"
 publish = false
 
 [dependencies]
-mofa-kernel = { path = "../../crates/mofa-kernel", features = ["streaming"] }
+mofa-kernel = { path = "../../crates/mofa-kernel" }
+mofa-foundation = { path = "../../crates/mofa-foundation" }
 tokio = { version = "1", features = ["full", "rt-multi-thread", "macros"] }
 tokio-util = "0.7.12"
 tokio-stream = "0.1"

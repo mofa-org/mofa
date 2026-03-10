@@ -3846,6 +3846,7 @@ dependencies = [
  "thiserror 1.0.69",
  "tokio",
  "tokio-stream",
+ "tokio-util",
  "toml 0.8.23",
  "tracing",
  "uuid",
@@ -6656,6 +6657,7 @@ version = "0.1.0"
 dependencies = [
  "async-trait",
  "futures",
+ "mofa-foundation",
  "mofa-kernel",
  "tokio",
  "tokio-stream",

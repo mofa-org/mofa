@@ -36,8 +36,8 @@ regex = { workspace = true, optional = true }
 
 # Streaming Response Protocol (optional — enabled by the `streaming` feature)
 # tokio-util 0.7: CancellationToken is available without a feature flag.
-tokio-util = { version = "0.7", optional = true }
-tokio-stream = { version = "0.1", optional = true }
+tokio-util = { version = "0.7" }
+tokio-stream = { version = "0.1" }
 
 [dev-dependencies]
 tempfile = "3"
@@ -51,7 +51,3 @@ workspace = true
 default = []
 # Config loader (formats, env substitution, merge)
 config = ["dep:config", "dep:regex", "dep:serde_yaml", "dep:toml"]
-# Streaming Response Protocol — requires tokio-util (CancellationToken) and
-# tokio-stream (ReceiverStream).  Opt-in so callers that only need the
-# synchronous kernel types incur no additional compile-time cost.
-streaming = ["dep:tokio-util", "dep:tokio-stream"]
