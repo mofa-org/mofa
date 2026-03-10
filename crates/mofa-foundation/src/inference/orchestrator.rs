@@ -44,8 +44,9 @@ mod duration_secs {
 }
 
 use super::model_pool::ModelPool;
-use super::routing::{self, AdmissionOutcome, RoutingDecision, RoutingPolicy};
+use super::routing::{self, RoutingDecision, RoutingPolicy};
 use super::types::{InferenceRequest, InferenceResult, RequestPriority, RoutedBackend};
+use crate::scheduler::AdmissionOutcome;
 
 /// Configuration for the `InferenceOrchestrator`.
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
@@ -251,9 +252,58 @@ impl InferenceOrchestrator {
                     cloud_attempt_count: 0,
                 }
             }
-            RoutingDecision::UseCloud { provider } => {
-                self.execute_cloud(request, &provider.clone())
+            RoutingDecision::UseLocalDegraded {
+                model_id,
+                degraded_precision,
+                quality_warning,
+            } => {
+                // Estimate degraded memory footprint
+                let degraded_memory_mb = ((request.required_memory_mb as f64)
+                    * (degraded_precision.bytes_per_param()
+                        / request.preferred_precision.bytes_per_param()))
+                .ceil() as usize;
+
+                // Load the model at degraded precision
+                if !self.model_pool.is_loaded(model_id) {
+                    self.model_pool.load(
+                        model_id,
+                        degraded_memory_mb,
+                        *degraded_precision,
+                        request.priority,
+                    );
+                } else {
+                    self.model_pool.touch(model_id);
+                }
+
+                tracing::warn!(
+                    model_id,
+                    from = %request.preferred_precision,
+                    to = %degraded_precision,
+                    "{}",
+                    quality_warning
+                );
+
+                InferenceResult {
+                    output: format!(
+                        "[local-degraded:{}@{}] Inference result for: {}",
+                        model_id, degraded_precision, request.prompt
+                    ),
+                    routed_to: RoutedBackend::Local {
+                        model_id: model_id.clone(),
+                    },
+                    actual_precision: *degraded_precision,
+                }
             }
+            RoutingDecision::UseCloud { provider } => InferenceResult {
+                output: format!(
+                    "[cloud:{}] Inference result for: {}",
+                    provider, request.prompt
+                ),
+                routed_to: RoutedBackend::Cloud {
+                    provider: provider.clone(),
+                },
+                actual_precision: request.preferred_precision,
+            },
             RoutingDecision::Rejected { reason } => InferenceResult {
                 output: format!("[rejected] {}", reason),
                 routed_to: RoutedBackend::Rejected {
@@ -265,61 +315,32 @@ impl InferenceOrchestrator {
         }
     }
 
-    /// Execute a cloud inference call with automatic retry on transient failure.
+    /// Phase-1 simulated streaming entry point.
     ///
-    /// Makes up to `1 + config.cloud_retry_attempts` attempts.  Between each
-    /// attempt it sleeps for `config.cloud_retry_delay_ms` milliseconds (set
-    /// to `0` in tests for instant retries).
-    ///
-    /// # Phase 1 note
-    /// Real cloud clients are not yet wired in Phase 1, so "success" vs
-    /// "failure" is determined by `cloud_call_fails` (a test-only injection
-    /// counter; always `0` in production paths).  In Phase 2 this method will
-    /// call the cloud LLM client and inspect returned errors.
-    fn execute_cloud(&mut self, request: &InferenceRequest, provider: &str) -> InferenceResult {
-        let max_attempts = 1 + self.config.cloud_retry_attempts as usize;
-        let delay = Duration::from_millis(self.config.cloud_retry_delay_ms);
+    /// **Warning**: This method splits the fully-generated output by whitespace
+    /// to simulate token-level SSE. It will be replaced by real incremental
+    /// decoding in Phase 2. Hidden from public documentation until then.
+    #[doc(hidden)]
+    pub fn infer_stream(
+        &mut self,
+        request: &InferenceRequest,
+    ) -> (
+        InferenceResult,
+        std::pin::Pin<Box<dyn futures::Stream<Item = String> + Send + Sync>>,
+    ) {
+        // Run full admission/routing logic
+        let base_result = self.infer(request);
 
-        for attempt in 1..=max_attempts {
-            // Phase 1 simulation: check whether this call is injected to fail.
-            if self.cloud_call_fails > 0 {
-                self.cloud_call_fails -= 1;
-                if attempt < max_attempts {
-                    // Transient failure — delay then retry.
-                    if !delay.is_zero() {
-                        std::thread::sleep(delay);
-                    }
-                    continue;
-                }
-                // All retries exhausted.
-                let reason = format!(
-                    "Cloud provider '{}' failed after {} attempt(s)",
-                    provider, attempt
-                );
-                return InferenceResult {
-                    output: format!("[rejected] {}", reason),
-                    routed_to: RoutedBackend::Rejected { reason },
-                    actual_precision: request.preferred_precision,
-                    cloud_attempt_count: attempt,
-                };
-            }
+        // Phase 1 simulated string stream based on the generated output
+        let output_str = base_result.output.clone();
 
-            // Success path.
-            return InferenceResult {
-                output: format!(
-                    "[cloud:{}] Inference result for: {}",
-                    provider, request.prompt
-                ),
-                routed_to: RoutedBackend::Cloud {
-                    provider: provider.to_string(),
-                },
-                actual_precision: request.preferred_precision,
-                cloud_attempt_count: attempt,
-            };
-        }
+        let words: Vec<String> = output_str
+            .split_whitespace()
+            .map(|w| format!("{w} "))
+            .collect();
+        let stream = futures::stream::iter(words);
 
-        // Unreachable in practice, but satisfies the compiler.
-        unreachable!("execute_cloud loop must return before here")
+        (base_result, Box::pin(stream))
     }
 
     /// Evaluate whether a local backend can admit this request based on
@@ -328,7 +349,7 @@ impl InferenceOrchestrator {
     /// # Priority semantics
     ///
     /// - `Low` / `Normal`: standard dual-threshold hysteresis — may return
-    ///   [`AdmissionOutcome::Deferred`] when usage is in the `[defer, reject)` band.
+    ///   [`AdmissionOutcome::Defer`] when usage is in the `[defer, reject)` band.
     /// - `High`: bypasses the Deferred band — admitted directly whenever usage
     ///   is at or below `reject_threshold` (skips the defer zone entirely).
     /// - `Critical`: same bypass as `High`; the caller (orchestrator) is
@@ -342,7 +363,7 @@ impl InferenceOrchestrator {
         let capacity = self.config.memory_capacity_mb;
 
         if capacity == 0 {
-            return AdmissionOutcome::Rejected;
+            return AdmissionOutcome::Reject;
         }
 
         let projected_usage = projected_mb as f64 / capacity as f64;
@@ -352,21 +373,21 @@ impl InferenceOrchestrator {
             // they are admitted whenever memory is below the reject ceiling.
             RequestPriority::High | RequestPriority::Critical => {
                 if projected_usage <= self.config.reject_threshold {
-                    AdmissionOutcome::Accepted
+                    AdmissionOutcome::Accept
                 } else {
-                    AdmissionOutcome::Rejected
+                    AdmissionOutcome::Reject
                 }
             }
             // Low and Normal use standard dual-threshold hysteresis.
             RequestPriority::Low | RequestPriority::Normal => {
                 if projected_usage <= self.config.defer_threshold {
-                    AdmissionOutcome::Accepted
+                    AdmissionOutcome::Accept
                 } else if projected_usage <= self.config.reject_threshold {
                     // Deferred: memory is tight but may be reclaimable via eviction.
                     // Phase 2 will add a queue-based scheduler with retry logic.
-                    AdmissionOutcome::Deferred
+                    AdmissionOutcome::Defer
                 } else {
-                    AdmissionOutcome::Rejected
+                    AdmissionOutcome::Reject
                 }
             }
         }

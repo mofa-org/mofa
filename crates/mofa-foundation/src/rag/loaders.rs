@@ -73,9 +73,7 @@ impl DocumentLoader for TextLoader {
         })?;
 
         if content.trim().is_empty() {
-            return Err(LoaderError::EmptyDocument(
-                path.display().to_string(),
-            ));
+            return Err(LoaderError::EmptyDocument(path.display().to_string()));
         }
 
         // Use full path for unique IDs across directories
@@ -152,9 +150,7 @@ impl DocumentLoader for MarkdownLoader {
         })?;
 
         if content.trim().is_empty() {
-            return Err(LoaderError::EmptyDocument(
-                path.display().to_string(),
-            ));
+            return Err(LoaderError::EmptyDocument(path.display().to_string()));
         }
 
         let source = path.display().to_string();
@@ -167,30 +163,30 @@ impl DocumentLoader for MarkdownLoader {
         let mut section_index = 0usize;
 
         for line in content.lines() {
-            if let Some(level) = Self::heading_level(line) {
-                if level <= self.split_level {
-                    // Save previous section
-                    if !current_content.trim().is_empty() {
-                        let mut metadata = HashMap::new();
-                        metadata.insert("source".into(), source.clone());
-                        metadata.insert("format".into(), "markdown".into());
-                        metadata.insert("section_index".into(), section_index.to_string());
-                        if !current_heading.is_empty() {
-                            metadata.insert("heading".into(), current_heading.clone());
-                        }
-
-                        documents.push(Document {
-                            id: format!("{base_id}:s{section_index}"),
-                            text: current_content.trim().to_string(),
-                            metadata,
-                        });
-                        section_index += 1;
+            if let Some(level) = Self::heading_level(line)
+                && level <= self.split_level
+            {
+                // Save previous section
+                if !current_content.trim().is_empty() {
+                    let mut metadata = HashMap::new();
+                    metadata.insert("source".into(), source.clone());
+                    metadata.insert("format".into(), "markdown".into());
+                    metadata.insert("section_index".into(), section_index.to_string());
+                    if !current_heading.is_empty() {
+                        metadata.insert("heading".into(), current_heading.clone());
                     }
 
-                    current_heading = Self::heading_text(line);
-                    current_content = format!("{line}\n");
-                    continue;
+                    documents.push(Document {
+                        id: format!("{base_id}:s{section_index}"),
+                        text: current_content.trim().to_string(),
+                        metadata,
+                    });
+                    section_index += 1;
                 }
+
+                current_heading = Self::heading_text(line);
+                current_content = format!("{line}\n");
+                continue;
             }
 
             current_content.push_str(line);
@@ -215,9 +211,7 @@ impl DocumentLoader for MarkdownLoader {
         }
 
         if documents.is_empty() {
-            return Err(LoaderError::EmptyDocument(
-                path.display().to_string(),
-            ));
+            return Err(LoaderError::EmptyDocument(path.display().to_string()));
         }
 
         Ok(documents)

@@ -231,18 +231,32 @@ let agent = ReActAgent::builder()
     .build();
 ```
 
-### SecretaryAgent
+### Secretary 模式
 
-人在回路的工作流管理:
+人在回路工作流管理（事件循环模式）:
 
 ```rust
-use mofa_sdk::secretary::SecretaryAgent;
+use mofa_sdk::secretary::{
+    ChannelConnection,
+    DefaultInput,
+    DefaultSecretaryBuilder,
+    SecretaryCore,
+};
 
-let agent = SecretaryAgent::builder()
-    .with_llm(client)
-    .with_human_feedback(true)
-    .with_delegation_targets(vec!["researcher", "writer"])
+let behavior = DefaultSecretaryBuilder::new()
+    .with_name("项目秘书")
+    .with_auto_clarify(true)
+    .with_auto_dispatch(true)
     .build();
+
+let (conn, input_tx, mut output_rx) = ChannelConnection::new_pair(32);
+let (_handle, _join) = SecretaryCore::new(behavior).start(conn).await;
+
+input_tx.send(DefaultInput::Idea {
+    content: "开发发布看板".to_string(),
+    priority: None,
+    metadata: None,
+}).await?;
 ```
 
 ## 使用 AgentRunner
