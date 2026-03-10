@@ -1194,10 +1194,6 @@ impl ModelOrchestrator for ModelPool {
 // ============================================================================
 
 #[cfg(test)]
-#[path = "busy_unload_repro.rs"]
-mod busy_unload_repro;
-
-#[cfg(test)]
 mod tests {
     use super::*;
     use std::sync::Arc;
