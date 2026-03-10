@@ -7,8 +7,10 @@
 pub mod disclosure;
 pub mod metadata;
 pub mod parser;
+pub mod signature;
 
 pub use disclosure::DisclosureController;
+pub use signature::TrustStore;
 pub use metadata::{
     CodeFile, Requirement, RequirementCheck, SkillMetadata, SkillRequirements, SkillState,
     SkillVersion,

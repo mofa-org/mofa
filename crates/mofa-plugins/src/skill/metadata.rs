@@ -43,6 +43,14 @@ pub struct SkillMetadata {
     /// Installation instructions
     #[serde(default)]
     pub install: Option<String>,
+    /// 签名 (Base64)
+    /// Cryptographic signature (Base64)
+    #[serde(default)]
+    pub signature: Option<String>,
+    /// 签名者公钥 (Base64)
+    /// Signer public key (Base64)
+    #[serde(default)]
+    pub signer_key: Option<String>,
 }
 
 /// Skill 版本信息
