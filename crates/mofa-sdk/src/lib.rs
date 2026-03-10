@@ -497,19 +497,13 @@ pub mod llm {
     pub use mofa_foundation::llm::openai::{OpenAIConfig, OpenAIProvider};
     pub use mofa_foundation::llm::*;
 
-    /// 从环境变量创建 OpenAI 提供器
     /// Create OpenAI provider from environment variables
     ///
-    /// 自动读取以下环境变量:
     /// Automatically reads the following environment variables:
-    /// - OPENAI_API_KEY: API 密钥
     /// - OPENAI_API_KEY: API Key
-    /// - OPENAI_BASE_URL: 可选的 API 基础 URL
     /// - OPENAI_BASE_URL: Optional API Base URL
-    /// - OPENAI_MODEL: 可选的默认模型
     /// - OPENAI_MODEL: Optional default model
     ///
-    /// # 示例
     /// # Example
     ///
     /// ```rust,ignore
@@ -547,16 +541,11 @@ pub mod llm {
     }
 }
 
-/// 从环境变量创建 Anthropic 提供器
 /// Create Anthropic provider from environment variables
 ///
-/// 读取环境变量:
 /// Reads environment variables:
-/// - ANTHROPIC_API_KEY (必需)
 /// - ANTHROPIC_API_KEY (Required)
-/// - ANTHROPIC_BASE_URL (可选)
 /// - ANTHROPIC_BASE_URL (Optional)
-/// - ANTHROPIC_MODEL (可选)
 /// - ANTHROPIC_MODEL (Optional)
 pub fn anthropic_from_env() -> Result<crate::llm::AnthropicProvider, crate::llm::LLMError> {
     let api_key = std::env::var("ANTHROPIC_API_KEY").map_err(|_| {
@@ -576,16 +565,11 @@ pub fn anthropic_from_env() -> Result<crate::llm::AnthropicProvider, crate::llm:
     Ok(crate::llm::AnthropicProvider::with_config(cfg))
 }
 
-/// 从环境变量创建 Google Gemini 提供器
 /// Create Google Gemini provider from environment variables
 ///
-/// 读取环境变量:
 /// Reads environment variables:
-/// - GEMINI_API_KEY (必需)
 /// - GEMINI_API_KEY (Required)
-/// - GEMINI_BASE_URL (可选)
 /// - GEMINI_BASE_URL (Optional)
-/// - GEMINI_MODEL (可选)
 /// - GEMINI_MODEL (Optional)
 pub fn gemini_from_env() -> Result<crate::llm::GeminiProvider, crate::llm::LLMError> {
     let api_key = std::env::var("GEMINI_API_KEY").map_err(|_| {
@@ -605,26 +589,17 @@ pub fn gemini_from_env() -> Result<crate::llm::GeminiProvider, crate::llm::LLMEr
 
 // Re-export Secretary module from mofa-foundation (always available)
 pub mod secretary {
-    //! 秘书Agent模式 - 基于事件循环的智能助手
     //! Secretary Agent Mode - Intelligent assistant based on event loop
     //!
-    //! 秘书Agent是一个面向用户的智能助手，通过与LLM交互完成个人助理工作。
     //! Secretary Agent is a user-facing smart assistant completing personal aid tasks via LLM interaction.
-    //! 设计为与长连接配合使用，实现持续的交互式服务。
     //! Designed to work with long-lived connections for continuous interactive services.
     //!
-    //! ## 工作循环（5阶段事件循环）
     //! ## Work Cycle (5-phase event loop)
     //!
-    //! 1. **接收想法** → 记录并生成TODO
     //! 1. **Receive Ideas** → Log and generate TODOs
-    //! 2. **澄清需求** → 与用户交互，转换为项目文档
     //! 2. **Clarify Requirements** → Interact with user, convert to project docs
-    //! 3. **调度分配** → 调用对应的执行Agent
     //! 3. **Schedule & Allocate** → Invoke corresponding execution Agents
-    //! 4. **监控反馈** → 推送关键决策给人类
     //! 4. **Monitor Feedback** → Push critical decisions to humans
-    //! 5. **验收汇报** → 更新TODO，生成报告
     //! 5. **Acceptance & Reporting** → Update TODOs, generate reports
     //!
     //! # Quick Start
@@ -638,9 +613,8 @@ pub mod secretary {
     //!
     //! #[tokio::main]
     //! async fn main() -> GlobalResult<()> {
-    //!     // 1. 创建秘书Agent
     //!     // 1. Create Secretary Agent
-    //!     let mut backend_agent = AgentInfo::new("backend_agent", "后端Agent");
+    //!     let mut backend_agent = AgentInfo::new("backend_agent", "Backend Agent");
     //!     backend_agent.capabilities = vec!["backend".to_string()];
     //!     backend_agent.current_load = 0;
     //!     backend_agent.available = true;
@@ -648,38 +622,34 @@ pub mod secretary {
     //!
     //!     let secretary = DefaultSecretaryBuilder::new()
     //!         .with_id("my_secretary")
-    //!         .with_name("项目秘书")
+    //!         .with_name("Project Secretary")
     //!         .with_auto_clarify(true)
     //!         .with_executor(backend_agent)
     //!         .build()
     //!         .await;
     //!
-    //!     // 2. 创建通道连接
     //!     // 2. Create channel connection
     //!     let (conn, input_tx, mut output_rx) = ChannelConnection::new_pair(32);
     //!
-    //!     // 3. 启动事件循环
     //!     // 3. Start event loop
     //!     let handle = secretary.start(conn).await;
     //!
-    //!     // 4. 发送用户输入
     //!     // 4. Send user input
     //!     input_tx.send(DefaultInput::Idea {
-    //!         content: "开发一个REST API".to_string(),
+    //!         content: "Build a REST API".to_string(),
     //!         priority: Some(TodoPriority::High),
     //!         metadata: None,
     //!     }).await?;
     //!
-    //!     // 5. 处理秘书输出
     //!     // 5. Handle secretary output
     //!     while let Some(output) = output_rx.recv().await {
     //!         match output {
     //!             SecretaryOutput::Acknowledgment { message } => {
-    //!                 info!("秘书: {}", message);
+    //!                 info!("Secretary: {}", message);
     //!             }
     //!             SecretaryOutput::DecisionRequired { decision } => {
-    //!                 info!("需要决策: {}", decision.description);
-    //!                 // 处理决策...
+    //!                 info!("Decision required: {}", decision.description);
+    //!                 // Handle the decision...
     //!                 // Handle decision...
     //!             }
     //!             SecretaryOutput::Report { report } => {
