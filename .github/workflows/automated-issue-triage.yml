@@ -261,6 +261,35 @@ jobs:
             
             const labelsToAdd = issueTriage.labels_to_add || [];
             const labelsToRemove = issueTriage.labels_to_remove || [];
+            const confidence = issueTriage.confidence || 0;
+            const explanation = issueTriage.explanation || '';
+
+            if (confidence < 0.6) {
+              core.info(`Low confidence (${confidence}) for issue #${issueNumber}. Adding status/manual-triage and commenting.`);
+              
+              await github.rest.issues.addLabels({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: issueNumber,
+                labels: ['status/manual-triage'],
+              });
+
+              const commentBody = `### 🤖 Automated Triage (Low Confidence: ${confidence})\n\n` +
+                `The automated triage system is uncertain about this issue. Manual review is required.\n\n` +
+                `**Suggested Labels:**\n` +
+                `- Add: ${labelsToAdd.length > 0 ? labelsToAdd.map(l => `\`${l}\``).join(', ') : '_none_'}\n` +
+                `- Remove: ${labelsToRemove.length > 0 ? labelsToRemove.map(l => `\`${l}\``).join(', ') : '_none_'}\n\n` +
+                `**Explanation:**\n${explanation}\n\n` +
+                `**Reviewers:** To apply these suggestions, comment \`/triage-apply\`.`;
+
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: issueNumber,
+                body: commentBody,
+              });
+              return;
+            }
             
             if (labelsToAdd.length > 0) {
               await github.rest.issues.addLabels({
@@ -292,3 +321,4 @@ jobs:
             if (labelsToAdd.length === 0 && labelsToRemove.length === 0) {
               core.info('No label changes needed');
             }
+
