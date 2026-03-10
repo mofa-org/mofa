@@ -36,7 +36,6 @@ members = [
     "rag_pipeline",
     "hitl_workflow",
     "agent_memory",
-    "hitl_v2",
     "agent_builder",
     "workflow_viz",
     "message_graph_validation",
