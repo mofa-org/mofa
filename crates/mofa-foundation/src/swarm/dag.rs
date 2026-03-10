@@ -297,6 +297,58 @@ impl SubtaskDAG {
             task.assigned_agent = Some(agent_id.into());
         }
     }
+
+    /// Number of tasks in the Failed state
+    pub fn failed_count(&self) -> usize {
+        self.graph
+            .node_weights()
+            .filter(|t| matches!(t.status, SubtaskStatus::Failed(_)))
+            .count()
+    }
+
+    /// Number of tasks that have reached a terminal state (Completed, Failed, or Skipped)
+    pub fn terminal_count(&self) -> usize {
+        self.graph
+            .node_weights()
+            .filter(|t| {
+                matches!(
+                    t.status,
+                    SubtaskStatus::Completed | SubtaskStatus::Failed(_) | SubtaskStatus::Skipped
+                )
+            })
+            .count()
+    }
+
+    /// Skip all Pending/Ready tasks that transitively depend on `failed_idx`
+    /// through hard (Sequential/DataFlow) edges. Returns the number of tasks skipped.
+    pub fn cascade_skip(&mut self, failed_idx: NodeIndex) -> usize {
+        let mut to_skip = Vec::new();
+        let mut stack = vec![failed_idx];
+
+        while let Some(idx) = stack.pop() {
+            for edge in self.graph.edges_directed(idx, Direction::Outgoing) {
+                if matches!(
+                    edge.weight().kind,
+                    DependencyKind::Sequential | DependencyKind::DataFlow
+                ) {
+                    let target = edge.target();
+                    if matches!(
+                        self.graph[target].status,
+                        SubtaskStatus::Pending | SubtaskStatus::Ready
+                    ) && !to_skip.contains(&target)
+                    {
+                        to_skip.push(target);
+                        stack.push(target);
+                    }
+                }
+            }
+        }
+
+        for &idx in &to_skip {
+            self.mark_skipped(idx);
+        }
+        to_skip.len()
+    }
 }
 
 #[cfg(test)]
@@ -454,6 +506,86 @@ mod tests {
         assert!(dag.is_complete()); // failed counts as terminal
         let task = dag.get_task(a).unwrap();
         assert!(matches!(task.status, SubtaskStatus::Failed(_)));
+    }
+
+    #[test]
+    fn test_failed_count() {
+        let mut dag = SubtaskDAG::new("fail-count");
+        let a = dag.add_task(SwarmSubtask::new("a", "A"));
+        let b = dag.add_task(SwarmSubtask::new("b", "B"));
+        let c = dag.add_task(SwarmSubtask::new("c", "C"));
+
+        assert_eq!(dag.failed_count(), 0);
+        assert_eq!(dag.terminal_count(), 0);
+
+        dag.mark_failed(a, "error");
+        assert_eq!(dag.failed_count(), 1);
+        assert_eq!(dag.terminal_count(), 1);
+
+        dag.mark_complete(b);
+        dag.mark_skipped(c);
+        assert_eq!(dag.failed_count(), 1);
+        assert_eq!(dag.terminal_count(), 3);
+    }
+
+    #[test]
+    fn test_cascade_skip_linear_chain() {
+        let mut dag = SubtaskDAG::new("cascade-chain");
+        let a = dag.add_task(SwarmSubtask::new("a", "Fetch"));
+        let b = dag.add_task(SwarmSubtask::new("b", "Process"));
+        let c = dag.add_task(SwarmSubtask::new("c", "Report"));
+
+        dag.add_dependency(a, b).unwrap();
+        dag.add_dependency(b, c).unwrap();
+
+        dag.mark_failed(a, "timeout");
+        let skipped = dag.cascade_skip(a);
+
+        assert_eq!(skipped, 2);
+        assert_eq!(dag.get_task(b).unwrap().status, SubtaskStatus::Skipped);
+        assert_eq!(dag.get_task(c).unwrap().status, SubtaskStatus::Skipped);
+        assert!(dag.is_complete());
+    }
+
+    #[test]
+    fn test_cascade_skip_diamond_only_skips_hard_deps() {
+        let mut dag = SubtaskDAG::new("cascade-diamond");
+        let a = dag.add_task(SwarmSubtask::new("a", "Fails"));
+        let b = dag.add_task(SwarmSubtask::new("b", "Hard dep on a"));
+        let c = dag.add_task(SwarmSubtask::new("c", "Soft dep on a"));
+        let d = dag.add_task(SwarmSubtask::new("d", "Independent"));
+
+        dag.add_dependency(a, b).unwrap(); // Sequential (hard)
+        dag.add_dependency_with_kind(a, c, DependencyKind::Soft).unwrap();
+
+        dag.mark_failed(a, "error");
+        let skipped = dag.cascade_skip(a);
+
+        // Only b should be skipped (hard dep), not c (soft dep) or d (no dep)
+        assert_eq!(skipped, 1);
+        assert_eq!(dag.get_task(b).unwrap().status, SubtaskStatus::Skipped);
+        assert_eq!(dag.get_task(c).unwrap().status, SubtaskStatus::Pending);
+        assert_eq!(dag.get_task(d).unwrap().status, SubtaskStatus::Pending);
+    }
+
+    #[test]
+    fn test_cascade_skip_does_not_skip_running_tasks() {
+        let mut dag = SubtaskDAG::new("cascade-running");
+        let a = dag.add_task(SwarmSubtask::new("a", "Fails"));
+        let b = dag.add_task(SwarmSubtask::new("b", "Already running"));
+        let c = dag.add_task(SwarmSubtask::new("c", "Pending after b"));
+
+        dag.add_dependency(a, b).unwrap();
+        dag.add_dependency(b, c).unwrap();
+
+        dag.mark_running(b); // b started before a failed
+        dag.mark_failed(a, "late failure");
+        let skipped = dag.cascade_skip(a);
+
+        // b is Running (not Pending/Ready), so it should NOT be skipped
+        // c depends on b which is Running, so cascade should not reach c through b
+        assert_eq!(skipped, 0);
+        assert_eq!(dag.get_task(b).unwrap().status, SubtaskStatus::Running);
     }
 
     #[test]
