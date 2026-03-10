@@ -56,6 +56,7 @@ use mofa_kernel::agent::types::error::{GlobalError, GlobalResult};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
+use std::sync::RwLock as StdRwLock;
 use tokio::sync::RwLock;
 
 // =============================================================================
@@ -808,6 +809,9 @@ pub enum ConditionLogic {
     Any,
 }
 
+/// Maximum number of compiled regex patterns to cache (avoids unbounded growth).
+const REGEX_CACHE_MAX_SIZE: usize = 64;
+
 /// 基于规则的路由器
 /// Rule-based Router
 pub struct RuleBasedRouter {
@@ -820,6 +824,8 @@ pub struct RuleBasedRouter {
     /// 是否需要人类确认规则匹配
     /// Whether to require human confirmation on rule match
     confirm_on_match: bool,
+    /// Cached compiled regexes (avoids recompiling on every rule check).
+    regex_cache: StdRwLock<HashMap<String, Arc<regex::Regex>>>,
 }
 
 impl RuleBasedRouter {
@@ -828,7 +834,34 @@ impl RuleBasedRouter {
             rules: Arc::new(RwLock::new(Vec::new())),
             default_agent_id: None,
             confirm_on_match: false,
+            regex_cache: StdRwLock::new(HashMap::new()),
         }
+    }
+
+    /// Returns a compiled regex for the pattern, using cache to avoid repeated compilation.
+    fn get_or_compile_regex(&self, pattern: &str) -> Option<Arc<regex::Regex>> {
+        {
+            let cache = self
+                .regex_cache
+                .read()
+                .unwrap_or_else(|e| e.into_inner());
+            if let Some(re) = cache.get(pattern) {
+                return Some(Arc::clone(re));
+            }
+        }
+        let re = regex::Regex::new(pattern).ok()?;
+        let re = Arc::new(re);
+        {
+            let mut cache = self
+                .regex_cache
+                .write()
+                .unwrap_or_else(|e| e.into_inner());
+            if cache.len() >= REGEX_CACHE_MAX_SIZE {
+                cache.clear();
+            }
+            cache.insert(pattern.to_string(), Arc::clone(&re));
+        }
+        Some(re)
     }
 
     pub fn with_default_agent(mut self, agent_id: impl Into<String>) -> Self {
@@ -885,7 +918,8 @@ impl RuleBasedRouter {
             RuleOperator::NotContains => !field_value.contains(&condition.value),
             RuleOperator::StartsWith => field_value.starts_with(&condition.value),
             RuleOperator::EndsWith => field_value.ends_with(&condition.value),
-            RuleOperator::Regex => regex::Regex::new(&condition.value)
+            RuleOperator::Regex => self
+                .get_or_compile_regex(&condition.value)
                 .map(|re| re.is_match(&field_value))
                 .unwrap_or(false),
             RuleOperator::In => condition.value.split(',').any(|v| v.trim() == field_value),
