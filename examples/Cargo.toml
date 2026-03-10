@@ -50,6 +50,7 @@ members = [
     "mcp_tools",
     "memory_scheduler_demo",
     "provider_hcp_demo",
+    "capability_discovery",
     "rag_retrieval_demo",
     "rag_indexing_demo",
 ]
@@ -93,6 +94,7 @@ opentelemetry-jaeger = { version = "0.20", features = ["rt-tokio"] }
 tracing-opentelemetry = "0.22"
 rand = "0.8"
 chrono = { version = "0.4", features = ["serde"] }
+cron = "0.12"
 hex = "0.4"
 lazy_static = "1.4"
 

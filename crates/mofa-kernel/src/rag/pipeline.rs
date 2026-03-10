@@ -10,6 +10,7 @@ use std::sync::Arc;
 
 /// A chunk of generated content from a streaming generator.
 #[derive(Debug, Clone)]
+#[non_exhaustive]
 pub enum GeneratorChunk {
     /// A piece of text content
     Text(String),
