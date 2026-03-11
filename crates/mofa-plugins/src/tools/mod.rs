@@ -20,6 +20,7 @@ pub mod response_optimizer;
 pub mod rhai;
 pub mod shell;
 mod web_scrapper;
+pub mod pdf_extractor;
 
 pub use calculator::CalculatorTool;
 pub use datetime::DateTimeTool;
@@ -31,6 +32,7 @@ pub use medical_knowledge::MedicalKnowledgeTool;
 pub use response_optimizer::ResponseOptimizerTool;
 pub use rhai::RhaiScriptTool;
 pub use shell::ShellCommandTool;
+pub use pdf_extractor::PdfTool;
 
 /// Convenience function to create a ToolPlugin with all built-in tools
 pub fn create_builtin_tool_plugin(plugin_id: &str) -> PluginResult<ToolPlugin> {
@@ -46,6 +48,8 @@ pub fn create_builtin_tool_plugin(plugin_id: &str) -> PluginResult<ToolPlugin> {
     tool_plugin.register_tool(JsonTool::new());
     tool_plugin.register_tool(ResponseOptimizerTool::new());
     tool_plugin.register_tool(MedicalKnowledgeTool::new());
+    tool_plugin.register_tool(PdfTool::new());
+
 
     Ok(tool_plugin)
 }

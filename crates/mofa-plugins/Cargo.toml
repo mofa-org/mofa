@@ -31,6 +31,8 @@ sha2.workspace = true
 tracing.workspace = true
 uuid = {workspace = true,features = ["v7"]}
 rand.workspace = true
+# PDF text extraction (optional)
+pdf-extract = { version = "0.10", optional = true }
 # WASM plugin runtime
 wasmtime = { version = "40", features = ["component-model", "async"] }
 # Local dependencies
@@ -56,6 +58,7 @@ dirs = "5.0"
 md-5 = "0.10"
 backoff = { version = "0.4", features = ["tokio"] }
 futures = "0.3"
+pdf-extract = "0.10"
 
 [lints]
 workspace = true
@@ -64,3 +67,4 @@ workspace = true
 default = []
 rodio = ["dep:rodio"]
 kokoro = ["dep:kokoro-tts", "dep:ort"]
+pdf = ["dep:pdf-extract"]
