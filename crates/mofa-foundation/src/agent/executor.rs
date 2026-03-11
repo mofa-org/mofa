@@ -558,3 +558,60 @@ impl MoFAAgent for AgentExecutor {
         self.base.shutdown().await
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use async_trait::async_trait;
+    use mofa_kernel::agent::types::ChatCompletionResponse;
+    use mofa_kernel::agent::types::ToolCall;
+
+    #[test]
+    fn agent_executor_config_builder_methods_apply_values() {
+        let config = AgentExecutorConfig::new()
+            .with_max_iterations(3)
+            .with_model("m1")
+            .with_temperature(0.25)
+            .with_max_context_tokens(1234);
+
+        assert_eq!(config.max_iterations, 3);
+        assert_eq!(config.default_model.as_deref(), Some("m1"));
+        assert_eq!(config.temperature, Some(0.25));
+        assert_eq!(config.max_context_tokens, 1234);
+        assert_eq!(config.tool_timeout, Duration::from_secs(30));
+    }
+
+    struct MockProvider;
+
+    #[async_trait]
+    impl LLMProvider for MockProvider {
+        fn name(&self) -> &str {
+            "mock"
+        }
+
+        async fn chat(&self, _request: ChatCompletionRequest) -> AgentResult<ChatCompletionResponse> {
+            Ok(ChatCompletionResponse {
+                content: Some("ok".to_string()),
+                tool_calls: Some(Vec::<ToolCall>::new()),
+                usage: None,
+            })
+        }
+    }
+
+    #[tokio::test]
+    async fn executor_new_builds_expected_base_and_config() {
+        let dir = std::env::temp_dir().join(format!("mofa-executor-test-{}", uuid::Uuid::now_v7()));
+        std::fs::create_dir_all(&dir).expect("temp dir should be created");
+
+        let config = AgentExecutorConfig::new().with_max_iterations(4);
+        let executor = AgentExecutor::with_config(Arc::new(MockProvider), &dir, config.clone())
+            .await
+            .expect("executor should initialize");
+
+        assert_eq!(executor.base().name(), "LLMExecutor");
+        assert_eq!(executor.config().max_iterations, 4);
+        assert_eq!(executor.state(), AgentState::Created);
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+}
