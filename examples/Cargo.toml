@@ -50,11 +50,8 @@ members = [
     "native_dataflow",
     "mcp_tools",
     "memory_scheduler_demo",
-<<<<<<< feat/kernel-irp
     "irp_demo",
-=======
     "cli_doctor_demo",
->>>>>>> main
     "capability_discovery",
     "rag_retrieval_demo",
     "rag_indexing_demo",
