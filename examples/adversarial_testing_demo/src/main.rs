@@ -1,4 +1,7 @@
-use mofa_testing::adversarial::{default_adversarial_suite, run_adversarial_suite, DefaultPolicyChecker};
+use mofa_testing::adversarial::{
+    default_adversarial_suite, run_adversarial_suite, DefaultPolicyChecker, SecurityJsonFormatter,
+    SecurityJunitFormatter, SecurityReportFormatter,
+};
 
 fn main() {
     let suite = default_adversarial_suite();
@@ -21,5 +24,13 @@ fn main() {
             failure.case_id, failure.category, failure.outcome
         );
     }
+
+    println!("\n=== SecurityReport (JSON) ===");
+    let json = SecurityJsonFormatter.format(&report);
+    println!("{json}");
+
+    println!("\n=== SecurityReport (JUnit XML) ===");
+    let junit = SecurityJunitFormatter::new("adversarial_testing_demo").format(&report);
+    println!("{junit}");
 }
 

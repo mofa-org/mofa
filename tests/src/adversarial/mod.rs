@@ -1,8 +1,10 @@
+mod format;
 mod policy;
 mod report;
 mod runner;
 mod suite;
 
+pub use format::{SecurityJsonFormatter, SecurityJunitFormatter, SecurityReportFormatter};
 pub use policy::{DefaultPolicyChecker, PolicyChecker, PolicyOutcome};
 pub use report::{SecurityCaseResult, SecurityReport};
 pub use runner::run_adversarial_suite;
