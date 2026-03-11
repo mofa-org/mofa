@@ -1,8 +1,8 @@
 //! CLI context providing access to backend services
 
 use crate::CliError;
+use crate::plugin_catalog::{DEFAULT_PLUGIN_REPO_ID, PluginRepoEntry, default_repos};
 use crate::state::PersistentAgentRegistry;
-use crate::plugin_catalog::{default_repos, DEFAULT_PLUGIN_REPO_ID, PluginRepoEntry};
 use crate::store::PersistedStore;
 use crate::utils::AgentProcessManager;
 use crate::utils::paths;
@@ -108,9 +108,9 @@ impl CliContext {
         let config_dir = paths::ensure_mofa_config_dir()?;
         migrate_legacy_nested_sessions(&data_dir)?;
 
-        let session_manager = SessionManager::with_jsonl(&data_dir)
-            .await
-            .map_err(|e| CliError::InitError(format!("Failed to initialize session manager: {}", e)))?;
+        let session_manager = SessionManager::with_jsonl(&data_dir).await.map_err(|e| {
+            CliError::InitError(format!("Failed to initialize session manager: {}", e))
+        })?;
         let agent_store = PersistedStore::new(data_dir.join("agents"))?;
         let agent_registry = AgentRegistry::new();
         register_default_agent_factories(&agent_registry).await?;
@@ -127,7 +127,12 @@ impl CliContext {
 
         let agents_dir = data_dir.join("agents");
         let persistent_agents = Arc::new(PersistentAgentRegistry::new(agents_dir).await.map_err(
-            |e| CliError::InitError(format!("Failed to initialize persistent agent registry: {}", e)),
+            |e| {
+                CliError::InitError(format!(
+                    "Failed to initialize persistent agent registry: {}",
+                    e
+                ))
+            },
         )?);
 
         let process_manager = AgentProcessManager::new(config_dir.clone());
@@ -177,7 +182,12 @@ impl CliContext {
 
         let agents_dir = data_dir.join("agents");
         let persistent_agents = Arc::new(PersistentAgentRegistry::new(agents_dir).await.map_err(
-            |e| CliError::InitError(format!("Failed to initialize persistent agent registry: {}", e)),
+            |e| {
+                CliError::InitError(format!(
+                    "Failed to initialize persistent agent registry: {}",
+                    e
+                ))
+            },
         )?);
 
         let process_manager = AgentProcessManager::new(config_dir.clone());
@@ -263,7 +273,9 @@ async fn register_default_agent_factories(agent_registry: &AgentRegistry) -> Res
     agent_registry
         .register_factory(Arc::new(CliBaseAgentFactory))
         .await
-        .map_err(|e| CliError::InitError(format!("Failed to register default agent factory: {}", e)))?;
+        .map_err(|e| {
+            CliError::InitError(format!("Failed to register default agent factory: {}", e))
+        })?;
 
     Ok(())
 }
@@ -339,9 +351,9 @@ fn replay_persisted_plugins(
         }
 
         if let Some(plugin) = instantiate_plugin_from_spec(&spec) {
-            plugin_registry
-                .register(plugin)
-                .map_err(|e| CliError::PluginError(format!("Failed to register plugin '{}': {}", spec.id, e)))?;
+            plugin_registry.register(plugin).map_err(|e| {
+                CliError::PluginError(format!("Failed to register plugin '{}': {}", spec.id, e))
+            })?;
         }
     }
 
@@ -361,7 +373,9 @@ fn replay_persisted_tools(
             BUILTIN_ECHO_TOOL_KIND => {
                 tool_registry
                     .register_with_source(EchoTool.into_dynamic(), ToolSource::Builtin)
-                    .map_err(|e| CliError::ToolError(format!("Failed to register tool '{}': {}", spec.id, e)))?;
+                    .map_err(|e| {
+                        CliError::ToolError(format!("Failed to register tool '{}': {}", spec.id, e))
+                    })?;
             }
             _ => {
                 // Ignore unknown kinds for forward compatibility.

@@ -76,15 +76,14 @@ impl ToolExecutor for ShellCommandTool {
     }
 
     async fn execute(&self, arguments: serde_json::Value) -> PluginResult<serde_json::Value> {
-        let command = arguments["command"]
-            .as_str()
-            .ok_or_else(|| mofa_kernel::plugin::PluginError::ExecutionFailed("Command is required".to_string()))?;
+        let command = arguments["command"].as_str().ok_or_else(|| {
+            mofa_kernel::plugin::PluginError::ExecutionFailed("Command is required".to_string())
+        })?;
 
         if !self.is_command_allowed(command) {
             return Err(mofa_kernel::plugin::PluginError::ExecutionFailed(format!(
                 "Command '{}' is not in the allowed commands list. Allowed: {:?}",
-                command,
-                self.allowed_commands
+                command, self.allowed_commands
             )));
         }
 
@@ -110,11 +109,25 @@ impl ToolExecutor for ShellCommandTool {
         let stdout = String::from_utf8_lossy(&output.stdout).to_string();
         let stderr = String::from_utf8_lossy(&output.stderr).to_string();
 
+        let truncate = |s: String, limit: usize| -> String {
+            if s.len() > limit {
+                // Find the last valid char boundary at or before the limit
+                // to avoid panicking on multi-byte UTF-8 characters.
+                let mut end = limit;
+                while !s.is_char_boundary(end) {
+                    end -= 1;
+                }
+                format!("{}...[truncated]", &s[..end])
+            } else {
+                s
+            }
+        };
+
         Ok(json!({
             "success": output.status.success(),
             "exit_code": output.status.code(),
-            "stdout": if stdout.len() > 5000 { format!("{}...[truncated]", &stdout[..5000]) } else { stdout },
-            "stderr": if stderr.len() > 5000 { format!("{}...[truncated]", &stderr[..5000]) } else { stderr }
+            "stdout": truncate(stdout, 5000),
+            "stderr": truncate(stderr, 5000)
         }))
     }
 }

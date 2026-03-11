@@ -321,6 +321,7 @@ async fn streaming_rag_pipeline() -> Result<(), Box<dyn std::error::Error>> {
                     }
                 }
                 mofa_kernel::rag::pipeline::GeneratorChunk::Done => break,
+                _ => {}
             }
         }
 
@@ -417,6 +418,7 @@ async fn streaming_edge_cases_test() -> Result<(), Box<dyn std::error::Error>> {
                                 total_chars += text.len();
                             }
                             mofa_kernel::rag::pipeline::GeneratorChunk::Done => break,
+                            _ => {}
                         },
                         Err(e) => {
                             println!("  ✗ Stream error: {}", e);
@@ -530,6 +532,7 @@ async fn streaming_memory_test() -> Result<(), Box<dyn std::error::Error>> {
                         tokio::time::sleep(std::time::Duration::from_millis(5)).await;
                     }
                     mofa_kernel::rag::pipeline::GeneratorChunk::Done => break,
+                    _ => {}
                 }
             }
 
@@ -659,6 +662,7 @@ async fn streaming_performance_benchmark() -> Result<(), Box<dyn std::error::Err
                         tokio::time::sleep(std::time::Duration::from_millis(1)).await;
                     }
                     mofa_kernel::rag::pipeline::GeneratorChunk::Done => break,
+                    _ => {}
                 }
             }
 
