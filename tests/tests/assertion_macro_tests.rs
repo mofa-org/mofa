@@ -31,7 +31,8 @@ fn make_config(name: &str) -> ModelProviderConfig {
 #[tokio::test]
 async fn assert_tool_called_passes_when_tool_was_called() {
     let tool = MockTool::new("search", "Search tool", json!({"type": "object"}));
-    tool.execute(ToolInput::from_json(json!({"q": "rust"}))).await;
+    tool.execute(ToolInput::from_json(json!({"q": "rust"})))
+        .await;
 
     mofa_testing::assert_tool_called!(tool, "search");
 }
@@ -50,7 +51,8 @@ async fn assert_tool_called_panics_when_tool_never_called() {
 #[tokio::test]
 async fn assert_tool_called_with_passes_on_matching_arguments() {
     let tool = MockTool::new("search", "Search tool", json!({"type": "object"}));
-    tool.execute(ToolInput::from_json(json!({"query": "rust"}))).await;
+    tool.execute(ToolInput::from_json(json!({"query": "rust"})))
+        .await;
 
     mofa_testing::assert_tool_called_with!(tool, json!({"query": "rust"}));
 }
@@ -59,7 +61,8 @@ async fn assert_tool_called_with_passes_on_matching_arguments() {
 #[should_panic(expected = "no matching call found")]
 async fn assert_tool_called_with_panics_on_mismatched_arguments() {
     let tool = MockTool::new("search", "Search tool", json!({"type": "object"}));
-    tool.execute(ToolInput::from_json(json!({"query": "python"}))).await;
+    tool.execute(ToolInput::from_json(json!({"query": "python"})))
+        .await;
 
     mofa_testing::assert_tool_called_with!(tool, json!({"query": "rust"}));
 }
