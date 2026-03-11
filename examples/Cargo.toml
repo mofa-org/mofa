@@ -50,6 +50,7 @@ members = [
     "native_dataflow",
     "mcp_tools",
     "memory_scheduler_demo",
+    "inference_orchestration",
     "cli_doctor_demo",
     "capability_discovery",
     "rag_retrieval_demo",
