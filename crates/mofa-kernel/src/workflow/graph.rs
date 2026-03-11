@@ -278,6 +278,11 @@ where
     /// Execute a single step of the graph
     ///
     /// Useful for debugging or interactive execution.
+    ///
+    /// Implementations should advance the supplied [`RuntimeContext`] so the
+    /// next `step()` call continues from the following node instead of
+    /// re-running the same node. They should also apply the same retry,
+    /// fallback, and circuit-breaker policies used by `invoke()` / `stream()`.
     /// # Returns
     /// Step execution result containing next state and command
     async fn step(
