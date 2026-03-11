@@ -5,9 +5,9 @@
 //! API stability.
 
 use axum::{
+    Json,
     http::StatusCode,
     response::{IntoResponse, Response},
-    Json,
 };
 use serde::Serialize;
 use thiserror::Error;
@@ -203,22 +203,70 @@ struct ErrorResponse {
 
 impl IntoResponse for GatewayError {
     fn into_response(self) -> Response {
-        let status = match self {
-            GatewayError::InvalidRequest(_) => StatusCode::BAD_REQUEST,
-            GatewayError::AgentAlreadyExists(_) => StatusCode::CONFLICT,
-            GatewayError::AgentNotFound(_) => StatusCode::NOT_FOUND,
-            GatewayError::AgentOperationFailed(_) => StatusCode::INTERNAL_SERVER_ERROR,
-            GatewayError::RateLimitExceeded(_) => StatusCode::TOO_MANY_REQUESTS,
-            GatewayError::CircuitBreakerOpen(_) => StatusCode::SERVICE_UNAVAILABLE,
-            GatewayError::NoHealthyNodes(_) => StatusCode::SERVICE_UNAVAILABLE,
-            GatewayError::UnhealthyNode(_) => StatusCode::SERVICE_UNAVAILABLE,
-            GatewayError::NoAvailableNodes(_) => StatusCode::SERVICE_UNAVAILABLE,
-            GatewayError::HealthCheckFailed(_) => StatusCode::SERVICE_UNAVAILABLE,
-            GatewayError::RoutingFailed(_) => StatusCode::BAD_GATEWAY,
-            GatewayError::Timeout(_) => StatusCode::REQUEST_TIMEOUT,
-            GatewayError::Network(_) => StatusCode::BAD_GATEWAY,
-            GatewayError::LoadBalancing(_) => StatusCode::INTERNAL_SERVER_ERROR,
-            GatewayError::Internal(_) => StatusCode::INTERNAL_SERVER_ERROR,
+        let (status, code, message) = match &self {
+            GatewayError::AgentNotFound(id) => (
+                StatusCode::NOT_FOUND,
+                "AGENT_NOT_FOUND",
+                format!("agent '{}' not found", id),
+            ),
+            GatewayError::AgentAlreadyExists(id) => (
+                StatusCode::CONFLICT,
+                "AGENT_ALREADY_EXISTS",
+                format!("agent '{}' already exists", id),
+            ),
+            GatewayError::RateLimitExceeded(client) => (
+                StatusCode::TOO_MANY_REQUESTS,
+                "RATE_LIMIT_EXCEEDED",
+                format!("rate limit exceeded for client '{}'", client),
+            ),
+            GatewayError::AgentOperationFailed(msg) => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "AGENT_OPERATION_FAILED",
+                msg.clone(),
+            ),
+            GatewayError::InvalidRequest(msg) => {
+                (StatusCode::BAD_REQUEST, "INVALID_REQUEST", msg.clone())
+            }
+            GatewayError::LoadBalancing(msg) => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "LOAD_BALANCING_ERROR",
+                msg.clone(),
+            ),
+            GatewayError::CircuitBreakerOpen(msg) => (
+                StatusCode::SERVICE_UNAVAILABLE,
+                "CIRCUIT_BREAKER_OPEN",
+                msg.clone(),
+            ),
+            GatewayError::NoHealthyNodes(msg) => (
+                StatusCode::SERVICE_UNAVAILABLE,
+                "NO_HEALTHY_NODES",
+                msg.clone(),
+            ),
+            GatewayError::UnhealthyNode(msg) => (
+                StatusCode::SERVICE_UNAVAILABLE,
+                "UNHEALTHY_NODE",
+                msg.clone(),
+            ),
+            GatewayError::NoAvailableNodes(msg) => (
+                StatusCode::SERVICE_UNAVAILABLE,
+                "NO_AVAILABLE_NODES",
+                msg.clone(),
+            ),
+            GatewayError::HealthCheckFailed(msg) => (
+                StatusCode::SERVICE_UNAVAILABLE,
+                "HEALTH_CHECK_FAILED",
+                msg.clone(),
+            ),
+            GatewayError::RoutingFailed(msg) => {
+                (StatusCode::BAD_GATEWAY, "ROUTING_FAILED", msg.clone())
+            }
+            GatewayError::Timeout(msg) => (StatusCode::REQUEST_TIMEOUT, "TIMEOUT", msg.clone()),
+            GatewayError::Network(msg) => (StatusCode::BAD_GATEWAY, "NETWORK_ERROR", msg.clone()),
+            GatewayError::Internal(msg) => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "INTERNAL_ERROR",
+                msg.clone(),
+            ),
         };
 
         let body = Json(ErrorResponse {

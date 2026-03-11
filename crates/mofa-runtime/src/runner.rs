@@ -774,8 +774,8 @@ pub async fn run_agents<T: MoFAAgent>(
 // GlobalResult-based APIs (Phase 4 unified error handling)
 // ============================================================================
 
-use mofa_kernel::agent::types::error::{GlobalError, GlobalResult};
 use mofa_foundation::recovery::RetryPolicy;
+use mofa_kernel::agent::types::error::{GlobalError, GlobalResult};
 
 impl<T: MoFAAgent> AgentRunner<T> {
     /// Execute a task returning `GlobalResult` (unified error type).
@@ -844,9 +844,7 @@ pub async fn run_agents_global<T: MoFAAgent>(
     agent: T,
     inputs: Vec<AgentInput>,
 ) -> GlobalResult<Vec<AgentOutput>> {
-    let mut runner = AgentRunner::new(agent)
-        .await
-        .map_err(GlobalError::from)?;
+    let mut runner = AgentRunner::new(agent).await.map_err(GlobalError::from)?;
 
     let mut outputs = Vec::with_capacity(inputs.len());
     for input in inputs {

@@ -272,7 +272,11 @@ where
 ///     Box::new(|| Box::pin(cached_fallback())),
 /// ]).await;
 /// ```
-pub async fn fallback_chain<T>(operations: Vec<FallbackOperation<T>>) -> GlobalResult<T> {
+pub async fn fallback_chain<T>(
+    operations: Vec<
+        Box<dyn FnOnce() -> std::pin::Pin<Box<dyn Future<Output = GlobalResult<T>> + Send>> + Send>,
+    >,
+) -> GlobalResult<T> {
     let mut last_error = GlobalError::Other("no fallback operations provided".to_string());
 
     for operation in operations {

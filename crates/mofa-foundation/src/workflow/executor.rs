@@ -17,9 +17,9 @@ use super::state::{
     WorkflowContext, WorkflowStatus, WorkflowValue,
 };
 use mofa_kernel::workflow::telemetry::{DebugEvent, TelemetryEmitter};
+use serde_json;
 use std::collections::HashMap;
 use std::sync::Arc;
-use serde_json;
 use std::time::Instant;
 use tokio::sync::{RwLock, Semaphore, mpsc, oneshot};
 use tracing::{error, info, warn};
@@ -60,7 +60,6 @@ impl Default for ExecutorConfig {
         }
     }
 }
-
 
 /// 工作流执行器
 /// Workflow Executor
@@ -647,9 +646,8 @@ impl WorkflowExecutor {
                 }
                 NodeType::Wait => self.execute_wait(ctx, node, current_input.clone()).await,
                 _ => {
-                    let node_timeout = std::time::Duration::from_millis(
-                        self.config.node_timeout_ms,
-                    );
+                    let node_timeout =
+                        std::time::Duration::from_millis(self.config.node_timeout_ms);
                     let result = match tokio::time::timeout(
                         node_timeout,
                         node.execute(ctx, current_input.clone()),
@@ -664,10 +662,7 @@ impl WorkflowExecutor {
                             );
                             NodeResult::failed(
                                 &current_node_id,
-                                &format!(
-                                    "Node timed out after {:?}",
-                                    node_timeout
-                                ),
+                                &format!("Node timed out after {:?}", node_timeout),
                                 node_timeout.as_millis() as u64,
                             )
                         }
