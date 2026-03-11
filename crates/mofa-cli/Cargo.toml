@@ -66,6 +66,7 @@ zip = "2.1"
 sha2 = "0.10"
 hex = "0.4"
 futures = "0.3"
+anyhow.workspace = true
 
 # Database (optional, for db init command)
 sqlx = { version = "0.8", features = [

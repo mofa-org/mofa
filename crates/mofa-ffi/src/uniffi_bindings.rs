@@ -280,17 +280,17 @@ pub trait FfiToolCallback: Send + Sync {
 // =============================================================================
 
 /// Get MoFA version
-pub fn get_version() -> String {
+pub(crate) fn get_version() -> String {
     env!("CARGO_PKG_VERSION").to_string()
 }
 
 /// Check if Dora runtime support is available
-pub fn is_dora_available() -> bool {
+pub(crate) fn is_dora_available() -> bool {
     cfg!(feature = "dora")
 }
 
 /// Create a new LLM Agent Builder
-pub fn new_llm_agent_builder() -> Result<std::sync::Arc<LLMAgentBuilder>, MoFaError> {
+pub(crate) fn new_llm_agent_builder() -> Result<std::sync::Arc<LLMAgentBuilder>, MoFaError> {
     LLMAgentBuilder::create()
 }
 
@@ -590,7 +590,7 @@ pub struct LLMAgentBuilder {
 
 impl LLMAgentBuilder {
     /// Create a new builder
-    pub fn create() -> Result<Arc<Self>, MoFaError> {
+    pub(crate) fn create() -> Result<Arc<Self>, MoFaError> {
         let runtime =
             tokio::runtime::Runtime::new().map_err(|e| MoFaError::RuntimeError(e.to_string()))?;
         Ok(Arc::new(Self {
@@ -1162,5 +1162,24 @@ mod tests {
         let msg = err.to_string();
         assert!(msg.contains("Runtime error:"));
         assert!(msg.contains("get_last_output is not yet supported"));
+    }
+
+    #[test]
+    fn udl_contract_includes_required_ffi_surface() {
+        // Contract guard: CI should fail when critical UDL entries drift from
+        // the implemented UniFFI
+        let udl = include_str!("mofa.udl");
+
+        for required in [
+            "dictionary LLMConfig",
+            "[Throws=MoFaError, Name=from_config_file]",
+            "[Throws=MoFaError, Name=from_config]",
+            "LLMAgentBuilder set_openai_provider(",
+        ] {
+            assert!(
+                udl.contains(required),
+                "missing required UDL contract marker: {required}"
+            );
+        }
     }
 }

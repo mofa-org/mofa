@@ -47,6 +47,7 @@ use crate::agent::context::prompt::PromptContext;
 
 use super::components::tool::SimpleToolRegistry;
 use super::{Session, SessionManager};
+use mofa_kernel::agent::components::memory::Memory;
 use mofa_kernel::agent::components::tool::{Tool, ToolInput, ToolRegistry};
 
 // ============================================================================
@@ -164,6 +165,12 @@ pub struct AgentExecutor {
     sessions: Arc<SessionManager>,
     /// Configuration
     config: AgentExecutorConfig,
+    /// Optional long-term memory backend.
+    ///
+    /// When set, the executor retrieves relevant memories before each turn
+    /// and injects them into the system prompt so the agent can refer to
+    /// past interactions across sessions.
+    memory: Option<Arc<RwLock<dyn Memory>>>,
     /// Optional context compressor applied before each LLM call when the
     /// estimated token count exceeds `config.max_context_tokens`.
     compressor: Option<Arc<dyn ContextCompressor>>,
@@ -198,6 +205,7 @@ impl AgentExecutor {
             tools,
             sessions,
             config: AgentExecutorConfig::default(),
+            memory: None,
             compressor: None,
         })
     }
@@ -234,8 +242,24 @@ impl AgentExecutor {
             tools,
             sessions,
             config,
+            memory: None,
             compressor: None,
         })
+    }
+
+    /// Attach a long-term memory backend to this executor.
+    ///
+    /// When memory is set, the executor will:
+    /// 1. Query the memory store for entries relevant to the incoming message.
+    /// 2. Prepend those memories to the system prompt so the agent has context
+    ///    from past sessions.
+    /// 3. Store each completed user/assistant exchange in memory after the turn.
+    ///
+    /// Any type implementing the kernel `Memory` trait can be plugged in —
+    /// `EpisodicMemory`, `SemanticMemory`, `InMemoryStorage`, etc.
+    pub fn with_memory(mut self, memory: Arc<RwLock<dyn Memory>>) -> Self {
+        self.memory = Some(memory);
+        self
     }
 
     /// Register a tool
@@ -267,12 +291,28 @@ impl AgentExecutor {
         let session = self.sessions.get_or_create(session_key).await;
 
         // 2. Build system prompt
-        let system_prompt = {
+        let mut system_prompt = {
             let mut ctx = self.context.write().await;
             ctx.build_system_prompt().await?
         };
 
-        // 3. Build messages
+        // 3. Inject relevant memories into system prompt (if memory is configured)
+        if let Some(mem) = &self.memory {
+            let mem_read = mem.read().await;
+            let recalled = mem_read.search(message, 5).await.unwrap_or_default();
+            if !recalled.is_empty() {
+                let memory_block: String = recalled
+                    .iter()
+                    .filter_map(|item| item.value.as_text().map(|t| format!("- {t}")))
+                    .collect::<Vec<_>>()
+                    .join("\n");
+                system_prompt = format!(
+                    "{system_prompt}\n\n## Relevant memories from past sessions\n{memory_block}"
+                );
+            }
+        }
+
+        // 4. Build messages
         let mut messages = self
             .build_messages(&session, &system_prompt, message)
             .await?;
@@ -296,6 +336,20 @@ impl AgentExecutor {
         session_updated.add_message("user", message);
         session_updated.add_message("assistant", &response);
         self.sessions.save(&session_updated).await?;
+
+        // 7. Store this exchange in long-term memory (if configured)
+        if let Some(mem) = &self.memory {
+            use mofa_kernel::agent::components::memory::Message as MemMessage;
+            let mut mem_write = mem.write().await;
+            mem_write
+                .add_to_history(session_key, MemMessage::user(message))
+                .await
+                .ok();
+            mem_write
+                .add_to_history(session_key, MemMessage::assistant(&response))
+                .await
+                .ok();
+        }
 
         Ok(response)
     }
