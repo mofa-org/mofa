@@ -28,4 +28,3 @@ async fn test_pdf_tool_extracts_text() {
 
     assert!(output["success"].as_bool().unwrap());
 }
-
