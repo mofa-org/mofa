@@ -44,6 +44,7 @@ linux-candle = ["dep:candle-core", "dep:candle-transformers"]
 # Enable scheduler telemetry (Prometheus metrics)
 scheduler-telemetry = ["dep:metrics"]
 
+
 [dependencies]
 # Workspace dependencies
 async-trait.workspace = true
@@ -59,6 +60,7 @@ tracing.workspace = true
 rand.workspace = true
 # YAML config parsing
 serde_yaml = "0.9"
+
 
 # HTTP client (transcription + HTTP providers)
 reqwest = { workspace = true, features = [

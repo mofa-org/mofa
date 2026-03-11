@@ -53,6 +53,9 @@ pub mod collaboration;
 // RAG module - vector store and document chunking
 pub mod rag;
 
+// cost module - concrete pricing registry and budget enforcer implementations
+pub mod cost;
+
 // swarm module - Multi-agent swarm orchestration
 pub mod swarm;
 // Structured output: JSON schema validator and agent executor
