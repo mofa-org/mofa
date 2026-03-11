@@ -45,6 +45,7 @@ use std::collections::HashMap;
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use tokio::sync::RwLock;
 
 /// Agent 工作流节点类型
@@ -442,6 +443,8 @@ pub struct AgentWorkflowContext {
     variables: Arc<RwLock<HashMap<String, String>>>,
     /// Maximum number of execution steps before aborting (prevents infinite loops)
     pub max_steps: usize,
+    /// Shared execution step counter across sequential and parallel branches.
+    step_counter: Arc<AtomicUsize>,
 }
 
 impl AgentWorkflowContext {
@@ -453,6 +456,7 @@ impl AgentWorkflowContext {
             shared_session_id: None,
             variables: Arc::new(RwLock::new(HashMap::new())),
             max_steps: 25, // Default limit matching LangGraph convention
+            step_counter: Arc::new(AtomicUsize::new(0)),
         }
     }
 
@@ -494,6 +498,19 @@ impl AgentWorkflowContext {
         let vars = self.variables.read().await;
         vars.get(key).cloned()
     }
+
+    fn claim_step(&self, workflow_id: &str) -> LLMResult<()> {
+        let next_step = self.step_counter.fetch_add(1, Ordering::SeqCst) + 1;
+        if next_step > self.max_steps {
+            return Err(LLMError::Other(format!(
+                "Workflow '{}' exceeded maximum step limit of {}. \
+                 Possible infinite loop detected. \
+                 Use AgentWorkflowContext::with_max_steps() to increase the limit if needed.",
+                workflow_id, self.max_steps
+            )));
+        }
+        Ok(())
+    }
 }
 
 impl Clone for AgentWorkflowContext {
@@ -505,6 +522,7 @@ impl Clone for AgentWorkflowContext {
             shared_session_id: self.shared_session_id.clone(),
             variables: self.variables.clone(),
             max_steps: self.max_steps,
+            step_counter: self.step_counter.clone(),
         }
     }
 }
@@ -554,23 +572,14 @@ impl AgentWorkflow {
         let input = input.into();
         let mut current_node_id = "start".to_string();
         let mut current_input = input;
-        let mut step_count: usize = 0;
 
         loop {
-            step_count += 1;
-            if step_count > ctx.max_steps {
-                return Err(LLMError::Other(format!(
-                    "Workflow '{}' exceeded maximum step limit of {}. \
-                     Possible infinite loop detected. \
-                     Use AgentWorkflowContext::with_max_steps() to increase the limit if needed.",
-                    self.id, ctx.max_steps
-                )));
-            }
-
             let node = self
                 .nodes
                 .get(&current_node_id)
                 .ok_or_else(|| LLMError::Other(format!("Node '{}' not found", current_node_id)))?;
+
+            ctx.claim_step(&self.id)?;
 
             // 执行节点
             // Execute node
@@ -579,6 +588,20 @@ impl AgentWorkflow {
             // 保存输出
             // Save output
             ctx.set_output(&current_node_id, output.clone()).await;
+
+            if matches!(node.node_type, AgentNodeType::Parallel) {
+                match self
+                    .execute_parallel_branches(ctx, &current_node_id, output.clone())
+                    .await?
+                {
+                    Some(next_id) => {
+                        current_node_id = next_id;
+                        current_input = output;
+                    }
+                    None => return Ok(output),
+                }
+                continue;
+            }
 
             // 确定下一个节点
             // Determine next node
@@ -592,6 +615,103 @@ impl AgentWorkflow {
                     // Workflow finished
                     return Ok(output);
                 }
+            }
+        }
+    }
+
+    async fn execute_parallel_branches(
+        &self,
+        ctx: &AgentWorkflowContext,
+        parallel_id: &str,
+        input: AgentValue,
+    ) -> LLMResult<Option<String>> {
+        let branch_edges = match self.adjacency.get(parallel_id) {
+            Some(edges) if !edges.is_empty() => edges,
+            _ => return Ok(None),
+        };
+
+        let branch_starts: Vec<String> = branch_edges.iter().map(|edge| edge.to.clone()).collect();
+
+        let branch_results =
+            futures::future::try_join_all(branch_starts.into_iter().map(|branch_id| {
+                let branch_ctx = ctx.clone();
+                let branch_input = input.clone();
+                async move {
+                    self.execute_branch_until_join(&branch_ctx, branch_id, branch_input)
+                        .await
+                }
+            }))
+            .await?;
+
+        let mut branch_targets = branch_results.into_iter();
+        let first_join = branch_targets.next().flatten().ok_or_else(|| {
+            LLMError::Other(format!(
+                "Parallel node '{}' must converge all branches into a join node",
+                parallel_id
+            ))
+        })?;
+
+        for branch_target in branch_targets {
+            match branch_target {
+                Some(join_id) if join_id == first_join => {}
+                Some(join_id) => {
+                    return Err(LLMError::Other(format!(
+                        "Parallel node '{}' branches converged to different join nodes ('{}' vs '{}')",
+                        parallel_id, first_join, join_id
+                    )));
+                }
+                None => {
+                    return Err(LLMError::Other(format!(
+                        "Parallel node '{}' must converge all branches into the same join node",
+                        parallel_id
+                    )));
+                }
+            }
+        }
+
+        Ok(Some(first_join))
+    }
+
+    async fn execute_branch_until_join(
+        &self,
+        ctx: &AgentWorkflowContext,
+        mut current_node_id: String,
+        mut current_input: AgentValue,
+    ) -> LLMResult<Option<String>> {
+        loop {
+            let node = self
+                .nodes
+                .get(&current_node_id)
+                .ok_or_else(|| LLMError::Other(format!("Node '{}' not found", current_node_id)))?;
+
+            if matches!(node.node_type, AgentNodeType::Join) {
+                return Ok(Some(current_node_id));
+            }
+
+            ctx.claim_step(&self.id)?;
+
+            let output = self.execute_node(ctx, node, current_input.clone()).await?;
+            ctx.set_output(&current_node_id, output.clone()).await;
+
+            if matches!(node.node_type, AgentNodeType::Parallel) {
+                return Err(LLMError::Other(format!(
+                    "Nested parallel node '{}' is not supported inside parallel branches",
+                    current_node_id
+                )));
+            }
+
+            match self.get_next_node(&current_node_id, &output).await {
+                Some(next_id) => {
+                    if matches!(
+                        self.nodes.get(&next_id).map(|next| &next.node_type),
+                        Some(AgentNodeType::Join)
+                    ) {
+                        return Ok(Some(next_id));
+                    }
+                    current_node_id = next_id;
+                    current_input = output;
+                }
+                None => return Ok(None),
             }
         }
     }
@@ -1160,6 +1280,59 @@ mod tests {
         let result = workflow.run("init").await.expect("workflow should succeed");
         // Verify execution correctness — tracing instrumentation must not alter behavior
         assert_eq!(result.as_text(), Some("init-step1-step2"));
+    }
+
+    #[tokio::test]
+    async fn test_parallel_node_executes_all_branches_before_join() {
+        use tokio::sync::Barrier;
+        use tokio::time::{Duration, timeout};
+
+        let barrier = Arc::new(Barrier::new(2));
+        let left_barrier = barrier.clone();
+        let right_barrier = barrier.clone();
+
+        let mut builder = AgentWorkflowBuilder::new("parallel-join-test")
+            .add_parallel("parallel")
+            .add_transform("left", move |input: AgentValue| {
+                let left_barrier = left_barrier.clone();
+                async move {
+                    left_barrier.wait().await;
+                    AgentValue::Text(format!("left:{}", input.into_text()))
+                }
+            })
+            .add_transform("right", move |input: AgentValue| {
+                let right_barrier = right_barrier.clone();
+                async move {
+                    right_barrier.wait().await;
+                    AgentValue::Text(format!("right:{}", input.into_text()))
+                }
+            })
+            .add_join_with("join", vec!["left", "right"], |outputs| async move {
+                let left = outputs
+                    .get("left")
+                    .and_then(AgentValue::as_text)
+                    .unwrap_or_default();
+                let right = outputs
+                    .get("right")
+                    .and_then(AgentValue::as_text)
+                    .unwrap_or_default();
+                AgentValue::Text(format!("{left}|{right}"))
+            })
+            .connect("start", "parallel")
+            .connect("parallel", "left")
+            .connect("parallel", "right")
+            .connect("left", "join")
+            .connect("right", "join");
+
+        builder.nodes.insert("end".to_string(), AgentNode::end());
+        let workflow = builder.connect("join", "end").build();
+
+        let result = timeout(Duration::from_millis(500), workflow.run("seed"))
+            .await
+            .expect("parallel branches should not deadlock")
+            .expect("workflow should succeed");
+
+        assert_eq!(result.as_text(), Some("left:seed|right:seed"));
     }
 
     #[test]
