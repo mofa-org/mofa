@@ -26,10 +26,14 @@
 //! println!("Output: {}", result.output);
 //! ```
 
+pub mod local_backend;
 pub mod model_pool;
 pub mod orchestrator;
 pub mod routing;
 pub mod types;
+
+// Re-export local backend types
+pub use local_backend::{InferenceChunk, InferenceResponse, LocalInferenceBackend};
 
 // Re-export primary public API
 pub use crate::scheduler::AdmissionOutcome;
