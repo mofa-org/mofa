@@ -55,6 +55,13 @@ pub use rag::{
 pub mod workflow;
 pub use workflow::*;
 pub mod llm;
+// Re-export the Inference Request Protocol types at the crate root for
+// convenient access (`mofa_kernel::InferenceRequest`, etc.).
+pub use llm::irp::{
+    InferenceCapabilities, InferenceProtocol, InferenceRequest, InferenceResponse,
+    RequestModality,
+};
+
 // Metrics traits for monitoring integration
 pub mod metrics;
 pub use metrics::*;
