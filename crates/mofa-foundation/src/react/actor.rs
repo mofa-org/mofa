@@ -258,19 +258,9 @@ async fn handle_message(
             // Execute task with step callbacks
             let result = match state.ensure_agent().await {
                 Ok(agent) => {
-                    // 运行任务
-                    // Run the task
-                    let result = agent.run(&task).await;
-
-                    // 发送所有步骤
-                    // Send all the steps
-                    if let Ok(ref res) = result {
-                        for step in &res.steps {
-                            let _ = step_tx.send(step.clone()).await;
-                        }
-                    }
-
-                    result
+                    // 使用流式方法运行任务 — 步骤在产生时实时发送
+                    // Use streaming method — steps are sent as they are produced
+                    agent.run_streaming(&task, step_tx).await
                 }
                 Err(e) => Err(e),
             };

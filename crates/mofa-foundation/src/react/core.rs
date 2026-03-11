@@ -469,6 +469,105 @@ impl ReActAgent {
         ))
     }
 
+    /// 执行任务并实时流式返回步骤
+    /// Execute task and stream steps in real-time
+    pub async fn run_streaming(
+        &self,
+        task: impl Into<String>,
+        step_tx: tokio::sync::mpsc::Sender<ReActStep>,
+    ) -> LLMResult<ReActResult> {
+        let task = task.into();
+        let task_id = uuid::Uuid::now_v7().to_string();
+        let start_time = std::time::Instant::now();
+
+        let mut steps = Vec::new();
+        let mut step_number = 0;
+
+        let system_prompt = self.build_system_prompt().await;
+        let mut conversation = vec![format!("Task: {}", task)];
+
+        for iteration in 0..self.config.max_iterations {
+            step_number += 1;
+
+            let prompt = self.build_prompt(&system_prompt, &conversation).await;
+            let response = self.llm.ask(&prompt).await?;
+            let parsed = self.parse_response(&response);
+
+            match parsed {
+                ParsedResponse::Thought(thought) => {
+                    let step = ReActStep::thought(&thought, step_number);
+                    // Stream step immediately as it is produced
+                    let _ = step_tx.send(step.clone()).await;
+                    steps.push(step);
+                    conversation.push(format!("Thought: {}", thought));
+
+                    if self.config.verbose {
+                        tracing::info!("Thought: {}", thought);
+                    }
+                }
+                ParsedResponse::Action { tool, input } => {
+                    let step = ReActStep::action(&tool, &input, step_number);
+                    let _ = step_tx.send(step.clone()).await;
+                    steps.push(step);
+                    conversation.push(format!("Action: {}[{}]", tool, input));
+
+                    if self.config.verbose {
+                        tracing::info!("Action: {}[{}]", tool, input);
+                    }
+
+                    // Execute tool
+                    step_number += 1;
+                    let observation = self.execute_tool(&tool, &input).await;
+                    let obs_step = ReActStep::observation(&observation, step_number);
+                    let _ = step_tx.send(obs_step.clone()).await;
+                    steps.push(obs_step);
+                    conversation.push(format!("Observation: {}", observation));
+
+                    if self.config.verbose {
+                        tracing::info!("Observation: {}", observation);
+                    }
+                }
+                ParsedResponse::FinalAnswer(answer) => {
+                    let step = ReActStep::final_answer(&answer, step_number);
+                    let _ = step_tx.send(step.clone()).await;
+                    steps.push(step);
+
+                    if self.config.verbose {
+                        tracing::info!("Final Answer: {}", answer);
+                    }
+
+                    return Ok(ReActResult::success(
+                        task_id,
+                        &task,
+                        answer,
+                        steps,
+                        iteration + 1,
+                        start_time.elapsed().as_millis() as u64,
+                    ));
+                }
+                ParsedResponse::Error(err) => {
+                    return Ok(ReActResult::failed(
+                        task_id,
+                        &task,
+                        err,
+                        steps,
+                        iteration + 1,
+                        start_time.elapsed().as_millis() as u64,
+                    ));
+                }
+            }
+        }
+
+        Ok(ReActResult::failed(
+            task_id,
+            &task,
+            format!("Max iterations ({}) exceeded", self.config.max_iterations),
+            steps,
+            self.config.max_iterations,
+            start_time.elapsed().as_millis() as u64,
+        ))
+    }
+
     /// 构建系统提示词
     /// Build system prompt
     async fn build_system_prompt(&self) -> String {
