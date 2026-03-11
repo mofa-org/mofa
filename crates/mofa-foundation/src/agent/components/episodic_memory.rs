@@ -35,8 +35,8 @@ use mofa_kernel::agent::components::memory::{
 };
 use mofa_kernel::agent::error::AgentResult;
 use std::collections::HashMap;
-use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 /// A single stored episode — one message within a session, with ordering metadata.
 #[derive(Debug, Clone)]
@@ -199,8 +199,7 @@ impl Memory for EpisodicMemory {
 
     async fn clear_history(&mut self, session_id: &str) -> AgentResult<()> {
         self.sessions.remove(session_id);
-        self.all_episodes
-            .retain(|ep| ep.session_id != session_id);
+        self.all_episodes.retain(|ep| ep.session_id != session_id);
         Ok(())
     }
 
@@ -233,8 +232,12 @@ mod tests {
     async fn test_add_and_retrieve_history() {
         let mut mem = EpisodicMemory::new();
 
-        mem.add_to_history("s1", Message::user("hello")).await.unwrap();
-        mem.add_to_history("s1", Message::assistant("hi there")).await.unwrap();
+        mem.add_to_history("s1", Message::user("hello"))
+            .await
+            .unwrap();
+        mem.add_to_history("s1", Message::assistant("hi there"))
+            .await
+            .unwrap();
 
         let history = mem.get_history("s1").await.unwrap();
         assert_eq!(history.len(), 2);
@@ -286,8 +289,12 @@ mod tests {
     async fn test_clear_history_for_session() {
         let mut mem = EpisodicMemory::new();
 
-        mem.add_to_history("s1", Message::user("msg1")).await.unwrap();
-        mem.add_to_history("s2", Message::user("msg2")).await.unwrap();
+        mem.add_to_history("s1", Message::user("msg1"))
+            .await
+            .unwrap();
+        mem.add_to_history("s2", Message::user("msg2"))
+            .await
+            .unwrap();
 
         mem.clear_history("s1").await.unwrap();
 
@@ -306,7 +313,9 @@ mod tests {
     async fn test_kv_store() {
         let mut mem = EpisodicMemory::new();
 
-        mem.store("user_name", MemoryValue::text("Alice")).await.unwrap();
+        mem.store("user_name", MemoryValue::text("Alice"))
+            .await
+            .unwrap();
         let val = mem.retrieve("user_name").await.unwrap();
         assert!(val.is_some());
         assert_eq!(val.unwrap().as_text(), Some("Alice"));
@@ -317,7 +326,9 @@ mod tests {
         let mut mem = EpisodicMemory::new();
 
         mem.add_to_history("s1", Message::user("a")).await.unwrap();
-        mem.add_to_history("s1", Message::assistant("b")).await.unwrap();
+        mem.add_to_history("s1", Message::assistant("b"))
+            .await
+            .unwrap();
         mem.add_to_history("s2", Message::user("c")).await.unwrap();
 
         let stats = mem.stats().await.unwrap();

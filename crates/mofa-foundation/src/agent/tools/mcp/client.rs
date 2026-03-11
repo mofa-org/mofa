@@ -236,12 +236,7 @@ impl McpClient for McpClientManager {
 
         let params = CallToolRequestParams {
             name: tool_name.to_string().into(),
-            arguments: Some(
-                arguments
-                    .as_object()
-                    .map(|m| m.clone())
-                    .unwrap_or_default(),
-            ),
+            arguments: Some(arguments.as_object().map(|m| m.clone()).unwrap_or_default()),
             meta: None,
             task: None,
         };

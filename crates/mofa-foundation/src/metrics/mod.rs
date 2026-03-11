@@ -353,21 +353,22 @@ impl MetricsCollector {
         tokens: Option<TokenUsage>,
     ) {
         let mut metrics = self.agent_metrics.write().await;
-        let entry = metrics.entry(agent_id.to_string()).or_insert_with(|| AgentMetrics {
-            agent_id: agent_id.to_string(),
-            total_executions: 0,
-            successful_executions: 0,
-            failed_executions: 0,
-            total_execution_time_ms: 0,
-            latency_percentiles: LatencyPercentiles::default(),
-            token_usage: TokenUsage::default(),
-            memory_usage_bytes: 0,
-            cpu_usage_percent: 0.0,
-        });
+        let entry = metrics
+            .entry(agent_id.to_string())
+            .or_insert_with(|| AgentMetrics {
+                agent_id: agent_id.to_string(),
+                total_executions: 0,
+                successful_executions: 0,
+                failed_executions: 0,
+                total_execution_time_ms: 0,
+                latency_percentiles: LatencyPercentiles::default(),
+                token_usage: TokenUsage::default(),
+                memory_usage_bytes: 0,
+                cpu_usage_percent: 0.0,
+            });
 
         entry.total_executions += 1;
-        entry.total_execution_time_ms +=
-            u64::try_from(duration.as_millis()).unwrap_or(u64::MAX);
+        entry.total_execution_time_ms += u64::try_from(duration.as_millis()).unwrap_or(u64::MAX);
 
         if success {
             entry.successful_executions += 1;
@@ -391,25 +392,21 @@ impl MetricsCollector {
     // -- Tool ----------------------------------------------------------------
 
     /// Record one tool invocation.
-    pub async fn record_tool_execution(
-        &self,
-        tool_name: &str,
-        duration: Duration,
-        success: bool,
-    ) {
+    pub async fn record_tool_execution(&self, tool_name: &str, duration: Duration, success: bool) {
         let mut metrics = self.tool_metrics.write().await;
-        let entry = metrics.entry(tool_name.to_string()).or_insert_with(|| ToolMetrics {
-            tool_name: tool_name.to_string(),
-            total_calls: 0,
-            successful_calls: 0,
-            failed_calls: 0,
-            average_execution_time_ms: 0.0,
-            total_execution_time_ms: 0,
-        });
+        let entry = metrics
+            .entry(tool_name.to_string())
+            .or_insert_with(|| ToolMetrics {
+                tool_name: tool_name.to_string(),
+                total_calls: 0,
+                successful_calls: 0,
+                failed_calls: 0,
+                average_execution_time_ms: 0.0,
+                total_execution_time_ms: 0,
+            });
 
         entry.total_calls += 1;
-        entry.total_execution_time_ms +=
-            u64::try_from(duration.as_millis()).unwrap_or(u64::MAX);
+        entry.total_execution_time_ms += u64::try_from(duration.as_millis()).unwrap_or(u64::MAX);
 
         if success {
             entry.successful_calls += 1;
@@ -473,11 +470,7 @@ impl MetricsCollector {
     // -- Circuit breaker -----------------------------------------------------
 
     /// Record a circuit breaker event.
-    pub async fn record_circuit_breaker_event(
-        &self,
-        cb_id: &str,
-        event: CircuitBreakerEvent,
-    ) {
+    pub async fn record_circuit_breaker_event(&self, cb_id: &str, event: CircuitBreakerEvent) {
         let mut metrics = self.circuit_breaker_metrics.write().await;
         let entry = metrics
             .entry(cb_id.to_string())
@@ -512,8 +505,7 @@ impl MetricsCollector {
         } else {
             metrics.rejected_count += 1;
         }
-        metrics.queue_wait_time_ms +=
-            u64::try_from(wait_time.as_millis()).unwrap_or(u64::MAX);
+        metrics.queue_wait_time_ms += u64::try_from(wait_time.as_millis()).unwrap_or(u64::MAX);
     }
 
     /// Return a snapshot of scheduler metrics.
@@ -546,8 +538,7 @@ impl MetricsCollector {
         } else {
             entry.exhausted_retries += 1;
         }
-        entry.total_backoff_time_ms +=
-            u64::try_from(backoff_time.as_millis()).unwrap_or(u64::MAX);
+        entry.total_backoff_time_ms += u64::try_from(backoff_time.as_millis()).unwrap_or(u64::MAX);
     }
 
     // -- Business metrics ----------------------------------------------------

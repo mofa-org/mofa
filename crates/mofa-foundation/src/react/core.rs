@@ -693,16 +693,11 @@ Rules:
             let tools = self.tools.read().await;
 
             match tools.get(tool_name) {
-                Some(tool) => {
-                    match tokio::time::timeout(timeout_dur, tool.execute(input)).await {
-                        Ok(Ok(result)) => result,
-                        Ok(Err(e)) => format!("Tool error: {}", e),
-                        Err(_) => format!(
-                            "Tool '{}' timed out after {:?}",
-                            tool_name, timeout_dur
-                        ),
-                    }
-                }
+                Some(tool) => match tokio::time::timeout(timeout_dur, tool.execute(input)).await {
+                    Ok(Ok(result)) => result,
+                    Ok(Err(e)) => format!("Tool error: {}", e),
+                    Err(_) => format!("Tool '{}' timed out after {:?}", tool_name, timeout_dur),
+                },
                 None => format!(
                     "Tool '{}' not found. Available tools: {:?}",
                     tool_name,
