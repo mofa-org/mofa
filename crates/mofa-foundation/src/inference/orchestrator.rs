@@ -299,6 +299,35 @@ impl InferenceOrchestrator {
         }
     }
 
+    /// Phase-1 simulated streaming entry point.
+    ///
+    /// **Warning**: This method splits the fully-generated output by whitespace
+    /// to simulate token-level SSE. It will be replaced by real incremental
+    /// decoding in Phase 2. Hidden from public documentation until then.
+    #[doc(hidden)]
+    pub fn infer_stream(
+        &mut self,
+        request: &InferenceRequest,
+    ) -> (
+        InferenceResult,
+        std::pin::Pin<Box<dyn futures::Stream<Item = String> + Send + Sync>>,
+    ) {
+        // Run full admission/routing logic
+        let base_result = self.infer(request);
+
+        // Phase 1 simulated string stream based on the generated output
+        let output_str = base_result.output.clone();
+
+        let words: Vec<String> = output_str
+            .split_whitespace()
+            .map(|w| format!("{w} "))
+            .collect();
+        let stream = futures::stream::iter(words);
+
+        (base_result, Box::pin(stream))
+    }
+
+
     /// Get the current memory usage as a fraction of total capacity (0.0–1.0).
     pub fn memory_utilization(&self) -> f64 {
         if self.config.memory_capacity_mb == 0 {

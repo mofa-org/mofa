@@ -109,6 +109,19 @@ mofa generate dataflow --output my-dataflow.yml
 mofa info
 ```
 
+### Diagnose Real-World Readiness
+
+```bash
+# Local developer diagnostics (checks OPENAI_API_KEY, toolchain, project files)
+mofa doctor --scenario local-dev --path .
+
+# CI gate diagnostics (machine-readable report)
+mofa doctor --scenario ci --json --strict --path .
+
+# Auto-create missing runtime directories
+mofa doctor --scenario docker --fix
+```
+
 # 创建 Rust LLM 项目
 mofa new my-rust-agent --template llm
 
@@ -131,6 +144,7 @@ cd my-python-agent && pip install -r requirements.txt && python main.py
 | `generate config` | Generate agent configuration |
 | `generate dataflow` | Generate dataflow configuration |
 | `info` | Show information about MoFA |
+| `doctor` | Diagnose project and environment readiness |
 
 ## License
 

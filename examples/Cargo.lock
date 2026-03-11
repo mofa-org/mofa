@@ -87,6 +87,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "agent_memory"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "mofa-foundation",
+ "mofa-kernel",
+ "tokio",
+ "tracing",
+ "tracing-subscriber 0.3.22",
+]
+
+[[package]]
 name = "agent_with_plugins_and_rhai"
 version = "0.1.0"
 dependencies = [
@@ -836,21 +848,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "circuit_breaker_demo"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "async-trait",
- "mofa-foundation",
- "mofa-kernel",
- "serde",
- "serde_json",
- "tokio",
- "tracing",
- "tracing-subscriber 0.3.22",
-]
-
-[[package]]
 name = "clang-sys"
 version = "1.8.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -927,6 +924,17 @@ dependencies = [
  "serde_json",
  "tempfile",
  "tokio",
+]
+
+[[package]]
+name = "cli_doctor_demo"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "colored",
+ "serde",
+ "serde_json",
+ "tempfile",
 ]
 
 [[package]]
@@ -3771,6 +3779,7 @@ dependencies = [
 name = "mofa-cli"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
  "async-trait",
  "chrono",
  "clap",
@@ -3880,6 +3889,7 @@ dependencies = [
  "futures",
  "hyper",
  "hyper-util",
+ "mofa-foundation",
  "mofa-kernel",
  "mofa-runtime",
  "parking_lot",
@@ -3952,6 +3962,7 @@ dependencies = [
  "hex",
  "lazy_static",
  "mime_guess",
+ "mofa-foundation",
  "mofa-kernel",
  "rand 0.8.5",
  "reqwest",
