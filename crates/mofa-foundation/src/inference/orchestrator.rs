@@ -312,6 +312,7 @@ impl InferenceOrchestrator {
         let max_attempts = 1 + self.config.cloud_retry_attempts;
         let mut attempts = 0;
 
+        #[allow(clippy::never_loop)]
         for _ in 0..max_attempts {
             attempts += 1;
             
