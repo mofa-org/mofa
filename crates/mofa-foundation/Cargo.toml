@@ -115,6 +115,7 @@ once_cell = "1.21.3"
 
 # Graph data structures for task DAGs (Swarm Orchestrator)
 petgraph = { version = "0.7", features = ["serde-1"] }
+dashmap = { workspace = true }
 rhai = { version = "1", features = ["sync", "serde"] }
 lazy_static = "1.4"
 
