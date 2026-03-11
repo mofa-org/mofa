@@ -244,6 +244,7 @@ pub struct ScheduleInfo {
 ///
 /// Callers that need to be generic over the scheduler backend (e.g. tests using a
 /// `MockScheduler`) depend only on this trait.
+#[allow(async_fn_in_trait)]
 pub trait AgentScheduler: Send + Sync {
     /// Register a new schedule. Returns a [`ScheduleHandle`] that, when dropped or
     /// cancelled, stops the background task.
