@@ -281,3 +281,27 @@ mod tests {
         assert_eq!(idx1.increment(), idx2);
     }
 }
+
+// ──────────────────────────────────────────────────────────────────────────────
+// OpenAI-compatible model types
+// ──────────────────────────────────────────────────────────────────────────────
+
+/// Information about an available model for the OpenAI-compatible API.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ModelInfo {
+    /// Unique identifier for the model.
+    pub id: String,
+    /// Object type (always "model").
+    pub object: String,
+    /// Owner/organization that created the model.
+    pub owned_by: String,
+}
+
+/// Response for the OpenAI-compatible `/v1/models` endpoint.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ModelListResponse {
+    /// Object type (always "list").
+    pub object: String,
+    /// List of available models.
+    pub data: Vec<ModelInfo>,
+}
