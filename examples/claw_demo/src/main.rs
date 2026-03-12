@@ -78,23 +78,27 @@ impl RouteRegistry for SimpleRouteRegistry {
     fn register(&mut self, route: GatewayRoute) -> Result<(), RegistryError> {
         // Validate the route and wrap validation errors as RegistryError::InvalidRoute for consistency.
         if let Err(err) = route.validate() {
-            return Err(RegistryError::InvalidRoute(route.clone(), err));
+            return Err(RegistryError::InvalidRoute(err.to_string()));
         }
         if self.routes.contains_key(&route.id) {
             return Err(RegistryError::DuplicateRouteId(route.id.clone()));
         }
         // Enforce deterministic dispatch: prevent multiple routes with the same
         // (path_pattern, method, priority) triple.
-        if self
+        let conflict_id = self
             .routes
             .values()
-            .any(|existing| {
+            .find(|existing| {
                 existing.path_pattern == route.path_pattern
                     && existing.method == route.method
                     && existing.priority == route.priority
             })
-        {
-            return Err(RegistryError::ConflictingRoutes);
+            .map(|existing| existing.id.clone());
+        if let Some(existing_id) = conflict_id {
+            return Err(RegistryError::ConflictingRoutes(
+                route.id.clone(),
+                existing_id,
+            ));
         }
         self.routes.insert(route.id.clone(), route);
         Ok(())
