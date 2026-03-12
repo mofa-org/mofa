@@ -1,6 +1,6 @@
 //! Claw Demo — MoFA Gateway Closed-Loop Showcase
 //!
-//! Demonstrates the full gateway processing pipeline using **real** types from
+//! Demonstrates the gateway processing pipeline using **real** types from
 //! `mofa-kernel`, `mofa-gateway`, and `mofa-foundation` wherever they exist.
 //! Inline mocks are used only for components that have no trait or concrete
 //! type in the current codebase — each mock is annotated with a `// MOCK:`
@@ -17,6 +17,8 @@
 //! 7. Backend response                       — MOCK (no API key)
 //! 8. `MockHandoffRecord`                    — MOCK (pending PR #997)
 //! 9. Closed-loop report
+//!
+//! **Note:** This demo does not currently integrate with `mofa-runtime` or execute a real sub-agent. The "handoff" is a local mock. To fully demonstrate a runtime/sub-agent path, further integration is required.
 //!
 //! # Running
 //!
@@ -74,9 +76,25 @@ impl SimpleRouteRegistry {
 
 impl RouteRegistry for SimpleRouteRegistry {
     fn register(&mut self, route: GatewayRoute) -> Result<(), RegistryError> {
-        route.validate()?;
+        // Validate the route and wrap validation errors as RegistryError::InvalidRoute for consistency.
+        if let Err(err) = route.validate() {
+            return Err(RegistryError::InvalidRoute(route.clone(), err));
+        }
         if self.routes.contains_key(&route.id) {
             return Err(RegistryError::DuplicateRouteId(route.id.clone()));
+        }
+        // Enforce deterministic dispatch: prevent multiple routes with the same
+        // (path_pattern, method, priority) triple.
+        if self
+            .routes
+            .values()
+            .any(|existing| {
+                existing.path_pattern == route.path_pattern
+                    && existing.method == route.method
+                    && existing.priority == route.priority
+            })
+        {
+            return Err(RegistryError::ConflictingRoutes);
         }
         self.routes.insert(route.id.clone(), route);
         Ok(())
