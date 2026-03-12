@@ -8,8 +8,8 @@
 //!   - [`InMemoryPricingRegistry`] — built-in prices for major providers
 //!   - [`BudgetEnforcer`] — async, per-agent budget enforcement
 
-mod pricing;
 mod budget;
+mod pricing;
 
-pub use pricing::InMemoryPricingRegistry;
 pub use budget::BudgetEnforcer;
+pub use pricing::InMemoryPricingRegistry;
