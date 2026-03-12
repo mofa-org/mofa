@@ -1045,6 +1045,9 @@ impl<S: GraphState + 'static> CompiledGraph<S, serde_json::Value> for CompiledGr
         let next_nodes = self.get_next_nodes(&node_id, &command)?;
         let is_complete = next_nodes.is_empty();
         let next_node = next_nodes.into_iter().next();
+        if let Some(next_node_id) = next_node.as_ref() {
+            ctx.set_current_node(next_node_id.clone()).await;
+        }
 
         Ok(StepResult {
             state,
@@ -1366,6 +1369,161 @@ mod tests {
 
         assert!(saw_timeout, "stream should emit a timeout error");
         assert!(!saw_end, "timed out stream should not emit an end event");
+    }
+
+    #[tokio::test]
+    async fn test_step_advances_runtime_context_for_linear_progression() {
+        let mut graph = StateGraphImpl::<JsonState>::new("step_progression");
+
+        graph
+            .add_node(
+                "first",
+                Box::new(TestNode {
+                    name: "first".to_string(),
+                    updates: vec![StateUpdate::new("visited_first", json!(true))],
+                }),
+            )
+            .add_node(
+                "second",
+                Box::new(TestNode {
+                    name: "second".to_string(),
+                    updates: vec![StateUpdate::new("visited_second", json!(true))],
+                }),
+            )
+            .add_edge(START, "first")
+            .add_edge("first", "second")
+            .add_edge("second", END);
+
+        let compiled = graph.compile().unwrap();
+        let ctx = RuntimeContext::new("step_progression");
+
+        let first_step = compiled
+            .step(JsonState::new(), Some(ctx.clone()))
+            .await
+            .unwrap();
+        assert_eq!(first_step.node_id, "first");
+        assert!(!first_step.is_complete);
+        assert_eq!(first_step.next_node.as_deref(), Some("second"));
+        assert_eq!(ctx.current_node().await, "second");
+        assert_eq!(
+            first_step
+                .state
+                .get_value::<serde_json::Value>("visited_first"),
+            Some(json!(true))
+        );
+
+        let second_step = compiled
+            .step(first_step.state, Some(ctx.clone()))
+            .await
+            .unwrap();
+        assert_eq!(second_step.node_id, "second");
+        assert!(second_step.is_complete);
+        assert_eq!(second_step.next_node, None);
+        assert_eq!(ctx.current_node().await, "second");
+        assert_eq!(
+            second_step
+                .state
+                .get_value::<serde_json::Value>("visited_first"),
+            Some(json!(true))
+        );
+        assert_eq!(
+            second_step
+                .state
+                .get_value::<serde_json::Value>("visited_second"),
+            Some(json!(true))
+        );
+    }
+
+    #[tokio::test]
+    async fn test_step_persists_selected_conditional_route() {
+        let mut graph = StateGraphImpl::<JsonState>::new("step_conditional_route");
+
+        let mut routes = HashMap::new();
+        routes.insert("approve".to_string(), "approved".to_string());
+        routes.insert("reject".to_string(), "rejected".to_string());
+
+        graph
+            .add_node(
+                "router",
+                Box::new(StaticCommandNode {
+                    name: "router".to_string(),
+                    command: Command::new().route("approve").continue_(),
+                }),
+            )
+            .add_node(
+                "approved",
+                Box::new(TestNode {
+                    name: "approved".to_string(),
+                    updates: vec![StateUpdate::new("decision", json!("approved"))],
+                }),
+            )
+            .add_node(
+                "rejected",
+                Box::new(TestNode {
+                    name: "rejected".to_string(),
+                    updates: vec![StateUpdate::new("decision", json!("rejected"))],
+                }),
+            )
+            .add_edge(START, "router")
+            .add_conditional_edges("router", routes)
+            .add_edge("approved", END)
+            .add_edge("rejected", END);
+
+        let compiled = graph.compile().unwrap();
+        let ctx = RuntimeContext::new("step_conditional_route");
+
+        let routed_step = compiled
+            .step(JsonState::new(), Some(ctx.clone()))
+            .await
+            .unwrap();
+        assert_eq!(routed_step.node_id, "router");
+        assert_eq!(routed_step.next_node.as_deref(), Some("approved"));
+        assert_eq!(ctx.current_node().await, "approved");
+
+        let branch_step = compiled
+            .step(routed_step.state, Some(ctx.clone()))
+            .await
+            .unwrap();
+        assert_eq!(branch_step.node_id, "approved");
+        assert!(branch_step.is_complete);
+        assert_eq!(branch_step.next_node, None);
+        assert_eq!(ctx.current_node().await, "approved");
+        assert_eq!(
+            branch_step.state.get_value::<serde_json::Value>("decision"),
+            Some(json!("approved"))
+        );
+    }
+
+    #[tokio::test]
+    async fn test_step_terminal_node_reports_completion_without_next_node() {
+        let mut graph = StateGraphImpl::<JsonState>::new("step_terminal");
+
+        graph
+            .add_node(
+                "only",
+                Box::new(TestNode {
+                    name: "only".to_string(),
+                    updates: vec![StateUpdate::new("done", json!(true))],
+                }),
+            )
+            .add_edge(START, "only")
+            .add_edge("only", END);
+
+        let compiled = graph.compile().unwrap();
+        let ctx = RuntimeContext::new("step_terminal");
+
+        let step = compiled
+            .step(JsonState::new(), Some(ctx.clone()))
+            .await
+            .unwrap();
+        assert_eq!(step.node_id, "only");
+        assert!(step.is_complete);
+        assert_eq!(step.next_node, None);
+        assert_eq!(ctx.current_node().await, "only");
+        assert_eq!(
+            step.state.get_value::<serde_json::Value>("done"),
+            Some(json!(true))
+        );
     }
 
     #[tokio::test]
