@@ -44,9 +44,9 @@ mod duration_secs {
 }
 
 use super::model_pool::ModelPool;
-use crate::scheduler::AdmissionOutcome;
 use super::routing::{self, RoutingDecision, RoutingPolicy};
 use super::types::{InferenceRequest, InferenceResult, RequestPriority, RoutedBackend};
+use crate::scheduler::AdmissionOutcome;
 
 /// Configuration for the `InferenceOrchestrator`.
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
@@ -183,6 +183,48 @@ impl InferenceOrchestrator {
                     actual_precision: request.preferred_precision,
                 }
             }
+            RoutingDecision::UseLocalDegraded {
+                model_id,
+                degraded_precision,
+                quality_warning,
+            } => {
+                // Estimate degraded memory footprint
+                let degraded_memory_mb = ((request.required_memory_mb as f64)
+                    * (degraded_precision.bytes_per_param()
+                        / request.preferred_precision.bytes_per_param()))
+                .ceil() as usize;
+
+                // Load the model at degraded precision
+                if !self.model_pool.is_loaded(model_id) {
+                    self.model_pool.load(
+                        model_id,
+                        degraded_memory_mb,
+                        *degraded_precision,
+                        request.priority,
+                    );
+                } else {
+                    self.model_pool.touch(model_id);
+                }
+
+                tracing::warn!(
+                    model_id,
+                    from = %request.preferred_precision,
+                    to = %degraded_precision,
+                    "{}",
+                    quality_warning
+                );
+
+                InferenceResult {
+                    output: format!(
+                        "[local-degraded:{}@{}] Inference result for: {}",
+                        model_id, degraded_precision, request.prompt
+                    ),
+                    routed_to: RoutedBackend::Local {
+                        model_id: model_id.clone(),
+                    },
+                    actual_precision: *degraded_precision,
+                }
+            }
             RoutingDecision::UseCloud { provider } => InferenceResult {
                 output: format!(
                     "[cloud:{}] Inference result for: {}",
@@ -201,6 +243,34 @@ impl InferenceOrchestrator {
                 actual_precision: request.preferred_precision,
             },
         }
+    }
+
+    /// Phase-1 simulated streaming entry point.
+    ///
+    /// **Warning**: This method splits the fully-generated output by whitespace
+    /// to simulate token-level SSE. It will be replaced by real incremental
+    /// decoding in Phase 2. Hidden from public documentation until then.
+    #[doc(hidden)]
+    pub fn infer_stream(
+        &mut self,
+        request: &InferenceRequest,
+    ) -> (
+        InferenceResult,
+        std::pin::Pin<Box<dyn futures::Stream<Item = String> + Send + Sync>>,
+    ) {
+        // Run full admission/routing logic
+        let base_result = self.infer(request);
+
+        // Phase 1 simulated string stream based on the generated output
+        let output_str = base_result.output.clone();
+
+        let words: Vec<String> = output_str
+            .split_whitespace()
+            .map(|w| format!("{w} "))
+            .collect();
+        let stream = futures::stream::iter(words);
+
+        (base_result, Box::pin(stream))
     }
 
     /// Evaluate whether a local backend can admit this request based on

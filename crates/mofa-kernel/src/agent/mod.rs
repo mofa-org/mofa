@@ -241,7 +241,7 @@ pub use components::{
     context_compressor::{CompressionStrategy, ContextCompressor},
     coordinator::{CoordinationPattern, Coordinator},
     mcp::{McpClient, McpServerConfig, McpServerInfo, McpToolInfo, McpTransportConfig},
-    memory::{Memory, MemoryItem, MemoryStats, MemoryValue, Message, MessageRole},
+    memory::{Embedder, Memory, MemoryItem, MemoryStats, MemoryValue, Message, MessageRole},
     reasoner::{Reasoner, ReasoningResult},
     tool::{Tool, ToolDescriptor, ToolInput, ToolMetadata, ToolResult},
 };
@@ -295,4 +295,124 @@ pub mod prelude {
     // AgentPlugin unified into the plugin module
     pub use crate::plugin::AgentPlugin;
     pub use async_trait::async_trait;
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    struct MinimalAgent {
+        caps: AgentCapabilities,
+        state: AgentState,
+    }
+
+    impl MinimalAgent {
+        fn new() -> Self {
+            Self {
+                caps: AgentCapabilitiesBuilder::new().build(),
+                state: AgentState::Created,
+            }
+        }
+    }
+
+    #[async_trait::async_trait]
+    impl MoFAAgent for MinimalAgent {
+        fn id(&self) -> &str {
+            "minimal-agent"
+        }
+
+        fn name(&self) -> &str {
+            "Minimal Agent"
+        }
+
+        fn capabilities(&self) -> &AgentCapabilities {
+            &self.caps
+        }
+
+        async fn initialize(&mut self, _ctx: &AgentContext) -> AgentResult<()> {
+            self.state = AgentState::Ready;
+            Ok(())
+        }
+
+        async fn execute(
+            &mut self,
+            _input: AgentInput,
+            _ctx: &AgentContext,
+        ) -> AgentResult<AgentOutput> {
+            Ok(AgentOutput::text("ok"))
+        }
+
+        async fn shutdown(&mut self) -> AgentResult<()> {
+            self.state = AgentState::Shutdown;
+            Ok(())
+        }
+
+        fn state(&self) -> AgentState {
+            self.state.clone()
+        }
+    }
+
+    struct FailingAgent {
+        caps: AgentCapabilities,
+    }
+
+    impl FailingAgent {
+        fn new() -> Self {
+            Self {
+                caps: AgentCapabilitiesBuilder::new().build(),
+            }
+        }
+    }
+
+    #[async_trait::async_trait]
+    impl MoFAAgent for FailingAgent {
+        fn id(&self) -> &str {
+            "failing-agent"
+        }
+
+        fn name(&self) -> &str {
+            "Failing Agent"
+        }
+
+        fn capabilities(&self) -> &AgentCapabilities {
+            &self.caps
+        }
+
+        async fn initialize(&mut self, _ctx: &AgentContext) -> AgentResult<()> {
+            Ok(())
+        }
+
+        async fn execute(
+            &mut self,
+            _input: AgentInput,
+            _ctx: &AgentContext,
+        ) -> AgentResult<AgentOutput> {
+            Err(AgentError::ExecutionFailed("failure".to_string()))
+        }
+
+        async fn shutdown(&mut self) -> AgentResult<()> {
+            Ok(())
+        }
+
+        fn state(&self) -> AgentState {
+            AgentState::Ready
+        }
+    }
+
+    #[tokio::test]
+    async fn minimal_agent_executes_successfully() {
+        let mut agent = MinimalAgent::new();
+        let ctx = AgentContext::new("exec-1");
+        agent.initialize(&ctx).await.unwrap();
+        let out = agent.execute(AgentInput::text("hello"), &ctx).await.unwrap();
+        assert_eq!(out.to_text(), "ok");
+    }
+
+    #[tokio::test]
+    async fn failing_agent_returns_execution_error() {
+        let mut agent = FailingAgent::new();
+        let ctx = AgentContext::new("exec-2");
+        let result = agent.execute(AgentInput::text("x"), &ctx).await;
+        assert!(matches!(result, Err(AgentError::ExecutionFailed(_))));
+    }
 }

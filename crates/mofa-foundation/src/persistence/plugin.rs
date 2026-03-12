@@ -747,3 +747,79 @@ impl crate::llm::agent::LLMAgentEventHandler for PersistencePlugin {
         Ok(None)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use mofa_kernel::plugin::{AgentPlugin, PluginContext, PluginState};
+
+    fn ids() -> (Uuid, Uuid, Uuid, Uuid) {
+        (
+            Uuid::now_v7(),
+            Uuid::now_v7(),
+            Uuid::now_v7(),
+            Uuid::now_v7(),
+        )
+    }
+
+    #[tokio::test]
+    async fn persistence_context_creates_session_and_saves_messages() {
+        let store = Arc::new(crate::persistence::InMemoryStore::new());
+        let (user_id, tenant_id, agent_id, _) = ids();
+
+        let mut ctx = PersistenceContext::new(store.clone(), user_id, tenant_id, agent_id)
+            .await
+            .expect("context creation should work");
+
+        let first_session = ctx.session_id();
+        let _ = ctx
+            .save_user_message("hello")
+            .await
+            .expect("save user message should work");
+        let _ = ctx
+            .save_assistant_message("world")
+            .await
+            .expect("save assistant message should work");
+
+        let history = ctx.get_history().await.expect("history query should work");
+        assert_eq!(history.len(), 2);
+
+        let new_session = ctx.new_session().await.expect("new session should work");
+        assert_ne!(new_session, first_session);
+    }
+
+    #[tokio::test]
+    async fn persistence_plugin_lifecycle_and_stats() {
+        let store = crate::persistence::InMemoryStore::new();
+        let (user_id, tenant_id, agent_id, session_id) = ids();
+        let mut plugin = PersistencePlugin::from_store(
+            "persistence-test",
+            store,
+            user_id,
+            tenant_id,
+            agent_id,
+            session_id,
+        );
+
+        assert_eq!(plugin.state(), PluginState::Loaded);
+
+        let ctx = PluginContext::new("agent-x");
+        AgentPlugin::load(&mut plugin, &ctx)
+            .await
+            .expect("load should work");
+        AgentPlugin::init_plugin(&mut plugin)
+            .await
+            .expect("init should work");
+        assert_eq!(plugin.state(), PluginState::Running);
+
+        let stats = plugin.stats();
+        assert_eq!(stats.get("plugin_type"), Some(&serde_json::json!("persistence")));
+
+        let next_session = Uuid::now_v7();
+        plugin.with_session_id(next_session).await;
+        assert_eq!(plugin.session_id().await, next_session);
+
+        AgentPlugin::stop(&mut plugin).await.expect("stop should work");
+        assert_eq!(plugin.state(), PluginState::Unloaded);
+    }
+}

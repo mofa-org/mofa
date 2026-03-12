@@ -1,7 +1,5 @@
 //! Swarm Configuration and Result types
 
-
-
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -75,19 +73,14 @@ impl Default for SLAConfig {
 }
 
 /// Human-in-the-loop mode
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "snake_case")]
 #[non_exhaustive]
 pub enum HITLMode {
     None,
     Required,
+    #[default]
     Optional,
-}
-
-impl Default for HITLMode {
-    fn default() -> Self {
-        Self::Optional
-    }
 }
 
 // Swarm Result
@@ -176,7 +169,6 @@ impl AuditEvent {
     }
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -223,9 +215,8 @@ task: "Do something"
 
     #[test]
     fn test_audit_event_creation() {
-        let event =
-            AuditEvent::new(AuditEventKind::SwarmStarted, "Swarm started with 3 agents")
-                .with_data(serde_json::json!({"agent_count": 3}));
+        let event = AuditEvent::new(AuditEventKind::SwarmStarted, "Swarm started with 3 agents")
+            .with_data(serde_json::json!({"agent_count": 3}));
 
         assert_eq!(event.kind, AuditEventKind::SwarmStarted);
         assert_eq!(event.data["agent_count"], 3);

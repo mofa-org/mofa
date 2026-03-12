@@ -434,6 +434,8 @@ pub struct AgentWorkflowContext {
     /// 节点输出
     /// Node outputs
     node_outputs: Arc<RwLock<HashMap<String, AgentValue>>>,
+    /// Cached router decisions keyed by router node ID
+    router_decisions: Arc<RwLock<HashMap<String, String>>>,
     /// 共享会话 ID（用于多 Agent 共享上下文）
     /// Shared session ID (for cross-agent context sharing)
     shared_session_id: Option<String>,
@@ -450,6 +452,7 @@ impl AgentWorkflowContext {
             workflow_id: workflow_id.into(),
             execution_id: uuid::Uuid::now_v7().to_string(),
             node_outputs: Arc::new(RwLock::new(HashMap::new())),
+            router_decisions: Arc::new(RwLock::new(HashMap::new())),
             shared_session_id: None,
             variables: Arc::new(RwLock::new(HashMap::new())),
             max_steps: 25, // Default limit matching LangGraph convention
@@ -485,6 +488,16 @@ impl AgentWorkflowContext {
             .collect()
     }
 
+    pub async fn set_router_decision(&self, node_id: &str, route: &str) {
+        let mut decisions = self.router_decisions.write().await;
+        decisions.insert(node_id.to_string(), route.to_string());
+    }
+
+    pub async fn get_router_decision(&self, node_id: &str) -> Option<String> {
+        let decisions = self.router_decisions.read().await;
+        decisions.get(node_id).cloned()
+    }
+
     pub async fn set_variable(&self, key: &str, value: &str) {
         let mut vars = self.variables.write().await;
         vars.insert(key.to_string(), value.to_string());
@@ -502,6 +515,7 @@ impl Clone for AgentWorkflowContext {
             workflow_id: self.workflow_id.clone(),
             execution_id: self.execution_id.clone(),
             node_outputs: self.node_outputs.clone(),
+            router_decisions: self.router_decisions.clone(),
             shared_session_id: self.shared_session_id.clone(),
             variables: self.variables.clone(),
             max_steps: self.max_steps,
@@ -582,7 +596,7 @@ impl AgentWorkflow {
 
             // 确定下一个节点
             // Determine next node
-            match self.get_next_node(&current_node_id, &output).await {
+            match self.get_next_node(ctx, &current_node_id, &output).await {
                 Some(next_id) => {
                     current_node_id = next_id;
                     current_input = output;
@@ -648,7 +662,8 @@ impl AgentWorkflow {
                     .router
                     .as_ref()
                     .ok_or_else(|| LLMError::Other("Router function not set".to_string()))?;
-                let _route = router(input.clone()).await;
+                let route = router(input.clone()).await;
+                ctx.set_router_decision(&node.id, &route).await;
                 // 路由节点返回原输入，路由决策在 get_next_node 中使用
                 // Router returns original input; decision is used in get_next_node
                 Ok(input)
@@ -687,7 +702,12 @@ impl AgentWorkflow {
 
     /// 获取下一个节点
     /// Get the next node
-    async fn get_next_node(&self, current_id: &str, output: &AgentValue) -> Option<String> {
+    async fn get_next_node(
+        &self,
+        ctx: &AgentWorkflowContext,
+        current_id: &str,
+        output: &AgentValue,
+    ) -> Option<String> {
         let node = self.nodes.get(current_id)?;
 
         // 结束节点没有后续
@@ -701,12 +721,17 @@ impl AgentWorkflow {
         // 路由节点：根据路由函数结果选择边
         // Router node: select edge based on router function result
         if matches!(node.node_type, AgentNodeType::Router) {
-            if let Some(ref router) = node.router {
-                let route = router(output.clone()).await;
-                for edge in edges {
-                    if edge.condition.as_ref() == Some(&route) {
-                        return Some(edge.to.clone());
-                    }
+            let route = match ctx.get_router_decision(current_id).await {
+                Some(route) => route,
+                None => {
+                    let router = node.router.as_ref()?;
+                    router(output.clone()).await
+                }
+            };
+
+            for edge in edges {
+                if edge.condition.as_ref() == Some(&route) {
+                    return Some(edge.to.clone());
                 }
             }
             // 如果没有匹配的条件边，使用默认边（无条件）
@@ -1160,6 +1185,50 @@ mod tests {
         let result = workflow.run("init").await.expect("workflow should succeed");
         // Verify execution correctness — tracing instrumentation must not alter behavior
         assert_eq!(result.as_text(), Some("init-step1-step2"));
+    }
+
+    #[tokio::test]
+    async fn test_router_node_reuses_cached_route_decision() {
+        use std::sync::{
+            Arc,
+            atomic::{AtomicUsize, Ordering},
+        };
+
+        let invocations = Arc::new(AtomicUsize::new(0));
+        let router_invocations = invocations.clone();
+
+        let workflow = AgentWorkflowBuilder::new("router-caching-test")
+            .add_router("router", move |_input: AgentValue| {
+                let router_invocations = router_invocations.clone();
+                async move {
+                    if router_invocations.fetch_add(1, Ordering::SeqCst) == 0 {
+                        "left".to_string()
+                    } else {
+                        "right".to_string()
+                    }
+                }
+            })
+            .add_transform("left", |input: AgentValue| async move {
+                AgentValue::Text(format!("left:{}", input.into_text()))
+            })
+            .add_transform("right", |input: AgentValue| async move {
+                AgentValue::Text(format!("right:{}", input.into_text()))
+            })
+            .connect("start", "router")
+            .connect_on("router", "left", "left")
+            .connect_on("router", "right", "right");
+
+        let mut workflow = workflow;
+        workflow.nodes.insert("end".to_string(), AgentNode::end());
+        let workflow = workflow
+            .connect("left", "end")
+            .connect("right", "end")
+            .build();
+
+        let result = workflow.run("seed").await.expect("workflow should succeed");
+
+        assert_eq!(result.as_text(), Some("left:seed"));
+        assert_eq!(invocations.load(Ordering::SeqCst), 1);
     }
 
     #[test]
