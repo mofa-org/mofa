@@ -309,7 +309,7 @@ impl CronScheduler {
 
         tokio::spawn(async move {
             let mut timing = if let Some(cron_expr) = &cron_expression {
-                ScheduleTiming::Cron(cron_expr.parse().unwrap())
+                ScheduleTiming::Cron(Box::new(cron_expr.parse().unwrap()))
             } else if let Some(ms) = interval_ms {
                 ScheduleTiming::Interval(interval(Duration::from_millis(ms)))
             } else {
@@ -408,7 +408,7 @@ impl CronScheduler {
 
 enum ScheduleTiming {
     Interval(tokio::time::Interval),
-    Cron(Schedule),
+    Cron(Box<Schedule>),
 }
 
 impl ScheduleTiming {
