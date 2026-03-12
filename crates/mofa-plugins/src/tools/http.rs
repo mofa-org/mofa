@@ -56,6 +56,19 @@ impl HttpRequestTool {
         }
     }
 
+    /// Truncate a UTF-8 string to at most `max_bytes` bytes without splitting
+    /// a multi-byte character. Returns the longest prefix that fits.
+    fn truncate_utf8(s: &str, max_bytes: usize) -> &str {
+        if s.len() <= max_bytes {
+            return s;
+        }
+        let mut end = max_bytes;
+        while end > 0 && !s.is_char_boundary(end) {
+            end -= 1;
+        }
+        &s[..end]
+    }
+
     /// Validate that a URL is safe to request (not targeting internal/private networks).
     fn is_url_allowed(url_str: &str) -> bool {
         let parsed = match Url::parse(url_str) {
@@ -190,7 +203,7 @@ impl ToolExecutor for HttpRequestTool {
         let truncated_body = if body.len() > 5000 {
             format!(
                 "{}... [truncated, total {} bytes]",
-                &body[..5000],
+                Self::truncate_utf8(&body, 5000),
                 body.len()
             )
         } else {
@@ -202,5 +215,44 @@ impl ToolExecutor for HttpRequestTool {
             "headers": headers,
             "body": truncated_body
         }))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_truncate_utf8_ascii() {
+        let s = "a".repeat(6000);
+        let result = HttpRequestTool::truncate_utf8(&s, 5000);
+        assert_eq!(result.len(), 5000);
+    }
+
+    #[test]
+    fn test_truncate_utf8_multibyte() {
+        // '中' is 3 bytes in UTF-8. Build a string where byte 5000 lands
+        // inside a character.
+        let s = "中".repeat(2000); // 6000 bytes total
+        let result = HttpRequestTool::truncate_utf8(&s, 5000);
+        // Should back up to nearest char boundary (4998 = 1666 × 3)
+        assert!(result.len() <= 5000);
+        assert!(result.is_char_boundary(result.len()));
+    }
+
+    #[test]
+    fn test_truncate_utf8_short_string() {
+        let s = "hello";
+        let result = HttpRequestTool::truncate_utf8(s, 5000);
+        assert_eq!(result, "hello");
+    }
+
+    #[test]
+    fn test_truncate_utf8_emoji() {
+        // '😀' is 4 bytes in UTF-8
+        let s = "😀".repeat(1500); // 6000 bytes
+        let result = HttpRequestTool::truncate_utf8(&s, 5000);
+        assert!(result.len() <= 5000);
+        assert!(result.is_char_boundary(result.len()));
     }
 }
