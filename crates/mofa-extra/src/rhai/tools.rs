@@ -18,9 +18,14 @@ use super::error::{RhaiError, RhaiResult};
 use rhai::{Dynamic, Engine, Map, Scope};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::sync::Arc;
+use std::sync::{Arc, LazyLock, Mutex};
 use tokio::sync::RwLock;
 use tracing::info;
+
+/// Process-wide cache for compiled regex patterns used in ToolParameter
+/// validation, avoiding recompilation on every `validate()` call.
+static TOOL_PARAM_REGEX_CACHE: LazyLock<Mutex<HashMap<String, regex::Regex>>> =
+    LazyLock::new(|| Mutex::new(HashMap::new()));
 
 // ============================================================================
 // 工具参数定义
@@ -203,13 +208,26 @@ impl ToolParameter {
                     self.name, max
                 )));
             }
-            // 检查正则表达式
-            // Check regex pattern
+            // 检查正则表达式 (cached)
+            // Check regex pattern (cached)
             if let Some(ref pattern) = self.pattern {
-                let re = regex::Regex::new(pattern).map_err(|e| {
-                    RhaiError::ValidationError(format!("Invalid regex pattern: {}", e))
-                })?;
-                if !re.is_match(s) {
+                let cache = TOOL_PARAM_REGEX_CACHE
+                    .lock()
+                    .unwrap_or_else(|e| e.into_inner());
+                let is_match = if let Some(re) = cache.get(pattern.as_str()) {
+                    re.is_match(s)
+                } else {
+                    drop(cache);
+                    let re = regex::Regex::new(pattern).map_err(|e| {
+                        RhaiError::ValidationError(format!("Invalid regex pattern: {}", e))
+                    })?;
+                    let matched = re.is_match(s);
+                    if let Ok(mut cache) = TOOL_PARAM_REGEX_CACHE.lock() {
+                        cache.insert(pattern.clone(), re);
+                    }
+                    matched
+                };
+                if !is_match {
                     return Err(RhaiError::ValidationError(format!(
                         "Parameter '{}' does not match pattern: {}",
                         self.name, pattern
