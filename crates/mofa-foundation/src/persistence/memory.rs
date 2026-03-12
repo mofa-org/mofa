@@ -877,3 +877,105 @@ impl PersistenceStore for BoundedInMemoryStore {
         self.inner.close().await
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn ids() -> (Uuid, Uuid, Uuid, Uuid) {
+        (
+            Uuid::now_v7(),
+            Uuid::now_v7(),
+            Uuid::now_v7(),
+            Uuid::now_v7(),
+        )
+    }
+
+    #[tokio::test]
+    async fn in_memory_store_saves_and_sorts_session_messages() {
+        let store = InMemoryStore::new();
+        let (session_id, agent_id, user_id, tenant_id) = ids();
+
+        let mut msg_newer = LLMMessage::new(
+            session_id,
+            agent_id,
+            user_id,
+            tenant_id,
+            MessageRole::User,
+            MessageContent::text("newer"),
+        );
+        let mut msg_older = LLMMessage::new(
+            session_id,
+            agent_id,
+            user_id,
+            tenant_id,
+            MessageRole::Assistant,
+            MessageContent::text("older"),
+        );
+        msg_older.create_time = msg_newer.create_time - chrono::Duration::seconds(1);
+
+        MessageStore::save_message(&store, &msg_newer)
+            .await
+            .expect("save newer should work");
+        MessageStore::save_message(&store, &msg_older)
+            .await
+            .expect("save older should work");
+
+        let messages = MessageStore::get_session_messages(&store, session_id)
+            .await
+            .expect("query should work");
+        assert_eq!(messages.len(), 2);
+        assert_eq!(messages[0].content.text.as_deref(), Some("older"));
+        assert_eq!(messages[1].content.text.as_deref(), Some("newer"));
+    }
+
+    #[tokio::test]
+    async fn in_memory_store_session_crud_and_delete_messages() {
+        let store = InMemoryStore::new();
+        let (session_id, agent_id, user_id, _tenant_id) = ids();
+        let session = ChatSession::new(user_id, agent_id).with_id(session_id);
+
+        SessionStore::create_session(&store, &session)
+            .await
+            .expect("create session should work");
+        let loaded = SessionStore::get_session(&store, session_id)
+            .await
+            .expect("get session should work");
+        assert!(loaded.is_some());
+
+        let deleted = SessionStore::delete_session(&store, session_id)
+            .await
+            .expect("delete session should work");
+        assert!(deleted);
+
+        let removed = MessageStore::delete_session_messages(&store, session_id)
+            .await
+            .expect("delete session messages should work");
+        assert_eq!(removed, 0);
+    }
+
+    #[tokio::test]
+    async fn bounded_store_enforces_message_capacity() {
+        let store = BoundedInMemoryStore::new(2, 10);
+        let (session_id, agent_id, user_id, tenant_id) = ids();
+
+        for idx in 0..3 {
+            let msg = LLMMessage::new(
+                session_id,
+                agent_id,
+                user_id,
+                tenant_id,
+                MessageRole::User,
+                MessageContent::text(format!("m{}", idx)),
+            );
+            MessageStore::save_message(&store, &msg)
+                .await
+                .expect("save should work");
+        }
+
+        let messages = MessageStore::get_session_messages(&store, session_id)
+            .await
+            .expect("query should work");
+        assert_eq!(messages.len(), 2);
+    }
+}

@@ -10,7 +10,10 @@ use mofa_kernel::agent::plugins::PluginRegistry;
 pub async fn run(ctx: &CliContext, name: &str, force: bool) -> Result<(), CliError> {
     // Check if plugin exists
     if !ctx.plugin_registry.contains(name) {
-        return Err(CliError::PluginError(format!("Plugin '{}' not found in registry", name)));
+        return Err(CliError::PluginError(format!(
+            "Plugin '{}' not found in registry",
+            name
+        )));
     }
 
     if !force {
@@ -27,16 +30,15 @@ pub async fn run(ctx: &CliContext, name: &str, force: bool) -> Result<(), CliErr
 
     println!("{} Uninstalling plugin: {}", "→".green(), name.cyan());
 
-    let previous_spec = ctx
-        .plugin_store
-        .get(name)
-        .map_err(|e| CliError::PluginError(format!("Failed to load plugin spec '{}': {}", name, e)))?;
+    let previous_spec = ctx.plugin_store.get(name).map_err(|e| {
+        CliError::PluginError(format!("Failed to load plugin spec '{}': {}", name, e))
+    })?;
 
     let persisted_updated = if let Some(mut spec) = previous_spec.clone() {
         spec.enabled = false;
-        ctx.plugin_store
-            .save(name, &spec)
-            .map_err(|e| CliError::PluginError(format!("Failed to persist plugin '{}': {}", name, e)))?;
+        ctx.plugin_store.save(name, &spec).map_err(|e| {
+            CliError::PluginError(format!("Failed to persist plugin '{}': {}", name, e))
+        })?;
         true
     } else {
         false
@@ -47,15 +49,11 @@ pub async fn run(ctx: &CliContext, name: &str, force: bool) -> Result<(), CliErr
         .unregister(name)
         .map_err(|e| CliError::PluginError(format!("Failed to unregister plugin: {}", e)))?;
 
-    if !removed
-        && persisted_updated
-        && let Some(previous) = previous_spec
-    {
+    if !removed && persisted_updated && let Some(previous) = previous_spec {
         ctx.plugin_store.save(name, &previous).map_err(|e| {
             CliError::PluginError(format!(
                 "Plugin '{}' remained registered and failed to restore persisted state: {}",
-                name,
-                e
+                name, e
             ))
         })?;
     }

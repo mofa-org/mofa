@@ -120,8 +120,8 @@ pub struct MemoryThresholds {
 impl Default for MemoryThresholds {
     fn default() -> Self {
         Self {
-            max_memory_mb: 16 * 1024, // 16 GB
-            defer_threshold_mb: 14 * 1024, // 14 GB
+            max_memory_mb: 16 * 1024,       // 16 GB
+            defer_threshold_mb: 14 * 1024,  // 14 GB
             accept_threshold_mb: 12 * 1024, // 12 GB
         }
     }
@@ -172,7 +172,7 @@ pub struct StabilityControl {
 impl Default for StabilityControl {
     fn default() -> Self {
         Self {
-            cooldown_ms: 5000, // 5 seconds
+            cooldown_ms: 5000,  // 5 seconds
             hysteresis_mb: 512, // 512 MB
             last_switch: None,
             last_memory: None,
@@ -198,11 +198,7 @@ impl StabilityControl {
     pub fn is_significant_change(&self, current_memory: u64) -> bool {
         match self.last_memory {
             Some(last) => {
-                let diff = if current_memory > last {
-                    current_memory - last
-                } else {
-                    last - current_memory
-                };
+                let diff = current_memory.abs_diff(last);
                 diff > self.hysteresis_mb
             }
             None => true,
@@ -374,7 +370,9 @@ impl MemoryBudget {
 
     /// Get available memory
     pub fn available(&self) -> u64 {
-        self.total_memory_mb.saturating_sub(self.current_usage_mb).saturating_sub(self.reserved_mb)
+        self.total_memory_mb
+            .saturating_sub(self.current_usage_mb)
+            .saturating_sub(self.reserved_mb)
     }
 
     /// Allocate memory for a request
@@ -512,17 +510,36 @@ impl Scheduler {
         Self::new(SchedulerPolicy::default(), MemoryBudget::new(total_memory))
     }
 
-    /// Make an admission decision for a request
+    /// Make an admission decision for a request.
+    ///
+    /// # Correctness note
+    /// The threshold check uses `effective_used = total - available()` rather than
+    /// the raw `current_usage_mb` field. This is intentional: `available()` subtracts
+    /// `reserved_mb` from the budget, so `effective_used` correctly represents the
+    /// memory that is *not* available for new requests. Using `current_usage_mb`
+    /// directly would ignore reservations and allow `decide()` to return `Accept`
+    /// for requests that `accept()` will then silently fail to allocate.
     pub fn decide(&self, required_memory: u64) -> AdmissionReason {
-        let current = self.memory.current_usage_mb;
         let available = self.memory.available();
+        // Use effective used memory so reserved_mb is accounted for, consistent
+        // with MemoryBudget::allocate() which gates on available() not current_usage_mb.
+        let effective_used = self.memory.total_memory_mb.saturating_sub(available);
 
-        let decision = self.policy.thresholds.check_memory(current, required_memory);
+        let decision = self
+            .policy
+            .thresholds
+            .check_memory(effective_used, required_memory);
 
         match decision {
-            AdmissionDecision::Accept => AdmissionReason::accept(current, required_memory, available),
-            AdmissionDecision::Defer => AdmissionReason::defer(current, required_memory, available),
-            AdmissionDecision::Reject => AdmissionReason::reject(current, required_memory, available),
+            AdmissionDecision::Accept => {
+                AdmissionReason::accept(effective_used, required_memory, available)
+            }
+            AdmissionDecision::Defer => {
+                AdmissionReason::defer(effective_used, required_memory, available)
+            }
+            AdmissionDecision::Reject => {
+                AdmissionReason::reject(effective_used, required_memory, available)
+            }
         }
     }
 
@@ -663,7 +680,11 @@ mod tests {
             .supported_format(ModelFormat::Safetensors)
             .build();
 
-        assert!(queue.enqueue(DeferredRequest::new("req1".to_string(), 1024, adapter.clone())));
+        assert!(queue.enqueue(DeferredRequest::new(
+            "req1".to_string(),
+            1024,
+            adapter.clone()
+        )));
         assert_eq!(queue.size(), 1);
 
         // Can't dequeue - not enough memory
@@ -690,7 +711,7 @@ mod tests {
         let mut req = DeferredRequest::new("req1".to_string(), 512, adapter);
         req.increment_retry();
         req.increment_retry();
-        
+
         queue.enqueue(req);
         assert_eq!(queue.size(), 1);
 
@@ -707,10 +728,10 @@ mod tests {
         // Set defer threshold very low so almost any request will be deferred
         policy.thresholds = MemoryThresholds::new(8192, 512, 256);
         let mut scheduler = Scheduler::new(policy, MemoryBudget::new(8192));
-        
+
         // Pre-allocate memory to trigger defer
         scheduler.memory.allocate(700);
-        
+
         // Now should defer because projected (700+512=1212) > 512
         let reason = scheduler.decide(512);
         assert_eq!(reason.decision, AdmissionDecision::Defer);
@@ -724,7 +745,7 @@ mod tests {
     #[test]
     fn test_scheduler_accept_and_release() {
         let mut scheduler = Scheduler::with_default_policy(8192);
-        
+
         assert!(scheduler.accept(1024));
         assert_eq!(scheduler.memory_usage(), 1024);
         assert_eq!(scheduler.active_requests(), 1);
@@ -737,13 +758,84 @@ mod tests {
     #[test]
     fn test_stability_control() {
         let mut stability = StabilityControl::default();
-        
+
         // Should be able to switch initially
         assert!(stability.can_switch());
 
         stability.record_switch();
-        
+
         // Should not be able to switch immediately after
         assert!(!stability.can_switch());
+    }
+
+    // ── Regression: decide() must honour reserved_mb ──────────────────────────
+
+    /// Before the fix, `decide()` used raw `current_usage_mb` (ignoring
+    /// `reserved_mb`), so it could return `Accept` for a request that
+    /// `accept()` would then fail to allocate — a silent decision/allocation
+    /// disagreement.
+    ///
+    /// After the fix, `decide()` uses `total - available()` as the effective
+    /// used memory, which correctly includes `reserved_mb`.
+    #[test]
+    fn test_decide_respects_reserved_memory() {
+        // 1000 MB total, 400 MB reserved for system overhead.
+        // Effective available = 1000 - 0 - 400 = 600 MB.
+        let mut budget = MemoryBudget::new(1000);
+        budget.reserve(400);
+
+        // Thresholds: defer > 750 MB, reject > 900 MB (of effective used).
+        let thresholds = MemoryThresholds::new(900, 750, 500);
+        let policy = SchedulerPolicy::with_thresholds(thresholds);
+        let scheduler = Scheduler::new(policy, budget);
+
+        // Request 700 MB.
+        // Without fix: current_usage_mb=0, projected=700 ≤ 750 → Accept  ← WRONG
+        // With fix:    effective_used = 1000 - 600 = 400, projected=1100 > 900 → Reject ← CORRECT
+        //
+        // Even using a softer check: effective_used=400, projected=400+700=1100 > 900 → Reject.
+        let reason = scheduler.decide(700);
+        assert_ne!(
+            reason.decision,
+            AdmissionDecision::Accept,
+            "decide() must not Accept when reserved_mb leaves insufficient headroom"
+        );
+
+        // Cross-check: MemoryBudget::allocate() for the same amount also fails.
+        let mut budget2 = MemoryBudget::new(1000);
+        budget2.reserve(400);
+        assert!(
+            !budget2.allocate(700),
+            "allocate() should fail when available < required"
+        );
+    }
+
+    /// Verify that decide() and accept() agree when reserved_mb is present
+    /// and the request *is* within budget.
+    #[test]
+    fn test_decide_and_accept_agree_with_reservation() {
+        // 1000 MB total, 200 MB reserved.
+        // Effective available = 800 MB.
+        let mut budget = MemoryBudget::new(1000);
+        budget.reserve(200);
+
+        // Generous thresholds — any request ≤ 900 MB projected is accepted.
+        let thresholds = MemoryThresholds::new(1200, 1000, 800);
+        let policy = SchedulerPolicy::with_thresholds(thresholds);
+        let mut scheduler = Scheduler::new(policy, budget);
+
+        // Request 300 MB — well within 800 MB available.
+        let reason = scheduler.decide(300);
+        assert_eq!(
+            reason.decision,
+            AdmissionDecision::Accept,
+            "decide() should Accept when request fits in available headroom"
+        );
+
+        // accept() must also succeed.
+        assert!(
+            scheduler.accept(300),
+            "accept() must succeed when decide() returned Accept"
+        );
     }
 }

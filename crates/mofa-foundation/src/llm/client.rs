@@ -8,6 +8,7 @@ use super::provider::{LLMConfig, LLMProvider};
 use super::tool_executor::ToolExecutor;
 use super::types::*;
 use std::sync::Arc;
+use std::time::Duration;
 
 /// LLM 客户端
 /// LLM Client
@@ -171,6 +172,9 @@ pub struct ChatRequestBuilder {
     request: ChatCompletionRequest,
     tool_executor: Option<Arc<dyn ToolExecutor>>,
     max_tool_rounds: u32,
+    /// Per-tool-call timeout duration. If a single tool execution exceeds
+    /// this duration, it is cancelled and an error is returned for that call.
+    tool_timeout: Duration,
     // Retry configuration
     retry_policy: Option<LLMRetryPolicy>,
     retry_enabled: bool,
@@ -185,6 +189,7 @@ impl ChatRequestBuilder {
             request: ChatCompletionRequest::new(model),
             tool_executor: None,
             max_tool_rounds: 10,
+            tool_timeout: Duration::from_secs(30),
             retry_policy: None,
             retry_enabled: false,
         }
@@ -282,6 +287,24 @@ impl ChatRequestBuilder {
     /// Set maximum tool call rounds
     pub fn max_tool_rounds(mut self, rounds: u32) -> Self {
         self.max_tool_rounds = rounds;
+        self
+    }
+
+    /// Set per-tool-call timeout duration
+    ///
+    /// If a single tool execution takes longer than this, it is cancelled
+    /// and treated as an error. Default is 30 seconds.
+    ///
+    /// # Example
+    /// ```rust,ignore
+    /// let response = client.chat()
+    ///     .with_tool_executor(executor)
+    ///     .tool_timeout(Duration::from_secs(60))
+    ///     .send_with_tools()
+    ///     .await?;
+    /// ```
+    pub fn tool_timeout(mut self, timeout: Duration) -> Self {
+        self.tool_timeout = timeout;
         self
     }
 
@@ -454,13 +477,26 @@ impl ChatRequestBuilder {
                 self.request.messages.push(choice.message.clone());
             }
 
-            // 执行工具调用
-            // Execute tool calls
+            // 执行工具调用（带超时保护）
+            // Execute tool calls (with timeout protection)
             if let Some(tool_calls) = response.tool_calls() {
                 for tool_call in tool_calls {
-                    let result = executor
-                        .execute(&tool_call.function.name, &tool_call.function.arguments)
-                        .await;
+                    let tool_name = &tool_call.function.name;
+                    let tool_args = &tool_call.function.arguments;
+                    let timeout_dur = self.tool_timeout;
+
+                    let result = match tokio::time::timeout(
+                        timeout_dur,
+                        executor.execute(tool_name, tool_args),
+                    )
+                    .await
+                    {
+                        Ok(inner) => inner,
+                        Err(_) => Err(LLMError::Other(format!(
+                            "Tool '{}' timed out after {:?}",
+                            tool_name, timeout_dur
+                        ))),
+                    };
 
                     let result_str = match result {
                         Ok(r) => r,
@@ -1324,6 +1360,155 @@ impl ChatSession {
         self.session_store.delete_session(self.session_id).await?;
 
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::llm::types::{Choice, EmbeddingData, EmbeddingInput, EmbeddingUsage, Role};
+    use async_trait::async_trait;
+    use std::sync::Mutex;
+
+    struct MockProvider {
+        default_model_name: String,
+        last_request: Arc<Mutex<Option<ChatCompletionRequest>>>,
+        response_content: Option<String>,
+    }
+
+    impl MockProvider {
+        fn new(default_model_name: &str, response_content: Option<&str>) -> Self {
+            Self {
+                default_model_name: default_model_name.to_string(),
+                last_request: Arc::new(Mutex::new(None)),
+                response_content: response_content.map(|s| s.to_string()),
+            }
+        }
+    }
+
+    #[async_trait]
+    impl LLMProvider for MockProvider {
+        fn name(&self) -> &str {
+            "mock"
+        }
+
+        fn default_model(&self) -> &str {
+            &self.default_model_name
+        }
+
+        async fn chat(&self, request: ChatCompletionRequest) -> LLMResult<ChatCompletionResponse> {
+            *self.last_request.lock().expect("lock poisoned") = Some(request);
+
+            let message = ChatMessage {
+                role: Role::Assistant,
+                content: self
+                    .response_content
+                    .as_ref()
+                    .map(|s| MessageContent::Text(s.clone())),
+                name: None,
+                tool_calls: None,
+                tool_call_id: None,
+            };
+
+            Ok(ChatCompletionResponse {
+                id: "resp-1".to_string(),
+                object: "chat.completion".to_string(),
+                created: 1,
+                model: self.default_model_name.clone(),
+                choices: vec![Choice {
+                    index: 0,
+                    message,
+                    finish_reason: None,
+                    logprobs: None,
+                }],
+                usage: None,
+                system_fingerprint: None,
+            })
+        }
+
+        async fn embedding(&self, request: EmbeddingRequest) -> LLMResult<EmbeddingResponse> {
+            let data = match request.input {
+                EmbeddingInput::Single(_) => vec![EmbeddingData {
+                    object: "embedding".to_string(),
+                    index: 0,
+                    embedding: vec![0.1, 0.2],
+                }],
+                EmbeddingInput::Multiple(values) => values
+                    .iter()
+                    .enumerate()
+                    .map(|(idx, _)| EmbeddingData {
+                        object: "embedding".to_string(),
+                        index: idx as u32,
+                        embedding: vec![idx as f32],
+                    })
+                    .collect(),
+            };
+
+            Ok(EmbeddingResponse {
+                object: "list".to_string(),
+                model: self.default_model_name.clone(),
+                data,
+                usage: EmbeddingUsage {
+                    prompt_tokens: 1,
+                    total_tokens: 1,
+                },
+            })
+        }
+    }
+
+    #[tokio::test]
+    async fn chat_builder_applies_client_defaults() {
+        let provider = Arc::new(MockProvider::new("provider-default", Some("ok")));
+        let client = LLMClient::with_config(
+            provider.clone(),
+            LLMConfig {
+                default_model: Some("configured-model".to_string()),
+                default_temperature: Some(0.33),
+                default_max_tokens: Some(222),
+                ..Default::default()
+            },
+        );
+
+        let _ = client.chat().user("hi").send().await.expect("chat should work");
+
+        let req = provider
+            .last_request
+            .lock()
+            .expect("lock poisoned")
+            .clone()
+            .expect("request should be captured");
+        assert_eq!(req.model, "configured-model");
+        assert_eq!(req.temperature, Some(0.33));
+        assert_eq!(req.max_tokens, Some(222));
+    }
+
+    #[tokio::test]
+    async fn ask_returns_error_when_response_has_no_content() {
+        let provider = Arc::new(MockProvider::new("model", None));
+        let client = LLMClient::new(provider);
+
+        let err = client
+            .ask("hello")
+            .await
+            .expect_err("ask should fail when content is absent");
+        assert!(matches!(err, LLMError::Other(_)));
+    }
+
+    #[tokio::test]
+    async fn embed_and_embed_batch_return_vectors() {
+        let provider = Arc::new(MockProvider::new("emb-model", Some("ok")));
+        let client = LLMClient::new(provider);
+
+        let single = client.embed("one").await.expect("single embedding should work");
+        assert_eq!(single, vec![0.1, 0.2]);
+
+        let batch = client
+            .embed_batch(vec!["a".to_string(), "b".to_string()])
+            .await
+            .expect("batch embedding should work");
+        assert_eq!(batch.len(), 2);
+        assert_eq!(batch[0], vec![0.0]);
+        assert_eq!(batch[1], vec![1.0]);
     }
 }
 

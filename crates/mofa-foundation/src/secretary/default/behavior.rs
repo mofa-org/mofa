@@ -4,13 +4,13 @@
 //! 提供一个开箱即用的秘书行为实现，包含完整的5阶段工作流程。
 //! Provides an out-of-the-box secretary behavior implementation with a complete 5-stage workflow.
 
-use mofa_kernel::agent::types::error::{GlobalError, GlobalResult};
 use super::clarifier::{ClarificationStrategy, RequirementClarifier};
 use super::coordinator::{DispatchStrategy, TaskCoordinator};
 use super::monitor::TaskMonitor;
 use super::reporter::{ReportConfig, Reporter};
 use super::todo::TodoManager;
 use super::types::*;
+use mofa_kernel::agent::types::error::{GlobalError, GlobalResult};
 
 use crate::secretary::agent_router::{AgentInfo, AgentProvider, AgentRouter};
 use crate::secretary::llm::{ChatMessage, ConversationHistory, LLMProvider};
@@ -363,9 +363,9 @@ impl DefaultSecretaryBehavior {
             .await
             .ok_or_else(|| GlobalError::Other(format!("Todo not found: {}", todo_id)))?;
 
-        let requirement = todo
-            .clarified_requirement
-            .ok_or_else(|| GlobalError::Other(format!("Requirement not clarified for: {}", todo_id)))?;
+        let requirement = todo.clarified_requirement.ok_or_else(|| {
+            GlobalError::Other(format!("Requirement not clarified for: {}", todo_id))
+        })?;
 
         // 检查可用执行器
         // Check available executors
@@ -658,21 +658,32 @@ impl SecretaryBehavior for DefaultSecretaryBehavior {
                 content,
                 priority,
                 metadata,
-            } => self.handle_idea(&content, priority, metadata, ctx).await
-                .map_err(|e| mofa_kernel::agent::secretary::SecretaryError::InputHandlingFailed(e.to_string())),
+            } => self
+                .handle_idea(&content, priority, metadata, ctx)
+                .await
+                .map_err(|e| {
+                    mofa_kernel::agent::secretary::SecretaryError::InputHandlingFailed(
+                        e.to_string(),
+                    )
+                }),
             DefaultInput::Decision {
                 decision_id,
                 selected_option,
                 comment,
-            } => {
-                self.handle_decision(&decision_id, selected_option, comment, ctx)
-                    .await
-                    .map_err(|e| mofa_kernel::agent::secretary::SecretaryError::InputHandlingFailed(e.to_string()))
-            }
-            DefaultInput::Query(query) => self.handle_query(query, ctx).await
-                .map_err(|e| mofa_kernel::agent::secretary::SecretaryError::InputHandlingFailed(e.to_string())),
-            DefaultInput::Command(cmd) => self.handle_command(cmd, ctx).await
-                .map_err(|e| mofa_kernel::agent::secretary::SecretaryError::InputHandlingFailed(e.to_string())),
+            } => self
+                .handle_decision(&decision_id, selected_option, comment, ctx)
+                .await
+                .map_err(|e| {
+                    mofa_kernel::agent::secretary::SecretaryError::InputHandlingFailed(
+                        e.to_string(),
+                    )
+                }),
+            DefaultInput::Query(query) => self.handle_query(query, ctx).await.map_err(|e| {
+                mofa_kernel::agent::secretary::SecretaryError::InputHandlingFailed(e.to_string())
+            }),
+            DefaultInput::Command(cmd) => self.handle_command(cmd, ctx).await.map_err(|e| {
+                mofa_kernel::agent::secretary::SecretaryError::InputHandlingFailed(e.to_string())
+            }),
         }
     }
 
@@ -689,7 +700,10 @@ impl SecretaryBehavior for DefaultSecretaryBehavior {
             .collect())
     }
 
-    fn handle_error(&self, error: &mofa_kernel::agent::secretary::SecretaryError) -> Option<Self::Output> {
+    fn handle_error(
+        &self,
+        error: &mofa_kernel::agent::secretary::SecretaryError,
+    ) -> Option<Self::Output> {
         Some(DefaultOutput::Error {
             message: format!("处理请求时出错: {}", error),
         })

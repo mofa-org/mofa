@@ -2,6 +2,8 @@ use mofa_kernel::agent::types::error::{GlobalError, GlobalResult};
 #[cfg(feature = "monitoring")]
 pub use mofa_monitoring::*;
 
+// Unified error conversions (GlobalError <-> runtime errors)
+pub mod error_conversions;
 // =============================================================================
 // MoFA Runtime - Agent Lifecycle and Execution Management
 // =============================================================================
@@ -23,12 +25,16 @@ pub mod builder;
 pub mod config;
 pub mod fallback;
 pub mod interrupt;
+pub mod rag;
 pub mod retry;
 pub mod runner;
 
 // Dora adapter module (only compiled when dora feature is enabled)
 #[cfg(feature = "dora")]
 pub mod dora_adapter;
+
+// Native dataflow module — always compiled, zero Dora dependency
+pub mod native_dataflow;
 
 // =============================================================================
 // Re-exports from Kernel (minimal, only what runtime needs)
@@ -762,19 +768,42 @@ impl SimpleMessageBus {
     /// Register an agent
     pub async fn register(&self, agent_id: &str, tx: tokio::sync::mpsc::Sender<AgentEvent>) {
         let mut subs = self.subscribers.write().await;
-        subs.entry(agent_id.to_string())
-            .or_insert_with(Vec::new)
-            .push(tx);
+        subs.insert(agent_id.to_string(), vec![tx]);
+            
+    }
+
+    /// Unregister an agent and clean up its topic subscriptions
+    pub async fn unregister(&self, agent_id: &str) {
+        {
+            let mut subs = self.subscribers.write().await;
+            subs.remove(agent_id);
+        }
+
+        {
+            let mut topics = self.topic_subscribers.write().await;
+            for subscriber_ids in topics.values_mut() {
+                subscriber_ids.retain(|id| id != agent_id);
+            }
+            topics.retain(|_, subscriber_ids| !subscriber_ids.is_empty());
+        }
+
+        {
+            let mut streams = self.streams.write().await;
+            streams.retain(|_, stream_info| {
+                stream_info.subscribers.retain(|id| id != agent_id);
+                !stream_info.subscribers.is_empty()
+            });
+        }
     }
 
     /// 订阅主题
     /// Subscribe to a topic
     pub async fn subscribe(&self, agent_id: &str, topic: &str) {
         let mut topics = self.topic_subscribers.write().await;
-        topics
-            .entry(topic.to_string())
-            .or_insert_with(Vec::new)
-            .push(agent_id.to_string());
+        let subscriber_ids = topics.entry(topic.to_string()).or_insert_with(Vec::new);
+        if !subscriber_ids.iter().any(|id| id == agent_id) {
+            subscriber_ids.push(agent_id.to_string());
+        }
     }
 
     /// 发送点对点消息
@@ -1095,8 +1124,22 @@ impl SimpleRuntime {
         config: AgentConfig,
         role: &str,
     ) -> GlobalResult<tokio::sync::mpsc::Receiver<AgentEvent>> {
+        self.register_agent_with_capacity(metadata, config, role, 100)
+            .await
+    }
+
+    /// 注册智能体并指定事件队列容量
+    /// Register an agent with explicit event queue capacity
+    pub async fn register_agent_with_capacity(
+        &self,
+        metadata: AgentMetadata,
+        config: AgentConfig,
+        role: &str,
+        queue_capacity: usize,
+    ) -> GlobalResult<tokio::sync::mpsc::Receiver<AgentEvent>> {
         let agent_id = metadata.id.clone();
-        let (tx, rx) = tokio::sync::mpsc::channel(100);
+        let capacity = queue_capacity.max(1);
+        let (tx, rx) = tokio::sync::mpsc::channel(capacity);
 
         // 注册到消息总线
         // Register to the message bus
@@ -1121,6 +1164,26 @@ impl SimpleRuntime {
 
         ::tracing::info!("Agent {} registered with role {}", agent_id, role);
         Ok(rx)
+    }
+
+    /// 注销智能体并清理其路由信息
+    /// Unregister an agent and clean up its routing entries
+    pub async fn unregister_agent(&self, agent_id: &str) -> GlobalResult<bool> {
+        let removed = {
+            let mut agents = self.agents.write().await;
+            agents.remove(agent_id).is_some()
+        };
+
+        if removed {
+            {
+                let mut roles = self.agent_roles.write().await;
+                roles.remove(agent_id);
+            }
+            self.message_bus.unregister(agent_id).await;
+            ::tracing::info!("Agent {} unregistered", agent_id);
+        }
+
+        Ok(removed)
     }
 
     /// 获取消息总线
@@ -1308,6 +1371,21 @@ mod tests {
         let _ = slow_rx.recv().await;
         send_task.await.unwrap().unwrap();
     }
+    
+    #[tokio::test]
+    async fn re_registration_replaces_stale_sender() {
+        let bus = SimpleMessageBus::new();
+
+        let (tx1, rx1) = tokio::sync::mpsc::channel(1);
+        bus.register("agent-a", tx1).await;
+        drop(rx1); // simulate agent restart
+
+        let (tx2, _rx2) = tokio::sync::mpsc::channel(1);
+        bus.register("agent-a", tx2).await;
+
+        let subs = bus.subscribers.read().await;
+        assert_eq!(subs["agent-a"].len(), 1);
+}
 }
 
 /// 智能体节点存储类型
@@ -1612,5 +1690,60 @@ mod test_agent_context {
             .await
             .expect("test_run_count should be set after second event");
         assert_eq!(val2.as_u64().unwrap(), 2);
+    }
+}
+
+// Additional message-bus tests
+#[cfg(test)]
+#[cfg(not(feature = "dora"))]
+mod test_message_bus {
+    use super::*;
+    use mofa_kernel::message::AgentEvent;
+    use std::time::Duration;
+
+    #[tokio::test]
+    async fn unregister_removes_routing_and_prevents_delivery() {
+        let bus = SimpleMessageBus::new();
+        let (tx, mut rx) = tokio::sync::mpsc::channel::<AgentEvent>(4);
+        bus.register("agent-x", tx).await;
+
+        // Subscribe to topic
+        bus.subscribe("agent-x", "topic-z").await;
+
+        // Ensure subscription exists
+        {
+            let topics = bus.topic_subscribers.read().await;
+            let subs = topics.get("topic-z").cloned().unwrap_or_default();
+            assert!(subs.iter().any(|id| id == "agent-x"));
+        }
+
+        // Unregister the agent
+        bus.unregister("agent-x").await;
+
+        // Confirm routing cleaned up
+        {
+            let topics = bus.topic_subscribers.read().await;
+            assert!(!topics.get("topic-z").map(|v| v.iter().any(|id| id == "agent-x")).unwrap_or(false));
+        }
+
+        // Confirm subscribers mapping cleaned up as well
+        {
+            let subs = bus.subscribers.read().await;
+            assert!(!subs.contains_key("agent-x"), "subscriber entry should be removed");
+        }
+
+        // Publish to topic - should not be delivered
+        // Drain any pending messages that may have been queued earlier
+        while rx.try_recv().is_ok() {}
+
+        bus.publish("topic-z", AgentEvent::Custom("nada".to_string(), vec![]))
+            .await
+            .expect("publish");
+
+        match tokio::time::timeout(Duration::from_millis(100), rx.recv()).await {
+            Ok(Some(msg)) => panic!("unexpected message after unregister: {msg:?}"),
+            Ok(None) => { /* channel closed */ }
+            Err(_) => { /* timed out as expected */ }
+        }
     }
 }
