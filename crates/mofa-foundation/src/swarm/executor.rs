@@ -27,6 +27,26 @@ pub struct ExecutionResult {
     pub outputs: Vec<SubtaskOutput>,
 }
 
+#[derive(Debug, Clone)]
+struct TaskAssignment {
+    idx: petgraph::graph::NodeIndex,
+    subtask_id: String,
+    description: String,
+    agent_pool_idx: usize,
+}
+
+fn stalled_dag_error(dag: &SubtaskDAG) -> GlobalError {
+    let pending = dag
+        .all_tasks()
+        .iter()
+        .filter(|(_, t)| matches!(t.status, SubtaskStatus::Pending | SubtaskStatus::Running))
+        .count();
+    GlobalError::Other(format!(
+        "DAG '{}' stalled: {} task(s) remain but none are ready",
+        dag.id, pending
+    ))
+}
+
 fn find_matching_agent<'a>(
     agents: &'a mut Vec<Box<dyn MoFAAgent>>,
     required: &[String],
@@ -49,12 +69,14 @@ pub async fn run_sequential(
     while !dag.is_complete() {
         let ready = dag.ready_tasks();
         if ready.is_empty() {
-            break;
+            return Err(stalled_dag_error(dag));
         }
 
         let idx = ready[0];
         let (id, desc, caps) = {
-            let t = dag.get_task(idx).unwrap();
+            let t = dag
+                .get_task(idx)
+                .ok_or_else(|| GlobalError::Other(format!("Missing task for node {:?}", idx)))?;
             (t.id.clone(), t.description.clone(), t.required_capabilities.clone())
         };
 
@@ -110,19 +132,21 @@ pub async fn run_parallel(
     while !dag.is_complete() {
         let ready = dag.ready_tasks();
         if ready.is_empty() {
-            break;
+            return Err(stalled_dag_error(dag));
         }
 
-        let mut assignments: Vec<(petgraph::graph::NodeIndex, String, String, usize)> = Vec::new();
-        let mut used_agent_indices: Vec<usize> = Vec::new();
+        let mut assignments: Vec<TaskAssignment> = Vec::new();
+        let mut used_agent_indices = std::collections::HashSet::new();
 
         for idx in &ready {
             let (id, desc, caps) = {
-                let t = dag.get_task(*idx).unwrap();
+                let t = dag.get_task(*idx).ok_or_else(|| {
+                    GlobalError::Other(format!("Missing task for node {:?}", idx))
+                })?;
                 (t.id.clone(), t.description.clone(), t.required_capabilities.clone())
             };
 
-            let agent_pos = agents
+            let Some(agent_pos) = agents
                 .iter()
                 .enumerate()
                 .find(|(i, a)| {
@@ -130,29 +154,38 @@ pub async fn run_parallel(
                         && caps.iter().all(|c| a.capabilities().has_tag(c))
                 })
                 .map(|(i, _)| i)
-                .ok_or_else(|| {
-                    GlobalError::Other(format!(
-                        "No available agent for capabilities {:?} (subtask '{id}')",
-                        caps
-                    ))
-                })?;
+            else {
+                continue;
+            };
 
-            used_agent_indices.push(agent_pos);
-            assignments.push((*idx, id, desc, agent_pos));
+            used_agent_indices.insert(agent_pos);
+            assignments.push(TaskAssignment {
+                idx: *idx,
+                subtask_id: id,
+                description: desc,
+                agent_pool_idx: agent_pos,
+            });
         }
 
-        for (idx, _, _, _) in &assignments {
-            dag.mark_running(*idx);
+        if assignments.is_empty() {
+            return Err(GlobalError::Other(
+                "No available agent could satisfy any ready subtask".to_string(),
+            ));
+        }
+
+        for assignment in &assignments {
+            dag.mark_running(assignment.idx);
         }
 
         // Remove agents from pool in descending index order to keep indices stable
-        let mut sorted_indices = used_agent_indices.clone();
+        let mut sorted_indices: Vec<_> = used_agent_indices.into_iter().collect();
         sorted_indices.sort_unstable_by(|a, b| b.cmp(a));
         let mut wave_agents: Vec<(usize, Box<dyn MoFAAgent>)> = sorted_indices
             .iter()
             .map(|&i| (i, agents.remove(i)))
             .collect();
         wave_agents.sort_by_key(|(i, _)| *i);
+        assignments.sort_by_key(|assignment| assignment.agent_pool_idx);
 
         type WaveResult = (
             usize,
@@ -164,9 +197,8 @@ pub async fn run_parallel(
 
         let mut futures: Vec<std::pin::Pin<Box<dyn std::future::Future<Output = WaveResult> + Send>>> = Vec::new();
 
-        for (i, (pool_idx, mut agent)) in wave_agents.into_iter().enumerate() {
-            let (idx, id, desc, _) = assignments[i].clone();
-            let input = AgentInput::text(format!("[{id}] {desc}"));
+        for (assignment, (pool_idx, mut agent)) in assignments.into_iter().zip(wave_agents.into_iter()) {
+            let input = AgentInput::text(format!("[{}] {}", assignment.subtask_id, assignment.description));
             let ctx = ctx.clone();
 
             futures.push(Box::pin(async move {
@@ -174,7 +206,7 @@ pub async fn run_parallel(
                     Ok(out) => Ok(out.to_text()),
                     Err(e) => Err(e.to_string()),
                 };
-                (pool_idx, agent, id, idx, outcome)
+                (pool_idx, agent, assignment.subtask_id, assignment.idx, outcome)
             }));
         }
 
@@ -258,6 +290,7 @@ mod tests {
         fn tags(mut self, tags: impl IntoIterator<Item = impl Into<String>>) -> Self {
             self.tags = tags.into_iter().map(|t| t.into()).collect(); self
         }
+        fn latency(mut self, latency_ms: u64) -> Self { self.latency_ms = latency_ms; self }
         fn fail_after(mut self, n: usize) -> Self { self.fail_after = Some(n); self }
         fn log(mut self, log: Arc<Mutex<Vec<String>>>) -> Self { self.log = log; self }
         fn build(self) -> InMemoryAgent {
@@ -364,12 +397,17 @@ mod tests {
         assert_eq!(result.completed, 3);
 
         let entries = log.lock().unwrap().clone();
-        let starts: Vec<&str> = entries.iter().filter(|e| e.ends_with(":start")).map(|s| s.as_str()).collect();
-        let ends: Vec<&str>   = entries.iter().filter(|e| e.ends_with(":end")).map(|s| s.as_str()).collect();
-        assert_eq!(starts.len(), 3);
-        assert_eq!(ends.len(), 3);
-        let end_pos = entries.iter().position(|e| e == "agent:end").unwrap();
-        assert!(entries[end_pos + 1..].iter().any(|e| e.ends_with(":start")));
+        assert_eq!(
+            entries,
+            vec![
+                "agent:start",
+                "agent:end",
+                "agent:start",
+                "agent:end",
+                "agent:start",
+                "agent:end",
+            ]
+        );
     }
 
     #[tokio::test]
@@ -415,6 +453,77 @@ mod tests {
         let result = run_parallel(&mut dag, &mut agents, &ctx()).await.unwrap();
         assert_eq!(result.completed, 3);
         assert_eq!(result.failed, 0);
+    }
+
+    #[tokio::test]
+    async fn test_par_more_ready_tasks_than_agents_runs_in_multiple_waves() {
+        let log = Arc::new(Mutex::new(Vec::<String>::new()));
+        let mut dag = SubtaskDAG::new("wave-limit");
+        dag.add_task(SwarmSubtask::new("t1", "Task 1"));
+        dag.add_task(SwarmSubtask::new("t2", "Task 2"));
+        dag.add_task(SwarmSubtask::new("t3", "Task 3"));
+
+        let mut agents: Vec<Box<dyn MoFAAgent>> = vec![
+            Box::new(InMemoryAgentBuilder::new("a1").latency(10).log(log.clone()).build()),
+            Box::new(InMemoryAgentBuilder::new("a2").latency(10).log(log.clone()).build()),
+        ];
+
+        let result = run_parallel(&mut dag, &mut agents, &ctx()).await.unwrap();
+        assert_eq!(result.completed, 3);
+        assert_eq!(result.failed, 0);
+
+        let entries = log.lock().unwrap().clone();
+        let start_count = entries.iter().filter(|entry| entry.ends_with(":start")).count();
+        assert_eq!(start_count, 3);
+    }
+
+    #[tokio::test]
+    async fn test_par_stalled_dag_returns_error() {
+        let mut dag = SubtaskDAG::new("stalled");
+        let a = dag.add_task(SwarmSubtask::new("a", "A"));
+        dag.mark_running(a);
+
+        let mut agents: Vec<Box<dyn MoFAAgent>> = vec![simple_agent("a1")];
+        let err = run_parallel(&mut dag, &mut agents, &ctx()).await.unwrap_err();
+        assert!(err.to_string().contains("stalled"));
+    }
+
+    #[tokio::test]
+    async fn test_seq_stalled_dag_returns_error() {
+        let mut dag = SubtaskDAG::new("stalled");
+        let a = dag.add_task(SwarmSubtask::new("a", "A"));
+        dag.mark_running(a);
+
+        let mut agents: Vec<Box<dyn MoFAAgent>> = vec![simple_agent("a1")];
+        let err = run_sequential(&mut dag, &mut agents, &ctx()).await.unwrap_err();
+        assert!(err.to_string().contains("stalled"));
+    }
+
+    #[tokio::test]
+    async fn test_par_agent_assignment_respects_capabilities_after_reordering() {
+        let mut dag = SubtaskDAG::new("cap-order");
+        let mut task_a = SwarmSubtask::new("vision-task", "Needs vision");
+        task_a.required_capabilities = vec!["vision".to_string()];
+        let mut task_b = SwarmSubtask::new("llm-task", "Needs llm");
+        task_b.required_capabilities = vec!["llm".to_string()];
+        dag.add_task(task_a);
+        dag.add_task(task_b);
+
+        let mut agents: Vec<Box<dyn MoFAAgent>> = vec![
+            tagged_agent("llm-agent", &["llm"]),
+            tagged_agent("vision-agent", &["vision"]),
+        ];
+
+        let result = run_parallel(&mut dag, &mut agents, &ctx()).await.unwrap();
+        assert_eq!(result.completed, 2);
+        assert!(result
+            .outputs
+            .iter()
+            .any(|out| out.subtask_id == "vision-task" && out.agent_id == "vision-agent"));
+        assert!(result
+            .outputs
+            .iter()
+            .any(|out| out.subtask_id == "llm-task" && out.agent_id == "llm-agent"));
     }
 
     #[tokio::test]
