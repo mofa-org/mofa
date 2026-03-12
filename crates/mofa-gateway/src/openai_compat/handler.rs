@@ -87,8 +87,12 @@ fn mofa_headers(backend: &str, latency_ms: u64) -> HeaderMap {
 }
 
 /// Estimate a rough token count (approx 4 chars per token).
+///
+/// Uses integer arithmetic to avoid f32 precision loss on strings
+/// longer than ~16 MB (2^24 bytes, the f32 mantissa limit).
 fn estimate_tokens(s: &str) -> u32 {
-    ((s.len() as f32) / 4.0).ceil() as u32
+    // (len + 3) / 4 is the ceiling-division equivalent of (len as f32 / 4.0).ceil()
+    u32::try_from((s.len() + 3) / 4).unwrap_or(u32::MAX)
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
