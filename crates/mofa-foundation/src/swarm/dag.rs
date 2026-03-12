@@ -161,12 +161,24 @@ impl SubtaskDAG {
                         let dep = &self.graph[edge.source()];
                         let dep_edge = edge.weight();
                         match dep_edge.kind {
-                            DependencyKind::Sequential | DependencyKind::DataFlow => {
+                            // Sequential: the downstream just needs the upstream
+                            // to finish; it does not consume its output, so a
+                            // Failed upstream still unblocks the next step.
+                            DependencyKind::Sequential => {
                                 matches!(
                                     dep.status,
                                     SubtaskStatus::Completed
                                         | SubtaskStatus::Skipped
                                         | SubtaskStatus::Failed(_)
+                                )
+                            }
+                            // DataFlow: the downstream *needs* the output
+                            // produced by the upstream. A failed task has no
+                            // output, so it must NOT satisfy a DataFlow edge.
+                            DependencyKind::DataFlow => {
+                                matches!(
+                                    dep.status,
+                                    SubtaskStatus::Completed | SubtaskStatus::Skipped
                                 )
                             }
                             DependencyKind::Soft => true,
@@ -325,7 +337,6 @@ impl SubtaskDAG {
             .filter(|t| matches!(t.status, SubtaskStatus::Failed(_)))
             .count()
     }
-
 
     /// Skip all Pending/Ready tasks that transitively depend on `failed_idx`
     /// through hard (Sequential/DataFlow) edges. Returns the number of tasks skipped.
@@ -564,7 +575,8 @@ mod tests {
         let d = dag.add_task(SwarmSubtask::new("d", "Independent"));
 
         dag.add_dependency(a, b).unwrap(); // Sequential (hard)
-        dag.add_dependency_with_kind(a, c, DependencyKind::Soft).unwrap();
+        dag.add_dependency_with_kind(a, c, DependencyKind::Soft)
+            .unwrap();
 
         dag.mark_failed(a, "error");
         let skipped = dag.cascade_skip(a);
@@ -612,12 +624,20 @@ mod tests {
         // a fails — b should become ready (not stuck forever)
         dag.mark_failed(a, "connection timeout");
         let ready = dag.ready_tasks();
-        assert_eq!(ready, vec![b], "b must become ready when its dependency fails");
+        assert_eq!(
+            ready,
+            vec![b],
+            "b must become ready when its dependency fails"
+        );
 
         // b also fails — c should become ready
         dag.mark_failed(b, "no input data");
         let ready = dag.ready_tasks();
-        assert_eq!(ready, vec![c], "c must become ready when its dependency fails");
+        assert_eq!(
+            ready,
+            vec![c],
+            "c must become ready when its dependency fails"
+        );
 
         dag.mark_skipped(c);
         assert!(dag.is_complete());
@@ -642,7 +662,11 @@ mod tests {
 
         // d depends on both b (Completed) and c (Failed) — should be ready
         let ready = dag.ready_tasks();
-        assert_eq!(ready, vec![d], "d must become ready when all deps are terminal");
+        assert_eq!(
+            ready,
+            vec![d],
+            "d must become ready when all deps are terminal"
+        );
     }
 
     #[test]
@@ -701,6 +725,222 @@ mod tests {
         assert_eq!(
             dag.get_task(a).unwrap().assigned_agent.as_deref(),
             Some("agent-1")
+        );
+    }
+
+    // ---- DataFlow dependency tests ------------------------------------------------
+
+    #[test]
+    fn test_dataflow_failed_upstream_blocks_downstream() {
+        let mut dag = SubtaskDAG::new("df-fail-block");
+        let a = dag.add_task(SwarmSubtask::new("a", "Produce output"));
+        let b = dag.add_task(SwarmSubtask::new("b", "Consume output"));
+
+        dag.add_dependency_with_kind(a, b, DependencyKind::DataFlow)
+            .unwrap();
+
+        dag.mark_failed(a, "crash");
+
+        // DataFlow: downstream needs actual output — failed upstream must NOT unblock b
+        let ready = dag.ready_tasks();
+        assert!(
+            !ready.contains(&b),
+            "b must NOT be ready when its DataFlow dependency failed"
+        );
+    }
+
+    #[test]
+    fn test_dataflow_completed_upstream_unblocks_downstream() {
+        let mut dag = SubtaskDAG::new("df-ok");
+        let a = dag.add_task(SwarmSubtask::new("a", "Produce output"));
+        let b = dag.add_task(SwarmSubtask::new("b", "Consume output"));
+
+        dag.add_dependency_with_kind(a, b, DependencyKind::DataFlow)
+            .unwrap();
+
+        dag.mark_complete(a);
+
+        let ready = dag.ready_tasks();
+        assert_eq!(
+            ready,
+            vec![b],
+            "b must be ready when its DataFlow upstream completed"
+        );
+    }
+
+    #[test]
+    fn test_dataflow_skipped_upstream_unblocks_downstream() {
+        let mut dag = SubtaskDAG::new("df-skip");
+        let a = dag.add_task(SwarmSubtask::new("a", "Optional producer"));
+        let b = dag.add_task(SwarmSubtask::new("b", "Consumer"));
+
+        dag.add_dependency_with_kind(a, b, DependencyKind::DataFlow)
+            .unwrap();
+
+        dag.mark_skipped(a);
+
+        let ready = dag.ready_tasks();
+        assert_eq!(
+            ready,
+            vec![b],
+            "b should be ready when its DataFlow upstream is skipped"
+        );
+    }
+
+    #[test]
+    fn test_dataflow_diamond_with_one_failed_branch() {
+        // Diamond: a → {b, c} → d (all DataFlow edges)
+        // b completes, c fails → d must NOT be ready
+        let mut dag = SubtaskDAG::new("df-diamond-fail");
+        let a = dag.add_task(SwarmSubtask::new("a", "Start"));
+        let b = dag.add_task(SwarmSubtask::new("b", "Branch 1"));
+        let c = dag.add_task(SwarmSubtask::new("c", "Branch 2"));
+        let d = dag.add_task(SwarmSubtask::new("d", "Merge"));
+
+        dag.add_dependency_with_kind(a, b, DependencyKind::DataFlow)
+            .unwrap();
+        dag.add_dependency_with_kind(a, c, DependencyKind::DataFlow)
+            .unwrap();
+        dag.add_dependency_with_kind(b, d, DependencyKind::DataFlow)
+            .unwrap();
+        dag.add_dependency_with_kind(c, d, DependencyKind::DataFlow)
+            .unwrap();
+
+        dag.mark_complete(a);
+        dag.mark_complete(b);
+        dag.mark_failed(c, "branch 2 error");
+
+        let ready = dag.ready_tasks();
+        assert!(
+            !ready.contains(&d),
+            "d must NOT be ready: it has a DataFlow dep on failed c"
+        );
+    }
+
+    #[test]
+    fn test_dataflow_diamond_all_completed() {
+        let mut dag = SubtaskDAG::new("df-diamond-ok");
+        let a = dag.add_task(SwarmSubtask::new("a", "Start"));
+        let b = dag.add_task(SwarmSubtask::new("b", "Branch 1"));
+        let c = dag.add_task(SwarmSubtask::new("c", "Branch 2"));
+        let d = dag.add_task(SwarmSubtask::new("d", "Merge"));
+
+        dag.add_dependency_with_kind(a, b, DependencyKind::DataFlow)
+            .unwrap();
+        dag.add_dependency_with_kind(a, c, DependencyKind::DataFlow)
+            .unwrap();
+        dag.add_dependency_with_kind(b, d, DependencyKind::DataFlow)
+            .unwrap();
+        dag.add_dependency_with_kind(c, d, DependencyKind::DataFlow)
+            .unwrap();
+
+        dag.mark_complete(a);
+        dag.mark_complete(b);
+        dag.mark_complete(c);
+
+        let ready = dag.ready_tasks();
+        assert_eq!(
+            ready,
+            vec![d],
+            "d must be ready when all DataFlow upstreams completed"
+        );
+    }
+
+    #[test]
+    fn test_mixed_sequential_and_dataflow_edges() {
+        // a --Sequential--> c
+        // b --DataFlow-----> c
+        // a fails, b completes: Sequential satisfied (Failed OK), DataFlow satisfied (Completed)
+        // → c should be ready
+        let mut dag = SubtaskDAG::new("mixed-edges-ok");
+        let a = dag.add_task(SwarmSubtask::new("a", "Setup"));
+        let b = dag.add_task(SwarmSubtask::new("b", "Producer"));
+        let c = dag.add_task(SwarmSubtask::new("c", "Consumer"));
+
+        dag.add_dependency_with_kind(a, c, DependencyKind::Sequential)
+            .unwrap();
+        dag.add_dependency_with_kind(b, c, DependencyKind::DataFlow)
+            .unwrap();
+
+        dag.mark_failed(a, "setup error");
+        dag.mark_complete(b);
+
+        let ready = dag.ready_tasks();
+        assert_eq!(
+            ready,
+            vec![c],
+            "c must be ready: Sequential dep satisfied by Failed, DataFlow dep satisfied by Completed"
+        );
+    }
+
+    #[test]
+    fn test_mixed_edges_dataflow_failed_blocks() {
+        // a --Sequential--> c
+        // b --DataFlow-----> c
+        // a completes, b fails: Sequential satisfied, DataFlow NOT satisfied
+        // → c must NOT be ready
+        let mut dag = SubtaskDAG::new("mixed-edges-blocked");
+        let a = dag.add_task(SwarmSubtask::new("a", "Setup"));
+        let b = dag.add_task(SwarmSubtask::new("b", "Producer"));
+        let c = dag.add_task(SwarmSubtask::new("c", "Consumer"));
+
+        dag.add_dependency_with_kind(a, c, DependencyKind::Sequential)
+            .unwrap();
+        dag.add_dependency_with_kind(b, c, DependencyKind::DataFlow)
+            .unwrap();
+
+        dag.mark_complete(a);
+        dag.mark_failed(b, "no data produced");
+
+        let ready = dag.ready_tasks();
+        assert!(
+            !ready.contains(&c),
+            "c must NOT be ready: its DataFlow dep on b is unsatisfied (b failed)"
+        );
+    }
+
+    #[test]
+    fn test_cascade_skip_through_dataflow_edge() {
+        // a --DataFlow--> b --DataFlow--> c
+        // a fails → cascade_skip should skip b and c (hard deps)
+        let mut dag = SubtaskDAG::new("df-cascade");
+        let a = dag.add_task(SwarmSubtask::new("a", "Source"));
+        let b = dag.add_task(SwarmSubtask::new("b", "Transform"));
+        let c = dag.add_task(SwarmSubtask::new("c", "Sink"));
+
+        dag.add_dependency_with_kind(a, b, DependencyKind::DataFlow)
+            .unwrap();
+        dag.add_dependency_with_kind(b, c, DependencyKind::DataFlow)
+            .unwrap();
+
+        dag.mark_failed(a, "source unavailable");
+        let skipped = dag.cascade_skip(a);
+
+        assert_eq!(
+            skipped, 2,
+            "both b and c should be skipped via DataFlow cascade"
+        );
+        assert_eq!(dag.get_task(b).unwrap().status, SubtaskStatus::Skipped);
+        assert_eq!(dag.get_task(c).unwrap().status, SubtaskStatus::Skipped);
+    }
+
+    #[test]
+    fn test_sequential_failed_still_unblocks_downstream() {
+        // Regression guard: the original behavior for Sequential edges must be preserved.
+        // Failed upstream SHOULD unblock downstream with Sequential edges.
+        let mut dag = SubtaskDAG::new("seq-fail-ok");
+        let a = dag.add_task(SwarmSubtask::new("a", "Fetch"));
+        let b = dag.add_task(SwarmSubtask::new("b", "Process"));
+
+        dag.add_dependency(a, b).unwrap(); // default = Sequential
+
+        dag.mark_failed(a, "timeout");
+
+        let ready = dag.ready_tasks();
+        assert_eq!(
+            ready,
+            vec![b],
+            "Sequential: Failed upstream must still unblock downstream"
         );
     }
 }
