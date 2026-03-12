@@ -6,8 +6,8 @@ use super::env::substitute_env_recursive;
 use super::schema::*;
 use super::{DslError, DslResult};
 use crate::llm::LLMAgent;
-use crate::workflow::builder::WorkflowBuilder;
 use crate::workflow::state::WorkflowValue;
+use crate::workflow::{WorkflowGraph, WorkflowNode};
 use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
@@ -65,29 +65,34 @@ impl WorkflowDslParser {
     pub async fn build_with_agents(
         definition: WorkflowDefinition,
         agent_registry: &HashMap<String, Arc<LLMAgent>>,
-    ) -> DslResult<crate::workflow::WorkflowGraph> {
+    ) -> DslResult<WorkflowGraph> {
         // Validate definition
         Self::validate(&definition)?;
 
-        // Build workflow
-        let mut builder = WorkflowBuilder::new(&definition.metadata.id, &definition.metadata.name)
-            .description(&definition.metadata.description);
+        // Build workflow directly so the DSL only creates declared edges.
+        let mut graph = WorkflowGraph::new(&definition.metadata.id, &definition.metadata.name)
+            .with_description(&definition.metadata.description);
 
         // Add nodes
         for node_def in definition.nodes {
-            builder = Self::add_node(builder, node_def, agent_registry).await?;
+            let node = Self::build_node(node_def, agent_registry)?;
+            graph.add_node(node);
         }
 
         // Add edges
         for edge in definition.edges {
             if let Some(condition) = &edge.condition {
-                builder = builder.conditional_edge(&edge.from, &edge.to, condition);
+                graph.connect_conditional(&edge.from, &edge.to, condition);
             } else {
-                builder = builder.edge(&edge.from, &edge.to);
+                graph.connect(&edge.from, &edge.to);
             }
         }
 
-        Ok(builder.build())
+        graph
+            .validate()
+            .map_err(|errors| DslError::Build(errors.join("; ")))?;
+
+        Ok(graph)
     }
 
     /// Validate workflow definition
@@ -154,27 +159,21 @@ impl WorkflowDslParser {
         Ok(())
     }
 
-    /// Add a node to the workflow builder
-    async fn add_node(
-        mut builder: WorkflowBuilder,
+    /// Build a workflow node from the DSL definition.
+    fn build_node(
         node_def: NodeDefinition,
         agent_registry: &HashMap<String, Arc<LLMAgent>>,
-    ) -> DslResult<WorkflowBuilder> {
-        match node_def {
-            NodeDefinition::Start { id, .. } => {
-                builder = builder.start_with_id(&id);
-            }
-            NodeDefinition::End { id, .. } => {
-                builder = builder.end_with_id(&id);
-            }
+    ) -> DslResult<WorkflowNode> {
+        let node = match node_def {
+            NodeDefinition::Start { id, .. } => WorkflowNode::start(&id),
+            NodeDefinition::End { id, .. } => WorkflowNode::end(&id),
             NodeDefinition::Task {
                 id, name, executor, ..
             } => {
-                // For now, tasks are limited to simple operations
-                // More complex task execution will be added later
+                // For now, tasks are limited to simple operations.
                 match executor {
                     TaskExecutorDef::None => {
-                        builder = builder.task(&id, &name, |_ctx, input| async move { Ok(input) });
+                        WorkflowNode::task(&id, &name, |_ctx, input| async move { Ok(input) })
                     }
                     _ => {
                         return Err(DslError::Validation(
@@ -207,40 +206,30 @@ impl WorkflowDslParser {
                 };
 
                 if let Some(template) = prompt_template {
-                    builder = builder.llm_agent_with_template(&id, &name, llm_agent, template);
+                    WorkflowNode::llm_agent_with_template(&id, &name, llm_agent, template)
                 } else {
-                    builder = builder.llm_agent(&id, &name, llm_agent);
+                    WorkflowNode::llm_agent(&id, &name, llm_agent)
                 }
             }
             NodeDefinition::Condition { id, name, .. } => {
-                // Condition nodes need special handling - use the agent node type
-                // with a custom executor that evaluates to true/false
-                builder = builder.task(&id, &name, |_ctx, _input| async move {
+                // Condition evaluation is still a placeholder until the DSL grows
+                // a real expression runtime, but the node no longer auto-wires edges.
+                WorkflowNode::task(&id, &name, |_ctx, _input| async move {
                     Ok(WorkflowValue::Bool(true))
-                });
+                })
             }
-            NodeDefinition::Parallel { id, name, .. } => {
-                // Parallel node - just mark it, actual parallelism handled by edges
-                builder = builder.task(&id, &name, |_ctx, input| async move { Ok(input) });
-            }
+            NodeDefinition::Parallel { id, name, .. } => WorkflowNode::parallel(&id, &name, vec![]),
             NodeDefinition::Join {
                 id, name, wait_for, ..
-            } => {
-                let wait_for_refs: Vec<&str> = wait_for.iter().map(|s| s.as_str()).collect();
-                builder = builder.goto(&id);
-                // Note: The join node will be connected later
-                let _ = (id, name, wait_for_refs);
-            }
+            } => WorkflowNode::join(&id, &name, wait_for.iter().map(String::as_str).collect()),
             NodeDefinition::Loop { id, name, body, .. } => match body {
-                TaskExecutorDef::None => {
-                    builder = builder.loop_node(
-                        &id,
-                        &name,
-                        |_ctx, input| async move { Ok(input) },
-                        |_ctx, _input| async move { false },
-                        10,
-                    );
-                }
+                TaskExecutorDef::None => WorkflowNode::loop_node(
+                    &id,
+                    &name,
+                    |_ctx, input| async move { Ok(input) },
+                    |_ctx, _input| async move { false },
+                    10,
+                ),
                 _ => {
                     return Err(DslError::Validation(
                         "Loop body executor not supported yet".to_string(),
@@ -248,28 +237,148 @@ impl WorkflowDslParser {
                 }
             },
             NodeDefinition::Transform { id, name, .. } => {
-                builder = builder.transform(&id, &name, |inputs| async move {
+                WorkflowNode::transform(&id, &name, |inputs| async move {
                     inputs.get("input").cloned().unwrap_or(WorkflowValue::Null)
-                });
+                })
             }
             NodeDefinition::SubWorkflow {
                 id,
                 name,
                 workflow_id,
                 ..
-            } => {
-                builder = builder.sub_workflow(&id, &name, &workflow_id);
-            }
+            } => WorkflowNode::sub_workflow(&id, &name, &workflow_id),
             NodeDefinition::Wait {
                 id,
                 name,
                 event_type,
                 ..
-            } => {
-                builder = builder.wait(&id, &name, &event_type);
-            }
-        }
+            } => WorkflowNode::wait(&id, &name, &event_type),
+        };
 
-        Ok(builder)
+        Ok(node)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::WorkflowDslParser;
+    use crate::workflow::NodeType;
+    use std::collections::HashMap;
+
+    #[tokio::test]
+    async fn build_with_agents_uses_only_declared_edges() {
+        let yaml = r#"
+metadata:
+  id: ordered-probe
+  name: Ordered Probe
+
+nodes:
+  - type: start
+    id: start
+
+  - type: task
+    id: second
+    name: Second
+    executor_type: none
+
+  - type: task
+    id: first
+    name: First
+    executor_type: none
+
+  - type: end
+    id: end
+
+edges:
+  - from: start
+    to: first
+  - from: first
+    to: second
+  - from: second
+    to: end
+"#;
+
+        let definition = WorkflowDslParser::from_yaml(yaml).unwrap();
+        let graph = WorkflowDslParser::build_with_agents(definition, &HashMap::new())
+            .await
+            .unwrap();
+
+        assert_eq!(graph.get_successors("start"), vec!["first"]);
+        assert_eq!(graph.get_successors("first"), vec!["second"]);
+        assert_eq!(graph.get_successors("second"), vec!["end"]);
+        assert_eq!(graph.get_outgoing_edges("start").len(), 1);
+        assert!(graph.validate().is_ok());
+    }
+
+    #[tokio::test]
+    async fn build_with_agents_preserves_parallel_and_join_nodes() {
+        let yaml = r#"
+metadata:
+  id: parallel-probe
+  name: Parallel Probe
+
+nodes:
+  - type: start
+    id: start
+
+  - type: parallel
+    id: fork
+    name: Fork
+
+  - type: task
+    id: left
+    name: Left
+    executor_type: none
+
+  - type: task
+    id: right
+    name: Right
+    executor_type: none
+
+  - type: join
+    id: merge
+    name: Merge
+    wait_for:
+      - left
+      - right
+
+  - type: end
+    id: end
+
+edges:
+  - from: start
+    to: fork
+  - from: fork
+    to: left
+  - from: fork
+    to: right
+  - from: left
+    to: merge
+  - from: right
+    to: merge
+  - from: merge
+    to: end
+"#;
+
+        let definition = WorkflowDslParser::from_yaml(yaml).unwrap();
+        let graph = WorkflowDslParser::build_with_agents(definition, &HashMap::new())
+            .await
+            .unwrap();
+
+        let fork = graph.get_node("fork").unwrap();
+        let merge = graph.get_node("merge").unwrap();
+
+        assert_eq!(fork.node_type(), &NodeType::Parallel);
+        assert_eq!(merge.node_type(), &NodeType::Join);
+        assert_eq!(graph.node_count(), 6);
+        assert_eq!(graph.get_successors("start"), vec!["fork"]);
+        assert_eq!(graph.get_successors("fork"), vec!["left", "right"]);
+        assert_eq!(graph.get_successors("left"), vec!["merge"]);
+        assert_eq!(graph.get_successors("right"), vec!["merge"]);
+        assert_eq!(
+            merge.join_nodes(),
+            &["left".to_string(), "right".to_string()]
+        );
+        assert!(graph.validate().is_ok());
     }
 }
