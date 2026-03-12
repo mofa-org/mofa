@@ -46,7 +46,7 @@ fn main() -> Result<()> {
     );
 
     println!("Request: '{}'", request.model_id);
-    println!("Memory Required: {} MB", request.memory_required_mb);
+    println!("Memory Required: {} MB", request.required_memory_mb);
     println!();
 
     // Get the routing decision
