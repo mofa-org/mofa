@@ -1693,6 +1693,27 @@ mod tests {
         assert_eq!(result.result["msg"], "hello");
     
     }
+    #[tokio::test]
+    async fn test_memory_plugin_eviction_when_limit_exceeded(){
+        let mut memory= MemoryPlugin::new("memory_test").with_max_memories(2);
+
+        memory.add_memory("low importance", 0.1);
+        memory.add_memory("medium importance", 0.5);
+        memory.add_memory("high importance", 0.9);
+
+
+        assert_eq!(memory.all_memories().len(), 2);
+
+        let contents: Vec<&str> = memory
+            .all_memories()
+            .iter()
+            .map(|m| m.content.as_str())
+            .collect();
+
+        assert!(!contents.contains(&"low importance"));
+
+
+    }
 
 
 
