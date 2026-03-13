@@ -514,25 +514,25 @@ async fn run_workflow_with_events() -> Result<(), Box<dyn std::error::Error>> {
         let mut events = Vec::new();
         while let Some(event) = event_rx.recv().await {
             match &event {
-                ExecutionEvent::WorkflowStarted { workflow_id, execution_id } => {
-                    info!("  [EVENT] 工作流开始: {} ({})", workflow_id, execution_id);
+                ExecutionEvent::WorkflowStarted { workflow_id, workflow_name, started_at: _ } => {
+                    info!("  [EVENT] 工作流开始: {} ({})", workflow_id, workflow_name);
                     //   [EVENT] Workflow started: {} ({})
                 }
-                ExecutionEvent::NodeStarted { node_id } => {
-                    info!("  [EVENT] 节点开始: {}", node_id);
-                    //   [EVENT] Node started: {}
+                ExecutionEvent::NodeStarted { node_id, node_name, parent_span_id: _ } => {
+                    info!("  [EVENT] 节点开始: {} ({})", node_id, node_name);
+                    //   [EVENT] Node started: {} ({})
                 }
-                ExecutionEvent::NodeCompleted { node_id, result } => {
-                    info!("  [EVENT] 节点完成: {} - {:?}", node_id, result.status);
-                    //   [EVENT] Node completed: {} - {:?}
+                ExecutionEvent::NodeCompleted { node_id, output, duration_ms } => {
+                    info!("  [EVENT] 节点完成: {} - {:?} ({}ms)", node_id, output, duration_ms);
+                    //   [EVENT] Node completed: {} - {:?} ({}ms)
                 }
                 ExecutionEvent::CheckpointCreated { label } => {
                     info!("  [EVENT] 检查点创建: {}", label);
                     //   [EVENT] Checkpoint created: {}
                 }
-                ExecutionEvent::WorkflowCompleted { workflow_id, status, .. } => {
-                    info!("  [EVENT] 工作流完成: {} - {:?}", workflow_id, status);
-                    //   [EVENT] Workflow completed: {} - {:?}
+                ExecutionEvent::WorkflowCompleted { workflow_id, final_output, total_duration_ms } => {
+                    info!("  [EVENT] 工作流完成: {} - {:?} ({}ms)", workflow_id, final_output, total_duration_ms);
+                    //   [EVENT] Workflow completed: {} - {:?} ({}ms)
                 }
                 _ => {}
             }
