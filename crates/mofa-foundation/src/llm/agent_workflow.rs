@@ -663,18 +663,9 @@ impl AgentWorkflow {
             }
 
             AgentNodeType::Router => {
-                let router = node
-                    .router
-                    .as_ref()
-                    .ok_or_else(|| LLMError::Other("Router function not set".to_string()))?;
-                let router_fn = Arc::clone(router);
-                let future = panic::catch_unwind(AssertUnwindSafe(|| router_fn(input.clone())))
-                    .map_err(|payload| {
-                        LLMError::Other(format!("Router panicked: {}", panic_payload_message(payload)))
-                    })?;
-                let _route = future.await;
-                // 路由节点返回原输入，路由决策在 get_next_node 中使用
-                // Router returns original input; decision is used in get_next_node
+                // 路由节点直接返回输入，路由决策在 get_next_node 中通过再次调用 router 函数确定
+                // Router node returns input directly; route decision is determined in get_next_node
+                // by calling the router function again
                 Ok(input)
             }
 
@@ -736,7 +727,15 @@ impl AgentWorkflow {
         // Router node: select edge based on router function result
         if matches!(node.node_type, AgentNodeType::Router) {
             if let Some(ref router) = node.router {
-                let route = router(output.clone()).await;
+                let router_fn = Arc::clone(router);
+                let route_result = panic::catch_unwind(AssertUnwindSafe(|| router_fn(output.clone())));
+                let route = match route_result {
+                    Ok(future) => future,
+                    Err(payload) => {
+                        tracing::error!("Router node panicked: {}", panic_payload_message(payload));
+                        return None;
+                    }
+                };
                 for edge in edges {
                     if edge.condition.as_ref() == Some(&route) {
                         return Some(edge.to.clone());
