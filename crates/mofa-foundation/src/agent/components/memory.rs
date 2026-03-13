@@ -730,3 +730,63 @@ impl Memory for FileBasedStorage {
         "file-based"
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn test_in_memory_search() {
+        let mut storage = InMemoryStorage::new();
+        
+        storage.store("k1", MemoryValue::text("The quick brown fox")).await.unwrap();
+        storage.store("k2", MemoryValue::text("Jumps over the lazy dog")).await.unwrap();
+        storage.store("k3", MemoryValue::text("Foxes are clever")).await.unwrap();
+
+        // Search for 'fox'
+        let results = storage.search("fox", 10).await.unwrap();
+        assert_eq!(results.len(), 2);
+        
+        // Search with limit
+        let limited_results = storage.search("fox", 1).await.unwrap();
+        assert_eq!(limited_results.len(), 1);
+
+        // Search non-matching
+        let no_results = storage.search("cat", 10).await.unwrap();
+        assert_eq!(no_results.len(), 0);
+    }
+
+    #[tokio::test]
+    async fn test_in_memory_history_and_stats() {
+        let mut storage = InMemoryStorage::new();
+        let session_id = "session_123";
+
+        // Test add to history
+        storage.add_to_history(session_id, Message::user("Hello")).await.unwrap();
+        storage.add_to_history(session_id, Message::assistant("Hi there!")).await.unwrap();
+
+        // Test get history
+        let history = storage.get_history(session_id).await.unwrap();
+        assert_eq!(history.len(), 2);
+        assert_eq!(history[0].role, MessageRole::User);
+        assert_eq!(history[1].role, MessageRole::Assistant);
+
+        // Test stats
+        storage.store("key1", MemoryValue::text("val")).await.unwrap();
+        let stats = storage.stats().await.unwrap();
+        assert_eq!(stats.total_items, 1);
+        assert_eq!(stats.total_sessions, 1);
+        assert_eq!(stats.total_messages, 2);
+
+        // Test clear history
+        storage.clear_history(session_id).await.unwrap();
+        let empty_history = storage.get_history(session_id).await.unwrap();
+        assert!(empty_history.is_empty());
+
+        // Test overall clear
+        storage.clear().await.unwrap();
+        let final_stats = storage.stats().await.unwrap();
+        assert_eq!(final_stats.total_items, 0);
+    }
+}
+
