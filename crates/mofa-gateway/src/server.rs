@@ -274,10 +274,10 @@ impl GatewayServer {
 ///
 /// ```rust,no_run
 /// # use mofa_gateway::server::{GatewayServer, ServerConfig, make_s3_store};
-/// # use mofa_gateway::AgentRegistry;
+/// # use mofa_runtime::agent::registry::AgentRegistry;
 /// # use std::sync::Arc;
 /// #[tokio::main]
-/// async fn main() -> Result<(), Box<dyn std::error::Error>> {
+/// async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
 ///     let store = make_s3_store("us-east-1", "my-bucket", None).await?;
 ///     let server = GatewayServer::new(ServerConfig::default(), Arc::new(AgentRegistry::new()))
 ///         .with_s3(store);
