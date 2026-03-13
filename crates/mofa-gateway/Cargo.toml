@@ -9,7 +9,15 @@ repository.workspace = true
 homepage.workspace = true
 documentation = "https://docs.rs/mofa-gateway"
 readme = "CRATE_OVERVIEW.md"
-keywords = ["ai", "agent", "gateway", "control-plane", "distributed", "consensus", "raft"]
+keywords = [
+    "ai",
+    "agent",
+    "gateway",
+    "control-plane",
+    "distributed",
+    "consensus",
+    "raft",
+]
 categories = ["asynchronous", "network-programming", "distributed-computing"]
 publish = true
 
@@ -28,8 +36,11 @@ axum = { workspace = true, features = ["multipart"] }
 chrono.workspace = true
 
 # Local dependencies
-mofa-kernel = { path = "../mofa-kernel", version = "0.1", features = ["config"] }
+mofa-kernel = { path = "../mofa-kernel", version = "0.1", features = [
+    "config",
+] }
 mofa-runtime = { path = "../mofa-runtime", version = "0.1" }
+mofa-foundation = { path = "../mofa-foundation", version = "0.1" }
 mofa-monitoring = { path = "../mofa-monitoring", version = "0.1", optional = true }
 mofa-integrations = { path = "../mofa-integrations", version = "0.1", optional = true }
 
@@ -37,7 +48,11 @@ mofa-integrations = { path = "../mofa-integrations", version = "0.1", optional =
 tonic = { version = "0.12", features = ["tls", "tls-roots"] }
 prost = "0.13"
 prost-types = "0.13"
-tower-http = { version = "0.6", features = ["cors", "trace", "compression-gzip"] }
+tower-http = { version = "0.6", features = [
+    "cors",
+    "trace",
+    "compression-gzip",
+] }
 tracing-subscriber.workspace = true
 prometheus = { version = "0.13", default-features = false }
 
@@ -69,6 +84,10 @@ opentelemetry_sdk = { workspace = true, optional = true }
 tracing-opentelemetry = { workspace = true, optional = true }
 opentelemetry-otlp = { workspace = true, optional = true }
 opentelemetry-semantic-conventions = { workspace = true, optional = true }
+
+# OpenAI / compatible APIs (for openai-compat gateway)
+async-openai = { version = "0.27", optional = true }
+subtle = { version = "2", optional = true }
 
 [build-dependencies]
 tonic-build = "0.12"
@@ -102,4 +121,7 @@ socketio = ["dep:mofa-integrations", "mofa-integrations/socketio", "dep:socketio
 s3 = ["dep:mofa-integrations", "mofa-integrations/s3", "dep:mime_guess"]
 
 # Full feature set (all optional features)
-full = ["rocksdb", "monitoring", "socketio", "s3"]
+full = ["rocksdb", "monitoring", "socketio", "s3", "openai-compat"]
+
+# OpenAI-compatible HTTP gateway components
+openai-compat = ["dep:async-openai", "dep:subtle"]

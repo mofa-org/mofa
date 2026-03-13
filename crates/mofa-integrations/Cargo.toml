@@ -38,6 +38,11 @@ aws-sdk-s3  = { version = "1", optional = true }
 aws-config  = { version = "1", features = ["behavior-version-latest"], optional = true }
 chrono = { version = "0.4", features = ["serde"], optional = true }
 
+# ── Speech features ──────────────────────────────────────────────────────────
+# Optional dependencies for cloud speech providers
+reqwest = { workspace = true, optional = true, features = ["multipart", "json", "stream"] }
+futures = { workspace = true, optional = true }
+
 [features]
 default = []
 
@@ -55,6 +60,11 @@ s3 = [
     "dep:aws-config",
     "dep:chrono",
 ]
+
+# Cloud Speech Adapters (TTS/ASR)
+openai-speech = ["dep:reqwest", "dep:futures"]
+elevenlabs = ["dep:reqwest", "dep:futures"]
+deepgram = ["dep:reqwest", "dep:futures"]
 
 [lints]
 workspace = true

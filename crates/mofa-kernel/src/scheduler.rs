@@ -233,6 +233,27 @@ pub struct ScheduleInfo {
     pub is_paused: bool,
 }
 
+impl ScheduleInfo {
+    /// Create a new ScheduleInfo for monitoring purposes.
+    pub fn new(
+        schedule_id: impl Into<String>,
+        agent_id: impl Into<String>,
+        next_run_ms: Option<u64>,
+        last_run_ms: Option<u64>,
+        consecutive_failures: u32,
+        is_paused: bool,
+    ) -> Self {
+        Self {
+            schedule_id: schedule_id.into(),
+            agent_id: agent_id.into(),
+            next_run_ms,
+            last_run_ms,
+            consecutive_failures,
+            is_paused,
+        }
+    }
+}
+
 // ---------------------------------------------------------------------------
 // AgentScheduler trait
 // ---------------------------------------------------------------------------
@@ -324,6 +345,30 @@ pub enum SchedulerError {
     /// A `register` call was made with a `schedule_id` that is already active.
     #[error("Schedule '{0}' is already registered")]
     AlreadyExists(String),
+}
+
+// ---------------------------------------------------------------------------
+// ScheduledAgentRunner
+// ---------------------------------------------------------------------------
+
+/// Minimal execution interface required by [`CronScheduler`] to fire an agent
+/// by ID.
+///
+/// Lives in `mofa-kernel` so that `mofa-foundation`'s `CronScheduler` can hold
+/// an `Arc<dyn ScheduledAgentRunner>` without importing the concrete
+/// `ExecutionEngine` from `mofa-runtime`, which would create a cyclic crate
+/// dependency.  `mofa-runtime`'s `ExecutionEngine` implements this trait.
+#[async_trait::async_trait]
+pub trait ScheduledAgentRunner: Send + Sync {
+    /// Run the agent identified by `agent_id` with the given `input`.
+    ///
+    /// Errors are boxed so that callers in `mofa-foundation` do not need to
+    /// know the concrete error type defined in `mofa-runtime`.
+    async fn run_scheduled(
+        &self,
+        agent_id: &str,
+        input: AgentInput,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>>;
 }
 
 // ---------------------------------------------------------------------------
