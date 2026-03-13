@@ -36,6 +36,7 @@ tower-http = { version = "0.6", features = ["cors"], optional = true }
 # ── S3 feature ─────────────────────────────────────────────────────────────────
 aws-sdk-s3  = { version = "1", optional = true }
 aws-config  = { version = "1", features = ["behavior-version-latest"], optional = true }
+chrono = { version = "0.4", features = ["serde"], optional = true }
 
 [features]
 default = []
@@ -52,6 +53,7 @@ socketio = [
 s3 = [
     "dep:aws-sdk-s3",
     "dep:aws-config",
+    "dep:chrono",
 ]
 
 [lints]
