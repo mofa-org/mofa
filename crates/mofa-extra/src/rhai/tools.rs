@@ -550,11 +550,13 @@ impl ScriptToolRegistry {
         while let Some(entry) = entries.next_entry().await? {
             let path = entry.path();
             if let Some(ext) = path.extension() {
+                // Use to_string_lossy() to handle non-UTF8 paths gracefully instead of panicking
+                let path_str = path.to_string_lossy();
                 let id = match ext.to_str() {
                     Some("yaml") | Some("yml") => {
-                        self.load_from_yaml(path.to_str().unwrap()).await.ok()
+                        self.load_from_yaml(&path_str).await.ok()
                     }
-                    Some("json") => self.load_from_json(path.to_str().unwrap()).await.ok(),
+                    Some("json") => self.load_from_json(&path_str).await.ok(),
                     _ => None,
                 };
                 if let Some(id) = id {
@@ -832,7 +834,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_tool_registration() {
-        let registry = ScriptToolRegistry::new(ScriptEngineConfig::default()).unwrap();
+        let registry = ScriptToolRegistry::new(ScriptEngineConfig::default()).expect("Failed to create tool registry");
 
         let tool = ToolBuilder::new("add", "Add Numbers")
             .description("Adds two numbers together")
@@ -852,14 +854,14 @@ mod tests {
             )
             .build();
 
-        registry.register(tool).await.unwrap();
+        registry.register(tool).await.expect("Failed to register tool");
 
         assert_eq!(registry.tool_count().await, 1);
     }
 
     #[tokio::test]
     async fn test_tool_execution() {
-        let registry = ScriptToolRegistry::new(ScriptEngineConfig::default()).unwrap();
+        let registry = ScriptToolRegistry::new(ScriptEngineConfig::default()).expect("Failed to create tool registry");
 
         let tool = ScriptToolDefinition::new(
             "multiply",
@@ -872,13 +874,13 @@ mod tests {
         .with_parameter(ToolParameter::new("x", ParameterType::Integer).required())
         .with_parameter(ToolParameter::new("y", ParameterType::Integer).required());
 
-        registry.register(tool).await.unwrap();
+        registry.register(tool).await.expect("Failed to register multiply tool");
 
         let mut input = HashMap::new();
         input.insert("x".to_string(), serde_json::json!(6));
         input.insert("y".to_string(), serde_json::json!(7));
 
-        let result = registry.execute("multiply", input).await.unwrap();
+        let result = registry.execute("multiply", input).await.expect("Failed to execute multiply tool");
 
         assert!(result.success);
         assert_eq!(result.result, serde_json::json!(42));
@@ -905,7 +907,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_tool_with_defaults() {
-        let registry = ScriptToolRegistry::new(ScriptEngineConfig::default()).unwrap();
+        let registry = ScriptToolRegistry::new(ScriptEngineConfig::default()).expect("Failed to create tool registry");
 
         let tool = ScriptToolDefinition::new(
             "greet",
@@ -921,14 +923,14 @@ mod tests {
             ToolParameter::new("greeting", ParameterType::String).with_default("Hello"),
         );
 
-        registry.register(tool).await.unwrap();
+        registry.register(tool).await.expect("Failed to register greet tool");
 
         // 不提供 greeting 参数，使用默认值
         // greeting parameter not provided, use default
         let mut input = HashMap::new();
         input.insert("name".to_string(), serde_json::json!("World"));
 
-        let result = registry.execute("greet", input).await.unwrap();
+        let result = registry.execute("greet", input).await.expect("Failed to execute greet tool");
 
         assert!(result.success);
         assert_eq!(result.result, serde_json::json!("Hello, World!"));
