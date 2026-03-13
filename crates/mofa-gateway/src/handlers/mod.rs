@@ -2,8 +2,10 @@
 
 pub mod agents;
 pub mod chat;
+pub mod files;
 pub mod health;
 
 pub use agents::agents_router;
 pub use chat::chat_router;
+pub use files::files_router;
 pub use health::health_router;
