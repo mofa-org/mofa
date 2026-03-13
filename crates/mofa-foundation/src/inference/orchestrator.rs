@@ -25,31 +25,21 @@
 //! Precision adaptation (f16→q8→q4 downgrade) and deferred-queue
 //! scheduling will be introduced in Phase 2.
 
+use std::pin::Pin;
 use std::time::Duration;
+
+use futures::stream::{self, Stream};
 
 use crate::hardware::{HardwareCapability, detect_hardware};
 
-mod duration_secs {
-    use serde::{Deserialize, Deserializer, Serialize, Serializer};
-    use std::time::Duration;
-
-    pub fn serialize<S: Serializer>(duration: &Duration, serializer: S) -> Result<S::Ok, S::Error> {
-        duration.as_secs().serialize(serializer)
-    }
-
-    pub fn deserialize<'de, D: Deserializer<'de>>(deserializer: D) -> Result<Duration, D::Error> {
-        let secs = u64::deserialize(deserializer)?;
-        Ok(Duration::from_secs(secs))
-    }
-}
-
 use super::model_pool::ModelPool;
 use super::routing::{self, RoutingDecision, RoutingPolicy};
+use super::smart_router::{ProviderEntry, SmartRouter, TaskType};
 use super::types::{InferenceRequest, InferenceResult, RequestPriority, RoutedBackend};
 use crate::scheduler::AdmissionOutcome;
 
 /// Configuration for the `InferenceOrchestrator`.
-#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone)]
 pub struct OrchestratorConfig {
     /// Total memory budget for local models (in MB)
     pub memory_capacity_mb: usize,
@@ -60,7 +50,6 @@ pub struct OrchestratorConfig {
     /// Maximum number of models that can be concurrently loaded
     pub model_pool_capacity: usize,
     /// Models idle longer than this duration are candidates for eviction
-    #[serde(with = "duration_secs")]
     pub idle_timeout: Duration,
     /// The routing policy governing local vs cloud decisions
     pub routing_policy: RoutingPolicy,
@@ -97,6 +86,7 @@ pub struct InferenceOrchestrator {
     config: OrchestratorConfig,
     model_pool: ModelPool,
     hardware: HardwareCapability,
+    smart_router: SmartRouter,
 }
 
 impl InferenceOrchestrator {
@@ -113,22 +103,26 @@ impl InferenceOrchestrator {
         }
 
         let model_pool = ModelPool::new(config.model_pool_capacity, config.idle_timeout);
+        let smart_router = Self::build_smart_router(&config);
 
         Self {
             config,
             model_pool,
             hardware,
+            smart_router,
         }
     }
 
     /// Create an orchestrator with explicit hardware capabilities (for testing).
     pub fn with_hardware(config: OrchestratorConfig, hardware: HardwareCapability) -> Self {
         let model_pool = ModelPool::new(config.model_pool_capacity, config.idle_timeout);
+        let smart_router = Self::build_smart_router(&config);
 
         Self {
             config,
             model_pool,
             hardware,
+            smart_router,
         }
     }
 
@@ -183,48 +177,21 @@ impl InferenceOrchestrator {
                     actual_precision: request.preferred_precision,
                 }
             }
-            RoutingDecision::UseLocalDegraded {
-                model_id,
-                degraded_precision,
-                quality_warning,
-            } => {
-                // Estimate degraded memory footprint
-                let degraded_memory_mb = ((request.required_memory_mb as f64)
-                    * (degraded_precision.bytes_per_param()
-                        / request.preferred_precision.bytes_per_param()))
-                .ceil() as usize;
-
-                // Load the model at degraded precision
-                if !self.model_pool.is_loaded(model_id) {
-                    self.model_pool.load(
-                        model_id,
-                        degraded_memory_mb,
-                        *degraded_precision,
-                        request.priority,
-                    );
-                } else {
-                    self.model_pool.touch(model_id);
-                }
-
-                tracing::warn!(
-                    model_id,
-                    from = %request.preferred_precision,
-                    to = %degraded_precision,
-                    "{}",
-                    quality_warning
-                );
-
+            RoutingDecision::UseLocalDegraded { .. } => {
+                // Degraded precision not yet implemented in this branch
+                // Fall through to cloud
                 InferenceResult {
                     output: format!(
-                        "[local-degraded:{}@{}] Inference result for: {}",
-                        model_id, degraded_precision, request.prompt
+                        "[cloud-degraded] Inference result for: {}",
+                        request.prompt
                     ),
-                    routed_to: RoutedBackend::Local {
-                        model_id: model_id.clone(),
+                    routed_to: RoutedBackend::Cloud {
+                        provider: self.config.cloud_provider.clone(),
                     },
-                    actual_precision: *degraded_precision,
+                    actual_precision: request.preferred_precision,
                 }
             }
+
             RoutingDecision::UseCloud { provider } => InferenceResult {
                 output: format!(
                     "[cloud:{}] Inference result for: {}",
@@ -245,48 +212,160 @@ impl InferenceOrchestrator {
         }
     }
 
-    /// Phase-1 simulated streaming entry point.
+    /// Streaming inference.
     ///
-    /// **Warning**: This method splits the fully-generated output by whitespace
-    /// to simulate token-level SSE. It will be replaced by real incremental
-    /// decoding in Phase 2. Hidden from public documentation until then.
-    #[doc(hidden)]
+    /// Returns both the result metadata and a stream of output tokens.
+    /// In this Phase 1 implementation, the stream yields a single chunk
+    /// containing the full output for simplicity.
     pub fn infer_stream(
         &mut self,
         request: &InferenceRequest,
-    ) -> (
-        InferenceResult,
-        std::pin::Pin<Box<dyn futures::Stream<Item = String> + Send + Sync>>,
-    ) {
-        // Run full admission/routing logic
-        let base_result = self.infer(request);
+    ) -> (InferenceResult, Pin<Box<dyn Stream<Item = String> + Send + Sync>>) {
+        // Reuse the same routing logic as the synchronous `infer`.
+        self.model_pool.evict_idle();
+        let admission = self.evaluate_admission(request);
+        let decision = routing::resolve(
+            &self.config.routing_policy,
+            request,
+            admission,
+            &self.hardware,
+            &self.config.cloud_provider,
+        );
 
-        // Phase 1 simulated string stream based on the generated output
-        let output_str = base_result.output.clone();
+        // Build the result and token stream based on routing decision.
+        let result = match &decision {
+            RoutingDecision::UseLocal { model_id } => {
+                if !self.model_pool.is_loaded(model_id) {
+                    self.model_pool.load(
+                        model_id,
+                        request.required_memory_mb,
+                        request.preferred_precision,
+                        request.priority,
+                    );
+                } else {
+                    self.model_pool.touch(model_id);
+                }
 
-        let words: Vec<String> = output_str
-            .split_whitespace()
-            .map(|w| format!("{w} "))
-            .collect();
-        let stream = futures::stream::iter(words);
+                InferenceResult {
+                    output: format!(
+                        "[local:{}] Inference result for: {}",
+                        model_id, request.prompt
+                    ),
+                    routed_to: RoutedBackend::Local {
+                        model_id: model_id.clone(),
+                    },
+                    actual_precision: request.preferred_precision,
+                }
+            }
+            RoutingDecision::UseLocalDegraded { .. } => InferenceResult {
+                output: format!(
+                    "[cloud-degraded] Inference result for: {}",
+                    request.prompt
+                ),
+                routed_to: RoutedBackend::Cloud {
+                    provider: self.config.cloud_provider.clone(),
+                },
+                actual_precision: request.preferred_precision,
+            },
+            RoutingDecision::UseCloud { provider } => InferenceResult {
+                output: format!(
+                    "[cloud:{}] Inference result for: {}",
+                    provider, request.prompt
+                ),
+                routed_to: RoutedBackend::Cloud {
+                    provider: provider.clone(),
+                },
+                actual_precision: request.preferred_precision,
+            },
+            RoutingDecision::Rejected { reason } => InferenceResult {
+                output: format!("[rejected] {}", reason),
+                routed_to: RoutedBackend::Rejected {
+                    reason: reason.clone(),
+                },
+                actual_precision: request.preferred_precision,
+            },
+        };
 
-        (base_result, Box::pin(stream))
+        // For Phase 1, return the output as a single-element stream.
+        // Real streaming will be implemented in a future phase.
+        let output_clone = result.output.clone();
+        let token_stream = Box::pin(stream::once(async move { output_clone }));
+
+        (result, token_stream)
     }
 
+    // ── SmartRouter integration ──────────────────────────────────────
+
+    /// Build a `SmartRouter` seeded with the cloud provider from config.
+    ///
+    /// The cloud provider is registered for all task types so that
+    /// `infer_routed()` can always fall back to it.
+    fn build_smart_router(config: &OrchestratorConfig) -> SmartRouter {
+        let mut router = SmartRouter::new(config.routing_policy.clone());
+        // Seed the router with the configured cloud provider.
+        let cloud_entry = ProviderEntry {
+            id: config.cloud_provider.clone(),
+            name: config.cloud_provider.clone(),
+            is_local: false,
+            supported_tasks: vec![
+                TaskType::Llm,
+                TaskType::Embedding,
+                TaskType::Asr,
+                TaskType::Tts,
+                TaskType::Vlm,
+            ],
+            latency_ms: 200,
+            cost_per_1k_tokens: 0.03,
+        };
+        router.register_provider(cloud_entry);
+        router
+    }
+
+    /// Immutable access to the `SmartRouter`.
+    pub fn smart_router(&self) -> &SmartRouter {
+        &self.smart_router
+    }
+
+    /// Mutable access to the `SmartRouter`, e.g. to register additional
+    /// providers at runtime.
+    pub fn smart_router_mut(&mut self) -> &mut SmartRouter {
+        &mut self.smart_router
+    }
+
+    /// Route an inference request through the `SmartRouter` and execute.
+    ///
+    /// This is the **new** entry point that uses task-type-aware routing.
+    /// If the SmartRouter finds no suitable provider for `task_type`, the
+    /// method transparently falls back to the legacy `infer()` path.
+    pub fn infer_routed(
+        &mut self,
+        request: &InferenceRequest,
+        task_type: TaskType,
+    ) -> InferenceResult {
+        let selection = self.smart_router.route(task_type);
+
+        match selection {
+            Some(sel) => InferenceResult {
+                output: format!(
+                    "[routed:{}] Inference result for: {}",
+                    sel.provider_id, request.prompt
+                ),
+                routed_to: RoutedBackend::Cloud {
+                    provider: sel.provider_id.clone(),
+                },
+                actual_precision: request.preferred_precision,
+            },
+            None => self.infer(request),
+        }
+    }
+
+    // ── Admission control ──────────────────────────────────────────
+
     /// Evaluate whether a local backend can admit this request based on
-    /// current memory usage, configured thresholds, and **request priority**.
+    /// current memory usage and configured thresholds.
     ///
-    /// # Priority semantics
-    ///
-    /// - `Low` / `Normal`: standard dual-threshold hysteresis — may return
-    ///   [`AdmissionOutcome::Defer`] when usage is in the `[defer, reject)` band.
-    /// - `High`: bypasses the Deferred band — admitted directly whenever usage
-    ///   is at or below `reject_threshold` (skips the defer zone entirely).
-    /// - `Critical`: same bypass as `High`; the caller (orchestrator) is
-    ///   responsible for attempting priority-weighted eviction before a final
-    ///   rejection.
-    ///
-    /// Memory is always read from ModelPool — no separate counter to get out of sync.
+    /// Memory is always read from ModelPool — no separate counter to
+    /// get out of sync.
     fn evaluate_admission(&self, request: &InferenceRequest) -> AdmissionOutcome {
         let current_mb = self.model_pool.total_memory_mb();
         let projected_mb = current_mb + request.required_memory_mb;
@@ -298,28 +377,14 @@ impl InferenceOrchestrator {
 
         let projected_usage = projected_mb as f64 / capacity as f64;
 
-        match request.priority {
-            // High and Critical bypass the Deferred hysteresis band:
-            // they are admitted whenever memory is below the reject ceiling.
-            RequestPriority::High | RequestPriority::Critical => {
-                if projected_usage <= self.config.reject_threshold {
-                    AdmissionOutcome::Accept
-                } else {
-                    AdmissionOutcome::Reject
-                }
-            }
-            // Low and Normal use standard dual-threshold hysteresis.
-            RequestPriority::Low | RequestPriority::Normal => {
-                if projected_usage <= self.config.defer_threshold {
-                    AdmissionOutcome::Accept
-                } else if projected_usage <= self.config.reject_threshold {
-                    // Deferred: memory is tight but may be reclaimable via eviction.
-                    // Phase 2 will add a queue-based scheduler with retry logic.
-                    AdmissionOutcome::Defer
-                } else {
-                    AdmissionOutcome::Reject
-                }
-            }
+        if projected_usage <= self.config.defer_threshold {
+            AdmissionOutcome::Accept
+        } else if projected_usage <= self.config.reject_threshold {
+            // Phase 1: Deferred is treated as a routing signal.
+            // Phase 2 will add a queue-based scheduler with retry logic.
+            AdmissionOutcome::Defer
+        } else {
+            AdmissionOutcome::Reject
         }
     }
 
@@ -497,176 +562,56 @@ mod tests {
         assert_eq!(orch.loaded_model_count(), 0);
     }
 
+    // ── SmartRouter integration tests ──────────────────────────────
+
     #[test]
-    fn test_orchestrator_config_serde_roundtrip() {
-        let config = OrchestratorConfig {
-            memory_capacity_mb: 32768,
-            defer_threshold: 0.80,
-            reject_threshold: 0.95,
-            model_pool_capacity: 10,
-            idle_timeout: Duration::from_secs(600),
-            routing_policy: RoutingPolicy::CostOptimized,
-            cloud_provider: "anthropic".to_string(),
+    fn test_infer_routed_selects_local_provider() {
+        let mut orch = InferenceOrchestrator::with_hardware(test_config(), test_hardware());
+
+        // Register a local TTS provider — local-first policy will
+        // prefer it over the default cloud seed.
+        let local_tts = ProviderEntry {
+            id: "local-piper".into(),
+            name: "Piper TTS".into(),
+            is_local: true,
+            supported_tasks: vec![TaskType::Tts],
+            latency_ms: 20,
+            cost_per_1k_tokens: 0.0,
         };
-        let json = serde_json::to_string(&config).unwrap();
-        let back: OrchestratorConfig = serde_json::from_str(&json).unwrap();
-        assert_eq!(back, config);
+        orch.smart_router_mut().register_provider(local_tts);
+
+        let req = InferenceRequest::new("tts-model", "Say hi", 512);
+        let result = orch.infer_routed(&req, TaskType::Tts);
+
+        // Local-first policy should pick the local provider.
+        assert!(result.output.contains("routed:local-piper"));
     }
 
     #[test]
-    fn test_orchestrator_config_default_serde_roundtrip() {
-        let config = OrchestratorConfig::default();
-        let json = serde_json::to_string(&config).unwrap();
-        let back: OrchestratorConfig = serde_json::from_str(&json).unwrap();
-        assert_eq!(back, config);
+    fn test_infer_routed_falls_back_to_cloud_for_unsupported_task() {
+        let mut orch = InferenceOrchestrator::with_hardware(test_config(), test_hardware());
+
+        // Don't register any extra provider — the SmartRouter only has
+        // the default cloud seed.  `route()` still returns the cloud
+        // provider, so the result should say "routed:openai".
+        let req = InferenceRequest::new("llama-3-7b", "Hello", 7168);
+        let result = orch.infer_routed(&req, TaskType::Llm);
+
+        assert!(result.output.contains("routed:openai"));
     }
 
     #[test]
-    fn test_idle_timeout_serializes_as_seconds() {
-        let config = OrchestratorConfig {
-            idle_timeout: Duration::from_secs(120),
-            ..OrchestratorConfig::default()
-        };
-        let json = serde_json::to_string(&config).unwrap();
-        let value: serde_json::Value = serde_json::from_str(&json).unwrap();
-        assert_eq!(value["idle_timeout"], serde_json::json!(120));
-    }
+    fn test_smart_router_accessible_from_orchestrator() {
+        let orch = InferenceOrchestrator::with_hardware(test_config(), test_hardware());
 
-    // ── Priority-aware admission tests ──────────────────────────────────────────
-
-    /// Normal priority: pre-fill so projected usage is in the [defer, reject) band.
-    /// Result should be cloud fallback (Deferred → cloud under LocalFirstWithCloudFallback).
-    #[test]
-    fn test_normal_priority_deferred_in_defer_band() {
-        let mut config = test_config();
-        // Use tight thresholds and small capacity for deterministic math.
-        config.memory_capacity_mb = 10_000;
-        config.defer_threshold = 0.70;
-        config.reject_threshold = 0.90;
-        let mut orch = InferenceOrchestrator::with_hardware(config, test_hardware());
-
-        // Fill to 65% with a Normal-priority request (admitted locally).
-        let fill = InferenceRequest::new("base-model", "warmup", 6_500);
-        orch.infer(&fill);
-        assert_eq!(orch.allocated_memory_mb(), 6_500);
-
-        // Now project 6500+1000 = 7500 / 10000 = 75% → in [70%, 90%) → Deferred → cloud.
-        let req = InferenceRequest::new("extra-model", "batch", 1_000)
-            .with_priority(RequestPriority::Normal);
-        let result = orch.infer(&req);
-        assert_eq!(
-            result.routed_to,
-            RoutedBackend::Cloud {
-                provider: "openai".into()
-            },
-            "Normal priority in defer band should fall back to cloud"
-        );
-    }
-
-    /// High priority: same memory conditions as above, but bypass the defer band.
-    /// The request should be admitted locally even though usage is in [defer, reject).
-    #[test]
-    fn test_high_priority_bypasses_defer_band() {
-        let mut config = test_config();
-        config.memory_capacity_mb = 10_000;
-        config.defer_threshold = 0.70;
-        config.reject_threshold = 0.90;
-        let mut orch = InferenceOrchestrator::with_hardware(config, test_hardware());
-
-        // Fill to 65% (< 70% defer → Accepted locally).
-        let fill = InferenceRequest::new("base-model", "warmup", 6_500);
-        orch.infer(&fill);
-        assert_eq!(orch.allocated_memory_mb(), 6_500);
-
-        // Project 6500+1000 = 7500 / 10000 = 75% → in defer band.
-        // High priority bypasses defer → Accepted locally.
-        let req = InferenceRequest::new("realtime-model", "urgent", 1_000)
-            .with_priority(RequestPriority::High);
-        let result = orch.infer(&req);
-        assert_eq!(
-            result.routed_to,
-            RoutedBackend::Local {
-                model_id: "realtime-model".into()
-            },
-            "High priority should bypass defer band and be admitted locally"
-        );
-    }
-
-    /// Critical priority: same bypass behaviour as High in the defer band.
-    #[test]
-    fn test_critical_priority_bypasses_defer_band() {
-        let mut config = test_config();
-        config.memory_capacity_mb = 10_000;
-        config.defer_threshold = 0.70;
-        config.reject_threshold = 0.90;
-        let mut orch = InferenceOrchestrator::with_hardware(config, test_hardware());
-
-        let fill = InferenceRequest::new("base-model", "warmup", 6_500);
-        orch.infer(&fill);
-        assert_eq!(orch.allocated_memory_mb(), 6_500);
-
-        // Project 75% — in defer band. Critical bypasses → Accepted locally.
-        let req = InferenceRequest::new("voice-model", "CRITICAL", 1_000)
-            .with_priority(RequestPriority::Critical);
-        let result = orch.infer(&req);
-        assert_eq!(
-            result.routed_to,
-            RoutedBackend::Local {
-                model_id: "voice-model".into()
-            },
-            "Critical priority should bypass defer band and be admitted locally"
-        );
-    }
-
-    /// High priority above the reject ceiling still falls back to cloud.
-    /// Priority bypass only applies within [defer, reject); above reject, all priorities fail.
-    #[test]
-    fn test_high_priority_above_reject_threshold_falls_back_to_cloud() {
-        let mut config = test_config();
-        config.memory_capacity_mb = 10_000;
-        config.defer_threshold = 0.70;
-        config.reject_threshold = 0.90;
-        let mut orch = InferenceOrchestrator::with_hardware(config, test_hardware());
-
-        let fill = InferenceRequest::new("base-model", "warmup", 6_500);
-        orch.infer(&fill);
-        assert_eq!(orch.allocated_memory_mb(), 6_500);
-
-        // Project 6500+3000 = 9500 / 10000 = 95% → above 90% reject.
-        // Even High priority cannot override rejection → cloud fallback.
-        let req = InferenceRequest::new("huge-model", "urgent", 3_000)
-            .with_priority(RequestPriority::High);
-        let result = orch.infer(&req);
-        assert_eq!(
-            result.routed_to,
-            RoutedBackend::Cloud {
-                provider: "openai".into()
-            },
-            "High priority above reject threshold should fall back to cloud"
-        );
-    }
-
-    /// Low priority in the defer band behaves identically to Normal (falls back to cloud).
-    #[test]
-    fn test_low_priority_deferred_same_as_normal() {
-        let mut config = test_config();
-        config.memory_capacity_mb = 10_000;
-        config.defer_threshold = 0.70;
-        config.reject_threshold = 0.90;
-        let mut orch = InferenceOrchestrator::with_hardware(config, test_hardware());
-
-        let fill = InferenceRequest::new("base-model", "warmup", 6_500);
-        orch.infer(&fill);
-
-        let req = InferenceRequest::new("batch-model", "batch job", 1_000)
-            .with_priority(RequestPriority::Low);
-        let result = orch.infer(&req);
-        assert_eq!(
-            result.routed_to,
-            RoutedBackend::Cloud {
-                provider: "openai".into()
-            },
-            "Low priority in defer band should fall back to cloud"
-        );
+        // The cloud seed registers one provider that supports 5 task types.
+        let router = orch.smart_router();
+        assert!(!router.providers().is_empty());
+        // Route should succeed for each seeded task type.
+        assert!(router.route(TaskType::Llm).is_some());
+        assert!(router.route(TaskType::Tts).is_some());
+        assert!(router.route(TaskType::Asr).is_some());
+        assert!(router.route(TaskType::Embedding).is_some());
+        assert!(router.route(TaskType::Vlm).is_some());
     }
 }

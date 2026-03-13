@@ -29,10 +29,12 @@
 pub mod model_pool;
 pub mod orchestrator;
 pub mod routing;
+pub mod smart_router;
 pub mod types;
 
 // Re-export primary public API
 pub use crate::scheduler::AdmissionOutcome;
 pub use orchestrator::{InferenceOrchestrator, OrchestratorConfig};
 pub use routing::{RoutingDecision, RoutingPolicy};
+pub use smart_router::{SmartRouter, TaskType, ProviderEntry, RouteSelection};
 pub use types::{InferenceRequest, InferenceResult, Precision, RequestPriority, RoutedBackend};
