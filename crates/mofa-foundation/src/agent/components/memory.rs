@@ -92,6 +92,7 @@ impl Memory for InMemoryStorage {
 
     async fn clear(&mut self) -> AgentResult<()> {
         self.data.clear();
+        self.history.clear();
         Ok(())
     }
 
@@ -746,14 +747,23 @@ mod tests {
         // Search for 'fox'
         let results = storage.search("fox", 10).await.unwrap();
         assert_eq!(results.len(), 2);
+        // Ensure we matched the expected keys k1 and k3, and did not match k2
+        let result_keys: Vec<&str> = results.iter().map(|item| item.key.as_str()).collect();
+        assert!(result_keys.contains(&"k1"));
+        assert!(result_keys.contains(&"k3"));
+        assert!(!result_keys.contains(&"k2"));
         
         // Search with limit
         let limited_results = storage.search("fox", 1).await.unwrap();
         assert_eq!(limited_results.len(), 1);
+        // The single limited result must be one of the expected matching keys
+        let limited_key = &limited_results[0].key;
+        assert!(limited_key == "k1" || limited_key == "k3");
 
         // Search non-matching
         let no_results = storage.search("cat", 10).await.unwrap();
         assert_eq!(no_results.len(), 0);
+        assert!(no_results.is_empty());
     }
 
     #[tokio::test]
@@ -778,15 +788,23 @@ mod tests {
         assert_eq!(stats.total_sessions, 1);
         assert_eq!(stats.total_messages, 2);
 
-        // Test clear history
+        // Test clear_history: removes only the specified session's messages
         storage.clear_history(session_id).await.unwrap();
         let empty_history = storage.get_history(session_id).await.unwrap();
         assert!(empty_history.is_empty());
+        // Stats must be deterministic: session and messages are gone
+        let stats_after_clear_history = storage.stats().await.unwrap();
+        assert_eq!(stats_after_clear_history.total_sessions, 0);
+        assert_eq!(stats_after_clear_history.total_messages, 0);
+        // Stored data item is still present (clear_history only removes history)
+        assert_eq!(stats_after_clear_history.total_items, 1);
 
-        // Test overall clear
+        // Test clear: removes all stored items AND all history
         storage.clear().await.unwrap();
-        let final_stats = storage.stats().await.unwrap();
-        assert_eq!(final_stats.total_items, 0);
+        let stats_after_clear = storage.stats().await.unwrap();
+        assert_eq!(stats_after_clear.total_items, 0);
+        assert_eq!(stats_after_clear.total_sessions, 0);
+        assert_eq!(stats_after_clear.total_messages, 0);
     }
 }
 

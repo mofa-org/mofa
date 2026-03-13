@@ -4,8 +4,6 @@ use std::error::Error;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
-
-
     println!("===========================================");
     println!(" MoFA Memory History & Search Demo         ");
     println!("===========================================\n");
@@ -25,7 +23,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     storage.store("doc1", MemoryValue::text("The MoFA Cognitive Gateway handles request routing and telemetry.")).await?;
     storage.store("doc2", MemoryValue::text("Episodic Memory allows agents to retrieve historical context from past sessions.")).await?;
     storage.store("doc3", MemoryValue::text("The workflow engine parses custom syntax into DAGs.")).await?;
-    
+
     let stats = storage.stats().await?;
     println!(" -> Current Stats: {} items, {} sessions, {} total messages\n", stats.total_items, stats.total_sessions, stats.total_messages);
 
@@ -34,7 +32,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     
     let results = storage.search(search_term, 5).await?;
     println!(" -> Found {} results.", results.len());
-    
+
     for (i, result) in results.iter().enumerate() {
         println!("    [{}] Key: '{}' | Snippet: {:?}", i+1, result.key, result.value.as_text());
     }
