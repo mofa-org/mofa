@@ -90,6 +90,7 @@ use crate::agent::error::{AgentError, AgentResult};
 use crate::agent::types::{AgentInput, AgentOutput, AgentState, InterruptResult};
 use chrono::{DateTime, Utc};
 use cron::Schedule;
+use std::collections::VecDeque;
 use std::str::FromStr;
 use std::sync::Arc;
 use tokio::sync::RwLock;
@@ -404,9 +405,27 @@ impl<T: MoFAAgent> AgentRunner<T> {
 
         let start = std::time::Instant::now();
 
+        // Default 5-minute timeout as watchdog unless agent logic should run longer
+        let timeout_duration = if let Some(ms) = self.context.config().timeout_ms {
+            std::time::Duration::from_millis(ms)
+        } else {
+            std::time::Duration::from_secs(300)
+        };
+
         // 执行 Agent
         // Execute Agent
-        let result = self.agent.execute(input, &self.context).await;
+        let result = match tokio::time::timeout(
+            timeout_duration, 
+            self.agent.execute(input, &self.context)
+        ).await {
+            Ok(res) => res,
+            Err(_) => {
+                // 超时，强制中断并返回超时错误
+                // Timeout, interrupt actively and return timeout error
+                let _ = self.agent.interrupt().await;
+                Err(AgentError::timeout(timeout_duration.as_millis() as u64))
+            }
+        };
 
         let duration = start.elapsed().as_millis() as u64;
 
@@ -866,6 +885,7 @@ pub async fn run_agents_global<T: MoFAAgent>(
 mod tests {
     use super::*;
     use crate::agent::capabilities::AgentCapabilitiesBuilder;
+    use mofa_kernel::agent::context::ContextConfig;
     use std::time::{Duration as StdDuration, Instant};
 
     struct TestAgent {
@@ -1273,6 +1293,67 @@ mod tests {
         );
     }
 
+    #[tokio::test]
+    async fn test_agent_runner_deadlock_watchdog_timeout() {
+        struct SlowAgent {
+            id: String,
+            name: String,
+            state: AgentState,
+            capabilities: AgentCapabilities,
+        }
+        
+        #[async_trait::async_trait]
+        impl MoFAAgent for SlowAgent {
+            fn id(&self) -> &str { &self.id }
+            fn name(&self) -> &str { &self.name }
+            fn capabilities(&self) -> &AgentCapabilities { &self.capabilities }
+            fn state(&self) -> AgentState { self.state.clone() }
+            async fn initialize(&mut self, _ctx: &AgentContext) -> AgentResult<()> {
+                self.state = AgentState::Ready;
+                Ok(())
+            }
+            async fn execute(&mut self, _input: AgentInput, _ctx: &AgentContext) -> AgentResult<AgentOutput> {
+                // Simulate a long-running / deadlocked operation
+                tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
+                Ok(AgentOutput::text("survived"))
+            }
+            async fn shutdown(&mut self) -> AgentResult<()> {
+                self.state = AgentState::Shutdown;
+                Ok(())
+            }
+        }
+        
+        let slow_agent = SlowAgent {
+            id: "slow-agent".to_string(),
+            name: "Slow Agent".to_string(),
+            state: AgentState::Created,
+            capabilities: AgentCapabilitiesBuilder::new().build(),
+        };
+        
+        // Build a context with a 50ms timeout — much less than the 500ms sleep
+        let ctx = AgentContext::new("slow-agent").with_config(ContextConfig {
+            timeout_ms: Some(50),
+            ..ContextConfig::default()
+        });
+        
+        let mut runner = AgentRunner::with_context(slow_agent, ctx).await.unwrap();
+        
+        let start = std::time::Instant::now();
+        let result = runner.execute(AgentInput::text("wake up")).await;
+        let elapsed = start.elapsed();
+        
+        // Should timeout before the 500ms sleep finishes
+        assert!(result.is_err(), "Expected a timeout error");
+        assert!(elapsed.as_millis() >= 50, "Should have waited at least 50ms");
+        assert!(elapsed.as_millis() < 400, "Should have timed out before 400ms");
+        
+        let msg = result.unwrap_err().to_string();
+        assert!(
+            msg.contains("timed out"),
+            "Expected timeout error message, got: {}",
+            msg
+        );
+    }
     // ========================================================================
     // Lifecycle (pause / resume) tests
     // ========================================================================
