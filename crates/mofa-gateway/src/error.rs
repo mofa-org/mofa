@@ -171,6 +171,18 @@ pub enum GatewayError {
     /// Internal gateway error.
     #[error("Internal gateway error: {0}")]
     Internal(String),
+
+    /// Object-store (S3) operation failed.
+    #[error("S3 error: {0}")]
+    S3Error(String),
+
+    /// The requested feature is not configured on this server instance.
+    #[error("{0} is not configured")]
+    NotConfigured(&'static str),
+
+    /// Upload rejected because the file exceeds the configured size limit.
+    #[error("Payload too large: {0}")]
+    PayloadTooLarge(String),
 }
 
 /// Result type for control plane operations.
@@ -219,6 +231,9 @@ impl IntoResponse for GatewayError {
             GatewayError::Network(_) => StatusCode::BAD_GATEWAY,
             GatewayError::LoadBalancing(_) => StatusCode::INTERNAL_SERVER_ERROR,
             GatewayError::Internal(_) => StatusCode::INTERNAL_SERVER_ERROR,
+            GatewayError::S3Error(_) => StatusCode::BAD_GATEWAY,
+            GatewayError::NotConfigured(_) => StatusCode::NOT_IMPLEMENTED,
+            GatewayError::PayloadTooLarge(_) => StatusCode::PAYLOAD_TOO_LARGE,
         };
 
         let body = Json(ErrorResponse {
