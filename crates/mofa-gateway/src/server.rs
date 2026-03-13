@@ -11,7 +11,18 @@ use tracing::info;
 use crate::handlers::{agents_router, chat_router, health_router};
 use crate::middleware::RateLimiter;
 use crate::state::AppState;
+use mofa_kernel::ObjectStore;
 use mofa_runtime::agent::registry::AgentRegistry;
+
+#[cfg(feature = "socketio")]
+use mofa_integrations::socketio::{SocketIoBridge, SocketIoConfig};
+#[cfg(feature = "socketio")]
+use mofa_kernel::AgentBus;
+
+#[cfg(feature = "s3")]
+use mofa_integrations::s3::S3ObjectStore;
+#[cfg(feature = "s3")]
+use mofa_integrations::s3::S3Config;
 
 /// Control-plane server configuration
 #[derive(Debug, Clone)]
@@ -28,6 +39,11 @@ pub struct ServerConfig {
     pub rate_max_requests: u64,
     /// Time window for the rate limiter
     pub rate_window: Duration,
+    /// Maximum allowed upload body size in bytes.
+    ///
+    /// Uploads that exceed this are rejected with `413 Payload Too Large`.
+    /// `None` means no limit (default).
+    pub max_upload_bytes: Option<u64>,
 }
 
 impl Default for ServerConfig {
@@ -39,6 +55,7 @@ impl Default for ServerConfig {
             enable_tracing: true,
             rate_max_requests: 100,
             rate_window: Duration::from_secs(60),
+            max_upload_bytes: None,
         }
     }
 }
@@ -74,6 +91,21 @@ impl ServerConfig {
         self
     }
 
+    /// Set the maximum allowed upload size in bytes.
+    ///
+    /// Uploads that exceed this limit are rejected with `413 Payload Too Large`.
+    ///
+    /// # Example
+    ///
+    /// ```rust,ignore
+    /// // Allow uploads up to 50 MB
+    /// ServerConfig::new().with_max_upload_size(50 * 1024 * 1024)
+    /// ```
+    pub fn with_max_upload_size(mut self, max_bytes: u64) -> Self {
+        self.max_upload_bytes = Some(max_bytes);
+        self
+    }
+
     /// Return the resolved `SocketAddr` for this configuration.
     pub fn socket_addr(&self) -> SocketAddr {
         format!("{}:{}", self.host, self.port)
@@ -86,12 +118,41 @@ impl ServerConfig {
 pub struct GatewayServer {
     config: ServerConfig,
     registry: Arc<AgentRegistry>,
+    /// Pre-initialised object store injected via [`with_s3`].
+    s3: Option<Arc<dyn ObjectStore>>,
+    #[cfg(feature = "socketio")]
+    socket_io: Option<(Arc<AgentBus>, SocketIoConfig)>,
 }
 
 impl GatewayServer {
     /// Create a server backed by the given `AgentRegistry`.
     pub fn new(config: ServerConfig, registry: Arc<AgentRegistry>) -> Self {
-        Self { config, registry }
+        Self {
+            config,
+            registry,
+            s3: None,
+            #[cfg(feature = "socketio")]
+            socket_io: None,
+        }
+    }
+
+    /// Attach a pre-initialised object store for the `/api/v1/files` endpoints.
+    ///
+    /// Accepts any `Arc<dyn ObjectStore>` — pass an [`S3ObjectStore`] for AWS/MinIO
+    /// or a custom in-memory implementation for testing.
+    pub fn with_s3(mut self, store: Arc<dyn ObjectStore>) -> Self {
+        self.s3 = Some(store);
+        self
+    }
+
+    /// Attach an [`AgentBus`] and [`SocketIoConfig`] to enable the real-time
+    /// Socket.IO bridge.
+    ///
+    /// Requires the `socketio` feature flag.
+    #[cfg(feature = "socketio")]
+    pub fn with_socket_io(mut self, bus: Arc<AgentBus>, config: SocketIoConfig) -> Self {
+        self.socket_io = Some((bus, config));
+        self
     }
 
     /// Build the axum `Router` without starting the server.
@@ -99,12 +160,22 @@ impl GatewayServer {
     /// Useful for integration tests that want to drive the server via
     /// `axum::serve` or `tower::ServiceExt`.
     pub fn build_router(&self) -> Router {
+        use crate::handlers::files_router;
+
         let rate_limiter = Arc::new(RateLimiter::new(
             self.config.rate_max_requests,
             self.config.rate_window,
         ));
 
-        let state = Arc::new(AppState::new(self.registry.clone(), rate_limiter.clone()));
+        let mut state = AppState::new(
+            self.registry.clone(),
+            rate_limiter.clone(),
+            self.s3.clone(),
+        );
+
+        if let Some(max_bytes) = self.config.max_upload_bytes {
+            state = state.with_max_upload_bytes(max_bytes);
+        }
 
         // Spawn background GC task for rate-limiter entries
         let gc_limiter = rate_limiter.clone();
@@ -116,10 +187,46 @@ impl GatewayServer {
             }
         });
 
+        // Build the Socket.IO layer when configured; capture the SocketIo handle
+        // so handlers can emit server-side events (e.g. upload progress).
+        #[cfg(feature = "socketio")]
+        if let Some((bus, sio_cfg)) = &self.socket_io {
+            let namespace = sio_cfg.namespace.clone();
+            let (sio_layer, _, io) = SocketIoBridge::new(sio_cfg.clone(), bus.clone()).build();
+            state = state.with_socketio(io, namespace);
+            let state = Arc::new(state);
+            let mut router = Router::new()
+                .merge(health_router())
+                .merge(agents_router())
+                .merge(chat_router())
+                .merge(files_router())
+                .with_state(state);
+            router = router.layer(sio_layer);
+            if self.config.enable_tracing {
+                router = router.layer(TraceLayer::new_for_http());
+            }
+            if self.config.enable_cors {
+                let cors = CorsLayer::new()
+                    .allow_origin(Any)
+                    .allow_methods([
+                        Method::GET,
+                        Method::POST,
+                        Method::PUT,
+                        Method::DELETE,
+                        Method::OPTIONS,
+                    ])
+                    .allow_headers(Any);
+                router = router.layer(cors);
+            }
+            return router;
+        }
+
+        let state = Arc::new(state);
         let mut router = Router::new()
             .merge(health_router())
             .merge(agents_router())
             .merge(chat_router())
+            .merge(files_router())
             .with_state(state);
 
         if self.config.enable_tracing {
@@ -132,6 +239,7 @@ impl GatewayServer {
                 .allow_methods([
                     Method::GET,
                     Method::POST,
+                    Method::PUT,
                     Method::DELETE,
                     Method::OPTIONS,
                 ])
@@ -159,6 +267,35 @@ impl GatewayServer {
     ) -> tokio::task::JoinHandle<Result<(), Box<dyn std::error::Error + Send + Sync>>> {
         tokio::spawn(async move { self.start().await })
     }
+}
+
+/// Convenience constructor: build an [`S3ObjectStore`] from config and wrap it
+/// for [`GatewayServer::with_s3`].
+///
+/// ```rust,no_run
+/// # use mofa_gateway::server::{GatewayServer, ServerConfig, make_s3_store};
+/// # use mofa_gateway::AgentRegistry;
+/// # use std::sync::Arc;
+/// #[tokio::main]
+/// async fn main() -> Result<(), Box<dyn std::error::Error>> {
+///     let store = make_s3_store("us-east-1", "my-bucket", None).await?;
+///     let server = GatewayServer::new(ServerConfig::default(), Arc::new(AgentRegistry::new()))
+///         .with_s3(store);
+///     Ok(())
+/// }
+/// ```
+#[cfg(feature = "s3")]
+pub async fn make_s3_store(
+    region: impl Into<String>,
+    bucket: impl Into<String>,
+    endpoint: Option<String>,
+) -> Result<Arc<dyn ObjectStore>, Box<dyn std::error::Error + Send + Sync>> {
+    let mut cfg = S3Config::new(region, bucket);
+    if let Some(ep) = endpoint {
+        cfg = cfg.with_endpoint(ep);
+    }
+    let store = S3ObjectStore::new(cfg).await?;
+    Ok(Arc::new(store) as Arc<dyn ObjectStore>)
 }
 
 #[cfg(test)]
