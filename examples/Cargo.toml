@@ -46,6 +46,7 @@ members = [
     "compression_examples",
     "admission_gate_demo",
     "integrations_demo",
+    "gateway_socketio_s3",
     "native_dataflow",
     "mcp_tools",
     "memory_scheduler_demo",
