@@ -730,7 +730,7 @@ impl AgentWorkflow {
                 let router_fn = Arc::clone(router);
                 let route_result = panic::catch_unwind(AssertUnwindSafe(|| router_fn(output.clone())));
                 let route = match route_result {
-                    Ok(future) => future,
+                    Ok(future) => future.await,
                     Err(payload) => {
                         tracing::error!("Router node panicked: {}", panic_payload_message(payload));
                         return None;
