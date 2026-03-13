@@ -746,14 +746,23 @@ mod tests {
         // Search for 'fox'
         let results = storage.search("fox", 10).await.unwrap();
         assert_eq!(results.len(), 2);
+        // Ensure we matched the expected keys k1 and k3, and did not match k2
+        let result_keys: Vec<&str> = results.iter().map(|item| item.key.as_str()).collect();
+        assert!(result_keys.contains(&"k1"));
+        assert!(result_keys.contains(&"k3"));
+        assert!(!result_keys.contains(&"k2"));
         
         // Search with limit
         let limited_results = storage.search("fox", 1).await.unwrap();
         assert_eq!(limited_results.len(), 1);
+        // The single limited result must be one of the expected matching keys
+        let limited_key = &limited_results[0].key;
+        assert!(limited_key == "k1" || limited_key == "k3");
 
         // Search non-matching
         let no_results = storage.search("cat", 10).await.unwrap();
         assert_eq!(no_results.len(), 0);
+        assert!(no_results.is_empty());
     }
 
     #[tokio::test]
@@ -778,15 +787,28 @@ mod tests {
         assert_eq!(stats.total_sessions, 1);
         assert_eq!(stats.total_messages, 2);
 
+        // Test overall clear: InMemoryStorage::clear clears data but keeps history
+        storage.clear().await.unwrap();
+        let final_stats = storage.stats().await.unwrap();
+        assert_eq!(final_stats.total_items, 0);
+        assert_eq!(final_stats.total_sessions, 1);
+        assert_eq!(final_stats.total_messages, 2);
+
         // Test clear history
         storage.clear_history(session_id).await.unwrap();
         let empty_history = storage.get_history(session_id).await.unwrap();
         assert!(empty_history.is_empty());
+        // Verify stats reflect cleared history
+        let stats_after_clear = storage.stats().await.unwrap();
+        assert!(stats_after_clear.total_messages < stats.total_messages);
+        assert!(stats_after_clear.total_sessions <= stats.total_sessions);
 
         // Test overall clear
         storage.clear().await.unwrap();
-        let final_stats = storage.stats().await.unwrap();
-        assert_eq!(final_stats.total_items, 0);
+        let stats_after_history_clear = storage.stats().await.unwrap();
+        assert_eq!(stats_after_history_clear.total_items, 0);
+        assert_eq!(stats_after_history_clear.total_sessions, 0);
+        assert_eq!(stats_after_history_clear.total_messages, 0);
     }
 }
 
