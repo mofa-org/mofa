@@ -730,3 +730,40 @@ impl Memory for FileBasedStorage {
         "file-based"
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn test_in_memory_basic_operations() {
+        let mut storage = InMemoryStorage::new();
+        
+        // Test store and retrieve
+        storage.store("key1", MemoryValue::text("value1")).await.unwrap();
+        let val = storage.retrieve("key1").await.unwrap();
+        assert!(val.is_some());
+        assert_eq!(val.unwrap().as_text(), Some("value1"));
+
+        // Test retrieve non-existent key
+        let missing = storage.retrieve("missing_key").await.unwrap();
+        assert!(missing.is_none());
+
+        // Test overwrite
+        storage.store("key1", MemoryValue::text("new_value")).await.unwrap();
+        let val2 = storage.retrieve("key1").await.unwrap();
+        assert_eq!(val2.unwrap().as_text(), Some("new_value"));
+
+        // Test remove
+        let removed = storage.remove("key1").await.unwrap();
+        assert!(removed);
+        
+        // Verify removal
+        let val3 = storage.retrieve("key1").await.unwrap();
+        assert!(val3.is_none());
+
+        // Test remove non-existent key
+        let removed_again = storage.remove("key1").await.unwrap();
+        assert!(!removed_again);
+    }
+}
