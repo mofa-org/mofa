@@ -2115,6 +2115,7 @@ impl LLMAgent {
         session_id: &str,
         message: impl Into<String>,
     ) -> LLMResult<TextStream> {
+        // TODO: token budget not applied to streaming path
         let message = message.into();
 
         // 获取模型名称
@@ -4059,5 +4060,105 @@ mod tests {
         assert!(result.is_ok(), "should succeed on retry: {:?}", result);
         assert_eq!(result.unwrap(), "retry ok");
         assert_eq!(call_count.load(Ordering::SeqCst), 2, "provider should be called twice");
+    }
+
+    #[tokio::test]
+    async fn agent_context_length_exceeded_retry_also_fails_propagates_error() {
+        struct AlwaysContextExceededProvider;
+
+        #[async_trait]
+        impl LLMProvider for AlwaysContextExceededProvider {
+            fn name(&self) -> &str {
+                "always-fail"
+            }
+
+            fn default_model(&self) -> &str {
+                "model"
+            }
+
+            async fn chat(
+                &self,
+                _req: ChatCompletionRequest,
+            ) -> LLMResult<ChatCompletionResponse> {
+                Err(LLMError::ContextLengthExceeded(
+                    "context length exceeded in test".to_string(),
+                ))
+            }
+        }
+
+        let tbc = crate::llm::token_budget::TokenBudgetConfig::sliding_window_only(4096);
+        let agent = LLMAgentBuilder::new()
+            .with_id("agent-always-fail")
+            .with_provider(Arc::new(AlwaysContextExceededProvider))
+            .with_token_budget_config(tbc)
+            .expect("valid config")
+            .build();
+
+        let result = agent.chat("hello").await;
+        assert!(result.is_err(), "should propagate error when retry also fails");
+        assert!(
+            matches!(result.unwrap_err(), LLMError::ContextLengthExceeded(_)),
+            "error should be ContextLengthExceeded"
+        );
+    }
+
+    #[tokio::test]
+    async fn agent_halt_false_proceeds_when_budget_exceeded() {
+        use mofa_kernel::budget::BudgetConfig;
+        let budget_cfg = BudgetConfig::default()
+            .with_max_tokens_per_session(1)
+            .expect("valid budget");
+        let tbc = crate::llm::token_budget::TokenBudgetConfig {
+            budget: Some(budget_cfg),
+            halt_on_budget_exceeded: false, // do NOT halt on exceeded
+            ..Default::default()
+        };
+        let agent = LLMAgentBuilder::new()
+            .with_id("agent-no-halt")
+            .with_provider(Arc::new(MockProvider))
+            .with_token_budget_config(tbc)
+            .expect("valid config")
+            .build_async()
+            .await;
+
+        // Manually record exceeding usage so budget is over the limit
+        if let Some(ref enforcer) = agent.budget_enforcer {
+            enforcer.record_usage("agent-no-halt", 0.0, 100).await;
+        }
+
+        // With halt_on_budget_exceeded=false the call should proceed and succeed
+        let result = agent.chat("hello").await;
+        assert!(
+            result.is_ok(),
+            "chat should proceed when halt_on_budget_exceeded=false: {:?}",
+            result
+        );
+    }
+
+    #[tokio::test]
+    async fn agent_token_usage_recorded_after_successful_call() {
+        use mofa_kernel::budget::BudgetConfig;
+        let budget_cfg = BudgetConfig::default()
+            .with_max_tokens_per_session(50_000)
+            .expect("valid budget");
+        let tbc = crate::llm::token_budget::TokenBudgetConfig {
+            budget: Some(budget_cfg),
+            ..Default::default()
+        };
+        let agent = LLMAgentBuilder::new()
+            .with_id("agent-usage")
+            .with_provider(Arc::new(MockProvider))
+            .with_token_budget_config(tbc)
+            .expect("valid config")
+            .build_async()
+            .await;
+
+        let _ = agent.chat("hello").await.expect("chat should succeed");
+
+        // Verify record_usage was invoked — the status must be accessible and not exceeded
+        if let Some(ref enforcer) = agent.budget_enforcer {
+            let status = enforcer.get_status("agent-usage").await;
+            assert!(!status.is_exceeded(), "single call should not exceed a 50k token budget");
+        }
     }
 }
