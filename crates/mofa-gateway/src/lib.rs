@@ -87,6 +87,13 @@ pub mod types;
 #[cfg(feature = "openai-compat")]
 pub mod openai_compat;
 
+/// Unified streaming abstractions (SSE + WebSocket) for gateway handlers.
+///
+/// Use [`streaming::SseBuilder`] to convert any [`mofa_kernel::llm::streaming::BoxTokenStream`]
+/// into an OpenAI-compatible SSE response from any handler.
+#[cfg(feature = "openai-compat")]
+pub mod streaming;
+
 // Re-export main types
 pub use control_plane::{ControlPlane, ControlPlaneConfig};
 pub use error::{ControlPlaneError, GatewayError, GatewayResult};

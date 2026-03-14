@@ -13,6 +13,7 @@ use mofa_foundation::inference::orchestrator::InferenceOrchestrator;
 use super::handler::{AppState, chat_completions, list_models};
 use super::rate_limiter::TokenBucketLimiter;
 use super::types::{GatewayConfig, OpenAiGatewayError};
+use crate::streaming::ws::ws_chat_completions;
 
 /// The MoFA inference gateway server.
 ///
@@ -56,6 +57,9 @@ impl GatewayServer {
         Router::new()
             .route("/v1/chat/completions", post(chat_completions))
             .route("/v1/models", get(list_models))
+            // WebSocket streaming endpoint: same semantics as SSE but bidirectional.
+            // Clients can cancel mid-stream by closing the WebSocket connection.
+            .route("/ws/v1/chat/completions", get(ws_chat_completions))
             .with_state(state)
     }
 
@@ -70,8 +74,9 @@ impl GatewayServer {
             .into_make_service_with_connect_info::<SocketAddr>();
 
         tracing::info!("MoFA inference gateway listening on http://{addr}");
-        tracing::info!("  POST /v1/chat/completions");
+        tracing::info!("  POST /v1/chat/completions       (SSE streaming supported)");
         tracing::info!("  GET  /v1/models");
+        tracing::info!("  GET  /ws/v1/chat/completions    (WebSocket streaming)");
 
         let listener = tokio::net::TcpListener::bind(&addr)
             .await
