@@ -370,7 +370,7 @@ impl ExecutionEngine {
             .execute_with_options(&agent, processed_input.clone(), &ctx, &options, &retry_cfg)
             .await;
 
-        let duration_ms = start_time.elapsed().as_millis() as u64;
+        let duration_ms = u64::try_from(start_time.elapsed().as_millis()).unwrap_or(u64::MAX);
 
         // 构建结果
         // Build result
@@ -579,10 +579,7 @@ impl ExecutionEngine {
 
             let span = tracing::info_span!("agent.parallel", agent_id = %agent_id);
             let handle = tokio::spawn(
-                async move {
-                    engine.execute(&agent_id, input, opts).await
-                }
-                .instrument(span),
+                async move { engine.execute(&agent_id, input, opts).await }.instrument(span),
             );
 
             handles.push(handle);
