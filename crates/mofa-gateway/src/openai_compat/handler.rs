@@ -10,7 +10,6 @@
 //! - `X-MoFA-Backend`: where the request was actually routed (e.g., `local(qwen3)`)
 //! - `X-MoFA-Latency-Ms`: end-to-end orchestrator latency in milliseconds
 
-use std::convert::Infallible;
 use std::net::IpAddr;
 use std::sync::Arc;
 use std::time::Instant;
@@ -20,17 +19,17 @@ use tokio::sync::RwLock;
 use axum::Json;
 use axum::extract::{ConnectInfo, State};
 use axum::http::{HeaderMap, HeaderValue, StatusCode};
-use axum::response::sse::{Event, KeepAlive, Sse};
 use axum::response::{IntoResponse, Response};
-use futures::stream;
+
+use crate::streaming::SseBuilder;
 
 use mofa_foundation::inference::orchestrator::InferenceOrchestrator;
 use mofa_foundation::inference::types::InferenceRequest;
 
 use super::rate_limiter::TokenBucketLimiter;
 use super::types::{
-    ChatCompletionChunk, ChatCompletionRequest, ChatCompletionResponse, ChatMessage, Choice,
-    ChunkChoice, Delta, GatewayErrorBody, ModelListResponse, ModelObject, Usage,
+    ChatCompletionRequest, ChatCompletionResponse, ChatMessage, Choice, GatewayErrorBody,
+    ModelListResponse, ModelObject, Usage,
 };
 
 // ──────────────────────────────────────────────────────────────────────────────
@@ -268,111 +267,18 @@ fn build_nstream_response(
 // SSE streaming response builder
 // ──────────────────────────────────────────────────────────────────────────────
 
+/// Build an SSE streaming response from the orchestrator's [`BoxTokenStream`].
+///
+/// Delegates to [`SseBuilder`] which handles the full OpenAI SSE event sequence:
+/// role chunk → content chunks → stop chunk → `[DONE]`.
 fn build_streaming_response(
-    token_stream: std::pin::Pin<Box<dyn futures::Stream<Item = String> + Send + Sync>>,
+    token_stream: mofa_kernel::llm::streaming::BoxTokenStream,
     model: String,
     headers: HeaderMap,
 ) -> Response {
-    let id = completion_id();
-    let created = unix_now();
-
-    let id_clone = id.clone();
-    let model_clone = model.clone();
-    let created_clone = created;
-
-    let id_pre = id.clone();
-    let model_pre = model.clone();
-
-    let pre_stream = stream::once(async move {
-        let role_chunk = ChatCompletionChunk {
-            id: id_pre,
-            object: "chat.completion.chunk".to_string(),
-            created,
-            model: model_pre,
-            choices: vec![ChunkChoice {
-                index: 0,
-                delta: Delta {
-                    role: Some("assistant".to_string()),
-                    content: None,
-                },
-                finish_reason: None,
-            }],
-        };
-        match serde_json::to_string(&role_chunk) {
-            Ok(json) => Ok::<_, Infallible>(Event::default().data(json)),
-            Err(e) => {
-                tracing::error!(error = %e, "failed to serialize SSE role chunk");
-                Ok::<_, Infallible>(
-                    Event::default().data(r#"{"error":"internal serialization error"}"#),
-                )
-            }
-        }
-    });
-
-    use futures::StreamExt;
-    let events_stream = token_stream.map(move |word| {
-        let chunk = ChatCompletionChunk {
-            id: id.clone(),
-            object: "chat.completion.chunk".to_string(),
-            created,
-            model: model.clone(),
-            choices: vec![ChunkChoice {
-                index: 0,
-                delta: Delta {
-                    role: None,
-                    content: Some(word),
-                },
-                finish_reason: None,
-            }],
-        };
-        match serde_json::to_string(&chunk) {
-            Ok(json) => Ok::<_, Infallible>(Event::default().data(json)),
-            Err(e) => {
-                tracing::error!(error = %e, "failed to serialize SSE content chunk");
-                Ok::<_, Infallible>(
-                    Event::default().data(r#"{"error":"internal serialization error"}"#),
-                )
-            }
-        }
-    });
-
-    let stop_chunk = ChatCompletionChunk {
-        id: id_clone,
-        object: "chat.completion.chunk".to_string(),
-        created: created_clone,
-        model: model_clone,
-        choices: vec![ChunkChoice {
-            index: 0,
-            delta: Delta::default(),
-            finish_reason: Some("stop".to_string()),
-        }],
-    };
-
-    let stop_event = stream::once(async move {
-        match serde_json::to_string(&stop_chunk) {
-            Ok(json) => Ok::<_, Infallible>(Event::default().data(json)),
-            Err(e) => {
-                tracing::error!(error = %e, "failed to serialize SSE stop chunk");
-                Ok::<_, Infallible>(
-                    Event::default().data(r#"{"error":"internal serialization error"}"#),
-                )
-            }
-        }
-    });
-
-    let done_event = stream::once(async { Ok::<_, Infallible>(Event::default().data("[DONE]")) });
-
-    let stream = pre_stream
-        .chain(events_stream)
-        .chain(stop_event)
-        .chain(done_event);
-
-    let mut sse_resp = Sse::new(stream)
-        .keep_alive(KeepAlive::default())
-        .into_response();
-
-    sse_resp.headers_mut().extend(headers);
-    sse_resp
+    SseBuilder::new(model)
+        .with_headers(headers)
+        .build_response(token_stream)
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
@@ -460,34 +366,35 @@ mod tests {
 
     #[tokio::test]
     async fn test_streaming_response_ends_with_done() {
-        use futures::StreamExt;
-        // Build a minimal chunks list and collect SSE events
-        let chunks: Vec<ChatCompletionChunk> = vec![ChatCompletionChunk {
-            id: "test".into(),
-            object: "chat.completion.chunk".into(),
-            created: 0,
-            model: "m".into(),
-            choices: vec![ChunkChoice {
-                index: 0,
-                delta: Delta {
-                    role: None,
-                    content: Some("hi".into()),
-                },
-                finish_reason: None,
-            }],
-        }];
+        use axum::body::to_bytes;
+        use mofa_kernel::llm::streaming::{StreamChunk, StreamError};
+        use mofa_kernel::llm::types::FinishReason;
 
-        let events: Vec<Result<Event, Infallible>> = chunks
-            .into_iter()
-            .map(|c| Ok::<_, Infallible>(Event::default().data(serde_json::to_string(&c).unwrap())))
-            .chain(std::iter::once(Ok(Event::default().data("[DONE]"))))
+        // Build a BoxTokenStream with one content chunk and a stop chunk.
+        let chunks: Vec<Result<StreamChunk, StreamError>> = vec![
+            Ok(StreamChunk::text("hi")),
+            Ok(StreamChunk::done(FinishReason::Stop)),
+        ];
+        let token_stream: mofa_kernel::llm::streaming::BoxTokenStream =
+            Box::pin(futures::stream::iter(chunks));
+
+        let resp =
+            build_streaming_response(token_stream, "test-model".to_string(), HeaderMap::new());
+
+        // Collect SSE body and check that it ends with [DONE]
+        let bytes = to_bytes(resp.into_body(), usize::MAX).await.unwrap();
+        let text = String::from_utf8(bytes.to_vec()).unwrap();
+        let data_lines: Vec<&str> = text
+            .lines()
+            .filter_map(|l| l.strip_prefix("data: "))
             .collect();
 
-        let stream = stream::iter(events);
-        let all: Vec<_> = stream.collect().await;
-        let last_event = all.last().unwrap().as_ref().unwrap();
-        let dbg = format!("{last_event:?}");
-        assert!(dbg.contains("[DONE]"), "stream must end with [DONE]: {dbg}");
+        assert!(!data_lines.is_empty(), "Expected SSE events");
+        assert_eq!(
+            *data_lines.last().unwrap(),
+            "[DONE]",
+            "stream must end with [DONE]"
+        );
     }
 
     #[tokio::test]
