@@ -7,12 +7,34 @@
 //! For non-streaming responses the full body is collected into memory so
 //! `Content-Length` can be set accurately.
 //!
+//! # Decision diagram
+//!
+//! ```text
+//!  upstream hyper::Response<Incoming>
+//!          │
+//!          ▼
+//!  Content-Type == "text/event-stream"?
+//!          │
+//!     Yes  │                      No
+//!  ────────┴─────────────────────────────────
+//!          │                                 │
+//!          ▼                                 ▼
+//!  strip hop-by-hop headers          strip hop-by-hop headers
+//!  remove Content-Length             keep Content-Length (or set it)
+//!          │                                 │
+//!          ▼                                 ▼
+//!  Body::from_stream()            body.collect().await
+//!  (zero-copy byte pipe)          set accurate Content-Length
+//!          │                                 │
+//!          └──────────────┬──────────────────┘
+//!                         ▼
+//!                axum Response<Body> → client
+//! ```
+//!
 //! # Usage (from a proxy handler)
 //!
 //! ```rust,no_run
 //! use mofa_gateway::streaming::proxy::forward_response;
-//! use axum::body::Body;
-//! use axum::http::Response;
 //!
 //! // Given a hyper response from an upstream call:
 //! // let upstream: hyper::Response<hyper::body::Incoming> = ...;
@@ -22,7 +44,7 @@
 //! # Integration with PR #931 (mofa-local-llm proxy)
 //!
 //! PR #931 adds a `ProxyHandler::forward()` that currently buffers the entire
-//! response body with `body.collect().await`. Replace that with a call to
+//! response body with `body.collect().await`. Replace that call with
 //! [`forward_response`] to enable SSE passthrough.
 
 use axum::body::Body;

@@ -3,20 +3,46 @@
 //! [`SseBuilder`] converts any [`BoxTokenStream`] into a properly formatted
 //! Server-Sent Events HTTP response that is compatible with OpenAI API clients.
 //!
-//! # SSE event sequence
+//! # StreamChunk → SSE event mapping
 //!
 //! ```text
-//! data: {"id":"chatcmpl-xxx","choices":[{"delta":{"role":"assistant"}}]}
-//! data: {"id":"chatcmpl-xxx","choices":[{"delta":{"content":"Hello"}}]}
-//! data: {"id":"chatcmpl-xxx","choices":[{"delta":{"content":" world"}}]}
-//! data: {"id":"chatcmpl-xxx","choices":[{"delta":{},"finish_reason":"stop"}]}
-//! data: [DONE]
+//!  BoxTokenStream item             SSE wire event
+//! ─────────────────────────────── ──────────────────────────────────────────────────
+//!  (builder opens)                data: {"choices":[{"delta":{"role":"assistant"}}]}
+//!
+//!  Ok(StreamChunk { delta: "Hi"   data: {"choices":[{"delta":{"content":"Hi"}}]}
+//!                 , finish_reason: None })
+//!
+//!  Ok(StreamChunk { delta: ""     (skipped — empty delta, not a done marker)
+//!                 , finish_reason: None })
+//!
+//!  Ok(StreamChunk { delta: ""     data: {"choices":[{"delta":{},"finish_reason":"stop"}]}
+//!                 , finish_reason: Some(Stop) })
+//!
+//!  Err(StreamError::Provider{…})  data: {"error":{"message":"…","type":"stream_error"}}
+//!
+//!  (stream exhausted)             data: [DONE]
+//! ─────────────────────────────── ──────────────────────────────────────────────────
 //! ```
 //!
-//! # Error handling
+//! # Keep-alive
 //!
-//! If the underlying [`BoxTokenStream`] yields a [`StreamError`], the builder
-//! emits an OpenAI-style error event and terminates with `[DONE]`.
+//! A periodic SSE `: keep-alive` comment is sent automatically so that
+//! proxies and browsers do not close the connection during long inference runs.
+//!
+//! # Usage
+//!
+//! ```rust,no_run
+//! use mofa_gateway::streaming::SseBuilder;
+//! use mofa_kernel::llm::streaming::BoxTokenStream;
+//! use axum::http::HeaderMap;
+//!
+//! fn handler(stream: BoxTokenStream, headers: HeaderMap) -> axum::response::Response {
+//!     SseBuilder::new("gpt-4o")
+//!         .with_headers(headers)   // forwards X-MoFA-* observability headers
+//!         .build_response(stream)
+//! }
+//! ```
 
 use std::convert::Infallible;
 
