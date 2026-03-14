@@ -303,6 +303,7 @@
 
 pub mod agent;
 pub mod client;
+pub mod fallback;
 pub mod plugin;
 pub mod provider;
 pub mod retry;
@@ -337,6 +338,11 @@ pub use client::{ChatRequestBuilder, ChatSession, LLMClient, function_tool};
 pub use plugin::{LLMCapability, LLMPlugin, MockLLMProvider};
 pub use provider::{
     ChatStream, LLMConfig, LLMProvider, LLMRegistry, ModelCapabilities, ModelInfo, global_registry,
+};
+pub use fallback::{
+    CircuitBreakerConfig, FallbackChain, FallbackChainBuilder, FallbackChainConfig,
+    FallbackCondition, FallbackConditionConfig, FallbackProviderConfig, FallbackSnapshot,
+    FallbackTrigger, FallbackTriggerConfig, ProviderSnapshot,
 };
 pub use retry::RetryExecutor;
 pub use stream_adapter::{GenericStreamAdapter, StreamAdapter, adapter_for_provider};
