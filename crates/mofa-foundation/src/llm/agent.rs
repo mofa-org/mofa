@@ -2336,11 +2336,46 @@ impl LLMAgent {
         // Retrieve the session
         let session = self.get_session_arc(session_id).await?;
 
-        // 获取当前历史
-        // Retrieve current history
-        let history = {
-            let session_guard = session.read().await;
-            session_guard.messages().to_vec()
+        // ---- Budget enforcement (lazy registration + pre-call check) ----
+        if let Some(ref enforcer) = self.budget_enforcer {
+            if !self.budget_registered.load(std::sync::atomic::Ordering::Acquire) {
+                if let Some(ref tbc) = self.config.token_budget_config
+                    && let Some(ref bc) = tbc.budget
+                {
+                    enforcer.set_budget(self.config.agent_id.clone(), bc.clone()).await;
+                }
+                self.budget_registered
+                    .store(true, std::sync::atomic::Ordering::Release);
+            }
+            match enforcer.check_budget(&self.config.agent_id).await {
+                Ok(()) => {}
+                Err(budget_err) => {
+                    let halt = self
+                        .config
+                        .token_budget_config
+                        .as_ref()
+                        .map(|tbc| tbc.halt_on_budget_exceeded)
+                        .unwrap_or(true);
+                    if halt {
+                        return Err(LLMError::Other(format!("Budget exceeded: {}", budget_err)));
+                    }
+                }
+            }
+        }
+
+        // ---- Token-budget pre-send compression ----
+        let (history, user_pushed) = {
+            let needs_budget = session.read().await.has_token_budget();
+            if needs_budget {
+                let mut guard = session.write().await;
+                guard
+                    .messages_mut()
+                    .push(ChatMessage::user(&processed_message));
+                guard.compress_history_if_needed().await;
+                (guard.messages().to_vec(), true)
+            } else {
+                (session.read().await.messages().to_vec(), false)
+            }
         };
 
         // 构建请求
@@ -2359,14 +2394,18 @@ impl LLMAgent {
             builder = builder.max_tokens(tokens);
         }
 
-        builder = builder.messages(history);
-        builder = builder.user(processed_message.clone());
+        if user_pushed {
+            builder = builder.messages(history);
+        } else {
+            builder = builder.messages(history);
+            builder = builder.user(processed_message.clone());
+        }
 
         let chunk_stream = builder.send_stream().await?;
 
-        // 添加用户消息到历史
-        // Add user message to history
-        {
+        // 添加用户消息到历史（仅当未通过压缩路径添加时）
+        // Add user message to history (only when not already added via compression)
+        if !user_pushed {
             let mut session_guard = session.write().await;
             session_guard
                 .messages_mut()
@@ -2377,11 +2416,19 @@ impl LLMAgent {
         // Create a channel to pass the full response
         let (tx, rx) = tokio::sync::oneshot::channel();
 
-        // 创建收集完整响应的流
-        // Create a stream that collects the full response
+        // 创建收集完整响应的流（含用量记录）
+        // Create a stream that collects the full response (with usage recording)
         let event_handler = self.event_handler.clone().map(Arc::new);
-        let wrapped_stream =
-            Self::create_collecting_stream(chunk_stream, session, tx, event_handler);
+        let budget_enforcer = self.budget_enforcer.clone();
+        let agent_id = self.config.agent_id.clone();
+        let wrapped_stream = Self::create_collecting_stream(
+            chunk_stream,
+            session,
+            tx,
+            event_handler,
+            budget_enforcer,
+            agent_id,
+        );
 
         Ok((wrapped_stream, rx))
     }
@@ -2526,6 +2573,8 @@ impl LLMAgent {
         session: Arc<RwLock<ChatSession>>,
         tx: tokio::sync::oneshot::Sender<String>,
         event_handler: Option<Arc<Box<dyn LLMAgentEventHandler>>>,
+        budget_enforcer: Option<Arc<crate::cost::BudgetEnforcer>>,
+        agent_id: String,
     ) -> TextStream {
         use super::types::LLMResponseMetadata;
         use futures::StreamExt;
@@ -2594,6 +2643,15 @@ impl LLMAgent {
                             &current_messages,
                             window_size,
                         );
+                    }
+
+                    // Record token usage for budget enforcement
+                    if let Some(ref enforcer) = budget_enforcer {
+                        let total_tokens = metadata
+                            .as_ref()
+                            .map(|m| u64::from(m.total_tokens))
+                            .unwrap_or(0);
+                        enforcer.record_usage(&agent_id, 0.0, total_tokens).await;
                     }
 
                     // 调用 after_chat 钩子（带元数据）
