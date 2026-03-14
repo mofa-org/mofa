@@ -12,6 +12,8 @@
 //! 3. Server sends one chunk per WebSocket text message (same JSON format as SSE `data:`).
 //! 4. Server sends `"[DONE]"` as the final message.
 //! 5. Either side can close the connection to cancel the stream.
+//!    When the client closes, the next `socket.send()` call fails and the
+//!    server drops the [`BoxTokenStream`], stopping the producer immediately.
 //!
 //! # Example (JavaScript)
 //!
@@ -36,7 +38,6 @@ use axum::response::Response;
 use futures::StreamExt;
 use mofa_kernel::llm::streaming::{StreamChunk, StreamError};
 use mofa_kernel::llm::types::FinishReason;
-use tokio::sync::oneshot;
 use tracing::{debug, error, info, warn};
 
 use crate::openai_compat::handler::AppState;
@@ -142,24 +143,16 @@ async fn handle_ws_session(mut socket: axum::extract::ws::WebSocket, state: AppS
         orch.infer_stream(&inference_req)
     };
 
-    // ── 4. Set up cancellation (client disconnect) ────────────────────────
-    let (cancel_tx, cancel_rx) = oneshot::channel::<()>();
     let id = completion_id();
     let model = req.model.clone();
     let created = unix_now();
 
-    // ── 5. Stream chunks to WebSocket ─────────────────────────────────────
-    tokio::select! {
-        _ = stream_chunks_to_ws(&mut socket, token_stream, &id, &model, created) => {
-            debug!("WebSocket: stream completed normally");
-        }
-        _ = cancel_rx => {
-            debug!("WebSocket: stream cancelled by client disconnect");
-        }
-    }
+    // ── 4. Stream chunks to WebSocket ────────────────────────────────────
+    // Cancellation is handled implicitly: stream_chunks_to_ws returns early
+    // whenever socket.send() fails (i.e. the client closed the connection).
+    // The BoxTokenStream is dropped at that point, stopping the producer.
+    stream_chunks_to_ws(&mut socket, token_stream, &id, &model, created).await;
 
-    // Signal cancel if client closed the socket early (cancel_tx drop sends signal)
-    drop(cancel_tx);
     let _ = socket.close().await;
 }
 
