@@ -3,72 +3,55 @@
 use super::config::ProxyBackend;
 use crate::error::{GatewayError, GatewayResult};
 use axum::body::Body;
-use axum::http::{HeaderMap, Method, Request, Response, StatusCode, Uri};
-use bytes::Bytes;
+use axum::http::{HeaderMap, Method, Request, Response, Uri};
+use http_body_util::BodyExt;
 use hyper_util::client::legacy::connect::HttpConnector;
 use hyper_util::client::legacy::Client;
 use hyper_util::rt::TokioExecutor;
 use std::sync::Arc;
 use std::time::Duration;
-use tracing::{debug, error, warn};
+use tracing::{debug, warn, Instrument};
 
 type HttpClient = Client<HttpConnector, Body>;
 
 /// HTTP proxy handler for forwarding requests to backend services.
 pub struct ProxyHandler {
     backend: ProxyBackend,
-    client: HttpClient,
+    /// Shared HTTP client — Arc so cloning the handler reuses the connection pool.
+    client: Arc<HttpClient>,
 }
 
 impl ProxyHandler {
     /// Create a new proxy handler for the given backend.
     pub fn new(backend: ProxyBackend) -> Self {
-        let client = Client::builder(TokioExecutor::new())
-            .build_http::<Body>();
+        let client = Arc::new(Client::builder(TokioExecutor::new()).build_http::<Body>());
 
         Self { backend, client }
     }
 
     /// Forward an HTTP request to the backend service.
     ///
-    /// This method:
-    /// 1. Constructs the target URL by combining backend base_url with the request path
-    /// 2. Copies relevant headers from the incoming request
-    /// 3. Forwards the request body
-    /// 4. Returns the backend's response
+    /// The response body is streamed through without buffering, so SSE / chunked
+    /// streaming responses work correctly end-to-end.
     pub async fn forward(
         &self,
         request: Request<Body>,
         path: &str,
     ) -> GatewayResult<Response<Body>> {
-        // Extract parts from request
         let (parts, body) = request.into_parts();
 
-        // Build target URL
         let target_url = self.build_target_url(path)?;
         let target_uri: Uri = target_url
             .parse()
             .map_err(|e| GatewayError::Network(format!("Invalid target URL: {}", e)))?;
 
-        // Create new request with target URI
         let mut proxy_request = Request::builder()
             .method(parts.method.clone())
             .uri(target_uri)
             .body(body)
             .map_err(|e| GatewayError::Network(format!("Failed to build proxy request: {}", e)))?;
 
-        // Copy headers (excluding hop-by-hop headers)
         self.copy_headers(&parts.headers, proxy_request.headers_mut());
-
-        // Create tracing span for proxy request
-        let span = tracing::info_span!(
-            "proxy_forward",
-            backend = %self.backend.name,
-            method = %proxy_request.method(),
-            url = %proxy_request.uri(),
-            status = tracing::field::Empty,
-        );
-        let _enter = span.enter();
 
         debug!(
             backend = %self.backend.name,
@@ -77,76 +60,64 @@ impl ProxyHandler {
             "Forwarding request to backend"
         );
 
-        // Forward request with timeout
-        let response = tokio::time::timeout(self.backend.timeout, async {
-            self.client
-                .request(proxy_request)
+        // Create the span before consuming proxy_request; use .instrument() so the
+        // span stays active across the await point (fixes the dropped _enter bug).
+        let span = tracing::info_span!(
+            "proxy_forward",
+            backend = %self.backend.name,
+            status = tracing::field::Empty,
+        );
+
+        let response = async {
+            tokio::time::timeout(self.backend.timeout, self.client.request(proxy_request))
                 .await
+                .map_err(|_| GatewayError::Network("Request timeout".to_string()))?
                 .map_err(|e| GatewayError::Network(format!("Request failed: {}", e)))
-        })
-        .await
-        .map_err(|_| GatewayError::Network("Request timeout".to_string()))??;
+        }
+        .instrument(span.clone())
+        .await?;
+
+        span.record("status", response.status().as_u16());
 
         debug!(
             backend = %self.backend.name,
             status = %response.status(),
             "Received response from backend"
         );
-        
-        // Record response status in span
-        tracing::Span::current().record("status", response.status().as_u16());
 
-        // Convert hyper response to axum response
-        // The response is already a Response<Body> from hyper client, but we need to convert
-        // the body from hyper::body::Incoming to axum::body::Body
-        let (parts, body) = response.into_parts();
-        
-        // Convert hyper Incoming body to bytes using http_body_util
-        use http_body_util::BodyExt;
-        let body_bytes = match body.collect().await {
-            Ok(collected) => collected.to_bytes(),
-            Err(e) => {
-                error!(backend = %self.backend.name, error = %e, "Failed to collect response body");
-                return Err(GatewayError::Network(format!("Failed to read response body: {}", e)));
-            }
-        };
-        
-        let body_size = body_bytes.len();
-        debug!(
-            backend = %self.backend.name,
-            body_size = body_size,
-            "Converted response body to bytes"
-        );
-        
-        // Build axum response with headers
-        let mut response_builder = Response::builder().status(parts.status);
-        
-        // Copy headers, excluding hop-by-hop headers and normalizing content-length/transfer-encoding
-        for (key, value) in parts.headers.iter() {
+        let (resp_parts, resp_body) = response.into_parts();
+
+        let mut response_builder = Response::builder().status(resp_parts.status);
+
+        // Copy headers, excluding hop-by-hop headers.
+        // The backend's content-length is preserved as-is; we never add a second one.
+        for (key, value) in resp_parts.headers.iter() {
             let skip = matches!(
                 key.as_str(),
-                "connection" | "keep-alive" | "proxy-authenticate" | "proxy-authorization"
-                    | "te" | "trailers" | "transfer-encoding" | "upgrade"
+                "connection"
+                    | "keep-alive"
+                    | "proxy-authenticate"
+                    | "proxy-authorization"
+                    | "te"
+                    | "trailers"
+                    | "transfer-encoding"
+                    | "upgrade"
             );
-            
             if !skip {
                 response_builder = response_builder.header(key.clone(), value.clone());
             }
         }
-        
-        // Set content-length for fixed body (since we buffered it)
-        response_builder = response_builder.header("content-length", body_size.to_string());
-        
-        // Set body - body_bytes is moved here
+
+        // Stream the body through without buffering — supports both regular JSON
+        // responses and SSE / chunked streaming (stream: true).
         let axum_response = response_builder
-            .body(Body::from(body_bytes))
+            .body(Body::from_stream(resp_body.into_data_stream()))
             .map_err(|e| GatewayError::Network(format!("Failed to build response: {}", e)))?;
 
         debug!(
             backend = %self.backend.name,
             status = %axum_response.status(),
-            body_size = body_size,
-            "Built axum response"
+            "Proxied response to client"
         );
 
         Ok(axum_response)
@@ -219,6 +190,10 @@ impl ProxyHandler {
 
 impl Clone for ProxyHandler {
     fn clone(&self) -> Self {
-        Self::new(self.backend.clone())
+        // Reuse the shared connection pool instead of creating a new HTTP client.
+        Self {
+            backend: self.backend.clone(),
+            client: Arc::clone(&self.client),
+        }
     }
 }

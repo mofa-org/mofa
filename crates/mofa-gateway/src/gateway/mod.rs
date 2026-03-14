@@ -208,17 +208,25 @@ impl Gateway {
                         if uri.scheme_str() == Some("https") { 443 } else { 80 }
                     });
                     
-                    // Convert localhost to 127.0.0.1 for SocketAddr parsing
+                    // Resolve hostnames and wildcard addresses to concrete IPs for SocketAddr parsing.
+                    // "localhost" and "0.0.0.0" map to the IPv4 loopback; "::1" is already a valid IP.
                     let host_ip = match host_str {
-                        "localhost" => "127.0.0.1",
+                        "localhost" | "0.0.0.0" => "127.0.0.1",
                         _ => host_str,
                     };
-                    
-                    if let Ok(addr) = format!("{}:{}", host_ip, port).parse::<std::net::SocketAddr>() {
+
+                    // IPv6 addresses require bracket notation in a SocketAddr string.
+                    let addr_str = if host_ip.contains(':') {
+                        format!("[{}]:{}", host_ip, port)
+                    } else {
+                        format!("{}:{}", host_ip, port)
+                    };
+
+                    if let Ok(addr) = addr_str.parse::<std::net::SocketAddr>() {
                         self.health_checker.register_node_address(local_llm_node_id.clone(), addr).await;
                         tracing::debug!("Registered mofa-local-llm health check address: {}", addr);
                     } else {
-                        tracing::warn!("Failed to parse mofa-local-llm address: {}:{}", host_ip, port);
+                        tracing::warn!("Failed to parse mofa-local-llm address: {}", addr_str);
                     }
                 } else {
                     tracing::warn!("Failed to extract authority from mofa-local-llm URL: {}", backend.base_url);

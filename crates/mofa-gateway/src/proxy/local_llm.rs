@@ -14,12 +14,10 @@ pub struct LocalLLMBackend {
     pub timeout: Duration,
 }
 
-impl LocalLLMBackend {
-    /// Create a default LocalLLMBackend configuration.
-    ///
+impl Default for LocalLLMBackend {
     /// Reads `MOFA_LOCAL_LLM_URL` environment variable or defaults to
     /// `http://localhost:8000`.
-    pub fn default() -> Self {
+    fn default() -> Self {
         let base_url = std::env::var("MOFA_LOCAL_LLM_URL")
             .unwrap_or_else(|_| "http://localhost:8000".to_string());
 
@@ -29,7 +27,9 @@ impl LocalLLMBackend {
             timeout: Duration::from_secs(60),
         }
     }
+}
 
+impl LocalLLMBackend {
     /// Create from explicit base URL.
     pub fn new(base_url: impl Into<String>) -> Self {
         Self {
