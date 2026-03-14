@@ -1,5 +1,5 @@
 [package]
-name = "hitl_v2"
+name = "hitl_workflow"
 version = "0.1.0"
 edition = "2021"
 
@@ -15,3 +15,15 @@ tracing-subscriber = "0.3"
 # Local dependencies
 mofa-foundation = { path = "../../crates/mofa-foundation" }
 mofa-kernel = { path = "../../crates/mofa-kernel" }
+
+# Workspace dependencies
+chrono.workspace = true
+uuid.workspace = true
+
+# HTTP API testing
+reqwest = { version = "0.12", features = ["json"], optional = true }
+axum = { workspace = true, optional = true }
+
+[features]
+default = []
+http-api = ["mofa-foundation/http-api", "dep:reqwest", "dep:axum"]
