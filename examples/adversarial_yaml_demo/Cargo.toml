@@ -1,0 +1,8 @@
+[package]
+name = "adversarial_yaml_demo"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+mofa-testing = { path = "../../tests" }
+serde_yaml = { workspace = true }
