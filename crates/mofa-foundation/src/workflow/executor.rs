@@ -637,19 +637,30 @@ impl WorkflowExecutor {
                 .as_millis() as u64,
         );
 
-        match result {
+        let final_status = match result {
             Ok(_) => {
-                execution_record.status = WorkflowStatus::Completed;
-                info!(
-                    "Workflow {} resumed and completed in {:?}",
-                    graph.name, duration
-                );
+                if execution_record.status != WorkflowStatus::Paused {
+                    execution_record.status = WorkflowStatus::Completed;
+                    info!(
+                        "Workflow {} resumed and completed in {:?}",
+                        graph.name, duration
+                    );
+                    "completed".to_string()
+                } else {
+                    info!(
+                        "Workflow {} resumed and paused after {:?}",
+                        graph.name, duration
+                    );
+                    execution_record.context = Some(ctx.clone());
+                    "paused".to_string()
+                }
             }
             Err(ref e) => {
                 execution_record.status = WorkflowStatus::Failed(e.clone());
                 error!("Workflow {} resumed and failed: {}", graph.name, e);
+                format!("failed: {}", e)
             }
-        }
+        };
 
         execution_record.outputs = ctx.get_all_outputs().await;
 
@@ -671,6 +682,14 @@ impl WorkflowExecutor {
                 .await;
             }
         }
+
+        self.emit_debug(DebugEvent::WorkflowEnd {
+            workflow_id: graph.id.clone(),
+            execution_id: ctx.execution_id.clone(),
+            timestamp_ms: DebugEvent::now_ms(),
+            status: final_status,
+        })
+        .await;
 
         Ok(execution_record)
     }
@@ -827,9 +846,8 @@ impl WorkflowExecutor {
                 }
                 NodeType::Wait => self.execute_wait(ctx, node, current_input.clone()).await,
                 _ => {
-                    let node_timeout = std::time::Duration::from_millis(
-                        self.config.node_timeout_ms,
-                    );
+                    let node_timeout =
+                        std::time::Duration::from_millis(self.config.node_timeout_ms);
                     let result = match tokio::time::timeout(
                         node_timeout,
                         node.execute(ctx, current_input.clone()),
@@ -844,10 +862,7 @@ impl WorkflowExecutor {
                             );
                             NodeResult::failed(
                                 &current_node_id,
-                                &format!(
-                                    "Node timed out after {:?}",
-                                    node_timeout
-                                ),
+                                &format!("Node timed out after {:?}", node_timeout),
                                 node_timeout.as_millis() as u64,
                             )
                         }
@@ -1934,9 +1949,7 @@ mod tests {
         graph.add_node(WorkflowNode::task(
             "fast_task",
             "Fast Task",
-            |_ctx, _input| async move {
-                Ok(WorkflowValue::String("fast".to_string()))
-            },
+            |_ctx, _input| async move { Ok(WorkflowValue::String("fast".to_string())) },
         ));
         graph.add_node(WorkflowNode::end("end"));
         graph.connect("start", "fast_task");

@@ -326,7 +326,6 @@ impl SubtaskDAG {
             .count()
     }
 
-
     /// Skip all Pending/Ready tasks that transitively depend on `failed_idx`
     /// through hard (Sequential/DataFlow) edges. Returns the number of tasks skipped.
     pub fn cascade_skip(&mut self, failed_idx: NodeIndex) -> usize {
@@ -564,7 +563,8 @@ mod tests {
         let d = dag.add_task(SwarmSubtask::new("d", "Independent"));
 
         dag.add_dependency(a, b).unwrap(); // Sequential (hard)
-        dag.add_dependency_with_kind(a, c, DependencyKind::Soft).unwrap();
+        dag.add_dependency_with_kind(a, c, DependencyKind::Soft)
+            .unwrap();
 
         dag.mark_failed(a, "error");
         let skipped = dag.cascade_skip(a);

@@ -417,9 +417,15 @@ mod tests {
         assert_eq!(*load.get("agent-1").unwrap(), 0);
         // Completed task metadata is evicted — entry must not linger in the map.
         let status = scheduler.task_status.read().await;
-        assert!(status.get("t1").is_none(), "task_status entry should be removed on completion");
+        assert!(
+            status.get("t1").is_none(),
+            "task_status entry should be removed on completion"
+        );
         let priorities = scheduler.task_priorities.read().await;
-        assert!(priorities.get("t1").is_none(), "task_priorities entry should be removed on completion");
+        assert!(
+            priorities.get("t1").is_none(),
+            "task_priorities entry should be removed on completion"
+        );
     }
 
     /// Verifies the priority queue orders tasks correctly (higher priority first).
