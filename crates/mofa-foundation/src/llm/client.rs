@@ -3,6 +3,31 @@
 //!
 //! 提供便捷的 LLM 交互 API，包括消息管理、工具调用循环等
 //! Provides convenient LLM interaction APIs, including message management, tool call loops, etc.
+//!
+//! ## OpenTelemetry Instrumentation (`otel-tracing` feature)
+//!
+//! Enable the `otel-tracing` feature to emit a `gen_ai.chat_completion` span
+//! (SpanKind::Client) on every [`ChatSession::send`] call.
+//!
+//! ```toml
+//! # Cargo.toml
+//! mofa-foundation = { version = "0.1", features = ["otel-tracing"] }
+//! ```
+//!
+//! The span records these attributes:
+//!
+//! | Attribute | Value |
+//! |-----------|-------|
+//! | `gen_ai.system` | Provider name, e.g. `"openai"` |
+//! | `gen_ai.request.model` | Model name, e.g. `"gpt-4o"` |
+//! | `gen_ai.response.model` | Model that actually responded |
+//! | `gen_ai.usage.input_tokens` | Prompt tokens from the response |
+//! | `gen_ai.usage.output_tokens` | Completion tokens from the response |
+//! | `session.id` | UUID of the [`ChatSession`] |
+//!
+//! The global tracer is read via [`opentelemetry::global::tracer`] — set any
+//! OTel-compatible provider (Jaeger, OTLP, console) before calling [`ChatSession::send`]
+//! and spans will appear automatically.
 
 use super::provider::{LLMConfig, LLMProvider};
 use super::tool_executor::ToolExecutor;
@@ -1011,6 +1036,29 @@ impl ChatSession {
             builder = builder.with_tool_executor(executor.clone());
         }
 
+        // Start OTel span for the provider call (feature-gated)
+        #[cfg(feature = "otel-tracing")]
+        let __otel_span = {
+            use opentelemetry::trace::{Tracer, SpanKind, Span};
+            use opentelemetry::KeyValue;
+            let tracer = opentelemetry::global::tracer("mofa-foundation");
+            let provider_name = self.client.provider().name().to_string();
+            let model_name = self
+                .client
+                .config()
+                .default_model
+                .clone()
+                .unwrap_or_else(|| self.client.provider().default_model().to_string());
+            let mut span = tracer
+                .span_builder("gen_ai.chat_completion")
+                .with_kind(SpanKind::Client)
+                .start(&tracer);
+            span.set_attribute(KeyValue::new("gen_ai.system", provider_name));
+            span.set_attribute(KeyValue::new("gen_ai.request.model", model_name));
+            span.set_attribute(KeyValue::new("session.id", self.session_id.to_string()));
+            span
+        };
+
         // 发送请求
         // Send request
         let response = if self.tool_executor.is_some() {
@@ -1018,6 +1066,29 @@ impl ChatSession {
         } else {
             builder.send().await?
         };
+
+        // Record token usage and end the OTel span
+        #[cfg(feature = "otel-tracing")]
+        {
+            use opentelemetry::trace::Span;
+            use opentelemetry::KeyValue;
+            let mut span = __otel_span;
+            span.set_attribute(KeyValue::new(
+                "gen_ai.usage.input_tokens",
+                response.usage.as_ref().map(|u| u.prompt_tokens as i64).unwrap_or(0),
+            ));
+            span.set_attribute(KeyValue::new(
+                "gen_ai.usage.output_tokens",
+                response
+                    .usage
+                    .as_ref()
+                    .map(|u| u.completion_tokens as i64)
+                    .unwrap_or(0),
+            ));
+            span.set_attribute(KeyValue::new("gen_ai.response.model", response.model.clone()));
+            span.set_status(opentelemetry::trace::Status::Ok);
+            span.end();
+        }
 
         // 存储响应元数据
         // Store response metadata
@@ -1469,7 +1540,12 @@ mod tests {
             },
         );
 
-        let _ = client.chat().user("hi").send().await.expect("chat should work");
+        let _ = client
+            .chat()
+            .user("hi")
+            .send()
+            .await
+            .expect("chat should work");
 
         let req = provider
             .last_request
@@ -1499,7 +1575,10 @@ mod tests {
         let provider = Arc::new(MockProvider::new("emb-model", Some("ok")));
         let client = LLMClient::new(provider);
 
-        let single = client.embed("one").await.expect("single embedding should work");
+        let single = client
+            .embed("one")
+            .await
+            .expect("single embedding should work");
         assert_eq!(single, vec![0.1, 0.2]);
 
         let batch = client

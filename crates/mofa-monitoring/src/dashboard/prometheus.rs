@@ -1,4 +1,33 @@
 //! Prometheus metrics export bridge for dashboard metrics.
+//!
+//! Renders a [`MetricsSnapshot`] into the Prometheus text exposition format
+//! and serves it from `GET /metrics`.
+//!
+//! ## LLM Metrics Exported
+//!
+//! | Metric | Type | Labels |
+//! |--------|------|--------|
+//! | `mofa_llm_requests_total` | counter | `provider`, `model` |
+//! | `mofa_llm_errors_total` | counter | `provider`, `model` |
+//! | `mofa_llm_input_tokens_total` | counter | `provider`, `model` |
+//! | `mofa_llm_output_tokens_total` | counter | `provider`, `model` |
+//! | `mofa_llm_tokens_per_second` | gauge | `provider`, `model` |
+//! | `mofa_llm_latency_seconds` | gauge | `provider`, `model` |
+//! | `mofa_llm_time_to_first_token_seconds` | gauge | `provider`, `model` |
+//! | `mofa_llm_request_duration_seconds` | histogram | `provider`, `model` |
+//!
+//! ## Practical PromQL Examples
+//!
+//! ```promql
+//! # Token consumption rate (cost proxy)
+//! rate(mofa_llm_input_tokens_total[1m]) + rate(mofa_llm_output_tokens_total[1m])
+//!
+//! # Error rate per model
+//! rate(mofa_llm_errors_total[5m]) / rate(mofa_llm_requests_total[5m])
+//!
+//! # P95 request latency
+//! histogram_quantile(0.95, rate(mofa_llm_request_duration_seconds_bucket[5m]))
+//! ```
 
 use super::metrics::{MetricValue, MetricsCollector, MetricsSnapshot};
 use axum::body::Bytes;
@@ -950,6 +979,9 @@ fn render_llm_metrics(
     let mut tokens_per_second = Vec::with_capacity(snapshot.llm_metrics.len());
     let mut errors = Vec::with_capacity(snapshot.llm_metrics.len());
     let mut latency = Vec::with_capacity(snapshot.llm_metrics.len());
+    let mut input_tokens = Vec::with_capacity(snapshot.llm_metrics.len());
+    let mut output_tokens = Vec::with_capacity(snapshot.llm_metrics.len());
+    let mut time_to_first_token = Vec::with_capacity(snapshot.llm_metrics.len());
 
     for llm in &snapshot.llm_metrics {
         let labels = vec![
@@ -972,9 +1004,25 @@ fn render_llm_metrics(
             sample_value: llm.failed_requests as f64,
         });
         latency.push(LabeledValue {
-            labels,
+            labels: labels.clone(),
             ranking_value: llm.avg_latency_ms,
             sample_value: llm.avg_latency_ms / 1000.0,
+        });
+        input_tokens.push(LabeledValue {
+            labels: labels.clone(),
+            ranking_value: llm.prompt_tokens as f64,
+            sample_value: llm.prompt_tokens as f64,
+        });
+        output_tokens.push(LabeledValue {
+            labels: labels.clone(),
+            ranking_value: llm.completion_tokens as f64,
+            sample_value: llm.completion_tokens as f64,
+        });
+        let ttft_s = llm.time_to_first_token_ms.unwrap_or(0.0) / 1000.0;
+        time_to_first_token.push(LabeledValue {
+            labels,
+            ranking_value: ttft_s,
+            sample_value: ttft_s,
         });
     }
 
@@ -1048,6 +1096,66 @@ fn render_llm_metrics(
         append_gauge_line(
             out,
             "mofa_llm_latency_seconds",
+            &series.labels,
+            series.sample_value,
+        );
+    }
+
+    write_metric_header(
+        out,
+        "mofa_llm_input_tokens_total",
+        "Cumulative prompt tokens sent to the LLM provider",
+        "counter",
+    );
+    for series in limit_series(
+        input_tokens,
+        limits.provider_model,
+        &mut dropped.provider_model,
+        OverflowAggregation::Sum,
+    ) {
+        append_gauge_line(
+            out,
+            "mofa_llm_input_tokens_total",
+            &series.labels,
+            series.sample_value,
+        );
+    }
+
+    write_metric_header(
+        out,
+        "mofa_llm_output_tokens_total",
+        "Cumulative completion tokens received from the LLM provider",
+        "counter",
+    );
+    for series in limit_series(
+        output_tokens,
+        limits.provider_model,
+        &mut dropped.provider_model,
+        OverflowAggregation::Sum,
+    ) {
+        append_gauge_line(
+            out,
+            "mofa_llm_output_tokens_total",
+            &series.labels,
+            series.sample_value,
+        );
+    }
+
+    write_metric_header(
+        out,
+        "mofa_llm_time_to_first_token_seconds",
+        "Time to first token for streaming requests in seconds (0 for non-streaming)",
+        "gauge",
+    );
+    for series in limit_series(
+        time_to_first_token,
+        limits.provider_model,
+        &mut dropped.provider_model,
+        OverflowAggregation::Mean,
+    ) {
+        append_gauge_line(
+            out,
+            "mofa_llm_time_to_first_token_seconds",
             &series.labels,
             series.sample_value,
         );
@@ -1713,5 +1821,90 @@ mod tests {
 
         assert!(output.contains("# HELP foo_bar "));
         assert!(output.contains("# HELP foo_bar_1 "));
+    }
+
+    #[test]
+    fn test_render_llm_input_tokens_exported() {
+        let mut snapshot = sample_snapshot();
+        snapshot.llm_metrics = vec![super::super::metrics::LLMMetrics {
+            provider_name: "openai".to_string(),
+            model_name: "gpt-4".to_string(),
+            prompt_tokens: 1000,
+            ..Default::default()
+        }];
+        let mut output = String::new();
+        let limits = CardinalityLimits::default();
+        let mut dropped = DroppedSeriesCounters::default();
+        render_llm_metrics(&mut output, &snapshot, &limits, &mut dropped);
+
+        assert!(
+            output.contains("# HELP mofa_llm_input_tokens_total"),
+            "missing HELP line for input tokens"
+        );
+        assert!(
+            output.contains("# TYPE mofa_llm_input_tokens_total counter"),
+            "missing TYPE line for input tokens"
+        );
+        assert!(
+            output.contains(
+                "mofa_llm_input_tokens_total{provider=\"openai\",model=\"gpt-4\"} 1000"
+            ),
+            "missing or wrong value for input tokens; output was:\n{output}"
+        );
+    }
+
+    #[test]
+    fn test_render_llm_output_tokens_exported() {
+        let mut snapshot = sample_snapshot();
+        snapshot.llm_metrics = vec![super::super::metrics::LLMMetrics {
+            provider_name: "anthropic".to_string(),
+            model_name: "claude-3-opus".to_string(),
+            completion_tokens: 512,
+            ..Default::default()
+        }];
+        let mut output = String::new();
+        let limits = CardinalityLimits::default();
+        let mut dropped = DroppedSeriesCounters::default();
+        render_llm_metrics(&mut output, &snapshot, &limits, &mut dropped);
+
+        assert!(
+            output.contains("# HELP mofa_llm_output_tokens_total"),
+            "missing HELP line for output tokens"
+        );
+        assert!(
+            output.contains("# TYPE mofa_llm_output_tokens_total counter"),
+            "missing TYPE line for output tokens"
+        );
+        assert!(
+            output.contains(
+                "mofa_llm_output_tokens_total{provider=\"anthropic\",model=\"claude-3-opus\"} 512"
+            ),
+            "missing or wrong value for output tokens; output was:\n{output}"
+        );
+    }
+
+    #[test]
+    fn test_render_llm_time_to_first_token_exported() {
+        let mut snapshot = sample_snapshot();
+        snapshot.llm_metrics = vec![super::super::metrics::LLMMetrics {
+            provider_name: "openai".to_string(),
+            model_name: "gpt-4".to_string(),
+            time_to_first_token_ms: Some(42.0),
+            ..Default::default()
+        }];
+        let mut output = String::new();
+        let limits = CardinalityLimits::default();
+        let mut dropped = DroppedSeriesCounters::default();
+        render_llm_metrics(&mut output, &snapshot, &limits, &mut dropped);
+
+        assert!(
+            output.contains("# HELP mofa_llm_time_to_first_token_seconds"),
+            "missing HELP line for time_to_first_token; output was:\n{output}"
+        );
+        // 42 ms = 0.042 s — check with float tolerance via string search
+        assert!(
+            output.contains("mofa_llm_time_to_first_token_seconds{provider=\"openai\",model=\"gpt-4\"} 0.042"),
+            "wrong value for time_to_first_token; output was:\n{output}"
+        );
     }
 }
