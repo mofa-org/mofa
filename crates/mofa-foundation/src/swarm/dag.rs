@@ -162,8 +162,12 @@ impl SubtaskDAG {
                         let dep_edge = edge.weight();
                         match dep_edge.kind {
                             DependencyKind::Sequential | DependencyKind::DataFlow => {
-                                dep.status == SubtaskStatus::Completed
-                                    || dep.status == SubtaskStatus::Skipped
+                                matches!(
+                                    dep.status,
+                                    SubtaskStatus::Completed
+                                        | SubtaskStatus::Skipped
+                                        | SubtaskStatus::Failed(_)
+                                )
                             }
                             DependencyKind::Soft => true,
                         }
@@ -590,6 +594,55 @@ mod tests {
         // c depends on b which is Running, so cascade should not reach c through b
         assert_eq!(skipped, 0);
         assert_eq!(dag.get_task(b).unwrap().status, SubtaskStatus::Running);
+    }
+
+    #[test]
+    fn test_failed_dependency_unblocks_downstream() {
+        let mut dag = SubtaskDAG::new("fail-chain");
+        let a = dag.add_task(SwarmSubtask::new("a", "Fetch data"));
+        let b = dag.add_task(SwarmSubtask::new("b", "Process data"));
+        let c = dag.add_task(SwarmSubtask::new("c", "Generate report"));
+
+        dag.add_dependency(a, b).unwrap();
+        dag.add_dependency(b, c).unwrap();
+
+        // Only a is ready initially
+        assert_eq!(dag.ready_tasks(), vec![a]);
+
+        // a fails — b should become ready (not stuck forever)
+        dag.mark_failed(a, "connection timeout");
+        let ready = dag.ready_tasks();
+        assert_eq!(ready, vec![b], "b must become ready when its dependency fails");
+
+        // b also fails — c should become ready
+        dag.mark_failed(b, "no input data");
+        let ready = dag.ready_tasks();
+        assert_eq!(ready, vec![c], "c must become ready when its dependency fails");
+
+        dag.mark_skipped(c);
+        assert!(dag.is_complete());
+    }
+
+    #[test]
+    fn test_failed_dependency_diamond_dag() {
+        let mut dag = SubtaskDAG::new("fail-diamond");
+        let a = dag.add_task(SwarmSubtask::new("a", "Start"));
+        let b = dag.add_task(SwarmSubtask::new("b", "Path 1"));
+        let c = dag.add_task(SwarmSubtask::new("c", "Path 2"));
+        let d = dag.add_task(SwarmSubtask::new("d", "Merge"));
+
+        dag.add_dependency(a, b).unwrap();
+        dag.add_dependency(a, c).unwrap();
+        dag.add_dependency(b, d).unwrap();
+        dag.add_dependency(c, d).unwrap();
+
+        dag.mark_complete(a);
+        dag.mark_complete(b);
+        dag.mark_failed(c, "path 2 error");
+
+        // d depends on both b (Completed) and c (Failed) — should be ready
+        let ready = dag.ready_tasks();
+        assert_eq!(ready, vec![d], "d must become ready when all deps are terminal");
     }
 
     #[test]

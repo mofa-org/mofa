@@ -689,20 +689,32 @@ Rules:
         let span = tracing::info_span!("react.tool_call", tool = %tool_name);
         let timeout_dur = self.config.tool_timeout;
 
-        async {
+        // Clone the Arc while holding the read lock, then release the lock
+        // before the potentially long-running tool.execute() call. Holding
+        // a tokio RwLock read guard across an .await blocks all concurrent
+        // write operations (e.g. register_tool) for the full tool duration.
+        let maybe_tool: Option<Arc<dyn ReActTool>> = {
             let tools = self.tools.read().await;
+            tools.get(tool_name).cloned()
+        }; // read guard dropped here, before any .await
 
-            match tools.get(tool_name) {
-                Some(tool) => match tokio::time::timeout(timeout_dur, tool.execute(input)).await {
-                    Ok(Ok(result)) => result,
-                    Ok(Err(e)) => format!("Tool error: {}", e),
-                    Err(_) => format!("Tool '{}' timed out after {:?}", tool_name, timeout_dur),
-                },
-                None => format!(
-                    "Tool '{}' not found. Available tools: {:?}",
-                    tool_name,
-                    tools.keys().collect::<Vec<_>>()
-                ),
+        async {
+            match maybe_tool {
+                Some(tool) => {
+                    match tokio::time::timeout(timeout_dur, tool.execute(input)).await {
+                        Ok(Ok(result)) => result,
+                        Ok(Err(e)) => format!("Tool error: {}", e),
+                        Err(_) => format!("Tool '{}' timed out after {:?}", tool_name, timeout_dur),
+                    }
+                }
+                None => {
+                    let tools = self.tools.read().await;
+                    format!(
+                        "Tool '{}' not found. Available tools: {:?}",
+                        tool_name,
+                        tools.keys().collect::<Vec<_>>()
+                    )
+                }
             }
         }
         .instrument(span)
