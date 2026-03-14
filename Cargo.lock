@@ -5859,7 +5859,7 @@ version = "0.1.0"
 dependencies = [
  "async-openai",
  "async-trait",
- "axum 0.6.20",
+ "axum",
  "base64 0.22.1",
  "candle-core",
  "candle-transformers",

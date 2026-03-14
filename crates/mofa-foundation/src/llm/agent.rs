@@ -217,6 +217,20 @@ pub struct LLMAgentConfig {
     /// 每轮对话 ≈ 1 个用户消息 + 1 个助手响应
     /// Each round ≈ 1 user message + 1 assistant response
     pub context_window_size: Option<usize>,
+
+    /// Token-budget configuration for auto-summarization and graceful halt.
+    ///
+    /// When set, enables:
+    /// - Automatic context compression when the payload approaches the configured
+    ///   context window limit
+    /// - Budget enforcement (token/cost limits) with graceful halt on overflow
+    /// - Single-attempt auto-recovery on `ContextLengthExceeded` errors
+    ///
+    /// When `None` (default), all token-budget features are disabled.
+    ///
+    /// **Note:** When using `TokenBudgetConfig`, set `context_window_size` to `None`
+    /// to avoid the round-based window conflicting with token-based management.
+    pub token_budget_config: Option<crate::llm::token_budget::TokenBudgetConfig>,
 }
 
 impl Default for LLMAgentConfig {
@@ -231,6 +245,7 @@ impl Default for LLMAgentConfig {
             user_id: None,
             tenant_id: None,
             context_window_size: None,
+            token_budget_config: None,
         }
     }
 }
@@ -342,6 +357,11 @@ pub struct LLMAgent {
     /// Agent ID（用于从数据库加载会话）
     /// Agent ID (for loading sessions from database)
     persistence_agent_id: Option<uuid::Uuid>,
+    /// Per-agent budget enforcer (present when `token_budget_config.budget` has limits).
+    budget_enforcer: Option<Arc<crate::cost::BudgetEnforcer>>,
+    /// Whether `set_budget` has been called on `budget_enforcer`.
+    /// Used to defer the async call in the sync constructor path.
+    budget_registered: Arc<std::sync::atomic::AtomicBool>,
 }
 
 /// LLM Agent 事件处理器
@@ -472,6 +492,35 @@ impl LLMAgent {
         // Set context window size
         session = session.with_context_window_size(config.context_window_size);
 
+        // Wire token-budget compression into the session
+        if let Some(ref tbc) = config.token_budget_config {
+            if let Err(e) = tbc.validate() {
+                tracing::warn!("TokenBudgetConfig validation failed: {}; ignoring", e);
+            } else {
+                let manager = Arc::new(
+                    crate::llm::token_budget::ContextWindowManager::new(tbc.context_window_tokens)
+                        .with_policy(
+                            crate::llm::token_budget::ContextWindowPolicy::SlidingWindow {
+                                keep_last_n: tbc.keep_recent_on_summarize,
+                            },
+                        ),
+                );
+                session = session.with_token_budget(
+                    manager,
+                    tbc.summarize_trigger_tokens(),
+                    tbc.use_llm_summarize,
+                );
+            }
+        }
+
+        // Build the budget enforcer (budget registration deferred until first chat)
+        let budget_enforcer = config
+            .token_budget_config
+            .as_ref()
+            .and_then(|tbc| tbc.budget.as_ref())
+            .filter(|bc| bc.has_limits())
+            .map(|_| Arc::new(crate::cost::BudgetEnforcer::new()));
+
         let session_id = session.session_id().to_string();
         let session_arc = Arc::new(RwLock::new(session));
 
@@ -523,6 +572,8 @@ impl LLMAgent {
             session_store: None,
             persistence_user_id: None,
             persistence_agent_id: None,
+            budget_enforcer,
+            budget_registered: Arc::new(std::sync::atomic::AtomicBool::new(false)),
         }
     }
 
@@ -582,7 +633,7 @@ impl LLMAgent {
 
         // 1. 尝试从数据库加载会话（如果有 stores 且指定了 session_id）
         // 1. Try to load session from database (if stores are present and session_id specified)
-        let session = if let (
+        let mut session = if let (
             Some(sid),
             Some(msg_store),
             Some(sess_store),
@@ -708,6 +759,48 @@ impl LLMAgent {
             session.with_context_window_size(config.context_window_size)
         };
 
+        // Wire token-budget compression into the session
+        if let Some(ref tbc) = config.token_budget_config {
+            if let Err(e) = tbc.validate() {
+                tracing::warn!("TokenBudgetConfig validation failed: {}; ignoring", e);
+            } else {
+                let manager = Arc::new(
+                    crate::llm::token_budget::ContextWindowManager::new(tbc.context_window_tokens)
+                        .with_policy(
+                            crate::llm::token_budget::ContextWindowPolicy::SlidingWindow {
+                                keep_last_n: tbc.keep_recent_on_summarize,
+                            },
+                        ),
+                );
+                session = session.with_token_budget(
+                    manager,
+                    tbc.summarize_trigger_tokens(),
+                    tbc.use_llm_summarize,
+                );
+            }
+        }
+
+        // Build and register the budget enforcer (async constructor can await directly)
+        let budget_enforcer = if let Some(ref tbc) = config.token_budget_config {
+            if let Some(ref bc) = tbc.budget {
+                if bc.has_limits() {
+                    let enforcer = Arc::new(crate::cost::BudgetEnforcer::new());
+                    enforcer
+                        .set_budget(config.agent_id.clone(), bc.clone())
+                        .await;
+                    Some(enforcer)
+                } else {
+                    None
+                }
+            } else {
+                None
+            }
+        } else {
+            None
+        };
+        let budget_registered =
+            Arc::new(std::sync::atomic::AtomicBool::new(budget_enforcer.is_some()));
+
         let session_id = session.session_id().to_string();
         let session_arc = Arc::new(RwLock::new(session));
 
@@ -759,6 +852,8 @@ impl LLMAgent {
             session_store,
             persistence_user_id,
             persistence_agent_id,
+            budget_enforcer,
+            budget_registered,
         }
     }
 
@@ -1658,15 +1753,81 @@ impl LLMAgent {
             message
         };
 
+        // ---- Budget enforcement (lazy registration for the sync constructor path) ----
+        if let Some(ref enforcer) = self.budget_enforcer {
+            // Register budget on first call if it hasn't been done yet
+            if !self.budget_registered.load(std::sync::atomic::Ordering::Acquire) {
+                if let Some(ref tbc) = self.config.token_budget_config
+                    && let Some(ref bc) = tbc.budget
+                {
+                    enforcer.set_budget(self.config.agent_id.clone(), bc.clone()).await;
+                }
+                self.budget_registered
+                    .store(true, std::sync::atomic::Ordering::Release);
+            }
+
+            match enforcer.check_budget(&self.config.agent_id).await {
+                Ok(()) => {}
+                Err(budget_err) => {
+                    let halt = self
+                        .config
+                        .token_budget_config
+                        .as_ref()
+                        .map(|c| c.halt_on_budget_exceeded)
+                        .unwrap_or(true);
+
+                    if halt {
+                        let status = enforcer.get_status(&self.config.agent_id).await;
+                        return Err(LLMError::Other(format!(
+                            "Budget exceeded: {}. Session tokens used: {}, Daily tokens used: {}",
+                            budget_err,
+                            status.session_tokens,
+                            status.daily_tokens,
+                        )));
+                    } else {
+                        tracing::warn!(
+                            "Budget exceeded but halt_on_budget_exceeded=false: {}",
+                            budget_err
+                        );
+                    }
+                }
+            }
+        }
+
         // 获取会话
         // Get session
         let session = self.get_session_arc(session_id).await?;
 
-        // 发送消息
-        // Send message
+        // 发送消息（带 ContextLengthExceeded 自动压缩重试）
+        // Send message (with ContextLengthExceeded auto-compress retry)
         let mut session_guard = session.write().await;
         let response = match session_guard.send(&processed_message).await {
             Ok(resp) => resp,
+            Err(LLMError::ContextLengthExceeded(ref detail)) => {
+                tracing::warn!(
+                    session_id = session_id,
+                    detail = %detail,
+                    "ContextLengthExceeded; auto-compressing history and retrying once"
+                );
+                // Force-compress: pops the failing user message, compresses history
+                let popped = session_guard.force_compress().await;
+                // Re-push the user message so send_existing_messages() includes it
+                if let Some(user_msg) = popped {
+                    session_guard.messages_mut().push(user_msg);
+                }
+                // Single retry without re-pushing (message already in history)
+                match session_guard.send_existing_messages().await {
+                    Ok(resp) => resp,
+                    Err(retry_err) => {
+                        if let Some(ref handler) = self.event_handler
+                            && let Some(fallback) = handler.on_error(&retry_err).await?
+                        {
+                            return Ok(fallback);
+                        }
+                        return Err(retry_err);
+                    }
+                }
+            }
             Err(e) => {
                 if let Some(ref handler) = self.event_handler
                     && let Some(fallback) = handler.on_error(&e).await?
@@ -1676,6 +1837,17 @@ impl LLMAgent {
                 return Err(e);
             }
         };
+
+        // ---- Record token usage ----
+        if let Some(ref enforcer) = self.budget_enforcer {
+            let total_tokens = session_guard
+                .last_response_metadata()
+                .map(|m| u64::from(m.total_tokens))
+                .unwrap_or(0);
+            enforcer
+                .record_usage(&self.config.agent_id, 0.0, total_tokens)
+                .await;
+        }
 
         // 调用 after_chat 钩子（带元数据）
         // Call after_chat hook (with metadata)
@@ -2420,6 +2592,8 @@ pub struct LLMAgentBuilder {
     persistence_user_id: Option<uuid::Uuid>,
     persistence_tenant_id: Option<uuid::Uuid>,
     persistence_agent_id: Option<uuid::Uuid>,
+    /// Token-budget configuration for auto-summarization and graceful halt.
+    token_budget_config: Option<crate::llm::token_budget::TokenBudgetConfig>,
 }
 
 impl Default for LLMAgentBuilder {
@@ -2454,6 +2628,7 @@ impl LLMAgentBuilder {
             persistence_user_id: None,
             persistence_tenant_id: None,
             persistence_agent_id: None,
+            token_budget_config: None,
         }
     }
 
@@ -2725,6 +2900,30 @@ impl LLMAgentBuilder {
         self
     }
 
+    /// Enable token-budget-aware auto-summarization and graceful halt.
+    ///
+    /// Validates the config before storing it. Returns `Err` on invalid values.
+    ///
+    /// # Example
+    ///
+    /// ```rust,ignore
+    /// use mofa_foundation::llm::{LLMAgentBuilder, TokenBudgetConfig};
+    ///
+    /// let agent = LLMAgentBuilder::from_env()?
+    ///     .with_token_budget_config(TokenBudgetConfig::default())?
+    ///     .build();
+    /// ```
+    pub fn with_token_budget_config(
+        mut self,
+        config: crate::llm::token_budget::TokenBudgetConfig,
+    ) -> LLMResult<Self> {
+        config
+            .validate()
+            .map_err(|e| LLMError::ConfigError(e.to_string()))?;
+        self.token_budget_config = Some(config);
+        Ok(self)
+    }
+
     /// 从环境变量创建基础配置
     /// Create basic configuration from environment variables
     ///
@@ -2799,6 +2998,7 @@ impl LLMAgentBuilder {
             user_id: self.user_id,
             tenant_id: self.tenant_id,
             context_window_size: self.context_window_size,
+            token_budget_config: self.token_budget_config.clone(),
         };
 
         let mut agent = LLMAgent::with_initial_session(config, provider, self.session_id);
@@ -2868,6 +3068,7 @@ impl LLMAgentBuilder {
             user_id: self.user_id,
             tenant_id: self.tenant_id,
             context_window_size: self.context_window_size,
+            token_budget_config: self.token_budget_config.clone(),
         };
 
         let mut agent = LLMAgent::with_initial_session(config, provider, self.session_id);
@@ -2965,6 +3166,7 @@ impl LLMAgentBuilder {
             user_id: self.user_id,
             tenant_id: self.tenant_id,
             context_window_size: self.context_window_size,
+            token_budget_config: self.token_budget_config.clone(),
         };
 
         // Fallback: If stores are set but persistence_tenant_id is None, use tenant_id
@@ -3736,5 +3938,126 @@ mod tests {
         let agent = simple_llm_agent("agent-1", provider, "system prompt");
         assert_eq!(agent.id(), "agent-1");
         assert_eq!(agent.name(), "agent-1");
+    }
+
+    #[test]
+    fn token_budget_config_none_by_default() {
+        let config = LLMAgentConfig::default();
+        assert!(config.token_budget_config.is_none());
+    }
+
+    #[test]
+    fn builder_with_invalid_token_budget_config_returns_error() {
+        let bad_config = crate::llm::token_budget::TokenBudgetConfig {
+            context_window_tokens: 0, // invalid: must be > 0
+            ..Default::default()
+        };
+        let result = LLMAgentBuilder::new()
+            .with_id("agent")
+            .with_provider(Arc::new(MockProvider))
+            .with_token_budget_config(bad_config);
+        assert!(result.is_err(), "zero window should be rejected");
+    }
+
+    #[test]
+    fn builder_stores_valid_token_budget_config() {
+        let config = crate::llm::token_budget::TokenBudgetConfig::sliding_window_only(4096);
+        let agent = LLMAgentBuilder::new()
+            .with_id("agent")
+            .with_provider(Arc::new(MockProvider))
+            .with_token_budget_config(config)
+            .expect("valid config should not fail")
+            .build();
+        assert_eq!(agent.id(), "agent");
+    }
+
+    #[tokio::test]
+    async fn agent_chat_succeeds_with_token_budget_config() {
+        let config = crate::llm::token_budget::TokenBudgetConfig::sliding_window_only(4096);
+        let agent = LLMAgentBuilder::new()
+            .with_id("agent-budget")
+            .with_provider(Arc::new(MockProvider))
+            .with_token_budget_config(config)
+            .expect("valid config")
+            .build();
+        let resp = agent.chat("hello").await;
+        assert!(resp.is_ok(), "chat should succeed with token budget config: {:?}", resp);
+        assert_eq!(resp.unwrap(), "ok");
+    }
+
+    #[tokio::test]
+    async fn agent_with_budget_config_chat_succeeds_when_under_limit() {
+        use mofa_kernel::budget::BudgetConfig;
+        let budget_cfg = BudgetConfig::default()
+            .with_max_tokens_per_session(100_000)
+            .expect("valid budget");
+        let tbc = crate::llm::token_budget::TokenBudgetConfig {
+            budget: Some(budget_cfg),
+            halt_on_budget_exceeded: true,
+            ..Default::default()
+        };
+        let agent = LLMAgentBuilder::new()
+            .with_id("agent-under-limit")
+            .with_provider(Arc::new(MockProvider))
+            .with_token_budget_config(tbc)
+            .expect("valid config")
+            .build();
+        let resp = agent.chat("hello").await;
+        assert!(resp.is_ok(), "chat should succeed when well under budget");
+    }
+
+    #[tokio::test]
+    async fn agent_context_length_exceeded_retries_once_and_succeeds() {
+        use std::sync::atomic::{AtomicUsize, Ordering};
+
+        struct FailOnceMockProvider {
+            call_count: Arc<AtomicUsize>,
+        }
+
+        #[async_trait]
+        impl LLMProvider for FailOnceMockProvider {
+            fn name(&self) -> &str { "fail-once" }
+            fn default_model(&self) -> &str { "model" }
+
+            async fn chat(&self, _req: ChatCompletionRequest) -> LLMResult<ChatCompletionResponse> {
+                let n = self.call_count.fetch_add(1, Ordering::SeqCst);
+                if n == 0 {
+                    Err(LLMError::ContextLengthExceeded(
+                        "context length exceeded (max: 100, requested: 200)".to_string(),
+                    ))
+                } else {
+                    Ok(ChatCompletionResponse {
+                        id: "r".to_string(),
+                        object: "chat.completion".to_string(),
+                        created: 1,
+                        model: "model".to_string(),
+                        choices: vec![Choice {
+                            index: 0,
+                            message: crate::llm::types::ChatMessage::assistant("retry ok"),
+                            finish_reason: None,
+                            logprobs: None,
+                        }],
+                        usage: None,
+                        system_fingerprint: None,
+                    })
+                }
+            }
+        }
+
+        let call_count = Arc::new(AtomicUsize::new(0));
+        let provider = Arc::new(FailOnceMockProvider { call_count: call_count.clone() });
+
+        let tbc = crate::llm::token_budget::TokenBudgetConfig::sliding_window_only(4096);
+        let agent = LLMAgentBuilder::new()
+            .with_id("agent-retry")
+            .with_provider(provider)
+            .with_token_budget_config(tbc)
+            .expect("valid config")
+            .build();
+
+        let result = agent.chat("hello").await;
+        assert!(result.is_ok(), "should succeed on retry: {:?}", result);
+        assert_eq!(result.unwrap(), "retry ok");
+        assert_eq!(call_count.load(Ordering::SeqCst), 2, "provider should be called twice");
     }
 }
