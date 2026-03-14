@@ -53,6 +53,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "adversarial_testing_demo"
+version = "0.1.0"
+dependencies = [
+ "mofa-testing",
+ "serde_json",
+]
+
+[[package]]
 name = "aes"
 version = "0.8.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2620,12 +2628,12 @@ name = "hitl_workflow"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "axum 0.7.9",
+ "axum",
  "chrono",
  "clap",
  "mofa-foundation",
  "mofa-kernel",
- "reqwest 0.12.28",
+ "reqwest",
  "serde",
  "serde_json",
  "tokio",
@@ -3512,6 +3520,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "11d3d7f243d5c5a8b9bb5d6dd2b1602c0cb0b9db1621bafc7ed66e35ff9fe092"
 
 [[package]]
+name = "llm_fallback_chain"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "mofa-foundation",
+ "tokio",
+ "tracing",
+ "tracing-subscriber 0.3.22",
+]
+
+[[package]]
 name = "llm_tts_streaming"
 version = "0.1.0"
 dependencies = [
@@ -3844,7 +3863,7 @@ version = "0.1.0"
 dependencies = [
  "async-openai",
  "async-trait",
- "axum 0.7.9",
+ "axum",
  "base64 0.22.1",
  "chrono",
  "config 0.14.1",
@@ -4071,6 +4090,20 @@ dependencies = [
  "tokio",
  "tracing",
  "uuid",
+]
+
+[[package]]
+name = "mofa-testing"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "chrono",
+ "mofa-foundation",
+ "mofa-kernel",
+ "serde",
+ "serde_json",
+ "tokio",
 ]
 
 [[package]]

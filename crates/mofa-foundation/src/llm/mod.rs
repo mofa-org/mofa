@@ -339,7 +339,11 @@ pub use plugin::{LLMCapability, LLMPlugin, MockLLMProvider};
 pub use provider::{
     ChatStream, LLMConfig, LLMProvider, LLMRegistry, ModelCapabilities, ModelInfo, global_registry,
 };
-pub use fallback::{FallbackChain, FallbackChainBuilder, FallbackCondition, FallbackTrigger};
+pub use fallback::{
+    CircuitBreakerConfig, FallbackChain, FallbackChainBuilder, FallbackChainConfig,
+    FallbackCondition, FallbackConditionConfig, FallbackProviderConfig, FallbackSnapshot,
+    FallbackTrigger, FallbackTriggerConfig, ProviderSnapshot,
+};
 pub use retry::RetryExecutor;
 pub use stream_adapter::{GenericStreamAdapter, StreamAdapter, adapter_for_provider};
 pub use stream_bridge::{stream_error_to_llm_error, token_stream_to_events, token_stream_to_text};
