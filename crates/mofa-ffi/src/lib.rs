@@ -67,3 +67,10 @@ mod python_bindings;
 
 #[cfg(feature = "python")]
 pub use python_bindings::mofa;
+
+// =============================================================================
+// Thread Safety Tests
+// =============================================================================
+
+#[cfg(test)]
+mod test_thread_safety;
