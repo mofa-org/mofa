@@ -9,15 +9,16 @@ distributed tracing, and structured logging.
 
 ```mermaid
 graph TD
-    A[LLMAgent.chat_with_session] -->|Internal span| B[llm.agent.chat]
-    A --> C[ChatSession.send]
-    C -->|Client span| D[gen_ai.chat_completion]
+    A[LLMAgent.chat_with_session] -->|creates Internal span| B[span: llm.agent.chat\nagent.id  session.id]
+    B --> C[ChatSession.send]
+    C -->|creates Client span| D[span: gen_ai.chat_completion\ngen_ai.system  gen_ai.request.model]
     D --> E[LLM Provider API]
-    E -->|token usage| D
-    D -->|gen_ai.usage.*| F[OTel Exporter]
+    E -->|response + token usage| D
+    B -->|exported via global tracer| F[OTel Exporter]
+    D -->|exported via global tracer| F
     F --> G[Jaeger / OTLP Collector]
 
-    A -->|metrics| H[MetricsCollector]
+    A -->|token counts| H[MetricsCollector]
     H --> I[PrometheusExporter]
     I --> J[GET /metrics]
     J --> K[Prometheus / Grafana]
