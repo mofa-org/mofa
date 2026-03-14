@@ -44,7 +44,7 @@ toml = "0.8"
 config.workspace = true
 regex.workspace = true
 chrono.workspace = true
-cron = "0.12"
+cron.workspace = true
 
 [lints]
 workspace = true

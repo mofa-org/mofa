@@ -6,9 +6,10 @@
 use serde::{Deserialize, Serialize};
 
 /// Coordination pattern for a swarm of agents
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum CoordinationPattern {
+    #[default]
     Sequential,
     Parallel,
     Debate,
@@ -16,12 +17,6 @@ pub enum CoordinationPattern {
     MapReduce,
     Supervision,
     Routing,
-}
-
-impl Default for CoordinationPattern {
-    fn default() -> Self {
-        Self::Sequential
-    }
 }
 
 impl std::fmt::Display for CoordinationPattern {
@@ -47,7 +42,9 @@ impl CoordinationPattern {
             Self::Debate => "Agents argue opposing positions, a judge synthesizes a conclusion",
             Self::Consensus => "Agents propose and iteratively converge on agreement",
             Self::MapReduce => "Input split into chunks, processed in parallel, results aggregated",
-            Self::Supervision => "Supervisor monitors workers, reassigns failures, escalates to HITL",
+            Self::Supervision => {
+                "Supervisor monitors workers, reassigns failures, escalates to HITL"
+            }
             Self::Routing => "Router dispatches task to best matching specialist agent",
         }
     }

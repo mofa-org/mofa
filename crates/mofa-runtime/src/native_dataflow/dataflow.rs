@@ -22,9 +22,9 @@ use crate::native_dataflow::node::{NativeNode, NodeConfig};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
-use tokio::sync::{mpsc, Mutex, RwLock};
+use tokio::sync::{Mutex, RwLock, mpsc};
 use tokio::task::JoinHandle;
-use tracing::{error, info};
+use tracing::{error, info, warn};
 
 /// Configuration for a [`NativeDataflow`].
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -89,7 +89,7 @@ pub struct NativeDataflow {
     state: Arc<RwLock<DataflowState>>,
     nodes: Arc<RwLock<HashMap<String, Arc<NativeNode>>>>,
     connections: Arc<RwLock<Vec<NodeConnection>>>,
-    router_tx: mpsc::Sender<RouterMessage>,
+    router_tx: Mutex<Option<mpsc::Sender<RouterMessage>>>,
     router_rx: Mutex<Option<mpsc::Receiver<RouterMessage>>>,
     router_handle: Mutex<Option<JoinHandle<()>>>,
     forwarder_handles: Mutex<Vec<JoinHandle<()>>>,
@@ -104,7 +104,7 @@ impl NativeDataflow {
             state: Arc::new(RwLock::new(DataflowState::Created)),
             nodes: Arc::new(RwLock::new(HashMap::new())),
             connections: Arc::new(RwLock::new(Vec::new())),
-            router_tx,
+            router_tx: Mutex::new(Some(router_tx)),
             router_rx: Mutex::new(Some(router_rx)),
             router_handle: Mutex::new(None),
             forwarder_handles: Mutex::new(Vec::new()),
@@ -328,12 +328,11 @@ impl NativeDataflow {
                 for conn in conns.iter() {
                     if conn.source_node == msg.source_node
                         && conn.source_output == msg.source_output
+                        && let Some(target) = node_map.get(&conn.target_node)
                     {
-                        if let Some(target) = node_map.get(&conn.target_node) {
-                            let port = conn.target_input.clone();
-                            if let Err(e) = target.inject_raw(port, msg.data.clone()).await {
-                                error!("Router failed to deliver to '{}': {}", conn.target_node, e);
-                            }
+                        let port = conn.target_input.clone();
+                        if let Err(e) = target.inject_raw(port, msg.data.clone()).await {
+                            error!("Router failed to deliver to '{}': {}", conn.target_node, e);
                         }
                     }
                 }
@@ -377,7 +376,13 @@ impl NativeDataflow {
             node.register_output_channel(source_output.clone(), tx)
                 .await?;
 
-            let router_tx = self.router_tx.clone();
+            let router_tx = self
+                .router_tx
+                .lock()
+                .await
+                .as_ref()
+                .expect("router_tx already closed")
+                .clone();
             let source_node_id = source_node.clone();
             let source_output_id = source_output.clone();
 
@@ -459,10 +464,18 @@ impl NativeDataflow {
         Ok(())
     }
 
-    /// Stop all nodes and abort the router task.
+    /// Stop all nodes and drain the router before shutting down.
+    ///
+    /// Shutdown order:
+    /// 1. Stop all nodes (no new work produced).
+    /// 2. Abort forwarder tasks and drop their cloned senders.
+    /// 3. Drop our own sender so the router channel closes.
+    /// 4. Await the router task (with timeout) so it can deliver any
+    ///    remaining queued messages before exiting.
     pub async fn stop(&self) -> DataflowResult<()> {
         *self.state.write().await = DataflowState::Stopping;
 
+        // 1. Stop all nodes.
         {
             let nodes = self.nodes.read().await;
             for node in nodes.values() {
@@ -470,13 +483,29 @@ impl NativeDataflow {
             }
         }
 
-        if let Some(handle) = self.router_handle.lock().await.take() {
-            handle.abort();
-        }
+        // 2. Abort forwarders — their cloned senders are dropped.
         {
             let mut forwarders = self.forwarder_handles.lock().await;
             for handle in forwarders.drain(..) {
                 handle.abort();
+            }
+        }
+
+        // 3. Drop the last sender so the router channel closes.
+        {
+            self.router_tx.lock().await.take();
+        }
+
+        // 4. Wait for the router to drain remaining messages.
+        if let Some(handle) = self.router_handle.lock().await.take() {
+            match tokio::time::timeout(std::time::Duration::from_secs(5), handle).await {
+                Ok(_) => {}
+                Err(_) => {
+                    warn!(
+                        "Dataflow '{}': router did not drain within 5s timeout",
+                        self.config.dataflow_id
+                    );
+                }
             }
         }
 

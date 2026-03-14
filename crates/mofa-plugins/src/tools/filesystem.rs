@@ -144,9 +144,15 @@ impl ToolExecutor for FileSystemTool {
             "read" => {
                 let content = fs::read_to_string(path).await?;
                 let truncated = if content.len() > 10000 {
+                    // Find the last valid char boundary at or before 10000
+                    // to avoid panicking on multi-byte UTF-8 characters.
+                    let mut end = 10000;
+                    while !content.is_char_boundary(end) {
+                        end -= 1;
+                    }
                     format!(
                         "{}... [truncated, total {} bytes]",
-                        &content[..10000],
+                        &content[..end],
                         content.len()
                     )
                 } else {
