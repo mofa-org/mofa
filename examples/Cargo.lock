@@ -2616,18 +2616,22 @@ dependencies = [
 ]
 
 [[package]]
-name = "hitl_v2"
+name = "hitl_workflow"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "axum 0.7.9",
+ "chrono",
  "clap",
  "mofa-foundation",
  "mofa-kernel",
+ "reqwest 0.12.28",
  "serde",
  "serde_json",
  "tokio",
  "tracing",
  "tracing-subscriber 0.3.22",
+ "uuid",
 ]
 
 [[package]]
@@ -3847,12 +3851,14 @@ version = "0.1.0"
 dependencies = [
  "async-openai",
  "async-trait",
+ "axum 0.7.9",
  "base64 0.22.1",
  "chrono",
  "config 0.14.1",
  "cron",
  "error-stack",
  "futures",
+ "hex",
  "infer",
  "jsonschema",
  "lazy_static",
@@ -3860,6 +3866,7 @@ dependencies = [
  "mofa-kernel",
  "mofa-plugins",
  "once_cell",
+ "parking_lot",
  "petgraph 0.7.1",
  "qdrant-client",
  "ractor",
@@ -3943,6 +3950,7 @@ dependencies = [
  "async-trait",
  "base64 0.22.1",
  "bincode 1.3.3",
+ "chrono",
  "config 0.14.1",
  "error-stack",
  "futures",

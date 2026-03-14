@@ -71,11 +71,7 @@ impl RequestEnvelope {
     ///
     /// `route_id` is typically empty at construction time and filled in by
     /// the routing middleware once a matching route has been found.
-    pub fn new(
-        route_id: impl Into<String>,
-        payload: serde_json::Value,
-        origin_ip: IpAddr,
-    ) -> Self {
+    pub fn new(route_id: impl Into<String>, payload: serde_json::Value, origin_ip: IpAddr) -> Self {
         Self {
             correlation_id: Uuid::new_v4().to_string(),
             route_id: route_id.into(),
@@ -101,9 +97,7 @@ impl RequestEnvelope {
 
     /// Returns `true` if a deadline is set and has already passed.
     pub fn is_expired(&self) -> bool {
-        self.deadline
-            .map(|d| Instant::now() > d)
-            .unwrap_or(false)
+        self.deadline.map(|d| Instant::now() > d).unwrap_or(false)
     }
 
     /// Return the deadline as milliseconds since UNIX epoch, suitable for
@@ -111,7 +105,8 @@ impl RequestEnvelope {
     pub fn deadline_unix_ms(&self) -> Option<u64> {
         self.deadline.map(|d| {
             let remaining = d.saturating_duration_since(Instant::now());
-            now_ms().saturating_add(remaining.as_millis() as u64)
+            let remaining_ms = u64::try_from(remaining.as_millis()).unwrap_or(u64::MAX);
+            now_ms().saturating_add(remaining_ms)
         })
     }
 }
@@ -182,10 +177,13 @@ impl AgentResponse {
 
 /// Current wall-clock time as milliseconds since UNIX epoch.
 fn now_ms() -> u64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_millis() as u64
+    u64::try_from(
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_millis(),
+    )
+    .unwrap_or(u64::MAX)
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -230,10 +228,7 @@ mod tests {
             env.headers.get("content-type"),
             Some(&"application/json".to_string())
         );
-        assert_eq!(
-            env.headers.get("x-api-key"),
-            Some(&"secret".to_string())
-        );
+        assert_eq!(env.headers.get("x-api-key"), Some(&"secret".to_string()));
     }
 
     #[test]
@@ -324,5 +319,16 @@ mod tests {
         assert!(json.contains("latency_ms"));
         assert!(json.contains("agent_id"));
         assert!(json.contains("correlation_id"));
+    }
+
+    #[test]
+    fn now_ms_uses_safe_conversion() {
+        // Verify the module-local now_ms() returns a sane value (i.e. the
+        // u128→u64 try_from path works in practice).
+        let ms = super::now_ms();
+        assert!(
+            ms > 1_577_836_800_000,
+            "now_ms() = {ms}, expected > 2020-01-01 epoch millis"
+        );
     }
 }

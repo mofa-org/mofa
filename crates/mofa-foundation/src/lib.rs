@@ -56,6 +56,8 @@ pub mod collaboration;
 // RAG module - vector store and document chunking
 pub mod rag;
 
+// HITL module - Human-in-the-Loop system
+pub mod hitl;
 // cost module - concrete pricing registry and budget enforcer implementations
 pub mod cost;
 
