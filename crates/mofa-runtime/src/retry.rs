@@ -31,7 +31,10 @@ impl RetryPolicy {
         let ms = match self {
             RetryPolicy::Fixed { delay_ms } => *delay_ms,
             RetryPolicy::Linear { base_ms } => {
-                let factor = u64::try_from(attempt + 1).unwrap_or(u64::MAX);
+                let factor = attempt
+                    .checked_add(1)
+                    .and_then(|v| u64::try_from(v).ok())
+                    .unwrap_or(u64::MAX);
                 base_ms
                     .saturating_mul(factor)
                     .min(MAX_LINEAR_BACKOFF_MS)
