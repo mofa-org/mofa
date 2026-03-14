@@ -1,4 +1,12 @@
 //! Gateway server entrypoint — builds the axum Router and binds to a TCP port.
+//!
+//! # Routes
+//!
+//! | Method | Path | Description |
+//! |--------|------|-------------|
+//! | `POST` | `/v1/chat/completions` | OpenAI-compatible chat (JSON or SSE with `"stream":true`) |
+//! | `GET`  | `/v1/models` | List available models |
+//! | `GET`  | `/ws/v1/chat/completions` | WebSocket streaming (same semantics as SSE, supports mid-stream cancellation) |
 
 use std::net::SocketAddr;
 use std::sync::Arc;

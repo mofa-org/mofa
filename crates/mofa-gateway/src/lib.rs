@@ -89,8 +89,14 @@ pub mod openai_compat;
 
 /// Unified streaming abstractions (SSE + WebSocket) for gateway handlers.
 ///
-/// Use [`streaming::SseBuilder`] to convert any [`mofa_kernel::llm::streaming::BoxTokenStream`]
-/// into an OpenAI-compatible SSE response from any handler.
+/// # Modules
+///
+/// - [`streaming::SseBuilder`] — converts any [`mofa_kernel::llm::streaming::BoxTokenStream`]
+///   into an OpenAI-compatible SSE response (`role` → content chunks → stop → `[DONE]`).
+/// - [`streaming::proxy`] — SSE-aware HTTP proxy passthrough; streams `text/event-stream`
+///   responses without buffering and strips hop-by-hop headers.
+/// - [`streaming::ws`] — `GET /ws/v1/chat/completions` WebSocket endpoint with
+///   mid-stream cancellation support.
 #[cfg(feature = "openai-compat")]
 pub mod streaming;
 
