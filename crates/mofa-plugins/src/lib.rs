@@ -28,6 +28,7 @@ use std::any::Any;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
+use tokio::time::{timeout,Duration};
 use tracing::{debug, error, info, warn};
 // ============================================================================
 // LLM 插件
@@ -1105,6 +1106,9 @@ pub struct PluginManager {
     /// 事件发送器（用于克隆给插件）
     /// Event sender (for cloning to plugins)
     event_tx: tokio::sync::mpsc::Sender<PluginEvent>,
+    //Configurable shutdown timeout : utilized in stopping and unloading plugins 
+
+    shutdown_timeout_secs:u64,
 }
 
 impl PluginManager {
@@ -1119,6 +1123,7 @@ impl PluginManager {
             context,
             event_rx: Some(event_rx),
             event_tx,
+            shutdown_timeout_secs: 5,
         }
     }
 
@@ -1165,11 +1170,21 @@ impl PluginManager {
     /// Unregister plugin
     pub async fn unregister(&self, plugin_id: &str) -> PluginResult<()> {
         let mut plugins = self.plugins.write().await;
+        let shutdown_timeout = Duration::from_secs(self.shutdown_timeout_secs);
         if let Some(mut entry) = plugins.remove(plugin_id) {
-            entry.plugin.unload().await?;
+            //stop->unload 
+            if let Err(_)= timeout(shutdown_timeout,entry.plugin.stop()).await{
+                error!("Plugin {} stop () timed out",plugin_id);
+
+            }
+
+            // unload
+            if let Err(_) = timeout(shutdown_timeout, entry.plugin.unload()).await {
+                error!("Plugin {} unload() timed out", plugin_id);
+            }            
             info!("Plugin {} unregistered", plugin_id);
-        }
-        Ok(())
+                }
+            Ok(())
     }
 
     /// 获取插件
@@ -1276,8 +1291,9 @@ impl PluginManager {
     /// Stop all plugins
     pub async fn stop_all(&self) -> PluginResult<()> {
         let mut plugins = self.plugins.write().await;
+        let shutdown_timeout = Duration::from_secs(self.shutdown_timeout_secs);
         for (id, entry) in plugins.iter_mut() {
-            if let Err(e) = entry.plugin.stop().await {
+            if let Err(e) = timeout(shutdown_timeout,entry.plugin.stop()).await {
                 warn!("Failed to stop plugin {}: {}", id, e);
             }
         }
@@ -1289,8 +1305,9 @@ impl PluginManager {
     /// Unload all plugins
     pub async fn unload_all(&self) -> PluginResult<()> {
         let mut plugins = self.plugins.write().await;
+        let shutdown_timeout = Duration::from_secs(self.shutdown_timeout_secs);
         for (id, entry) in plugins.iter_mut() {
-            if let Err(e) = entry.plugin.unload().await {
+            if let Err(e) = timeout(shutdown_timeout,entry.plugin.unload()).await {
                 warn!("Failed to unload plugin {}: {}", id, e);
             }
         }
@@ -1349,6 +1366,13 @@ impl PluginManager {
     /// Take event receiver
     pub fn take_event_receiver(&mut self) -> Option<tokio::sync::mpsc::Receiver<PluginEvent>> {
         self.event_rx.take()
+    }
+
+
+    /// Set Shutdown Timeout in runtime 
+    pub fn set_shutdown_timeout(&mut self,secs:u64){
+        self.shutdown_timeout_secs=secs;
+
     }
 }
 
