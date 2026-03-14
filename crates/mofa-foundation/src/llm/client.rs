@@ -1024,7 +1024,7 @@ impl ChatSession {
     ///
     /// On summarization failure, a warning is logged and the original history is
     /// kept — the user's request is never dropped.
-    async fn compress_history_if_needed(&mut self) {
+    pub(crate) async fn compress_history_if_needed(&mut self) {
         let trigger = self.summarize_trigger_tokens;
         if trigger == 0 {
             return;
@@ -1393,6 +1393,11 @@ impl ChatSession {
     /// Get context window size (rounds)
     pub fn context_window_size(&self) -> Option<usize> {
         self.context_window_size
+    }
+
+    /// Returns true when a token-budget manager is wired into this session.
+    pub(crate) fn has_token_budget(&self) -> bool {
+        self.context_window_manager.is_some() && self.summarize_trigger_tokens > 0
     }
 
     /// 获取最后一次 LLM 响应的元数据

@@ -2115,7 +2115,6 @@ impl LLMAgent {
         session_id: &str,
         message: impl Into<String>,
     ) -> LLMResult<TextStream> {
-        // TODO: token budget not applied to streaming path
         let message = message.into();
 
         // 获取模型名称
@@ -2137,11 +2136,51 @@ impl LLMAgent {
         // Retrieve the session
         let session = self.get_session_arc(session_id).await?;
 
-        // 获取当前历史
-        // Retrieve current history
-        let history = {
-            let session_guard = session.read().await;
-            session_guard.messages().to_vec()
+        // ---- Budget enforcement (lazy registration + pre-call check) ----
+        if let Some(ref enforcer) = self.budget_enforcer {
+            if !self.budget_registered.load(std::sync::atomic::Ordering::Acquire) {
+                if let Some(ref tbc) = self.config.token_budget_config
+                    && let Some(ref bc) = tbc.budget
+                {
+                    enforcer.set_budget(self.config.agent_id.clone(), bc.clone()).await;
+                }
+                self.budget_registered
+                    .store(true, std::sync::atomic::Ordering::Release);
+            }
+            match enforcer.check_budget(&self.config.agent_id).await {
+                Ok(()) => {}
+                Err(budget_err) => {
+                    let halt = self
+                        .config
+                        .token_budget_config
+                        .as_ref()
+                        .map(|tbc| tbc.halt_on_budget_exceeded)
+                        .unwrap_or(true);
+                    if halt {
+                        return Err(LLMError::Other(format!("Budget exceeded: {}", budget_err)));
+                    }
+                }
+            }
+        }
+
+        // ---- Token-budget pre-send compression ----
+        // Push user message into the session, run compress_history_if_needed (which
+        // trims old messages while keeping the user msg at the tail), then snapshot
+        // the full (possibly compressed) history — user message included.
+        // This avoids a second push after the stream starts.
+        let (history, user_pushed) = {
+            let needs_budget = session.read().await.has_token_budget();
+            if needs_budget {
+                let mut guard = session.write().await;
+                guard
+                    .messages_mut()
+                    .push(ChatMessage::user(&processed_message));
+                guard.compress_history_if_needed().await;
+                // After compression the user message is still at the end
+                (guard.messages().to_vec(), true)
+            } else {
+                (session.read().await.messages().to_vec(), false)
+            }
         };
 
         // 构建请求
@@ -2160,29 +2199,41 @@ impl LLMAgent {
             builder = builder.max_tokens(tokens);
         }
 
-        // 添加历史消息
-        // Add history messages
-        builder = builder.messages(history);
-        builder = builder.user(processed_message.clone());
+        if user_pushed {
+            // History already contains the user message at the end
+            builder = builder.messages(history);
+        } else {
+            // 添加历史消息 + 当前用户消息
+            // Add history messages + current user message
+            builder = builder.messages(history);
+            builder = builder.user(processed_message.clone());
+        }
 
         // 发送流式请求
         // Send a streaming request
         let chunk_stream = builder.send_stream().await?;
 
-        // 在流式处理前，先添加用户消息到历史
-        // Add user message to history before stream processing
-        {
+        // 在流式处理前，先添加用户消息到历史（仅当尚未通过压缩路径添加时）
+        // Add user message to history before stream processing (only if not already added via compression)
+        if !user_pushed {
             let mut session_guard = session.write().await;
             session_guard
                 .messages_mut()
                 .push(ChatMessage::user(&processed_message));
         }
 
-        // 创建一个包装流，在完成时更新历史并调用事件处理
-        // Create a wrapped stream to update history and call events on completion
+        // 创建一个包装流，在完成时更新历史、记录用量并调用事件处理
+        // Create a wrapped stream to update history, record usage, and call events on completion
         let event_handler = self.event_handler.clone().map(Arc::new);
-        let wrapped_stream =
-            Self::create_history_updating_stream(chunk_stream, session, event_handler);
+        let budget_enforcer = self.budget_enforcer.clone();
+        let agent_id = self.config.agent_id.clone();
+        let wrapped_stream = Self::create_history_updating_stream(
+            chunk_stream,
+            session,
+            event_handler,
+            budget_enforcer,
+            agent_id,
+        );
 
         Ok(wrapped_stream)
     }
@@ -2371,6 +2422,8 @@ impl LLMAgent {
         chunk_stream: ChatStream,
         session: Arc<RwLock<ChatSession>>,
         event_handler: Option<Arc<Box<dyn LLMAgentEventHandler>>>,
+        budget_enforcer: Option<Arc<crate::cost::BudgetEnforcer>>,
+        agent_id: String,
     ) -> TextStream {
         use super::types::LLMResponseMetadata;
 
@@ -2434,6 +2487,15 @@ impl LLMAgent {
                             &current_messages,
                             window_size,
                         );
+                    }
+
+                    // Record token usage for budget enforcement
+                    if let Some(ref enforcer) = budget_enforcer {
+                        let total_tokens = metadata
+                            .as_ref()
+                            .map(|m| u64::from(m.total_tokens))
+                            .unwrap_or(0);
+                        enforcer.record_usage(&agent_id, 0.0, total_tokens).await;
                     }
 
                     if let Some(handler) = event_handler_clone {
