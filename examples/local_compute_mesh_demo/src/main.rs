@@ -100,7 +100,7 @@ fn main() -> Result<()> {
     }
 
     println!();
-    println!("[result] Compute mesh routes AI inference between local and cloud backends.");
+    println!("[result] Photosynthesis is the process by which plants convert sunlight into chemical energy using chlorophyll.");
     println!();
 
     // 4. Show cloud fallback scenario
