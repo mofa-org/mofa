@@ -246,6 +246,181 @@ if tokens > 4000 {
 }
 ```
 
+---
+
+## Token Budget — Auto-Summarization & Graceful Halt
+
+For long-running agents (multi-turn dialogue, ReAct loops, secretary workflows), conversation history grows over time and will eventually hit the provider's context limit. The token budget system handles this automatically:
+
+- **Auto-compression** — trims or summarizes old history before each request when the context window approaches its limit
+- **Budget enforcement** — hard token/cost caps per agent session or per day
+- **`ContextLengthExceeded` recovery** — automatically compresses and retries once instead of crashing
+
+### Quick Start
+
+```rust
+use mofa_foundation::llm::{LLMAgentBuilder, TokenBudgetConfig};
+use mofa_kernel::budget::BudgetConfig;
+
+let agent = LLMAgentBuilder::from_env()?
+    .with_id("my-agent")
+    .with_token_budget_config(TokenBudgetConfig {
+        context_window_tokens: 8192,        // your provider's context limit
+        auto_summarize_threshold: 0.8,      // compress when 80% full
+        keep_recent_on_summarize: 4,        // always keep last 4 messages
+        use_llm_summarize: true,            // LLM summary (false = sliding window)
+        halt_on_budget_exceeded: true,
+        budget: Some(
+            BudgetConfig::default()
+                .with_max_tokens_per_session(50_000)?
+        ),
+    })?
+    .build();
+
+// Works exactly like a normal agent — budget management is transparent
+let response = agent.chat("Hello!").await?;
+```
+
+### `TokenBudgetConfig` Fields
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `context_window_tokens` | `usize` | `8192` | Provider's context window size in tokens |
+| `auto_summarize_threshold` | `f64` | `0.8` | Fraction of window at which compression triggers (0.0–1.0) |
+| `keep_recent_on_summarize` | `usize` | `4` | Number of recent messages always preserved during compression |
+| `use_llm_summarize` | `bool` | `true` | `true` = LLM produces a summary; `false` = sliding-window trim |
+| `halt_on_budget_exceeded` | `bool` | `true` | Return an error when budget is exceeded (false = log and proceed) |
+| `budget` | `Option<BudgetConfig>` | `None` | Token/cost limits (see Budget Enforcement below) |
+
+### Convenience Constructors
+
+```rust
+// Sliding window only — no LLM summary, no budget limits
+let config = TokenBudgetConfig::sliding_window_only(8192);
+
+// Default — LLM summarization at 80%, no hard budget limits
+let config = TokenBudgetConfig::default();
+```
+
+### How Compression Works
+
+```mermaid
+flowchart TD
+    A([Before each request]) --> B[Estimate tokens\nsystem + history + user msg]
+    B --> C{estimated < threshold?}
+    C -- Yes --> D([Send as-is\nfast path])
+    C -- No --> E{use_llm_summarize?}
+
+    E -- true --> F[LLM.chat summary prompt]
+    F --> G{Success?}
+    G -- Yes --> H([history = assistant summary + user msg])
+    G -- No --> I([warn + keep original\nnever blocks request])
+
+    E -- false --> J([ContextWindowManager.apply\ndrop oldest, keep last N messages])
+```
+
+> **Note:** Compression failure never blocks the request. If the summarization LLM call fails, the original history is kept and a warning is logged.
+
+### `ContextLengthExceeded` Auto-Recovery
+
+If the provider still returns `ContextLengthExceeded` (e.g. the history was too large before the threshold triggered), the agent performs one automatic recovery attempt:
+
+```mermaid
+flowchart TD
+    A([ContextLengthExceeded]) --> B[force_compress\npop current user message]
+    B --> C[Compress history to 50% of context window]
+    C --> D[Push user message back]
+    D --> E[send_existing_messages retry once]
+    E --> F{Success?}
+    F -- Yes --> G([Return response])
+    F -- No --> H([Propagate ContextLengthExceeded])
+```
+
+Only one retry is attempted. If the retry also fails, the error propagates normally.
+
+### Budget Enforcement
+
+Use `BudgetConfig` to set hard limits on token usage per session or per day:
+
+```rust
+use mofa_kernel::budget::BudgetConfig;
+
+// Session token limit only
+let budget = BudgetConfig::default()
+    .with_max_tokens_per_session(50_000)?;
+
+// Session + daily cost limit
+let budget = BudgetConfig::default()
+    .with_max_tokens_per_session(50_000)?
+    .with_max_cost_per_day(5.0)?;       // $5 USD/day
+```
+
+When `halt_on_budget_exceeded = true` (default), any call after the limit is reached returns:
+
+```
+Err(LLMError::Other("Budget exceeded: SessionTokensExceeded { used: 50001, limit: 50000 }"))
+```
+
+Set `halt_on_budget_exceeded = false` to log the violation and proceed anyway (useful for non-critical agents).
+
+> **Note on cost tracking:** Token limits work fully. Cost limits require pricing data — record actual costs via a custom `LLMAgentEventHandler::after_chat_with_metadata` implementation.
+
+### Streaming Support
+
+The token budget is applied identically across all call paths:
+
+| Method | Budget Check | Compression | Usage Recording |
+|--------|-------------|-------------|-----------------|
+| `chat()` / `chat_with_session()` | Yes | Yes — before send | Yes — after response |
+| `chat_stream()` / `chat_stream_with_session()` | Yes | Yes — before stream | Yes — in stream completion |
+| `chat_stream_with_full()` / `chat_stream_with_full_session()` | Yes | Yes — before stream | Yes — in stream completion |
+| `ask()` / `ask_stream()` | No | No | No |
+
+> `ask()` and `ask_stream()` are stateless single-shot methods with no session history — compression does not apply.
+
+### Async vs Sync Construction
+
+`LLMAgentBuilder::build()` (sync) and `build_async()` handle budget registration differently:
+
+```rust
+// build_async() — registers budget immediately, ready on first call
+let agent = LLMAgentBuilder::from_env()?
+    .with_token_budget_config(config)?
+    .build_async()
+    .await;
+
+// build() — budget registration is deferred to the first chat() call
+// (transparent to the caller, uses AtomicBool flag internally)
+let agent = LLMAgentBuilder::from_env()?
+    .with_token_budget_config(config)?
+    .build();
+```
+
+Both behave identically from the caller's perspective.
+
+### Request Flow Diagram
+
+```mermaid
+flowchart TD
+    A([chat_with_session]) --> B[1 Lazy budget registration\nAtomicBool first call only]
+    B --> C[2 check_budget]
+    C --> D{Exceeded?}
+    D -- Yes, halt=true --> E([Return Err Budget exceeded])
+    D -- No or halt=false --> F[3 session.send message\ncompress_history_if_needed]
+    F --> G{LLM call result}
+    G -- Success --> H[5 record_usage]
+    H --> I[6 after_chat hook]
+    I --> J([Return response])
+    G -- ContextLengthExceeded --> K[4 force_compress\ncompress to 50% window]
+    K --> L[send_existing_messages\nretry once]
+    L --> M{Retry result}
+    M -- Success --> H
+    M -- Failed --> N([Propagate error])
+    G -- Other error --> N
+```
+
+---
+
 ## See Also
 
 - [LLM Setup](../getting-started/llm-setup.md) — Initial configuration
