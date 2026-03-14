@@ -64,7 +64,11 @@ impl ScheduleEntry {
     /// Convert to a monitoring snapshot.
     fn to_info(&self, clock: &dyn Clock) -> ScheduleInfo {
         let last_run_raw = self.last_run_ms.load(Ordering::Relaxed);
-        let last_run = if last_run_raw == 0 { None } else { Some(last_run_raw) };
+        let last_run = if last_run_raw == 0 {
+            None
+        } else {
+            Some(last_run_raw)
+        };
         ScheduleInfo::new(
             self.definition.schedule_id.clone(),
             self.definition.agent_id.clone(),
@@ -309,7 +313,7 @@ impl CronScheduler {
 
         tokio::spawn(async move {
             let mut timing = if let Some(cron_expr) = &cron_expression {
-                ScheduleTiming::Cron(cron_expr.parse().unwrap())
+                ScheduleTiming::Cron(Box::new(cron_expr.parse().unwrap()))
             } else if let Some(ms) = interval_ms {
                 ScheduleTiming::Interval(interval(Duration::from_millis(ms)))
             } else {
@@ -408,7 +412,7 @@ impl CronScheduler {
 
 enum ScheduleTiming {
     Interval(tokio::time::Interval),
-    Cron(Schedule),
+    Cron(Box<Schedule>),
 }
 
 impl ScheduleTiming {
@@ -440,6 +444,7 @@ impl ScheduleTiming {
 
 #[cfg(test)]
 mod tests {
+    use std::mem::size_of;
     use std::sync::Arc;
     use std::sync::atomic::Ordering;
     use tokio::sync::Semaphore;
@@ -585,5 +590,20 @@ mod tests {
         // Paused: no next_run_ms.
         entry.paused.store(true, Ordering::Release);
         assert_eq!(entry.to_info(&clock).next_run_ms, None);
+    }
+
+    #[test]
+    fn test_schedule_timing_uses_boxed_cron_variant() {
+        enum UnboxedScheduleTiming {
+            Interval(tokio::time::Interval),
+            Cron(Schedule),
+        }
+
+        // Regression guard: boxed Cron variant should keep enum size smaller
+        // than an equivalent unboxed representation.
+        assert!(
+            size_of::<ScheduleTiming>() < size_of::<UnboxedScheduleTiming>(),
+            "ScheduleTiming should be smaller with boxed Cron variant"
+        );
     }
 }
