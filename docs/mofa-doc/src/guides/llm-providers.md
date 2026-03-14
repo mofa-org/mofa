@@ -247,10 +247,12 @@ stateDiagram-v2
 
     Closed --> Closed : success → reset failures = 0
     Closed --> Closed : failure < threshold → failures++
-    Closed --> Open : failures >= threshold → open_until = now + cooldown
+    Closed --> Open : failures >= threshold\nopen_until = now + cooldown
 
-    Open --> Open : request arrives before cooldown expires → skip provider
-    Open --> Closed : successful call after cooldown → reset failures = 0
+    Open --> Open : now < open_until → skip provider
+    Open --> HalfOpen : now >= open_until → allow one attempt
+    HalfOpen --> Closed : success → reset failures = 0
+    HalfOpen --> Open : failure → reopen circuit
 ```
 
 ### Code Usage
