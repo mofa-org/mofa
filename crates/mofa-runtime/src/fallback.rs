@@ -1,5 +1,7 @@
 //! Graceful degradation strategies invoked after retries are exhausted.
 
+use std::sync::Arc;
+
 use async_trait::async_trait;
 use mofa_kernel::agent::{error::AgentError, types::AgentOutput};
 
@@ -12,18 +14,18 @@ pub trait FallbackStrategy: Send + Sync {
         agent_id: &str,
         error: &AgentError,
         attempt_count: usize,
-    ) -> Option<AgentOutput>;
+    ) -> Option<Arc<AgentOutput>>;
 }
 
 /// Returns a fixed static output useful for "service unavailable" placeholders.
 pub struct StaticFallback {
-    pub output: AgentOutput,
+    pub output: Arc<AgentOutput>,
 }
 
 #[async_trait]
 impl FallbackStrategy for StaticFallback {
-    async fn on_failure(&self, _: &str, _: &AgentError, _: usize) -> Option<AgentOutput> {
-        Some(self.output.clone())
+    async fn on_failure(&self, _: &str, _: &AgentError, _: usize) -> Option<Arc<AgentOutput>> {
+        Some(Arc::clone(&self.output))
     }
 }
 
@@ -32,7 +34,7 @@ pub struct NoFallback;
 
 #[async_trait]
 impl FallbackStrategy for NoFallback {
-    async fn on_failure(&self, _: &str, _: &AgentError, _: usize) -> Option<AgentOutput> {
+    async fn on_failure(&self, _: &str, _: &AgentError, _: usize) -> Option<Arc<AgentOutput>> {
         None
     }
 }
