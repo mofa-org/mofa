@@ -1116,6 +1116,7 @@ dependencies = [
  "matchit 0.7.3",
  "memchr",
  "mime",
+ "multer",
  "percent-encoding",
  "pin-project-lite",
  "rustversion",
@@ -5919,6 +5920,8 @@ dependencies = [
  "futures",
  "hyper 1.8.1",
  "hyper-util",
+ "mime_guess",
+ "mofa-integrations",
  "mofa-foundation",
  "mofa-kernel",
  "mofa-monitoring",
@@ -5935,6 +5938,7 @@ dependencies = [
  "rocksdb",
  "serde",
  "serde_json",
+ "socketioxide",
  "subtle",
  "tempfile",
  "thiserror 1.0.69",
@@ -5958,6 +5962,7 @@ dependencies = [
  "aws-sdk-s3",
  "axum",
  "bincode 1.3.3",
+ "chrono",
  "futures",
  "hex",
  "mofa-kernel",
@@ -6157,6 +6162,23 @@ dependencies = [
  "serde",
  "serde_json",
  "tokio",
+]
+
+[[package]]
+name = "multer"
+version = "3.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "83e87776546dc87511aa5ee218730c92b666d7264ab6ed41f9d215af9cd5224b"
+dependencies = [
+ "bytes",
+ "encoding_rs",
+ "futures-util",
+ "http 1.4.0",
+ "httparse",
+ "memchr",
+ "mime",
+ "spin 0.9.8",
+ "version_check",
 ]
 
 [[package]]
