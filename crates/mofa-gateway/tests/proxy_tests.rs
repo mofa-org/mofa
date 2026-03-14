@@ -9,19 +9,16 @@ fn test_proxy_backend_new() {
     assert_eq!(backend.name, "test-backend");
     assert_eq!(backend.base_url, "http://localhost:8000");
     assert_eq!(backend.timeout, Duration::from_secs(60));
-    assert_eq!(backend.retries, 3);
 }
 
 #[test]
 fn test_proxy_backend_with_options() {
     let backend = ProxyBackend::new("test", "http://localhost:8000")
         .with_health_check("/health")
-        .with_timeout(Duration::from_secs(30))
-        .with_retries(5);
+        .with_timeout(Duration::from_secs(30));
 
     assert_eq!(backend.health_check_endpoint, Some("/health".to_string()));
     assert_eq!(backend.timeout, Duration::from_secs(30));
-    assert_eq!(backend.retries, 5);
 }
 
 #[test]

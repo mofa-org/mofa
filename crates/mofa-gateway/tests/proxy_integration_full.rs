@@ -24,15 +24,11 @@ async fn create_test_gateway(local_llm_url: &str) -> Gateway {
     Gateway::new(config).await.expect("Failed to create gateway")
 }
 
+/// Run with `cargo test -p mofa-gateway -- --ignored` against a live mofa-local-llm server.
 #[tokio::test]
+#[ignore = "requires mofa-local-llm server on localhost:8000"]
 async fn test_proxy_models_list_success() {
-    // This test requires mofa-local-llm server running on localhost:8000
-    // Skip if not available
     let client = reqwest::Client::new();
-    if client.get("http://localhost:8000/health").send().await.is_err() {
-        eprintln!("Skipping test: mofa-local-llm server not running");
-        return;
-    }
 
     let mut gateway = create_test_gateway("http://localhost:8000").await;
     gateway.start().await.expect("Failed to start gateway");
@@ -60,14 +56,11 @@ async fn test_proxy_models_list_success() {
     gateway.stop().await.expect("Failed to stop gateway");
 }
 
+/// Run with `cargo test -p mofa-gateway -- --ignored` against a live mofa-local-llm server.
 #[tokio::test]
+#[ignore = "requires mofa-local-llm server on localhost:8000"]
 async fn test_proxy_model_info_success() {
-    // Skip if backend not available
     let client = reqwest::Client::new();
-    if client.get("http://localhost:8000/health").send().await.is_err() {
-        eprintln!("Skipping test: mofa-local-llm server not running");
-        return;
-    }
 
     let mut gateway = create_test_gateway("http://localhost:8000").await;
     gateway.start().await.expect("Failed to start gateway");
@@ -93,14 +86,11 @@ async fn test_proxy_model_info_success() {
     gateway.stop().await.expect("Failed to stop gateway");
 }
 
+/// Run with `cargo test -p mofa-gateway -- --ignored` against a live mofa-local-llm server.
 #[tokio::test]
+#[ignore = "requires mofa-local-llm server on localhost:8000"]
 async fn test_proxy_chat_completions_success() {
-    // Skip if backend not available
     let client = reqwest::Client::new();
-    if client.get("http://localhost:8000/health").send().await.is_err() {
-        eprintln!("Skipping test: mofa-local-llm server not running");
-        return;
-    }
 
     let mut gateway = create_test_gateway("http://localhost:8000").await;
     gateway.start().await.expect("Failed to start gateway");
@@ -182,14 +172,11 @@ async fn test_proxy_timeout() {
     // Gateway was created successfully - test passes
 }
 
+/// Run with `cargo test -p mofa-gateway -- --ignored` against a live mofa-local-llm server.
 #[tokio::test]
+#[ignore = "requires mofa-local-llm server on localhost:8000"]
 async fn test_health_check_integration() {
-    // Skip if backend not available
     let client = reqwest::Client::new();
-    if client.get("http://localhost:8000/health").send().await.is_err() {
-        eprintln!("Skipping test: mofa-local-llm server not running");
-        return;
-    }
 
     let mut gateway = create_test_gateway("http://localhost:8000").await;
     gateway.start().await.expect("Failed to start gateway");
@@ -259,14 +246,11 @@ async fn test_circuit_breaker_opens_on_failures() {
     gateway.stop().await.expect("Failed to stop gateway");
 }
 
+/// Run with `cargo test -p mofa-gateway -- --ignored` against a live mofa-local-llm server.
 #[tokio::test]
+#[ignore = "requires mofa-local-llm server on localhost:8000"]
 async fn test_concurrent_requests() {
-    // Skip if backend not available
     let client = reqwest::Client::new();
-    if client.get("http://localhost:8000/health").send().await.is_err() {
-        eprintln!("Skipping test: mofa-local-llm server not running");
-        return;
-    }
 
     let mut gateway = create_test_gateway("http://localhost:8000").await;
     gateway.start().await.expect("Failed to start gateway");
