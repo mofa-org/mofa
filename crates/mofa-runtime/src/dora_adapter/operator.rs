@@ -334,11 +334,13 @@ impl Default for OperatorChain {
 #[cfg(test)]
 mod tests {
     use super::{MoFAOperator, OperatorChain, OperatorInput, PluginOperatorAdapter};
-    use mofa_plugins::LLMPlugin;
+    use mofa_foundation::llm::plugin::{LLMPlugin, MockLLMProvider};
+    use std::sync::Arc;
 
     #[tokio::test]
     async fn test_plugin_operator_adapter() {
-        let plugin = Box::new(LLMPlugin::new("test_llm"));
+        let provider = Arc::new(MockLLMProvider::new("test_provider"));
+        let plugin = Box::new(LLMPlugin::new("test_llm", provider));
         let mut adapter = PluginOperatorAdapter::new("test_op".to_string(), plugin);
 
         adapter.init_operator().await.unwrap();
@@ -353,7 +355,8 @@ mod tests {
     async fn test_operator_chain() {
         let mut chain = OperatorChain::new();
 
-        let plugin1 = Box::new(LLMPlugin::new("llm1"));
+        let provider = Arc::new(MockLLMProvider::new("test_provider2"));
+        let plugin1 = Box::new(LLMPlugin::new("llm1", provider));
         let adapter1 = PluginOperatorAdapter::new("op1".to_string(), plugin1);
         chain.add_operator(Box::new(adapter1));
 

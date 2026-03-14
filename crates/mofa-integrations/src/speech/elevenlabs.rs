@@ -2,9 +2,7 @@
 
 use async_trait::async_trait;
 use mofa_kernel::agent::{AgentError, AgentResult};
-use mofa_kernel::speech::{
-    AudioFormat, AudioOutput, TtsAdapter, TtsConfig, VoiceDescriptor,
-};
+use mofa_kernel::speech::{AudioFormat, AudioOutput, TtsAdapter, TtsConfig, VoiceDescriptor};
 use reqwest::Client;
 use serde::Deserialize;
 use std::time::Duration;
@@ -118,7 +116,9 @@ impl TtsAdapter for ElevenLabsTtsAdapter {
                 tokio::time::sleep(Duration::from_millis(500 * attempt as u64)).await;
             }
 
-            let response = self.client.post(&url)
+            let response = self
+                .client
+                .post(&url)
                 .header("xi-api-key", &api_key)
                 .json(&payload)
                 .timeout(self.config.timeout)
@@ -127,14 +127,20 @@ impl TtsAdapter for ElevenLabsTtsAdapter {
 
             match response {
                 Ok(resp) if resp.status().is_success() => {
-                    let data = resp.bytes().await.map_err(|e| AgentError::Other(e.to_string()))?;
+                    let data = resp
+                        .bytes()
+                        .await
+                        .map_err(|e| AgentError::Other(e.to_string()))?;
                     return Ok(AudioOutput::new(data.to_vec(), AudioFormat::Mp3, 44100));
                 }
                 Ok(resp) => {
                     let status = resp.status();
                     let err_body = resp.text().await.unwrap_or_default();
                     error!("[elevenlabs] API error: {} - {}", status, err_body);
-                    last_error = Some(AgentError::Other(format!("ElevenLabs error {}: {}", status, err_body)));
+                    last_error = Some(AgentError::Other(format!(
+                        "ElevenLabs error {}: {}",
+                        status, err_body
+                    )));
                     if status.as_u16() != 429 && !status.is_server_error() {
                         break;
                     }
@@ -153,27 +159,39 @@ impl TtsAdapter for ElevenLabsTtsAdapter {
         let api_key = self.config.resolve_api_key()?;
         let url = format!("{}/voices", self.config.base_url);
 
-        let response = self.client.get(&url)
+        let response = self
+            .client
+            .get(&url)
             .header("xi-api-key", &api_key)
             .send()
             .await
             .map_err(|e| AgentError::Other(e.to_string()))?;
 
         if !response.status().is_success() {
-            return Err(AgentError::Other(format!("ElevenLabs list_voices failed: {}", response.status())));
+            return Err(AgentError::Other(format!(
+                "ElevenLabs list_voices failed: {}",
+                response.status()
+            )));
         }
 
-        let body: ElevenLabsVoicesResponse = response.json().await.map_err(|e| AgentError::Other(e.to_string()))?;
+        let body: ElevenLabsVoicesResponse = response
+            .json()
+            .await
+            .map_err(|e| AgentError::Other(e.to_string()))?;
 
-        Ok(body.voices.into_iter().map(|v| {
-            VoiceDescriptor {
-                id: v.voice_id,
-                name: v.name,
-                language: "en".to_string(), // ElevenLabs voices are often multilingual
-                gender: v.labels.get("gender").cloned(),
-                preview_url: v.preview_url,
-            }
-        }).collect())
+        Ok(body
+            .voices
+            .into_iter()
+            .map(|v| {
+                VoiceDescriptor {
+                    id: v.voice_id,
+                    name: v.name,
+                    language: "en".to_string(), // ElevenLabs voices are often multilingual
+                    gender: v.labels.get("gender").cloned(),
+                    preview_url: v.preview_url,
+                }
+            })
+            .collect())
     }
 
     async fn health_check(&self) -> AgentResult<bool> {

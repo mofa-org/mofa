@@ -275,7 +275,7 @@ impl Drop for OtlpRecorder {
 impl OtlpRecorder {
     fn new(config: &OtlpMetricsExporterConfig) -> Result<Self, OtlpMetricsExporterError> {
         use opentelemetry_otlp::WithExportConfig;
-        
+
         let exporter = opentelemetry_otlp::MetricExporter::builder()
             .with_http()
             .with_endpoint(config.endpoint.clone())
@@ -287,7 +287,7 @@ impl OtlpRecorder {
             .with_reader(
                 opentelemetry_sdk::metrics::PeriodicReader::builder(exporter, Tokio)
                     .with_interval(config.export_interval)
-                    .build()
+                    .build(),
             )
             .with_resource(Resource::new(vec![KeyValue::new(
                 "service.name",

@@ -78,7 +78,11 @@ pub struct VoiceDescriptor {
 }
 
 impl VoiceDescriptor {
-    pub fn new(id: impl Into<String>, name: impl Into<String>, language: impl Into<String>) -> Self {
+    pub fn new(
+        id: impl Into<String>,
+        name: impl Into<String>,
+        language: impl Into<String>,
+    ) -> Self {
         Self {
             id: id.into(),
             name: name.into(),
@@ -212,7 +216,11 @@ pub trait AsrAdapter: Send + Sync {
     fn name(&self) -> &str;
 
     /// Transcribe audio bytes into text.
-    async fn transcribe(&self, audio: &[u8], config: &AsrConfig) -> AgentResult<TranscriptionResult>;
+    async fn transcribe(
+        &self,
+        audio: &[u8],
+        config: &AsrConfig,
+    ) -> AgentResult<TranscriptionResult>;
 
     /// List supported languages for this adapter.
     fn supported_languages(&self) -> Vec<String> {
@@ -241,7 +249,9 @@ mod tests {
 
     #[test]
     fn tts_config_builder() {
-        let cfg = TtsConfig::new().with_format(AudioFormat::Mp3).with_speed(1.5);
+        let cfg = TtsConfig::new()
+            .with_format(AudioFormat::Mp3)
+            .with_speed(1.5);
         assert_eq!(cfg.format, Some(AudioFormat::Mp3));
         assert_eq!(cfg.speed, Some(1.5));
     }

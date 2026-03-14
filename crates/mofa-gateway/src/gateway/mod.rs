@@ -11,23 +11,22 @@
 //!
 //! **Complete** - All gateway functionality implemented and tested
 
+pub mod circuit_breaker;
+pub mod health_checker;
 pub mod load_balancer;
 pub mod rate_limiter;
-pub mod health_checker;
-pub mod circuit_breaker;
 pub mod router;
 
+pub use circuit_breaker::*;
+pub use health_checker::*;
 pub use load_balancer::*;
 pub use rate_limiter::*;
-pub use health_checker::*;
-pub use circuit_breaker::*;
 pub use router::*;
 
 use crate::error::{GatewayError, GatewayResult};
 use crate::types::{LoadBalancingAlgorithm, NodeId, RequestMetadata};
 use std::sync::Arc;
 use tokio::sync::RwLock;
-
 
 /// Configuration for the gateway.
 #[derive(Debug, Clone)]
@@ -91,8 +90,8 @@ impl Gateway {
 
         // Create circuit breaker registry
         let circuit_breakers = Arc::new(CircuitBreakerRegistry::new(
-            5, // failure threshold
-            2, // success threshold
+            5,                                  // failure threshold
+            2,                                  // success threshold
             std::time::Duration::from_secs(30), // timeout
         ));
 
@@ -121,15 +120,14 @@ impl Gateway {
         })
     }
 
-
     /// Start the gateway HTTP server.
     pub async fn start(&mut self) -> GatewayResult<()> {
         use axum::{
+            Json, Router,
             extract::{Path, State},
             http::StatusCode,
             response::IntoResponse,
-            routing::{get, post, delete},
-            Json, Router,
+            routing::{delete, get, post},
         };
         use serde::{Deserialize, Serialize};
         use tower_http::cors::{Any, CorsLayer};
@@ -183,15 +181,22 @@ impl Gateway {
         // Start server
         let listener = tokio::net::TcpListener::bind(self.config.listen_addr)
             .await
-            .map_err(|e| GatewayError::Network(format!("Failed to bind to {}: {}", self.config.listen_addr, e)))?;
+            .map_err(|e| {
+                GatewayError::Network(format!(
+                    "Failed to bind to {}: {}",
+                    self.config.listen_addr, e
+                ))
+            })?;
 
-        tracing::info!("Gateway HTTP server listening on {}", self.config.listen_addr);
+        tracing::info!(
+            "Gateway HTTP server listening on {}",
+            self.config.listen_addr
+        );
 
         // Spawn server task
-        let server = axum::serve(listener, app)
-            .with_graceful_shutdown(async {
-                shutdown_rx.await.ok();
-            });
+        let server = axum::serve(listener, app).with_graceful_shutdown(async {
+            shutdown_rx.await.ok();
+        });
 
         tokio::spawn(async move {
             if let Err(e) = server.await {
@@ -253,7 +258,8 @@ impl Gateway {
                     let agent_count = {
                         let sm_guard = sm.read().await;
                         sm_guard.get_agents().await
-                    }.len();
+                    }
+                    .len();
                     metrics.update_agent_count(agent_count);
                 }
             }
@@ -274,10 +280,10 @@ struct GatewayState {
 // HTTP Handlers
 
 use axum::{
+    Json,
     extract::{Path, State},
     http::StatusCode,
     response::IntoResponse,
-    Json,
 };
 use serde::{Deserialize, Serialize};
 

@@ -20,18 +20,18 @@
 //! | [`AuthError`] | Auth failure error enum |
 
 pub mod auth;
+mod config_error;
 pub mod envelope;
 pub mod error;
 pub mod route;
-mod config_error;
 mod types;
 
 #[cfg(test)]
 mod tests;
 
 pub use auth::{ApiKeyStore, AuthClaims, AuthError, AuthProvider};
+pub use config_error::GatewayConfigError;
 pub use envelope::{AgentResponse, RequestEnvelope};
 pub use error::RegistryError;
 pub use route::{GatewayRoute, HttpMethod, RouteRegistry, RoutingContext};
-pub use config_error::GatewayConfigError;
 pub use types::{GatewayContext, GatewayRequest, GatewayResponse, RouteMatch};

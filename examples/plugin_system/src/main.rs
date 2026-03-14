@@ -25,6 +25,8 @@ use mofa_sdk::plugins::{
     PluginManager, PluginMetadata, PluginResult, PluginState, PluginType, StoragePlugin,
     ToolDefinition, ToolExecutor, ToolPlugin,
 };
+use mofa_sdk::llm::MockLLMProvider;
+use std::sync::Arc;
 use std::any::Any;
 use std::collections::HashMap;
 use tracing::{info, warn};
@@ -299,15 +301,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // 2. 注册 LLM 插件
     // 2. Register LLM plugin
     info!("\n--- Registering LLM Plugin ---");
-    let llm_config = LLMPluginConfig {
-        model: "gpt-4".to_string(),
-        max_tokens: 4096,
-        temperature: 0.7,
-        ..Default::default()
-    };
-    let llm = LLMPlugin::new("llm_main").with_config(llm_config);
+    let llm_config = LLMPluginConfig::openai("mock-key")
+        .model("gpt-4")
+        .max_tokens(4096)
+        .temperature(0.7);
+    
+    let provider = Arc::new(MockLLMProvider::new("mock-provider"));
+    let llm = LLMPlugin::with_config("llm_main", provider, llm_config);
     manager.register(llm).await?;
-    info!("LLM plugin registered");
+    info!("LLM plugin registered with MockLLMProvider");
 
     // 3. 注册工具插件并添加工具
     // 3. Register tool plugin and add tools
