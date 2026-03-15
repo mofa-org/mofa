@@ -8,14 +8,20 @@ MoFA ships a production-ready voice pipeline that connects automatic speech reco
 
 ```mermaid
 graph LR
-    MIC[Microphone] -->|WAV bytes| ASR
+    MIC[Microphone]:::mic -->|WAV bytes| ASR
 
     subgraph VoicePipeline
-        ASR[AsrAdapter] -->|transcript| LLM[LLMProvider]
-        LLM -->|text reply| TTS[TtsAdapter]
+        ASR[AsrAdapter]:::asr -->|transcript| LLM[LLMProvider]:::llm
+        LLM -->|text reply| TTS[TtsAdapter]:::tts
     end
 
-    TTS -->|MP3 bytes| SPK[Speaker]
+    TTS -->|MP3 bytes| SPK[Speaker]:::spk
+
+    classDef mic fill:#4A90D9,stroke:#2C5F8A,color:#fff
+    classDef asr fill:#7B68EE,stroke:#4B3DB5,color:#fff
+    classDef llm fill:#F5A623,stroke:#C47D0E,color:#fff
+    classDef tts fill:#7ED321,stroke:#4E8A0E,color:#fff
+    classDef spk fill:#E74C3C,stroke:#A93226,color:#fff
 ```
 
 The pipeline is fully decoupled — swap any adapter without touching the other two.
