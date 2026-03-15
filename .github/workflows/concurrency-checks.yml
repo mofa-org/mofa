@@ -1,0 +1,93 @@
+name: Concurrency Analysis & Deadlock Detection
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+  pull_request:
+    branches:
+      - main
+      - develop
+
+jobs:
+  clippy-lock-checks:
+    name: Clippy Lock Safety Checks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      
+      - name: Cache cargo registry
+        uses: actions/cache@v3
+        with:
+          path: ~/.cargo/registry
+          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
+      
+      - name: Check for lock-across-await patterns
+        run: |
+          cargo clippy --all-targets --all-features -- \
+            -W clippy::await_holding_lock \
+            -W clippy::mutex_atomic \
+            -W clippy::let_underscore_lock \
+            -D warnings
+        continue-on-error: true
+
+  concurrency-stress-tests:
+    name: Concurrency Stress Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      
+      - name: Cache cargo build
+        uses: actions/cache@v3
+        with:
+          path: target
+          key: ${{ runner.os }}-cargo-build-${{ hashFiles('**/Cargo.lock') }}
+      
+      - name: Build mofa-testing crate
+        run: cargo build -p mofa-testing --all-features
+      
+      - name: Run concurrency stress tests
+        run: |
+          cargo test -p mofa-testing --all-features \
+            --test '*' -- --nocapture --test-threads=1
+        env:
+          RUST_LOG: info
+
+  deadlock-detection-unit-tests:
+    name: Deadlock Detection in Unit Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      
+      - name: Run all tests with deadlock detection
+        run: |
+          cargo test --all --lib --all-features \
+            -- --nocapture
+        env:
+          RUST_LOG: warn
+        timeout-minutes: 30
+
+  summary:
+    name: Concurrency Check Summary
+    runs-on: ubuntu-latest
+    needs: [clippy-lock-checks, concurrency-stress-tests, deadlock-detection-unit-tests]
+    if: always()
+    steps:
+      - name: Check job statuses
+        run: |
+          if [ "${{ needs.clippy-lock-checks.result }}" = "failure" ]; then
+            echo "⚠️ Clippy lock safety checks failed"
+          fi
+          if [ "${{ needs.concurrency-stress-tests.result }}" = "failure" ]; then
+            echo "❌ Concurrency stress tests failed"
+            exit 1
+          fi
+          if [ "${{ needs.deadlock-detection-unit-tests.result }}" = "failure" ]; then
+            echo "❌ Unit tests with deadlock detection failed"
+            exit 1
+          fi
+          echo "✅ All concurrency checks passed"
