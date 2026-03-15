@@ -23,6 +23,31 @@ jobs:
             const repo = context.repo;
             const username = context.payload.comment.user.login;
 
+            if (commentBody === '/unassign') {
+              const alreadyAssigned = (issue.assignees || []).some(a => a.login === username);
+              if (!alreadyAssigned) {
+                core.info(`${username} is not assigned to issue #${issueNumber}, skipping.`);
+                return;
+              }
+
+              await github.rest.issues.removeAssignees({
+                owner: repo.owner,
+                repo: repo.repo,
+                issue_number: issueNumber,
+                assignees: [username]
+              });
+
+              await github.rest.issues.createComment({
+                owner: repo.owner,
+                repo: repo.repo,
+                issue_number: issueNumber,
+                body: `👋 @${username}, you have been unassigned from this issue. It is now open for others to pick up. Check out our [open issues](https://github.com/${repo.owner}/${repo.repo}/issues?q=is%3Aopen+is%3Aissue+no%3Aassignee) if you want to work on something else.`
+              });
+
+              core.info(`Unassigned ${username} from issue #${issueNumber}.`);
+              return;
+            }
+
             if (commentBody !== '/assign') {
               core.info('Not a /assign or /unassign command, skipping.');
               return;
