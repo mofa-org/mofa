@@ -42,7 +42,7 @@ use super::types::{
 /// into the gateway's expected `Stream<Item = String>` for SSE streaming.
 fn adapt_token_stream_to_string(
     token_stream: BoxTokenStream,
-) -> std::pin::Pin<Box<dyn futures::Stream<Item = String> + Send + Sync>> {
+) -> std::pin::Pin<Box<dyn futures::Stream<Item = String> + Send>> {
     use futures::StreamExt;
     let adapted = token_stream.map(|result| match result {
         Ok(chunk) => {
