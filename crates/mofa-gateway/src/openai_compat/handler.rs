@@ -301,7 +301,7 @@ fn build_nstream_response(
 // ──────────────────────────────────────────────────────────────────────────────
 
 fn build_streaming_response(
-    token_stream: std::pin::Pin<Box<dyn futures::Stream<Item = String> + Send + Sync>>,
+    token_stream: std::pin::Pin<Box<dyn futures::Stream<Item = String> + Send>>,
     model: String,
     headers: HeaderMap,
 ) -> Response {
