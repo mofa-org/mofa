@@ -12,21 +12,21 @@ jobs:
     if: ${{ github.event.issue.pull_request == null }} # only issues, not PRs
     runs-on: ubuntu-latest
     steps:
-      - name: Handle /assign command
+      - name: Handle /assign and /unassign commands
         uses: actions/github-script@v7
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
             const commentBody = context.payload.comment.body.trim();
-            if (commentBody !== '/assign') {
-              core.info('Not a /assign command, skipping.');
-              return;
-            }
-
             const issue = context.payload.issue;
             const issueNumber = issue.number;
             const repo = context.repo;
             const username = context.payload.comment.user.login;
+
+            if (commentBody !== '/assign') {
+              core.info('Not a /assign or /unassign command, skipping.');
+              return;
+            }
 
             // If already assigned, do nothing
             const alreadyAssigned = (issue.assignees || []).some(a => a.login === username);
