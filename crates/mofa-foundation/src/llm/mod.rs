@@ -330,6 +330,9 @@ pub mod stream_adapter;
 pub mod stream_bridge;
 // Audio processing
 pub mod transcription;
+//CANDLE FEATURE
+#[cfg(feature = "linux-candle")]
+pub mod candle;
 
 // Re-export 核心类型
 // Re-export core types
@@ -363,6 +366,14 @@ pub use anthropic::{AnthropicConfig, AnthropicProvider};
 pub use google::{GeminiConfig, GeminiProvider};
 // Re-export Ollama Provider
 pub use ollama::{OllamaConfig, OllamaProvider};
+// Re-export Candle Provider (when enabled)
+#[cfg(feature = "linux-candle")]
+// pub use candle::{
+//     CandleConfig, CandleProvider, CandleProviderEmbeddingPooling as EmbeddingPooling,
+//     ToolCallFormat, candle_from_path, candle_from_path_gpu,
+// };
+// Add after `pub mod transcription;`:
+pub use candle::{CandleConfig, CandleProvider, candle_from_path, candle_from_path_gpu};
 
 // Re-export 高级 API
 // Re-export Advanced API
@@ -443,3 +454,4 @@ mod tests {
         assert_eq!(provider.default_model(), "gemini-1.5-flash");
     }
 }
+
