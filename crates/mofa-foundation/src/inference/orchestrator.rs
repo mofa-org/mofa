@@ -283,7 +283,7 @@ impl InferenceOrchestrator {
         request: &InferenceRequest,
     ) -> (
         InferenceResult,
-        std::pin::Pin<Box<dyn futures::Stream<Item = String> + Send>>,
+        std::pin::Pin<Box<dyn futures::Stream<Item = String> + Send + Sync>>,
     ) {
         // Step 1: Evict idle models to free memory before admission check
         self.model_pool.evict_idle();
@@ -334,7 +334,7 @@ impl InferenceOrchestrator {
                                 Err(e) => format!("[error: {}]", e),
                             }
                         });
-                    let boxed: std::pin::Pin<Box<dyn futures::Stream<Item = String> + Send>> = Box::pin(stream);
+                    let boxed: std::pin::Pin<Box<dyn futures::Stream<Item = String> + Send + Sync>> = Box::pin(stream);
                     
                     (output, boxed)
                 } else {
@@ -358,7 +358,7 @@ impl InferenceOrchestrator {
                                 Err(e) => format!("[error: {}]", e),
                             }
                         });
-                    let boxed: std::pin::Pin<Box<dyn futures::Stream<Item = String> + Send>> = Box::pin(string_stream);
+                    let boxed: std::pin::Pin<Box<dyn futures::Stream<Item = String> + Send + Sync>> = Box::pin(string_stream);
                     
                     (output, boxed)
                 };
