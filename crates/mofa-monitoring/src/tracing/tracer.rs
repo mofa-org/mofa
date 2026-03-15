@@ -13,20 +13,48 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 use tokio::sync::RwLock;
 
+/// Determines which spans are recorded and exported to the backend.
+///
+/// Choose a strategy based on your traffic volume and observability needs:
+///
+/// | Strategy | Best for |
+/// |---|---|
+/// | `AlwaysOn` | Development, low-traffic services |
+/// | `AlwaysOff` | Temporarily disabling tracing without code changes |
+/// | `Probabilistic` | High-traffic production (e.g. 0.01 = 1%) |
+/// | `RateLimiting` | Bursty traffic with a hard cap per second |
+/// | `ParentBased` | Microservices — inherit the sampling decision from the caller |
+///
 /// 采样策略
 /// Sampling strategy
 #[derive(Debug, Clone, Default)]
 pub enum SamplingStrategy {
+    /// Record every span. Use during development or for low-traffic services
+    /// where 100% visibility is acceptable.
+    ///
     /// 始终采样
     /// Always sample
     #[default]
     AlwaysOn,
+    /// Record no spans. Useful for disabling tracing without changing code.
+    ///
     /// 从不采样
     /// Never sample
     AlwaysOff,
+    /// Record a random fraction of traces. The value must be in `[0.0, 1.0]`.
+    /// Sampling is stable: the same `trace_id` always produces the same decision.
+    ///
+    /// # Example
+    /// ```rust,ignore
+    /// SamplingStrategy::Probabilistic(0.05) // sample 5% of traces
+    /// ```
+    ///
     /// 按概率采样
     /// Probabilistic sampling
     Probabilistic(f64),
+    /// Admit at most `traces_per_second` new root spans per second.
+    /// Excess spans are dropped. Thread-safe via atomic CAS.
+    ///
     /// 基于速率限制采样
     /// Rate-limiting based sampling
     RateLimiting {
@@ -34,6 +62,10 @@ pub enum SamplingStrategy {
         /// Holds (timestamp_secs << 32) | (count)
         state: Arc<AtomicU64>,
     },
+    /// Inherit the sampling decision from the parent span's context.
+    /// If there is no parent, fall back to the `root` strategy.
+    /// Use this in multi-service deployments so the caller controls sampling.
+    ///
     /// 父级决定
     /// Parent-based decision
     ParentBased { root: Box<SamplingStrategy> },
@@ -106,6 +138,20 @@ impl SamplingStrategy {
     }
 }
 
+/// Configuration for the MoFA distributed tracer.
+///
+/// Use [`TracerConfig::new`] for a quick setup with sensible defaults,
+/// or build the struct directly for full control.
+///
+/// # Example
+/// ```rust,no_run
+/// use mofa_monitoring::tracing::{TracerConfig, SamplingStrategy};
+///
+/// let config = TracerConfig::new("my-agent")
+///     .with_version("1.2.3")
+///     .with_sampling(SamplingStrategy::Probabilistic(0.1));
+/// ```
+///
 /// Tracer 配置
 /// Tracer configuration
 #[derive(Debug, Clone)]
