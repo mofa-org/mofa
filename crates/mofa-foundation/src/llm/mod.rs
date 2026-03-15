@@ -386,7 +386,8 @@ pub use task_orchestrator::{
     BackgroundTask, TaskOrchestrator, TaskOrchestratorConfig, TaskOrigin, TaskResult, TaskStatus,
 };
 pub use token_budget::{
-    CharBasedEstimator, ContextWindowManager, ContextWindowPolicy, TokenEstimator, TrimResult,
+    CharBasedEstimator, ContextWindowManager, ContextWindowPolicy, TokenBudgetConfig,
+    TokenEstimator, TrimResult,
 };
 pub use vision::{
     ImageDetailExt, build_vision_chat_message, build_vision_chat_message_single,
