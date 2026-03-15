@@ -125,18 +125,17 @@ pub mod kernel {
     pub use mofa_kernel::agent::{
         AgentCapabilities, AgentCapabilitiesBuilder, AgentContext, AgentError, AgentFactory,
         AgentInput, AgentLifecycle, AgentMessage as CoreAgentMessage, AgentMessaging,
-        AgentMetadata, AgentOutput, AgentPluginSupport, AgentRequirements,
-        AgentRequirementsBuilder, AgentReport, AgentResult, AgentState, AgentStats,
-        ChatCompletionRequest, ChatCompletionResponse, ChatMessage, ContextConfig,
-        CoordinationPattern, Coordinator, DynAgent, ErrorCategory, ErrorContext, EventBuilder,
-        EventBus, GlobalError, GlobalEvent, GlobalMessage, GlobalReport, GlobalResult,
-        HealthStatus, InputType, IntoAgentReport, IntoGlobalReport, InterruptResult, LLMProvider,
-        Memory,
-        MemoryItem, MemoryStats, MemoryValue, Message, MessageContent, MessageMetadata,
-        MessageRole, MoFAAgent, OutputContent, OutputType, Reasoner, ReasoningResult,
-        ReasoningStep, ReasoningStepType, ReasoningStrategy, TokenUsage, Tool, ToolCall,
-        ToolDefinition, ToolDescriptor, ToolInput, ToolMetadata, ToolResult, ToolUsage,
-        execution_events, lifecycle, message_events, plugin_events, state_events,
+        AgentMetadata, AgentOutput, AgentPluginSupport, AgentReport, AgentRequirements,
+        AgentRequirementsBuilder, AgentResult, AgentState, AgentStats, ChatCompletionRequest,
+        ChatCompletionResponse, ChatMessage, ContextConfig, CoordinationPattern, Coordinator,
+        DynAgent, ErrorCategory, ErrorContext, EventBuilder, EventBus, GlobalError, GlobalEvent,
+        GlobalMessage, GlobalReport, GlobalResult, HealthStatus, InputType, InterruptResult,
+        IntoAgentReport, IntoGlobalReport, LLMProvider, Memory, MemoryItem, MemoryStats,
+        MemoryValue, Message, MessageContent, MessageMetadata, MessageRole, MoFAAgent,
+        OutputContent, OutputType, Reasoner, ReasoningResult, ReasoningStep, ReasoningStepType,
+        ReasoningStrategy, TokenUsage, Tool, ToolCall, ToolDefinition, ToolDescriptor, ToolInput,
+        ToolMetadata, ToolResult, ToolUsage, execution_events, lifecycle, message_events,
+        plugin_events, state_events,
     };
 
     // Core AgentConfig (runtime-level, lightweight)
@@ -318,11 +317,11 @@ pub mod foundation {
 // =============================================================================
 
 pub mod plugins {
+    pub use mofa_foundation::llm::LLMConfig as LLMPluginConfig;
+    pub use mofa_foundation::llm::LLMPlugin;
     pub use mofa_plugins::{
         AgentPlugin,
         AudioPlaybackConfig,
-        LLMPlugin,
-        LLMPluginConfig,
         MemoryPlugin,
         MemoryStorage,
         MockTTSEngine,
@@ -1025,8 +1024,8 @@ mod tests {
         AgentCapabilities, AgentCapabilitiesBuilder, AgentContext, AgentError, AgentInput,
         AgentOutput, AgentResult, AgentState, MoFAAgent,
     };
-    use super::{llm, runtime};
     use super::llm::LLMProvider;
+    use super::{llm, runtime};
     use std::sync::{Mutex, OnceLock};
 
     fn env_lock() -> &'static Mutex<()> {
@@ -1121,7 +1120,9 @@ mod tests {
             _input: AgentInput,
             _ctx: &AgentContext,
         ) -> AgentResult<AgentOutput> {
-            Err(AgentError::ExecutionFailed("intentional failure".to_string()))
+            Err(AgentError::ExecutionFailed(
+                "intentional failure".to_string(),
+            ))
         }
 
         async fn shutdown(&mut self) -> AgentResult<()> {

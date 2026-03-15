@@ -46,7 +46,9 @@ pub mod runtime;
 // Flatten the most commonly used types into the module namespace.
 
 pub use channel::{ChannelConfig, ChannelManager, MessageEnvelope, NativeChannel};
-pub use dataflow::{DataflowBuilder, DataflowConfig, DataflowState, NativeDataflow, NodeConnection};
+pub use dataflow::{
+    DataflowBuilder, DataflowConfig, DataflowState, NativeDataflow, NodeConnection,
+};
 pub use error::{DataflowError, DataflowResult};
 pub use node::{NativeNode, NodeConfig, NodeEventLoop, NodeState};
 pub use runtime::{NativeRuntime, RuntimeState};

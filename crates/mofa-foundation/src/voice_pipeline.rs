@@ -9,9 +9,7 @@
 
 use mofa_kernel::agent::{AgentError, AgentResult};
 use mofa_kernel::llm::provider::LLMProvider;
-use mofa_kernel::llm::types::{
-    ChatCompletionRequest, ChatMessage,
-};
+use mofa_kernel::llm::types::{ChatCompletionRequest, ChatMessage};
 use mofa_kernel::speech::{
     AsrAdapter, AsrConfig, AudioFormat, AudioOutput, TranscriptionResult, TtsAdapter, TtsConfig,
 };
@@ -227,9 +225,7 @@ impl VoicePipeline {
 mod tests {
     use super::*;
     use async_trait::async_trait;
-    use mofa_kernel::llm::types::{
-        ChatCompletionResponse, Choice, FinishReason,
-    };
+    use mofa_kernel::llm::types::{ChatCompletionResponse, Choice, FinishReason};
     use mofa_kernel::speech::*;
 
     // ---- Mock ASR ----

@@ -4,10 +4,8 @@
 //! load balancing, health checks, and circuit breaker state.
 
 use crate::error::{GatewayError, GatewayResult};
+use crate::gateway::{CircuitBreakerRegistry, HealthChecker, LoadBalancer};
 use crate::types::{NodeId, RequestMetadata};
-use crate::gateway::{
-    CircuitBreakerRegistry, HealthChecker, LoadBalancer,
-};
 use std::sync::Arc;
 use tracing::{debug, warn};
 
@@ -62,7 +60,9 @@ impl GatewayRouter {
                 None => {
                     // Node not registered, try to check it
                     self.health_checker.check_node(&node_id).await?;
-                    self.health_checker.get_status(&node_id).await
+                    self.health_checker
+                        .get_status(&node_id)
+                        .await
                         .map(|s| s == crate::types::NodeStatus::Healthy)
                         .unwrap_or(false)
                 }
@@ -77,18 +77,30 @@ impl GatewayRouter {
             // Check circuit breaker
             let breaker = self.circuit_breakers.get_or_create(&node_id).await;
             if !breaker.try_acquire().await? {
-                debug!("Circuit breaker is open for node {}, trying next node", node_id);
+                debug!(
+                    "Circuit breaker is open for node {}, trying next node",
+                    node_id
+                );
                 last_error = Some(GatewayError::CircuitBreakerOpen(node_id.to_string()));
                 continue;
             }
 
             // Found a suitable node
-            debug!("Routed request {} to node {} (attempt {})", metadata.request_id, node_id, attempt + 1);
+            debug!(
+                "Routed request {} to node {} (attempt {})",
+                metadata.request_id,
+                node_id,
+                attempt + 1
+            );
             return Ok(node_id);
         }
 
         // All retries exhausted
-        warn!("Failed to route request {} after {} attempts", metadata.request_id, self.max_retries + 1);
+        warn!(
+            "Failed to route request {} after {} attempts",
+            metadata.request_id,
+            self.max_retries + 1
+        );
         Err(last_error.unwrap_or_else(|| {
             GatewayError::NoAvailableNodes("No healthy nodes available".to_string())
         }))
@@ -102,7 +114,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_router_with_healthy_node() {
-        let lb = Arc::new(LoadBalancer::new(crate::types::LoadBalancingAlgorithm::RoundRobin));
+        let lb = Arc::new(LoadBalancer::new(
+            crate::types::LoadBalancingAlgorithm::RoundRobin,
+        ));
         let hc = Arc::new(HealthChecker::new(
             Duration::from_secs(5),
             Duration::from_secs(1),

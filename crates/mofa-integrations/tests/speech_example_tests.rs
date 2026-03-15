@@ -25,9 +25,7 @@ mod openai_examples {
     use mofa_integrations::speech::openai::{
         OpenAiAsrAdapter, OpenAiSpeechConfig, OpenAiTtsAdapter, OpenAiTtsModel,
     };
-    use mofa_kernel::speech::{
-        AsrAdapter, AsrConfig, AudioFormat, TtsAdapter, TtsConfig,
-    };
+    use mofa_kernel::speech::{AsrAdapter, AsrConfig, AudioFormat, TtsAdapter, TtsConfig};
 
     // ---- Mock-safe tests (always run) ----
 
@@ -89,7 +87,10 @@ mod openai_examples {
 
         assert!(!output.data.is_empty(), "audio data should not be empty");
         assert_eq!(output.format, AudioFormat::Mp3);
-        println!("✅ OpenAI TTS produced {} bytes of audio", output.data.len());
+        println!(
+            "✅ OpenAI TTS produced {} bytes of audio",
+            output.data.len()
+        );
     }
 
     #[tokio::test]
@@ -163,7 +164,10 @@ mod elevenlabs_examples {
     async fn elevenlabs_list_voices_real_api() {
         let adapter = ElevenLabsTtsAdapter::new(ElevenLabsConfig::new());
         let voices = adapter.list_voices().await.expect("should list voices");
-        assert!(!voices.is_empty(), "ElevenLabs should have at least one voice");
+        assert!(
+            !voices.is_empty(),
+            "ElevenLabs should have at least one voice"
+        );
         println!("✅ Found {} ElevenLabs voices", voices.len());
     }
 }

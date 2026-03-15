@@ -1,9 +1,9 @@
 //! Budget enforcer — concrete async per-agent budget enforcement.
 
+use mofa_kernel::budget::{BudgetConfig, BudgetError, BudgetStatus};
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use mofa_kernel::budget::{BudgetConfig, BudgetError, BudgetStatus};
 
 /// Per-agent budget enforcer. Thread-safe, keyed by agent_id.
 ///
@@ -139,7 +139,7 @@ impl BudgetEnforcer {
             daily_cost,
             session_tokens,
             daily_tokens,
-            config
+            config,
         )
     }
 
@@ -185,7 +185,9 @@ mod tests {
         enforcer
             .set_budget(
                 "agent-1",
-                BudgetConfig::default().with_max_cost_per_session(10.0).unwrap(),
+                BudgetConfig::default()
+                    .with_max_cost_per_session(10.0)
+                    .unwrap(),
             )
             .await;
         enforcer.record_usage("agent-1", 5.0, 1000).await;
@@ -198,7 +200,9 @@ mod tests {
         enforcer
             .set_budget(
                 "agent-1",
-                BudgetConfig::default().with_max_cost_per_session(10.0).unwrap(),
+                BudgetConfig::default()
+                    .with_max_cost_per_session(10.0)
+                    .unwrap(),
             )
             .await;
         enforcer.record_usage("agent-1", 11.0, 5000).await;
@@ -219,7 +223,9 @@ mod tests {
         enforcer
             .set_budget(
                 "agent-1",
-                BudgetConfig::default().with_max_tokens_per_session(1000).unwrap(),
+                BudgetConfig::default()
+                    .with_max_tokens_per_session(1000)
+                    .unwrap(),
             )
             .await;
         enforcer.record_usage("agent-1", 0.0, 1500).await;
@@ -232,7 +238,9 @@ mod tests {
         enforcer
             .set_budget(
                 "agent-1",
-                BudgetConfig::default().with_max_cost_per_session(10.0).unwrap(),
+                BudgetConfig::default()
+                    .with_max_cost_per_session(10.0)
+                    .unwrap(),
             )
             .await;
         enforcer.record_usage("agent-1", 11.0, 5000).await;

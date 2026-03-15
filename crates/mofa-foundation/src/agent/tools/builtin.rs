@@ -901,7 +901,10 @@ mod tests {
                 .execute(ToolInput::from_json(json!({"path": path})))
                 .await;
             assert!(read.success);
-            content = read.output["content"].as_str().unwrap_or_default().to_string();
+            content = read.output["content"]
+                .as_str()
+                .unwrap_or_default()
+                .to_string();
             if content.contains("line2") {
                 ok = true;
                 break;

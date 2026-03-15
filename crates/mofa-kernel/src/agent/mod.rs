@@ -209,9 +209,9 @@ pub use types::{
     GlobalMessage,
     GlobalReport,
     GlobalResult,
-    IntoGlobalReport,
     InputType,
     InterruptResult,
+    IntoGlobalReport,
     LLMProvider,
     MessageContent,
     MessageMetadata,
@@ -395,7 +395,10 @@ mod tests {
         let mut agent = MinimalAgent::new();
         let ctx = AgentContext::new("exec-1");
         agent.initialize(&ctx).await.unwrap();
-        let out = agent.execute(AgentInput::text("hello"), &ctx).await.unwrap();
+        let out = agent
+            .execute(AgentInput::text("hello"), &ctx)
+            .await
+            .unwrap();
         assert_eq!(out.to_text(), "ok");
     }
 

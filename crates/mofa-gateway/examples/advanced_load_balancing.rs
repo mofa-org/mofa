@@ -1,5 +1,5 @@
 //! Advanced load balancing configuration example.
-//! 
+//!
 //! This example demonstrates how to configure different load balancing
 //! algorithms and customize their behavior.
 //!
@@ -17,7 +17,7 @@ use std::time::Duration;
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     tracing_subscriber::fmt::init();
-    
+
     tracing::info!("Advanced Load Balancing Configuration Example");
 
     // Example 1: Round-Robin (default)
@@ -34,7 +34,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Example 3: Weighted Round-Robin
     tracing::info!("\n=== Example 3: Weighted Round-Robin ===");
-    let load_balancer_wrr = Arc::new(LoadBalancer::new(LoadBalancingAlgorithm::WeightedRoundRobin));
+    let load_balancer_wrr = Arc::new(LoadBalancer::new(
+        LoadBalancingAlgorithm::WeightedRoundRobin,
+    ));
     tracing::info!("Weighted round-robin distributes based on node capacity");
     tracing::info!("Best for: Heterogeneous node capacities");
 
@@ -46,12 +48,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Demonstrate load balancing with multiple nodes
     tracing::info!("\n=== Load Balancing Simulation ===");
-    
+
     // Add nodes to the round-robin load balancer
     load_balancer_rr.add_node(NodeId::new("node-1")).await;
     load_balancer_rr.add_node(NodeId::new("node-2")).await;
     load_balancer_rr.add_node(NodeId::new("node-3")).await;
-    
+
     tracing::info!("Routing 10 requests with Round-Robin:");
     for i in 0..10 {
         if let Some(node) = load_balancer_rr.select_node().await? {

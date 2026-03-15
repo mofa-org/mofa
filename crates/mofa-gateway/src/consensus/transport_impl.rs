@@ -4,8 +4,8 @@
 //! for testing the Raft consensus engine without network dependencies.
 
 use crate::consensus::transport::{
-    AppendEntriesRequest, AppendEntriesResponse, RequestVoteRequest, RequestVoteResponse,
-    RaftTransport,
+    AppendEntriesRequest, AppendEntriesResponse, RaftTransport, RequestVoteRequest,
+    RequestVoteResponse,
 };
 use crate::error::ConsensusResult;
 use crate::types::NodeId;
@@ -44,7 +44,11 @@ impl InMemoryTransport {
     }
 
     /// Register a handler for a node.
-    pub async fn register_handler(&self, node_id: NodeId, handler: Arc<dyn ConsensusHandler + Send + Sync>) {
+    pub async fn register_handler(
+        &self,
+        node_id: NodeId,
+        handler: Arc<dyn ConsensusHandler + Send + Sync>,
+    ) {
         self.handlers.write().await.insert(node_id, handler);
     }
 
