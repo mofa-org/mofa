@@ -1081,6 +1081,80 @@ pub mod speech {
     #[cfg(feature = "deepgram")]
     pub use mofa_integrations::speech::deepgram::{DeepgramAsrAdapter, DeepgramConfig};
 
+    // ---- registry builder factory -------------------------------------------
+
+    /// Register cloud speech adapters into a [`SpeechAdapterRegistry`] from config.
+    ///
+    /// Each entry in [`SpeechConfig::providers`] is matched by `provider` string
+    /// (`"openai"`, `"elevenlabs"`, `"deepgram"`), the corresponding adapter is
+    /// constructed with the supplied `api_key`, and registered.  If
+    /// `default_tts` / `default_asr` is `true`, that adapter becomes the default
+    /// for its modality.
+    ///
+    /// Unknown provider names are ignored with a warning.
+    ///
+    /// # Feature requirements
+    ///
+    /// Only provider entries whose backing feature is enabled are registered.
+    /// Entries for disabled features are silently skipped.
+    #[cfg(any(
+        feature = "openai-speech",
+        feature = "elevenlabs",
+        feature = "deepgram"
+    ))]
+    pub fn register_speech_adapters(
+        registry: &mut SpeechAdapterRegistry,
+        config: &SpeechConfig,
+    ) -> mofa_kernel::agent::AgentResult<()> {
+        use std::sync::Arc;
+
+        for entry in &config.providers {
+            match entry.provider.as_str() {
+                #[cfg(feature = "openai-speech")]
+                "openai" => {
+                    use mofa_integrations::speech::openai::{
+                        OpenAiAsrAdapter, OpenAiSpeechConfig, OpenAiTtsAdapter,
+                    };
+                    let cfg = OpenAiSpeechConfig::new().with_api_key(&entry.api_key);
+                    registry.register_tts(Arc::new(OpenAiTtsAdapter::new(cfg.clone())));
+                    registry.register_asr(Arc::new(OpenAiAsrAdapter::new(cfg)));
+                    if entry.default_tts {
+                        registry.set_default_tts("openai-tts");
+                    }
+                    if entry.default_asr {
+                        registry.set_default_asr("openai-whisper");
+                    }
+                }
+                #[cfg(feature = "elevenlabs")]
+                "elevenlabs" => {
+                    use mofa_integrations::speech::elevenlabs::{
+                        ElevenLabsConfig, ElevenLabsTtsAdapter,
+                    };
+                    let cfg = ElevenLabsConfig::new().with_api_key(&entry.api_key);
+                    registry.register_tts(Arc::new(ElevenLabsTtsAdapter::new(cfg)));
+                    if entry.default_tts {
+                        registry.set_default_tts("elevenlabs");
+                    }
+                }
+                #[cfg(feature = "deepgram")]
+                "deepgram" => {
+                    use mofa_integrations::speech::deepgram::{DeepgramAsrAdapter, DeepgramConfig};
+                    let cfg = DeepgramConfig::new().with_api_key(&entry.api_key);
+                    registry.register_asr(Arc::new(DeepgramAsrAdapter::new(cfg)));
+                    if entry.default_asr {
+                        registry.set_default_asr("deepgram");
+                    }
+                }
+                other => {
+                    tracing::warn!(
+                        "[speech] unknown or feature-disabled provider '{}', skipping",
+                        other
+                    );
+                }
+            }
+        }
+        Ok(())
+    }
 }
 
 // =============================================================================
