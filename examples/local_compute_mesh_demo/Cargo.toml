@@ -1,0 +1,18 @@
+[package]
+name = "local_compute_mesh_demo"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+tokio.workspace = true
+mofa-foundation = {path = "../../crates/mofa-foundation" }
+mofa-local-llm = {path = "../../crates/mofa-local-llm" }
+tracing.workspace = true
+tracing-subscriber.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+serde_yaml.workspace = true
+uuid.workspace = true
+
+[lints]
+workspace = true

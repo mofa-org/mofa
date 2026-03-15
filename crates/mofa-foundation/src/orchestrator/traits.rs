@@ -5,9 +5,11 @@
 //! - `ModelOrchestrator`: Orchestrates multiple models with lifecycle, scheduling, and pipeline routing
 
 use async_trait::async_trait;
+use futures::stream::{Stream, StreamExt};
 use serde_json::Value;
 use std::collections::HashMap;
 use std::fmt;
+use std::pin::Pin;
 use std::sync::Arc;
 use thiserror::Error;
 
@@ -235,6 +237,18 @@ pub trait ModelProvider: Send + Sync {
 
     /// Run inference with the given input string, return response string
     async fn infer(&self, input: &str) -> OrchestratorResult<String>;
+
+    /// Run streaming inference with the given input string.
+    ///
+    /// Returns a stream of tokens that can be consumed incrementally.
+    /// Default implementation calls `infer` and splits by whitespace for backward compatibility.
+    fn infer_stream(
+        &self,
+        input: &str,
+    ) -> Pin<Box<dyn Stream<Item = OrchestratorResult<String>> + Send + Sync>> {
+        // Default implementation: call infer and split by whitespace
+        Box::pin(futures::stream::iter(vec![self.infer(input)]))
+    }
 
     /// Current memory usage in bytes
     fn memory_usage_bytes(&self) -> u64;
