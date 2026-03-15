@@ -79,6 +79,7 @@ pub mod gateway;
 pub mod handlers;
 pub mod middleware;
 pub mod observability;
+pub mod proxy;
 pub mod server;
 pub mod state;
 pub mod state_machine;
