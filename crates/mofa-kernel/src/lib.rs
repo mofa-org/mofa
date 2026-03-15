@@ -1,3 +1,5 @@
+#![allow(ambiguous_glob_reexports)]
+
 // context module
 pub mod context;
 

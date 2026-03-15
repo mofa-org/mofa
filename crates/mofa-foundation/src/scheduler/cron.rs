@@ -211,14 +211,13 @@ impl CronScheduler {
 impl AgentScheduler for CronScheduler {
     async fn register(&self, def: ScheduleDefinition) -> Result<ScheduleHandle, SchedulerError> {
         // Validate cron expression up-front so the error is immediate.
-        if let Some(cron_expr) = &def.cron_expression {
-            if let Err(e) = cron_expr.parse::<Schedule>() {
+        if let Some(cron_expr) = &def.cron_expression
+            && let Err(e) = cron_expr.parse::<Schedule>() {
                 return Err(SchedulerError::InvalidCron(
                     cron_expr.clone(),
                     e.to_string(),
                 ));
             }
-        }
 
         // Reject duplicate schedule IDs.
         {
@@ -309,7 +308,7 @@ impl CronScheduler {
 
         tokio::spawn(async move {
             let mut timing = if let Some(cron_expr) = &cron_expression {
-                ScheduleTiming::Cron(cron_expr.parse().unwrap())
+                ScheduleTiming::Cron(Box::new(cron_expr.parse().unwrap()))
             } else if let Some(ms) = interval_ms {
                 ScheduleTiming::Interval(interval(Duration::from_millis(ms)))
             } else {
@@ -408,7 +407,7 @@ impl CronScheduler {
 
 enum ScheduleTiming {
     Interval(tokio::time::Interval),
-    Cron(Schedule),
+    Cron(Box<Schedule>),
 }
 
 impl ScheduleTiming {
