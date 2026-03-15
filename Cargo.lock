@@ -5843,6 +5843,7 @@ dependencies = [
  "mofa-foundation",
  "mofa-kernel",
  "mofa-sdk",
+ "parking_lot",
  "pyo3",
  "pyo3-async-runtimes",
  "serde_json",
