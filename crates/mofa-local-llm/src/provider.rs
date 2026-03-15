@@ -7,7 +7,7 @@
 use crate::config::LinuxInferenceConfig;
 use crate::hardware::{ComputeBackend, HardwareInfo};
 use async_trait::async_trait;
-use futures::{Stream, StreamExt};
+use futures::StreamExt;
 use mofa_foundation::orchestrator::traits::{
     ModelProvider, ModelProviderConfig, ModelType, OrchestratorError, OrchestratorResult,
 };
@@ -15,7 +15,6 @@ use mofa_kernel::llm::streaming::{BoxTokenStream, StreamChunk, StreamError};
 use rand::Rng;
 use serde_json::Value;
 use std::collections::HashMap;
-use std::pin::Pin;
 use sysinfo::{MemoryRefreshKind, RefreshKind, System};
 
 /// A local inference provider that runs on Linux using the best available
@@ -266,6 +265,7 @@ impl ModelProvider for LinuxLocalProvider {
 // provider compile-time correct on any platform while keeping the dispatch
 // logic centralized here.
 
+#[allow(dead_code)]
 impl LinuxLocalProvider {
     fn run_inference_cuda(&self, input: &str) -> OrchestratorResult<String> {
         tracing::debug!("dispatching to CUDA backend");

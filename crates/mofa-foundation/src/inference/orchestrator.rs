@@ -26,8 +26,10 @@
 //! scheduling will be introduced in Phase 2.
 
 use std::sync::Arc;
+use std::pin::Pin;
 use std::time::Duration;
 
+use async_stream::stream;
 use futures::StreamExt;
 use crate::hardware::{HardwareCapability, detect_hardware};
 use crate::orchestrator::traits::ModelProvider;
@@ -316,51 +318,50 @@ impl InferenceOrchestrator {
                 }
 
                 // Try to use the local provider's streaming if available
-                let (output, stream) = if let Some(ref provider) = self.local_provider {
-                    // Use the provider's streaming with kernel streaming types
+                let (output, stream): (String, Pin<Box<dyn futures::Stream<Item = String> + Send + Sync>>) = if let Some(ref provider) = self.local_provider {
+                    // Use the provider's streaming
                     let provider_stream = provider.infer_stream(&request.prompt);
                     
-                    // Collect output for the result (we need to run the stream)
+                    // Collect output for the result
                     let output = format!(
                         "[local:{}] Streaming inference for: {}",
                         model_id, request.prompt
                     );
                     
-                    // Convert from StreamChunk to String - box to ensure type consistency
-                    let stream = provider_stream
-                        .map(|r| {
-                            match r {
-                                Ok(chunk) => chunk.delta,
-                                Err(e) => format!("[error: {}]", e),
+                    // Collect the provider stream into a Vec to avoid Sync issues
+                    // Use block_on since we're in a sync function
+                    let collected: Vec<String> = futures::executor::block_on(async {
+                        use futures::StreamExt;
+                        let mut stream = provider_stream;
+                        let mut tokens = Vec::new();
+                        while let Some(result) = stream.next().await {
+                            match result {
+                                Ok(chunk) => tokens.push(chunk.delta),
+                                Err(e) => tokens.push(format!("[error: {}]", e)),
                             }
-                        });
-                    let boxed: std::pin::Pin<Box<dyn futures::Stream<Item = String> + Send + Sync>> = Box::pin(stream);
+                        }
+                        tokens
+                    });
                     
-                    (output, boxed)
+                    // Now stream from the collected Vec (this is Sync-safe)
+                    let string_stream = async_stream::stream! {
+                        for token in collected {
+                            yield token;
+                        }
+                    };
+                    
+                    (output, Box::pin(string_stream) as _)
                 } else {
                     // Fallback: error since no provider is available
-                    // Return a stream that emits an error message
                     let output = format!(
                         "[local:{}] Streaming inference for: {}",
                         model_id, request.prompt
                     );
-                    let stream: BoxTokenStream = Box::pin(futures::stream::once(async move {
-                        Err(StreamError::provider(
-                            "InferenceOrchestrator",
-                            "No local provider configured - set up LinuxLocalProvider for streaming",
-                        ))
-                    }));
-                    // Convert BoxTokenStream to String stream - box to ensure type consistency
-                    let string_stream = stream
-                        .map(|r| {
-                            match r {
-                                Ok(chunk) => chunk.delta,
-                                Err(e) => format!("[error: {}]", e),
-                            }
-                        });
-                    let boxed: std::pin::Pin<Box<dyn futures::Stream<Item = String> + Send + Sync>> = Box::pin(string_stream);
+                    let error_stream = async_stream::stream! {
+                        yield String::from("[error: No local provider configured - set up LinuxLocalProvider for streaming]");
+                    };
                     
-                    (output, boxed)
+                    (output, Box::pin(error_stream) as _)
                 };
 
                 let result = InferenceResult {
