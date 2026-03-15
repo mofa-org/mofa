@@ -10,6 +10,8 @@
 use futures::StreamExt;
 use mofa_foundation::inference::orchestrator::{InferenceOrchestrator, OrchestratorConfig};
 use mofa_foundation::inference::routing::RoutingPolicy;
+use mofa_foundation::inference::types::{InferenceRequest, RequestPriority};
+use mofa_kernel::llm::streaming::StreamChunk;
 use mofa_local_llm::config::LinuxInferenceConfig;
 use mofa_local_llm::hardware::ComputeBackend;
 use mofa_local_llm::provider::LinuxLocalProvider;
@@ -179,29 +181,7 @@ impl ExecutionTrace {
 // Compute Mesh Components
 // ============================================================================
 
-/// Routing policy for compute mesh
-#[derive(Debug, Clone)]
-#[allow(dead_code)]
-pub enum RoutingPolicy {
-    /// Use only local backend
-    LocalOnly,
-    /// Use only cloud backend
-    CloudOnly,
-    /// Try local first, fall back to cloud if needed
-    LocalFirstWithCloudFallback,
-}
-
-impl RoutingPolicy {
-    fn as_str(&self) -> &'static str {
-        match self {
-            RoutingPolicy::LocalOnly => "LocalOnly",
-            RoutingPolicy::CloudOnly => "CloudOnly",
-            RoutingPolicy::LocalFirstWithCloudFallback => "LocalFirstWithCloudFallback",
-        }
-    }
-}
-
-/// Backend selection
+/// Backend selection (local helper, not the foundation's type)
 #[derive(Debug, Clone)]
 #[allow(dead_code)]
 pub enum Backend {
@@ -226,10 +206,10 @@ impl Backend {
 
 /// Main compute mesh pipeline with trace instrumentation and performance benchmarking
 #[allow(dead_code)]
-#[derive(Debug)]
 pub struct ComputeMeshPipeline {
     trace: Arc<RwLock<ExecutionTrace>>,
     policy: RoutingPolicy,
+    #[allow(dead_code)]
     orchestrator: InferenceOrchestrator,
 }
 
@@ -280,7 +260,19 @@ impl ComputeMeshPipeline {
 
         // Stage 2: Routing Decision
         let backend = {
-            let policy_str = self.policy.as_str();
+            // Convert our local policy to foundation's RoutingPolicy
+            let foundation_policy = match self.policy {
+                RoutingPolicy::LocalFirstWithCloudFallback => {
+                    mofa_foundation::inference::routing::RoutingPolicy::LocalFirst
+                }
+                RoutingPolicy::LocalOnly => {
+                    mofa_foundation::inference::routing::RoutingPolicy::LocalOnly
+                }
+                RoutingPolicy::CloudOnly => {
+                    mofa_foundation::inference::routing::RoutingPolicy::CloudOnly
+                }
+            };
+            let policy_str = format!("{:?}", foundation_policy);
             trace
                 .write()
                 .unwrap()
@@ -372,14 +364,8 @@ impl ComputeMeshPipeline {
         
         // For demonstration, we'll use the orchestrator's streaming
         // Create a mock inference request for the orchestrator
-        let request = InferenceRequest {
-            prompt: input.to_string(),
-            model_id: Some("demo-model".to_string()),
-            required_memory_mb: 1024,
-            preferred_precision: mofa_foundation::orchestrator::traits::DegradationLevel::Int4,
-            priority: RequestPriority::Normal,
-            max_tokens: Some(50),
-        };
+        let request = InferenceRequest::new("demo-model", &input.to_string(), 1024)
+            .with_priority(RequestPriority::Normal);
         
         // Use the orchestrator's streaming
         let (_result, mut stream) = self.orchestrator.infer_stream(&request);
@@ -393,14 +379,23 @@ impl ComputeMeshPipeline {
                         *first_token_time = Some(Instant::now());
                     }
                     
-                    let detail = format!("token_{}", token_count + 1);
-                    self.trace
-                        .write()
-                        .unwrap()
-                        .record("streaming.tokens", Some(detail));
+                    // Extract text from the chunk
+                    let text = token.delta;
+                    if !text.is_empty() {
+                        let detail = format!("token_{}: {}", token_count + 1, text);
+                        self.trace
+                            .write()
+                            .unwrap()
+                            .record("streaming.tokens", Some(detail));
+                        
+                        info!("[stream] {}", text);
+                        token_count += 1;
+                    }
                     
-                    info!("[stream] {}", token);
-                    token_count += 1;
+                    // Check if this is the last chunk
+                    if token.is_done() {
+                        break;
+                    }
                 }
                 Err(e) => {
                     tracing::warn!("Stream error: {:?}", e);

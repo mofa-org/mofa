@@ -3548,7 +3548,9 @@ dependencies = [
 name = "local_compute_mesh_demo"
 version = "0.1.0"
 dependencies = [
+ "futures",
  "mofa-foundation",
+ "mofa-kernel",
  "mofa-local-llm",
  "serde",
  "serde_json",
