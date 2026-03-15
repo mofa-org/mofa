@@ -8,6 +8,7 @@
 //! Pipeline: workflow → routing → backend → inference → streaming → metrics → trace
 
 use futures::StreamExt;
+use mofa_foundation::inference::orchestrator::{InferenceOrchestrator, OrchestratorConfig};
 use mofa_foundation::inference::routing::RoutingPolicy;
 use mofa_local_llm::config::LinuxInferenceConfig;
 use mofa_local_llm::hardware::ComputeBackend;
@@ -229,7 +230,7 @@ impl Backend {
 pub struct ComputeMeshPipeline {
     trace: Arc<RwLock<ExecutionTrace>>,
     policy: RoutingPolicy,
-    local_provider: LinuxLocalProvider,
+    orchestrator: InferenceOrchestrator,
 }
 
 impl ComputeMeshPipeline {
@@ -247,10 +248,17 @@ impl ComputeMeshPipeline {
         let local_provider = LinuxLocalProvider::new(local_config)
             .expect("Failed to create local provider");
 
+        // Create the inference orchestrator with the local provider
+        let config = OrchestratorConfig::default();
+        let orchestrator = InferenceOrchestrator::with_local_provider(
+            config, 
+            Arc::new(local_provider)
+        );
+
         Self {
             trace: Arc::new(RwLock::new(ExecutionTrace::new())),
             policy,
-            local_provider,
+            orchestrator,
         }
     }
 

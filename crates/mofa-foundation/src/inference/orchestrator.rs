@@ -25,9 +25,11 @@
 //! Precision adaptation (f16→q8→q4 downgrade) and deferred-queue
 //! scheduling will be introduced in Phase 2.
 
+use std::sync::Arc;
 use std::time::Duration;
 
 use crate::hardware::{HardwareCapability, detect_hardware};
+use crate::orchestrator::traits::ModelProvider;
 
 mod duration_secs {
     use serde::{Deserialize, Deserializer, Serialize, Serializer};
@@ -97,6 +99,7 @@ pub struct InferenceOrchestrator {
     config: OrchestratorConfig,
     model_pool: ModelPool,
     hardware: HardwareCapability,
+    local_provider: Option<Arc<dyn ModelProvider>>,
 }
 
 impl InferenceOrchestrator {
@@ -118,6 +121,26 @@ impl InferenceOrchestrator {
             config,
             model_pool,
             hardware,
+            local_provider: None,
+        }
+    }
+
+    /// Create a new orchestrator with a local provider for streaming inference.
+    pub fn with_local_provider(mut config: OrchestratorConfig, provider: Arc<dyn ModelProvider>) -> Self {
+        let hardware = detect_hardware();
+
+        // Dynamically override memory capacity with actual unified memory (MB)
+        if config.memory_capacity_mb == 16384 {
+            config.memory_capacity_mb = (hardware.total_memory_bytes / 1_000_000) as usize;
+        }
+
+        let model_pool = ModelPool::new(config.model_pool_capacity, config.idle_timeout);
+
+        Self {
+            config,
+            model_pool,
+            hardware,
+            local_provider: Some(provider),
         }
     }
 
@@ -129,6 +152,7 @@ impl InferenceOrchestrator {
             config,
             model_pool,
             hardware,
+            local_provider: None,
         }
     }
 
@@ -249,6 +273,9 @@ impl InferenceOrchestrator {
     ///
     /// This method routes the request and returns a stream of tokens
     /// from the appropriate backend (local or cloud).
+    /// 
+    /// When a local provider is available, it uses the provider's native streaming.
+    /// Otherwise, it falls back to simulated token generation.
     pub fn infer_stream(
         &mut self,
         request: &InferenceRequest,
@@ -286,20 +313,35 @@ impl InferenceOrchestrator {
                     self.model_pool.touch(model_id);
                 }
 
-                // For local backend, try to get streaming provider
-                // The model pool may not have direct provider access, so we simulate
-                // streaming by generating tokens from the output
-                let output = format!(
-                    "[local:{}] Streaming inference for: {}",
-                    model_id, request.prompt
-                );
-                
-                // Generate simulated token stream from the output
-                let words: Vec<String> = output
-                    .split_whitespace()
-                    .map(|w| format!("{w} "))
-                    .collect();
-                let stream = futures::stream::iter(words);
+                // Try to use the local provider's streaming if available
+                let (output, stream) = if let Some(ref provider) = self.local_provider {
+                    // Use the provider's streaming
+                    let provider_stream = provider.infer_stream(&request.prompt);
+                    
+                    // Collect output for the result (we need to run the stream)
+                    let output = format!(
+                        "[local:{}] Streaming inference for: {}",
+                        model_id, request.prompt
+                    );
+                    
+                    // Convert from OrchestratorResult<String> to String
+                    let stream = provider_stream.map(|r| r.unwrap_or_else(|e| format!("error: {}", e)));
+                    
+                    (output, stream)
+                } else {
+                    // Fallback: simulate streaming
+                    let output = format!(
+                        "[local:{}] Streaming inference for: {}",
+                        model_id, request.prompt
+                    );
+                    let words: Vec<String> = output
+                        .split_whitespace()
+                        .map(|w| format!("{w} "))
+                        .collect();
+                    let stream = futures::stream::iter(words);
+                    
+                    (output, stream)
+                };
 
                 let result = InferenceResult {
                     output,
