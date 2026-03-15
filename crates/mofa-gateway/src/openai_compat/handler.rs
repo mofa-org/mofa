@@ -26,12 +26,43 @@ use futures::stream;
 
 use mofa_foundation::inference::orchestrator::InferenceOrchestrator;
 use mofa_foundation::inference::types::InferenceRequest;
+use mofa_kernel::llm::streaming::{BoxTokenStream, StreamChunk, StreamError};
 
 use super::rate_limiter::TokenBucketLimiter;
 use super::types::{
     ChatCompletionChunk, ChatCompletionRequest, ChatCompletionResponse, ChatMessage, Choice,
     ChunkChoice, Delta, GatewayErrorBody, ModelListResponse, ModelObject, Usage,
 };
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Token stream adapter: kernel -> gateway
+// ──────────────────────────────────────────────────────────────────────────────
+
+/// Adapts the kernel's `BoxTokenStream` (which yields `Result<StreamChunk, StreamError>`)
+/// into the gateway's expected `Stream<Item = String>` for SSE streaming.
+fn adapt_token_stream_to_string(
+    token_stream: BoxTokenStream,
+) -> std::pin::Pin<Box<dyn futures::Stream<Item = String> + Send + Sync>> {
+    use futures::StreamExt;
+    let adapted = token_stream.map(|result| match result {
+        Ok(chunk) => {
+            // Only extract text content; empty deltas (done chunks) are filtered out
+            if chunk.delta.is_empty() {
+                None
+            } else {
+                Some(chunk.delta)
+            }
+        }
+        Err(e) => {
+            tracing::warn!(error = %e, "token stream error, emitting empty string");
+            Some(String::new())
+        }
+    });
+    // Filter out None values (empty/done chunks)
+    let filtered = adapted.filter(|s| futures::future::ready(s.is_some()));
+    let mapped = filtered.map(|s| s.unwrap_or_default());
+    Box::pin(mapped)
+}
 
 // ──────────────────────────────────────────────────────────────────────────────
 // Shared application state
@@ -209,7 +240,8 @@ pub async fn chat_completions(
         let model_used = req.model.clone();
         let headers = mofa_headers(&backend_label, latency_ms);
 
-        build_streaming_response(token_stream, model_used, headers)
+        let string_stream = adapt_token_stream_to_string(token_stream);
+        build_streaming_response(string_stream, model_used, headers)
     } else {
         let result = {
             let mut orch = state.orchestrator.write().await;
