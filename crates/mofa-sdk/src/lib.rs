@@ -1011,6 +1011,79 @@ pub mod dora {
 }
 
 // =============================================================================
+// Speech — TTS/ASR cloud adapters + registry helpers
+// =============================================================================
+
+/// Cloud TTS/ASR adapters and the config-driven registry builder.
+///
+/// Adapter types are gated by the matching feature flag so users only pull in
+/// vendor dependencies they actually need.
+///
+/// # Feature flags
+///
+/// | Flag | Adapter |
+/// |---|---|
+/// | `openai-speech` | [`OpenAiTtsAdapter`], [`OpenAiAsrAdapter`] |
+/// | `elevenlabs` | [`ElevenLabsTtsAdapter`] |
+/// | `deepgram` | [`DeepgramAsrAdapter`] |
+///
+/// # Quick start
+///
+/// ```toml
+/// [dependencies]
+/// mofa-sdk = { version = "0.1", features = ["openai-speech", "deepgram"] }
+/// ```
+///
+/// ```rust,ignore
+/// use mofa_sdk::speech::{
+///     SpeechConfig, SpeechProviderConfig, register_speech_adapters,
+///     SpeechAdapterRegistry,
+/// };
+///
+/// let config = SpeechConfig::new()
+///     .with_provider(SpeechProviderConfig::new("openai", "sk-...").as_default_tts().as_default_asr())
+///     .with_provider(SpeechProviderConfig::new("deepgram", "dg-...").as_default_asr());
+///
+/// let mut registry = SpeechAdapterRegistry::new();
+/// register_speech_adapters(&mut registry, &config).unwrap();
+///
+/// let tts = registry.default_tts().unwrap();
+/// ```
+pub mod speech {
+    // ---- kernel speech traits (always available) ----------------------------
+    pub use mofa_kernel::speech::{
+        AsrAdapter, AsrConfig, AudioFormat, AudioOutput, TtsAdapter, TtsConfig,
+        TranscriptionResult, VoiceDescriptor,
+    };
+
+    // ---- foundation registry + pipeline (always available) ------------------
+    pub use mofa_foundation::speech_registry::SpeechAdapterRegistry;
+    pub use mofa_foundation::voice_pipeline::{VoicePipeline, VoicePipelineConfig, VoicePipelineResult};
+
+    // ---- config types (always available, no feature gate needed) ------------
+    #[cfg(any(
+        feature = "openai-speech",
+        feature = "elevenlabs",
+        feature = "deepgram"
+    ))]
+    pub use mofa_integrations::speech::registry_builder::{SpeechConfig, SpeechProviderConfig};
+
+    // ---- per-vendor adapter re-exports --------------------------------------
+
+    #[cfg(feature = "openai-speech")]
+    pub use mofa_integrations::speech::openai::{
+        OpenAiAsrAdapter, OpenAiSpeechConfig, OpenAiTtsAdapter, OpenAiTtsModel,
+    };
+
+    #[cfg(feature = "elevenlabs")]
+    pub use mofa_integrations::speech::elevenlabs::{ElevenLabsConfig, ElevenLabsTtsAdapter};
+
+    #[cfg(feature = "deepgram")]
+    pub use mofa_integrations::speech::deepgram::{DeepgramAsrAdapter, DeepgramConfig};
+
+}
+
+// =============================================================================
 // Agent Skills - Progressive Disclosure Skills System
 // =============================================================================
 
