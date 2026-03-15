@@ -53,6 +53,7 @@ pub mod collaboration;
 // RAG module - vector store and document chunking
 pub mod rag;
 
+// Security module - security governance (RBAC, PII, moderation, prompt guard)
 // HITL module - Human-in-the-Loop system
 pub mod hitl;
 // cost module - concrete pricing registry and budget enforcer implementations
