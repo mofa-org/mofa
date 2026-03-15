@@ -3,6 +3,10 @@ name = "local_compute_mesh_demo"
 version.workspace = true
 edition.workspace = true
 
+[[bin]]
+name = "local_compute_mesh_demo"
+path = "src/main.rs"
+
 [dependencies]
 tokio.workspace = true
 mofa-foundation = {path = "../../crates/mofa-foundation" }
