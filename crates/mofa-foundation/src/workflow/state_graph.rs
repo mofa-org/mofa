@@ -54,7 +54,7 @@ pub struct StateGraphImpl<S: GraphState> {
     /// Entry point (first node after START)
     entry_point: Option<NodeId>,
     /// Finish points (nodes that connect to END)
-    finish_points: Vec<NodeId>,
+    finish_points: HashSet<NodeId>,
     /// 图配置
     /// Graph configuration
     config: GraphConfig,
@@ -72,7 +72,7 @@ impl<S: GraphState> StateGraphImpl<S> {
             edges: HashMap::new(),
             reducers: HashMap::new(),
             entry_point: None,
-            finish_points: Vec::new(),
+            finish_points: HashSet::new(),
             config: GraphConfig::default(),
             policies: HashMap::new(),
         }
@@ -201,9 +201,7 @@ impl<S: GraphState + 'static> mofa_kernel::workflow::StateGraph for StateGraphIm
 
         // Handle END edge (finish point)
         if to_id == END {
-            if !self.finish_points.contains(&from_id) {
-                self.finish_points.push(from_id.clone());
-            }
+            self.finish_points.insert(from_id.clone());
             return self;
         }
 
@@ -267,9 +265,7 @@ impl<S: GraphState + 'static> mofa_kernel::workflow::StateGraph for StateGraphIm
     fn set_finish_point(&mut self, node: impl Into<String>) -> &mut Self {
         let node_id = node.into();
         debug!("Setting finish point at '{}'", node_id);
-        if !self.finish_points.contains(&node_id) {
-            self.finish_points.push(node_id);
-        }
+        self.finish_points.insert(node_id);
         self
     }
 
