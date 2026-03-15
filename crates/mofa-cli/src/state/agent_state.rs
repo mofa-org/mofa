@@ -342,7 +342,8 @@ mod tests {
             "tags": []
         }"#;
 
-        let metadata: AgentMetadata = serde_json::from_str(legacy).expect("legacy metadata should deserialize");
+        let metadata: AgentMetadata =
+            serde_json::from_str(legacy).expect("legacy metadata should deserialize");
         assert_eq!(metadata.last_state, AgentProcessState::Stopped);
         assert_eq!(metadata.id, "agent-legacy");
     }
