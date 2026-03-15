@@ -55,6 +55,7 @@ thiserror.workspace = true
 error-stack = { workspace = true }
 tokio.workspace = true
 futures.workspace = true
+async-stream = "0.3"
 tokio-stream = { workspace = true }
 tracing.workspace = true
 rand.workspace = true

@@ -107,6 +107,12 @@ impl LinuxInferenceConfig {
         self.temperature = temp;
         Ok(self)
     }
+
+    /// Set maximum number of tokens to generate
+    pub fn with_max_tokens(mut self, tokens: usize) -> Self {
+        self.max_tokens = tokens;
+        self
+    }
 }
 
 // ============================================================================

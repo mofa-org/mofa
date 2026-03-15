@@ -5,9 +5,12 @@
 //! - `ModelOrchestrator`: Orchestrates multiple models with lifecycle, scheduling, and pipeline routing
 
 use async_trait::async_trait;
+use futures::stream::{Stream, StreamExt};
+use mofa_kernel::llm::streaming::{BoxTokenStream, StreamChunk, StreamError};
 use serde_json::Value;
 use std::collections::HashMap;
 use std::fmt;
+use std::pin::Pin;
 use std::sync::Arc;
 use thiserror::Error;
 
@@ -235,6 +238,24 @@ pub trait ModelProvider: Send + Sync {
 
     /// Run inference with the given input string, return response string
     async fn infer(&self, input: &str) -> OrchestratorResult<String>;
+
+    /// Run streaming inference with the given input string.
+    ///
+    /// Returns a stream of streaming chunks that can be consumed incrementally.
+    /// Uses kernel streaming types for provider-agnostic token delivery.
+    /// 
+    /// Note: Implementors MUST override this method for proper streaming support.
+    /// The default implementation returns an error.
+    fn infer_stream(&self, input: &str) -> BoxTokenStream {
+        // Default implementation returns an error - implementors must override
+        let name = self.name().to_string();
+        Box::pin(futures::stream::once(async move {
+            Err(StreamError::provider(
+                name,
+                "Streaming not implemented - use infer() instead or provide a streaming implementation",
+            ))
+        }))
+    }
 
     /// Current memory usage in bytes
     fn memory_usage_bytes(&self) -> u64;

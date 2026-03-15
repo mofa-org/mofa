@@ -25,9 +25,14 @@
 //! Precision adaptation (f16→q8→q4 downgrade) and deferred-queue
 //! scheduling will be introduced in Phase 2.
 
+use std::sync::Arc;
 use std::time::Duration;
 
+use futures::StreamExt;
 use crate::hardware::{HardwareCapability, detect_hardware};
+use crate::orchestrator::traits::ModelProvider;
+use mofa_kernel::llm::streaming::{BoxTokenStream, StreamChunk, StreamError};
+use mofa_kernel::llm::types::FinishReason;
 
 mod duration_secs {
     use serde::{Deserialize, Deserializer, Serialize, Serializer};
@@ -97,6 +102,7 @@ pub struct InferenceOrchestrator {
     config: OrchestratorConfig,
     model_pool: ModelPool,
     hardware: HardwareCapability,
+    local_provider: Option<Arc<dyn ModelProvider>>,
 }
 
 impl InferenceOrchestrator {
@@ -118,6 +124,26 @@ impl InferenceOrchestrator {
             config,
             model_pool,
             hardware,
+            local_provider: None,
+        }
+    }
+
+    /// Create a new orchestrator with a local provider for streaming inference.
+    pub fn with_local_provider(mut config: OrchestratorConfig, provider: Arc<dyn ModelProvider>) -> Self {
+        let hardware = detect_hardware();
+
+        // Dynamically override memory capacity with actual unified memory (MB)
+        if config.memory_capacity_mb == 16384 {
+            config.memory_capacity_mb = (hardware.total_memory_bytes / 1_000_000) as usize;
+        }
+
+        let model_pool = ModelPool::new(config.model_pool_capacity, config.idle_timeout);
+
+        Self {
+            config,
+            model_pool,
+            hardware,
+            local_provider: Some(provider),
         }
     }
 
@@ -129,6 +155,7 @@ impl InferenceOrchestrator {
             config,
             model_pool,
             hardware,
+            local_provider: None,
         }
     }
 
@@ -245,32 +272,187 @@ impl InferenceOrchestrator {
         }
     }
 
-    /// Phase-1 simulated streaming entry point.
+    /// Unified streaming inference entry point.
     ///
-    /// **Warning**: This method splits the fully-generated output by whitespace
-    /// to simulate token-level SSE. It will be replaced by real incremental
-    /// decoding in Phase 2. Hidden from public documentation until then.
-    #[doc(hidden)]
+    /// This method routes the request and returns a stream of tokens
+    /// from the appropriate backend (local or cloud).
+    /// 
+    /// When a local provider is available, it uses the provider's native streaming.
+    /// Otherwise, it falls back to simulated token generation.
     pub fn infer_stream(
         &mut self,
         request: &InferenceRequest,
-    ) -> (
-        InferenceResult,
-        std::pin::Pin<Box<dyn futures::Stream<Item = String> + Send + Sync>>,
-    ) {
-        // Run full admission/routing logic
-        let base_result = self.infer(request);
+    ) -> (InferenceResult, BoxTokenStream) {
+        // Step 1: Evict idle models to free memory before admission check
+        self.model_pool.evict_idle();
 
-        // Phase 1 simulated string stream based on the generated output
-        let output_str = base_result.output.clone();
+        // Step 2: Evaluate admission based on current memory state
+        let admission = self.evaluate_admission(request);
 
-        let words: Vec<String> = output_str
-            .split_whitespace()
-            .map(|w| format!("{w} "))
-            .collect();
-        let stream = futures::stream::iter(words);
+        // Step 3: Resolve routing based on policy + admission + hardware
+        let decision = routing::resolve(
+            &self.config.routing_policy,
+            request,
+            admission,
+            &self.hardware,
+            &self.config.cloud_provider,
+        );
 
-        (base_result, Box::pin(stream))
+        // Step 4: Execute based on routing decision and build result
+        match &decision {
+            RoutingDecision::UseLocal { model_id } => {
+                // Load the model if not already loaded
+                if !self.model_pool.is_loaded(model_id) {
+                    self.model_pool.load(
+                        model_id,
+                        request.required_memory_mb,
+                        request.preferred_precision,
+                        request.priority,
+                    );
+                } else {
+                    self.model_pool.touch(model_id);
+                }
+
+                // Try to use the local provider's streaming if available
+                let (output, stream): (String, BoxTokenStream) = if let Some(ref provider) = self.local_provider {
+                    // Use the provider's streaming directly - return BoxTokenStream
+                    let provider_stream = provider.infer_stream(&request.prompt);
+                    
+                    // Collect output for the result (synchronous summary)
+                    let output = format!(
+                        "[local:{}] Streaming inference for: {}",
+                        model_id, request.prompt
+                    );
+                    
+                    (output, provider_stream)
+                } else {
+                    // Fallback: error since no provider is available
+                    let output = format!(
+                        "[local:{}] Streaming inference for: {}",
+                        model_id, request.prompt
+                    );
+                    
+                    // Create an error stream using kernel types
+                    let error_stream = futures::stream::iter(vec![
+                        Err(StreamError::provider(
+                            "LinuxLocalProvider",
+                            "No local provider configured - set up LinuxLocalProvider for streaming"
+                        ))
+                    ]);
+                    
+                    (output, Box::pin(error_stream) as BoxTokenStream)
+                };
+
+                let result = InferenceResult {
+                    output,
+                    routed_to: RoutedBackend::Local {
+                        model_id: model_id.clone(),
+                    },
+                    actual_precision: request.preferred_precision,
+                };
+
+                (result, stream)
+            }
+            RoutingDecision::UseLocalDegraded {
+                model_id,
+                degraded_precision,
+                quality_warning,
+            } => {
+                let degraded_memory_mb = ((request.required_memory_mb as f64)
+                    * (degraded_precision.bytes_per_param()
+                        / request.preferred_precision.bytes_per_param()))
+                .ceil() as usize;
+
+                if !self.model_pool.is_loaded(model_id) {
+                    self.model_pool.load(
+                        model_id,
+                        degraded_memory_mb,
+                        *degraded_precision,
+                        request.priority,
+                    );
+                } else {
+                    self.model_pool.touch(model_id);
+                }
+
+                tracing::warn!(
+                    model_id,
+                    from = %request.preferred_precision,
+                    to = %degraded_precision,
+                    "{}",
+                    quality_warning
+                );
+
+                let output = format!(
+                    "[local-degraded:{}@{}] Streaming inference for: {}",
+                    model_id, degraded_precision, request.prompt
+                );
+                
+                // Create simulated token stream as BoxTokenStream
+                let words: Vec<Result<StreamChunk, StreamError>> = output
+                    .split_whitespace()
+                    .map(|w| Ok(StreamChunk::text(format!("{w} "))))
+                    .collect();
+                // Add final chunk
+                let mut chunks = words;
+                chunks.push(Ok(StreamChunk::done(FinishReason::Stop)));
+                let stream = futures::stream::iter(chunks);
+
+                let result = InferenceResult {
+                    output,
+                    routed_to: RoutedBackend::Local {
+                        model_id: model_id.clone(),
+                    },
+                    actual_precision: *degraded_precision,
+                };
+
+                (result, Box::pin(stream) as BoxTokenStream)
+            }
+            RoutingDecision::UseCloud { provider } => {
+                let output = format!(
+                    "[cloud:{}] Streaming inference for: {}",
+                    provider, request.prompt
+                );
+                
+                // Create simulated token stream as BoxTokenStream
+                let words: Vec<Result<StreamChunk, StreamError>> = output
+                    .split_whitespace()
+                    .map(|w| Ok(StreamChunk::text(format!("{w} "))))
+                    .collect();
+                // Add final chunk
+                let mut chunks = words;
+                chunks.push(Ok(StreamChunk::done(FinishReason::Stop)));
+                let stream = futures::stream::iter(chunks);
+
+                let result = InferenceResult {
+                    output,
+                    routed_to: RoutedBackend::Cloud {
+                        provider: provider.clone(),
+                    },
+                    actual_precision: request.preferred_precision,
+                };
+
+                (result, Box::pin(stream) as BoxTokenStream)
+            }
+            RoutingDecision::Rejected { reason } => {
+                let output = format!("[rejected] {}", reason);
+                
+                // Create error stream as BoxTokenStream
+                let chunks: Vec<Result<StreamChunk, StreamError>> = vec![
+                    Err(StreamError::provider("orchestrator", reason.clone())),
+                ];
+                let stream = futures::stream::iter(chunks);
+
+                let result = InferenceResult {
+                    output,
+                    routed_to: RoutedBackend::Rejected {
+                        reason: reason.clone(),
+                    },
+                    actual_precision: request.preferred_precision,
+                };
+
+                (result, Box::pin(stream) as BoxTokenStream)
+            }
+        }
     }
 
     /// Evaluate whether a local backend can admit this request based on

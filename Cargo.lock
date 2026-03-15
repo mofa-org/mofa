@@ -5858,8 +5858,9 @@ name = "mofa-foundation"
 version = "0.1.0"
 dependencies = [
  "async-openai",
+ "async-stream",
  "async-trait",
- "axum 0.6.20",
+ "axum",
  "base64 0.22.1",
  "candle-core",
  "candle-transformers",
@@ -6001,7 +6002,10 @@ version = "0.1.0"
 dependencies = [
  "async-trait",
  "chrono",
+ "futures",
  "mofa-foundation",
+ "mofa-kernel",
+ "rand 0.8.5",
  "serde",
  "serde_json",
  "sysinfo 0.31.4",
