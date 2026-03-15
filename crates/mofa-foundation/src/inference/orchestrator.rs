@@ -26,14 +26,13 @@
 //! scheduling will be introduced in Phase 2.
 
 use std::sync::Arc;
-use std::pin::Pin;
 use std::time::Duration;
 
-use async_stream::stream;
 use futures::StreamExt;
 use crate::hardware::{HardwareCapability, detect_hardware};
 use crate::orchestrator::traits::ModelProvider;
 use mofa_kernel::llm::streaming::{BoxTokenStream, StreamChunk, StreamError};
+use mofa_kernel::llm::types::FinishReason;
 
 mod duration_secs {
     use serde::{Deserialize, Deserializer, Serialize, Serializer};
@@ -283,10 +282,7 @@ impl InferenceOrchestrator {
     pub fn infer_stream(
         &mut self,
         request: &InferenceRequest,
-    ) -> (
-        InferenceResult,
-        std::pin::Pin<Box<dyn futures::Stream<Item = String> + Send + Sync>>,
-    ) {
+    ) -> (InferenceResult, BoxTokenStream) {
         // Step 1: Evict idle models to free memory before admission check
         self.model_pool.evict_idle();
 
@@ -318,50 +314,33 @@ impl InferenceOrchestrator {
                 }
 
                 // Try to use the local provider's streaming if available
-                let (output, stream): (String, Pin<Box<dyn futures::Stream<Item = String> + Send + Sync>>) = if let Some(ref provider) = self.local_provider {
-                    // Use the provider's streaming
+                let (output, stream): (String, BoxTokenStream) = if let Some(ref provider) = self.local_provider {
+                    // Use the provider's streaming directly - return BoxTokenStream
                     let provider_stream = provider.infer_stream(&request.prompt);
                     
-                    // Collect output for the result
+                    // Collect output for the result (synchronous summary)
                     let output = format!(
                         "[local:{}] Streaming inference for: {}",
                         model_id, request.prompt
                     );
                     
-                    // Collect the provider stream into a Vec to avoid Sync issues
-                    // Use block_on since we're in a sync function
-                    let collected: Vec<String> = futures::executor::block_on(async {
-                        use futures::StreamExt;
-                        let mut stream = provider_stream;
-                        let mut tokens = Vec::new();
-                        while let Some(result) = stream.next().await {
-                            match result {
-                                Ok(chunk) => tokens.push(chunk.delta),
-                                Err(e) => tokens.push(format!("[error: {}]", e)),
-                            }
-                        }
-                        tokens
-                    });
-                    
-                    // Now stream from the collected Vec (this is Sync-safe)
-                    let string_stream = async_stream::stream! {
-                        for token in collected {
-                            yield token;
-                        }
-                    };
-                    
-                    (output, Box::pin(string_stream) as _)
+                    (output, provider_stream)
                 } else {
                     // Fallback: error since no provider is available
                     let output = format!(
                         "[local:{}] Streaming inference for: {}",
                         model_id, request.prompt
                     );
-                    let error_stream = async_stream::stream! {
-                        yield String::from("[error: No local provider configured - set up LinuxLocalProvider for streaming]");
-                    };
                     
-                    (output, Box::pin(error_stream) as _)
+                    // Create an error stream using kernel types
+                    let error_stream = futures::stream::iter(vec![
+                        Err(StreamError::provider(
+                            "LinuxLocalProvider",
+                            "No local provider configured - set up LinuxLocalProvider for streaming"
+                        ))
+                    ]);
+                    
+                    (output, Box::pin(error_stream) as BoxTokenStream)
                 };
 
                 let result = InferenceResult {
@@ -372,7 +351,7 @@ impl InferenceOrchestrator {
                     actual_precision: request.preferred_precision,
                 };
 
-                (result, Box::pin(stream))
+                (result, stream)
             }
             RoutingDecision::UseLocalDegraded {
                 model_id,
@@ -408,11 +387,15 @@ impl InferenceOrchestrator {
                     model_id, degraded_precision, request.prompt
                 );
                 
-                let words: Vec<String> = output
+                // Create simulated token stream as BoxTokenStream
+                let words: Vec<Result<StreamChunk, StreamError>> = output
                     .split_whitespace()
-                    .map(|w| format!("{w} "))
+                    .map(|w| Ok(StreamChunk::text(format!("{w} "))))
                     .collect();
-                let stream = futures::stream::iter(words);
+                // Add final chunk
+                let mut chunks = words;
+                chunks.push(Ok(StreamChunk::done(FinishReason::Stop)));
+                let stream = futures::stream::iter(chunks);
 
                 let result = InferenceResult {
                     output,
@@ -422,7 +405,7 @@ impl InferenceOrchestrator {
                     actual_precision: *degraded_precision,
                 };
 
-                (result, Box::pin(stream))
+                (result, Box::pin(stream) as BoxTokenStream)
             }
             RoutingDecision::UseCloud { provider } => {
                 let output = format!(
@@ -430,11 +413,15 @@ impl InferenceOrchestrator {
                     provider, request.prompt
                 );
                 
-                let words: Vec<String> = output
+                // Create simulated token stream as BoxTokenStream
+                let words: Vec<Result<StreamChunk, StreamError>> = output
                     .split_whitespace()
-                    .map(|w| format!("{w} "))
+                    .map(|w| Ok(StreamChunk::text(format!("{w} "))))
                     .collect();
-                let stream = futures::stream::iter(words);
+                // Add final chunk
+                let mut chunks = words;
+                chunks.push(Ok(StreamChunk::done(FinishReason::Stop)));
+                let stream = futures::stream::iter(chunks);
 
                 let result = InferenceResult {
                     output,
@@ -444,16 +431,16 @@ impl InferenceOrchestrator {
                     actual_precision: request.preferred_precision,
                 };
 
-                (result, Box::pin(stream))
+                (result, Box::pin(stream) as BoxTokenStream)
             }
             RoutingDecision::Rejected { reason } => {
                 let output = format!("[rejected] {}", reason);
                 
-                let words: Vec<String> = output
-                    .split_whitespace()
-                    .map(|w| format!("{w} "))
-                    .collect();
-                let stream = futures::stream::iter(words);
+                // Create error stream as BoxTokenStream
+                let chunks: Vec<Result<StreamChunk, StreamError>> = vec![
+                    Err(StreamError::provider("orchestrator", reason.clone())),
+                ];
+                let stream = futures::stream::iter(chunks);
 
                 let result = InferenceResult {
                     output,
@@ -463,7 +450,7 @@ impl InferenceOrchestrator {
                     actual_precision: request.preferred_precision,
                 };
 
-                (result, Box::pin(stream))
+                (result, Box::pin(stream) as BoxTokenStream)
             }
         }
     }
