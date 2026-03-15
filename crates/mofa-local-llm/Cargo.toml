@@ -35,7 +35,10 @@ rand = "0.8"
 # System information for hardware detection and memory monitoring
 sysinfo = "0.31"
 
+# Local inference dependencies
 mofa-foundation = { path = "../mofa-foundation", version = "0.1" }
+mofa-kernel = { path = "../mofa-kernel", version = "0.1" }
+futures = "0.3"
 
 [dev-dependencies]
 tokio = { version = "1", features = ["full", "rt-multi-thread"] }

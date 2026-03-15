@@ -7,10 +7,11 @@
 use crate::config::LinuxInferenceConfig;
 use crate::hardware::{ComputeBackend, HardwareInfo};
 use async_trait::async_trait;
-use futures::stream::{Stream, StreamExt};
+use futures::{Stream, StreamExt};
 use mofa_foundation::orchestrator::traits::{
     ModelProvider, ModelProviderConfig, ModelType, OrchestratorError, OrchestratorResult,
 };
+use mofa_kernel::llm::streaming::{BoxTokenStream, StreamChunk, StreamError};
 use rand::Rng;
 use serde_json::Value;
 use std::collections::HashMap;
@@ -253,12 +254,8 @@ impl ModelProvider for LinuxLocalProvider {
         Ok(std::path::Path::new(&self.config.model_path).exists())
     }
 
-    fn infer_stream(
-        &self,
-        input: &str,
-    ) -> Pin<Box<dyn Stream<Item = OrchestratorResult<String>> + Send + Sync>> {
-        self.infer_stream_impl(input)
-    }
+    // The trait method is now handled by the default implementation in the trait
+    // which calls infer_stream_impl - no override needed
 }
 
 // ============================================================================
@@ -293,7 +290,7 @@ impl LinuxLocalProvider {
     /// Real inference implementation using token generation.
     /// This produces actual text output based on the input prompt.
     fn run_inference_impl(&self, backend: &str, input: &str) -> OrchestratorResult<String> {
-        let max_tokens = self.config.max_tokens.unwrap_or(50);
+        let max_tokens = self.config.max_tokens;
         let output = self.generate_tokens(input, max_tokens);
         
         tracing::info!(
@@ -356,8 +353,8 @@ impl LinuxLocalProvider {
         &self,
         backend: &str,
         input: &str,
-    ) -> Pin<Box<dyn Stream<Item = OrchestratorResult<String>> + Send + Sync>> {
-        let max_tokens = self.config.max_tokens.unwrap_or(50);
+    ) -> BoxTokenStream {
+        let max_tokens = self.config.max_tokens;
         let tokens = self.generate_token_stream(input, max_tokens);
         let backend_str = backend.to_string();
         let model_name = self.config.model_name.clone();
@@ -371,7 +368,7 @@ impl LinuxLocalProvider {
                 tokio::time::sleep(tokio::time::Duration::from_millis(delay)).await;
                 
                 tracing::debug!(model = %model, backend = %backend, token = %token, "streaming token");
-                Ok(token)
+                Ok(StreamChunk::text(token))
             }
         }))
     }
@@ -416,13 +413,11 @@ impl LinuxLocalProvider {
     }
 
     /// Override the infer_stream method from ModelProvider trait
-    fn infer_stream_impl(
-        &self,
-        input: &str,
-    ) -> Pin<Box<dyn Stream<Item = OrchestratorResult<String>> + Send + Sync>> {
+    fn infer_stream_impl(&self, input: &str) -> BoxTokenStream {
         if !self.loaded {
-            return Box::pin(futures::stream::iter(vec![Err(OrchestratorError::InferenceFailed(
-                "model is not loaded".into(),
+            return Box::pin(futures::stream::iter(vec![Err(StreamError::provider(
+                self.name(),
+                "model is not loaded",
             ))]));
         }
 

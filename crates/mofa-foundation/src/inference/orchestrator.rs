@@ -28,8 +28,10 @@
 use std::sync::Arc;
 use std::time::Duration;
 
+use futures::StreamExt;
 use crate::hardware::{HardwareCapability, detect_hardware};
 use crate::orchestrator::traits::ModelProvider;
+use mofa_kernel::llm::streaming::{BoxTokenStream, StreamChunk, StreamError};
 
 mod duration_secs {
     use serde::{Deserialize, Deserializer, Serialize, Serializer};
@@ -281,7 +283,7 @@ impl InferenceOrchestrator {
         request: &InferenceRequest,
     ) -> (
         InferenceResult,
-        std::pin::Pin<Box<dyn futures::Stream<Item = String> + Send + Sync>>,
+        std::pin::Pin<Box<dyn futures::Stream<Item = String> + Send>>,
     ) {
         // Step 1: Evict idle models to free memory before admission check
         self.model_pool.evict_idle();
@@ -315,7 +317,7 @@ impl InferenceOrchestrator {
 
                 // Try to use the local provider's streaming if available
                 let (output, stream) = if let Some(ref provider) = self.local_provider {
-                    // Use the provider's streaming
+                    // Use the provider's streaming with kernel streaming types
                     let provider_stream = provider.infer_stream(&request.prompt);
                     
                     // Collect output for the result (we need to run the stream)
@@ -324,23 +326,41 @@ impl InferenceOrchestrator {
                         model_id, request.prompt
                     );
                     
-                    // Convert from OrchestratorResult<String> to String
-                    let stream = provider_stream.map(|r| r.unwrap_or_else(|e| format!("error: {}", e)));
+                    // Convert from StreamChunk to String - box to ensure type consistency
+                    let stream = provider_stream
+                        .map(|r| {
+                            match r {
+                                Ok(chunk) => chunk.delta,
+                                Err(e) => format!("[error: {}]", e),
+                            }
+                        });
+                    let boxed: std::pin::Pin<Box<dyn futures::Stream<Item = String> + Send>> = Box::pin(stream);
                     
-                    (output, stream)
+                    (output, boxed)
                 } else {
-                    // Fallback: simulate streaming
+                    // Fallback: error since no provider is available
+                    // Return a stream that emits an error message
                     let output = format!(
                         "[local:{}] Streaming inference for: {}",
                         model_id, request.prompt
                     );
-                    let words: Vec<String> = output
-                        .split_whitespace()
-                        .map(|w| format!("{w} "))
-                        .collect();
-                    let stream = futures::stream::iter(words);
+                    let stream: BoxTokenStream = Box::pin(futures::stream::once(async move {
+                        Err(StreamError::provider(
+                            "InferenceOrchestrator",
+                            "No local provider configured - set up LinuxLocalProvider for streaming",
+                        ))
+                    }));
+                    // Convert BoxTokenStream to String stream - box to ensure type consistency
+                    let string_stream = stream
+                        .map(|r| {
+                            match r {
+                                Ok(chunk) => chunk.delta,
+                                Err(e) => format!("[error: {}]", e),
+                            }
+                        });
+                    let boxed: std::pin::Pin<Box<dyn futures::Stream<Item = String> + Send>> = Box::pin(string_stream);
                     
-                    (output, stream)
+                    (output, boxed)
                 };
 
                 let result = InferenceResult {
