@@ -3,6 +3,7 @@
 //! Provides mock implementations, failure injection, and deterministic time
 //! control for testing MoFA agents.
 
+pub mod adversarial;
 pub mod assertions;
 pub mod backend;
 pub mod bus;
