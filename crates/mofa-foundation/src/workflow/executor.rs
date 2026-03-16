@@ -179,8 +179,8 @@ impl WorkflowExecutor {
 
         // Create steps from completed nodes
         for (nid, output) in node_outputs {
-            if let Some(status) = node_statuses.get(&nid) {
-                if matches!(status, super::state::NodeStatus::Completed) {
+            if let Some(status) = node_statuses.get(&nid)
+                && matches!(status, super::state::NodeStatus::Completed) {
                     steps.push(ExecutionStep {
                         step_id: nid.clone(),
                         step_type: "workflow_node".to_string(),
@@ -190,7 +190,6 @@ impl WorkflowExecutor {
                         metadata: HashMap::new(),
                     });
                 }
-            }
         }
 
         // Add current node step
@@ -415,9 +414,9 @@ impl WorkflowExecutor {
         );
 
         // Check if this was a unified HITL review (check for review_id in variables)
-        if let Some(review_id_value) = ctx.get_variable("review_id").await {
-            if let WorkflowValue::String(ref review_id_str) = review_id_value {
-                if let Some(ref review_handler) = self.review_handler {
+        if let Some(review_id_value) = ctx.get_variable("review_id").await
+            && let WorkflowValue::String(ref review_id_str) = review_id_value
+                && let Some(ref review_handler) = self.review_handler {
                     use mofa_kernel::hitl::ReviewRequestId;
                     let review_id = ReviewRequestId::new(review_id_str.clone());
 
@@ -456,8 +455,6 @@ impl WorkflowExecutor {
                         }
                     }
                 }
-            }
-        }
 
         // Calculate wait time
         if let Some(paused_at) = *ctx.paused_at.read().await {

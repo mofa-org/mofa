@@ -68,11 +68,13 @@ impl ReviewAnalytics {
         start_time_ms: Option<u64>,
         end_time_ms: Option<u64>,
     ) -> Result<ReviewMetrics, crate::hitl::audit::AuditStoreError> {
-        let mut query = AuditLogQuery::default();
-        query.tenant_id = tenant_id;
-        query.start_time_ms = start_time_ms;
-        query.end_time_ms = end_time_ms;
-        query.limit = Some(10000); // Large limit for analytics
+        let query = AuditLogQuery {
+            tenant_id,
+            start_time_ms,
+            end_time_ms,
+            limit: Some(10000), // Large limit for analytics
+            ..Default::default()
+        };
 
         let events = self.audit_store.query_events(&query).await?;
 
@@ -111,8 +113,8 @@ impl ReviewAnalytics {
                     pending_reviews = pending_reviews.saturating_sub(1);
 
                     // Extract status from event data
-                    if let Some(status_val) = event.data.get("status") {
-                        if let Some(status_str) = status_val.as_str() {
+                    if let Some(status_val) = event.data.get("status")
+                        && let Some(status_str) = status_val.as_str() {
                             let status = status_str.to_string();
                             *reviews_by_status.entry(status.clone()).or_insert(0) += 1;
 
@@ -122,7 +124,6 @@ impl ReviewAnalytics {
                                 rejected_reviews += 1;
                             }
                         }
-                    }
                 }
                 ReviewAuditEventType::Expired => {
                     expired_reviews += 1;
@@ -184,12 +185,14 @@ impl ReviewAnalytics {
         start_time_ms: Option<u64>,
         end_time_ms: Option<u64>,
     ) -> Result<Vec<ReviewerMetrics>, crate::hitl::audit::AuditStoreError> {
-        let mut query = AuditLogQuery::default();
-        query.tenant_id = tenant_id;
-        query.start_time_ms = start_time_ms;
-        query.end_time_ms = end_time_ms;
-        query.event_type = Some(ReviewAuditEventType::Resolved);
-        query.limit = Some(10000);
+        let query = AuditLogQuery {
+            tenant_id,
+            start_time_ms,
+            end_time_ms,
+            event_type: Some(ReviewAuditEventType::Resolved),
+            limit: Some(10000),
+            ..Default::default()
+        };
 
         let events = self.audit_store.query_events(&query).await?;
 
@@ -199,12 +202,14 @@ impl ReviewAnalytics {
             std::collections::HashMap::new();
 
         // First pass: collect creation times
-        let mut creation_query = AuditLogQuery::default();
-        creation_query.tenant_id = tenant_id;
-        creation_query.start_time_ms = start_time_ms;
-        creation_query.end_time_ms = end_time_ms;
-        creation_query.event_type = Some(ReviewAuditEventType::Created);
-        creation_query.limit = Some(10000);
+        let creation_query = AuditLogQuery {
+            tenant_id,
+            start_time_ms,
+            end_time_ms,
+            event_type: Some(ReviewAuditEventType::Created),
+            limit: Some(10000),
+            ..Default::default()
+        };
 
         let creation_events = self.audit_store.query_events(&creation_query).await?;
         for event in creation_events {
@@ -237,22 +242,19 @@ impl ReviewAnalytics {
                 }
 
                 // Check status
-                if let Some(status_val) = event.data.get("status") {
-                    if let Some(status_str) = status_val.as_str() {
+                if let Some(status_val) = event.data.get("status")
+                    && let Some(status_str) = status_val.as_str() {
                         if status_str.contains("Approved") {
                             stats.approved += 1;
                         } else if status_str.contains("Rejected") {
                             stats.rejected += 1;
                         }
                     }
-                }
             }
         }
 
         // Convert to ReviewerMetrics
-        let mut metrics: Vec<ReviewerMetrics> = reviewer_stats
-            .into_iter()
-            .map(|(_, stats)| {
+        let mut metrics: Vec<ReviewerMetrics> = reviewer_stats.into_values().map(|stats| {
                 let average_review_time_ms = if !stats.review_times.is_empty() {
                     let sum: u64 = stats.review_times.iter().sum();
                     Some(sum / stats.review_times.len() as u64)
@@ -285,12 +287,14 @@ impl ReviewAnalytics {
         end_time_ms: u64,
         interval_ms: u64,
     ) -> Result<Vec<TimeSeriesPoint>, crate::hitl::audit::AuditStoreError> {
-        let mut query = AuditLogQuery::default();
-        query.tenant_id = tenant_id;
-        query.start_time_ms = Some(start_time_ms);
-        query.end_time_ms = Some(end_time_ms);
-        query.event_type = Some(ReviewAuditEventType::Created);
-        query.limit = Some(100000);
+        let query = AuditLogQuery {
+            tenant_id,
+            start_time_ms: Some(start_time_ms),
+            end_time_ms: Some(end_time_ms),
+            event_type: Some(ReviewAuditEventType::Created),
+            limit: Some(100000),
+            ..Default::default()
+        };
 
         let events = self.audit_store.query_events(&query).await?;
 
