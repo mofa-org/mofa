@@ -231,18 +231,32 @@ let agent = ReActAgent::builder()
     .build();
 ```
 
-### SecretaryAgent
+### Secretary Pattern
 
-Human-in-the-loop workflow management:
+Human-in-the-loop workflow management (event-loop based):
 
 ```rust
-use mofa_sdk::secretary::SecretaryAgent;
+use mofa_sdk::secretary::{
+    ChannelConnection,
+    DefaultInput,
+    DefaultSecretaryBuilder,
+    SecretaryCore,
+};
 
-let agent = SecretaryAgent::builder()
-    .with_llm(client)
-    .with_human_feedback(true)
-    .with_delegation_targets(vec!["researcher", "writer"])
+let behavior = DefaultSecretaryBuilder::new()
+    .with_name("Project Secretary")
+    .with_auto_clarify(true)
+    .with_auto_dispatch(true)
     .build();
+
+let (conn, input_tx, mut output_rx) = ChannelConnection::new_pair(32);
+let (_handle, _join) = SecretaryCore::new(behavior).start(conn).await;
+
+input_tx.send(DefaultInput::Idea {
+    content: "Build release dashboard".to_string(),
+    priority: None,
+    metadata: None,
+}).await?;
 ```
 
 ## Using AgentRunner

@@ -41,6 +41,9 @@ parallel-compression = ["dep:rayon"]
 compression-cache = ["dep:sha2"]
 # Enable Linux Candle on-device ML inference (Hugging Face Candle)
 linux-candle = ["dep:candle-core", "dep:candle-transformers"]
+# Enable HTTP API endpoints for HITL (requires axum)
+http-api = ["dep:axum"]
+
 
 [dependencies]
 # Workspace dependencies
@@ -58,6 +61,7 @@ rand.workspace = true
 # YAML config parsing
 serde_yaml = "0.9"
 
+
 # HTTP client (transcription + HTTP providers)
 reqwest = { workspace = true, features = [
     "multipart",
@@ -66,6 +70,9 @@ reqwest = { workspace = true, features = [
     "brotli",
     "deflate",
 ] }
+
+# HTTP server (for HITL API - optional)
+axum = { workspace = true, optional = true }
 
 # Config parsing (multi-format)
 config.workspace = true
@@ -138,6 +145,12 @@ rayon = { version = "1.8", optional = true }
 
 # Hashing for compression cache keys
 sha2 = { version = "0.10", optional = true }
+
+# Hex encoding for webhook signatures  
+hex = "0.4"
+
+# Parking lot for efficient in-memory locks
+parking_lot.workspace = true
 
 # Candle ML framework for on-device inference (Linux only, optional)
 # Enable with: features = ["linux-candle"]

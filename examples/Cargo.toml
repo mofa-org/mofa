@@ -33,8 +33,10 @@ members = [
     "reflection_agent",
     "tool_routing",
     "runtime_message_bus_backpressure",
+    "cloud_voice_demo",
     "rag_pipeline",
-    "hitl_v2",
+    "hitl_workflow",
+    "agent_memory",
     "agent_builder",
     "workflow_viz",
     "message_graph_validation",
@@ -49,9 +51,11 @@ members = [
     "native_dataflow",
     "mcp_tools",
     "memory_scheduler_demo",
+    "cli_doctor_demo",
     "capability_discovery",
     "rag_retrieval_demo",
     "rag_indexing_demo",
+    "adversarial_testing_demo",
 ]
 
 [workspace.package]
