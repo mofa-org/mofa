@@ -64,7 +64,11 @@ impl ScheduleEntry {
     /// Convert to a monitoring snapshot.
     fn to_info(&self, clock: &dyn Clock) -> ScheduleInfo {
         let last_run_raw = self.last_run_ms.load(Ordering::Relaxed);
-        let last_run = if last_run_raw == 0 { None } else { Some(last_run_raw) };
+        let last_run = if last_run_raw == 0 {
+            None
+        } else {
+            Some(last_run_raw)
+        };
         ScheduleInfo::new(
             self.definition.schedule_id.clone(),
             self.definition.agent_id.clone(),
@@ -212,12 +216,13 @@ impl AgentScheduler for CronScheduler {
     async fn register(&self, def: ScheduleDefinition) -> Result<ScheduleHandle, SchedulerError> {
         // Validate cron expression up-front so the error is immediate.
         if let Some(cron_expr) = &def.cron_expression
-            && let Err(e) = cron_expr.parse::<Schedule>() {
-                return Err(SchedulerError::InvalidCron(
-                    cron_expr.clone(),
-                    e.to_string(),
-                ));
-            }
+            && let Err(e) = cron_expr.parse::<Schedule>()
+        {
+            return Err(SchedulerError::InvalidCron(
+                cron_expr.clone(),
+                e.to_string(),
+            ));
+        }
 
         // Reject duplicate schedule IDs.
         {

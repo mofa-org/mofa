@@ -222,10 +222,22 @@ impl ModelProvider for LinuxLocalProvider {
 
     fn get_metadata(&self) -> HashMap<String, Value> {
         let mut m = HashMap::new();
-        m.insert("model_id".into(), Value::String(self.config.model_name.clone()));
-        m.insert("backend".into(), Value::String(self.active_backend.to_string()));
-        m.insert("model_path".into(), Value::String(self.config.model_path.clone()));
-        m.insert("vram_bytes".into(), Value::Number(self.hardware.vram_bytes.into()));
+        m.insert(
+            "model_id".into(),
+            Value::String(self.config.model_name.clone()),
+        );
+        m.insert(
+            "backend".into(),
+            Value::String(self.active_backend.to_string()),
+        );
+        m.insert(
+            "model_path".into(),
+            Value::String(self.config.model_path.clone()),
+        );
+        m.insert(
+            "vram_bytes".into(),
+            Value::Number(self.hardware.vram_bytes.into()),
+        );
         m.insert(
             "available_backends".into(),
             Value::Array(
