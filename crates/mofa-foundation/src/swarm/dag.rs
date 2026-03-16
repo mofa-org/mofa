@@ -326,7 +326,6 @@ impl SubtaskDAG {
             .count()
     }
 
-
     /// Skip all Pending/Ready tasks that transitively depend on `failed_idx`
     /// through hard (Sequential/DataFlow) edges. Returns the number of tasks skipped.
     pub fn cascade_skip(&mut self, failed_idx: NodeIndex) -> usize {
@@ -564,7 +563,8 @@ mod tests {
         let d = dag.add_task(SwarmSubtask::new("d", "Independent"));
 
         dag.add_dependency(a, b).unwrap(); // Sequential (hard)
-        dag.add_dependency_with_kind(a, c, DependencyKind::Soft).unwrap();
+        dag.add_dependency_with_kind(a, c, DependencyKind::Soft)
+            .unwrap();
 
         dag.mark_failed(a, "error");
         let skipped = dag.cascade_skip(a);
@@ -612,12 +612,20 @@ mod tests {
         // a fails — b should become ready (not stuck forever)
         dag.mark_failed(a, "connection timeout");
         let ready = dag.ready_tasks();
-        assert_eq!(ready, vec![b], "b must become ready when its dependency fails");
+        assert_eq!(
+            ready,
+            vec![b],
+            "b must become ready when its dependency fails"
+        );
 
         // b also fails — c should become ready
         dag.mark_failed(b, "no input data");
         let ready = dag.ready_tasks();
-        assert_eq!(ready, vec![c], "c must become ready when its dependency fails");
+        assert_eq!(
+            ready,
+            vec![c],
+            "c must become ready when its dependency fails"
+        );
 
         dag.mark_skipped(c);
         assert!(dag.is_complete());
@@ -642,7 +650,11 @@ mod tests {
 
         // d depends on both b (Completed) and c (Failed) — should be ready
         let ready = dag.ready_tasks();
-        assert_eq!(ready, vec![d], "d must become ready when all deps are terminal");
+        assert_eq!(
+            ready,
+            vec![d],
+            "d must become ready when all deps are terminal"
+        );
     }
 
     #[test]

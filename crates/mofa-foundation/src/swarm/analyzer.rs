@@ -210,7 +210,8 @@ impl TaskAnalyzer {
 
         if let Some(sep) = separator {
             let char_pos = lower[..lower.find(sep).unwrap()].chars().count();
-            let split_byte: usize = task.char_indices()
+            let split_byte: usize = task
+                .char_indices()
                 .nth(char_pos)
                 .map(|(b, _)| b)
                 .unwrap_or(task.len());
@@ -382,7 +383,10 @@ mod tests {
         let result = TaskAnalyzer::from_json("dup-test", json);
         assert!(result.is_err(), "duplicate ids must return Err");
         let msg = result.unwrap_err().to_string();
-        assert!(msg.contains("Duplicate") || msg.contains("unique"), "error should mention duplicate: {msg}");
+        assert!(
+            msg.contains("Duplicate") || msg.contains("unique"),
+            "error should mention duplicate: {msg}"
+        );
     }
 
     #[test]
@@ -396,7 +400,10 @@ mod tests {
         for task in tasks {
             // Should not panic outcome (1 or 2 subtasks) is acceptable either way
             let dag = TaskAnalyzer::analyze_offline(task);
-            assert!(dag.task_count() >= 1, "expected at least 1 task for: {task}");
+            assert!(
+                dag.task_count() >= 1,
+                "expected at least 1 task for: {task}"
+            );
         }
     }
 
@@ -416,9 +423,9 @@ See also: reference [1] and [2]."#;
         use crate::llm::openai::{OpenAIConfig, OpenAIProvider};
         use std::sync::Arc;
 
-        let api_key  = std::env::var("LLM_API_KEY").expect("Set LLM_API_KEY to run this test");
+        let api_key = std::env::var("LLM_API_KEY").expect("Set LLM_API_KEY to run this test");
         let base_url = std::env::var("LLM_BASE_URL").expect("Set LLM_BASE_URL to run this test");
-        let model    = std::env::var("LLM_MODEL").expect("Set LLM_MODEL to run this test");
+        let model = std::env::var("LLM_MODEL").expect("Set LLM_MODEL to run this test");
 
         let provider = OpenAIProvider::with_config(
             OpenAIConfig::new(api_key)
@@ -449,7 +456,10 @@ See also: reference [1] and [2]."#;
             println!("  {} (deps: {:?})", t.id, dag.dependencies_of(*idx));
         }
 
-        assert!(dag.task_count() >= 1, "Expected at least one subtask from the LLM");
+        assert!(
+            dag.task_count() >= 1,
+            "Expected at least one subtask from the LLM"
+        );
         assert!(
             dag.topological_order().is_ok(),
             "Expected a cycle-free DAG from the LLM"

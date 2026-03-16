@@ -23,14 +23,17 @@ impl ConsensusHandler for EngineHandler {
     async fn handle_request_vote(
         &self,
         request: mofa_gateway::consensus::transport::RequestVoteRequest,
-    ) -> mofa_gateway::error::ConsensusResult<mofa_gateway::consensus::transport::RequestVoteResponse> {
+    ) -> mofa_gateway::error::ConsensusResult<mofa_gateway::consensus::transport::RequestVoteResponse>
+    {
         self.engine.handle_request_vote(request).await
     }
 
     async fn handle_append_entries(
         &self,
         request: mofa_gateway::consensus::transport::AppendEntriesRequest,
-    ) -> mofa_gateway::error::ConsensusResult<mofa_gateway::consensus::transport::AppendEntriesResponse> {
+    ) -> mofa_gateway::error::ConsensusResult<
+        mofa_gateway::consensus::transport::AppendEntriesResponse,
+    > {
         self.engine.handle_append_entries(request).await
     }
 }
@@ -46,12 +49,12 @@ impl TestCluster {
     async fn new(num_nodes: usize) -> Self {
         let mut nodes = Vec::new();
         let transport = Arc::new(InMemoryTransport::new());
-        
+
         // Create node IDs
         let node_ids: Vec<NodeId> = (0..num_nodes)
             .map(|i| NodeId::new(&format!("node-{}", i + 1)))
             .collect();
-        
+
         // Create control plane instances
         for (idx, node_id) in node_ids.iter().enumerate() {
             let storage = Arc::new(RaftStorage::new());
@@ -62,17 +65,17 @@ impl TestCluster {
                 election_timeout_ms: 150,
                 heartbeat_interval_ms: 50,
             };
-            
+
             let cp = ControlPlane::new(config, storage, Arc::clone(&transport) as _)
                 .await
                 .unwrap();
-            
+
             // Register handler with transport (need to access consensus engine)
             // Note: We'll register after creating all nodes since we need the Arc
-            
+
             nodes.push((node_id.clone(), Arc::new(cp)));
         }
-        
+
         // Register handlers for all nodes
         for (node_id, cp) in &nodes {
             let engine = cp.consensus();
@@ -81,10 +84,10 @@ impl TestCluster {
             });
             transport.register_handler(node_id.clone(), handler).await;
         }
-        
+
         Self { nodes, transport }
     }
-    
+
     /// Start all nodes in the cluster.
     async fn start_all(&self) {
         // Start nodes with small delays to prevent simultaneous candidate transitions
@@ -99,7 +102,7 @@ impl TestCluster {
         // Give nodes time to initialize
         sleep(Duration::from_millis(200)).await;
     }
-    
+
     /// Stop all nodes in the cluster.
     async fn stop_all(&self) {
         for (node_id, cp) in &self.nodes {
@@ -107,12 +110,12 @@ impl TestCluster {
             tracing::debug!("Stopped node {}", node_id);
         }
     }
-    
+
     /// Get a node by index.
     fn get_node(&self, idx: usize) -> Option<&(NodeId, Arc<ControlPlane>)> {
         self.nodes.get(idx)
     }
-    
+
     /// Get the leader node (if any).
     async fn get_leader(&self) -> Option<(NodeId, Arc<ControlPlane>)> {
         for (node_id, cp) in &self.nodes {
@@ -127,10 +130,10 @@ impl TestCluster {
 #[tokio::test]
 async fn test_three_node_cluster_startup() {
     let _ = tracing_subscriber::fmt::try_init();
-    
+
     let cluster = TestCluster::new(3).await;
     cluster.start_all().await;
-    
+
     // Verify at least one node becomes leader
     // Wait longer for election (election timeout is 150-300ms, so 2 seconds should be enough)
     // Check multiple times to catch when leader is elected
@@ -142,18 +145,21 @@ async fn test_three_node_cluster_startup() {
             break;
         }
     }
-    assert!(leader.is_some(), "Expected a leader to be elected after 4 seconds");
-    
+    assert!(
+        leader.is_some(),
+        "Expected a leader to be elected after 4 seconds"
+    );
+
     cluster.stop_all().await;
 }
 
 #[tokio::test]
 async fn test_leader_election() {
     let _ = tracing_subscriber::fmt::try_init();
-    
+
     let cluster = TestCluster::new(3).await;
     cluster.start_all().await;
-    
+
     // Wait for leader election and stability
     // Check multiple times to ensure we have a stable leader
     let mut leader_count = 0;
@@ -178,19 +184,23 @@ async fn test_leader_election() {
             break;
         }
     }
-    
-    assert_eq!(leader_count, 1, "Expected exactly one leader, found {}", leader_count);
-    
+
+    assert_eq!(
+        leader_count, 1,
+        "Expected exactly one leader, found {}",
+        leader_count
+    );
+
     cluster.stop_all().await;
 }
 
 #[tokio::test]
 async fn test_state_replication_across_nodes() {
     let _ = tracing_subscriber::fmt::try_init();
-    
+
     let cluster = TestCluster::new(3).await;
     cluster.start_all().await;
-    
+
     // Wait for leader election - check multiple times
     let mut leader = None;
     for _ in 0..20 {
@@ -202,13 +212,16 @@ async fn test_state_replication_across_nodes() {
     }
     let leader = leader.expect("No leader elected");
     let (leader_id, leader_cp) = leader;
-    
+
     // Register an agent through the leader
     let mut metadata = HashMap::new();
     metadata.insert("type".to_string(), "test".to_string());
-    
-    leader_cp.register_agent("test-agent-1".to_string(), metadata).await.unwrap();
-    
+
+    leader_cp
+        .register_agent("test-agent-1".to_string(), metadata)
+        .await
+        .unwrap();
+
     // Wait for replication - need time for log replication, commit, and state machine application
     // Retry checking multiple times since apply loop runs every 50ms
     let mut all_replicated = false;
@@ -226,7 +239,7 @@ async fn test_state_replication_across_nodes() {
             break;
         }
     }
-    
+
     // Verify agent is registered on all nodes
     for (node_id, cp) in &cluster.nodes {
         let agents = cp.get_agents().await;
@@ -236,17 +249,17 @@ async fn test_state_replication_across_nodes() {
             node_id
         );
     }
-    
+
     cluster.stop_all().await;
 }
 
 #[tokio::test]
 async fn test_leader_failover() {
     let _ = tracing_subscriber::fmt::try_init();
-    
+
     let cluster = TestCluster::new(3).await;
     cluster.start_all().await;
-    
+
     // Wait for initial leader election - check multiple times
     let mut initial_leader = None;
     for _ in 0..20 {
@@ -259,11 +272,11 @@ async fn test_leader_failover() {
     let initial_leader = initial_leader.expect("No initial leader");
     let (leader_id, leader_cp) = initial_leader.clone();
     tracing::info!("Initial leader: {}", leader_id);
-    
+
     // Stop the leader
     leader_cp.stop().await.unwrap();
     tracing::info!("Stopped leader {}", leader_id);
-    
+
     // Wait for new leader election - check multiple times
     // Need to ensure the stopped node is not considered
     let mut new_leader_opt = None;
@@ -284,24 +297,23 @@ async fn test_leader_failover() {
         }
     }
     let new_leader = new_leader_opt.expect("Expected a new leader after failover");
-    
+
     let (new_leader_id, _) = new_leader.clone();
     assert_ne!(
-        new_leader_id,
-        leader_id,
+        new_leader_id, leader_id,
         "New leader should be different from old leader"
     );
-    
+
     cluster.stop_all().await;
 }
 
 #[tokio::test]
 async fn test_five_node_cluster() {
     let _ = tracing_subscriber::fmt::try_init();
-    
+
     let cluster = TestCluster::new(5).await;
     cluster.start_all().await;
-    
+
     // Wait for leader election and stability - check multiple times
     let mut leader_count = 0;
     for _ in 0..20 {
@@ -325,8 +337,11 @@ async fn test_five_node_cluster() {
             break;
         }
     }
-    
-    assert_eq!(leader_count, 1, "Expected exactly one leader in 5-node cluster");
-    
+
+    assert_eq!(
+        leader_count, 1,
+        "Expected exactly one leader in 5-node cluster"
+    );
+
     cluster.stop_all().await;
 }
