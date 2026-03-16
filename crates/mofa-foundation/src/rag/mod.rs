@@ -19,6 +19,9 @@ pub mod vector_store;
 #[cfg(feature = "qdrant")]
 pub mod qdrant_store;
 
+#[cfg(feature = "pgvector")]
+pub mod storage;
+
 pub use chunker::{ChunkConfig, TextChunker};
 pub use embedding_adapter::{
     deterministic_chunk_id, EmbeddingAdapterError, LlmEmbeddingAdapter, RagEmbeddingConfig,
@@ -41,6 +44,9 @@ pub use vector_store::InMemoryVectorStore;
 
 #[cfg(feature = "qdrant")]
 pub use qdrant_store::{QdrantConfig, QdrantVectorStore};
+
+#[cfg(feature = "pgvector")]
+pub use storage::pgvector::{PgVectorConfig, PgVectorStore};
 
 // Re-export kernel types for convenience
 pub use mofa_kernel::rag::{
