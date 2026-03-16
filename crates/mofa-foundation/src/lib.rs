@@ -10,9 +10,6 @@ pub mod orchestrator;
 // hardware discovery module
 pub mod hardware;
 
-// memory-budgeted scheduler for inference orchestration
-pub mod scheduler;
-
 // adapter registry module - Runtime model adapter discovery
 pub mod adapter;
 
@@ -39,6 +36,9 @@ pub mod workflow;
 
 // coordination module
 pub mod coordination;
+
+// scheduler module - periodic agent execution & memory-budgeted scheduling
+pub mod scheduler;
 
 // config module
 pub mod config;
