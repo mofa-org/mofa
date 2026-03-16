@@ -169,6 +169,11 @@ pub enum AgentError {
     #[error("{0}")]
     Other(String),
 
+    /// 工作流执行错误
+    /// Workflow execution error
+    #[error(transparent)]
+    Workflow(#[from] crate::workflow::error::WorkflowError),
+
     /// Circuit breaker open — the node is currently blocked due to repeated failures.
     /// Route to a fallback or retry later.
     #[error("circuit breaker open for node '{0}'")]
