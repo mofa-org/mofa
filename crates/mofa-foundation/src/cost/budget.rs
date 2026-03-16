@@ -5,8 +5,20 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 use mofa_kernel::budget::{BudgetConfig, BudgetError, BudgetStatus};
 
-/// Usage tracked per day (cost, tokens, day_key)
-pub type AgentDailyUsage = (f64, u64, String);
+/// Tracks a single session's budget usage
+#[derive(Debug, Clone, Copy, Default)]
+pub struct SessionUsage {
+    pub cost: f64,
+    pub tokens: u64,
+}
+
+/// Tracks daily budget usage
+#[derive(Debug, Clone, Default)]
+pub struct DailyUsage {
+    pub cost: f64,
+    pub tokens: u64,
+    pub date: String,
+}
 
 /// Per-agent budget enforcer. Thread-safe, keyed by agent_id.
 ///
@@ -15,8 +27,8 @@ pub type AgentDailyUsage = (f64, u64, String);
 #[derive(Debug, Clone)]
 pub struct BudgetEnforcer {
     configs: Arc<RwLock<HashMap<String, BudgetConfig>>>,
-    session_usage: Arc<RwLock<HashMap<String, (f64, u64)>>>,
-    daily_usage: Arc<RwLock<HashMap<String, AgentDailyUsage>>>,
+    session_usage: Arc<RwLock<HashMap<String, SessionUsage>>>,
+    daily_usage: Arc<RwLock<HashMap<String, DailyUsage>>>,
 }
 
 impl BudgetEnforcer {
@@ -45,18 +57,18 @@ impl BudgetEnforcer {
         };
 
         let session = self.session_usage.read().await;
-        if let Some(&(cost, tokens)) = session.get(agent_id) {
+        if let Some(&usage) = session.get(agent_id) {
             if let Some(max) = config.max_cost_per_session
-                && cost >= max {
+                && usage.cost >= max {
                     return Err(BudgetError::SessionCostExceeded {
-                        spent: cost,
+                        spent: usage.cost,
                         limit: max,
                     });
                 }
             if let Some(max) = config.max_tokens_per_session
-                && tokens >= max {
+                && usage.tokens >= max {
                     return Err(BudgetError::SessionTokensExceeded {
-                        used: tokens,
+                        used: usage.tokens,
                         limit: max,
                     });
                 }
@@ -64,19 +76,19 @@ impl BudgetEnforcer {
 
         let today = today_key();
         let daily = self.daily_usage.read().await;
-        if let Some(&(cost, tokens, ref date)) = daily.get(agent_id)
-            && date == &today {
+        if let Some(usage) = daily.get(agent_id)
+            && usage.date == today {
                 if let Some(max) = config.max_cost_per_day
-                    && cost >= max {
+                    && usage.cost >= max {
                         return Err(BudgetError::DailyCostExceeded {
-                            spent: cost,
+                            spent: usage.cost,
                             limit: max,
                         });
                     }
                 if let Some(max) = config.max_tokens_per_day
-                    && tokens >= max {
+                    && usage.tokens >= max {
                         return Err(BudgetError::DailyTokensExceeded {
-                            used: tokens,
+                            used: usage.tokens,
                             limit: max,
                         });
                     }
@@ -89,23 +101,23 @@ impl BudgetEnforcer {
     pub async fn record_usage(&self, agent_id: &str, cost: f64, tokens: u64) {
         {
             let mut session = self.session_usage.write().await;
-            let entry = session.entry(agent_id.to_string()).or_insert((0.0, 0));
-            entry.0 += cost;
-            entry.1 += tokens;
+            let entry = session.entry(agent_id.to_string()).or_insert_with(SessionUsage::default);
+            entry.cost += cost;
+            entry.tokens += tokens;
         }
         {
             let today = today_key();
             let mut daily = self.daily_usage.write().await;
             let entry = daily
                 .entry(agent_id.to_string())
-                .or_insert((0.0, 0, today.clone()));
-            if entry.2 != today {
-                entry.0 = 0.0;
-                entry.1 = 0;
-                entry.2 = today;
+                .or_insert_with(|| DailyUsage { cost: 0.0, tokens: 0, date: today.clone() });
+            if entry.date != today {
+                entry.cost = 0.0;
+                entry.tokens = 0;
+                entry.date = today;
             }
-            entry.0 += cost;
-            entry.1 += tokens;
+            entry.cost += cost;
+            entry.tokens += tokens;
         }
     }
 
@@ -122,13 +134,13 @@ impl BudgetEnforcer {
             .read()
             .await
             .get(agent_id)
-            .copied()
+            .map(|u| (u.cost, u.tokens))
             .unwrap_or((0.0, 0));
         let today = today_key();
         let (daily_cost, daily_tokens) = {
             let daily = self.daily_usage.read().await;
             match daily.get(agent_id) {
-                Some(&(cost, tokens, ref date)) if date == &today => (cost, tokens),
+                Some(u) if u.date == today => (u.cost, u.tokens),
                 _ => (0.0, 0),
             }
         };

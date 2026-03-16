@@ -4,6 +4,7 @@
 //! Run with: `cargo bench -p mofa-local-llm`
 
 use mofa_local_llm::{ComputeBackend, HardwareInfo, LinuxInferenceConfig, LinuxLocalProvider};
+use mofa_foundation::orchestrator::traits::ModelProvider;
 use std::time::Instant;
 
 fn bench_backend(backend: ComputeBackend, model_path: &str, prompts: &[&str]) {
@@ -27,9 +28,9 @@ fn bench_backend(backend: ComputeBackend, model_path: &str, prompts: &[&str]) {
 
     for &prompt in prompts {
         let result = rt.block_on(async {
-            let mut p = provider;
+            let p = provider;
             // Load would fail without a real model file; count stub responses
-            let out = p.infer(prompt).await;
+            let out: Result<String, _> = p.infer(prompt).await;
             (p, out)
         });
         let (p, out) = result;
