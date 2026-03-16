@@ -1,7 +1,12 @@
 use mofa_testing::report::{TestCaseResult, TestReport, TestStatus};
 use std::time::Duration;
 
-fn make_report(name: &str, results: Vec<TestCaseResult>, duration: u64, timestamp: u64) -> TestReport {
+fn make_report(
+    name: &str,
+    results: Vec<TestCaseResult>,
+    duration: u64,
+    timestamp: u64,
+) -> TestReport {
     TestReport {
         suite_name: name.into(),
         results,
@@ -98,9 +103,7 @@ async fn merge_zero_reports_returns_empty() {
 async fn merged_report_pass_rate_is_correct() {
     let r1 = make_report(
         "a",
-        vec![
-            make_result("t1", TestStatus::Passed, 1),
-        ],
+        vec![make_result("t1", TestStatus::Passed, 1)],
         10,
         1000,
     );

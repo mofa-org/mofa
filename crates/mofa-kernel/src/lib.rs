@@ -1,3 +1,5 @@
+#![allow(ambiguous_glob_reexports)]
+
 // context module
 pub mod context;
 
@@ -61,6 +63,9 @@ pub use metrics::*;
 
 // LLM provider traits and message types
 pub mod llm;
+// Human-in-the-Loop (HITL) module
+pub mod hitl;
+pub use hitl::*;
 // Provider pricing registry (LLM cost calculation)
 pub mod pricing;
 
@@ -77,8 +82,9 @@ pub mod security;
 pub mod gateway;
 pub use gateway::{
     AgentResponse, ApiKeyStore, AuthClaims, AuthError, AuthProvider, GatewayConfigError,
-    GatewayContext, GatewayRequest, GatewayResponse, GatewayRoute, HttpMethod, RegistryError,
-    RequestEnvelope, RouteMatch, RouteRegistry, RoutingContext,
+    GatewayContext, GatewayRequest, GatewayRateLimiter, GatewayResponse, GatewayRoute, HttpMethod,
+    KeyStrategy, RateLimitDecision, RateLimiterConfig, RegistryError, RequestEnvelope, RouteMatch,
+    RouteRegistry, RoutingContext,
 };
 
 // Scheduler kernel contract (traits, types, errors for periodic agent execution)
