@@ -64,7 +64,10 @@ fn on_message(msg) {
 
 fn write_file(path: &PathBuf, content: &str, dry_run: bool) -> Result<(), CliError> {
     if dry_run {
-        println!("\n--- {} ---", path.display());
+        // Normalize path separators to forward slashes for consistent output across platforms.
+        // On Windows, `path.display()` uses backslashes, which breaks test assertions.
+        let display = path.display().to_string().replace('\\', "/");
+        println!("\n--- {} ---", display);
         println!("{}", content.trim_end());
     } else {
         fs::write(path, content)?;
