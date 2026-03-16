@@ -1,5 +1,13 @@
 //! Kernel-level gateway abstractions for agent request dispatch.
 //!
+//! This module defines the trait boundary between the gateway transport layer
+//! (HTTP, gRPC, MQTT, …) and the agent runtime.  By keeping routing and
+//! envelope logic in the kernel, alternative transports and unit tests can
+//! reason about the full request lifecycle without depending on the full HTTP
+//! stack.
+//!
+//! # Types
+//!
 //! | Type | Description |
 //! |------|-------------|
 //! | [`GatewayRoute`] | Routing rule mapping path + method to an agent |
@@ -35,3 +43,6 @@ pub use error::RegistryError;
 pub use route::{GatewayRoute, HttpMethod, RouteRegistry, RoutingContext};
 pub use config_error::GatewayConfigError;
 pub use types::{GatewayContext, GatewayRequest, GatewayResponse, RouteMatch};
+
+pub mod routing;
+pub use routing::RoutingStrategy;

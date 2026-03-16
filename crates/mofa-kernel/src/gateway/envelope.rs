@@ -61,7 +61,7 @@ pub struct RequestEnvelope {
     /// Headers forwarded from the inbound HTTP request.  Keys are lowercased.
     pub headers: HashMap<String, String>,
     /// Wall-clock timestamp (ms since UNIX epoch) at which the envelope was
-    /// created.  Used to compute `latency_ms` in [`GatewayResponse`].
+    /// created.  Used to compute `latency_ms` in [`AgentResponse`].
     pub created_at_ms: u64,
 }
 
@@ -112,7 +112,7 @@ impl RequestEnvelope {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// GatewayResponse
+// AgentResponse
 // ─────────────────────────────────────────────────────────────────────────────
 
 /// A typed response produced by an agent handler and consumed by the
@@ -274,7 +274,7 @@ mod tests {
         assert!(json.contains("created_at_ms"));
     }
 
-    // ── GatewayResponse ──────────────────────────────────────────────────────
+    // ── AgentResponse ──────────────────────────────────────────────────────
 
     #[test]
     fn gateway_response_latency_computed_from_envelope() {

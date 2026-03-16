@@ -79,7 +79,7 @@ pub mod gateway;
 pub use gateway::{
     AgentResponse, ApiKeyStore, AuthClaims, AuthError, AuthProvider, GatewayConfigError,
     GatewayContext, GatewayRequest, GatewayResponse, GatewayRoute, HttpMethod, RegistryError,
-    RequestEnvelope, RouteMatch, RouteRegistry, RoutingContext,
+    RequestEnvelope, RouteMatch, RouteRegistry, RoutingContext, RoutingStrategy,
 };
 
 // Scheduler kernel contract (traits, types, errors for periodic agent execution)
