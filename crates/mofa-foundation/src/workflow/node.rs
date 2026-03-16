@@ -255,6 +255,9 @@ pub struct WorkflowNode {
     /// 条件分支映射：条件名 -> 目标节点 ID
     /// Condition branch map: Name -> Target Node ID
     condition_branches: HashMap<String, String>,
+    /// 并行/聚合节点的配置聚合策略
+    /// Reducer strategy for parallel/join nodes
+    parallel_reducer: Option<mofa_kernel::workflow::ReducerType>,
 }
 
 impl WorkflowNode {
@@ -273,6 +276,7 @@ impl WorkflowNode {
             sub_workflow_id: None,
             wait_event_type: None,
             condition_branches: HashMap::new(),
+            parallel_reducer: None,
         }
     }
 
@@ -291,6 +295,7 @@ impl WorkflowNode {
             sub_workflow_id: None,
             wait_event_type: None,
             condition_branches: HashMap::new(),
+            parallel_reducer: None,
         }
     }
 
@@ -313,6 +318,7 @@ impl WorkflowNode {
             sub_workflow_id: None,
             wait_event_type: None,
             condition_branches: HashMap::new(),
+            parallel_reducer: None,
         }
     }
 
@@ -337,6 +343,7 @@ impl WorkflowNode {
             sub_workflow_id: None,
             wait_event_type: None,
             condition_branches: HashMap::new(),
+            parallel_reducer: None,
         }
     }
 
@@ -361,6 +368,7 @@ impl WorkflowNode {
             sub_workflow_id: None,
             wait_event_type: None,
             condition_branches: HashMap::new(),
+            parallel_reducer: None,
         }
     }
 
@@ -379,6 +387,7 @@ impl WorkflowNode {
             sub_workflow_id: None,
             wait_event_type: None,
             condition_branches: HashMap::new(),
+            parallel_reducer: None,
         }
     }
 
@@ -397,6 +406,7 @@ impl WorkflowNode {
             sub_workflow_id: None,
             wait_event_type: None,
             condition_branches: HashMap::new(),
+            parallel_reducer: None,
         }
     }
 
@@ -424,6 +434,7 @@ impl WorkflowNode {
             sub_workflow_id: None,
             wait_event_type: None,
             condition_branches: HashMap::new(),
+            parallel_reducer: None,
         }
     }
 
@@ -454,6 +465,7 @@ impl WorkflowNode {
             sub_workflow_id: None,
             wait_event_type: None,
             condition_branches: HashMap::new(),
+            parallel_reducer: None,
         }
     }
 
@@ -472,6 +484,7 @@ impl WorkflowNode {
             sub_workflow_id: Some(sub_workflow_id.to_string()),
             wait_event_type: None,
             condition_branches: HashMap::new(),
+            parallel_reducer: None,
         }
     }
 
@@ -490,6 +503,7 @@ impl WorkflowNode {
             sub_workflow_id: None,
             wait_event_type: Some(event_type.to_string()),
             condition_branches: HashMap::new(),
+            parallel_reducer: None,
         }
     }
 
@@ -512,6 +526,7 @@ impl WorkflowNode {
             sub_workflow_id: None,
             wait_event_type: None,
             condition_branches: HashMap::new(),
+            parallel_reducer: None,
         }
     }
 
@@ -549,6 +564,7 @@ impl WorkflowNode {
             sub_workflow_id: None,
             wait_event_type: None,
             condition_branches: HashMap::new(),
+            parallel_reducer: None,
         }
     }
 
@@ -600,6 +616,7 @@ impl WorkflowNode {
             sub_workflow_id: None,
             wait_event_type: None,
             condition_branches: HashMap::new(),
+            parallel_reducer: None,
         }
     }
 
@@ -621,6 +638,19 @@ impl WorkflowNode {
     /// Set timeout
     pub fn with_timeout(mut self, timeout_ms: u64) -> Self {
         self.config.timeout.execution_timeout_ms = timeout_ms;
+        self
+    }
+
+    /// 设置并行/聚合节点的聚合策略（可变借用）
+    /// Set the reducer strategy for parallel/join nodes (mutable reference)
+    pub fn set_reducer(&mut self, reducer: mofa_kernel::workflow::ReducerType) {
+        self.parallel_reducer = Some(reducer);
+    }
+
+    /// 设置聚合策略 (Reducer)
+    /// Set reducer strategy for parallel/join operations
+    pub fn with_reducer(mut self, reducer: mofa_kernel::workflow::ReducerType) -> Self {
+        self.parallel_reducer = Some(reducer);
         self
     }
 
@@ -672,6 +702,12 @@ impl WorkflowNode {
     /// Get wait event type
     pub fn wait_event_type(&self) -> Option<&str> {
         self.wait_event_type.as_deref()
+    }
+
+    /// 获取配置的 Reducer
+    /// Get configured reducer
+    pub fn parallel_reducer(&self) -> Option<&mofa_kernel::workflow::ReducerType> {
+        self.parallel_reducer.as_ref()
     }
 
     /// 执行节点
@@ -729,22 +765,36 @@ impl WorkflowNode {
             NodeType::Join => {
                 // 聚合节点等待所有依赖完成
                 // Join node waits for all dependencies
-                let outputs = ctx
-                    .get_node_outputs(
-                        &self
-                            .join_nodes
-                            .iter()
-                            .map(|s| s.as_str())
-                            .collect::<Vec<_>>(),
-                    )
-                    .await;
-
                 let result = if let Some(ref transform_fn) = self.transform {
+                    let outputs = match input {
+                        WorkflowValue::Map(m) => m,
+                        WorkflowValue::Json(serde_json::Value::Object(obj)) => obj
+                            .into_iter()
+                            .map(|(k, v)| {
+                                let val = serde_json::from_value::<WorkflowValue>(v.clone())
+                                    .unwrap_or(WorkflowValue::Json(v));
+                                (k, val)
+                            })
+                            .collect(),
+                        WorkflowValue::Null => {
+                            ctx.get_node_outputs(
+                                &self
+                                    .join_nodes
+                                    .iter()
+                                    .map(|s| s.as_str())
+                                    .collect::<Vec<_>>(),
+                            )
+                            .await
+                        }
+                        _ => {
+                            let mut map = HashMap::new();
+                            map.insert("_reduced".to_string(), input);
+                            map
+                        }
+                    };
                     transform_fn(outputs).await
                 } else {
-                    // 默认将所有输入合并为 Map
-                    // Merge all inputs into a Map by default
-                    WorkflowValue::Map(outputs)
+                    input
                 };
 
                 NodeResult::success(node_id, result, start_time.elapsed().as_millis() as u64)

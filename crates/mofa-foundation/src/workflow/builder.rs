@@ -258,6 +258,7 @@ impl WorkflowBuilder {
             parent: self,
             parallel_node: id.to_string(),
             branches: Vec::new(),
+            reducer: None,
         }
     }
 
@@ -486,6 +487,7 @@ pub struct ParallelBuilder {
     parent: WorkflowBuilder,
     parallel_node: String,
     branches: Vec<String>,
+    reducer: Option<mofa_kernel::workflow::ReducerType>,
 }
 
 impl ParallelBuilder {
@@ -544,10 +546,24 @@ impl ParallelBuilder {
         self
     }
 
+    /// 设置并行分支的聚合策略 (Reducer)
+    /// Set reducer strategy for parallel branches
+    pub fn with_reducer(mut self, reducer: mofa_kernel::workflow::ReducerType) -> Self {
+        if let Some(node) = self.parent.graph.get_node_mut(&self.parallel_node) {
+            node.set_reducer(reducer.clone());
+        }
+        self.reducer = Some(reducer);
+        self
+    }
+
     /// 汇聚所有分支
     /// Join all branches
     pub fn join(mut self, id: &str, name: &str) -> WorkflowBuilder {
-        let node = WorkflowNode::join(id, name, self.branches.iter().map(|s| s.as_str()).collect());
+        let mut node =
+            WorkflowNode::join(id, name, self.branches.iter().map(|s| s.as_str()).collect());
+        if let Some(reducer) = self.reducer.take() {
+            node = node.with_reducer(reducer);
+        }
         self.parent.graph.add_node(node);
 
         for branch in &self.branches {
@@ -570,12 +586,15 @@ impl ParallelBuilder {
         F: Fn(HashMap<String, WorkflowValue>) -> Fut + Send + Sync + 'static,
         Fut: Future<Output = WorkflowValue> + Send + 'static,
     {
-        let node = WorkflowNode::join_with_transform(
+        let mut node = WorkflowNode::join_with_transform(
             id,
             name,
             self.branches.iter().map(|s| s.as_str()).collect(),
             transform,
         );
+        if let Some(reducer) = self.reducer.take() {
+            node = node.with_reducer(reducer);
+        }
         self.parent.graph.add_node(node);
 
         for branch in &self.branches {
@@ -656,5 +675,28 @@ mod tests {
             .build();
 
         assert_eq!(graph.node_count(), 7);
+    }
+    #[test]
+    fn test_parallel_builder_with_reducer() {
+        let graph = WorkflowBuilder::new("test", "Parallel Workflow with Reducer")
+            .start()
+            .parallel("fork", "Fork")
+            .branch("a", "Branch A", |_ctx, _input| async move {
+                Ok(WorkflowValue::String("a".to_string()))
+            })
+            .branch("b", "Branch B", |_ctx, _input| async move {
+                Ok(WorkflowValue::String("b".to_string()))
+            })
+            .with_reducer(mofa_kernel::workflow::ReducerType::Append)
+            .join("join", "Join")
+            .end()
+            .build();
+
+        assert_eq!(graph.node_count(), 6);
+        let join_node = graph.get_node("join").expect("Join node should exist");
+        assert_eq!(
+            join_node.parallel_reducer(),
+            Some(&mofa_kernel::workflow::ReducerType::Append)
+        );
     }
 }
