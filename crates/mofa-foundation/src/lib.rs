@@ -53,6 +53,8 @@ pub mod collaboration;
 // RAG module - vector store and document chunking
 pub mod rag;
 
+// HITL module - Human-in-the-Loop system
+pub mod hitl;
 // cost module - concrete pricing registry and budget enforcer implementations
 pub mod cost;
 
@@ -82,6 +84,10 @@ pub use metrics::{
     ModelPoolMetrics, RetryMetrics, RoutingMetrics, SchedulerMetrics, StepStatus, StepTiming,
     TokenUsage, ToolMetrics, WorkflowMetrics,
 };
+
+// Gateway implementations (rate limiter, routing strategies)
+pub mod gateway;
+pub use gateway::TokenBucketRateLimiter;
 
 // Re-export config types
 pub use config::{AgentInfo, AgentYamlConfig, LLMYamlConfig, RuntimeConfig, ToolConfig};

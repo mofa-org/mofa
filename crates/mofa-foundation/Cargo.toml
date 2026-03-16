@@ -41,6 +41,8 @@ parallel-compression = ["dep:rayon"]
 compression-cache = ["dep:sha2"]
 # Enable Linux Candle on-device ML inference (Hugging Face Candle)
 linux-candle = ["dep:candle-core", "dep:candle-transformers"]
+# Enable HTTP API endpoints for HITL (requires axum)
+http-api = ["dep:axum"]
 # Enable scheduler telemetry (Prometheus metrics)
 scheduler-telemetry = ["dep:metrics"]
 
@@ -70,6 +72,9 @@ reqwest = { workspace = true, features = [
     "brotli",
     "deflate",
 ] }
+
+# HTTP server (for HITL API - optional)
+axum = { workspace = true, optional = true }
 
 # Config parsing (multi-format)
 config.workspace = true
@@ -117,6 +122,7 @@ once_cell = "1.21.3"
 
 # Graph data structures for task DAGs (Swarm Orchestrator)
 petgraph = { version = "0.7", features = ["serde-1"] }
+dashmap = { workspace = true }
 rhai = { version = "1", features = ["sync", "serde"] }
 lazy_static = "1.4"
 
@@ -142,6 +148,12 @@ rayon = { version = "1.8", optional = true }
 
 # Hashing for compression cache keys
 sha2 = { version = "0.10", optional = true }
+
+# Hex encoding for webhook signatures  
+hex = "0.4"
+
+# Parking lot for efficient in-memory locks
+parking_lot.workspace = true
 
 # Candle ML framework for on-device inference (Linux only, optional)
 # Enable with: features = ["linux-candle"]
