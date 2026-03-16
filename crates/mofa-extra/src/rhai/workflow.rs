@@ -824,7 +824,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_script_node_execution() {
-        let engine = Arc::new(RhaiScriptEngine::new(ScriptEngineConfig::default()).unwrap());
+        let engine = Arc::new(RhaiScriptEngine::new(ScriptEngineConfig::default()).expect("Failed to initialize Rhai engine"));
 
         let config = task_script(
             "double_node",
@@ -835,8 +835,8 @@ mod tests {
             "#,
         );
 
-        let node = ScriptWorkflowNode::new(config, engine).await.unwrap();
-        let result = node.execute(serde_json::json!(21)).await.unwrap();
+        let node = ScriptWorkflowNode::new(config, engine).await.expect("Failed to create workflow node");
+        let result = node.execute(serde_json::json!(21)).await.expect("Failed to execute workflow node");
 
         assert!(result.success);
         assert_eq!(result.output, serde_json::json!(42));
@@ -844,22 +844,24 @@ mod tests {
 
     #[tokio::test]
     async fn test_condition_node() {
-        let engine = Arc::new(RhaiScriptEngine::new(ScriptEngineConfig::default()).unwrap());
+        let engine = Arc::new(RhaiScriptEngine::new(ScriptEngineConfig::default()).expect("Failed to initialize Rhai engine"));
 
         let config = condition_script("check_positive", "Check Positive", "input > 0");
 
-        let node = ScriptWorkflowNode::new(config, engine).await.unwrap();
+        let node = ScriptWorkflowNode::new(config, engine).await.expect("Failed to create workflow node");
 
         assert!(
             node.execute_as_condition(serde_json::json!(10))
                 .await
-                .unwrap()
+                .expect("Failed to execute condition node"),
+            "Condition should return true for positive input"
         );
         assert!(
             !node
                 .execute_as_condition(serde_json::json!(-5))
                 .await
-                .unwrap()
+                .expect("Failed to execute condition node"),
+            "Condition should return false for negative input"
         );
     }
 
@@ -876,7 +878,7 @@ mod tests {
             .set_start("start")
             .add_end("end");
 
-        let errors = workflow.validate().unwrap();
+        let errors = workflow.validate().expect("Workflow validation should not fail");
         assert!(errors.is_empty(), "Validation errors: {:?}", errors);
     }
 
@@ -895,9 +897,9 @@ mod tests {
 
         let executor = ScriptWorkflowExecutor::new(workflow, ScriptEngineConfig::default())
             .await
-            .unwrap();
+            .expect("Failed to create workflow executor");
 
-        let result = executor.execute(serde_json::json!(5)).await.unwrap();
+        let result = executor.execute(serde_json::json!(5)).await.expect("Failed to execute workflow");
         // 5 * 2 = 10, 10 + 10 = 20
         assert_eq!(result, serde_json::json!(20));
     }
@@ -924,14 +926,16 @@ mod tests {
 
         let executor = ScriptWorkflowExecutor::new(workflow, ScriptEngineConfig::default())
             .await
-            .unwrap();
+            .expect("Failed to create workflow executor");
 
-        let result = executor.execute(serde_json::json!(20)).await.unwrap();
-        assert!(result.as_str().unwrap().starts_with("HIGH:"));
+        let result = executor.execute(serde_json::json!(20)).await.expect("Failed to execute workflow");
+        let result_str = result.as_str().expect("Workflow result should be a string");
+        assert!(result_str.starts_with("HIGH:"), "Result '{}' should start with HIGH:", result_str);
 
         executor.reset().await;
 
-        let result = executor.execute(serde_json::json!(5)).await.unwrap();
-        assert!(result.as_str().unwrap().starts_with("LOW:"));
+        let result = executor.execute(serde_json::json!(5)).await.expect("Failed to execute workflow");
+        let result_str = result.as_str().expect("Workflow result should be a string");
+        assert!(result_str.starts_with("LOW:"), "Result '{}' should start with LOW:", result_str);
     }
 }
