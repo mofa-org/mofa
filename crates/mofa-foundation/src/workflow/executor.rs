@@ -827,9 +827,8 @@ impl WorkflowExecutor {
                 }
                 NodeType::Wait => self.execute_wait(ctx, node, current_input.clone()).await,
                 _ => {
-                    let node_timeout = std::time::Duration::from_millis(
-                        self.config.node_timeout_ms,
-                    );
+                    let node_timeout =
+                        std::time::Duration::from_millis(self.config.node_timeout_ms);
                     let result = match tokio::time::timeout(
                         node_timeout,
                         node.execute(ctx, current_input.clone()),
@@ -844,10 +843,7 @@ impl WorkflowExecutor {
                             );
                             NodeResult::failed(
                                 &current_node_id,
-                                &format!(
-                                    "Node timed out after {:?}",
-                                    node_timeout
-                                ),
+                                &format!("Node timed out after {:?}", node_timeout),
                                 node_timeout.as_millis() as u64,
                             )
                         }
@@ -1041,7 +1037,14 @@ impl WorkflowExecutor {
             }
 
             let result = self
-                .execute_branches_parallel(graph, ctx, &branch_ids, input, record)
+                .execute_branches_parallel(
+                    graph,
+                    ctx,
+                    &branch_ids,
+                    input,
+                    record,
+                    node.parallel_reducer().cloned(),
+                )
                 .await?;
             ctx.set_node_output(node.id(), result.clone()).await;
             ctx.set_node_status(node.id(), NodeStatus::Completed).await;
@@ -1049,7 +1052,14 @@ impl WorkflowExecutor {
         }
 
         let result = self
-            .execute_branches_parallel(graph, ctx, branches, input, record)
+            .execute_branches_parallel(
+                graph,
+                ctx,
+                branches,
+                input,
+                record,
+                node.parallel_reducer().cloned(),
+            )
             .await?;
         ctx.set_node_output(node.id(), result.clone()).await;
         ctx.set_node_status(node.id(), NodeStatus::Completed).await;
@@ -1065,6 +1075,7 @@ impl WorkflowExecutor {
         branches: &[String],
         input: WorkflowValue,
         _record: &mut ExecutionRecord,
+        reducer_type: Option<mofa_kernel::workflow::ReducerType>,
     ) -> Result<WorkflowValue, String> {
         let mut results = HashMap::new();
         let mut errors = Vec::new();
@@ -1124,9 +1135,9 @@ impl WorkflowExecutor {
             });
         }
 
-        // The result of parallel branches are merged into a single WorkflowValue::Map.
-        // State merging: later branches overwrite earlier ones on key collision (last-write-wins)
-        // TODO: Consider configurable reducers for custom merge logic
+        // The result of parallel branches are merged.
+        // If `parallel_reducer` is configured for this node, it's used to reduce individual branch outputs.
+        // Otherwise, it defaults to `WorkflowValue::Map` with branch IDs as keys.
         // If `stop_on_failure` is enabled, the first error cancels all remaining branches.
         while let Some(res_join) = join_set.join_next().await {
             let res = res_join.map_err(|e| format!("Join error or panic: {}", e))?;
@@ -1146,6 +1157,28 @@ impl WorkflowExecutor {
 
         if !errors.is_empty() && self.config.stop_on_failure {
             return Err(errors.join("; "));
+        }
+
+        if let Some(reducer_type) = reducer_type {
+            let reducer = crate::workflow::reducers::create_reducer(&reducer_type)
+                .map_err(|e| format!("Failed to create reducer: {:?}", e))?;
+            let mut current_val: Option<serde_json::Value> = None;
+
+            // Sort by branch ID for deterministic reduction order
+            let mut sorted_results: Vec<_> = results.into_iter().collect();
+            sorted_results.sort_by(|a, b| a.0.cmp(&b.0));
+
+            for (_, output) in sorted_results {
+                let val = serde_json::to_value(&output).unwrap_or(serde_json::Value::Null);
+                let new_val = reducer
+                    .reduce(current_val.as_ref(), &val)
+                    .await
+                    .map_err(|e| format!("Reducer error: {:?}", e))?;
+                current_val = Some(new_val);
+            }
+            return Ok(current_val
+                .map(WorkflowValue::Json)
+                .unwrap_or(WorkflowValue::Null));
         }
 
         Ok(WorkflowValue::Map(results))
@@ -1195,9 +1228,34 @@ impl WorkflowExecutor {
             .get_node_outputs(&wait_for.iter().map(|s| s.as_str()).collect::<Vec<_>>())
             .await;
 
+        // Apply custom reducer if specified, otherwise default to Map
+        let aggregated_input = if let Some(reducer_type) = node.parallel_reducer() {
+            let reducer = crate::workflow::reducers::create_reducer(reducer_type)
+                .map_err(|e| format!("Failed to create reducer: {:?}", e))?;
+            let mut current_val: Option<serde_json::Value> = None;
+
+            // Sort by branch ID for deterministic reduction order
+            let mut sorted_outputs: Vec<_> = outputs.into_iter().collect();
+            sorted_outputs.sort_by(|a, b| a.0.cmp(&b.0));
+
+            for (_, output) in sorted_outputs {
+                let val = serde_json::to_value(&output).unwrap_or(serde_json::Value::Null);
+                let new_val = reducer
+                    .reduce(current_val.as_ref(), &val)
+                    .await
+                    .map_err(|e| format!("Reducer error: {:?}", e))?;
+                current_val = Some(new_val);
+            }
+            current_val
+                .map(WorkflowValue::Json)
+                .unwrap_or(WorkflowValue::Null)
+        } else {
+            WorkflowValue::Map(outputs)
+        };
+
         // 执行节点（可能有转换函数）
         // Execute node (may contain transformation functions)
-        let result = node.execute(ctx, WorkflowValue::Map(outputs)).await;
+        let result = node.execute(ctx, aggregated_input).await;
 
         ctx.set_node_output(node.id(), result.output.clone()).await;
         ctx.set_node_status(node.id(), result.status.clone()).await;
@@ -1934,9 +1992,7 @@ mod tests {
         graph.add_node(WorkflowNode::task(
             "fast_task",
             "Fast Task",
-            |_ctx, _input| async move {
-                Ok(WorkflowValue::String("fast".to_string()))
-            },
+            |_ctx, _input| async move { Ok(WorkflowValue::String("fast".to_string())) },
         ));
         graph.add_node(WorkflowNode::end("end"));
         graph.connect("start", "fast_task");
@@ -1947,5 +2003,81 @@ mod tests {
             .await
             .expect("Should complete without timeout");
         assert!(matches!(result.status, WorkflowStatus::Completed));
+    }
+
+    #[tokio::test]
+    async fn test_parallel_reducer_execution() {
+        use crate::workflow::builder::WorkflowBuilder;
+        let graph = WorkflowBuilder::new("test_reducer", "Test Reducer")
+            .start()
+            .parallel("parallel_split", "Parallel Split")
+            .branch("branch_a", "Task A", |_ctx, _input| async move {
+                let mut map = std::collections::HashMap::new();
+                map.insert("a".to_string(), WorkflowValue::Int(10));
+                Ok(WorkflowValue::Map(map))
+            })
+            .branch("branch_b", "Task B", |_ctx, _input| async move {
+                let mut map = std::collections::HashMap::new();
+                map.insert("b".to_string(), WorkflowValue::Int(20));
+                Ok(WorkflowValue::Map(map))
+            })
+            .with_reducer(mofa_kernel::workflow::ReducerType::Merge { deep: false })
+            .join("join_node", "Join Node")
+            .end()
+            .build();
+
+        let executor = WorkflowExecutor::new(ExecutorConfig::default());
+        let result = executor
+            .execute(&graph, WorkflowValue::Null)
+            .await
+            .expect("execute should succeed");
+
+        assert!(matches!(result.status, WorkflowStatus::Completed));
+
+        if let Some(WorkflowValue::Json(val)) = result.outputs.get("end") {
+            assert_eq!(val["a"], 10);
+            assert_eq!(val["b"], 20);
+        } else {
+            panic!(
+                "Expected Json Object output from reducer, got {:?}",
+                result.outputs.get("end")
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn test_parallel_reducer_with_join_transform_execution() {
+        use crate::workflow::builder::WorkflowBuilder;
+
+        let graph = WorkflowBuilder::new("test_reducer_transform", "Test Reducer Transform")
+            .start()
+            .parallel("parallel_split", "Parallel Split")
+            .branch("branch_a", "Task A", |_ctx, _input| async move {
+                let mut map = std::collections::HashMap::new();
+                map.insert("a".to_string(), WorkflowValue::Int(10));
+                Ok(WorkflowValue::Map(map))
+            })
+            .branch("branch_b", "Task B", |_ctx, _input| async move {
+                let mut map = std::collections::HashMap::new();
+                map.insert("b".to_string(), WorkflowValue::Int(20));
+                Ok(WorkflowValue::Map(map))
+            })
+            .with_reducer(mofa_kernel::workflow::ReducerType::Merge { deep: false })
+            .join_with_transform("join_node", "Join Node", |inputs| async move {
+                let a = inputs.get("a").and_then(|v| v.as_i64()).unwrap_or_default();
+                let b = inputs.get("b").and_then(|v| v.as_i64()).unwrap_or_default();
+                WorkflowValue::Int(a + b)
+            })
+            .end()
+            .build();
+
+        let executor = WorkflowExecutor::new(ExecutorConfig::default());
+        let result = executor
+            .execute(&graph, WorkflowValue::Null)
+            .await
+            .expect("execute should succeed");
+
+        assert!(matches!(result.status, WorkflowStatus::Completed));
+        assert_eq!(result.outputs.get("end").and_then(|v| v.as_i64()), Some(30));
     }
 }
