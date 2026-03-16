@@ -12,7 +12,7 @@ use mofa_kernel::agent::error::{AgentError, AgentResult};
 use rmcp::ServiceExt;
 use rmcp::model::{CallToolRequestParams, ClientCapabilities, ClientInfo, Implementation};
 use rmcp::service::{RoleClient, RunningService};
-use rmcp::transport::TokioChildProcess;
+use rmcp::transport::{StreamableHttpClientTransport, TokioChildProcess};
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::process::Command;
@@ -154,13 +154,29 @@ impl McpClient for McpClientManager {
                     ))
                 })?
             }
-            McpTransportConfig::Http { url: _ } => {
-                // HTTP/SSE transport requires the `transport-streamable-http-client-reqwest` feature
-                // which is not included by default. For now, return an error.
-                // HTTP/SSE 传输需要 `transport-streamable-http-client-reqwest` 特性，目前尚未默认包含。
-                return Err(AgentError::ConfigError(
-                    "HTTP transport is not yet supported. Use Stdio transport instead.".to_string(),
-                ));
+            McpTransportConfig::Http { url } => {
+                let transport = StreamableHttpClientTransport::from_uri(url.clone());
+
+                let client_info = ClientInfo {
+                    meta: None,
+                    protocol_version: Default::default(),
+                    capabilities: ClientCapabilities::default(),
+                    client_info: Implementation {
+                        name: "mofa-agent".to_string(),
+                        version: "0.1.0".to_string(),
+                        title: None,
+                        description: None,
+                        icons: None,
+                        website_url: None,
+                    },
+                };
+
+                client_info.serve(transport).await.map_err(|e| {
+                    AgentError::InitializationFailed(format!(
+                        "Failed to initialize MCP session with '{}': {}",
+                        server_name, e
+                    ))
+                })?
             }
             _ => {
                 return Err(AgentError::ConfigError(format!(
@@ -236,11 +252,7 @@ impl McpClient for McpClientManager {
 
         let params = CallToolRequestParams {
             name: tool_name.to_string().into(),
-            arguments: Some(
-                arguments
-                    .as_object().cloned()
-                    .unwrap_or_default(),
-            ),
+            arguments: Some(arguments.as_object().cloned().unwrap_or_default()),
             meta: None,
             task: None,
         };
@@ -359,10 +371,15 @@ mod tests {
         let config = McpServerConfig::stdio("test", "nonexistent-command-xyz", vec![]);
         let _ = manager.connect(config).await; // This will fail - that's okay
 
-        // Test HTTP transport error
-        // 测试 HTTP 传输错误
+        // Test HTTP transport path reaches connection initialization.
+        // We expect a connection failure here because no MCP server is running.
+        // 测试 HTTP 传输路径可达连接初始化（本地无 MCP 服务时应连接失败）
         let http_config = McpServerConfig::http("http-test", "http://localhost:9999");
         let result = manager.connect(http_config).await;
-        assert!(result.is_err()); // HTTP not yet supported
+        assert!(result.is_err());
+        assert!(
+            matches!(result, Err(AgentError::InitializationFailed(_))),
+            "expected initialization failure for unreachable HTTP endpoint"
+        );
     }
 }
