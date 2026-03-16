@@ -5867,6 +5867,7 @@ dependencies = [
  "config",
  "criterion",
  "cron",
+ "dashmap 5.5.3",
  "error-stack",
  "futures",
  "hex",

@@ -1469,7 +1469,12 @@ mod tests {
             },
         );
 
-        let _ = client.chat().user("hi").send().await.expect("chat should work");
+        let _ = client
+            .chat()
+            .user("hi")
+            .send()
+            .await
+            .expect("chat should work");
 
         let req = provider
             .last_request
@@ -1499,7 +1504,10 @@ mod tests {
         let provider = Arc::new(MockProvider::new("emb-model", Some("ok")));
         let client = LLMClient::new(provider);
 
-        let single = client.embed("one").await.expect("single embedding should work");
+        let single = client
+            .embed("one")
+            .await
+            .expect("single embedding should work");
         assert_eq!(single, vec![0.1, 0.2]);
 
         let batch = client
