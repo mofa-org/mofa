@@ -147,9 +147,13 @@ impl WebhookDelivery {
         {
             let deliveries = self.pending_deliveries.lock().await;
             if let Some(state) = deliveries.get(&review_id)
-                && state.attempt > 0 && std::time::Instant::now() < state.next_retry {
-                    return Err(FoundationHitlError::WebhookDelivery("Retry scheduled for later".to_string()));
-                }
+                && state.attempt > 0
+                && std::time::Instant::now() < state.next_retry
+            {
+                return Err(FoundationHitlError::WebhookDelivery(
+                    "Retry scheduled for later".to_string(),
+                ));
+            }
         }
 
         // Build request
@@ -182,8 +186,8 @@ impl WebhookDelivery {
                     if should_remove {
                         error!("Webhook delivery failed after {} attempts", state.attempt);
                     } else {
-                        state.next_retry = std::time::Instant::now()
-                            + self.config.retry_delay * state.attempt;
+                        state.next_retry =
+                            std::time::Instant::now() + self.config.retry_delay * state.attempt;
                         warn!(
                             "Webhook delivery failed, will retry (attempt {})",
                             state.attempt
@@ -212,8 +216,8 @@ impl WebhookDelivery {
                         state.attempt, e
                     );
                 } else {
-                    state.next_retry = std::time::Instant::now()
-                        + self.config.retry_delay * state.attempt;
+                    state.next_retry =
+                        std::time::Instant::now() + self.config.retry_delay * state.attempt;
                     warn!(
                         "Webhook delivery error, will retry (attempt {}): {}",
                         state.attempt, e

@@ -80,7 +80,7 @@ pub mod security;
 pub mod gateway;
 pub use gateway::{
     AgentResponse, ApiKeyStore, AuthClaims, AuthError, AuthProvider, GatewayConfigError,
-    GatewayContext, GatewayRequest, GatewayRateLimiter, GatewayResponse, GatewayRoute, HttpMethod,
+    GatewayContext, GatewayRateLimiter, GatewayRequest, GatewayResponse, GatewayRoute, HttpMethod,
     KeyStrategy, RateLimitDecision, RateLimiterConfig, RegistryError, RequestEnvelope, RouteMatch,
     RouteRegistry, RoutingContext,
 };
@@ -88,8 +88,8 @@ pub use gateway::{
 // Scheduler kernel contract (traits, types, errors for periodic agent execution)
 pub mod scheduler;
 pub use scheduler::{
-    AgentScheduler, Clock, MissedTickPolicy, ScheduleDefinition,
-    ScheduleHandle, ScheduleInfo, ScheduledAgentRunner, SchedulerError,
+    AgentScheduler, Clock, MissedTickPolicy, ScheduleDefinition, ScheduleHandle, ScheduleInfo,
+    ScheduledAgentRunner, SchedulerError,
 };
 
 // Speech kernel contracts (traits and types for TTS/ASR)

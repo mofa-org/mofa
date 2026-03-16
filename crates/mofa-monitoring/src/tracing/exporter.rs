@@ -666,7 +666,11 @@ impl BatchExporter {
             }
         });
 
-        Self { exporter, sender, _task: task }
+        Self {
+            exporter,
+            sender,
+            _task: task,
+        }
     }
 
     pub async fn record(&self, span: SpanData) -> Result<(), String> {

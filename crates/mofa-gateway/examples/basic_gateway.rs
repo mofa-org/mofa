@@ -22,7 +22,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Create load balancer
     let load_balancer = LoadBalancer::new(LoadBalancingAlgorithm::RoundRobin);
-    
+
     // Add some nodes
     load_balancer.add_node(NodeId::new("node-1")).await;
     load_balancer.add_node(NodeId::new("node-2")).await;
