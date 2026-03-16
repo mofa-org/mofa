@@ -191,7 +191,7 @@ refactor(foundation): extract SimpleToolRegistry to its own module
 3. Run the full quality gate locally:
    ```bash
    cargo fmt --check
-   cargo clippy --workspace --all-features -- -D errors
+   cargo clippy --workspace --all-features -- -D warnings
    cargo test --workspace --all-features
    cargo build --examples
    cargo doc --workspace --no-deps --all-features
@@ -207,7 +207,7 @@ Open a **draft PR** early when:
 Mark it as "Ready for review" only when all quality gates pass:
 ```bash
 cargo fmt --check
-cargo clippy --workspace --all-features -- -D errors
+cargo clippy --workspace --all-features -- -D warnings
 cargo test --workspace --all-features
 cargo build --examples
 cargo doc --workspace --no-deps --all-features
@@ -233,7 +233,7 @@ cargo doc --workspace --no-deps --all-features
 
 ## Checklist
 - [ ] `cargo fmt --check` passes
-- [ ] `cargo clippy --workspace --all-features -- -D errors` passes
+- [ ] `cargo clippy --workspace --all-features -- -D warnings` passes
 - [ ] `cargo test --workspace --all-features` passes
 - [ ] `cargo build --examples` succeeds
 - [ ] `cargo doc --workspace --no-deps --all-features` succeeds
@@ -258,7 +258,7 @@ All PRs must pass the **PR Guard** CI job before they can be merged. This check 
 
 ```bash
 # Run these locally before pushing to ensure your PR will pass
-cargo clippy --workspace --all-features -- -D errors   # Lint with all features
+cargo clippy --workspace --all-features -- -D warnings # Lint with all features
 cargo test --workspace --all-features                   # Test with all features
 cargo build --examples                                  # Build all examples
 cargo doc --workspace --no-deps --all-features          # Build documentation

@@ -2,12 +2,11 @@ use async_trait::async_trait;
 use futures::Stream;
 use std::pin::Pin;
 
-use crate::agent::AgentResult;
 use super::types::*;
+use crate::agent::AgentResult;
 
 /// Streaming response type
-pub type ChatStream =
-    Pin<Box<dyn Stream<Item = AgentResult<ChatCompletionChunk>> + Send>>;
+pub type ChatStream = Pin<Box<dyn Stream<Item = AgentResult<ChatCompletionChunk>> + Send>>;
 
 /// Canonical LLM Provider trait (Kernel-owned)
 #[async_trait]
@@ -46,16 +45,10 @@ pub trait LLMProvider: Send + Sync {
     }
 
     /// Chat request
-    async fn chat(
-        &self,
-        request: ChatCompletionRequest,
-    ) -> AgentResult<ChatCompletionResponse>;
+    async fn chat(&self, request: ChatCompletionRequest) -> AgentResult<ChatCompletionResponse>;
 
     /// Streaming chat (default: not supported)
-    async fn chat_stream(
-        &self,
-        _request: ChatCompletionRequest,
-    ) -> AgentResult<ChatStream> {
+    async fn chat_stream(&self, _request: ChatCompletionRequest) -> AgentResult<ChatStream> {
         Err(crate::agent::AgentError::Other(format!(
             "Provider {} does not support streaming",
             self.name()
@@ -63,10 +56,7 @@ pub trait LLMProvider: Send + Sync {
     }
 
     /// Embedding request
-    async fn embedding(
-        &self,
-        _request: EmbeddingRequest,
-    ) -> AgentResult<EmbeddingResponse> {
+    async fn embedding(&self, _request: EmbeddingRequest) -> AgentResult<EmbeddingResponse> {
         Err(crate::agent::AgentError::Other(format!(
             "Provider {} does not support embedding",
             self.name()
@@ -79,10 +69,7 @@ pub trait LLMProvider: Send + Sync {
     }
 
     /// Model info
-    async fn get_model_info(
-        &self,
-        _model: &str,
-    ) -> AgentResult<ModelInfo> {
+    async fn get_model_info(&self, _model: &str) -> AgentResult<ModelInfo> {
         Err(crate::agent::AgentError::Other(format!(
             "Provider {} does not support model info",
             self.name()

@@ -63,7 +63,9 @@ impl AgentExecutor {
             let raw = self.client.ask(&current_prompt).await?;
 
             match self.schema_validator.validate(&raw) {
-                Ok(value) => return serde_json::from_value(value).map_err(ExecutorError::Deserialize),
+                Ok(value) => {
+                    return serde_json::from_value(value).map_err(ExecutorError::Deserialize);
+                }
                 Err(e) => {
                     if attempt >= max_retries {
                         return Err(ExecutorError::ValidationFailed {

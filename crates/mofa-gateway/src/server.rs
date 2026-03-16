@@ -129,12 +129,7 @@ impl GatewayServer {
         if self.config.enable_cors {
             let cors = CorsLayer::new()
                 .allow_origin(Any)
-                .allow_methods([
-                    Method::GET,
-                    Method::POST,
-                    Method::DELETE,
-                    Method::OPTIONS,
-                ])
+                .allow_methods([Method::GET, Method::POST, Method::DELETE, Method::OPTIONS])
                 .allow_headers(Any);
             router = router.layer(cors);
         }

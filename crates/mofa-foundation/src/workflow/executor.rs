@@ -180,16 +180,17 @@ impl WorkflowExecutor {
         // Create steps from completed nodes
         for (nid, output) in node_outputs {
             if let Some(status) = node_statuses.get(&nid)
-                && matches!(status, super::state::NodeStatus::Completed) {
-                    steps.push(ExecutionStep {
-                        step_id: nid.clone(),
-                        step_type: "workflow_node".to_string(),
-                        timestamp_ms: chrono::Utc::now().timestamp_millis() as u64,
-                        input: None,
-                        output: serde_json::to_value(&output).ok(),
-                        metadata: HashMap::new(),
-                    });
-                }
+                && matches!(status, super::state::NodeStatus::Completed)
+            {
+                steps.push(ExecutionStep {
+                    step_id: nid.clone(),
+                    step_type: "workflow_node".to_string(),
+                    timestamp_ms: chrono::Utc::now().timestamp_millis() as u64,
+                    input: None,
+                    output: serde_json::to_value(&output).ok(),
+                    metadata: HashMap::new(),
+                });
+            }
         }
 
         // Add current node step
@@ -416,45 +417,40 @@ impl WorkflowExecutor {
         // Check if this was a unified HITL review (check for review_id in variables)
         if let Some(review_id_value) = ctx.get_variable("review_id").await
             && let WorkflowValue::String(ref review_id_str) = review_id_value
-                && let Some(ref review_handler) = self.review_handler {
-                    use mofa_kernel::hitl::ReviewRequestId;
-                    let review_id = ReviewRequestId::new(review_id_str.clone());
+            && let Some(ref review_handler) = self.review_handler
+        {
+            use mofa_kernel::hitl::ReviewRequestId;
+            let review_id = ReviewRequestId::new(review_id_str.clone());
 
-                    // Check if review is approved
-                    match review_handler.is_approved(&review_id).await {
-                        Ok(true) => {
-                            info!(
-                                "Review {} approved, proceeding with workflow",
-                                review_id_str
-                            );
-                        }
-                        Ok(false) => {
-                            // Check if rejected
-                            if let Ok(Some(response)) =
-                                review_handler.get_review_response(&review_id).await
-                            {
-                                match response {
-                                    mofa_kernel::hitl::ReviewResponse::Rejected {
-                                        reason, ..
-                                    } => {
-                                        return Err(format!("Review rejected: {}", reason));
-                                    }
-                                    _ => {
-                                        return Err(format!(
-                                            "Review {} not approved",
-                                            review_id_str
-                                        ));
-                                    }
-                                }
-                            } else {
-                                return Err(format!("Review {} not yet resolved", review_id_str));
+            // Check if review is approved
+            match review_handler.is_approved(&review_id).await {
+                Ok(true) => {
+                    info!(
+                        "Review {} approved, proceeding with workflow",
+                        review_id_str
+                    );
+                }
+                Ok(false) => {
+                    // Check if rejected
+                    if let Ok(Some(response)) = review_handler.get_review_response(&review_id).await
+                    {
+                        match response {
+                            mofa_kernel::hitl::ReviewResponse::Rejected { reason, .. } => {
+                                return Err(format!("Review rejected: {}", reason));
+                            }
+                            _ => {
+                                return Err(format!("Review {} not approved", review_id_str));
                             }
                         }
-                        Err(e) => {
-                            warn!("Failed to check review status: {}, proceeding anyway", e);
-                        }
+                    } else {
+                        return Err(format!("Review {} not yet resolved", review_id_str));
                     }
                 }
+                Err(e) => {
+                    warn!("Failed to check review status: {}, proceeding anyway", e);
+                }
+            }
+        }
 
         // Calculate wait time
         if let Some(paused_at) = *ctx.paused_at.read().await {
@@ -824,9 +820,8 @@ impl WorkflowExecutor {
                 }
                 NodeType::Wait => self.execute_wait(ctx, node, current_input.clone()).await,
                 _ => {
-                    let node_timeout = std::time::Duration::from_millis(
-                        self.config.node_timeout_ms,
-                    );
+                    let node_timeout =
+                        std::time::Duration::from_millis(self.config.node_timeout_ms);
                     let result = match tokio::time::timeout(
                         node_timeout,
                         node.execute(ctx, current_input.clone()),
@@ -841,10 +836,7 @@ impl WorkflowExecutor {
                             );
                             NodeResult::failed(
                                 &current_node_id,
-                                &format!(
-                                    "Node timed out after {:?}",
-                                    node_timeout
-                                ),
+                                &format!("Node timed out after {:?}", node_timeout),
                                 node_timeout.as_millis() as u64,
                             )
                         }
@@ -1931,9 +1923,7 @@ mod tests {
         graph.add_node(WorkflowNode::task(
             "fast_task",
             "Fast Task",
-            |_ctx, _input| async move {
-                Ok(WorkflowValue::String("fast".to_string()))
-            },
+            |_ctx, _input| async move { Ok(WorkflowValue::String("fast".to_string())) },
         ));
         graph.add_node(WorkflowNode::end("end"));
         graph.connect("start", "fast_task");

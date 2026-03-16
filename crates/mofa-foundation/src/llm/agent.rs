@@ -3688,10 +3688,7 @@ mod tests {
             "mock-model"
         }
 
-        async fn chat(
-            &self,
-            _request: ChatCompletionRequest,
-        ) -> LLMResult<ChatCompletionResponse> {
+        async fn chat(&self, _request: ChatCompletionRequest) -> LLMResult<ChatCompletionResponse> {
             Ok(ChatCompletionResponse {
                 id: "resp-1".to_string(),
                 object: "chat.completion".to_string(),
