@@ -47,6 +47,7 @@ members = [
     "context_window_demo",
     "compression_examples",
     "admission_gate_demo",
+    "voice_pipeline_demo",
     "integrations_demo",
     "cron_scheduler",
     "native_dataflow",

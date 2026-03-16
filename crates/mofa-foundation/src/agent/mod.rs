@@ -11,6 +11,8 @@ pub mod context;
 pub mod executor;
 pub mod session;
 pub mod tools;
+pub mod voice;
+pub mod voice_mock;
 
 // ========================================================================
 // 从 Kernel 层重导出核心类型
