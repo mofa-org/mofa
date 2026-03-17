@@ -105,10 +105,7 @@ impl ReActStep {
     }
 
     fn current_timestamp() -> u64 {
-        std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_millis() as u64
+        mofa_kernel::utils::now_ms()
     }
 }
 
@@ -441,7 +438,7 @@ impl ReActAgent {
                         answer,
                         steps,
                         iteration + 1,
-                        start_time.elapsed().as_millis() as u64,
+                        u64::try_from(start_time.elapsed().as_millis()).unwrap_or(u64::MAX),
                     ));
                 }
                 ParsedResponse::Error(err) => {
@@ -451,7 +448,7 @@ impl ReActAgent {
                         err,
                         steps,
                         iteration + 1,
-                        start_time.elapsed().as_millis() as u64,
+                        u64::try_from(start_time.elapsed().as_millis()).unwrap_or(u64::MAX),
                     ));
                 }
             }
@@ -465,7 +462,7 @@ impl ReActAgent {
             format!("Max iterations ({}) exceeded", self.config.max_iterations),
             steps,
             self.config.max_iterations,
-            start_time.elapsed().as_millis() as u64,
+            u64::try_from(start_time.elapsed().as_millis()).unwrap_or(u64::MAX),
         ))
     }
 
@@ -542,7 +539,7 @@ impl ReActAgent {
                         answer,
                         steps,
                         iteration + 1,
-                        start_time.elapsed().as_millis() as u64,
+                        u64::try_from(start_time.elapsed().as_millis()).unwrap_or(u64::MAX),
                     ));
                 }
                 ParsedResponse::Error(err) => {
@@ -552,7 +549,7 @@ impl ReActAgent {
                         err,
                         steps,
                         iteration + 1,
-                        start_time.elapsed().as_millis() as u64,
+                        u64::try_from(start_time.elapsed().as_millis()).unwrap_or(u64::MAX),
                     ));
                 }
             }
@@ -564,7 +561,7 @@ impl ReActAgent {
             format!("Max iterations ({}) exceeded", self.config.max_iterations),
             steps,
             self.config.max_iterations,
-            start_time.elapsed().as_millis() as u64,
+            u64::try_from(start_time.elapsed().as_millis()).unwrap_or(u64::MAX),
         ))
     }
 
@@ -700,13 +697,11 @@ Rules:
 
         async {
             match maybe_tool {
-                Some(tool) => {
-                    match tokio::time::timeout(timeout_dur, tool.execute(input)).await {
-                        Ok(Ok(result)) => result,
-                        Ok(Err(e)) => format!("Tool error: {}", e),
-                        Err(_) => format!("Tool '{}' timed out after {:?}", tool_name, timeout_dur),
-                    }
-                }
+                Some(tool) => match tokio::time::timeout(timeout_dur, tool.execute(input)).await {
+                    Ok(Ok(result)) => result,
+                    Ok(Err(e)) => format!("Tool error: {}", e),
+                    Err(_) => format!("Tool '{}' timed out after {:?}", tool_name, timeout_dur),
+                },
                 None => {
                     let tools = self.tools.read().await;
                     format!(

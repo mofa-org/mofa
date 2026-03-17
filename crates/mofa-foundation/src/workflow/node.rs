@@ -686,12 +686,20 @@ impl WorkflowNode {
             NodeType::Start => {
                 // 开始节点直接传递输入
                 // Start node simply passes input through
-                NodeResult::success(node_id, input, start_time.elapsed().as_millis() as u64)
+                NodeResult::success(
+                    node_id,
+                    input,
+                    u64::try_from(start_time.elapsed().as_millis()).unwrap_or(u64::MAX),
+                )
             }
             NodeType::End => {
                 // 结束节点直接传递输入
                 // End node simply passes input through
-                NodeResult::success(node_id, input, start_time.elapsed().as_millis() as u64)
+                NodeResult::success(
+                    node_id,
+                    input,
+                    u64::try_from(start_time.elapsed().as_millis()).unwrap_or(u64::MAX),
+                )
             }
             NodeType::Task | NodeType::Agent => {
                 self.execute_with_retry(ctx, input, start_time).await
@@ -706,7 +714,7 @@ impl WorkflowNode {
                     NodeResult::success(
                         node_id,
                         WorkflowValue::String(branch.to_string()),
-                        start_time.elapsed().as_millis() as u64,
+                        u64::try_from(start_time.elapsed().as_millis()).unwrap_or(u64::MAX),
                     )
                 } else {
                     NodeResult::failed(node_id, "No condition function", 0)
@@ -723,7 +731,7 @@ impl WorkflowNode {
                             .map(|b| WorkflowValue::String(b.clone()))
                             .collect(),
                     ),
-                    start_time.elapsed().as_millis() as u64,
+                    u64::try_from(start_time.elapsed().as_millis()).unwrap_or(u64::MAX),
                 )
             }
             NodeType::Join => {
@@ -747,7 +755,11 @@ impl WorkflowNode {
                     WorkflowValue::Map(outputs)
                 };
 
-                NodeResult::success(node_id, result, start_time.elapsed().as_millis() as u64)
+                NodeResult::success(
+                    node_id,
+                    result,
+                    u64::try_from(start_time.elapsed().as_millis()).unwrap_or(u64::MAX),
+                )
             }
             NodeType::Loop => self.execute_loop(ctx, input, start_time).await,
             NodeType::Transform => {
@@ -755,7 +767,11 @@ impl WorkflowNode {
                     let mut inputs = HashMap::new();
                     inputs.insert("input".to_string(), input);
                     let result = transform_fn(inputs).await;
-                    NodeResult::success(node_id, result, start_time.elapsed().as_millis() as u64)
+                    NodeResult::success(
+                        node_id,
+                        result,
+                        u64::try_from(start_time.elapsed().as_millis()).unwrap_or(u64::MAX),
+                    )
                 } else {
                     NodeResult::failed(node_id, "No transform function", 0)
                 }
@@ -763,12 +779,20 @@ impl WorkflowNode {
             NodeType::SubWorkflow => {
                 // 子工作流执行由 executor 处理
                 // Sub-workflow execution handled by executor
-                NodeResult::success(node_id, input, start_time.elapsed().as_millis() as u64)
+                NodeResult::success(
+                    node_id,
+                    input,
+                    u64::try_from(start_time.elapsed().as_millis()).unwrap_or(u64::MAX),
+                )
             }
             NodeType::Wait => {
                 // 等待节点由 executor 处理
                 // Wait node handled by executor
-                NodeResult::success(node_id, input, start_time.elapsed().as_millis() as u64)
+                NodeResult::success(
+                    node_id,
+                    input,
+                    u64::try_from(start_time.elapsed().as_millis()).unwrap_or(u64::MAX),
+                )
             }
         }
     }
@@ -796,7 +820,7 @@ impl WorkflowNode {
                     let mut result = NodeResult::success(
                         node_id,
                         output,
-                        start_time.elapsed().as_millis() as u64,
+                        u64::try_from(start_time.elapsed().as_millis()).unwrap_or(u64::MAX),
                     );
                     result.retry_count = retry_count;
                     return result;
@@ -817,7 +841,7 @@ impl WorkflowNode {
                         let mut result = NodeResult::failed(
                             node_id,
                             &e,
-                            start_time.elapsed().as_millis() as u64,
+                            u64::try_from(start_time.elapsed().as_millis()).unwrap_or(u64::MAX),
                         );
                         result.retry_count = retry_count;
                         return result;
@@ -875,7 +899,7 @@ impl WorkflowNode {
                     return NodeResult::failed(
                         node_id,
                         &format!("Loop failed at iteration {}: {}", iteration, e),
-                        start_time.elapsed().as_millis() as u64,
+                        u64::try_from(start_time.elapsed().as_millis()).unwrap_or(u64::MAX),
                     );
                 }
             }
@@ -887,7 +911,11 @@ impl WorkflowNode {
             warn!("Loop {} reached max iterations: {}", node_id, max_iter);
         }
 
-        NodeResult::success(node_id, input, start_time.elapsed().as_millis() as u64)
+        NodeResult::success(
+            node_id,
+            input,
+            u64::try_from(start_time.elapsed().as_millis()).unwrap_or(u64::MAX),
+        )
     }
 }
 

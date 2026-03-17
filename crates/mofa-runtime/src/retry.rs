@@ -230,9 +230,13 @@ mod tests {
         let max_ms = 5_000;
 
         // Without jitter
-        let p = RetryPolicy::ExponentialBackoff { base_ms, max_ms, jitter: false };
+        let p = RetryPolicy::ExponentialBackoff {
+            base_ms,
+            max_ms,
+            jitter: false,
+        };
         for attempt in 0..20 {
-            let delay = p.delay_for(attempt).as_millis() as u64;
+            let delay = u64::try_from(p.delay_for(attempt).as_millis()).unwrap_or(u64::MAX);
             assert!(
                 delay <= max_ms,
                 "attempt {attempt}: delay {delay} ms exceeded max {max_ms} ms (no jitter)",
@@ -240,9 +244,13 @@ mod tests {
         }
 
         // With jitter
-        let p = RetryPolicy::ExponentialBackoff { base_ms, max_ms, jitter: true };
+        let p = RetryPolicy::ExponentialBackoff {
+            base_ms,
+            max_ms,
+            jitter: true,
+        };
         for attempt in 0..20 {
-            let delay = p.delay_for(attempt).as_millis() as u64;
+            let delay = u64::try_from(p.delay_for(attempt).as_millis()).unwrap_or(u64::MAX);
             assert!(
                 delay <= max_ms,
                 "attempt {attempt}: delay {delay} ms exceeded max {max_ms} ms (jitter)",
@@ -254,10 +262,14 @@ mod tests {
     fn test_jitter_stays_within_bounds() {
         let base_ms = 200;
         let max_ms = 10_000;
-        let p = RetryPolicy::ExponentialBackoff { base_ms, max_ms, jitter: true };
+        let p = RetryPolicy::ExponentialBackoff {
+            base_ms,
+            max_ms,
+            jitter: true,
+        };
 
         for attempt in 0..20 {
-            let delay = p.delay_for(attempt).as_millis() as u64;
+            let delay = u64::try_from(p.delay_for(attempt).as_millis()).unwrap_or(u64::MAX);
 
             // Recompute the non-jittered capped value to derive bounds.
             let exp = 1u64
@@ -283,11 +295,15 @@ mod tests {
     fn test_monotonic_growth_before_saturation_no_jitter() {
         let base_ms = 50;
         let max_ms = 3_200;
-        let p = RetryPolicy::ExponentialBackoff { base_ms, max_ms, jitter: false };
+        let p = RetryPolicy::ExponentialBackoff {
+            base_ms,
+            max_ms,
+            jitter: false,
+        };
 
         let mut prev_delay = 0u64;
         for attempt in 0..20 {
-            let delay = p.delay_for(attempt).as_millis() as u64;
+            let delay = u64::try_from(p.delay_for(attempt).as_millis()).unwrap_or(u64::MAX);
             assert!(
                 delay >= prev_delay,
                 "attempt {attempt}: delay {delay} ms decreased from previous {prev_delay} ms",

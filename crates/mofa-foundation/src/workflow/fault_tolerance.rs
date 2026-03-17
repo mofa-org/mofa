@@ -234,7 +234,7 @@ pub(crate) async fn execute_with_policy<S: GraphState>(
                         node_id = node_id,
                         attempt = attempt + 1,
                         max_attempts = max_attempts,
-                        delay_ms = delay.as_millis() as u64,
+                        delay_ms = u64::try_from(delay.as_millis()).unwrap_or(u64::MAX),
                         error = %err_msg,
                         "Retrying node after transient failure"
                     );
@@ -318,4 +318,3 @@ pub(crate) enum NodeExecutionOutcome {
 }
 
 // ────────────────────── Tests ──────────────────────
-
