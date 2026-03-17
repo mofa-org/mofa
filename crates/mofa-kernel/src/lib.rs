@@ -56,11 +56,13 @@ pub use rag::{
 // Workflow traits (工作流接口)
 pub mod workflow;
 pub use workflow::*;
-pub mod llm;
+
 // Metrics traits for monitoring integration
 pub mod metrics;
 pub use metrics::*;
 
+// LLM provider traits and message types
+pub mod llm;
 // Human-in-the-Loop (HITL) module
 pub mod hitl;
 pub use hitl::*;

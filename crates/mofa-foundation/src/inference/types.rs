@@ -175,6 +175,15 @@ pub struct InferenceResult {
     pub routed_to: RoutedBackend,
     /// The actual precision used (may differ from requested if downgraded)
     pub actual_precision: Precision,
+    /// Number of cloud call attempts made for this result.
+    ///
+    /// - `0` — request was served locally or rejected without a cloud attempt.
+    /// - `1` — cloud succeeded on the first try (no retries needed).
+    /// - `>1` — cloud failed transiently and succeeded after `n-1` retries.
+    ///
+    /// When `routed_to` is `RoutedBackend::Rejected` and this is `>0`, all
+    /// configured retries were exhausted before giving up.
+    pub cloud_attempt_count: usize,
 }
 
 /// Describes where an inference request was actually executed.
@@ -298,6 +307,7 @@ mod tests {
                 model_id: "llama-3".into(),
             },
             actual_precision: Precision::F16,
+            cloud_attempt_count: 0,
         };
         let json = serde_json::to_string(&result).unwrap();
         let back: InferenceResult = serde_json::from_str(&json).unwrap();

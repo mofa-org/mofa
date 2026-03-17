@@ -3124,6 +3124,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "inference_orchestration"
+version = "0.1.0"
+dependencies = [
+ "mofa-foundation",
+ "tokio",
+ "tracing",
+ "tracing-subscriber 0.3.22",
+]
+
+[[package]]
 name = "inotify"
 version = "0.9.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
