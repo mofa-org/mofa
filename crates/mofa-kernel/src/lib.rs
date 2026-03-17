@@ -55,7 +55,15 @@ pub use rag::{
 
 // Workflow traits (工作流接口)
 pub mod workflow;
-pub use workflow::*;
+// Explicit re-exports instead of `pub use workflow::*` to avoid ambiguous
+// `policy` module collision with `hitl::policy`. Fixes #1217.
+pub use workflow::{
+    CircuitBreakerState, CircuitState, CompiledGraph, Command, ControlFlow, DebugEvent,
+    DebugSession, EdgeTarget, END, GraphConfig, GraphState, JsonState, NodeFunc, NodePolicy,
+    RemainingSteps, Reducer, ReducerType, RetryCondition, RuntimeContext, SendCommand,
+    SessionRecorder, START, StateGraph, StateSchema, StateUpdate, StepResult, StreamEvent,
+    TelemetryEmitter,
+};
 pub mod llm;
 // Metrics traits for monitoring integration
 pub mod metrics;
@@ -63,7 +71,14 @@ pub use metrics::*;
 
 // Human-in-the-Loop (HITL) module
 pub mod hitl;
-pub use hitl::*;
+// Explicit re-exports instead of `pub use hitl::*` to avoid ambiguous
+// `policy` module collision with `workflow::policy`. Fixes #1217.
+pub use hitl::{
+    AlwaysReviewPolicy, AuditLogQuery, Change, Diff, ExecutionStep, ExecutionTrace, HitlError,
+    HitlResult, NeverReviewPolicy, PerformanceData, ReviewAuditEvent, ReviewAuditEventType,
+    ReviewContext, ReviewMetadata, ReviewPolicy, ReviewRequest, ReviewRequestId, ReviewResponse,
+    ReviewStatus, ReviewType, StoreError, TelemetrySnapshot,
+};
 // Provider pricing registry (LLM cost calculation)
 pub mod pricing;
 
