@@ -31,7 +31,7 @@ mod without_mcp_feature {
     #[tokio::test]
     async fn stub_returns_empty_list_without_panic() {
         let mut registry = ToolRegistry::new();
-        let result = registry.load_mcp_server("fake-endpoint").await;
+        let result: Result<Vec<String>, mofa_kernel::agent::error::AgentError> = registry.load_mcp_server("fake-endpoint").await;
         assert!(result.is_ok(), "stub must not return an error");
         let names = result.unwrap();
         assert!(
@@ -45,10 +45,10 @@ mod without_mcp_feature {
     #[tokio::test]
     async fn stub_records_attempted_endpoint() {
         let mut registry = ToolRegistry::new();
-        registry
+        let _result: Result<Vec<String>, mofa_kernel::agent::error::AgentError> = registry
             .load_mcp_server("http://localhost:9999")
-            .await
-            .unwrap();
+            .await;
+        _result.unwrap();
         assert!(
             registry
                 .mcp_endpoints()
@@ -63,7 +63,8 @@ mod without_mcp_feature {
         let mut registry = ToolRegistry::new();
         for i in 0..5 {
             let ep = format!("ep-{i}");
-            registry.load_mcp_server(&ep).await.unwrap();
+            let _result: Result<Vec<String>, mofa_kernel::agent::error::AgentError> = registry.load_mcp_server(&ep).await;
+            _result.unwrap();
         }
         assert_eq!(registry.mcp_endpoints().len(), 5);
     }
