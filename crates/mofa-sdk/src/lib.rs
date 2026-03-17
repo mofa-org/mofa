@@ -112,6 +112,9 @@ pub mod kernel {
     pub mod storage {
         pub use mofa_kernel::storage::*;
     }
+    pub mod hitl {
+        pub use mofa_kernel::hitl::*;
+    }
     pub mod error {
         pub use mofa_kernel::error::*;
     }
@@ -161,6 +164,13 @@ pub mod kernel {
     // Storage trait
     pub use mofa_kernel::Storage;
 
+    // HITL (Human-in-the-Loop) types - see also crate::hitl module
+    pub use mofa_kernel::hitl::{
+        AlwaysReviewPolicy, Change, Diff, ExecutionStep, ExecutionTrace, HitlError, HitlResult,
+        NeverReviewPolicy, PerformanceData, ReviewContext, ReviewMetadata, ReviewPolicy,
+        ReviewRequest, ReviewRequestId, ReviewResponse, ReviewStatus, ReviewType, StoreError,
+        TelemetrySnapshot,
+    };
     // Crate-level error and result types
     pub use mofa_kernel::error::{IntoKernelReport, KernelError, KernelResult};
 }
@@ -299,6 +309,7 @@ pub mod foundation {
     pub use super::react;
     pub use super::secretary;
     pub use super::workflow;
+    // Note: HITL is available as top-level module `crate::hitl`, not `crate::foundation::hitl`
 }
 
 // =============================================================================
@@ -996,6 +1007,153 @@ pub mod dora {
 
     // Re-export dora-specific runtime types from mofa_runtime root
     pub use mofa_runtime::{AgentBuilder, AgentRuntime, MoFARuntime};
+}
+
+// =============================================================================
+// Speech — TTS/ASR cloud adapters + registry helpers
+// =============================================================================
+
+/// Cloud TTS/ASR adapters and the config-driven registry builder.
+///
+/// Adapter types are gated by the matching feature flag so users only pull in
+/// vendor dependencies they actually need.
+///
+/// # Feature flags
+///
+/// | Flag | Adapter |
+/// |---|---|
+/// | `openai-speech` | [`OpenAiTtsAdapter`], [`OpenAiAsrAdapter`] |
+/// | `elevenlabs` | [`ElevenLabsTtsAdapter`] |
+/// | `deepgram` | [`DeepgramAsrAdapter`] |
+///
+/// # Quick start
+///
+/// ```toml
+/// [dependencies]
+/// mofa-sdk = { version = "0.1", features = ["openai-speech", "deepgram"] }
+/// ```
+///
+/// ```rust,ignore
+/// use mofa_sdk::speech::{
+///     SpeechConfig, SpeechProviderConfig, register_speech_adapters,
+///     SpeechAdapterRegistry,
+/// };
+///
+/// let config = SpeechConfig::new()
+///     .with_provider(SpeechProviderConfig::new("openai", "sk-...").as_default_tts().as_default_asr())
+///     .with_provider(SpeechProviderConfig::new("deepgram", "dg-...").as_default_asr());
+///
+/// let mut registry = SpeechAdapterRegistry::new();
+/// register_speech_adapters(&mut registry, &config).unwrap();
+///
+/// let tts = registry.default_tts().unwrap();
+/// ```
+pub mod speech {
+    // ---- kernel speech traits (always available) ----------------------------
+    pub use mofa_kernel::speech::{
+        AsrAdapter, AsrConfig, AudioFormat, AudioOutput, TtsAdapter, TtsConfig,
+        TranscriptionResult, VoiceDescriptor,
+    };
+
+    // ---- foundation registry + pipeline (always available) ------------------
+    pub use mofa_foundation::speech_registry::SpeechAdapterRegistry;
+    pub use mofa_foundation::voice_pipeline::{VoicePipeline, VoicePipelineConfig, VoicePipelineResult};
+
+    // ---- config types (always available, no feature gate needed) ------------
+    #[cfg(any(
+        feature = "openai-speech",
+        feature = "elevenlabs",
+        feature = "deepgram"
+    ))]
+    pub use mofa_integrations::speech::registry_builder::{SpeechConfig, SpeechProviderConfig};
+
+    // ---- per-vendor adapter re-exports --------------------------------------
+
+    #[cfg(feature = "openai-speech")]
+    pub use mofa_integrations::speech::openai::{
+        OpenAiAsrAdapter, OpenAiSpeechConfig, OpenAiTtsAdapter, OpenAiTtsModel,
+    };
+
+    #[cfg(feature = "elevenlabs")]
+    pub use mofa_integrations::speech::elevenlabs::{ElevenLabsConfig, ElevenLabsTtsAdapter};
+
+    #[cfg(feature = "deepgram")]
+    pub use mofa_integrations::speech::deepgram::{DeepgramAsrAdapter, DeepgramConfig};
+
+    // ---- registry builder factory -------------------------------------------
+
+    /// Register cloud speech adapters into a [`SpeechAdapterRegistry`] from config.
+    ///
+    /// Each entry in [`SpeechConfig::providers`] is matched by `provider` string
+    /// (`"openai"`, `"elevenlabs"`, `"deepgram"`), the corresponding adapter is
+    /// constructed with the supplied `api_key`, and registered.  If
+    /// `default_tts` / `default_asr` is `true`, that adapter becomes the default
+    /// for its modality.
+    ///
+    /// Unknown provider names are ignored with a warning.
+    ///
+    /// # Feature requirements
+    ///
+    /// Only provider entries whose backing feature is enabled are registered.
+    /// Entries for disabled features are silently skipped.
+    #[cfg(any(
+        feature = "openai-speech",
+        feature = "elevenlabs",
+        feature = "deepgram"
+    ))]
+    pub fn register_speech_adapters(
+        registry: &mut SpeechAdapterRegistry,
+        config: &SpeechConfig,
+    ) -> mofa_kernel::agent::AgentResult<()> {
+        use std::sync::Arc;
+
+        for entry in &config.providers {
+            match entry.provider.as_str() {
+                #[cfg(feature = "openai-speech")]
+                "openai" => {
+                    use mofa_integrations::speech::openai::{
+                        OpenAiAsrAdapter, OpenAiSpeechConfig, OpenAiTtsAdapter,
+                    };
+                    let cfg = OpenAiSpeechConfig::new().with_api_key(&entry.api_key);
+                    registry.register_tts(Arc::new(OpenAiTtsAdapter::new(cfg.clone())));
+                    registry.register_asr(Arc::new(OpenAiAsrAdapter::new(cfg)));
+                    if entry.default_tts {
+                        registry.set_default_tts("openai-tts");
+                    }
+                    if entry.default_asr {
+                        registry.set_default_asr("openai-whisper");
+                    }
+                }
+                #[cfg(feature = "elevenlabs")]
+                "elevenlabs" => {
+                    use mofa_integrations::speech::elevenlabs::{
+                        ElevenLabsConfig, ElevenLabsTtsAdapter,
+                    };
+                    let cfg = ElevenLabsConfig::new().with_api_key(&entry.api_key);
+                    registry.register_tts(Arc::new(ElevenLabsTtsAdapter::new(cfg)));
+                    if entry.default_tts {
+                        registry.set_default_tts("elevenlabs");
+                    }
+                }
+                #[cfg(feature = "deepgram")]
+                "deepgram" => {
+                    use mofa_integrations::speech::deepgram::{DeepgramAsrAdapter, DeepgramConfig};
+                    let cfg = DeepgramConfig::new().with_api_key(&entry.api_key);
+                    registry.register_asr(Arc::new(DeepgramAsrAdapter::new(cfg)));
+                    if entry.default_asr {
+                        registry.set_default_asr("deepgram");
+                    }
+                }
+                other => {
+                    tracing::warn!(
+                        "[speech] unknown or feature-disabled provider '{}', skipping",
+                        other
+                    );
+                }
+            }
+        }
+        Ok(())
+    }
 }
 
 // =============================================================================

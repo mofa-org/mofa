@@ -257,6 +257,8 @@ pub fn as_tool<T: SimpleTool + Send + Sync + 'static>(
 /// Concrete implementation of the Foundation layer
 pub struct SimpleToolRegistry {
     tools: HashMap<String, Arc<dyn mofa_kernel::agent::components::tool::DynTool>>,
+    /// Optional HITL review handler for tool execution reviews
+    review_handler: Option<Arc<crate::hitl::handlers::ToolReviewHandler>>,
 }
 
 impl SimpleToolRegistry {
@@ -265,7 +267,136 @@ impl SimpleToolRegistry {
     pub fn new() -> Self {
         Self {
             tools: HashMap::new(),
+            review_handler: None,
         }
+    }
+
+    /// Attach a review manager for Human-in-the-Loop (HITL) support.
+    ///
+    /// When set, tool executions can be reviewed before/after execution.
+    ///
+    /// # Example
+    ///
+    /// ```rust,ignore
+    /// use mofa_foundation::hitl::*;
+    /// use mofa_foundation::agent::components::tool::SimpleToolRegistry;
+    ///
+    /// let store = Arc::new(InMemoryReviewStore::new());
+    /// let manager = Arc::new(ReviewManager::new(...));
+    /// let handler = Arc::new(ToolReviewHandler::new(manager));
+    ///
+    /// let mut registry = SimpleToolRegistry::new()
+    ///     .with_review_manager(handler);
+    /// ```
+    pub fn with_review_manager(
+        mut self,
+        handler: Arc<crate::hitl::handlers::ToolReviewHandler>,
+    ) -> Self {
+        self.review_handler = Some(handler);
+        self
+    }
+
+    /// Execute a tool with optional review support
+    ///
+    /// If a review handler is configured and the tool requires review,
+    /// this will request a review before execution.
+    ///
+    /// Returns the tool result as JSON value (same as `execute_dynamic`).
+    pub async fn execute_with_review(
+        &self,
+        name: &str,
+        input: mofa_kernel::agent::components::tool::ToolInput,
+        ctx: &mofa_kernel::agent::context::AgentContext,
+        execution_id: &str,
+    ) -> mofa_kernel::agent::error::AgentResult<serde_json::Value> {
+        use mofa_kernel::agent::components::tool::ToolRegistry;
+        use mofa_kernel::agent::error::AgentResult;
+        use mofa_kernel::hitl::{ExecutionStep, ExecutionTrace, ReviewContext};
+        use std::collections::HashMap;
+
+        let tool = self.get(name).ok_or_else(|| {
+            mofa_kernel::agent::error::AgentError::NotFound(format!("Tool '{}' not found", name))
+        })?;
+
+        // Check if review is needed (for destructive operations)
+        if let Some(ref review_handler) = self.review_handler {
+            // Check if tool requires review (e.g., DELETE operations)
+            let tool_name = tool.name();
+            let requires_review = tool_name.to_lowercase().contains("delete")
+                || tool_name.to_lowercase().contains("remove")
+                || tool_name.to_lowercase().contains("drop");
+
+            if requires_review {
+                // Create review context
+                let args_json = serde_json::to_value(&input).unwrap_or(serde_json::json!({}));
+                let trace = ExecutionTrace {
+                    steps: vec![ExecutionStep {
+                        step_id: format!("tool:{}", tool_name),
+                        step_type: "tool_call".to_string(),
+                        timestamp_ms: chrono::Utc::now().timestamp_millis() as u64,
+                        input: Some(args_json.clone()),
+                        output: None,
+                        metadata: HashMap::new(),
+                    }],
+                    duration_ms: 0,
+                };
+                let review_context = ReviewContext::new(trace, args_json);
+
+                // Request review
+                match review_handler
+                    .request_tool_call_review(
+                        execution_id,
+                        tool_name,
+                        serde_json::to_value(&input).unwrap_or(serde_json::json!({})),
+                        review_context,
+                    )
+                    .await
+                {
+                    Ok(review_id) => {
+                        tracing::info!(
+                            "Tool execution review requested: {} - waiting for approval",
+                            review_id.as_str()
+                        );
+
+                        // Wait for review resolution
+                        match review_handler.wait_for_review(&review_id).await {
+                            Ok(response) => match response {
+                                mofa_kernel::hitl::ReviewResponse::Approved { .. } => {
+                                    tracing::info!("Tool execution approved, proceeding");
+                                }
+                                mofa_kernel::hitl::ReviewResponse::Rejected { reason, .. } => {
+                                    return Err(
+                                        mofa_kernel::agent::error::AgentError::ExecutionFailed(
+                                            format!("Tool execution rejected: {}", reason),
+                                        ),
+                                    );
+                                }
+                                _ => {
+                                    return Err(
+                                        mofa_kernel::agent::error::AgentError::ExecutionFailed(
+                                            "Tool execution review not approved".to_string(),
+                                        ),
+                                    );
+                                }
+                            },
+                            Err(e) => {
+                                tracing::warn!("Review wait failed: {}, proceeding anyway", e);
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        tracing::warn!("Failed to request review: {}, proceeding anyway", e);
+                    }
+                }
+            }
+        }
+
+        // Execute tool
+        tool.execute_dynamic(
+            serde_json::to_value(&input).unwrap_or(serde_json::json!({})),
+            ctx,
+        )
+        .await
     }
 }
 

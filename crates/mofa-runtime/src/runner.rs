@@ -408,7 +408,7 @@ impl<T: MoFAAgent> AgentRunner<T> {
         // Execute Agent
         let result = self.agent.execute(input, &self.context).await;
 
-        let duration = start.elapsed().as_millis() as u64;
+        let duration = u64::try_from(start.elapsed().as_millis()).unwrap_or(u64::MAX);
 
         // 更新统计信息
         // Update statistics
@@ -1386,8 +1386,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_resume_failure_preserves_paused_state() {
-        let agent = LifecycleTestAgent::new("lc-002", "Failing Resume Agent")
-            .with_failing_resume();
+        let agent = LifecycleTestAgent::new("lc-002", "Failing Resume Agent").with_failing_resume();
         let mut runner = AgentRunner::new(agent).await.unwrap();
 
         // Move into Running, then pause.
@@ -1407,8 +1406,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_pause_failure_preserves_running_state() {
-        let agent = LifecycleTestAgent::new("lc-003", "Failing Pause Agent")
-            .with_failing_pause();
+        let agent = LifecycleTestAgent::new("lc-003", "Failing Pause Agent").with_failing_pause();
         let mut runner = AgentRunner::new(agent).await.unwrap();
 
         // Move into Running.

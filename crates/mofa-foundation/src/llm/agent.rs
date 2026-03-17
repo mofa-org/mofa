@@ -3668,3 +3668,73 @@ pub fn simple_llm_agent(
 pub fn agent_from_config(path: impl AsRef<std::path::Path>) -> LLMResult<LLMAgent> {
     LLMAgentBuilder::from_config_file(path)?.try_build()
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::llm::types::{ChatCompletionRequest, ChatCompletionResponse, Choice};
+    use async_trait::async_trait;
+    use mofa_kernel::agent::MoFAAgent;
+
+    struct MockProvider;
+
+    #[async_trait]
+    impl LLMProvider for MockProvider {
+        fn name(&self) -> &str {
+            "mock"
+        }
+
+        fn default_model(&self) -> &str {
+            "mock-model"
+        }
+
+        async fn chat(
+            &self,
+            _request: ChatCompletionRequest,
+        ) -> LLMResult<ChatCompletionResponse> {
+            Ok(ChatCompletionResponse {
+                id: "resp-1".to_string(),
+                object: "chat.completion".to_string(),
+                created: 1,
+                model: "mock-model".to_string(),
+                choices: vec![Choice {
+                    index: 0,
+                    message: crate::llm::types::ChatMessage::assistant("ok"),
+                    finish_reason: None,
+                    logprobs: None,
+                }],
+                usage: None,
+                system_fingerprint: None,
+            })
+        }
+    }
+
+    #[test]
+    fn sentence_buffer_splits_and_flushes() {
+        let mut buffer = SentenceBuffer::new();
+        assert_eq!(buffer.push("Hello"), None);
+        assert_eq!(buffer.push(" world!"), Some("Hello world!".to_string()));
+        assert_eq!(buffer.flush(), None);
+
+        assert_eq!(buffer.push("Tail"), None);
+        assert_eq!(buffer.flush(), Some("Tail".to_string()));
+    }
+
+    #[test]
+    fn cancellation_token_is_shared_between_clones() {
+        let token = CancellationToken::new();
+        let cloned = token.clone_token();
+
+        assert!(!token.is_cancelled());
+        cloned.cancel();
+        assert!(token.is_cancelled());
+    }
+
+    #[test]
+    fn simple_llm_agent_uses_given_id() {
+        let provider = Arc::new(MockProvider);
+        let agent = simple_llm_agent("agent-1", provider, "system prompt");
+        assert_eq!(agent.id(), "agent-1");
+        assert_eq!(agent.name(), "agent-1");
+    }
+}

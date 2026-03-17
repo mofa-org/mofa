@@ -1,6 +1,7 @@
 //! Control-plane HTTP server
 
 use axum::{Router, http::Method};
+use mofa_foundation::inference::OrchestratorConfig;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::Duration;
@@ -8,7 +9,8 @@ use tower_http::cors::{Any, CorsLayer};
 use tower_http::trace::TraceLayer;
 use tracing::info;
 
-use crate::handlers::{agents_router, chat_router, health_router};
+use crate::handlers::{agents_router, chat_router, health_router, openai_router};
+use crate::inference_bridge::InferenceBridge;
 use crate::middleware::RateLimiter;
 use crate::state::AppState;
 use mofa_runtime::agent::registry::AgentRegistry;
@@ -86,12 +88,31 @@ impl ServerConfig {
 pub struct GatewayServer {
     config: ServerConfig,
     registry: Arc<AgentRegistry>,
+    /// Optional orchestrator config for inference bridge
+    orchestrator_config: Option<OrchestratorConfig>,
 }
 
 impl GatewayServer {
     /// Create a server backed by the given `AgentRegistry`.
     pub fn new(config: ServerConfig, registry: Arc<AgentRegistry>) -> Self {
-        Self { config, registry }
+        Self {
+            config,
+            registry,
+            orchestrator_config: None,
+        }
+    }
+
+    /// Create a server with inference bridge enabled.
+    pub fn with_inference(
+        config: ServerConfig,
+        registry: Arc<AgentRegistry>,
+        orchestrator_config: OrchestratorConfig,
+    ) -> Self {
+        Self {
+            config,
+            registry,
+            orchestrator_config: Some(orchestrator_config),
+        }
     }
 
     /// Build the axum `Router` without starting the server.
@@ -104,6 +125,7 @@ impl GatewayServer {
             self.config.rate_window,
         ));
 
+        // Create state
         let state = Arc::new(AppState::new(self.registry.clone(), rate_limiter.clone()));
 
         // Spawn background GC task for rate-limiter entries
@@ -121,6 +143,14 @@ impl GatewayServer {
             .merge(agents_router())
             .merge(chat_router())
             .with_state(state);
+
+        // Add OpenAI router if inference bridge is configured
+        if let Some(ref orch_config) = self.orchestrator_config {
+            let bridge = Arc::new(InferenceBridge::new(orch_config.clone()));
+            router = router
+                .merge(openai_router())
+                .layer(axum::Extension(bridge));
+        }
 
         if self.config.enable_tracing {
             router = router.layer(TraceLayer::new_for_http());
