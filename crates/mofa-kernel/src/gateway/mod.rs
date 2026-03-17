@@ -1,17 +1,10 @@
 //! Kernel-level gateway abstractions for agent request dispatch.
 //!
-//! This module defines the trait boundary between the gateway transport layer
-//! (HTTP, gRPC, MQTT, …) and the agent runtime.  By keeping routing logic in
-//! the kernel, alternative transports and unit tests can reason about routing
-//! without depending on the full HTTP stack.
-//!
-//! # Types
-//!
 //! | Type | Description |
 //! |------|-------------|
-//! | [`GatewayRoute`] | A routing rule mapping a path + method to an agent |
+//! | [`GatewayRoute`] | Routing rule mapping path + method to an agent |
 //! | [`RouteRegistry`] | Trait for registering, looking up, and listing routes |
-//! | [`RoutingContext`] | Per-request dispatch context (path, method, headers, correlation ID) |
+//! | [`RoutingContext`] | Per-request dispatch context |
 //! | [`HttpMethod`] | HTTP method enum |
 //! | [`RegistryError`] | Error type for registry operations |
 //! | [`GatewayConfigError`] | Error type for gateway configuration validation |
@@ -19,7 +12,20 @@
 //! | [`GatewayResponse`] | Outbound HTTP response model |
 //! | [`GatewayContext`] | Per-request mutable context for filter chains |
 //! | [`RouteMatch`] | Result of a successful route lookup |
+//! | [`RequestEnvelope`] | Typed inbound request envelope flowing through the pipeline |
+//! | [`AgentResponse`] | Typed agent response for access logging, metrics, and admin API |
+//! | [`AuthClaims`] | Verified identity produced by any auth backend |
+//! | [`AuthProvider`] | Async trait for authenticating requests |
+//! | [`ApiKeyStore`] | Persistence trait for API key lifecycle |
+//! | [`AuthError`] | Auth failure error enum |
+//! | [`GatewayRateLimiter`] | Kernel contract for rate limiting |
+//! | [`RateLimitDecision`] | Outcome of a rate-limit check |
+//! | [`KeyStrategy`] | Keying dimension (per-agent or per-client) |
+//! | [`RateLimiterConfig`] | Shared rate limiter configuration |
 
+pub mod auth;
+pub mod rate_limiter;
+pub mod envelope;
 pub mod error;
 pub mod route;
 mod config_error;
@@ -28,6 +34,9 @@ mod types;
 #[cfg(test)]
 mod tests;
 
+pub use auth::{ApiKeyStore, AuthClaims, AuthError, AuthProvider};
+pub use envelope::{AgentResponse, RequestEnvelope};
+pub use rate_limiter::{GatewayRateLimiter, KeyStrategy, RateLimitDecision, RateLimiterConfig};
 pub use error::RegistryError;
 pub use route::{GatewayRoute, HttpMethod, RouteRegistry, RoutingContext};
 pub use config_error::GatewayConfigError;

@@ -17,12 +17,15 @@ use super::state::{
     WorkflowContext, WorkflowStatus, WorkflowValue,
 };
 use mofa_kernel::workflow::telemetry::{DebugEvent, TelemetryEmitter};
+use serde_json;
 use std::collections::HashMap;
 use std::sync::Arc;
-use serde_json;
 use std::time::Instant;
 use tokio::sync::{RwLock, Semaphore, mpsc, oneshot};
 use tracing::{error, info, warn};
+
+// Optional HITL integration
+use crate::hitl::handlers::WorkflowReviewHandler;
 
 /// 执行器配置
 /// Executor Configuration
@@ -61,7 +64,6 @@ impl Default for ExecutorConfig {
     }
 }
 
-
 /// 工作流执行器
 /// Workflow Executor
 pub struct WorkflowExecutor {
@@ -84,6 +86,8 @@ pub struct WorkflowExecutor {
     semaphore: Arc<Semaphore>,
     /// Profiler for execution timing (optional)
     profiler: ProfilerMode,
+    /// HITL review handler (optional)
+    review_handler: Option<Arc<WorkflowReviewHandler>>,
 }
 
 impl WorkflowExecutor {
@@ -97,6 +101,7 @@ impl WorkflowExecutor {
             event_waiters: Arc::new(RwLock::new(HashMap::new())),
             semaphore,
             profiler: ProfilerMode::Disabled,
+            review_handler: None,
         }
     }
 
@@ -124,12 +129,93 @@ impl WorkflowExecutor {
         self
     }
 
+    /// Attach a review manager for Human-in-the-Loop (HITL) support.
+    ///
+    /// When set, the executor will pause at review nodes and wait for human approval
+    /// before continuing execution. This replaces the legacy `Wait` node approach.
+    ///
+    /// # Example
+    ///
+    /// ```rust,ignore
+    /// use mofa_foundation::hitl::*;
+    /// use mofa_foundation::workflow::*;
+    ///
+    /// let store = Arc::new(InMemoryReviewStore::new());
+    /// let manager = Arc::new(ReviewManager::new(...));
+    /// let handler = Arc::new(WorkflowReviewHandler::new(manager));
+    ///
+    /// let executor = WorkflowExecutor::new(ExecutorConfig::default())
+    ///     .with_review_manager(handler);
+    /// ```
+    pub fn with_review_manager(mut self, handler: Arc<WorkflowReviewHandler>) -> Self {
+        self.review_handler = Some(handler);
+        self
+    }
+
     /// Get profiler timeline if profiling is enabled.
     pub fn profiler_timeline(&self) -> Option<&ExecutionTimeline> {
         match &self.profiler {
             ProfilerMode::Record(timeline) => Some(timeline.get_timeline()),
             ProfilerMode::Disabled => None,
         }
+    }
+
+    /// Create review context from workflow state
+    async fn create_review_context(
+        &self,
+        ctx: &WorkflowContext,
+        node_id: &str,
+        input: &WorkflowValue,
+    ) -> mofa_kernel::hitl::ReviewContext {
+        use mofa_kernel::hitl::{ExecutionStep, ExecutionTrace, ReviewContext};
+        use std::collections::HashMap;
+
+        // Create execution trace from workflow context
+        let mut steps = Vec::new();
+
+        // Get node outputs and statuses to build execution history
+        let node_outputs = ctx.get_all_outputs().await;
+        let node_statuses = ctx.get_all_node_statuses().await;
+
+        // Create steps from completed nodes
+        for (nid, output) in node_outputs {
+            if let Some(status) = node_statuses.get(&nid)
+                && matches!(status, super::state::NodeStatus::Completed) {
+                    steps.push(ExecutionStep {
+                        step_id: nid.clone(),
+                        step_type: "workflow_node".to_string(),
+                        timestamp_ms: chrono::Utc::now().timestamp_millis() as u64,
+                        input: None,
+                        output: serde_json::to_value(&output).ok(),
+                        metadata: HashMap::new(),
+                    });
+                }
+        }
+
+        // Add current node step
+        steps.push(ExecutionStep {
+            step_id: node_id.to_string(),
+            step_type: "review_node".to_string(),
+            timestamp_ms: chrono::Utc::now().timestamp_millis() as u64,
+            input: serde_json::to_value(input).ok(),
+            output: None,
+            metadata: HashMap::new(),
+        });
+
+        // Calculate duration from paused_at if available
+        let duration_ms = if let Some(paused_at) = *ctx.paused_at.read().await {
+            let now = chrono::Utc::now();
+            now.signed_duration_since(paused_at).num_milliseconds() as u64
+        } else {
+            0
+        };
+
+        let trace = ExecutionTrace { steps, duration_ms };
+
+        ReviewContext::new(
+            trace,
+            serde_json::to_value(input).unwrap_or(serde_json::json!({})),
+        )
     }
 
     /// Emit a debug telemetry event (no-op if no emitter is set).
@@ -327,6 +413,49 @@ impl WorkflowExecutor {
             graph.id, waiting_node_id
         );
 
+        // Check if this was a unified HITL review (check for review_id in variables)
+        if let Some(review_id_value) = ctx.get_variable("review_id").await
+            && let WorkflowValue::String(ref review_id_str) = review_id_value
+                && let Some(ref review_handler) = self.review_handler {
+                    use mofa_kernel::hitl::ReviewRequestId;
+                    let review_id = ReviewRequestId::new(review_id_str.clone());
+
+                    // Check if review is approved
+                    match review_handler.is_approved(&review_id).await {
+                        Ok(true) => {
+                            info!(
+                                "Review {} approved, proceeding with workflow",
+                                review_id_str
+                            );
+                        }
+                        Ok(false) => {
+                            // Check if rejected
+                            if let Ok(Some(response)) =
+                                review_handler.get_review_response(&review_id).await
+                            {
+                                match response {
+                                    mofa_kernel::hitl::ReviewResponse::Rejected {
+                                        reason, ..
+                                    } => {
+                                        return Err(format!("Review rejected: {}", reason));
+                                    }
+                                    _ => {
+                                        return Err(format!(
+                                            "Review {} not approved",
+                                            review_id_str
+                                        ));
+                                    }
+                                }
+                            } else {
+                                return Err(format!("Review {} not yet resolved", review_id_str));
+                            }
+                        }
+                        Err(e) => {
+                            warn!("Failed to check review status: {}, proceeding anyway", e);
+                        }
+                    }
+                }
+
         // Calculate wait time
         if let Some(paused_at) = *ctx.paused_at.read().await {
             let duration = chrono::Utc::now().signed_duration_since(paused_at);
@@ -505,19 +634,31 @@ impl WorkflowExecutor {
                 .as_millis() as u64,
         );
 
-        match result {
+        let final_status = match result {
             Ok(_) => {
-                execution_record.status = WorkflowStatus::Completed;
-                info!(
-                    "Workflow {} resumed and completed in {:?}",
-                    graph.name, duration
-                );
+                if execution_record.status != WorkflowStatus::Paused {
+                    execution_record.status = WorkflowStatus::Completed;
+                    info!(
+                        "Workflow {} resumed and completed in {:?}",
+                        graph.name, duration
+                    );
+                    "completed".to_string()
+                } else {
+                    info!(
+                        "Workflow {} resumed and paused again after {:?}",
+                        graph.name, duration
+                    );
+                    // Preserve context so the caller can resume again later
+                    execution_record.context = Some(ctx.clone());
+                    "paused".to_string()
+                }
             }
             Err(ref e) => {
                 execution_record.status = WorkflowStatus::Failed(e.clone());
                 error!("Workflow {} resumed and failed: {}", graph.name, e);
+                format!("failed: {}", e)
             }
-        }
+        };
 
         execution_record.outputs = ctx.get_all_outputs().await;
 
@@ -539,6 +680,15 @@ impl WorkflowExecutor {
                 .await;
             }
         }
+
+        // Emit debug telemetry: WorkflowEnd (was missing in resume path)
+        self.emit_debug(DebugEvent::WorkflowEnd {
+            workflow_id: graph.id.clone(),
+            execution_id: ctx.execution_id.clone(),
+            timestamp_ms: DebugEvent::now_ms(),
+            status: final_status,
+        })
+        .await;
 
         Ok(execution_record)
     }
@@ -600,9 +750,57 @@ impl WorkflowExecutor {
                 }
             }
 
-            // 2. Check for HITL "wait_for_human" node
+            // 2. Check for HITL review node (unified system or legacy Wait)
             if node.config.node_type == NodeType::Wait {
-                info!("Pausing workflow at node: {}", current_node_id);
+                // Use unified HITL system if review handler is available
+                if let Some(ref review_handler) = self.review_handler {
+                    info!(
+                        "Requesting review at node: {} (unified HITL)",
+                        current_node_id
+                    );
+
+                    // Create review context from workflow state
+                    let review_context = self
+                        .create_review_context(ctx, &current_node_id, &current_input)
+                        .await;
+
+                    // Request review
+                    match review_handler
+                        .request_node_review(&record.execution_id, &current_node_id, review_context)
+                        .await
+                    {
+                        Ok(review_id) => {
+                            info!("Review requested: {} - workflow paused", review_id.as_str());
+                            *ctx.paused_at.write().await = Some(chrono::Utc::now());
+                            *ctx.last_waiting_node.write().await = Some(current_node_id.clone());
+                            ctx.set_node_status(&current_node_id, NodeStatus::Waiting)
+                                .await;
+                            record.status = WorkflowStatus::Paused;
+
+                            // Store review ID in context variables for later retrieval
+                            ctx.set_variable(
+                                "review_id",
+                                WorkflowValue::String(review_id.as_str().to_string()),
+                            )
+                            .await;
+
+                            return Ok(WorkflowValue::Null);
+                        }
+                        Err(e) => {
+                            error!(
+                                "Failed to request review: {} - falling back to legacy Wait",
+                                e
+                            );
+                            // Fall through to legacy Wait handling
+                        }
+                    }
+                }
+
+                // Legacy Wait node handling (fallback)
+                info!(
+                    "Pausing workflow at node: {} (legacy Wait)",
+                    current_node_id
+                );
                 *ctx.paused_at.write().await = Some(chrono::Utc::now());
                 *ctx.last_waiting_node.write().await = Some(current_node_id.clone());
 
@@ -1767,5 +1965,245 @@ mod tests {
             .await
             .expect("Should complete without timeout");
         assert!(matches!(result.status, WorkflowStatus::Completed));
+    }
+
+    // -------------------------------------------------------------------------
+    // Tests for fix #994: resume_from_checkpoint must preserve Paused status
+    // and emit WorkflowEnd telemetry.
+    // -------------------------------------------------------------------------
+
+    /// Build a simple graph that goes: start → task → wait → end.
+    /// The wait node simulates the point at which a human-in-the-loop review
+    /// would pause the workflow.
+    fn make_wait_graph(id: &str) -> WorkflowGraph {
+        let mut graph = WorkflowGraph::new(id, "Wait-node workflow");
+        graph.add_node(WorkflowNode::start("start"));
+        graph.add_node(WorkflowNode::task(
+            "task1",
+            "First task",
+            |_ctx, _input| async move { Ok(WorkflowValue::String("step1_done".into())) },
+        ));
+        graph.add_node(WorkflowNode::wait(
+            "wait_review",
+            "Await review",
+            "human_review",
+        ));
+        graph.add_node(WorkflowNode::end("end"));
+
+        graph.connect("start", "task1");
+        graph.connect("task1", "wait_review");
+        graph.connect("wait_review", "end");
+        graph
+    }
+
+    /// Bug regression guard: the old code unconditionally set status to
+    /// `Completed` inside `resume_from_checkpoint`, even when the execution hit
+    /// another Wait node and set the status to `Paused`.
+    ///
+    /// After the fix, when `execute_from_node` marks the record as `Paused`,
+    /// `resume_from_checkpoint` must NOT overwrite it with `Completed`.
+    #[tokio::test]
+    async fn test_resume_from_checkpoint_preserves_paused_status() {
+        let executor = WorkflowExecutor::new(ExecutorConfig::default());
+        let graph = make_wait_graph("resume_paused_wf");
+
+        // --- First run: execute until the Wait node pauses the workflow ---
+        let first_run = executor
+            .execute(&graph, WorkflowValue::Null)
+            .await
+            .expect("First execute should succeed");
+
+        assert!(
+            matches!(first_run.status, WorkflowStatus::Paused),
+            "Expected Paused after reaching Wait node, got: {:?}",
+            first_run.status
+        );
+        assert!(
+            first_run.context.is_some(),
+            "ExecutionRecord.context must be populated when workflow is Paused"
+        );
+
+        // --- Build a checkpoint from the node outputs collected so far ---
+        //     In a real application this would come from a persisted store; we
+        //     synthesise it from the first run's outputs to verify the path.
+        let checkpoint = ExecutionCheckpoint {
+            execution_id: first_run.execution_id.clone(),
+            workflow_id: "resume_paused_wf".to_string(),
+            // The task node completed; the wait node did NOT complete.
+            completed_nodes: vec!["start".to_string(), "task1".to_string()],
+            node_outputs: first_run.outputs.clone(),
+            variables: std::collections::HashMap::new(),
+            timestamp: 0,
+        };
+
+        // --- Resume from checkpoint: the workflow will hit the Wait node again ---
+        let resumed = executor
+            .resume_from_checkpoint(&graph, checkpoint)
+            .await
+            .expect("resume_from_checkpoint should return Ok");
+
+        // Core invariant: status must still be Paused, NOT Completed.
+        assert!(
+            matches!(resumed.status, WorkflowStatus::Paused),
+            "BUG #994: resume_from_checkpoint must keep Paused when a Wait node \
+             is encountered during resume. Got: {:?}",
+            resumed.status
+        );
+
+        // The context must be preserved for a subsequent resume cycle.
+        assert!(
+            resumed.context.is_some(),
+            "ExecutionRecord.context must be set when resume ends with Paused"
+        );
+    }
+
+    /// A workflow with NO wait nodes should reach `Completed` when resumed from
+    /// a checkpoint, confirming the fix does not regress the happy path.
+    #[tokio::test]
+    async fn test_resume_from_checkpoint_completes_when_no_wait_node() {
+        let executor = WorkflowExecutor::new(ExecutorConfig::default());
+
+        let mut graph = WorkflowGraph::new("resume_complete_wf", "No-wait workflow");
+        graph.add_node(WorkflowNode::start("start"));
+        graph.add_node(WorkflowNode::task(
+            "task1",
+            "Task 1",
+            |_ctx, _input| async move { Ok(WorkflowValue::String("result".into())) },
+        ));
+        graph.add_node(WorkflowNode::end("end"));
+        graph.connect("start", "task1");
+        graph.connect("task1", "end");
+
+        // Build a checkpoint that simulates having already completed `start`.
+        let checkpoint = ExecutionCheckpoint {
+            execution_id: uuid::Uuid::now_v7().to_string(),
+            workflow_id: "resume_complete_wf".to_string(),
+            completed_nodes: vec!["start".to_string()],
+            node_outputs: std::collections::HashMap::new(),
+            variables: std::collections::HashMap::new(),
+            timestamp: 0,
+        };
+
+        let record = executor
+            .resume_from_checkpoint(&graph, checkpoint)
+            .await
+            .expect("resume should succeed");
+
+        assert!(
+            matches!(record.status, WorkflowStatus::Completed),
+            "Expected Completed for no-wait resume, got: {:?}",
+            record.status
+        );
+    }
+
+    /// `resume_from_checkpoint` must surface `Failed` status when a task node
+    /// returns an error – the fix must not break error propagation.
+    #[tokio::test]
+    async fn test_resume_from_checkpoint_propagates_failure() {
+        let executor = WorkflowExecutor::new(ExecutorConfig::default());
+
+        let mut graph = WorkflowGraph::new("resume_fail_wf", "Failing resume workflow");
+        graph.add_node(WorkflowNode::start("start"));
+        graph.add_node(WorkflowNode::task(
+            "bad_task",
+            "Bad task",
+            |_ctx, _input| async move { Err("intentional failure".to_string()) },
+        ));
+        graph.add_node(WorkflowNode::end("end"));
+        graph.connect("start", "bad_task");
+        graph.connect("bad_task", "end");
+
+        let checkpoint = ExecutionCheckpoint {
+            execution_id: uuid::Uuid::now_v7().to_string(),
+            workflow_id: "resume_fail_wf".to_string(),
+            completed_nodes: vec!["start".to_string()],
+            node_outputs: std::collections::HashMap::new(),
+            variables: std::collections::HashMap::new(),
+            timestamp: 0,
+        };
+
+        let record = executor
+            .resume_from_checkpoint(&graph, checkpoint)
+            .await
+            .expect("resume_from_checkpoint itself should return Ok");
+
+        match &record.status {
+            WorkflowStatus::Failed(msg) => {
+                assert!(
+                    msg.contains("intentional failure"),
+                    "Unexpected failure message: {}",
+                    msg
+                );
+            }
+            other => panic!("Expected Failed status from resume, got: {:?}", other),
+        }
+    }
+
+    /// Verify that `WorkflowEnd` telemetry is emitted during
+    /// `resume_from_checkpoint`.  We attach a simple in-memory collector and
+    /// confirm that at least one `WorkflowEnd` event is recorded after resume.
+    #[tokio::test]
+    async fn test_resume_from_checkpoint_emits_workflow_end_telemetry() {
+        use mofa_kernel::workflow::telemetry::{DebugEvent, TelemetryEmitter};
+        use std::sync::Arc;
+        use tokio::sync::RwLock;
+
+        // Minimal in-process collector
+        #[derive(Clone)]
+        struct TestEmitter {
+            events: Arc<RwLock<Vec<String>>>,
+        }
+
+        #[async_trait::async_trait]
+        impl TelemetryEmitter for TestEmitter {
+            async fn emit(&self, event: DebugEvent) {
+                if matches!(event, DebugEvent::WorkflowEnd { .. }) {
+                    self.events.write().await.push("WorkflowEnd".to_string());
+                }
+            }
+            fn is_enabled(&self) -> bool {
+                true
+            }
+        }
+
+        let collected: Arc<RwLock<Vec<String>>> = Arc::new(RwLock::new(Vec::new()));
+        let emitter = Arc::new(TestEmitter {
+            events: collected.clone(),
+        });
+
+        let executor = WorkflowExecutor::new(ExecutorConfig::default()).with_telemetry(emitter);
+
+        let mut graph = WorkflowGraph::new("telemetry_resume_wf", "Telemetry resume test");
+        graph.add_node(WorkflowNode::start("start"));
+        graph.add_node(WorkflowNode::task(
+            "task1",
+            "Task 1",
+            |_ctx, _input| async move { Ok(WorkflowValue::String("ok".into())) },
+        ));
+        graph.add_node(WorkflowNode::end("end"));
+        graph.connect("start", "task1");
+        graph.connect("task1", "end");
+
+        let checkpoint = ExecutionCheckpoint {
+            execution_id: uuid::Uuid::now_v7().to_string(),
+            workflow_id: "telemetry_resume_wf".to_string(),
+            completed_nodes: vec!["start".to_string()],
+            node_outputs: std::collections::HashMap::new(),
+            variables: std::collections::HashMap::new(),
+            timestamp: 0,
+        };
+
+        executor
+            .resume_from_checkpoint(&graph, checkpoint)
+            .await
+            .expect("resume should succeed");
+
+        let events = collected.read().await;
+        assert!(
+            events.iter().any(|e| e == "WorkflowEnd"),
+            "Expected WorkflowEnd telemetry event from resume_from_checkpoint, \
+             got events: {:?}",
+            *events
+        );
     }
 }

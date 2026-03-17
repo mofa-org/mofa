@@ -1,3 +1,5 @@
+#![allow(ambiguous_glob_reexports)]
+
 // context module
 pub mod context;
 
@@ -53,11 +55,35 @@ pub use rag::{
 
 // Workflow traits (工作流接口)
 pub mod workflow;
-pub use workflow::*;
+// Explicit re-exports instead of `pub use workflow::*` to avoid ambiguous
+// `policy` module collision with `hitl::policy`. Fixes #1217.
+pub use workflow::{
+    CircuitBreakerState, CircuitState, CompiledGraph, Command, ControlFlow, DebugEvent,
+    DebugSession, EdgeTarget, END, GraphConfig, GraphState, JsonState, NodeFunc, NodePolicy,
+    RemainingSteps, Reducer, ReducerType, RetryCondition, RuntimeContext, SendCommand,
+    SessionRecorder, START, StateGraph, StateSchema, StateUpdate, StepResult, StreamEvent,
+    TelemetryEmitter,
+};
 pub mod llm;
 // Metrics traits for monitoring integration
 pub mod metrics;
 pub use metrics::*;
+
+// Human-in-the-Loop (HITL) module
+pub mod hitl;
+// Explicit re-exports instead of `pub use hitl::*` to avoid ambiguous
+// `policy` module collision with `workflow::policy`. Fixes #1217.
+pub use hitl::{
+    AlwaysReviewPolicy, AuditLogQuery, Change, Diff, ExecutionStep, ExecutionTrace, HitlError,
+    HitlResult, NeverReviewPolicy, PerformanceData, ReviewAuditEvent, ReviewAuditEventType,
+    ReviewContext, ReviewMetadata, ReviewPolicy, ReviewRequest, ReviewRequestId, ReviewResponse,
+    ReviewStatus, ReviewType, StoreError, TelemetrySnapshot,
+};
+// Provider pricing registry (LLM cost calculation)
+pub mod pricing;
+
+// Budget configuration & enforcement
+pub mod budget;
 
 // Structured output parsing with JSON schema validation
 pub mod structured_output;
@@ -68,13 +94,19 @@ pub mod security;
 // Gateway routing abstractions (kernel-level traits for agent request dispatch)
 pub mod gateway;
 pub use gateway::{
-    GatewayConfigError, GatewayContext, GatewayRequest, GatewayResponse, GatewayRoute, HttpMethod,
-    RegistryError, RouteMatch, RouteRegistry, RoutingContext,
+    AgentResponse, ApiKeyStore, AuthClaims, AuthError, AuthProvider, GatewayConfigError,
+    GatewayContext, GatewayRequest, GatewayRateLimiter, GatewayResponse, GatewayRoute, HttpMethod,
+    KeyStrategy, RateLimitDecision, RateLimiterConfig, RegistryError, RequestEnvelope, RouteMatch,
+    RouteRegistry, RoutingContext,
 };
 
 // Scheduler kernel contract (traits, types, errors for periodic agent execution)
 pub mod scheduler;
 pub use scheduler::{
     AgentScheduler, Clock, MissedTickPolicy, ScheduleDefinition,
-    ScheduleHandle, ScheduleInfo, SchedulerError,
+    ScheduleHandle, ScheduleInfo, ScheduledAgentRunner, SchedulerError,
 };
+
+// Speech kernel contracts (traits and types for TTS/ASR)
+pub mod speech;
+pub use speech::{AsrAdapter, TtsAdapter};

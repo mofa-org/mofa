@@ -61,18 +61,17 @@ mod cache {
         /// get cached embedding
         pub async fn get_embedding(&self, key: &str) -> Option<Vec<f32>> {
             let cache = self.embedding_cache.read().await;
-            cache.get(key).map(|entry| {
-                entry.embedding.clone()
-            })
+            cache.get(key).map(|entry| entry.embedding.clone())
         }
 
         /// store embedding in cache
         pub async fn store_embedding(&self, key: String, embedding: Vec<f32>) {
             let mut cache = self.embedding_cache.write().await;
-            
+
             // evict oldest if at capacity
             if cache.len() >= self.max_embedding_entries && !cache.is_empty() {
-                let oldest_key = cache.iter()
+                let oldest_key = cache
+                    .iter()
                     .min_by_key(|(_, entry)| entry.accessed_at)
                     .map(|(k, _)| k.clone());
                 if let Some(key) = oldest_key {
@@ -80,27 +79,29 @@ mod cache {
                 }
             }
 
-            cache.insert(key, EmbeddingCacheEntry {
-                embedding,
-                accessed_at: Instant::now(),
-            });
+            cache.insert(
+                key,
+                EmbeddingCacheEntry {
+                    embedding,
+                    accessed_at: Instant::now(),
+                },
+            );
         }
 
         /// get cached summary
         pub async fn get_summary(&self, key: &str) -> Option<String> {
             let cache = self.summary_cache.read().await;
-            cache.get(key).map(|entry| {
-                entry.summary.clone()
-            })
+            cache.get(key).map(|entry| entry.summary.clone())
         }
 
         /// store summary in cache
         pub async fn store_summary(&self, key: String, summary: String) {
             let mut cache = self.summary_cache.write().await;
-            
+
             // evict oldest if at capacity
             if cache.len() >= self.max_summary_entries && !cache.is_empty() {
-                let oldest_key = cache.iter()
+                let oldest_key = cache
+                    .iter()
                     .min_by_key(|(_, entry)| entry.accessed_at)
                     .map(|(k, _)| k.clone());
                 if let Some(key) = oldest_key {
@@ -108,10 +109,13 @@ mod cache {
                 }
             }
 
-            cache.insert(key, SummaryCacheEntry {
-                summary,
-                accessed_at: Instant::now(),
-            });
+            cache.insert(
+                key,
+                SummaryCacheEntry {
+                    summary,
+                    accessed_at: Instant::now(),
+                },
+            );
         }
 
         /// clear all caches
@@ -144,7 +148,7 @@ mod cache {
 }
 
 #[cfg(feature = "compression-cache")]
-pub use cache::{CompressionCache, CacheStats};
+pub use cache::{CacheStats, CompressionCache};
 
 // token counter utility
 
@@ -311,7 +315,11 @@ impl ContextCompressor for SlidingWindowCompressor {
                 messages_before,
                 messages_before,
             );
-            return Ok(CompressionResult::new(messages, metrics, self.name().to_string()));
+            return Ok(CompressionResult::new(
+                messages,
+                metrics,
+                self.name().to_string(),
+            ));
         }
 
         let (system_msgs, mut conversation): (Vec<_>, Vec<_>) =
@@ -327,12 +335,8 @@ impl ContextCompressor for SlidingWindowCompressor {
         let tokens_after = self.count_tokens(&result);
         let messages_after = result.len();
 
-        let metrics = CompressionMetrics::new(
-            tokens_before,
-            tokens_after,
-            messages_before,
-            messages_after,
-        );
+        let metrics =
+            CompressionMetrics::new(tokens_before, tokens_after, messages_before, messages_after);
 
         // log compression event
         if metrics.was_compressed() {
@@ -356,7 +360,11 @@ impl ContextCompressor for SlidingWindowCompressor {
             );
         }
 
-        Ok(CompressionResult::new(result, metrics, self.name().to_string()))
+        Ok(CompressionResult::new(
+            result,
+            metrics,
+            self.name().to_string(),
+        ))
     }
 
     fn strategy(&self) -> CompressionStrategy {
@@ -436,7 +444,11 @@ impl ContextCompressor for SummarizingCompressor {
                 messages_before,
                 messages_before,
             );
-            return Ok(CompressionResult::new(messages, metrics, self.name().to_string()));
+            return Ok(CompressionResult::new(
+                messages,
+                metrics,
+                self.name().to_string(),
+            ));
         }
 
         let (system_msgs, conversation): (Vec<_>, Vec<_>) =
@@ -446,67 +458,66 @@ impl ContextCompressor for SummarizingCompressor {
             let mut result = system_msgs;
             result.extend(conversation);
             let tokens_after = self.count_tokens(&result);
-            let metrics = CompressionMetrics::new(
-                tokens_before,
-                tokens_after,
-                messages_before,
-                result.len(),
-            );
-            return Ok(CompressionResult::new(result, metrics, self.name().to_string()));
+            let metrics =
+                CompressionMetrics::new(tokens_before, tokens_after, messages_before, result.len());
+            return Ok(CompressionResult::new(
+                result,
+                metrics,
+                self.name().to_string(),
+            ));
         }
 
         let split_at = conversation.len() - self.keep_recent;
         let (to_summarise, recent) = conversation.split_at(split_at);
 
         let prompt = Self::build_summary_prompt(to_summarise);
-        
+
         // check cache if enabled
         #[cfg(feature = "compression-cache")]
-        let cache_key = if let Some(ref cache) = self.cache {
-            Some(CompressionCache::cache_key(&prompt))
-        } else {
-            None
-        };
+        let cache_key = self.cache.as_ref().map(|cache| CompressionCache::cache_key(&prompt));
 
         #[cfg(feature = "compression-cache")]
-        let summary_text = if let (Some(ref cache), Some(ref key)) = (self.cache.as_ref(), cache_key.as_ref()) {
-            if let Some(cached) = cache.get_summary(key).await {
-                cached
-            } else {
-                let summary_response = self
-                    .llm
-                    .chat(crate::llm::types::ChatCompletionRequest::new("gpt-4o-mini")
-                        .user(prompt.clone())
-                        .temperature(0.3)
-                        .max_tokens(512))
-                    .await
-                    .map_err(|e| AgentError::ExecutionFailed(format!("summarisation failed: {e}")))?;
+        let summary_text =
+            if let (Some(cache), Some(ref key)) = (self.cache.as_ref(), cache_key.as_ref()) {
+                if let Some(cached) = cache.get_summary(key).await {
+                    cached
+                } else {
+                    let summary_response = self
+                        .llm
+                        .chat(
+                            crate::llm::types::ChatCompletionRequest::new("gpt-4o-mini")
+                                .user(prompt.clone())
+                                .temperature(0.3)
+                                .max_tokens(512),
+                        )
+                        .await
+                        .map_err(|e| {
+                            AgentError::ExecutionFailed(format!("summarisation failed: {e}"))
+                        })?;
 
-                let text = summary_response
+                    let text = summary_response
+                        .content()
+                        .map(str::to_string)
+                        .unwrap_or_else(|| "[summary unavailable]".to_string());
+
+                    cache.store_summary(key.to_string(), text.clone()).await;
+                    text
+                }
+            } else {
+                let summary_request = crate::llm::types::ChatCompletionRequest::new("gpt-4o-mini")
+                    .user(prompt)
+                    .temperature(0.3)
+                    .max_tokens(512);
+
+                let summary_response = self.llm.chat(summary_request).await.map_err(|e| {
+                    AgentError::ExecutionFailed(format!("summarisation failed: {e}"))
+                })?;
+
+                summary_response
                     .content()
                     .map(str::to_string)
-                    .unwrap_or_else(|| "[summary unavailable]".to_string());
-                
-                cache.store_summary(key.to_string(), text.clone()).await;
-                text
-            }
-        } else {
-        let summary_request = crate::llm::types::ChatCompletionRequest::new("gpt-4o-mini")
-            .user(prompt)
-            .temperature(0.3)
-            .max_tokens(512);
-
-        let summary_response = self
-            .llm
-            .chat(summary_request)
-            .await
-            .map_err(|e| AgentError::ExecutionFailed(format!("summarisation failed: {e}")))?;
-
-            summary_response
-            .content()
-            .map(str::to_string)
-                .unwrap_or_else(|| "[summary unavailable]".to_string())
-        };
+                    .unwrap_or_else(|| "[summary unavailable]".to_string())
+            };
 
         #[cfg(not(feature = "compression-cache"))]
         let summary_text = {
@@ -515,11 +526,10 @@ impl ContextCompressor for SummarizingCompressor {
                 .temperature(0.3)
                 .max_tokens(512);
 
-            let summary_response = self
-                .llm
-                .chat(summary_request)
-                .await
-                .map_err(|e| AgentError::ExecutionFailed(format!("summarisation failed: {e}")))?;
+            let summary_response =
+                self.llm.chat(summary_request).await.map_err(|e| {
+                    AgentError::ExecutionFailed(format!("summarisation failed: {e}"))
+                })?;
 
             summary_response
                 .content()
@@ -540,12 +550,8 @@ impl ContextCompressor for SummarizingCompressor {
         let tokens_after = self.count_tokens(&result);
         let messages_after = result.len();
 
-        let metrics = CompressionMetrics::new(
-            tokens_before,
-            tokens_after,
-            messages_before,
-            messages_after,
-        );
+        let metrics =
+            CompressionMetrics::new(tokens_before, tokens_after, messages_before, messages_after);
 
         // log compression event
         if metrics.was_compressed() {
@@ -569,7 +575,11 @@ impl ContextCompressor for SummarizingCompressor {
             );
         }
 
-        Ok(CompressionResult::new(result, metrics, self.name().to_string()))
+        Ok(CompressionResult::new(
+            result,
+            metrics,
+            self.name().to_string(),
+        ))
     }
 
     fn strategy(&self) -> CompressionStrategy {
@@ -689,9 +699,11 @@ impl SemanticCompressor {
                         .data
                         .into_iter()
                         .next()
-                        .ok_or_else(|| AgentError::ExecutionFailed("no embedding data".to_string()))?
+                        .ok_or_else(|| {
+                            AgentError::ExecutionFailed("no embedding data".to_string())
+                        })?
                         .embedding;
-                    
+
                     cache.store_embedding(cache_key, emb.clone()).await;
                     emb
                 }
@@ -766,7 +778,7 @@ impl SemanticCompressor {
 
         let texts: Vec<String> = to_compress
             .par_iter()
-            .map(|msg| Self::extract_text(msg))
+            .map(Self::extract_text)
             .collect();
 
         let non_empty_texts: Vec<(usize, String)> = texts
@@ -827,7 +839,11 @@ impl ContextCompressor for SemanticCompressor {
                 messages_before,
                 messages_before,
             );
-            return Ok(CompressionResult::new(messages, metrics, self.name().to_string()));
+            return Ok(CompressionResult::new(
+                messages,
+                metrics,
+                self.name().to_string(),
+            ));
         }
 
         let (system_msgs, conversation): (Vec<_>, Vec<_>) =
@@ -837,13 +853,13 @@ impl ContextCompressor for SemanticCompressor {
             let mut result = system_msgs;
             result.extend(conversation);
             let tokens_after = self.count_tokens(&result);
-            let metrics = CompressionMetrics::new(
-                tokens_before,
-                tokens_after,
-                messages_before,
-                result.len(),
-            );
-            return Ok(CompressionResult::new(result, metrics, self.name().to_string()));
+            let metrics =
+                CompressionMetrics::new(tokens_before, tokens_after, messages_before, result.len());
+            return Ok(CompressionResult::new(
+                result,
+                metrics,
+                self.name().to_string(),
+            ));
         }
 
         let split_at = conversation.len().saturating_sub(self.keep_recent);
@@ -869,8 +885,8 @@ impl ContextCompressor for SemanticCompressor {
             assigned[i] = true;
 
             if let Some(Some(emb_i)) = embeddings.get(i) {
-                for j in (i + 1)..to_compress.len() {
-                    if assigned[j] {
+                for (j, assigned_j) in assigned.iter_mut().enumerate().skip(i + 1) {
+                    if *assigned_j {
                         continue;
                     }
 
@@ -878,7 +894,7 @@ impl ContextCompressor for SemanticCompressor {
                         let similarity = Self::cosine_similarity(emb_i, emb_j);
                         if similarity >= self.similarity_threshold {
                             cluster.push(j);
-                            assigned[j] = true;
+                            *assigned_j = true;
                         }
                     }
                 }
@@ -905,12 +921,8 @@ impl ContextCompressor for SemanticCompressor {
         let tokens_after = self.count_tokens(&result);
         let messages_after = result.len();
 
-        let metrics = CompressionMetrics::new(
-            tokens_before,
-            tokens_after,
-            messages_before,
-            messages_after,
-        );
+        let metrics =
+            CompressionMetrics::new(tokens_before, tokens_after, messages_before, messages_after);
 
         // log compression event
         if metrics.was_compressed() {
@@ -934,7 +946,11 @@ impl ContextCompressor for SemanticCompressor {
             );
         }
 
-        Ok(CompressionResult::new(result, metrics, self.name().to_string()))
+        Ok(CompressionResult::new(
+            result,
+            metrics,
+            self.name().to_string(),
+        ))
     }
 
     fn strategy(&self) -> CompressionStrategy {
@@ -1007,7 +1023,11 @@ impl ContextCompressor for HierarchicalCompressor {
                 messages_before,
                 messages_before,
             );
-            return Ok(CompressionResult::new(messages, metrics, self.name().to_string()));
+            return Ok(CompressionResult::new(
+                messages,
+                metrics,
+                self.name().to_string(),
+            ));
         }
 
         let (system_msgs, conversation): (Vec<_>, Vec<_>) =
@@ -1017,13 +1037,13 @@ impl ContextCompressor for HierarchicalCompressor {
             let mut result = system_msgs;
             result.extend(conversation);
             let tokens_after = self.count_tokens(&result);
-            let metrics = CompressionMetrics::new(
-                tokens_before,
-                tokens_after,
-                messages_before,
-                result.len(),
-            );
-            return Ok(CompressionResult::new(result, metrics, self.name().to_string()));
+            let metrics =
+                CompressionMetrics::new(tokens_before, tokens_after, messages_before, result.len());
+            return Ok(CompressionResult::new(
+                result,
+                metrics,
+                self.name().to_string(),
+            ));
         }
 
         let split_at = conversation.len().saturating_sub(self.keep_recent);
@@ -1043,16 +1063,16 @@ impl ContextCompressor for HierarchicalCompressor {
         let mut compressed = Vec::new();
         let mut current_tokens = system_msgs
             .iter()
-            .map(|m| self.count_tokens(&[m.clone()]))
+            .map(|m| self.count_tokens(std::slice::from_ref(m)))
             .sum::<usize>();
 
         for (score, msg) in scored {
-            let msg_tokens = self.count_tokens(&[msg.clone()]);
+            let msg_tokens = self.count_tokens(std::slice::from_ref(&msg));
             let estimated_total = current_tokens
                 + msg_tokens
                 + recent
                     .iter()
-                    .map(|m| self.count_tokens(&[m.clone()]))
+                    .map(|m| self.count_tokens(std::slice::from_ref(m)))
                     .sum::<usize>();
 
             if estimated_total <= max_tokens {
@@ -1072,23 +1092,20 @@ impl ContextCompressor for HierarchicalCompressor {
                             .temperature(0.3)
                             .max_tokens(256);
 
-                    match self.llm.chat(summary_request).await {
-                        Ok(response) => {
-                            if let Some(summary) = response.content() {
-                                let summary_msg = ChatMessage {
-                                    role: msg.role.clone(),
-                                    content: Some(format!("[Compressed] {}", summary)),
-                                    tool_call_id: None,
-                                    tool_calls: None,
-                                };
-                                let summary_tokens = self.count_tokens(&[summary_msg.clone()]);
-                                if current_tokens + summary_tokens <= max_tokens {
-                                    compressed.push(summary_msg);
-                                    current_tokens += summary_tokens;
-                                }
-                            }
+                    if let Ok(response) = self.llm.chat(summary_request).await
+                        && let Some(summary) = response.content()
+                    {
+                        let summary_msg = ChatMessage {
+                            role: msg.role.clone(),
+                            content: Some(format!("[Compressed] {}", summary)),
+                            tool_call_id: None,
+                            tool_calls: None,
+                        };
+                        let summary_tokens = self.count_tokens(std::slice::from_ref(&summary_msg));
+                        if current_tokens + summary_tokens <= max_tokens {
+                            compressed.push(summary_msg);
+                            current_tokens += summary_tokens;
                         }
-                        Err(_) => {}
                     }
                 }
             }
@@ -1101,12 +1118,8 @@ impl ContextCompressor for HierarchicalCompressor {
         let tokens_after = self.count_tokens(&result);
         let messages_after = result.len();
 
-        let metrics = CompressionMetrics::new(
-            tokens_before,
-            tokens_after,
-            messages_before,
-            messages_after,
-        );
+        let metrics =
+            CompressionMetrics::new(tokens_before, tokens_after, messages_before, messages_after);
 
         // log compression event
         if metrics.was_compressed() {
@@ -1130,7 +1143,11 @@ impl ContextCompressor for HierarchicalCompressor {
             );
         }
 
-        Ok(CompressionResult::new(result, metrics, self.name().to_string()))
+        Ok(CompressionResult::new(
+            result,
+            metrics,
+            self.name().to_string(),
+        ))
     }
 
     fn strategy(&self) -> CompressionStrategy {
@@ -1189,12 +1206,18 @@ impl ContextCompressor for HybridCompressor {
                 messages_before,
                 messages_before,
             );
-            return Ok(CompressionResult::new(messages, metrics, self.name().to_string()));
+            return Ok(CompressionResult::new(
+                messages,
+                metrics,
+                self.name().to_string(),
+            ));
         }
 
         let mut current = messages;
         for strategy in &self.strategies {
-            let result = strategy.compress_with_metrics(current.clone(), max_tokens).await?;
+            let result = strategy
+                .compress_with_metrics(current.clone(), max_tokens)
+                .await?;
             if result.metrics.tokens_after <= max_tokens {
                 return Ok(result);
             }
@@ -1203,14 +1226,14 @@ impl ContextCompressor for HybridCompressor {
 
         let tokens_after = self.count_tokens(&current);
         let messages_after = current.len();
-        let metrics = CompressionMetrics::new(
-            tokens_before,
-            tokens_after,
-            messages_before,
-            messages_after,
-        );
+        let metrics =
+            CompressionMetrics::new(tokens_before, tokens_after, messages_before, messages_after);
 
-        Ok(CompressionResult::new(current, metrics, self.name().to_string()))
+        Ok(CompressionResult::new(
+            current,
+            metrics,
+            self.name().to_string(),
+        ))
     }
 
     fn strategy(&self) -> CompressionStrategy {

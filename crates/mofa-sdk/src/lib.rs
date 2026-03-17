@@ -112,6 +112,9 @@ pub mod kernel {
     pub mod storage {
         pub use mofa_kernel::storage::*;
     }
+    pub mod hitl {
+        pub use mofa_kernel::hitl::*;
+    }
     pub mod error {
         pub use mofa_kernel::error::*;
     }
@@ -162,6 +165,13 @@ pub mod kernel {
     // Storage trait
     pub use mofa_kernel::Storage;
 
+    // HITL (Human-in-the-Loop) types - see also crate::hitl module
+    pub use mofa_kernel::hitl::{
+        AlwaysReviewPolicy, Change, Diff, ExecutionStep, ExecutionTrace, HitlError, HitlResult,
+        NeverReviewPolicy, PerformanceData, ReviewContext, ReviewMetadata, ReviewPolicy,
+        ReviewRequest, ReviewRequestId, ReviewResponse, ReviewStatus, ReviewType, StoreError,
+        TelemetrySnapshot,
+    };
     // Crate-level error and result types
     pub use mofa_kernel::error::{IntoKernelReport, KernelError, KernelResult};
 }
@@ -300,6 +310,7 @@ pub mod foundation {
     pub use super::react;
     pub use super::secretary;
     pub use super::workflow;
+    // Note: HITL is available as top-level module `crate::hitl`, not `crate::foundation::hitl`
 }
 
 // =============================================================================
@@ -497,19 +508,13 @@ pub mod llm {
     pub use mofa_foundation::llm::openai::{OpenAIConfig, OpenAIProvider};
     pub use mofa_foundation::llm::*;
 
-    /// 从环境变量创建 OpenAI 提供器
     /// Create OpenAI provider from environment variables
     ///
-    /// 自动读取以下环境变量:
     /// Automatically reads the following environment variables:
-    /// - OPENAI_API_KEY: API 密钥
     /// - OPENAI_API_KEY: API Key
-    /// - OPENAI_BASE_URL: 可选的 API 基础 URL
     /// - OPENAI_BASE_URL: Optional API Base URL
-    /// - OPENAI_MODEL: 可选的默认模型
     /// - OPENAI_MODEL: Optional default model
     ///
-    /// # 示例
     /// # Example
     ///
     /// ```rust,ignore
@@ -547,16 +552,11 @@ pub mod llm {
     }
 }
 
-/// 从环境变量创建 Anthropic 提供器
 /// Create Anthropic provider from environment variables
 ///
-/// 读取环境变量:
 /// Reads environment variables:
-/// - ANTHROPIC_API_KEY (必需)
 /// - ANTHROPIC_API_KEY (Required)
-/// - ANTHROPIC_BASE_URL (可选)
 /// - ANTHROPIC_BASE_URL (Optional)
-/// - ANTHROPIC_MODEL (可选)
 /// - ANTHROPIC_MODEL (Optional)
 pub fn anthropic_from_env() -> Result<crate::llm::AnthropicProvider, crate::llm::LLMError> {
     let api_key = std::env::var("ANTHROPIC_API_KEY").map_err(|_| {
@@ -576,16 +576,11 @@ pub fn anthropic_from_env() -> Result<crate::llm::AnthropicProvider, crate::llm:
     Ok(crate::llm::AnthropicProvider::with_config(cfg))
 }
 
-/// 从环境变量创建 Google Gemini 提供器
 /// Create Google Gemini provider from environment variables
 ///
-/// 读取环境变量:
 /// Reads environment variables:
-/// - GEMINI_API_KEY (必需)
 /// - GEMINI_API_KEY (Required)
-/// - GEMINI_BASE_URL (可选)
 /// - GEMINI_BASE_URL (Optional)
-/// - GEMINI_MODEL (可选)
 /// - GEMINI_MODEL (Optional)
 pub fn gemini_from_env() -> Result<crate::llm::GeminiProvider, crate::llm::LLMError> {
     let api_key = std::env::var("GEMINI_API_KEY").map_err(|_| {
@@ -605,26 +600,17 @@ pub fn gemini_from_env() -> Result<crate::llm::GeminiProvider, crate::llm::LLMEr
 
 // Re-export Secretary module from mofa-foundation (always available)
 pub mod secretary {
-    //! 秘书Agent模式 - 基于事件循环的智能助手
     //! Secretary Agent Mode - Intelligent assistant based on event loop
     //!
-    //! 秘书Agent是一个面向用户的智能助手，通过与LLM交互完成个人助理工作。
     //! Secretary Agent is a user-facing smart assistant completing personal aid tasks via LLM interaction.
-    //! 设计为与长连接配合使用，实现持续的交互式服务。
     //! Designed to work with long-lived connections for continuous interactive services.
     //!
-    //! ## 工作循环（5阶段事件循环）
     //! ## Work Cycle (5-phase event loop)
     //!
-    //! 1. **接收想法** → 记录并生成TODO
     //! 1. **Receive Ideas** → Log and generate TODOs
-    //! 2. **澄清需求** → 与用户交互，转换为项目文档
     //! 2. **Clarify Requirements** → Interact with user, convert to project docs
-    //! 3. **调度分配** → 调用对应的执行Agent
     //! 3. **Schedule & Allocate** → Invoke corresponding execution Agents
-    //! 4. **监控反馈** → 推送关键决策给人类
     //! 4. **Monitor Feedback** → Push critical decisions to humans
-    //! 5. **验收汇报** → 更新TODO，生成报告
     //! 5. **Acceptance & Reporting** → Update TODOs, generate reports
     //!
     //! # Quick Start
@@ -638,9 +624,8 @@ pub mod secretary {
     //!
     //! #[tokio::main]
     //! async fn main() -> GlobalResult<()> {
-    //!     // 1. 创建秘书Agent
     //!     // 1. Create Secretary Agent
-    //!     let mut backend_agent = AgentInfo::new("backend_agent", "后端Agent");
+    //!     let mut backend_agent = AgentInfo::new("backend_agent", "Backend Agent");
     //!     backend_agent.capabilities = vec!["backend".to_string()];
     //!     backend_agent.current_load = 0;
     //!     backend_agent.available = true;
@@ -648,38 +633,34 @@ pub mod secretary {
     //!
     //!     let secretary = DefaultSecretaryBuilder::new()
     //!         .with_id("my_secretary")
-    //!         .with_name("项目秘书")
+    //!         .with_name("Project Secretary")
     //!         .with_auto_clarify(true)
     //!         .with_executor(backend_agent)
     //!         .build()
     //!         .await;
     //!
-    //!     // 2. 创建通道连接
     //!     // 2. Create channel connection
     //!     let (conn, input_tx, mut output_rx) = ChannelConnection::new_pair(32);
     //!
-    //!     // 3. 启动事件循环
     //!     // 3. Start event loop
     //!     let handle = secretary.start(conn).await;
     //!
-    //!     // 4. 发送用户输入
     //!     // 4. Send user input
     //!     input_tx.send(DefaultInput::Idea {
-    //!         content: "开发一个REST API".to_string(),
+    //!         content: "Build a REST API".to_string(),
     //!         priority: Some(TodoPriority::High),
     //!         metadata: None,
     //!     }).await?;
     //!
-    //!     // 5. 处理秘书输出
     //!     // 5. Handle secretary output
     //!     while let Some(output) = output_rx.recv().await {
     //!         match output {
     //!             SecretaryOutput::Acknowledgment { message } => {
-    //!                 info!("秘书: {}", message);
+    //!                 info!("Secretary: {}", message);
     //!             }
     //!             SecretaryOutput::DecisionRequired { decision } => {
-    //!                 info!("需要决策: {}", decision.description);
-    //!                 // 处理决策...
+    //!                 info!("Decision required: {}", decision.description);
+    //!                 // Handle the decision...
     //!                 // Handle decision...
     //!             }
     //!             SecretaryOutput::Report { report } => {
@@ -1030,6 +1011,153 @@ pub mod dora {
 }
 
 // =============================================================================
+// Speech — TTS/ASR cloud adapters + registry helpers
+// =============================================================================
+
+/// Cloud TTS/ASR adapters and the config-driven registry builder.
+///
+/// Adapter types are gated by the matching feature flag so users only pull in
+/// vendor dependencies they actually need.
+///
+/// # Feature flags
+///
+/// | Flag | Adapter |
+/// |---|---|
+/// | `openai-speech` | [`OpenAiTtsAdapter`], [`OpenAiAsrAdapter`] |
+/// | `elevenlabs` | [`ElevenLabsTtsAdapter`] |
+/// | `deepgram` | [`DeepgramAsrAdapter`] |
+///
+/// # Quick start
+///
+/// ```toml
+/// [dependencies]
+/// mofa-sdk = { version = "0.1", features = ["openai-speech", "deepgram"] }
+/// ```
+///
+/// ```rust,ignore
+/// use mofa_sdk::speech::{
+///     SpeechConfig, SpeechProviderConfig, register_speech_adapters,
+///     SpeechAdapterRegistry,
+/// };
+///
+/// let config = SpeechConfig::new()
+///     .with_provider(SpeechProviderConfig::new("openai", "sk-...").as_default_tts().as_default_asr())
+///     .with_provider(SpeechProviderConfig::new("deepgram", "dg-...").as_default_asr());
+///
+/// let mut registry = SpeechAdapterRegistry::new();
+/// register_speech_adapters(&mut registry, &config).unwrap();
+///
+/// let tts = registry.default_tts().unwrap();
+/// ```
+pub mod speech {
+    // ---- kernel speech traits (always available) ----------------------------
+    pub use mofa_kernel::speech::{
+        AsrAdapter, AsrConfig, AudioFormat, AudioOutput, TtsAdapter, TtsConfig,
+        TranscriptionResult, VoiceDescriptor,
+    };
+
+    // ---- foundation registry + pipeline (always available) ------------------
+    pub use mofa_foundation::speech_registry::SpeechAdapterRegistry;
+    pub use mofa_foundation::voice_pipeline::{VoicePipeline, VoicePipelineConfig, VoicePipelineResult};
+
+    // ---- config types (always available, no feature gate needed) ------------
+    #[cfg(any(
+        feature = "openai-speech",
+        feature = "elevenlabs",
+        feature = "deepgram"
+    ))]
+    pub use mofa_integrations::speech::registry_builder::{SpeechConfig, SpeechProviderConfig};
+
+    // ---- per-vendor adapter re-exports --------------------------------------
+
+    #[cfg(feature = "openai-speech")]
+    pub use mofa_integrations::speech::openai::{
+        OpenAiAsrAdapter, OpenAiSpeechConfig, OpenAiTtsAdapter, OpenAiTtsModel,
+    };
+
+    #[cfg(feature = "elevenlabs")]
+    pub use mofa_integrations::speech::elevenlabs::{ElevenLabsConfig, ElevenLabsTtsAdapter};
+
+    #[cfg(feature = "deepgram")]
+    pub use mofa_integrations::speech::deepgram::{DeepgramAsrAdapter, DeepgramConfig};
+
+    // ---- registry builder factory -------------------------------------------
+
+    /// Register cloud speech adapters into a [`SpeechAdapterRegistry`] from config.
+    ///
+    /// Each entry in [`SpeechConfig::providers`] is matched by `provider` string
+    /// (`"openai"`, `"elevenlabs"`, `"deepgram"`), the corresponding adapter is
+    /// constructed with the supplied `api_key`, and registered.  If
+    /// `default_tts` / `default_asr` is `true`, that adapter becomes the default
+    /// for its modality.
+    ///
+    /// Unknown provider names are ignored with a warning.
+    ///
+    /// # Feature requirements
+    ///
+    /// Only provider entries whose backing feature is enabled are registered.
+    /// Entries for disabled features are silently skipped.
+    #[cfg(any(
+        feature = "openai-speech",
+        feature = "elevenlabs",
+        feature = "deepgram"
+    ))]
+    pub fn register_speech_adapters(
+        registry: &mut SpeechAdapterRegistry,
+        config: &SpeechConfig,
+    ) -> mofa_kernel::agent::AgentResult<()> {
+        use std::sync::Arc;
+
+        for entry in &config.providers {
+            match entry.provider.as_str() {
+                #[cfg(feature = "openai-speech")]
+                "openai" => {
+                    use mofa_integrations::speech::openai::{
+                        OpenAiAsrAdapter, OpenAiSpeechConfig, OpenAiTtsAdapter,
+                    };
+                    let cfg = OpenAiSpeechConfig::new().with_api_key(&entry.api_key);
+                    registry.register_tts(Arc::new(OpenAiTtsAdapter::new(cfg.clone())));
+                    registry.register_asr(Arc::new(OpenAiAsrAdapter::new(cfg)));
+                    if entry.default_tts {
+                        registry.set_default_tts("openai-tts");
+                    }
+                    if entry.default_asr {
+                        registry.set_default_asr("openai-whisper");
+                    }
+                }
+                #[cfg(feature = "elevenlabs")]
+                "elevenlabs" => {
+                    use mofa_integrations::speech::elevenlabs::{
+                        ElevenLabsConfig, ElevenLabsTtsAdapter,
+                    };
+                    let cfg = ElevenLabsConfig::new().with_api_key(&entry.api_key);
+                    registry.register_tts(Arc::new(ElevenLabsTtsAdapter::new(cfg)));
+                    if entry.default_tts {
+                        registry.set_default_tts("elevenlabs");
+                    }
+                }
+                #[cfg(feature = "deepgram")]
+                "deepgram" => {
+                    use mofa_integrations::speech::deepgram::{DeepgramAsrAdapter, DeepgramConfig};
+                    let cfg = DeepgramConfig::new().with_api_key(&entry.api_key);
+                    registry.register_asr(Arc::new(DeepgramAsrAdapter::new(cfg)));
+                    if entry.default_asr {
+                        registry.set_default_asr("deepgram");
+                    }
+                }
+                other => {
+                    tracing::warn!(
+                        "[speech] unknown or feature-disabled provider '{}', skipping",
+                        other
+                    );
+                }
+            }
+        }
+        Ok(())
+    }
+}
+
+// =============================================================================
 // Agent Skills - Progressive Disclosure Skills System
 // =============================================================================
 
@@ -1037,3 +1165,179 @@ pub mod dora {
 pub mod skills;
 
 // Public skills module with re-exports
+
+#[cfg(test)]
+mod tests {
+    use super::kernel::{
+        AgentCapabilities, AgentCapabilitiesBuilder, AgentContext, AgentError, AgentInput,
+        AgentOutput, AgentResult, AgentState, MoFAAgent,
+    };
+    use super::{llm, runtime};
+    use super::llm::LLMProvider;
+    use std::sync::{Mutex, OnceLock};
+
+    fn env_lock() -> &'static Mutex<()> {
+        static ENV_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+        ENV_LOCK.get_or_init(|| Mutex::new(()))
+    }
+
+    struct EchoAgent {
+        caps: AgentCapabilities,
+        state: AgentState,
+    }
+
+    impl EchoAgent {
+        fn new() -> Self {
+            Self {
+                caps: AgentCapabilitiesBuilder::new().build(),
+                state: AgentState::Created,
+            }
+        }
+    }
+
+    #[async_trait::async_trait]
+    impl MoFAAgent for EchoAgent {
+        fn id(&self) -> &str {
+            "echo-agent"
+        }
+
+        fn name(&self) -> &str {
+            "Echo Agent"
+        }
+
+        fn capabilities(&self) -> &AgentCapabilities {
+            &self.caps
+        }
+
+        async fn initialize(&mut self, _ctx: &AgentContext) -> AgentResult<()> {
+            self.state = AgentState::Ready;
+            Ok(())
+        }
+
+        async fn execute(
+            &mut self,
+            input: AgentInput,
+            _ctx: &AgentContext,
+        ) -> AgentResult<AgentOutput> {
+            self.state = AgentState::Executing;
+            Ok(AgentOutput::text(format!("Echo: {}", input.to_text())))
+        }
+
+        async fn shutdown(&mut self) -> AgentResult<()> {
+            self.state = AgentState::Shutdown;
+            Ok(())
+        }
+
+        fn state(&self) -> AgentState {
+            self.state.clone()
+        }
+    }
+
+    struct FailingAgent {
+        caps: AgentCapabilities,
+    }
+
+    impl FailingAgent {
+        fn new() -> Self {
+            Self {
+                caps: AgentCapabilitiesBuilder::new().build(),
+            }
+        }
+    }
+
+    #[async_trait::async_trait]
+    impl MoFAAgent for FailingAgent {
+        fn id(&self) -> &str {
+            "failing-agent"
+        }
+
+        fn name(&self) -> &str {
+            "Failing Agent"
+        }
+
+        fn capabilities(&self) -> &AgentCapabilities {
+            &self.caps
+        }
+
+        async fn initialize(&mut self, _ctx: &AgentContext) -> AgentResult<()> {
+            Ok(())
+        }
+
+        async fn execute(
+            &mut self,
+            _input: AgentInput,
+            _ctx: &AgentContext,
+        ) -> AgentResult<AgentOutput> {
+            Err(AgentError::ExecutionFailed("intentional failure".to_string()))
+        }
+
+        async fn shutdown(&mut self) -> AgentResult<()> {
+            Ok(())
+        }
+
+        fn state(&self) -> AgentState {
+            AgentState::Ready
+        }
+    }
+
+    #[tokio::test]
+    async fn run_agents_propagates_error() {
+        let result = runtime::run_agents(FailingAgent::new(), vec![AgentInput::text("x")]).await;
+        assert!(matches!(result, Err(AgentError::ExecutionFailed(_))));
+    }
+
+    #[tokio::test]
+    async fn run_agents_executes_all_inputs() {
+        let outputs = runtime::run_agents(
+            EchoAgent::new(),
+            vec![AgentInput::text("a"), AgentInput::text("b")],
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(outputs.len(), 2);
+        assert_eq!(outputs[0].to_text(), "Echo: a");
+        assert_eq!(outputs[1].to_text(), "Echo: b");
+    }
+
+    #[test]
+    fn openai_from_env_missing_key_errors() {
+        let _guard = env_lock().lock().expect("env lock poisoned");
+        unsafe {
+            std::env::remove_var("OPENAI_API_KEY");
+            std::env::remove_var("OPENAI_MODEL");
+        }
+        let result = llm::openai_from_env();
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn openai_from_env_model_override_applies() {
+        let _guard = env_lock().lock().expect("env lock poisoned");
+        unsafe {
+            std::env::set_var("OPENAI_API_KEY", "test-key");
+            std::env::set_var("OPENAI_MODEL", "gpt-4o-mini");
+        }
+
+        let provider = llm::openai_from_env().unwrap();
+        assert_eq!(provider.name(), "openai");
+        assert_eq!(provider.default_model(), "gpt-4o-mini");
+
+        unsafe {
+            std::env::remove_var("OPENAI_API_KEY");
+            std::env::remove_var("OPENAI_MODEL");
+        }
+    }
+
+    #[test]
+    fn anthropic_and_gemini_missing_keys_error() {
+        let _guard = env_lock().lock().expect("env lock poisoned");
+        unsafe {
+            std::env::remove_var("ANTHROPIC_API_KEY");
+            std::env::remove_var("GEMINI_API_KEY");
+        }
+
+        assert!(super::anthropic_from_env().is_err());
+        assert!(super::gemini_from_env().is_err());
+    }
+}

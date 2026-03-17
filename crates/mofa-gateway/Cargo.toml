@@ -9,7 +9,15 @@ repository.workspace = true
 homepage.workspace = true
 documentation = "https://docs.rs/mofa-gateway"
 readme = "CRATE_OVERVIEW.md"
-keywords = ["ai", "agent", "gateway", "control-plane", "distributed", "consensus", "raft"]
+keywords = [
+    "ai",
+    "agent",
+    "gateway",
+    "control-plane",
+    "distributed",
+    "consensus",
+    "raft",
+]
 categories = ["asynchronous", "network-programming", "distributed-computing"]
 publish = true
 
@@ -24,19 +32,26 @@ tracing.workspace = true
 uuid.workspace = true
 thiserror.workspace = true
 eyre.workspace = true
-axum.workspace = true
+axum = { workspace = true, features = ["ws", "macros"] }
 chrono.workspace = true
 
 # Local dependencies
-mofa-kernel = { path = "../mofa-kernel", version = "0.1", features = ["config"] }
+mofa-kernel = { path = "../mofa-kernel", version = "0.1", features = [
+    "config",
+] }
 mofa-runtime = { path = "../mofa-runtime", version = "0.1" }
+mofa-foundation = { path = "../mofa-foundation", version = "0.1" }
 mofa-monitoring = { path = "../mofa-monitoring", version = "0.1", optional = true }
 
 # Network and consensus (always available - lightweight Rust code)
 tonic = { version = "0.12", features = ["tls", "tls-roots"] }
 prost = "0.13"
 prost-types = "0.13"
-tower-http = { version = "0.6", features = ["cors", "trace", "compression-gzip"] }
+tower-http = { version = "0.6", features = [
+    "cors",
+    "trace",
+    "compression-gzip",
+] }
 tracing-subscriber.workspace = true
 prometheus = { version = "0.13", default-features = false }
 
@@ -44,6 +59,7 @@ prometheus = { version = "0.13", default-features = false }
 tower = "0.5"
 hyper = { version = "1.8", features = ["full"] }
 hyper-util = "0.1"
+http-body-util = "0.1"
 
 # Utilities
 dashmap = "5.5"
@@ -62,6 +78,10 @@ opentelemetry_sdk = { workspace = true, optional = true }
 tracing-opentelemetry = { workspace = true, optional = true }
 opentelemetry-otlp = { workspace = true, optional = true }
 opentelemetry-semantic-conventions = { workspace = true, optional = true }
+
+# OpenAI / compatible APIs (for openai-compat gateway)
+async-openai = { version = "0.27", optional = true }
+subtle = { version = "2", optional = true }
 
 [build-dependencies]
 tonic-build = "0.12"
@@ -89,4 +109,12 @@ monitoring = [
 ]
 
 # Full feature set (all optional features)
-full = ["rocksdb", "monitoring"]
+full = ["rocksdb", "monitoring", "openai-compat"]
+
+# OpenAI-compatible HTTP gateway components
+openai-compat = ["dep:async-openai", "dep:subtle"]
+
+[[example]]
+name = "gateway_inference_server"
+path = "examples/gateway_inference_server.rs"
+required-features = ["openai-compat"]

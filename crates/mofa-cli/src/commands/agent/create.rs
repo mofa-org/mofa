@@ -382,11 +382,9 @@ fn parse_provider(value: &str) -> Result<LLMProvider, CliError> {
         "compatible" | "compatible_api" | "compatible-api" => Ok(LLMProvider::Compatible),
         "anthropic" => Ok(LLMProvider::Anthropic),
         "gemini" => Ok(LLMProvider::Gemini),
-        other => {
-            return Err(CliError::ConfigError(format!(
-                "Unsupported llm.provider value: {other}"
-            )));
-        }
+        other => Err(CliError::ConfigError(format!(
+            "Unsupported llm.provider value: {other}"
+        ))),
     }
 }
 

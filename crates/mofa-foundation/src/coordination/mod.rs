@@ -1,10 +1,15 @@
 use mofa_kernel::agent::types::error::{GlobalError, GlobalResult};
 mod scheduler;
+#[cfg(test)]
+mod tests;
 use mofa_kernel::message::{AgentMessage, TaskRequest, TaskStatus};
 use mofa_kernel::{AgentBus, CommunicationMode};
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
+use tokio::time::{Duration, timeout};
+
+const PIPELINE_STAGE_TIMEOUT_SECS: u64 = 5;
 
 /// 协同策略枚举
 /// Enumeration of coordination strategies
@@ -20,21 +25,32 @@ pub enum CoordinationStrategy {
 
 /// 协同器核心结构体
 /// Core structure of the Agent Coordinator
+pub type AgentTaskStatus = (String, TaskStatus);
+
 pub struct AgentCoordinator {
     bus: Arc<AgentBus>,
     strategy: CoordinationStrategy,
     // 维护协同拓扑：角色→智能体ID列表
     // Maintain coordination topology: Role -> Agent ID list
     role_mapping: Arc<RwLock<HashMap<String, Vec<String>>>>,
-    // 维护任务状态：任务ID→执行智能体ID+状态
-    // Maintain task status: Task ID -> Executor Agent ID + Status
-    task_tracker: Arc<RwLock<HashMap<String, (String, TaskStatus)>>>,
+    // 维护任务状态：任务ID→执行智能体ID+状态（列表）
+    // Maintain task status: Task ID -> list of (Executor Agent ID, Status)
+    pub task_tracker: Arc<RwLock<HashMap<String, Vec<AgentTaskStatus>>>>,
     // 优先级调度器
     // Priority scheduler
     scheduler: scheduler::PriorityScheduler,
 }
 
 impl AgentCoordinator {
+    fn extract_pipeline_task(task_msg: &AgentMessage) -> GlobalResult<(String, String)> {
+        match task_msg {
+            AgentMessage::TaskRequest { task_id, content } => Ok((task_id.clone(), content.clone())),
+            _ => Err(GlobalError::Other(
+                "Pipeline coordination only supports TaskRequest messages".to_string(),
+            )),
+        }
+    }
+
     /// 创建协同器
     /// Create a new coordinator
     pub async fn new(bus: Arc<AgentBus>, strategy: CoordinationStrategy) -> Self {
@@ -65,7 +81,7 @@ impl AgentCoordinator {
         match &self.strategy {
             CoordinationStrategy::MasterSlave => self.master_slave_coordinate(task_msg).await,
             CoordinationStrategy::Pipeline => self.pipeline_coordinate(task_msg).await,
-            _ => Ok(()),
+            CoordinationStrategy::PeerToPeer => self.peer_to_peer_coordinate(task_msg).await,
         }
     }
 
@@ -98,12 +114,13 @@ impl AgentCoordinator {
             .await
             .map_err(|e| GlobalError::Other(e.to_string()))?;
 
-        // 4. 跟踪任务状态（简化示例）
-        // 4. Track task status (Simplified example)
+        // 4. 跟踪任务状态
+        // 4. Track task status for all workers
         if let AgentMessage::TaskRequest { task_id, .. } = task_msg {
             let mut tracker = self.task_tracker.write().await;
+            let entries = tracker.entry(task_id.clone()).or_default();
             for worker_id in workers {
-                tracker.insert(task_id.clone(), (worker_id.clone(), TaskStatus::Pending));
+                entries.push((worker_id.clone(), TaskStatus::Pending));
             }
         }
         Ok(())
@@ -112,11 +129,13 @@ impl AgentCoordinator {
     /// 流水线模式协同逻辑（任务串行传递）
     /// Pipeline coordination logic (Serial task transmission)
     async fn pipeline_coordinate(&self, task_msg: &AgentMessage) -> GlobalResult<()> {
+        let (root_task_id, initial_content) = Self::extract_pipeline_task(task_msg)?;
         let role_map = self.role_mapping.read().await;
         // 按流水线阶段顺序获取角色（如 "stage1_extract" → "stage2_process" → "stage3_output"）
         // Get roles by pipeline sequence (e.g., "stage1_extract" -> "stage2_process" -> "stage3_output")
         let stages = vec!["stage1", "stage2", "stage3"];
-        let mut last_output: Option<String> = None;
+        // Carry the previous stage's output forward as the next stage's input.
+        let mut last_output: Option<String> = Some(initial_content);
 
         for stage in stages {
             let agents = role_map
@@ -125,13 +144,24 @@ impl AgentCoordinator {
             let agent_id = &agents[0];
             // 传递上一阶段输出作为当前阶段输入
             // Pass the output of the previous stage as current stage input
-            let current_msg = match last_output {
-                Some(ref output) => AgentMessage::TaskRequest {
-                    task_id: uuid::Uuid::now_v7().to_string(),
-                    content: output.clone(),
-                },
-                None => task_msg.clone(),
+            let current_msg = AgentMessage::TaskRequest {
+                // Keep one root task id across the full pipeline for traceability.
+                task_id: root_task_id.clone(),
+                content: last_output.clone().ok_or_else(|| {
+                    GlobalError::Other(format!("Pipeline stage {} has no upstream output", stage))
+                })?,
             };
+            let response_bus = self.bus.clone();
+            let response_agent_id = agent_id.to_string();
+            let response_handle = tokio::spawn(async move {
+                response_bus
+                    .receive_message(
+                        "coordinator",
+                        CommunicationMode::PointToPoint(response_agent_id),
+                    )
+                    .await
+            });
+            tokio::task::yield_now().await;
             // 点对点发送给当前阶段智能体
             // Send point-to-point to the agent of the current stage
             self.bus
@@ -142,18 +172,85 @@ impl AgentCoordinator {
                 )
                 .await
                 .map_err(|e| GlobalError::Other(e.to_string()))?;
-            // 接收当前阶段输出（简化示例）
-            // Receive current stage output (Simplified example)
-            if let Some(AgentMessage::TaskResponse { result, .. }) = self
-                .bus
-                .receive_message(
-                    agent_id,
-                    CommunicationMode::PointToPoint("coordinator".to_string()),
+            // Wait on the coordinator side reply channel with a bounded timeout.
+            let stage_response = timeout(
+                Duration::from_secs(PIPELINE_STAGE_TIMEOUT_SECS),
+                response_handle,
+            )
+            .await
+            .map_err(|_| {
+                GlobalError::Other(format!(
+                    "Timed out waiting for pipeline stage {} ({})",
+                    stage, agent_id
+                ))
+            })?
+            .map_err(|e| GlobalError::Other(format!("Pipeline stage {} join failed: {}", stage, e)))?
+            .map_err(|e| GlobalError::Other(e.to_string()))?;
+
+            match stage_response {
+                Some(AgentMessage::TaskResponse {
+                    task_id,
+                    result,
+                    status,
+                }) => {
+                    // A stage must answer for the same root task the pipeline started with.
+                    if task_id != root_task_id {
+                        return Err(GlobalError::Other(format!(
+                            "Pipeline stage {} returned mismatched task id: expected {}, got {}",
+                            stage, root_task_id, task_id
+                        )));
+                    }
+                    if status != TaskStatus::Success {
+                        return Err(GlobalError::Other(format!(
+                            "Pipeline stage {} ({}) failed for task {}",
+                            stage, agent_id, root_task_id
+                        )));
+                    }
+                    last_output = Some(result);
+                }
+                Some(other) => {
+                    return Err(GlobalError::Other(format!(
+                        "Pipeline stage {} ({}) returned unexpected message: {:?}",
+                        stage, agent_id, other
+                    )));
+                }
+                None => {
+                    return Err(GlobalError::Other(format!(
+                        "Pipeline stage {} ({}) closed without a response",
+                        stage, agent_id
+                    )));
+                }
+            }
+        }
+        Ok(())
+    }
+
+    /// Peer-to-peer coordination logic
+    async fn peer_to_peer_coordinate(&self, task_msg: &AgentMessage) -> GlobalResult<()> {
+        let role_map = self.role_mapping.read().await;
+
+        let peers = role_map
+            .get("peer")
+            .ok_or_else(|| GlobalError::Other("No peer agents registered".to_string()))?;
+
+        // Send point to point to all peers to avoid broadcast leakage
+        for peer_id in peers {
+            self.bus
+                .send_message(
+                    "coordinator",
+                    CommunicationMode::PointToPoint(peer_id.clone()),
+                    task_msg,
                 )
                 .await
-                .map_err(|e| GlobalError::Other(e.to_string()))?
-            {
-                last_output = Some(result);
+                .map_err(|e| GlobalError::Other(e.to_string()))?;
+        }
+
+        // Track task status
+        if let AgentMessage::TaskRequest { task_id, .. } = task_msg {
+            let mut tracker = self.task_tracker.write().await;
+            let entries = tracker.entry(task_id.clone()).or_default();
+            for peer_id in peers {
+                entries.push((peer_id.clone(), TaskStatus::Pending));
             }
         }
         Ok(())

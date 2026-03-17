@@ -44,9 +44,9 @@ mod duration_secs {
 }
 
 use super::model_pool::ModelPool;
-use crate::scheduler::AdmissionOutcome;
 use super::routing::{self, RoutingDecision, RoutingPolicy};
 use super::types::{InferenceRequest, InferenceResult, RequestPriority, RoutedBackend};
+use crate::scheduler::AdmissionOutcome;
 
 /// Configuration for the `InferenceOrchestrator`.
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
@@ -183,6 +183,48 @@ impl InferenceOrchestrator {
                     actual_precision: request.preferred_precision,
                 }
             }
+            RoutingDecision::UseLocalDegraded {
+                model_id,
+                degraded_precision,
+                quality_warning,
+            } => {
+                // Estimate degraded memory footprint
+                let degraded_memory_mb = ((request.required_memory_mb as f64)
+                    * (degraded_precision.bytes_per_param()
+                        / request.preferred_precision.bytes_per_param()))
+                .ceil() as usize;
+
+                // Load the model at degraded precision
+                if !self.model_pool.is_loaded(model_id) {
+                    self.model_pool.load(
+                        model_id,
+                        degraded_memory_mb,
+                        *degraded_precision,
+                        request.priority,
+                    );
+                } else {
+                    self.model_pool.touch(model_id);
+                }
+
+                tracing::warn!(
+                    model_id,
+                    from = %request.preferred_precision,
+                    to = %degraded_precision,
+                    "{}",
+                    quality_warning
+                );
+
+                InferenceResult {
+                    output: format!(
+                        "[local-degraded:{}@{}] Inference result for: {}",
+                        model_id, degraded_precision, request.prompt
+                    ),
+                    routed_to: RoutedBackend::Local {
+                        model_id: model_id.clone(),
+                    },
+                    actual_precision: *degraded_precision,
+                }
+            }
             RoutingDecision::UseCloud { provider } => InferenceResult {
                 output: format!(
                     "[cloud:{}] Inference result for: {}",
@@ -201,6 +243,69 @@ impl InferenceOrchestrator {
                 actual_precision: request.preferred_precision,
             },
         }
+    }
+
+    /// Phase-1 simulated streaming entry point.
+    ///
+    /// Stream inference result as a [`BoxTokenStream`].
+    ///
+    /// Each [`StreamChunk`] emitted carries the incremental text delta from the
+    /// backend. The final chunk has [`StreamChunk::finish_reason`] set to
+    /// [`FinishReason::Stop`].
+    ///
+    /// # Current implementation note
+    ///
+    /// Until the local model pool exposes native token-by-token decoding, this
+    /// method calls [`infer`] to obtain the full output and then re-emits it
+    /// word-by-word as a simulated stream. Real LLM providers accessed via the
+    /// cloud fallback path will be wired in Phase 2 to use `chat_stream()`
+    /// directly, bypassing the full-output round-trip.
+    pub fn infer_stream(
+        &mut self,
+        request: &InferenceRequest,
+    ) -> (InferenceResult, mofa_kernel::llm::streaming::BoxTokenStream) {
+        use futures::StreamExt;
+        use mofa_kernel::llm::streaming::{BoxTokenStream, StreamChunk, StreamError};
+        use mofa_kernel::llm::types::FinishReason;
+
+        // Run full admission/routing logic to get the complete output.
+        let base_result = self.infer(request);
+        let output_str = base_result.output.clone();
+
+        // Build word-level chunks from the full output string.
+        let mut words: Vec<Result<StreamChunk, StreamError>> = output_str
+            .split_whitespace()
+            .map(|w| Ok(StreamChunk::text(format!("{w} "))))
+            .collect();
+
+        // Append a terminal done chunk with finish_reason = Stop.
+        words.push(Ok(StreamChunk::done(FinishReason::Stop)));
+
+        let stream: BoxTokenStream = Box::pin(futures::stream::iter(words));
+        (base_result, stream)
+    }
+
+    /// Compatibility accessor: returns the text-only stream used by legacy callers.
+    ///
+    /// **Deprecated** — prefer [`infer_stream`] which returns a fully typed
+    /// [`BoxTokenStream`]. This method will be removed once all call sites are
+    /// updated.
+    #[deprecated(note = "Use infer_stream() which returns BoxTokenStream")]
+    pub fn infer_stream_text(
+        &mut self,
+        request: &InferenceRequest,
+    ) -> (
+        InferenceResult,
+        std::pin::Pin<Box<dyn futures::Stream<Item = String> + Send + Sync>>,
+    ) {
+        let base_result = self.infer(request);
+        let output_str = base_result.output.clone();
+        let words: Vec<String> = output_str
+            .split_whitespace()
+            .map(|w| format!("{w} "))
+            .collect();
+        let stream = futures::stream::iter(words);
+        (base_result, Box::pin(stream))
     }
 
     /// Evaluate whether a local backend can admit this request based on
