@@ -58,6 +58,7 @@ members = [
     "rag_indexing_demo",
     "adversarial_testing_demo",
     "resume_from_checkpoint",
+    "claw_demo",
 ]
 
 [workspace.package]
