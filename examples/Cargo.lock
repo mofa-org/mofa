@@ -53,6 +53,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "adversarial_testing_demo"
+version = "0.1.0"
+dependencies = [
+ "mofa-testing",
+ "serde_json",
+]
+
+[[package]]
 name = "aes"
 version = "0.8.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -953,6 +961,18 @@ version = "0.1.0"
 dependencies = [
  "serde_json",
  "tempfile",
+]
+
+[[package]]
+name = "cloud_voice_demo"
+version = "0.1.0"
+dependencies = [
+ "dotenvy",
+ "mofa-kernel",
+ "mofa-plugins",
+ "tokio",
+ "tracing",
+ "tracing-subscriber 0.3.22",
 ]
 
 [[package]]
@@ -2634,12 +2654,12 @@ name = "hitl_workflow"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "axum 0.7.9",
+ "axum",
  "chrono",
  "clap",
  "mofa-foundation",
  "mofa-kernel",
- "reqwest 0.12.28",
+ "reqwest",
  "serde",
  "serde_json",
  "tokio",
@@ -3868,11 +3888,12 @@ version = "0.1.0"
 dependencies = [
  "async-openai",
  "async-trait",
- "axum 0.7.9",
+ "axum",
  "base64 0.22.1",
  "chrono",
  "config 0.14.1",
  "cron",
+ "dashmap 5.5.3",
  "error-stack",
  "futures",
  "hex",
@@ -4096,6 +4117,20 @@ dependencies = [
  "tokio",
  "tracing",
  "uuid",
+]
+
+[[package]]
+name = "mofa-testing"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "chrono",
+ "mofa-foundation",
+ "mofa-kernel",
+ "serde",
+ "serde_json",
+ "tokio",
 ]
 
 [[package]]
@@ -5706,6 +5741,19 @@ dependencies = [
  "pin-project-lite",
  "reqwest",
  "thiserror 1.0.69",
+]
+
+[[package]]
+name = "resume_from_checkpoint"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "mofa-foundation",
+ "mofa-kernel",
+ "tokio",
+ "tracing",
+ "tracing-subscriber 0.3.22",
+ "uuid",
 ]
 
 [[package]]
