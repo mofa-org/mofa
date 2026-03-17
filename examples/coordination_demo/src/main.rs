@@ -38,14 +38,13 @@ impl AgentMemory for MockMemoryStore {
         workflow_id: &str,
     ) -> CoordinationResult<MemoryRef> {
         let memory_id = Uuid::new_v4();
-        let obj = MemoryObject {
+        let obj = MemoryObject::new(
             memory_id,
-            owner_agent: agent_id.to_string(),
-            content: content.to_string(),
-            workflow_id: workflow_id.to_string(),
-            // In a real implementation this would use a monotonic clock helper.
-            timestamp: 0_u64,
-        };
+            agent_id.to_string(),
+            content.to_string(),
+            workflow_id.to_string(),
+            0_u64,
+        );
 
         self.store.lock().unwrap().insert(memory_id, obj);
 
@@ -91,18 +90,30 @@ impl HandoffProtocol for MockMemoryStore {
         to: &str,
         context: HandoffContext,
     ) -> CoordinationResult<HandoffPacket> {
-        let packet = HandoffPacket {
-            handoff_id: Uuid::new_v4(),
-            from_agent: from.to_string(),
-            to_agent: to.to_string(),
-            task_completed: context.task_completed,
-            decisions: context.decisions,
-            confidence: context.confidence,
-            memory_refs: context.memory_refs,
-            next_task: context.next_task,
-            // Demo: use a fixed timestamp; production impls should use a real clock.
-            timestamp: 0_u64,
+        // Derive workflow_id from the first memory ref's workflow, or default.
+        let workflow_id = {
+            let store = self.store.lock().unwrap();
+            context
+                .memory_refs
+                .first()
+                .and_then(|r| store.get(&r.id))
+                .map(|obj| obj.workflow_id.clone())
+                .unwrap_or_default()
         };
+
+        let packet = HandoffPacket::new(
+            Uuid::new_v4(),
+            from.to_string(),
+            to.to_string(),
+            context.task_completed,
+            context.decisions,
+            context.confidence,
+            context.memory_refs,
+            context.next_task,
+            workflow_id,
+            // Demo: use a fixed timestamp; production impls should use a real clock.
+            0_u64,
+        );
 
         self.handoffs.lock().unwrap().push(packet.clone());
         Ok(packet)
@@ -128,9 +139,13 @@ impl HandoffProtocol for MockMemoryStore {
         Ok(())
     }
 
-    async fn list_handoffs(&self, _workflow_id: &str) -> CoordinationResult<Vec<HandoffPacket>> {
-        // This mock does not track workflow_id on handoffs; return all of them.
-        Ok(self.handoffs.lock().unwrap().clone())
+    async fn list_handoffs(&self, workflow_id: &str) -> CoordinationResult<Vec<HandoffPacket>> {
+        let handoffs = self.handoffs.lock().unwrap();
+        Ok(handoffs
+            .iter()
+            .filter(|h| h.workflow_id == workflow_id)
+            .cloned()
+            .collect())
     }
 }
 
@@ -143,14 +158,14 @@ impl ConflictDetector for MockConflictDetector {
             return None;
         }
 
-        Some(ConflictInfo {
-            conflict_id: Uuid::new_v4(),
-            memory_ref: MemoryRef { id: existing.memory_id },
-            existing_value: existing.content.clone(),
-            incoming_value: incoming.content.clone(),
-            detected_at: 0_u64,
-            workflow_id: existing.workflow_id.clone(),
-        })
+        Some(ConflictInfo::new(
+            Uuid::new_v4(),
+            MemoryRef { id: existing.memory_id },
+            existing.content.clone(),
+            incoming.content.clone(),
+            0_u64,
+            existing.workflow_id.clone(),
+        ))
     }
 
     async fn resolve(
@@ -169,16 +184,18 @@ impl ConflictDetector for MockConflictDetector {
                     "Escalation required (mock implementation)".to_string(),
                 ))
             }
+            // Fallback: default to KeepIncoming for any future ResolutionStrategy
+            // variants added under #[non_exhaustive].
             _ => conflict.incoming_value.clone(),
         };
 
-        Ok(MemoryObject {
-            memory_id: conflict.memory_ref.id,
-            owner_agent: "resolved".to_string(),
+        Ok(MemoryObject::new(
+            conflict.memory_ref.id,
+            "resolved".to_string(),
             content,
-            workflow_id: conflict.workflow_id.clone(),
-            timestamp: 0_u64,
-        })
+            conflict.workflow_id.clone(),
+            0_u64,
+        ))
     }
 
     async fn list_conflicts(&self, _workflow_id: &str) -> CoordinationResult<Vec<ConflictInfo>> {
@@ -277,13 +294,13 @@ async fn main() -> Result<()> {
     }
 
     // ── Step 4: Agent A creates handoff for Agent B ─────────────────────────
-    let context = HandoffContext {
-        task_completed: "Market analysis complete".into(),
-        decisions: vec!["BTC analysis done".into()],
-        confidence: 0.87,
-        next_task: "Generate summary report".into(),
-        memory_refs: vec![ref_a],
-    };
+    let context = HandoffContext::new(
+        "Market analysis complete".into(),
+        vec!["BTC analysis done".into()],
+        0.87,
+        "Generate summary report".into(),
+        vec![ref_a],
+    );
 
     let packet = store
         .create_handoff("agent_a", "agent_b", context)

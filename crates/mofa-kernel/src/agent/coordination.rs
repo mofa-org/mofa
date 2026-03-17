@@ -51,6 +51,7 @@ impl MemoryRef {
 ///
 /// Contains the actual content along with ownership and workflow metadata.
 /// 包含实际内容以及归属和工作流元数据。
+#[non_exhaustive]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MemoryObject {
     /// Unique identifier for this memory entry.
@@ -74,12 +75,33 @@ pub struct MemoryObject {
     pub timestamp: u64,
 }
 
+impl MemoryObject {
+    /// Create a new memory object.
+    /// 创建新的内存对象。
+    pub fn new(
+        memory_id: Uuid,
+        owner_agent: String,
+        content: String,
+        workflow_id: String,
+        timestamp: u64,
+    ) -> Self {
+        Self {
+            memory_id,
+            owner_agent,
+            content,
+            workflow_id,
+            timestamp,
+        }
+    }
+}
+
 /// Context passed during an agent-to-agent handoff.
 /// Agent 之间交接传递的上下文。
 ///
 /// Captures the completed task, decisions made, confidence level,
 /// and references to shared memory entries.
 /// 捕获已完成的任务、做出的决策、置信度以及共享内存条目的引用。
+#[non_exhaustive]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct HandoffContext {
     /// Description of the completed task.
@@ -103,12 +125,33 @@ pub struct HandoffContext {
     pub memory_refs: Vec<MemoryRef>,
 }
 
+impl HandoffContext {
+    /// Create a new handoff context.
+    /// 创建新的交接上下文。
+    pub fn new(
+        task_completed: String,
+        decisions: Vec<String>,
+        confidence: f32,
+        next_task: String,
+        memory_refs: Vec<MemoryRef>,
+    ) -> Self {
+        Self {
+            task_completed,
+            decisions,
+            confidence,
+            next_task,
+            memory_refs,
+        }
+    }
+}
+
 /// A typed, schema-validated packet for agent-to-agent handoffs.
 /// 用于 Agent 之间交接的类型化、模式验证数据包。
 ///
 /// Nothing is lost at handoff boundaries — every decision, confidence score,
 /// and memory reference is preserved and auditable.
 /// 交接边界不会丢失任何内容 — 每个决策、置信度分数和内存引用都被保留并可审计。
+#[non_exhaustive]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct HandoffPacket {
     /// Unique identifier for this handoff.
@@ -143,12 +186,45 @@ pub struct HandoffPacket {
     /// 接收 Agent 的下一个任务描述。
     pub next_task: String,
 
+    /// Workflow this handoff belongs to.
+    /// 此交接所属的工作流。
+    pub workflow_id: String,
+
     /// Timestamp in milliseconds since epoch.
     /// 自 epoch 起的毫秒时间戳。
     pub timestamp: u64,
 }
 
-/// Information about a detected conflict between memory entries.
+impl HandoffPacket {
+    /// Create a new handoff packet.
+    /// 创建新的交接数据包。
+    #[allow(clippy::too_many_arguments)]
+    pub fn new(
+        handoff_id: Uuid,
+        from_agent: String,
+        to_agent: String,
+        task_completed: String,
+        decisions: Vec<String>,
+        confidence: f32,
+        memory_refs: Vec<MemoryRef>,
+        next_task: String,
+        workflow_id: String,
+        timestamp: u64,
+    ) -> Self {
+        Self {
+            handoff_id,
+            from_agent,
+            to_agent,
+            task_completed,
+            decisions,
+            confidence,
+            memory_refs,
+            next_task,
+            workflow_id,
+            timestamp,
+        }
+    }
+}
 /// 内存条目之间检测到的冲突信息。
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ConflictInfo {
@@ -177,6 +253,28 @@ pub struct ConflictInfo {
     pub workflow_id: String,
 }
 
+impl ConflictInfo {
+    /// Create a new conflict info.
+    /// 创建新的冲突信息。
+    pub fn new(
+        conflict_id: Uuid,
+        memory_ref: MemoryRef,
+        existing_value: String,
+        incoming_value: String,
+        detected_at: u64,
+        workflow_id: String,
+    ) -> Self {
+        Self {
+            conflict_id,
+            memory_ref,
+            existing_value,
+            incoming_value,
+            detected_at,
+            workflow_id,
+        }
+    }
+}
+
 /// Strategy for resolving a detected conflict.
 /// 解决检测到的冲突的策略。
 #[non_exhaustive]
@@ -201,6 +299,7 @@ pub enum ResolutionStrategy {
 
 /// Configuration for governance policies.
 /// 治理策略的配置。
+#[non_exhaustive]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GovernanceConfig {
     /// Maximum depth of agent spawning chains.
@@ -214,6 +313,18 @@ pub struct GovernanceConfig {
     /// Whether to record all handoffs in the audit trail.
     /// 是否在审计跟踪中记录所有交接。
     pub enable_audit: bool,
+}
+
+impl GovernanceConfig {
+    /// Create a new governance configuration.
+    /// 创建新的治理配置。
+    pub fn new(max_spawn_depth: u32, max_agents_per_workflow: u32, enable_audit: bool) -> Self {
+        Self {
+            max_spawn_depth,
+            max_agents_per_workflow,
+            enable_audit,
+        }
+    }
 }
 
 impl Default for GovernanceConfig {
@@ -306,8 +417,11 @@ pub trait AgentMemory: Send + Sync {
         workflow_id: &str,
     ) -> CoordinationResult<MemoryRef>;
 
-    /// Read from the shared memory store using a semantic query.
-    /// 使用语义查询从共享内存存储中读取。
+    /// Search the shared memory store.
+    /// 搜索共享内存存储。
+    ///
+    /// The matching strategy (substring, semantic, etc.) is implementation-defined.
+    /// 匹配策略（子串、语义等）由具体实现决定。
     ///
     /// # Parameters / 参数
     ///
@@ -316,8 +430,8 @@ pub trait AgentMemory: Send + Sync {
     ///
     /// # Returns / 返回
     ///
-    /// Matching memory objects, ordered by relevance.
-    /// 按相关性排序的匹配内存对象。
+    /// Matching memory objects. Ordering is implementation-defined.
+    /// 匹配的内存对象。排序由具体实现决定。
     async fn read(&self, query: &str, limit: usize) -> CoordinationResult<Vec<MemoryObject>>;
 
     /// Delete a memory entry from the store.
@@ -450,7 +564,7 @@ pub trait CoordinationGovernor: Send + Sync {
 mod tests {
     use super::*;
     use std::collections::HashMap;
-    use std::sync::Mutex;
+    use tokio::sync::Mutex;
 
     // ---- Mock in-memory shared store ----
 
@@ -482,12 +596,12 @@ mod tests {
                 workflow_id: workflow_id.to_string(),
                 timestamp: crate::utils::now_ms(),
             };
-            self.entries.lock().unwrap().insert(id, obj);
+            self.entries.lock().await.insert(id, obj);
             Ok(MemoryRef::new(id))
         }
 
         async fn read(&self, query: &str, limit: usize) -> CoordinationResult<Vec<MemoryObject>> {
-            let entries = self.entries.lock().unwrap();
+            let entries = self.entries.lock().await;
             let results: Vec<MemoryObject> = entries
                 .values()
                 .filter(|obj| obj.content.contains(query))
@@ -498,7 +612,7 @@ mod tests {
         }
 
         async fn delete(&self, memory_ref: &MemoryRef) -> CoordinationResult<()> {
-            self.entries.lock().unwrap().remove(&memory_ref.id);
+            self.entries.lock().await.remove(&memory_ref.id);
             Ok(())
         }
 
@@ -506,7 +620,7 @@ mod tests {
             &self,
             workflow_id: &str,
         ) -> CoordinationResult<Vec<MemoryObject>> {
-            let entries = self.entries.lock().unwrap();
+            let entries = self.entries.lock().await;
             let results: Vec<MemoryObject> = entries
                 .values()
                 .filter(|obj| obj.workflow_id == workflow_id)
@@ -584,6 +698,7 @@ mod tests {
             confidence: 0.92,
             memory_refs: vec![MemoryRef::new(Uuid::new_v4())],
             next_task: "Generate report".to_string(),
+            workflow_id: "wf-1".to_string(),
             timestamp: crate::utils::now_ms(),
         };
 
@@ -591,6 +706,7 @@ mod tests {
         let deserialized: HandoffPacket = serde_json::from_str(&json).unwrap();
         assert_eq!(deserialized.from_agent, "agent-a");
         assert_eq!(deserialized.confidence, 0.92);
+        assert_eq!(deserialized.workflow_id, "wf-1");
     }
 
     #[test]
