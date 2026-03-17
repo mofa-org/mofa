@@ -112,3 +112,8 @@ full = ["rocksdb", "monitoring", "openai-compat"]
 
 # OpenAI-compatible HTTP gateway components
 openai-compat = ["dep:async-openai", "dep:subtle"]
+
+[[example]]
+name = "gateway_inference_server"
+path = "examples/gateway_inference_server.rs"
+required-features = ["openai-compat"]
