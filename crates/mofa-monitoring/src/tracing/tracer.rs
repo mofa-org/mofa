@@ -235,8 +235,14 @@ pub trait SpanProcessor: Send + Sync {
     async fn force_flush(&self) -> Result<(), String>;
 }
 
-/// 简单 Span 处理器 - 直接导出
-/// Simple Span Processor - Export directly
+/// Exports each span synchronously as soon as it ends.
+///
+/// **When to use**: development, testing, or very low-throughput services where
+/// you want immediate visibility and can tolerate the per-span export latency.
+///
+/// **Trade-off vs [`BatchSpanProcessor`]**: every span end call blocks until the
+/// exporter round-trip completes (network I/O for remote exporters). For production
+/// workloads prefer `BatchSpanProcessor` which offloads exports to a background task.
 pub struct SimpleSpanProcessor {
     exporter: Arc<dyn TracingExporter>,
 }
@@ -269,8 +275,17 @@ impl SpanProcessor for SimpleSpanProcessor {
     }
 }
 
-/// 批处理 Span 处理器
-/// Batch Span Processor
+/// Buffers completed spans and exports them in batches on a background Tokio task.
+///
+/// **When to use**: production or any service where exporter latency would otherwise
+/// appear in your application's critical path.
+///
+/// Configure the trade-offs via [`ExporterConfig`]:
+/// - `batch_size` — maximum spans per export call (default: 512)
+/// - `export_interval_ms` — maximum time a span waits in the buffer (default: 5 000 ms)
+/// - `max_queue_size` — spans are dropped when the queue exceeds this limit (default: 2 048)
+///
+/// Call `force_flush` before process exit to avoid losing buffered spans.
 pub struct BatchSpanProcessor {
     exporter: Arc<dyn TracingExporter>,
     buffer: Arc<RwLock<Vec<SpanData>>>,
@@ -480,8 +495,28 @@ impl Tracer {
     }
 }
 
-/// Tracer Provider - 管理多个 Tracer
-/// Tracer Provider - Manages multiple Tracers
+/// Factory and lifecycle manager for [`Tracer`] instances.
+///
+/// A single `TracerProvider` owns the [`SpanProcessor`] (and therefore the exporter),
+/// so all tracers it creates share the same export pipeline. This matches the
+/// OpenTelemetry spec's `TracerProvider` concept.
+///
+/// # Examples
+/// ```rust,no_run
+/// use std::sync::Arc;
+/// use mofa_monitoring::tracing::{
+///     ConsoleExporter, ExporterConfig, SimpleSpanProcessor, TracerConfig, TracerProvider,
+/// };
+///
+/// # async fn example() {
+/// let exporter = Arc::new(ConsoleExporter::new(ExporterConfig::new("my-agent")));
+/// let processor = Arc::new(SimpleSpanProcessor::new(exporter));
+/// let provider = TracerProvider::new(TracerConfig::new("my-agent"), processor);
+///
+/// // Obtain a tracer scoped to a specific component
+/// let tracer = provider.tracer("rag-pipeline").await;
+/// # }
+/// ```
 pub struct TracerProvider {
     config: TracerConfig,
     processor: Arc<dyn SpanProcessor>,
@@ -556,7 +591,11 @@ impl TracerProvider {
 }
 
 /// 全局 Tracer
-/// Global Tracer
+/// Process-wide singleton that holds a reference to the active [`TracerProvider`].
+///
+/// Use `GlobalTracer` when library code needs to emit spans without requiring
+/// callers to pass a tracer explicitly. Call [`GlobalTracer::set_provider`] once
+/// at startup, then use [`global_tracer()`] anywhere to obtain a [`Tracer`].
 pub struct GlobalTracer {
     provider: Arc<RwLock<Option<Arc<TracerProvider>>>>,
 }
