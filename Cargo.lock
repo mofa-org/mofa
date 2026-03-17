@@ -5928,6 +5928,7 @@ dependencies = [
  "dashmap 5.5.3",
  "eyre",
  "futures",
+ "http-body-util",
  "hyper 1.8.1",
  "hyper-util",
  "mofa-foundation",
