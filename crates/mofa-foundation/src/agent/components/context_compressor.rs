@@ -474,15 +474,11 @@ impl ContextCompressor for SummarizingCompressor {
 
         // check cache if enabled
         #[cfg(feature = "compression-cache")]
-        let cache_key = if let Some(ref cache) = self.cache {
-            Some(CompressionCache::cache_key(&prompt))
-        } else {
-            None
-        };
+        let cache_key = self.cache.as_ref().map(|cache| CompressionCache::cache_key(&prompt));
 
         #[cfg(feature = "compression-cache")]
         let summary_text =
-            if let (Some(ref cache), Some(ref key)) = (self.cache.as_ref(), cache_key.as_ref()) {
+            if let (Some(cache), Some(ref key)) = (self.cache.as_ref(), cache_key.as_ref()) {
                 if let Some(cached) = cache.get_summary(key).await {
                     cached
                 } else {
@@ -782,7 +778,7 @@ impl SemanticCompressor {
 
         let texts: Vec<String> = to_compress
             .par_iter()
-            .map(|msg| Self::extract_text(msg))
+            .map(Self::extract_text)
             .collect();
 
         let non_empty_texts: Vec<(usize, String)> = texts

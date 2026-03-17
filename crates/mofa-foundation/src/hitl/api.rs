@@ -297,16 +297,17 @@ async fn query_audit_events_handler(
     axum::extract::Query(params): axum::extract::Query<QueryAuditEventsRequest>,
 ) -> axum::response::Response {
     use axum::{http::StatusCode, response::IntoResponse, response::Json};
-    let mut query = AuditLogQuery::default();
-
-    query.review_id = params.review_id;
-    query.execution_id = params.execution_id;
-    query.tenant_id = params.tenant_id;
-    query.actor = params.actor;
-    query.start_time_ms = params.start_time_ms;
-    query.end_time_ms = params.end_time_ms;
-    query.limit = params.limit;
-    query.offset = params.offset;
+    let mut query = AuditLogQuery {
+        review_id: params.review_id,
+        execution_id: params.execution_id,
+        tenant_id: params.tenant_id,
+        actor: params.actor,
+        start_time_ms: params.start_time_ms,
+        end_time_ms: params.end_time_ms,
+        limit: params.limit,
+        offset: params.offset,
+        ..Default::default()
+    };
 
     // Parse event type if provided
     if let Some(_event_type_str) = params.event_type {

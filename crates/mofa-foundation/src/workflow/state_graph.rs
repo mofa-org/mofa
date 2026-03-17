@@ -143,13 +143,23 @@ impl<S: GraphState> StateGraphImpl<S> {
         let mut stack = vec![start.to_string()];
 
         while let Some(node_id) = stack.pop() {
-            if reachable.insert(node_id.clone())
-                && let Some(edge_target) = self.edges.get(&node_id)
-            {
-                let targets = edge_target.targets();
-                for target in targets {
-                    if target != END && !reachable.contains(target) {
-                        stack.push(target.to_string());
+            if reachable.insert(node_id.clone()) {
+                // Include normal directed edges
+                if let Some(edge_target) = self.edges.get(&node_id) {
+                    let targets = edge_target.targets();
+                    for target in targets {
+                        if target != END && !reachable.contains(target) {
+                            stack.push(target.to_string());
+                        }
+                    }
+                }
+
+                // Include fallback node edges from NodePolicy
+                if let Some(policy) = self.policies.get(&node_id) {
+                    if let Some(fallback) = &policy.fallback_node {
+                        if fallback != END && !reachable.contains(fallback) {
+                            stack.push(fallback.to_string());
+                        }
                     }
                 }
             }
