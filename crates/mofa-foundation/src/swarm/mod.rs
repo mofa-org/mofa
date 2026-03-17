@@ -4,6 +4,7 @@ pub mod analyzer;
 pub mod config;
 pub mod dag;
 pub mod patterns;
+pub mod telemetry;
 
 // Re-export core types
 pub use analyzer::TaskAnalyzer;
@@ -13,3 +14,5 @@ pub use config::{
 };
 pub use dag::{DependencyEdge, DependencyKind, SwarmSubtask, SubtaskDAG, SubtaskStatus};
 pub use patterns::CoordinationPattern;
+pub use telemetry::{audit_to_debug, audit_batch_to_debug};
+
