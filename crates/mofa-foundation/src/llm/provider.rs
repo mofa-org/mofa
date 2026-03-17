@@ -441,10 +441,7 @@ mod tests {
             vec!["mock-model"]
         }
 
-        async fn chat(
-            &self,
-            _request: ChatCompletionRequest,
-        ) -> LLMResult<ChatCompletionResponse> {
+        async fn chat(&self, _request: ChatCompletionRequest) -> LLMResult<ChatCompletionResponse> {
             Ok(ChatCompletionResponse {
                 id: "resp-1".to_string(),
                 object: "chat.completion".to_string(),
@@ -493,7 +490,10 @@ mod tests {
 
     #[test]
     fn llm_config_builders_set_expected_fields() {
-        let openai = LLMConfig::openai("k").model("gpt-x").temperature(0.2).max_tokens(256);
+        let openai = LLMConfig::openai("k")
+            .model("gpt-x")
+            .temperature(0.2)
+            .max_tokens(256);
         assert_eq!(openai.provider, "openai");
         assert_eq!(openai.default_model.as_deref(), Some("gpt-x"));
         assert_eq!(openai.default_temperature, Some(0.2));
@@ -522,7 +522,10 @@ mod tests {
         let stream_result = provider
             .chat_stream(ChatCompletionRequest::new("mock-model"))
             .await;
-        assert!(matches!(stream_result, Err(LLMError::ProviderNotSupported(_))));
+        assert!(matches!(
+            stream_result,
+            Err(LLMError::ProviderNotSupported(_))
+        ));
 
         let registry = LLMRegistry::new();
         registry
@@ -547,8 +550,18 @@ mod tests {
         registry.register("cached", created.clone()).await;
         let cached = registry.get("cached").await;
         assert!(cached.is_some());
-        assert!(registry.list_factories().await.contains(&"mock".to_string()));
-        assert!(registry.list_providers().await.contains(&"cached".to_string()));
+        assert!(
+            registry
+                .list_factories()
+                .await
+                .contains(&"mock".to_string())
+        );
+        assert!(
+            registry
+                .list_providers()
+                .await
+                .contains(&"cached".to_string())
+        );
     }
 
     #[test]
