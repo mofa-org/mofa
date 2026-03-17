@@ -118,7 +118,7 @@ def _check_and_setup_api_key():
 
             # Ask if they want to save it
             if click.confirm("\nSave to .env file?", default=True):
-                env_file = os.path.join(os.getcwd(), '.env')
+                env_file = _get_env_file_path()
 
                 # Append to .env or create new one
                 with open(env_file, 'a') as f:
