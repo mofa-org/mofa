@@ -213,6 +213,9 @@ SDK Layer (mofa-sdk)
 - Event routing
 - Plugin support
 
+### Swarm Orchestrator (Coordination)
+While other schedulers exist in the MoFA framework for varying concerns, the `SwarmScheduler` specifically introduces a dedicated execution engine for Swarm DAGs. It cleanly bridges complex multi-agent coordination with isolation from the executor logic. Crucially, the scheduler retains exclusive ownership of DAG state mutations (e.g., `mark_running`, `mark_complete_with_output`, `mark_failed`, `cascade_skip`), while the executor remains a pure function returning a `GlobalResult<String>`. (For details on coordination patterns, refer to the [Multi-Agent Systems Guide](./mofa-doc/src/guides/multi-agent.md)).
+
 ### Abstraction Layer
 - MoFAAgent core interface
 - Extension traits
