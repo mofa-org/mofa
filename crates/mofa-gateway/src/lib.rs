@@ -80,6 +80,7 @@ pub mod handlers;
 pub mod inference_bridge;
 pub mod middleware;
 pub mod observability;
+pub mod prompt;
 pub mod server;
 pub mod state;
 pub mod state_machine;

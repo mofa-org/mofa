@@ -17,6 +17,7 @@
 //! ```
 
 use crate::error::GatewayError;
+use crate::prompt::build_chat_prompt;
 use mofa_foundation::inference::{
     InferenceOrchestrator, InferenceRequest, InferenceResult, OrchestratorConfig, Precision,
     RequestPriority,
@@ -112,7 +113,13 @@ impl InferenceBridge {
         &self,
         request: ChatCompletionRequest,
     ) -> Result<ChatCompletionResponse, GatewayError> {
-        // Extract prompt from messages (last user message)
+        if request.stream.unwrap_or(false) {
+            return Err(GatewayError::InvalidRequest(
+                "stream=true is not supported by legacy /v1/chat/completions; use openai-compat SSE endpoint".to_string(),
+            ));
+        }
+
+        // Extract prompt from messages (multi-turn context preserved)
         let prompt = extract_prompt_from_messages(&request.messages)?;
 
         // Demo logging for visualization
@@ -143,25 +150,17 @@ impl InferenceBridge {
 
 /// Extract prompt from OpenAI messages
 fn extract_prompt_from_messages(messages: &[Message]) -> Result<String, GatewayError> {
-    // Find the last user message
-    let mut prompt = String::new();
-
-    for msg in messages.iter().rev() {
-        if msg.role == "user" {
-            prompt = msg.content.clone();
-            break;
-        }
+    if messages.is_empty() {
+        return Err(GatewayError::InvalidRequest(
+            "messages must not be empty".to_string(),
+        ));
     }
 
-    if prompt.is_empty() {
-        // If no user message found, concatenate all messages
-        for msg in messages {
-            prompt.push_str(&msg.content);
-            prompt.push('\n');
-        }
-    }
-
-    Ok(prompt.trim().to_string())
+    Ok(build_chat_prompt(
+        messages
+            .iter()
+            .map(|msg| (msg.role.as_str(), msg.content.as_str())),
+    ))
 }
 
 /// Convert InferenceResult to OpenAI response format
@@ -213,7 +212,16 @@ mod tests {
         ];
 
         let prompt = extract_prompt_from_messages(&messages).unwrap();
-        assert_eq!(prompt, "Explain Rust ownership");
+        assert_eq!(
+            prompt,
+            "system: You are a helpful assistant.\nuser: Explain Rust ownership"
+        );
+    }
+
+    #[test]
+    fn test_extract_prompt_rejects_empty_messages() {
+        let err = extract_prompt_from_messages(&[]).unwrap_err();
+        assert!(matches!(err, GatewayError::InvalidRequest(_)));
     }
 
     #[test]
@@ -230,5 +238,89 @@ mod tests {
         assert_eq!(response.object_type, "chat.completion");
         assert_eq!(response.choices.len(), 1);
         assert_eq!(response.choices[0].message.content, "Test output");
+    }
+
+    #[tokio::test]
+    async fn test_run_chat_completion_rejects_stream_true_on_legacy_path() {
+        let bridge = InferenceBridge::new(OrchestratorConfig::default());
+        let request = ChatCompletionRequest {
+            model: "gpt-4".to_string(),
+            messages: vec![Message {
+                role: "user".to_string(),
+                content: "Hello".to_string(),
+            }],
+            max_tokens: None,
+            temperature: None,
+            stream: Some(true),
+        };
+
+        let err = bridge.run_chat_completion(request).await.unwrap_err();
+        assert!(matches!(err, GatewayError::InvalidRequest(_)));
+    }
+
+    #[cfg(feature = "openai-compat")]
+    #[tokio::test]
+    async fn test_legacy_prompt_matches_openai_compat_prompt_shape() {
+        let bridge = InferenceBridge::new(OrchestratorConfig::default());
+        let legacy_request = ChatCompletionRequest {
+            model: "test-model".to_string(),
+            messages: vec![
+                Message {
+                    role: "system".to_string(),
+                    content: "You are concise.".to_string(),
+                },
+                Message {
+                    role: "user".to_string(),
+                    content: "Question 1".to_string(),
+                },
+                Message {
+                    role: "assistant".to_string(),
+                    content: "Answer 1".to_string(),
+                },
+                Message {
+                    role: "user".to_string(),
+                    content: "Question 2".to_string(),
+                },
+            ],
+            max_tokens: Some(64),
+            temperature: Some(0.2),
+            stream: Some(false),
+        };
+
+        let compat_request = crate::openai_compat::types::ChatCompletionRequest {
+            model: "test-model".to_string(),
+            messages: vec![
+                crate::openai_compat::types::ChatMessage {
+                    role: "system".to_string(),
+                    content: "You are concise.".to_string(),
+                },
+                crate::openai_compat::types::ChatMessage {
+                    role: "user".to_string(),
+                    content: "Question 1".to_string(),
+                },
+                crate::openai_compat::types::ChatMessage {
+                    role: "assistant".to_string(),
+                    content: "Answer 1".to_string(),
+                },
+                crate::openai_compat::types::ChatMessage {
+                    role: "user".to_string(),
+                    content: "Question 2".to_string(),
+                },
+            ],
+            stream: false,
+            max_tokens: Some(64),
+            temperature: Some(0.2),
+            priority: crate::openai_compat::types::RequestPriorityParam::Normal,
+        };
+        let expected_prompt = compat_request.to_prompt();
+
+        let response = bridge.run_chat_completion(legacy_request).await.unwrap();
+        assert!(
+            response.choices[0]
+                .message
+                .content
+                .contains(&expected_prompt),
+            "legacy path prompt should match openai_compat formatting"
+        );
     }
 }

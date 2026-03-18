@@ -8,6 +8,7 @@
 
 use serde::{Deserialize, Serialize};
 
+use crate::prompt::build_chat_prompt;
 use mofa_foundation::inference::types::RequestPriority;
 use mofa_foundation::inference::{OrchestratorConfig, RoutingPolicy};
 
@@ -62,11 +63,11 @@ pub struct ChatCompletionRequest {
 impl ChatCompletionRequest {
     /// Extract the prompt by concatenating all messages (user + system).
     pub fn to_prompt(&self) -> String {
-        self.messages
-            .iter()
-            .map(|m| format!("{}: {}", m.role, m.content))
-            .collect::<Vec<_>>()
-            .join("\n")
+        build_chat_prompt(
+            self.messages
+                .iter()
+                .map(|message| (message.role.as_str(), message.content.as_str())),
+        )
     }
 
     /// Convert the MoFA priority extension to an internal [`RequestPriority`].
