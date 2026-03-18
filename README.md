@@ -57,6 +57,7 @@
 - [Core Architecture](#core-architecture)
 - [Core Features](#core-features)
 - [Quick Start](#quick-start)
+- [Persistent Memory Module](#persistent-memory-module)
 - [Roadmap](#roadmap)
 - [Ecosystem & Related Repos](#-ecosystem--related-repos)
 - [Documentation](#documentation)
@@ -354,6 +355,47 @@ The runtime provides comprehensive:
 - Error handling mechanisms
 
 Suitable for building production applications that need stable operation, rather than simple plugin testing or prototype development.
+
+## Persistent Memory Module
+
+MoFA now includes a lightweight Python memory example that can be reused in agent workflows:
+
+- Path: `examples/agent_memory_python`
+- Backing store: Chroma persistent vector database
+- Retrieval: embedding-based semantic search
+- APIs: `store`, `retrieve`, `delete`, `update`
+
+### Architecture
+
+- `memory_module/memory_manager.py`
+  - Stores interaction content and metadata.
+  - Persists vectors in a Chroma collection.
+  - Supports semantic retrieval, delete, and update operations.
+- `memory_module/workflow.py`
+  - Implements retrieval-augmented prompt construction.
+  - Executes a responder callback.
+  - Persists each user/assistant interaction as new memory.
+
+### Why it improves agents
+
+- Maintains context across sessions with persistent storage.
+- Reduces repeated user clarification by retrieving relevant history.
+- Keeps integration simple for single-agent and multi-agent workflows.
+
+### Usage
+
+```bash
+cd examples/agent_memory_python
+python -m pip install -r requirements.txt
+python demo_agent.py
+python cli_demo.py
+```
+
+Unit tests:
+
+```bash
+pytest tests/memory/test_memory_manager.py
+```
 
 ## CLI Production Smoke Example
 
