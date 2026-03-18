@@ -98,7 +98,7 @@ impl AuditStore for InMemoryAuditStore {
             self.by_review
                 .write()
                 .entry(review_id)
-                .or_insert_with(Vec::new)
+                .or_default()
                 .push(event.event_id.clone());
         }
 
@@ -107,7 +107,7 @@ impl AuditStore for InMemoryAuditStore {
             self.by_execution
                 .write()
                 .entry(execution_id)
-                .or_insert_with(Vec::new)
+                .or_default()
                 .push(event.event_id.clone());
         }
 
@@ -116,7 +116,7 @@ impl AuditStore for InMemoryAuditStore {
             self.by_tenant
                 .write()
                 .entry(tenant_id)
-                .or_insert_with(Vec::new)
+                .or_default()
                 .push(event.event_id.clone());
         }
 
@@ -132,52 +132,45 @@ impl AuditStore for InMemoryAuditStore {
             .iter()
             .filter(|event| {
                 // Filter by review ID
-                if let Some(ref review_id) = query.review_id {
-                    if event.review_id != *review_id {
+                if let Some(ref review_id) = query.review_id
+                    && event.review_id != *review_id {
                         return false;
                     }
-                }
 
                 // Filter by execution ID
-                if let Some(ref execution_id) = query.execution_id {
-                    if event.execution_id.as_ref() != Some(execution_id) {
+                if let Some(ref execution_id) = query.execution_id
+                    && event.execution_id.as_ref() != Some(execution_id) {
                         return false;
                     }
-                }
 
                 // Filter by tenant ID
-                if let Some(tenant_id) = query.tenant_id {
-                    if event.tenant_id != Some(tenant_id) {
+                if let Some(tenant_id) = query.tenant_id
+                    && event.tenant_id != Some(tenant_id) {
                         return false;
                     }
-                }
 
                 // Filter by event type
-                if let Some(ref event_type) = query.event_type {
-                    if &event.event_type != event_type {
+                if let Some(ref event_type) = query.event_type
+                    && &event.event_type != event_type {
                         return false;
                     }
-                }
 
                 // Filter by actor
-                if let Some(ref actor) = query.actor {
-                    if event.actor.as_ref() != Some(actor) {
+                if let Some(ref actor) = query.actor
+                    && event.actor.as_ref() != Some(actor) {
                         return false;
                     }
-                }
 
                 // Filter by time range
-                if let Some(start_time) = query.start_time_ms {
-                    if event.timestamp_ms < start_time {
+                if let Some(start_time) = query.start_time_ms
+                    && event.timestamp_ms < start_time {
                         return false;
                     }
-                }
 
-                if let Some(end_time) = query.end_time_ms {
-                    if event.timestamp_ms >= end_time {
+                if let Some(end_time) = query.end_time_ms
+                    && event.timestamp_ms >= end_time {
                         return false;
                     }
-                }
 
                 true
             })
@@ -283,20 +276,20 @@ impl AuditStore for InMemoryAuditStore {
         for event in events.iter() {
             by_review
                 .entry(event.review_id.clone())
-                .or_insert_with(Vec::new)
+                .or_default()
                 .push(event.event_id.clone());
 
             if let Some(ref execution_id) = event.execution_id {
                 by_execution
                     .entry(execution_id.clone())
-                    .or_insert_with(Vec::new)
+                    .or_default()
                     .push(event.event_id.clone());
             }
 
             if let Some(tenant_id) = event.tenant_id {
                 by_tenant
                     .entry(tenant_id)
-                    .or_insert_with(Vec::new)
+                    .or_default()
                     .push(event.event_id.clone());
             }
         }

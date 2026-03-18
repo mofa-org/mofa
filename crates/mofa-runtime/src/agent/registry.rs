@@ -201,10 +201,7 @@ impl AgentRegistry {
         let state = agent_guard.state();
         drop(agent_guard);
 
-        let now = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_millis() as u64;
+        let now = mofa_kernel::utils::now_ms();
 
         let metadata = AgentMetadata {
             id: id.clone(),

@@ -5716,6 +5716,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "metrics"
+version = "0.22.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "56d05972e8cbac2671e85aa9d04d9160d193f8bebd1a5c1a2f4542c62e65d1d0"
+dependencies = [
+ "ahash",
+ "portable-atomic",
+]
+
+[[package]]
 name = "mime"
 version = "0.3.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5867,12 +5877,14 @@ dependencies = [
  "config",
  "criterion",
  "cron",
+ "dashmap 5.5.3",
  "error-stack",
  "futures",
  "hex",
  "infer",
  "jsonschema",
  "lazy_static",
+ "metrics",
  "mofa-extra",
  "mofa-kernel",
  "mofa-plugins",
@@ -5917,6 +5929,7 @@ dependencies = [
  "dashmap 5.5.3",
  "eyre",
  "futures",
+ "http-body-util",
  "hyper 1.8.1",
  "hyper-util",
  "mofa-foundation",
@@ -6129,6 +6142,7 @@ dependencies = [
  "error-stack",
  "mofa-extra",
  "mofa-foundation",
+ "mofa-integrations",
  "mofa-kernel",
  "mofa-monitoring",
  "mofa-plugins",

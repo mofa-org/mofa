@@ -33,6 +33,7 @@ members = [
     "reflection_agent",
     "tool_routing",
     "runtime_message_bus_backpressure",
+    "cloud_voice_demo",
     "rag_pipeline",
     "hitl_workflow",
     "agent_memory",
@@ -47,6 +48,7 @@ members = [
     "compression_examples",
     "admission_gate_demo",
     "integrations_demo",
+    "cron_scheduler",
     "native_dataflow",
     "mcp_tools",
     "memory_scheduler_demo",
@@ -56,6 +58,8 @@ members = [
     "rag_indexing_demo",
     "adversarial_testing_demo",
     "llm_fallback_chain",
+    "resume_from_checkpoint",
+    "claw_demo",
 ]
 
 [workspace.package]

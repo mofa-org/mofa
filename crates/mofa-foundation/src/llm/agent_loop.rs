@@ -127,7 +127,7 @@ impl AgentLoop {
         // Build user message with optional media
         let user_msg = if let Some(media_paths) = media {
             if !media_paths.is_empty() {
-                Self::build_vision_message(content, &media_paths)?
+                Self::build_vision_message(content, &media_paths).await?
             } else {
                 ChatMessage::user(content)
             }
@@ -193,7 +193,7 @@ impl AgentLoop {
             let mut messages = history;
             let user_msg = if let Some(media_paths) = media.clone() {
                 if !media_paths.is_empty() {
-                    Self::build_vision_message(content, &media_paths)?
+                    Self::build_vision_message(content, &media_paths).await?
                 } else {
                     ChatMessage::user(content)
                 }
@@ -214,7 +214,7 @@ impl AgentLoop {
 
         let user_msg = if let Some(media_paths) = media {
             if !media_paths.is_empty() {
-                Self::build_vision_message(content, &media_paths)?
+                Self::build_vision_message(content, &media_paths).await?
             } else {
                 ChatMessage::user(content)
             }
@@ -320,13 +320,13 @@ impl AgentLoop {
     }
 
     /// Build a vision message with images
-    fn build_vision_message(text: &str, image_paths: &[String]) -> GlobalResult<ChatMessage> {
+    async fn build_vision_message(text: &str, image_paths: &[String]) -> GlobalResult<ChatMessage> {
         let mut parts = vec![ContentPart::Text {
             text: text.to_string(),
         }];
 
         for path in image_paths {
-            let image_url = Self::encode_image_data_url(Path::new(path))?;
+            let image_url = Self::encode_image_data_url(Path::new(path)).await?;
             parts.push(ContentPart::Image { image_url });
         }
 
@@ -340,12 +340,11 @@ impl AgentLoop {
     }
 
     /// Encode an image file as a data URL
-    fn encode_image_data_url(path: &Path) -> GlobalResult<ImageUrl> {
+    async fn encode_image_data_url(path: &Path) -> GlobalResult<ImageUrl> {
         use base64::Engine;
         use base64::engine::general_purpose::STANDARD_NO_PAD;
-        use std::fs;
 
-        let bytes = fs::read(path)?;
+        let bytes = tokio::fs::read(path).await?;
         let mime_type = infer::get_from_path(path)?
             .ok_or_else(|| GlobalError::Other(format!("Unknown MIME type for: {:?}", path)))?
             .mime_type()

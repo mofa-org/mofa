@@ -12,6 +12,7 @@ permissions:
 
 jobs:
   triage:
+    if: github.repository == 'mofa-org/mofa'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
