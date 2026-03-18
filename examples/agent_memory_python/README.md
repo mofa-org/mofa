@@ -34,6 +34,12 @@ cd examples/agent_memory_python
 python -m pip install -r requirements.txt
 ```
 
+For LLM-integrated examples, also install OpenAI:
+
+```bash
+python -m pip install openai
+```
+
 ## Run scripted demo
 
 ```bash
@@ -57,6 +63,26 @@ CLI commands:
 - `/search <query>`: semantic retrieval
 - `/delete <memory_id>`: remove a memory
 - `/exit`: quit
+
+## Run LLM-integrated example
+
+Single-agent example that calls OpenAI:
+
+```bash
+OPENAI_API_KEY=sk-... python llm_integrated_example.py
+```
+
+This shows a memory-augmented agent that uses persistent memory with a real LLM responder.
+
+## Run multi-agent example
+
+Two-agent collaboration example using persistent memory:
+
+```bash
+OPENAI_API_KEY=sk-... python multi_agent_example.py
+```
+
+This demonstrates how multiple agents can share and build on memories in a collaborative workflow.
 
 ## Unit tests
 
