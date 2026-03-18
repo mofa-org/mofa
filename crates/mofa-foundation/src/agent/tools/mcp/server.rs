@@ -296,8 +296,9 @@ mod tests {
     #[test]
     fn test_register_tool_duplicate_rejected() {
         use mofa_kernel::agent::components::tool::{
-            AgentContext, DynToolWrapper, ToolInput, ToolResult, ToolExt,
+            DynToolWrapper, ToolInput, ToolResult, ToolExt,
         };
+        use mofa_kernel::agent::context::AgentContext;
 
         struct DummyTool;
 
