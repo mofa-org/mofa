@@ -271,6 +271,7 @@ impl AgentScheduler for CronScheduler {
             cancel_rx,
             Arc::clone(&per_schedule_semaphore),
             Arc::clone(&last_run_ms),
+            Arc::clone(&self.schedules),
         );
 
         let entry = ScheduleEntry::new(def, task_handle, per_schedule_semaphore, last_run_ms);
@@ -401,6 +402,7 @@ impl CronScheduler {
         mut cancel_rx: oneshot::Receiver<()>,
         per_schedule_semaphore: Arc<Semaphore>,
         last_run_ms: Arc<AtomicU64>,
+        schedules: Arc<RwLock<HashMap<String, ScheduleEntry>>>,
     ) -> JoinHandle<()> {
         let runner = Arc::clone(&self.runner);
         let global_semaphore = Arc::clone(&self.global_semaphore);
@@ -432,6 +434,9 @@ impl CronScheduler {
                 tokio::select! {
                     _ = &mut cancel_rx => {
                         tracing::debug!("Schedule {} cancelled", schedule_id);
+                        // Clean up the entry from the schedules map
+                        let mut map = schedules.write().await;
+                        map.remove(&schedule_id);
                         return;
                     }
 

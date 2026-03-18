@@ -104,6 +104,12 @@ def _save_vibe_config(model=None, max_rounds=None, agents_output=None, flows_out
 
 def _check_and_setup_api_key():
     """Check for API key and prompt user if not found"""
+    from dotenv import load_dotenv
+
+    # Load .env file first to ensure we have the latest keys
+    env_file = _get_env_file_path()
+    if os.path.exists(env_file):
+        load_dotenv(env_file)
 
     # Check if API key is set
     api_key = os.getenv('OPENAI_API_KEY')
@@ -118,14 +124,29 @@ def _check_and_setup_api_key():
 
             # Ask if they want to save it
             if click.confirm("\nSave to .env file?", default=True):
-                env_file = _get_env_file_path()
-
-                # Append to .env or create new one
-                with open(env_file, 'a') as f:
-                    f.write(f"\nOPENAI_API_KEY={api_key}\n")
+                # Update .env file (load-and-replace to avoid duplicates)
+                lines = []
+                if os.path.exists(env_file):
+                    with open(env_file, 'r') as f:
+                        lines = f.readlines()
+                
+                updated = False
+                for i, line in enumerate(lines):
+                    if line.strip().startswith("OPENAI_API_KEY="):
+                        lines[i] = f"OPENAI_API_KEY={api_key}\n"
+                        updated = True
+                        break
+                
+                if not updated:
+                    if lines and not lines[-1].endswith('\n'):
+                        lines.append('\n')
+                    lines.append(f"OPENAI_API_KEY={api_key}\n")
+                
+                with open(env_file, 'w') as f:
+                    f.writelines(lines)
 
                 click.echo(f"✓ API key saved to {env_file}")
-
+                
                 # Set it in current environment
                 os.environ['OPENAI_API_KEY'] = api_key
             else:
