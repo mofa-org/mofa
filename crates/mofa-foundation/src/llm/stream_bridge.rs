@@ -9,7 +9,10 @@ use super::types::{LLMError, LLMResult};
 /// `StreamError` to `LLMError`
 pub fn stream_error_to_llm_error(err: StreamError) -> LLMError {
     match err {
-        StreamError::Provider { message, .. } => LLMError::ApiError { code: None, message },
+        StreamError::Provider { message, .. } => LLMError::ApiError {
+            code: None,
+            message,
+        },
         StreamError::Connection(msg) => LLMError::NetworkError(msg),
         StreamError::Parse(msg) => LLMError::SerializationError(msg),
         StreamError::Timeout(msg) => LLMError::Timeout(msg),
@@ -99,7 +102,10 @@ mod tests {
     use mofa_kernel::llm::streaming::StreamChunk;
 
     fn text(s: &str) -> Result<StreamChunk, StreamError> {
-        Ok(StreamChunk { delta: s.into(), ..Default::default() })
+        Ok(StreamChunk {
+            delta: s.into(),
+            ..Default::default()
+        })
     }
 
     fn done() -> Result<StreamChunk, StreamError> {
@@ -128,7 +134,7 @@ mod tests {
     async fn text_bridge_filters_empty_and_done() {
         let stream: BoxTokenStream = Box::pin(futures::stream::iter(vec![
             text("a"),
-            text(""),     // filtered
+            text(""), // filtered
             text("b"),
             done(),
         ]));
@@ -154,10 +160,7 @@ mod tests {
 
     #[tokio::test]
     async fn events_bridge_text_and_done() {
-        let stream: BoxTokenStream = Box::pin(futures::stream::iter(vec![
-            text("hi"),
-            done(),
-        ]));
+        let stream: BoxTokenStream = Box::pin(futures::stream::iter(vec![text("hi"), done()]));
         let evts: Vec<_> = token_stream_to_events(stream)
             .collect::<Vec<_>>()
             .await

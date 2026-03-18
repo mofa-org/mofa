@@ -899,8 +899,7 @@ impl RuleBasedRouter {
                 match regex::Regex::new(&condition.value) {
                     Ok(re) => {
                         let matched = re.is_match(&field_value);
-                        let mut cache =
-                            self.regex_cache.lock().unwrap_or_else(|e| e.into_inner());
+                        let mut cache = self.regex_cache.lock().unwrap_or_else(|e| e.into_inner());
                         cache.insert(condition.value.clone(), re);
                         matched
                     }

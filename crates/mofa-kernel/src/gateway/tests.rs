@@ -63,8 +63,7 @@ impl RouteRegistry for InMemoryRouteRegistry {
     }
 
     fn list_active(&self) -> Vec<&GatewayRoute> {
-        let mut active: Vec<&GatewayRoute> =
-            self.routes.values().filter(|r| r.enabled).collect();
+        let mut active: Vec<&GatewayRoute> = self.routes.values().filter(|r| r.enabled).collect();
         active.sort_by(|a, b| b.priority.cmp(&a.priority));
         active
     }
@@ -168,12 +167,15 @@ fn deregister_missing_is_error() {
 #[test]
 fn list_active_excludes_disabled_routes() {
     let mut reg = InMemoryRouteRegistry::new();
-    reg.register(GatewayRoute::new("r1", "agent-a", "/active", HttpMethod::Get))
-        .unwrap();
-    reg.register(
-        GatewayRoute::new("r2", "agent-b", "/disabled", HttpMethod::Post).disabled(),
-    )
+    reg.register(GatewayRoute::new(
+        "r1",
+        "agent-a",
+        "/active",
+        HttpMethod::Get,
+    ))
     .unwrap();
+    reg.register(GatewayRoute::new("r2", "agent-b", "/disabled", HttpMethod::Post).disabled())
+        .unwrap();
 
     let active = reg.list_active();
     assert_eq!(active.len(), 1);
@@ -183,18 +185,12 @@ fn list_active_excludes_disabled_routes() {
 #[test]
 fn list_active_sorted_by_descending_priority() {
     let mut reg = InMemoryRouteRegistry::new();
-    reg.register(
-        GatewayRoute::new("low", "agent-a", "/low", HttpMethod::Get).with_priority(1),
-    )
-    .unwrap();
-    reg.register(
-        GatewayRoute::new("high", "agent-b", "/high", HttpMethod::Post).with_priority(10),
-    )
-    .unwrap();
-    reg.register(
-        GatewayRoute::new("mid", "agent-c", "/mid", HttpMethod::Put).with_priority(5),
-    )
-    .unwrap();
+    reg.register(GatewayRoute::new("low", "agent-a", "/low", HttpMethod::Get).with_priority(1))
+        .unwrap();
+    reg.register(GatewayRoute::new("high", "agent-b", "/high", HttpMethod::Post).with_priority(10))
+        .unwrap();
+    reg.register(GatewayRoute::new("mid", "agent-c", "/mid", HttpMethod::Put).with_priority(5))
+        .unwrap();
 
     let active = reg.list_active();
     assert_eq!(active[0].id, "high");
@@ -209,10 +205,20 @@ fn list_active_sorted_by_descending_priority() {
 #[test]
 fn conflict_same_path_method_and_equal_priority() {
     let mut reg = InMemoryRouteRegistry::new();
-    reg.register(GatewayRoute::new("r1", "agent-a", "/v1/chat", HttpMethod::Post))
-        .unwrap();
+    reg.register(GatewayRoute::new(
+        "r1",
+        "agent-a",
+        "/v1/chat",
+        HttpMethod::Post,
+    ))
+    .unwrap();
     // Same path, method, and priority (0) as r1 — must be rejected.
-    let result = reg.register(GatewayRoute::new("r2", "agent-b", "/v1/chat", HttpMethod::Post));
+    let result = reg.register(GatewayRoute::new(
+        "r2",
+        "agent-b",
+        "/v1/chat",
+        HttpMethod::Post,
+    ));
     assert!(
         matches!(result, Err(RegistryError::ConflictingRoutes(ref new, ref existing))
             if new == "r2" && existing == "r1"),
@@ -223,23 +229,36 @@ fn conflict_same_path_method_and_equal_priority() {
 #[test]
 fn no_conflict_same_path_method_different_priority() {
     let mut reg = InMemoryRouteRegistry::new();
-    reg.register(GatewayRoute::new("r1", "agent-a", "/v1/chat", HttpMethod::Post))
-        .unwrap();
-    // Different priority — should succeed.
-    reg.register(
-        GatewayRoute::new("r2", "agent-b", "/v1/chat", HttpMethod::Post).with_priority(1),
-    )
+    reg.register(GatewayRoute::new(
+        "r1",
+        "agent-a",
+        "/v1/chat",
+        HttpMethod::Post,
+    ))
     .unwrap();
+    // Different priority — should succeed.
+    reg.register(GatewayRoute::new("r2", "agent-b", "/v1/chat", HttpMethod::Post).with_priority(1))
+        .unwrap();
     assert!(reg.lookup("r2").is_some());
 }
 
 #[test]
 fn no_conflict_same_path_different_method() {
     let mut reg = InMemoryRouteRegistry::new();
-    reg.register(GatewayRoute::new("r1", "agent-a", "/v1/chat", HttpMethod::Post))
-        .unwrap();
-    reg.register(GatewayRoute::new("r2", "agent-b", "/v1/chat", HttpMethod::Get))
-        .unwrap();
+    reg.register(GatewayRoute::new(
+        "r1",
+        "agent-a",
+        "/v1/chat",
+        HttpMethod::Post,
+    ))
+    .unwrap();
+    reg.register(GatewayRoute::new(
+        "r2",
+        "agent-b",
+        "/v1/chat",
+        HttpMethod::Get,
+    ))
+    .unwrap();
     assert_eq!(reg.list_active().len(), 2);
 }
 
@@ -266,10 +285,7 @@ fn routing_context_headers_are_lowercased() {
         ctx.headers.get("content-type"),
         Some(&"application/json".to_string())
     );
-    assert_eq!(
-        ctx.headers.get("x-api-key"),
-        Some(&"secret".to_string())
-    );
+    assert_eq!(ctx.headers.get("x-api-key"), Some(&"secret".to_string()));
 }
 
 #[test]

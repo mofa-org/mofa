@@ -12,7 +12,6 @@ pub use config::{
     AgentSpec, AuditEvent, AuditEventKind, HITLMode, SLAConfig, SwarmConfig, SwarmMetrics,
     SwarmResult, SwarmStatus,
 };
-pub use dag::{DependencyEdge, DependencyKind, SwarmSubtask, SubtaskDAG, SubtaskStatus};
+pub use dag::{DependencyEdge, DependencyKind, SubtaskDAG, SubtaskStatus, SwarmSubtask};
 pub use patterns::CoordinationPattern;
-pub use telemetry::{audit_to_debug, audit_batch_to_debug};
-
+pub use telemetry::{audit_batch_to_debug, audit_to_debug};

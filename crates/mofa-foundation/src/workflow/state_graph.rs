@@ -155,12 +155,12 @@ impl<S: GraphState> StateGraphImpl<S> {
                 }
 
                 // Include fallback node edges from NodePolicy
-                if let Some(policy) = self.policies.get(&node_id) {
-                    if let Some(fallback) = &policy.fallback_node {
-                        if fallback != END && !reachable.contains(fallback) {
-                            stack.push(fallback.to_string());
-                        }
-                    }
+                if let Some(policy) = self.policies.get(&node_id)
+                    && let Some(fallback) = &policy.fallback_node
+                    && fallback != END
+                    && !reachable.contains(fallback)
+                {
+                    stack.push(fallback.to_string());
                 }
             }
         }
@@ -1082,8 +1082,8 @@ impl<S: GraphState + 'static> CompiledGraph<S, serde_json::Value> for CompiledGr
 mod tests {
     use super::*;
     use futures::StreamExt;
-    use mofa_kernel::workflow::telemetry::TelemetryEmitter;
     use mofa_kernel::workflow::GraphConfig;
+    use mofa_kernel::workflow::telemetry::TelemetryEmitter;
     use mofa_kernel::workflow::{JsonState, StateGraph};
     use serde_json::json;
     use std::collections::HashMap;

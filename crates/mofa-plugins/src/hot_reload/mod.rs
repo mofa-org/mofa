@@ -17,7 +17,9 @@ pub use loader::{
     DynamicPlugin, IntoPluginLoadReport, PluginLibrary, PluginLoadError, PluginLoadReport,
     PluginLoadResult, PluginLoader, PluginSymbols,
 };
-pub use manager::{HotReloadConfig, HotReloadManager, IntoReloadReport, ReloadError, ReloadReport, ReloadResult};
+pub use manager::{
+    HotReloadConfig, HotReloadManager, IntoReloadReport, ReloadError, ReloadReport, ReloadResult,
+};
 pub use registry::{PluginInfo, PluginRegistry, PluginVersion};
 pub use state::{PluginState as HotReloadPluginState, StateManager, StateSnapshot};
 pub use watcher::{PluginWatcher, WatchConfig, WatchEvent, WatchEventKind};

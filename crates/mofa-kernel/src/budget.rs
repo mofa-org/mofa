@@ -172,9 +172,21 @@ mod tests {
 
     #[test]
     fn test_budget_config_rejects_negative() {
-        assert!(BudgetConfig::default().with_max_cost_per_session(-1.0).is_err());
-        assert!(BudgetConfig::default().with_max_cost_per_day(f64::NEG_INFINITY).is_err());
-        assert!(BudgetConfig::default().with_max_cost_per_session(f64::NAN).is_err());
+        assert!(
+            BudgetConfig::default()
+                .with_max_cost_per_session(-1.0)
+                .is_err()
+        );
+        assert!(
+            BudgetConfig::default()
+                .with_max_cost_per_day(f64::NEG_INFINITY)
+                .is_err()
+        );
+        assert!(
+            BudgetConfig::default()
+                .with_max_cost_per_session(f64::NAN)
+                .is_err()
+        );
     }
 
     #[test]
@@ -199,7 +211,9 @@ mod tests {
             daily_cost: 50.0,
             session_tokens: 0,
             daily_tokens: 0,
-            config: BudgetConfig::default().with_max_cost_per_session(10.0).unwrap(),
+            config: BudgetConfig::default()
+                .with_max_cost_per_session(10.0)
+                .unwrap(),
         };
         assert!(status.is_exceeded());
     }
@@ -211,7 +225,9 @@ mod tests {
             daily_cost: 0.0,
             session_tokens: 0,
             daily_tokens: 0,
-            config: BudgetConfig::default().with_max_cost_per_session(10.0).unwrap(),
+            config: BudgetConfig::default()
+                .with_max_cost_per_session(10.0)
+                .unwrap(),
         };
         assert!((status.remaining_session_cost().unwrap() - 7.0).abs() < 0.001);
     }

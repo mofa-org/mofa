@@ -813,13 +813,18 @@ mod tests {
         assert_eq!(plugin.state(), PluginState::Running);
 
         let stats = plugin.stats();
-        assert_eq!(stats.get("plugin_type"), Some(&serde_json::json!("persistence")));
+        assert_eq!(
+            stats.get("plugin_type"),
+            Some(&serde_json::json!("persistence"))
+        );
 
         let next_session = Uuid::now_v7();
         plugin.with_session_id(next_session).await;
         assert_eq!(plugin.session_id().await, next_session);
 
-        AgentPlugin::stop(&mut plugin).await.expect("stop should work");
+        AgentPlugin::stop(&mut plugin)
+            .await
+            .expect("stop should work");
         assert_eq!(plugin.state(), PluginState::Unloaded);
     }
 }

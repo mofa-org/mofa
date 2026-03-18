@@ -124,16 +124,24 @@ impl TtsAdapter for OpenAiTtsAdapter {
             "speed": speed,
         });
 
-        debug!("[openai-tts] synthesizing text: \"{}\" with voice={}", text, voice);
+        debug!(
+            "[openai-tts] synthesizing text: \"{}\" with voice={}",
+            text, voice
+        );
 
         let mut last_error = None;
         for attempt in 0..=self.config.max_retries {
             if attempt > 0 {
-                info!("[openai-tts] retry attempt {}/{}", attempt, self.config.max_retries);
+                info!(
+                    "[openai-tts] retry attempt {}/{}",
+                    attempt, self.config.max_retries
+                );
                 tokio::time::sleep(Duration::from_millis(500 * attempt as u64)).await;
             }
 
-            let response = self.client.post(&url)
+            let response = self
+                .client
+                .post(&url)
                 .bearer_auth(&api_key)
                 .json(&payload)
                 .timeout(self.config.timeout)
@@ -142,14 +150,24 @@ impl TtsAdapter for OpenAiTtsAdapter {
 
             match response {
                 Ok(resp) if resp.status().is_success() => {
-                    let data = resp.bytes().await.map_err(|e| AgentError::Other(e.to_string()))?;
-                    return Ok(AudioOutput::new(data.to_vec(), format, config.sample_rate.unwrap_or(24000)));
+                    let data = resp
+                        .bytes()
+                        .await
+                        .map_err(|e| AgentError::Other(e.to_string()))?;
+                    return Ok(AudioOutput::new(
+                        data.to_vec(),
+                        format,
+                        config.sample_rate.unwrap_or(24000),
+                    ));
                 }
                 Ok(resp) => {
                     let status = resp.status();
                     let err_body = resp.text().await.unwrap_or_default();
                     error!("[openai-tts] API error: {} - {}", status, err_body);
-                    last_error = Some(AgentError::Other(format!("OpenAI TTS error {}: {}", status, err_body)));
+                    last_error = Some(AgentError::Other(format!(
+                        "OpenAI TTS error {}: {}",
+                        status, err_body
+                    )));
                     if status.as_u16() != 429 && !status.is_server_error() {
                         break;
                     }
@@ -243,22 +261,33 @@ impl AsrAdapter for OpenAiAsrAdapter {
         "openai-whisper"
     }
 
-    async fn transcribe(&self, audio: &[u8], config: &AsrConfig) -> AgentResult<TranscriptionResult> {
+    async fn transcribe(
+        &self,
+        audio: &[u8],
+        config: &AsrConfig,
+    ) -> AgentResult<TranscriptionResult> {
         let api_key = self.config.resolve_api_key()?;
         let url = format!("{}/audio/transcriptions", self.config.base_url);
 
         let mut last_error = None;
         for attempt in 0..=self.config.max_retries {
             if attempt > 0 {
-                info!("[openai-whisper] retry attempt {}/{}", attempt, self.config.max_retries);
+                info!(
+                    "[openai-whisper] retry attempt {}/{}",
+                    attempt, self.config.max_retries
+                );
                 tokio::time::sleep(Duration::from_millis(500 * attempt as u64)).await;
             }
 
             // Build form per attempt because reqwest::multipart::Form is not Clone
             let mut form = reqwest::multipart::Form::new()
-                .part("file", reqwest::multipart::Part::bytes(audio.to_vec())
-                    .file_name("audio")
-                    .mime_str("application/octet-stream").map_err(|e| AgentError::Other(e.to_string()))?)
+                .part(
+                    "file",
+                    reqwest::multipart::Part::bytes(audio.to_vec())
+                        .file_name("audio")
+                        .mime_str("application/octet-stream")
+                        .map_err(|e| AgentError::Other(e.to_string()))?,
+                )
                 .text("model", "whisper-1");
 
             if let Some(lang) = &config.language {
@@ -268,7 +297,9 @@ impl AsrAdapter for OpenAiAsrAdapter {
                 form = form.text("prompt", prompt.clone());
             }
 
-            let response = self.client.post(&url)
+            let response = self
+                .client
+                .post(&url)
                 .bearer_auth(&api_key)
                 .multipart(form)
                 .timeout(self.config.timeout)
@@ -277,7 +308,10 @@ impl AsrAdapter for OpenAiAsrAdapter {
 
             match response {
                 Ok(resp) if resp.status().is_success() => {
-                    let json: serde_json::Value = resp.json().await.map_err(|e| AgentError::Other(e.to_string()))?;
+                    let json: serde_json::Value = resp
+                        .json()
+                        .await
+                        .map_err(|e| AgentError::Other(e.to_string()))?;
                     let text = json["text"].as_str().unwrap_or_default().to_string();
                     let language = json["language"].as_str().map(|s| s.to_string());
                     return Ok(TranscriptionResult {
@@ -291,7 +325,10 @@ impl AsrAdapter for OpenAiAsrAdapter {
                     let status = resp.status();
                     let err_body = resp.text().await.unwrap_or_default();
                     error!("[openai-whisper] API error: {} - {}", status, err_body);
-                    last_error = Some(AgentError::Other(format!("OpenAI Whisper error {}: {}", status, err_body)));
+                    last_error = Some(AgentError::Other(format!(
+                        "OpenAI Whisper error {}: {}",
+                        status, err_body
+                    )));
                     if status.as_u16() != 429 && !status.is_server_error() {
                         break;
                     }
@@ -308,8 +345,17 @@ impl AsrAdapter for OpenAiAsrAdapter {
 
     fn supported_languages(&self) -> Vec<String> {
         [
-            "en", "zh", "de", "es", "ru", "ko", "fr", "ja", "pt", "tr", "pl", "ca", "nl", "ar", "sv", "it", "id", "hi", "fi", "vi", "he", "uk", "el", "ms", "cs", "ro", "da", "hu", "ta", "no", "th", "ur", "hr", "bg", "lt", "la", "mi", "ml", "cy", "sk", "te", "fa", "lv", "bn", "sr", "az", "sl", "kn", "et", "mk", "br", "eu", "is", "hy", "ne", "mn", "bs", "kk", "sq", "sw", "gl", "mr", "pa", "si", "km", "sn", "yo", "so", "af", "oc", "ka", "be", "tg", "sd", "gu", "am", "yi", "lo", "uz", "fo", "ht", "ps", "tk", "nn", "mt", "sa", "lb", "my", "ba", "as", "tt", "haw", "ln", "ha", "mg", "jw", "su",
-        ].iter().map(|s| s.to_string()).collect()
+            "en", "zh", "de", "es", "ru", "ko", "fr", "ja", "pt", "tr", "pl", "ca", "nl", "ar",
+            "sv", "it", "id", "hi", "fi", "vi", "he", "uk", "el", "ms", "cs", "ro", "da", "hu",
+            "ta", "no", "th", "ur", "hr", "bg", "lt", "la", "mi", "ml", "cy", "sk", "te", "fa",
+            "lv", "bn", "sr", "az", "sl", "kn", "et", "mk", "br", "eu", "is", "hy", "ne", "mn",
+            "bs", "kk", "sq", "sw", "gl", "mr", "pa", "si", "km", "sn", "yo", "so", "af", "oc",
+            "ka", "be", "tg", "sd", "gu", "am", "yi", "lo", "uz", "fo", "ht", "ps", "tk", "nn",
+            "mt", "sa", "lb", "my", "ba", "as", "tt", "haw", "ln", "ha", "mg", "jw", "su",
+        ]
+        .iter()
+        .map(|s| s.to_string())
+        .collect()
     }
 }
 

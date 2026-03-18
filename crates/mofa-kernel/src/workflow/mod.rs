@@ -43,6 +43,7 @@
 pub mod command;
 pub mod context;
 pub mod graph;
+pub mod planning;
 pub mod policy;
 pub mod reducer;
 pub mod state;
@@ -53,6 +54,9 @@ pub use command::{Command, ControlFlow, SendCommand};
 pub use context::{GraphConfig, RemainingSteps, RuntimeContext};
 pub use graph::{
     CompiledGraph, END, EdgeTarget, NodeFunc, START, StateGraph, StepResult, StreamEvent,
+};
+pub use planning::{
+    Plan, PlanStep, PlanStepOutput, Planner, PlanningConfig, PlanningEvent, ReflectionVerdict,
 };
 pub use policy::{CircuitBreakerState, CircuitState, NodePolicy, RetryCondition};
 pub use reducer::{Reducer, ReducerType, StateUpdate};

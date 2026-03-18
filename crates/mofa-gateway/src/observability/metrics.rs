@@ -6,9 +6,7 @@
 //! - Consensus metrics (term, log index, leader elections)
 //! - Agent registry metrics
 
-use prometheus::{
-    Counter, Encoder, Gauge, Histogram, HistogramOpts, Opts, Registry, TextEncoder,
-};
+use prometheus::{Counter, Encoder, Gauge, Histogram, HistogramOpts, Opts, Registry, TextEncoder};
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -73,120 +71,167 @@ impl GatewayMetrics {
         let registry = Registry::new();
 
         // Request metrics
-        let requests_total = Counter::with_opts(
-            Opts::new("gateway_requests_total", "Total number of requests processed"),
-        )
+        let requests_total = Counter::with_opts(Opts::new(
+            "gateway_requests_total",
+            "Total number of requests processed",
+        ))
         .unwrap();
         registry.register(Box::new(requests_total.clone())).unwrap();
 
         let requests_duration = Histogram::with_opts(
-            HistogramOpts::new("gateway_requests_duration_seconds", "Request duration in seconds")
-                .buckets(vec![0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0]),
+            HistogramOpts::new(
+                "gateway_requests_duration_seconds",
+                "Request duration in seconds",
+            )
+            .buckets(vec![
+                0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0,
+            ]),
         )
         .unwrap();
-        registry.register(Box::new(requests_duration.clone())).unwrap();
+        registry
+            .register(Box::new(requests_duration.clone()))
+            .unwrap();
 
-        let requests_errors_total = Counter::with_opts(
-            Opts::new("gateway_requests_errors_total", "Total number of request errors"),
-        )
+        let requests_errors_total = Counter::with_opts(Opts::new(
+            "gateway_requests_errors_total",
+            "Total number of request errors",
+        ))
         .unwrap();
-        registry.register(Box::new(requests_errors_total.clone())).unwrap();
+        registry
+            .register(Box::new(requests_errors_total.clone()))
+            .unwrap();
 
         // Node metrics
-        let nodes_total = Gauge::with_opts(
-            Opts::new("gateway_nodes_total", "Total number of nodes in cluster"),
-        )
+        let nodes_total = Gauge::with_opts(Opts::new(
+            "gateway_nodes_total",
+            "Total number of nodes in cluster",
+        ))
         .unwrap();
         registry.register(Box::new(nodes_total.clone())).unwrap();
 
-        let nodes_healthy = Gauge::with_opts(
-            Opts::new("gateway_nodes_healthy", "Number of healthy nodes"),
-        )
+        let nodes_healthy = Gauge::with_opts(Opts::new(
+            "gateway_nodes_healthy",
+            "Number of healthy nodes",
+        ))
         .unwrap();
         registry.register(Box::new(nodes_healthy.clone())).unwrap();
 
-        let nodes_unhealthy = Gauge::with_opts(
-            Opts::new("gateway_nodes_unhealthy", "Number of unhealthy nodes"),
-        )
+        let nodes_unhealthy = Gauge::with_opts(Opts::new(
+            "gateway_nodes_unhealthy",
+            "Number of unhealthy nodes",
+        ))
         .unwrap();
-        registry.register(Box::new(nodes_unhealthy.clone())).unwrap();
+        registry
+            .register(Box::new(nodes_unhealthy.clone()))
+            .unwrap();
 
         // Consensus metrics
-        let consensus_term = Gauge::with_opts(
-            Opts::new("gateway_consensus_term", "Current Raft term"),
-        )
-        .unwrap();
+        let consensus_term =
+            Gauge::with_opts(Opts::new("gateway_consensus_term", "Current Raft term")).unwrap();
         registry.register(Box::new(consensus_term.clone())).unwrap();
 
-        let consensus_log_index = Gauge::with_opts(
-            Opts::new("gateway_consensus_log_index", "Current Raft log index"),
-        )
+        let consensus_log_index = Gauge::with_opts(Opts::new(
+            "gateway_consensus_log_index",
+            "Current Raft log index",
+        ))
         .unwrap();
-        registry.register(Box::new(consensus_log_index.clone())).unwrap();
+        registry
+            .register(Box::new(consensus_log_index.clone()))
+            .unwrap();
 
-        let consensus_leader_elections_total = Counter::with_opts(
-            Opts::new("gateway_consensus_leader_elections_total", "Total number of leader elections"),
-        )
+        let consensus_leader_elections_total = Counter::with_opts(Opts::new(
+            "gateway_consensus_leader_elections_total",
+            "Total number of leader elections",
+        ))
         .unwrap();
-        registry.register(Box::new(consensus_leader_elections_total.clone())).unwrap();
+        registry
+            .register(Box::new(consensus_leader_elections_total.clone()))
+            .unwrap();
 
-        let consensus_heartbeats_total = Counter::with_opts(
-            Opts::new("gateway_consensus_heartbeats_total", "Total number of heartbeats sent"),
-        )
+        let consensus_heartbeats_total = Counter::with_opts(Opts::new(
+            "gateway_consensus_heartbeats_total",
+            "Total number of heartbeats sent",
+        ))
         .unwrap();
-        registry.register(Box::new(consensus_heartbeats_total.clone())).unwrap();
+        registry
+            .register(Box::new(consensus_heartbeats_total.clone()))
+            .unwrap();
 
         // Agent registry metrics
-        let agents_registered = Gauge::with_opts(
-            Opts::new("gateway_agents_registered", "Number of registered agents"),
-        )
+        let agents_registered = Gauge::with_opts(Opts::new(
+            "gateway_agents_registered",
+            "Number of registered agents",
+        ))
         .unwrap();
-        registry.register(Box::new(agents_registered.clone())).unwrap();
+        registry
+            .register(Box::new(agents_registered.clone()))
+            .unwrap();
 
-        let agents_unregistered_total = Counter::with_opts(
-            Opts::new("gateway_agents_unregistered_total", "Total number of agent unregistrations"),
-        )
+        let agents_unregistered_total = Counter::with_opts(Opts::new(
+            "gateway_agents_unregistered_total",
+            "Total number of agent unregistrations",
+        ))
         .unwrap();
-        registry.register(Box::new(agents_unregistered_total.clone())).unwrap();
+        registry
+            .register(Box::new(agents_unregistered_total.clone()))
+            .unwrap();
 
         // Load balancer metrics
-        let load_balancer_selections_total = Counter::with_opts(
-            Opts::new("gateway_load_balancer_selections_total", "Total number of node selections by load balancer"),
-        )
+        let load_balancer_selections_total = Counter::with_opts(Opts::new(
+            "gateway_load_balancer_selections_total",
+            "Total number of node selections by load balancer",
+        ))
         .unwrap();
-        registry.register(Box::new(load_balancer_selections_total.clone())).unwrap();
+        registry
+            .register(Box::new(load_balancer_selections_total.clone()))
+            .unwrap();
 
-        let load_balancer_errors_total = Counter::with_opts(
-            Opts::new("gateway_load_balancer_errors_total", "Total number of load balancer errors"),
-        )
+        let load_balancer_errors_total = Counter::with_opts(Opts::new(
+            "gateway_load_balancer_errors_total",
+            "Total number of load balancer errors",
+        ))
         .unwrap();
-        registry.register(Box::new(load_balancer_errors_total.clone())).unwrap();
+        registry
+            .register(Box::new(load_balancer_errors_total.clone()))
+            .unwrap();
 
         // Circuit breaker metrics
-        let circuit_breaker_opens_total = Counter::with_opts(
-            Opts::new("gateway_circuit_breaker_opens_total", "Total number of circuit breaker opens"),
-        )
+        let circuit_breaker_opens_total = Counter::with_opts(Opts::new(
+            "gateway_circuit_breaker_opens_total",
+            "Total number of circuit breaker opens",
+        ))
         .unwrap();
-        registry.register(Box::new(circuit_breaker_opens_total.clone())).unwrap();
+        registry
+            .register(Box::new(circuit_breaker_opens_total.clone()))
+            .unwrap();
 
-        let circuit_breaker_closes_total = Counter::with_opts(
-            Opts::new("gateway_circuit_breaker_closes_total", "Total number of circuit breaker closes"),
-        )
+        let circuit_breaker_closes_total = Counter::with_opts(Opts::new(
+            "gateway_circuit_breaker_closes_total",
+            "Total number of circuit breaker closes",
+        ))
         .unwrap();
-        registry.register(Box::new(circuit_breaker_closes_total.clone())).unwrap();
+        registry
+            .register(Box::new(circuit_breaker_closes_total.clone()))
+            .unwrap();
 
         // Health check metrics
-        let health_checks_total = Counter::with_opts(
-            Opts::new("gateway_health_checks_total", "Total number of health checks performed"),
-        )
+        let health_checks_total = Counter::with_opts(Opts::new(
+            "gateway_health_checks_total",
+            "Total number of health checks performed",
+        ))
         .unwrap();
-        registry.register(Box::new(health_checks_total.clone())).unwrap();
+        registry
+            .register(Box::new(health_checks_total.clone()))
+            .unwrap();
 
-        let health_checks_failed_total = Counter::with_opts(
-            Opts::new("gateway_health_checks_failed_total", "Total number of failed health checks"),
-        )
+        let health_checks_failed_total = Counter::with_opts(Opts::new(
+            "gateway_health_checks_failed_total",
+            "Total number of failed health checks",
+        ))
         .unwrap();
-        registry.register(Box::new(health_checks_failed_total.clone())).unwrap();
+        registry
+            .register(Box::new(health_checks_failed_total.clone()))
+            .unwrap();
 
         Self {
             registry,

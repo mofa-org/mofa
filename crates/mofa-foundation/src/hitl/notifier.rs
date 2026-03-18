@@ -49,10 +49,11 @@ impl ReviewNotifier {
             match channel {
                 NotificationChannel::Webhook(_) => {
                     if let Some(ref webhook) = self.webhook_delivery
-                        && let Err(e) = webhook.deliver(review, "review.created").await {
-                            tracing::warn!("Webhook notification failed: {}", e);
-                            // Continue with other channels
-                        }
+                        && let Err(e) = webhook.deliver(review, "review.created").await
+                    {
+                        tracing::warn!("Webhook notification failed: {}", e);
+                        // Continue with other channels
+                    }
                 }
                 NotificationChannel::EventBus => {
                     // Future: emit to event bus
@@ -79,9 +80,10 @@ impl ReviewNotifier {
             match channel {
                 NotificationChannel::Webhook(_) => {
                     if let Some(ref webhook) = self.webhook_delivery
-                        && let Err(e) = webhook.deliver(review, "review.resolved").await {
-                            tracing::warn!("Webhook notification failed: {}", e);
-                        }
+                        && let Err(e) = webhook.deliver(review, "review.resolved").await
+                    {
+                        tracing::warn!("Webhook notification failed: {}", e);
+                    }
                 }
                 NotificationChannel::EventBus => {
                     tracing::debug!("Event bus notification (not implemented yet)");
