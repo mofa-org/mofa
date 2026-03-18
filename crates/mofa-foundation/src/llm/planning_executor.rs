@@ -340,10 +340,10 @@ impl PlanningExecutor {
                 self.execute_single_step(plan, &step_id, &completed, tx)
                     .await?;
                 // Mark completed
-                if let Some(step) = plan.get_step(&step_id) {
-                    if step.status.is_success() {
-                        completed.insert(step_id);
-                    }
+                if let Some(step) = plan.get_step(&step_id)
+                    && step.status.is_success()
+                {
+                    completed.insert(step_id);
                 }
             }
         }

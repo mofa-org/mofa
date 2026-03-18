@@ -7,7 +7,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
 
-use tokio::sync::{RwLock, broadcast, mpsc};
+use tokio::sync::{Mutex, RwLock, broadcast, mpsc};
 use tracing::{debug, error, info, warn};
 
 use super::loader::{DynamicPlugin, PluginLoadError, PluginLoader};
@@ -171,8 +171,9 @@ impl<T> IntoReloadReport<T> for ::std::result::Result<T, ReloadError> {
 
 /// Loaded plugin entry
 struct LoadedPlugin {
-    /// The dynamic plugin
-    plugin: DynamicPlugin,
+    /// The dynamic plugin, wrapped in a per-plugin Mutex so that execute()
+    /// can release the global `loaded_plugins` RwLock before awaiting.
+    plugin: Arc<Mutex<DynamicPlugin>>,
     /// Plugin info
     info: PluginInfo,
     /// Reload attempt counter
@@ -434,10 +435,14 @@ impl HotReloadManager {
                                         path: watch_event.path.clone(),
                                     });
 
-                                    // Unload the plugin
-                                    let mut plugins = loaded_plugins.write().await;
-                                    if let Some(mut entry) = plugins.remove(&info.id) {
-                                        let _ = entry.plugin.plugin_mut().unload().await;
+                                    // Unload the plugin — release the write lock before
+                                    // awaiting unload() to avoid holding it across .await.
+                                    let removed = {
+                                        let mut plugins = loaded_plugins.write().await;
+                                        plugins.remove(&info.id)
+                                    };
+                                    if let Some(entry) = removed {
+                                        let _ = entry.plugin.lock().await.plugin_mut().unload().await;
                                     }
                                     let _ = registry.unregister(&info.id).await;
                                 }
@@ -566,7 +571,7 @@ impl HotReloadManager {
 
         // Store
         let entry = LoadedPlugin {
-            plugin: dynamic_plugin,
+            plugin: Arc::new(Mutex::new(dynamic_plugin)),
             info,
             reload_attempts: 0,
             last_reload: None,
@@ -626,7 +631,7 @@ impl HotReloadManager {
             let plugins = loaded_plugins.read().await;
             if let Some(entry) = plugins.get(&plugin_id) {
                 // Create a basic snapshot from stats
-                let stats = entry.plugin.plugin().stats();
+                let stats = entry.plugin.lock().await.plugin().stats();
                 let mut snapshot = StateSnapshot::new(&plugin_id, &entry.info.version.to_string());
                 for (key, value) in stats {
                     snapshot.data.insert(key, value);
@@ -645,12 +650,17 @@ impl HotReloadManager {
             None
         };
 
-        // Unload current plugin
+        // Unload current plugin — remove from map first, then stop/unload
+        // outside the write-lock so we don't block concurrent operations.
         {
-            let mut plugins = loaded_plugins.write().await;
-            if let Some(mut entry) = plugins.remove(&plugin_id) {
-                let _ = entry.plugin.plugin_mut().stop().await;
-                let _ = entry.plugin.plugin_mut().unload().await;
+            let removed = {
+                let mut plugins = loaded_plugins.write().await;
+                plugins.remove(&plugin_id)
+            };
+            if let Some(entry) = removed {
+                let mut p = entry.plugin.lock().await;
+                let _ = p.plugin_mut().stop().await;
+                let _ = p.plugin_mut().unload().await;
             }
         }
 
@@ -729,7 +739,7 @@ impl HotReloadManager {
 
         // Store new plugin
         let entry = LoadedPlugin {
-            plugin: dynamic_plugin,
+            plugin: Arc::new(Mutex::new(dynamic_plugin)),
             info,
             reload_attempts: 0,
             last_reload: Some(std::time::Instant::now()),
@@ -787,7 +797,7 @@ impl HotReloadManager {
         if self.config.base.preserve_state {
             let plugins = self.loaded_plugins.read().await;
             if let Some(entry) = plugins.get(plugin_id) {
-                let stats = entry.plugin.plugin().stats();
+                let stats = entry.plugin.lock().await.plugin().stats();
                 let mut snapshot = StateSnapshot::new(plugin_id, &entry.info.version.to_string());
                 for (key, value) in stats {
                     snapshot.data.insert(key, value);
@@ -796,18 +806,19 @@ impl HotReloadManager {
             }
         }
 
-        // Remove and unload
-        let mut plugins = self.loaded_plugins.write().await;
-        if let Some(mut entry) = plugins.remove(plugin_id) {
-            entry
-                .plugin
-                .plugin_mut()
+        // Remove from the map first, then stop/unload outside the write-lock
+        // so we don't hold it across async plugin lifecycle awaits.
+        let removed = {
+            let mut plugins = self.loaded_plugins.write().await;
+            plugins.remove(plugin_id)
+        };
+        if let Some(entry) = removed {
+            let mut p = entry.plugin.lock().await;
+            p.plugin_mut()
                 .stop()
                 .await
                 .map_err(|e| ReloadError::Internal(e.to_string()))?;
-            entry
-                .plugin
-                .plugin_mut()
+            p.plugin_mut()
                 .unload()
                 .await
                 .map_err(|e| ReloadError::Internal(e.to_string()))?;
@@ -865,14 +876,30 @@ impl HotReloadManager {
         self.registry.get(plugin_id).await
     }
 
-    /// Execute a plugin
+    /// Execute a plugin.
+    ///
+    /// The global `loaded_plugins` read-lock is released before awaiting the
+    /// plugin's `execute()` call. This allows concurrent executions of
+    /// different plugins to proceed in parallel and prevents hot-reload
+    /// operations from being blocked by long-running plugin calls.
     pub async fn execute(&self, plugin_id: &str, input: String) -> PluginResult<String> {
-        let mut plugins = self.loaded_plugins.write().await;
-        let entry = plugins
-            .get_mut(plugin_id)
-            .ok_or_else(|| mofa_kernel::plugin::PluginError::ExecutionFailed(format!("Plugin {} not found", plugin_id)))?;
+        // Acquire read lock only long enough to clone the per-plugin Arc handle.
+        let plugin_mutex = {
+            let plugins = self.loaded_plugins.read().await;
+            plugins
+                .get(plugin_id)
+                .map(|e| Arc::clone(&e.plugin))
+                .ok_or_else(|| {
+                    mofa_kernel::plugin::PluginError::ExecutionFailed(format!(
+                        "Plugin {} not found",
+                        plugin_id
+                    ))
+                })?
+        }; // read lock released here — before any .await
 
-        entry.plugin.plugin_mut().execute(input).await
+        // Per-plugin mutex serialises concurrent calls to the same instance
+        // without blocking access to any other plugin in the map.
+        plugin_mutex.lock().await.plugin_mut().execute(input).await
     }
 
     /// List all loaded plugins

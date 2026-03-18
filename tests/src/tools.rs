@@ -4,20 +4,25 @@ use async_trait::async_trait;
 use mofa_foundation::agent::components::tool::{SimpleTool, ToolCategory};
 use mofa_kernel::agent::components::tool::{ToolInput, ToolResult};
 use serde_json::Value;
+use std::collections::VecDeque;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
 /// A mock tool that records calls and returns a configurable result.
+/// Supports failure injection via [`fail_next`](Self::fail_next),
+/// input-pattern failures via [`fail_on_input`](Self::fail_on_input),
+/// and sequenced results via [`add_result_sequence`](Self::add_result_sequence).
 #[derive(Clone)]
 pub struct MockTool {
     name: String,
     description: String,
     schema: Value,
     category: ToolCategory,
-    /// The result returned by every call to [`execute`](SimpleTool::execute).
     pub stubbed_result: Arc<RwLock<ToolResult>>,
-    /// Chronologically ordered inputs passed to this tool.
     pub call_history: Arc<RwLock<Vec<ToolInput>>>,
+    failure_queue: Arc<RwLock<VecDeque<String>>>,
+    failure_patterns: Arc<RwLock<Vec<(Value, String)>>>,
+    result_sequence: Arc<RwLock<VecDeque<ToolResult>>>,
 }
 
 impl MockTool {
@@ -32,6 +37,9 @@ impl MockTool {
                 "Mock execution default",
             ))),
             call_history: Arc::new(RwLock::new(Vec::new())),
+            failure_queue: Arc::new(RwLock::new(VecDeque::new())),
+            failure_patterns: Arc::new(RwLock::new(Vec::new())),
+            result_sequence: Arc::new(RwLock::new(VecDeque::new())),
         }
     }
 
@@ -48,6 +56,41 @@ impl MockTool {
     /// Number of times this tool has been executed.
     pub async fn call_count(&self) -> usize {
         self.call_history.read().await.len()
+    }
+
+    /// Queue failures for the next N calls.
+    pub async fn fail_next(&self, count: usize, error_msg: &str) {
+        let mut queue = self.failure_queue.write().await;
+        for _ in 0..count {
+            queue.push_back(error_msg.to_string());
+        }
+    }
+
+    /// Fail when input arguments match the given JSON value.
+    pub async fn fail_on_input(&self, input_pattern: Value, error_msg: &str) {
+        self.failure_patterns
+            .write()
+            .await
+            .push((input_pattern, error_msg.to_string()));
+    }
+
+    /// Returns the most recent call's input, or `None` if never called.
+    pub async fn last_call(&self) -> Option<ToolInput> {
+        self.call_history.read().await.last().cloned()
+    }
+
+    /// Returns the Nth call (0-indexed), or `None` if out of bounds.
+    pub async fn nth_call(&self, n: usize) -> Option<ToolInput> {
+        self.call_history.read().await.get(n).cloned()
+    }
+
+    /// Add a sequence of results. Each call consumes the next entry;
+    /// when exhausted, falls back to `stubbed_result`.
+    pub async fn add_result_sequence(&self, results: Vec<ToolResult>) {
+        let mut seq = self.result_sequence.write().await;
+        for r in results {
+            seq.push_back(r);
+        }
     }
 }
 
@@ -66,7 +109,34 @@ impl SimpleTool for MockTool {
     }
 
     async fn execute(&self, input: ToolInput) -> ToolResult {
-        self.call_history.write().await.push(input);
+        self.call_history.write().await.push(input.clone());
+
+        // 1. Drain failure queue
+        {
+            let mut queue = self.failure_queue.write().await;
+            if let Some(err) = queue.pop_front() {
+                return ToolResult::failure(err);
+            }
+        }
+
+        // 2. Check input-pattern failures
+        {
+            let patterns = self.failure_patterns.read().await;
+            for (pattern, err) in patterns.iter() {
+                if input.arguments == *pattern {
+                    return ToolResult::failure(err);
+                }
+            }
+        }
+
+        // 3. Drain result sequence
+        {
+            let mut seq = self.result_sequence.write().await;
+            if let Some(result) = seq.pop_front() {
+                return result;
+            }
+        }
+
         self.stubbed_result.read().await.clone()
     }
 
@@ -77,12 +147,13 @@ impl SimpleTool for MockTool {
 
 /// Assert that a [`MockTool`] was called exactly `$expected` times.
 #[macro_export]
-macro_rules! assert_tool_called {
+macro_rules! assert_tool_call_count {
     ($tool:expr, $expected_count:expr) => {{
         use mofa_foundation::agent::components::tool::SimpleTool as _;
         let count = $tool.call_count().await;
         assert_eq!(
-            count, $expected_count,
+            count,
+            $expected_count,
             "Expected tool '{}' to be called {} time(s), but was called {} time(s)",
             $tool.name(),
             $expected_count,

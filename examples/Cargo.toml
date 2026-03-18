@@ -33,20 +33,33 @@ members = [
     "reflection_agent",
     "tool_routing",
     "runtime_message_bus_backpressure",
+    "cloud_voice_demo",
     "rag_pipeline",
-    "hitl_v2",
+    "hitl_workflow",
+    "agent_memory",
     "agent_builder",
     "workflow_viz",
     "message_graph_validation",
     "message_graph_executor_runtime",
     "context_compression",
+    "structured_output",
     "control_plane",
     "context_window_demo",
     "compression_examples",
     "admission_gate_demo",
     "planning_loop",
     "integrations_demo",
+    "cron_scheduler",
+    "native_dataflow",
+    "mcp_tools",
     "memory_scheduler_demo",
+    "cli_doctor_demo",
+    "capability_discovery",
+    "rag_retrieval_demo",
+    "rag_indexing_demo",
+    "adversarial_testing_demo",
+    "resume_from_checkpoint",
+    "claw_demo",
 ]
 
 [workspace.package]
@@ -88,6 +101,7 @@ opentelemetry-jaeger = { version = "0.20", features = ["rt-tokio"] }
 tracing-opentelemetry = "0.22"
 rand = "0.8"
 chrono = { version = "0.4", features = ["serde"] }
+cron = "0.12"
 hex = "0.4"
 lazy_static = "1.4"
 

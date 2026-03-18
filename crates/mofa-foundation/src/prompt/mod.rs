@@ -24,6 +24,7 @@ mod hot_reload;
 mod memory_store;
 mod plugin;
 mod presets;
+mod regex;
 mod registry;
 mod store;
 mod template; // 新增插件模块

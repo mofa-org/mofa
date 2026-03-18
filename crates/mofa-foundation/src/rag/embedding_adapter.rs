@@ -222,9 +222,7 @@ impl LlmEmbeddingAdapter {
         let dimensions = self
             .config
             .dimensions
-            .map(|d| {
-                u32::try_from(d).map_err(|_| EmbeddingAdapterError::DimensionOverflow(d))
-            })
+            .map(|d| u32::try_from(d).map_err(|_| EmbeddingAdapterError::DimensionOverflow(d)))
             .transpose()?;
 
         for chunk in texts.chunks(batch_size) {
@@ -290,8 +288,6 @@ impl std::fmt::Debug for LlmEmbeddingAdapter {
             .finish()
     }
 }
-
-
 
 // ---------------------------------------------------------------------------
 // Deterministic chunk IDs

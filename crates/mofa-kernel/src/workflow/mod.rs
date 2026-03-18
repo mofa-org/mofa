@@ -44,6 +44,7 @@ pub mod command;
 pub mod context;
 pub mod graph;
 pub mod planning;
+pub mod policy;
 pub mod reducer;
 pub mod state;
 pub mod telemetry;
@@ -57,6 +58,7 @@ pub use graph::{
 pub use planning::{
     Plan, PlanStep, PlanStepOutput, Planner, PlanningConfig, PlanningEvent, ReflectionVerdict,
 };
+pub use policy::{CircuitBreakerState, CircuitState, NodePolicy, RetryCondition};
 pub use reducer::{Reducer, ReducerType, StateUpdate};
 pub use state::{GraphState, JsonState, StateSchema};
 pub use telemetry::{DebugEvent, DebugSession, SessionRecorder, TelemetryEmitter};

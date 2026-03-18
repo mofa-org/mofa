@@ -46,3 +46,10 @@ pub mod socketio;
 
 #[cfg(feature = "s3")]
 pub mod s3;
+
+#[cfg(any(
+    feature = "openai-speech",
+    feature = "elevenlabs",
+    feature = "deepgram"
+))]
+pub mod speech;

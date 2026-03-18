@@ -42,7 +42,12 @@ pub use components::{
     DirectReasoner,
     DispatchResult,
     EchoTool,
+    // Long-term memory implementations
+    Embedder,
+    Episode,
+    EpisodicMemory,
     FileBasedStorage,
+    HashEmbedder,
     HierarchicalCompressor,
     HybridCompressor,
     InMemoryStorage,
@@ -57,6 +62,7 @@ pub use components::{
     Reasoner,
     ReasoningResult,
     SemanticCompressor,
+    SemanticMemory,
     SequentialCoordinator,
     // SimpleTool 便捷接口
     // SimpleTool convenient interfaces

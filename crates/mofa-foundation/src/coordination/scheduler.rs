@@ -127,71 +127,64 @@ impl PriorityScheduler {
 
             // 检查是否需要抢占 — 内联以避免死锁
             // Check for preemption — inlined to avoid deadlock
-            if let Some(&load) = agent_load.get(&target_agent) {
-                if load > 0 {
-                    if let Some(tasks_on_agent) = agent_tasks.get(&target_agent) {
-                        let preemptable_task = tasks_on_agent
-                            .iter()
-                            .filter(|tid| task_status.get(*tid) == Some(&SchedulingStatus::Running))
-                            .filter(|tid| {
-                                if let Some(task_priority) = task_priorities.get(*tid) {
-                                    task.priority > *task_priority
-                                } else {
-                                    false
-                                }
-                            })
-                            .min_by_key(|tid| task_priorities.get(*tid).cloned())
-                            .cloned();
-
-                        if let Some(low_priority_task_id) = preemptable_task {
-                            let preempt_msg = AgentMessage::Event(AgentEvent::TaskPreempted(
-                                low_priority_task_id.clone(),
-                            ));
-                            self.bus
-                                .send_message(
-                                    "scheduler",
-                                    CommunicationMode::PointToPoint(target_agent.clone()),
-                                    &preempt_msg,
-                                )
-                                .await
-                                .map_err(|e| GlobalError::Other(e.to_string()))?;
-
-                            // Clean up preempted task state to prevent ghost entries:
-                            // Without this, preempted tasks leak in all 4 HashMaps,
-                            // causing agent_load drift, OOM, and scheduling starvation.
-                            task_status
-                                .insert(low_priority_task_id.clone(), SchedulingStatus::Preempted);
-                            if let Some(count) = agent_load.get_mut(&target_agent) {
-                                *count = count.saturating_sub(1);
-                            }
-                            if let Some(tasks) = agent_tasks.get_mut(&target_agent) {
-                                tasks.retain(|t| t != &low_priority_task_id);
-                            }
-
-                            // Re-enqueue the preempted task so it can be rescheduled
-                            // to a different (or the same) agent in a future cycle.
-                            if let Some(orig_priority) =
-                                task_priorities.remove(&low_priority_task_id)
-                            {
-                                let requeued = PriorityTask {
-                                    priority: orig_priority.clone(),
-                                    task: TaskRequest {
-                                        task_id: low_priority_task_id.clone(),
-                                        content: task.content.clone(),
-                                        priority: orig_priority.clone(),
-                                        deadline: None,
-                                        metadata: std::collections::HashMap::new(),
-                                    },
-                                    submit_time: std::time::Instant::now(),
-                                };
-                                task_queue.push(requeued);
-                                task_status.insert(
-                                    low_priority_task_id.clone(),
-                                    SchedulingStatus::Pending,
-                                );
-                                task_priorities.insert(low_priority_task_id, orig_priority);
-                            }
+            if let Some(&load) = agent_load.get(&target_agent)
+                && load > 0
+                && let Some(tasks_on_agent) = agent_tasks.get(&target_agent)
+            {
+                let preemptable_task = tasks_on_agent
+                    .iter()
+                    .filter(|tid| task_status.get(*tid) == Some(&SchedulingStatus::Running))
+                    .filter(|tid| {
+                        if let Some(task_priority) = task_priorities.get(*tid) {
+                            task.priority > *task_priority
+                        } else {
+                            false
                         }
+                    })
+                    .min_by_key(|tid| task_priorities.get(*tid).cloned())
+                    .cloned();
+
+                if let Some(low_priority_task_id) = preemptable_task {
+                    let preempt_msg = AgentMessage::Event(AgentEvent::TaskPreempted(
+                        low_priority_task_id.clone(),
+                    ));
+                    self.bus
+                        .send_message(
+                            "scheduler",
+                            CommunicationMode::PointToPoint(target_agent.clone()),
+                            &preempt_msg,
+                        )
+                        .await
+                        .map_err(|e| GlobalError::Other(e.to_string()))?;
+
+                    // Clean up preempted task state to prevent ghost entries:
+                    // Without this, preempted tasks leak in all 4 HashMaps,
+                    // causing agent_load drift, OOM, and scheduling starvation.
+                    task_status.insert(low_priority_task_id.clone(), SchedulingStatus::Preempted);
+                    if let Some(count) = agent_load.get_mut(&target_agent) {
+                        *count = count.saturating_sub(1);
+                    }
+                    if let Some(tasks) = agent_tasks.get_mut(&target_agent) {
+                        tasks.retain(|t| t != &low_priority_task_id);
+                    }
+
+                    // Re-enqueue the preempted task so it can be rescheduled
+                    // to a different (or the same) agent in a future cycle.
+                    if let Some(orig_priority) = task_priorities.remove(&low_priority_task_id) {
+                        let requeued = PriorityTask {
+                            priority: orig_priority.clone(),
+                            task: TaskRequest {
+                                task_id: low_priority_task_id.clone(),
+                                content: task.content.clone(),
+                                priority: orig_priority.clone(),
+                                deadline: None,
+                                metadata: std::collections::HashMap::new(),
+                            },
+                            submit_time: std::time::Instant::now(),
+                        };
+                        task_queue.push(requeued);
+                        task_status.insert(low_priority_task_id.clone(), SchedulingStatus::Pending);
+                        task_priorities.insert(low_priority_task_id, orig_priority);
                     }
                 }
             }
@@ -330,11 +323,17 @@ impl PriorityScheduler {
             let mut agent_load = self.agent_load.write().await;
             let mut task_status = self.task_status.write().await;
             let mut agent_tasks = self.agent_tasks.write().await;
+            let mut task_priorities = self.task_priorities.write().await;
 
             agent_load
                 .entry(agent_id.to_string())
                 .and_modify(|count| *count = count.saturating_sub(1));
-            task_status.insert(task_id.to_string(), SchedulingStatus::Completed);
+
+            // Remove completed task metadata to prevent unbounded map growth.
+            // Completed tasks are never re-queued, so these entries serve no
+            // further purpose and would otherwise accumulate indefinitely.
+            task_status.remove(task_id);
+            task_priorities.remove(task_id);
 
             // Remove completed task from agent's task list
             if let Some(tasks) = agent_tasks.get_mut(agent_id) {
@@ -416,8 +415,17 @@ mod tests {
         // Verify state was updated correctly.
         let load = scheduler.agent_load.read().await;
         assert_eq!(*load.get("agent-1").unwrap(), 0);
+        // Completed task metadata is evicted — entry must not linger in the map.
         let status = scheduler.task_status.read().await;
-        assert_eq!(*status.get("t1").unwrap(), SchedulingStatus::Completed);
+        assert!(
+            status.get("t1").is_none(),
+            "task_status entry should be removed on completion"
+        );
+        let priorities = scheduler.task_priorities.read().await;
+        assert!(
+            priorities.get("t1").is_none(),
+            "task_priorities entry should be removed on completion"
+        );
     }
 
     /// Verifies the priority queue orders tasks correctly (higher priority first).

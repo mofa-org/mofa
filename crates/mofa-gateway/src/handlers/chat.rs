@@ -33,9 +33,13 @@ pub struct ChatRequest {
 /// Response returned by the chat endpoint
 #[derive(Debug, Serialize)]
 pub struct ChatResponse {
+    /// ID of the agent that processed the request.
     pub agent_id: String,
+    /// Session identifier for multi-turn conversations.
     pub session_id: String,
+    /// Agent output as a JSON value.
     pub output: Value,
+    /// Request processing time in milliseconds.
     pub duration_ms: u64,
 }
 
@@ -116,8 +120,8 @@ pub async fn chat(
         "chat request completed"
     );
 
-    let output_value = serde_json::to_value(&output.content)
-        .unwrap_or_else(|_| json!(output.content.to_text()));
+    let output_value =
+        serde_json::to_value(&output.content).unwrap_or_else(|_| json!(output.content.to_text()));
 
     let response = ChatResponse {
         agent_id: id,

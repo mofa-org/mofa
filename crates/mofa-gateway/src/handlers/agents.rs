@@ -46,23 +46,36 @@ pub struct CreateAgentRequest {
 /// Serialisable representation of an agent returned by GET /agents
 #[derive(Debug, Serialize)]
 pub struct AgentDto {
+    /// Unique agent identifier.
     pub id: String,
+    /// Human-readable agent name.
     pub name: String,
+    /// Optional agent description.
     pub description: Option<String>,
+    /// Optional agent version string.
     pub version: Option<String>,
+    /// Current lifecycle state of the agent.
     pub state: String,
+    /// Capability tags associated with the agent.
     pub tags: Vec<String>,
 }
 
 /// Serialisable status detail returned by GET /agents/{id}/status
 #[derive(Debug, Serialize)]
 pub struct AgentStatusDto {
+    /// Unique agent identifier.
     pub id: String,
+    /// Human-readable agent name.
     pub name: String,
+    /// Optional agent description.
     pub description: Option<String>,
+    /// Optional agent version string.
     pub version: Option<String>,
+    /// Current lifecycle state of the agent.
     pub state: String,
+    /// Capability tags associated with the agent.
     pub tags: Vec<String>,
+    /// Reasoning strategies supported by the agent.
     pub reasoning_strategies: Vec<String>,
 }
 
@@ -99,7 +112,9 @@ pub async fn create_agent(
     }
 
     if req.id.is_empty() {
-        return Err(GatewayError::InvalidRequest("agent id must not be empty".into()));
+        return Err(GatewayError::InvalidRequest(
+            "agent id must not be empty".into(),
+        ));
     }
 
     if state.registry.contains(&req.id).await {
@@ -115,9 +130,8 @@ pub async fn create_agent(
         "type": req.agent_type,
         "custom": req.config,
     });
-    let agent_config: AgentConfig = serde_json::from_value(raw).map_err(|e| {
-        GatewayError::InvalidRequest(format!("invalid config: {}", e))
-    })?;
+    let agent_config: AgentConfig = serde_json::from_value(raw)
+        .map_err(|e| GatewayError::InvalidRequest(format!("invalid config: {}", e)))?;
 
     state
         .registry

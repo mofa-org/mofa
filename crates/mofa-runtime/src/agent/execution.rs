@@ -271,6 +271,7 @@ impl ExecutionResult {
 ///     info!("Output: {:?}", result.output);
 /// }
 /// ```
+#[derive(Clone)]
 pub struct ExecutionEngine {
     /// Agent 注册中心
     /// Agent Registry
@@ -369,7 +370,7 @@ impl ExecutionEngine {
             .execute_with_options(&agent, processed_input.clone(), &ctx, &options, &retry_cfg)
             .await;
 
-        let duration_ms = start_time.elapsed().as_millis() as u64;
+        let duration_ms = u64::try_from(start_time.elapsed().as_millis()).unwrap_or(u64::MAX);
 
         // 构建结果
         // Build result
@@ -573,16 +574,12 @@ impl ExecutionEngine {
         let mut handles = Vec::new();
 
         for (agent_id, input) in executions {
-            let registry = self.registry.clone();
+            let engine = self.clone();
             let opts = options.clone();
 
             let span = tracing::info_span!("agent.parallel", agent_id = %agent_id);
             let handle = tokio::spawn(
-                async move {
-                    let engine = ExecutionEngine::new(registry);
-                    engine.execute(&agent_id, input, opts).await
-                }
-                .instrument(span),
+                async move { engine.execute(&agent_id, input, opts).await }.instrument(span),
             );
 
             handles.push(handle);
@@ -769,6 +766,27 @@ impl ExecutionEngine {
         }
 
         Ok(results)
+    }
+}
+
+// ---------------------------------------------------------------------------
+// ScheduledAgentRunner implementation
+// ---------------------------------------------------------------------------
+
+/// Allow `ExecutionEngine` to be used directly as the runner inside
+/// `CronScheduler` (which lives in `mofa-foundation`) without creating a
+/// cyclic crate dependency.
+#[async_trait::async_trait]
+impl mofa_kernel::scheduler::ScheduledAgentRunner for ExecutionEngine {
+    async fn run_scheduled(
+        &self,
+        agent_id: &str,
+        input: mofa_kernel::agent::types::AgentInput,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        self.execute(agent_id, input, ExecutionOptions::default())
+            .await
+            .map(|_| ())
+            .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>)
     }
 }
 

@@ -56,6 +56,7 @@ use mofa_kernel::agent::types::error::{GlobalError, GlobalResult};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
+use std::sync::Mutex;
 use tokio::sync::RwLock;
 
 // =============================================================================
@@ -820,6 +821,9 @@ pub struct RuleBasedRouter {
     /// 是否需要人类确认规则匹配
     /// Whether to require human confirmation on rule match
     confirm_on_match: bool,
+    /// Cache of compiled regex patterns keyed by their source string.
+    /// Avoids recompiling the same regex on every `check_condition` call.
+    regex_cache: Mutex<HashMap<String, regex::Regex>>,
 }
 
 impl RuleBasedRouter {
@@ -828,6 +832,7 @@ impl RuleBasedRouter {
             rules: Arc::new(RwLock::new(Vec::new())),
             default_agent_id: None,
             confirm_on_match: false,
+            regex_cache: Mutex::new(HashMap::new()),
         }
     }
 
@@ -885,9 +890,22 @@ impl RuleBasedRouter {
             RuleOperator::NotContains => !field_value.contains(&condition.value),
             RuleOperator::StartsWith => field_value.starts_with(&condition.value),
             RuleOperator::EndsWith => field_value.ends_with(&condition.value),
-            RuleOperator::Regex => regex::Regex::new(&condition.value)
-                .map(|re| re.is_match(&field_value))
-                .unwrap_or(false),
+            RuleOperator::Regex => {
+                let cache = self.regex_cache.lock().unwrap_or_else(|e| e.into_inner());
+                if let Some(re) = cache.get(&condition.value) {
+                    return re.is_match(&field_value);
+                }
+                drop(cache);
+                match regex::Regex::new(&condition.value) {
+                    Ok(re) => {
+                        let matched = re.is_match(&field_value);
+                        let mut cache = self.regex_cache.lock().unwrap_or_else(|e| e.into_inner());
+                        cache.insert(condition.value.clone(), re);
+                        matched
+                    }
+                    Err(_) => false,
+                }
+            }
             RuleOperator::In => condition.value.split(',').any(|v| v.trim() == field_value),
             RuleOperator::NotIn => !condition.value.split(',').any(|v| v.trim() == field_value),
         }

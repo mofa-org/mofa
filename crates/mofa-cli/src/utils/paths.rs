@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 
 /// Get the current working directory
 pub fn current_dir() -> Result<PathBuf, CliError> {
-    std::env::current_dir().map_err(|e| CliError::Io(e))
+    std::env::current_dir().map_err(CliError::Io)
 }
 
 /// Resolve a path relative to the current directory
@@ -88,8 +88,13 @@ pub fn mofa_cache_dir() -> Result<PathBuf, CliError> {
 /// Ensure a directory exists, creating it if necessary
 pub fn ensure_dir<P: AsRef<Path>>(path: P) -> Result<PathBuf, CliError> {
     let path = path.as_ref();
-    std::fs::create_dir_all(path)
-        .map_err(|e| CliError::Other(format!("Failed to create directory {}: {}", path.display(), e)))?;
+    std::fs::create_dir_all(path).map_err(|e| {
+        CliError::Other(format!(
+            "Failed to create directory {}: {}",
+            path.display(),
+            e
+        ))
+    })?;
     Ok(path.to_path_buf())
 }
 

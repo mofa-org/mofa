@@ -451,7 +451,11 @@ impl PrometheusExporter {
         out
     }
 
-    async fn append_exporter_internal_metrics(&self, out: &mut String, last_refresh_unix_seconds: f64) {
+    async fn append_exporter_internal_metrics(
+        &self,
+        out: &mut String,
+        last_refresh_unix_seconds: f64,
+    ) {
         let render_hist = self.render_duration_histogram.read().await;
         write_metric_header(
             out,

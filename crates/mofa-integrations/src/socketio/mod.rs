@@ -130,12 +130,12 @@ impl SocketIoBridge {
         io.ns(
             namespace,
             move |socket: SocketRef, Data(auth): Data<AuthPayload>| {
-                if let Some(required) = &auth_token {
-                    if auth.token != *required {
-                        warn!(socket_id = %socket.id, "Socket.IO rejected: bad token");
-                        let _ = socket.disconnect();
-                        return;
-                    }
+                if let Some(required) = &auth_token
+                    && auth.token != *required
+                {
+                    warn!(socket_id = %socket.id, "Socket.IO rejected: bad token");
+                    let _ = socket.disconnect();
+                    return;
                 }
 
                 info!(socket_id = %socket.id, "Socket.IO client connected");
@@ -164,6 +164,5 @@ impl SocketIoBridge {
 }
 
 fn agent_message_to_json(msg: &AgentMessage) -> Value {
-    serde_json::to_value(msg)
-        .unwrap_or_else(|_| json!({ "error": "serialization failed" }))
+    serde_json::to_value(msg).unwrap_or_else(|_| json!({ "error": "serialization failed" }))
 }

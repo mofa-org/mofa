@@ -216,6 +216,79 @@ impl DebugSession {
 }
 
 // ============================================================================
+// SessionQuery — Filter parameters for session queries
+// ============================================================================
+
+/// Query parameters for filtering debug sessions.
+///
+/// All fields are optional — unset fields impose no constraint.
+/// Results are ordered by `started_at` descending (newest first).
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct SessionQuery {
+    /// Filter by workflow graph ID
+    pub workflow_id: Option<String>,
+    /// Filter by session status ("running", "completed", "failed")
+    pub status: Option<String>,
+    /// Only include sessions started at or after this timestamp (ms since epoch)
+    pub from: Option<u64>,
+    /// Only include sessions started at or before this timestamp (ms since epoch)
+    pub to: Option<u64>,
+    /// Only include sessions whose duration exceeds this threshold
+    pub min_duration_ms: Option<u64>,
+    /// Maximum number of sessions to return
+    pub limit: Option<usize>,
+    /// Number of sessions to skip (for pagination)
+    pub offset: Option<usize>,
+}
+
+impl SessionQuery {
+    /// Returns true if the given session matches all active filters.
+    pub fn matches(&self, session: &DebugSession) -> bool {
+        if let Some(ref wf) = self.workflow_id
+            && session.workflow_id != *wf
+        {
+            return false;
+        }
+        if let Some(ref status) = self.status
+            && session.status != *status
+        {
+            return false;
+        }
+        if let Some(from) = self.from
+            && session.started_at < from
+        {
+            return false;
+        }
+        if let Some(to) = self.to
+            && session.started_at > to
+        {
+            return false;
+        }
+        if let Some(min_dur) = self.min_duration_ms {
+            let duration = match session.ended_at {
+                Some(ended) => ended.saturating_sub(session.started_at),
+                None => return false, // still running, duration unknown
+            };
+            if duration < min_dur {
+                return false;
+            }
+        }
+        true
+    }
+
+    /// Sort sessions by `started_at` descending, then apply offset and limit.
+    pub fn paginate(&self, mut sessions: Vec<DebugSession>) -> Vec<DebugSession> {
+        sessions.sort_by(|a, b| b.started_at.cmp(&a.started_at));
+        let offset = self.offset.unwrap_or(0);
+        let iter = sessions.into_iter().skip(offset);
+        match self.limit {
+            Some(limit) => iter.take(limit).collect(),
+            None => iter.collect(),
+        }
+    }
+}
+
+// ============================================================================
 // TelemetryEmitter — Trait for emitting debug events
 // ============================================================================
 
@@ -301,6 +374,18 @@ pub trait SessionRecorder: Send + Sync {
 
     /// List all recorded sessions
     async fn list_sessions(&self) -> AgentResult<Vec<DebugSession>>;
+
+    /// Query sessions with filtering, pagination, and ordering.
+    ///
+    /// The default implementation falls back to `list_sessions()` with
+    /// in-memory filtering. Backends with indexed storage (e.g. PostgreSQL)
+    /// should override this for efficient server-side queries.
+    async fn query_sessions(&self, query: &SessionQuery) -> AgentResult<Vec<DebugSession>> {
+        let sessions = self.list_sessions().await?;
+        let filtered: Vec<DebugSession> =
+            sessions.into_iter().filter(|s| query.matches(s)).collect();
+        Ok(query.paginate(filtered))
+    }
 }
 
 // ============================================================================
@@ -432,5 +517,165 @@ mod tests {
         let ts = DebugEvent::now_ms();
         // Should be a reasonable timestamp (after 2020)
         assert!(ts > 1_577_836_800_000);
+    }
+
+    fn make_session(
+        id: &str,
+        wf: &str,
+        status: &str,
+        start: u64,
+        end: Option<u64>,
+    ) -> DebugSession {
+        DebugSession {
+            session_id: id.to_string(),
+            workflow_id: wf.to_string(),
+            execution_id: format!("exec-{id}"),
+            started_at: start,
+            ended_at: end,
+            status: status.to_string(),
+            event_count: 0,
+        }
+    }
+
+    #[test]
+    fn test_session_query_matches_workflow_id() {
+        let query = SessionQuery {
+            workflow_id: Some("wf-a".to_string()),
+            ..Default::default()
+        };
+        let s1 = make_session("s1", "wf-a", "completed", 1000, Some(2000));
+        let s2 = make_session("s2", "wf-b", "completed", 1000, Some(2000));
+        assert!(query.matches(&s1));
+        assert!(!query.matches(&s2));
+    }
+
+    #[test]
+    fn test_session_query_matches_status() {
+        let query = SessionQuery {
+            status: Some("failed".to_string()),
+            ..Default::default()
+        };
+        let s1 = make_session("s1", "wf", "failed", 1000, Some(2000));
+        let s2 = make_session("s2", "wf", "completed", 1000, Some(2000));
+        assert!(query.matches(&s1));
+        assert!(!query.matches(&s2));
+    }
+
+    #[test]
+    fn test_session_query_matches_time_range() {
+        let query = SessionQuery {
+            from: Some(500),
+            to: Some(1500),
+            ..Default::default()
+        };
+        let before = make_session("s1", "wf", "completed", 100, Some(200));
+        let inside = make_session("s2", "wf", "completed", 1000, Some(2000));
+        let after = make_session("s3", "wf", "completed", 2000, Some(3000));
+        assert!(!query.matches(&before));
+        assert!(query.matches(&inside));
+        assert!(!query.matches(&after));
+    }
+
+    #[test]
+    fn test_session_query_matches_min_duration() {
+        let query = SessionQuery {
+            min_duration_ms: Some(500),
+            ..Default::default()
+        };
+        let short = make_session("s1", "wf", "completed", 1000, Some(1200));
+        let long = make_session("s2", "wf", "completed", 1000, Some(2000));
+        let running = make_session("s3", "wf", "running", 1000, None);
+        assert!(!query.matches(&short)); // 200ms < 500ms
+        assert!(query.matches(&long)); // 1000ms >= 500ms
+        assert!(!query.matches(&running)); // still running, duration unknown
+    }
+
+    #[test]
+    fn test_session_query_combined_filters() {
+        let query = SessionQuery {
+            workflow_id: Some("wf-x".to_string()),
+            status: Some("failed".to_string()),
+            from: Some(1000),
+            ..Default::default()
+        };
+        let match_all = make_session("s1", "wf-x", "failed", 1500, Some(2000));
+        let wrong_wf = make_session("s2", "wf-y", "failed", 1500, Some(2000));
+        let wrong_status = make_session("s3", "wf-x", "completed", 1500, Some(2000));
+        let too_early = make_session("s4", "wf-x", "failed", 500, Some(600));
+        assert!(query.matches(&match_all));
+        assert!(!query.matches(&wrong_wf));
+        assert!(!query.matches(&wrong_status));
+        assert!(!query.matches(&too_early));
+    }
+
+    #[test]
+    fn test_session_query_paginate() {
+        // sessions created in ascending order: s0(0), s1(100), ..., s9(900)
+        let sessions: Vec<DebugSession> = (0..10)
+            .map(|i| {
+                make_session(
+                    &format!("s{i}"),
+                    "wf",
+                    "completed",
+                    i * 100,
+                    Some(i * 100 + 50),
+                )
+            })
+            .collect();
+
+        // limit only — sorted descending, so newest (s9) comes first
+        let q = SessionQuery {
+            limit: Some(3),
+            ..Default::default()
+        };
+        let result = q.paginate(sessions.clone());
+        assert_eq!(result.len(), 3);
+        assert_eq!(result[0].session_id, "s9");
+        assert_eq!(result[1].session_id, "s8");
+        assert_eq!(result[2].session_id, "s7");
+
+        // offset only — skip 7 newest, leaving 3 oldest
+        let q = SessionQuery {
+            offset: Some(7),
+            ..Default::default()
+        };
+        assert_eq!(q.paginate(sessions.clone()).len(), 3);
+
+        // limit + offset — skip 5 newest, take next 2
+        let q = SessionQuery {
+            limit: Some(2),
+            offset: Some(5),
+            ..Default::default()
+        };
+        let result = q.paginate(sessions.clone());
+        assert_eq!(result.len(), 2);
+        assert_eq!(result[0].session_id, "s4");
+        assert_eq!(result[1].session_id, "s3");
+
+        // no limit or offset returns all
+        let q = SessionQuery::default();
+        assert_eq!(q.paginate(sessions).len(), 10);
+    }
+
+    #[test]
+    fn test_paginate_sorts_descending_regardless_of_input_order() {
+        // feed sessions in random order
+        let sessions = vec![
+            make_session("mid", "wf", "completed", 500, Some(550)),
+            make_session("old", "wf", "completed", 100, Some(150)),
+            make_session("new", "wf", "completed", 900, Some(950)),
+        ];
+        let q = SessionQuery::default();
+        let result = q.paginate(sessions);
+        assert_eq!(result[0].session_id, "new");
+        assert_eq!(result[1].session_id, "mid");
+        assert_eq!(result[2].session_id, "old");
+    }
+
+    #[test]
+    fn test_session_query_empty_matches_all() {
+        let query = SessionQuery::default();
+        let s = make_session("s1", "wf", "completed", 1000, Some(2000));
+        assert!(query.matches(&s));
     }
 }

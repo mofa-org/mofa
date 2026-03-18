@@ -325,11 +325,11 @@ pub mod agent_loop;
 pub mod context;
 pub mod llm_planner;
 pub mod planning_executor;
+pub mod stream_adapter;
+pub mod stream_bridge;
 pub mod task_orchestrator;
 pub mod token_budget;
 pub mod vision;
-pub mod stream_adapter;
-pub mod stream_bridge;
 // Audio processing
 pub mod transcription;
 
@@ -409,3 +409,41 @@ pub use tool_executor::ToolExecutor as AgentLoopToolExecutor;
 pub use transcription::{
     GroqTranscriptionProvider, OpenAITranscriptionProvider, TranscriptionProvider,
 };
+
+#[cfg(test)]
+mod tests {
+    use super::{
+        AnthropicConfig, AnthropicProvider, GeminiConfig, GeminiProvider, LLMProvider,
+        OpenAIConfig, OpenAIProvider,
+    };
+
+    #[test]
+    fn openai_provider_uses_configured_model() {
+        let cfg = OpenAIConfig::new("k")
+            .with_base_url("https://example.test/v1")
+            .with_model("gpt-4o-mini");
+        let provider = OpenAIProvider::with_config(cfg);
+        assert_eq!(provider.name(), "openai");
+        assert_eq!(provider.default_model(), "gpt-4o-mini");
+    }
+
+    #[test]
+    fn anthropic_provider_uses_configured_model() {
+        let cfg = AnthropicConfig::new("k")
+            .with_base_url("https://example.test")
+            .with_model("claude-3-5-sonnet-latest");
+        let provider = AnthropicProvider::with_config(cfg);
+        assert_eq!(provider.name(), "anthropic");
+        assert_eq!(provider.default_model(), "claude-3-5-sonnet-latest");
+    }
+
+    #[test]
+    fn gemini_provider_uses_configured_model() {
+        let cfg = GeminiConfig::new("k")
+            .with_base_url("https://example.test")
+            .with_model("gemini-1.5-flash");
+        let provider = GeminiProvider::with_config(cfg);
+        assert_eq!(provider.name(), "gemini");
+        assert_eq!(provider.default_model(), "gemini-1.5-flash");
+    }
+}

@@ -52,8 +52,12 @@ impl ModelCache {
         });
 
         // Ensure cache directory exists
-        fs::create_dir_all(&cache_dir)
-            .map_err(|e| PluginError::Other(format!("Failed to create cache directory: {:?}: {}", cache_dir, e)))?;
+        fs::create_dir_all(&cache_dir).map_err(|e| {
+            PluginError::Other(format!(
+                "Failed to create cache directory: {:?}: {}",
+                cache_dir, e
+            ))
+        })?;
 
         info!("Model cache initialized at: {:?}", cache_dir);
 
@@ -96,11 +100,19 @@ impl ModelCache {
             return Ok(None);
         }
 
-        let content = fs::read_to_string(&metadata_path)
-            .map_err(|e| PluginError::Other(format!("Failed to read metadata: {:?}: {}", metadata_path, e)))?;
+        let content = fs::read_to_string(&metadata_path).map_err(|e| {
+            PluginError::Other(format!(
+                "Failed to read metadata: {:?}: {}",
+                metadata_path, e
+            ))
+        })?;
 
-        let metadata: ModelMetadata = serde_json::from_str(&content)
-            .map_err(|e| PluginError::Other(format!("Failed to parse metadata: {:?}: {}", metadata_path, e)))?;
+        let metadata: ModelMetadata = serde_json::from_str(&content).map_err(|e| {
+            PluginError::Other(format!(
+                "Failed to parse metadata: {:?}: {}",
+                metadata_path, e
+            ))
+        })?;
 
         // Update in-memory cache
         let mut cache = self.metadata.write().await;
@@ -114,11 +126,15 @@ impl ModelCache {
     pub async fn save_metadata(&self, metadata: &ModelMetadata) -> PluginResult<()> {
         let metadata_path = self.metadata_path(&metadata.model_id);
 
-        let content =
-            serde_json::to_string_pretty(metadata).map_err(|e| PluginError::Other(format!("Failed to serialize metadata: {}", e)))?;
+        let content = serde_json::to_string_pretty(metadata)
+            .map_err(|e| PluginError::Other(format!("Failed to serialize metadata: {}", e)))?;
 
-        fs::write(&metadata_path, content)
-            .map_err(|e| PluginError::Other(format!("Failed to write metadata: {:?}: {}", metadata_path, e)))?;
+        fs::write(&metadata_path, content).map_err(|e| {
+            PluginError::Other(format!(
+                "Failed to write metadata: {:?}: {}",
+                metadata_path, e
+            ))
+        })?;
 
         // Update in-memory cache
         let mut cache = self.metadata.write().await;
@@ -129,7 +145,11 @@ impl ModelCache {
     }
 
     /// Validate model file integrity using checksum
-    pub async fn validate(&self, model_id: &str, expected_checksum: Option<&str>) -> PluginResult<bool> {
+    pub async fn validate(
+        &self,
+        model_id: &str,
+        expected_checksum: Option<&str>,
+    ) -> PluginResult<bool> {
         let model_path = self.model_path(model_id);
 
         if !model_path.exists() {
@@ -143,7 +163,9 @@ impl ModelCache {
         };
 
         // Verify file exists and has correct size
-        let file_size = fs::metadata(&model_path).map_err(|e| PluginError::Other(format!("Model file metadata error: {}", e)))?.len();
+        let file_size = fs::metadata(&model_path)
+            .map_err(|e| PluginError::Other(format!("Model file metadata error: {}", e)))?
+            .len();
         if file_size != metadata.file_size {
             warn!(
                 "Model file size mismatch for {}: expected {}, got {}",
@@ -167,8 +189,8 @@ impl ModelCache {
     /// Get model size in bytes
     pub async fn get_size(&self, model_id: &str) -> PluginResult<u64> {
         let model_path = self.model_path(model_id);
-        let metadata =
-            fs::metadata(&model_path).map_err(|e| PluginError::Other(format!("Model not found: {:?}: {}", model_path, e)))?;
+        let metadata = fs::metadata(&model_path)
+            .map_err(|e| PluginError::Other(format!("Model not found: {:?}: {}", model_path, e)))?;
         Ok(metadata.len())
     }
 
@@ -186,10 +208,12 @@ impl ModelCache {
     pub async fn list_models(&self) -> PluginResult<Vec<String>> {
         let mut models = Vec::new();
 
-        let entries = fs::read_dir(&self.cache_dir).map_err(|e| PluginError::Other(format!(
-            "Failed to read cache directory {:?}: {}",
-            self.cache_dir, e
-        )))?;
+        let entries = fs::read_dir(&self.cache_dir).map_err(|e| {
+            PluginError::Other(format!(
+                "Failed to read cache directory {:?}: {}",
+                self.cache_dir, e
+            ))
+        })?;
 
         for entry in entries {
             let entry = entry.map_err(|e| PluginError::Other(e.to_string()))?;
@@ -217,14 +241,19 @@ impl ModelCache {
 
         // Delete model file
         if model_path.exists() {
-            fs::remove_file(&model_path)
-                .map_err(|e| PluginError::Other(format!("Failed to delete model: {:?}: {}", model_path, e)))?;
+            fs::remove_file(&model_path).map_err(|e| {
+                PluginError::Other(format!("Failed to delete model: {:?}: {}", model_path, e))
+            })?;
         }
 
         // Delete metadata
         if metadata_path.exists() {
-            fs::remove_file(&metadata_path)
-                .map_err(|e| PluginError::Other(format!("Failed to delete metadata: {:?}: {}", metadata_path, e)))?;
+            fs::remove_file(&metadata_path).map_err(|e| {
+                PluginError::Other(format!(
+                    "Failed to delete metadata: {:?}: {}",
+                    metadata_path, e
+                ))
+            })?;
         }
 
         // Remove from in-memory cache

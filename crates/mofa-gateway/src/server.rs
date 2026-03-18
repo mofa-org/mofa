@@ -1,6 +1,7 @@
 //! Control-plane HTTP server
 
 use axum::{Router, http::Method};
+use mofa_foundation::inference::OrchestratorConfig;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::Duration;
@@ -8,14 +9,15 @@ use tower_http::cors::{Any, CorsLayer};
 use tower_http::trace::TraceLayer;
 use tracing::info;
 
-use crate::handlers::{agents_router, chat_router, health_router};
+use crate::handlers::{agents_router, chat_router, health_router, openai_router};
+use crate::inference_bridge::InferenceBridge;
 use crate::middleware::RateLimiter;
 use crate::state::AppState;
 use mofa_runtime::agent::registry::AgentRegistry;
 
 /// Control-plane server configuration
 #[derive(Debug, Clone)]
-pub struct GatewayConfig {
+pub struct ServerConfig {
     /// Bind host
     pub host: String,
     /// Bind port
@@ -30,7 +32,7 @@ pub struct GatewayConfig {
     pub rate_window: Duration,
 }
 
-impl Default for GatewayConfig {
+impl Default for ServerConfig {
     fn default() -> Self {
         Self {
             host: "0.0.0.0".to_string(),
@@ -43,32 +45,38 @@ impl Default for GatewayConfig {
     }
 }
 
-impl GatewayConfig {
+impl ServerConfig {
+    /// Create a new `ServerConfig` with default values.
     pub fn new() -> Self {
         Self::default()
     }
 
+    /// Set the bind host address.
     pub fn with_host(mut self, host: impl Into<String>) -> Self {
         self.host = host.into();
         self
     }
 
+    /// Set the bind port.
     pub fn with_port(mut self, port: u16) -> Self {
         self.port = port;
         self
     }
 
+    /// Enable or disable CORS for all origins.
     pub fn with_cors(mut self, enable: bool) -> Self {
         self.enable_cors = enable;
         self
     }
 
+    /// Configure the rate limiter: maximum requests per client per window.
     pub fn with_rate_limit(mut self, max_requests: u64, window: Duration) -> Self {
         self.rate_max_requests = max_requests;
         self.rate_window = window;
         self
     }
 
+    /// Return the resolved `SocketAddr` for this configuration.
     pub fn socket_addr(&self) -> SocketAddr {
         format!("{}:{}", self.host, self.port)
             .parse()
@@ -78,14 +86,33 @@ impl GatewayConfig {
 
 /// Control-plane server that exposes the agent management REST API
 pub struct GatewayServer {
-    config: GatewayConfig,
+    config: ServerConfig,
     registry: Arc<AgentRegistry>,
+    /// Optional orchestrator config for inference bridge
+    orchestrator_config: Option<OrchestratorConfig>,
 }
 
 impl GatewayServer {
     /// Create a server backed by the given `AgentRegistry`.
-    pub fn new(config: GatewayConfig, registry: Arc<AgentRegistry>) -> Self {
-        Self { config, registry }
+    pub fn new(config: ServerConfig, registry: Arc<AgentRegistry>) -> Self {
+        Self {
+            config,
+            registry,
+            orchestrator_config: None,
+        }
+    }
+
+    /// Create a server with inference bridge enabled.
+    pub fn with_inference(
+        config: ServerConfig,
+        registry: Arc<AgentRegistry>,
+        orchestrator_config: OrchestratorConfig,
+    ) -> Self {
+        Self {
+            config,
+            registry,
+            orchestrator_config: Some(orchestrator_config),
+        }
     }
 
     /// Build the axum `Router` without starting the server.
@@ -98,6 +125,7 @@ impl GatewayServer {
             self.config.rate_window,
         ));
 
+        // Create state
         let state = Arc::new(AppState::new(self.registry.clone(), rate_limiter.clone()));
 
         // Spawn background GC task for rate-limiter entries
@@ -116,6 +144,12 @@ impl GatewayServer {
             .merge(chat_router())
             .with_state(state);
 
+        // Add OpenAI router if inference bridge is configured
+        if let Some(ref orch_config) = self.orchestrator_config {
+            let bridge = Arc::new(InferenceBridge::new(orch_config.clone()));
+            router = router.merge(openai_router()).layer(axum::Extension(bridge));
+        }
+
         if self.config.enable_tracing {
             router = router.layer(TraceLayer::new_for_http());
         }
@@ -123,12 +157,7 @@ impl GatewayServer {
         if self.config.enable_cors {
             let cors = CorsLayer::new()
                 .allow_origin(Any)
-                .allow_methods([
-                    Method::GET,
-                    Method::POST,
-                    Method::DELETE,
-                    Method::OPTIONS,
-                ])
+                .allow_methods([Method::GET, Method::POST, Method::DELETE, Method::OPTIONS])
                 .allow_headers(Any);
             router = router.layer(cors);
         }
@@ -161,14 +190,14 @@ mod tests {
 
     #[test]
     fn default_config() {
-        let cfg = GatewayConfig::default();
+        let cfg = ServerConfig::default();
         assert_eq!(cfg.port, 8090);
         assert!(cfg.enable_cors);
     }
 
     #[test]
     fn builder_methods() {
-        let cfg = GatewayConfig::new()
+        let cfg = ServerConfig::new()
             .with_host("127.0.0.1")
             .with_port(9000)
             .with_cors(false)
@@ -182,7 +211,7 @@ mod tests {
 
     #[test]
     fn socket_addr_parses() {
-        let cfg = GatewayConfig::new().with_host("127.0.0.1").with_port(8090);
+        let cfg = ServerConfig::new().with_host("127.0.0.1").with_port(8090);
         let addr = cfg.socket_addr();
         assert_eq!(addr.port(), 8090);
     }

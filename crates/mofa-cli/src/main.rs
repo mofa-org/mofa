@@ -3,9 +3,9 @@
 mod cli;
 mod commands;
 mod config;
-mod plugin_catalog;
 mod context;
 mod output;
+mod plugin_catalog;
 mod render;
 mod state;
 mod store;
@@ -106,7 +106,9 @@ async fn run_command(cli: Cli) -> CliResult<()> {
         }) => {
             commands::new::run(&name, &template, output.as_deref())
                 .into_report()
-                .attach_with(|| format!("scaffolding project '{name}' with template '{template}'"))?;
+                .attach_with(|| {
+                    format!("scaffolding project '{name}' with template '{template}'")
+                })?;
         }
 
         Some(Commands::Init { path }) => {
@@ -137,6 +139,17 @@ async fn run_command(cli: Cli) -> CliResult<()> {
 
         Some(Commands::Info) => {
             commands::generate::run_info();
+        }
+
+        Some(Commands::Doctor {
+            path,
+            scenario,
+            json,
+            fix,
+            strict,
+        }) => {
+            commands::doctor::run(Some(path), scenario, strict, json, fix)
+                .map_err(|e| CliError::Other(e.to_string()))?;
         }
 
         Some(Commands::Db { action }) => match action {
@@ -275,13 +288,8 @@ async fn run_command(cli: Cli) -> CliResult<()> {
                         url,
                         description,
                     } => {
-                        commands::plugin::repository::add(
-                            ctx,
-                            &id,
-                            &url,
-                            description.as_deref(),
-                        )
-                        .await?;
+                        commands::plugin::repository::add(ctx, &id, &url, description.as_deref())
+                            .await?;
                     }
                 },
             }
@@ -398,7 +406,7 @@ async fn run_command(cli: Cli) -> CliResult<()> {
 fn normalize_legacy_output_flags(args: &mut [String]) {
     const TOP_LEVEL_COMMANDS: &[&str] = &[
         "new", "init", "build", "run", "dataflow", "generate", "info", "db", "agent", "config",
-        "plugin", "session", "tool", "rag",
+        "plugin", "session", "tool", "doctor", "rag",
     ];
 
     let top_command_index = args
