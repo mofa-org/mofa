@@ -76,13 +76,10 @@ jobs:
         if: runner.os == 'windows-latest'
         run: cargo test --workspace --no-default-features --features "cuda,rocm,vulkan"
 
+      # Skip example building on Windows due to CRT mismatch between tokenizers and onnxruntime
       - name: Build examples
         if: runner.os != 'windows-latest'
         run: cargo build --examples
-
-      - name: Build examples (Windows - no candle)
-        if: runner.os == 'windows-latest'
-        run: cargo build --examples --no-default-features --features "cuda,rocm,vulkan"
 
       - name: Run targeted examples compile smoke tests
         run: cargo test --manifest-path examples/cli_production_smoke/Cargo.toml --test examples_compile
