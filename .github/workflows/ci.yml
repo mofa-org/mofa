@@ -69,7 +69,12 @@ jobs:
           key: ${{ runner.os }}-cargo-test-${{ hashFiles('**/Cargo.lock') }}
 
       - name: Run tests
+        if: runner.os != 'windows-latest'
         run: cargo test --workspace --all-features
+
+      - name: Run tests (Windows - no candle)
+        if: runner.os == 'windows-latest'
+        run: cargo test --workspace --all-features --no-default-features --features "cuda,rocm,vulkan"
 
       - name: Build examples
         run: cargo build --examples
