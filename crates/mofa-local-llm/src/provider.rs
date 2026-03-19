@@ -204,7 +204,7 @@ impl ModelProvider for LinuxLocalProvider {
 
             engine
                 .load(&self.config.model_path, &self.config.tokenizer_path)
-                .map_err(|e| OrchestratorError::ModelLoadFailed(e))?;
+                .map_err(OrchestratorError::ModelLoadFailed)?;
 
             *self.engine.write().unwrap() = Some(engine);
         }
@@ -335,11 +335,11 @@ impl LinuxLocalProvider {
             if let Some(ref mut engine) = *engine_guard {
                 return engine
                     .generate(input)
-                    .map_err(|e| OrchestratorError::InferenceFailed(e));
+                    .map_err(OrchestratorError::InferenceFailed);
             }
 
             // If no engine, fall back to stub
-            return self.run_inference_stub("cpu", input);
+            self.run_inference_stub("cpu", input)
         }
 
         #[cfg(not(feature = "candle"))]

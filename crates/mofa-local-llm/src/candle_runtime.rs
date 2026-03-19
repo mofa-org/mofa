@@ -373,7 +373,7 @@ impl InferenceEngine {
 
         // Use simple tokenizer (tokenizers crate has CRT mismatch on Windows)
         let tokenizer = SimpleTokenizer::new(self.vocab_size);
-        let token_ids = tokenizer.encode(prompt)?;
+        let mut token_ids = tokenizer.encode(prompt)?;
 
         let emb_dim = embedding
             .dim(1)
@@ -492,35 +492,35 @@ fn skip_metadata_value<R: Read>(reader: &mut R, value_type: u32) -> Result<(), S
     match value_type {
         0 => {
             // UINT8
-            let _ = skip_bytes(reader, 1)?;
+            skip_bytes(reader, 1)?;
         }
         1 => {
             // INT8
-            let _ = skip_bytes(reader, 1)?;
+            skip_bytes(reader, 1)?;
         }
         2 => {
             // UINT16
-            let _ = skip_bytes(reader, 2)?;
+            skip_bytes(reader, 2)?;
         }
         3 => {
             // INT16
-            let _ = skip_bytes(reader, 2)?;
+            skip_bytes(reader, 2)?;
         }
         4 => {
             // UINT32
-            let _ = skip_bytes(reader, 4)?;
+            skip_bytes(reader, 4)?;
         }
         5 => {
             // INT32
-            let _ = skip_bytes(reader, 4)?;
+            skip_bytes(reader, 4)?;
         }
         6 => {
             // FLOAT32
-            let _ = skip_bytes(reader, 4)?;
+            skip_bytes(reader, 4)?;
         }
         7 => {
             // BOOL
-            let _ = skip_bytes(reader, 1)?;
+            skip_bytes(reader, 1)?;
         }
         8 => {
             // STRING
@@ -537,15 +537,15 @@ fn skip_metadata_value<R: Read>(reader: &mut R, value_type: u32) -> Result<(), S
         }
         10 => {
             // UINT64
-            let _ = skip_bytes(reader, 8)?;
+            skip_bytes(reader, 8)?;
         }
         11 => {
             // INT64
-            let _ = skip_bytes(reader, 8)?;
+            skip_bytes(reader, 8)?;
         }
         12 => {
             // FLOAT64
-            let _ = skip_bytes(reader, 8)?;
+            skip_bytes(reader, 8)?;
         }
         _ => {
             return Err(format!("Unknown metadata value type: {}", value_type));
