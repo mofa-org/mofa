@@ -25,6 +25,8 @@ pub enum CoordinationStrategy {
 
 /// 协同器核心结构体
 /// Core structure of the Agent Coordinator
+pub type AgentTaskStatus = (String, TaskStatus);
+
 pub struct AgentCoordinator {
     bus: Arc<AgentBus>,
     strategy: CoordinationStrategy,
@@ -33,7 +35,7 @@ pub struct AgentCoordinator {
     role_mapping: Arc<RwLock<HashMap<String, Vec<String>>>>,
     // 维护任务状态：任务ID→执行智能体ID+状态（列表）
     // Maintain task status: Task ID -> list of (Executor Agent ID, Status)
-    task_tracker: Arc<RwLock<HashMap<String, Vec<(String, TaskStatus)>>>>,
+    pub task_tracker: Arc<RwLock<HashMap<String, Vec<AgentTaskStatus>>>>,
     // 优先级调度器
     // Priority scheduler
     scheduler: scheduler::PriorityScheduler,

@@ -32,7 +32,7 @@ tracing.workspace = true
 uuid.workspace = true
 thiserror.workspace = true
 eyre.workspace = true
-axum.workspace = true
+axum = { workspace = true, features = ["ws", "macros"] }
 chrono.workspace = true
 
 # Local dependencies
@@ -59,6 +59,7 @@ prometheus = { version = "0.13", default-features = false }
 tower = "0.5"
 hyper = { version = "1.8", features = ["full"] }
 hyper-util = "0.1"
+http-body-util = "0.1"
 
 # Utilities
 dashmap = "5.5"
@@ -112,3 +113,8 @@ full = ["rocksdb", "monitoring", "openai-compat"]
 
 # OpenAI-compatible HTTP gateway components
 openai-compat = ["dep:async-openai", "dep:subtle"]
+
+[[example]]
+name = "gateway_inference_server"
+path = "examples/gateway_inference_server.rs"
+required-features = ["openai-compat"]

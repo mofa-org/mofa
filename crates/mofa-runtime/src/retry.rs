@@ -5,13 +5,17 @@ use std::time::Duration;
 
 use crate::agent::error::{AgentError, AgentResult};
 
+/// Global safety cap for linear retry delay to avoid pathological sleeps.
+const MAX_LINEAR_BACKOFF_MS: u64 = 60_000;
+
 /// Delay strategy between retry attempts.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum RetryPolicy {
     /// Same delay every attempt.
     Fixed { delay_ms: u64 },
-    /// Delay increases linearly: `base_ms * attempt`.
+    /// Delay increases linearly: `base_ms * attempt`, capped by
+    /// [`MAX_LINEAR_BACKOFF_MS`].
     Linear { base_ms: u64 },
     /// Exponential backoff capped at `max_ms`, with optional ±12.5% pseudo-jitter.
     ExponentialBackoff {
@@ -26,7 +30,15 @@ impl RetryPolicy {
     pub fn delay_for(&self, attempt: usize) -> Duration {
         let ms = match self {
             RetryPolicy::Fixed { delay_ms } => *delay_ms,
-            RetryPolicy::Linear { base_ms } => base_ms.saturating_mul((attempt + 1) as u64),
+            RetryPolicy::Linear { base_ms } => {
+                let factor = attempt
+                    .checked_add(1)
+                    .and_then(|v| u64::try_from(v).ok())
+                    .unwrap_or(u64::MAX);
+                base_ms
+                    .saturating_mul(factor)
+                    .min(MAX_LINEAR_BACKOFF_MS)
+            }
             RetryPolicy::ExponentialBackoff {
                 base_ms,
                 max_ms,
@@ -140,6 +152,24 @@ mod tests {
         let p = RetryPolicy::Linear { base_ms: 200 };
         assert_eq!(p.delay_for(0), Duration::from_millis(200));
         assert_eq!(p.delay_for(2), Duration::from_millis(600));
+    }
+
+    #[test]
+    fn test_linear_policy_delay_is_capped() {
+        let p = RetryPolicy::Linear { base_ms: 10_000 };
+        assert_eq!(
+            p.delay_for(100),
+            Duration::from_millis(MAX_LINEAR_BACKOFF_MS)
+        );
+    }
+
+    #[test]
+    fn test_linear_policy_large_attempt_stays_bounded() {
+        let p = RetryPolicy::Linear { base_ms: 1 };
+        assert_eq!(
+            p.delay_for(usize::MAX),
+            Duration::from_millis(MAX_LINEAR_BACKOFF_MS)
+        );
     }
 
     #[test]

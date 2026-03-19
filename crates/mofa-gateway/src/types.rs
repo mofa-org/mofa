@@ -281,3 +281,149 @@ mod tests {
         assert_eq!(idx1.increment(), idx2);
     }
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// OpenAI-compatible API types
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Role of a message sender
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Role {
+    /// System message
+    System,
+    /// User message
+    User,
+    /// Assistant message
+    Assistant,
+    /// Tool message
+    Tool,
+}
+
+impl Default for Role {
+    fn default() -> Self {
+        Role::User
+    }
+}
+
+/// A single message in the conversation
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct Message {
+    /// The role of the message sender
+    pub role: Role,
+    /// The content of the message
+    pub content: String,
+    /// Optional name of the sender
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+}
+
+/// Request body for POST /v1/chat/completions
+#[derive(Debug, serde::Deserialize)]
+pub struct ChatCompletionRequest {
+    /// ID of the model to use
+    #[serde(default = "default_model")]
+    pub model: String,
+    /// List of messages in the conversation
+    pub messages: Vec<Message>,
+    /// Whether to stream the response (not implemented yet)
+    #[serde(default)]
+    pub stream: bool,
+    /// Maximum tokens to generate
+    #[serde(default)]
+    pub max_tokens: Option<u32>,
+    /// Temperature for sampling
+    #[serde(default = "default_temperature")]
+    pub temperature: f32,
+    /// Top-p sampling parameter
+    #[serde(default)]
+    pub top_p: Option<f32>,
+    /// Optional agent ID to use (for MoFA-specific routing)
+    #[serde(default)]
+    pub agent_id: Option<String>,
+}
+
+fn default_model() -> String {
+    "gpt-4".to_string()
+}
+
+fn default_temperature() -> f32 {
+    0.7
+}
+
+/// A single choice in the chat completion response
+#[derive(Debug, serde::Serialize)]
+pub struct Choice {
+    /// Index of this choice
+    pub index: usize,
+    /// The assistant's message
+    pub message: Message,
+    /// Reason for completion
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub finish_reason: Option<String>,
+}
+
+/// Response body for POST /v1/chat/completions
+#[derive(Debug, serde::Serialize)]
+pub struct ChatCompletionResponse {
+    /// Unique identifier for this completion
+    pub id: String,
+    /// Type of object (chat.completion)
+    pub object: String,
+    /// Unix timestamp of creation
+    pub created: u64,
+    /// Model used for completion
+    pub model: String,
+    /// List of completion choices
+    pub choices: Vec<Choice>,
+    /// Usage statistics
+    pub usage: Usage,
+}
+
+/// Token usage information
+#[derive(Debug, serde::Serialize)]
+pub struct Usage {
+    /// Number of tokens in the prompt
+    #[serde(rename = "prompt_tokens")]
+    pub prompt_tokens: u32,
+    /// Number of tokens in the completion
+    #[serde(rename = "completion_tokens")]
+    pub completion_tokens: u32,
+    /// Total number of tokens
+    #[serde(rename = "total_tokens")]
+    pub total_tokens: u32,
+}
+
+impl Usage {
+    /// Create usage stats from token counts
+    pub fn new(prompt_tokens: u32, completion_tokens: u32) -> Self {
+        Self {
+            prompt_tokens,
+            completion_tokens,
+            total_tokens: prompt_tokens + completion_tokens,
+        }
+    }
+}
+
+impl ChatCompletionResponse {
+    /// Create a new chat completion response
+    pub fn new(id: String, model: String, message: Message, usage: Usage) -> Self {
+        let choice = Choice {
+            index: 0,
+            message,
+            finish_reason: Some("stop".to_string()),
+        };
+
+        Self {
+            id,
+            object: "chat.completion".to_string(),
+            created: std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_secs(),
+            model,
+            choices: vec![choice],
+            usage,
+        }
+    }
+}

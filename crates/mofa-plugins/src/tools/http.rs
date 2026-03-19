@@ -58,16 +58,17 @@ impl HttpRequestTool {
         }
     }
 
-    fn truncate_utf8(input: &str, max_bytes: usize) -> String {
-        if input.len() <= max_bytes {
-            return input.to_string();
+    /// Truncate a UTF-8 string to at most `max_bytes` bytes without splitting
+    /// a multi-byte character. Returns the longest prefix that fits.
+    fn truncate_utf8(s: &str, max_bytes: usize) -> &str {
+        if s.len() <= max_bytes {
+            return s;
         }
-
-        let mut end = max_bytes.min(input.len());
-        while end > 0 && !input.is_char_boundary(end) {
+        let mut end = max_bytes;
+        while end > 0 && !s.is_char_boundary(end) {
             end -= 1;
         }
-        input[..end].to_string()
+        &s[..end]
     }
 
     /// Validate that a URL is safe to request (not targeting internal/private networks).
@@ -242,6 +243,40 @@ impl ToolExecutor for HttpRequestTool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_truncate_utf8_ascii() {
+        let s = "a".repeat(6000);
+        let result = HttpRequestTool::truncate_utf8(&s, 5000);
+        assert_eq!(result.len(), 5000);
+    }
+
+    #[test]
+    fn test_truncate_utf8_multibyte() {
+        // '中' is 3 bytes in UTF-8. Build a string where byte 5000 lands
+        // inside a character.
+        let s = "中".repeat(2000); // 6000 bytes total
+        let result = HttpRequestTool::truncate_utf8(&s, 5000);
+        // Should back up to nearest char boundary (4998 = 1666 × 3)
+        assert!(result.len() <= 5000);
+        assert!(result.is_char_boundary(result.len()));
+    }
+
+    #[test]
+    fn test_truncate_utf8_short_string() {
+        let s = "hello";
+        let result = HttpRequestTool::truncate_utf8(s, 5000);
+        assert_eq!(result, "hello");
+    }
+
+    #[test]
+    fn test_truncate_utf8_emoji() {
+        // '😀' is 4 bytes in UTF-8
+        let s = "😀".repeat(1500); // 6000 bytes
+        let result = HttpRequestTool::truncate_utf8(&s, 5000);
+        assert!(result.len() <= 5000);
+        assert!(result.is_char_boundary(result.len()));
+    }
 
     #[test]
     fn blocks_ipv4_mapped_loopback() {

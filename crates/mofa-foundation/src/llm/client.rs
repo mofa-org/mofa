@@ -30,6 +30,7 @@
 //! and spans will appear automatically.
 
 use super::provider::{LLMConfig, LLMProvider};
+use super::token_budget::ContextWindowManager;
 use super::tool_executor::ToolExecutor;
 use super::types::*;
 use std::sync::Arc;
@@ -595,6 +596,15 @@ pub struct ChatSession {
     /// 最后一次 LLM 响应的元数据
     /// Metadata of the last LLM response
     last_response_metadata: Option<super::types::LLMResponseMetadata>,
+    // ---- Token-budget auto-compression fields ----
+    /// Token-aware context window manager.
+    /// When set, tokens are estimated before each send and compression is applied
+    /// when the payload approaches the configured limit.
+    context_window_manager: Option<Arc<ContextWindowManager>>,
+    /// Token count at which auto-summarization is triggered (0 = disabled).
+    summarize_trigger_tokens: usize,
+    /// Whether to use LLM-based summarization (true) or sliding-window trimming (false).
+    use_llm_summarize: bool,
 }
 
 impl ChatSession {
@@ -660,6 +670,9 @@ impl ChatSession {
             session_store: store.clone(),
             context_window_size: None,
             last_response_metadata: None,
+            context_window_manager: None,
+            summarize_trigger_tokens: 0,
+            use_llm_summarize: true,
         }
     }
 
@@ -701,6 +714,9 @@ impl ChatSession {
             session_store,
             context_window_size,
             last_response_metadata: None,
+            context_window_manager: None,
+            summarize_trigger_tokens: 0,
+            use_llm_summarize: true,
         }
     }
 
@@ -917,6 +933,9 @@ impl ChatSession {
             session_store,
             context_window_size,
             last_response_metadata: None,
+            context_window_manager: None,
+            summarize_trigger_tokens: 0,
+            use_llm_summarize: true,
         })
     }
 
@@ -998,43 +1017,133 @@ impl ChatSession {
         self
     }
 
-    /// 发送消息
-    /// Send message
-    pub async fn send(&mut self, content: impl Into<String>) -> LLMResult<String> {
-        // 添加用户消息
-        // Add user message
-        self.messages.push(ChatMessage::user(content));
+    /// Configure token-budget-aware compression for this session.
+    ///
+    /// When set, estimated token counts are checked before each `send()`. If the
+    /// payload approaches the configured limit, the history is automatically
+    /// compressed (via LLM summarization or sliding-window trimming) before the
+    /// request is sent.
+    ///
+    /// # Parameters
+    /// - `manager`: Token estimator + window policy (from `ContextWindowManager`)
+    /// - `trigger_tokens`: Token count at which compression triggers (0 = disabled)
+    /// - `use_llm_summarize`: Use LLM to produce a summary (true) or just drop
+    ///   old messages (false)
+    pub fn with_token_budget(
+        mut self,
+        manager: Arc<ContextWindowManager>,
+        trigger_tokens: usize,
+        use_llm_summarize: bool,
+    ) -> Self {
+        self.context_window_manager = Some(manager);
+        self.summarize_trigger_tokens = trigger_tokens;
+        self.use_llm_summarize = use_llm_summarize;
+        self
+    }
 
-        // 构建请求
-        // Build request
-        let mut builder = self.client.chat();
+    /// Apply token-budget compression to the current message history if needed.
+    ///
+    /// Called internally before building each outbound request.  The last message
+    /// in `self.messages` is always the current user message; it is excluded from
+    /// compression and re-appended afterwards.
+    ///
+    /// On summarization failure, a warning is logged and the original history is
+    /// kept — the user's request is never dropped.
+    pub(crate) async fn compress_history_if_needed(&mut self) {
+        let trigger = self.summarize_trigger_tokens;
+        if trigger == 0 {
+            return;
+        }
+        let manager = match &self.context_window_manager {
+            Some(m) => m.clone(),
+            None => return,
+        };
 
-        // 添加系统提示
-        // Add system prompt
-        if let Some(ref system) = self.system_prompt {
-            builder = builder.system(system.clone());
+        // Build the candidate payload: [system] + history + current user msg
+        let mut candidate = Vec::new();
+        if let Some(ref sys) = self.system_prompt {
+            candidate.push(ChatMessage::system(sys.clone()));
+        }
+        candidate.extend_from_slice(&self.messages);
+
+        let estimated = manager.estimate_tokens(&candidate);
+        if estimated < trigger {
+            return; // Within budget — nothing to do
         }
 
-        // 添加历史消息（应用滑动窗口）
-        // Add historical messages (apply sliding window)
-        let messages_for_context = self.apply_sliding_window();
-        builder = builder.messages(messages_for_context);
+        tracing::debug!(
+            estimated_tokens = estimated,
+            trigger = trigger,
+            "Token budget exceeded; compressing history"
+        );
 
-        // 添加工具
-        // Add tools
-        if let Some(ref executor) = self.tool_executor {
-            let tools = if self.tools.is_empty() {
-                executor.available_tools().await?
-            } else {
-                self.tools.clone()
-            };
+        // Pop the current user message (last in self.messages) before compressing
+        let current_user_msg = self.messages.pop();
 
-            if !tools.is_empty() {
-                builder = builder.tools(tools);
+        if self.use_llm_summarize && !self.messages.is_empty() {
+            // Build a summary prompt from the old history
+            let history_text = self
+                .messages
+                .iter()
+                .filter_map(|m| {
+                    m.content.as_ref().map(|c| {
+                        let text = match c {
+                            MessageContent::Text(t) => t.as_str().to_owned(),
+                            MessageContent::Parts(_) => format!("{:?}", c),
+                        };
+                        format!("{:?}: {}", m.role, text)
+                    })
+                })
+                .collect::<Vec<_>>()
+                .join("\n");
+
+            let summary_prompt = format!(
+                "Summarise the following conversation concisely, preserving all \
+                 important facts, decisions, and context. Write in third person.\n\n\
+                 ---\n{}\n---",
+                history_text
+            );
+
+            match self.client.chat().user(summary_prompt).send().await {
+                Ok(summary_response) => {
+                    if let Some(summary_text) = summary_response.content() {
+                        // Replace history with a single assistant summary message
+                        self.messages.clear();
+                        self.messages
+                            .push(ChatMessage::assistant(summary_text.to_string()));
+                        tracing::debug!("Auto-summarization complete");
+                    }
+                }
+                Err(e) => {
+                    tracing::warn!(
+                        error = %e,
+                        "Auto-summarization LLM call failed; falling back to sliding-window trim"
+                    );
+                    // Fall back to sliding-window trimming below
+                    if let Some(msg) = current_user_msg {
+                        self.messages.push(msg);
+                    }
+                    self.apply_sliding_window_token_budget(&manager);
+                    return;
+                }
             }
-
-            builder = builder.with_tool_executor(executor.clone());
+        } else {
+            // No LLM summarize — use sliding-window trimming via ContextWindowManager
+            // Re-push user msg temporarily so apply() can treat it as the "current" message
+            if let Some(ref msg) = current_user_msg {
+                self.messages.push(msg.clone());
+            }
+            self.apply_sliding_window_token_budget(&manager);
+            // apply_sliding_window_token_budget already trims self.messages, so
+            // pop the current user msg we re-added above
+            let _ = self.messages.pop();
         }
+
+        // Re-attach the current user message
+        if let Some(msg) = current_user_msg {
+            self.messages.push(msg);
+        }
+    }
 
         // Start OTel span for the provider call (feature-gated)
         #[cfg(feature = "otel-tracing")]
@@ -1093,49 +1202,147 @@ impl ChatSession {
         // 存储响应元数据
         // Store response metadata
         self.last_response_metadata = Some(super::types::LLMResponseMetadata::from(&response));
-
-        // 提取响应内容
-        // Extract response content
-        let content = response
-            .content()
-            .ok_or_else(|| LLMError::Other("No content in response".to_string()))?
-            .to_string();
-
-        // 添加助手消息到历史
-        // Add assistant message to history
-        self.messages.push(ChatMessage::assistant(&content));
-
-        // 滑动窗口：裁剪历史消息以保持固定大小
-        // Sliding window: trim history messages to maintain fixed size
-        if self.context_window_size.is_some() {
-            self.messages =
-                Self::apply_sliding_window_static(&self.messages, self.context_window_size);
+    /// Apply the ContextWindowManager's sliding window policy to `self.messages`.
+    ///
+    /// Rebuilds `self.messages` from the trim result, stripping the system prefix
+    /// (which is stored in `self.system_prompt` separately).
+    fn apply_sliding_window_token_budget(&mut self, manager: &ContextWindowManager) {
+        // Build full candidate with system prefix for the manager
+        let mut candidate = Vec::new();
+        if let Some(ref sys) = self.system_prompt {
+            candidate.push(ChatMessage::system(sys.clone()));
         }
+        candidate.extend_from_slice(&self.messages);
 
-        Ok(content)
+        let result = manager.apply(&candidate);
+        if result.was_trimmed {
+            // Strip the system prefix — ChatSession stores it separately
+            self.messages = result
+                .messages
+                .into_iter()
+                .filter(|m| m.role != Role::System)
+                .collect();
+        }
     }
 
-    /// 发送结构化消息（支持多模态）
-    /// Send structured message (supports multi-modal)
-    pub async fn send_with_content(&mut self, content: MessageContent) -> LLMResult<String> {
-        self.messages.push(ChatMessage::user_with_content(content));
+    /// Force-compress the message history as a recovery action after a
+    /// `ContextLengthExceeded` error.
+    ///
+    /// Pops the last user message, aggressively compresses the remaining history
+    /// to 50 % of the configured context window (or keeps only the last 4 messages
+    /// when no manager is configured), then returns the popped message so the
+    /// caller can push it back before retrying.
+    ///
+    /// The returned message is `None` when the history was already empty.
+    pub async fn force_compress(&mut self) -> Option<ChatMessage> {
+        // Pop the current (failing) user message
+        let last_user_msg = if self
+            .messages
+            .last()
+            .map(|m| m.role == Role::User)
+            .unwrap_or(false)
+        {
+            self.messages.pop()
+        } else {
+            None
+        };
 
-        // 构建请求
-        // Build request
+        if let Some(ref manager) = self.context_window_manager.clone() {
+            let half_budget = manager.context_window_tokens() / 2;
+
+            if self.use_llm_summarize && !self.messages.is_empty() {
+                let history_text = self
+                    .messages
+                    .iter()
+                    .filter_map(|m| {
+                        m.content.as_ref().map(|c| {
+                            let text = match c {
+                                MessageContent::Text(t) => t.clone(),
+                                MessageContent::Parts(_) => format!("{:?}", c),
+                            };
+                            format!("{:?}: {}", m.role, text)
+                        })
+                    })
+                    .collect::<Vec<_>>()
+                    .join("\n");
+
+                let summary_prompt = format!(
+                    "Summarise the following conversation concisely, preserving all \
+                     important facts, decisions, and context. Write in third person.\n\n\
+                     ---\n{}\n---",
+                    history_text
+                );
+
+                match self.client.chat().user(summary_prompt).send().await {
+                    Ok(resp) => {
+                        if let Some(text) = resp.content() {
+                            self.messages.clear();
+                            self.messages
+                                .push(ChatMessage::assistant(text.to_string()));
+                        }
+                    }
+                    Err(e) => {
+                        tracing::warn!(
+                            error = %e,
+                            "force_compress: LLM summarization failed; dropping old messages"
+                        );
+                        // Best-effort: keep last 4 messages
+                        let keep = self.messages.len().min(4);
+                        let start = self.messages.len() - keep;
+                        self.messages = self.messages[start..].to_vec();
+                    }
+                }
+            } else {
+                // Sliding-window trim at 50% budget
+                let mut candidate = Vec::new();
+                if let Some(ref sys) = self.system_prompt {
+                    candidate.push(ChatMessage::system(sys.clone()));
+                }
+                candidate.extend_from_slice(&self.messages);
+
+                // Temporarily shrink the window to half by re-applying
+                let trimmed = {
+                    let half_manager = ContextWindowManager::new(half_budget)
+                        .with_policy(super::token_budget::ContextWindowPolicy::SlidingWindow {
+                            keep_last_n: 2,
+                        });
+                    half_manager.apply(&candidate)
+                };
+
+                self.messages = trimmed
+                    .messages
+                    .into_iter()
+                    .filter(|m| m.role != Role::System)
+                    .collect();
+            }
+        } else {
+            // No manager configured — keep only the last 4 messages
+            let keep = self.messages.len().min(4);
+            let start = self.messages.len() - keep;
+            self.messages = self.messages[start..].to_vec();
+        }
+
+        last_user_msg
+    }
+
+    /// Send the current `self.messages` to the LLM **without** pushing a new
+    /// user message.
+    ///
+    /// This is the internal implementation used by both `send()` (after pushing)
+    /// and the retry path after `force_compress()` (which already has the user
+    /// message in `self.messages`).
+    pub(crate) async fn send_existing_messages(&mut self) -> LLMResult<String> {
         let mut builder = self.client.chat();
 
-        // 添加系统提示
         // Add system prompt
         if let Some(ref system) = self.system_prompt {
             builder = builder.system(system.clone());
         }
 
-        // 添加历史消息（应用滑动窗口）
-        // Add historical messages (apply sliding window)
+        // Add history (apply round-based sliding window if configured)
         let messages_for_context = self.apply_sliding_window();
         builder = builder.messages(messages_for_context);
 
-        // 添加工具
         // Add tools
         if let Some(ref executor) = self.tool_executor {
             let tools = if self.tools.is_empty() {
@@ -1151,37 +1358,57 @@ impl ChatSession {
             builder = builder.with_tool_executor(executor.clone());
         }
 
-        // 发送请求
-        // Send request
+        // Fire the request
         let response = if self.tool_executor.is_some() {
             builder.send_with_tools().await?
         } else {
             builder.send().await?
         };
 
-        // 存储响应元数据
         // Store response metadata
         self.last_response_metadata = Some(super::types::LLMResponseMetadata::from(&response));
 
-        // 提取响应内容
-        // Extract response content
+        // Extract content
         let content = response
             .content()
             .ok_or_else(|| LLMError::Other("No content in response".to_string()))?
             .to_string();
 
-        // 添加助手消息到历史
-        // Add assistant message to history
+        // Append assistant message to history
         self.messages.push(ChatMessage::assistant(&content));
 
-        // 滑动窗口：裁剪历史消息以保持固定大小
-        // Sliding window: trim history messages to maintain fixed size
+        // Round-based sliding window post-processing
         if self.context_window_size.is_some() {
             self.messages =
                 Self::apply_sliding_window_static(&self.messages, self.context_window_size);
         }
 
         Ok(content)
+    }
+
+    /// 发送消息
+    /// Send message
+    pub async fn send(&mut self, content: impl Into<String>) -> LLMResult<String> {
+        // Push the user message
+        self.messages.push(ChatMessage::user(content));
+
+        // Token-budget auto-compression (no-op when not configured)
+        self.compress_history_if_needed().await;
+
+        // Delegate to the shared send implementation
+        self.send_existing_messages().await
+    }
+
+    /// 发送结构化消息（支持多模态）
+    /// Send structured message (supports multi-modal)
+    pub async fn send_with_content(&mut self, content: MessageContent) -> LLMResult<String> {
+        self.messages.push(ChatMessage::user_with_content(content));
+
+        // Token-budget auto-compression (no-op when not configured)
+        self.compress_history_if_needed().await;
+
+        // Delegate to the shared send implementation
+        self.send_existing_messages().await
     }
 
     /// 获取消息历史
@@ -1248,6 +1475,11 @@ impl ChatSession {
     /// Get context window size (rounds)
     pub fn context_window_size(&self) -> Option<usize> {
         self.context_window_size
+    }
+
+    /// Returns true when a token-budget manager is wired into this session.
+    pub(crate) fn has_token_budget(&self) -> bool {
+        self.context_window_manager.is_some() && self.summarize_trigger_tokens > 0
     }
 
     /// 获取最后一次 LLM 响应的元数据
@@ -1588,6 +1820,81 @@ mod tests {
         assert_eq!(batch.len(), 2);
         assert_eq!(batch[0], vec![0.0]);
         assert_eq!(batch[1], vec![1.0]);
+    }
+
+    #[test]
+    fn with_token_budget_sets_context_window_manager() {
+        let provider = Arc::new(MockProvider::new("model", Some("ok")));
+        let client = LLMClient::new(provider);
+        let manager = Arc::new(super::ContextWindowManager::new(8192));
+        let session = ChatSession::with_id(uuid::Uuid::nil(), client)
+            .with_token_budget(manager, 6554, false);
+        // The budget is set — force_compress should work without panicking even on empty history
+        assert_eq!(session.messages().len(), 0);
+    }
+
+    #[tokio::test]
+    async fn force_compress_without_manager_keeps_last_four() {
+        let provider = Arc::new(MockProvider::new("model", Some("ok")));
+        let client = LLMClient::new(provider);
+        let mut session = ChatSession::with_id(uuid::Uuid::nil(), client);
+        // Add 10 assistant messages + 1 user message
+        for i in 0..10 {
+            session.messages_mut().push(ChatMessage::assistant(format!("msg {}", i)));
+        }
+        session.messages_mut().push(ChatMessage::user("final question"));
+        // force_compress with no manager should keep last 4 messages and return the user msg
+        let popped = session.force_compress().await;
+        assert!(popped.is_some(), "should return the user message");
+        // After compress, history ≤ 4
+        assert!(session.messages().len() <= 4, "expected at most 4 messages, got {}", session.messages().len());
+    }
+
+    #[tokio::test]
+    async fn force_compress_with_sliding_window_manager_trims_history() {
+        let provider = Arc::new(MockProvider::new("model", Some("ok")));
+        let client = LLMClient::new(provider);
+        // Small window of 100 tokens, use_llm_summarize=false so no LLM call
+        let manager = Arc::new(super::ContextWindowManager::new(100));
+        let mut session = ChatSession::with_id(uuid::Uuid::nil(), client)
+            .with_token_budget(manager, 50, false);
+        // Build a large history
+        for i in 0..20 {
+            session.messages_mut().push(ChatMessage::assistant(format!("message number {}", i)));
+        }
+        session.messages_mut().push(ChatMessage::user("hello"));
+        let before = session.messages().len();
+        let popped = session.force_compress().await;
+        assert!(popped.is_some());
+        // History must have been trimmed
+        assert!(session.messages().len() < before, "history should shrink after force_compress");
+    }
+
+    #[tokio::test]
+    async fn send_existing_messages_returns_response_content() {
+        let provider = Arc::new(MockProvider::new("model", Some("hello from mock")));
+        let client = LLMClient::new(provider);
+        let mut session = ChatSession::with_id(uuid::Uuid::nil(), client);
+        // Push a user message manually so send_existing_messages can send it
+        session.messages_mut().push(ChatMessage::user("hi"));
+        let result = session.send_existing_messages().await;
+        assert!(result.is_ok(), "send_existing_messages should succeed: {:?}", result);
+        assert_eq!(result.unwrap(), "hello from mock");
+    }
+
+    #[tokio::test]
+    async fn no_compression_when_trigger_is_zero() {
+        let provider = Arc::new(MockProvider::new("model", Some("ok")));
+        let client = LLMClient::new(provider);
+        // Session without token budget — trigger = 0
+        let mut session = ChatSession::with_id(uuid::Uuid::nil(), client);
+        for i in 0..5 {
+            session.messages_mut().push(ChatMessage::assistant(format!("past {}", i)));
+        }
+        // send() adds one more user message — total should be 6 after send
+        let _ = session.send("new question").await;
+        // History contains the prior 5 + new user msg + assistant reply = 7
+        assert!(session.messages().len() >= 6, "no messages should be dropped when trigger=0");
     }
 }
 

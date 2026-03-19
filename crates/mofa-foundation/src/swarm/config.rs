@@ -121,6 +121,38 @@ pub struct SwarmMetrics {
     pub agent_tokens: HashMap<String, u64>,
 }
 
+impl SwarmMetrics {
+    pub fn record_task_completed(&mut self) {
+        self.tasks_completed += 1;
+    }
+
+    pub fn record_task_failed(&mut self) {
+        self.tasks_failed += 1;
+    }
+
+    pub fn record_hitl_intervention(&mut self) {
+        self.hitl_interventions += 1;
+    }
+
+    pub fn record_reassignment(&mut self) {
+        self.reassignments += 1;
+    }
+
+    pub fn add_tokens(&mut self, tokens: u64) {
+        self.total_tokens += tokens;
+    }
+
+    // Aggregate token usage both globally and per agent.
+    pub fn record_agent_tokens(&mut self, agent_id: impl Into<String>, tokens: u64) {
+        self.total_tokens += tokens;
+        *self.agent_tokens.entry(agent_id.into()).or_insert(0) += tokens;
+    }
+
+    pub fn set_duration_ms(&mut self, duration_ms: u64) {
+        self.duration_ms = duration_ms;
+    }
+}
+
 /// An audit event logged during swarm execution
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AuditEvent {
@@ -166,6 +198,10 @@ impl AuditEvent {
     pub fn with_data(mut self, data: serde_json::Value) -> Self {
         self.data = data;
         self
+    }
+
+    pub fn record_into(self, log: &mut Vec<AuditEvent>) {
+        log.push(self);
     }
 }
 
@@ -220,5 +256,37 @@ task: "Do something"
 
         assert_eq!(event.kind, AuditEventKind::SwarmStarted);
         assert_eq!(event.data["agent_count"], 3);
+    }
+
+    #[test]
+    fn test_swarm_metrics_helpers() {
+        let mut metrics = SwarmMetrics::default();
+
+        metrics.record_task_completed();
+        metrics.record_task_failed();
+        metrics.record_hitl_intervention();
+        metrics.record_reassignment();
+        metrics.add_tokens(25);
+        metrics.record_agent_tokens("agent-a", 15);
+        metrics.set_duration_ms(42);
+
+        assert_eq!(metrics.tasks_completed, 1);
+        assert_eq!(metrics.tasks_failed, 1);
+        assert_eq!(metrics.hitl_interventions, 1);
+        assert_eq!(metrics.reassignments, 1);
+        assert_eq!(metrics.total_tokens, 40);
+        assert_eq!(metrics.agent_tokens.get("agent-a"), Some(&15));
+        assert_eq!(metrics.duration_ms, 42);
+    }
+
+    #[test]
+    fn test_audit_event_record_into_log() {
+        let mut log = Vec::new();
+
+        AuditEvent::new(AuditEventKind::SubtaskCompleted, "subtask finished").record_into(&mut log);
+
+        assert_eq!(log.len(), 1);
+        assert_eq!(log[0].kind, AuditEventKind::SubtaskCompleted);
+        assert_eq!(log[0].description, "subtask finished");
     }
 }

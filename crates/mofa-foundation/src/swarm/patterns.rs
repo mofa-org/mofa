@@ -1,7 +1,4 @@
-//! Coordination Patterns for the Swarm Orchestrator
-//!
-//! Unifies all coordination strategies into a single enum that the
-//! swarm orchestrator uses to select how agents collaborate.
+//! swarm coordination patterns
 
 use serde::{Deserialize, Serialize};
 
@@ -34,7 +31,7 @@ impl std::fmt::Display for CoordinationPattern {
 }
 
 impl CoordinationPattern {
-    /// Get a human-readable description of this pattern
+    /// short description
     pub fn description(&self) -> &'static str {
         match self {
             Self::Sequential => "Agents execute subtasks one after another in dependency order",
@@ -49,7 +46,7 @@ impl CoordinationPattern {
         }
     }
 
-    /// Minimum number of agents required for this pattern
+    /// minimum agents
     pub fn min_agents(&self) -> usize {
         match self {
             Self::Sequential => 1,
@@ -62,12 +59,12 @@ impl CoordinationPattern {
         }
     }
 
-    /// Whether this pattern requires a designated leader/coordinator agent
+    /// whether a leader is required
     pub fn requires_leader(&self) -> bool {
         matches!(self, Self::Debate | Self::Supervision | Self::Routing)
     }
 
-    /// All available patterns
+    /// all patterns
     pub fn all() -> Vec<Self> {
         vec![
             Self::Sequential,
@@ -78,6 +75,17 @@ impl CoordinationPattern {
             Self::Supervision,
             Self::Routing,
         ]
+    }
+
+    /// create the scheduler for this pattern
+    pub fn into_scheduler(self) -> Box<dyn crate::swarm::SwarmScheduler> {
+        match self {
+            Self::Sequential => Box::new(crate::swarm::SequentialScheduler::new()),
+            Self::Parallel => Box::new(crate::swarm::ParallelScheduler::new()),
+            other => {
+                unimplemented!("Scheduler for `{other}` pattern is not yet implemented (Phase 2)")
+            }
+        }
     }
 }
 

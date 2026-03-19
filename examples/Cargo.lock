@@ -907,6 +907,21 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3a822ea5bc7590f9d40f1ba12c0dc3c2760f3482c6984db1573ad11031420831"
 
 [[package]]
+name = "claw_demo"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "mofa-foundation",
+ "mofa-gateway",
+ "mofa-kernel",
+ "mofa-sdk",
+ "tokio",
+ "tracing",
+ "tracing-subscriber 0.3.22",
+ "uuid",
+]
+
+[[package]]
 name = "claxon"
 version = "0.4.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -961,6 +976,18 @@ version = "0.1.0"
 dependencies = [
  "serde_json",
  "tempfile",
+]
+
+[[package]]
+name = "cloud_voice_demo"
+version = "0.1.0"
+dependencies = [
+ "dotenvy",
+ "mofa-kernel",
+ "mofa-plugins",
+ "tokio",
+ "tracing",
+ "tracing-subscriber 0.3.22",
 ]
 
 [[package]]
@@ -1467,6 +1494,20 @@ dependencies = [
  "chrono",
  "nom 7.1.3",
  "once_cell",
+]
+
+[[package]]
+name = "cron_scheduler"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "chrono",
+ "mofa-foundation",
+ "mofa-kernel",
+ "mofa-runtime",
+ "tokio",
+ "tracing",
+ "tracing-subscriber 0.3.22",
 ]
 
 [[package]]
@@ -3520,6 +3561,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "11d3d7f243d5c5a8b9bb5d6dd2b1602c0cb0b9db1621bafc7ed66e35ff9fe092"
 
 [[package]]
+name = "llm_fallback_chain"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "mofa-foundation",
+ "tokio",
+ "tracing",
+ "tracing-subscriber 0.3.22",
+]
+
+[[package]]
 name = "llm_tts_streaming"
 version = "0.1.0"
 dependencies = [
@@ -3732,6 +3784,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "metrics"
+version = "0.22.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "56d05972e8cbac2671e85aa9d04d9160d193f8bebd1a5c1a2f4542c62e65d1d0"
+dependencies = [
+ "ahash",
+ "portable-atomic",
+]
+
+[[package]]
 name = "mime"
 version = "0.3.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3857,12 +3919,14 @@ dependencies = [
  "chrono",
  "config 0.14.1",
  "cron",
+ "dashmap 5.5.3",
  "error-stack",
  "futures",
  "hex",
  "infer",
  "jsonschema",
  "lazy_static",
+ "metrics",
  "mofa-extra",
  "mofa-kernel",
  "mofa-plugins",
@@ -3904,6 +3968,7 @@ dependencies = [
  "dashmap 5.5.3",
  "eyre",
  "futures",
+ "http-body-util",
  "hyper",
  "hyper-util",
  "mofa-foundation",
@@ -4924,6 +4989,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "pii_only"
+version = "0.1.0"
+dependencies = [
+ "mofa-foundation",
+ "mofa-runtime",
+ "tokio",
+]
+
+[[package]]
 name = "pin-project"
 version = "1.1.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5587,6 +5661,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "rbac_only"
+version = "0.1.0"
+dependencies = [
+ "mofa-foundation",
+ "mofa-runtime",
+ "tokio",
+]
+
+[[package]]
 name = "react_agent"
 version = "0.1.0"
 dependencies = [
@@ -5791,6 +5874,19 @@ dependencies = [
  "pin-project-lite",
  "reqwest",
  "thiserror 1.0.69",
+]
+
+[[package]]
+name = "resume_from_checkpoint"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "mofa-foundation",
+ "mofa-kernel",
+ "tokio",
+ "tracing",
+ "tracing-subscriber 0.3.22",
+ "uuid",
 ]
 
 [[package]]
@@ -6196,6 +6292,15 @@ dependencies = [
  "tokio",
  "tracing",
  "tracing-subscriber 0.3.22",
+]
+
+[[package]]
+name = "secure_agent"
+version = "0.1.0"
+dependencies = [
+ "mofa-foundation",
+ "mofa-runtime",
+ "tokio",
 ]
 
 [[package]]
@@ -6903,6 +7008,19 @@ name = "subtle"
 version = "2.6.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "13c2bddecc57b384dee18652358fb23172facb8a2c51ccc10d74c157bdea3292"
+
+[[package]]
+name = "swarm_orchestrator"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "futures",
+ "mofa-foundation",
+ "mofa-kernel",
+ "tokio",
+ "tracing",
+ "tracing-subscriber 0.3.22",
+]
 
 [[package]]
 name = "symphonia"

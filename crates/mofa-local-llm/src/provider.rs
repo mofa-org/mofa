@@ -222,10 +222,22 @@ impl ModelProvider for LinuxLocalProvider {
 
     fn get_metadata(&self) -> HashMap<String, Value> {
         let mut m = HashMap::new();
-        m.insert("model_id".into(), Value::String(self.config.model_name.clone()));
-        m.insert("backend".into(), Value::String(self.active_backend.to_string()));
-        m.insert("model_path".into(), Value::String(self.config.model_path.clone()));
-        m.insert("vram_bytes".into(), Value::Number(self.hardware.vram_bytes.into()));
+        m.insert(
+            "model_id".into(),
+            Value::String(self.config.model_name.clone()),
+        );
+        m.insert(
+            "backend".into(),
+            Value::String(self.active_backend.to_string()),
+        );
+        m.insert(
+            "model_path".into(),
+            Value::String(self.config.model_path.clone()),
+        );
+        m.insert(
+            "vram_bytes".into(),
+            Value::Number(self.hardware.vram_bytes.into()),
+        );
         m.insert(
             "available_backends".into(),
             Value::Array(
@@ -390,5 +402,135 @@ mod tests {
         let p = make_provider();
         let healthy = p.health_check().await.unwrap();
         assert!(!healthy);
+    }
+
+    // ========================================================================
+    // Trait-dispatch tests: ensure ModelProvider methods are callable through
+    // the trait interface (mirrors the bench pattern that was broken).
+    // ========================================================================
+
+    #[tokio::test]
+    async fn test_infer_via_trait_object_before_load() {
+        let p = make_provider();
+        // Calling infer through a trait reference must produce InferenceFailed
+        let provider: &dyn ModelProvider = &p;
+        let result = provider.infer("hello").await;
+        assert!(result.is_err());
+        assert!(matches!(result, Err(OrchestratorError::InferenceFailed(_))));
+    }
+
+    #[tokio::test]
+    async fn test_load_then_infer_with_real_file() {
+        // Create a temporary file so load() succeeds
+        let dir = std::env::temp_dir().join("mofa_test_provider");
+        std::fs::create_dir_all(&dir).unwrap();
+        let model_file = dir.join("test.gguf");
+        std::fs::write(&model_file, b"fake-model-bytes").unwrap();
+
+        let config = LinuxInferenceConfig::new("test-model", model_file.to_str().unwrap())
+            .with_backend(ComputeBackend::Cpu);
+        let mut provider = LinuxLocalProvider::new(config).unwrap();
+
+        // load succeeds with a real file
+        provider.load().await.unwrap();
+        assert!(provider.is_loaded());
+        assert!(provider.memory_usage_bytes() > 0);
+
+        // infer succeeds after load
+        let response = provider.infer("test prompt").await.unwrap();
+        assert!(!response.is_empty());
+        assert!(response.contains("cpu"));
+
+        // health_check reports healthy
+        assert!(provider.health_check().await.unwrap());
+
+        // unload resets state
+        provider.unload().await.unwrap();
+        assert!(!provider.is_loaded());
+        assert_eq!(provider.memory_usage_bytes(), 0);
+
+        // Cleanup
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[tokio::test]
+    async fn test_double_load_is_idempotent() {
+        let dir = std::env::temp_dir().join("mofa_test_double_load");
+        std::fs::create_dir_all(&dir).unwrap();
+        let model_file = dir.join("test.gguf");
+        std::fs::write(&model_file, b"model-data").unwrap();
+
+        let config = LinuxInferenceConfig::new("model", model_file.to_str().unwrap())
+            .with_backend(ComputeBackend::Cpu);
+        let mut p = LinuxLocalProvider::new(config).unwrap();
+
+        p.load().await.unwrap();
+        assert!(p.is_loaded());
+
+        // second load should succeed without error
+        p.load().await.unwrap();
+        assert!(p.is_loaded());
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[tokio::test]
+    async fn test_infer_after_unload_fails() {
+        let dir = std::env::temp_dir().join("mofa_test_unload_infer");
+        std::fs::create_dir_all(&dir).unwrap();
+        let model_file = dir.join("test.gguf");
+        std::fs::write(&model_file, b"data").unwrap();
+
+        let config = LinuxInferenceConfig::new("m", model_file.to_str().unwrap())
+            .with_backend(ComputeBackend::Cpu);
+        let mut p = LinuxLocalProvider::new(config).unwrap();
+
+        p.load().await.unwrap();
+        p.unload().await.unwrap();
+
+        // infer must fail after unload
+        let result = p.infer("hello").await;
+        assert!(result.is_err());
+        assert!(matches!(result, Err(OrchestratorError::InferenceFailed(_))));
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn test_stub_response_format() {
+        let dir = std::env::temp_dir().join("mofa_test_stub_fmt");
+        std::fs::create_dir_all(&dir).unwrap();
+        let model_file = dir.join("test.gguf");
+        std::fs::write(&model_file, b"data").unwrap();
+
+        let config = LinuxInferenceConfig::new("my-llama", model_file.to_str().unwrap())
+            .with_backend(ComputeBackend::Cpu);
+        let p = LinuxLocalProvider::new(config).unwrap();
+
+        let out = p.run_inference_stub("cpu", "hello world");
+        assert!(out.is_ok());
+        let text = out.unwrap();
+        assert!(text.contains("cpu backend"));
+        assert!(text.contains("my-llama"));
+        assert!(text.contains("input_tokens=2"));
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn test_metadata_keys_complete() {
+        let p = make_provider();
+        let meta = p.get_metadata();
+        assert!(meta.contains_key("model_id"));
+        assert!(meta.contains_key("backend"));
+        assert!(meta.contains_key("model_path"));
+        assert!(meta.contains_key("vram_bytes"));
+        assert!(meta.contains_key("available_backends"));
+    }
+
+    #[test]
+    fn test_model_type_is_llm() {
+        let p = make_provider();
+        assert_eq!(*p.model_type(), ModelType::Llm);
     }
 }

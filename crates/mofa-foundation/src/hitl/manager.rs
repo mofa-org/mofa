@@ -104,7 +104,7 @@ impl ReviewManager {
             limiter
                 .check(&tenant_id)
                 .await
-                .map_err(|e| FoundationHitlError::from(e))?;
+                .map_err(FoundationHitlError::from)?;
         }
 
         // Set expiration if not set

@@ -32,19 +32,22 @@ kokoro = ["mofa-plugins/kokoro"]
 # Enable MCP (Model Context Protocol) client support
 mcp = ["dep:rmcp"]
 # Enable Qdrant vector database support
-qdrant = ["dep:qdrant-client", "dep:sha2"]
+qdrant = ["dep:qdrant-client"]
 # Enable accurate token counting with tiktoken
 tiktoken = ["dep:tiktoken-rs"]
 # Enable parallel processing for compression
 parallel-compression = ["dep:rayon"]
 # Enable compression caching for embeddings and summaries
-compression-cache = ["dep:sha2"]
+# Note: sha2 is already included as a non-optional dependency for security features
+compression-cache = []
 # Enable Linux Candle on-device ML inference (Hugging Face Candle)
 linux-candle = ["dep:candle-core", "dep:candle-transformers"]
 # Enable HTTP API endpoints for HITL (requires axum)
 http-api = ["dep:axum"]
 # Enable OpenTelemetry span instrumentation on the LLM call path
 otel-tracing = ["dep:opentelemetry", "dep:opentelemetry-semantic-conventions"]
+# Enable scheduler telemetry (Prometheus metrics)
+scheduler-telemetry = ["dep:metrics"]
 
 
 [dependencies]
@@ -126,6 +129,7 @@ opentelemetry-semantic-conventions = { workspace = true, optional = true }
 
 # Graph data structures for task DAGs (Swarm Orchestrator)
 petgraph = { version = "0.7", features = ["serde-1"] }
+dashmap = { workspace = true }
 rhai = { version = "1", features = ["sync", "serde"] }
 lazy_static = "1.4"
 
@@ -136,6 +140,9 @@ qdrant-client = { version = "1.17", optional = true }
 base64 = "0.22"
 infer = "0.16"
 
+# Security: PII redaction (hashing)
+sha2 = "0.10"
+hex = "0.4"
 # JSON Schema validation for structured output
 jsonschema = { version = "0.17", default-features = false }
 
@@ -149,12 +156,6 @@ tiktoken-rs = { version = "0.5", optional = true }
 # Parallel processing for compression algorithms
 rayon = { version = "1.8", optional = true }
 
-# Hashing for compression cache keys
-sha2 = { version = "0.10", optional = true }
-
-# Hex encoding for webhook signatures  
-hex = "0.4"
-
 # Parking lot for efficient in-memory locks
 parking_lot.workspace = true
 
@@ -165,6 +166,9 @@ candle-transformers = { version = "0.8", optional = true }
 
 # Cron expression parsing for scheduled agent execution
 cron.workspace = true
+
+# Prometheus metrics (optional)
+metrics = { version = "0.22", optional = true }
 
 [lints]
 workspace = true
