@@ -64,17 +64,21 @@ def _save_vibe_config(model=None, max_rounds=None, agents_output=None, flows_out
 
     # Update existing lines
     for i, line in enumerate(lines):
-        stripped = line.strip()
-        if model and stripped.startswith("MOFA_VIBE_MODEL="):
+        if '=' not in line or line.strip().startswith('#'):
+            continue
+            
+        key = line.split('=')[0].strip()
+        
+        if model and key == "MOFA_VIBE_MODEL":
             lines[i] = f"MOFA_VIBE_MODEL={model}\n"
             updated["MOFA_VIBE_MODEL"] = True
-        elif max_rounds is not None and stripped.startswith("MOFA_VIBE_MAX_ROUNDS="):
+        elif max_rounds is not None and key == "MOFA_VIBE_MAX_ROUNDS":
             lines[i] = f"MOFA_VIBE_MAX_ROUNDS={max_rounds}\n"
             updated["MOFA_VIBE_MAX_ROUNDS"] = True
-        elif agents_output and stripped.startswith("MOFA_VIBE_AGENTS_OUTPUT="):
+        elif agents_output and key == "MOFA_VIBE_AGENTS_OUTPUT":
             lines[i] = f"MOFA_VIBE_AGENTS_OUTPUT={agents_output}\n"
             updated["MOFA_VIBE_AGENTS_OUTPUT"] = True
-        elif flows_output and stripped.startswith("MOFA_VIBE_FLOWS_OUTPUT="):
+        elif flows_output and key == "MOFA_VIBE_FLOWS_OUTPUT":
             lines[i] = f"MOFA_VIBE_FLOWS_OUTPUT={flows_output}\n"
             updated["MOFA_VIBE_FLOWS_OUTPUT"] = True
 
@@ -132,10 +136,11 @@ def _check_and_setup_api_key():
                 
                 updated = False
                 for i, line in enumerate(lines):
-                    if line.strip().startswith("OPENAI_API_KEY="):
-                        lines[i] = f"OPENAI_API_KEY={api_key}\n"
-                        updated = True
-                        break
+                    if '=' in line and not line.strip().startswith('#'):
+                        if line.split('=')[0].strip() == "OPENAI_API_KEY":
+                            lines[i] = f"OPENAI_API_KEY={api_key}\n"
+                            updated = True
+                            break
                 
                 if not updated:
                     if lines and not lines[-1].endswith('\n'):
