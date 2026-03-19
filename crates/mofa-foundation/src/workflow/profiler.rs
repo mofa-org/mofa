@@ -9,7 +9,9 @@ use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
 /// Profiler mode configuration
-#[derive(Debug, Clone)]
+/// 性能分析模式
+/// Profiler Mode
+#[derive(Clone)]
 pub enum ProfilerMode {
     /// Profiler disabled - no overhead
     Disabled,
