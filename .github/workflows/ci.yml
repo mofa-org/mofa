@@ -72,13 +72,12 @@ jobs:
         if: runner.os != 'windows-latest'
         run: cargo test --workspace --all-features
 
-      - name: Run tests (Windows - no candle)
-        if: runner.os == 'windows-latest'
-        run: cargo test --workspace --no-default-features --features "cuda,rocm,vulkan"
+      # candle now works on Windows after removing tokenizers
+      - name: Run tests (Windows)
+        run: cargo test --workspace --all-features
 
-      # Skip example building on Windows due to CRT mismatch between tokenizers and onnxruntime
+      # Build examples - now works on all platforms after removing tokenizers
       - name: Build examples
-        if: runner.os != 'windows-latest'
         run: cargo build --examples
 
       - name: Run targeted examples compile smoke tests

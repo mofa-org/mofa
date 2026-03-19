@@ -20,7 +20,7 @@ rocm = []
 # Enable Vulkan compute backend (cross-vendor fallback)
 vulkan = []
 # Enable Candle inference engine (Linux only)
-candle = ["dep:candle-core", "dep:candle-transformers", "dep:tokenizers"]
+candle = ["dep:candle-core", "dep:candle-transformers"]
 
 [dependencies]
 async-trait.workspace = true
@@ -38,8 +38,8 @@ sysinfo = "0.31"
 candle-core = { version = "0.9", optional = true }
 candle-transformers = { version = "0.9", optional = true }
 
-# Tokenization - Optional for Linux-only builds
-tokenizers = { version = "0.22", optional = true }
+# Tokenization - Using simple tokenizer for Windows compatibility
+# tokenizers removed due to Windows CRT mismatch (onig_sys C++ dependency)
 
 mofa-foundation = { path = "../mofa-foundation", version = "0.1" }
 
