@@ -4267,6 +4267,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "11d3d7f243d5c5a8b9bb5d6dd2b1602c0cb0b9db1621bafc7ed66e35ff9fe092"
 
 [[package]]
+name = "llm_fallback_chain"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "mofa-foundation",
+ "tokio",
+ "tracing",
+ "tracing-subscriber 0.3.22",
+]
+
+[[package]]
 name = "llm_tts_streaming"
 version = "0.1.0"
 dependencies = [
@@ -5659,6 +5670,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "pii_only"
+version = "0.1.0"
+dependencies = [
+ "mofa-foundation",
+ "mofa-runtime",
+ "tokio",
+]
+
+[[package]]
 name = "pin-project"
 version = "1.1.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6313,6 +6333,15 @@ checksum = "22e18b0f0062d30d4230b2e85ff77fdfe4326feb054b9783a3460d8435c8ab91"
 dependencies = [
  "crossbeam-deque",
  "crossbeam-utils",
+]
+
+[[package]]
+name = "rbac_only"
+version = "0.1.0"
+dependencies = [
+ "mofa-foundation",
+ "mofa-runtime",
+ "tokio",
 ]
 
 [[package]]
@@ -7003,6 +7032,15 @@ dependencies = [
  "tokio",
  "tracing",
  "tracing-subscriber 0.3.23",
+]
+
+[[package]]
+name = "secure_agent"
+version = "0.1.0"
+dependencies = [
+ "mofa-foundation",
+ "mofa-runtime",
+ "tokio",
 ]
 
 [[package]]
@@ -7730,6 +7768,19 @@ name = "subtle"
 version = "2.6.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "13c2bddecc57b384dee18652358fb23172facb8a2c51ccc10d74c157bdea3292"
+
+[[package]]
+name = "swarm_orchestrator"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "futures",
+ "mofa-foundation",
+ "mofa-kernel",
+ "tokio",
+ "tracing",
+ "tracing-subscriber 0.3.22",
+]
 
 [[package]]
 name = "symphonia"
