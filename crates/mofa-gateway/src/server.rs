@@ -190,6 +190,10 @@ impl GatewayServer {
 
         // Create state
         let mut state = AppState::new(self.registry.clone(), rate_limiter.clone());
+        // Attach the pre-initialized object store so file handlers can use it.
+        // When no store is configured (tests: `build_server_no_s3`) we keep `None`
+        // and endpoints correctly return `501 Not Implemented`.
+        state.s3 = self.s3.clone();
 
         if let Some(max_bytes) = self.config.max_upload_bytes {
             state = state.with_max_upload_bytes(max_bytes);
