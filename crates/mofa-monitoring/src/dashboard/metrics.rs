@@ -512,7 +512,11 @@ impl MetricsCollector {
     }
 
     /// Set LLM metrics source for pulling from persistence
-    pub fn with_llm_metrics_source(mut self, source: Arc<dyn LLMMetricsSource>, provider_name: String) -> Self {
+    pub fn with_llm_metrics_source(
+        mut self,
+        source: Arc<dyn LLMMetricsSource>,
+        provider_name: String,
+    ) -> Self {
         self.llm_metrics_source = Some(source);
         self.provider_name = provider_name;
         self
@@ -525,7 +529,7 @@ impl MetricsCollector {
     /// Update agent metrics
     pub async fn update_agent(&self, metrics: AgentMetrics) {
         let mut agents = self.agent_metrics.write().await;
-        agents.insert(metrics.agent_id.clone(), metrics);   
+        agents.insert(metrics.agent_id.clone(), metrics);
     }
 
     /// Update LLM metrics
@@ -573,7 +577,18 @@ impl MetricsCollector {
                 .unwrap_or_default()
                 .as_secs();
 
-            let mut sys = system.write().unwrap();
+            // Handle potential RwLock poisoning gracefully instead of panicking
+            let mut sys = match system.write() {
+                Ok(guard) => guard,
+                Err(poisoned) => {
+                    tracing::error!(
+                        "RwLock poisoned in metrics collection - recovering with poisoned data"
+                    );
+                    // Recover the data even though the lock is poisoned
+                    // This is safe for metrics collection - we prefer stale data over no data
+                    poisoned.into_inner()
+                }
+            };
             sys.refresh_all();
 
             let pid = Pid::from_u32(std::process::id());

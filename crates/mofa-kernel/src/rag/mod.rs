@@ -10,5 +10,7 @@ pub mod vector_store;
 pub use pipeline::{
     Generator, GeneratorChunk, RagPipeline, RagPipelineOutput, Reranker, Retriever,
 };
-pub use types::{Document, DocumentChunk, GenerateInput, ScoredDocument, SearchResult, SimilarityMetric};
+pub use types::{
+    Document, DocumentChunk, GenerateInput, ScoredDocument, SearchResult, SimilarityMetric,
+};
 pub use vector_store::VectorStore;

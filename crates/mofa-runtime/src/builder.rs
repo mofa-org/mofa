@@ -249,6 +249,40 @@ impl AgentBuilder {
     }
 }
 
+#[cfg(test)]
+#[cfg(not(feature = "dora"))]
+mod simple_message_bus_tests {
+    use super::*;
+    use mofa_kernel::message::AgentEvent;
+    use std::time::Duration;
+
+    #[tokio::test]
+    async fn subscribe_is_idempotent() {
+        let bus = SimpleMessageBus::new();
+        let (tx, mut rx) = tokio::sync::mpsc::channel::<AgentEvent>(4);
+        bus.register("agent1", tx).await;
+
+        // Subscribe twice
+        bus.subscribe("agent1", "topic-a").await;
+        bus.subscribe("agent1", "topic-a").await;
+
+        // Publish once; the agent should receive exactly one delivery
+        bus.publish("topic-a", AgentEvent::Custom("hi".to_string(), vec![]))
+            .await
+            .expect("publish");
+
+        // First receive should succeed
+        let first = tokio::time::timeout(Duration::from_millis(100), rx.recv())
+            .await
+            .expect("expected first message within timeout");
+        assert!(first.is_some());
+
+        // Second receive should time out (no duplicate delivery)
+        let second = tokio::time::timeout(Duration::from_millis(100), rx.recv()).await;
+        assert!(second.is_err(), "did not expect a second message");
+    }
+}
+
 /// 智能体运行时
 /// Agent Runtime
 #[cfg(feature = "dora")]
@@ -661,22 +695,26 @@ impl SimpleMessageBus {
 
     /// 注册智能体
     /// Register agent
+    ///
+    /// Replaces any existing senders for `agent_id` so that stale clones from
+    /// previous registrations (e.g. after an agent restart) do not accumulate
+    /// in the Vec and leak memory.
     pub async fn register(&self, agent_id: &str, tx: tokio::sync::mpsc::Sender<AgentEvent>) {
         let mut subs = self.subscribers.write().await;
-        subs.entry(agent_id.to_string())
-            .or_insert_with(Vec::new)
-            .push(tx);
+        subs.insert(agent_id.to_string(), vec![tx]);
     }
 
     /// 订阅主题
     /// Subscribe to topic
     pub async fn subscribe(&self, agent_id: &str, topic: &str) {
         let mut topics = self.topic_subscribers.write().await;
-        topics
-            .entry(topic.to_string())
-            .or_insert_with(Vec::new)
-            .push(agent_id.to_string());
+        let subscriber_ids = topics.entry(topic.to_string()).or_insert_with(Vec::new);
+        if !subscriber_ids.iter().any(|id| id == agent_id) {
+            subscriber_ids.push(agent_id.to_string());
+        }
     }
+
+    
 
     /// 发送点对点消息
     /// Send point-to-point message

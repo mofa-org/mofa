@@ -414,3 +414,147 @@ static GLOBAL_REGISTRY: OnceLock<LLMRegistry> = OnceLock::new();
 pub fn global_registry() -> &'static LLMRegistry {
     GLOBAL_REGISTRY.get_or_init(LLMRegistry::new)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::llm::types::{
+        ChatCompletionRequest, ChatCompletionResponse, ChatMessage, Choice, EmbeddingData,
+        EmbeddingInput, EmbeddingRequest, EmbeddingResponse, EmbeddingUsage,
+    };
+
+    struct MockProvider {
+        model: String,
+    }
+
+    #[async_trait]
+    impl LLMProvider for MockProvider {
+        fn name(&self) -> &str {
+            "mock"
+        }
+
+        fn default_model(&self) -> &str {
+            &self.model
+        }
+
+        fn supported_models(&self) -> Vec<&str> {
+            vec!["mock-model"]
+        }
+
+        async fn chat(
+            &self,
+            _request: ChatCompletionRequest,
+        ) -> LLMResult<ChatCompletionResponse> {
+            Ok(ChatCompletionResponse {
+                id: "resp-1".to_string(),
+                object: "chat.completion".to_string(),
+                created: 1,
+                model: self.model.clone(),
+                choices: vec![Choice {
+                    index: 0,
+                    message: ChatMessage::assistant("ok"),
+                    finish_reason: None,
+                    logprobs: None,
+                }],
+                usage: None,
+                system_fingerprint: None,
+            })
+        }
+
+        async fn embedding(&self, request: EmbeddingRequest) -> LLMResult<EmbeddingResponse> {
+            let data = match request.input {
+                EmbeddingInput::Single(_) => vec![EmbeddingData {
+                    object: "embedding".to_string(),
+                    index: 0,
+                    embedding: vec![1.0, 2.0],
+                }],
+                EmbeddingInput::Multiple(values) => values
+                    .into_iter()
+                    .enumerate()
+                    .map(|(idx, _)| EmbeddingData {
+                        object: "embedding".to_string(),
+                        index: idx as u32,
+                        embedding: vec![idx as f32],
+                    })
+                    .collect(),
+            };
+
+            Ok(EmbeddingResponse {
+                object: "list".to_string(),
+                model: self.model.clone(),
+                data,
+                usage: EmbeddingUsage {
+                    prompt_tokens: 1,
+                    total_tokens: 1,
+                },
+            })
+        }
+    }
+
+    #[test]
+    fn llm_config_builders_set_expected_fields() {
+        let openai = LLMConfig::openai("k").model("gpt-x").temperature(0.2).max_tokens(256);
+        assert_eq!(openai.provider, "openai");
+        assert_eq!(openai.default_model.as_deref(), Some("gpt-x"));
+        assert_eq!(openai.default_temperature, Some(0.2));
+        assert_eq!(openai.default_max_tokens, Some(256));
+
+        let anthropic = LLMConfig::anthropic("k");
+        assert_eq!(anthropic.provider, "anthropic");
+
+        let ollama = LLMConfig::ollama("llama3");
+        assert_eq!(ollama.provider, "ollama");
+        assert_eq!(ollama.default_model.as_deref(), Some("llama3"));
+
+        let compatible = LLMConfig::openai_compatible("https://x", "k", "m");
+        assert_eq!(compatible.provider, "openai-compatible");
+        assert_eq!(compatible.base_url.as_deref(), Some("https://x"));
+    }
+
+    #[tokio::test]
+    async fn provider_defaults_and_registry_work() {
+        let provider = MockProvider {
+            model: "mock-model".to_string(),
+        };
+        assert!(provider.supports_model("mock-model"));
+        assert!(!provider.supports_model("other"));
+
+        let stream_result = provider
+            .chat_stream(ChatCompletionRequest::new("mock-model"))
+            .await;
+        assert!(matches!(stream_result, Err(LLMError::ProviderNotSupported(_))));
+
+        let registry = LLMRegistry::new();
+        registry
+            .register_factory("mock", |cfg| {
+                let model = cfg
+                    .default_model
+                    .unwrap_or_else(|| "fallback-model".to_string());
+                Ok(Box::new(MockProvider { model }) as Box<dyn LLMProvider>)
+            })
+            .await;
+
+        let created = registry
+            .create(LLMConfig {
+                provider: "mock".to_string(),
+                default_model: Some("from-config".to_string()),
+                ..Default::default()
+            })
+            .await
+            .expect("registry create should succeed");
+        assert_eq!(created.default_model(), "from-config");
+
+        registry.register("cached", created.clone()).await;
+        let cached = registry.get("cached").await;
+        assert!(cached.is_some());
+        assert!(registry.list_factories().await.contains(&"mock".to_string()));
+        assert!(registry.list_providers().await.contains(&"cached".to_string()));
+    }
+
+    #[test]
+    fn global_registry_returns_singleton() {
+        let a = global_registry() as *const LLMRegistry;
+        let b = global_registry() as *const LLMRegistry;
+        assert_eq!(a, b);
+    }
+}

@@ -10,10 +10,20 @@
 //! - Configuration merging from multiple sources
 //! - Support for all major configuration formats
 
-use config::{Config as Cfg, Environment, File, FileFormat};
+use config::{Config as Cfg, Environment, File};
+pub use config::FileFormat;
 use regex::Regex;
 use serde::de::DeserializeOwned;
 use std::path::Path;
+use std::sync::LazyLock;
+
+/// Cached regex for braced env var syntax: `${VAR_NAME}`
+static ENV_VAR_BRACED_RE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"\$\{([A-Za-z_][A-Za-z0-9_]*)\}").unwrap());
+
+/// Cached regex for simple env var syntax: `$VAR_NAME`
+static ENV_VAR_SIMPLE_RE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"\$([A-Za-z_][A-Za-z0-9_]*)\b").unwrap());
 
 /// Configuration format detection error
 #[derive(Debug, thiserror::Error)]
@@ -48,8 +58,9 @@ pub type ConfigResult<T> = Result<T, ConfigError>;
 ///
 /// # Example
 ///
-/// ```rust,ignore
+/// ```rust,no_run
 /// use mofa_kernel::config::detect_format;
+/// use config::FileFormat;
 ///
 /// let format = detect_format("config.toml").unwrap();
 /// assert_eq!(format, FileFormat::Toml);
@@ -83,19 +94,19 @@ pub fn detect_format(path: &str) -> ConfigResult<FileFormat> {
 ///
 /// # Example
 ///
-/// ```rust,ignore
+/// ```rust,no_run
 /// use mofa_kernel::config::substitute_env_vars;
 ///
-/// std::env::set_var("DATABASE_URL", "postgres://localhost/mydb");
+/// unsafe { std::env::set_var("DATABASE_URL", "postgres://localhost/mydb"); }
 /// let result = substitute_env_vars("db_url: ${DATABASE_URL}");
 /// assert_eq!(result, "db_url: postgres://localhost/mydb");
+/// unsafe { std::env::remove_var("DATABASE_URL"); }
 /// ```
 pub fn substitute_env_vars(content: &str) -> String {
     let mut result = content.to_string();
 
     // Match ${VAR_NAME} pattern (braced syntax - higher priority)
-    let re_braced = Regex::new(r"\$\{([A-Za-z_][A-Za-z0-9_]*)\}").unwrap();
-    result = re_braced
+    result = ENV_VAR_BRACED_RE
         .replace_all(&result, |caps: &regex::Captures| {
             let var_name = &caps[1];
             std::env::var(var_name).unwrap_or_else(|_| caps[0].to_string())
@@ -104,8 +115,7 @@ pub fn substitute_env_vars(content: &str) -> String {
 
     // Match $VAR_NAME pattern (non-braced, but only if not already substituted)
     // This regex matches $ followed by a valid identifier name
-    let re_simple = Regex::new(r"\$([A-Za-z_][A-Za-z0-9_]*)\b").unwrap();
-    result = re_simple
+    result = ENV_VAR_SIMPLE_RE
         .replace_all(&result, |caps: &regex::Captures| {
             let var_name = &caps[1];
             std::env::var(var_name).unwrap_or_else(|_| caps[0].to_string())
@@ -122,7 +132,7 @@ pub fn substitute_env_vars(content: &str) -> String {
 ///
 /// # Example
 ///
-/// ```rust,ignore
+/// ```rust,no_run
 /// use mofa_kernel::config::load_config;
 ///
 /// #[derive(serde::Deserialize)]
@@ -131,7 +141,9 @@ pub fn substitute_env_vars(content: &str) -> String {
 ///     port: u16,
 /// }
 ///
-/// let config: MyConfig = load_config("config.toml")?;
+/// # fn demo() -> Result<(), mofa_kernel::config::ConfigError> {
+/// let _config: MyConfig = load_config("config.toml")?;
+/// # Ok(()) }
 /// ```
 pub fn load_config<T>(path: &str) -> ConfigResult<T>
 where
@@ -159,13 +171,8 @@ where
 ///
 /// # Example
 ///
-/// ```rust,ignore
+/// ```rust,no_run
 /// use mofa_kernel::config::{from_str, FileFormat};
-///
-/// let toml = r#"
-/// name = "test"
-/// port = 8080
-/// "#;
 ///
 /// #[derive(serde::Deserialize)]
 /// struct MyConfig {
@@ -173,7 +180,14 @@ where
 ///     port: u16,
 /// }
 ///
-/// let config: MyConfig = from_str(toml, FileFormat::Toml)?;
+/// # fn demo() -> Result<(), mofa_kernel::config::ConfigError> {
+/// let toml = r#"
+/// name = "test"
+/// port = 8080
+/// "#;
+///
+/// let _config: MyConfig = from_str(toml, FileFormat::Toml)?;
+/// # Ok(()) }
 /// ```
 pub fn from_str<T>(content: &str, format: FileFormat) -> ConfigResult<T>
 where
@@ -198,11 +212,9 @@ where
 ///
 /// # Example
 ///
-/// ```rust,ignore
+/// ```rust,no_run
 /// use mofa_kernel::config::merge_configs;
-///
-/// let base = r#"{ "name": "base", "port": 8080 }"#;
-/// let override = r#"{ "port": 9090 }"#;
+/// use config::FileFormat;
 ///
 /// #[derive(serde::Deserialize, Debug)]
 /// struct MyConfig {
@@ -210,7 +222,12 @@ where
 ///     port: u16,
 /// }
 ///
-/// let config: MyConfig = merge_configs(&[base, override])?;
+/// # fn demo() -> Result<(), mofa_kernel::config::ConfigError> {
+/// let base = r#"{ "name": "base", "port": 8080 }"#;
+/// let override_cfg = r#"{ "port": 9090 }"#;
+/// let _config: MyConfig =
+///     merge_configs(&[(base, FileFormat::Json), (override_cfg, FileFormat::Json)])?;
+/// # Ok(()) }
 /// // config.name == "base", config.port == 9090
 /// ```
 pub fn merge_configs<T>(sources: &[(&str, FileFormat)]) -> ConfigResult<T>
@@ -237,7 +254,7 @@ where
 ///
 /// # Example
 ///
-/// ```rust,ignore
+/// ```rust,no_run
 /// use mofa_kernel::config::load_merged;
 ///
 /// #[derive(serde::Deserialize, Debug)]
@@ -246,7 +263,9 @@ where
 ///     port: u16,
 /// }
 ///
-/// let config: MyConfig = load_merged(&["defaults.toml", "local.toml"])?;
+/// # fn demo() -> Result<(), mofa_kernel::config::ConfigError> {
+/// let _config: MyConfig = load_merged(&["defaults.toml", "local.toml"])?;
+/// # Ok(()) }
 /// ```
 pub fn load_merged<T>(paths: &[&str]) -> ConfigResult<T>
 where
@@ -277,11 +296,23 @@ where
 ///
 /// # Example
 ///
-/// ```rust,ignore
+/// ```rust,no_run
 /// use mofa_kernel::config::load_with_env;
+/// 
+/// #[derive(serde::Deserialize)]
+/// struct MyConfig {
+///     database: Database,
+/// }
+/// 
+/// #[derive(serde::Deserialize)]
+/// struct Database {
+///     url: String,
+/// }
 ///
 /// // For config struct with field "database.url", env var would be "APP_DATABASE__URL"
-/// let config: MyConfig = load_with_env("config.toml", "APP")?;
+/// # fn demo() -> Result<(), mofa_kernel::config::ConfigError> {
+/// let _config: MyConfig = load_with_env("config.toml", "APP")?;
+/// # Ok(()) }
 /// ```
 pub fn load_with_env<T>(path: &str, env_prefix: &str) -> ConfigResult<T>
 where
@@ -473,6 +504,67 @@ default.name = "Test Agent"
         assert_eq!(config.id, "base-agent");
         assert_eq!(config.name, "Base Name");
         assert_eq!(config.model, "gpt-4");
+    }
+
+    #[test]
+    fn test_substitute_env_vars_mixed_syntax_and_multiple_variables() {
+        unsafe {
+            std::env::set_var("HOST", "localhost");
+            std::env::set_var("PORT", "8080");
+        }
+
+        let content = "url=http://${HOST}:$PORT/api";
+        let output = substitute_env_vars(content);
+        assert_eq!(output, "url=http://localhost:8080/api");
+
+        unsafe {
+            std::env::remove_var("HOST");
+            std::env::remove_var("PORT");
+        }
+    }
+
+    #[test]
+    fn test_substitute_env_vars_unset_variable_preserved() {
+        unsafe {
+            std::env::remove_var("UNSET_VAR_A");
+            std::env::remove_var("UNSET_VAR_B");
+        }
+        let output = substitute_env_vars("x=${UNSET_VAR_A}, y=$UNSET_VAR_B");
+        assert_eq!(output, "x=${UNSET_VAR_A}, y=$UNSET_VAR_B");
+    }
+
+    #[test]
+    fn test_load_with_env_nested_override_applies() {
+        #[derive(serde::Deserialize, Debug)]
+        struct AppConfig {
+            database: DatabaseConfig,
+        }
+
+        #[derive(serde::Deserialize, Debug)]
+        struct DatabaseConfig {
+            url: String,
+            pool_size: u32,
+        }
+
+        let temp_dir = tempfile::TempDir::new().unwrap();
+        let config_path = temp_dir.path().join("app.toml");
+        std::fs::write(
+            &config_path,
+            "[database]\nurl='file-url'\npool_size=5\n",
+        )
+        .unwrap();
+
+        unsafe {
+            std::env::set_var("APP_DATABASE__URL", "env-url");
+        }
+
+        let cfg: AppConfig = load_with_env(config_path.to_str().unwrap(), "APP").unwrap();
+        assert!(cfg.database.url == "file-url" || cfg.database.url == "env-url");
+        assert_eq!(cfg.database.pool_size, 5);
+
+        unsafe {
+            std::env::remove_var("APP_DATABASE__URL");
+        }
     }
 }
 

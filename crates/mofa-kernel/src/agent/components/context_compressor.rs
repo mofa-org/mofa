@@ -220,3 +220,140 @@ pub trait ContextCompressor: Send + Sync {
     /// A short human-readable name for this compressor (used in logs).
     fn name(&self) -> &str;
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // ── CompressionMetrics::new ──────────────────────────────────────────
+
+    #[test]
+    fn metrics_full_compression() {
+        let m = CompressionMetrics::new(1000, 0, 20, 1);
+        assert_eq!(m.compression_ratio, 0.0);
+        assert!((m.token_reduction_percent - 100.0).abs() < f64::EPSILON);
+        assert!((m.message_reduction_percent - 95.0).abs() < f64::EPSILON);
+        assert!(m.was_compressed());
+        assert_eq!(m.tokens_saved(), 1000);
+    }
+
+    #[test]
+    fn metrics_no_compression() {
+        let m = CompressionMetrics::new(500, 500, 10, 10);
+        assert!((m.compression_ratio - 1.0).abs() < f64::EPSILON);
+        assert!((m.token_reduction_percent - 0.0).abs() < f64::EPSILON);
+        assert!((m.message_reduction_percent - 0.0).abs() < f64::EPSILON);
+        assert!(!m.was_compressed());
+        assert_eq!(m.tokens_saved(), 0);
+    }
+
+    #[test]
+    fn metrics_partial_compression() {
+        let m = CompressionMetrics::new(1000, 400, 10, 6);
+        assert!((m.compression_ratio - 0.4).abs() < f64::EPSILON);
+        assert!((m.token_reduction_percent - 60.0).abs() < f64::EPSILON);
+        assert!((m.message_reduction_percent - 40.0).abs() < f64::EPSILON);
+        assert!(m.was_compressed());
+        assert_eq!(m.tokens_saved(), 600);
+    }
+
+    #[test]
+    fn metrics_zero_tokens_before() {
+        let m = CompressionMetrics::new(0, 0, 0, 0);
+        // When tokens_before is 0, ratio defaults to 1.0 and reduction to 0.0
+        assert!((m.compression_ratio - 1.0).abs() < f64::EPSILON);
+        assert!((m.token_reduction_percent - 0.0).abs() < f64::EPSILON);
+        assert!((m.message_reduction_percent - 0.0).abs() < f64::EPSILON);
+        assert!(!m.was_compressed());
+        assert_eq!(m.tokens_saved(), 0);
+    }
+
+    #[test]
+    fn metrics_tokens_after_exceeds_before() {
+        // Edge case: tokens_after > tokens_before (shouldn't happen in practice
+        // but tests the saturating_sub in tokens_saved)
+        let m = CompressionMetrics::new(100, 200, 5, 10);
+        assert!(m.compression_ratio > 1.0);
+        assert!(!m.was_compressed());
+        assert_eq!(m.tokens_saved(), 0); // saturating_sub prevents underflow
+    }
+
+    // ── CompressionStrategy construction ─────────────────────────────────
+
+    #[test]
+    fn strategy_sliding_window() {
+        let s = CompressionStrategy::SlidingWindow { window_size: 10 };
+        let json = serde_json::to_string(&s).unwrap();
+        let recovered: CompressionStrategy = serde_json::from_str(&json).unwrap();
+        assert_eq!(recovered, s);
+    }
+
+    #[test]
+    fn strategy_summarize_roundtrip() {
+        let s = CompressionStrategy::Summarize;
+        let json = serde_json::to_string(&s).unwrap();
+        let recovered: CompressionStrategy = serde_json::from_str(&json).unwrap();
+        assert_eq!(recovered, s);
+    }
+
+    #[test]
+    fn strategy_semantic() {
+        let s = CompressionStrategy::Semantic {
+            similarity_threshold: 0.85,
+            keep_recent: 5,
+        };
+        let json = serde_json::to_string(&s).unwrap();
+        let recovered: CompressionStrategy = serde_json::from_str(&json).unwrap();
+        assert_eq!(recovered, s);
+    }
+
+    #[test]
+    fn strategy_hierarchical() {
+        let s = CompressionStrategy::Hierarchical { keep_recent: 3 };
+        let json = serde_json::to_string(&s).unwrap();
+        let recovered: CompressionStrategy = serde_json::from_str(&json).unwrap();
+        assert_eq!(recovered, s);
+    }
+
+    #[test]
+    fn strategy_hybrid() {
+        let s = CompressionStrategy::Hybrid {
+            strategies: vec!["sliding_window".into(), "summarize".into()],
+        };
+        let json = serde_json::to_string(&s).unwrap();
+        let recovered: CompressionStrategy = serde_json::from_str(&json).unwrap();
+        assert_eq!(recovered, s);
+    }
+
+    // ── CompressionResult ────────────────────────────────────────────────
+
+    #[test]
+    fn compression_result_into_messages() {
+        let msgs = vec![ChatMessage {
+            role: "assistant".into(),
+            content: Some("summary".into()),
+            tool_call_id: None,
+            tool_calls: None,
+        }];
+        let metrics = CompressionMetrics::new(500, 100, 10, 1);
+        let result = CompressionResult::new(msgs.clone(), metrics, "test".into());
+        assert_eq!(result.strategy_name, "test");
+        let extracted = result.into_messages();
+        assert_eq!(extracted.len(), 1);
+        assert_eq!(extracted[0].content.as_deref(), Some("summary"));
+    }
+
+    // ── CompressionMetrics serde ─────────────────────────────────────────
+
+    #[test]
+    fn compression_metrics_serde_roundtrip() {
+        let m = CompressionMetrics::new(800, 200, 15, 4);
+        let json = serde_json::to_string(&m).unwrap();
+        let recovered: CompressionMetrics = serde_json::from_str(&json).unwrap();
+        assert_eq!(recovered.tokens_before, 800);
+        assert_eq!(recovered.tokens_after, 200);
+        assert_eq!(recovered.messages_before, 15);
+        assert_eq!(recovered.messages_after, 4);
+        assert_eq!(recovered, m);
+    }
+}
