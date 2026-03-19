@@ -51,7 +51,7 @@ use super::StateUpdate;
 ///                     .ok(),
 ///                     "result" => serde_json::to_value(&self.result)
 ///                     .map_err(|e| AgentError::SerializationError(e.to_string()))
-///                     .ok(),
+///                    .ok(),
 ///
 ///             _ => None,
 ///         }
