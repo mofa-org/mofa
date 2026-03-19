@@ -1,0 +1,72 @@
+//! HITL Error Types
+//! Human-in-the-Loop error definitions
+
+use crate::error::KernelError;
+use thiserror::Error;
+
+/// Errors that can occur in the Human-in-the-Loop system
+#[derive(Debug, Error)]
+#[non_exhaustive]
+pub enum HitlError {
+    #[error("Review request not found: {id}")]
+    ReviewNotFound { id: String },
+
+    #[error("Review request expired: {id}")]
+    ReviewExpired { id: String },
+
+    #[error("Review request already resolved: {id}")]
+    ReviewAlreadyResolved { id: String },
+
+    #[error("Invalid review response: {reason}")]
+    InvalidResponse { reason: String },
+
+    #[error("Review policy evaluation failed: {reason}")]
+    PolicyError { reason: String },
+
+    #[error("Review store error: {0}")]
+    StoreError(#[from] StoreError),
+
+    #[error("Review notification failed: {reason}")]
+    NotificationError { reason: String },
+
+    #[error("Review context serialization failed: {0}")]
+    SerializationError(String),
+
+    #[error("Review timeout: {id}")]
+    ReviewTimeout { id: String },
+
+    #[error("Rate limit exceeded for tenant {tenant_id}, retry after {retry_after_secs}s")]
+    RateLimitExceeded {
+        tenant_id: String,
+        retry_after_secs: u64,
+    },
+
+    #[error("Webhook notification failed: {reason}")]
+    WebhookError { reason: String },
+
+    #[error("Tenant access denied: {tenant_id}")]
+    TenantAccessDenied { tenant_id: String },
+}
+
+/// Errors that can occur in the review store
+#[derive(Debug, Error)]
+#[non_exhaustive]
+pub enum StoreError {
+    #[error("Connection error: {0}")]
+    Connection(String),
+
+    #[error("Query error: {0}")]
+    Query(String),
+
+    #[error("Record not found: {0}")]
+    NotFound(String),
+}
+
+impl From<HitlError> for KernelError {
+    fn from(err: HitlError) -> Self {
+        KernelError::Internal(err.to_string())
+    }
+}
+
+/// Result type for HITL operations
+pub type HitlResult<T> = Result<T, HitlError>;

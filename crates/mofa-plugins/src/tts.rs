@@ -10,6 +10,7 @@
 // Model cache and download modules
 pub mod cache;
 pub mod model_downloader;
+pub mod openai;
 
 // Kokoro TTS wrapper (available with kokoro feature)
 #[cfg(feature = "kokoro")]

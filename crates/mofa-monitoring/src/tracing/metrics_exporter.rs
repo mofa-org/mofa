@@ -259,8 +259,8 @@ struct OtlpRecorder {
 
 impl Drop for OtlpRecorder {
     fn drop(&mut self) {
-        if let Ok(mut guard) = self.meter_provider.lock() {
-            if let Some(provider) = guard.take() {
+        if let Ok(mut guard) = self.meter_provider.lock()
+            && let Some(provider) = guard.take() {
                 // Shutdown in a background OS thread so we never block a tokio
                 // worker thread (e.g. when an async task holding this recorder
                 // is aborted).
@@ -268,7 +268,6 @@ impl Drop for OtlpRecorder {
                     let _ = provider.shutdown();
                 });
             }
-        }
     }
 }
 

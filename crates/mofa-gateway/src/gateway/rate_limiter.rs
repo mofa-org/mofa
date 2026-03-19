@@ -38,14 +38,21 @@ impl TokenBucketRateLimiter {
         let mut tokens = self.tokens.write().await;
         let mut last_refill = self.last_refill.write().await;
 
-        // Refill tokens based on elapsed time
+        // Refill tokens based on elapsed time using sub-second precision.
+        // The previous `elapsed.as_secs()` truncated fractional seconds, which
+        // meant that high-frequency callers (< 1s apart) would never see a
+        // refill even when `refill_rate` was large.
         let now = Instant::now();
         let elapsed = now.duration_since(*last_refill);
-        let tokens_to_add = elapsed.as_secs() * self.refill_rate;
+        let elapsed_secs = elapsed.as_secs_f64();
+        let tokens_to_add = (elapsed_secs * self.refill_rate as f64) as u64;
 
         if tokens_to_add > 0 {
             *tokens = (*tokens + tokens_to_add).min(self.capacity);
-            *last_refill = now;
+            // Advance last_refill by only the time accounted for, preserving
+            // the fractional remainder for the next refill cycle.
+            let secs_consumed = tokens_to_add as f64 / self.refill_rate as f64;
+            *last_refill += Duration::from_secs_f64(secs_consumed);
         }
 
         // Try to consume a token
@@ -201,6 +208,26 @@ mod tests {
         // Wait for refill
         tokio::time::sleep(Duration::from_secs(2)).await;
         assert!(limiter.try_acquire().await.unwrap());
+    }
+
+    #[tokio::test]
+    async fn test_token_bucket_sub_second_refill() {
+        // With as_secs() truncation, a 10 token/sec bucket that is checked every
+        // 500ms would NEVER refill because 0.5.as_secs() == 0.
+        let limiter = TokenBucketRateLimiter::new(10, 10); // 10 capacity, 10 tokens/sec
+
+        // Drain all tokens
+        for _ in 0..10 {
+            assert!(limiter.try_acquire().await.unwrap());
+        }
+        assert!(!limiter.try_acquire().await.unwrap());
+
+        // Wait 500ms — should refill ~5 tokens with sub-second precision
+        tokio::time::sleep(Duration::from_millis(500)).await;
+        assert!(
+            limiter.try_acquire().await.unwrap(),
+            "sub-second refill should have added tokens"
+        );
     }
 
     #[tokio::test]
