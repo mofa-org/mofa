@@ -132,12 +132,12 @@ impl SocketIoBridge {
         io.ns(
             namespace,
             move |socket: SocketRef, Data(auth): Data<AuthPayload>| {
-                if let Some(required) = &auth_token {
-                    if auth.token != *required {
-                        warn!(socket_id = %socket.id, "Socket.IO rejected: bad token");
-                        let _ = socket.disconnect();
-                        return;
-                    }
+                if let Some(required) = &auth_token
+                    && auth.token != *required
+                {
+                    warn!(socket_id = %socket.id, "Socket.IO rejected: bad token");
+                    let _ = socket.disconnect();
+                    return;
                 }
 
                 info!(socket_id = %socket.id, "Socket.IO client connected");

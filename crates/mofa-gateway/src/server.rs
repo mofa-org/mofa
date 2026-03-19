@@ -1,6 +1,7 @@
 //! Control-plane HTTP server
 
-use axum::{Router, http::Method};
+use axum::{http::Method, Router};
+use mofa_foundation::inference::OrchestratorConfig;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::Duration;
@@ -8,7 +9,8 @@ use tower_http::cors::{Any, CorsLayer};
 use tower_http::trace::TraceLayer;
 use tracing::info;
 
-use crate::handlers::{agents_router, chat_router, health_router};
+use crate::handlers::{agents_router, chat_router, health_router, openai_router};
+use crate::inference_bridge::InferenceBridge;
 use crate::middleware::RateLimiter;
 use crate::state::AppState;
 use mofa_kernel::ObjectStore;
@@ -118,7 +120,9 @@ impl ServerConfig {
 pub struct GatewayServer {
     config: ServerConfig,
     registry: Arc<AgentRegistry>,
-    /// Pre-initialised object store injected via [`with_s3`].
+    /// Optional orchestrator config for inference bridge
+    orchestrator_config: Option<OrchestratorConfig>,
+    /// Pre-initialised object store injected via `with_s3`.
     s3: Option<Arc<dyn ObjectStore>>,
     #[cfg(feature = "socketio")]
     socket_io: Option<(Arc<AgentBus>, SocketIoConfig)>,
@@ -130,6 +134,23 @@ impl GatewayServer {
         Self {
             config,
             registry,
+            orchestrator_config: None,
+            s3: None,
+            #[cfg(feature = "socketio")]
+            socket_io: None,
+        }
+    }
+
+    /// Create a server with inference bridge enabled.
+    pub fn with_inference(
+        config: ServerConfig,
+        registry: Arc<AgentRegistry>,
+        orchestrator_config: OrchestratorConfig,
+    ) -> Self {
+        Self {
+            config,
+            registry,
+            orchestrator_config: Some(orchestrator_config),
             s3: None,
             #[cfg(feature = "socketio")]
             socket_io: None,
@@ -138,14 +159,14 @@ impl GatewayServer {
 
     /// Attach a pre-initialised object store for the `/api/v1/files` endpoints.
     ///
-    /// Accepts any `Arc<dyn ObjectStore>` — pass an [`S3ObjectStore`] for AWS/MinIO
+    /// Accepts any `Arc<dyn ObjectStore>` — pass an `S3ObjectStore` for AWS/MinIO
     /// or a custom in-memory implementation for testing.
     pub fn with_s3(mut self, store: Arc<dyn ObjectStore>) -> Self {
         self.s3 = Some(store);
         self
     }
 
-    /// Attach an [`AgentBus`] and [`SocketIoConfig`] to enable the real-time
+    /// Attach an `AgentBus` and `SocketIoConfig` to enable the real-time
     /// Socket.IO bridge.
     ///
     /// Requires the `socketio` feature flag.
@@ -167,11 +188,8 @@ impl GatewayServer {
             self.config.rate_window,
         ));
 
-        let mut state = AppState::new(
-            self.registry.clone(),
-            rate_limiter.clone(),
-            self.s3.clone(),
-        );
+        // Create state
+        let mut state = AppState::new(self.registry.clone(), rate_limiter.clone());
 
         if let Some(max_bytes) = self.config.max_upload_bytes {
             state = state.with_max_upload_bytes(max_bytes);
@@ -202,6 +220,15 @@ impl GatewayServer {
                 .merge(files_router())
                 .with_state(state);
             router = router.layer(sio_layer);
+
+            // Add OpenAI router if inference bridge is configured
+            if let Some(ref orch_config) = self.orchestrator_config {
+                let bridge = Arc::new(InferenceBridge::new(orch_config.clone()));
+                router = router
+                    .merge(openai_router())
+                    .layer(axum::Extension(bridge));
+            }
+
             if self.config.enable_tracing {
                 router = router.layer(TraceLayer::new_for_http());
             }
@@ -228,6 +255,14 @@ impl GatewayServer {
             .merge(chat_router())
             .merge(files_router())
             .with_state(state);
+
+        // Add OpenAI router if inference bridge is configured
+        if let Some(ref orch_config) = self.orchestrator_config {
+            let bridge = Arc::new(InferenceBridge::new(orch_config.clone()));
+            router = router
+                .merge(openai_router())
+                .layer(axum::Extension(bridge));
+        }
 
         if self.config.enable_tracing {
             router = router.layer(TraceLayer::new_for_http());

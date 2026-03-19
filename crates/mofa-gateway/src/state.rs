@@ -1,6 +1,8 @@
 //! Shared application state for the control-plane server
 
+use crate::inference_bridge::InferenceBridge;
 use crate::middleware::RateLimiter;
+use mofa_foundation::inference::OrchestratorConfig;
 use mofa_kernel::ObjectStore;
 use mofa_runtime::agent::registry::AgentRegistry;
 use std::sync::Arc;
@@ -12,6 +14,8 @@ pub struct AppState {
     pub registry: Arc<AgentRegistry>,
     /// Per-client rate limiter
     pub rate_limiter: Arc<RateLimiter>,
+    /// Inference bridge - connects to InferenceOrchestrator (optional)
+    pub inference_bridge: Option<Arc<InferenceBridge>>,
     /// Optional object store for file upload/download endpoints.
     ///
     /// Held as `Arc<dyn ObjectStore>` (the kernel trait) so that `AppState`
@@ -26,22 +30,37 @@ pub struct AppState {
     /// Socket.IO handle + namespace used to emit real-time upload events.
     ///
     /// Only present when the `socketio` feature is enabled and a Socket.IO
-    /// bridge was configured via [`GatewayServer::with_socket_io`].
+    /// bridge was configured via `GatewayServer::with_socket_io`.
     #[cfg(feature = "socketio")]
     pub socketio: Option<(socketioxide::SocketIo, String)>,
 }
 
 impl AppState {
     /// Create a new `AppState` wrapping the given `AgentRegistry`.
-    pub fn new(
-        registry: Arc<AgentRegistry>,
-        rate_limiter: Arc<RateLimiter>,
-        s3: Option<Arc<dyn ObjectStore>>,
-    ) -> Self {
+    pub fn new(registry: Arc<AgentRegistry>, rate_limiter: Arc<RateLimiter>) -> Self {
         Self {
             registry,
             rate_limiter,
-            s3,
+            inference_bridge: None,
+            s3: None,
+            max_upload_bytes: None,
+            #[cfg(feature = "socketio")]
+            socketio: None,
+        }
+    }
+
+    /// Create a new `AppState` with an inference bridge.
+    pub fn with_inference_bridge(
+        registry: Arc<AgentRegistry>,
+        rate_limiter: Arc<RateLimiter>,
+        orchestrator_config: OrchestratorConfig,
+    ) -> Self {
+        let bridge = InferenceBridge::new(orchestrator_config);
+        Self {
+            registry,
+            rate_limiter,
+            inference_bridge: Some(Arc::new(bridge)),
+            s3: None,
             max_upload_bytes: None,
             #[cfg(feature = "socketio")]
             socketio: None,
