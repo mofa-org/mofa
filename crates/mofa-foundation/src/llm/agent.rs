@@ -4141,6 +4141,8 @@ mod tests {
         // The span ran — that's what we care about. Either success or a
         // ProviderNotSupported error is acceptable here.
         let _ = result; // no panic is the assertion
+    }
+
     #[test]
     fn token_budget_config_none_by_default() {
         let config = LLMAgentConfig::default();
