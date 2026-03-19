@@ -140,7 +140,6 @@ def _check_and_setup_api_key():
                         if line.split('=')[0].strip() == "OPENAI_API_KEY":
                             lines[i] = f"OPENAI_API_KEY={api_key}\n"
                             updated = True
-                            break
                 
                 if not updated:
                     if lines and not lines[-1].endswith('\n'):
