@@ -33,6 +33,12 @@ pub mod config;
 pub mod hardware;
 pub mod provider;
 
+#[cfg(feature = "candle")]
+pub mod candle_runtime;
+
 pub use config::LinuxInferenceConfig;
 pub use hardware::{ComputeBackend, HardwareInfo};
 pub use provider::LinuxLocalProvider;
+
+#[cfg(feature = "candle")]
+pub use candle_runtime::{InferenceEngine, RuntimeConfig};
