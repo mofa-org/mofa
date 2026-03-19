@@ -74,7 +74,7 @@ jobs:
 
       - name: Run tests (Windows - no candle)
         if: runner.os == 'windows-latest'
-        run: cargo test --workspace --all-features --no-default-features --features "cuda,rocm,vulkan"
+        run: cargo test --workspace --no-default-features --features "cuda,rocm,vulkan"
 
       - name: Build examples
         if: runner.os != 'windows-latest'
