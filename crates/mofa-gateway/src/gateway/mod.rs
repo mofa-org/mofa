@@ -173,10 +173,7 @@ impl Gateway {
             .route("/api/v1/cluster/nodes", get(list_nodes_handler))
             .route("/api/v1/cluster/status", get(cluster_status_handler))
             // Request routing endpoint (for proxying)
-            .route("/api/v1/route", post(route_request_handler))
-            // OpenAI-compatible endpoint
-            .route("/v1/chat/completions", post(chat_completions_handler))
-            ;
+            .route("/api/v1/route", post(route_request_handler));
 
         // Add mofa-local-llm proxy routes if enabled
         if self.config.enable_local_llm_proxy {
@@ -265,6 +262,9 @@ impl Gateway {
                 .route("/v1/chat/completions", post(proxy_local_llm_chat))
                 .route("/v1/models", get(proxy_local_llm_models))
                 .route("/v1/models/:model_id", get(proxy_local_llm_model_info));
+        } else {
+            // Fallback OpenAI-compatible endpoint when proxy is disabled.
+            app = app.route("/v1/chat/completions", post(chat_completions_handler));
         }
 
         let app = app
