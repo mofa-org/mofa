@@ -430,7 +430,7 @@ impl InferenceEngine {
         }
 
         let output = tokenizer
-            .decode(&token_ids, true)
+            .decode(&token_ids)
             .map_err(|e| format!("Failed to decode: {}", e))?;
 
         Ok(output)
