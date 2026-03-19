@@ -39,6 +39,15 @@ impl SimpleTokenizer {
         ids.push(0);
         Ok(ids)
     }
+    
+    fn decode(&self, token_ids: &[u32]) -> Result<String, String> {
+        // Simple character-based decoding
+        let chars: Vec<char> = token_ids
+            .iter()
+            .map(|&id| char::from_u32(id % 128).unwrap_or('?'))
+            .collect();
+        Ok(chars.into_iter().collect())
+    }
 }
 
 /// Runtime configuration for inference
