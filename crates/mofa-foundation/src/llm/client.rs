@@ -1144,64 +1144,6 @@ impl ChatSession {
             self.messages.push(msg);
         }
     }
-
-        // Start OTel span for the provider call (feature-gated)
-        #[cfg(feature = "otel-tracing")]
-        let __otel_span = {
-            use opentelemetry::trace::{Tracer, SpanKind, Span};
-            use opentelemetry::KeyValue;
-            let tracer = opentelemetry::global::tracer("mofa-foundation");
-            let provider_name = self.client.provider().name().to_string();
-            let model_name = self
-                .client
-                .config()
-                .default_model
-                .clone()
-                .unwrap_or_else(|| self.client.provider().default_model().to_string());
-            let mut span = tracer
-                .span_builder("gen_ai.chat_completion")
-                .with_kind(SpanKind::Client)
-                .start(&tracer);
-            span.set_attribute(KeyValue::new("gen_ai.system", provider_name));
-            span.set_attribute(KeyValue::new("gen_ai.request.model", model_name));
-            span.set_attribute(KeyValue::new("session.id", self.session_id.to_string()));
-            span
-        };
-
-        // 发送请求
-        // Send request
-        let response = if self.tool_executor.is_some() {
-            builder.send_with_tools().await?
-        } else {
-            builder.send().await?
-        };
-
-        // Record token usage and end the OTel span
-        #[cfg(feature = "otel-tracing")]
-        {
-            use opentelemetry::trace::Span;
-            use opentelemetry::KeyValue;
-            let mut span = __otel_span;
-            span.set_attribute(KeyValue::new(
-                "gen_ai.usage.input_tokens",
-                response.usage.as_ref().map(|u| u.prompt_tokens as i64).unwrap_or(0),
-            ));
-            span.set_attribute(KeyValue::new(
-                "gen_ai.usage.output_tokens",
-                response
-                    .usage
-                    .as_ref()
-                    .map(|u| u.completion_tokens as i64)
-                    .unwrap_or(0),
-            ));
-            span.set_attribute(KeyValue::new("gen_ai.response.model", response.model.clone()));
-            span.set_status(opentelemetry::trace::Status::Ok);
-            span.end();
-        }
-
-        // 存储响应元数据
-        // Store response metadata
-        self.last_response_metadata = Some(super::types::LLMResponseMetadata::from(&response));
     /// Apply the ContextWindowManager's sliding window policy to `self.messages`.
     ///
     /// Rebuilds `self.messages` from the trim result, stripping the system prefix
@@ -1358,12 +1300,86 @@ impl ChatSession {
             builder = builder.with_tool_executor(executor.clone());
         }
 
+        // OTel span for the provider call (feature-gated).
+        // We use local helper functions to avoid `#[cfg]` on `let` statements.
+        #[cfg(feature = "otel-tracing")]
+        fn __make_otel_span(
+            client: &LLMClient,
+            session_id: uuid::Uuid,
+        ) -> opentelemetry::global::BoxedSpan {
+            use opentelemetry::trace::{SpanKind, Tracer};
+            use opentelemetry::trace::Span as _;
+            use opentelemetry::KeyValue;
+
+            let tracer = opentelemetry::global::tracer("mofa-foundation");
+            let provider_name = client.provider().name().to_string();
+            let model_name = client
+                .config()
+                .default_model
+                .clone()
+                .unwrap_or_else(|| client.provider().default_model().to_string());
+
+            let mut span = tracer
+                .span_builder("gen_ai.chat_completion")
+                .with_kind(SpanKind::Client)
+                .start(&tracer);
+
+            span.set_attribute(KeyValue::new("gen_ai.system", provider_name));
+            span.set_attribute(KeyValue::new("gen_ai.request.model", model_name));
+            span.set_attribute(KeyValue::new("session.id", session_id.to_string()));
+            span
+        }
+
+        #[cfg(not(feature = "otel-tracing"))]
+        fn __make_otel_span(_client: &LLMClient, _session_id: uuid::Uuid) -> () {
+            ()
+        }
+
+        let mut __otel_span = __make_otel_span(&self.client, self.session_id);
+
         // Fire the request
         let response = if self.tool_executor.is_some() {
             builder.send_with_tools().await?
         } else {
             builder.send().await?
         };
+
+        #[cfg(feature = "otel-tracing")]
+        fn __end_otel_span(
+            span: &mut opentelemetry::global::BoxedSpan,
+            response: &ChatCompletionResponse,
+        ) {
+            use opentelemetry::trace::Span as _;
+            use opentelemetry::KeyValue;
+
+            span.set_attribute(
+                KeyValue::new(
+                    "gen_ai.usage.input_tokens",
+                    response.usage.as_ref().map(|u| u.prompt_tokens as i64).unwrap_or(0),
+                ),
+            );
+            span.set_attribute(
+                KeyValue::new(
+                    "gen_ai.usage.output_tokens",
+                    response
+                        .usage
+                        .as_ref()
+                        .map(|u| u.completion_tokens as i64)
+                        .unwrap_or(0),
+                ),
+            );
+            span.set_attribute(KeyValue::new(
+                "gen_ai.response.model",
+                response.model.clone(),
+            ));
+            span.set_status(opentelemetry::trace::Status::Ok);
+            span.end();
+        }
+
+        #[cfg(not(feature = "otel-tracing"))]
+        fn __end_otel_span(_span: &mut (), _response: &ChatCompletionResponse) {}
+
+        __end_otel_span(&mut __otel_span, &response);
 
         // Store response metadata
         self.last_response_metadata = Some(super::types::LLMResponseMetadata::from(&response));
