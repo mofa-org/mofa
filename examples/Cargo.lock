@@ -4903,6 +4903,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "pii_only"
+version = "0.1.0"
+dependencies = [
+ "mofa-foundation",
+ "mofa-runtime",
+ "tokio",
+]
+
+[[package]]
 name = "pin-project"
 version = "1.1.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5552,6 +5561,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "rbac_only"
+version = "0.1.0"
+dependencies = [
+ "mofa-foundation",
+ "mofa-runtime",
+ "tokio",
+]
+
+[[package]]
 name = "react_agent"
 version = "0.1.0"
 dependencies = [
@@ -6174,6 +6192,15 @@ dependencies = [
  "tokio",
  "tracing",
  "tracing-subscriber 0.3.22",
+]
+
+[[package]]
+name = "secure_agent"
+version = "0.1.0"
+dependencies = [
+ "mofa-foundation",
+ "mofa-runtime",
+ "tokio",
 ]
 
 [[package]]
