@@ -252,7 +252,6 @@ impl ReviewManagerApprovalHandler {
 #[async_trait]
 impl ApprovalHandler for ReviewManagerApprovalHandler {
     async fn request_approval(&self, req: ApprovalRequest) -> ApprovalOutcome {
-        use crate::hitl::error::FoundationHitlError;
         use mofa_kernel::hitl::{
             ExecutionTrace, ReviewContext, ReviewRequest, ReviewResponse, ReviewType,
         };
@@ -284,9 +283,14 @@ impl ApprovalHandler for ReviewManagerApprovalHandler {
         // Block until the human resolves via REST API (or we time out).
         let response = match self.manager.wait_for_review(&id, Some(self.review_timeout)).await {
             Ok(r) => r,
-            Err(FoundationHitlError::ReviewTimeout(_))
-            | Err(FoundationHitlError::ReviewExpired(_)) => return ApprovalOutcome::approve(),
-            Err(err) => return ApprovalOutcome::reject(format!("review wait failed: {err}")),
+            // Only timeout/expiry auto-approves; other infra errors reject.
+            Err(err) => {
+                let msg = err.to_string();
+                if msg.contains("timed out") || msg.contains("expired") {
+                    return ApprovalOutcome::approve();
+                }
+                return ApprovalOutcome::reject(format!("review wait failed: {msg}"));
+            }
         };
 
         // Map ReviewResponse to ApprovalOutcome.
