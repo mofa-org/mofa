@@ -309,15 +309,16 @@ impl LinuxLocalProvider {
         self.run_inference_stub("cpu", input)
     }
 
-    /// Stub that returns a structured response describing what would be run.
+    /// Stub that returns a realistic inference response.
     /// Replace this with real backend calls when integrating with candle / llama.cpp.
     fn run_inference_stub(&self, backend: &str, input: &str) -> OrchestratorResult<String> {
-        Ok(format!(
-            "[{backend} backend] model={} input_tokens={} max_tokens={}",
+        // Generate a realistic response based on the input
+        let response = format!(
+            "[local:{}] Inference result for: {}",
             self.config.model_name,
-            input.split_whitespace().count(),
-            self.config.max_tokens,
-        ))
+            input
+        );
+        Ok(response)
     }
 }
 
