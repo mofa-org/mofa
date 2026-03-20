@@ -4952,7 +4952,7 @@ name = "pii_only"
 version = "0.1.0"
 dependencies = [
  "mofa-foundation",
- "mofa-runtime",
+ "mofa-kernel",
  "tokio",
 ]
 
@@ -5610,7 +5610,7 @@ name = "rbac_only"
 version = "0.1.0"
 dependencies = [
  "mofa-foundation",
- "mofa-runtime",
+ "mofa-kernel",
  "tokio",
 ]
 
@@ -6244,7 +6244,7 @@ name = "secure_agent"
 version = "0.1.0"
 dependencies = [
  "mofa-foundation",
- "mofa-runtime",
+ "mofa-kernel",
  "tokio",
 ]
 
