@@ -10,6 +10,7 @@ use async_trait::async_trait;
 use mofa_foundation::orchestrator::traits::{
     ModelProvider, ModelProviderConfig, ModelType, OrchestratorError, OrchestratorResult,
 };
+use mofa_kernel::llm::BoxTokenStream;
 use serde_json::Value;
 use std::collections::HashMap;
 use sysinfo::{MemoryRefreshKind, RefreshKind, System};
@@ -214,6 +215,34 @@ impl ModelProvider for LinuxLocalProvider {
             ComputeBackend::Vulkan => self.run_inference_vulkan(input),
             ComputeBackend::Cpu => self.run_inference_cpu(input),
         }
+    }
+
+    async fn infer_stream(&self, input: &str) -> OrchestratorResult<BoxTokenStream> {
+        use futures::StreamExt;
+        use mofa_kernel::llm::{StreamChunk, FinishReason, StreamError};
+
+        if !self.loaded {
+            return Err(OrchestratorError::InferenceFailed(
+                "model is not loaded".into(),
+            ));
+        }
+
+        // Get the full inference result first
+        let output = self.infer(input).await?;
+        
+        // Simulate token-by-token streaming
+        let tokens: Vec<String> = output.split_whitespace().map(String::from).collect();
+        
+        let stream = futures::stream::iter(tokens)
+            .then(|token| async move {
+                tokio::time::sleep(tokio::time::Duration::from_millis(25)).await;
+                Ok::<_, StreamError>(StreamChunk::text(token))
+            })
+            .chain(futures::stream::once(async move {
+                Ok(StreamChunk::done(FinishReason::Stop))
+            }));
+        
+        Ok(Box::pin(stream))
     }
 
     fn memory_usage_bytes(&self) -> u64 {
