@@ -55,7 +55,7 @@ pub fn role_assistant() -> PromptTemplate {
                 .with_description("专业领域")
                 // Professional field
                 .with_default("解决问题和提供帮助"),
-                // Problem solving and providing help
+            // Problem solving and providing help
         )
         .with_tag("system")
         .with_tag("role")
@@ -90,7 +90,7 @@ pub fn code_review() -> PromptTemplate {
                 .with_description("编程语言")
                 // Programming language
                 .with_default("代码"),
-                // Code
+            // Code
         )
         .with_variable(PromptVariable::new("code").with_description("要审查的代码"))
         // The code to be reviewed
@@ -120,7 +120,7 @@ pub fn code_explain() -> PromptTemplate {
                 .with_description("编程语言")
                 // Programming language
                 .with_default("代码"),
-                // Code
+            // Code
         )
         .with_variable(PromptVariable::new("code").with_description("要解释的代码"))
         // The code to be explained
@@ -175,7 +175,7 @@ pub fn code_refactor() -> PromptTemplate {
                 .with_description("编程语言")
                 // Programming language
                 .with_default("代码"),
-                // Code
+            // Code
         )
         .with_variable(PromptVariable::new("code").with_description("要重构的代码"))
         // The code to be refactored
@@ -184,7 +184,7 @@ pub fn code_refactor() -> PromptTemplate {
                 .with_description("重构目标")
                 // Refactoring goal
                 .with_default("使其更加清晰、高效"),
-                // Make it clearer and more efficient
+            // Make it clearer and more efficient
         )
         .with_tag("code")
         .with_tag("refactor")
@@ -216,7 +216,7 @@ pub fn code_test() -> PromptTemplate {
                 .with_description("测试框架")
                 // Test framework
                 .with_default("标准"),
-                // Standard
+            // Standard
         )
         .with_tag("code")
         .with_tag("test")
@@ -252,7 +252,7 @@ pub fn tech_doc() -> PromptTemplate {
                 .with_description("目标读者")
                 // Target audience
                 .with_default("开发者"),
-                // Developers
+            // Developers
         )
         .with_tag("doc")
         .with_tag("writing")
@@ -281,7 +281,7 @@ pub fn summarize() -> PromptTemplate {
                 .with_description("目标长度")
                 // Target length
                 .with_default("200-300字"),
-                // 200-300 words
+            // 200-300 words
         )
         .with_tag("writing")
         .with_tag("summary")
@@ -309,14 +309,14 @@ pub fn translate() -> PromptTemplate {
                 .with_description("源语言")
                 // Source language
                 .with_default("英文"),
-                // English
+            // English
         )
         .with_variable(
             PromptVariable::new("target_lang")
                 .with_description("目标语言")
                 // Target language
                 .with_default("中文"),
-                // Chinese
+            // Chinese
         )
         .with_variable(PromptVariable::new("content").with_description("要翻译的内容"))
         // The content to be translated
@@ -354,7 +354,7 @@ pub fn analyze() -> PromptTemplate {
                 .with_description("相关背景信息")
                 // Relevant background information
                 .with_default("无额外上下文"),
-                // No extra context
+            // No extra context
         )
         .with_tag("analysis")
         .with_tag("problem-solving")
@@ -385,7 +385,7 @@ pub fn compare() -> PromptTemplate {
                 .with_description("对比维度")
                 // Comparison dimensions
                 .with_default("功能、性能、易用性、成本"),
-                // Function, performance, usability, cost
+            // Function, performance, usability, cost
         )
         .with_tag("analysis")
         .with_tag("comparison")
@@ -467,7 +467,7 @@ pub fn debater() -> PromptTemplate {
                 .with_description("辩论立场")
                 // Debate position
                 .with_enum(vec!["正".to_string(), "反".to_string()]),
-                // Pro, Con
+            // Pro, Con
         )
         .with_variable(PromptVariable::new("topic").with_description("辩论话题"))
         // Debate topic
@@ -476,7 +476,7 @@ pub fn debater() -> PromptTemplate {
                 .with_description("之前的辩论内容")
                 // Previous debate content
                 .with_default("这是辩论的开始"),
-                // This is the beginning of the debate
+            // This is the beginning of the debate
         )
         .with_tag("multi-agent")
         .with_tag("debate")

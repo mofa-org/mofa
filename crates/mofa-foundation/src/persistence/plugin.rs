@@ -593,10 +593,10 @@ impl crate::llm::agent::LLMAgentEventHandler for PersistencePlugin {
                 user_msg_id,
                 assistant_msg_id,
                 model_name,
-                0,                         // 未知（没有元数据时无法获取真实值）
-                                           // Unknown (cannot get real value without metadata)
+                0, // 未知（没有元数据时无法获取真实值）
+                // Unknown (cannot get real value without metadata)
                 response.len() as i32 / 4, // 简单估算 completion_tokens (每4字符一个token)
-                                           // Simple estimation of completion_tokens (1 token per 4 chars)
+                // Simple estimation of completion_tokens (1 token per 4 chars)
                 request_time,
                 now,
             );

@@ -10,11 +10,11 @@ use tokio::sync::RwLock;
 #[derive(Debug, Clone)]
 pub enum CoordinationStrategy {
     MasterSlave, // 主从模式
-                 // Master-Slave mode
-    PeerToPeer,  // 对等协作模式
-                 // Peer-to-Peer collaboration mode
-    Pipeline,    // 流水线模式（任务串行传递）
-                 // Pipeline mode (serial task passing)
+    // Master-Slave mode
+    PeerToPeer, // 对等协作模式
+    // Peer-to-Peer collaboration mode
+    Pipeline, // 流水线模式（任务串行传递）
+              // Pipeline mode (serial task passing)
 }
 
 /// 协同器核心结构体

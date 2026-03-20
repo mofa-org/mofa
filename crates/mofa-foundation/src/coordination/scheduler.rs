@@ -18,7 +18,7 @@ impl Ord for PriorityTask {
         self.priority
             .cmp(&other.priority)
             .then_with(|| other.submit_time.cmp(&self.submit_time)) // 同优先级先提交先执行
-            // First-in-first-out for tasks with the same priority
+        // First-in-first-out for tasks with the same priority
     }
 }
 
@@ -33,14 +33,14 @@ impl PartialOrd for PriorityTask {
 pub struct PriorityScheduler {
     task_queue: Arc<RwLock<BinaryHeap<PriorityTask>>>, // 优先级任务队列
     // Priority task queue
-    agent_load: Arc<RwLock<HashMap<String, usize>>>,   // 智能体当前负载（执行中的任务数）
+    agent_load: Arc<RwLock<HashMap<String, usize>>>, // 智能体当前负载（执行中的任务数）
     // Current agent load (number of tasks being executed)
     bus: Arc<AgentBus>,
     task_status: Arc<RwLock<HashMap<String, SchedulingStatus>>>, // 任务状态跟踪
     // Task status tracking
-    role_mapping: Arc<RwLock<HashMap<String, Vec<String>>>>,     // 角色-智能体映射
+    role_mapping: Arc<RwLock<HashMap<String, Vec<String>>>>, // 角色-智能体映射
     // Role-to-agent mapping
-    agent_tasks: Arc<RwLock<HashMap<String, Vec<String>>>>,      // Agent-to-task mapping
+    agent_tasks: Arc<RwLock<HashMap<String, Vec<String>>>>, // Agent-to-task mapping
     task_priorities: Arc<RwLock<HashMap<String, TaskPriority>>>, // Task priority tracking
 }
 
@@ -132,10 +132,7 @@ impl PriorityScheduler {
             // Update task status and agent loa
             task_status.insert(task_id.clone(), SchedulingStatus::Running);
             *agent_load.entry(target_agent.clone()).or_insert(0) += 1;
-            agent_tasks
-                .entry(target_agent)
-                .or_default()
-                .push(task_id);
+            agent_tasks.entry(target_agent).or_default().push(task_id);
         }
         Ok(())
     }
