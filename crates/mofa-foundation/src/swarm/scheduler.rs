@@ -587,13 +587,13 @@ mod tests {
 
         let executor: SubtaskExecutorFn = Arc::new(move |_idx, _task| {
             Box::pin(async move {
-                sleep(Duration::from_millis(50)).await;
+                sleep(Duration::from_millis(100)).await;
                 Ok("done".into())
             })
         });
 
         let mut config = SwarmSchedulerConfig::default();
-        config.task_timeout = Duration::from_millis(10);
+        config.task_timeout = Duration::from_millis(1);
         let scheduler = SequentialScheduler::with_config(config);
 
         let summary = scheduler.execute(&mut dag, executor).await.unwrap();
