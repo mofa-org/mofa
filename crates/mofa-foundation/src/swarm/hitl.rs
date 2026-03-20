@@ -210,12 +210,109 @@ pub fn hitl_executor_middleware(
     })
 }
 
+/// An [`ApprovalHandler`] that delegates to the production [`ReviewManager`].
+///
+/// This bridges the lightweight swarm HITL abstraction with the full
+/// production review infrastructure (audit trail, webhooks, REST API, rate
+/// limiting)
+///
+/// # Usage
+/// ```ignore
+/// let handler = ReviewManagerApprovalHandler::new(manager, "swarm-run-42");
+/// let executor = hitl_executor_middleware(base, HITLMode::Required, Arc::new(handler), audit, timeout);
+/// ```
+///
+/// For tests and local dev, use [`ChannelApprovalHandler`] instead
+/// it works fully in-process with no dependencies.
+pub struct ReviewManagerApprovalHandler {
+    manager: Arc<crate::hitl::manager::ReviewManager>,
+    execution_id: String,
+    review_timeout: std::time::Duration,
+}
+
+impl ReviewManagerApprovalHandler {
+    pub fn new(
+        manager: Arc<crate::hitl::manager::ReviewManager>,
+        execution_id: impl Into<String>,
+    ) -> Self {
+        Self {
+            manager,
+            execution_id: execution_id.into(),
+            review_timeout: std::time::Duration::from_secs(3600),
+        }
+    }
+
+    /// Override the default 1-hour wait timeout.
+    pub fn with_review_timeout(mut self, timeout: std::time::Duration) -> Self {
+        self.review_timeout = timeout;
+        self
+    }
+}
+
+#[async_trait]
+impl ApprovalHandler for ReviewManagerApprovalHandler {
+    async fn request_approval(&self, req: ApprovalRequest) -> ApprovalOutcome {
+        use crate::hitl::error::FoundationHitlError;
+        use mofa_kernel::hitl::{
+            ExecutionTrace, ReviewContext, ReviewRequest, ReviewResponse, ReviewType,
+        };
+
+        // Build a minimal ReviewContext carrying the task description and risk level.
+        let input_data = serde_json::json!({
+            "subtask_id": req.subtask_id,
+            "description": req.description,
+            "risk_level": req.risk_level,
+            "prior_output": req.prior_output,
+        });
+        let trace = ExecutionTrace { steps: vec![], duration_ms: 0 };
+        let context = ReviewContext::new(trace, input_data);
+
+        let review_req = ReviewRequest::new(
+            self.execution_id.clone(),
+            ReviewType::Approval,
+            context,
+        )
+        .with_node_id(req.subtask_id.clone());
+
+        // Submit to ReviewManager (fires webhooks, stores in ReviewStore, etc.).
+        // Infra errors (storage down, misconfiguration) → reject: don't silently approve.
+        let id = match self.manager.request_review(review_req).await {
+            Ok(id) => id,
+            Err(err) => return ApprovalOutcome::reject(format!("review request failed: {err}")),
+        };
+
+        // Block until the human resolves via REST API (or we time out).
+        let response = match self.manager.wait_for_review(&id, Some(self.review_timeout)).await {
+            Ok(r) => r,
+            Err(FoundationHitlError::ReviewTimeout(_))
+            | Err(FoundationHitlError::ReviewExpired(_)) => return ApprovalOutcome::approve(),
+            Err(err) => return ApprovalOutcome::reject(format!("review wait failed: {err}")),
+        };
+
+        // Map ReviewResponse to ApprovalOutcome.
+        match response {
+            ReviewResponse::Approved { comment } => ApprovalOutcome {
+                decision: ApprovalDecision::Approve,
+                reason: comment,
+            },
+            ReviewResponse::Rejected { reason, .. } => ApprovalOutcome::reject(reason),
+            ReviewResponse::ChangesRequested { changes, .. } => ApprovalOutcome::modify(changes),
+            ReviewResponse::Deferred { .. } => ApprovalOutcome::approve(),
+            _ => ApprovalOutcome::approve(),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::hitl::store::{ReviewStore, ReviewStoreError};
     use crate::swarm::dag::{SubtaskDAG, SwarmSubtask};
     use crate::swarm::scheduler::{SequentialScheduler, SwarmScheduler, SwarmSchedulerConfig};
+    use async_trait::async_trait;
+    use mofa_kernel::hitl::{ReviewRequest, ReviewResponse, ReviewStatus};
     use tokio::task;
+    use uuid::Uuid;
 
     fn one_task_dag() -> SubtaskDAG {
         let mut d = SubtaskDAG::new("test");
@@ -389,5 +486,379 @@ mod tests {
         let kinds: Vec<_> = audit.iter().map(|e| &e.kind).collect();
         assert!(kinds.contains(&&AuditEventKind::HITLRequested), "missing HITLRequested");
         assert!(kinds.contains(&&AuditEventKind::HITLDecision),  "missing HITLDecision");
+    }
+
+    fn make_review_manager() -> Arc<crate::hitl::manager::ReviewManager> {
+        use crate::hitl::{
+            manager::{ReviewManager, ReviewManagerConfig},
+            notifier::ReviewNotifier,
+            policy_engine::ReviewPolicyEngine,
+            store::InMemoryReviewStore,
+        };
+        Arc::new(ReviewManager::new(
+            Arc::new(InMemoryReviewStore::new()),
+            Arc::new(ReviewNotifier::new(vec![])),
+            Arc::new(ReviewPolicyEngine::new(vec![])),
+            None, // no rate limiting in tests
+            ReviewManagerConfig::default(),
+        ))
+    }
+
+    enum FailingStoreMode {
+        Create,
+        Get,
+    }
+
+    struct FailingReviewStore {
+        mode: FailingStoreMode,
+    }
+
+    #[async_trait]
+    impl ReviewStore for FailingReviewStore {
+        async fn create_review(&self, _request: &ReviewRequest) -> Result<(), ReviewStoreError> {
+            match self.mode {
+                FailingStoreMode::Create => Err(ReviewStoreError::Connection("create failed".into())),
+                FailingStoreMode::Get => Ok(()),
+            }
+        }
+
+        async fn get_review(
+            &self,
+            _id: &mofa_kernel::hitl::ReviewRequestId,
+        ) -> Result<Option<ReviewRequest>, ReviewStoreError> {
+            match self.mode {
+                FailingStoreMode::Create => Ok(None),
+                FailingStoreMode::Get => Err(ReviewStoreError::Query("get failed".into())),
+            }
+        }
+
+        async fn update_review(
+            &self,
+            _id: &mofa_kernel::hitl::ReviewRequestId,
+            _status: ReviewStatus,
+            _response: Option<ReviewResponse>,
+            _resolved_by: Option<String>,
+        ) -> Result<(), ReviewStoreError> {
+            Ok(())
+        }
+
+        async fn list_pending(
+            &self,
+            _tenant_id: Option<Uuid>,
+            _limit: Option<u64>,
+        ) -> Result<Vec<ReviewRequest>, ReviewStoreError> {
+            Ok(vec![])
+        }
+
+        async fn list_by_execution(
+            &self,
+            _execution_id: &str,
+        ) -> Result<Vec<ReviewRequest>, ReviewStoreError> {
+            Ok(vec![])
+        }
+
+        async fn list_expired(&self) -> Result<Vec<ReviewRequest>, ReviewStoreError> {
+            Ok(vec![])
+        }
+
+        async fn cleanup_old_reviews(
+            &self,
+            _before: chrono::DateTime<chrono::Utc>,
+        ) -> Result<u64, ReviewStoreError> {
+            Ok(0)
+        }
+    }
+
+    fn make_review_manager_with_store(
+        store: Arc<dyn ReviewStore>,
+    ) -> Arc<crate::hitl::manager::ReviewManager> {
+        use crate::hitl::{
+            manager::{ReviewManager, ReviewManagerConfig},
+            notifier::ReviewNotifier,
+            policy_engine::ReviewPolicyEngine,
+        };
+        Arc::new(ReviewManager::new(
+            store,
+            Arc::new(ReviewNotifier::new(vec![])),
+            Arc::new(ReviewPolicyEngine::new(vec![])),
+            None,
+            ReviewManagerConfig::default(),
+        ))
+    }
+
+    #[tokio::test]
+    async fn test_review_manager_handler_approve() {
+        use mofa_kernel::hitl::ReviewResponse;
+
+        let manager = make_review_manager();
+        let mgr_clone = Arc::clone(&manager);
+
+        let handler = Arc::new(
+            ReviewManagerApprovalHandler::new(Arc::clone(&manager), "test-run-1")
+                .with_review_timeout(std::time::Duration::from_secs(5)),
+        );
+
+        // Background resolver: waits for a pending review then approves it.
+        let resolver = task::spawn(async move {
+            loop {
+                tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+                let pending = mgr_clone.list_pending(None, Some(1)).await.unwrap();
+                if let Some(req) = pending.into_iter().next() {
+                    mgr_clone
+                        .resolve_review(
+                            &req.id,
+                            ReviewResponse::Approved { comment: Some("looks good".into()) },
+                            "auto-approver".into(),
+                        )
+                        .await
+                        .unwrap();
+                    return;
+                }
+            }
+        });
+
+        let req = ApprovalRequest {
+            subtask_id: "task-1".into(),
+            description: "Deploy to production".into(),
+            risk_level: 0.8,
+            prior_output: None,
+        };
+
+        let outcome = handler.request_approval(req).await;
+        resolver.await.unwrap();
+
+        assert!(
+            matches!(outcome.decision, ApprovalDecision::Approve),
+            "expected Approve, got {:?}", outcome.decision
+        );
+        assert_eq!(outcome.reason.as_deref(), Some("looks good"));
+    }
+
+    #[tokio::test]
+    async fn test_review_manager_handler_reject() {
+        use mofa_kernel::hitl::ReviewResponse;
+
+        let manager = make_review_manager();
+        let mgr_clone = Arc::clone(&manager);
+
+        let handler = Arc::new(
+            ReviewManagerApprovalHandler::new(Arc::clone(&manager), "test-run-2")
+                .with_review_timeout(std::time::Duration::from_secs(5)),
+        );
+
+        let resolver = task::spawn(async move {
+            loop {
+                tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+                let pending = mgr_clone.list_pending(None, Some(1)).await.unwrap();
+                if let Some(req) = pending.into_iter().next() {
+                    mgr_clone
+                        .resolve_review(
+                            &req.id,
+                            ReviewResponse::Rejected {
+                                reason: "too risky".into(),
+                                comment: None,
+                            },
+                            "auto-reviewer".into(),
+                        )
+                        .await
+                        .unwrap();
+                    return;
+                }
+            }
+        });
+
+        let req = ApprovalRequest {
+            subtask_id: "task-2".into(),
+            description: "Drop the production database".into(),
+            risk_level: 0.95,
+            prior_output: None,
+        };
+
+        let outcome = handler.request_approval(req).await;
+        resolver.await.unwrap();
+
+        assert!(
+            matches!(outcome.decision, ApprovalDecision::Reject),
+            "expected Reject, got {:?}", outcome.decision
+        );
+        assert_eq!(outcome.reason.as_deref(), Some("too risky"));
+    }
+
+    #[tokio::test]
+    async fn test_review_manager_handler_timeout_auto_approves() {
+        let manager = make_review_manager();
+        let handler = ReviewManagerApprovalHandler::new(manager, "test-run-timeout")
+            .with_review_timeout(std::time::Duration::from_millis(10));
+
+        let req = ApprovalRequest {
+            subtask_id: "task-timeout".into(),
+            description: "Wait for approval".into(),
+            risk_level: 0.5,
+            prior_output: None,
+        };
+
+        let outcome = handler.request_approval(req).await;
+
+        assert!(
+            matches!(outcome.decision, ApprovalDecision::Approve),
+            "expected timeout to auto-approve, got {:?}",
+            outcome.decision
+        );
+        assert!(outcome.reason.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_review_manager_handler_request_review_failure_rejects() {
+        let manager = make_review_manager_with_store(Arc::new(FailingReviewStore {
+            mode: FailingStoreMode::Create,
+        }));
+        let handler = ReviewManagerApprovalHandler::new(manager, "test-run-create-fail");
+
+        let outcome = handler
+            .request_approval(ApprovalRequest {
+                subtask_id: "task-create-fail".into(),
+                description: "Create review should fail".into(),
+                risk_level: 0.4,
+                prior_output: None,
+            })
+            .await;
+
+        assert!(
+            matches!(outcome.decision, ApprovalDecision::Reject),
+            "expected create failure to reject, got {:?}",
+            outcome.decision
+        );
+        assert!(
+            outcome
+                .reason
+                .as_deref()
+                .is_some_and(|reason| reason.contains("review request failed")),
+            "unexpected reason: {:?}",
+            outcome.reason
+        );
+    }
+
+    #[tokio::test]
+    async fn test_review_manager_handler_wait_failure_rejects() {
+        let manager = make_review_manager_with_store(Arc::new(FailingReviewStore {
+            mode: FailingStoreMode::Get,
+        }));
+        let handler = ReviewManagerApprovalHandler::new(manager, "test-run-wait-fail")
+            .with_review_timeout(std::time::Duration::from_millis(50));
+
+        let outcome = handler
+            .request_approval(ApprovalRequest {
+                subtask_id: "task-wait-fail".into(),
+                description: "Wait for review should fail".into(),
+                risk_level: 0.4,
+                prior_output: None,
+            })
+            .await;
+
+        assert!(
+            matches!(outcome.decision, ApprovalDecision::Reject),
+            "expected wait failure to reject, got {:?}",
+            outcome.decision
+        );
+        assert!(
+            outcome
+                .reason
+                .as_deref()
+                .is_some_and(|reason| reason.contains("review wait failed")),
+            "unexpected reason: {:?}",
+            outcome.reason
+        );
+    }
+
+    #[tokio::test]
+    async fn test_review_manager_handler_changes_requested_maps_to_modify() {
+        let manager = make_review_manager();
+        let mgr_clone = Arc::clone(&manager);
+        let handler = ReviewManagerApprovalHandler::new(Arc::clone(&manager), "test-run-modify")
+            .with_review_timeout(std::time::Duration::from_secs(5));
+
+        let resolver = task::spawn(async move {
+            loop {
+                tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+                let pending = mgr_clone.list_pending(None, Some(1)).await.unwrap();
+                if let Some(req) = pending.into_iter().next() {
+                    mgr_clone
+                        .resolve_review(
+                            &req.id,
+                            ReviewResponse::ChangesRequested {
+                                changes: "Use a safer deployment plan".into(),
+                                comment: None,
+                            },
+                            "auto-reviewer".into(),
+                        )
+                        .await
+                        .unwrap();
+                    return;
+                }
+            }
+        });
+
+        let outcome = handler
+            .request_approval(ApprovalRequest {
+                subtask_id: "task-modify".into(),
+                description: "Deploy to production".into(),
+                risk_level: 0.7,
+                prior_output: None,
+            })
+            .await;
+        resolver.await.unwrap();
+
+        assert!(
+            matches!(
+                outcome.decision,
+                ApprovalDecision::Modify(ref prompt) if prompt == "Use a safer deployment plan"
+            ),
+            "expected modify outcome, got {:?}",
+            outcome.decision
+        );
+    }
+
+    #[tokio::test]
+    async fn test_review_manager_handler_deferred_auto_approves() {
+        let manager = make_review_manager();
+        let mgr_clone = Arc::clone(&manager);
+        let handler = ReviewManagerApprovalHandler::new(Arc::clone(&manager), "test-run-deferred")
+            .with_review_timeout(std::time::Duration::from_secs(5));
+
+        let resolver = task::spawn(async move {
+            loop {
+                tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+                let pending = mgr_clone.list_pending(None, Some(1)).await.unwrap();
+                if let Some(req) = pending.into_iter().next() {
+                    mgr_clone
+                        .resolve_review(
+                            &req.id,
+                            ReviewResponse::Deferred {
+                                reason: "need another reviewer".into(),
+                            },
+                            "auto-reviewer".into(),
+                        )
+                        .await
+                        .unwrap();
+                    return;
+                }
+            }
+        });
+
+        let outcome = handler
+            .request_approval(ApprovalRequest {
+                subtask_id: "task-deferred".into(),
+                description: "Review later".into(),
+                risk_level: 0.3,
+                prior_output: None,
+            })
+            .await;
+        resolver.await.unwrap();
+
+        assert!(
+            matches!(outcome.decision, ApprovalDecision::Approve),
+            "expected deferred review to auto-approve, got {:?}",
+            outcome.decision
+        );
     }
 }

@@ -16,7 +16,7 @@ pub use config::{
 pub use dag::{DependencyEdge, DependencyKind, SubtaskDAG, SubtaskStatus, SwarmSubtask};
 pub use hitl::{
     ApprovalDecision, ApprovalHandler, ApprovalOutcome, ApprovalRequest,
-    ChannelApprovalHandler, hitl_executor_middleware,
+    ChannelApprovalHandler, ReviewManagerApprovalHandler, hitl_executor_middleware,
 };
 pub use patterns::CoordinationPattern;
 pub use scheduler::{
