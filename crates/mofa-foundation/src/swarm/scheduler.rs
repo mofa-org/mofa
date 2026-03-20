@@ -221,6 +221,12 @@ impl SwarmScheduler for SequentialScheduler {
                 continue;
             }
 
+            // Skip tasks whose hard deps have failed (Continue policy: no cascade, but still blocked).
+            let is_ready_or_running = dag.ready_tasks().contains(&idx);
+            if !is_ready_or_running {
+                continue;
+            }
+
             dag.mark_running(idx);
             let task_snapshot = dag.get_task(idx).unwrap().clone();
             let task_id = task_snapshot.id.clone();
@@ -443,6 +449,12 @@ impl SwarmScheduler for ParallelScheduler {
 
         for (idx, task) in dag.all_tasks() {
             if task.status == crate::swarm::SubtaskStatus::Pending {
+                // Pending + blocked by failed hard dep under Continue: not a stall, skip counting.
+                let is_blocked_by_failure = self.config.failure_policy == FailurePolicy::Continue
+                    && !dag.ready_tasks().contains(&idx);
+                if is_blocked_by_failure {
+                    continue;
+                }
                 skipped += 1;
                 results.push(TaskExecutionResult::skipped(
                     task,

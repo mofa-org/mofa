@@ -323,6 +323,7 @@ mod tests {
             HITLMode::Required,
             handler_arc,
             audit_log,
+            SwarmSchedulerConfig::default().hitl_optional_timeout,
         );
 
         let scheduler = SequentialScheduler::new();
