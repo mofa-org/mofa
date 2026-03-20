@@ -7,6 +7,7 @@ use tokio::sync::{mpsc, oneshot, Mutex};
 use mofa_kernel::agent::types::error::GlobalResult;
 
 use crate::swarm::config::{AuditEvent, AuditEventKind, HITLMode};
+use crate::swarm::dag::RiskLevel;
 use crate::swarm::scheduler::SubtaskExecutorFn;
 
 /// The human's decision types for a pending subtask
@@ -23,7 +24,7 @@ pub struct ApprovalRequest {
     pub subtask_id: String,
     pub description: String,
     pub prior_output: Option<String>,
-    pub risk_level: f64,
+    pub risk_level: RiskLevel,
 }
 
 #[derive(Debug)]
@@ -95,9 +96,9 @@ pub fn hitl_executor_middleware(
         Box::pin(async move {
             let id = task.id.clone();
             let desc = task.description.clone();
-            let complexity = task.complexity;
+            let risk_level = task.risk_level.clone();
 
-            // Prior output might be available if passed down through task definitions or context, 
+            // Prior output might be available if passed down through task definitions or context,
             // but for raw DAG execution here, we just surface the node ID and description.
             let prior_output = None;
 
@@ -108,13 +109,13 @@ pub fn hitl_executor_middleware(
                         subtask_id: id.clone(),
                         description: desc.clone(),
                         prior_output: prior_output.clone(),
-                        risk_level: complexity,
+                        risk_level: risk_level.clone(),
                     };
 
                     audit.lock().await.push(AuditEvent::new(
                         AuditEventKind::HITLRequested,
                         format!("Approval requested for subtask '{id}'"),
-                    ).with_data(serde_json::json!({ "subtask_id": id, "risk": complexity })));
+                    ).with_data(serde_json::json!({ "subtask_id": id, "risk": format!("{:?}", risk_level) })));
 
                     let outcome = handler.request_approval(req).await;
 
@@ -152,17 +153,22 @@ pub fn hitl_executor_middleware(
                     task
                 }
                 HITLMode::Optional => {
+                    // Pre-filter: skip the gate entirely for low-risk tasks that don't have hitl_required set
+                    if !task.hitl_required && !risk_level.requires_hitl() {
+                        return base(idx, task).await;
+                    }
+
                     let req = ApprovalRequest {
                         subtask_id: id.clone(),
                         description: desc.clone(),
                         prior_output: prior_output.clone(),
-                        risk_level: complexity,
+                        risk_level: risk_level.clone(),
                     };
 
                     audit.lock().await.push(AuditEvent::new(
                         AuditEventKind::HITLRequested,
                         format!("Optional approval requested for subtask '{id}'"),
-                    ).with_data(serde_json::json!({ "subtask_id": id, "risk": complexity })));
+                    ).with_data(serde_json::json!({ "subtask_id": id, "risk": format!("{:?}", risk_level) })));
 
                     let outcome_result = tokio::time::timeout(
                         optional_timeout,
@@ -260,18 +266,25 @@ impl ApprovalHandler for ReviewManagerApprovalHandler {
         let input_data = serde_json::json!({
             "subtask_id": req.subtask_id,
             "description": req.description,
-            "risk_level": req.risk_level,
+            "risk_level": format!("{:?}", req.risk_level),
             "prior_output": req.prior_output,
         });
         let trace = ExecutionTrace { steps: vec![], duration_ms: 0 };
         let context = ReviewContext::new(trace, input_data);
 
-        let review_req = ReviewRequest::new(
+        let mut review_req = ReviewRequest::new(
             self.execution_id.clone(),
             ReviewType::Approval,
             context,
         )
         .with_node_id(req.subtask_id.clone());
+
+        // Surface urgency to the reviewer via priority (Low=2, Medium=4, High=7, Critical=10).
+        review_req.metadata.priority = req.risk_level.to_priority();
+        review_req.metadata.tags = vec![
+            "swarm-subtask".to_string(),
+            format!("risk:{}", format!("{:?}", req.risk_level).to_lowercase()),
+        ];
 
         // Submit to ReviewManager (fires webhooks, stores in ReviewStore, etc.).
         // Infra errors (storage down, misconfiguration) → reject: don't silently approve.
@@ -624,7 +637,7 @@ mod tests {
         let req = ApprovalRequest {
             subtask_id: "task-1".into(),
             description: "Deploy to production".into(),
-            risk_level: 0.8,
+            risk_level: RiskLevel::High,
             prior_output: None,
         };
 
@@ -674,7 +687,7 @@ mod tests {
         let req = ApprovalRequest {
             subtask_id: "task-2".into(),
             description: "Drop the production database".into(),
-            risk_level: 0.95,
+            risk_level: RiskLevel::Critical,
             prior_output: None,
         };
 
@@ -697,7 +710,7 @@ mod tests {
         let req = ApprovalRequest {
             subtask_id: "task-timeout".into(),
             description: "Wait for approval".into(),
-            risk_level: 0.5,
+            risk_level: RiskLevel::Medium,
             prior_output: None,
         };
 
@@ -722,7 +735,7 @@ mod tests {
             .request_approval(ApprovalRequest {
                 subtask_id: "task-create-fail".into(),
                 description: "Create review should fail".into(),
-                risk_level: 0.4,
+                risk_level: RiskLevel::Low,
                 prior_output: None,
             })
             .await;
@@ -754,7 +767,7 @@ mod tests {
             .request_approval(ApprovalRequest {
                 subtask_id: "task-wait-fail".into(),
                 description: "Wait for review should fail".into(),
-                risk_level: 0.4,
+                risk_level: RiskLevel::Low,
                 prior_output: None,
             })
             .await;
@@ -806,7 +819,7 @@ mod tests {
             .request_approval(ApprovalRequest {
                 subtask_id: "task-modify".into(),
                 description: "Deploy to production".into(),
-                risk_level: 0.7,
+                risk_level: RiskLevel::High,
                 prior_output: None,
             })
             .await;
@@ -853,7 +866,7 @@ mod tests {
             .request_approval(ApprovalRequest {
                 subtask_id: "task-deferred".into(),
                 description: "Review later".into(),
-                risk_level: 0.3,
+                risk_level: RiskLevel::Low,
                 prior_output: None,
             })
             .await;
