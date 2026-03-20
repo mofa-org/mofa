@@ -15,7 +15,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@v6  
 
       - name: Install system dependencies
         run: |
@@ -23,12 +23,12 @@ jobs:
           sudo apt-get install -y libasound2-dev
 
       - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@a54c7afa936fefeb4456b2dd8068152669aa8203  # stable
         with:
           components: rustfmt, clippy
 
       - name: Cache dependencies
-        uses: actions/cache@v5
+        uses: actions/cache@v5  
         with:
           path: |
             ~/.cargo/registry
@@ -57,7 +57,7 @@ jobs:
           sudo apt-get install -y libasound2-dev
 
       - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@a54c7afa936fefeb4456b2dd8068152669aa8203  # stable
 
       - name: Cache dependencies
         uses: actions/cache@v5
@@ -93,7 +93,7 @@ jobs:
           sudo apt-get install -y libasound2-dev
 
       - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@a54c7afa936fefeb4456b2dd8068152669aa8203  # stable
 
       - name: Cache dependencies
         uses: actions/cache@v5
