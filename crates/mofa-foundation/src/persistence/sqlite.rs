@@ -1479,9 +1479,10 @@ mod tests {
         );
         store.save_api_call(&new_call).await.unwrap();
 
-        let range_filter = QueryFilter::new()
-            .user(user_id)
-            .time_range(now - chrono::Duration::hours(2), now + chrono::Duration::minutes(1));
+        let range_filter = QueryFilter::new().user(user_id).time_range(
+            now - chrono::Duration::hours(2),
+            now + chrono::Duration::minutes(1),
+        );
 
         let calls = store.query_api_calls(&range_filter).await.unwrap();
         assert_eq!(calls.len(), 1);

@@ -669,7 +669,7 @@ mod tests {
         graph.connect("a", "b");
         graph.connect("b", "c");
         graph.connect("c", "a"); // 形成环
-                                 // forms a cycle
+        // forms a cycle
 
         assert!(graph.has_cycle());
     }

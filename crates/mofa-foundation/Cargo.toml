@@ -29,6 +29,8 @@ kokoro = ["mofa-plugins/kokoro"]
 mcp = ["dep:rmcp"]
 # Enable Qdrant vector database support
 qdrant = ["dep:qdrant-client"]
+# Enable distributed tracing with OpenTelemetry
+tracing-otel = ["dep:opentelemetry", "dep:opentelemetry_sdk"]
 
 [dependencies]
 # Workspace dependencies
@@ -83,6 +85,10 @@ lazy_static = "1.4"
 
 # Qdrant vector database client (optional)
 qdrant-client = { version = "1.17", optional = true }
+
+# OpenTelemetry for distributed tracing (optional)
+opentelemetry = { workspace = true, optional = true }
+opentelemetry_sdk = { workspace = true, optional = true }
 
 # Image encoding and MIME detection
 base64 = "0.22"

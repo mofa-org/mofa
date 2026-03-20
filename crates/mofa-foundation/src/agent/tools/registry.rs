@@ -6,9 +6,9 @@
 
 use async_trait::async_trait;
 use mofa_kernel::agent::components::tool::{
-    Tool, ToolDescriptor, ToolRegistry as ToolRegistryTrait, DynTool, ToolExt,
+    DynTool, Tool, ToolDescriptor, ToolExt, ToolRegistry as ToolRegistryTrait,
 };
-use mofa_kernel::agent::error::{AgentResult, AgentError};
+use mofa_kernel::agent::error::{AgentError, AgentResult};
 use std::collections::HashMap;
 use std::sync::Arc;
 
