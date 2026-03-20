@@ -43,6 +43,7 @@ anyhow.workspace = true
 tokio-stream = { workspace = true }
 tracing.workspace = true
 rand.workspace = true
+sha2.workspace = true
 # YAML config parsing
 serde_yaml = "0.9"
 

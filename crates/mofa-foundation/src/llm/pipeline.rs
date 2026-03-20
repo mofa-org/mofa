@@ -230,7 +230,7 @@ impl Pipeline {
             // 多步骤情况，需要嵌套
             // Multi-step case, requires nesting
             PipelineStep::Identity // 简化处理
-                                   // Simplified handling
+            // Simplified handling
         };
 
         let false_step = if if_false.steps.is_empty() {

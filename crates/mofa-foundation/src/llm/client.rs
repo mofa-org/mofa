@@ -1210,7 +1210,7 @@ impl ChatSession {
         let max_rounds = match window_size {
             Some(size) if size > 0 => size,
             _ => return messages.to_vec(), // 无限制，返回所有消息
-            // No limit, return all messages
+                                           // No limit, return all messages
         };
 
         // 分离系统消息和对话消息
