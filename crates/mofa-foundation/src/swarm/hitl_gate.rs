@@ -157,7 +157,7 @@ impl SwarmHITLGate {
                 output: None,
                 metadata: Default::default(),
             }],
-            duration_ms: task.estimated_duration_secs.unwrap_or(0) * 1_000,
+            duration_ms: task.estimated_duration_secs.unwrap_or(0).saturating_mul(1_000),
         };
 
         let context = ReviewContext::new(
@@ -300,19 +300,28 @@ mod tests {
         let mut dag = SubtaskDAG::new("required-mode");
         dag.add_task(SwarmSubtask::new("low-task", "Search the web").with_risk_level(RiskLevel::Low));
 
-        // Auto-approve in background.
+        // Poll until the review appears then approve it.
         let mgr = Arc::clone(&manager);
         tokio::spawn(async move {
-            tokio::time::sleep(Duration::from_millis(50)).await;
-            let pending = mgr.list_pending(None, None).await.unwrap();
-            for r in pending {
-                mgr.resolve_review(
-                    &r.id,
-                    ReviewResponse::Approved { comment: None },
-                    "auto-approver".to_string(),
-                )
-                .await
-                .unwrap();
+            let deadline = tokio::time::Instant::now() + Duration::from_secs(5);
+            loop {
+                let pending = mgr.list_pending(None, None).await.unwrap();
+                if !pending.is_empty() {
+                    for r in pending {
+                        mgr.resolve_review(
+                            &r.id,
+                            ReviewResponse::Approved { comment: None },
+                            "auto-approver".to_string(),
+                        )
+                        .await
+                        .unwrap();
+                    }
+                    break;
+                }
+                if tokio::time::Instant::now() >= deadline {
+                    break;
+                }
+                tokio::time::sleep(Duration::from_millis(10)).await;
             }
         });
 
@@ -343,19 +352,28 @@ mod tests {
                 .with_risk_level(RiskLevel::High),
         );
 
-        // Auto-approve in background.
+        // Poll until the review appears then approve it.
         let mgr = Arc::clone(&manager);
         tokio::spawn(async move {
-            tokio::time::sleep(Duration::from_millis(50)).await;
-            let pending = mgr.list_pending(None, None).await.unwrap();
-            for r in pending {
-                mgr.resolve_review(
-                    &r.id,
-                    ReviewResponse::Approved { comment: Some("LGTM".to_string()) },
-                    "reviewer".to_string(),
-                )
-                .await
-                .unwrap();
+            let deadline = tokio::time::Instant::now() + Duration::from_secs(5);
+            loop {
+                let pending = mgr.list_pending(None, None).await.unwrap();
+                if !pending.is_empty() {
+                    for r in pending {
+                        mgr.resolve_review(
+                            &r.id,
+                            ReviewResponse::Approved { comment: Some("LGTM".to_string()) },
+                            "reviewer".to_string(),
+                        )
+                        .await
+                        .unwrap();
+                    }
+                    break;
+                }
+                if tokio::time::Instant::now() >= deadline {
+                    break;
+                }
+                tokio::time::sleep(Duration::from_millis(10)).await;
             }
         });
 
@@ -413,22 +431,31 @@ mod tests {
                 .with_risk_level(RiskLevel::Critical),
         );
 
-        // Auto-reject in background.
+        // Poll until the review appears then reject it.
         let mgr = Arc::clone(&manager);
         tokio::spawn(async move {
-            tokio::time::sleep(Duration::from_millis(50)).await;
-            let pending = mgr.list_pending(None, None).await.unwrap();
-            for r in pending {
-                mgr.resolve_review(
-                    &r.id,
-                    ReviewResponse::Rejected {
-                        reason: "Not safe to deploy now".to_string(),
-                        comment: None,
-                    },
-                    "reviewer".to_string(),
-                )
-                .await
-                .unwrap();
+            let deadline = tokio::time::Instant::now() + Duration::from_secs(5);
+            loop {
+                let pending = mgr.list_pending(None, None).await.unwrap();
+                if !pending.is_empty() {
+                    for r in pending {
+                        mgr.resolve_review(
+                            &r.id,
+                            ReviewResponse::Rejected {
+                                reason: "Not safe to deploy now".to_string(),
+                                comment: None,
+                            },
+                            "reviewer".to_string(),
+                        )
+                        .await
+                        .unwrap();
+                    }
+                    break;
+                }
+                if tokio::time::Instant::now() >= deadline {
+                    break;
+                }
+                tokio::time::sleep(Duration::from_millis(10)).await;
             }
         });
 
@@ -487,20 +514,28 @@ mod tests {
         dag.add_dependency(analyze_a, merge).unwrap();
         dag.add_dependency(analyze_b, merge).unwrap();
 
-        // Auto-approve the single High-risk merge task.
+        // Poll until the merge node's review appears then approve it.
         let mgr = Arc::clone(&manager);
         tokio::spawn(async move {
-            // Give the scheduler time to reach the merge node.
-            tokio::time::sleep(Duration::from_millis(80)).await;
-            let pending = mgr.list_pending(None, None).await.unwrap();
-            for r in pending {
-                mgr.resolve_review(
-                    &r.id,
-                    ReviewResponse::Approved { comment: None },
-                    "auto-approver".to_string(),
-                )
-                .await
-                .unwrap();
+            let deadline = tokio::time::Instant::now() + Duration::from_secs(5);
+            loop {
+                let pending = mgr.list_pending(None, None).await.unwrap();
+                if !pending.is_empty() {
+                    for r in pending {
+                        mgr.resolve_review(
+                            &r.id,
+                            ReviewResponse::Approved { comment: None },
+                            "auto-approver".to_string(),
+                        )
+                        .await
+                        .unwrap();
+                    }
+                    break;
+                }
+                if tokio::time::Instant::now() >= deadline {
+                    break;
+                }
+                tokio::time::sleep(Duration::from_millis(10)).await;
             }
         });
 
