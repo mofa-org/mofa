@@ -10,6 +10,55 @@ use uuid::Uuid;
 
 use mofa_kernel::agent::types::error::{GlobalError, GlobalResult};
 
+// ── Risk Classification ───────────────────────────────────────────────────────
+
+/// Risk level classification for a subtask.
+///
+/// Drives automatic HITL routing: [`High`] and [`Critical`] tasks
+/// are intercepted by `SwarmHITLGate` before execution.
+///
+/// The variants are ordered from lowest to highest risk so that
+/// `PartialOrd`/`Ord` comparisons work naturally
+/// (`Critical > High > Medium > Low`).
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, Default)]
+#[serde(rename_all = "snake_case")]
+#[non_exhaustive]
+pub enum RiskLevel {
+    /// Read-only, fully reversible, no external side-effects
+    /// (e.g. web search, text summarisation).
+    #[default]
+    Low,
+    /// Writes to internal state; reversible with effort
+    /// (e.g. draft a document, send an internal notification).
+    Medium,
+    /// Writes to external systems or has significant impact
+    /// (e.g. an API call that modifies third-party data).
+    High,
+    /// Irreversible, financial, security-sensitive, or production deployment
+    /// (e.g. execute a payment, delete a database, deploy to production).
+    Critical,
+}
+
+impl RiskLevel {
+    /// Returns `true` if this risk level requires human review before execution.
+    ///
+    /// [`High`] and [`Critical`] tasks require HITL by default.
+    pub fn requires_hitl(&self) -> bool {
+        matches!(self, Self::High | Self::Critical)
+    }
+
+    /// Maps the risk level to a numeric priority (1–10) suitable for
+    /// `ReviewMetadata::priority` in the HITL system.
+    pub fn to_priority(&self) -> u8 {
+        match self {
+            Self::Low => 2,
+            Self::Medium => 4,
+            Self::High => 7,
+            Self::Critical => 10,
+        }
+    }
+}
+
 // SwarmSubtask Types
 /// Status of an individual subtask in the DAG
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
@@ -36,6 +85,21 @@ pub struct SwarmSubtask {
     pub complexity: f64,
     pub started_at: Option<DateTime<Utc>>,
     pub completed_at: Option<DateTime<Utc>>,
+    /// Risk classification for this subtask (defaults to [`RiskLevel::Low`]).
+    #[serde(default)]
+    pub risk_level: RiskLevel,
+    /// Whether this subtask requires human approval before execution.
+    ///
+    /// Automatically set to `true` when `risk_level` is [`RiskLevel::High`]
+    /// or [`RiskLevel::Critical`], but can also be overridden explicitly.
+    #[serde(default)]
+    pub hitl_required: bool,
+    /// LLM-estimated wall-clock duration for this subtask in seconds.
+    ///
+    /// Used by [`SubtaskDAG::critical_path`] for scheduling hints.
+    /// `None` means the duration is unknown.
+    #[serde(default)]
+    pub estimated_duration_secs: Option<u64>,
 }
 
 impl SwarmSubtask {
@@ -55,6 +119,9 @@ impl SwarmSubtask {
             complexity,
             started_at: None,
             completed_at: None,
+            risk_level: RiskLevel::Low,
+            hitl_required: false,
+            estimated_duration_secs: None,
         }
     }
 
@@ -67,6 +134,28 @@ impl SwarmSubtask {
     /// Override the estimated complexity (0.0 = trivial, 1.0 = very risky).
     pub fn with_complexity(mut self, complexity: f64) -> Self {
         self.complexity = complexity.clamp(0.0, 1.0);
+        self
+    }
+
+    /// Set the risk level and automatically derive [`hitl_required`].
+    ///
+    /// Tasks rated [`RiskLevel::High`] or [`RiskLevel::Critical`] will have
+    /// `hitl_required` set to `true` automatically.
+    pub fn with_risk_level(mut self, risk: RiskLevel) -> Self {
+        self.hitl_required = risk.requires_hitl();
+        self.risk_level = risk;
+        self
+    }
+
+    /// Set the LLM-estimated execution duration in seconds.
+    pub fn with_estimated_duration(mut self, secs: u64) -> Self {
+        self.estimated_duration_secs = Some(secs);
+        self
+    }
+
+    /// Override the HITL requirement flag directly, regardless of risk level.
+    pub fn with_hitl_required(mut self, required: bool) -> Self {
+        self.hitl_required = required;
         self
     }
 }
@@ -375,6 +464,100 @@ impl SubtaskDAG {
             .count()
     }
 
+    // ── Risk & HITL helpers ───────────────────────────────────────────────
+
+    /// Return the IDs of all subtasks whose `hitl_required` flag is `true`.
+    pub fn hitl_required_tasks(&self) -> Vec<String> {
+        self.graph
+            .node_weights()
+            .filter(|t| t.hitl_required)
+            .map(|t| t.id.clone())
+            .collect()
+    }
+
+    /// Return all tasks whose `risk_level` is at or above `min_risk`.
+    pub fn tasks_at_risk(&self, min_risk: &RiskLevel) -> Vec<(NodeIndex, &SwarmSubtask)> {
+        self.graph
+            .node_indices()
+            .filter_map(|idx| {
+                let task = &self.graph[idx];
+                if &task.risk_level >= min_risk {
+                    Some((idx, task))
+                } else {
+                    None
+                }
+            })
+            .collect()
+    }
+
+    // ── Critical path ─────────────────────────────────────────────────────
+
+    /// Compute the critical path through the DAG.
+    ///
+    /// Returns an ordered list of task **IDs** forming the longest-duration
+    /// path from any source node to any sink node, using
+    /// `estimated_duration_secs` as the edge weight (defaulting to `0` when
+    /// `None`).
+    ///
+    /// Returns an empty `Vec` when the DAG is empty.
+    pub fn critical_path(&self) -> GlobalResult<Vec<String>> {
+        let order = self.topological_order()?;
+        if order.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        // Forward pass: longest[node] = duration(node) + max(longest[predecessors])
+        let mut longest: HashMap<NodeIndex, u64> = HashMap::new();
+        let mut predecessor: HashMap<NodeIndex, Option<NodeIndex>> = HashMap::new();
+
+        for &idx in &order {
+            let duration = self.graph[idx].estimated_duration_secs.unwrap_or(0);
+            let best_pred = self
+                .graph
+                .edges_directed(idx, Direction::Incoming)
+                .map(|e| (e.source(), *longest.get(&e.source()).unwrap_or(&0)))
+                .max_by_key(|&(_, v)| v);
+
+            let (pred, pred_val) = best_pred
+                .map(|(n, v)| (Some(n), v))
+                .unwrap_or((None, 0));
+
+            longest.insert(idx, pred_val + duration);
+            predecessor.insert(idx, pred);
+        }
+
+        // Find the sink with the maximum finish time
+        let &sink = order
+            .iter()
+            .max_by_key(|&&idx| longest.get(&idx).unwrap_or(&0))
+            .unwrap(); // safe: order is non-empty
+
+        // Backtrack to reconstruct the path
+        let mut path = Vec::new();
+        let mut current = Some(sink);
+        while let Some(idx) = current {
+            path.push(self.graph[idx].id.clone());
+            current = *predecessor.get(&idx).unwrap_or(&None);
+        }
+        path.reverse();
+        Ok(path)
+    }
+
+    /// Total estimated seconds along the critical path.
+    ///
+    /// Returns `0` when the DAG is empty or all durations are unknown.
+    pub fn critical_path_duration_secs(&self) -> GlobalResult<u64> {
+        let path = self.critical_path()?;
+        let total = path
+            .iter()
+            .filter_map(|id| self.find_by_id(id))
+            .filter_map(|idx| self.graph[idx].estimated_duration_secs)
+            .sum();
+        Ok(total)
+    }
+
+    /// Skip all Pending/Ready tasks that transitively depend on `failed_idx`
+    /// through hard (Sequential/DataFlow) edges. Returns the number of tasks skipped.
     pub fn cascade_skip(&mut self, failed_idx: NodeIndex) -> usize {
         let mut to_skip = Vec::new();
         let mut stack = vec![failed_idx];
@@ -745,5 +928,124 @@ mod tests {
             dag.get_task(a).unwrap().assigned_agent.as_deref(),
             Some("agent-1")
         );
+    }
+
+    // ── RiskLevel tests ───────────────────────────────────────────────────
+
+    #[test]
+    fn test_risk_level_ordering() {
+        assert!(RiskLevel::Critical > RiskLevel::High);
+        assert!(RiskLevel::High > RiskLevel::Medium);
+        assert!(RiskLevel::Medium > RiskLevel::Low);
+        assert!(RiskLevel::Low < RiskLevel::Critical);
+    }
+
+    #[test]
+    fn test_risk_level_requires_hitl() {
+        assert!(!RiskLevel::Low.requires_hitl());
+        assert!(!RiskLevel::Medium.requires_hitl());
+        assert!(RiskLevel::High.requires_hitl());
+        assert!(RiskLevel::Critical.requires_hitl());
+    }
+
+    #[test]
+    fn test_risk_level_serde_roundtrip() {
+        for level in [
+            RiskLevel::Low,
+            RiskLevel::Medium,
+            RiskLevel::High,
+            RiskLevel::Critical,
+        ] {
+            let json = serde_json::to_string(&level).unwrap();
+            let decoded: RiskLevel = serde_json::from_str(&json).unwrap();
+            assert_eq!(decoded, level);
+        }
+    }
+
+    #[test]
+    fn test_swarmsubtask_default_risk_is_low() {
+        let t = SwarmSubtask::new("t1", "Do something");
+        assert_eq!(t.risk_level, RiskLevel::Low);
+        assert!(!t.hitl_required);
+        assert!(t.estimated_duration_secs.is_none());
+    }
+
+    #[test]
+    fn test_with_risk_level_sets_hitl_required() {
+        let low = SwarmSubtask::new("a", "A").with_risk_level(RiskLevel::Low);
+        let med = SwarmSubtask::new("b", "B").with_risk_level(RiskLevel::Medium);
+        let high = SwarmSubtask::new("c", "C").with_risk_level(RiskLevel::High);
+        let crit = SwarmSubtask::new("d", "D").with_risk_level(RiskLevel::Critical);
+
+        assert!(!low.hitl_required);
+        assert!(!med.hitl_required);
+        assert!(high.hitl_required);
+        assert!(crit.hitl_required);
+    }
+
+    #[test]
+    fn test_hitl_required_tasks_filters_correctly() {
+        let mut dag = SubtaskDAG::new("hitl-filter");
+        dag.add_task(SwarmSubtask::new("low", "low-risk").with_risk_level(RiskLevel::Low));
+        dag.add_task(SwarmSubtask::new("med", "medium-risk").with_risk_level(RiskLevel::Medium));
+        dag.add_task(SwarmSubtask::new("high", "high-risk").with_risk_level(RiskLevel::High));
+        dag.add_task(SwarmSubtask::new("crit", "critical-risk").with_risk_level(RiskLevel::Critical));
+
+        let mut hitl = dag.hitl_required_tasks();
+        hitl.sort();
+        assert_eq!(hitl, vec!["crit", "high"]);
+    }
+
+    #[test]
+    fn test_critical_path_linear_chain() {
+        let mut dag = SubtaskDAG::new("cp-chain");
+        let a = dag.add_task(
+            SwarmSubtask::new("a", "Fetch").with_estimated_duration(10),
+        );
+        let b = dag.add_task(
+            SwarmSubtask::new("b", "Process").with_estimated_duration(20),
+        );
+        let c = dag.add_task(
+            SwarmSubtask::new("c", "Report").with_estimated_duration(30),
+        );
+        dag.add_dependency(a, b).unwrap();
+        dag.add_dependency(b, c).unwrap();
+
+        let path = dag.critical_path().unwrap();
+        assert_eq!(path, vec!["a", "b", "c"]);
+        assert_eq!(dag.critical_path_duration_secs().unwrap(), 60);
+    }
+
+    #[test]
+    fn test_critical_path_diamond_takes_longer_branch() {
+        //       start(5)
+        //      /        \
+        //  short(10)  long(50)
+        //      \        /
+        //       merge(5)
+        let mut dag = SubtaskDAG::new("cp-diamond");
+        let start = dag.add_task(SwarmSubtask::new("start", "Start").with_estimated_duration(5));
+        let short = dag.add_task(SwarmSubtask::new("short", "Short").with_estimated_duration(10));
+        let long = dag.add_task(SwarmSubtask::new("long", "Long").with_estimated_duration(50));
+        let merge = dag.add_task(SwarmSubtask::new("merge", "Merge").with_estimated_duration(5));
+
+        dag.add_dependency(start, short).unwrap();
+        dag.add_dependency(start, long).unwrap();
+        dag.add_dependency(short, merge).unwrap();
+        dag.add_dependency(long, merge).unwrap();
+
+        let path = dag.critical_path().unwrap();
+        // Critical path: start → long → merge (total = 5 + 50 + 5 = 60)
+        assert!(path.contains(&"long".to_string()), "critical path must go through 'long': {path:?}");
+        assert!(!path.contains(&"short".to_string()), "critical path must NOT go through 'short': {path:?}");
+        assert_eq!(dag.critical_path_duration_secs().unwrap(), 60);
+    }
+
+    #[test]
+    fn test_critical_path_empty_dag_returns_empty() {
+        let dag = SubtaskDAG::new("empty-cp");
+        let path = dag.critical_path().unwrap();
+        assert!(path.is_empty());
+        assert_eq!(dag.critical_path_duration_secs().unwrap(), 0);
     }
 }
