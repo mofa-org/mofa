@@ -103,20 +103,16 @@ pub struct SwarmSubtask {
 }
 
 impl SwarmSubtask {
-    /// Create a new subtask. Complexity is estimated.
-    /// Use [`with_complexity`] to override it when more precise information is
-    /// available (e.g. from an LLM decomposer).
+    /// Create a new subtask with the given id and description
     pub fn new(id: impl Into<String>, description: impl Into<String>) -> Self {
-        let desc = description.into();
-        let complexity = estimate_complexity(&desc);
         Self {
             id: id.into(),
-            description: desc,
+            description: description.into(),
             required_capabilities: Vec::new(),
             status: SubtaskStatus::Pending,
             assigned_agent: None,
             output: None,
-            complexity,
+            complexity: 0.5, // Default
             started_at: None,
             completed_at: None,
             risk_level: RiskLevel::Low,
@@ -160,55 +156,6 @@ impl SwarmSubtask {
     }
 }
 
-/// Estimate task complexity from description text using a lightweight keyword
-/// heuristic. No external call.
-/// When multiple categories match, take the max score (high > medium > low).
-/// Result is clamped to [0.05, 0.95].
-fn estimate_complexity(desc: &str) -> f64 {
-    let lower = desc.to_lowercase();
-
-    const HIGH_RISK: &[&str] = &[
-        "delete", "remove", "drop", "destroy", "terminate", "execute",
-        "deploy", "transfer", "send", "publish", "commit", "override",
-        "format", "wipe", "reset", "migrate",
-    ];
-    const MEDIUM_RISK: &[&str] = &[
-        "update", "modify", "edit", "write", "create", "generate",
-        "build", "post", "submit", "upload", "transform", "process",
-        "install", "configure", "synthesise", "synthesize", "report",
-    ];
-    const LOW_RISK: &[&str] = &[
-        "fetch", "get", "read", "list", "search", "query",
-        "retrieve", "load", "download", "scan", "check", "inspect",
-        "analyse", "analyze", "summarise", "summarize",
-    ];
-
-    let mut score: Option<f64> = None;
-
-    for kw in HIGH_RISK {
-        if lower.contains(kw) {
-            score = Some(score.map_or(0.35, |s| s.max(0.35)));
-        }
-    }
-    for kw in MEDIUM_RISK {
-        if lower.contains(kw) {
-            score = Some(score.map_or(0.20, |s| s.max(0.20)));
-        }
-    }
-    for kw in LOW_RISK {
-        if lower.contains(kw) {
-            score = Some(score.map_or(-0.10, |s| s.max(-0.10)));
-        }
-    }
-
-    let mut score = score.unwrap_or(0.0);
-
-    // Longer descriptions tend to involve more sub-steps, slightly higher risk
-    let word_count = lower.split_whitespace().count();
-    score += (word_count as f64 * 0.02).min(0.20);
-
-    score.clamp(0.05, 0.95)
-}
 
 /// Edge metadata representing a dependency between subtasks
 #[derive(Debug, Clone, Serialize, Deserialize)]
