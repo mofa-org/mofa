@@ -47,6 +47,9 @@ members = [
     "context_window_demo",
     "compression_examples",
     "admission_gate_demo",
+    "security/secure_agent",
+    "security/rbac_only",
+    "security/pii_only",
     "integrations_demo",
     "cron_scheduler",
     "native_dataflow",
@@ -57,8 +60,10 @@ members = [
     "rag_retrieval_demo",
     "rag_indexing_demo",
     "adversarial_testing_demo",
+    "llm_fallback_chain",
     "resume_from_checkpoint",
     "claw_demo",
+    "swarm_orchestrator",
 ]
 
 [workspace.package]
