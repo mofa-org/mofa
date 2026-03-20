@@ -202,7 +202,7 @@ def register_vibe_commands(cli_group):
             click.echo(f"ERROR: Failed to import vibe module: {e}")
             click.echo("Make sure all dependencies are installed:")
             click.echo("  pip install openai rich pyyaml python-dotenv")
-            return
+            sys.exit(1)
 
         # Load .env file if it exists
         env_file = _get_env_file_path()
@@ -409,7 +409,7 @@ def register_vibe_commands(cli_group):
             click.echo(f"ERROR: Failed to import vibe module: {e}")
             click.echo("Make sure all dependencies are installed:")
             click.echo("  pip install openai rich pyyaml python-dotenv")
-            return
+            sys.exit(1)
 
         # Load .env file if it exists
         env_file = _get_env_file_path()
@@ -500,7 +500,7 @@ def register_vibe_commands(cli_group):
             click.echo(f"ERROR: Failed to import vibe module: {e}")
             click.echo("Make sure all dependencies are installed:")
             click.echo("  pip install openai rich pyyaml python-dotenv")
-            return
+            sys.exit(1)
 
         # Load .env file if it exists
         env_file = _get_env_file_path()
