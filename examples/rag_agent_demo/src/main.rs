@@ -122,7 +122,7 @@ impl SimpleAgent {
         println!("\n[Agent:{}] Processing query: \"{}\"", self.name, query);
         
         // Simulate agent reasoning - deciding to use rag_query
-        println!("[Agent:{}] Reasoning: This query asks about document content. I should use rag_query to retrieve relevant context.", self.name);
+        println!("[Agent:{}] Reasoning: This query requires external knowledge from indexed documents, so I will use rag_query to retrieve relevant context.", self.name);
         
         // Create the tool input
         let tool_input = ToolInput::from_json(serde_json::json!({
