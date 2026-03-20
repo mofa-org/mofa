@@ -447,9 +447,9 @@ impl SubtaskDAG {
     /// Compute the critical path through the DAG.
     ///
     /// Returns an ordered list of task **IDs** forming the longest-duration
-    /// path from any source node to any sink node, where each task's
-    /// `estimated_duration_secs` is treated as a node duration and path
-    /// length is the sum of node durations (defaulting to `0` when `None`).
+    /// path from any source node to any sink node, using
+    /// `estimated_duration_secs` as the edge weight (defaulting to `0` when
+    /// `None`).
     ///
     /// Returns an empty `Vec` when the DAG is empty.
     pub fn critical_path(&self) -> GlobalResult<Vec<String>> {
