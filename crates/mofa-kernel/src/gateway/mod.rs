@@ -18,8 +18,13 @@
 //! | [`AuthProvider`] | Async trait for authenticating requests |
 //! | [`ApiKeyStore`] | Persistence trait for API key lifecycle |
 //! | [`AuthError`] | Auth failure error enum |
+//! | [`GatewayRateLimiter`] | Kernel contract for rate limiting |
+//! | [`RateLimitDecision`] | Outcome of a rate-limit check |
+//! | [`KeyStrategy`] | Keying dimension (per-agent or per-client) |
+//! | [`RateLimiterConfig`] | Shared rate limiter configuration |
 
 pub mod auth;
+pub mod rate_limiter;
 pub mod envelope;
 pub mod error;
 pub mod route;
@@ -31,6 +36,7 @@ mod tests;
 
 pub use auth::{ApiKeyStore, AuthClaims, AuthError, AuthProvider};
 pub use envelope::{AgentResponse, RequestEnvelope};
+pub use rate_limiter::{GatewayRateLimiter, KeyStrategy, RateLimitDecision, RateLimiterConfig};
 pub use error::RegistryError;
 pub use route::{GatewayRoute, HttpMethod, RouteRegistry, RoutingContext};
 pub use config_error::GatewayConfigError;

@@ -154,6 +154,114 @@ pub struct TrimResult {
     pub was_trimmed: bool,
 }
 
+// ============================================================================
+// Token Budget Config
+// ============================================================================
+
+/// Unified configuration for token-budget-aware auto-summarization and graceful halt.
+///
+/// Pass this to `LLMAgentBuilder::with_token_budget_config()` to enable automatic
+/// context compression and budget enforcement.
+///
+/// # Example
+///
+/// ```rust,ignore
+/// use mofa_foundation::llm::TokenBudgetConfig;
+///
+/// // Enable auto-summarize at 80% of an 8 K-token context window
+/// let cfg = TokenBudgetConfig::default();
+///
+/// // Only sliding-window (no LLM summarization)
+/// let cfg = TokenBudgetConfig::sliding_window_only(4096);
+/// ```
+///
+/// # Note
+/// When using `TokenBudgetConfig`, set `LLMAgentConfig::context_window_size` to `None`
+/// (or leave it unset) to avoid the round-based sliding window fighting with
+/// the token-based management provided by this config.
+#[derive(Debug, Clone)]
+#[non_exhaustive]
+pub struct TokenBudgetConfig {
+    /// Maximum tokens for the entire input payload (system + history + current message).
+    ///
+    /// Default: `8192`
+    pub context_window_tokens: usize,
+
+    /// Fraction of `context_window_tokens` at which auto-summarization is triggered.
+    ///
+    /// Must be in the range `(0.0, 1.0]`. Default: `0.8` (trigger at 80% full).
+    /// When the estimated payload exceeds `context_window_tokens * auto_summarize_threshold`,
+    /// the compressor is invoked before the LLM call.
+    pub auto_summarize_threshold: f64,
+
+    /// Number of recent messages to keep verbatim when summarizing.
+    ///
+    /// The summarizer compresses only older messages; the most recent
+    /// `keep_recent_on_summarize` messages are left untouched.
+    /// Default: `4`
+    pub keep_recent_on_summarize: usize,
+
+    /// Whether to use LLM-based summarization (true) or just sliding-window trimming (false).
+    ///
+    /// When `true`, an LLM call is made to produce a concise summary of older messages.
+    /// When `false`, oldest messages are simply dropped.
+    /// Default: `true`
+    pub use_llm_summarize: bool,
+
+    /// If `true`, return an error when the token/cost budget is exceeded.
+    /// If `false`, log a warning and continue.
+    ///
+    /// Default: `true`
+    pub halt_on_budget_exceeded: bool,
+
+    /// Optional cost/token budget limits.
+    ///
+    /// When `None`, no budget checking is performed.
+    /// When `Some`, a `BudgetEnforcer` is created and wired automatically.
+    pub budget: Option<mofa_kernel::budget::BudgetConfig>,
+}
+
+impl Default for TokenBudgetConfig {
+    fn default() -> Self {
+        Self {
+            context_window_tokens: 8192,
+            auto_summarize_threshold: 0.8,
+            keep_recent_on_summarize: 4,
+            use_llm_summarize: true,
+            halt_on_budget_exceeded: true,
+            budget: None,
+        }
+    }
+}
+
+impl TokenBudgetConfig {
+    /// Create a config that only enables sliding-window trimming — no LLM summarization
+    /// and no budget limits.
+    pub fn sliding_window_only(context_window_tokens: usize) -> Self {
+        Self {
+            context_window_tokens,
+            use_llm_summarize: false,
+            ..Default::default()
+        }
+    }
+
+    /// Validate this config. Returns `Err` on invalid values.
+    pub fn validate(&self) -> Result<(), &'static str> {
+        if self.context_window_tokens == 0 {
+            return Err("context_window_tokens must be > 0");
+        }
+        if self.auto_summarize_threshold <= 0.0 || self.auto_summarize_threshold > 1.0 {
+            return Err("auto_summarize_threshold must be in range (0.0, 1.0]");
+        }
+        Ok(())
+    }
+
+    /// Compute the absolute token count at which summarization is triggered.
+    pub fn summarize_trigger_tokens(&self) -> usize {
+        (self.context_window_tokens as f64 * self.auto_summarize_threshold) as usize
+    }
+}
+
 /// Manages the context window budget for LLM requests.
 ///
 /// Combines a `TokenEstimator` with a `ContextWindowPolicy` to automatically
@@ -354,6 +462,77 @@ impl ContextWindowManager {
 mod tests {
     use super::*;
     use crate::llm::types::ChatMessage;
+
+    // -------------------------------------------------------------------------
+    // TokenBudgetConfig tests
+    // -------------------------------------------------------------------------
+
+    #[test]
+    fn test_token_budget_config_default_values() {
+        let cfg = TokenBudgetConfig::default();
+        assert_eq!(cfg.context_window_tokens, 8192);
+        assert!((cfg.auto_summarize_threshold - 0.8).abs() < f64::EPSILON);
+        assert_eq!(cfg.keep_recent_on_summarize, 4);
+        assert!(cfg.use_llm_summarize);
+        assert!(cfg.halt_on_budget_exceeded);
+        assert!(cfg.budget.is_none());
+    }
+
+    #[test]
+    fn test_token_budget_config_validate_zero_window() {
+        let cfg = TokenBudgetConfig {
+            context_window_tokens: 0,
+            ..Default::default()
+        };
+        assert!(cfg.validate().is_err());
+    }
+
+    #[test]
+    fn test_token_budget_config_validate_threshold_zero() {
+        let cfg = TokenBudgetConfig {
+            auto_summarize_threshold: 0.0,
+            ..Default::default()
+        };
+        assert!(cfg.validate().is_err());
+    }
+
+    #[test]
+    fn test_token_budget_config_validate_threshold_over_one() {
+        let cfg = TokenBudgetConfig {
+            auto_summarize_threshold: 1.1,
+            ..Default::default()
+        };
+        assert!(cfg.validate().is_err());
+    }
+
+    #[test]
+    fn test_token_budget_config_validate_ok() {
+        let cfg = TokenBudgetConfig::default();
+        assert!(cfg.validate().is_ok());
+    }
+
+    #[test]
+    fn test_token_budget_config_trigger_tokens_math() {
+        let cfg = TokenBudgetConfig {
+            context_window_tokens: 10000,
+            auto_summarize_threshold: 0.8,
+            ..Default::default()
+        };
+        assert_eq!(cfg.summarize_trigger_tokens(), 8000);
+    }
+
+    #[test]
+    fn test_token_budget_config_sliding_window_only() {
+        let cfg = TokenBudgetConfig::sliding_window_only(4096);
+        assert_eq!(cfg.context_window_tokens, 4096);
+        assert!(!cfg.use_llm_summarize);
+        assert!(cfg.budget.is_none());
+        assert!(cfg.validate().is_ok());
+    }
+
+    // -------------------------------------------------------------------------
+    // Existing ContextWindowManager tests
+    // -------------------------------------------------------------------------
 
     fn make_messages(count: usize, msg_len: usize) -> Vec<ChatMessage> {
         let mut msgs = Vec::new();

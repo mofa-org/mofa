@@ -57,6 +57,7 @@ MoFA strictly follows these microkernel design principles:
 │  - collaboration: Adaptive collaboration protocols                       │
 │  - persistence: Persistence layer                                        │
 │  - prompt: Prompt engineering                                            │
+│  - security: Security implementations (RBAC, PII, moderation, guard)     │
 │                                                                          │
 │  Responsibilities:                                                       │
 │  - Provide production-ready Agent implementations                        │
@@ -74,6 +75,7 @@ MoFA strictly follows these microkernel design principles:
 │  - SimpleRuntime: Multi-agent coordination (non-dora mode)               │
 │  - AgentRuntime: Dora-rs integration (optional)                          │
 │  - Message bus and event routing                                         │
+│  - Security service: Security enforcement and interceptors               │
 │                                                                          │
 │  Responsibilities:                                                       │
 │  - Manage Agent lifecycle (init, start, stop, destroy)                   │
@@ -206,12 +208,17 @@ SDK Layer (mofa-sdk)
 - Workflow orchestration
 - Collaboration protocols
 - Persistence
+- Security implementations (RBAC, PII redaction, content moderation, prompt guard)
 
 ### Runtime Layer
 - Agent lifecycle management
 - Execution environment
 - Event routing
 - Plugin support
+- Security enforcement (traits, interceptors, audit logging)
+
+### Swarm Orchestrator (Coordination)
+While other schedulers exist in the MoFA framework for varying concerns, the `SwarmScheduler` specifically introduces a dedicated execution engine for Swarm DAGs. It cleanly bridges complex multi-agent coordination with isolation from the executor logic. Crucially, the scheduler retains exclusive ownership of DAG state mutations (e.g., `mark_running`, `mark_complete_with_output`, `mark_failed`, `cascade_skip`), while the executor remains a pure function returning a `GlobalResult<String>`. (For details on coordination patterns, refer to the [Multi-Agent Systems Guide](./mofa-doc/src/guides/multi-agent.md)).
 
 ### Abstraction Layer
 - MoFAAgent core interface
@@ -519,6 +526,46 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 ```
+
+## Security Governance Architecture
+
+The security governance layer follows MoFA's microkernel architecture principles:
+
+### Layer Placement
+
+- **Runtime Layer (`mofa-runtime`)**: Security enforcement infrastructure
+  - Trait definitions (`Authorizer`, `PiiDetector`, `ContentModerator`, `PromptGuard`)
+  - Security service orchestrator
+  - Configuration and event types
+  - Audit logging helpers
+  - Runtime interceptors for permission checks
+
+- **Foundation Layer (`mofa-foundation`)**: Security implementations
+  - RBAC implementations (`DefaultAuthorizer`, `RbacPolicy`, `Role`)
+  - PII detection and redaction (`RegexPiiDetector`, `RegexPiiRedactor`)
+  - Content moderation (`KeywordModerator`, `ContentPolicy`)
+  - Prompt injection guard (`RegexPromptGuard`)
+
+- **Kernel Layer (`mofa-kernel`)**: Minimal involvement
+  - No security business logic (respects microkernel principle)
+  - Only minimal data types if needed for event bus compatibility
+
+### Design Principles
+
+1. **Separation of Concerns**: Security traits defined in runtime, implementations in foundation
+2. **Extensibility**: All security traits designed for custom implementations
+3. **Feature Flags**: Security features can be enabled/disabled per deployment
+4. **Fail Modes**: Configurable fail-open vs fail-closed behavior
+5. **Audit Trail**: All security decisions logged for compliance
+
+### Security Features
+
+- **RBAC**: Role-based access control with inheritance
+- **PII Redaction**: GDPR-compliant data protection with multiple strategies
+- **Content Moderation**: Harmful content filtering with flagging support
+- **Prompt Injection Defense**: Attack prevention with confidence scoring
+
+For detailed documentation, see [Security Guide](./security.md#security-governance).
 
 ## Design Decisions
 

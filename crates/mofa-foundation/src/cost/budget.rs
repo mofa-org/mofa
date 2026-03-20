@@ -5,6 +5,9 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 use mofa_kernel::budget::{BudgetConfig, BudgetError, BudgetStatus};
 
+/// Usage tracked per day (cost, tokens, day_key)
+pub type AgentDailyUsage = (f64, u64, String);
+
 /// Per-agent budget enforcer. Thread-safe, keyed by agent_id.
 ///
 /// Budget limits are defined by [`BudgetConfig`] (from `mofa-kernel`).
@@ -13,7 +16,7 @@ use mofa_kernel::budget::{BudgetConfig, BudgetError, BudgetStatus};
 pub struct BudgetEnforcer {
     configs: Arc<RwLock<HashMap<String, BudgetConfig>>>,
     session_usage: Arc<RwLock<HashMap<String, (f64, u64)>>>,
-    daily_usage: Arc<RwLock<HashMap<String, (f64, u64, String)>>>,
+    daily_usage: Arc<RwLock<HashMap<String, AgentDailyUsage>>>,
 }
 
 impl BudgetEnforcer {
@@ -43,46 +46,41 @@ impl BudgetEnforcer {
 
         let session = self.session_usage.read().await;
         if let Some(&(cost, tokens)) = session.get(agent_id) {
-            if let Some(max) = config.max_cost_per_session {
-                if cost >= max {
+            if let Some(max) = config.max_cost_per_session
+                && cost >= max {
                     return Err(BudgetError::SessionCostExceeded {
                         spent: cost,
                         limit: max,
                     });
                 }
-            }
-            if let Some(max) = config.max_tokens_per_session {
-                if tokens >= max {
+            if let Some(max) = config.max_tokens_per_session
+                && tokens >= max {
                     return Err(BudgetError::SessionTokensExceeded {
                         used: tokens,
                         limit: max,
                     });
                 }
-            }
         }
 
         let today = today_key();
         let daily = self.daily_usage.read().await;
-        if let Some(&(cost, tokens, ref date)) = daily.get(agent_id) {
-            if date == &today {
-                if let Some(max) = config.max_cost_per_day {
-                    if cost >= max {
+        if let Some(&(cost, tokens, ref date)) = daily.get(agent_id)
+            && date == &today {
+                if let Some(max) = config.max_cost_per_day
+                    && cost >= max {
                         return Err(BudgetError::DailyCostExceeded {
                             spent: cost,
                             limit: max,
                         });
                     }
-                }
-                if let Some(max) = config.max_tokens_per_day {
-                    if tokens >= max {
+                if let Some(max) = config.max_tokens_per_day
+                    && tokens >= max {
                         return Err(BudgetError::DailyTokensExceeded {
                             used: tokens,
                             limit: max,
                         });
                     }
-                }
             }
-        }
 
         Ok(())
     }
