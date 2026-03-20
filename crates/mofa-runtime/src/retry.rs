@@ -3,6 +3,8 @@
 use std::future::Future;
 use std::time::Duration;
 
+use rand::Rng;
+
 use crate::agent::error::{AgentError, AgentResult};
 
 /// Global safety cap for linear retry delay to avoid pathological sleeps.
@@ -51,12 +53,9 @@ impl RetryPolicy {
                 let capped = exp.min(*max_ms);
                 if *jitter {
                     let eighth = capped / 8;
-                    if attempt.is_multiple_of(2) {
-                        capped.saturating_add(eighth)
-                    } else {
-                        capped.saturating_sub(eighth)
-                    }
-                    .min(*max_ms)
+                    let jitter_range = eighth.max(1);
+                    let jitter_val = rand::thread_rng().gen_range(0..=jitter_range * 2);
+                    capped.saturating_sub(jitter_range).saturating_add(jitter_val).min(*max_ms)
                 } else {
                     capped
                 }
