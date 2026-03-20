@@ -1,0 +1,13 @@
+[package]
+name = "swarm_hitl"
+version.workspace = true
+edition.workspace = true
+publish = false
+
+[dependencies]
+mofa-foundation = { path = "../../crates/mofa-foundation" }
+mofa-kernel = { path = "../../crates/mofa-kernel" }
+tokio = { workspace = true, features = ["rt-multi-thread", "macros", "sync", "io-std", "time"] }
+tracing.workspace = true
+tracing-subscriber.workspace = true
+futures = { workspace = true }

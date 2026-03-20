@@ -1,3 +1,5 @@
+//! Swarm Orchestrator Module
+
 pub mod analyzer;
 pub mod config;
 pub mod dag;
@@ -14,7 +16,8 @@ pub use config::{
 pub use dag::{DependencyEdge, DependencyKind, SubtaskDAG, SubtaskStatus, SwarmSubtask};
 pub use hitl::{
     ApprovalDecision, ApprovalHandler, ApprovalOutcome, ApprovalRequest,
-    ChannelApprovalHandler, ExecutionResult, SubtaskOutput, run_sequential_with_hitl,
+    ChannelApprovalHandler, ExecutionResult, SubtaskOutput, hitl_executor_middleware,
+    run_sequential_with_hitl,
 };
 pub use patterns::CoordinationPattern;
 pub use scheduler::{

@@ -39,16 +39,20 @@ pub struct SwarmSubtask {
 }
 
 impl SwarmSubtask {
-    /// Create a new subtask with the given id and description
+    /// Create a new subtask. Complexity is estimated.
+    /// Use [`with_complexity`] to override it when more precise information is
+    /// available (e.g. from an LLM decomposer).
     pub fn new(id: impl Into<String>, description: impl Into<String>) -> Self {
+        let desc = description.into();
+        let complexity = estimate_complexity(&desc);
         Self {
             id: id.into(),
-            description: description.into(),
+            description: desc,
             required_capabilities: Vec::new(),
             status: SubtaskStatus::Pending,
             assigned_agent: None,
             output: None,
-            complexity: 0.5,
+            complexity,
             started_at: None,
             completed_at: None,
         }
@@ -60,11 +64,61 @@ impl SwarmSubtask {
         self
     }
 
-    /// Set the estimated complexity
+    /// Override the estimated complexity (0.0 = trivial, 1.0 = very risky).
     pub fn with_complexity(mut self, complexity: f64) -> Self {
         self.complexity = complexity.clamp(0.0, 1.0);
         self
     }
+}
+
+/// Estimate task complexity from description text using a lightweight keyword
+/// heuristic. No external call.
+/// When multiple categories match, take the max score (high > medium > low).
+/// Result is clamped to [0.05, 0.95].
+fn estimate_complexity(desc: &str) -> f64 {
+    let lower = desc.to_lowercase();
+
+    const HIGH_RISK: &[&str] = &[
+        "delete", "remove", "drop", "destroy", "terminate", "execute",
+        "deploy", "transfer", "send", "publish", "commit", "override",
+        "format", "wipe", "reset", "migrate",
+    ];
+    const MEDIUM_RISK: &[&str] = &[
+        "update", "modify", "edit", "write", "create", "generate",
+        "build", "post", "submit", "upload", "transform", "process",
+        "install", "configure", "synthesise", "synthesize", "report",
+    ];
+    const LOW_RISK: &[&str] = &[
+        "fetch", "get", "read", "list", "search", "query",
+        "retrieve", "load", "download", "scan", "check", "inspect",
+        "analyse", "analyze", "summarise", "summarize",
+    ];
+
+    let mut score: Option<f64> = None;
+
+    for kw in HIGH_RISK {
+        if lower.contains(kw) {
+            score = Some(score.map_or(0.35, |s| s.max(0.35)));
+        }
+    }
+    for kw in MEDIUM_RISK {
+        if lower.contains(kw) {
+            score = Some(score.map_or(0.20, |s| s.max(0.20)));
+        }
+    }
+    for kw in LOW_RISK {
+        if lower.contains(kw) {
+            score = Some(score.map_or(-0.10, |s| s.max(-0.10)));
+        }
+    }
+
+    let mut score = score.unwrap_or(0.0);
+
+    // Longer descriptions tend to involve more sub-steps, slightly higher risk
+    let word_count = lower.split_whitespace().count();
+    score += (word_count as f64 * 0.02).min(0.20);
+
+    score.clamp(0.05, 0.95)
 }
 
 /// Edge metadata representing a dependency between subtasks
@@ -162,12 +216,7 @@ impl SubtaskDAG {
                         let dep_edge = edge.weight();
                         match dep_edge.kind {
                             DependencyKind::Sequential | DependencyKind::DataFlow => {
-                                matches!(
-                                    dep.status,
-                                    SubtaskStatus::Completed
-                                        | SubtaskStatus::Skipped
-                                        | SubtaskStatus::Failed(_)
-                                )
+                                matches!(dep.status, SubtaskStatus::Completed | SubtaskStatus::Skipped)
                             }
                             DependencyKind::Soft => true,
                         }
@@ -326,9 +375,6 @@ impl SubtaskDAG {
             .count()
     }
 
-
-    /// Skip all Pending/Ready tasks that transitively depend on `failed_idx`
-    /// through hard (Sequential/DataFlow) edges. Returns the number of tasks skipped.
     pub fn cascade_skip(&mut self, failed_idx: NodeIndex) -> usize {
         let mut to_skip = Vec::new();
         let mut stack = vec![failed_idx];
@@ -597,7 +643,7 @@ mod tests {
     }
 
     #[test]
-    fn test_failed_dependency_unblocks_downstream() {
+    fn test_failed_dependency_blocks_downstream() {
         let mut dag = SubtaskDAG::new("fail-chain");
         let a = dag.add_task(SwarmSubtask::new("a", "Fetch data"));
         let b = dag.add_task(SwarmSubtask::new("b", "Process data"));
@@ -609,22 +655,19 @@ mod tests {
         // Only a is ready initially
         assert_eq!(dag.ready_tasks(), vec![a]);
 
-        // a fails — b should become ready (not stuck forever)
+        // a fails — b should NOT become ready
         dag.mark_failed(a, "connection timeout");
         let ready = dag.ready_tasks();
-        assert_eq!(ready, vec![b], "b must become ready when its dependency fails");
+        assert!(ready.is_empty(), "b must not be ready when its dependency fails");
 
-        // b also fails — c should become ready
-        dag.mark_failed(b, "no input data");
+        // If b is explicitly skipped, c can become ready
+        dag.mark_skipped(b);
         let ready = dag.ready_tasks();
-        assert_eq!(ready, vec![c], "c must become ready when its dependency fails");
-
-        dag.mark_skipped(c);
-        assert!(dag.is_complete());
+        assert_eq!(ready, vec![c], "c must be ready when b is skipped");
     }
 
     #[test]
-    fn test_failed_dependency_diamond_dag() {
+    fn test_failed_dependency_blocks_merge_node() {
         let mut dag = SubtaskDAG::new("fail-diamond");
         let a = dag.add_task(SwarmSubtask::new("a", "Start"));
         let b = dag.add_task(SwarmSubtask::new("b", "Path 1"));
@@ -640,9 +683,9 @@ mod tests {
         dag.mark_complete(b);
         dag.mark_failed(c, "path 2 error");
 
-        // d depends on both b (Completed) and c (Failed) — should be ready
+        // d depends on both b (Completed) and c (Failed) — should NOT be ready
         let ready = dag.ready_tasks();
-        assert_eq!(ready, vec![d], "d must become ready when all deps are terminal");
+        assert!(ready.is_empty(), "d must not be ready when a dependency fails");
     }
 
     #[test]
