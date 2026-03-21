@@ -59,6 +59,7 @@ members = [
     "capability_discovery",
     "rag_retrieval_demo",
     "rag_indexing_demo",
+    "rag_agent_demo",
     "adversarial_testing_demo",
     "llm_fallback_chain",
     "resume_from_checkpoint",

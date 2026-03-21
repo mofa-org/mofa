@@ -4919,7 +4919,7 @@ name = "pii_only"
 version = "0.1.0"
 dependencies = [
  "mofa-foundation",
- "mofa-runtime",
+ "mofa-kernel",
  "tokio",
 ]
 
@@ -5331,6 +5331,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "rag_agent_demo"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "mofa-foundation",
+ "mofa-kernel",
+ "serde",
+ "serde_json",
+ "tokio",
+]
+
+[[package]]
 name = "rag_indexing_demo"
 version = "0.1.0"
 dependencies = [
@@ -5577,7 +5590,7 @@ name = "rbac_only"
 version = "0.1.0"
 dependencies = [
  "mofa-foundation",
- "mofa-runtime",
+ "mofa-kernel",
  "tokio",
 ]
 
@@ -6211,7 +6224,7 @@ name = "secure_agent"
 version = "0.1.0"
 dependencies = [
  "mofa-foundation",
- "mofa-runtime",
+ "mofa-kernel",
  "tokio",
 ]
 
