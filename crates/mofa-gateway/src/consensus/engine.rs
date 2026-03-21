@@ -468,11 +468,9 @@ impl ConsensusEngine {
         transport: &Arc<dyn RaftTransport>,
         cluster_nodes: &[NodeId],
     ) {
-        let current_term = state.read().await.current_term;
-        let (prev_log_term, prev_log_index) = {
-            let s = state.read().await;
-            s.last_log_info()
-        };
+        let s = state.read().await;
+        let current_term = s.current_term;
+        let current_commit_index = s.commit_index;
 
         let leader_state_guard = leader_state.read().await;
         let leader_state_ref = match leader_state_guard.as_ref() {
@@ -486,24 +484,39 @@ impl ConsensusEngine {
                 continue;
             }
 
+            // In Raft, prev_log_index is the index of the entry immediately preceding
+            // the new ones. For heartbeats (empty entries), this is next_index - 1.
             let next_index = leader_state_ref
                 .next_index
                 .get(follower_id)
                 .copied()
-                .unwrap_or(prev_log_index);
+                .unwrap_or_else(|| s.last_log_info().1.increment());
 
-            // Read commit_index after getting prev_log info to ensure we have the latest
-            let current_commit_index = state.read().await.commit_index;
+            let prev_log_index = LogIndex::new(next_index.0.saturating_sub(1));
+            
+            // prev_log_term must be the term of the entry at prev_log_index
+            let prev_log_term = if prev_log_index.0 == 0 {
+                Term::new(0)
+            } else {
+                s.log.get((prev_log_index.0 - 1) as usize)
+                    .map(|e| e.term)
+                    .unwrap_or_else(|| {
+                        debug!("Term not found for index {}, using 0", prev_log_index.0);
+                        Term::new(0)
+                    })
+            };
+
             let heartbeat = AppendEntriesRequest {
                 term: current_term,
                 leader_id: node_id.clone(),
-                prev_log_index: next_index,
+                prev_log_index,
                 prev_log_term,
                 entries: Vec::new(), // Empty for heartbeat
                 leader_commit: current_commit_index,
             };
             
-            info!("Leader {} sending heartbeat with commit_index={}", node_id, current_commit_index.0);
+            info!("Leader {} sending heartbeat to {} with prev_log_index={}, prev_log_term={}, commit_index={}", 
+                node_id, follower_id, prev_log_index.0, prev_log_term.0, current_commit_index.0);
 
             let transport_clone = Arc::clone(transport);
             let follower_id_clone = follower_id.clone();
@@ -1045,6 +1058,6 @@ impl ConsensusEngine {
         debug!("Node {}: get_committed_entries: commit_index={}, last_applied={}, log_len={}, returning {} entries", 
             self.node_id, commit_index, last_applied, state.log.len(), entries.len());
         
-        (commit_index, entries)
+    (commit_index, entries)
     }
 }
