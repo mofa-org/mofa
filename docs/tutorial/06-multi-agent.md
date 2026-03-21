@@ -493,6 +493,45 @@ Workers run in parallel. Regardless of individual success or failure, the superv
 | **Routing** | Exactly one specialist should handle a request based on content inspection | Multiple specialists must collaborate or all specialists must run |
 | **Supervision** | Workers may fail and recovery or aggregation must always execute | All workers must succeed for the pipeline to be meaningful |
 
+### Auto-Selecting a Pattern
+
+If you are not sure which pattern fits your DAG, `PatternSelector` inspects the topology and task metadata and recommends one automatically — no LLM call required.
+
+```rust
+use mofa_foundation::swarm::{PatternSelector, SubtaskDAG};
+
+let dag: SubtaskDAG = /* build your dag */;
+
+let selection = PatternSelector::select_with_reason(&dag);
+println!("pattern:    {:?}", selection.pattern);
+println!("confidence: {:.0}%", selection.confidence * 100.0);
+println!("reason:     {}", selection.reason);
+
+// execute with the recommended pattern — no manual choice needed
+let scheduler = selection.pattern.into_scheduler();
+let summary = scheduler.execute(&mut dag, executor).await?;
+```
+
+Rules are applied in priority order; the first match wins:
+
+| Priority | Pattern | Trigger |
+|----------|---------|---------|
+| 1 | Routing | Single source + any sink has `required_capabilities` set |
+| 2 | Supervision | Any task has `risk_level ≥ High` or `hitl_required = true` |
+| 3 | Debate | Exactly 2 sources → 1 sink |
+| 4 | Consensus | ≥3 sources with identical `required_capabilities` → 1 sink |
+| 5 | MapReduce | ≥2 heterogeneous sources → 1 sink |
+| 6 | Sequential | All nodes form a strict linear chain |
+| 7 | Parallel | Fallback for all other shapes |
+
+`RiskAwareAnalysis` (returned by `TaskAnalyzer::analyze_with_risk`) includes a pre-populated `suggested_pattern` field — you get a recommendation for free alongside the DAG:
+
+```rust
+let analysis = analyzer.analyze_with_risk("deploy the payment service").await?;
+println!("suggested: {:?}", analysis.suggested_pattern.pattern);
+// → Supervision  (any deploy task is classified Critical risk)
+```
+
 ---
 
 ## What Just Happened?
