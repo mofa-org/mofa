@@ -387,7 +387,8 @@ where
                     // 没有输入，执行定时检查
                     // No input, perform periodic check
                     if self.config.enable_periodic_check {
-                        let elapsed = last_periodic_check.elapsed().as_millis() as u64;
+                        let elapsed = u64::try_from(last_periodic_check.elapsed().as_millis())
+                            .unwrap_or(u64::MAX);
                         if elapsed >= self.config.periodic_check_interval_ms {
                             last_periodic_check = std::time::Instant::now();
 

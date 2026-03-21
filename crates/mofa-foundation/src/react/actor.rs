@@ -498,7 +498,7 @@ impl AutoAgent {
                 mode: ExecutionMode::ReAct,
                 answer,
                 react_result: Some(result),
-                duration_ms: start.elapsed().as_millis() as u64,
+                duration_ms: u64::try_from(start.elapsed().as_millis()).unwrap_or(u64::MAX),
             });
         }
 
@@ -515,7 +515,7 @@ impl AutoAgent {
                     mode: ExecutionMode::Direct,
                     answer,
                     react_result: None,
-                    duration_ms: start.elapsed().as_millis() as u64,
+                    duration_ms: u64::try_from(start.elapsed().as_millis()).unwrap_or(u64::MAX),
                 })
             }
             TaskComplexity::RequiresTool | TaskComplexity::Complex => {
@@ -527,7 +527,7 @@ impl AutoAgent {
                     mode: ExecutionMode::ReAct,
                     answer,
                     react_result: Some(result),
-                    duration_ms: start.elapsed().as_millis() as u64,
+                    duration_ms: u64::try_from(start.elapsed().as_millis()).unwrap_or(u64::MAX),
                 })
             }
         }

@@ -628,7 +628,8 @@ impl ScriptToolRegistry {
                     success: true,
                     result: value,
                     error: None,
-                    execution_time_ms: start_time.elapsed().as_millis() as u64,
+                    execution_time_ms: u64::try_from(start_time.elapsed().as_millis())
+                        .unwrap_or(u64::MAX),
                     logs: Vec::new(),
                 }),
                 Err(_e) => {
@@ -641,7 +642,8 @@ impl ScriptToolRegistry {
                             success: true,
                             result: script_result.value,
                             error: None,
-                            execution_time_ms: start_time.elapsed().as_millis() as u64,
+                            execution_time_ms: u64::try_from(start_time.elapsed().as_millis())
+                                .unwrap_or(u64::MAX),
                             logs: script_result.logs,
                         })
                     } else {
@@ -650,7 +652,8 @@ impl ScriptToolRegistry {
                             success: false,
                             result: serde_json::Value::Null,
                             error: script_result.error,
-                            execution_time_ms: start_time.elapsed().as_millis() as u64,
+                            execution_time_ms: u64::try_from(start_time.elapsed().as_millis())
+                                .unwrap_or(u64::MAX),
                             logs: script_result.logs,
                         })
                     }
@@ -663,7 +666,8 @@ impl ScriptToolRegistry {
                 success: script_result.success,
                 result: script_result.value,
                 error: script_result.error,
-                execution_time_ms: start_time.elapsed().as_millis() as u64,
+                execution_time_ms: u64::try_from(start_time.elapsed().as_millis())
+                    .unwrap_or(u64::MAX),
                 logs: script_result.logs,
             })
         }

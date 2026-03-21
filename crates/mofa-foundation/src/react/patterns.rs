@@ -147,7 +147,7 @@ impl AgentUnit {
                     task,
                     success: true,
                     error: None,
-                    duration_ms: start.elapsed().as_millis() as u64,
+                    duration_ms: u64::try_from(start.elapsed().as_millis()).unwrap_or(u64::MAX),
                     metadata: None,
                 })
             }
@@ -376,7 +376,8 @@ impl ChainAgent {
                                 steps: step_results,
                                 success: false,
                                 error: output.error,
-                                total_duration_ms: start_time.elapsed().as_millis() as u64,
+                                total_duration_ms: u64::try_from(start_time.elapsed().as_millis())
+                                    .unwrap_or(u64::MAX),
                             });
                         }
                     }
@@ -419,7 +420,8 @@ impl ChainAgent {
                             steps: step_results,
                             success: false,
                             error: Some(e.to_string()),
-                            total_duration_ms: start_time.elapsed().as_millis() as u64,
+                            total_duration_ms: u64::try_from(start_time.elapsed().as_millis())
+                                .unwrap_or(u64::MAX),
                         });
                     }
                 }
@@ -433,7 +435,7 @@ impl ChainAgent {
             steps: step_results,
             success: all_success,
             error: None,
-            total_duration_ms: start_time.elapsed().as_millis() as u64,
+            total_duration_ms: u64::try_from(start_time.elapsed().as_millis()).unwrap_or(u64::MAX),
         })
     }
 
@@ -797,7 +799,7 @@ impl ParallelAgent {
             aggregated_output,
             individual_results: step_results,
             success: all_success,
-            total_duration_ms: start_time.elapsed().as_millis() as u64,
+            total_duration_ms: u64::try_from(start_time.elapsed().as_millis()).unwrap_or(u64::MAX),
         })
     }
 
@@ -1300,7 +1302,7 @@ impl MapReduceAgent {
             input,
             map_results,
             reduce_output,
-            total_duration_ms: start_time.elapsed().as_millis() as u64,
+            total_duration_ms: u64::try_from(start_time.elapsed().as_millis()).unwrap_or(u64::MAX),
         })
     }
 }

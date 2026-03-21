@@ -452,10 +452,7 @@ impl WorkflowContext {
     pub async fn create_checkpoint(&self, label: &str) {
         let checkpoint = CheckpointData {
             label: label.to_string(),
-            timestamp: std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap_or_default()
-                .as_millis() as u64,
+            timestamp: mofa_kernel::utils::now_ms(),
             node_outputs: self.node_outputs.read().await.clone(),
             node_statuses: self.node_statuses.read().await.clone(),
             variables: self.variables.read().await.clone(),

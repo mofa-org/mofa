@@ -51,10 +51,7 @@ impl ExecutionMetrics {
     /// 创建新的指标
     /// Create new metrics
     pub fn new() -> Self {
-        let now = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_millis() as u64;
+        let now = mofa_kernel::utils::now_ms();
 
         Self {
             start_time_ms: now,
@@ -65,10 +62,7 @@ impl ExecutionMetrics {
     /// 获取执行时长 (毫秒)
     /// Get execution duration (ms)
     pub fn duration_ms(&self) -> u64 {
-        let now = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_millis() as u64;
+        let now = mofa_kernel::utils::now_ms();
 
         self.end_time_ms.unwrap_or(now) - self.start_time_ms
     }
@@ -132,10 +126,7 @@ impl RichAgentContext {
     /// 记录组件输出
     /// Record component output
     pub async fn record_output(&self, component: impl Into<String>, output: serde_json::Value) {
-        let now = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_millis() as u64;
+        let now = mofa_kernel::utils::now_ms();
 
         let mut outputs = self.outputs.write().await;
         outputs.push(ComponentOutput {
@@ -186,10 +177,7 @@ impl RichAgentContext {
     /// 结束执行 (记录结束时间)
     /// Finish execution (record end time)
     pub async fn finish(&self) {
-        let now = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_millis() as u64;
+        let now = mofa_kernel::utils::now_ms();
 
         let mut metrics = self.metrics.write().await;
         metrics.end_time_ms = Some(now);

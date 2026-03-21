@@ -333,7 +333,7 @@ impl SimpleToolRegistry {
                     steps: vec![ExecutionStep {
                         step_id: format!("tool:{}", tool_name),
                         step_type: "tool_call".to_string(),
-                        timestamp_ms: chrono::Utc::now().timestamp_millis() as u64,
+                        timestamp_ms: mofa_kernel::utils::chrono_now_ms(),
                         input: Some(args_json.clone()),
                         output: None,
                         metadata: HashMap::new(),

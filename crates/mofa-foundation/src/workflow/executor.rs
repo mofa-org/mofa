@@ -184,7 +184,7 @@ impl WorkflowExecutor {
                     steps.push(ExecutionStep {
                         step_id: nid.clone(),
                         step_type: "workflow_node".to_string(),
-                        timestamp_ms: chrono::Utc::now().timestamp_millis() as u64,
+                        timestamp_ms: mofa_kernel::utils::chrono_now_ms(),
                         input: None,
                         output: serde_json::to_value(&output).ok(),
                         metadata: HashMap::new(),
@@ -196,7 +196,7 @@ impl WorkflowExecutor {
         steps.push(ExecutionStep {
             step_id: node_id.to_string(),
             step_type: "review_node".to_string(),
-            timestamp_ms: chrono::Utc::now().timestamp_millis() as u64,
+            timestamp_ms: mofa_kernel::utils::chrono_now_ms(),
             input: serde_json::to_value(input).ok(),
             output: None,
             metadata: HashMap::new(),
@@ -205,7 +205,15 @@ impl WorkflowExecutor {
         // Calculate duration from paused_at if available
         let duration_ms = if let Some(paused_at) = *ctx.paused_at.read().await {
             let now = chrono::Utc::now();
-            now.signed_duration_since(paused_at).num_milliseconds() as u64
+            // num_milliseconds() returns i64 and can be negative if the clock
+            // jumped forward while the workflow was paused (NTP correction).
+            // Clamp to 0 before converting so we never wrap to near u64::MAX.
+            u64::try_from(
+                now.signed_duration_since(paused_at)
+                    .num_milliseconds()
+                    .max(0),
+            )
+            .unwrap_or(0)
         } else {
             0
         };
@@ -269,10 +277,7 @@ impl WorkflowExecutor {
         self.emit_event(ExecutionEvent::WorkflowStarted {
             workflow_id: graph.id.clone(),
             workflow_name: graph.name.clone(),
-            started_at: std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap_or_default()
-                .as_millis() as u64,
+            started_at: mofa_kernel::utils::now_ms(),
         })
         .await;
 
@@ -308,10 +313,7 @@ impl WorkflowExecutor {
         let mut execution_record = ExecutionRecord {
             execution_id: ctx.execution_id.clone(),
             workflow_id: graph.id.clone(),
-            started_at: std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap_or_default()
-                .as_millis() as u64,
+            started_at: mofa_kernel::utils::now_ms(),
             ended_at: None,
             status: WorkflowStatus::Running,
             node_records: Vec::new(),
@@ -341,12 +343,7 @@ impl WorkflowExecutor {
         };
 
         let duration = start_time.elapsed();
-        execution_record.ended_at = Some(
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap_or_default()
-                .as_millis() as u64,
-        );
+        execution_record.ended_at = Some(mofa_kernel::utils::now_ms());
 
         let final_status = match result {
             Ok(_) => {
@@ -375,7 +372,7 @@ impl WorkflowExecutor {
                 self.emit_event(ExecutionEvent::WorkflowFailed {
                     workflow_id: graph.id.clone(),
                     error: e.clone(),
-                    total_duration_ms: duration.as_millis() as u64,
+                    total_duration_ms: u64::try_from(duration.as_millis()).unwrap_or(u64::MAX),
                 })
                 .await;
             }
@@ -383,7 +380,7 @@ impl WorkflowExecutor {
                 self.emit_event(ExecutionEvent::WorkflowCompleted {
                     workflow_id: graph.id.clone(),
                     final_output: None,
-                    total_duration_ms: duration.as_millis() as u64,
+                    total_duration_ms: u64::try_from(duration.as_millis()).unwrap_or(u64::MAX),
                 })
                 .await;
             }
@@ -474,10 +471,7 @@ impl WorkflowExecutor {
         let mut execution_record = ExecutionRecord {
             execution_id: ctx.execution_id.clone(),
             workflow_id: graph.id.clone(),
-            started_at: std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap_or_default()
-                .as_millis() as u64,
+            started_at: mofa_kernel::utils::now_ms(),
             ended_at: None,
             status: WorkflowStatus::Running,
             node_records: Vec::new(),
@@ -502,12 +496,7 @@ impl WorkflowExecutor {
             .await;
 
         let duration = start_time.elapsed();
-        execution_record.ended_at = Some(
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap_or_default()
-                .as_millis() as u64,
-        );
+        execution_record.ended_at = Some(mofa_kernel::utils::now_ms());
 
         let final_status = match result {
             Ok(_) => {
@@ -532,7 +521,7 @@ impl WorkflowExecutor {
                 self.emit_event(ExecutionEvent::WorkflowFailed {
                     workflow_id: graph.id.clone(),
                     error: e.clone(),
-                    total_duration_ms: duration.as_millis() as u64,
+                    total_duration_ms: u64::try_from(duration.as_millis()).unwrap_or(u64::MAX),
                 })
                 .await;
             }
@@ -540,7 +529,7 @@ impl WorkflowExecutor {
                 self.emit_event(ExecutionEvent::WorkflowCompleted {
                     workflow_id: graph.id.clone(),
                     final_output: None,
-                    total_duration_ms: duration.as_millis() as u64,
+                    total_duration_ms: u64::try_from(duration.as_millis()).unwrap_or(u64::MAX),
                 })
                 .await;
             }
@@ -568,10 +557,7 @@ impl WorkflowExecutor {
         self.emit_event(ExecutionEvent::WorkflowStarted {
             workflow_id: graph.id.clone(),
             workflow_name: graph.name.clone(),
-            started_at: std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap_or_default()
-                .as_millis() as u64,
+            started_at: mofa_kernel::utils::now_ms(),
         })
         .await;
 
@@ -604,10 +590,7 @@ impl WorkflowExecutor {
         let mut execution_record = ExecutionRecord {
             execution_id: ctx.execution_id.clone(),
             workflow_id: graph.id.clone(),
-            started_at: std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap_or_default()
-                .as_millis() as u64,
+            started_at: mofa_kernel::utils::now_ms(),
             ended_at: None,
             status: WorkflowStatus::Running,
             node_records: Vec::new(),
@@ -627,12 +610,7 @@ impl WorkflowExecutor {
             .await;
 
         let duration = start_time.elapsed();
-        execution_record.ended_at = Some(
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap_or_default()
-                .as_millis() as u64,
-        );
+        execution_record.ended_at = Some(mofa_kernel::utils::now_ms());
 
         let final_status = match result {
             Ok(_) => {
@@ -667,7 +645,7 @@ impl WorkflowExecutor {
                 self.emit_event(ExecutionEvent::WorkflowFailed {
                     workflow_id: graph.id.clone(),
                     error: e.clone(),
-                    total_duration_ms: duration.as_millis() as u64,
+                    total_duration_ms: u64::try_from(duration.as_millis()).unwrap_or(u64::MAX),
                 })
                 .await;
             }
@@ -675,7 +653,7 @@ impl WorkflowExecutor {
                 self.emit_event(ExecutionEvent::WorkflowCompleted {
                     workflow_id: graph.id.clone(),
                     final_output: None,
-                    total_duration_ms: duration.as_millis() as u64,
+                    total_duration_ms: u64::try_from(duration.as_millis()).unwrap_or(u64::MAX),
                 })
                 .await;
             }
@@ -819,10 +797,7 @@ impl WorkflowExecutor {
             })
             .await;
 
-            let start_time = std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap_or_default()
-                .as_millis() as u64;
+            let start_time = mofa_kernel::utils::now_ms();
 
             ctx.set_node_status(&current_node_id, NodeStatus::Running)
                 .await;
@@ -845,9 +820,8 @@ impl WorkflowExecutor {
                 }
                 NodeType::Wait => self.execute_wait(ctx, node, current_input.clone()).await,
                 _ => {
-                    let node_timeout = std::time::Duration::from_millis(
-                        self.config.node_timeout_ms,
-                    );
+                    let node_timeout =
+                        std::time::Duration::from_millis(self.config.node_timeout_ms);
                     let result = match tokio::time::timeout(
                         node_timeout,
                         node.execute(ctx, current_input.clone()),
@@ -862,11 +836,8 @@ impl WorkflowExecutor {
                             );
                             NodeResult::failed(
                                 &current_node_id,
-                                &format!(
-                                    "Node timed out after {:?}",
-                                    node_timeout
-                                ),
-                                node_timeout.as_millis() as u64,
+                                &format!("Node timed out after {:?}", node_timeout),
+                                u64::try_from(node_timeout.as_millis()).unwrap_or(u64::MAX),
                             )
                         }
                     };
@@ -874,10 +845,7 @@ impl WorkflowExecutor {
                         .await;
                     ctx.set_node_status(&current_node_id, result.status.clone())
                         .await;
-                    let node_end_ms = std::time::SystemTime::now()
-                        .duration_since(std::time::UNIX_EPOCH)
-                        .unwrap_or_default()
-                        .as_millis() as u64;
+                    let node_end_ms = mofa_kernel::utils::now_ms();
                     self.emit_event(ExecutionEvent::NodeCompleted {
                         node_id: current_node_id.clone(),
                         output: serde_json::to_value(&result.output).ok(),
@@ -892,10 +860,7 @@ impl WorkflowExecutor {
                 }
             };
 
-            let end_time = std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap_or_default()
-                .as_millis() as u64;
+            let end_time = mofa_kernel::utils::now_ms();
 
             // Emit debug telemetry: NodeEnd
             self.emit_debug(DebugEvent::NodeEnd {
@@ -1342,10 +1307,7 @@ impl WorkflowExecutor {
         let mut execution_record = ExecutionRecord {
             execution_id: ctx.execution_id.clone(),
             workflow_id: graph.id.clone(),
-            started_at: std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap_or_default()
-                .as_millis() as u64,
+            started_at: mofa_kernel::utils::now_ms(),
             ended_at: None,
             status: WorkflowStatus::Running,
             node_records: Vec::new(),
@@ -1375,10 +1337,7 @@ impl WorkflowExecutor {
                     .collect();
 
                 join_set.spawn(async move {
-                    let node_start_time = std::time::SystemTime::now()
-                        .duration_since(std::time::UNIX_EPOCH)
-                        .unwrap_or_default()
-                        .as_millis() as u64;
+                    let node_start_time = mofa_kernel::utils::now_ms();
                     let _permit = match semaphore.acquire_owned().await {
                         Ok(permit) => permit,
                         Err(e) => {
@@ -1436,10 +1395,7 @@ impl WorkflowExecutor {
                         NodeResult::failed(&n_id, "Node not found", 0)
                     };
 
-                    let node_end_time = std::time::SystemTime::now()
-                        .duration_since(std::time::UNIX_EPOCH)
-                        .unwrap_or_default()
-                        .as_millis() as u64;
+                    let node_end_time = mofa_kernel::utils::now_ms();
 
                     tracing::debug!(
                         "Branch {} completed in {}ms",
@@ -1482,12 +1438,7 @@ impl WorkflowExecutor {
                     execution_record.status = WorkflowStatus::Failed(
                         result.error.unwrap_or_else(|| "Unknown error".to_string()),
                     );
-                    execution_record.ended_at = Some(
-                        std::time::SystemTime::now()
-                            .duration_since(std::time::UNIX_EPOCH)
-                            .unwrap_or_default()
-                            .as_millis() as u64,
-                    );
+                    execution_record.ended_at = Some(mofa_kernel::utils::now_ms());
                     execution_record.outputs = ctx_ref.get_all_outputs().await;
                     return Ok(execution_record);
                 }
@@ -1496,12 +1447,7 @@ impl WorkflowExecutor {
 
         let duration = start_time.elapsed();
         execution_record.status = WorkflowStatus::Completed;
-        execution_record.ended_at = Some(
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap_or_default()
-                .as_millis() as u64,
-        );
+        execution_record.ended_at = Some(mofa_kernel::utils::now_ms());
 
         execution_record.outputs = ctx.get_all_outputs().await;
 
@@ -1952,9 +1898,7 @@ mod tests {
         graph.add_node(WorkflowNode::task(
             "fast_task",
             "Fast Task",
-            |_ctx, _input| async move {
-                Ok(WorkflowValue::String("fast".to_string()))
-            },
+            |_ctx, _input| async move { Ok(WorkflowValue::String("fast".to_string())) },
         ));
         graph.add_node(WorkflowNode::end("end"));
         graph.connect("start", "fast_task");

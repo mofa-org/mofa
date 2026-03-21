@@ -35,7 +35,7 @@ impl DeferredRequest {
 
     /// How long this request has been waiting (milliseconds).
     pub fn wait_time_ms(&self) -> u64 {
-        self.enqueued_at.elapsed().as_millis() as u64
+        u64::try_from(self.enqueued_at.elapsed().as_millis()).unwrap_or(u64::MAX)
     }
 
     /// Increment the retry counter.

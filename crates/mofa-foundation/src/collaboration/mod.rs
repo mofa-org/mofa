@@ -247,7 +247,7 @@ impl CollaborationProtocol for RequestResponseProtocol {
             // Received and processed request from {}
         };
 
-        let duration = start.elapsed().as_millis() as u64;
+        let duration = u64::try_from(start.elapsed().as_millis()).unwrap_or(u64::MAX);
 
         Ok(
             CollaborationResult::success(content, duration, CollaborationMode::RequestResponse)
@@ -383,7 +383,7 @@ impl CollaborationProtocol for PublishSubscribeProtocol {
             // Message published to topic {:?}
         };
 
-        let duration = start.elapsed().as_millis() as u64;
+        let duration = u64::try_from(start.elapsed().as_millis()).unwrap_or(u64::MAX);
 
         Ok(
             CollaborationResult::success(content, duration, CollaborationMode::PublishSubscribe)
@@ -510,7 +510,7 @@ impl CollaborationProtocol for ConsensusProtocol {
             // Participated in consensus decision, threshold: {}
         };
 
-        let duration = start.elapsed().as_millis() as u64;
+        let duration = u64::try_from(start.elapsed().as_millis()).unwrap_or(u64::MAX);
 
         Ok(
             CollaborationResult::success(content, duration, CollaborationMode::Consensus)
@@ -633,7 +633,7 @@ impl CollaborationProtocol for DebateProtocol {
             // Participated in debate, max rounds: {}
         };
 
-        let duration = start.elapsed().as_millis() as u64;
+        let duration = u64::try_from(start.elapsed().as_millis()).unwrap_or(u64::MAX);
 
         Ok(
             CollaborationResult::success(content, duration, CollaborationMode::Debate)
@@ -759,7 +759,7 @@ impl CollaborationProtocol for ParallelProtocol {
             ))
         };
 
-        let duration = start.elapsed().as_millis() as u64;
+        let duration = u64::try_from(start.elapsed().as_millis()).unwrap_or(u64::MAX);
 
         Ok(
             CollaborationResult::success(content, duration, CollaborationMode::Parallel)
@@ -882,7 +882,7 @@ impl CollaborationProtocol for SequentialProtocol {
             // Sequential task chain executed
         };
 
-        let duration = start.elapsed().as_millis() as u64;
+        let duration = u64::try_from(start.elapsed().as_millis()).unwrap_or(u64::MAX);
 
         Ok(
             CollaborationResult::success(content, duration, CollaborationMode::Sequential)

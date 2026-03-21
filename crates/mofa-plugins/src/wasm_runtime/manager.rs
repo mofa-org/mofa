@@ -393,7 +393,8 @@ impl WasmPluginManager {
         {
             let mut stats = self.stats.write().await;
             stats.total_calls += 1;
-            stats.total_execution_time_ms += duration.as_millis() as u64;
+            stats.total_execution_time_ms +=
+                u64::try_from(duration.as_millis()).unwrap_or(u64::MAX);
             if result.is_err() {
                 stats.failed_calls += 1;
             }
@@ -403,7 +404,7 @@ impl WasmPluginManager {
         let _ = self.event_tx.send(PluginEvent::Executed {
             plugin_id: handle.id().to_string(),
             function: function.to_string(),
-            duration_ms: duration.as_millis() as u64,
+            duration_ms: u64::try_from(duration.as_millis()).unwrap_or(u64::MAX),
             success: result.is_ok(),
         });
 
@@ -427,7 +428,8 @@ impl WasmPluginManager {
         {
             let mut stats = self.stats.write().await;
             stats.total_calls += 1;
-            stats.total_execution_time_ms += duration.as_millis() as u64;
+            stats.total_execution_time_ms +=
+                u64::try_from(duration.as_millis()).unwrap_or(u64::MAX);
             if result.is_err() {
                 stats.failed_calls += 1;
             }
@@ -437,7 +439,7 @@ impl WasmPluginManager {
         let _ = self.event_tx.send(PluginEvent::Executed {
             plugin_id: handle.id().to_string(),
             function: function.to_string(),
-            duration_ms: duration.as_millis() as u64,
+            duration_ms: u64::try_from(duration.as_millis()).unwrap_or(u64::MAX),
             success: result.is_ok(),
         });
 

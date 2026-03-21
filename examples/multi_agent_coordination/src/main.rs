@@ -546,7 +546,7 @@ impl WorkerAgent {
             .send()
             .await?;
 
-        let processing_time_ms = start_time.elapsed().as_millis() as u64;
+        let processing_time_ms = u64::try_from(start_time.elapsed().as_millis()).unwrap_or(u64::MAX);
         let content = response.content().unwrap_or("").to_string();
 
         self.stats.tasks_completed += 1;

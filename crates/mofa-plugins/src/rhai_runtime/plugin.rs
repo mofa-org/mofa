@@ -715,7 +715,7 @@ impl AgentPlugin for RhaiPlugin {
         // --- stats: start wall-clock timer ---
         let timer = Instant::now();
         let result = self.execute_script(input).await;
-        let latency_ms = timer.elapsed().as_millis() as u64;
+        let latency_ms = u64::try_from(timer.elapsed().as_millis()).unwrap_or(u64::MAX);
         self.stats.record(latency_ms, result.is_err());
         result
     }

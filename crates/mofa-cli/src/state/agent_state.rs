@@ -72,10 +72,7 @@ pub struct AgentMetadata {
 impl AgentMetadata {
     /// Create new agent metadata
     pub fn new(id: String, name: String) -> Self {
-        let now = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_millis() as u64;
+        let now = mofa_kernel::utils::now_ms();
 
         Self {
             id,
@@ -106,10 +103,7 @@ impl AgentMetadata {
 
     /// Mark as started
     pub fn mark_started(&mut self, pid: u32) {
-        let now = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_millis() as u64;
+        let now = mofa_kernel::utils::now_ms();
         self.last_started = Some(now);
         self.process_id = Some(pid);
         self.last_state = AgentProcessState::Running;
@@ -118,10 +112,7 @@ impl AgentMetadata {
 
     /// Mark as stopped
     pub fn mark_stopped(&mut self) {
-        let now = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_millis() as u64;
+        let now = mofa_kernel::utils::now_ms();
         self.last_stopped = Some(now);
         self.process_id = None;
         self.last_state = AgentProcessState::Stopped;
@@ -342,7 +333,8 @@ mod tests {
             "tags": []
         }"#;
 
-        let metadata: AgentMetadata = serde_json::from_str(legacy).expect("legacy metadata should deserialize");
+        let metadata: AgentMetadata =
+            serde_json::from_str(legacy).expect("legacy metadata should deserialize");
         assert_eq!(metadata.last_state, AgentProcessState::Stopped);
         assert_eq!(metadata.id, "agent-legacy");
     }

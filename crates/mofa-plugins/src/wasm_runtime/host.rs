@@ -251,10 +251,7 @@ impl HostFunctions for DefaultHostFunctions {
         let msg = HostMessage {
             target: target.to_string(),
             payload: payload.to_vec(),
-            timestamp: std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap_or_default()
-                .as_millis() as u64,
+            timestamp: mofa_kernel::utils::now_ms(),
         };
 
         self.context.message_queue.write().await.push(msg);
@@ -315,10 +312,7 @@ impl HostFunctions for DefaultHostFunctions {
     }
 
     async fn now_ms(&self) -> WasmResult<u64> {
-        Ok(std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_millis() as u64)
+        Ok(mofa_kernel::utils::now_ms())
     }
 
     async fn random_bytes(&self, len: u32) -> WasmResult<Vec<u8>> {

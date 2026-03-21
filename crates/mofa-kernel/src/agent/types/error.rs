@@ -350,10 +350,7 @@ pub struct ErrorContext {
 impl ErrorContext {
     /// Create new error context (auto-captures timestamp)
     pub fn new(message: impl Into<String>) -> Self {
-        let now = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_millis() as u64;
+        let now = crate::utils::now_ms();
         Self {
             message: message.into(),
             location: None,

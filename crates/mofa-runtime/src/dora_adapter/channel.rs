@@ -80,10 +80,7 @@ impl MessageEnvelope {
             sender_id: sender_id.to_string(),
             receiver_id: None,
             topic: None,
-            timestamp: std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap_or_default()
-                .as_millis() as u64,
+            timestamp: mofa_kernel::utils::now_ms(),
             payload,
             metadata: HashMap::new(),
         }

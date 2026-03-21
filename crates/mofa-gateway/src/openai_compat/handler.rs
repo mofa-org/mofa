@@ -206,7 +206,7 @@ pub async fn chat_completions(
             let mut orch = state.orchestrator.write().await;
             orch.infer_stream(&inference_req)
         };
-        let latency_ms = start.elapsed().as_millis() as u64;
+        let latency_ms = u64::try_from(start.elapsed().as_millis()).unwrap_or(u64::MAX);
 
         let backend_label = result.routed_to.to_string();
         let model_used = req.model.clone();
@@ -222,7 +222,7 @@ pub async fn chat_completions(
             let mut orch = state.orchestrator.write().await;
             orch.infer(&inference_req)
         };
-        let latency_ms = start.elapsed().as_millis() as u64;
+        let latency_ms = u64::try_from(start.elapsed().as_millis()).unwrap_or(u64::MAX);
 
         let backend_label = result.routed_to.to_string();
         let output_text = result.output.clone();

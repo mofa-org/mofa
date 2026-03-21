@@ -260,10 +260,7 @@ impl CollaborationMessage {
         content: impl Into<CollaborationContent>,
         mode: CollaborationMode,
     ) -> Self {
-        let now = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_millis() as u64;
+        let now = mofa_kernel::utils::now_ms();
 
         Self {
             id: Uuid::now_v7().to_string(),
@@ -785,7 +782,7 @@ impl LLMDrivenCollaborationManager {
         // Process message
         let result = protocol.process_message(msg).await;
 
-        let duration = start.elapsed().as_millis() as u64;
+        let duration = u64::try_from(start.elapsed().as_millis()).unwrap_or(u64::MAX);
 
         match result {
             Ok(mut result) => {
