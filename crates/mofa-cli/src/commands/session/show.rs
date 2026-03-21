@@ -1,10 +1,11 @@
 //! `mofa session show` command implementation
 
+use crate::CliError;
 use crate::context::CliContext;
 use colored::Colorize;
 
 /// Execute the `mofa session show` command
-pub async fn run(ctx: &CliContext, session_id: &str, format: Option<&str>) -> anyhow::Result<()> {
+pub async fn run(ctx: &CliContext, session_id: &str, format: Option<&str>) -> Result<(), CliError> {
     println!("{} Session details: {}", "→".green(), session_id.cyan());
     println!();
 
@@ -12,8 +13,8 @@ pub async fn run(ctx: &CliContext, session_id: &str, format: Option<&str>) -> an
         .session_manager
         .get(session_id)
         .await
-        .map_err(|e| anyhow::anyhow!("Failed to load session: {}", e))?
-        .ok_or_else(|| anyhow::anyhow!("Session '{}' not found", session_id))?;
+        .map_err(|e| CliError::SessionError(format!("Failed to load session: {}", e)))?
+        .ok_or_else(|| CliError::SessionError(format!("Session '{}' not found", session_id)))?;
     let output_format = format.unwrap_or("text");
 
     match output_format {

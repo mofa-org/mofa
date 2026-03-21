@@ -9,14 +9,17 @@ use axum::{
     response::IntoResponse,
     routing::get,
 };
+use mofa_foundation::cost::InMemoryPricingRegistry;
+use mofa_kernel::pricing::{ModelPricing, ProviderPricingRegistry};
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::sync::Arc;
 
 use super::metrics::{
     AgentMetrics, LLMMetrics, MetricsCollector, MetricsSnapshot, PluginMetrics, WorkflowMetrics,
 };
 
-use mofa_kernel::workflow::telemetry::{DebugEvent, SessionRecorder};
+use mofa_kernel::workflow::telemetry::{DebugEvent, SessionQuery, SessionRecorder};
 
 /// API response wrapper
 #[derive(Debug, Serialize)]
@@ -53,8 +56,9 @@ impl<T: Serialize> ApiResponse<T> {
     }
 }
 
-/// API error type
+/// API error type.
 #[derive(Debug, thiserror::Error)]
+#[non_exhaustive]
 pub enum ApiError {
     #[error("Not found: {0}")]
     NotFound(String),
@@ -64,6 +68,25 @@ pub enum ApiError {
 
     #[error("Internal error: {0}")]
     Internal(String),
+}
+
+/// Plain result alias for API handler operations (backward-compatible).
+pub type ApiResult<T> = ::std::result::Result<T, ApiError>;
+
+/// Error-stack–backed result alias for API operations.
+pub type ApiReport<T> = ::std::result::Result<T, error_stack::Report<ApiError>>;
+
+/// Extension trait to convert [`ApiResult<T>`] into [`ApiReport<T>`].
+pub trait IntoApiReport<T> {
+    /// Wrap the error in an `error_stack::Report`.
+    fn into_report(self) -> ApiReport<T>;
+}
+
+impl<T> IntoApiReport<T> for ApiResult<T> {
+    #[inline]
+    fn into_report(self) -> ApiReport<T> {
+        self.map_err(error_stack::Report::new)
+    }
 }
 
 impl IntoResponse for ApiError {
@@ -357,6 +380,8 @@ pub fn create_api_router(
         // LLM
         .route("/llm", get(get_llm_metrics))
         .route("/llm/{id}", get(get_llm_plugin))
+        // Costs
+        .route("/costs/summary", get(get_cost_summary))
         // System
         .route("/system", get(get_system_status))
         .route("/health", get(health_check))
@@ -686,20 +711,111 @@ pub struct HealthStatus {
     pub version: String,
 }
 
+// Cost summary API
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CostSummaryResponse {
+    pub total_cost_usd: f64,
+    pub cost_by_model: HashMap<String, ModelCostEntry>,
+    pub total_tokens: u64,
+    pub total_prompt_tokens: u64,
+    pub total_completion_tokens: u64,
+    pub model_count: usize,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ModelCostEntry {
+    pub provider: String,
+    pub model: String,
+    pub prompt_tokens: u64,
+    pub completion_tokens: u64,
+    pub total_tokens: u64,
+    pub estimated_cost_usd: f64,
+    pub requests: u64,
+}
+
+async fn get_cost_summary(
+    State(state): State<Arc<ApiState>>,
+) -> Result<Json<ApiResponse<CostSummaryResponse>>, ApiError> {
+    let snapshot = state.collector.current().await;
+    let registry = InMemoryPricingRegistry::with_defaults();
+
+    let mut cost_by_model: HashMap<String, ModelCostEntry> = HashMap::new();
+    let mut total_cost = 0.0f64;
+    let mut total_tokens = 0u64;
+    let mut total_prompt = 0u64;
+    let mut total_completion = 0u64;
+
+    for llm in &snapshot.llm_metrics {
+        let model_key = format!("{}/{}", llm.provider_name, llm.model_name);
+        let estimated_cost = registry
+            .get_pricing(&llm.provider_name, &llm.model_name)
+            .map(|p: ModelPricing| {
+                let pt = u32::try_from(llm.prompt_tokens).unwrap_or(u32::MAX);
+                let ct = u32::try_from(llm.completion_tokens).unwrap_or(u32::MAX);
+                p.calculate_cost(pt, ct)
+            })
+            .unwrap_or(0.0);
+
+        total_cost += estimated_cost;
+        total_tokens += llm.total_tokens;
+        total_prompt += llm.prompt_tokens;
+        total_completion += llm.completion_tokens;
+
+        let entry = cost_by_model
+            .entry(model_key)
+            .or_insert_with(|| ModelCostEntry {
+                provider: llm.provider_name.clone(),
+                model: llm.model_name.clone(),
+                prompt_tokens: 0,
+                completion_tokens: 0,
+                total_tokens: 0,
+                estimated_cost_usd: 0.0,
+                requests: 0,
+            });
+        entry.prompt_tokens += llm.prompt_tokens;
+        entry.completion_tokens += llm.completion_tokens;
+        entry.total_tokens += llm.total_tokens;
+        entry.estimated_cost_usd += estimated_cost;
+        entry.requests += llm.total_requests;
+    }
+
+    let response = CostSummaryResponse {
+        total_cost_usd: total_cost,
+        cost_by_model,
+        total_tokens,
+        total_prompt_tokens: total_prompt,
+        total_completion_tokens: total_completion,
+        model_count: snapshot.llm_metrics.len(),
+    };
+
+    Ok(Json(ApiResponse::success(response)))
+}
+
 // ============================================================================
 // Debug Session API Handlers
 // ============================================================================
 
-/// Get all debug sessions
+/// Get debug sessions with optional filtering and pagination.
+///
+/// Query parameters:
+/// - `workflow_id` — filter by workflow graph ID
+/// - `status` — filter by status ("running", "completed", "failed")
+/// - `from` — only sessions started at or after this timestamp (ms)
+/// - `to` — only sessions started at or before this timestamp (ms)
+/// - `min_duration_ms` — only sessions longer than this threshold
+/// - `limit` — max results (for pagination)
+/// - `offset` — skip N results (for pagination)
 async fn get_debug_sessions(
     State(state): State<Arc<ApiState>>,
+    Query(query): Query<SessionQuery>,
 ) -> Result<Json<ApiResponse<Vec<DebugSessionResponse>>>, ApiError> {
     let recorder = state.session_recorder.as_ref().ok_or_else(|| {
         ApiError::BadRequest("Debug session recording is not enabled".to_string())
     })?;
 
     let sessions = recorder
-        .list_sessions()
+        .query_sessions(&query)
         .await
         .map_err(|e| ApiError::Internal(e.to_string()))?;
 

@@ -1,3 +1,5 @@
+#![allow(ambiguous_glob_reexports)]
+
 // context module
 pub mod context;
 
@@ -17,7 +19,7 @@ pub mod logging;
 
 // error module
 pub mod error;
-pub use error::{KernelError, KernelResult};
+pub use error::{IntoKernelReport, KernelError, KernelResult};
 
 // core module
 pub mod core;
@@ -32,6 +34,7 @@ pub use message_graph::*;
 
 // Agent Framework (统一 Agent 框架)
 pub mod agent;
+pub use agent::{AgentManifest, AgentManifestBuilder};
 
 // Global Configuration System (全局配置系统)
 #[cfg(feature = "config")]
@@ -41,16 +44,69 @@ pub use config::*;
 
 // Storage traits (存储接口)
 pub mod storage;
-pub use storage::Storage;
+pub use storage::{ObjectStore, Storage};
 
 // RAG traits (向量存储接口)
 pub mod rag;
-pub use rag::{DocumentChunk, SearchResult, SimilarityMetric, VectorStore};
+pub use rag::{
+    Document, DocumentChunk, GenerateInput, Generator, RagPipeline, RagPipelineOutput, Reranker,
+    Retriever, ScoredDocument, SearchResult, SimilarityMetric, VectorStore,
+};
 
 // Workflow traits (工作流接口)
 pub mod workflow;
-pub use workflow::*;
-
+// Explicit re-exports instead of `pub use workflow::*` to avoid ambiguous
+// `policy` module collision with `hitl::policy`. Fixes #1217.
+pub use workflow::{
+    CircuitBreakerState, CircuitState, CompiledGraph, Command, ControlFlow, DebugEvent,
+    DebugSession, EdgeTarget, END, GraphConfig, GraphState, JsonState, NodeFunc, NodePolicy,
+    RemainingSteps, Reducer, ReducerType, RetryCondition, RuntimeContext, SendCommand,
+    SessionRecorder, START, StateGraph, StateSchema, StateUpdate, StepResult, StreamEvent,
+    TelemetryEmitter,
+};
+pub mod llm;
 // Metrics traits for monitoring integration
 pub mod metrics;
 pub use metrics::*;
+
+// Human-in-the-Loop (HITL) module
+pub mod hitl;
+// Explicit re-exports instead of `pub use hitl::*` to avoid ambiguous
+// `policy` module collision with `workflow::policy`. Fixes #1217.
+pub use hitl::{
+    AlwaysReviewPolicy, AuditLogQuery, Change, Diff, ExecutionStep, ExecutionTrace, HitlError,
+    HitlResult, NeverReviewPolicy, PerformanceData, ReviewAuditEvent, ReviewAuditEventType,
+    ReviewContext, ReviewMetadata, ReviewPolicy, ReviewRequest, ReviewRequestId, ReviewResponse,
+    ReviewStatus, ReviewType, StoreError, TelemetrySnapshot,
+};
+// Provider pricing registry (LLM cost calculation)
+pub mod pricing;
+
+// Budget configuration & enforcement
+pub mod budget;
+
+// Structured output parsing with JSON schema validation
+pub mod structured_output;
+pub use structured_output::StructuredOutput;
+// Security governance (PII redaction, content moderation, prompt guard)
+pub mod security;
+
+// Gateway routing abstractions (kernel-level traits for agent request dispatch)
+pub mod gateway;
+pub use gateway::{
+    AgentResponse, ApiKeyStore, AuthClaims, AuthError, AuthProvider, GatewayConfigError,
+    GatewayContext, GatewayRequest, GatewayRateLimiter, GatewayResponse, GatewayRoute, HttpMethod,
+    KeyStrategy, RateLimitDecision, RateLimiterConfig, RegistryError, RequestEnvelope, RouteMatch,
+    RouteRegistry, RoutingContext,
+};
+
+// Scheduler kernel contract (traits, types, errors for periodic agent execution)
+pub mod scheduler;
+pub use scheduler::{
+    AgentScheduler, Clock, MissedTickPolicy, ScheduleDefinition,
+    ScheduleHandle, ScheduleInfo, ScheduledAgentRunner, SchedulerError,
+};
+
+// Speech kernel contracts (traits and types for TTS/ASR)
+pub mod speech;
+pub use speech::{AsrAdapter, TtsAdapter};

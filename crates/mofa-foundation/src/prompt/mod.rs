@@ -22,6 +22,7 @@
 mod builder;
 mod hot_reload;
 mod memory_store;
+mod regex;
 mod plugin;
 mod presets;
 mod registry;

@@ -1,13 +1,11 @@
-//! Skills Manager - SDK 层统一 API
 //! Skills Manager - SDK Layer Unified API
 
 use super::{DisclosureController, RequirementCheck, SkillMetadata};
+use mofa_kernel::agent::types::error::{GlobalError, GlobalResult};
 use std::path::{Path, PathBuf};
 
-/// Skills Manager - SDK 层统一 API
 /// Skills Manager - SDK Layer Unified API
 ///
-/// 提供 Skills 的管理和查询接口，支持渐进式披露、多目录搜索和依赖检查。
 /// Provides management and query interfaces for Skills, supporting progressive disclosure, multi-directory search, and dependency checks.
 #[derive(Debug, Clone)]
 pub struct SkillsManager {
@@ -15,12 +13,10 @@ pub struct SkillsManager {
 }
 
 impl SkillsManager {
-    /// 创建新的 Skills Manager（单目录）
     /// Create a new Skills Manager (single directory)
     ///
     /// # Arguments
     ///
-    /// * `skills_dir` - Skills 目录路径
     /// * `skills_dir` - Path to the skills directory
     ///
     /// # Examples
@@ -30,25 +26,24 @@ impl SkillsManager {
     ///
     /// let manager = SkillsManager::new("./skills").unwrap();
     /// ```
-    pub fn new(skills_dir: impl AsRef<Path>) -> anyhow::Result<Self> {
+    pub fn new(skills_dir: impl AsRef<Path>) -> GlobalResult<Self> {
         let skills_dir = skills_dir.as_ref();
 
-        // 不要求目录必须存在（支持空目录）
         // Directory existence not required (supports empty directories)
         let mut controller = DisclosureController::new(skills_dir);
         if skills_dir.exists() {
-            controller.scan_metadata()?;
+            controller
+                .scan_metadata()
+                .map_err(|e| GlobalError::Other(e.to_string()))?;
         }
 
         Ok(Self { controller })
     }
 
-    /// 创建支持多目录搜索的 Skills Manager
     /// Create a Skills Manager supporting multi-directory search
     ///
     /// # Arguments
     ///
-    /// * `search_dirs` - Skills 目录列表，按优先级排序
     /// * `search_dirs` - List of skill directories, ordered by priority
     ///
     /// # Examples
@@ -64,54 +59,43 @@ impl SkillsManager {
     ///     let manager = SkillsManager::with_search_dirs(vec![workspace_skills, builtin]).unwrap();
     /// }
     /// ```
-    pub fn with_search_dirs(search_dirs: Vec<PathBuf>) -> anyhow::Result<Self> {
+    pub fn with_search_dirs(search_dirs: Vec<PathBuf>) -> GlobalResult<Self> {
         let controller = DisclosureController::with_search_dirs(search_dirs);
         let mut manager = Self { controller };
         manager.rescan()?;
         Ok(manager)
     }
 
-    /// 查找内置 skills 目录
     /// Find the built-in skills directory
     ///
-    /// 按以下顺序查找：
     /// Search in the following order:
-    /// 1. CARGO_MANIFEST_DIR/skills（开发时）
     /// 1. CARGO_MANIFEST_DIR/skills (during development)
-    /// 2. 可执行文件父目录/skills（已安装）
     /// 2. Executable parent directory/skills (when installed)
-    /// 3. /usr/local/lib/mofa/skills（标准安装路径）
     /// 3. /usr/local/lib/mofa/skills (standard installation path)
     pub fn find_builtin_skills() -> Option<PathBuf> {
         DisclosureController::find_builtin_skills()
     }
 
-    /// 获取系统提示（第1层：仅元数据）
     /// Get system prompt (Layer 1: Metadata only)
     ///
-    /// 返回包含所有 Skills 元数据的系统提示字符串。
     /// Returns a system prompt string containing all Skills metadata.
     pub fn build_system_prompt(&self) -> String {
         self.controller.build_system_prompt()
     }
 
-    /// 获取系统提示（异步版本）
     /// Get system prompt (Async version)
     pub async fn build_system_prompt_async(&self) -> String {
         self.build_system_prompt()
     }
 
-    /// 加载 Skill 的 SKILL.md 内容（第2层）
     /// Load SKILL.md content for a Skill (Layer 2)
     ///
     /// # Arguments
     ///
-    /// * `name` - Skill 名称
     /// * `name` - Skill name
     ///
     /// # Returns
     ///
-    /// 返回 SKILL.md 的 Markdown 内容（去除 frontmatter）
     /// Returns Markdown content of SKILL.md (frontmatter removed)
     pub fn load_skill(&self, name: &str) -> Option<String> {
         let skill_path = self.controller.get_skill_path(name)?;
@@ -119,7 +103,6 @@ impl SkillsManager {
 
         let content = std::fs::read_to_string(&skill_md).ok()?;
 
-        // 去除 frontmatter，返回纯 Markdown
         // Remove frontmatter and return pure Markdown
         let parts: Vec<&str> = content.splitn(3, "---").collect();
         if parts.len() >= 3 {
@@ -129,7 +112,6 @@ impl SkillsManager {
         }
     }
 
-    /// 加载 Skill 的 SKILL.md 内容（异步版本）
     /// Load SKILL.md content for a Skill (Async version)
     pub async fn load_skill_async(&self, name: &str) -> Option<String> {
         let skill_path = self.controller.get_skill_path(name)?;
@@ -137,7 +119,6 @@ impl SkillsManager {
 
         let content = tokio::fs::read_to_string(&skill_md).await.ok()?;
 
-        // 去除 frontmatter，返回纯 Markdown
         // Remove frontmatter and return pure Markdown
         let parts: Vec<&str> = content.splitn(3, "---").collect();
         if parts.len() >= 3 {
@@ -147,17 +128,14 @@ impl SkillsManager {
         }
     }
 
-    /// 加载多个 Skills 的内容用于上下文
     /// Load content of multiple Skills for context
     ///
     /// # Arguments
     ///
-    /// * `skill_names` - Skill 名称列表
     /// * `skill_names` - List of skill names
     ///
     /// # Returns
     ///
-    /// 返回所有 Skills 的 Markdown 内容，用 --- 分隔
     /// Returns Markdown content for all skills, separated by ---
     pub async fn load_skills_for_context(&self, skill_names: &[String]) -> String {
         let mut parts = Vec::new();
@@ -173,46 +151,38 @@ impl SkillsManager {
         parts.join("\n\n---\n\n")
     }
 
-    /// 获取标记为 always 的技能名称列表
     /// Get list of skill names marked as "always"
     pub fn get_always_skills(&self) -> Vec<String> {
         self.controller.get_always_skills()
     }
 
-    /// 获取标记为 always 的技能名称列表（异步版本）
     /// Get list of skill names marked as "always" (Async version)
     pub async fn get_always_skills_async(&self) -> Vec<String> {
         self.get_always_skills()
     }
 
-    /// 检查技能依赖是否满足
     /// Check if skill requirements are satisfied
     pub fn check_requirements(&self, name: &str) -> RequirementCheck {
         self.controller.check_requirements(name)
     }
 
-    /// 检查技能依赖是否满足（异步版本）
     /// Check if skill requirements are satisfied (Async version)
     pub async fn check_requirements_async(&self, name: &str) -> RequirementCheck {
         self.check_requirements(name)
     }
 
-    /// 获取技能的安装指令
     /// Get installation instructions for a skill
     pub fn get_install_instructions(&self, name: &str) -> Option<String> {
         self.controller.get_install_instructions(name)
     }
 
-    /// 获取缺失依赖的描述字符串
     /// Get description string for missing requirements
     pub fn get_missing_requirements_description(&self, name: &str) -> String {
         self.controller.get_missing_requirements_description(name)
     }
 
-    /// 构建技能摘要 XML 格式
     /// Build skills summary in XML format
     ///
-    /// 返回所有技能的名称、描述、位置和可用性信息
     /// Returns name, description, location, and availability for all skills
     pub async fn build_skills_summary(&self) -> String {
         let all_metadata = self.get_all_metadata();
@@ -309,13 +279,15 @@ impl SkillsManager {
 
     /// 重新扫描 Skills 目录
     /// Rescan Skills directory
-    pub fn rescan(&mut self) -> anyhow::Result<usize> {
-        self.controller.scan_metadata()
+    pub fn rescan(&mut self) -> GlobalResult<usize> {
+        self.controller
+            .scan_metadata()
+            .map_err(|e| GlobalError::Other(e.to_string()))
     }
 
     /// 重新扫描 Skills 目录（异步版本）
     /// Rescan Skills directory (Async version)
-    pub async fn rescan_async(&mut self) -> anyhow::Result<usize> {
+    pub async fn rescan_async(&mut self) -> GlobalResult<usize> {
         self.rescan()
     }
 

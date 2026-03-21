@@ -3,7 +3,7 @@ use tokio_stream::StreamExt;
 use tracing::{info, Level};
 
 #[tokio::main]
-async fn main() -> anyhow::Result<()> {
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
     tracing_subscriber::fmt()
         .with_max_level(Level::INFO)
         .init();
@@ -13,7 +13,7 @@ async fn main() -> anyhow::Result<()> {
 
     // Load agent from agent.yml configuration (optional)
     // let agent = agent_from_config("chat_stream/agent.yml")
-    //     .map_err(|e| anyhow::anyhow!("Failed to load config: {}", e))?;
+    //     .map_err(|e| format!("Failed to load config: {}", e).into())?;
 
     // Create OpenAI provider from environment variables
     let openai_provider = OpenAIProvider::from_env();
@@ -31,7 +31,7 @@ async fn main() -> anyhow::Result<()> {
     let response = agent
         .ask("Hello! What can you help me with?")
         .await
-        .map_err(|e| anyhow::anyhow!("LLM error: {e}"))?;
+        .map_err(|e| -> Box<dyn std::error::Error> { format!("LLM error: {e}").into() })?;
     info!("Q: Hello! What can you help me with?");
     info!("A: {response}\n");
 
@@ -41,14 +41,14 @@ async fn main() -> anyhow::Result<()> {
     let r1 = agent
         .chat("My favorite programming language is Rust.")
         .await
-        .map_err(|e| anyhow::anyhow!("LLM error: {e}"))?;
+        .map_err(|e| -> Box<dyn std::error::Error> { format!("LLM error: {e}").into() })?;
     info!("User: My favorite programming language is Rust.");
     info!("AI: {r1}\n");
 
     let r2 = agent
         .chat("What's my favorite language?")
         .await
-        .map_err(|e| anyhow::anyhow!("LLM error: {e}"))?;
+        .map_err(|e| -> Box<dyn std::error::Error> { format!("LLM error: {e}").into() })?;
     info!("User: What's my favorite language?");
     info!("AI: {r2}\n");
 

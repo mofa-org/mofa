@@ -251,11 +251,15 @@ impl DoraChannel {
             .clone()
             .ok_or_else(|| DoraError::ChannelError("No receiver specified for P2P".to_string()))?;
 
-        let p2p_channels = self.p2p_channels.read().await;
-        let tx = p2p_channels.get(&receiver_id).ok_or_else(|| {
-            DoraError::AgentNotFound(format!("Receiver {} not registered", receiver_id))
-        })?;
+        // Clone the sender in a scoped block to release lock quickly
+        let tx = {
+            let p2p_channels = self.p2p_channels.read().await;
+            p2p_channels.get(&receiver_id).cloned().ok_or_else(|| {
+                DoraError::AgentNotFound(format!("Receiver {} not registered", receiver_id))
+            })?
+        }; // Lock released here
 
+        // Send without holding any locks
         tx.send(envelope)
             .await
             .map_err(|e| DoraError::ChannelError(e.to_string()))?;
@@ -288,11 +292,16 @@ impl DoraChannel {
             .clone()
             .ok_or_else(|| DoraError::ChannelError("No topic specified".to_string()))?;
 
-        let topic_channels = self.topic_channels.read().await;
-        let tx = topic_channels
-            .get(&topic)
-            .ok_or_else(|| DoraError::ChannelError(format!("Topic {} not found", topic)))?;
+        // Clone the broadcast sender in a scoped block to release lock quickly
+        let tx = {
+            let topic_channels = self.topic_channels.read().await;
+            topic_channels
+                .get(&topic)
+                .cloned()
+                .ok_or_else(|| DoraError::ChannelError(format!("Topic {} not found", topic)))?
+        }; // Lock released here
 
+        // Send without holding any locks
         // 如果没有接收者，send 会返回错误，但这不应该是致命错误
         // If there are no receivers, send returns an error, but this shouldn't be fatal
         match tx.send(envelope) {
@@ -314,12 +323,9 @@ impl DoraChannel {
     pub async fn receive_p2p(&self, agent_id: &str) -> DoraResult<Option<MessageEnvelope>> {
         let rx = {
             let receivers = self.receivers.read().await;
-            receivers
-                .get(agent_id)
-                .cloned()
-                .ok_or_else(|| {
-                    DoraError::AgentNotFound(format!("Agent {} not registered", agent_id))
-                })?
+            receivers.get(agent_id).cloned().ok_or_else(|| {
+                DoraError::AgentNotFound(format!("Agent {} not registered", agent_id))
+            })?
         };
 
         let mut rx_guard = rx.lock().await;
@@ -335,12 +341,9 @@ impl DoraChannel {
     pub async fn try_receive_p2p(&self, agent_id: &str) -> DoraResult<Option<MessageEnvelope>> {
         let rx = {
             let receivers = self.receivers.read().await;
-            receivers
-                .get(agent_id)
-                .cloned()
-                .ok_or_else(|| {
-                    DoraError::AgentNotFound(format!("Agent {} not registered", agent_id))
-                })?
+            receivers.get(agent_id).cloned().ok_or_else(|| {
+                DoraError::AgentNotFound(format!("Agent {} not registered", agent_id))
+            })?
         };
 
         let mut rx_guard = rx.lock().await;
@@ -545,4 +548,3 @@ mod tests {
         );
     }
 }
-
