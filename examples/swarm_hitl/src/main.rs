@@ -19,9 +19,14 @@
 //!   cargo run -p swarm_hitl
 
 use std::sync::Arc;
+use opentelemetry::global;
+use opentelemetry::trace::TracerProvider as _;
+use opentelemetry_otlp::WithExportConfig;
+use opentelemetry_sdk::{trace as sdktrace, runtime, Resource};
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::sync::Mutex;
-use tracing::{info, warn, Level};
+use tracing::{info, warn, Instrument};
+use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
 
 use mofa_foundation::swarm::{
     FailurePolicy, HITLMode, ParallelScheduler, SubtaskDAG, SubtaskExecutorFn,
@@ -29,10 +34,39 @@ use mofa_foundation::swarm::{
 };
 use mofa_foundation::swarm::hitl::{ApprovalOutcome, ChannelApprovalHandler};
 
+async fn init_tracer() -> Result<sdktrace::Tracer, Box<dyn std::error::Error>> {
+    let exporter = opentelemetry_otlp::SpanExporter::builder()
+        .with_http()
+        .with_endpoint("http://localhost:4318/v1/traces")
+        .build()?;
+
+    let provider = sdktrace::TracerProvider::builder()
+        .with_resource(Resource::new(vec![
+            opentelemetry::KeyValue::new("service.name", "swarm-hitl"),
+        ]))
+        .with_batch_exporter(exporter, runtime::Tokio)
+        .build();
+
+    let tracer = provider.tracer("swarm-hitl");
+    global::set_tracer_provider(provider);
+    Ok(tracer)
+}
+
 #[tokio::main]
 async fn main() {
-    tracing_subscriber::fmt()
-        .with_max_level(Level::INFO)
+    let tracer = match init_tracer().await {
+        Ok(tracer) => Some(tracer),
+        Err(e) => {
+            eprintln!("Warning: Jaeger not available ({e}), running without OTel traces");
+            None
+        }
+    };
+
+    let otel_layer = tracer.map(|tracer| tracing_opentelemetry::layer().with_tracer(tracer));
+    tracing_subscriber::registry()
+        .with(EnvFilter::new("info"))
+        .with(tracing_subscriber::fmt::layer())
+        .with(otel_layer)
         .init();
 
     info!("=== Swarm HITL (Diamond DAG + ParallelScheduler) ===");
@@ -56,12 +90,28 @@ async fn main() {
 
     // 2. Base executor (simulates agent work with a short sleep)
     let base_executor: SubtaskExecutorFn = Arc::new(|_idx, task| {
+        let task_id = task.id.clone();
+        let task_description = task.description.clone();
+        let risk_level = format!("{:?}", task.risk_level);
+        let hitl_required = task.hitl_required;
         Box::pin(async move {
-            info!("[Agent] Running: '{}'", task.description);
-            tokio::time::sleep(tokio::time::Duration::from_millis(400)).await;
-            let output = format!("[result of: {}]", task.id);
-            info!("[Agent] Done: '{}' => {}", task.id, output);
-            Ok(output)
+            let span = tracing::info_span!(
+                "swarm.subtask.execute",
+                subtask_id = %task_id,
+                description = %task_description,
+                risk_level = %risk_level,
+                hitl_required = hitl_required,
+            );
+
+            async move {
+                info!("[Agent] Running: '{}'", task.description);
+                tokio::time::sleep(tokio::time::Duration::from_millis(400)).await;
+                let output = format!("[result of: {}]", task.id);
+                info!("[Agent] Done: '{}' => {}", task.id, output);
+                Ok(output)
+            }
+            .instrument(span)
+            .await
         })
     });
 
@@ -77,7 +127,7 @@ async fn main() {
             println!("\n-------------------------------------------");
             println!("HITL Review Required");
             println!("  Task    : {} — {}", req.subtask_id, req.description);
-            println!("  Risk    : {:.1}", req.risk_level);
+            println!("  Risk    : {:?}", req.risk_level);
             println!("-------------------------------------------");
             println!("  (y) Approve  (n) Reject  (m <text>) Modify prompt");
             print!("  > ");
@@ -137,10 +187,18 @@ async fn main() {
         config.hitl_optional_timeout,
     );
 
-    // 5. Run with ParallelScheduler (concurrency_limit = 2 for analyze_a and analyze_b)
     info!("Starting parallel DAG execution with HITL gates...");
     let scheduler = ParallelScheduler::with_config(config);
-    let summary = scheduler.execute(&mut dag, hitl_executor).await.unwrap();
+    let dag_task_count = dag.task_count();
+    let summary = scheduler
+        .execute(&mut dag, hitl_executor)
+        .instrument(tracing::info_span!(
+            "swarm_hitl_run",
+            dag_task_count = dag_task_count,
+            hitl_mode = "required",
+        ))
+        .await
+        .unwrap();
 
     // 6. Results
     println!("\n===========================================");
@@ -159,4 +217,8 @@ async fn main() {
         println!("  [{:?}] {}", event.kind, event.description);
     }
     println!();
+
+    // Flush all pending OTel spans to Jaeger before exit.
+    global::shutdown_tracer_provider();
+    println!("Open http://localhost:16686 — search service: swarm-hitl");
 }

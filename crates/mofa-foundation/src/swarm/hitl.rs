@@ -3,12 +3,21 @@
 use async_trait::async_trait;
 use std::sync::Arc;
 use tokio::sync::{mpsc, oneshot, Mutex};
+use tracing::Instrument;
 
 use mofa_kernel::agent::types::error::GlobalResult;
 
 use crate::swarm::config::{AuditEvent, AuditEventKind, HITLMode};
 use crate::swarm::dag::RiskLevel;
 use crate::swarm::scheduler::SubtaskExecutorFn;
+
+fn approval_decision_label(decision: &ApprovalDecision) -> &'static str {
+    match decision {
+        ApprovalDecision::Approve => "approved",
+        ApprovalDecision::Reject => "rejected",
+        ApprovalDecision::Modify(_) => "modified",
+    }
+}
 
 /// The human's decision types for a pending subtask
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -68,12 +77,32 @@ impl ChannelApprovalHandler {
 #[async_trait]
 impl ApprovalHandler for ChannelApprovalHandler {
     async fn request_approval(&self, req: ApprovalRequest) -> ApprovalOutcome {
+        // Span covers the channel round-trip; decision and channel_closed are recorded after the reviewer responds.
+        let span = tracing::info_span!(
+            "hitl.channel_approval",
+            subtask_id = %req.subtask_id,
+            risk_level = ?req.risk_level,
+            decision = tracing::field::Empty,
+            channel_closed = tracing::field::Empty,
+        );
+        let record_span = span.clone();
+
         let (reply_tx, reply_rx) = oneshot::channel();
-        // If the receiver is gone, default to Approve so the scheduler doesn't deadlock.
-        if self.tx.send((req, reply_tx)).await.is_err() {
-            return ApprovalOutcome::approve();
+        async move {
+            // If the receiver is gone, default to Approve so the scheduler doesn't deadlock.
+            if self.tx.send((req, reply_tx)).await.is_err() {
+                record_span.record("channel_closed", true);
+                record_span.record("decision", "approved");
+                return ApprovalOutcome::approve();
+            }
+
+            let outcome = reply_rx.await.unwrap_or_else(|_| ApprovalOutcome::approve());
+            record_span.record("channel_closed", false);
+            record_span.record("decision", approval_decision_label(&outcome.decision));
+            outcome
         }
-        reply_rx.await.unwrap_or_else(|_| ApprovalOutcome::approve())
+        .instrument(span)
+        .await
     }
 }
 
@@ -117,7 +146,21 @@ pub fn hitl_executor_middleware(
                         format!("Approval requested for subtask '{id}'"),
                     ).with_data(serde_json::json!({ "subtask_id": id, "risk": format!("{:?}", risk_level) })));
 
-                    let outcome = handler.request_approval(req).await;
+                    // Span measures total wall-time waiting for human approval; decision is recorded after await.
+                    let span = tracing::info_span!(
+                        "hitl.approval_gate",
+                        subtask_id = %id,
+                        risk_level = ?risk_level,
+                        hitl_required = task.hitl_required,
+                        mode = "required",
+                        decision = tracing::field::Empty,
+                    );
+                    let outcome = handler.request_approval(req).instrument(span.clone()).await;
+                    span.record("decision", match &outcome.decision {
+                        ApprovalDecision::Approve => "approved",
+                        ApprovalDecision::Reject => "rejected",
+                        ApprovalDecision::Modify(_) => "modified",
+                    });
 
                     let (decision_label, modified_desc) = match &outcome.decision {
                         ApprovalDecision::Approve => ("approved".to_string(), desc.clone()),
@@ -170,9 +213,19 @@ pub fn hitl_executor_middleware(
                         format!("Optional approval requested for subtask '{id}'"),
                     ).with_data(serde_json::json!({ "subtask_id": id, "risk": format!("{:?}", risk_level) })));
 
+                    // Span covers the optional timeout window; timed_out and decision are filled after the future settles.
+                    let span = tracing::info_span!(
+                        "hitl.approval_gate",
+                        subtask_id = %id,
+                        risk_level = ?risk_level,
+                        hitl_required = task.hitl_required,
+                        mode = "optional",
+                        decision = tracing::field::Empty,
+                        timed_out = tracing::field::Empty,
+                    );
                     let outcome_result = tokio::time::timeout(
                         optional_timeout,
-                        handler.request_approval(req),
+                        handler.request_approval(req).instrument(span.clone()),
                     )
                     .await;
 
@@ -180,6 +233,12 @@ pub fn hitl_executor_middleware(
                         Ok(outcome) => (outcome, false),
                         Err(_) => (ApprovalOutcome::approve(), true),
                     };
+                    span.record("timed_out", timed_out);
+                    span.record("decision", match &outcome.decision {
+                        ApprovalDecision::Approve => if timed_out { "auto-approved" } else { "approved" },
+                        ApprovalDecision::Reject => "rejected",
+                        ApprovalDecision::Modify(_) => "modified",
+                    });
 
                     let (decision_label, modified_desc) = match &outcome.decision {
                         ApprovalDecision::Approve => (
@@ -261,62 +320,90 @@ impl ApprovalHandler for ReviewManagerApprovalHandler {
         use mofa_kernel::hitl::{
             ExecutionTrace, ReviewContext, ReviewRequest, ReviewResponse, ReviewType,
         };
+        // Span covers the full ReviewManager round-trip from submission to resolution.
+        // review_id is recorded on successful submission; decision is filled once wait_for_review returns.
+        let span = tracing::info_span!(
+            "hitl.review_manager_approval",
+            execution_id = %self.execution_id,
+            subtask_id = %req.subtask_id,
+            risk_level = ?req.risk_level,
+            review_timeout_ms = self.review_timeout.as_millis(),
+            review_id = tracing::field::Empty,
+            decision = tracing::field::Empty,
+        );
+        let record_span = span.clone();
 
-        // Build a minimal ReviewContext carrying the task description and risk level.
-        let input_data = serde_json::json!({
-            "subtask_id": req.subtask_id,
-            "description": req.description,
-            "risk_level": format!("{:?}", req.risk_level),
-            "prior_output": req.prior_output,
-        });
-        let trace = ExecutionTrace { steps: vec![], duration_ms: 0 };
-        let context = ReviewContext::new(trace, input_data);
+        async move {
+            // Build a minimal ReviewContext carrying the task description and risk level.
+            let input_data = serde_json::json!({
+                "subtask_id": req.subtask_id,
+                "description": req.description,
+                "risk_level": format!("{:?}", req.risk_level),
+                "prior_output": req.prior_output,
+            });
+            let trace = ExecutionTrace { steps: vec![], duration_ms: 0 };
+            let context = ReviewContext::new(trace, input_data);
 
-        let mut review_req = ReviewRequest::new(
-            self.execution_id.clone(),
-            ReviewType::Approval,
-            context,
-        )
-        .with_node_id(req.subtask_id.clone());
+            let mut review_req = ReviewRequest::new(
+                self.execution_id.clone(),
+                ReviewType::Approval,
+                context,
+            )
+            .with_node_id(req.subtask_id.clone());
 
-        // Surface urgency to the reviewer via priority (Low=2, Medium=4, High=7, Critical=10).
-        review_req.metadata.priority = req.risk_level.to_priority();
-        review_req.metadata.tags = vec![
-            "swarm-subtask".to_string(),
-            format!("risk:{}", format!("{:?}", req.risk_level).to_lowercase()),
-        ];
+            // Surface urgency to the reviewer via priority (Low=2, Medium=4, High=7, Critical=10).
+            review_req.metadata.priority = req.risk_level.to_priority();
+            review_req.metadata.tags = vec![
+                "swarm-subtask".to_string(),
+                format!("risk:{}", format!("{:?}", req.risk_level).to_lowercase()),
+            ];
 
-        // Submit to ReviewManager (fires webhooks, stores in ReviewStore, etc.).
-        // Infra errors (storage down, misconfiguration) → reject: don't silently approve.
-        let id = match self.manager.request_review(review_req).await {
-            Ok(id) => id,
-            Err(err) => return ApprovalOutcome::reject(format!("review request failed: {err}")),
-        };
-
-        // Block until the human resolves via REST API (or we time out).
-        let response = match self.manager.wait_for_review(&id, Some(self.review_timeout)).await {
-            Ok(r) => r,
-            // Only timeout/expiry auto-approves; other infra errors reject.
-            Err(err) => {
-                let msg = err.to_string();
-                if msg.contains("timed out") || msg.contains("expired") {
-                    return ApprovalOutcome::approve();
+            // Submit to ReviewManager (fires webhooks, stores in ReviewStore, etc.).
+            // Infra errors (storage down, misconfiguration) reject instead of silently approving.
+            let id = match self.manager.request_review(review_req).await {
+                Ok(id) => {
+                    record_span.record("review_id", id.as_str());
+                    id
                 }
-                return ApprovalOutcome::reject(format!("review wait failed: {msg}"));
-            }
-        };
+                Err(err) => {
+                    let outcome = ApprovalOutcome::reject(format!("review request failed: {err}"));
+                    record_span.record("decision", approval_decision_label(&outcome.decision));
+                    return outcome;
+                }
+            };
 
-        // Map ReviewResponse to ApprovalOutcome.
-        match response {
-            ReviewResponse::Approved { comment } => ApprovalOutcome {
-                decision: ApprovalDecision::Approve,
-                reason: comment,
-            },
-            ReviewResponse::Rejected { reason, .. } => ApprovalOutcome::reject(reason),
-            ReviewResponse::ChangesRequested { changes, .. } => ApprovalOutcome::modify(changes),
-            ReviewResponse::Deferred { .. } => ApprovalOutcome::approve(),
-            _ => ApprovalOutcome::approve(),
+            // Block until the human resolves via REST API (or we time out).
+            let response = match self.manager.wait_for_review(&id, Some(self.review_timeout)).await {
+                Ok(r) => r,
+                // Only timeout/expiry auto-approves; other infra errors reject.
+                Err(err) => {
+                    let msg = err.to_string();
+                    let outcome = if msg.contains("timed out") || msg.contains("expired") {
+                        ApprovalOutcome::approve()
+                    } else {
+                        ApprovalOutcome::reject(format!("review wait failed: {msg}"))
+                    };
+                    record_span.record("decision", approval_decision_label(&outcome.decision));
+                    return outcome;
+                }
+            };
+
+            // Map ReviewResponse to ApprovalOutcome.
+            let outcome = match response {
+                ReviewResponse::Approved { comment } => ApprovalOutcome {
+                    decision: ApprovalDecision::Approve,
+                    reason: comment,
+                },
+                ReviewResponse::Rejected { reason, .. } => ApprovalOutcome::reject(reason),
+                ReviewResponse::ChangesRequested { changes, .. } => ApprovalOutcome::modify(changes),
+                ReviewResponse::Deferred { .. } => ApprovalOutcome::approve(),
+                _ => ApprovalOutcome::approve(),
+            };
+            record_span.record("decision", approval_decision_label(&outcome.decision));
+            outcome
         }
+        .instrument(span)
+        .await
     }
 }
 
@@ -328,8 +415,121 @@ mod tests {
     use crate::swarm::scheduler::{SequentialScheduler, SwarmScheduler, SwarmSchedulerConfig};
     use async_trait::async_trait;
     use mofa_kernel::hitl::{ReviewRequest, ReviewResponse, ReviewStatus};
+    use std::collections::{BTreeMap, HashMap};
+    use std::sync::{Mutex as StdMutex, OnceLock};
     use tokio::task;
+    use tracing::field::{Field, Visit};
+    use tracing_subscriber::layer::{Context, Layer, SubscriberExt};
+    use tracing_subscriber::registry::LookupSpan;
     use uuid::Uuid;
+
+    #[derive(Clone, Debug)]
+    struct CapturedSpan {
+        name: String,
+        fields: BTreeMap<String, String>,
+    }
+
+    #[derive(Default)]
+    struct TestSpanCollector {
+        spans: StdMutex<HashMap<tracing::Id, CapturedSpan>>,
+    }
+
+    #[derive(Clone)]
+    struct TestSpanLayer(std::sync::Arc<TestSpanCollector>);
+
+    #[derive(Default)]
+    struct FieldRecorder(BTreeMap<String, String>);
+
+    impl Visit for FieldRecorder {
+        fn record_bool(&mut self, field: &Field, value: bool) {
+            self.0.insert(field.name().to_string(), value.to_string());
+        }
+
+        fn record_i64(&mut self, field: &Field, value: i64) {
+            self.0.insert(field.name().to_string(), value.to_string());
+        }
+
+        fn record_u64(&mut self, field: &Field, value: u64) {
+            self.0.insert(field.name().to_string(), value.to_string());
+        }
+
+        fn record_str(&mut self, field: &Field, value: &str) {
+            self.0.insert(field.name().to_string(), value.to_string());
+        }
+
+        fn record_debug(&mut self, field: &Field, value: &dyn std::fmt::Debug) {
+            self.0.insert(field.name().to_string(), format!("{value:?}"));
+        }
+    }
+
+    impl<S> Layer<S> for TestSpanLayer
+    where
+        S: tracing::Subscriber + for<'lookup> LookupSpan<'lookup>,
+    {
+        fn on_new_span(
+            &self,
+            attrs: &tracing::span::Attributes<'_>,
+            id: &tracing::Id,
+            _ctx: Context<'_, S>,
+        ) {
+            let mut recorder = FieldRecorder::default();
+            attrs.record(&mut recorder);
+            self.0.spans.lock().unwrap().insert(
+                id.clone(),
+                CapturedSpan {
+                    name: attrs.metadata().name().to_string(),
+                    fields: recorder.0,
+                },
+            );
+        }
+
+        fn on_record(
+            &self,
+            id: &tracing::Id,
+            values: &tracing::span::Record<'_>,
+            _ctx: Context<'_, S>,
+        ) {
+            if let Some(span) = self.0.spans.lock().unwrap().get_mut(id) {
+                let mut recorder = FieldRecorder::default();
+                values.record(&mut recorder);
+                span.fields.extend(recorder.0);
+            }
+        }
+    }
+
+    impl TestSpanCollector {
+        fn snapshot(&self) -> Vec<CapturedSpan> {
+            self.spans.lock().unwrap().values().cloned().collect()
+        }
+
+        fn clear(&self) {
+            self.spans.lock().unwrap().clear();
+        }
+    }
+
+    static TEST_TRACING: OnceLock<(Arc<TestSpanCollector>, StdMutex<()>)> = OnceLock::new();
+
+    fn test_tracing() -> &'static (Arc<TestSpanCollector>, StdMutex<()>) {
+        TEST_TRACING.get_or_init(|| {
+            let collector = Arc::new(TestSpanCollector::default());
+            let subscriber = tracing_subscriber::registry().with(TestSpanLayer(collector.clone()));
+            tracing::subscriber::set_global_default(subscriber)
+                .expect("global test tracing subscriber should be set once");
+            (collector, StdMutex::new(()))
+        })
+    }
+
+    struct SlowApprovalHandler {
+        delay: std::time::Duration,
+    }
+
+    #[async_trait]
+    impl ApprovalHandler for SlowApprovalHandler {
+        async fn request_approval(&self, _req: ApprovalRequest) -> ApprovalOutcome {
+            tokio::time::sleep(self.delay).await;
+            ApprovalOutcome::approve()
+        }
+    }
 
     fn one_task_dag() -> SubtaskDAG {
         let mut d = SubtaskDAG::new("test");
@@ -375,6 +575,40 @@ mod tests {
         assert_eq!(summary.succeeded, 1);
         assert_eq!(summary.failed, 0);
         assert!(summary.results[0].outcome.is_success());
+    }
+
+    #[tokio::test]
+    async fn test_tracing_channel_approval_records_decision() {
+        let (collector, guard_lock) = test_tracing();
+        let _guard = guard_lock.lock().unwrap();
+        collector.clear();
+        let (handler, mut rx) = ChannelApprovalHandler::new(1);
+
+        let reviewer = task::spawn(async move {
+            let (_, reply) = rx.recv().await.expect("expected approval request");
+            reply.send(ApprovalOutcome::approve()).ok();
+        });
+
+        let outcome = handler
+            .request_approval(ApprovalRequest {
+                subtask_id: "trace-task".into(),
+                description: "Trace this approval".into(),
+                prior_output: None,
+                risk_level: RiskLevel::High,
+            })
+            .await;
+
+        reviewer.await.unwrap();
+        assert!(matches!(outcome.decision, ApprovalDecision::Approve));
+
+        let spans = collector.snapshot();
+        let span = spans
+            .iter()
+            .find(|span| span.name == "hitl.channel_approval")
+            .unwrap_or_else(|| panic!("missing hitl.channel_approval span: {spans:#?}"));
+        assert_eq!(span.fields.get("subtask_id").map(String::as_str), Some("trace-task"));
+        assert_eq!(span.fields.get("decision").map(String::as_str), Some("approved"));
+        assert_eq!(span.fields.get("channel_closed").map(String::as_str), Some("false"));
     }
 
     /// Reviewer sends Reject, scheduler halts, downstream task stays Pending.
@@ -652,6 +886,45 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_tracing_optional_gate_records_timeout() {
+        let (collector, guard_lock) = test_tracing();
+        let _guard = guard_lock.lock().unwrap();
+        collector.clear();
+        let mut dag = SubtaskDAG::new("test");
+        let t1 = dag.add_task(SwarmSubtask::new("t1", "Run the analysis"));
+        dag.get_task_mut(t1).unwrap().hitl_required = true;
+        let audit_log = Arc::new(Mutex::new(vec![]));
+        let executor = hitl_executor_middleware(
+            mock_base_executor(),
+            HITLMode::Optional,
+            Arc::new(SlowApprovalHandler {
+                delay: std::time::Duration::from_millis(50),
+            }),
+            audit_log,
+            std::time::Duration::from_millis(5),
+        );
+
+        let summary = SequentialScheduler::new()
+            .execute(&mut dag, executor)
+            .await
+            .expect("scheduler should succeed");
+
+        assert_eq!(summary.succeeded, 1);
+
+        let spans = collector.snapshot();
+        let span = spans
+            .iter()
+            .find(|span| {
+                span.name == "hitl.approval_gate"
+                    && span.fields.get("mode").map(String::as_str) == Some("optional")
+            })
+            .unwrap_or_else(|| panic!("missing optional hitl.approval_gate span: {spans:#?}"));
+        assert_eq!(span.fields.get("timed_out").map(String::as_str), Some("true"));
+        assert_eq!(span.fields.get("decision").map(String::as_str), Some("auto-approved"));
+        assert_eq!(span.fields.get("subtask_id").map(String::as_str), Some("t1"));
+    }
+
+    #[tokio::test]
     async fn test_review_manager_handler_reject() {
         use mofa_kernel::hitl::ReviewResponse;
 
@@ -699,6 +972,67 @@ mod tests {
             "expected Reject, got {:?}", outcome.decision
         );
         assert_eq!(outcome.reason.as_deref(), Some("too risky"));
+    }
+
+    #[tokio::test]
+    async fn test_tracing_review_manager_approval_records_review_id_and_decision() {
+        use mofa_kernel::hitl::ReviewResponse;
+
+        let (collector, guard_lock) = test_tracing();
+        let _guard = guard_lock.lock().unwrap();
+        collector.clear();
+        let manager = make_review_manager();
+        let mgr_clone = Arc::clone(&manager);
+
+        let handler = ReviewManagerApprovalHandler::new(Arc::clone(&manager), "trace-run")
+            .with_review_timeout(std::time::Duration::from_secs(5));
+
+        let resolver = task::spawn(async move {
+            loop {
+                tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+                let pending = mgr_clone.list_pending(None, Some(1)).await.unwrap();
+                if let Some(req) = pending.into_iter().next() {
+                    mgr_clone
+                        .resolve_review(
+                            &req.id,
+                            ReviewResponse::Approved {
+                                comment: Some("approved in trace test".into()),
+                            },
+                            "auto-reviewer".into(),
+                        )
+                        .await
+                        .unwrap();
+                    return;
+                }
+            }
+        });
+
+        let outcome = handler
+            .request_approval(ApprovalRequest {
+                subtask_id: "trace-review-task".into(),
+                description: "Trace review manager approval".into(),
+                risk_level: RiskLevel::Medium,
+                prior_output: None,
+            })
+            .await;
+
+        resolver.await.unwrap();
+        assert!(matches!(outcome.decision, ApprovalDecision::Approve));
+
+        let spans = collector.snapshot();
+        let span = spans
+            .iter()
+            .find(|span| span.name == "hitl.review_manager_approval")
+            .unwrap_or_else(|| panic!("missing hitl.review_manager_approval span: {spans:#?}"));
+        assert_eq!(span.fields.get("execution_id").map(String::as_str), Some("trace-run"));
+        assert_eq!(span.fields.get("subtask_id").map(String::as_str), Some("trace-review-task"));
+        assert_eq!(span.fields.get("decision").map(String::as_str), Some("approved"));
+        assert!(
+            span.fields
+                .get("review_id")
+                .is_some_and(|review_id| !review_id.is_empty()),
+            "expected review_id to be recorded"
+        );
     }
 
     #[tokio::test]
