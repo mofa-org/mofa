@@ -318,6 +318,48 @@ pub enum TeamPattern {
 
 > **Architecture note:** `AgentTeam` lives in `mofa-foundation` (`crates/mofa-foundation/src/llm/multi_agent.rs`). It implements the `Coordinator` trait from `mofa-kernel` internally. See `examples/multi_agent_coordination/src/main.rs` and `examples/adaptive_collaboration_agent/src/main.rs` for complete working examples.
 
+
+## Auto-Selecting a Pattern
+
+If you are not sure which pattern fits your DAG, `PatternSelector` inspects the topology and task metadata and recommends one automatically — no LLM call required.
+
+```rust
+use mofa_foundation::swarm::{PatternSelector, SubtaskDAG};
+
+let dag: SubtaskDAG = /* build your dag */;
+
+let selection = PatternSelector::select_with_reason(&dag);
+println!("pattern:    {:?}", selection.pattern);
+println!("confidence: {:.0}%", selection.confidence * 100.0);
+println!("reason:     {}", selection.reason);
+
+// execute with the recommended pattern — no manual choice needed
+let scheduler = selection.pattern.into_scheduler();
+let summary = scheduler.execute(&mut dag, executor).await?;
+```
+
+Rules applied in priority order — first match wins:
+
+| Priority | Pattern | Trigger |
+|----------|---------|---------|
+| 1 | Routing | Single source + any sink has `required_capabilities` set |
+| 2 | Supervision | Any task has `risk_level ≥ High` or `hitl_required = true` |
+| 3 | Debate | Exactly 2 sources → 1 sink |
+| 4 | Consensus | ≥3 sources with identical `required_capabilities` → 1 sink |
+| 5 | MapReduce | ≥2 heterogeneous sources → 1 sink |
+| 6 | Sequential | All nodes form a strict linear chain |
+| 7 | Parallel | Fallback for all other shapes |
+
+`RiskAwareAnalysis` (returned by `TaskAnalyzer::analyze_with_risk`) includes a pre-populated `suggested_pattern` field:
+
+```rust
+let analysis = analyzer.analyze_with_risk("deploy the payment service").await?;
+println!("suggested: {:?}", analysis.suggested_pattern.pattern);
+// → Supervision  (deploy is classified Critical risk)
+```
+
+---
+
 ## What Just Happened?
 
 In the chain example:
