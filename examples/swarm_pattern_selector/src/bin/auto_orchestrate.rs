@@ -10,7 +10,7 @@ use std::sync::Arc;
 use anyhow::Result;
 use futures::future::BoxFuture;
 use mofa_foundation::swarm::{
-    PatternSelector, RiskLevel, SubtaskDAG, SubtaskExecutorFn, SwarmScheduler, SwarmSubtask,
+    PatternSelector, RiskLevel, SubtaskDAG, SubtaskExecutorFn, SwarmSubtask,
 };
 use mofa_kernel::agent::types::error::GlobalResult;
 
