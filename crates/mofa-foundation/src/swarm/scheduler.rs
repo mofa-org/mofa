@@ -466,6 +466,857 @@ impl SwarmScheduler for ParallelScheduler {
     }
 }
 
+fn inject_context(mut task: SwarmSubtask, label: &str, outputs: &[String]) -> SwarmSubtask {
+    if outputs.is_empty() {
+        return task;
+    }
+    let body = outputs.join("\n---\n");
+    task.description = format!("{}\n\n## {}\n{}", task.description, label, body);
+    task
+}
+
+async fn run_parallel_wave(
+    indices: &[NodeIndex],
+    dag: &mut SubtaskDAG,
+    executor: &SubtaskExecutorFn,
+    timeout_dur: Duration,
+) -> Vec<TaskExecutionResult> {
+    let mut futures = Vec::with_capacity(indices.len());
+
+    for &idx in indices {
+        dag.mark_running(idx);
+        let task_snapshot = dag.get_task(idx).expect("missing idx").clone();
+        let exec = executor.clone();
+
+        let fut = async move {
+            let start = Instant::now();
+            match timeout(timeout_dur, exec(idx, task_snapshot.clone())).await {
+                Ok(Ok(output)) => {
+                    TaskExecutionResult::success(&task_snapshot, idx, output, start.elapsed())
+                }
+                Ok(Err(e)) => {
+                    TaskExecutionResult::failure(&task_snapshot, idx, e.to_string(), start.elapsed())
+                }
+                Err(_) => TaskExecutionResult::failure(
+                    &task_snapshot,
+                    idx,
+                    format!("timed out after {:?}", timeout_dur),
+                    start.elapsed(),
+                ),
+            }
+        };
+
+        futures.push(fut);
+    }
+
+    join_all(futures).await
+}
+
+pub struct MapReduceScheduler {
+    pub config: SwarmSchedulerConfig,
+}
+
+impl MapReduceScheduler {
+    pub fn new() -> Self {
+        Self {
+            config: SwarmSchedulerConfig::default(),
+        }
+    }
+
+    pub fn with_config(config: SwarmSchedulerConfig) -> Self {
+        Self { config }
+    }
+}
+
+impl Default for MapReduceScheduler {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+#[async_trait]
+impl SwarmScheduler for MapReduceScheduler {
+    fn pattern(&self) -> CoordinationPattern {
+        CoordinationPattern::MapReduce
+    }
+
+    #[instrument(
+        skip(self, dag, executor),
+        fields(pattern = "map_reduce", task_count = dag.task_count())
+    )]
+    async fn execute(
+        &self,
+        dag: &mut SubtaskDAG,
+        executor: SubtaskExecutorFn,
+    ) -> GlobalResult<SchedulerSummary> {
+        let wall_start = Instant::now();
+        let total = dag.task_count();
+
+        let all: Vec<NodeIndex> = dag.all_tasks().into_iter().map(|(idx, _)| idx).collect();
+        let (map_idxs, reduce_idxs): (Vec<_>, Vec<_>) =
+            all.iter().partition(|&&idx| dag.dependencies_of(idx).is_empty());
+
+        info!(
+            mappers = map_idxs.len(),
+            reducers = reduce_idxs.len(),
+            "MapReduce scheduler starting"
+        );
+
+        let mut results: Vec<TaskExecutionResult> = Vec::with_capacity(total);
+        let mut succeeded = 0usize;
+        let mut failed = 0usize;
+
+        let wave = run_parallel_wave(&map_idxs, dag, &executor, self.config.task_timeout).await;
+
+        let mut map_outputs: Vec<String> = Vec::new();
+        for res in wave {
+            let idx = NodeIndex::new(res.node_index);
+            if res.outcome.is_success() {
+                let out = res.outcome.output().unwrap().to_string();
+                dag.mark_complete_with_output(idx, Some(out.clone()));
+                map_outputs.push(out);
+                succeeded += 1;
+            } else {
+                let err = match &res.outcome {
+                    TaskOutcome::Failure(e) => e.clone(),
+                    _ => "unknown error".into(),
+                };
+                warn!(task_id = %res.task_id, "mapper failed: {}", err);
+                dag.mark_failed(idx, err);
+                failed += 1;
+            }
+            results.push(res);
+        }
+
+        for &idx in &reduce_idxs {
+            let task_snapshot = dag.get_task(idx).expect("missing reducer").clone();
+            let injected = inject_context(task_snapshot, "Map Phase Outputs", &map_outputs);
+            dag.mark_running(idx);
+
+            let start = Instant::now();
+            match timeout(self.config.task_timeout, executor(idx, injected)).await {
+                Ok(Ok(output)) => {
+                    let elapsed = start.elapsed();
+                    dag.mark_complete_with_output(idx, Some(output.clone()));
+                    results.push(TaskExecutionResult::success(
+                        dag.get_task(idx).unwrap(),
+                        idx,
+                        output,
+                        elapsed,
+                    ));
+                    succeeded += 1;
+                }
+                Ok(Err(e)) => {
+                    let elapsed = start.elapsed();
+                    let err = e.to_string();
+                    error!(error = %err, "reducer failed");
+                    dag.mark_failed(idx, err.clone());
+                    results.push(TaskExecutionResult::failure(
+                        dag.get_task(idx).unwrap(),
+                        idx,
+                        err,
+                        elapsed,
+                    ));
+                    failed += 1;
+                }
+                Err(_) => {
+                    let elapsed = start.elapsed();
+                    let msg = format!("timed out after {:?}", self.config.task_timeout);
+                    error!("reducer {}", msg);
+                    dag.mark_failed(idx, msg.clone());
+                    results.push(TaskExecutionResult::failure(
+                        dag.get_task(idx).unwrap(),
+                        idx,
+                        msg,
+                        elapsed,
+                    ));
+                    failed += 1;
+                }
+            }
+        }
+
+        Ok(SchedulerSummary {
+            pattern: CoordinationPattern::MapReduce,
+            total_tasks: total,
+            succeeded,
+            failed,
+            skipped: 0,
+            total_wall_time: wall_start.elapsed(),
+            results,
+        })
+    }
+}
+
+pub struct DebateScheduler {
+    pub config: SwarmSchedulerConfig,
+}
+
+impl DebateScheduler {
+    pub fn new() -> Self {
+        Self {
+            config: SwarmSchedulerConfig::default(),
+        }
+    }
+
+    pub fn with_config(config: SwarmSchedulerConfig) -> Self {
+        Self { config }
+    }
+}
+
+impl Default for DebateScheduler {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+#[async_trait]
+impl SwarmScheduler for DebateScheduler {
+    fn pattern(&self) -> CoordinationPattern {
+        CoordinationPattern::Debate
+    }
+
+    #[instrument(
+        skip(self, dag, executor),
+        fields(pattern = "debate", task_count = dag.task_count())
+    )]
+    async fn execute(
+        &self,
+        dag: &mut SubtaskDAG,
+        executor: SubtaskExecutorFn,
+    ) -> GlobalResult<SchedulerSummary> {
+        let wall_start = Instant::now();
+        let total = dag.task_count();
+
+        let all: Vec<NodeIndex> = dag.all_tasks().into_iter().map(|(idx, _)| idx).collect();
+        let (debater_idxs, judge_idxs): (Vec<_>, Vec<_>) =
+            all.iter().partition(|&&idx| dag.dependencies_of(idx).is_empty());
+
+        info!(
+            debaters = debater_idxs.len(),
+            judges = judge_idxs.len(),
+            "Debate scheduler starting"
+        );
+
+        let mut results: Vec<TaskExecutionResult> = Vec::with_capacity(total);
+        let mut succeeded = 0usize;
+        let mut failed = 0usize;
+
+        let wave = run_parallel_wave(&debater_idxs, dag, &executor, self.config.task_timeout).await;
+
+        let mut debate_lines: Vec<String> = Vec::new();
+        for res in wave {
+            let idx = NodeIndex::new(res.node_index);
+            if res.outcome.is_success() {
+                let out = res.outcome.output().unwrap().to_string();
+                dag.mark_complete_with_output(idx, Some(out.clone()));
+                debate_lines.push(format!("**{}:** {}", res.task_id, out));
+                succeeded += 1;
+            } else {
+                let err = match &res.outcome {
+                    TaskOutcome::Failure(e) => e.clone(),
+                    _ => "unknown error".into(),
+                };
+                warn!(task_id = %res.task_id, "debater failed: {}", err);
+                dag.mark_failed(idx, err);
+                failed += 1;
+            }
+            results.push(res);
+        }
+
+        for &idx in &judge_idxs {
+            let task_snapshot = dag.get_task(idx).expect("missing judge").clone();
+            let injected = inject_context(task_snapshot, "Debate Arguments", &debate_lines);
+            dag.mark_running(idx);
+
+            let start = Instant::now();
+            match timeout(self.config.task_timeout, executor(idx, injected)).await {
+                Ok(Ok(output)) => {
+                    let elapsed = start.elapsed();
+                    dag.mark_complete_with_output(idx, Some(output.clone()));
+                    results.push(TaskExecutionResult::success(
+                        dag.get_task(idx).unwrap(),
+                        idx,
+                        output,
+                        elapsed,
+                    ));
+                    succeeded += 1;
+                }
+                Ok(Err(e)) => {
+                    let elapsed = start.elapsed();
+                    let err = e.to_string();
+                    error!(error = %err, "judge failed");
+                    dag.mark_failed(idx, err.clone());
+                    results.push(TaskExecutionResult::failure(
+                        dag.get_task(idx).unwrap(),
+                        idx,
+                        err,
+                        elapsed,
+                    ));
+                    failed += 1;
+                }
+                Err(_) => {
+                    let elapsed = start.elapsed();
+                    let msg = format!("timed out after {:?}", self.config.task_timeout);
+                    error!("judge {}", msg);
+                    dag.mark_failed(idx, msg.clone());
+                    results.push(TaskExecutionResult::failure(
+                        dag.get_task(idx).unwrap(),
+                        idx,
+                        msg,
+                        elapsed,
+                    ));
+                    failed += 1;
+                }
+            }
+        }
+
+        Ok(SchedulerSummary {
+            pattern: CoordinationPattern::Debate,
+            total_tasks: total,
+            succeeded,
+            failed,
+            skipped: 0,
+            total_wall_time: wall_start.elapsed(),
+            results,
+        })
+    }
+}
+
+pub struct ConsensusScheduler {
+    pub config: SwarmSchedulerConfig,
+}
+
+impl ConsensusScheduler {
+    pub fn new() -> Self {
+        Self {
+            config: SwarmSchedulerConfig::default(),
+        }
+    }
+
+    pub fn with_config(config: SwarmSchedulerConfig) -> Self {
+        Self { config }
+    }
+}
+
+impl Default for ConsensusScheduler {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+#[async_trait]
+impl SwarmScheduler for ConsensusScheduler {
+    fn pattern(&self) -> CoordinationPattern {
+        CoordinationPattern::Consensus
+    }
+
+    #[instrument(
+        skip(self, dag, executor),
+        fields(pattern = "consensus", task_count = dag.task_count())
+    )]
+    async fn execute(
+        &self,
+        dag: &mut SubtaskDAG,
+        executor: SubtaskExecutorFn,
+    ) -> GlobalResult<SchedulerSummary> {
+        let wall_start = Instant::now();
+        let total = dag.task_count();
+
+        let all: Vec<NodeIndex> = dag.all_tasks().into_iter().map(|(idx, _)| idx).collect();
+        let (voter_idxs, aggregator_idxs): (Vec<_>, Vec<_>) =
+            all.iter().partition(|&&idx| dag.dependencies_of(idx).is_empty());
+
+        info!(
+            voters = voter_idxs.len(),
+            aggregators = aggregator_idxs.len(),
+            "Consensus scheduler starting"
+        );
+
+        let mut results: Vec<TaskExecutionResult> = Vec::with_capacity(total);
+        let mut succeeded = 0usize;
+        let mut failed = 0usize;
+
+        let wave = run_parallel_wave(&voter_idxs, dag, &executor, self.config.task_timeout).await;
+
+        let mut voter_outputs: Vec<String> = Vec::new();
+        for res in wave {
+            let idx = NodeIndex::new(res.node_index);
+            if res.outcome.is_success() {
+                let out = res.outcome.output().unwrap().to_string();
+                dag.mark_complete_with_output(idx, Some(out.clone()));
+                voter_outputs.push(out);
+                succeeded += 1;
+            } else {
+                let err = match &res.outcome {
+                    TaskOutcome::Failure(e) => e.clone(),
+                    _ => "unknown error".into(),
+                };
+                warn!(task_id = %res.task_id, "voter failed: {}", err);
+                dag.mark_failed(idx, err);
+                failed += 1;
+            }
+            results.push(res);
+        }
+
+        let majority = {
+            let mut counts: std::collections::HashMap<&str, usize> =
+                std::collections::HashMap::new();
+            for v in &voter_outputs {
+                *counts.entry(v.as_str()).or_insert(0) += 1;
+            }
+            let max = counts.values().copied().max().unwrap_or(0);
+            if max > 1 {
+                counts
+                    .into_iter()
+                    .filter(|(_, c)| *c == max)
+                    .map(|(k, _)| k.to_string())
+                    .next()
+            } else {
+                None
+            }
+        };
+
+        for &idx in &aggregator_idxs {
+            let task_snapshot = dag.get_task(idx).expect("missing aggregator").clone();
+            let mut injected =
+                inject_context(task_snapshot, "Voter Outputs", &voter_outputs);
+            if let Some(ref candidate) = majority {
+                injected.description = format!(
+                    "## Majority Candidate\n{}\n\n{}",
+                    candidate, injected.description
+                );
+            }
+            dag.mark_running(idx);
+
+            let start = Instant::now();
+            match timeout(self.config.task_timeout, executor(idx, injected)).await {
+                Ok(Ok(output)) => {
+                    let elapsed = start.elapsed();
+                    dag.mark_complete_with_output(idx, Some(output.clone()));
+                    results.push(TaskExecutionResult::success(
+                        dag.get_task(idx).unwrap(),
+                        idx,
+                        output,
+                        elapsed,
+                    ));
+                    succeeded += 1;
+                }
+                Ok(Err(e)) => {
+                    let elapsed = start.elapsed();
+                    let err = e.to_string();
+                    error!(error = %err, "aggregator failed");
+                    dag.mark_failed(idx, err.clone());
+                    results.push(TaskExecutionResult::failure(
+                        dag.get_task(idx).unwrap(),
+                        idx,
+                        err,
+                        elapsed,
+                    ));
+                    failed += 1;
+                }
+                Err(_) => {
+                    let elapsed = start.elapsed();
+                    let msg = format!("timed out after {:?}", self.config.task_timeout);
+                    error!("aggregator {}", msg);
+                    dag.mark_failed(idx, msg.clone());
+                    results.push(TaskExecutionResult::failure(
+                        dag.get_task(idx).unwrap(),
+                        idx,
+                        msg,
+                        elapsed,
+                    ));
+                    failed += 1;
+                }
+            }
+        }
+
+        Ok(SchedulerSummary {
+            pattern: CoordinationPattern::Consensus,
+            total_tasks: total,
+            succeeded,
+            failed,
+            skipped: 0,
+            total_wall_time: wall_start.elapsed(),
+            results,
+        })
+    }
+}
+
+pub struct RoutingScheduler {
+    pub config: SwarmSchedulerConfig,
+}
+
+impl RoutingScheduler {
+    pub fn new() -> Self {
+        Self {
+            config: SwarmSchedulerConfig::default(),
+        }
+    }
+
+    pub fn with_config(config: SwarmSchedulerConfig) -> Self {
+        Self { config }
+    }
+}
+
+impl Default for RoutingScheduler {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+#[async_trait]
+impl SwarmScheduler for RoutingScheduler {
+    fn pattern(&self) -> CoordinationPattern {
+        CoordinationPattern::Routing
+    }
+
+    #[instrument(
+        skip(self, dag, executor),
+        fields(pattern = "routing", task_count = dag.task_count())
+    )]
+    async fn execute(
+        &self,
+        dag: &mut SubtaskDAG,
+        executor: SubtaskExecutorFn,
+    ) -> GlobalResult<SchedulerSummary> {
+        let wall_start = Instant::now();
+        let total = dag.task_count();
+
+        let all: Vec<NodeIndex> = dag.all_tasks().into_iter().map(|(idx, _)| idx).collect();
+        let router_idxs: Vec<_> = all
+            .iter()
+            .filter(|&&idx| dag.dependencies_of(idx).is_empty())
+            .copied()
+            .collect();
+        let specialist_idxs: Vec<_> = all
+            .iter()
+            .filter(|&&idx| !dag.dependencies_of(idx).is_empty())
+            .copied()
+            .collect();
+
+        if router_idxs.len() != 1 {
+            return Err(GlobalError::runtime(format!(
+                "Routing pattern requires exactly 1 router task, found {}",
+                router_idxs.len()
+            )));
+        }
+
+        let router_idx = router_idxs[0];
+        info!(
+            specialists = specialist_idxs.len(),
+            "Routing scheduler starting"
+        );
+
+        let mut results: Vec<TaskExecutionResult> = Vec::with_capacity(total);
+        let mut succeeded = 0usize;
+        let mut failed = 0usize;
+        let mut skipped = 0usize;
+
+        dag.mark_running(router_idx);
+        let router_snapshot = dag.get_task(router_idx).unwrap().clone();
+        let start = Instant::now();
+        let router_output = match timeout(
+            self.config.task_timeout,
+            executor(router_idx, router_snapshot.clone()),
+        )
+        .await
+        {
+            Ok(Ok(out)) => {
+                let elapsed = start.elapsed();
+                dag.mark_complete_with_output(router_idx, Some(out.clone()));
+                results.push(TaskExecutionResult::success(
+                    &router_snapshot,
+                    router_idx,
+                    out.clone(),
+                    elapsed,
+                ));
+                succeeded += 1;
+                out
+            }
+            Ok(Err(e)) => {
+                let elapsed = start.elapsed();
+                let err = e.to_string();
+                error!(error = %err, "router failed");
+                dag.mark_failed(router_idx, err.clone());
+                results.push(TaskExecutionResult::failure(
+                    &router_snapshot,
+                    router_idx,
+                    err,
+                    elapsed,
+                ));
+                failed += 1;
+                for &idx in &specialist_idxs {
+                    dag.mark_skipped(idx);
+                    skipped += 1;
+                    results.push(TaskExecutionResult::skipped(
+                        dag.get_task(idx).unwrap(),
+                        idx,
+                        "router failed".into(),
+                    ));
+                }
+                return Ok(SchedulerSummary {
+                    pattern: CoordinationPattern::Routing,
+                    total_tasks: total,
+                    succeeded,
+                    failed,
+                    skipped,
+                    total_wall_time: wall_start.elapsed(),
+                    results,
+                });
+            }
+            Err(_) => {
+                let elapsed = start.elapsed();
+                let msg = format!("timed out after {:?}", self.config.task_timeout);
+                error!("router {}", msg);
+                dag.mark_failed(router_idx, msg.clone());
+                results.push(TaskExecutionResult::failure(
+                    &router_snapshot,
+                    router_idx,
+                    msg,
+                    elapsed,
+                ));
+                failed += 1;
+                for &idx in &specialist_idxs {
+                    dag.mark_skipped(idx);
+                    skipped += 1;
+                    results.push(TaskExecutionResult::skipped(
+                        dag.get_task(idx).unwrap(),
+                        idx,
+                        "router timed out".into(),
+                    ));
+                }
+                return Ok(SchedulerSummary {
+                    pattern: CoordinationPattern::Routing,
+                    total_tasks: total,
+                    succeeded,
+                    failed,
+                    skipped,
+                    total_wall_time: wall_start.elapsed(),
+                    results,
+                });
+            }
+        };
+
+        let router_lower = router_output.to_lowercase();
+        let matched_idx = specialist_idxs.iter().find(|&&idx| {
+            let task = dag.get_task(idx).unwrap();
+            task.required_capabilities
+                .iter()
+                .any(|cap| router_lower.contains(&cap.to_lowercase()))
+        });
+
+        let chosen_idx = if let Some(&idx) = matched_idx {
+            idx
+        } else {
+            warn!("no capability match found; falling back to first specialist");
+            specialist_idxs[0]
+        };
+
+        for &idx in &specialist_idxs {
+            if idx != chosen_idx {
+                dag.mark_skipped(idx);
+                skipped += 1;
+                results.push(TaskExecutionResult::skipped(
+                    dag.get_task(idx).unwrap(),
+                    idx,
+                    "not selected by router".into(),
+                ));
+            }
+        }
+
+        let spec_snapshot = dag.get_task(chosen_idx).unwrap().clone();
+        let injected = inject_context(spec_snapshot, "Router Output", &[router_output]);
+        dag.mark_running(chosen_idx);
+
+        let start = Instant::now();
+        match timeout(self.config.task_timeout, executor(chosen_idx, injected)).await {
+            Ok(Ok(output)) => {
+                let elapsed = start.elapsed();
+                dag.mark_complete_with_output(chosen_idx, Some(output.clone()));
+                results.push(TaskExecutionResult::success(
+                    dag.get_task(chosen_idx).unwrap(),
+                    chosen_idx,
+                    output,
+                    elapsed,
+                ));
+                succeeded += 1;
+            }
+            Ok(Err(e)) => {
+                let elapsed = start.elapsed();
+                let err = e.to_string();
+                error!(error = %err, "specialist failed");
+                dag.mark_failed(chosen_idx, err.clone());
+                results.push(TaskExecutionResult::failure(
+                    dag.get_task(chosen_idx).unwrap(),
+                    chosen_idx,
+                    err,
+                    elapsed,
+                ));
+                failed += 1;
+            }
+            Err(_) => {
+                let elapsed = start.elapsed();
+                let msg = format!("timed out after {:?}", self.config.task_timeout);
+                error!("specialist {}", msg);
+                dag.mark_failed(chosen_idx, msg.clone());
+                results.push(TaskExecutionResult::failure(
+                    dag.get_task(chosen_idx).unwrap(),
+                    chosen_idx,
+                    msg,
+                    elapsed,
+                ));
+                failed += 1;
+            }
+        }
+
+        Ok(SchedulerSummary {
+            pattern: CoordinationPattern::Routing,
+            total_tasks: total,
+            succeeded,
+            failed,
+            skipped,
+            total_wall_time: wall_start.elapsed(),
+            results,
+        })
+    }
+}
+
+pub struct SupervisionScheduler {
+    pub config: SwarmSchedulerConfig,
+}
+
+impl SupervisionScheduler {
+    pub fn new() -> Self {
+        Self {
+            config: SwarmSchedulerConfig::default(),
+        }
+    }
+
+    pub fn with_config(config: SwarmSchedulerConfig) -> Self {
+        Self { config }
+    }
+}
+
+impl Default for SupervisionScheduler {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+#[async_trait]
+impl SwarmScheduler for SupervisionScheduler {
+    fn pattern(&self) -> CoordinationPattern {
+        CoordinationPattern::Supervision
+    }
+
+    #[instrument(
+        skip(self, dag, executor),
+        fields(pattern = "supervision", task_count = dag.task_count())
+    )]
+    async fn execute(
+        &self,
+        dag: &mut SubtaskDAG,
+        executor: SubtaskExecutorFn,
+    ) -> GlobalResult<SchedulerSummary> {
+        let wall_start = Instant::now();
+        let total = dag.task_count();
+
+        let all: Vec<NodeIndex> = dag.all_tasks().into_iter().map(|(idx, _)| idx).collect();
+        let (worker_idxs, supervisor_idxs): (Vec<_>, Vec<_>) =
+            all.iter().partition(|&&idx| dag.dependencies_of(idx).is_empty());
+
+        info!(
+            workers = worker_idxs.len(),
+            supervisors = supervisor_idxs.len(),
+            "Supervision scheduler starting"
+        );
+
+        let mut results: Vec<TaskExecutionResult> = Vec::with_capacity(total);
+        let mut succeeded = 0usize;
+        let mut failed = 0usize;
+
+        let wave = run_parallel_wave(&worker_idxs, dag, &executor, self.config.task_timeout).await;
+
+        let mut worker_context_lines: Vec<String> = Vec::new();
+        for res in wave {
+            let idx = NodeIndex::new(res.node_index);
+            if res.outcome.is_success() {
+                let out = res.outcome.output().unwrap().to_string();
+                dag.mark_complete_with_output(idx, Some(out.clone()));
+                worker_context_lines.push(format!("{} (SUCCESS): {}", res.task_id, out));
+                succeeded += 1;
+            } else {
+                let err = match &res.outcome {
+                    TaskOutcome::Failure(e) => e.clone(),
+                    _ => "unknown error".into(),
+                };
+                dag.mark_failed(idx, err.clone());
+                worker_context_lines.push(format!("{} (FAILED): {}", res.task_id, err));
+                failed += 1;
+            }
+            results.push(res);
+        }
+
+        for &idx in &supervisor_idxs {
+            let task_snapshot = dag.get_task(idx).expect("missing supervisor").clone();
+            let injected =
+                inject_context(task_snapshot, "Worker Results", &worker_context_lines);
+            dag.mark_running(idx);
+
+            let start = Instant::now();
+            match timeout(self.config.task_timeout, executor(idx, injected)).await {
+                Ok(Ok(output)) => {
+                    let elapsed = start.elapsed();
+                    dag.mark_complete_with_output(idx, Some(output.clone()));
+                    results.push(TaskExecutionResult::success(
+                        dag.get_task(idx).unwrap(),
+                        idx,
+                        output,
+                        elapsed,
+                    ));
+                    succeeded += 1;
+                }
+                Ok(Err(e)) => {
+                    let elapsed = start.elapsed();
+                    let err = e.to_string();
+                    error!(error = %err, "supervisor failed");
+                    dag.mark_failed(idx, err.clone());
+                    results.push(TaskExecutionResult::failure(
+                        dag.get_task(idx).unwrap(),
+                        idx,
+                        err,
+                        elapsed,
+                    ));
+                    failed += 1;
+                }
+                Err(_) => {
+                    let elapsed = start.elapsed();
+                    let msg = format!("timed out after {:?}", self.config.task_timeout);
+                    error!("supervisor {}", msg);
+                    dag.mark_failed(idx, msg.clone());
+                    results.push(TaskExecutionResult::failure(
+                        dag.get_task(idx).unwrap(),
+                        idx,
+                        msg,
+                        elapsed,
+                    ));
+                    failed += 1;
+                }
+            }
+        }
+
+        Ok(SchedulerSummary {
+            pattern: CoordinationPattern::Supervision,
+            total_tasks: total,
+            succeeded,
+            failed,
+            skipped: 0,
+            total_wall_time: wall_start.elapsed(),
+            results,
+        })
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -872,5 +1723,379 @@ mod tests {
         let summary = scheduler.execute(&mut dag, executor).await.unwrap();
         assert!(summary.is_fully_successful());
         assert_eq!(peak.load(Ordering::SeqCst), 1);
+    }
+
+    #[tokio::test]
+    async fn test_mapreduce_outputs_injected_into_reducer() {
+        let mut dag = SubtaskDAG::new("test");
+        let idx_m1 = dag.add_task(SwarmSubtask::new("mapper-1", "Map chunk 1"));
+        let idx_m2 = dag.add_task(SwarmSubtask::new("mapper-2", "Map chunk 2"));
+        let idx_r = dag.add_task(SwarmSubtask::new("reducer", "Reduce all"));
+        dag.add_dependency(idx_m1, idx_r).unwrap();
+        dag.add_dependency(idx_m2, idx_r).unwrap();
+
+        let seen_desc = Arc::new(tokio::sync::Mutex::new(String::new()));
+        let seen_clone = seen_desc.clone();
+
+        let executor: SubtaskExecutorFn = Arc::new(move |_idx, task| {
+            let seen = seen_clone.clone();
+            let id = task.id.clone();
+            let desc = task.description.clone();
+            Box::pin(async move {
+                if id == "reducer" {
+                    *seen.lock().await = desc;
+                }
+                Ok(format!("{}-out", id))
+            })
+        });
+
+        let scheduler = MapReduceScheduler::new();
+        let summary = scheduler.execute(&mut dag, executor).await.unwrap();
+
+        assert!(summary.is_fully_successful());
+        assert_eq!(summary.succeeded, 3);
+
+        let desc = seen_desc.lock().await;
+        assert!(desc.contains("mapper-1-out"), "reducer must see mapper-1 output");
+        assert!(desc.contains("mapper-2-out"), "reducer must see mapper-2 output");
+    }
+
+    #[tokio::test]
+    async fn test_mapreduce_partial_failure_reducer_still_runs() {
+        let mut dag = SubtaskDAG::new("test");
+        let idx_m1 = dag.add_task(SwarmSubtask::new("mapper-ok", "Map A"));
+        let idx_m2 = dag.add_task(SwarmSubtask::new("mapper-fail", "Map B"));
+        let idx_r = dag.add_task(SwarmSubtask::new("reducer", "Reduce"));
+        dag.add_dependency(idx_m1, idx_r).unwrap();
+        dag.add_dependency(idx_m2, idx_r).unwrap();
+
+        let reducer_ran = Arc::new(AtomicUsize::new(0));
+        let ran_clone = reducer_ran.clone();
+
+        let executor: SubtaskExecutorFn = Arc::new(move |_idx, task| {
+            let ran = ran_clone.clone();
+            let id = task.id.clone();
+            Box::pin(async move {
+                if id == "mapper-fail" {
+                    Err(GlobalError::runtime("mapper error"))
+                } else if id == "reducer" {
+                    ran.fetch_add(1, Ordering::SeqCst);
+                    Ok("reduced".into())
+                } else {
+                    Ok("ok".into())
+                }
+            })
+        });
+
+        let scheduler = MapReduceScheduler::new();
+        let summary = scheduler.execute(&mut dag, executor).await.unwrap();
+
+        assert_eq!(reducer_ran.load(Ordering::SeqCst), 1, "reducer must run even when a mapper fails");
+        assert_eq!(summary.failed, 1);
+        assert_eq!(summary.succeeded, 2);
+    }
+
+    #[tokio::test]
+    async fn test_debate_judge_receives_both_arguments() {
+        let mut dag = SubtaskDAG::new("test");
+        let idx_pro = dag.add_task(SwarmSubtask::new("pro", "Argue for"));
+        let idx_con = dag.add_task(SwarmSubtask::new("con", "Argue against"));
+        let idx_j = dag.add_task(SwarmSubtask::new("judge", "Decide"));
+        dag.add_dependency(idx_pro, idx_j).unwrap();
+        dag.add_dependency(idx_con, idx_j).unwrap();
+
+        let judge_desc = Arc::new(tokio::sync::Mutex::new(String::new()));
+        let jd_clone = judge_desc.clone();
+
+        let executor: SubtaskExecutorFn = Arc::new(move |_idx, task| {
+            let jd = jd_clone.clone();
+            let id = task.id.clone();
+            let desc = task.description.clone();
+            Box::pin(async move {
+                if id == "judge" {
+                    *jd.lock().await = desc;
+                }
+                Ok(format!("{}-verdict", id))
+            })
+        });
+
+        let scheduler = DebateScheduler::new();
+        let summary = scheduler.execute(&mut dag, executor).await.unwrap();
+
+        assert!(summary.is_fully_successful());
+        let desc = judge_desc.lock().await;
+        assert!(desc.contains("**pro:**"), "judge must see pro argument");
+        assert!(desc.contains("**con:**"), "judge must see con argument");
+    }
+
+    #[tokio::test]
+    async fn test_debate_debaters_run_in_parallel() {
+        let mut dag = SubtaskDAG::new("test");
+        let idx_a = dag.add_task(SwarmSubtask::new("debater-a", "Position A"));
+        let idx_b = dag.add_task(SwarmSubtask::new("debater-b", "Position B"));
+        let idx_j = dag.add_task(SwarmSubtask::new("judge", "Decide"));
+        dag.add_dependency(idx_a, idx_j).unwrap();
+        dag.add_dependency(idx_b, idx_j).unwrap();
+
+        let active = Arc::new(AtomicUsize::new(0));
+        let peak = Arc::new(AtomicUsize::new(0));
+        let a = active.clone();
+        let p = peak.clone();
+
+        let executor: SubtaskExecutorFn = Arc::new(move |_idx, task| {
+            let a = a.clone();
+            let p = p.clone();
+            let id = task.id.clone();
+            Box::pin(async move {
+                if id != "judge" {
+                    let current = a.fetch_add(1, Ordering::SeqCst) + 1;
+                    p.fetch_max(current, Ordering::SeqCst);
+                    sleep(Duration::from_millis(30)).await;
+                    a.fetch_sub(1, Ordering::SeqCst);
+                }
+                Ok(format!("{}-done", id))
+            })
+        });
+
+        let scheduler = DebateScheduler::new();
+        let summary = scheduler.execute(&mut dag, executor).await.unwrap();
+
+        assert!(summary.is_fully_successful());
+        assert!(
+            peak.load(Ordering::SeqCst) >= 2,
+            "debaters must run in parallel"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_consensus_aggregator_receives_voter_outputs() {
+        let mut dag = SubtaskDAG::new("test");
+        let idx_v1 = dag.add_task(SwarmSubtask::new("voter-1", "Vote A"));
+        let idx_v2 = dag.add_task(SwarmSubtask::new("voter-2", "Vote B"));
+        let idx_agg = dag.add_task(SwarmSubtask::new("aggregator", "Aggregate"));
+        dag.add_dependency(idx_v1, idx_agg).unwrap();
+        dag.add_dependency(idx_v2, idx_agg).unwrap();
+
+        let agg_desc = Arc::new(tokio::sync::Mutex::new(String::new()));
+        let agg_clone = agg_desc.clone();
+
+        let executor: SubtaskExecutorFn = Arc::new(move |_idx, task| {
+            let agg = agg_clone.clone();
+            let id = task.id.clone();
+            let desc = task.description.clone();
+            Box::pin(async move {
+                if id == "aggregator" {
+                    *agg.lock().await = desc;
+                }
+                Ok(format!("{}-result", id))
+            })
+        });
+
+        let scheduler = ConsensusScheduler::new();
+        let summary = scheduler.execute(&mut dag, executor).await.unwrap();
+
+        assert!(summary.is_fully_successful());
+        let desc = agg_desc.lock().await;
+        assert!(desc.contains("voter-1-result"), "aggregator must see voter-1");
+        assert!(desc.contains("voter-2-result"), "aggregator must see voter-2");
+    }
+
+    #[tokio::test]
+    async fn test_consensus_majority_candidate_prepended() {
+        let mut dag = SubtaskDAG::new("test");
+        let idx_v1 = dag.add_task(SwarmSubtask::new("voter-1", "Vote"));
+        let idx_v2 = dag.add_task(SwarmSubtask::new("voter-2", "Vote"));
+        let idx_v3 = dag.add_task(SwarmSubtask::new("voter-3", "Vote"));
+        let idx_agg = dag.add_task(SwarmSubtask::new("aggregator", "Aggregate"));
+        dag.add_dependency(idx_v1, idx_agg).unwrap();
+        dag.add_dependency(idx_v2, idx_agg).unwrap();
+        dag.add_dependency(idx_v3, idx_agg).unwrap();
+
+        let agg_desc = Arc::new(tokio::sync::Mutex::new(String::new()));
+        let agg_clone = agg_desc.clone();
+
+        let executor: SubtaskExecutorFn = Arc::new(move |_idx, task| {
+            let agg = agg_clone.clone();
+            let id = task.id.clone();
+            let desc = task.description.clone();
+            Box::pin(async move {
+                if id == "aggregator" {
+                    *agg.lock().await = desc;
+                    Ok("final".into())
+                } else {
+                    Ok("positive".into())
+                }
+            })
+        });
+
+        let scheduler = ConsensusScheduler::new();
+        let summary = scheduler.execute(&mut dag, executor).await.unwrap();
+
+        assert!(summary.is_fully_successful());
+        let desc = agg_desc.lock().await;
+        assert!(
+            desc.contains("Majority Candidate"),
+            "aggregator must see majority candidate section"
+        );
+        assert!(desc.contains("positive"), "majority candidate must be the repeated vote");
+    }
+
+    #[tokio::test]
+    async fn test_routing_matches_specialist_by_capability() {
+        let mut dag = SubtaskDAG::new("test");
+        let idx_router = dag.add_task(SwarmSubtask::new("router", "Route task"));
+
+        let mut db_spec = SwarmSubtask::new("db-specialist", "Handle DB");
+        db_spec.required_capabilities = vec!["database".into()];
+        let idx_db = dag.add_task(db_spec);
+
+        let mut ml_spec = SwarmSubtask::new("ml-specialist", "Handle ML");
+        ml_spec.required_capabilities = vec!["machine_learning".into()];
+        let idx_ml = dag.add_task(ml_spec);
+
+        dag.add_dependency(idx_router, idx_db).unwrap();
+        dag.add_dependency(idx_router, idx_ml).unwrap();
+
+        let executed = Arc::new(tokio::sync::Mutex::new(Vec::new()));
+        let exec_clone = executed.clone();
+
+        let executor: SubtaskExecutorFn = Arc::new(move |_idx, task| {
+            let exec = exec_clone.clone();
+            let id = task.id.clone();
+            Box::pin(async move {
+                exec.lock().await.push(id.clone());
+                if id == "router" {
+                    Ok("needs database access".into())
+                } else {
+                    Ok(format!("{}-done", id))
+                }
+            })
+        });
+
+        let scheduler = RoutingScheduler::new();
+        let summary = scheduler.execute(&mut dag, executor).await.unwrap();
+
+        assert_eq!(summary.succeeded, 2);
+        assert_eq!(summary.skipped, 1);
+
+        let ran = executed.lock().await;
+        assert!(ran.contains(&"db-specialist".to_string()), "db specialist must run");
+        assert!(!ran.contains(&"ml-specialist".to_string()), "ml specialist must be skipped");
+    }
+
+    #[tokio::test]
+    async fn test_routing_fallback_when_no_match() {
+        let mut dag = SubtaskDAG::new("test");
+        let idx_router = dag.add_task(SwarmSubtask::new("router", "Route task"));
+
+        let mut s1 = SwarmSubtask::new("specialist-1", "Handle X");
+        s1.required_capabilities = vec!["very_specific_cap".into()];
+        let idx_s1 = dag.add_task(s1);
+
+        let mut s2 = SwarmSubtask::new("specialist-2", "Handle Y");
+        s2.required_capabilities = vec!["another_cap".into()];
+        let idx_s2 = dag.add_task(s2);
+
+        dag.add_dependency(idx_router, idx_s1).unwrap();
+        dag.add_dependency(idx_router, idx_s2).unwrap();
+
+        let executed = Arc::new(tokio::sync::Mutex::new(Vec::new()));
+        let exec_clone = executed.clone();
+
+        let executor: SubtaskExecutorFn = Arc::new(move |_idx, task| {
+            let exec = exec_clone.clone();
+            let id = task.id.clone();
+            Box::pin(async move {
+                exec.lock().await.push(id.clone());
+                Ok(format!("{}-done", id))
+            })
+        });
+
+        let scheduler = RoutingScheduler::new();
+        let summary = scheduler.execute(&mut dag, executor).await.unwrap();
+
+        assert_eq!(summary.succeeded, 2);
+        assert_eq!(summary.skipped, 1);
+
+        let ran = executed.lock().await;
+        assert_eq!(ran.len(), 2, "router + one fallback specialist");
+    }
+
+    #[tokio::test]
+    async fn test_supervision_supervisor_always_runs_after_workers() {
+        let mut dag = SubtaskDAG::new("test");
+        let idx_w1 = dag.add_task(SwarmSubtask::new("worker-ok", "Do work"));
+        let idx_w2 = dag.add_task(SwarmSubtask::new("worker-fail", "Do work 2"));
+        let idx_sup = dag.add_task(SwarmSubtask::new("supervisor", "Oversee"));
+        dag.add_dependency(idx_w1, idx_sup).unwrap();
+        dag.add_dependency(idx_w2, idx_sup).unwrap();
+
+        let supervisor_ran = Arc::new(AtomicUsize::new(0));
+        let ran_clone = supervisor_ran.clone();
+
+        let executor: SubtaskExecutorFn = Arc::new(move |_idx, task| {
+            let ran = ran_clone.clone();
+            let id = task.id.clone();
+            Box::pin(async move {
+                if id == "worker-fail" {
+                    Err(GlobalError::runtime("worker crashed"))
+                } else if id == "supervisor" {
+                    ran.fetch_add(1, Ordering::SeqCst);
+                    Ok("supervised".into())
+                } else {
+                    Ok("worker-ok-out".into())
+                }
+            })
+        });
+
+        let scheduler = SupervisionScheduler::new();
+        let summary = scheduler.execute(&mut dag, executor).await.unwrap();
+
+        assert_eq!(
+            supervisor_ran.load(Ordering::SeqCst),
+            1,
+            "supervisor must always run"
+        );
+        assert_eq!(summary.failed, 1);
+        assert_eq!(summary.succeeded, 2);
+    }
+
+    #[tokio::test]
+    async fn test_supervision_supervisor_receives_failure_context() {
+        let mut dag = SubtaskDAG::new("test");
+        let idx_w1 = dag.add_task(SwarmSubtask::new("worker-a", "Task A"));
+        let idx_w2 = dag.add_task(SwarmSubtask::new("worker-b", "Task B"));
+        let idx_sup = dag.add_task(SwarmSubtask::new("supervisor", "Oversee"));
+        dag.add_dependency(idx_w1, idx_sup).unwrap();
+        dag.add_dependency(idx_w2, idx_sup).unwrap();
+
+        let sup_desc = Arc::new(tokio::sync::Mutex::new(String::new()));
+        let desc_clone = sup_desc.clone();
+
+        let executor: SubtaskExecutorFn = Arc::new(move |_idx, task| {
+            let desc = desc_clone.clone();
+            let id = task.id.clone();
+            let task_desc = task.description.clone();
+            Box::pin(async move {
+                if id == "worker-b" {
+                    Err(GlobalError::runtime("critical failure"))
+                } else if id == "supervisor" {
+                    *desc.lock().await = task_desc;
+                    Ok("recovery plan issued".into())
+                } else {
+                    Ok("done".into())
+                }
+            })
+        });
+
+        let scheduler = SupervisionScheduler::new();
+        let summary = scheduler.execute(&mut dag, executor).await.unwrap();
+
+        assert_eq!(summary.succeeded, 2);
+        assert_eq!(summary.failed, 1);
+
+        let desc = sup_desc.lock().await;
+        assert!(desc.contains("FAILED"), "supervisor must see FAILED label for failed worker");
+        assert!(desc.contains("worker-b"), "supervisor must see failed worker id");
     }
 }
