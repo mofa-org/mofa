@@ -1,0 +1,12 @@
+[package]
+name = "swarm_pattern_selector"
+version.workspace = true
+edition.workspace = true
+publish = false
+
+[dependencies]
+mofa-foundation = { path = "../../crates/mofa-foundation" }
+mofa-kernel     = { path = "../../crates/mofa-kernel" }
+tokio.workspace = true
+tracing-subscriber.workspace = true
+anyhow = { workspace = true }
