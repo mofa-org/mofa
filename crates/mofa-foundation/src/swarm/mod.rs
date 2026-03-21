@@ -15,7 +15,8 @@ pub use dag::{DependencyEdge, DependencyKind, RiskLevel, SubtaskDAG, SubtaskStat
 pub use patterns::CoordinationPattern;
 pub mod scheduler;
 pub use scheduler::{
-    FailurePolicy, ParallelScheduler, SchedulerSummary, SequentialScheduler, SubtaskExecutorFn,
+    ConsensusScheduler, DebateScheduler, FailurePolicy, MapReduceScheduler, ParallelScheduler,
+    RoutingScheduler, SchedulerSummary, SequentialScheduler, SubtaskExecutorFn, SupervisionScheduler,
     SwarmScheduler, SwarmSchedulerConfig, TaskExecutionResult, TaskOutcome,
 };
 pub use telemetry::{audit_batch_to_debug, audit_to_debug};
