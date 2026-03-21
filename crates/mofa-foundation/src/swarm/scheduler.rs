@@ -1571,6 +1571,21 @@ mod tests {
 
         let par = CoordinationPattern::Parallel.into_scheduler();
         assert_eq!(par.pattern(), CoordinationPattern::Parallel);
+
+        let mr = CoordinationPattern::MapReduce.into_scheduler();
+        assert_eq!(mr.pattern(), CoordinationPattern::MapReduce);
+
+        let deb = CoordinationPattern::Debate.into_scheduler();
+        assert_eq!(deb.pattern(), CoordinationPattern::Debate);
+
+        let con = CoordinationPattern::Consensus.into_scheduler();
+        assert_eq!(con.pattern(), CoordinationPattern::Consensus);
+
+        let rou = CoordinationPattern::Routing.into_scheduler();
+        assert_eq!(rou.pattern(), CoordinationPattern::Routing);
+
+        let sup = CoordinationPattern::Supervision.into_scheduler();
+        assert_eq!(sup.pattern(), CoordinationPattern::Supervision);
     }
 
     #[tokio::test]
@@ -2110,5 +2125,46 @@ mod tests {
         let desc = sup_desc.lock().await;
         assert!(desc.contains("FAILED"), "supervisor must see FAILED label for failed worker");
         assert!(desc.contains("worker-b"), "supervisor must see failed worker id");
+    }
+
+    #[tokio::test]
+    async fn test_mapreduce_mappers_run_in_parallel() {
+        let mut dag = SubtaskDAG::new("test");
+        let m1 = dag.add_task(SwarmSubtask::new("mapper-a", "Map A"));
+        let m2 = dag.add_task(SwarmSubtask::new("mapper-b", "Map B"));
+        let m3 = dag.add_task(SwarmSubtask::new("mapper-c", "Map C"));
+        let r = dag.add_task(SwarmSubtask::new("reducer", "Reduce"));
+        dag.add_dependency(m1, r).unwrap();
+        dag.add_dependency(m2, r).unwrap();
+        dag.add_dependency(m3, r).unwrap();
+
+        let active = Arc::new(AtomicUsize::new(0));
+        let peak = Arc::new(AtomicUsize::new(0));
+        let a = active.clone();
+        let p = peak.clone();
+
+        let executor: SubtaskExecutorFn = Arc::new(move |_idx, task| {
+            let a = a.clone();
+            let p = p.clone();
+            let id = task.id.clone();
+            Box::pin(async move {
+                if id != "reducer" {
+                    let current = a.fetch_add(1, Ordering::SeqCst) + 1;
+                    p.fetch_max(current, Ordering::SeqCst);
+                    sleep(Duration::from_millis(30)).await;
+                    a.fetch_sub(1, Ordering::SeqCst);
+                }
+                Ok(format!("{}-out", id))
+            })
+        });
+
+        let scheduler = MapReduceScheduler::new();
+        let summary = scheduler.execute(&mut dag, executor).await.unwrap();
+
+        assert!(summary.is_fully_successful());
+        assert!(
+            peak.load(Ordering::SeqCst) >= 3,
+            "all 3 mappers must run in parallel"
+        );
     }
 }
