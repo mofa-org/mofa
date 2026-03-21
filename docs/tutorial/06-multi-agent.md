@@ -318,6 +318,183 @@ pub enum TeamPattern {
 
 > **Architecture note:** `AgentTeam` lives in `mofa-foundation` (`crates/mofa-foundation/src/llm/multi_agent.rs`). It implements the `Coordinator` trait from `mofa-kernel` internally. See `examples/multi_agent_coordination/src/main.rs` and `examples/adaptive_collaboration_agent/src/main.rs` for complete working examples.
 
+## Phase 2: Advanced Coordination Patterns
+
+The `SwarmScheduler` trait in `mofa-foundation` provides five additional patterns beyond sequential and parallel. Each targets a distinct coordination problem.
+
+### MapReduce
+
+**When to use:** You have a large input that can be split into uniform chunks, each processed independently, and then merged. Classic for document summarization, batch data processing, and parallel search.
+
+```mermaid
+graph LR
+    S1[section-1] --> R[final-summary]
+    S2[section-2] --> R
+    S3[section-3] --> R
+    S4[section-4] --> R
+```
+
+```rust
+let mut dag = SubtaskDAG::new("document-summarization");
+
+let s1 = dag.add_task(SwarmSubtask::new("section-1", "Summarize Introduction"));
+let s2 = dag.add_task(SwarmSubtask::new("section-2", "Summarize Methodology"));
+let s3 = dag.add_task(SwarmSubtask::new("section-3", "Summarize Experiments"));
+let s4 = dag.add_task(SwarmSubtask::new("section-4", "Summarize Conclusion"));
+let reducer = dag.add_task(SwarmSubtask::new("final-summary", "Merge all section summaries"));
+
+dag.add_dependency(s1, reducer)?;
+dag.add_dependency(s2, reducer)?;
+dag.add_dependency(s3, reducer)?;
+dag.add_dependency(s4, reducer)?;
+
+let summary = MapReduceScheduler::new().execute(&mut dag, executor).await?;
+```
+
+The scheduler runs all mappers in parallel, then injects their outputs into the reducer's `description` field under a `## Map Phase Outputs` heading before calling the executor on it.
+
+---
+
+### Debate
+
+**When to use:** You want two or more agents to argue opposing positions before a judge synthesizes the best answer. Use for architecture decisions, risk analysis, and peer review workflows where adversarial pressure improves quality.
+
+```mermaid
+graph LR
+    D1[microservices-advocate] --> J[chief-architect]
+    D2[monolith-advocate] --> J
+```
+
+```rust
+let mut dag = SubtaskDAG::new("architecture-debate");
+
+let pro = dag.add_task(SwarmSubtask::new("microservices-advocate", "Argue for microservices"));
+let con = dag.add_task(SwarmSubtask::new("monolith-advocate", "Argue for monolith"));
+let judge = dag.add_task(SwarmSubtask::new("chief-architect", "Issue architecture decision"));
+
+dag.add_dependency(pro, judge)?;
+dag.add_dependency(con, judge)?;
+
+let summary = DebateScheduler::new().execute(&mut dag, executor).await?;
+```
+
+Debaters run in parallel. Each debater's output is formatted as `**{task_id}:** {output}` and injected into the judge's description under `## Debate Arguments`.
+
+---
+
+### Consensus
+
+**When to use:** Multiple independent agents each produce a label or classification; you want the majority vote to win. Use for sentiment analysis, fact-checking, and any scenario where a single model's confidence is insufficient.
+
+```mermaid
+graph LR
+    V1[classifier-a] --> A[verdict]
+    V2[classifier-b] --> A
+    V3[classifier-c] --> A
+```
+
+```rust
+let mut dag = SubtaskDAG::new("sentiment-consensus");
+
+let a = dag.add_task(SwarmSubtask::new("classifier-a", "Classify sentiment via BERT"));
+let b = dag.add_task(SwarmSubtask::new("classifier-b", "Classify sentiment via RoBERTa"));
+let c = dag.add_task(SwarmSubtask::new("classifier-c", "Classify sentiment via GPT"));
+let verdict = dag.add_task(SwarmSubtask::new("verdict", "Return majority sentiment"));
+
+dag.add_dependency(a, verdict)?;
+dag.add_dependency(b, verdict)?;
+dag.add_dependency(c, verdict)?;
+
+let summary = ConsensusScheduler::new().execute(&mut dag, executor).await?;
+```
+
+Voters run in parallel. The scheduler counts exact string matches across voter outputs, then prepends `## Majority Candidate\n{candidate}` to the aggregator's description when a strict majority exists (count > 1 and count is maximal).
+
+---
+
+### Routing
+
+**When to use:** A classifier or router agent must inspect input and dispatch it to exactly one specialist. Use for customer support triage, query routing, and intent-based dispatch where only one handler is appropriate.
+
+```mermaid
+graph LR
+    R[ticket-classifier] --> B[billing-agent]
+    R --> T[technical-agent]
+    R --> G[general-agent]
+    style B fill:#90EE90
+    style T fill:#FFB6C1
+    style G fill:#FFB6C1
+```
+
+```rust
+let mut dag = SubtaskDAG::new("support-ticket-routing");
+
+let classifier = dag.add_task(SwarmSubtask::new("ticket-classifier", "Classify the support ticket"));
+
+let mut billing = SwarmSubtask::new("billing-agent", "Handle billing disputes");
+billing.required_capabilities = vec!["billing".into()];
+let billing_idx = dag.add_task(billing);
+
+let mut technical = SwarmSubtask::new("technical-agent", "Handle technical bugs");
+technical.required_capabilities = vec!["technical".into(), "bug".into()];
+let technical_idx = dag.add_task(technical);
+
+dag.add_dependency(classifier, billing_idx)?;
+dag.add_dependency(classifier, technical_idx)?;
+
+let summary = RoutingScheduler::new().execute(&mut dag, executor).await?;
+// summary.skipped == 1: only the matched specialist runs
+```
+
+The router runs first. Its output string is matched case-insensitively against each specialist's `required_capabilities`. The first matching specialist runs; all others are marked `Skipped`. If no capability matches, the first specialist is used as a fallback.
+
+---
+
+### Supervision
+
+**When to use:** Workers may fail, and a supervisor must always run to handle recovery, alerting, or partial-result aggregation regardless of worker outcomes. Use for distributed data pipelines, batch jobs, and any fault-tolerant processing workflow.
+
+```mermaid
+graph LR
+    W1[shard-a] --> S[recovery-coordinator]
+    W2[shard-b] --> S
+    W3[shard-c] --> S
+    style W2 fill:#FFB6C1
+```
+
+```rust
+let mut dag = SubtaskDAG::new("resilient-data-pipeline");
+
+let a = dag.add_task(SwarmSubtask::new("shard-a", "Process partition A"));
+let b = dag.add_task(SwarmSubtask::new("shard-b", "Process partition B"));
+let c = dag.add_task(SwarmSubtask::new("shard-c", "Process partition C"));
+let supervisor = dag.add_task(SwarmSubtask::new("recovery-coordinator", "Review and recover"));
+
+dag.add_dependency(a, supervisor)?;
+dag.add_dependency(b, supervisor)?;
+dag.add_dependency(c, supervisor)?;
+
+let summary = SupervisionScheduler::new().execute(&mut dag, shard_executor).await?;
+```
+
+Workers run in parallel. Regardless of individual success or failure, the supervisor always executes. Each worker's outcome is injected as `{task_id} (SUCCESS): {output}` or `{task_id} (FAILED): {error}` under `## Worker Results` in the supervisor's description.
+
+---
+
+### Pattern Decision Guide
+
+| Pattern | Pick when... | Avoid when... |
+|---------|-------------|--------------|
+| **Sequential** | Stages have data dependencies; output of one stage is input to the next | Tasks are independent and you want maximum throughput |
+| **Parallel** | Subtasks are fully independent and all results are needed before proceeding | Tasks depend on each other's outputs |
+| **MapReduce** | Input can be partitioned uniformly; reduction is associative or commutative | Chunks have wildly different sizes or the reduce step must be incremental |
+| **Debate** | Adversarial critique improves answer quality; you need a reasoned synthesis | Debaters share the same perspective or the task has one objectively correct answer |
+| **Consensus** | You need majority agreement across independent models to reduce individual error | All agents share the same underlying model (no diversity benefit) |
+| **Routing** | Exactly one specialist should handle a request based on content inspection | Multiple specialists must collaborate or all specialists must run |
+| **Supervision** | Workers may fail and recovery or aggregation must always execute | All workers must succeed for the pipeline to be meaningful |
+
+---
+
 ## What Just Happened?
 
 In the chain example:
