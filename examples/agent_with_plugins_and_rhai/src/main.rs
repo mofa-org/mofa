@@ -23,7 +23,6 @@
 //！ - LLMAgent: 集成工具调用能力的智能体
 //! - LLMAgent: An agent integrated with tool calling capabilities
 
-use anyhow::Result;
 use mofa_sdk::kernel::{AgentPlugin, PluginContext};
 use mofa_sdk::llm::{LLMAgentBuilder, ToolExecutor, ToolPluginExecutor};
 use mofa_sdk::plugins::rhai_runtime::{RhaiPlugin, RhaiPluginConfig};
@@ -40,7 +39,7 @@ use tracing::{info, warn, Level};
 // Demo 4: File-based dynamic plugins - supporting runtime modification and auto-reloading
 // ============================================================================
 
-async fn demo_file_based_dynamic_plugin() -> Result<()> {
+async fn demo_file_based_dynamic_plugin() -> Result<(), Box<dyn std::error::Error>> {
     info!("\n========== 演示 4: 基于文件的动态插件 - 支持运行时修改和自动重载 ==========\n");
     info!("\n========== Demo 4: File-based dynamic plugins - supporting runtime modification and auto-reloading ==========\n");
 
@@ -214,7 +213,7 @@ fn execute(prompt) {
 // Demo 5: Dynamic rule engine integration with LLM
 // ============================================================================
 
-async fn demo_dynamic_rules_engine_for_llm() -> Result<()> {
+async fn demo_dynamic_rules_engine_for_llm() -> Result<(), Box<dyn std::error::Error>> {
     info!("\n========== 演示 5: 动态规则引擎与 LLM 集成 ==========\n");
     info!("\n========== Demo 5: Dynamic rule engine integration with LLM ==========\n");
 
@@ -340,7 +339,7 @@ fn execute(llm_response) {
 // ============================================================================
 
 #[tokio::main]
-async fn main() -> Result<()> {
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // 初始化日志
     // Initialize logging
     tracing_subscriber::fmt()

@@ -1,0 +1,81 @@
+# Aider Configuration for MoFA Project
+# This file provides guidance to Aider AI when working with code in this repository.
+
+# Read the development standards
+read:
+  - CLAUDE.md
+  - docs/mofa-doc/src/coding-standards/spec.md
+
+# File patterns to include
+file_patterns:
+  - "**/*.rs"
+  - "**/Cargo.toml"
+  - "**/*.md"
+
+# Commands to run before committing
+pre_commit_commands:
+  - "cargo fmt --check"
+  - "cargo clippy -- -D warnings"
+  - "cargo test"
+
+# Development guidelines to follow
+guidelines: |
+  ## Rust Project Development Standards
+
+  ### I. Error Handling Standards
+  - **MUST** define a unified error type in the crate root (e.g., `KernelError`)
+  - **MUST** establish a clear error hierarchy where module errors can be unified through the `From` trait
+  - **MUST NOT** use `anyhow::Result` as a public API return type in library code; use `thiserror` to define typed errors
+  - **MUST NOT** implement blanket `From<anyhow::Error>` for error types
+
+  ### II. Type Design and API Stability
+  - **MUST** add the `#[non_exhaustive]` attribute to public enums
+  - Comparable/testable types **MUST** derive `PartialEq`, `Eq`
+  - Debug output types **MUST** derive `Debug`
+  - Serializable types **MUST** derive `Clone`
+
+  ### III. Naming and Module Design
+  - **MUST NOT** define types with the same name representing different concepts
+  - **MUST** use `pub(crate)` to limit internal module visibility
+  - **MUST** carefully design the public API surface through `lib.rs` or `prelude`
+
+  ### IV. Performance and Dependencies Management
+  - In Rust 1.75+ environments, **SHOULD** use native `async fn in trait`
+  - Objects with high compilation costs like regular expressions **MUST** be cached using `LazyLock` or `OnceLock`
+  - Timestamp generation logic **MUST** be abstracted into a single utility function
+
+  ### V. Type Safety
+  - **MUST NOT** abuse `serde_json::Value` in scenarios where generic constraints can be used
+  - **AVOID** using `Box<dyn Any + Send + Sync>` as generic storage
+
+  ### VI. Interface Consistency
+  - Constructor parameter types **SHOULD** be unified: prefer `impl Into<String>` or `&str`
+  - Builder methods **MUST** validate invalid input or return `Result`
+
+  ### VII. Code Correctness
+  - **MUST** write complete tests covering all branches for manually implemented `Ord` trait
+  - Numeric type conversions **MUST** explicitly handle potential overflow
+
+  ### VIII. Serialization and Compatibility
+  - Binary serialization **MUST** include version identifiers
+  - Message buses **SHOULD** support pluggable serialization backends
+
+  ### IX. Testing Standards
+  - **MUST** include: boundary values, null values, invalid input, concurrent scenarios
+  - **MUST** write unit tests for core logic
+  - **SHOULD** write integration tests for inter-module interactions
+
+  ### X. Feature Isolation
+  - Dependencies behind feature gates **MUST** be marked with `optional = true` in `Cargo.toml`
+  - **MUST NOT** feature gate partial code while the dependency is still compiled unconditionally
+
+  ## MoFA Microkernel Architecture Standards
+  - Kernel Layer: Define ALL core trait interfaces
+  - Foundation Layer: Provide ALL concrete implementations
+  - Plugins Layer: Provide optional advanced implementations
+  - **FORBIDDEN**: Kernel depending on Foundation (circular dependency)
+
+  ## Code and Documentation Language
+  - Use English for all code comments and documentation
+  - Variable, function, and type names should be in English
+  - Commit messages should be written in English

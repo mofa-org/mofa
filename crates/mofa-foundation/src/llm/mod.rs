@@ -303,6 +303,7 @@
 
 pub mod agent;
 pub mod client;
+pub mod fallback;
 pub mod plugin;
 pub mod provider;
 pub mod retry;
@@ -324,8 +325,10 @@ pub mod pipeline;
 pub mod agent_loop;
 pub mod context;
 pub mod task_orchestrator;
+pub mod token_budget;
 pub mod vision;
-
+pub mod stream_adapter;
+pub mod stream_bridge;
 // Audio processing
 pub mod transcription;
 
@@ -336,7 +339,14 @@ pub use plugin::{LLMCapability, LLMPlugin, MockLLMProvider};
 pub use provider::{
     ChatStream, LLMConfig, LLMProvider, LLMRegistry, ModelCapabilities, ModelInfo, global_registry,
 };
+pub use fallback::{
+    CircuitBreakerConfig, FallbackChain, FallbackChainBuilder, FallbackChainConfig,
+    FallbackCondition, FallbackConditionConfig, FallbackProviderConfig, FallbackSnapshot,
+    FallbackTrigger, FallbackTriggerConfig, ProviderSnapshot,
+};
 pub use retry::RetryExecutor;
+pub use stream_adapter::{GenericStreamAdapter, StreamAdapter, adapter_for_provider};
+pub use stream_bridge::{stream_error_to_llm_error, token_stream_to_events, token_stream_to_text};
 pub use tool_executor::ToolExecutor;
 pub use tool_schema::{normalize_schema, parse_schema, validate_schema};
 pub use types::*;
@@ -381,6 +391,10 @@ pub use context::{AgentContextBuilder, AgentIdentity, NoOpSkillsManager, SkillsM
 pub use task_orchestrator::{
     BackgroundTask, TaskOrchestrator, TaskOrchestratorConfig, TaskOrigin, TaskResult, TaskStatus,
 };
+pub use token_budget::{
+    CharBasedEstimator, ContextWindowManager, ContextWindowPolicy, TokenBudgetConfig,
+    TokenEstimator, TrimResult,
+};
 pub use vision::{
     ImageDetailExt, build_vision_chat_message, build_vision_chat_message_single,
     build_vision_message, encode_image_data_url, encode_image_url, get_mime_type,
@@ -398,3 +412,41 @@ pub use tool_executor::ToolExecutor as AgentLoopToolExecutor;
 pub use transcription::{
     GroqTranscriptionProvider, OpenAITranscriptionProvider, TranscriptionProvider,
 };
+
+#[cfg(test)]
+mod tests {
+    use super::{
+        AnthropicConfig, AnthropicProvider, GeminiConfig, GeminiProvider, LLMProvider,
+        OpenAIConfig, OpenAIProvider,
+    };
+
+    #[test]
+    fn openai_provider_uses_configured_model() {
+        let cfg = OpenAIConfig::new("k")
+            .with_base_url("https://example.test/v1")
+            .with_model("gpt-4o-mini");
+        let provider = OpenAIProvider::with_config(cfg);
+        assert_eq!(provider.name(), "openai");
+        assert_eq!(provider.default_model(), "gpt-4o-mini");
+    }
+
+    #[test]
+    fn anthropic_provider_uses_configured_model() {
+        let cfg = AnthropicConfig::new("k")
+            .with_base_url("https://example.test")
+            .with_model("claude-3-5-sonnet-latest");
+        let provider = AnthropicProvider::with_config(cfg);
+        assert_eq!(provider.name(), "anthropic");
+        assert_eq!(provider.default_model(), "claude-3-5-sonnet-latest");
+    }
+
+    #[test]
+    fn gemini_provider_uses_configured_model() {
+        let cfg = GeminiConfig::new("k")
+            .with_base_url("https://example.test")
+            .with_model("gemini-1.5-flash");
+        let provider = GeminiProvider::with_config(cfg);
+        assert_eq!(provider.name(), "gemini");
+        assert_eq!(provider.default_model(), "gemini-1.5-flash");
+    }
+}

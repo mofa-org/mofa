@@ -65,7 +65,7 @@ impl ToolPluginExecutor {
 impl ToolExecutor for ToolPluginExecutor {
     async fn execute(&self, name: &str, arguments: &str) -> LLMResult<String> {
         let args: serde_json::Value = serde_json::from_str(arguments)
-            .map_err(|e| LLMError::Other(format!("参数解析失败: {}", e)))?;
+            .map_err(|e| LLMError::Other(format!("Failed to parse arguments: {}", e)))?;
 
         let call = ToolCall {
             call_id: uuid::Uuid::now_v7().to_string(),
@@ -77,14 +77,14 @@ impl ToolExecutor for ToolPluginExecutor {
         let result = plugin
             .call_tool(call)
             .await
-            .map_err(|e| LLMError::Other(format!("工具执行失败: {}", e)))?;
+            .map_err(|e| LLMError::Other(format!("Tool execution failed: {}", e)))?;
 
         if result.success {
             serde_json::to_string(&result.result)
-                .map_err(|e| LLMError::Other(format!("结果序列化失败: {}", e)))
+                .map_err(|e| LLMError::Other(format!("Failed to serialize result: {}", e)))
         } else {
             Err(LLMError::Other(
-                result.error.unwrap_or_else(|| "未知错误".to_string()),
+                result.error.unwrap_or_else(|| "Unknown error".to_string()),
             ))
         }
     }

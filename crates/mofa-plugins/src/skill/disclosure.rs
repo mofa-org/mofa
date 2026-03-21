@@ -103,7 +103,7 @@ impl DisclosureController {
     ///
     /// 按优先级从多个目录扫描，先找到的优先
     /// Scan multiple directories by priority; the first match takes precedence
-    pub fn scan_metadata(&mut self) -> anyhow::Result<usize> {
+    pub fn scan_metadata(&mut self) -> mofa_kernel::plugin::PluginResult<usize> {
         let mut count = 0;
 
         for skills_dir in &self.search_dirs {

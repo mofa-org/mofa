@@ -4,11 +4,11 @@
 //! with progress tracking, checksum validation, and retry logic.
 
 use super::cache::{ModelCache, ModelMetadata};
-use anyhow::{Context, Result, anyhow, bail};
 use backoff::ExponentialBackoff;
 use backoff::future::retry;
 use futures::stream::StreamExt;
 use md5::{Digest, Md5};
+use mofa_kernel::plugin::{PluginError, PluginResult};
 use reqwest::Client;
 use std::fs;
 use std::io::Read;
@@ -104,12 +104,10 @@ impl HFHubClient {
         &self,
         config: DownloadConfig,
         cache: &ModelCache,
-    ) -> Result<std::path::PathBuf> {
-        let _permit = self
-            .download_semaphore
-            .acquire()
-            .await
-            .map_err(|e| anyhow!("Failed to acquire download semaphore: {}", e))?;
+    ) -> PluginResult<std::path::PathBuf> {
+        let _permit = self.download_semaphore.acquire().await.map_err(|e| {
+            PluginError::Other(format!("Failed to acquire download semaphore: {}", e))
+        })?;
 
         info!(
             "Starting download: {} / {}",
@@ -147,12 +145,11 @@ impl HFHubClient {
             && actual_checksum != *expected
         {
             error!("Checksum validation failed");
-            fs::remove_file(&output_path)?;
-            bail!(
+            fs::remove_file(&output_path).map_err(|e| PluginError::Other(e.to_string()))?;
+            return Err(PluginError::Other(format!(
                 "Downloaded file checksum mismatch. Expected: {}, Got: {}",
-                expected,
-                actual_checksum
-            );
+                expected, actual_checksum
+            )));
         }
 
         // Save metadata
@@ -183,7 +180,7 @@ impl HFHubClient {
         url: &str,
         output_path: &std::path::PathBuf,
         config: &DownloadConfig,
-    ) -> Result<u64> {
+    ) -> PluginResult<u64> {
         let backoff = ExponentialBackoff {
             max_elapsed_time: Some(Duration::from_secs(config.timeout_secs)),
             max_interval: Duration::from_secs(60),
@@ -199,7 +196,7 @@ impl HFHubClient {
                 })
         })
         .await
-        .context("Failed to download file after retries")
+        .map_err(|e| PluginError::Other(format!("Failed to download file after retries: {}", e)))
     }
 
     /// Single download attempt
@@ -208,17 +205,20 @@ impl HFHubClient {
         url: &str,
         output_path: &std::path::PathBuf,
         config: &DownloadConfig,
-    ) -> Result<u64> {
+    ) -> PluginResult<u64> {
         // Send HTTP request
         let response = self
             .client
             .get(url)
             .send()
             .await
-            .context("Failed to initiate download")?;
+            .map_err(|e| PluginError::Other(format!("Failed to initiate download: {}", e)))?;
 
         if !response.status().is_success() {
-            bail!("Download failed with HTTP {}", response.status());
+            return Err(PluginError::Other(format!(
+                "Download failed with HTTP {}",
+                response.status()
+            )));
         }
 
         // Get content length for progress tracking
@@ -229,17 +229,18 @@ impl HFHubClient {
         // Create output file
         let mut file = tokio::fs::File::create(output_path)
             .await
-            .context("Failed to create output file")?;
+            .map_err(|e| PluginError::Other(format!("Failed to create output file: {}", e)))?;
 
         // Download with progress tracking
         let mut downloaded = 0u64;
         let mut stream = response.bytes_stream();
 
         while let Some(chunk) = stream.next().await {
-            let chunk = chunk.context("Failed to read download chunk")?;
-            file.write_all(&chunk)
-                .await
-                .context("Failed to write to output file")?;
+            let chunk = chunk
+                .map_err(|e| PluginError::Other(format!("Failed to read download chunk: {}", e)))?;
+            file.write_all(&chunk).await.map_err(|e| {
+                PluginError::Other(format!("Failed to write to output file: {}", e))
+            })?;
 
             downloaded += chunk.len() as u64;
 
@@ -259,23 +260,24 @@ impl HFHubClient {
 
         file.sync_all()
             .await
-            .context("Failed to sync file to disk")?;
+            .map_err(|e| PluginError::Other(format!("Failed to sync file to disk: {}", e)))?;
 
         Ok(downloaded)
     }
 
     /// Calculate MD5 checksum of a file
-    fn calculate_checksum(&self, path: &std::path::PathBuf) -> Result<String> {
-        let file = fs::File::open(path).context(format!("Failed to open file: {:?}", path))?;
+    fn calculate_checksum(&self, path: &std::path::PathBuf) -> PluginResult<String> {
+        let file = fs::File::open(path)
+            .map_err(|e| PluginError::Other(format!("Failed to open file {:?}: {}", path, e)))?;
 
         let mut hasher = Md5::new();
         let mut reader = std::io::BufReader::new(file);
         let mut buffer = [0u8; 8192];
 
         loop {
-            let n = reader
-                .read(&mut buffer)
-                .context("Failed to read file for checksum")?;
+            let n = reader.read(&mut buffer).map_err(|e| {
+                PluginError::Other(format!("Failed to read file for checksum: {}", e))
+            })?;
             if n == 0 {
                 break;
             }

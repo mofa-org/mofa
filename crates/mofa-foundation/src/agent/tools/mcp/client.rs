@@ -163,9 +163,10 @@ impl McpClient for McpClientManager {
                 ));
             }
             _ => {
-                return Err(AgentError::ConfigError(
-                    "Unsupported MCP transport configuration".to_string(),
-                ));
+                return Err(AgentError::ConfigError(format!(
+                    "Unsupported MCP transport for server '{}'",
+                    server_name
+                )));
             }
         };
 
@@ -235,11 +236,11 @@ impl McpClient for McpClientManager {
 
         let params = CallToolRequestParams {
             name: tool_name.to_string().into(),
-            arguments: if arguments.is_object() {
-                Some(arguments.as_object().unwrap().clone())
-            } else {
-                Some(serde_json::Map::new())
-            },
+            arguments: Some(
+                arguments
+                    .as_object().cloned()
+                    .unwrap_or_default(),
+            ),
             meta: None,
             task: None,
         };

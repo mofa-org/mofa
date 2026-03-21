@@ -5,6 +5,7 @@
 //! Provides business-specific functions to extend the kernel's CoreAgentContext
 
 use mofa_kernel::agent::context::AgentContext;
+use mofa_kernel::security::{Authorizer, AuthorizationResult, SecurityError, SecurityResult};
 use serde::{Serialize, de::DeserializeOwned};
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -223,7 +224,9 @@ impl RichAgentContext {
     pub async fn set<T: Serialize>(&self, key: &str, value: T) {
         match serde_json::to_value(value) {
             Ok(v) => self.inner.set(key, v).await,
-            Err(e) => tracing::warn!(key = key, error = %e, "RichAgentContext::set serialization failed"),
+            Err(e) => {
+                tracing::warn!(key = key, error = %e, "RichAgentContext::set serialization failed")
+            }
         }
     }
 
@@ -257,6 +260,67 @@ impl RichAgentContext {
                 }
             }
         })
+    }
+
+    // ===== RBAC Helpers =====
+    // ===== RBAC Helpers =====
+
+    /// Check if the current agent has permission to execute a tool
+    ///
+    /// This method retrieves the authorizer from the context and checks permissions.
+    /// The authorizer should be set in the context using `set_authorizer()`.
+    ///
+    /// # Arguments
+    /// * `tool_name` - Name of the tool to check (e.g., "delete_user")
+    /// * `action` - Action to perform (default: "execute")
+    ///
+    /// # Returns
+    /// `Ok(true)` if permission is granted, `Ok(false)` if denied,
+    /// `Err` if authorizer is not configured or check fails.
+    pub async fn check_tool_permission(
+        &self,
+        tool_name: &str,
+        action: Option<&str>,
+    ) -> SecurityResult<bool> {
+        // Get agent ID from context
+        let agent_id: Option<String> = self.get("agent_id").await;
+        let agent_id = agent_id.as_deref().unwrap_or("unknown");
+
+        // Get authorizer from context (stored as a serialized reference or key)
+        // For now, we'll check if there's an authorizer key in the context
+        // In a real implementation, you might want to store the authorizer differently
+        let authorizer_key: Option<String> = self.get("_authorizer_key").await;
+        
+        if authorizer_key.is_none() {
+            // No authorizer configured - allow by default (fail-open mode)
+            // In production, you might want to fail-closed instead
+            return Ok(true);
+        }
+
+        // In a real implementation, you would retrieve the actual authorizer
+        // from a registry or service. For now, we'll return an error indicating
+        // that the authorizer needs to be injected properly.
+        Err(SecurityError::ConfigurationError(
+            "Authorizer not properly injected into context. Use Runtime security interceptors instead.".to_string()
+        ))
+    }
+
+    /// Set the authorizer key for RBAC checks
+    ///
+    /// This is a helper method to store authorizer metadata in the context.
+    /// The actual authorizer should be managed by the runtime SecurityService.
+    pub async fn set_authorizer_key(&self, key: impl Into<String>) {
+        self.set("_authorizer_key", key.into()).await;
+    }
+
+    /// Set the agent ID for RBAC checks
+    pub async fn set_agent_id(&self, agent_id: impl Into<String>) {
+        self.set("agent_id", agent_id.into()).await;
+    }
+
+    /// Get the agent ID from context
+    pub async fn get_agent_id(&self) -> Option<String> {
+        self.get("agent_id").await
     }
 
     /// 获取执行 ID

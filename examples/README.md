@@ -4,7 +4,7 @@ use futures::StreamExt;
 use mofa_sdk::llm::{LLMAgentBuilder, openai_from_env};
 
 #[tokio::main]
-async fn main() -> anyhow::Result<()> {
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
 let agent = LLMAgentBuilder::new("my-agent")
 .with_provider(Arc::new(openai_from_env()))
 .with_system_prompt("You are a helpful assistant.")

@@ -101,7 +101,6 @@ edition = "2024"
 mofa-sdk = { path = "../../crates/mofa-sdk" }
 async-trait = "0.1"
 tokio = { version = "1", features = ["full"] }
-anyhow = "1"
 serde_json = "1"
 ```
 
@@ -207,7 +206,7 @@ impl MoFAAgent for WriterAgent {
 }
 
 // --- Chain execution ---
-async fn run_chain(input: &str) -> anyhow::Result<String> {
+async fn run_chain(input: &str) -> Result<String, Box<dyn std::error::Error>> {
     // Stage 1: Analyst
     let analyst = AnalystAgent::new();
     let outputs = run_agents(analyst, vec![AgentInput::text(input)]).await?;
@@ -224,7 +223,7 @@ async fn run_chain(input: &str) -> anyhow::Result<String> {
 }
 
 #[tokio::main]
-async fn main() -> anyhow::Result<()> {
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("=== Sequential Chain: Analyst → Writer ===\n");
     let result = run_chain("MoFA is a modular agent framework built in Rust").await?;
     println!("\nFinal output:\n{}", result);
@@ -240,7 +239,7 @@ Multiple agents process the same input concurrently, then results are aggregated
 ```rust
 use tokio::task::JoinSet;
 
-async fn run_parallel(input: &str) -> anyhow::Result<Vec<String>> {
+async fn run_parallel(input: &str) -> Result<Vec<String, Box<dyn std::error::Error>>> {
     let mut tasks = JoinSet::new();
 
     // Launch multiple agents in parallel

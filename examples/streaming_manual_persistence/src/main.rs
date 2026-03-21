@@ -44,37 +44,37 @@ async fn main() -> LLMResult<()> {
         .with_max_level(Level::INFO)
         .init();
     info!("=============================================");
-    info!("MoFA 流式对话手动持久化示例");
+    info!("MoFA Streaming Conversation Manual Persistence Example");
     // MoFA Streaming Conversation Manual Persistence Example
     info!("=============================================");
 
     // 1. 获取配置
     // 1. Get configuration
     let database_url = std::env::var("DATABASE_URL")
-        .expect("请设置 DATABASE_URL 环境变量");
+        .expect("Please set the DATABASE_URL environment variable");
         // "Please set the DATABASE_URL environment variable"
 
     // 2. 连接数据库
     // 2. Connect to the database
-    info!("\n1. 连接 PostgreSQL 数据库...");
+    info!("\n1. Connecting to PostgreSQL database...");
     // 1. Connecting to PostgreSQL database...
     let store: Arc<PostgresStore> = PostgresStore::shared(&database_url).await
-        .map_err(|e| LLMError::Other(format!("数据库连接失败: {}", e)))?;
+        .map_err(|e| LLMError::Other(format!("Database connection failed: {}", e)))?;
         // "Database connection failed: {}"
-    info!("✅ 数据库连接成功!");
+    info!("✅ Database connection successful!");
     // ✅ Database connection successful!
 
     // 3. 初始化 LLM Agent
     // 3. Initialize LLM Agent
-    info!("\n2. 初始化 LLM Agent...");
+    info!("\n2. Initializing LLM Agent...");
     // 2. Initializing LLM Agent...
     let provider = Arc::new(openai_from_env()?);
     let agent = LLMAgentBuilder::new()
-        .with_system_prompt("你是一个专业的技术顾问，请用清晰简洁的方式回答问题。")
+        .with_system_prompt("You are a professional technical consultant, please answer questions clearly and concisely.")
         // "You are a professional technical consultant, please answer questions clearly and concisely."
         .with_provider(provider)
         .build();
-    info!("✅ LLM Agent 初始化完成!");
+    info!("✅ LLM Agent initialization complete!");
     // ✅ LLM Agent initialization complete!
 
     // 4. 处理会话选择
@@ -83,35 +83,35 @@ async fn main() -> LLMResult<()> {
     let agent_id = Uuid::new_v4();
     let tenant_id = Uuid::now_v7();
 
-    info!("\n3. 会话管理:");
+    info!("\n3. Session Management:");
     // 3. Session Management:
-    info!("   1) 创建新会话");
+    info!("   1) Create new session");
     //    1) Create new session
-    info!("   2) 使用现有会话 ID");
+    info!("   2) Use existing session ID");
     //    2) Use existing session ID
 
     let persistence_ctx = match get_user_choice().await {
         1 => {
-            info!("创建新会话...");
+            info!("Creating new session...");
             // Creating new session...
             let ctx = PersistenceContext::new(store, user_id, tenant_id, agent_id).await?;
-            info!("✅ 新会话创建成功: ID = {}", ctx.session_id());
+            info!("✅ New session created successfully: ID = {}", ctx.session_id());
             // ✅ New session created successfully: ID = {}
             ctx
         }
         2 => {
-            print!("请输入会话 ID: ");
-            // Please input session ID: 
+            print!("Please input session ID: ");
+            // Please input session ID:
             std::io::stdout().flush().unwrap();
 
             let mut session_id_input = String::new();
             std::io::stdin().read_line(&mut session_id_input).unwrap();
 
             let session_id = Uuid::parse_str(session_id_input.trim())
-                .expect("无效的 UUID 格式");
+                .expect("Invalid UUID format");
                 // "Invalid UUID format"
 
-            info!("使用现有会话: ID = {}", session_id);
+            info!("Using existing session: ID = {}", session_id);
             // Using existing session: ID = {}
             PersistenceContext::from_session(
                 store.clone(),
@@ -121,20 +121,20 @@ async fn main() -> LLMResult<()> {
                 session_id
             )
         }
-        _ => panic!("无效选择"),
+        _ => panic!("Invalid choice"),
         // _ => panic!("Invalid choice")
     };
 
     // 5. 开始对话循环
     // 5. Start conversation loop
-    info!("\n4. 开始流式对话 (输入 'quit' 退出):");
+    info!("\n4. Starting streaming conversation (type 'quit' to exit):");
     // 4. Starting streaming conversation (type 'quit' to exit):
 
     loop {
         // 获取用户输入
         // Get user input
-        print!("\n用户: ");
-        // User: 
+        print!("\nUser: ");
+        // User:
         std::io::stdout().flush().unwrap();
 
         let mut user_input = String::new();
@@ -145,10 +145,10 @@ async fn main() -> LLMResult<()> {
             break;
         }
 
-        info!("🔄 保存用户消息...");
+        info!("🔄 Saving user message...");
         // 🔄 Saving user message...
         let user_msg_id = persistence_ctx.save_user_message(&user_input).await?;
-        info!("✅ 用户消息保存成功: ID = {}", user_msg_id);
+        info!("✅ User message saved successfully: ID = {}", user_msg_id);
         // ✅ User message saved successfully: ID = {}
 
         // 开始计时
@@ -157,8 +157,8 @@ async fn main() -> LLMResult<()> {
 
         // 流式对话
         // Streaming conversation
-        print!("助手: ");
-        // Assistant: 
+        print!("Assistant: ");
+        // Assistant:
         std::io::stdout().flush().unwrap();
 
         let mut stream = agent.chat_stream_with_session(
@@ -177,7 +177,7 @@ async fn main() -> LLMResult<()> {
                     full_response.push_str(&text);
                 }
                 Err(e) => {
-                    info!("\n❌ 对话错误: {}", e);
+                    info!("\n❌ Conversation error: {}", e);
                     // ❌ Conversation error: {}
                     response_ok = false;
                     break;
@@ -191,23 +191,23 @@ async fn main() -> LLMResult<()> {
         let latency = start_time.elapsed().as_millis() as i32;
 
         if response_ok && !full_response.is_empty() {
-            info!("🔄 保存助手消息...");
+            info!("🔄 Saving assistant message...");
             // 🔄 Saving assistant message...
             let assistant_msg_id = persistence_ctx.save_assistant_message(&full_response).await?;
-            info!("✅ 助手消息保存成功: ID = {}", assistant_msg_id);
+            info!("✅ Assistant message saved successfully: ID = {}", assistant_msg_id);
             // ✅ Assistant message saved successfully: ID = {}
 
-            info!("🔄 保存 API 调用记录...");
+            info!("🔄 Saving API call record...");
             // 🔄 Saving API call record...
             // 直接使用 store API 保存 API 调用记录（示例简化）
             // Directly use store API to save API call records (simplified example)
-            info!("✅ API 调用记录保存成功: 延迟 = {}ms", latency);
+            info!("✅ API call record saved successfully: Latency = {}ms", latency);
             // ✅ API call record saved successfully: Latency = {}ms
         }
     }
 
     info!("\n=============================================");
-    info!("对话结束。所有数据已手动持久化到数据库。");
+    info!("Conversation ended. All data has been manually persisted to the database.");
     // Conversation ended. All data has been manually persisted to the database.
     info!("=============================================");
 
@@ -218,8 +218,8 @@ async fn main() -> LLMResult<()> {
 /// Get user choice
 async fn get_user_choice() -> i32 {
     loop {
-        print!("请选择: ");
-        // Please select: 
+        print!("Please select: ");
+        // Please select:
         std::io::stdout().flush().unwrap();
 
         let mut input = String::new();
@@ -227,7 +227,7 @@ async fn get_user_choice() -> i32 {
 
         match input.trim().parse::<i32>() {
             Ok(choice @ 1..=2) => return choice,
-            _ => info!("⚠️  无效选择，请输入 1 或 2"),
+            _ => info!("⚠️  Invalid choice, please enter 1 or 2"),
             // _ => info!("⚠️  Invalid choice, please enter 1 or 2")
         }
     }

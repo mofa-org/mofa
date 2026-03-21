@@ -1,22 +1,18 @@
 #![allow(dead_code, unused_imports, improper_ctypes_definitions)]
-//! 插件机制模块
 //! Plugin mechanism module
 //!
-//! 提供完整的插件系统，支持：
 //! Provides a complete plugin system, supporting:
-//! - 插件生命周期管理
 //! - Plugin lifecycle management
-//! - 多种插件类型（LLM、Tool、Storage、Memory 等）
 //! - Various plugin types (LLM, Tool, Storage, Memory, etc.)
-//! - 插件注册与发现
 //! - Plugin registration and discovery
-//! - 插件间通信与依赖管理
 //! - Inter-plugin communication and dependency management
-//! - 事件钩子机制
 //! - Event hook mechanism
-//! - Agent Skills 支持
 //! - Agent Skills support
 
+// Unified error conversions (GlobalError <-> plugin errors)
+pub mod error_conversions;
+
+pub mod asr;
 pub mod hot_reload;
 pub mod skill;
 pub mod tool;
@@ -24,9 +20,11 @@ pub mod tools;
 pub mod tts;
 pub mod wasm_runtime;
 
+pub use asr::{ASREngine, ASRPlugin, ASRPluginConfig, MockASREngine};
+
 pub use mofa_kernel::{
-    AgentPlugin, PluginConfig, PluginContext, PluginEvent, PluginMetadata, PluginResult,
-    PluginState, PluginType,
+    AgentPlugin, PluginConfig, PluginContext, PluginError, PluginEvent, PluginMetadata,
+    PluginResult, PluginState, PluginType,
 };
 use serde::{Deserialize, Serialize};
 use std::any::Any;
@@ -255,7 +253,7 @@ impl LLMPlugin {
         let client = self
             .client
             .as_ref()
-            .ok_or_else(|| anyhow::anyhow!("LLM client not initialized"))?;
+            .ok_or_else(|| PluginError::InitFailed("LLM client not initialized".into()))?;
         self.call_count += 1;
         client.chat(messages).await
     }
@@ -266,7 +264,7 @@ impl LLMPlugin {
         let client = self
             .client
             .as_ref()
-            .ok_or_else(|| anyhow::anyhow!("LLM client not initialized"))?;
+            .ok_or_else(|| PluginError::InitFailed("LLM client not initialized".into()))?;
         client.embedding(text).await
     }
 }
@@ -317,7 +315,7 @@ impl AgentPlugin for LLMPlugin {
     }
 
     async fn stop(&mut self) -> PluginResult<()> {
-        self.state = PluginState::Paused;
+        self.state = PluginState::Loaded;
         info!("LLM plugin {} stopped", self.metadata.id);
         Ok(())
     }
@@ -333,7 +331,7 @@ impl AgentPlugin for LLMPlugin {
         let client = self
             .client
             .as_ref()
-            .ok_or_else(|| anyhow::anyhow!("LLM client not initialized"))?;
+            .ok_or_else(|| PluginError::InitFailed("LLM client not initialized".into()))?;
         self.call_count += 1;
         client.generate(&input).await
     }
@@ -497,10 +495,9 @@ impl ToolPlugin {
     /// 调用工具
     /// Call tool
     pub async fn call_tool(&mut self, call: ToolCall) -> PluginResult<ToolResult> {
-        let tool = self
-            .tools
-            .get(&call.name)
-            .ok_or_else(|| anyhow::anyhow!("Tool not found: {}", call.name))?;
+        let tool = self.tools.get(&call.name).ok_or_else(|| {
+            PluginError::ExecutionFailed(format!("Tool not found: {}", call.name))
+        })?;
 
         // 验证参数
         // Validate arguments
@@ -562,7 +559,7 @@ impl AgentPlugin for ToolPlugin {
     }
 
     async fn stop(&mut self) -> PluginResult<()> {
-        self.state = PluginState::Paused;
+        self.state = PluginState::Loaded;
         info!("Tool plugin {} stopped", self.metadata.id);
         Ok(())
     }
@@ -577,11 +574,12 @@ impl AgentPlugin for ToolPlugin {
     async fn execute(&mut self, input: String) -> PluginResult<String> {
         // 解析输入为工具调用
         // Parse input as tool call
-        let call: ToolCall = serde_json::from_str(&input)
-            .map_err(|e| anyhow::anyhow!("Invalid tool call format: {}", e))?;
+        let call: ToolCall = serde_json::from_str(&input).map_err(|e| {
+            PluginError::ExecutionFailed(format!("Invalid tool call format: {}", e))
+        })?;
         let result = self.call_tool(call).await?;
         serde_json::to_string(&result)
-            .map_err(|e| anyhow::anyhow!("Failed to serialize result: {}", e))
+            .map_err(|e| PluginError::ExecutionFailed(format!("Failed to serialize result: {}", e)))
     }
 
     fn stats(&self) -> HashMap<String, serde_json::Value> {
@@ -729,7 +727,7 @@ impl StoragePlugin {
         let backend = self
             .backend
             .as_ref()
-            .ok_or_else(|| anyhow::anyhow!("Storage backend not initialized"))?;
+            .ok_or_else(|| PluginError::InitFailed("Storage backend not initialized".into()))?;
         self.read_count += 1;
         backend.get(key).await
     }
@@ -740,7 +738,7 @@ impl StoragePlugin {
         let backend = self
             .backend
             .as_ref()
-            .ok_or_else(|| anyhow::anyhow!("Storage backend not initialized"))?;
+            .ok_or_else(|| PluginError::InitFailed("Storage backend not initialized".into()))?;
         self.write_count += 1;
         backend.set(key, value).await
     }
@@ -751,7 +749,7 @@ impl StoragePlugin {
         let backend = self
             .backend
             .as_ref()
-            .ok_or_else(|| anyhow::anyhow!("Storage backend not initialized"))?;
+            .ok_or_else(|| PluginError::InitFailed("Storage backend not initialized".into()))?;
         self.write_count += 1;
         backend.delete(key).await
     }
@@ -802,7 +800,7 @@ impl AgentPlugin for StoragePlugin {
     }
 
     async fn stop(&mut self) -> PluginResult<()> {
-        self.state = PluginState::Paused;
+        self.state = PluginState::Loaded;
         info!("Storage plugin {} stopped", self.metadata.id);
         Ok(())
     }
@@ -831,8 +829,8 @@ impl AgentPlugin for StoragePlugin {
                 let deleted = self.delete(key).await?;
                 Ok(if deleted { "1" } else { "0" }.to_string())
             }
-            _ => Err(anyhow::anyhow!(
-                "Invalid command. Use: get <key>, set <key> <value>, delete <key>"
+            _ => Err(PluginError::ExecutionFailed(
+                "Invalid command. Use: get <key>, set <key> <value>, delete <key>".into(),
             )),
         }
     }
@@ -1044,14 +1042,16 @@ impl AgentPlugin for MemoryPlugin {
             ["search", query] => {
                 let results = self.retrieve(query, 5);
                 let contents: Vec<&str> = results.iter().map(|m| m.content.as_str()).collect();
-                Ok(serde_json::to_string(&contents)?)
+                let json = serde_json::to_string(&contents)
+                    .map_err(|e| PluginError::ExecutionFailed(e.to_string()))?;
+                Ok(json)
             }
             ["count"] => Ok(self.memories.len().to_string()),
             ["clear"] => {
                 self.clear();
                 Ok("Cleared".to_string())
             }
-            _ => Err(anyhow::anyhow!("Invalid command")),
+            _ => Err(PluginError::ExecutionFailed("Invalid command".into())),
         }
     }
 
@@ -1148,7 +1148,10 @@ impl PluginManager {
         let mut plugins = self.plugins.write().await;
 
         if plugins.contains_key(&plugin_id) {
-            return Err(anyhow::anyhow!("Plugin {} already registered", plugin_id));
+            return Err(PluginError::Other(format!(
+                "Plugin {} already registered",
+                plugin_id
+            )));
         }
 
         let entry = PluginEntry {
@@ -1305,7 +1308,7 @@ impl PluginManager {
         let mut plugins = self.plugins.write().await;
         let entry = plugins
             .get_mut(plugin_id)
-            .ok_or_else(|| anyhow::anyhow!("Plugin {} not found", plugin_id))?;
+            .ok_or_else(|| PluginError::Other(format!("Plugin {} not found", plugin_id)))?;
         entry.plugin.execute(input).await
     }
 
@@ -1437,6 +1440,144 @@ mod tests {
         llm.stop().await.unwrap();
         llm.unload().await.unwrap();
 
+        assert_eq!(llm.state(), PluginState::Unloaded);
+    }
+
+    // ---- State-machine transition tests (fixes #448) -------------------------
+
+    /// Verifies the full lifecycle state sequence for LLMPlugin:
+    /// Unloaded → Loading → Loaded → Running → Loaded (stop) → Unloaded
+    #[tokio::test]
+    async fn test_llm_plugin_stop_sets_loaded_state() {
+        let mut llm = LLMPlugin::new("llm_state_test");
+        let ctx = PluginContext::new("test_agent");
+
+        // Initial state
+        assert_eq!(llm.state(), PluginState::Unloaded);
+
+        // After load: Loaded
+        llm.load(&ctx).await.unwrap();
+        assert_eq!(llm.state(), PluginState::Loaded);
+
+        // After init + start: Running
+        llm.init_plugin().await.unwrap();
+        llm.start().await.unwrap();
+        assert_eq!(llm.state(), PluginState::Running);
+
+        // After stop: must be Loaded, NOT Paused
+        llm.stop().await.unwrap();
+        assert_eq!(
+            llm.state(),
+            PluginState::Loaded,
+            "stop() must transition to Loaded, not Paused (see issue #448)"
+        );
+        assert_ne!(
+            llm.state(),
+            PluginState::Paused,
+            "stop() must NOT set Paused — that is reserved for pause()"
+        );
+
+        // After unload: Unloaded
+        llm.unload().await.unwrap();
+        assert_eq!(llm.state(), PluginState::Unloaded);
+    }
+
+    /// Verifies the full lifecycle state sequence for ToolPlugin:
+    /// Unloaded → Loading → Loaded → Running → Loaded (stop) → Unloaded
+    #[tokio::test]
+    async fn test_tool_plugin_stop_sets_loaded_state() {
+        let mut tool = ToolPlugin::new("tool_state_test");
+        let ctx = PluginContext::new("test_agent");
+
+        // Initial state
+        assert_eq!(tool.state(), PluginState::Unloaded);
+
+        // After load: Loaded
+        tool.load(&ctx).await.unwrap();
+        assert_eq!(tool.state(), PluginState::Loaded);
+
+        // After init + start: Running
+        tool.init_plugin().await.unwrap();
+        tool.start().await.unwrap();
+        assert_eq!(tool.state(), PluginState::Running);
+
+        // After stop: must be Loaded, NOT Paused
+        tool.stop().await.unwrap();
+        assert_eq!(
+            tool.state(),
+            PluginState::Loaded,
+            "stop() must transition to Loaded, not Paused (see issue #448)"
+        );
+        assert_ne!(
+            tool.state(),
+            PluginState::Paused,
+            "stop() must NOT set Paused — that is reserved for pause()"
+        );
+
+        // After unload: Unloaded
+        tool.unload().await.unwrap();
+        assert_eq!(tool.state(), PluginState::Unloaded);
+    }
+
+    /// Verifies the full lifecycle state sequence for StoragePlugin:
+    /// Unloaded → Loading → Loaded → Running → Loaded (stop) → Unloaded
+    #[tokio::test]
+    async fn test_storage_plugin_stop_sets_loaded_state() {
+        let mut storage = StoragePlugin::new("storage_state_test");
+        let ctx = PluginContext::new("test_agent");
+
+        // Initial state
+        assert_eq!(storage.state(), PluginState::Unloaded);
+
+        // After load: Loaded
+        storage.load(&ctx).await.unwrap();
+        assert_eq!(storage.state(), PluginState::Loaded);
+
+        // After init + start: Running
+        storage.init_plugin().await.unwrap();
+        storage.start().await.unwrap();
+        assert_eq!(storage.state(), PluginState::Running);
+
+        // After stop: must be Loaded, NOT Paused
+        storage.stop().await.unwrap();
+        assert_eq!(
+            storage.state(),
+            PluginState::Loaded,
+            "stop() must transition to Loaded, not Paused (see issue #448)"
+        );
+        assert_ne!(
+            storage.state(),
+            PluginState::Paused,
+            "stop() must NOT set Paused — that is reserved for pause()"
+        );
+
+        // After unload: Unloaded
+        storage.unload().await.unwrap();
+        assert_eq!(storage.state(), PluginState::Unloaded);
+    }
+
+    /// Verifies a plugin can be restarted after stop (start → stop → start cycle).
+    /// This is only valid if stop() correctly returns to Loaded (not Paused).
+    #[tokio::test]
+    async fn test_llm_plugin_can_restart_after_stop() {
+        let mut llm = LLMPlugin::new("llm_restart_test");
+        let ctx = PluginContext::new("test_agent");
+
+        llm.load(&ctx).await.unwrap();
+        llm.init_plugin().await.unwrap();
+
+        // First start → stop cycle
+        llm.start().await.unwrap();
+        assert_eq!(llm.state(), PluginState::Running);
+        llm.stop().await.unwrap();
+        assert_eq!(llm.state(), PluginState::Loaded);
+
+        // Second start: only possible if stop() returned to Loaded (not Paused or Unloaded)
+        llm.start().await.unwrap();
+        assert_eq!(llm.state(), PluginState::Running);
+
+        llm.stop().await.unwrap();
+        llm.unload().await.unwrap();
         assert_eq!(llm.state(), PluginState::Unloaded);
     }
 

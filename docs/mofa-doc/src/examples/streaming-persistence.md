@@ -104,7 +104,7 @@ async fn main() -> Result<()> {
     let config = store
         .get_agent_by_code_and_tenant_with_provider(tenant_id, "chat-assistant")
         .await?
-        .ok_or_else(|| anyhow!("Agent not found"))?;
+        .ok_or_else(|| format!("Agent not found"))?;
 
     // Create persistence plugin
     let persistence = PersistencePlugin::from_store(
