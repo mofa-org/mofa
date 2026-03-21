@@ -97,6 +97,7 @@ rmcp = { version = "0.16", features = [
     "client",
     "transport-child-process",
     "transport-io",
+    "transport-streamable-http-client-reqwest",
 ], optional = true }
 
 # Datetime support for persistence
