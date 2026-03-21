@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 use crate::swarm::{CoordinationPattern, RiskLevel, SubtaskDAG};
 
 /// Result of automatic pattern selection.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct PatternSelection {
     /// The recommended coordination pattern.
     pub pattern: CoordinationPattern,
