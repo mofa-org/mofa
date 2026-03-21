@@ -1107,9 +1107,13 @@ impl SwarmScheduler for RoutingScheduler {
 
         let chosen_idx = if let Some(&idx) = matched_idx {
             idx
-        } else {
+        } else if let Some(&first) = specialist_idxs.first() {
             warn!("no capability match found; falling back to first specialist");
-            specialist_idxs[0]
+            first
+        } else {
+            return Err(GlobalError::runtime(
+                "Routing pattern requires at least one specialist task",
+            ));
         };
 
         for &idx in &specialist_idxs {
