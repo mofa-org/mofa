@@ -37,6 +37,7 @@ use mofa_kernel::agent::types::error::{GlobalError, GlobalResult};
 use mofa_kernel::hitl::{
     ExecutionStep, ExecutionTrace, ReviewContext, ReviewRequest, ReviewResponse, ReviewType,
 };
+use tracing::{info_span, Instrument};
 
 use crate::hitl::manager::ReviewManager;
 use crate::swarm::config::HITLMode;
@@ -111,10 +112,24 @@ impl SwarmHITLGate {
             let inner = Arc::clone(&inner);
             let task_for_gate = task.clone();
             Box::pin(async move {
-                if gate.should_intercept(&task_for_gate) {
-                    gate.request_and_wait(&task_for_gate).await?;
+                let span = info_span!(
+                    "swarm.hitl_gate",
+                    task_id = %task_for_gate.id,
+                    risk_level = ?task_for_gate.risk_level,
+                    execution_id = %gate.execution_id,
+                );
+                async move {
+                    if gate.should_intercept(&task_for_gate) {
+                        gate.request_and_wait(&task_for_gate)
+                            .instrument(info_span!("hitl.approval_gate"))
+                            .await?;
+                    }
+                    inner(idx, task)
+                        .instrument(info_span!("swarm.subtask.execute"))
+                        .await
                 }
-                inner(idx, task).await
+                .instrument(span)
+                .await
             })
         })
     }
@@ -199,17 +214,26 @@ impl SwarmHITLGate {
             })?;
 
         match response {
-            ReviewResponse::Approved { .. } => Ok(()),
-            ReviewResponse::Rejected { reason, .. } => Err(GlobalError::Other(format!(
-                "Task '{}' rejected by reviewer: {reason}",
-                task.id
-            ))),
+            ReviewResponse::Approved { .. } => {
+                tracing::info!(task_id = %task.id, "hitl.decision" = "approved");
+                Ok(())
+            }
+            ReviewResponse::Rejected { reason, .. } => {
+                tracing::warn!(task_id = %task.id, "hitl.decision" = "rejected", %reason);
+                Err(GlobalError::Other(format!(
+                    "Task '{}' rejected by reviewer: {reason}",
+                    task.id
+                )))
+            }
             // Handles Deferred, ChangesRequested, and any future variants
             // added to the #[non_exhaustive] ReviewResponse enum.
-            _ => Err(GlobalError::Other(format!(
-                "Task '{}' not approved (unexpected response: {:?})",
-                task.id, response
-            ))),
+            _ => {
+                tracing::warn!(task_id = %task.id, "hitl.decision" = "unexpected");
+                Err(GlobalError::Other(format!(
+                    "Task '{}' not approved (unexpected response: {:?})",
+                    task.id, response
+                )))
+            }
         }
     }
 }
