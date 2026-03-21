@@ -69,8 +69,14 @@ jobs:
           key: ${{ runner.os }}-cargo-test-${{ hashFiles('**/Cargo.lock') }}
 
       - name: Run tests
+        if: runner.os != 'windows-latest'
         run: cargo test --workspace --all-features
 
+      # candle now works on Windows after removing tokenizers
+      - name: Run tests (Windows)
+        run: cargo test --workspace --all-features
+
+      # Build examples - now works on all platforms after removing tokenizers
       - name: Build examples
         run: cargo build --examples
 

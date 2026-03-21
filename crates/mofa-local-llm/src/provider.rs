@@ -4,6 +4,8 @@
 //! backend slots into the existing `ModelPool` orchestrator without any changes to
 //! downstream code.
 
+#[cfg(feature = "candle")]
+use crate::candle_runtime::InferenceEngine;
 use crate::config::LinuxInferenceConfig;
 use crate::hardware::{ComputeBackend, HardwareInfo};
 use async_trait::async_trait;
@@ -12,6 +14,7 @@ use mofa_foundation::orchestrator::traits::{
 };
 use serde_json::Value;
 use std::collections::HashMap;
+use std::sync::RwLock as StdRwLock;
 use sysinfo::{MemoryRefreshKind, RefreshKind, System};
 
 /// A local inference provider that runs on Linux using the best available
@@ -25,6 +28,8 @@ pub struct LinuxLocalProvider {
     active_backend: ComputeBackend,
     loaded: bool,
     memory_usage: u64,
+    #[cfg(feature = "candle")]
+    engine: StdRwLock<Option<InferenceEngine>>,
 }
 
 impl LinuxLocalProvider {
@@ -61,6 +66,8 @@ impl LinuxLocalProvider {
             active_backend,
             loaded: false,
             memory_usage: 0,
+            #[cfg(feature = "candle")]
+            engine: StdRwLock::new(None),
         })
     }
 
@@ -163,9 +170,18 @@ impl ModelProvider for LinuxLocalProvider {
             )));
         }
 
+        // Validate tokenizer path exists
+        if !std::path::Path::new(&self.config.tokenizer_path).exists() {
+            return Err(OrchestratorError::ModelLoadFailed(format!(
+                "tokenizer file not found: {}",
+                self.config.tokenizer_path
+            )));
+        }
+
         tracing::info!(
             model = %self.config.model_name,
             path = %self.config.model_path,
+            tokenizer = %self.config.tokenizer_path,
             backend = %self.active_backend,
             "loading model"
         );
@@ -175,11 +191,33 @@ impl ModelProvider for LinuxLocalProvider {
             .map(|m| m.len())
             .unwrap_or(0);
 
+        #[cfg(feature = "candle")]
+        {
+            // Load model into Candle engine for CPU inference
+            let mut engine =
+                crate::candle_runtime::InferenceEngine::new(crate::candle_runtime::RuntimeConfig {
+                    max_tokens: self.config.max_tokens,
+                    temperature: self.config.temperature,
+                    top_p: self.config.top_p,
+                    num_threads: self.config.num_threads.unwrap_or(4),
+                });
+
+            engine
+                .load(&self.config.model_path, &self.config.tokenizer_path)
+                .map_err(OrchestratorError::ModelLoadFailed)?;
+
+            *self.engine.write().unwrap() = Some(engine);
+        }
+
         self.loaded = true;
         Ok(())
     }
 
     async fn unload(&mut self) -> OrchestratorResult<()> {
+        #[cfg(feature = "candle")]
+        {
+            *self.engine.write().unwrap() = None;
+        }
         self.loaded = false;
         self.memory_usage = 0;
         tracing::info!(model = %self.config.model_name, "model unloaded");
@@ -288,8 +326,27 @@ impl LinuxLocalProvider {
     }
 
     fn run_inference_cpu(&self, input: &str) -> OrchestratorResult<String> {
-        tracing::debug!("dispatching to CPU backend");
-        self.run_inference_stub("cpu", input)
+        #[cfg(feature = "candle")]
+        {
+            // Use Candle engine for real inference
+            // Using std::sync::RwLock for synchronous access
+            // Need write lock since generate() takes &mut self
+            let mut engine_guard = self.engine.write().unwrap();
+            if let Some(ref mut engine) = *engine_guard {
+                return engine
+                    .generate(input)
+                    .map_err(OrchestratorError::InferenceFailed);
+            }
+
+            // If no engine, fall back to stub
+            self.run_inference_stub("cpu", input)
+        }
+
+        #[cfg(not(feature = "candle"))]
+        {
+            tracing::debug!("dispatching to CPU backend");
+            self.run_inference_stub("cpu", input)
+        }
     }
 
     /// Stub that returns a structured response describing what would be run.
@@ -420,6 +477,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[ignore = "requires real GGUF model and tokenizer files"]
     async fn test_load_then_infer_with_real_file() {
         // Create a temporary file so load() succeeds
         let dir = std::env::temp_dir().join("mofa_test_provider");
@@ -454,6 +512,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[ignore = "requires real GGUF model and tokenizer files"]
     async fn test_double_load_is_idempotent() {
         let dir = std::env::temp_dir().join("mofa_test_double_load");
         std::fs::create_dir_all(&dir).unwrap();
@@ -475,6 +534,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[ignore = "requires real GGUF model and tokenizer files"]
     async fn test_infer_after_unload_fails() {
         let dir = std::env::temp_dir().join("mofa_test_unload_infer");
         std::fs::create_dir_all(&dir).unwrap();

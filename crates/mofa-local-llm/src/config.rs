@@ -9,6 +9,9 @@ pub struct LinuxInferenceConfig {
     /// Path to the model weights file (GGUF or safetensors)
     pub model_path: String,
 
+    /// Path to the tokenizer.json file
+    pub tokenizer_path: String,
+
     /// Human-readable model name used as the provider ID
     pub model_name: String,
 
@@ -45,6 +48,7 @@ impl Default for LinuxInferenceConfig {
     fn default() -> Self {
         Self {
             model_path: String::new(),
+            tokenizer_path: String::new(),
             model_name: String::from("local-model"),
             backend_override: None,
             memory_limit_bytes: None,
@@ -79,6 +83,12 @@ impl LinuxInferenceConfig {
         }
         self.memory_limit_bytes = Some(bytes);
         Ok(self)
+    }
+
+    /// Set the tokenizer path
+    pub fn with_tokenizer(mut self, path: impl Into<String>) -> Self {
+        self.tokenizer_path = path.into();
+        self
     }
 
     /// Set number of CPU threads
