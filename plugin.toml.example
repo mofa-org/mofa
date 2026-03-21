@@ -1,0 +1,16 @@
+# plugin.toml — place this file in your plugin's output directory
+# alongside the compiled shared library.
+#
+# Example for a plugin called "mofa-fm":
+#
+#   Linux build:   cargo build -p mofa-fm --release
+#   macOS build:   cargo build -p mofa-fm --release
+#
+# The `entry` field must match the actual filename produced by `cargo build`:
+#   Linux  → libmofa_fm.so
+#   macOS  → libmofa_fm.dylib
+
+[plugin]
+id      = "mofa-fm"       # must be unique across all loaded plugins
+version = "0.3.0"
+entry   = "libmofa_fm.so" # or libmofa_fm.dylib on macOS
