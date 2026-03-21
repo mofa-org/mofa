@@ -15,13 +15,12 @@
 //! cargo run --manifest-path examples/reflection_agent/Cargo.toml
 //! ```
 
-use anyhow::Result;
 use mofa_sdk::llm::{LLMAgentBuilder, OpenAIConfig, OpenAIProvider};
 use mofa_sdk::react::{ReflectionAgent, ReflectionConfig};
 use std::sync::Arc;
 use tracing::info;
 
-fn create_llm_agent() -> Result<mofa_sdk::llm::LLMAgent> {
+fn create_llm_agent() -> Result<mofa_sdk::llm::LLMAgent, Box<dyn std::error::Error>> {
     let api_key = std::env::var("OPENAI_API_KEY")
         .unwrap_or_else(|_| "demo-key".to_owned());
     let base_url = std::env::var("OPENAI_BASE_URL").ok();
@@ -46,7 +45,7 @@ fn create_llm_agent() -> Result<mofa_sdk::llm::LLMAgent> {
 }
 
 #[tokio::main]
-async fn main() -> Result<()> {
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
     tracing_subscriber::fmt()
         .with_env_filter(
             tracing_subscriber::EnvFilter::try_from_default_env()

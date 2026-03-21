@@ -1,0 +1,19 @@
+[package]
+name = "workflow_viz"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+mofa-foundation = { path = "../../crates/mofa-foundation" }
+
+serde_json.workspace = true
+serde.workspace = true
+serde_yaml.workspace = true
+tokio.workspace = true
+axum = { workspace = true, features = ["macros", "ws"] }
+tracing.workspace = true
+tracing-subscriber.workspace = true
+tower-http = { version = "0.6", features = ["cors"] }
+uuid.workspace = true
+futures.workspace = true
+chrono.workspace = true

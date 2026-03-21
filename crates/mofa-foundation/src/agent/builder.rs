@@ -22,7 +22,7 @@
 //!     .name("analyst")
 //!     .system_prompt("You are a financial analyst.")
 //!     .llm(llm_provider)
-//!     .with_tool(Arc::new(HttpTool))
+//!     .with_tool(HttpTool::new())
 //!     .model("gpt-4o")
 //!     .build()
 //!     .await?;
@@ -41,14 +41,19 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
+use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 
-use mofa_kernel::agent::components::tool::DynTool;
+use mofa_kernel::agent::components::tool::{
+    DynTool, LLMTool, Tool, ToolExt, ToolInput, ToolMetadata, ToolResult,
+};
+use mofa_kernel::agent::context::AgentContext;
 use mofa_kernel::agent::error::{AgentError, AgentResult};
 use mofa_kernel::agent::types::LLMProvider;
 
 use crate::agent::executor::{AgentExecutor, AgentExecutorConfig};
 
+// ============================================================================
 // ============================================================================
 // AgentBuilder
 // ============================================================================
@@ -72,7 +77,7 @@ pub struct AgentBuilder {
     pub(crate) system_prompt: Option<String>,
     /// LLM provider (required)
     llm: Option<Arc<dyn LLMProvider>>,
-    /// Tools to register on the executor
+    /// Tools to register on the executor (dynamic tool objects)
     tools: Vec<Arc<dyn DynTool>>,
     /// Executor configuration (model, temperature, iterations, …)
     pub(crate) config: AgentExecutorConfig,
@@ -132,8 +137,11 @@ impl AgentBuilder {
     /// Register a tool on the resulting executor.
     ///
     /// Can be called multiple times to register several tools.
-    pub fn with_tool(mut self, tool: Arc<dyn DynTool>) -> Self {
-        self.tools.push(tool);
+    pub fn with_tool<T>(mut self, tool: T) -> Self
+    where
+        T: Tool<serde_json::Value, serde_json::Value> + Send + Sync + 'static,
+    {
+        self.tools.push(tool.into_dynamic());
         self
     }
 

@@ -1,9 +1,10 @@
 //! `mofa generate` command implementation
 
+use crate::CliError;
 use colored::Colorize;
 
 /// Generate agent configuration
-pub fn run_config(output: &std::path::Path) -> anyhow::Result<()> {
+pub fn run_config(output: &std::path::Path) -> Result<(), CliError> {
     println!("{} Generating config: {}", "→".green(), output.display());
 
     let config = r#"# MoFA Agent Configuration
@@ -32,7 +33,7 @@ outputs:
 }
 
 /// Generate dataflow configuration
-pub fn run_dataflow(output: &std::path::Path) -> anyhow::Result<()> {
+pub fn run_dataflow(output: &std::path::Path) -> Result<(), CliError> {
     println!("{} Generating dataflow: {}", "→".green(), output.display());
 
     let dataflow = r#"# MoFA Dataflow Configuration

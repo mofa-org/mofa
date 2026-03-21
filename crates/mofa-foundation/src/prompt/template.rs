@@ -11,6 +11,7 @@ use thiserror::Error;
 /// Prompt 模板错误
 /// Prompt template errors
 #[derive(Debug, Error)]
+#[non_exhaustive]
 pub enum PromptError {
     /// 模板未找到
     /// Template not found
@@ -44,15 +45,35 @@ pub enum PromptError {
     /// YAML parsing error
     #[error("YAML error: {0}")]
     YamlError(String),
+    /// Lock poisoning error
+    /// Occurs when a thread panics while holding a lock
+    #[error("Lock poisoned: {0}")]
+    LockPoisoned(String),
 }
 
-/// Prompt 结果类型
-/// Prompt result type
+/// Plain result alias for prompt operations (backward-compatible).
 pub type PromptResult<T> = Result<T, PromptError>;
+
+/// Error-stack–backed result alias for prompt operations.
+pub type PromptReport<T> = ::std::result::Result<T, error_stack::Report<PromptError>>;
+
+/// Extension trait to convert [`PromptResult<T>`] into [`PromptReport<T>`].
+pub trait IntoPromptReport<T> {
+    /// Wrap the error in an `error_stack::Report`.
+    fn into_report(self) -> PromptReport<T>;
+}
+
+impl<T> IntoPromptReport<T> for PromptResult<T> {
+    #[inline]
+    fn into_report(self) -> PromptReport<T> {
+        self.map_err(error_stack::Report::new)
+    }
+}
 
 /// 变量类型
 /// Variable types
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[non_exhaustive]
 #[serde(rename_all = "lowercase")]
 pub enum VariableType {
     /// 字符串类型
@@ -352,10 +373,9 @@ impl PromptTemplate {
     /// 获取模板中所有变量名（从内容中解析）
     /// Get all template variable names (parse from content)
     pub fn extract_variables(&self) -> Vec<String> {
-        let re = regex::Regex::new(r"\{(\w+)\}").unwrap();
         let mut vars = std::collections::HashSet::new();
 
-        for cap in re.captures_iter(&self.content) {
+        for cap in super::regex::VARIABLE_PLACEHOLDER_RE.captures_iter(&self.content) {
             vars.insert(cap[1].to_string());
         }
 
@@ -421,22 +441,35 @@ impl PromptTemplate {
 
         // 然后处理模板中存在但未在 variables 中预定义的变量
         // Then handle variables in template not predefined in variables
-        let re = regex::Regex::new(r"\{(\w+)\}").unwrap();
         let defined_vars: std::collections::HashSet<_> =
             self.variables.iter().map(|v| v.name.as_str()).collect();
 
         // 收集所有未定义但在模板中出现的变量
         // Collect all undefined variables appearing in template
+        // Collect variable names from the template first, then apply replacements.
+        // This avoids cloning `result` just for regex iteration.
         let mut missing = Vec::new();
-        for cap in re.captures_iter(&result.clone()) {
-            let var_name = &cap[1];
-            if !defined_vars.contains(var_name) {
-                if let Some(&value) = vars.get(var_name) {
-                    let placeholder = format!("{{{}}}", var_name);
-                    result = result.replace(&placeholder, value);
+        let var_names: Vec<(String, bool)> = super::regex::VARIABLE_PLACEHOLDER_RE
+            .captures_iter(&result)
+            .filter_map(|cap| {
+                let var_name = cap[1].to_string();
+                if !defined_vars.contains(var_name.as_str()) {
+                    let has_value = vars.contains_key(var_name.as_str());
+                    Some((var_name, has_value))
                 } else {
-                    missing.push(var_name.to_string());
+                    None
                 }
+            })
+            .collect();
+
+        for (var_name, has_value) in var_names {
+            if has_value {
+                let placeholder = format!("{{{}}}", var_name);
+                if let Some(&value) = vars.get(var_name.as_str()) {
+                    result = result.replace(&placeholder, value);
+                }
+            } else {
+                missing.push(var_name);
             }
         }
 
@@ -489,11 +522,10 @@ impl PromptTemplate {
 
         // 检查模板中的未定义变量
         // Check undefined variables in template
-        let re = regex::Regex::new(r"\{(\w+)\}").unwrap();
         let defined_vars: std::collections::HashSet<_> =
             self.variables.iter().map(|v| v.name.as_str()).collect();
 
-        for cap in re.captures_iter(&self.content) {
+        for cap in super::regex::VARIABLE_PLACEHOLDER_RE.captures_iter(&self.content) {
             let var_name = &cap[1];
             // 如果变量未在预定义列表中，且未在提供的变量中
             // If variable not in predefined list and not in provided variables

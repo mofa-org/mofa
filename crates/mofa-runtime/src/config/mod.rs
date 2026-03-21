@@ -22,9 +22,9 @@ use std::collections::HashMap;
 use std::path::Path;
 use thiserror::Error;
 
-/// 配置错误类型
-/// Configuration error types
+/// Configuration error types.
 #[derive(Error, Debug)]
+#[non_exhaustive]
 pub enum ConfigError {
     #[error("IO error: {0}")]
     Io(#[from] std::io::Error),
@@ -42,8 +42,26 @@ pub enum ConfigError {
     UnsupportedFormat(String),
 }
 
-/// 配置加载器
-/// Configuration loader
+/// Plain result alias for config operations (backward-compatible).
+pub type ConfigResult<T> = ::std::result::Result<T, ConfigError>;
+
+/// Error-stack–backed result alias for config operations.
+pub type ConfigReport<T> = ::std::result::Result<T, error_stack::Report<ConfigError>>;
+
+/// Extension trait to convert [`ConfigResult<T>`] into [`ConfigReport<T>`].
+pub trait IntoConfigReport<T> {
+    /// Wrap the error in an `error_stack::Report`.
+    fn into_report(self) -> ConfigReport<T>;
+}
+
+impl<T> IntoConfigReport<T> for ConfigResult<T> {
+    #[inline]
+    fn into_report(self) -> ConfigReport<T> {
+        self.map_err(error_stack::Report::new)
+    }
+}
+
+/// Configuration loader.
 pub struct ConfigLoader {
     config: FrameworkConfig,
 }

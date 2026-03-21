@@ -34,6 +34,10 @@
   - [Secretary Agent](guides/secretary-agent.md)
   - [Skills System](guides/skills.md)
   - [Monitoring & Observability](guides/monitoring.md)
+  - [Context Compression Architecture](guides/context-compression-architecture.md)
+
+- [Coding Standards](coding-standards/README.md)
+  - [Rust Development Specification](coding-standards/spec.md)
 
 - [API Reference](api-reference/README.md)
   - [Kernel](api-reference/kernel/README.md)
