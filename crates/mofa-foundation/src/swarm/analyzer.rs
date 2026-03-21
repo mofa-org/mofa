@@ -872,6 +872,28 @@ See also: reference [1] and [2]."#;
         assert_eq!(hitl, vec!["step-2"]);
     }
 
+    #[test]
+    fn test_suggested_pattern_supervision_for_critical_task() {
+        let analysis = TaskAnalyzer::analyze_offline_with_risk("delete the production database");
+        assert_eq!(
+            analysis.suggested_pattern.pattern,
+            crate::swarm::CoordinationPattern::Supervision,
+            "critical-risk task should suggest Supervision"
+        );
+        assert!(analysis.suggested_pattern.confidence >= 0.85);
+    }
+
+    #[test]
+    fn test_suggested_pattern_sequential_for_linear_task() {
+        let analysis =
+            TaskAnalyzer::analyze_offline_with_risk("read the file then summarise then view");
+        assert_eq!(
+            analysis.suggested_pattern.pattern,
+            crate::swarm::CoordinationPattern::Sequential,
+            "linear pipeline with low-risk steps should suggest Sequential"
+        );
+    }
+
     /// Live LLM integration test works with any OpenAI compatible provider
     #[tokio::test]
     #[ignore = "requires LLM_API_KEY env var — run locally only"]
