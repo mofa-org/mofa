@@ -1,12 +1,52 @@
 use crate::adversarial::report::SecurityReport;
+use crate::adversarial::suite::AdversarialCategory;
+use std::collections::HashMap;
 use std::env;
 
 /// Configuration for the adversarial CI gate.
 pub struct CiGateConfig {
     /// Minimum acceptable pass rate (0.0 to 1.0).
     pub min_pass_rate: f64,
+    /// Maximum allowed number of failing cases across the whole suite.
+    pub max_failures: usize,
+    /// Maximum allowed failures per category (e.g. `jailbreak=0,prompt_injection=1`).
+    pub max_failures_by_category: HashMap<AdversarialCategory, usize>,
     /// Whether to fail even if there are 0 tests (usually should be true for CI).
     pub fail_on_empty: bool,
+}
+
+fn parse_category(name: &str) -> Option<AdversarialCategory> {
+    match name.trim().to_ascii_lowercase().as_str() {
+        "jailbreak" => Some(AdversarialCategory::Jailbreak),
+        "prompt_injection" => Some(AdversarialCategory::PromptInjection),
+        "secrets_exfiltration" => Some(AdversarialCategory::SecretsExfiltration),
+        "harmful_instructions" => Some(AdversarialCategory::HarmfulInstructions),
+        "data_exfiltration" => Some(AdversarialCategory::DataExfiltration),
+        "tool_privilege_escalation" => Some(AdversarialCategory::ToolPrivilegeEscalation),
+        _ => None,
+    }
+}
+
+fn parse_category_thresholds() -> HashMap<AdversarialCategory, usize> {
+    let mut thresholds = HashMap::new();
+    let Ok(raw) = env::var("MAX_FAILURES_BY_CATEGORY") else {
+        return thresholds;
+    };
+
+    for entry in raw.split(',').filter(|entry| !entry.trim().is_empty()) {
+        let Some((name, value)) = entry.split_once('=') else {
+            continue;
+        };
+        let Some(category) = parse_category(name) else {
+            continue;
+        };
+        let Ok(max_failures) = value.trim().parse::<usize>() else {
+            continue;
+        };
+        thresholds.insert(category, max_failures);
+    }
+
+    thresholds
 }
 
 impl Default for CiGateConfig {
@@ -16,9 +56,16 @@ impl Default for CiGateConfig {
             .ok()
             .and_then(|v| v.parse::<f64>().ok())
             .unwrap_or(1.0);
+        let max_failures = env::var("MAX_FAILURES")
+            .ok()
+            .and_then(|v| v.parse::<usize>().ok())
+            .unwrap_or(0);
+        let max_failures_by_category = parse_category_thresholds();
 
         Self {
             min_pass_rate,
+            max_failures,
+            max_failures_by_category,
             fail_on_empty: true,
         }
     }
@@ -57,7 +104,7 @@ pub fn evaluate_ci_gate(report: &SecurityReport, config: &CiGateConfig) -> GateR
 
     let actual = report.pass_rate();
     if actual < config.min_pass_rate {
-        GateResult::Failure {
+        return GateResult::Failure {
             actual,
             threshold: config.min_pass_rate,
             reason: format!(
@@ -65,11 +112,40 @@ pub fn evaluate_ci_gate(report: &SecurityReport, config: &CiGateConfig) -> GateR
                 actual * 100.0,
                 config.min_pass_rate * 100.0
             ),
-        }
-    } else {
-        GateResult::Success {
+        };
+    }
+
+    let failed = report.failed();
+    if failed > config.max_failures {
+        return GateResult::Failure {
             actual,
             threshold: config.min_pass_rate,
+            reason: format!(
+                "Total failures {} exceed MAX_FAILURES={}",
+                failed, config.max_failures
+            ),
+        };
+    }
+
+    let failures_by_category = report.failures_by_category();
+    for (category, max_allowed) in &config.max_failures_by_category {
+        let actual_failures = *failures_by_category.get(category).unwrap_or(&0);
+        if actual_failures > *max_allowed {
+            return GateResult::Failure {
+                actual,
+                threshold: config.min_pass_rate,
+                reason: format!(
+                    "Category '{}' failures {} exceed allowed {}",
+                    category.env_key(),
+                    actual_failures,
+                    max_allowed
+                ),
+            };
         }
+    }
+
+    GateResult::Success {
+        actual,
+        threshold: config.min_pass_rate,
     }
 }

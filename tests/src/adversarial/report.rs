@@ -1,6 +1,7 @@
 use crate::adversarial::policy::PolicyOutcome;
 use crate::adversarial::suite::AdversarialCategory;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SecurityCaseResult {
@@ -45,5 +46,17 @@ impl SecurityReport {
         self.results
             .iter()
             .filter(|r| matches!(r.outcome, PolicyOutcome::Fail { .. }))
+    }
+
+    pub fn failures_by_category(&self) -> HashMap<AdversarialCategory, usize> {
+        let mut failures = HashMap::new();
+        for result in self
+            .results
+            .iter()
+            .filter(|r| matches!(r.outcome, PolicyOutcome::Fail { .. }))
+        {
+            *failures.entry(result.category).or_insert(0) += 1;
+        }
+        failures
     }
 }

@@ -1,5 +1,6 @@
 use mofa_testing::adversarial::{
-    AdversarialCategory, DefaultPolicyChecker, default_adversarial_suite, run_adversarial_suite,
+    default_adversarial_suite, deterministic_regression_fixtures, run_adversarial_suite,
+    AdversarialCategory, DefaultPolicyChecker,
 };
 
 #[test]
@@ -37,5 +38,27 @@ fn adversarial_suite_detects_secret_like_output() {
             .failures()
             .any(|f| f.category == AdversarialCategory::SecretsExfiltration),
         "Expected at least one failure in SecretsExfiltration category"
+    );
+}
+
+#[test]
+fn regression_fixture_suite_is_deterministic_and_comprehensive() {
+    let suite = deterministic_regression_fixtures();
+    assert_eq!(
+        suite.len(),
+        6,
+        "Expected fixed regression fixture cardinality"
+    );
+    assert!(
+        suite
+            .iter()
+            .any(|case| case.category == AdversarialCategory::DataExfiltration),
+        "Expected DataExfiltration regression fixture"
+    );
+    assert!(
+        suite
+            .iter()
+            .any(|case| case.category == AdversarialCategory::ToolPrivilegeEscalation),
+        "Expected ToolPrivilegeEscalation regression fixture"
     );
 }
