@@ -1,9 +1,10 @@
 //! `mofa init` command implementation
 
+use crate::CliError;
 use colored::Colorize;
 
 /// Execute the `mofa init` command
-pub fn run(path: &std::path::Path) -> anyhow::Result<()> {
+pub fn run(path: &std::path::Path) -> Result<(), CliError> {
     println!("{} Initializing MoFA in: {}", "→".green(), path.display());
 
     // Create agent.yml if not exists

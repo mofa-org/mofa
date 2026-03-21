@@ -4,8 +4,8 @@ version.workspace = true
 edition.workspace = true
 
 [dependencies]
-anyhow.workspace = true
 tokio.workspace = true
+anyhow = "1"
 
 # Local dependencies
 mofa-sdk = { path = "../../crates/mofa-sdk" }

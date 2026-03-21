@@ -18,6 +18,7 @@
 //! - [`WorkflowOrchestrator`][]: 编排多阶段工作流
 //! - [`WorkflowOrchestrator`][]: Orchestrates multi-phase workflows
 
+use super::error::SecretaryError;
 use async_trait::async_trait;
 use serde::{Serialize, de::DeserializeOwned};
 use std::fmt::Debug;
@@ -121,7 +122,7 @@ pub trait SecretaryOutput:
 ///         &self,
 ///         input: Self::Input,
 ///         ctx: &mut SecretaryContext<Self::State>,
-///     ) -> anyhow::Result<Vec<Self::Output>> {
+///     ) -> Result<Vec<Self::Output>, SecretaryError> {
 ///         match input {
 ///             MyInput::TextMessage(text) => {
 ///                 // 处理文本消息
@@ -180,7 +181,7 @@ pub trait SecretaryBehavior: Send + Sync {
         &self,
         input: Self::Input,
         ctx: &mut super::context::SecretaryContext<Self::State>,
-    ) -> anyhow::Result<Vec<Self::Output>>;
+    ) -> Result<Vec<Self::Output>, SecretaryError>;
 
     /// 欢迎消息
     /// Welcome message
@@ -213,7 +214,7 @@ pub trait SecretaryBehavior: Send + Sync {
     async fn periodic_check(
         &self,
         _ctx: &mut super::context::SecretaryContext<Self::State>,
-    ) -> anyhow::Result<Vec<Self::Output>> {
+    ) -> Result<Vec<Self::Output>, SecretaryError> {
         Ok(vec![])
     }
 
@@ -225,7 +226,7 @@ pub trait SecretaryBehavior: Send + Sync {
     async fn on_disconnect(
         &self,
         _ctx: &mut super::context::SecretaryContext<Self::State>,
-    ) -> anyhow::Result<()> {
+    ) -> Result<(), SecretaryError> {
         Ok(())
     }
 
@@ -236,7 +237,7 @@ pub trait SecretaryBehavior: Send + Sync {
     /// Called to generate an error response when an error occurs during input processing.
     /// 默认实现返回 `None`，表示不向用户发送错误消息。
     /// Default implementation returns `None`, meaning no error message is sent to the user.
-    fn handle_error(&self, _error: &anyhow::Error) -> Option<Self::Output> {
+    fn handle_error(&self, _error: &SecretaryError) -> Option<Self::Output> {
         None
     }
 }
@@ -280,7 +281,7 @@ where
         &self,
         input: Input,
         ctx: &mut super::context::SecretaryContext<State>,
-    ) -> anyhow::Result<PhaseResult<Output>>;
+    ) -> Result<PhaseResult<Output>, SecretaryError>;
 
     /// 是否可以跳过此阶段
     /// Whether this phase can be skipped
@@ -342,7 +343,7 @@ where
         &self,
         input: Input,
         ctx: &mut super::context::SecretaryContext<State>,
-    ) -> anyhow::Result<WorkflowResult<Output>>;
+    ) -> Result<WorkflowResult<Output>, SecretaryError>;
 }
 
 /// 工作流执行结果
@@ -395,7 +396,7 @@ where
         &self,
         input: Input,
         ctx: &mut super::context::SecretaryContext<State>,
-    ) -> anyhow::Result<Vec<Output>>;
+    ) -> Result<Vec<Output>, SecretaryError>;
 }
 
 // =============================================================================

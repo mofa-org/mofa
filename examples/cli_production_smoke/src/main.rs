@@ -1,9 +1,8 @@
 #![allow(missing_docs)]
 
-use anyhow::{Result, bail};
 use cli_production_smoke::run_full_smoke;
 
-fn main() -> Result<()> {
+fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("=== MoFA CLI Production Smoke Check ===\n");
 
     let report = run_full_smoke()?;
@@ -28,6 +27,6 @@ fn main() -> Result<()> {
         println!("All CLI smoke checks passed.");
         Ok(())
     } else {
-        bail!("CLI smoke checks failed")
+        return Err(format!("CLI smoke checks failed").into())
     }
 }

@@ -1,5 +1,6 @@
 //! Generic file-based persisted store for CLI state.
 
+use crate::CliError;
 use serde::Serialize;
 use serde::de::DeserializeOwned;
 use std::fs;
@@ -12,7 +13,7 @@ pub struct PersistedStore<T> {
 }
 
 impl<T: Serialize + DeserializeOwned> PersistedStore<T> {
-    pub fn new(dir: impl AsRef<Path>) -> anyhow::Result<Self> {
+    pub fn new(dir: impl AsRef<Path>) -> Result<Self, CliError> {
         let dir = dir.as_ref().to_path_buf();
         fs::create_dir_all(&dir)?;
         Ok(Self {
@@ -21,14 +22,14 @@ impl<T: Serialize + DeserializeOwned> PersistedStore<T> {
         })
     }
 
-    pub fn save(&self, id: &str, item: &T) -> anyhow::Result<()> {
+    pub fn save(&self, id: &str, item: &T) -> Result<(), CliError> {
         let path = self.path_for(id);
         let payload = serde_json::to_vec_pretty(item)?;
         fs::write(path, payload)?;
         Ok(())
     }
 
-    pub fn get(&self, id: &str) -> anyhow::Result<Option<T>> {
+    pub fn get(&self, id: &str) -> Result<Option<T>, CliError> {
         let path = self.path_for(id);
         if !path.exists() {
             return Ok(None);
@@ -39,7 +40,7 @@ impl<T: Serialize + DeserializeOwned> PersistedStore<T> {
         Ok(Some(item))
     }
 
-    pub fn list(&self) -> anyhow::Result<Vec<(String, T)>> {
+    pub fn list(&self) -> Result<Vec<(String, T)>, CliError> {
         let mut items = Vec::new();
 
         for entry in fs::read_dir(&self.dir)? {
@@ -49,9 +50,15 @@ impl<T: Serialize + DeserializeOwned> PersistedStore<T> {
                 continue;
             }
 
-            let id = match path.file_stem().and_then(|stem| stem.to_str()) {
-                Some(stem) => stem.to_string(),
+            let file_stem = match path.file_stem().and_then(|stem| stem.to_str()) {
+                Some(stem) => stem,
                 None => continue,
+            };
+
+            // Attempt to decode as hex. If it fails, assume it's a legacy unencoded file.
+            let id = match hex::decode(file_stem) {
+                Ok(bytes) => String::from_utf8(bytes).unwrap_or_else(|_| file_stem.to_string()),
+                Err(_) => file_stem.to_string(),
             };
 
             let payload = fs::read(path)?;
@@ -63,7 +70,7 @@ impl<T: Serialize + DeserializeOwned> PersistedStore<T> {
         Ok(items)
     }
 
-    pub fn delete(&self, id: &str) -> anyhow::Result<bool> {
+    pub fn delete(&self, id: &str) -> Result<bool, CliError> {
         let path = self.path_for(id);
         if !path.exists() {
             return Ok(false);
@@ -74,24 +81,13 @@ impl<T: Serialize + DeserializeOwned> PersistedStore<T> {
     }
 
     fn path_for(&self, id: &str) -> PathBuf {
-        let safe_id: String = id
-            .chars()
-            .map(|c| {
-                if c.is_ascii_alphanumeric() || c == '-' || c == '_' || c == '.' {
-                    c
-                } else {
-                    '_'
-                }
-            })
-            .collect();
-
-        let file_name = if safe_id.is_empty() {
+        let safe_id = if id.is_empty() {
             "_".to_string()
         } else {
-            safe_id
+            hex::encode(id)
         };
 
-        self.dir.join(format!("{}.json", file_name))
+        self.dir.join(format!("{}.json", safe_id))
     }
 }
 
@@ -239,5 +235,32 @@ mod tests {
                 value: 7
             })
         );
+    }
+
+    #[test]
+    fn test_special_characters_no_collision() {
+        let temp = TempDir::new().unwrap();
+        let store = PersistedStore::<TestEntry>::new(temp.path()).unwrap();
+
+        let e1 = TestEntry { name: "1".into(), value: 1 };
+        let e2 = TestEntry { name: "2".into(), value: 2 };
+
+        store.save("agent@node", &e1).unwrap();
+        store.save("agent#node", &e2).unwrap();
+
+        // They should remain distinct
+        assert_eq!(store.get("agent@node").unwrap().unwrap(), e1);
+        assert_eq!(store.get("agent#node").unwrap().unwrap(), e2);
+
+        // list should return both
+        let items = store.list().unwrap();
+        assert_eq!(items.len(), 2);
+        
+        // Assert items are decoded correctly
+        let (id1, _) = &items[0];
+        let (id2, _) = &items[1];
+        assert!(id1 == "agent#node" || id1 == "agent@node");
+        assert!(id2 == "agent#node" || id2 == "agent@node");
+        assert_ne!(id1, id2);
     }
 }

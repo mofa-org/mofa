@@ -84,6 +84,7 @@ use crate::llm::{LLMAgent, LLMError, LLMResult};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
+use tracing::Instrument;
 
 /// Type alias for mapper function in MapReduceAgent
 pub type MapFunction = Arc<dyn Fn(&str) -> Vec<String> + Send + Sync>;
@@ -224,6 +225,9 @@ pub struct ChainAgent {
     /// 是否详细输出
     /// Enable verbose output
     verbose: bool,
+    /// 超时时间 (毫秒)
+    /// Timeout in milliseconds
+    timeout_ms: Option<u64>,
 }
 
 /// 输入转换函数类型
@@ -239,6 +243,7 @@ impl ChainAgent {
             transform: None,
             continue_on_error: false,
             verbose: true,
+            timeout_ms: None,
         }
     }
 
@@ -299,6 +304,13 @@ impl ChainAgent {
         self
     }
 
+    /// 设置超时时间
+    /// Set timeout duration
+    pub fn with_timeout_ms(mut self, timeout_ms: u64) -> Self {
+        self.timeout_ms = Some(timeout_ms);
+        self
+    }
+
     /// 执行链式 Agent
     /// Run Chain Agent
     pub async fn run(&self, initial_task: impl Into<String>) -> LLMResult<ChainResult> {
@@ -318,7 +330,22 @@ impl ChainAgent {
 
             // 执行 Agent
             // Execute Agent
-            let result = agent.run(&current_input).await;
+            let result = if let Some(t_ms) = self.timeout_ms {
+                match tokio::time::timeout(
+                    std::time::Duration::from_millis(t_ms),
+                    agent.run(&current_input),
+                )
+                .await
+                {
+                    Ok(res) => res,
+                    Err(_) => Err(crate::llm::types::LLMError::Timeout(format!(
+                        "Agent '{}' timed out after {}ms in chain",
+                        name, t_ms
+                    ))),
+                }
+            } else {
+                agent.run(&current_input).await
+            };
 
             match result {
                 Ok(output) => {
@@ -669,30 +696,34 @@ impl ParallelAgent {
             let task_input = self.prepare_task(&name, &task);
             let verbose = self.verbose;
 
-            let handle = tokio::spawn(async move {
-                if verbose {
-                    tracing::info!("[Parallel] Agent '{}' starting", name);
-                }
+            let span = tracing::info_span!("parallel_agent.branch", agent_name = %name);
+            let handle = tokio::spawn(
+                async move {
+                    if verbose {
+                        tracing::info!("[Parallel] Agent '{}' starting", name);
+                    }
 
-                let result = agent.run(&task_input).await;
+                    let result = agent.run(&task_input).await;
 
-                if verbose {
-                    match &result {
-                        Ok(output) => {
-                            tracing::info!(
-                                "[Parallel] Agent '{}' completed in {}ms",
-                                name,
-                                output.duration_ms
-                            );
-                        }
-                        Err(e) => {
-                            tracing::warn!("[Parallel] Agent '{}' failed: {}", name, e);
+                    if verbose {
+                        match &result {
+                            Ok(output) => {
+                                tracing::info!(
+                                    "[Parallel] Agent '{}' completed in {}ms",
+                                    name,
+                                    output.duration_ms
+                                );
+                            }
+                            Err(e) => {
+                                tracing::warn!("[Parallel] Agent '{}' failed: {}", name, e);
+                            }
                         }
                     }
-                }
 
-                (name, task_input, result)
-            });
+                    (name, task_input, result)
+                }
+                .instrument(span),
+            );
 
             handles.push(handle);
         }
@@ -1176,30 +1207,34 @@ impl MapReduceAgent {
             let semaphore = semaphore.clone();
             let verbose = self.verbose;
 
-            let handle = tokio::spawn(async move {
-                let _permit = if let Some(ref sem) = semaphore {
-                    Some(sem.acquire().await)
-                } else {
-                    None
-                };
+            let span = tracing::info_span!("map_reduce.worker", sub_task_idx = idx);
+            let handle = tokio::spawn(
+                async move {
+                    let _permit = if let Some(ref sem) = semaphore {
+                        Some(sem.acquire().await)
+                    } else {
+                        None
+                    };
 
-                if verbose {
-                    tracing::info!("[MapReduce] Processing sub-task {}", idx + 1);
-                }
+                    if verbose {
+                        tracing::info!("[MapReduce] Processing sub-task {}", idx + 1);
+                    }
 
-                let result = worker.run(&sub_task).await;
+                    let result = worker.run(&sub_task).await;
 
-                if verbose {
-                    match &result {
-                        Ok(_) => tracing::info!("[MapReduce] Sub-task {} completed", idx + 1),
-                        Err(e) => {
-                            tracing::warn!("[MapReduce] Sub-task {} failed: {}", idx + 1, e)
+                    if verbose {
+                        match &result {
+                            Ok(_) => tracing::info!("[MapReduce] Sub-task {} completed", idx + 1),
+                            Err(e) => {
+                                tracing::warn!("[MapReduce] Sub-task {} failed: {}", idx + 1, e)
+                            }
                         }
                     }
-                }
 
-                (idx, sub_task, result)
-            });
+                    (idx, sub_task, result)
+                }
+                .instrument(span),
+            );
 
             handles.push(handle);
         }
@@ -1325,10 +1360,24 @@ mod tests {
     fn test_chain_agent_builder() {
         let chain = ChainAgent::new()
             .with_continue_on_error(true)
+            .with_timeout_ms(1000)
             .with_verbose(false);
 
         assert!(chain.is_empty());
         assert!(!chain.verbose);
+        assert!(chain.continue_on_error);
+        assert_eq!(chain.timeout_ms, Some(1000));
+    }
+
+    #[test]
+    fn test_chain_agent_timeout_config() {
+        let chain = ChainAgent::new()
+            .with_continue_on_error(true)
+            .with_timeout_ms(1500)
+            .with_verbose(false);
+
+        assert!(chain.is_empty());
+        assert_eq!(chain.timeout_ms, Some(1500));
         assert!(chain.continue_on_error);
     }
 

@@ -330,6 +330,7 @@ impl AgentCapabilitiesBuilder {
 
     /// 构建能力描述
     /// Build the capability description
+    #[must_use]
     pub fn build(self) -> AgentCapabilities {
         self.capabilities
     }
@@ -532,6 +533,7 @@ impl AgentRequirementsBuilder {
 
     /// 构建需求描述
     /// Build the requirements description
+    #[must_use]
     pub fn build(self) -> AgentRequirements {
         self.requirements
     }

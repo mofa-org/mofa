@@ -31,8 +31,8 @@ tokio = { workspace = true }
 async-trait = { workspace = true }
 
 # Error handling
-anyhow = { workspace = true }
 thiserror = { workspace = true }
+error-stack = { workspace = true }
 
 # Utilities
 uuid = { workspace = true }

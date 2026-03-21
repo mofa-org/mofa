@@ -5,7 +5,6 @@ edition.workspace = true
 description = "User-perspective CLI production smoke checks for MoFA"
 
 [dependencies]
-anyhow.workspace = true
 tempfile.workspace = true
 serde_json.workspace = true
 

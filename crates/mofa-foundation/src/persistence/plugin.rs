@@ -8,6 +8,7 @@ use super::entities::*;
 use super::traits::*;
 use crate::llm::types::LLMResponseMetadata;
 use crate::llm::{LLMError, LLMResult};
+use mofa_kernel::agent::types::error::{GlobalError, GlobalResult};
 use mofa_kernel::plugin::{
     AgentPlugin, PluginContext, PluginMetadata, PluginResult, PluginState, PluginType,
 };
@@ -188,7 +189,7 @@ where
 /// use mofa_sdk::llm::LLMAgentBuilder;
 /// use uuid::Uuid;
 ///
-/// # async fn example() -> anyhow::Result<()> {
+/// # async fn example() -> GlobalResult<()> {
 /// let store = PostgresStore::connect("postgres://localhost/mofa").await?;
 /// let user_id = Uuid::now_v7();
 /// let tenant_id = Uuid::now_v7();
@@ -531,7 +532,10 @@ impl crate::llm::agent::LLMAgentEventHandler for PersistencePlugin {
         // 保存用户消息
         // Save user message
         let user_msg_id = self.save_user_message(message).await?;
-        info!("✅ [持久化插件] 用户消息已保存: ID = {}", user_msg_id);
+        info!(
+            "✅ [Persistence Plugin] User message saved: ID = {}",
+            user_msg_id
+        );
         // ✅ [Persistence Plugin] User message saved: ID = {}
 
         // 存储当前用户消息 ID，用于后续关联 API 调用
@@ -563,7 +567,10 @@ impl crate::llm::agent::LLMAgentEventHandler for PersistencePlugin {
         // 保存助手消息
         // Save assistant message
         let assistant_msg_id = self.save_assistant_message(response).await?;
-        info!("✅ [持久化插件] 助手消息已保存: ID = {}", assistant_msg_id);
+        info!(
+            "✅ [Persistence Plugin] Assistant message saved: ID = {}",
+            assistant_msg_id
+        );
         // ✅ [Persistence Plugin] Assistant message saved: ID = {}
 
         // 计算请求延迟
@@ -607,7 +614,7 @@ impl crate::llm::agent::LLMAgentEventHandler for PersistencePlugin {
                 .await
                 .map_err(|e| LLMError::Other(e.to_string()));
             info!(
-                "✅ [持久化插件] API 调用记录已保存: 模型={}, 延迟={}ms",
+                "✅ [Persistence Plugin] API call record saved: model={}, latency={}ms",
                 model_name, latency
             );
             // ✅ [Persistence Plugin] API call record saved: model={}, latency={}ms
@@ -636,7 +643,10 @@ impl crate::llm::agent::LLMAgentEventHandler for PersistencePlugin {
         // 保存助手消息
         // Save assistant message
         let assistant_msg_id = self.save_assistant_message(response).await?;
-        info!("✅ [持久化插件] 助手消息已保存: ID = {}", assistant_msg_id);
+        info!(
+            "✅ [Persistence Plugin] Assistant message saved: ID = {}",
+            assistant_msg_id
+        );
         // ✅ [Persistence Plugin] Assistant message saved: ID = {}
 
         // 计算请求延迟
@@ -677,7 +687,7 @@ impl crate::llm::agent::LLMAgentEventHandler for PersistencePlugin {
                 .await
                 .map_err(|e| LLMError::Other(e.to_string()));
             info!(
-                "✅ [持久化插件] API 调用记录已保存: 模型={}, tokens={}/{}, 延迟={}ms",
+                "✅ [Persistence Plugin] API call record saved: model={}, tokens={}/{}, latency={}ms",
                 metadata.model, metadata.prompt_tokens, metadata.completion_tokens, latency
             );
             // ✅ [Persistence Plugin] API call record saved: model={}, tokens={}/{}, latency={}ms
@@ -695,7 +705,7 @@ impl crate::llm::agent::LLMAgentEventHandler for PersistencePlugin {
     /// 在发生错误时调用 - 记录 API 错误
     /// Called when an error occurs - records API error
     async fn on_error(&self, error: &LLMError) -> LLMResult<Option<String>> {
-        info!("✅ [持久化插件] 记录 API 错误...");
+        info!("✅ [Persistence Plugin] Recording API error...");
         // ✅ [Persistence Plugin] Recording API error...
 
         // 获取存储的模型名称，或使用默认值
@@ -724,7 +734,7 @@ impl crate::llm::agent::LLMAgentEventHandler for PersistencePlugin {
                 .save_api_call(&api_call)
                 .await
                 .map_err(|e| LLMError::Other(e.to_string()));
-            info!("✅ [持久化插件] API 错误记录已保存");
+            info!("✅ [Persistence Plugin] API error record saved");
             // ✅ [Persistence Plugin] API error record saved
         }
 
@@ -735,5 +745,81 @@ impl crate::llm::agent::LLMAgentEventHandler for PersistencePlugin {
         *self.current_model.write().await = None;
 
         Ok(None)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use mofa_kernel::plugin::{AgentPlugin, PluginContext, PluginState};
+
+    fn ids() -> (Uuid, Uuid, Uuid, Uuid) {
+        (
+            Uuid::now_v7(),
+            Uuid::now_v7(),
+            Uuid::now_v7(),
+            Uuid::now_v7(),
+        )
+    }
+
+    #[tokio::test]
+    async fn persistence_context_creates_session_and_saves_messages() {
+        let store = Arc::new(crate::persistence::InMemoryStore::new());
+        let (user_id, tenant_id, agent_id, _) = ids();
+
+        let mut ctx = PersistenceContext::new(store.clone(), user_id, tenant_id, agent_id)
+            .await
+            .expect("context creation should work");
+
+        let first_session = ctx.session_id();
+        let _ = ctx
+            .save_user_message("hello")
+            .await
+            .expect("save user message should work");
+        let _ = ctx
+            .save_assistant_message("world")
+            .await
+            .expect("save assistant message should work");
+
+        let history = ctx.get_history().await.expect("history query should work");
+        assert_eq!(history.len(), 2);
+
+        let new_session = ctx.new_session().await.expect("new session should work");
+        assert_ne!(new_session, first_session);
+    }
+
+    #[tokio::test]
+    async fn persistence_plugin_lifecycle_and_stats() {
+        let store = crate::persistence::InMemoryStore::new();
+        let (user_id, tenant_id, agent_id, session_id) = ids();
+        let mut plugin = PersistencePlugin::from_store(
+            "persistence-test",
+            store,
+            user_id,
+            tenant_id,
+            agent_id,
+            session_id,
+        );
+
+        assert_eq!(plugin.state(), PluginState::Loaded);
+
+        let ctx = PluginContext::new("agent-x");
+        AgentPlugin::load(&mut plugin, &ctx)
+            .await
+            .expect("load should work");
+        AgentPlugin::init_plugin(&mut plugin)
+            .await
+            .expect("init should work");
+        assert_eq!(plugin.state(), PluginState::Running);
+
+        let stats = plugin.stats();
+        assert_eq!(stats.get("plugin_type"), Some(&serde_json::json!("persistence")));
+
+        let next_session = Uuid::now_v7();
+        plugin.with_session_id(next_session).await;
+        assert_eq!(plugin.session_id().await, next_session);
+
+        AgentPlugin::stop(&mut plugin).await.expect("stop should work");
+        assert_eq!(plugin.state(), PluginState::Unloaded);
     }
 }

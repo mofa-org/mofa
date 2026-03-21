@@ -344,6 +344,35 @@ impl std::fmt::Display for MessageRole {
     }
 }
 
+/// Trait for converting text into fixed-dimensional embedding vectors.
+///
+/// Implementations can use different strategies — hash-based (no external API),
+/// API-based (OpenAI embeddings), or local model-based — as long as they
+/// satisfy the `Send + Sync` bound required for use in async agent contexts.
+///
+/// # Example
+///
+/// ```rust,ignore
+/// use mofa_kernel::agent::components::memory::Embedder;
+///
+/// let embedder = MyEmbedder::new();
+/// let vec = embedder.embed("hello world").await?;
+/// assert_eq!(vec.len(), embedder.dimensions());
+/// ```
+#[async_trait]
+pub trait Embedder: Send + Sync {
+    /// Embed the given text into a fixed-dimensional vector.
+    async fn embed(&self, text: &str) -> AgentResult<Vec<f32>>;
+
+    /// The number of dimensions produced by this embedder.
+    fn dimensions(&self) -> usize;
+
+    /// Human-readable name for this embedder implementation.
+    fn name(&self) -> &str {
+        "embedder"
+    }
+}
+
 /// 记忆统计
 /// Memory statistics
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -360,4 +389,218 @@ pub struct MemoryStats {
     /// 内存使用 (字节)
     /// Memory usage (bytes)
     pub memory_bytes: usize,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // ── MemoryValue factory methods ──────────────────────────────────────
+
+    #[test]
+    fn memory_value_text_factory() {
+        let val = MemoryValue::text("hello");
+        assert_eq!(val.as_text(), Some("hello"));
+        assert!(val.as_embedding().is_none());
+        assert!(val.as_structured().is_none());
+    }
+
+    #[test]
+    fn memory_value_embedding_factory() {
+        let vec = vec![0.1, 0.2, 0.3];
+        let val = MemoryValue::embedding(vec.clone());
+        assert_eq!(val.as_embedding(), Some(vec.as_slice()));
+        assert!(val.as_text().is_none());
+    }
+
+    #[test]
+    fn memory_value_structured_factory() {
+        let json = serde_json::json!({"key": "value"});
+        let val = MemoryValue::structured(json.clone());
+        assert_eq!(val.as_structured(), Some(&json));
+        assert!(val.as_text().is_none());
+    }
+
+    #[test]
+    fn memory_value_text_with_embedding_factory() {
+        let emb = vec![1.0, 2.0];
+        let val = MemoryValue::text_with_embedding("combined", emb.clone());
+        // as_text returns the text portion
+        assert_eq!(val.as_text(), Some("combined"));
+        // as_embedding returns the embedding portion
+        assert_eq!(val.as_embedding(), Some(emb.as_slice()));
+        // as_structured returns None
+        assert!(val.as_structured().is_none());
+    }
+
+    #[test]
+    fn memory_value_binary_has_no_text_or_embedding() {
+        let val = MemoryValue::Binary(vec![0xDE, 0xAD]);
+        assert!(val.as_text().is_none());
+        assert!(val.as_embedding().is_none());
+        assert!(val.as_structured().is_none());
+    }
+
+    // ── From conversions ─────────────────────────────────────────────────
+
+    #[test]
+    fn memory_value_from_string() {
+        let val: MemoryValue = String::from("owned").into();
+        assert_eq!(val.as_text(), Some("owned"));
+    }
+
+    #[test]
+    fn memory_value_from_str_ref() {
+        let val: MemoryValue = "borrowed".into();
+        assert_eq!(val.as_text(), Some("borrowed"));
+    }
+
+    #[test]
+    fn memory_value_from_json() {
+        let json = serde_json::json!(42);
+        let val: MemoryValue = json.clone().into();
+        assert_eq!(val.as_structured(), Some(&json));
+    }
+
+    // ── MemoryItem ───────────────────────────────────────────────────────
+
+    #[test]
+    fn memory_item_new_defaults() {
+        let item = MemoryItem::new("k1", MemoryValue::text("v1"));
+        assert_eq!(item.key, "k1");
+        assert_eq!(item.score, 1.0);
+        assert!(item.metadata.is_empty());
+        assert!(item.created_at > 0);
+        assert_eq!(item.created_at, item.last_accessed);
+    }
+
+    #[test]
+    fn memory_item_with_score_clamps_high() {
+        let item = MemoryItem::new("k", MemoryValue::text("v")).with_score(2.5);
+        assert_eq!(item.score, 1.0);
+    }
+
+    #[test]
+    fn memory_item_with_score_clamps_low() {
+        let item = MemoryItem::new("k", MemoryValue::text("v")).with_score(-0.5);
+        assert_eq!(item.score, 0.0);
+    }
+
+    #[test]
+    fn memory_item_with_score_normal() {
+        let item = MemoryItem::new("k", MemoryValue::text("v")).with_score(0.75);
+        assert!((item.score - 0.75).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn memory_item_with_metadata() {
+        let item = MemoryItem::new("k", MemoryValue::text("v"))
+            .with_metadata("source", "test")
+            .with_metadata("priority", "high");
+        assert_eq!(item.metadata.get("source").unwrap(), "test");
+        assert_eq!(item.metadata.get("priority").unwrap(), "high");
+    }
+
+    // ── Message factory methods ──────────────────────────────────────────
+
+    #[test]
+    fn message_system() {
+        let msg = Message::system("you are helpful");
+        assert_eq!(msg.role, MessageRole::System);
+        assert_eq!(msg.content, "you are helpful");
+        assert!(msg.timestamp > 0);
+        assert!(msg.metadata.is_empty());
+    }
+
+    #[test]
+    fn message_user() {
+        let msg = Message::user("hello");
+        assert_eq!(msg.role, MessageRole::User);
+        assert_eq!(msg.content, "hello");
+    }
+
+    #[test]
+    fn message_assistant() {
+        let msg = Message::assistant("hi there");
+        assert_eq!(msg.role, MessageRole::Assistant);
+        assert_eq!(msg.content, "hi there");
+    }
+
+    #[test]
+    fn message_tool_inserts_metadata() {
+        let msg = Message::tool("calculator", "42");
+        assert_eq!(msg.role, MessageRole::Tool);
+        assert_eq!(msg.content, "42");
+        let tool_name = msg.metadata.get("tool_name").unwrap();
+        assert_eq!(tool_name, &serde_json::Value::String("calculator".into()));
+    }
+
+    #[test]
+    fn message_with_metadata_builder() {
+        let msg = Message::user("q")
+            .with_metadata("session", serde_json::json!("abc"))
+            .with_metadata("turn", serde_json::json!(3));
+        assert_eq!(msg.metadata.len(), 2);
+        assert_eq!(msg.metadata["session"], serde_json::json!("abc"));
+    }
+
+    // ── MessageRole ──────────────────────────────────────────────────────
+
+    #[test]
+    fn message_role_display() {
+        assert_eq!(MessageRole::System.to_string(), "system");
+        assert_eq!(MessageRole::User.to_string(), "user");
+        assert_eq!(MessageRole::Assistant.to_string(), "assistant");
+        assert_eq!(MessageRole::Tool.to_string(), "tool");
+    }
+
+    #[test]
+    fn message_role_equality() {
+        assert_eq!(MessageRole::System, MessageRole::System);
+        assert_ne!(MessageRole::User, MessageRole::Assistant);
+    }
+
+    // ── MemoryStats ──────────────────────────────────────────────────────
+
+    #[test]
+    fn memory_stats_default_is_zero() {
+        let stats = MemoryStats::default();
+        assert_eq!(stats.total_items, 0);
+        assert_eq!(stats.total_sessions, 0);
+        assert_eq!(stats.total_messages, 0);
+        assert_eq!(stats.memory_bytes, 0);
+    }
+
+    // ── Serialization round-trips ────────────────────────────────────────
+
+    #[test]
+    fn memory_value_serde_roundtrip_text() {
+        let original = MemoryValue::text("round-trip");
+        let json = serde_json::to_string(&original).unwrap();
+        let recovered: MemoryValue = serde_json::from_str(&json).unwrap();
+        assert_eq!(recovered.as_text(), Some("round-trip"));
+    }
+
+    #[test]
+    fn memory_value_serde_roundtrip_structured() {
+        let data = serde_json::json!({"nested": [1, 2, 3]});
+        let original = MemoryValue::structured(data.clone());
+        let json = serde_json::to_string(&original).unwrap();
+        let recovered: MemoryValue = serde_json::from_str(&json).unwrap();
+        assert_eq!(recovered.as_structured(), Some(&data));
+    }
+
+    #[test]
+    fn message_role_serde_roundtrip() {
+        for role in [
+            MessageRole::System,
+            MessageRole::User,
+            MessageRole::Assistant,
+            MessageRole::Tool,
+        ] {
+            let json = serde_json::to_string(&role).unwrap();
+            let recovered: MessageRole = serde_json::from_str(&json).unwrap();
+            assert_eq!(recovered, role);
+        }
+    }
 }

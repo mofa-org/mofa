@@ -129,7 +129,6 @@ edition = "2024"
 mofa-sdk = { path = "../../crates/mofa-sdk" }
 async-trait = "0.1"
 tokio = { version = "1", features = ["full"] }
-anyhow = "1"
 serde_json = "1"
 ```
 
@@ -299,7 +298,7 @@ impl NodeFunc<JsonState> for RespondNode {
 // --- Build and run the workflow ---
 
 #[tokio::main]
-async fn main() -> anyhow::Result<()> {
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Create the state graph
     let mut graph = StateGraphImpl::<JsonState>::new("customer_support");
 

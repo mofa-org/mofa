@@ -5,23 +5,25 @@
 //! Defines unified Agent input, output, and state types
 
 use async_trait::async_trait;
+use base64::Engine;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fmt;
-use base64::Engine;
 
 // 导出统一类型模块
 // Export unified type modules
 pub mod error;
 pub mod event;
 pub mod global;
+pub mod recovery;
 
-pub use error::{ErrorCategory, ErrorContext, GlobalError, GlobalResult};
+pub use error::{ErrorCategory, ErrorContext, GlobalError, GlobalReport, GlobalResult, IntoGlobalReport};
 pub use event::{EventBuilder, GlobalEvent};
 pub use event::{execution, lifecycle, message, plugin, state};
 // 重新导出常用类型
 // Re-export common types
 pub use global::{GlobalMessage, MessageContent, MessageMetadata};
+pub use recovery::ErrorRecovery;
 
 // ============================================================================
 // Agent 状态
@@ -191,6 +193,9 @@ pub enum AgentInput {
     /// 二进制数据
     /// Binary data
     Binary(Vec<u8>),
+    /// 多模态部分内容
+    /// Multimodal content parts
+    Multimodal(Vec<serde_json::Value>),
     /// 空输入
     /// Empty input
     #[default]
@@ -234,6 +239,7 @@ impl AgentInput {
             Self::Json(v) => v.to_string(),
             Self::Map(m) => serde_json::to_string(m).unwrap_or_default(),
             Self::Binary(b) => String::from_utf8_lossy(b).to_string(),
+            Self::Multimodal(_) => "[Multimodal Content]".to_string(),
             Self::Empty => String::new(),
         }
     }
@@ -255,6 +261,7 @@ impl AgentInput {
             Self::Texts(v) => serde_json::json!(v),
             Self::Json(v) => v.clone(),
             Self::Map(m) => serde_json::to_value(m).unwrap_or_default(),
+            Self::Multimodal(parts) => serde_json::json!({ "parts": parts }),
             Self::Binary(b) => {
                 serde_json::json!({ "binary": base64::engine::general_purpose::STANDARD.encode(b) })
             }

@@ -6,7 +6,6 @@
 //! 3. Reloading the plugin when the file changes
 //! 4. Executing the updated plugin to see changes
 
-use anyhow::Result;
 use mofa_sdk::plugins::{AgentPlugin, PluginContext, RhaiPlugin};
 use std::path::PathBuf;
 use tokio::time;
@@ -16,7 +15,7 @@ use tracing::{info, warn, Level};
 // ============================================================================
 
 #[tokio::main]
-async fn main() -> Result<()> {
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Initialize logging
     tracing_subscriber::fmt()
         .with_max_level(Level::INFO)
@@ -71,7 +70,7 @@ async fn main() -> Result<()> {
 // Helper Functions
 // ============================================================================
 
-async fn check_and_reload(plugin: &mut RhaiPlugin, path: &PathBuf) -> Result<bool> {
+async fn check_and_reload(plugin: &mut RhaiPlugin, path: &PathBuf) -> Result<bool, Box<dyn std::error::Error>> {
     // Get current file modification time
     let current_mod = std::fs::metadata(path)?.modified()?.duration_since(std::time::UNIX_EPOCH)?.as_secs();
 

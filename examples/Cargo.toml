@@ -2,6 +2,11 @@
 resolver = "3"
 members = [
     "cli_production_smoke",
+    "cli_agent_logs_demo",
+    "cli_plugin_lifecycle",
+    "custom_plugin_install",
+    "log_rotation_handling",
+    "cli_cicd_integration",
     "plugin_system",
     "workflow_orchestration",
     "wasm_plugin",
@@ -28,9 +33,37 @@ members = [
     "reflection_agent",
     "tool_routing",
     "runtime_message_bus_backpressure",
+    "cloud_voice_demo",
     "rag_pipeline",
-    "message_graph_validation"
-    "agent_builder"
+    "hitl_workflow",
+    "agent_memory",
+    "agent_builder",
+    "workflow_viz",
+    "message_graph_validation",
+    "message_graph_executor_runtime",
+    "context_compression",
+    "structured_output",
+    "control_plane",
+    "context_window_demo",
+    "compression_examples",
+    "admission_gate_demo",
+    "security/secure_agent",
+    "security/rbac_only",
+    "security/pii_only",
+    "integrations_demo",
+    "cron_scheduler",
+    "native_dataflow",
+    "mcp_tools",
+    "memory_scheduler_demo",
+    "cli_doctor_demo",
+    "capability_discovery",
+    "rag_retrieval_demo",
+    "rag_indexing_demo",
+    "adversarial_testing_demo",
+    "llm_fallback_chain",
+    "resume_from_checkpoint",
+    "claw_demo",
+    "swarm_orchestrator",
 ]
 
 [workspace.package]
@@ -38,6 +71,7 @@ version = "0.1.0"
 edition = "2024"
 
 [workspace.dependencies]
+anyhow = "1.0"
 async-trait = "0.1"
 axum = "0"
 serde = { version = "1.0", features = ["derive"] }
@@ -46,7 +80,6 @@ serde_yaml = "0.9"
 bincode = "1.3"
 tokio = { version = "1", features = ["full", "rt-multi-thread", "sync"] }
 tokio-stream = { version = "0.1", features = ["net"] }
-anyhow = "1.0"
 uuid = { version = "1.7", features = ["v4", "v7"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
@@ -72,6 +105,7 @@ opentelemetry-jaeger = { version = "0.20", features = ["rt-tokio"] }
 tracing-opentelemetry = "0.22"
 rand = "0.8"
 chrono = { version = "0.4", features = ["serde"] }
+cron = "0.12"
 hex = "0.4"
 lazy_static = "1.4"
 
