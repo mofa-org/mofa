@@ -20,7 +20,6 @@ In `crates/mofa-myplugin/Cargo.toml` set the crate type to `cdylib`:
 crate-type = ["cdylib"]
 
 [dependencies]
-# … your plugin dependencies
 ```
 
 ---
@@ -30,11 +29,6 @@ crate-type = ["cdylib"]
 Every plugin **must** export a `mofa_app_create` symbol with a stable C ABI:
 
 ```rust
-// crates/mofa-myplugin/src/lib.rs
-
-/// # Safety
-/// Called by mofa-plugin-loader to construct the plugin.
-/// The returned pointer is owned by the caller.
 #[no_mangle]
 pub extern "C" fn mofa_app_create() -> *mut () {
     let app = Box::new(MyPlugin::new());
@@ -59,9 +53,9 @@ Place a `plugin.toml` next to the compiled shared library:
 
 ```toml
 [plugin]
-id      = "mofa-myplugin"   # unique id
+id      = "mofa-myplugin"
 version = "0.1.0"
-entry   = "libmofa_myplugin.so"   # or .dylib on macOS
+entry   = "libmofa_myplugin.so"
 ```
 
 For a typical `cargo build --release` the library lands in
@@ -78,7 +72,7 @@ use mofa_plugin_loader::{load_all_plugins, PluginRegistry};
 use std::path::Path;
 
 let registry = PluginRegistry::new();
-let plugin_dir = Path::new("plugins"); // directory containing plugin sub-dirs
+let plugin_dir = Path::new("plugins");
 
 let n = load_all_plugins(plugin_dir, &registry);
 println!("Loaded {n} plugins");
@@ -117,10 +111,8 @@ When enabled, the shell:
 ### Typical iteration loop
 
 ```bash
-# Terminal 1 — run the shell with hot-reload
 MOFA_HOT_RELOAD=1 cargo run -p mofa-studio-shell
 
-# Terminal 2 — rebuild your plugin; the shell reloads it automatically
 cargo build -p mofa-myplugin
 cp target/debug/libmofa_myplugin.so plugins/mofa-myplugin/
 ```
@@ -147,12 +139,10 @@ if hot_reload_enabled() {
         registry.clone(),
         |info| {
             println!("Reloaded plugin: {} v{}", info.id, info.version);
-            // Trigger a Makepad live_design! refresh here.
         },
     )
     .expect("failed to start hot-reload watcher");
 
-    // Keep `_guard` alive for the duration of the shell.
 }
 ```
 

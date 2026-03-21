@@ -1,10 +1,3 @@
-// mofa-plugin-loader/src/lib.rs
-//
-// Public API for the mofa-plugin-loader crate.
-//
-// Hot-reload is guarded by the `MOFA_HOT_RELOAD=1` environment variable.
-// Nothing runs in production unless that variable is explicitly set.
-
 mod plugin_loader;
 mod watcher;
 
@@ -18,20 +11,12 @@ use std::{
     time::Duration,
 };
 
-/// Returns `true` when `MOFA_HOT_RELOAD=1` is set in the environment.
-///
-/// All hot-reload functionality should be gated on this check so production
-/// deployments are unaffected by accident.
 pub fn hot_reload_enabled() -> bool {
     std::env::var("MOFA_HOT_RELOAD")
         .map(|v| v.trim() == "1")
         .unwrap_or(false)
 }
 
-/// Convenience: scan `plugin_dir` for every sub-directory that contains a
-/// `plugin.toml` and load them all into `registry`.
-///
-/// Returns the number of plugins successfully loaded.
 pub fn load_all_plugins(
     plugin_dir: &Path,
     registry: &PluginRegistry,
@@ -78,17 +63,6 @@ pub fn load_all_plugins(
     loaded
 }
 
-/// Spawn a background thread that:
-/// 1. Watches `plugin_dir` for `.so` / `.dylib` changes.
-/// 2. On change: finds the parent plugin directory, drops the old handle,
-///    loads the new one, and re-registers it.
-///
-/// **Only call this when `hot_reload_enabled()` returns `true`.**
-///
-/// Returns a `WatcherGuard`; drop it to stop the watcher thread.
-///
-/// The `on_reload` callback is invoked on the background thread each time a
-/// plugin is successfully reloaded.  Use it to refresh UI state.
 pub fn spawn_hot_reload_thread<F>(
     plugin_dir: PathBuf,
     registry: PluginRegistry,
@@ -103,13 +77,11 @@ where
         loop {
             match rx.try_recv() {
                 Ok(HotReloadEvent::Updated(lib_path)) => {
-                    // The .so lives inside a plugin sub-dir; walk up to find it.
                     let dir = lib_path
                         .parent()
                         .map(PathBuf::from)
                         .unwrap_or_else(|| plugin_dir.clone());
 
-                    // Small delay so the linker has finished writing the file.
                     thread::sleep(Duration::from_millis(200));
 
                     match PluginHandle::load(&dir) {
@@ -132,14 +104,11 @@ where
                     }
                 }
                 Ok(HotReloadEvent::Removed(lib_path)) => {
-                    // Best-effort: try to figure out plugin id from path stem.
                     let stem = lib_path
                         .file_stem()
                         .and_then(|s| s.to_str())
                         .unwrap_or("");
                     tracing::info!(stem, "plugin library removed; unregistering");
-                    // Registry keys are plugin ids, not file stems, so we do a
-                    // best-effort search.
                     for id in registry.get_ids() {
                         if stem.contains(&id) {
                             registry.unregister(&id);

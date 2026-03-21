@@ -1,7 +1,4 @@
-// mofa-plugin-loader/src/plugin_loader.rs
-//
-// Runtime hot-reload for MofaApp plugins.
-// Enabled only when MOFA_HOT_RELOAD=1 is set (off by default).
+
 
 use std::{
     collections::HashMap,
@@ -11,20 +8,17 @@ use std::{
 
 use libloading::{Library, Symbol};
 
-/// Metadata exposed by every plugin `.so` / `.dylib`.
 #[derive(Clone, Debug)]
 pub struct PluginInfo {
     pub id: String,
     pub version: String,
 }
 
-/// A loaded plugin.  Keeps the `Library` alive so symbols stay valid.
+
 pub struct PluginHandle {
     _lib: Library,
     pub info: PluginInfo,
-    /// C-ABI constructor: `extern "C" fn() -> *mut dyn MofaApp`
-    ///
-    /// Callers cast the raw pointer to the concrete app type they expect.
+    
     pub create_raw: unsafe extern "C" fn() -> *mut (),
 }
 
@@ -36,7 +30,7 @@ impl std::fmt::Debug for PluginHandle {
     }
 }
 
-/// Errors that can arise while loading a plugin.
+
 #[derive(Debug, thiserror::Error)]
 pub enum PluginLoadError {
     #[error("libloading error: {0}")]
@@ -58,8 +52,6 @@ pub enum PluginLoadError {
     MissingSymbol { symbol: String, path: PathBuf },
 }
 
-// ── plugin.toml schema ────────────────────────────────────────────────────────
-
 #[derive(serde::Deserialize, Debug)]
 struct PluginManifest {
     plugin: PluginSection,
@@ -69,21 +61,12 @@ struct PluginManifest {
 struct PluginSection {
     id: String,
     version: String,
-    entry: String, // e.g. "libmofa_fm.so" or "libmofa_fm.dylib"
+    entry: String, 
 }
 
-// ── PluginHandle ──────────────────────────────────────────────────────────────
-
 impl PluginHandle {
-    /// Load a plugin from its directory.
-    ///
-    /// Expects `plugin_dir/plugin.toml` and `plugin_dir/<entry>`.
-    ///
-    /// # Safety
-    /// Loading a shared library is inherently unsafe.  The plugin ABI must
-    /// match (C ABI, stable symbol names).
+
     pub fn load(plugin_dir: &Path) -> Result<Self, PluginLoadError> {
-        // 1. Parse manifest
         let manifest_path = plugin_dir.join("plugin.toml");
         let raw = std::fs::read_to_string(&manifest_path).map_err(|e| {
             PluginLoadError::Manifest {
@@ -99,15 +82,12 @@ impl PluginHandle {
 
         let lib_path = plugin_dir.join(&manifest.plugin.entry);
 
-        // 2. Load the shared library
-        // SAFETY: plugin ABI contract must be upheld by the caller.
+        
         let lib = unsafe { Library::new(&lib_path)? };
 
-        // 3. Resolve the mandatory constructor symbol
-        // SAFETY: same constraint as above.
         let create_raw: Symbol<unsafe extern "C" fn() -> *mut ()> = unsafe {
             lib.get(b"mofa_app_create\0").map_err(|e| {
-                let _ = e; // rethrow with context
+                let _ = e;
                 PluginLoadError::MissingSymbol {
                     symbol: "mofa_app_create".into(),
                     path: lib_path.clone(),
@@ -115,9 +95,7 @@ impl PluginHandle {
             })?
         };
 
-        // Extend the lifetime to 'static — safe because we keep `_lib` alive.
-        // SAFETY: `lib` is stored in the same struct, so symbols are valid as
-        //         long as `PluginHandle` is alive.
+        
         let create_raw: unsafe extern "C" fn() -> *mut () =
             unsafe { std::mem::transmute(create_raw.into_raw()) };
 
@@ -132,9 +110,6 @@ impl PluginHandle {
     }
 }
 
-// ── Plugin registry ───────────────────────────────────────────────────────────
-
-/// Thread-safe map of `plugin_id → PluginHandle`.
 #[derive(Debug, Default)]
 pub struct PluginRegistry {
     inner: Arc<Mutex<HashMap<String, PluginHandle>>>,
@@ -145,7 +120,6 @@ impl PluginRegistry {
         Self::default()
     }
 
-    /// Insert or replace a plugin.
     pub fn register(&self, handle: PluginHandle) {
         let id = handle.info.id.clone();
         let mut guard = self.inner.lock().expect("registry lock poisoned");
@@ -158,8 +132,6 @@ impl PluginRegistry {
         }
     }
 
-    /// Remove a plugin by id, returning the old handle (which unloads the lib
-    /// when dropped).
     pub fn unregister(&self, id: &str) -> Option<PluginHandle> {
         self.inner
             .lock()

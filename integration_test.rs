@@ -1,16 +1,9 @@
-// mofa-plugin-loader/tests/integration_test.rs
-//
-// Smoke tests for the plugin loader.
-// These tests do NOT require an actual compiled .so; they test the error paths
-// and the env-gate logic.
-
 use mofa_plugin_loader::{hot_reload_enabled, load_all_plugins, PluginRegistry};
 use tempfile::TempDir;
 use std::fs;
 
 #[test]
 fn hot_reload_disabled_by_default() {
-    // Unset the variable in case the test runner accidentally set it.
     std::env::remove_var("MOFA_HOT_RELOAD");
     assert!(!hot_reload_enabled());
 }
@@ -33,7 +26,6 @@ fn load_all_plugins_empty_dir_returns_zero() {
 #[test]
 fn load_all_plugins_skips_dirs_without_manifest() {
     let dir = TempDir::new().unwrap();
-    // A sub-dir with no plugin.toml should be silently skipped.
     fs::create_dir(dir.path().join("no_manifest")).unwrap();
     let registry = PluginRegistry::new();
     let loaded = load_all_plugins(dir.path(), &registry);
@@ -43,7 +35,6 @@ fn load_all_plugins_skips_dirs_without_manifest() {
 #[test]
 fn load_plugin_handle_missing_lib_returns_error() {
     let dir = TempDir::new().unwrap();
-    // Write a manifest that points to a non-existent entry.
     fs::write(
         dir.path().join("plugin.toml"),
         r#"
