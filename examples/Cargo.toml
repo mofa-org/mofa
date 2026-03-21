@@ -64,6 +64,8 @@ members = [
     "resume_from_checkpoint",
     "claw_demo",
     "swarm_orchestrator",
+    "swarm_coordination_patterns",
+    "swarm_pattern_selector",
 ]
 
 [workspace.package]
