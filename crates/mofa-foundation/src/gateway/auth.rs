@@ -145,12 +145,17 @@ impl<S: ApiKeyStore> ApiKeyAuthProvider<S> {
 
     /// Create a provider that reads from a custom header name.
     ///
-    /// The header name is lowercased automatically on lookup.
-    pub fn with_header(store: Arc<S>, header_name: impl Into<String>) -> Self {
-        Self {
-            store,
-            header_name: header_name.into().to_ascii_lowercase(),
+    /// The header name is lowercased automatically. Returns an error if the
+    /// provided name contains invalid characters (non-ascii alphanumeric or hyphen).
+    pub fn with_header(store: Arc<S>, header_name: impl Into<String>) -> Result<Self, String> {
+        let name = header_name.into().to_ascii_lowercase();
+        if name.is_empty() || !name.chars().all(|c| c.is_ascii_alphanumeric() || c == '-') {
+            return Err("Invalid header name".to_string());
         }
+        Ok(Self {
+            store,
+            header_name: name,
+        })
     }
 }
 
@@ -283,7 +288,7 @@ mod tests {
     async fn custom_header_name_is_respected() {
         let mut store = InMemoryApiKeyStore::new();
         store.keys.insert("secret".to_string(), Some(AuthClaims::new("subject", vec![])));
-        let provider = ApiKeyAuthProvider::with_header(Arc::new(store), "x-internal-token");
+        let provider = ApiKeyAuthProvider::with_header(Arc::new(store), "x-internal-token").unwrap();
 
         let headers = HashMap::from([("x-internal-token".to_string(), "secret".to_string())]);
         assert!(provider.authenticate(&headers).await.is_ok());
