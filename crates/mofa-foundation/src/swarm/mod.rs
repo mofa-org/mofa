@@ -6,7 +6,7 @@ pub mod selector;
 pub mod telemetry;
 
 pub use analyzer::{RiskAwareAnalysis, RiskSummary, TaskAnalyzer};
-pub use selector::{PatternSelection, PatternSelector};
+pub use selector::{PatternSelection, PatternSelector, ValidationResult};
 pub use config::{
     AgentSpec, AuditEvent, AuditEventKind, HITLMode, SLAConfig, SwarmConfig, SwarmMetrics,
     SwarmResult, SwarmStatus,

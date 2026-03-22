@@ -19,6 +19,20 @@ pub struct PatternSelection {
     pub reason: String,
 }
 
+/// Result of validating a manually chosen [`CoordinationPattern`] against a [`SubtaskDAG`].
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub enum ValidationResult {
+    Valid,
+    Suboptimal { reason: String, suggested: CoordinationPattern },
+    Invalid { reason: String },
+}
+
+impl ValidationResult {
+    pub fn is_valid(&self) -> bool {
+        matches!(self, Self::Valid | Self::Suboptimal { .. })
+    }
+}
+
 /// Inspects a [`SubtaskDAG`]'s topology and task metadata to recommend the
 /// best [`CoordinationPattern`].
 ///
@@ -182,6 +196,189 @@ impl PatternSelector {
                 .into(),
         }
     }
+
+    /// Checks whether a manually chosen `pattern` is appropriate for `dag`.
+    ///
+    /// Returns:
+    /// - [`ValidationResult::Valid`] — the pattern fits the DAG topology.
+    /// - [`ValidationResult::Suboptimal`] — the pattern works but a better fit exists.
+    /// - [`ValidationResult::Invalid`] — the pattern's structural requirements are not met.
+    pub fn validate(dag: &SubtaskDAG, pattern: CoordinationPattern) -> ValidationResult {
+        if dag.task_count() == 0 {
+            return ValidationResult::Valid;
+        }
+
+        let all = dag.all_tasks();
+
+        let source_count = all
+            .iter()
+            .filter(|(idx, _)| dag.dependencies_of(*idx).is_empty())
+            .count();
+
+        let sink_indices: Vec<_> = all
+            .iter()
+            .filter(|(idx, _)| dag.dependents_of(*idx).is_empty())
+            .map(|(idx, _)| *idx)
+            .collect();
+        let sink_count = sink_indices.len();
+
+        let is_linear = source_count == 1
+            && sink_count == 1
+            && all.iter().all(|(idx, _)| {
+                dag.dependencies_of(*idx).len() <= 1 && dag.dependents_of(*idx).len() <= 1
+            });
+
+        let has_oversight_need = all
+            .iter()
+            .any(|(_, t)| t.hitl_required || t.risk_level >= RiskLevel::High);
+
+        let specialist_count = sink_indices
+            .iter()
+            .filter(|&&idx| {
+                dag.get_task(idx)
+                    .map(|t| !t.required_capabilities.is_empty())
+                    .unwrap_or(false)
+            })
+            .count();
+
+        match pattern {
+            CoordinationPattern::Sequential => {
+                if !is_linear {
+                    return ValidationResult::Invalid {
+                        reason: format!(
+                            "sequential requires a strict linear chain; dag has \
+                             {source_count} source(s) and {sink_count} sink(s)"
+                        ),
+                    };
+                }
+                if has_oversight_need {
+                    return ValidationResult::Suboptimal {
+                        reason: "dag contains high-risk tasks; Supervision ensures a \
+                                 supervisor always runs even if earlier steps fail"
+                            .into(),
+                        suggested: CoordinationPattern::Supervision,
+                    };
+                }
+                ValidationResult::Valid
+            }
+
+            CoordinationPattern::Parallel => {
+                if is_linear && dag.task_count() > 1 {
+                    return ValidationResult::Suboptimal {
+                        reason: "dag is a strict linear chain; Sequential preserves \
+                                 output ordering between dependent steps"
+                            .into(),
+                        suggested: CoordinationPattern::Sequential,
+                    };
+                }
+                if has_oversight_need {
+                    return ValidationResult::Suboptimal {
+                        reason: "dag contains high-risk tasks; Supervision ensures a \
+                                 supervisor always runs even if workers fail"
+                            .into(),
+                        suggested: CoordinationPattern::Supervision,
+                    };
+                }
+                ValidationResult::Valid
+            }
+
+            CoordinationPattern::MapReduce => {
+                if source_count < 2 {
+                    return ValidationResult::Invalid {
+                        reason: format!(
+                            "mapreduce requires ≥2 source (mapper) nodes; found {source_count}"
+                        ),
+                    };
+                }
+                if sink_count != 1 {
+                    return ValidationResult::Invalid {
+                        reason: format!(
+                            "mapreduce requires exactly 1 sink (reducer) node; found {sink_count}"
+                        ),
+                    };
+                }
+                ValidationResult::Valid
+            }
+
+            CoordinationPattern::Debate => {
+                if source_count != 2 {
+                    return ValidationResult::Invalid {
+                        reason: format!(
+                            "debate requires exactly 2 source (debater) nodes; found {source_count}"
+                        ),
+                    };
+                }
+                if sink_count != 1 {
+                    return ValidationResult::Invalid {
+                        reason: format!(
+                            "debate requires exactly 1 sink (judge) node; found {sink_count}"
+                        ),
+                    };
+                }
+                ValidationResult::Valid
+            }
+
+            CoordinationPattern::Consensus => {
+                if source_count < 3 {
+                    return ValidationResult::Invalid {
+                        reason: format!(
+                            "consensus requires ≥3 source (voter) nodes for a meaningful \
+                             majority; found {source_count}"
+                        ),
+                    };
+                }
+                if sink_count != 1 {
+                    return ValidationResult::Invalid {
+                        reason: format!(
+                            "consensus requires exactly 1 sink (aggregator) node; \
+                             found {sink_count}"
+                        ),
+                    };
+                }
+                ValidationResult::Valid
+            }
+
+            CoordinationPattern::Routing => {
+                if source_count != 1 {
+                    return ValidationResult::Invalid {
+                        reason: format!(
+                            "routing requires exactly 1 source (router) node; \
+                             found {source_count}"
+                        ),
+                    };
+                }
+                if specialist_count == 0 {
+                    return ValidationResult::Suboptimal {
+                        reason: "no sink nodes declare required_capabilities; the router has \
+                                 no capability signal to match against — consider MapReduce \
+                                 or Parallel"
+                            .into(),
+                        suggested: Self::select(dag),
+                    };
+                }
+                ValidationResult::Valid
+            }
+
+            CoordinationPattern::Supervision => {
+                if source_count < 1 || sink_count != 1 {
+                    return ValidationResult::Invalid {
+                        reason: format!(
+                            "supervision requires ≥1 source (worker) and exactly 1 sink \
+                             (supervisor); found {source_count} source(s) and {sink_count} sink(s)"
+                        ),
+                    };
+                }
+                if !has_oversight_need {
+                    return ValidationResult::Suboptimal {
+                        reason: "no high-risk tasks detected; a lighter pattern may suffice"
+                            .into(),
+                        suggested: Self::select(dag),
+                    };
+                }
+                ValidationResult::Valid
+            }
+        }
+    }
 }
 
 #[cfg(test)]
@@ -297,5 +494,64 @@ mod tests {
         let sel = PatternSelector::select_with_reason(&dag);
         assert_eq!(sel.pattern, CoordinationPattern::Sequential);
         assert_eq!(sel.confidence, 1.0);
+    }
+
+    #[test]
+    fn test_validate_debate_wrong_source_count_is_invalid() {
+        let mut dag = SubtaskDAG::new("t");
+        let a = dag.add_task(task("a"));
+        let b = dag.add_task(task("b"));
+        let c = dag.add_task(task("c"));
+        let judge = dag.add_task(task("judge"));
+        dag.add_dependency(a, judge).unwrap();
+        dag.add_dependency(b, judge).unwrap();
+        dag.add_dependency(c, judge).unwrap();
+
+        let result = PatternSelector::validate(&dag, CoordinationPattern::Debate);
+        assert!(matches!(result, ValidationResult::Invalid { .. }));
+    }
+
+    #[test]
+    fn test_validate_sequential_on_fan_in_dag_is_invalid() {
+        let mut dag = SubtaskDAG::new("t");
+        let m1 = dag.add_task(task("mapper-1"));
+        let m2 = dag.add_task(task("mapper-2"));
+        let r = dag.add_task(task("reducer"));
+        dag.add_dependency(m1, r).unwrap();
+        dag.add_dependency(m2, r).unwrap();
+
+        let result = PatternSelector::validate(&dag, CoordinationPattern::Sequential);
+        assert!(matches!(result, ValidationResult::Invalid { .. }));
+    }
+
+    #[test]
+    fn test_validate_supervision_without_high_risk_is_suboptimal() {
+        let mut dag = SubtaskDAG::new("t");
+        let w1 = dag.add_task(task("worker-1"));
+        let w2 = dag.add_task(task("worker-2"));
+        let sup = dag.add_task(task("supervisor"));
+        dag.add_dependency(w1, sup).unwrap();
+        dag.add_dependency(w2, sup).unwrap();
+
+        let result = PatternSelector::validate(&dag, CoordinationPattern::Supervision);
+        assert!(matches!(result, ValidationResult::Suboptimal { .. }));
+        assert!(result.is_valid());
+    }
+
+    #[test]
+    fn test_validate_returns_valid_for_correct_pattern() {
+        let mut dag = SubtaskDAG::new("t");
+        let m1 = dag.add_task(task("mapper-1"));
+        let m2 = dag.add_task(task("mapper-2"));
+        let m3 = dag.add_task(task("mapper-3"));
+        let r = dag.add_task(task("reducer"));
+        dag.add_dependency(m1, r).unwrap();
+        dag.add_dependency(m2, r).unwrap();
+        dag.add_dependency(m3, r).unwrap();
+
+        assert_eq!(
+            PatternSelector::validate(&dag, CoordinationPattern::MapReduce),
+            ValidationResult::Valid
+        );
     }
 }

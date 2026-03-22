@@ -358,6 +358,35 @@ println!("suggested: {:?}", analysis.suggested_pattern.pattern);
 // → Supervision  (deploy is classified Critical risk)
 ```
 
+### Validating a Manual Choice
+
+If you prefer to pick the pattern yourself but want to catch mismatches before execution, use `PatternSelector::validate`:
+
+```rust
+use mofa_foundation::swarm::{PatternSelector, ValidationResult};
+
+match PatternSelector::validate(&dag, CoordinationPattern::Debate) {
+    ValidationResult::Valid => { /* proceed */ }
+    ValidationResult::Suboptimal { reason, suggested } => {
+        println!("works but {reason} — consider {:?}", suggested);
+    }
+    ValidationResult::Invalid { reason } => {
+        eprintln!("cannot use Debate: {reason}");
+    }
+}
+```
+
+`validate` checks structural requirements for each pattern:
+
+| Pattern | Invalid when… |
+|---------|--------------|
+| Sequential | DAG is not a strict linear chain |
+| MapReduce | Fewer than 2 source nodes, or more than 1 sink |
+| Debate | Source node count ≠ 2, or sink count ≠ 1 |
+| Consensus | Fewer than 3 source nodes, or more than 1 sink |
+| Routing | Source count ≠ 1, or no sinks with `required_capabilities` |
+| Supervision | No source nodes, or more than 1 sink |
+
 ---
 
 ## What Just Happened?
