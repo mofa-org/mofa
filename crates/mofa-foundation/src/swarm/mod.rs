@@ -15,7 +15,7 @@ pub use config::{
 };
 pub use hitl::{
     ApprovalDecision, ApprovalHandler, ApprovalOutcome, ApprovalRequest,
-    ChannelApprovalHandler, ReviewManagerApprovalHandler, hitl_executor_middleware,
+    ChannelApprovalHandler, hitl_executor_middleware,
 };
 pub use dag::{DependencyEdge, DependencyKind, RiskLevel, SubtaskDAG, SubtaskStatus, SwarmSubtask};
 pub use patterns::CoordinationPattern;
