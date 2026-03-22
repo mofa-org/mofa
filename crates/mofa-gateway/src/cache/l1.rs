@@ -6,7 +6,6 @@ use dashmap::DashMap;
 use mofa_kernel::gateway::{GatewayRequest, GatewayResponse};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::{Duration, Instant};
-use std::time::{Duration, Instant};
 /// Statistics related to the L1 Cache.
 #[derive(Debug, Clone, Default)]
 pub struct CacheStats {
