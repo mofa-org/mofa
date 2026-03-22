@@ -56,7 +56,15 @@ async fn run_map_reduce() -> Result<()> {
         failed = summary.failed,
         "MapReduce complete"
     );
-    println!("[MapReduce]   succeeded={} failed={}", summary.succeeded, summary.failed);
+    println!(
+        "[MapReduce]   succeeded={} failed={}  peak_concurrency={}  wall={:?}",
+        summary.succeeded, summary.failed,
+        summary.peak_concurrency(),
+        summary.total_wall_time,
+    );
+    for r in summary.timeline() {
+        println!("  +{:>6}µs  {:>20}  {:?}", r.start_offset_us, r.task_id, r.wall_time);
+    }
     Ok(())
 }
 
@@ -175,8 +183,13 @@ async fn run_supervision() -> Result<()> {
         "Supervision complete"
     );
     println!(
-        "[Supervision] succeeded={} failed={}",
-        summary.succeeded, summary.failed
+        "[Supervision] succeeded={} failed={}  peak_concurrency={}  wall={:?}",
+        summary.succeeded, summary.failed,
+        summary.peak_concurrency(),
+        summary.total_wall_time,
     );
+    for r in summary.timeline() {
+        println!("  +{:>6}µs  {:>20}  {:?}", r.start_offset_us, r.task_id, r.wall_time);
+    }
     Ok(())
 }
