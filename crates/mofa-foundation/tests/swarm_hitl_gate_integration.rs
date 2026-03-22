@@ -11,9 +11,9 @@ use mofa_foundation::hitl::{
     InMemoryReviewStore, ReviewManager, ReviewManagerConfig, ReviewNotifier, ReviewPolicyEngine,
 };
 use mofa_foundation::swarm::{
-    FailurePolicy, HITLGateMetrics, HITLMode, ParallelScheduler, RiskLevel, SchedulerSummary,
-    SequentialScheduler, SubtaskDAG, SubtaskExecutorFn, SwarmHITLGate, SwarmScheduler,
-    SwarmSchedulerConfig, SwarmSubtask, TaskOutcome,
+    FailurePolicy, HITLDecision, HITLGateMetrics, HITLMode, HITLNotifier, ParallelScheduler,
+    RiskLevel, SchedulerSummary, SequentialScheduler, SubtaskDAG, SubtaskExecutorFn,
+    SwarmHITLGate, SwarmScheduler, SwarmSchedulerConfig, SwarmSubtask, TaskOutcome,
 };
 use mofa_kernel::hitl::ReviewResponse;
 
@@ -479,4 +479,60 @@ async fn test_gate_custom_predicate_overrides_risk_threshold() {
         metrics
     );
     assert_eq!(metrics.approved, 1);
+}
+
+// ── Test 11: HITLNotifier receives on_intercepted and on_decision calls ───────
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn test_gate_notifier_receives_events() {
+    use std::sync::Mutex;
+
+    struct RecordingNotifier {
+        intercepted: Mutex<Vec<String>>,
+        decisions: Mutex<Vec<(String, HITLDecision)>>,
+    }
+
+    impl HITLNotifier for RecordingNotifier {
+        fn on_intercepted(&self, task: &SwarmSubtask) {
+            self.intercepted.lock().unwrap().push(task.id.clone());
+        }
+        fn on_decision(&self, task: &SwarmSubtask, decision: HITLDecision, _latency_ms: u64) {
+            self.decisions.lock().unwrap().push((task.id.clone(), decision));
+        }
+    }
+
+    let notifier = Arc::new(RecordingNotifier {
+        intercepted: Mutex::new(vec![]),
+        decisions: Mutex::new(vec![]),
+    });
+
+    let manager = make_manager();
+    let gate = Arc::new(
+        SwarmHITLGate::new(Arc::clone(&manager), HITLMode::Required, "exec-notifier")
+            .with_notifier(Arc::clone(&notifier) as Arc<dyn HITLNotifier>),
+    );
+    let executor = gate.clone().wrap_executor(echo_executor());
+
+    let mut dag = SubtaskDAG::new("notifier-dag");
+    dag.add_task(
+        SwarmSubtask::new("task-a", "Do something safe").with_risk_level(RiskLevel::Low),
+    );
+
+    spawn_auto_resolver(Arc::clone(&manager), ReviewResponse::Approved { comment: None });
+
+    let summary = SequentialScheduler::with_config(SwarmSchedulerConfig::default())
+        .execute(&mut dag, executor)
+        .await
+        .unwrap();
+
+    assert_eq!(summary.succeeded, 1);
+
+    let intercepted = notifier.intercepted.lock().unwrap();
+    let decisions = notifier.decisions.lock().unwrap();
+
+    assert_eq!(intercepted.len(), 1, "notifier must receive one on_intercepted call");
+    assert_eq!(intercepted[0], "task-a");
+    assert_eq!(decisions.len(), 1, "notifier must receive one on_decision call");
+    assert_eq!(decisions[0].0, "task-a");
+    assert_eq!(decisions[0].1, HITLDecision::Approved);
 }

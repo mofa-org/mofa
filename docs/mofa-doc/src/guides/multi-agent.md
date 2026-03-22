@@ -191,21 +191,83 @@ let summary = ParallelScheduler::default()
 |------|-----------|
 | `None` | All tasks bypass the gate — no reviews submitted |
 | `Required` | Every task is intercepted regardless of risk |
-| `Optional` | Only tasks where `hitl_required == true` or `risk_level >= threshold` |
+| `Optional` | Only tasks where `hitl_required == true` or `risk_level >= threshold`; timeout auto-approves |
+
+### Custom Interception Predicate
+
+`with_intercept_when` replaces the built-in risk threshold with any predicate over the task:
+
+```rust,ignore
+let gate = Arc::new(
+    SwarmHITLGate::new(manager, HITLMode::Optional, "exec-1")
+        .with_intercept_when(|task| {
+            // Intercept tasks that touch payment or require a specific capability,
+            // regardless of their assigned risk level.
+            task.description.to_lowercase().contains("pay")
+                || task.required_capabilities.contains(&"write_production_db".to_string())
+        }),
+);
+```
+
+### HITLGateMetrics
+
+Call `gate.enrich_summary(summary)` after the scheduler returns to embed a metrics snapshot in the `SchedulerSummary`:
+
+```rust,ignore
+let summary = scheduler.execute(&mut dag, gated_executor).await?;
+let summary = gate.enrich_summary(summary);
+
+if let Some(m) = &summary.hitl_stats {
+    println!("intercepted: {}", m.intercepted);
+    println!("approved: {}  modified: {}  rejected: {}", m.approved, m.modified, m.rejected);
+    println!("auto-approved on timeout: {}", m.auto_approved_timeout);
+    println!("avg review latency: {} ms", m.avg_review_latency_ms());
+}
+```
+
+Fields tracked: `intercepted`, `approved`, `modified`, `rejected`, `auto_approved_timeout`, `total_review_latency_ms`. Uses `AtomicU64` internally so parallel tasks never contend on a lock.
+
+### HITLNotifier
+
+Attach an observer to fan out gate events to any secondary sink — Slack, PagerDuty, a CLI prompt — without changing the approval flow:
+
+```rust,ignore
+use mofa_foundation::swarm::{HITLDecision, HITLNotifier, SwarmSubtask};
+
+struct SlackNotifier { webhook_url: String }
+
+impl HITLNotifier for SlackNotifier {
+    fn on_intercepted(&self, task: &SwarmSubtask) {
+        // post "task X is awaiting review" to Slack
+    }
+
+    fn on_decision(&self, task: &SwarmSubtask, decision: HITLDecision, latency_ms: u64) {
+        // post "task X was approved/rejected in N ms" to Slack
+    }
+}
+
+let gate = SwarmHITLGate::new(manager, HITLMode::Optional, "exec-1")
+    .with_notifier(Arc::new(SlackNotifier { webhook_url: "...".into() }));
+```
+
+`HITLDecision` variants: `Approved`, `Modified`, `Rejected`, `AutoApprovedTimeout`.
 
 ### Full Pipeline
 
 ```text
-analyze_offline_with_risk()     ← risk classification
+analyze_offline_with_risk()         ← risk classification
         │
         ▼  RiskAwareAnalysis
-SwarmHITLGate::wrap_executor()  ← intercepts High / Critical tasks
-        │                          submits ReviewRequest → ReviewManager
-        │                          waits for Approved / Rejected
+SwarmHITLGate::wrap_executor()      ← intercepts tasks (risk threshold or custom predicate)
+        │   with_intercept_when()   ← swap what gets intercepted
+        │   with_notifier()         ← fan out events to Slack / PagerDuty / CLI
+        │                              submits ReviewRequest → ReviewManager
+        │                              waits for Approved / Rejected / ChangesRequested
         ▼
-ParallelScheduler::execute()    ← runs DAG concurrently
+ParallelScheduler::execute()        ← runs DAG concurrently
         │
         ▼  SchedulerSummary
+gate.enrich_summary()               ← attach HITLGateMetrics to summary
 ```
 
 The gate plugs directly into `ReviewManager`, giving swarm tasks access to audit trail, webhook notifications, and the REST review API out of the box.

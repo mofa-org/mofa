@@ -48,6 +48,59 @@ use crate::swarm::config::HITLMode;
 use crate::swarm::dag::{RiskLevel, SwarmSubtask};
 use crate::swarm::scheduler::{SchedulerSummary, SubtaskExecutorFn};
 
+// ── Notifier ──────────────────────────────────────────────────────────────────
+
+/// The outcome of a single reviewer decision.
+///
+/// Passed to [`HITLNotifier::on_decision`] so notifier implementations can
+/// fan out decisions to Slack, PagerDuty, a CLI prompt, or any other sink
+/// without touching the approval flow or replacing `ReviewManager`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
+pub enum HITLDecision {
+    /// Task approved as-is.
+    Approved,
+    /// Reviewer provided a modified description; task runs with the changes.
+    Modified,
+    /// Task rejected; execution will not proceed.
+    Rejected,
+    /// No reviewer responded before the timeout; auto-approved because the
+    /// gate is in `HITLMode::Optional`.
+    AutoApprovedTimeout,
+}
+
+/// Observer hook called on every gate interception and every reviewer decision.
+///
+/// Implement this trait to fan out events to any secondary sink — Slack,
+/// PagerDuty, a CLI prompt, a metrics store — without changing the approval
+/// flow or swapping out `ReviewManager`.
+///
+/// All methods have default no-op implementations so implementors only
+/// override what they care about.
+///
+/// ```rust,ignore
+/// struct SlackNotifier { webhook_url: String }
+///
+/// impl HITLNotifier for SlackNotifier {
+///     fn on_decision(&self, task: &SwarmSubtask, decision: HITLDecision, latency_ms: u64) {
+///         // post to Slack webhook
+///     }
+/// }
+///
+/// let gate = SwarmHITLGate::new(manager, HITLMode::Optional, "exec-1")
+///     .with_notifier(Arc::new(SlackNotifier { webhook_url: "...".into() }));
+/// ```
+pub trait HITLNotifier: Send + Sync {
+    /// Called immediately before a task is submitted for review.
+    fn on_intercepted(&self, _task: &SwarmSubtask) {}
+
+    /// Called after the reviewer decision is recorded.
+    ///
+    /// `latency_ms` is the round-trip time from `request_review` to the
+    /// resolved response (or timeout).
+    fn on_decision(&self, _task: &SwarmSubtask, _decision: HITLDecision, _latency_ms: u64) {}
+}
+
 // ── Metrics ───────────────────────────────────────────────────────────────────
 
 /// Atomic counters used internally to track gate activity across concurrent tasks.
@@ -148,6 +201,8 @@ pub struct SwarmHITLGate {
     /// When set, replaces the built-in `risk_threshold` / `mode` logic.
     /// Use [`with_intercept_when`] to install one.
     intercept_when: Option<Arc<dyn Fn(&SwarmSubtask) -> bool + Send + Sync>>,
+    /// Optional observer notified on every interception and decision.
+    notifier: Option<Arc<dyn HITLNotifier>>,
     /// Shared atomic counters written by every task closure concurrently.
     metrics: Arc<MetricsInner>,
 }
@@ -170,6 +225,7 @@ impl SwarmHITLGate {
             risk_threshold: RiskLevel::High,
             review_timeout: None,
             intercept_when: None,
+            notifier: None,
             metrics: Arc::new(MetricsInner::default()),
         }
     }
@@ -208,6 +264,17 @@ impl SwarmHITLGate {
         predicate: impl Fn(&SwarmSubtask) -> bool + Send + Sync + 'static,
     ) -> Self {
         self.intercept_when = Some(Arc::new(predicate));
+        self
+    }
+
+    /// Attach an [`HITLNotifier`] observer to the gate.
+    ///
+    /// The notifier receives every interception and every reviewer decision.
+    /// Multiple notifiers can be composed behind a single wrapper struct.
+    /// The notifier does not affect the approval flow — it is called
+    /// after the gate has already recorded the decision internally.
+    pub fn with_notifier(mut self, notifier: Arc<dyn HITLNotifier>) -> Self {
+        self.notifier = Some(notifier);
         self
     }
 
@@ -254,6 +321,9 @@ impl SwarmHITLGate {
                 async move {
                     if gate.should_intercept(&task_for_gate) {
                         gate.metrics.intercepted.fetch_add(1, Ordering::Relaxed);
+                        if let Some(ref n) = gate.notifier {
+                            n.on_intercepted(&task_for_gate);
+                        }
 
                         let gate_span = info_span!(
                             "hitl.approval_gate",
@@ -276,11 +346,17 @@ impl SwarmHITLGate {
                                 gate.metrics.approved.fetch_add(1, Ordering::Relaxed);
                                 gate.metrics.total_review_latency_ms
                                     .fetch_add(latency_ms, Ordering::Relaxed);
+                                if let Some(ref n) = gate.notifier {
+                                    n.on_decision(&task_for_gate, HITLDecision::Approved, latency_ms);
+                                }
                             }
                             Ok(Some(modified_desc)) => {
                                 gate.metrics.modified.fetch_add(1, Ordering::Relaxed);
                                 gate.metrics.total_review_latency_ms
                                     .fetch_add(latency_ms, Ordering::Relaxed);
+                                if let Some(ref n) = gate.notifier {
+                                    n.on_decision(&task_for_gate, HITLDecision::Modified, latency_ms);
+                                }
                                 task.description = modified_desc;
                             }
                             Err(e) if gate.is_optional() => {
@@ -290,12 +366,22 @@ impl SwarmHITLGate {
                                     task_id = %task_for_gate.id,
                                     "hitl timeout in Optional mode — auto-approving"
                                 );
+                                if let Some(ref n) = gate.notifier {
+                                    n.on_decision(
+                                        &task_for_gate,
+                                        HITLDecision::AutoApprovedTimeout,
+                                        latency_ms,
+                                    );
+                                }
                                 let _ = e;
                             }
                             Err(e) => {
                                 gate.metrics.rejected.fetch_add(1, Ordering::Relaxed);
                                 gate.metrics.total_review_latency_ms
                                     .fetch_add(latency_ms, Ordering::Relaxed);
+                                if let Some(ref n) = gate.notifier {
+                                    n.on_decision(&task_for_gate, HITLDecision::Rejected, latency_ms);
+                                }
                                 return Err(e);
                             }
                         }

@@ -7,12 +7,13 @@
 //!         │
 //!         ▼  RiskAwareAnalysis
 //! SwarmHITLGate::wrap_executor()      ← intercepts High/Critical tasks
-//!         │
+//!         │                              with_intercept_when() for custom logic
+//!         │                              HITLNotifier observer for side-effects
 //!         ▼  gated executor
 //! ParallelScheduler::execute()         ← runs the DAG concurrently
 //!         │
-//!         ▼  SchedulerSummary
-//! print results
+//!         ▼  SchedulerSummary + HITLGateMetrics
+//! enrich_summary() + print metrics
 //! ```
 //!
 //! A background task auto-approves all pending HITL reviews so the demo
@@ -31,10 +32,30 @@ use mofa_foundation::hitl::notifier::ReviewNotifier;
 use mofa_foundation::hitl::policy_engine::ReviewPolicyEngine;
 use mofa_foundation::hitl::store::InMemoryReviewStore;
 use mofa_foundation::swarm::{
-    HITLMode, ParallelScheduler, SwarmHITLGate, SwarmScheduler, SwarmSchedulerConfig,
-    SwarmSubtask, TaskAnalyzer,
+    HITLDecision, HITLGateMetrics, HITLMode, HITLNotifier, ParallelScheduler, SwarmHITLGate,
+    SwarmScheduler, SwarmSchedulerConfig, SwarmSubtask, TaskAnalyzer,
 };
 use mofa_kernel::hitl::ReviewResponse;
+
+// ── Demo notifier: prints every gate event to stdout ─────────────────────────
+
+struct ConsoleNotifier;
+
+impl HITLNotifier for ConsoleNotifier {
+    fn on_intercepted(&self, task: &SwarmSubtask) {
+        println!(
+            "   [gate] intercepted '{}' (risk: {:?})",
+            task.id, task.risk_level
+        );
+    }
+
+    fn on_decision(&self, task: &SwarmSubtask, decision: HITLDecision, latency_ms: u64) {
+        println!(
+            "   [gate] decision for '{}': {:?} ({} ms)",
+            task.id, decision, latency_ms
+        );
+    }
+}
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -114,13 +135,18 @@ async fn main() -> anyhow::Result<()> {
 
     // ── Phase 4: Execute with SwarmHITLGate ───────────────────────────────
 
-    let gate = Arc::new(SwarmHITLGate::new(
-        Arc::clone(&manager),
-        HITLMode::Optional,
-        analysis.dag.id.clone(),
-    ));
+    let gate = Arc::new(
+        SwarmHITLGate::new(Arc::clone(&manager), HITLMode::Optional, analysis.dag.id.clone())
+            // Only intercept tasks that require human sign-off or touch payment.
+            .with_intercept_when(|task| {
+                task.hitl_required
+                    || task.description.to_lowercase().contains("charge")
+                    || task.description.to_lowercase().contains("pay")
+            })
+            // Attach the console notifier to observe every gate event.
+            .with_notifier(Arc::new(ConsoleNotifier)),
+    );
 
-    // Mock executor: just echo the task ID.
     let inner_executor: mofa_foundation::swarm::SubtaskExecutorFn =
         Arc::new(|_idx, task: SwarmSubtask| {
             Box::pin(async move {
@@ -129,7 +155,8 @@ async fn main() -> anyhow::Result<()> {
             })
         });
 
-    let gated_executor = gate.wrap_executor(inner_executor);
+    // Clone the Arc so we can call gate.enrich_summary() after execution.
+    let gated_executor = gate.clone().wrap_executor(inner_executor);
 
     println!("\n🚀 Starting parallel execution with HITLMode::Optional ...\n");
 
@@ -139,7 +166,10 @@ async fn main() -> anyhow::Result<()> {
         .execute(&mut dag, gated_executor)
         .await?;
 
-    // ── Phase 5: Print summary ─────────────────────────────────────────────
+    // Attach HITL metrics to the summary.
+    let summary = gate.enrich_summary(summary);
+
+    // ── Phase 5: Print summary + gate metrics ──────────────────────────────
 
     println!("\n════════════════════════ Summary ══════════════════════════");
     println!(
@@ -156,6 +186,18 @@ async fn main() -> anyhow::Result<()> {
         "  📈 Success rate: {:.0}%",
         summary.success_rate() * 100.0
     );
+
+    if let Some(m) = &summary.hitl_stats {
+        println!("\n════════════════════════ HITL Metrics ═════════════════════");
+        println!("  Intercepted          : {}", m.intercepted);
+        println!("  Approved             : {}", m.approved);
+        println!("  Modified             : {}", m.modified);
+        println!("  Rejected             : {}", m.rejected);
+        println!("  Auto-approved (timeout): {}", m.auto_approved_timeout);
+        println!("  Avg review latency   : {} ms", m.avg_review_latency_ms());
+        println!("  Total review latency : {} ms", m.total_review_latency_ms);
+    }
+
     println!("═══════════════════════════════════════════════════════════\n");
 
     Ok(())
