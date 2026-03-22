@@ -48,26 +48,44 @@ pub struct TaskExecutionResult {
     pub node_index: usize,
     pub outcome: TaskOutcome,
     pub wall_time: Duration,
+    /// Microseconds elapsed from scheduler start until this task began executing.
+    /// Zero for skipped tasks. Provides microsecond precision for accurate peak_concurrency computation.
+    #[serde(default)]
+    pub start_offset_us: u64,
     pub attempt: u32,
 }
 
 impl TaskExecutionResult {
-    fn success(task: &SwarmSubtask, idx: NodeIndex, output: String, elapsed: Duration) -> Self {
+    fn success(
+        task: &SwarmSubtask,
+        idx: NodeIndex,
+        output: String,
+        elapsed: Duration,
+        start_offset_us: u64,
+    ) -> Self {
         Self {
             task_id: task.id.clone(),
             node_index: idx.index(),
             outcome: TaskOutcome::Success(output),
             wall_time: elapsed,
+            start_offset_us,
             attempt: 1,
         }
     }
 
-    fn failure(task: &SwarmSubtask, idx: NodeIndex, error: String, elapsed: Duration) -> Self {
+    fn failure(
+        task: &SwarmSubtask,
+        idx: NodeIndex,
+        error: String,
+        elapsed: Duration,
+        start_offset_us: u64,
+    ) -> Self {
         Self {
             task_id: task.id.clone(),
             node_index: idx.index(),
             outcome: TaskOutcome::Failure(error),
             wall_time: elapsed,
+            start_offset_us,
             attempt: 1,
         }
     }
@@ -78,6 +96,7 @@ impl TaskExecutionResult {
             node_index: idx.index(),
             outcome: TaskOutcome::Skipped(reason),
             wall_time: Duration::ZERO,
+            start_offset_us: 0,
             attempt: 0,
         }
     }
@@ -118,6 +137,41 @@ impl SchedulerSummary {
             .filter_map(|r| r.outcome.output())
             .collect()
     }
+
+    /// Returns results sorted by `start_offset_us` — the order tasks actually began executing.
+    pub fn timeline(&self) -> Vec<&TaskExecutionResult> {
+        let mut ordered: Vec<&TaskExecutionResult> = self.results.iter().collect();
+        ordered.sort_by_key(|r| r.start_offset_us);
+        ordered
+    }
+
+    /// Maximum number of tasks that were executing concurrently at any instant.
+    /// Computed from `start_offset_us` and `wall_time` (microsecond precision internally);
+    /// skipped tasks are excluded.
+    pub fn peak_concurrency(&self) -> usize {
+        let mut events: Vec<(u64, i32)> = Vec::new();
+        for r in &self.results {
+            if matches!(r.outcome, TaskOutcome::Skipped(_)) {
+                continue;
+            }
+            let start = r.start_offset_us;
+            let duration = r.wall_time.as_micros().max(1) as u64;
+            let end = start + duration;
+            events.push((start, 1));
+            events.push((end, -1));
+        }
+        if events.is_empty() {
+            return 0;
+        }
+        events.sort_by(|a, b| a.0.cmp(&b.0).then(a.1.cmp(&b.1)));
+        let mut current = 0i32;
+        let mut peak = 0i32;
+        for (_, delta) in events {
+            current += delta;
+            peak = peak.max(current);
+        }
+        peak as usize
+    }
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
@@ -133,6 +187,9 @@ pub struct SwarmSchedulerConfig {
     pub task_timeout: Duration,
     pub failure_policy: FailurePolicy,
     pub concurrency_limit: Option<usize>,
+    /// When `true` the scheduler validates DAG topology and returns a summary showing
+    /// which tasks would execute in what order — without calling the executor at all.
+    pub dry_run: bool,
 }
 
 impl Default for SwarmSchedulerConfig {
@@ -141,6 +198,7 @@ impl Default for SwarmSchedulerConfig {
             task_timeout: Duration::from_secs(120),
             failure_policy: FailurePolicy::default(),
             concurrency_limit: None,
+            dry_run: false,
         }
     }
 }
@@ -200,6 +258,24 @@ impl SwarmScheduler for SequentialScheduler {
             GlobalError::runtime(format!("Sequential scheduling failed, DAG error: {e}"))
         })?;
 
+        if self.config.dry_run {
+            let mut results = Vec::with_capacity(ordered_indices.len());
+            for &idx in &ordered_indices {
+                let task = dag.get_task(idx).expect("missing idx").clone();
+                dag.mark_skipped(idx);
+                results.push(TaskExecutionResult::skipped(&task, idx, "dry_run".into()));
+            }
+            return Ok(SchedulerSummary {
+                pattern: CoordinationPattern::Sequential,
+                total_tasks: total,
+                succeeded: 0,
+                failed: 0,
+                skipped: total,
+                total_wall_time: Duration::ZERO,
+                results,
+            });
+        }
+
         let mut results = Vec::with_capacity(total);
         let mut succeeded = 0usize;
         let mut failed = 0usize;
@@ -230,6 +306,7 @@ impl SwarmScheduler for SequentialScheduler {
             let task_snapshot = dag.get_task(idx).unwrap().clone();
             let task_id = task_snapshot.id.clone();
 
+            let offset_ms = wall_start.elapsed().as_micros() as u64;
             let start = Instant::now();
             info!(task_id = %task_id, task_desc = %task_snapshot.description, "Executing node");
 
@@ -249,6 +326,7 @@ impl SwarmScheduler for SequentialScheduler {
                         idx,
                         output,
                         elapsed,
+                        offset_ms,
                     ));
                     succeeded += 1;
                 }
@@ -261,6 +339,7 @@ impl SwarmScheduler for SequentialScheduler {
                         idx,
                         err_str,
                         elapsed,
+                        offset_ms,
                     ));
                     failed += 1;
 
@@ -278,6 +357,7 @@ impl SwarmScheduler for SequentialScheduler {
                         idx,
                         msg,
                         elapsed,
+                        offset_ms,
                     ));
                     failed += 1;
 
@@ -341,6 +421,25 @@ impl SwarmScheduler for ParallelScheduler {
         let wall_start = Instant::now();
         let total = dag.task_count();
 
+        if self.config.dry_run {
+            let ordered = dag.topological_order().unwrap_or_default();
+            let mut results = Vec::with_capacity(ordered.len());
+            for &idx in &ordered {
+                let task = dag.get_task(idx).expect("missing idx").clone();
+                dag.mark_skipped(idx);
+                results.push(TaskExecutionResult::skipped(&task, idx, "dry_run".into()));
+            }
+            return Ok(SchedulerSummary {
+                pattern: self.pattern(),
+                total_tasks: total,
+                succeeded: 0,
+                failed: 0,
+                skipped: total,
+                total_wall_time: Duration::ZERO,
+                results,
+            });
+        }
+
         let semaphore = self
             .config
             .concurrency_limit
@@ -377,6 +476,7 @@ impl SwarmScheduler for ParallelScheduler {
                 let exec = executor.clone();
                 let sem = semaphore.clone();
                 let timeout_dur = self.config.task_timeout;
+                let offset_ms = wall_start.elapsed().as_micros() as u64;
 
                 let fut = async move {
                     let _permit = if let Some(s) = sem {
@@ -392,18 +492,21 @@ impl SwarmScheduler for ParallelScheduler {
                             idx,
                             output,
                             start.elapsed(),
+                            offset_ms,
                         ),
                         Ok(Err(e)) => TaskExecutionResult::failure(
                             &task_snapshot,
                             idx,
                             e.to_string(),
                             start.elapsed(),
+                            offset_ms,
                         ),
                         Err(_) => TaskExecutionResult::failure(
                             &task_snapshot,
                             idx,
                             format!("timed out after {:?}", timeout_dur),
                             start.elapsed(),
+                            offset_ms,
                         ),
                     }
                 };
@@ -489,6 +592,7 @@ async fn run_parallel_wave(
     dag: &mut SubtaskDAG,
     executor: &SubtaskExecutorFn,
     timeout_dur: Duration,
+    sched_start: Instant,
 ) -> Vec<TaskExecutionResult> {
     let mut futures = Vec::with_capacity(indices.len());
 
@@ -496,21 +600,23 @@ async fn run_parallel_wave(
         dag.mark_running(idx);
         let task_snapshot = dag.get_task(idx).expect("missing idx").clone();
         let exec = executor.clone();
+        let offset_ms = sched_start.elapsed().as_micros() as u64;
 
         let fut = async move {
             let start = Instant::now();
             match timeout(timeout_dur, exec(idx, task_snapshot.clone())).await {
                 Ok(Ok(output)) => {
-                    TaskExecutionResult::success(&task_snapshot, idx, output, start.elapsed())
+                    TaskExecutionResult::success(&task_snapshot, idx, output, start.elapsed(), offset_ms)
                 }
                 Ok(Err(e)) => {
-                    TaskExecutionResult::failure(&task_snapshot, idx, e.to_string(), start.elapsed())
+                    TaskExecutionResult::failure(&task_snapshot, idx, e.to_string(), start.elapsed(), offset_ms)
                 }
                 Err(_) => TaskExecutionResult::failure(
                     &task_snapshot,
                     idx,
                     format!("timed out after {:?}", timeout_dur),
                     start.elapsed(),
+                    offset_ms,
                 ),
             }
         };
@@ -561,6 +667,25 @@ impl SwarmScheduler for MapReduceScheduler {
         let wall_start = Instant::now();
         let total = dag.task_count();
 
+        if self.config.dry_run {
+            let ordered = dag.topological_order().unwrap_or_default();
+            let mut results = Vec::with_capacity(ordered.len());
+            for &idx in &ordered {
+                let task = dag.get_task(idx).expect("missing idx").clone();
+                dag.mark_skipped(idx);
+                results.push(TaskExecutionResult::skipped(&task, idx, "dry_run".into()));
+            }
+            return Ok(SchedulerSummary {
+                pattern: self.pattern(),
+                total_tasks: total,
+                succeeded: 0,
+                failed: 0,
+                skipped: total,
+                total_wall_time: Duration::ZERO,
+                results,
+            });
+        }
+
         let all: Vec<NodeIndex> = dag.all_tasks().into_iter().map(|(idx, _)| idx).collect();
         let (map_idxs, reduce_idxs): (Vec<_>, Vec<_>) =
             all.iter().partition(|&&idx| dag.dependencies_of(idx).is_empty());
@@ -575,7 +700,7 @@ impl SwarmScheduler for MapReduceScheduler {
         let mut succeeded = 0usize;
         let mut failed = 0usize;
 
-        let wave = run_parallel_wave(&map_idxs, dag, &executor, self.config.task_timeout).await;
+        let wave = run_parallel_wave(&map_idxs, dag, &executor, self.config.task_timeout, wall_start).await;
 
         let mut map_outputs: Vec<String> = Vec::new();
         for res in wave {
@@ -602,6 +727,7 @@ impl SwarmScheduler for MapReduceScheduler {
             let injected = inject_context(task_snapshot, "Map Phase Outputs", &map_outputs);
             dag.mark_running(idx);
 
+            let offset_ms = wall_start.elapsed().as_micros() as u64;
             let start = Instant::now();
             match timeout(self.config.task_timeout, executor(idx, injected)).await {
                 Ok(Ok(output)) => {
@@ -612,6 +738,7 @@ impl SwarmScheduler for MapReduceScheduler {
                         idx,
                         output,
                         elapsed,
+                        offset_ms,
                     ));
                     succeeded += 1;
                 }
@@ -625,6 +752,7 @@ impl SwarmScheduler for MapReduceScheduler {
                         idx,
                         err,
                         elapsed,
+                        offset_ms,
                     ));
                     failed += 1;
                 }
@@ -638,6 +766,7 @@ impl SwarmScheduler for MapReduceScheduler {
                         idx,
                         msg,
                         elapsed,
+                        offset_ms,
                     ));
                     failed += 1;
                 }
@@ -696,6 +825,25 @@ impl SwarmScheduler for DebateScheduler {
         let wall_start = Instant::now();
         let total = dag.task_count();
 
+        if self.config.dry_run {
+            let ordered = dag.topological_order().unwrap_or_default();
+            let mut results = Vec::with_capacity(ordered.len());
+            for &idx in &ordered {
+                let task = dag.get_task(idx).expect("missing idx").clone();
+                dag.mark_skipped(idx);
+                results.push(TaskExecutionResult::skipped(&task, idx, "dry_run".into()));
+            }
+            return Ok(SchedulerSummary {
+                pattern: self.pattern(),
+                total_tasks: total,
+                succeeded: 0,
+                failed: 0,
+                skipped: total,
+                total_wall_time: Duration::ZERO,
+                results,
+            });
+        }
+
         let all: Vec<NodeIndex> = dag.all_tasks().into_iter().map(|(idx, _)| idx).collect();
         let (debater_idxs, judge_idxs): (Vec<_>, Vec<_>) =
             all.iter().partition(|&&idx| dag.dependencies_of(idx).is_empty());
@@ -710,7 +858,7 @@ impl SwarmScheduler for DebateScheduler {
         let mut succeeded = 0usize;
         let mut failed = 0usize;
 
-        let wave = run_parallel_wave(&debater_idxs, dag, &executor, self.config.task_timeout).await;
+        let wave = run_parallel_wave(&debater_idxs, dag, &executor, self.config.task_timeout, wall_start).await;
 
         let mut debate_lines: Vec<String> = Vec::new();
         for res in wave {
@@ -737,6 +885,7 @@ impl SwarmScheduler for DebateScheduler {
             let injected = inject_context(task_snapshot, "Debate Arguments", &debate_lines);
             dag.mark_running(idx);
 
+            let offset_ms = wall_start.elapsed().as_micros() as u64;
             let start = Instant::now();
             match timeout(self.config.task_timeout, executor(idx, injected)).await {
                 Ok(Ok(output)) => {
@@ -747,6 +896,7 @@ impl SwarmScheduler for DebateScheduler {
                         idx,
                         output,
                         elapsed,
+                        offset_ms,
                     ));
                     succeeded += 1;
                 }
@@ -760,6 +910,7 @@ impl SwarmScheduler for DebateScheduler {
                         idx,
                         err,
                         elapsed,
+                        offset_ms,
                     ));
                     failed += 1;
                 }
@@ -773,6 +924,7 @@ impl SwarmScheduler for DebateScheduler {
                         idx,
                         msg,
                         elapsed,
+                        offset_ms,
                     ));
                     failed += 1;
                 }
@@ -831,6 +983,25 @@ impl SwarmScheduler for ConsensusScheduler {
         let wall_start = Instant::now();
         let total = dag.task_count();
 
+        if self.config.dry_run {
+            let ordered = dag.topological_order().unwrap_or_default();
+            let mut results = Vec::with_capacity(ordered.len());
+            for &idx in &ordered {
+                let task = dag.get_task(idx).expect("missing idx").clone();
+                dag.mark_skipped(idx);
+                results.push(TaskExecutionResult::skipped(&task, idx, "dry_run".into()));
+            }
+            return Ok(SchedulerSummary {
+                pattern: self.pattern(),
+                total_tasks: total,
+                succeeded: 0,
+                failed: 0,
+                skipped: total,
+                total_wall_time: Duration::ZERO,
+                results,
+            });
+        }
+
         let all: Vec<NodeIndex> = dag.all_tasks().into_iter().map(|(idx, _)| idx).collect();
         let (voter_idxs, aggregator_idxs): (Vec<_>, Vec<_>) =
             all.iter().partition(|&&idx| dag.dependencies_of(idx).is_empty());
@@ -845,7 +1016,7 @@ impl SwarmScheduler for ConsensusScheduler {
         let mut succeeded = 0usize;
         let mut failed = 0usize;
 
-        let wave = run_parallel_wave(&voter_idxs, dag, &executor, self.config.task_timeout).await;
+        let wave = run_parallel_wave(&voter_idxs, dag, &executor, self.config.task_timeout, wall_start).await;
 
         let mut voter_outputs: Vec<String> = Vec::new();
         for res in wave {
@@ -897,6 +1068,7 @@ impl SwarmScheduler for ConsensusScheduler {
             }
             dag.mark_running(idx);
 
+            let offset_ms = wall_start.elapsed().as_micros() as u64;
             let start = Instant::now();
             match timeout(self.config.task_timeout, executor(idx, injected)).await {
                 Ok(Ok(output)) => {
@@ -907,6 +1079,7 @@ impl SwarmScheduler for ConsensusScheduler {
                         idx,
                         output,
                         elapsed,
+                        offset_ms,
                     ));
                     succeeded += 1;
                 }
@@ -920,6 +1093,7 @@ impl SwarmScheduler for ConsensusScheduler {
                         idx,
                         err,
                         elapsed,
+                        offset_ms,
                     ));
                     failed += 1;
                 }
@@ -933,6 +1107,7 @@ impl SwarmScheduler for ConsensusScheduler {
                         idx,
                         msg,
                         elapsed,
+                        offset_ms,
                     ));
                     failed += 1;
                 }
@@ -991,6 +1166,25 @@ impl SwarmScheduler for RoutingScheduler {
         let wall_start = Instant::now();
         let total = dag.task_count();
 
+        if self.config.dry_run {
+            let ordered = dag.topological_order().unwrap_or_default();
+            let mut results = Vec::with_capacity(ordered.len());
+            for &idx in &ordered {
+                let task = dag.get_task(idx).expect("missing idx").clone();
+                dag.mark_skipped(idx);
+                results.push(TaskExecutionResult::skipped(&task, idx, "dry_run".into()));
+            }
+            return Ok(SchedulerSummary {
+                pattern: self.pattern(),
+                total_tasks: total,
+                succeeded: 0,
+                failed: 0,
+                skipped: total,
+                total_wall_time: Duration::ZERO,
+                results,
+            });
+        }
+
         let all: Vec<NodeIndex> = dag.all_tasks().into_iter().map(|(idx, _)| idx).collect();
         let router_idxs: Vec<_> = all
             .iter()
@@ -1023,6 +1217,7 @@ impl SwarmScheduler for RoutingScheduler {
 
         dag.mark_running(router_idx);
         let router_snapshot = dag.get_task(router_idx).unwrap().clone();
+        let router_offset_ms = wall_start.elapsed().as_micros() as u64;
         let start = Instant::now();
         let router_output = match timeout(
             self.config.task_timeout,
@@ -1038,6 +1233,7 @@ impl SwarmScheduler for RoutingScheduler {
                     router_idx,
                     out.clone(),
                     elapsed,
+                    router_offset_ms,
                 ));
                 succeeded += 1;
                 out
@@ -1052,6 +1248,7 @@ impl SwarmScheduler for RoutingScheduler {
                     router_idx,
                     err,
                     elapsed,
+                    router_offset_ms,
                 ));
                 failed += 1;
                 for &idx in &specialist_idxs {
@@ -1083,6 +1280,7 @@ impl SwarmScheduler for RoutingScheduler {
                     router_idx,
                     msg,
                     elapsed,
+                    router_offset_ms,
                 ));
                 failed += 1;
                 for &idx in &specialist_idxs {
@@ -1141,6 +1339,7 @@ impl SwarmScheduler for RoutingScheduler {
         let injected = inject_context(spec_snapshot, "Router Output", &[router_output]);
         dag.mark_running(chosen_idx);
 
+        let spec_offset_ms = wall_start.elapsed().as_micros() as u64;
         let start = Instant::now();
         match timeout(self.config.task_timeout, executor(chosen_idx, injected)).await {
             Ok(Ok(output)) => {
@@ -1151,6 +1350,7 @@ impl SwarmScheduler for RoutingScheduler {
                     chosen_idx,
                     output,
                     elapsed,
+                    spec_offset_ms,
                 ));
                 succeeded += 1;
             }
@@ -1164,6 +1364,7 @@ impl SwarmScheduler for RoutingScheduler {
                     chosen_idx,
                     err,
                     elapsed,
+                    spec_offset_ms,
                 ));
                 failed += 1;
             }
@@ -1177,6 +1378,7 @@ impl SwarmScheduler for RoutingScheduler {
                     chosen_idx,
                     msg,
                     elapsed,
+                    spec_offset_ms,
                 ));
                 failed += 1;
             }
@@ -1234,6 +1436,25 @@ impl SwarmScheduler for SupervisionScheduler {
         let wall_start = Instant::now();
         let total = dag.task_count();
 
+        if self.config.dry_run {
+            let ordered = dag.topological_order().unwrap_or_default();
+            let mut results = Vec::with_capacity(ordered.len());
+            for &idx in &ordered {
+                let task = dag.get_task(idx).expect("missing idx").clone();
+                dag.mark_skipped(idx);
+                results.push(TaskExecutionResult::skipped(&task, idx, "dry_run".into()));
+            }
+            return Ok(SchedulerSummary {
+                pattern: self.pattern(),
+                total_tasks: total,
+                succeeded: 0,
+                failed: 0,
+                skipped: total,
+                total_wall_time: Duration::ZERO,
+                results,
+            });
+        }
+
         let all: Vec<NodeIndex> = dag.all_tasks().into_iter().map(|(idx, _)| idx).collect();
         let (worker_idxs, supervisor_idxs): (Vec<_>, Vec<_>) =
             all.iter().partition(|&&idx| dag.dependencies_of(idx).is_empty());
@@ -1248,7 +1469,7 @@ impl SwarmScheduler for SupervisionScheduler {
         let mut succeeded = 0usize;
         let mut failed = 0usize;
 
-        let wave = run_parallel_wave(&worker_idxs, dag, &executor, self.config.task_timeout).await;
+        let wave = run_parallel_wave(&worker_idxs, dag, &executor, self.config.task_timeout, wall_start).await;
 
         let mut worker_context_lines: Vec<String> = Vec::new();
         for res in wave {
@@ -1276,6 +1497,7 @@ impl SwarmScheduler for SupervisionScheduler {
                 inject_context(task_snapshot, "Worker Results", &worker_context_lines);
             dag.mark_running(idx);
 
+            let offset_ms = wall_start.elapsed().as_micros() as u64;
             let start = Instant::now();
             match timeout(self.config.task_timeout, executor(idx, injected)).await {
                 Ok(Ok(output)) => {
@@ -1286,6 +1508,7 @@ impl SwarmScheduler for SupervisionScheduler {
                         idx,
                         output,
                         elapsed,
+                        offset_ms,
                     ));
                     succeeded += 1;
                 }
@@ -1299,6 +1522,7 @@ impl SwarmScheduler for SupervisionScheduler {
                         idx,
                         err,
                         elapsed,
+                        offset_ms,
                     ));
                     failed += 1;
                 }
@@ -1312,6 +1536,7 @@ impl SwarmScheduler for SupervisionScheduler {
                         idx,
                         msg,
                         elapsed,
+                        offset_ms,
                     ));
                     failed += 1;
                 }
@@ -2165,6 +2390,93 @@ mod tests {
         assert!(
             peak.load(Ordering::SeqCst) >= 3,
             "all 3 mappers must run in parallel"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_dry_run_skips_all_without_executing() {
+        let mut dag = SubtaskDAG::new("test");
+        dag.add_task(SwarmSubtask::new("a", "Task A"));
+        dag.add_task(SwarmSubtask::new("b", "Task B"));
+        dag.add_task(SwarmSubtask::new("c", "Task C"));
+
+        let called = Arc::new(AtomicUsize::new(0));
+        let c = called.clone();
+        let executor: SubtaskExecutorFn = Arc::new(move |_idx, _task| {
+            c.fetch_add(1, Ordering::SeqCst);
+            Box::pin(async { Ok("should not run".into()) })
+        });
+
+        let config = SwarmSchedulerConfig { dry_run: true, ..Default::default() };
+        let summary = ParallelScheduler::with_config(config)
+            .execute(&mut dag, executor)
+            .await
+            .unwrap();
+
+        assert_eq!(called.load(Ordering::SeqCst), 0, "executor must never be called in dry_run");
+        assert_eq!(summary.skipped, 3);
+        assert_eq!(summary.succeeded, 0);
+        assert_eq!(summary.total_wall_time, Duration::ZERO);
+    }
+
+    #[tokio::test]
+    async fn test_timeline_sequential_tasks_have_increasing_offsets() {
+        let mut dag = SubtaskDAG::new("test");
+        let a = dag.add_task(SwarmSubtask::new("a", "Task A"));
+        let b = dag.add_task(SwarmSubtask::new("b", "Task B"));
+        let c = dag.add_task(SwarmSubtask::new("c", "Task C"));
+        dag.add_dependency(a, b).unwrap();
+        dag.add_dependency(b, c).unwrap();
+
+        let executor: SubtaskExecutorFn = Arc::new(move |_idx, task| {
+            let id = task.id.clone();
+            Box::pin(async move {
+                sleep(Duration::from_millis(20)).await;
+                Ok(format!("{}-done", id))
+            })
+        });
+
+        let summary = SequentialScheduler::new().execute(&mut dag, executor).await.unwrap();
+
+        assert!(summary.is_fully_successful());
+        let tl = summary.timeline();
+        assert_eq!(tl.len(), 3);
+        assert!(
+            tl[0].start_offset_us <= tl[1].start_offset_us,
+            "a must start before b"
+        );
+        assert!(
+            tl[1].start_offset_us <= tl[2].start_offset_us,
+            "b must start before c"
+        );
+        assert!(
+            summary.peak_concurrency() <= 1,
+            "sequential never exceeds 1 concurrent task"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_peak_concurrency_parallel_tasks() {
+        let mut dag = SubtaskDAG::new("test");
+        dag.add_task(SwarmSubtask::new("p1", "Task 1"));
+        dag.add_task(SwarmSubtask::new("p2", "Task 2"));
+        dag.add_task(SwarmSubtask::new("p3", "Task 3"));
+
+        let executor: SubtaskExecutorFn = Arc::new(move |_idx, task| {
+            let id = task.id.clone();
+            Box::pin(async move {
+                sleep(Duration::from_millis(30)).await;
+                Ok(format!("{}-done", id))
+            })
+        });
+
+        let summary = ParallelScheduler::new().execute(&mut dag, executor).await.unwrap();
+
+        assert!(summary.is_fully_successful());
+        assert_eq!(
+            summary.peak_concurrency(),
+            3,
+            "all 3 independent tasks run concurrently"
         );
     }
 }
