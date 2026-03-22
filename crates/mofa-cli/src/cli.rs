@@ -162,6 +162,12 @@ pub enum Commands {
         #[command(subcommand)]
         action: RagCommands,
     },
+
+    /// Swarm orchestration commands
+    Swarm {
+        #[command(subcommand)]
+        action: SwarmCommands,
+    },
 }
 
 /// Generate subcommands
@@ -217,6 +223,20 @@ pub enum DatabaseType {
     Mysql,
     /// SQLite database
     Sqlite,
+}
+
+/// Swarm orchestration subcommands
+#[derive(Subcommand)]
+pub enum SwarmCommands {
+    /// Execute a swarm workflow from a YAML file
+    Run {
+        /// Swarm YAML file path
+        file: PathBuf,
+
+        /// Emit a machine-readable JSON summary
+        #[arg(long)]
+        json: bool,
+    },
 }
 
 impl std::fmt::Display for DatabaseType {

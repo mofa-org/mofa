@@ -9,10 +9,11 @@ use tower_http::cors::{Any, CorsLayer};
 use tower_http::trace::TraceLayer;
 use tracing::info;
 
-use crate::handlers::{agents_router, chat_router, health_router, openai_router};
+use crate::handlers::{agents_router, capability_router, chat_router, health_router, openai_router};
 use crate::inference_bridge::InferenceBridge;
 use crate::middleware::RateLimiter;
 use crate::state::AppState;
+use mofa_foundation::GatewayCapabilityRegistry;
 use mofa_runtime::agent::registry::AgentRegistry;
 
 /// Control-plane server configuration
@@ -90,6 +91,8 @@ pub struct GatewayServer {
     registry: Arc<AgentRegistry>,
     /// Optional orchestrator config for inference bridge
     orchestrator_config: Option<OrchestratorConfig>,
+    /// Optional capability registry for HTTP capability access
+    capability_registry: Option<Arc<GatewayCapabilityRegistry>>,
 }
 
 impl GatewayServer {
@@ -99,6 +102,7 @@ impl GatewayServer {
             config,
             registry,
             orchestrator_config: None,
+            capability_registry: None,
         }
     }
 
@@ -112,7 +116,17 @@ impl GatewayServer {
             config,
             registry,
             orchestrator_config: Some(orchestrator_config),
+            capability_registry: None,
         }
+    }
+
+    /// Attach a capability registry to expose capability endpoints.
+    pub fn with_capability_registry(
+        mut self,
+        capability_registry: Arc<GatewayCapabilityRegistry>,
+    ) -> Self {
+        self.capability_registry = Some(capability_registry);
+        self
     }
 
     /// Build the axum `Router` without starting the server.
@@ -126,7 +140,11 @@ impl GatewayServer {
         ));
 
         // Create state
-        let state = Arc::new(AppState::new(self.registry.clone(), rate_limiter.clone()));
+        let mut app_state = AppState::new(self.registry.clone(), rate_limiter.clone());
+        if let Some(capability_registry) = &self.capability_registry {
+            app_state = app_state.with_capability_registry(Arc::clone(capability_registry));
+        }
+        let state = Arc::new(app_state);
 
         // Spawn background GC task for rate-limiter entries
         let gc_limiter = rate_limiter.clone();
@@ -141,15 +159,14 @@ impl GatewayServer {
         let mut router = Router::new()
             .merge(health_router())
             .merge(agents_router())
+            .merge(capability_router())
             .merge(chat_router())
             .with_state(state);
 
         // Add OpenAI router if inference bridge is configured
         if let Some(ref orch_config) = self.orchestrator_config {
             let bridge = Arc::new(InferenceBridge::new(orch_config.clone()));
-            router = router
-                .merge(openai_router())
-                .layer(axum::Extension(bridge));
+            router = router.merge(openai_router()).layer(axum::Extension(bridge));
         }
 
         if self.config.enable_tracing {

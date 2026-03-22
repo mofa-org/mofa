@@ -88,7 +88,13 @@ pub use metrics::{
 
 // Gateway implementations (rate limiter, routing strategies)
 pub mod gateway;
-pub use gateway::TokenBucketRateLimiter;
+pub use gateway::{
+    GatewayCapabilityRegistryConfig,
+    CapabilityRequest, CapabilityResponse, GatewayCapability, GatewayCapabilityRegistry,
+    DuckDuckGoSearchCapability, HttpFetchCapability, ReadSensorCapability,
+    TokenBucketRateLimiter, WebhookNotificationCapability,
+    built_in_capability_registry_from_env,
+};
 
 // Re-export config types
 pub use config::{AgentInfo, AgentYamlConfig, LLMYamlConfig, RuntimeConfig, ToolConfig};
