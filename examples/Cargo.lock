@@ -3568,7 +3568,7 @@ dependencies = [
  "mofa-foundation",
  "tokio",
  "tracing",
- "tracing-subscriber 0.3.23",
+ "tracing-subscriber 0.3.22",
 ]
 
 [[package]]
@@ -6930,7 +6930,7 @@ dependencies = [
  "mofa-kernel",
  "tokio",
  "tracing",
- "tracing-subscriber 0.3.23",
+ "tracing-subscriber 0.3.22",
 ]
 
 [[package]]
@@ -6943,7 +6943,7 @@ dependencies = [
  "mofa-kernel",
  "tokio",
  "tracing",
- "tracing-subscriber 0.3.23",
+ "tracing-subscriber 0.3.22",
 ]
 
 [[package]]
