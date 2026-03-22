@@ -163,9 +163,11 @@ pub struct RiskAwareAnalysis {
     /// Count of subtasks at each risk level.
     pub risk_summary: RiskSummary,
     /// Coordination pattern recommended by [`PatternSelector`] based on the
-    /// DAG's topology and task metadata. Use `.suggested_pattern.pattern` to
-    /// retrieve the [`CoordinationPattern`] and call `.into_scheduler()` on it.
-    pub suggested_pattern: PatternSelection,
+    /// DAG's topology and task metadata. Use `.suggested_pattern.as_ref().map(|s| s.pattern)`
+    /// to retrieve the [`CoordinationPattern`] and call `.into_scheduler()` on it.
+    /// `None` only when the DAG is empty and no meaningful pattern can be selected.
+    #[serde(default)]
+    pub suggested_pattern: Option<PatternSelection>,
 }
 
 /// LLM powered task decomposer
@@ -494,7 +496,7 @@ impl TaskAnalyzer {
         let critical_path = dag.critical_path()?;
         let critical_path_duration_secs = dag.critical_path_duration_secs()?;
         let risk_summary = Self::compute_risk_summary(&dag);
-        let suggested_pattern = PatternSelector::select_with_reason(&dag);
+        let suggested_pattern = Some(PatternSelector::select_with_reason(&dag));
 
         Ok(RiskAwareAnalysis {
             dag,
@@ -875,20 +877,22 @@ See also: reference [1] and [2]."#;
     #[test]
     fn test_suggested_pattern_supervision_for_critical_task() {
         let analysis = TaskAnalyzer::analyze_offline_with_risk("delete the production database");
+        let sel = analysis.suggested_pattern.expect("suggested_pattern must be Some");
         assert_eq!(
-            analysis.suggested_pattern.pattern,
+            sel.pattern,
             crate::swarm::CoordinationPattern::Supervision,
             "critical-risk task should suggest Supervision"
         );
-        assert!(analysis.suggested_pattern.confidence >= 0.85);
+        assert!(sel.confidence >= 0.85);
     }
 
     #[test]
     fn test_suggested_pattern_sequential_for_linear_task() {
         let analysis =
             TaskAnalyzer::analyze_offline_with_risk("read the file then summarise then view");
+        let sel = analysis.suggested_pattern.expect("suggested_pattern must be Some");
         assert_eq!(
-            analysis.suggested_pattern.pattern,
+            sel.pattern,
             crate::swarm::CoordinationPattern::Sequential,
             "linear pipeline with low-risk steps should suggest Sequential"
         );

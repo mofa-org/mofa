@@ -2,7 +2,8 @@
 //!
 //! [`PatternSelector`] inspects a [`SubtaskDAG`]'s structure and metadata and
 //! returns the most appropriate [`CoordinationPattern`] without any LLM call.
-//! The selection is deterministic and runs in O(n) time.
+//! The selection is deterministic and runs in O(n + m) time where n is the
+//! number of tasks and m is the number of dependency edges.
 
 use serde::{Deserialize, Serialize};
 
@@ -21,6 +22,7 @@ pub struct PatternSelection {
 
 /// Result of validating a manually chosen [`CoordinationPattern`] against a [`SubtaskDAG`].
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub enum ValidationResult {
     Valid,
     Suboptimal { reason: String, suggested: CoordinationPattern },
@@ -104,12 +106,14 @@ impl PatternSelector {
             }
         }
 
-        // 2. Supervision — any task carries high/critical risk or requires HITL
+        // 2. Supervision — any task carries high/critical risk or requires HITL,
+        //    AND the DAG has the required ≥1 source / exactly 1 sink shape so that
+        //    validate(Supervision) agrees with the selection.
         let has_oversight_need = all
             .iter()
             .any(|(_, t)| t.hitl_required || t.risk_level >= RiskLevel::High);
 
-        if has_oversight_need {
+        if has_oversight_need && source_indices.len() >= 1 && sink_indices.len() == 1 {
             return PatternSelection {
                 pattern: CoordinationPattern::Supervision,
                 confidence: 0.90,
@@ -171,13 +175,14 @@ impl PatternSelector {
 
         // 6. Sequential — strict linear chain: exactly 1 source, exactly 1 sink,
         //    and every node has at most 1 predecessor and 1 successor.
+        //    A single-node DAG trivially satisfies this (source == sink == that node).
         let is_linear = source_indices.len() == 1
             && sink_indices.len() == 1
             && all.iter().all(|(idx, _)| {
                 dag.dependencies_of(*idx).len() <= 1 && dag.dependents_of(*idx).len() <= 1
             });
 
-        if is_linear && dag.task_count() > 1 {
+        if is_linear {
             return PatternSelection {
                 pattern: CoordinationPattern::Sequential,
                 confidence: 0.90,
@@ -263,7 +268,7 @@ impl PatternSelector {
             }
 
             CoordinationPattern::Parallel => {
-                if is_linear && dag.task_count() > 1 {
+                if is_linear {
                     return ValidationResult::Suboptimal {
                         reason: "dag is a strict linear chain; Sequential preserves \
                                  output ordering between dependent steps"
@@ -486,6 +491,15 @@ mod tests {
         dag.add_task(task("worker-3"));
 
         assert_eq!(PatternSelector::select(&dag), CoordinationPattern::Parallel);
+    }
+
+    #[test]
+    fn test_select_single_node_is_sequential() {
+        let mut dag = SubtaskDAG::new("t");
+        dag.add_task(task("only-node"));
+
+        let sel = PatternSelector::select_with_reason(&dag);
+        assert_eq!(sel.pattern, CoordinationPattern::Sequential);
     }
 
     #[test]

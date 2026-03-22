@@ -326,7 +326,7 @@ If you are not sure which pattern fits your DAG, `PatternSelector` inspects the 
 ```rust
 use mofa_foundation::swarm::{PatternSelector, SubtaskDAG};
 
-let dag: SubtaskDAG = /* build your dag */;
+let mut dag: SubtaskDAG = /* build your dag */;
 
 let selection = PatternSelector::select_with_reason(&dag);
 println!("pattern:    {:?}", selection.pattern);
@@ -384,7 +384,7 @@ match PatternSelector::validate(&dag, CoordinationPattern::Debate) {
 | MapReduce | Fewer than 2 source nodes, or more than 1 sink |
 | Debate | Source node count ≠ 2, or sink count ≠ 1 |
 | Consensus | Fewer than 3 source nodes, or more than 1 sink |
-| Routing | Source count ≠ 1, or no sinks with `required_capabilities` |
+| Routing | Source count ≠ 1 (**Invalid**); no sinks with `required_capabilities` (**Suboptimal**) |
 | Supervision | No source nodes, or more than 1 sink |
 
 ---
