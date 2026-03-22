@@ -4,11 +4,9 @@
 
 use dashmap::DashMap;
 use mofa_kernel::gateway::{GatewayRequest, GatewayResponse};
-use std::hash::{Hash, Hasher};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::{Duration, Instant};
-use std::collections::hash_map::DefaultHasher;
-
+use std::time::{Duration, Instant};
 /// Statistics related to the L1 Cache.
 #[derive(Debug, Clone, Default)]
 pub struct CacheStats {
@@ -28,11 +26,17 @@ struct CacheEntry {
     path: String,
 }
 
+#[derive(Debug, Clone, Hash, Eq, PartialEq)]
+struct CacheKey {
+    path: String,
+    method: mofa_kernel::gateway::route::HttpMethod,
+}
+
 /// L1 in-memory cache keyed on deterministic request hash.
 ///
 /// Features per-entry TTL and thread-safe concurrent access via `DashMap`.
 pub struct L1Cache {
-    entries: DashMap<u64, CacheEntry>,
+    entries: DashMap<CacheKey, CacheEntry>,
     default_ttl: Duration,
     max_entries: usize,
     hits: AtomicUsize,
@@ -59,22 +63,20 @@ impl L1Cache {
     ///
     /// If the response exists but has expired, it is removed and `None` is returned.
     pub fn get(&self, req: &GatewayRequest) -> Option<GatewayResponse> {
-        let key = cache_key(req);
+        let key = CacheKey {
+            path: req.path.clone(),
+            method: req.method.clone(),
+        };
 
-        let expired = if let Some(entry) = self.entries.get(&key) {
+        if let Some(entry) = self.entries.get(&key) {
             if entry.expires_at > Instant::now() {
                 self.hits.fetch_add(1, Ordering::Relaxed);
                 return Some(entry.response.clone());
             }
-            true // entry is expired
-        } else {
-            false // entry does not exist
-        };
-
-        if expired {
-            self.entries.remove(&key);
         }
 
+        // Atomically remove only if still expired
+        self.entries.remove_if(&key, |_, entry| entry.expires_at <= Instant::now());
         self.misses.fetch_add(1, Ordering::Relaxed);
         None
     }
@@ -83,17 +85,21 @@ impl L1Cache {
     ///
     /// If `ttl` is `None`, the default TTL is used.
     /// If the cache exceeds `max_entries`, it currently evicts a random (first available) entry.
+    /// Note: Capacity enforcement is best-effort under high concurrency.
     pub fn insert(&self, req: &GatewayRequest, resp: GatewayResponse, ttl: Option<Duration>) {
         if self.entries.len() >= self.max_entries {
             // Simple eviction: remove the first entry we can grab
             // For a production system this might use an LRU or random eviction strategy
-            let eviction_key = self.entries.iter().next().map(|r| *r.key());
+            let eviction_key = self.entries.iter().next().map(|r| r.key().clone());
             if let Some(k) = eviction_key {
                 self.entries.remove(&k);
             }
         }
 
-        let key = cache_key(req);
+        let key = CacheKey {
+            path: req.path.clone(),
+            method: req.method.clone(),
+        };
         let expires_at = Instant::now() + ttl.unwrap_or(self.default_ttl);
 
         self.entries.insert(
@@ -108,7 +114,10 @@ impl L1Cache {
 
     /// Explicitly invalidate a specific request's cache entry.
     pub fn invalidate(&self, req: &GatewayRequest) -> bool {
-        let key = cache_key(req);
+        let key = CacheKey {
+            path: req.path.clone(),
+            method: req.method.clone(),
+        };
         self.entries.remove(&key).is_some()
     }
 
@@ -117,7 +126,7 @@ impl L1Cache {
         let mut to_remove = Vec::new();
         for entry in self.entries.iter() {
             if entry.path.starts_with(path_prefix) {
-                to_remove.push(*entry.key());
+                to_remove.push(entry.key().clone());
             }
         }
 
@@ -138,17 +147,7 @@ impl L1Cache {
     }
 }
 
-/// Compute a deterministic hash for a `GatewayRequest`.
-///
-/// Hashes the path and method.
-fn cache_key(req: &GatewayRequest) -> u64 {
-    let mut hasher = DefaultHasher::new();
-    req.path.hash(&mut hasher);
-    // Serialize method to string (e.g. "GET")
-    let method_str = format!("{:?}", req.method);
-    method_str.hash(&mut hasher);
-    hasher.finish()
-}
+
 
 #[cfg(test)]
 mod tests {
