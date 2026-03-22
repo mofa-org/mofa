@@ -40,12 +40,14 @@
 
 pub mod moderation;
 pub mod policy;
+pub mod rbac;
 pub mod redaction;
 pub mod types;
 
 // Re-export key types for convenience
 pub use moderation::{ContentModerator, PromptGuard};
 pub use policy::{PolicyBuilder, SecurityPolicy};
+pub use rbac::{Authorizer, AuthorizationResult};
 pub use redaction::{PiiDetector, PiiRedactor, RedactionAuditLog};
 pub use types::{
     ContentPolicy, ModerationCategory, ModerationVerdict, RedactionMatch, RedactionResult,

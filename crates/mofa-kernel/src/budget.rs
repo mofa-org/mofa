@@ -108,25 +108,25 @@ impl BudgetStatus {
     }
 
     pub fn is_exceeded(&self) -> bool {
-        if let Some(max) = self.config.max_cost_per_session {
-            if self.session_cost >= max {
-                return true;
-            }
+        if let Some(max) = self.config.max_cost_per_session
+            && self.session_cost >= max
+        {
+            return true;
         }
-        if let Some(max) = self.config.max_cost_per_day {
-            if self.daily_cost >= max {
-                return true;
-            }
+        if let Some(max) = self.config.max_cost_per_day
+            && self.daily_cost >= max
+        {
+            return true;
         }
-        if let Some(max) = self.config.max_tokens_per_session {
-            if self.session_tokens >= max {
-                return true;
-            }
+        if let Some(max) = self.config.max_tokens_per_session
+            && self.session_tokens >= max
+        {
+            return true;
         }
-        if let Some(max) = self.config.max_tokens_per_day {
-            if self.daily_tokens >= max {
-                return true;
-            }
+        if let Some(max) = self.config.max_tokens_per_day
+            && self.daily_tokens >= max
+        {
+            return true;
         }
         false
     }

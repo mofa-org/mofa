@@ -43,9 +43,13 @@
 //! }
 //! ```
 
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 use std::time::Duration;
 use tokio::sync::RwLock;
+
+/// Maximum number of business metric entries retained in memory.
+/// Oldest entries are evicted when this limit is reached.
+const MAX_BUSINESS_METRICS: usize = 10_000;
 
 // ---------------------------------------------------------------------------
 // Agent metrics
@@ -318,7 +322,7 @@ pub struct MetricsCollector {
     circuit_breaker_metrics: RwLock<HashMap<String, CircuitBreakerMetrics>>,
     scheduler_metrics: RwLock<SchedulerMetrics>,
     retry_metrics: RwLock<HashMap<String, RetryMetrics>>,
-    business_metrics: RwLock<Vec<BusinessMetrics>>,
+    business_metrics: RwLock<VecDeque<BusinessMetrics>>,
 }
 
 impl Default for MetricsCollector {
@@ -338,7 +342,7 @@ impl MetricsCollector {
             circuit_breaker_metrics: RwLock::new(HashMap::new()),
             scheduler_metrics: RwLock::new(SchedulerMetrics::default()),
             retry_metrics: RwLock::new(HashMap::new()),
-            business_metrics: RwLock::new(Vec::new()),
+            business_metrics: RwLock::new(VecDeque::new()),
         }
     }
 
@@ -553,6 +557,10 @@ impl MetricsCollector {
     // -- Business metrics ----------------------------------------------------
 
     /// Record a custom business metric with arbitrary tags.
+    ///
+    /// The buffer is capped at [`MAX_BUSINESS_METRICS`] entries. When full, the
+    /// oldest entry is dropped (O(1) via `VecDeque`) to make room for the new
+    /// one, preventing unbounded memory growth in long-running deployments.
     pub async fn record_business_metric(
         &self,
         name: impl Into<String>,
@@ -568,12 +576,26 @@ impl MetricsCollector {
         )
         .unwrap_or(u64::MAX);
 
-        metrics.push(BusinessMetrics {
+        if metrics.len() >= MAX_BUSINESS_METRICS {
+            metrics.pop_front();
+        }
+
+        metrics.push_back(BusinessMetrics {
             metric_name: name.into(),
             metric_value: value,
             tags,
             timestamp_ms,
         });
+    }
+
+    /// Atomically drain and return all buffered business metrics.
+    ///
+    /// Callers (e.g. a Prometheus scrape loop or OTLP exporter) should call
+    /// this on each collection interval to both read and clear the buffer,
+    /// keeping memory usage stable between scrapes.
+    pub async fn drain_business_metrics(&self) -> Vec<BusinessMetrics> {
+        let mut metrics = self.business_metrics.write().await;
+        metrics.drain(..).collect()
     }
 }
 
@@ -742,7 +764,7 @@ mod tests {
             .record_business_metric("custom_score", 42.5, tags)
             .await;
 
-        let all = collector.business_metrics.read().await;
+        let all = collector.drain_business_metrics().await;
         assert_eq!(all.len(), 1);
         assert_eq!(all[0].metric_name, "custom_score");
         assert!((all[0].metric_value - 42.5).abs() < f64::EPSILON);

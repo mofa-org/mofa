@@ -10,31 +10,81 @@ Multi-agent systems enable:
 - **Collaboration** — Agents working together
 - **Robustness** — Fallback and redundancy
 
+## Swarm DAG Orchestrator
+
+The Swarm Orchestrator executes directed acyclic graph (DAG) pipelines via a dedicated **SwarmScheduler** engine. Crucially, the scheduler retains exclusive ownership of DAG state mutations (e.g., `mark_running`, `mark_complete_with_output`, `mark_failed`, `cascade_skip`), while the Subtask Executor (`SubtaskExecutorFn`) remains a pure function returning a `GlobalResult<String>`.
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant Router as CoordinationPattern
+    participant Scheduler as SwarmScheduler
+    participant DAG as SubtaskDAG
+    participant Executor as SubtaskExecutorFn (Agent)
+
+    User->>Router: .into_scheduler()
+    Router-->>User: Box<dyn SwarmScheduler>
+    
+    User->>Scheduler: .execute(&mut dag, executor_fn)
+    Scheduler->>DAG: topological_order() / ready_tasks()
+    DAG-->>Scheduler: List of NodeIndexes
+    
+    loop For each NodeIndex (in Waves or Sequence)
+        Scheduler->>DAG: mark_running(idx)
+        Scheduler->>Executor: execute(idx, task_clone)
+        Executor-->>Scheduler: GlobalResult<String>
+        
+        alt Task Succeeds
+            Scheduler->>DAG: mark_complete_with_output(idx, Some(output))
+        else Task Fails
+            Scheduler->>DAG: mark_failed(idx, error_msg)
+            opt FailFastCascade policy
+                Scheduler->>DAG: cascade_skip(idx)
+            end
+        end
+    end
+    
+    Scheduler-->>User: SchedulerSummary (Metrics & Results)
+```
+
 ## Coordination Patterns
 
 ### Sequential Pipeline
 
-```rust
-use mofa_sdk::coordination::Sequential;
+```rust,ignore
+use mofa_foundation::swarm::{CoordinationPattern, SubtaskDAG, SwarmSubtask};
 
-let pipeline = Sequential::new()
-    .add_step(research_agent)
-    .add_step(analysis_agent)
-    .add_step(writer_agent);
+let mut dag = SubtaskDAG::new("research-pipeline");
+let idx_research = dag.add_task(SwarmSubtask::new("research", "Research topic"));
+let idx_analysis = dag.add_task(SwarmSubtask::new("analysis", "Analyze data"));
+let idx_writer   = dag.add_task(SwarmSubtask::new("writer", "Write report"));
 
-let result = pipeline.execute(input).await?;
+// Enforce sequential dependency: research -> analysis -> writer
+dag.add_dependency(idx_research, idx_analysis).unwrap();
+dag.add_dependency(idx_analysis, idx_writer).unwrap();
+
+let scheduler = CoordinationPattern::Sequential.into_scheduler();
+let summary = scheduler.execute(&mut dag, executor_fn).await?;
 ```
 
 ### Parallel Execution
 
-```rust
-use mofa_sdk::coordination::Parallel;
+```rust,ignore
+use mofa_foundation::swarm::{CoordinationPattern, SubtaskDAG, SwarmSubtask};
+use mofa_foundation::swarm::{SwarmSchedulerConfig, FailurePolicy, ParallelScheduler};
 
-let parallel = Parallel::new()
-    .with_agents(vec![agent_a, agent_b, agent_c])
-    .with_aggregation(Aggregation::TakeBest);
+let mut dag = SubtaskDAG::new("parallel-search");
+let idx_a = dag.add_task(SwarmSubtask::new("A", "Search Source A"));
+let idx_b = dag.add_task(SwarmSubtask::new("B", "Search Source B"));
+let idx_c = dag.add_task(SwarmSubtask::new("C", "Search Source C"));
 
-let results = parallel.execute(input).await?;
+// Optional: Configure strict limits and failure cascades
+let mut config = SwarmSchedulerConfig::default();
+config.concurrency_limit = Some(2); // Only execute 2 queries concurrently
+config.failure_policy = FailurePolicy::FailFastCascade;
+
+let scheduler = ParallelScheduler::with_config(config);
+let summary = scheduler.execute(&mut dag, executor_fn).await?;
 ```
 
 ### Consensus
