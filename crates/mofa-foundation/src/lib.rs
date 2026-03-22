@@ -77,6 +77,10 @@ pub mod recovery;
 // Metrics and telemetry module
 pub mod metrics;
 
+// Gateway layer implementations (AuthProvider, API Key Auth)
+pub mod gateway;
+pub use gateway::{ApiKeyAuthProvider, InMemoryApiKeyStore};
+
 // Re-export metrics types
 pub use metrics::{
     AgentMetrics, BusinessMetrics, CircuitBreakerEvent, CircuitBreakerMetrics, CircuitBreakerState,
