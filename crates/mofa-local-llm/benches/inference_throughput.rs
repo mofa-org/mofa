@@ -3,17 +3,15 @@
 //! Compares tokens-per-second across available compute backends.
 //! Run with: `cargo bench -p mofa-local-llm`
 
+use mofa_foundation::orchestrator::traits::ModelProvider;
 use mofa_local_llm::{ComputeBackend, HardwareInfo, LinuxInferenceConfig, LinuxLocalProvider};
 use std::time::Instant;
 
 fn bench_backend(backend: ComputeBackend, model_path: &str, prompts: &[&str]) {
-    let config = LinuxInferenceConfig::new(
-        format!("bench-{}", backend),
-        model_path,
-    )
-    .with_backend(backend.clone());
+    let config = LinuxInferenceConfig::new(format!("bench-{}", backend), model_path)
+        .with_backend(backend.clone());
 
-    let provider = match LinuxLocalProvider::new(config) {
+    let mut provider = match LinuxLocalProvider::new(config) {
         Ok(p) => p,
         Err(e) => {
             eprintln!("skip {backend}: {e}");
@@ -22,22 +20,21 @@ fn bench_backend(backend: ComputeBackend, model_path: &str, prompts: &[&str]) {
     };
 
     let rt = tokio::runtime::Runtime::new().unwrap();
+
+    // Attempt to load the model; skip this backend if the file is missing.
+    if let Err(e) = rt.block_on(provider.load()) {
+        eprintln!("skip {backend} (load failed): {e}");
+        return;
+    }
+
     let mut total_tokens = 0usize;
     let start = Instant::now();
 
     for &prompt in prompts {
-        let result = rt.block_on(async {
-            let mut p = provider;
-            // Load would fail without a real model file; count stub responses
-            let out = p.infer(prompt).await;
-            (p, out)
-        });
-        let (p, out) = result;
+        let out = rt.block_on(provider.infer(prompt));
         if let Ok(response) = out {
             total_tokens += response.split_whitespace().count();
         }
-        drop(p);
-        break; // one round per backend in bench
     }
 
     let elapsed = start.elapsed();
@@ -63,8 +60,8 @@ fn main() {
     );
     println!();
 
-    let model_path = std::env::var("BENCH_MODEL_PATH")
-        .unwrap_or_else(|_| "/tmp/bench-model.gguf".into());
+    let model_path =
+        std::env::var("BENCH_MODEL_PATH").unwrap_or_else(|_| "/tmp/bench-model.gguf".into());
 
     let prompts = [
         "explain the difference between CUDA and ROCm in two sentences",

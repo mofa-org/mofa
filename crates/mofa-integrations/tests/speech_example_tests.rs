@@ -189,3 +189,58 @@ mod deepgram_examples {
         assert_eq!(adapter.name(), "deepgram");
     }
 }
+
+// ============================================================================
+// SpeechConfig / SpeechProviderConfig (registry_builder)
+// ============================================================================
+
+mod registry_builder_tests {
+    use mofa_integrations::speech::registry_builder::{SpeechConfig, SpeechProviderConfig};
+
+    #[test]
+    fn empty_config() {
+        let cfg = SpeechConfig::new();
+        assert!(cfg.providers.is_empty());
+    }
+
+    #[test]
+    fn builder_chain() {
+        let cfg = SpeechConfig::new()
+            .with_provider(SpeechProviderConfig::new("openai", "sk-test").as_default_tts())
+            .with_provider(SpeechProviderConfig::new("deepgram", "dg-test").as_default_asr());
+
+        assert_eq!(cfg.providers.len(), 2);
+
+        let openai = &cfg.providers[0];
+        assert_eq!(openai.provider, "openai");
+        assert_eq!(openai.api_key, "sk-test");
+        assert!(openai.default_tts);
+        assert!(!openai.default_asr);
+
+        let dg = &cfg.providers[1];
+        assert_eq!(dg.provider, "deepgram");
+        assert!(dg.default_asr);
+    }
+
+    #[test]
+    fn json_roundtrip() {
+        let original = SpeechConfig::new()
+            .with_provider(SpeechProviderConfig::new("elevenlabs", "el-key").as_default_tts());
+
+        let json = serde_json::to_string(&original).unwrap();
+        let parsed: SpeechConfig = serde_json::from_str(&json).unwrap();
+
+        assert_eq!(parsed.providers.len(), 1);
+        assert_eq!(parsed.providers[0].provider, "elevenlabs");
+        assert_eq!(parsed.providers[0].api_key, "el-key");
+        assert!(parsed.providers[0].default_tts);
+    }
+
+    #[test]
+    fn deserialize_missing_default_flags_is_false() {
+        let json = r#"{"providers":[{"provider":"deepgram","api_key":"x"}]}"#;
+        let cfg: SpeechConfig = serde_json::from_str(json).unwrap();
+        assert!(!cfg.providers[0].default_tts);
+        assert!(!cfg.providers[0].default_asr);
+    }
+}
