@@ -4,6 +4,8 @@
 //! OpenAI-SDK-compatible client can target the MoFA gateway with zero
 //! code changes.
 
+#![allow(missing_docs)]
+
 use serde::{Deserialize, Serialize};
 
 use mofa_foundation::inference::types::RequestPriority;
@@ -152,6 +154,7 @@ pub struct ChatCompletionChunk {
 }
 
 /// A streaming choice delta.
+#[allow(missing_docs)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ChunkChoice {
     pub index: u32,
@@ -161,6 +164,7 @@ pub struct ChunkChoice {
 }
 
 /// The partial content in a streaming chunk.
+#[allow(missing_docs)]
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct Delta {
     #[serde(skip_serializing_if = "Option::is_none")]

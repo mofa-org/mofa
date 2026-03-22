@@ -11,6 +11,7 @@ Practical guides for common tasks and patterns.
 - **Secretary Agent** — Human-in-the-loop patterns
 - **Skills System** — Composable agent capabilities
 - **Monitoring & Observability** — Production monitoring
+- **Context Compression Architecture** — Architecture diagrams and design patterns
 
 ## Common Patterns
 

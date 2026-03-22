@@ -238,8 +238,7 @@ impl McpClient for McpClientManager {
             name: tool_name.to_string().into(),
             arguments: Some(
                 arguments
-                    .as_object()
-                    .map(|m| m.clone())
+                    .as_object().cloned()
                     .unwrap_or_default(),
             ),
             meta: None,

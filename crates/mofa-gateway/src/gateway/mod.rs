@@ -11,25 +11,24 @@
 //!
 //! **Complete** - All gateway functionality implemented and tested
 
+pub mod circuit_breaker;
+pub mod health_checker;
 pub mod load_balancer;
 pub mod rate_limiter;
-pub mod health_checker;
-pub mod circuit_breaker;
 pub mod router;
 pub mod routing_policy;
 
+pub use circuit_breaker::*;
+pub use health_checker::*;
 pub use load_balancer::*;
 pub use rate_limiter::*;
-pub use health_checker::*;
-pub use circuit_breaker::*;
 pub use router::*;
 pub use routing_policy::*;
 
 use crate::error::{GatewayError, GatewayResult};
-use crate::types::{LoadBalancingAlgorithm, NodeId, RequestMetadata};
+use crate::types::{LoadBalancingAlgorithm, NodeId, RequestMetadata, ChatCompletionResponse, Message, Role, Usage, Choice};
 use std::sync::Arc;
 use tokio::sync::RwLock;
-
 
 /// Configuration for the gateway.
 #[derive(Debug, Clone)]
@@ -93,8 +92,8 @@ impl Gateway {
 
         // Create circuit breaker registry
         let circuit_breakers = Arc::new(CircuitBreakerRegistry::new(
-            5, // failure threshold
-            2, // success threshold
+            5,                                  // failure threshold
+            2,                                  // success threshold
             std::time::Duration::from_secs(30), // timeout
         ));
 
@@ -123,15 +122,14 @@ impl Gateway {
         })
     }
 
-
     /// Start the gateway HTTP server.
     pub async fn start(&mut self) -> GatewayResult<()> {
         use axum::{
+            Json, Router,
             extract::{Path, State},
             http::StatusCode,
             response::IntoResponse,
-            routing::{get, post, delete},
-            Json, Router,
+            routing::{delete, get, post},
         };
         use serde::{Deserialize, Serialize};
         use tower_http::cors::{Any, CorsLayer};
@@ -164,6 +162,8 @@ impl Gateway {
             .route("/api/v1/cluster/status", get(cluster_status_handler))
             // Request routing endpoint (for proxying)
             .route("/api/v1/route", post(route_request_handler))
+            // OpenAI-compatible endpoint
+            .route("/v1/chat/completions", post(chat_completions_handler))
             .with_state(app_state)
             .layer(TraceLayer::new_for_http())
             .layer(
@@ -185,15 +185,22 @@ impl Gateway {
         // Start server
         let listener = tokio::net::TcpListener::bind(self.config.listen_addr)
             .await
-            .map_err(|e| GatewayError::Network(format!("Failed to bind to {}: {}", self.config.listen_addr, e)))?;
+            .map_err(|e| {
+                GatewayError::Network(format!(
+                    "Failed to bind to {}: {}",
+                    self.config.listen_addr, e
+                ))
+            })?;
 
-        tracing::info!("Gateway HTTP server listening on {}", self.config.listen_addr);
+        tracing::info!(
+            "Gateway HTTP server listening on {}",
+            self.config.listen_addr
+        );
 
         // Spawn server task
-        let server = axum::serve(listener, app)
-            .with_graceful_shutdown(async {
-                shutdown_rx.await.ok();
-            });
+        let server = axum::serve(listener, app).with_graceful_shutdown(async {
+            shutdown_rx.await.ok();
+        });
 
         tokio::spawn(async move {
             if let Err(e) = server.await {
@@ -255,7 +262,8 @@ impl Gateway {
                     let agent_count = {
                         let sm_guard = sm.read().await;
                         sm_guard.get_agents().await
-                    }.len();
+                    }
+                    .len();
                     metrics.update_agent_count(agent_count);
                 }
             }
@@ -276,10 +284,10 @@ struct GatewayState {
 // HTTP Handlers
 
 use axum::{
+    Json,
     extract::{Path, State},
     http::StatusCode,
     response::IntoResponse,
-    Json,
 };
 use serde::{Deserialize, Serialize};
 
@@ -550,6 +558,27 @@ async fn route_request_handler(
             ))
         }
     }
+}
+
+// OpenAI-compatible chat completions handler (mock for minimal PR)
+async fn chat_completions_handler(
+    State(_state): State<GatewayState>,
+    Json(req): Json<crate::types::ChatCompletionRequest>,
+) -> impl IntoResponse {
+    // For minimal PR, return a mock response
+    // In future PRs, this will integrate with the agent registry
+    let response = ChatCompletionResponse::new(
+        format!("chatcmpl-{}", uuid::Uuid::new_v4())[..8].to_string(),
+        req.model,
+        Message {
+            role: Role::Assistant,
+            content: "Hello from MoFA gateway!".to_string(),
+            name: None,
+        },
+        Usage::new(10, 8),
+    );
+
+    (StatusCode::OK, Json(response))
 }
 
 async fn metrics_handler(State(state): State<GatewayState>) -> impl IntoResponse {

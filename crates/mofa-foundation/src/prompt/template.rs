@@ -446,16 +446,30 @@ impl PromptTemplate {
 
         // 收集所有未定义但在模板中出现的变量
         // Collect all undefined variables appearing in template
+        // Collect variable names from the template first, then apply replacements.
+        // This avoids cloning `result` just for regex iteration.
         let mut missing = Vec::new();
-        for cap in super::regex::VARIABLE_PLACEHOLDER_RE.captures_iter(&result.clone()) {
-            let var_name = &cap[1];
-            if !defined_vars.contains(var_name) {
-                if let Some(&value) = vars.get(var_name) {
-                    let placeholder = format!("{{{}}}", var_name);
-                    result = result.replace(&placeholder, value);
+        let var_names: Vec<(String, bool)> = super::regex::VARIABLE_PLACEHOLDER_RE
+            .captures_iter(&result)
+            .filter_map(|cap| {
+                let var_name = cap[1].to_string();
+                if !defined_vars.contains(var_name.as_str()) {
+                    let has_value = vars.contains_key(var_name.as_str());
+                    Some((var_name, has_value))
                 } else {
-                    missing.push(var_name.to_string());
+                    None
                 }
+            })
+            .collect();
+
+        for (var_name, has_value) in var_names {
+            if has_value {
+                let placeholder = format!("{{{}}}", var_name);
+                if let Some(&value) = vars.get(var_name.as_str()) {
+                    result = result.replace(&placeholder, value);
+                }
+            } else {
+                missing.push(var_name);
             }
         }
 
