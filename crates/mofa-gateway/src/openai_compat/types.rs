@@ -267,6 +267,8 @@ pub struct GatewayConfig {
     pub available_models: Vec<String>,
     /// Optional API key for static bearer token authentication.
     pub api_key: Option<String>,
+    /// Optional JWT secret for JWT authentication.
+    pub jwt_secret: Option<String>,
 }
 
 impl Default for GatewayConfig {
@@ -278,6 +280,7 @@ impl Default for GatewayConfig {
             orchestrator_config: OrchestratorConfig::default(),
             available_models: vec!["mofa-local".to_string()],
             api_key: None,
+            jwt_secret: None,
         }
     }
 }
@@ -310,6 +313,12 @@ impl GatewayConfig {
     /// Set the API key for authentication.
     pub fn with_api_key(mut self, key: impl Into<String>) -> Self {
         self.api_key = Some(key.into());
+        self
+    }
+
+    /// Set the JWT secret for JWT authentication.
+    pub fn with_jwt_secret(mut self, secret: impl Into<String>) -> Self {
+        self.jwt_secret = Some(secret.into());
         self
     }
 }

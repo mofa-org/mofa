@@ -82,6 +82,9 @@ opentelemetry-semantic-conventions = { workspace = true, optional = true }
 async-openai = { version = "0.27", optional = true }
 subtle = { version = "2", optional = true }
 
+# JWT authentication (for openai-compat gateway)
+jsonwebtoken = { version = "9", optional = true }
+
 [build-dependencies]
 tonic-build = "0.12"
 
@@ -111,4 +114,9 @@ monitoring = [
 full = ["rocksdb", "monitoring", "openai-compat"]
 
 # OpenAI-compatible HTTP gateway components
-openai-compat = ["dep:async-openai", "dep:subtle"]
+openai-compat = ["dep:async-openai", "dep:subtle", "dep:jsonwebtoken"]
+
+[[example]]
+name = "gateway_inference_server"
+path = "examples/gateway_inference_server.rs"
+required-features = ["openai-compat"]

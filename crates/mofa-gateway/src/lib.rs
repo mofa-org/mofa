@@ -83,6 +83,7 @@ pub mod server;
 pub mod state;
 pub mod state_machine;
 pub mod types;
+pub mod inference_bridge;
 
 #[cfg(feature = "openai-compat")]
 pub mod openai_compat;

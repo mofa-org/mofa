@@ -27,6 +27,8 @@ use futures::stream;
 use mofa_foundation::inference::orchestrator::InferenceOrchestrator;
 use mofa_foundation::inference::types::InferenceRequest;
 
+use crate::inference_bridge::InferenceBridge;
+use crate::middleware::jwt_auth::JwtAuth;
 use super::rate_limiter::TokenBucketLimiter;
 use super::types::{
     ChatCompletionChunk, ChatCompletionRequest, ChatCompletionResponse, ChatMessage, Choice,
@@ -51,6 +53,10 @@ pub struct AppState {
     pub available_models: Vec<String>,
     /// Optional static API key for authentication.
     pub api_key: Option<String>,
+    /// Optional JWT authentication configuration.
+    pub jwt_auth: Option<JwtAuth>,
+    /// Inference bridge for routing policies.
+    pub inference_bridge: InferenceBridge,
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
@@ -155,29 +161,58 @@ pub async fn chat_completions(
     Json(req): Json<ChatCompletionRequest>,
 ) -> Response {
     // ── Authentication ────────────────────────────────────────────────────────
-    if let Some(expected_key) = &state.api_key {
-        let auth_header = headers_map
-            .get(axum::http::header::AUTHORIZATION)
-            .and_then(|h| h.to_str().ok())
-            .unwrap_or("");
+    // Try JWT authentication first if configured
+    let auth_header = headers_map
+        .get(axum::http::header::AUTHORIZATION)
+        .and_then(|h| h.to_str().ok());
+    
+    let mut authenticated = false;
+    
+    // Try JWT authentication if configured
+    if let Some(ref jwt) = state.jwt_auth {
+        if let Some(header) = auth_header {
+            // Check if it looks like a JWT (contains two dots)
+            if header.starts_with("Bearer ") && header.matches('.').count() >= 2 {
+                match jwt.extract_from_header(headers_map.get(axum::http::header::AUTHORIZATION)) {
+                    Ok(claims) => {
+                        tracing::debug!("JWT authentication successful for user: {}", claims.sub);
+                        authenticated = true;
+                    }
+                    Err(e) => {
+                        return e.into_response();
+                    }
+                }
+            }
+        }
+    }
+    
+    // If not authenticated via JWT, try API key if configured
+    if !authenticated {
+        if let Some(expected_key) = &state.api_key {
+            let auth_value = auth_header.unwrap_or("");
+            let provided_key = auth_value.strip_prefix("Bearer ").unwrap_or("").trim();
 
-        let provided_key = auth_header.strip_prefix("Bearer ").unwrap_or("").trim();
+            // Constant-time comparison via `subtle` to prevent timing side-channel attacks.
+            // Pad both values to equal length so no information is leaked about key length.
+            use subtle::ConstantTimeEq;
+            let max_len = provided_key.len().max(expected_key.len());
+            let mut a = vec![0u8; max_len];
+            let mut b = vec![0u8; max_len];
+            a[..provided_key.len()].copy_from_slice(provided_key.as_bytes());
+            b[..expected_key.len()].copy_from_slice(expected_key.as_bytes());
+            let len_ok = (provided_key.len() == expected_key.len()) as u8;
+            let keys_match = a.ct_eq(&b).unwrap_u8() & len_ok;
 
-        // Constant-time comparison via `subtle` to prevent timing side-channel attacks.
-        // Pad both values to equal length so no information is leaked about key length.
-        use subtle::ConstantTimeEq;
-        let max_len = provided_key.len().max(expected_key.len());
-        let mut a = vec![0u8; max_len];
-        let mut b = vec![0u8; max_len];
-        a[..provided_key.len()].copy_from_slice(provided_key.as_bytes());
-        b[..expected_key.len()].copy_from_slice(expected_key.as_bytes());
-        let len_ok = (provided_key.len() == expected_key.len()) as u8;
-        let keys_match = a.ct_eq(&b).unwrap_u8() & len_ok;
-
-        if keys_match != 1 {
-            let err = GatewayErrorBody::new("Invalid API key provided", "authentication_error");
+            if keys_match != 1 {
+                let err = GatewayErrorBody::new("Invalid API key provided", "authentication_error");
+                return (StatusCode::UNAUTHORIZED, Json(err)).into_response();
+            }
+        } else if state.jwt_auth.is_some() && !authenticated {
+            // JWT is configured but token was not provided or invalid
+            let err = GatewayErrorBody::new("Invalid or missing JWT token", "authentication_error");
             return (StatusCode::UNAUTHORIZED, Json(err)).into_response();
         }
+        // If neither JWT nor API key is configured, allow the request (no auth required)
     }
 
     // ── Rate limit ────────────────────────────────────────────────────────────
@@ -395,12 +430,20 @@ mod tests {
             limiter,
             available_models: vec!["mofa-local".to_string(), "gpt-4o".to_string()],
             api_key: None,
+            jwt_auth: None,
+            inference_bridge: InferenceBridge::new("local"),
         }
     }
 
     fn make_state_with_auth(rpm: u32, key: &str) -> AppState {
         let mut state = make_state(rpm);
         state.api_key = Some(key.to_string());
+        state
+    }
+
+    fn make_state_with_jwt(rpm: u32, secret: &str) -> AppState {
+        let mut state = make_state(rpm);
+        state.jwt_auth = Some(JwtAuth::new(secret));
         state
     }
 
