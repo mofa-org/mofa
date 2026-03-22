@@ -80,7 +80,7 @@ pub mod metrics;
 
 // Gateway layer implementations (RouteRegistry, AuthProvider)
 pub mod gateway;
-pub use gateway::InMemoryRouteRegistry;
+pub use gateway::{InMemoryRouteRegistry, TokenBucketRateLimiter};
 
 // Re-export metrics types
 pub use metrics::{
@@ -90,9 +90,7 @@ pub use metrics::{
     TokenUsage, ToolMetrics, WorkflowMetrics,
 };
 
-// Gateway implementations (rate limiter, routing strategies)
-pub mod gateway;
-pub use gateway::TokenBucketRateLimiter;
+
 
 // Re-export config types
 pub use config::{AgentInfo, AgentYamlConfig, LLMYamlConfig, RuntimeConfig, ToolConfig};

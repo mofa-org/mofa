@@ -6,11 +6,11 @@
 pub mod registry;
 
 pub use registry::InMemoryRouteRegistry;
-//! Foundation-layer gateway implementations.
-//!
-//! This module contains concrete implementations of the kernel-level gateway
-//! traits. Kernel traits live in `mofa-kernel::gateway`; implementations live
-//! here so the kernel stays free of runtime dependencies.
+/// Foundation-layer gateway implementations.
+///
+/// This module contains concrete implementations of the kernel-level gateway
+/// traits. Kernel traits live in `mofa-kernel::gateway`; implementations live
+/// here so the kernel stays free of runtime dependencies.
 
 pub mod rate_limiter;
 
