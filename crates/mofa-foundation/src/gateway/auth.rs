@@ -134,7 +134,7 @@ pub struct ApiKeyAuthProvider<S: ApiKeyStore> {
     header_name: String,
 }
 
-impl<S: ApiKeyStore + Send + Sync> ApiKeyAuthProvider<S> {
+impl<S: ApiKeyStore> ApiKeyAuthProvider<S> {
     /// Create a provider using the default `x-api-key` header.
     pub fn new(store: Arc<S>) -> Self {
         Self {
@@ -155,7 +155,7 @@ impl<S: ApiKeyStore + Send + Sync> ApiKeyAuthProvider<S> {
 }
 
 #[async_trait]
-impl<S: ApiKeyStore + Send + Sync> AuthProvider for ApiKeyAuthProvider<S> {
+impl<S: ApiKeyStore> AuthProvider for ApiKeyAuthProvider<S> {
     async fn authenticate(
         &self,
         headers: &HashMap<String, String>,
@@ -196,26 +196,27 @@ mod tests {
 
     // ── Helper ───────────────────────────────────────────────────────────────
 
-    fn make_provider_with_keys(keys: Vec<(&str, &str, Vec<String>, Option<u64>)>) -> ApiKeyAuthProvider<InMemoryApiKeyStore> {
+    fn make_provider_with_keys(keys: Vec<(&str, Vec<String>, Option<u64>)>) -> (ApiKeyAuthProvider<InMemoryApiKeyStore>, Vec<String>) {
         let mut store = InMemoryApiKeyStore::new();
-        for (key, subject, scopes, expiry) in keys {
-            let mut claims = AuthClaims::new(subject, scopes);
-            if let Some(exp) = expiry {
-                claims = claims.with_expiry(exp);
-            }
-            store.keys.insert(key.to_string(), Some(claims));
+        let mut generated_keys = Vec::new();
+        for (subject, scopes, expiry) in keys {
+            let key = match expiry {
+                Some(exp) => store.issue_with_expiry(subject, scopes, exp),
+                None => store.issue(subject, scopes),
+            };
+            generated_keys.push(key);
         }
-        ApiKeyAuthProvider::new(Arc::new(store))
+        (ApiKeyAuthProvider::new(Arc::new(store)), generated_keys)
     }
 
     // ── PR Body Test Suite ───────────────────────────────────────────────────
 
     #[tokio::test]
     async fn valid_key_populates_context() {
-        let provider = make_provider_with_keys(vec![
-            ("valid-key-123", "agent-prime", vec!["chat:write".into()], None)
+        let (provider, keys) = make_provider_with_keys(vec![
+            ("agent-prime", vec!["chat:write".into()], None)
         ]);
-        let headers = HashMap::from([("x-api-key".to_string(), "valid-key-123".to_string())]);
+        let headers = HashMap::from([("x-api-key".to_string(), keys[0].clone())]);
         let claims = provider.authenticate(&headers).await.expect("Auth should succeed");
         assert_eq!(claims.subject, "agent-prime");
         assert!(claims.has_scope("chat:write"));
@@ -223,7 +224,7 @@ mod tests {
 
     #[tokio::test]
     async fn missing_header_returns_400() {
-        let provider = make_provider_with_keys(vec![]);
+        let (provider, _) = make_provider_with_keys(vec![]);
         let headers = HashMap::new(); // No x-api-key
         let err = provider.authenticate(&headers).await.unwrap_err();
         assert_eq!(err, AuthError::MissingCredentials);
@@ -231,7 +232,7 @@ mod tests {
 
     #[tokio::test]
     async fn unknown_key_returns_401() {
-        let provider = make_provider_with_keys(vec![]);
+        let (provider, _) = make_provider_with_keys(vec![]);
         let headers = HashMap::from([("x-api-key".to_string(), "ghost-key".to_string())]);
         let err = provider.authenticate(&headers).await.unwrap_err();
         assert_eq!(err, AuthError::InvalidCredentials);
@@ -251,10 +252,10 @@ mod tests {
 
     #[tokio::test]
     async fn expired_key_returns_401() {
-        let provider = make_provider_with_keys(vec![
-            ("old-key", "subject", vec![], Some(1)) // Expired 1ms after epoch
+        let (provider, keys) = make_provider_with_keys(vec![
+            ("subject", vec![], Some(1)) // Expired 1ms after epoch
         ]);
-        let headers = HashMap::from([("x-api-key".to_string(), "old-key".to_string())]);
+        let headers = HashMap::from([("x-api-key".to_string(), keys[0].clone())]);
         let err = provider.authenticate(&headers).await.unwrap_err();
         assert_eq!(err, AuthError::ExpiredCredentials);
     }
@@ -262,19 +263,19 @@ mod tests {
     #[tokio::test]
     async fn non_expired_key_passes() {
         let future = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis() as u64 + 100_000;
-        let provider = make_provider_with_keys(vec![
-            ("future-key", "subject", vec![], Some(future))
+        let (provider, keys) = make_provider_with_keys(vec![
+            ("subject", vec![], Some(future))
         ]);
-        let headers = HashMap::from([("x-api-key".to_string(), "future-key".to_string())]);
+        let headers = HashMap::from([("x-api-key".to_string(), keys[0].clone())]);
         assert!(provider.authenticate(&headers).await.is_ok());
     }
 
     #[tokio::test]
     async fn key_with_no_expiry_never_expires() {
-        let provider = make_provider_with_keys(vec![
-            ("eternal-key", "subject", vec![], None)
+        let (provider, keys) = make_provider_with_keys(vec![
+            ("subject", vec![], None)
         ]);
-        let headers = HashMap::from([("x-api-key".to_string(), "eternal-key".to_string())]);
+        let headers = HashMap::from([("x-api-key".to_string(), keys[0].clone())]);
         assert!(provider.authenticate(&headers).await.is_ok());
     }
 
@@ -299,10 +300,10 @@ mod tests {
     #[tokio::test]
     async fn scopes_from_claims_appear_in_context() {
         let scopes = vec!["read".to_string(), "write".to_string()];
-        let provider = make_provider_with_keys(vec![
-            ("scoped-key", "subject", scopes.clone(), None)
+        let (provider, keys) = make_provider_with_keys(vec![
+            ("subject", scopes.clone(), None)
         ]);
-        let headers = HashMap::from([("x-api-key".to_string(), "scoped-key".to_string())]);
+        let headers = HashMap::from([("x-api-key".to_string(), keys[0].clone())]);
         let claims = provider.authenticate(&headers).await.unwrap();
         assert_eq!(claims.scopes, scopes);
     }
