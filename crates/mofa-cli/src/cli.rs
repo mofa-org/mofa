@@ -184,6 +184,12 @@ pub enum SwarmCommands {
         #[arg(long)]
         json: bool,
     },
+
+    /// Validate a swarm workflow YAML file
+    Validate {
+        /// Path to the swarm YAML config file
+        file: PathBuf,
+    },
 }
 
 /// Generate subcommands
@@ -782,5 +788,11 @@ mod tests {
         let parsed =
             Cli::try_parse_from(["mofa", "swarm", "run", "examples/swarm_demo.yaml", "--json"]);
         assert!(parsed.is_ok(), "swarm run --json should parse");
+    }
+
+    #[test]
+    fn test_swarm_validate_parses() {
+        let parsed = Cli::try_parse_from(["mofa", "swarm", "validate", "examples/swarm_demo.yaml"]);
+        assert!(parsed.is_ok(), "swarm validate <file> should parse");
     }
 }

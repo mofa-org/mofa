@@ -393,6 +393,9 @@ async fn run_command(cli: Cli) -> CliResult<()> {
             cli::SwarmCommands::Run { file, json } => {
                 commands::swarm::run_swarm(&file, json).await?;
             }
+            cli::SwarmCommands::Validate { file } => {
+                commands::swarm::validate_swarm(&file).await?;
+            }
         },
 
         None => {

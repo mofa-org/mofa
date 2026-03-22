@@ -29,9 +29,7 @@ enum SwarmExecutorKind {
     Llm,
 }
 
-/// Execute `mofa swarm run <file>`
-pub async fn run_swarm(file: &Path, json_output: bool) -> Result<(), CliError> {
-    // 1. Read & Parse YAML 
+async fn load_swarm_run_file(file: &Path) -> Result<SwarmRunFile, CliError> {
     let yaml = std::fs::read_to_string(file).map_err(|e| {
         CliError::Other(format!(
             "Failed to read swarm config '{}': {}",
@@ -40,13 +38,19 @@ pub async fn run_swarm(file: &Path, json_output: bool) -> Result<(), CliError> {
         ))
     })?;
 
-    let run_file: SwarmRunFile = serde_yaml::from_str(&yaml).map_err(|e| {
+    serde_yaml::from_str(&yaml).map_err(|e| {
         CliError::Other(format!(
             "Failed to parse swarm YAML '{}': {}",
             file.display(),
             e
         ))
-    })?;
+    })
+}
+
+/// Execute `mofa swarm run <file>`
+pub async fn run_swarm(file: &Path, json_output: bool) -> Result<(), CliError> {
+    // 1. Read & Parse YAML
+    let run_file = load_swarm_run_file(file).await?;
 
     let config = run_file.config;
     // 2. Load DAG 
@@ -89,6 +93,44 @@ pub async fn run_swarm(file: &Path, json_output: bool) -> Result<(), CliError> {
             summary.failed
         )));
     }
+
+    Ok(())
+}
+
+/// Validate `mofa swarm validate <file>`
+pub async fn validate_swarm(file: &Path) -> Result<(), CliError> {
+    let run_file = load_swarm_run_file(file).await?;
+    let config = run_file.config;
+
+    let (dag, dag_source) = match run_file.dag {
+        Some(mut dag) => {
+            if dag.name.is_empty() {
+                dag.name = config.name.clone();
+            }
+            (dag, "yaml")
+        }
+        None => (build_dag_from_task(&config).await?, "generated"),
+    };
+
+    println!("{} {}", "✓ Valid swarm workflow:".green().bold(), config.name);
+    println!("  {} {}", "Pattern:".dimmed(), format!("{}", config.pattern).yellow());
+    println!(
+        "  {} {}",
+        "Executor:".dimmed(),
+        match run_file.executor {
+            SwarmExecutorKind::Llm => "LLM".green(),
+        }
+    );
+    println!(
+        "  {} {}",
+        "DAG source:".dimmed(),
+        dag_source.yellow()
+    );
+    println!(
+        "  {} {} task(s)",
+        "Tasks:".dimmed(),
+        dag.task_count().to_string().yellow()
+    );
 
     Ok(())
 }
@@ -440,6 +482,30 @@ dag:
 
         let result = run_swarm(tmp.path(), false).await;
         assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_validate_swarm_with_explicit_dag_succeeds() {
+        let yaml = r#"
+name: validate-swarm
+task: "Research a topic"
+pattern: parallel
+executor: llm
+agents:
+  - id: researcher
+    capabilities: [web_search]
+    model: llama-3.1-8b-instant
+dag:
+  tasks:
+    - id: search
+      description: "Search for sources"
+      capabilities: [web_search]
+"#;
+        let mut tmp = NamedTempFile::new().unwrap();
+        tmp.write_all(yaml.as_bytes()).unwrap();
+
+        let result = validate_swarm(tmp.path()).await;
+        assert!(result.is_ok(), "swarm validate should succeed: {:?}", result.err());
     }
 
     #[tokio::test]
