@@ -30,8 +30,7 @@ struct CacheEntry {
 
 /// L1 in-memory cache keyed on deterministic request hash.
 ///
-/// Features per-entry TTL, zero allocation on cache hit (clones the response),
-/// and thread-safe concurrent access via `DashMap`.
+/// Features per-entry TTL and thread-safe concurrent access via `DashMap`.
 pub struct L1Cache {
     entries: DashMap<u64, CacheEntry>,
     default_ttl: Duration,
@@ -42,7 +41,11 @@ pub struct L1Cache {
 
 impl L1Cache {
     /// Create a new L1 Cache with the given default TTL and maximum capacity.
+    ///
+    /// # Panics
+    /// Panics if `max_entries` is 0.
     pub fn new(default_ttl: Duration, max_entries: usize) -> Self {
+        assert!(max_entries > 0, "max_entries must be strictly greater than 0 to enable caching");
         Self {
             entries: DashMap::new(),
             default_ttl,
@@ -233,12 +236,12 @@ mod tests {
     }
 
     #[test]
-    fn max_entries_evicts_oldest() {
+    fn max_entries_limits_size() {
         let cache = L1Cache::new(Duration::from_secs(60), 2);
         
         cache.insert(&make_req("/1"), make_resp(), None);
         cache.insert(&make_req("/2"), make_resp(), None);
-        // This will evict one of the previous two
+        // This will evict one of the previous two to enforce the max size
         cache.insert(&make_req("/3"), make_resp(), None);
 
         assert_eq!(cache.stats().size, 2);
