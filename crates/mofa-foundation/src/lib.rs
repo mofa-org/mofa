@@ -77,7 +77,7 @@ pub mod recovery;
 // Metrics and telemetry module
 pub mod metrics;
 
-// Gateway layer implementations (RouteRegistry, AuthProvider, cache)
+// Gateway layer implementations (RouteRegistry)
 pub mod gateway;
 pub use gateway::InMemoryRouteRegistry;
 
