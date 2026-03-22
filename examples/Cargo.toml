@@ -52,6 +52,7 @@ members = [
     "security/pii_only",
     "integrations_demo",
     "cron_scheduler",
+    "gateway_socketio_s3",
     "native_dataflow",
     "mcp_tools",
     "memory_scheduler_demo",

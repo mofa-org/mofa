@@ -8,7 +8,7 @@ The MoFA Gateway provides a **production-grade distributed control plane and gat
 
 **Production Ready** - All features implemented, tested, and documented.
 
-**Test Coverage**: 51 tests passing (32 unit, 12 integration, 5 multi-node cluster, 2 doctests)
+**Test Coverage**: 86+ tests passing (47 unit, 26 s3 integration, 9 socketio integration, 5 multi-node cluster, and others)
 
 ### Usage Modes
 
@@ -58,7 +58,9 @@ The gateway is designed to be **simple by default**, with distributed features a
 - **Optional Cargo features**:
   - `rocksdb`: enable persistent Raft storage using RocksDB (otherwise an in-memory fallback is used).
   - `monitoring`: enable OpenTelemetry-based tracing (`opentelemetry`, `opentelemetry_sdk`, `tracing-opentelemetry`).
-  - `full`: convenience feature that enables both `rocksdb` and `monitoring`.
+  - `socketio`: enable real-time Socket.IO bridge that forwards `AgentBus` broadcasts to connected clients. Also emits file upload progress events (`file_upload_started`, `file_upload_completed`, `file_upload_failed`).
+  - `s3`: enable AWS S3 / MinIO file storage endpoints (`/api/v1/files/**`) with automatic MIME-type detection.
+  - `full`: convenience feature that enables `rocksdb`, `monitoring`, `socketio`, and `s3`.
 
 Typical build profiles:
 
@@ -66,6 +68,8 @@ Typical build profiles:
   - `cargo build --package mofa-gateway --no-default-features`
 - **Gateway + persistent Raft storage**:
   - `cargo build --package mofa-gateway --no-default-features --features rocksdb`
+- **Gateway + S3 file storage + Socket.IO real-time bridge**:
+  - `cargo build --package mofa-gateway --features socketio,s3`
 - **Gateway + storage + tracing (full)**:
   - `cargo build --package mofa-gateway --no-default-features --features full`
 
@@ -783,6 +787,338 @@ The [`examples/`](../crates/mofa-gateway/examples/) directory contains 9 skeleto
 9. `advanced_health_checks.rs` - Health check configurations
 
 **Note**: These examples are conceptual/placeholder code. For working implementations, refer to the test files above.
+
+---
+
+## Socket.IO Real-Time Bridge (`socketio` feature)
+
+Enable the `socketio` Cargo feature to attach a Socket.IO server that forwards
+`AgentBus` broadcast messages to every connected client in real time.
+
+### Architecture overview
+
+```mermaid
+graph LR
+    subgraph Server
+        AB[AgentBus]
+        GW[GatewayServer]
+        SIO[Socket.IO Bridge\n/agents namespace]
+        AB -->|broadcast| SIO
+        GW -->|emit upload events| SIO
+    end
+
+    subgraph Clients
+        C1[Browser / JS client]
+        C2[Mobile client]
+        C3[Dashboard]
+    end
+
+    SIO -->|WebSocket / long-poll| C1
+    SIO -->|WebSocket / long-poll| C2
+    SIO -->|WebSocket / long-poll| C3
+```
+
+### Setup
+
+```rust
+use mofa_gateway::server::{GatewayServer, ServerConfig};
+use mofa_integrations::socketio::SocketIoConfig;
+use mofa_kernel::bus::AgentBus;
+use mofa_runtime::agent::registry::AgentRegistry;
+use std::sync::Arc;
+
+let bus = Arc::new(AgentBus::new());
+let sio_cfg = SocketIoConfig::new()
+    .with_auth_token("my-secret-token")   // optional: require a bearer token
+    .with_namespace("/agents");            // default namespace
+
+let server = GatewayServer::new(ServerConfig::default(), Arc::new(AgentRegistry::new()))
+    .with_socket_io(bus, sio_cfg);
+
+server.start().await?;
+```
+
+### JavaScript client
+
+```js
+const { io } = require("socket.io-client");
+const socket = io("http://localhost:8090/agents", {
+  auth: { token: "my-secret-token" },
+});
+
+socket.on("connected",      ()    => console.log("connected"));
+socket.on("agent_message",  (msg) => console.log("agent event:", msg));
+
+// File upload lifecycle events (emitted by the /api/v1/files/upload endpoint)
+socket.on("file_upload_started",   (e) => console.log("upload started",   e));
+socket.on("file_upload_completed", (e) => console.log("upload completed", e));
+socket.on("file_upload_failed",    (e) => console.error("upload failed",  e));
+```
+
+### File upload events
+
+When a file is uploaded via `POST /api/v1/files/upload` the Socket.IO bridge
+emits three events to all clients in the configured namespace:
+
+| Event | Payload | When |
+|-------|---------|------|
+| `file_upload_started`   | `{ key, size, content_type }` | Before the object is written to the store |
+| `file_upload_completed` | `{ key, size, content_type }` | After a successful write |
+| `file_upload_failed`    | `{ key, reason }`            | On store error or size-limit rejection |
+
+### Upload event flow
+
+```mermaid
+sequenceDiagram
+    participant C as HTTP Client
+    participant GW as Gateway
+    participant SIO as Socket.IO Bridge
+    participant S3 as Object Store (S3/MinIO)
+
+    C->>GW: POST /api/v1/files/upload\n(multipart: key + file bytes)
+
+    alt file exceeds size limit
+        GW-->>SIO: emit file_upload_failed\n{ key, reason: "size limit exceeded" }
+        GW-->>C: 413 Payload Too Large
+    else size OK
+        GW-->>SIO: emit file_upload_started\n{ key, size, content_type }
+        GW->>S3: put(key, bytes)
+
+        alt store error
+            S3-->>GW: Err(...)
+            GW-->>SIO: emit file_upload_failed\n{ key, reason: "..." }
+            GW-->>C: 500 Internal Server Error
+        else store success
+            S3-->>GW: Ok(())
+            GW-->>SIO: emit file_upload_completed\n{ key, size, content_type }
+            GW-->>C: 201 Created\n{ key, size, content_type }
+        end
+    end
+```
+
+### Example: progress bar in the browser
+
+```js
+const { io } = require("socket.io-client");
+const socket = io("http://localhost:8090/agents");
+
+// Track uploads by key
+const uploads = {};
+
+socket.on("file_upload_started", ({ key, size, content_type }) => {
+  uploads[key] = { size, started: Date.now() };
+  console.log(`[${key}] upload started — ${size} bytes (${content_type})`);
+  showProgressBar(key);
+});
+
+socket.on("file_upload_completed", ({ key, size }) => {
+  const elapsed = Date.now() - uploads[key].started;
+  console.log(`[${key}] done in ${elapsed}ms`);
+  hideProgressBar(key, "success");
+  delete uploads[key];
+});
+
+socket.on("file_upload_failed", ({ key, reason }) => {
+  console.error(`[${key}] FAILED: ${reason}`);
+  hideProgressBar(key, "error");
+  delete uploads[key];
+});
+```
+
+---
+
+## File Storage API (`s3` feature)
+
+Enable the `s3` Cargo feature to expose file-storage HTTP endpoints backed by
+AWS S3 or any S3-compatible service (MinIO, LocalStack, Ceph …).
+
+### Architecture overview
+
+```mermaid
+graph TD
+    Client -->|HTTP| GW
+
+    subgraph File Storage API
+        GW[GatewayServer\n:8090]
+        GW -->|POST /api/v1/files/upload| UP[upload_file]
+        GW -->|GET /api/v1/files/:key| DL[download_file]
+        GW -->|DELETE /api/v1/files/:key| DEL[delete_file]
+        GW -->|GET /api/v1/files| LS[list_files]
+        GW -->|GET /api/v1/files/:key/metadata| META[file_metadata]
+        GW -->|GET /api/v1/files/:key/presigned-get| PSG[presigned_get]
+        GW -->|POST /api/v1/files/:key/presigned-put| PSP[presigned_put]
+    end
+
+    UP & DL & DEL & LS & META & PSG & PSP -->|ObjectStore trait| Store[(S3 / MinIO\nLocalStack / Ceph)]
+```
+
+### Setup
+
+```rust
+use mofa_gateway::server::{GatewayServer, ServerConfig, make_s3_store};
+use mofa_runtime::agent::registry::AgentRegistry;
+use std::sync::Arc;
+
+// Build from env: AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, S3_REGION, …
+let s3 = make_s3_store("us-east-1", "my-bucket", None).await?;
+
+let server = GatewayServer::new(
+        ServerConfig::default()
+            .with_max_upload_size(50 * 1024 * 1024), // 50 MB limit
+        Arc::new(AgentRegistry::new()),
+    )
+    .with_s3(s3);
+
+server.start().await?;
+```
+
+### Endpoints
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `POST`   | `/api/v1/files/upload`                | Upload via `multipart/form-data` (fields: `key`, `file`) |
+| `GET`    | `/api/v1/files/:key`                 | Download object bytes. `Content-Type` is auto-detected from extension. |
+| `DELETE` | `/api/v1/files/:key`                 | Delete an object |
+| `GET`    | `/api/v1/files`                      | List keys (`?prefix=uploads/` to filter) |
+| `GET`    | `/api/v1/files/:key/metadata`        | Return size, content-type, last-modified (no download) |
+| `GET`    | `/api/v1/files/:key/presigned-get`   | Generate a time-limited GET URL (`?expires=3600`) |
+| `POST`   | `/api/v1/files/:key/presigned-put`   | Generate a time-limited PUT URL |
+
+### Content-Type auto-detection
+
+All file endpoints infer the MIME type from the object key's extension using
+`mime_guess`. The detected type is:
+- Returned in the `content_type` field of upload responses.
+- Set as the `Content-Type` header on download responses.
+- Used as the default `content_type` constraint when generating presigned PUT
+  URLs (can be overridden by the caller).
+
+### File size limits
+
+Set a maximum upload size with `ServerConfig::with_max_upload_size(bytes)`.
+Uploads that exceed the limit are rejected with `413 Payload Too Large` and a
+`file_upload_failed` Socket.IO event is emitted (if Socket.IO is configured).
+
+> **Note:** the size limit only applies to `POST /api/v1/files/upload` (bytes
+> pass through the gateway). Presigned PUT uploads bypass the gateway entirely
+> — the client writes directly to S3, so the gateway limit is **not enforced**.
+> Configure a maximum object size on the S3 bucket policy or use a
+> `Content-Length` condition in the presigned URL if you need to cap
+> direct-upload sizes.
+
+### Presigned URL flow
+
+```mermaid
+sequenceDiagram
+    participant C as Client
+    participant GW as Gateway
+    participant S3 as S3 / MinIO
+
+    Note over C,S3: Presigned PUT — client uploads directly to S3
+
+    C->>GW: POST /api/v1/files/photo.jpg/presigned-put\n{ expires_secs: 3600 }
+    GW->>GW: sign URL locally with credentials\n(no S3 round-trip)
+    GW-->>C: { url, method: "PUT", expires_secs: 3600,\n  content_type: "image/jpeg" }
+
+    C->>S3: PUT https://s3.../photo.jpg\n(file bytes, no gateway involved)
+    S3-->>C: 200 OK
+
+    Note over C,S3: Presigned GET — client downloads directly from S3
+
+    C->>GW: GET /api/v1/files/photo.jpg/presigned-get?expires=600
+    GW->>GW: sign URL locally with credentials\n(no S3 round-trip)
+    GW-->>C: { url, method: "GET", expires_secs: 600 }
+
+    C->>S3: GET https://s3.../photo.jpg
+    S3-->>C: file bytes
+```
+
+### Example: curl usage
+
+```bash
+# Upload a file
+curl -X POST http://localhost:8090/api/v1/files/upload \
+  -F "key=uploads/photo.jpg" \
+  -F "file=@/path/to/photo.jpg"
+# → { "key": "uploads/photo.jpg", "size": 204800, "content_type": "image/jpeg" }
+
+# Download a file
+curl http://localhost:8090/api/v1/files/uploads/photo.jpg -o photo.jpg
+
+# Get metadata (no download)
+curl http://localhost:8090/api/v1/files/uploads/photo.jpg/metadata
+# → { "key": "uploads/photo.jpg", "size": 204800,
+#     "content_type": "image/jpeg", "last_modified": "2025-01-15T12:34:56+00:00" }
+
+# List all keys under a prefix
+curl "http://localhost:8090/api/v1/files?prefix=uploads/"
+# → { "keys": ["uploads/photo.jpg"], "total": 1, "prefix": "uploads/" }
+
+# Generate a presigned GET URL (valid for 10 minutes)
+curl "http://localhost:8090/api/v1/files/uploads/photo.jpg/presigned-get?expires=600"
+# → { "key": "uploads/photo.jpg", "url": "https://...", "expires_secs": 600, "method": "GET" }
+
+# Generate a presigned PUT URL (client uploads directly to S3)
+curl -X POST http://localhost:8090/api/v1/files/uploads/report.pdf/presigned-put \
+  -H "Content-Type: application/json" \
+  -d '{ "expires_secs": 3600, "content_type": "application/pdf" }'
+# → { "key": "uploads/report.pdf", "url": "https://...", "expires_secs": 3600,
+#     "method": "PUT", "content_type": "application/pdf" }
+
+# Delete a file
+curl -X DELETE http://localhost:8090/api/v1/files/uploads/photo.jpg
+# → { "key": "uploads/photo.jpg", "status": "deleted" }
+```
+
+### MinIO / LocalStack quick-start
+
+```bash
+# Start MinIO
+docker run -p 9000:9000 -p 9001:9001 \
+  -e MINIO_ROOT_USER=minioadmin \
+  -e MINIO_ROOT_PASSWORD=minioadmin \
+  quay.io/minio/minio server /data --console-address ":9001"
+
+# Create bucket
+mc alias set local http://localhost:9000 minioadmin minioadmin
+mc mb local/mofa-files
+
+# Run the combined example
+AWS_ACCESS_KEY_ID=minioadmin \
+AWS_SECRET_ACCESS_KEY=minioadmin \
+S3_ENDPOINT=http://localhost:9000 \
+SOCKETIO_TOKEN=dev-secret \
+MAX_UPLOAD_MB=50 \
+cargo run -p gateway_socketio_s3
+```
+
+### Combined Socket.IO + S3 component diagram
+
+```mermaid
+graph TD
+    subgraph MoFA Gateway Process
+        GW[GatewayServer\nAxum HTTP :8090]
+        BUS[AgentBus\nbroadcast channel]
+        SIO[Socket.IO Bridge\nnamespace /agents]
+        BUS -->|subscribe| SIO
+        GW -->|upload events| SIO
+    end
+
+    subgraph Storage
+        S3[(S3 / MinIO\nbucket)]
+    end
+
+    subgraph Real-time Clients
+        JS[Browser / JS]
+        DASH[Dashboard]
+    end
+
+    HTTPClient[HTTP Client] -->|multipart upload / GET / DELETE / LIST / presigned URLs| GW
+    GW -->|put / get / delete / list / presigned sign| S3
+    SIO -->|WebSocket| JS
+    SIO -->|WebSocket| DASH
+    HTTPClient -.->|presigned PUT/GET bypasses gateway| S3
+```
 
 ---
 

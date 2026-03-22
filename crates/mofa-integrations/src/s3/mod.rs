@@ -17,6 +17,7 @@ use aws_sdk_s3::Client;
 use aws_sdk_s3::config::Builder as S3Builder;
 use aws_sdk_s3::presigning::PresigningConfig;
 use aws_sdk_s3::primitives::ByteStream;
+use mofa_kernel::storage::ObjectMetadata;
 use mofa_kernel::ObjectStore;
 use mofa_kernel::agent::error::{AgentError, AgentResult};
 use std::time::Duration;
@@ -244,5 +245,145 @@ impl ObjectStore for S3ObjectStore {
             .map_err(|e| Self::err(format!("presign failed for key '{}': {}", key, e)))?;
 
         Ok(presigned.uri().to_string())
+    }
+
+    async fn get_metadata(&self, key: &str) -> AgentResult<Option<ObjectMetadata>> {
+        use aws_sdk_s3::operation::head_object::HeadObjectError;
+
+        let result = self
+            .client
+            .head_object()
+            .bucket(&self.bucket)
+            .key(key)
+            .send()
+            .await;
+
+        match result {
+            Ok(output) => {
+                let size = u64::try_from(output.content_length().unwrap_or(0)).unwrap_or(0);
+                let content_type = output.content_type().map(|s| s.to_string());
+                let last_modified = output.last_modified().and_then(|dt| {
+                    chrono::DateTime::from_timestamp(dt.secs(), dt.subsec_nanos())
+                        .map(|d: chrono::DateTime<chrono::Utc>| d.to_rfc3339())
+                });
+                Ok(Some(ObjectMetadata {
+                    size,
+                    content_type,
+                    last_modified,
+                }))
+            }
+            Err(sdk_err) => {
+                let service_err = sdk_err.into_service_error();
+                if matches!(service_err, HeadObjectError::NotFound(_)) {
+                    Ok(None)
+                } else {
+                    Err(Self::err(format!(
+                        "S3 head_object failed for key '{}': {}",
+                        key, service_err
+                    )))
+                }
+            }
+        }
+    }
+
+    async fn presigned_put_url(
+        &self,
+        key: &str,
+        expires_secs: u64,
+        content_type: Option<&str>,
+    ) -> AgentResult<String> {
+        let presigning_cfg = PresigningConfig::expires_in(Duration::from_secs(expires_secs))
+            .map_err(|e| Self::err(format!("invalid presigning config: {}", e)))?;
+
+        let mut req = self.client.put_object().bucket(&self.bucket).key(key);
+
+        if let Some(ct) = content_type {
+            req = req.content_type(ct);
+        }
+
+        let presigned = req
+            .presigned(presigning_cfg)
+            .await
+            .map_err(|e| Self::err(format!("presign PUT failed for key '{}': {}", key, e)))?;
+
+        Ok(presigned.uri().to_string())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // ── S3Config builder tests (no network required) ──────────────────────────
+
+    #[test]
+    fn default_config_has_no_endpoint() {
+        let cfg = S3Config::new("us-east-1", "my-bucket");
+        assert_eq!(cfg.region, "us-east-1");
+        assert_eq!(cfg.bucket, "my-bucket");
+        assert!(cfg.endpoint_url.is_none());
+        assert!(!cfg.force_path_style);
+    }
+
+    #[test]
+    fn with_endpoint_sets_url_and_enables_path_style() {
+        let cfg = S3Config::new("us-east-1", "my-bucket")
+            .with_endpoint("http://localhost:9000");
+        assert_eq!(cfg.endpoint_url.as_deref(), Some("http://localhost:9000"));
+        assert!(cfg.force_path_style, "path style must be enabled for MinIO");
+    }
+
+    #[test]
+    fn with_path_style_can_be_disabled_explicitly() {
+        let cfg = S3Config::new("us-east-1", "bucket")
+            .with_endpoint("http://localhost:9000")
+            .with_path_style(false);
+        assert!(cfg.endpoint_url.is_some());
+        assert!(!cfg.force_path_style);
+    }
+
+    #[test]
+    fn accepts_string_and_str_for_region_and_bucket() {
+        let _a = S3Config::new("us-west-2", "bucket-a");
+        let _b = S3Config::new(String::from("eu-central-1"), String::from("bucket-b"));
+    }
+
+    // ── presigned_put_url default fallback (kernel ObjectStore trait) ─────────
+
+    #[tokio::test]
+    async fn default_presigned_put_returns_err() {
+        use async_trait::async_trait;
+        use mofa_kernel::ObjectStore;
+        use mofa_kernel::agent::error::AgentResult;
+
+        struct NoOpStore;
+
+        #[async_trait]
+        impl ObjectStore for NoOpStore {
+            async fn put(&self, _: &str, _: Vec<u8>) -> AgentResult<()> {
+                unimplemented!()
+            }
+            async fn get(&self, _: &str) -> AgentResult<Option<Vec<u8>>> {
+                unimplemented!()
+            }
+            async fn delete(&self, _: &str) -> AgentResult<bool> {
+                unimplemented!()
+            }
+            async fn list_keys(&self, _: &str) -> AgentResult<Vec<String>> {
+                unimplemented!()
+            }
+            async fn presigned_get_url(&self, _: &str, _: u64) -> AgentResult<String> {
+                unimplemented!()
+            }
+        }
+
+        let store = NoOpStore;
+        let result = store.presigned_put_url("key", 3600, None).await;
+        assert!(
+            result.is_err(),
+            "default impl must return Err for unsupported stores"
+        );
+        let msg = result.unwrap_err().to_string();
+        assert!(msg.contains("presigned_put_url"), "error should mention the method name");
     }
 }
