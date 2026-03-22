@@ -90,15 +90,15 @@ fn build_report(
     strict: bool,
     fix: bool,
 ) -> anyhow::Result<DoctorReport> {
-    let mut checks = vec![];
-
-    checks.push(check_project_directory(project_path));
-    checks.push(check_project_markers(project_path));
-    checks.push(check_agent_configuration(project_path));
-    checks.push(check_env_secret(scenario));
-    checks.push(check_gitignore(project_path));
-    checks.push(check_cargo_lock(project_path));
-    checks.push(check_test_layout(project_path));
+    let mut checks = vec![
+        check_project_directory(project_path),
+        check_project_markers(project_path),
+        check_agent_configuration(project_path),
+        check_env_secret(scenario),
+        check_gitignore(project_path),
+        check_cargo_lock(project_path),
+        check_test_layout(project_path),
+    ];
     checks.extend(check_required_binaries(scenario));
     checks.extend(check_optional_binaries(scenario));
     checks.extend(check_runtime_directories(fix)?);

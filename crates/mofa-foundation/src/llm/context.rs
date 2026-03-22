@@ -160,7 +160,7 @@ impl AgentContextBuilder {
         // Load bootstrap files
         for filename in &self.bootstrap_files {
             let path = self.workspace.join(filename);
-            if let Ok(content) = Self::load_file(&path) {
+            if let Ok(content) = Self::load_file(&path).await {
                 parts.push(format!("## {}\n{}", filename, content));
             }
         }
@@ -340,8 +340,9 @@ The following skills extend your capabilities. To use a skill, read its document
     }
 
     /// Load a file's content
-    fn load_file(path: &Path) -> GlobalResult<String> {
-        std::fs::read_to_string(path)
+    async fn load_file(path: &Path) -> GlobalResult<String> {
+        tokio::fs::read_to_string(path)
+            .await
             .map_err(|e| GlobalError::Other(format!("Failed to read {:?}: {}", path, e)))
     }
 

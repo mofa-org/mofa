@@ -85,20 +85,22 @@ fn evaluate_expression(expr: &str) -> Result<f64, String> {
     let mut last_add_sub = None;
     let mut last_mul_div = None;
 
-    let chars: Vec<char> = expr.chars().collect();
-    for (i, &c) in chars.iter().enumerate() {
-        match c {
-            '(' => paren_depth += 1,
-            ')' => paren_depth -= 1,
-            '+' | '-' if paren_depth == 0 && i > 0 => {
+    // All operator and grouping characters are single-byte ASCII, so we
+    // iterate over bytes directly instead of collecting into a Vec<char>.
+    let bytes = expr.as_bytes();
+    for (i, &b) in bytes.iter().enumerate() {
+        match b {
+            b'(' => paren_depth += 1,
+            b')' => paren_depth -= 1,
+            b'+' | b'-' if paren_depth == 0 && i > 0 => {
                 // 确保不是负号
                 // Ensure it is not a negative sign
-                let prev = chars.get(i.saturating_sub(1)).copied().unwrap_or(' ');
-                if !matches!(prev, '+' | '-' | '*' | '/' | '(') {
+                let prev = if i > 0 { bytes[i - 1] } else { b' ' };
+                if !matches!(prev, b'+' | b'-' | b'*' | b'/' | b'(') {
                     last_add_sub = Some(i);
                 }
             }
-            '*' | '/' if paren_depth == 0 => {
+            b'*' | b'/' if paren_depth == 0 => {
                 last_mul_div = Some(i);
             }
             _ => {}
@@ -110,9 +112,9 @@ fn evaluate_expression(expr: &str) -> Result<f64, String> {
     if let Some(pos) = last_add_sub {
         let left = evaluate_expression(&expr[..pos])?;
         let right = evaluate_expression(&expr[pos + 1..])?;
-        return match chars[pos] {
-            '+' => Ok(left + right),
-            '-' => Ok(left - right),
+        return match bytes[pos] {
+            b'+' => Ok(left + right),
+            b'-' => Ok(left - right),
             _ => unreachable!(),
         };
     }
@@ -120,9 +122,9 @@ fn evaluate_expression(expr: &str) -> Result<f64, String> {
     if let Some(pos) = last_mul_div {
         let left = evaluate_expression(&expr[..pos])?;
         let right = evaluate_expression(&expr[pos + 1..])?;
-        return match chars[pos] {
-            '*' => Ok(left * right),
-            '/' => {
+        return match bytes[pos] {
+            b'*' => Ok(left * right),
+            b'/' => {
                 if right == 0.0 {
                     Err("Division by zero".to_string())
                 } else {
