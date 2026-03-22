@@ -152,7 +152,12 @@ impl GatewayCapability for DuckDuckGoSearchCapability {
     }
 
     async fn invoke(&self, input: CapabilityRequest) -> GlobalResult<CapabilityResponse> {
-        let query = input.input.trim();
+        let query = input
+            .params
+            .get("query")
+            .and_then(Value::as_str)
+            .unwrap_or(input.input.as_str())
+            .trim();
         if query.is_empty() {
             return Err(GlobalError::Other("web search query must not be empty".to_string()));
         }
