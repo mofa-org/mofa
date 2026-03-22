@@ -1,0 +1,22 @@
+﻿cargo :     Finished 
+`dev` profile 
+[unoptimized + 
+debuginfo] target(s) 
+in 1.65s
+At line:1 char:1
++ cargo check -p 
+mofa-runtime 2>&1 | 
+Out-File -FilePath 
+"check_runtime. ...
++ ~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~
+    + CategoryInfo     
+         : NotSpecifi  
+  ed: (    Finished    
+ `d...get(s) in 1.6    
+5s:String) [], Rem    
+oteException
+    + FullyQualifiedEr 
+   rorId : NativeComm  
+  andError
+ 

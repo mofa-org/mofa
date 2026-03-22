@@ -1,0 +1,57 @@
+﻿cargo :     Finished 
+`test` profile 
+[unoptimized + 
+debuginfo] target(s) 
+in 1.61s
+At line:1 char:1
++ cargo test -p 
+mofa-runtime test_agent
+_runner_deadlock_watchd
+og_timeou ...
++ ~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~
+~~
+    + CategoryInfo     
+         : NotSpecifi  
+  ed: (    Finished    
+ `t...get(s) in 1.6    
+1s:String) [], Rem    
+oteException
+    + FullyQualifiedEr 
+   rorId : NativeComm  
+  andError
+ 
+     Running unittests 
+src\lib.rs (target\debu
+g\deps\mofa_runtime-10a
+cbd0f7ca674e7.exe)
+
+running 1 test
+
+thread 'runner::tests::
+test_agent_runner_deadl
+ock_watchdog_timeout' 
+(11340) panicked at cra
+tes\mofa-runtime\src\ru
+nner.rs:1248:9:
+Expected timeout error 
+message, got: 
+Operation timed out 
+after 50ms
+note: run with 
+`RUST_BACKTRACE=1` 
+environment variable 
+to display a backtrace
+test runner::tests::test_agent_runner_deadlock_watchdog_timeout ... FAILED
+
+failures:
+
+failures:
+    runner::tests::test_agent_runner_deadlock_watchdog_timeout
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 46 filtered out; finished in 0.06s
+
+error: test failed, to 
+rerun pass `-p 
+mofa-runtime --lib`
