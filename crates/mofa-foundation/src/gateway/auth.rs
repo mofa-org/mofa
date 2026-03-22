@@ -45,7 +45,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 /// deployments should replace this with a store backed by a persistent
 /// database (Redis, PostgreSQL, etc.).
 pub struct InMemoryApiKeyStore {
-    keys: HashMap<String, AuthClaims>,
+    keys: HashMap<String, Option<AuthClaims>>,
     counter: u64,
 }
 
@@ -66,7 +66,7 @@ impl InMemoryApiKeyStore {
 
     /// Return the number of active (non-revoked) keys.
     pub fn key_count(&self) -> usize {
-        self.keys.len()
+        self.keys.values().filter(|v| v.is_some()).count()
     }
 
     /// Issue a key that expires at a specific UNIX timestamp (milliseconds).
@@ -78,7 +78,7 @@ impl InMemoryApiKeyStore {
     ) -> String {
         let key = self.generate_key();
         let claims = AuthClaims::new(subject, scopes).with_expiry(expires_at_ms);
-        self.keys.insert(key.clone(), claims);
+        self.keys.insert(key.clone(), Some(claims));
         key
     }
 
@@ -89,19 +89,29 @@ impl InMemoryApiKeyStore {
 }
 
 impl ApiKeyStore for InMemoryApiKeyStore {
-    fn lookup(&self, key: &str) -> Option<AuthClaims> {
-        self.keys.get(key).cloned()
+    fn lookup(&self, key: &str) -> Result<AuthClaims, AuthError> {
+        match self.keys.get(key) {
+            Some(Some(claims)) => Ok(claims.clone()),
+            Some(None) => Err(AuthError::RevokedCredentials),
+            None => Err(AuthError::InvalidCredentials),
+        }
     }
 
     fn issue(&mut self, subject: impl Into<String>, scopes: Vec<String>) -> String {
         let key = self.generate_key();
         self.keys
-            .insert(key.clone(), AuthClaims::new(subject, scopes));
+            .insert(key.clone(), Some(AuthClaims::new(subject, scopes)));
         key
     }
 
     fn revoke(&mut self, key: &str) -> bool {
-        self.keys.remove(key).is_some()
+        if let Some(val) = self.keys.get_mut(key) {
+            if val.is_some() {
+                *val = None;
+                return true;
+            }
+        }
+        false
     }
 }
 
@@ -156,10 +166,7 @@ impl<S: ApiKeyStore + Send + Sync> AuthProvider for ApiKeyAuthProvider<S> {
             .ok_or(AuthError::MissingCredentials)?;
 
         // 2. Look up the key in the store.
-        let claims = self
-            .store
-            .lookup(key)
-            .ok_or(AuthError::InvalidCredentials)?;
+        let claims = self.store.lookup(key)?;
 
         // 3. Check expiry.
         let now_ms = SystemTime::now()
@@ -196,7 +203,7 @@ mod tests {
             if let Some(exp) = expiry {
                 claims = claims.with_expiry(exp);
             }
-            store.keys.insert(key.to_string(), claims);
+            store.keys.insert(key.to_string(), Some(claims));
         }
         ApiKeyAuthProvider::new(Arc::new(store))
     }
@@ -239,7 +246,7 @@ mod tests {
         let provider = ApiKeyAuthProvider::new(Arc::new(store));
         let headers = HashMap::from([("x-api-key".to_string(), key)]);
         let err = provider.authenticate(&headers).await.unwrap_err();
-        assert_eq!(err, AuthError::InvalidCredentials);
+        assert_eq!(err, AuthError::RevokedCredentials);
     }
 
     #[tokio::test]
@@ -274,7 +281,7 @@ mod tests {
     #[tokio::test]
     async fn custom_header_name_is_respected() {
         let mut store = InMemoryApiKeyStore::new();
-        store.keys.insert("secret".to_string(), AuthClaims::new("subject", vec![]));
+        store.keys.insert("secret".to_string(), Some(AuthClaims::new("subject", vec![])));
         let provider = ApiKeyAuthProvider::with_header(Arc::new(store), "x-internal-token");
 
         let headers = HashMap::from([("x-internal-token".to_string(), "secret".to_string())]);
