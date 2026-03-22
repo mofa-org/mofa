@@ -16,9 +16,27 @@ use mofa_kernel::agent::types::error::{GlobalError, GlobalResult};
 
 use crate::swarm::{CoordinationPattern, SubtaskDAG, SwarmSubtask};
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TaskDependencyContext {
+    pub task_id: String,
+    pub output: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct TaskExecutionContext {
+    pub dependencies: Vec<TaskDependencyContext>,
+}
+
 /// task executor used by schedulers
-pub type SubtaskExecutorFn =
-    Arc<dyn Fn(NodeIndex, SwarmSubtask) -> BoxFuture<'static, GlobalResult<String>> + Send + Sync>;
+pub type SubtaskExecutorFn = Arc<
+    dyn Fn(
+            NodeIndex,
+            SwarmSubtask,
+            TaskExecutionContext,
+        ) -> BoxFuture<'static, GlobalResult<String>>
+        + Send
+        + Sync,
+>;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum TaskOutcome {
@@ -163,6 +181,21 @@ impl SequentialScheduler {
     pub fn with_config(config: SwarmSchedulerConfig) -> Self {
         Self { config }
     }
+
+    fn build_execution_context(dag: &SubtaskDAG, idx: NodeIndex) -> TaskExecutionContext {
+        let dependencies = dag
+            .dependencies_of(idx)
+            .into_iter()
+            .filter_map(|dep_idx| {
+                dag.get_task(dep_idx).map(|task| TaskDependencyContext {
+                    task_id: task.id.clone(),
+                    output: task.output.clone(),
+                })
+            })
+            .collect();
+
+        TaskExecutionContext { dependencies }
+    }
 }
 
 impl Default for SequentialScheduler {
@@ -226,9 +259,10 @@ impl SwarmScheduler for SequentialScheduler {
             let start = Instant::now();
             info!(task_id = %task_id, task_desc = %task_snapshot.description, "Executing node");
 
+            let exec_context = Self::build_execution_context(dag, idx);
             let outcome = timeout(
                 self.config.task_timeout,
-                executor(idx, task_snapshot.clone()),
+                executor(idx, task_snapshot.clone(), exec_context),
             )
             .await;
             let elapsed = start.elapsed();
@@ -370,6 +404,8 @@ impl SwarmScheduler for ParallelScheduler {
                 let sem = semaphore.clone();
                 let timeout_dur = self.config.task_timeout;
 
+                let exec_context = SequentialScheduler::build_execution_context(dag, idx);
+
                 let fut = async move {
                     let _permit = if let Some(s) = sem {
                         Some(s.acquire_owned().await.expect("semaphore closed"))
@@ -378,7 +414,8 @@ impl SwarmScheduler for ParallelScheduler {
                     };
 
                     let start = Instant::now();
-                    match timeout(timeout_dur, exec(idx, task_snapshot.clone())).await {
+                    match timeout(timeout_dur, exec(idx, task_snapshot.clone(), exec_context)).await
+                    {
                         Ok(Ok(output)) => TaskExecutionResult::success(
                             &task_snapshot,
                             idx,
@@ -486,7 +523,7 @@ mod tests {
         let exec_order = Arc::new(tokio::sync::Mutex::new(Vec::new()));
         let exec_order_clone = exec_order.clone();
 
-        let executor: SubtaskExecutorFn = Arc::new(move |_idx, task| {
+        let executor: SubtaskExecutorFn = Arc::new(move |_idx, task, _context| {
             let order = exec_order_clone.clone();
             let task_id = task.id.clone();
             Box::pin(async move {
@@ -515,7 +552,7 @@ mod tests {
         dag.add_dependency(idx_a, idx_b).unwrap();
         dag.add_dependency(idx_a, idx_c).unwrap();
 
-        let executor: SubtaskExecutorFn = Arc::new(move |_idx, task| {
+        let executor: SubtaskExecutorFn = Arc::new(move |_idx, task, _context| {
             Box::pin(async move {
                 if task.id == "A" {
                     Err(GlobalError::runtime("A failed"))
@@ -557,7 +594,7 @@ mod tests {
 
         dag.add_dependency(idx_a, idx_b).unwrap();
 
-        let executor: SubtaskExecutorFn = Arc::new(move |_idx, task| {
+        let executor: SubtaskExecutorFn = Arc::new(move |_idx, task, _context| {
             Box::pin(async move {
                 if task.id == "A" {
                     Err(GlobalError::runtime("A failed"))
@@ -585,7 +622,7 @@ mod tests {
         let mut dag = SubtaskDAG::new("test");
         let _idx_a = dag.add_task(SwarmSubtask::new("A", "Task A"));
 
-        let executor: SubtaskExecutorFn = Arc::new(move |_idx, _task| {
+        let executor: SubtaskExecutorFn = Arc::new(move |_idx, _task, _context| {
             Box::pin(async move {
                 sleep(Duration::from_millis(100)).await;
                 Ok("done".into())
@@ -621,7 +658,7 @@ mod tests {
         let execution_log = Arc::new(tokio::sync::Mutex::new(Vec::new()));
         let execution_log_clone = execution_log.clone();
 
-        let executor: SubtaskExecutorFn = Arc::new(move |_idx, task| {
+        let executor: SubtaskExecutorFn = Arc::new(move |_idx, task, _context| {
             let log = execution_log_clone.clone();
             let task_id = task.id.clone();
             Box::pin(async move {
@@ -658,7 +695,7 @@ mod tests {
         let active_clone = active_tasks.clone();
         let peak_clone = peak_tasks.clone();
 
-        let executor: SubtaskExecutorFn = Arc::new(move |_idx, _task| {
+        let executor: SubtaskExecutorFn = Arc::new(move |_idx, _task, _context| {
             let active = active_clone.clone();
             let peak = peak_clone.clone();
 
@@ -720,7 +757,7 @@ mod tests {
         dag.add_dependency(idx_a, idx_b).unwrap();
         dag.add_dependency(idx_b, idx_c).unwrap();
 
-        let executor: SubtaskExecutorFn = Arc::new(move |_idx, task| {
+        let executor: SubtaskExecutorFn = Arc::new(move |_idx, task, _context| {
             Box::pin(async move {
                 if task.id == "A" {
                     Err(GlobalError::runtime("boom"))
@@ -758,7 +795,7 @@ mod tests {
             .unwrap();
 
         // Executor fails A, but B must still run because it's only a soft dependency.
-        let executor: SubtaskExecutorFn = Arc::new(move |_idx, task| {
+        let executor: SubtaskExecutorFn = Arc::new(move |_idx, task, _context| {
             Box::pin(async move {
                 if task.id == "A" {
                     Err(GlobalError::runtime("A failed"))
@@ -785,8 +822,9 @@ mod tests {
         let mut dag = SubtaskDAG::new("test");
         let idx_a = dag.add_task(SwarmSubtask::new("A", "Task A"));
 
-        let executor: SubtaskExecutorFn =
-            Arc::new(move |_idx, task| Box::pin(async move { Ok(format!("out:{}", task.id)) }));
+        let executor: SubtaskExecutorFn = Arc::new(move |_idx, task, _context| {
+            Box::pin(async move { Ok(format!("out:{}", task.id)) })
+        });
 
         let scheduler = SequentialScheduler::new();
         let summary = scheduler.execute(&mut dag, executor).await.unwrap();
@@ -798,11 +836,42 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_dependency_outputs_are_passed_to_downstream_tasks() {
+        let mut dag = SubtaskDAG::new("test");
+        let idx_a = dag.add_task(SwarmSubtask::new("A", "Task A"));
+        let idx_b = dag.add_task(SwarmSubtask::new("B", "Task B"));
+        dag.add_dependency(idx_a, idx_b).unwrap();
+
+        let executor: SubtaskExecutorFn = Arc::new(move |_idx, task, context| {
+            Box::pin(async move {
+                if task.id == "A" {
+                    Ok("alpha".into())
+                } else {
+                    let seen = context
+                        .dependencies
+                        .iter()
+                        .find(|dep| dep.task_id == "A")
+                        .and_then(|dep| dep.output.clone())
+                        .unwrap_or_default();
+                    Ok(format!("saw:{seen}"))
+                }
+            })
+        });
+
+        let scheduler = SequentialScheduler::new();
+        let summary = scheduler.execute(&mut dag, executor).await.unwrap();
+        assert!(summary.is_fully_successful());
+
+        let task = dag.get_task(idx_b).unwrap();
+        assert_eq!(task.output.as_deref(), Some("saw:alpha"));
+    }
+
+    #[tokio::test]
     async fn test_empty_dag_is_noop_and_does_not_panic() {
         let mut dag = SubtaskDAG::new("empty");
 
         let executor: SubtaskExecutorFn =
-            Arc::new(move |_idx, _task| Box::pin(async move { Ok("unused".into()) }));
+            Arc::new(move |_idx, _task, _context| Box::pin(async move { Ok("unused".into()) }));
 
         let scheduler = SequentialScheduler::new();
         let summary = scheduler.execute(&mut dag, executor).await.unwrap();
@@ -819,7 +888,7 @@ mod tests {
         let idx_b = dag.add_task(SwarmSubtask::new("B", "B"));
         dag.add_dependency(idx_a, idx_b).unwrap();
 
-        let executor: SubtaskExecutorFn = Arc::new(move |_idx, task| {
+        let executor: SubtaskExecutorFn = Arc::new(move |_idx, task, _context| {
             Box::pin(async move {
                 if task.id == "A" {
                     Err(GlobalError::runtime("A failed"))
@@ -853,7 +922,7 @@ mod tests {
         let a = active.clone();
         let p = peak.clone();
 
-        let executor: SubtaskExecutorFn = Arc::new(move |_idx, _task| {
+        let executor: SubtaskExecutorFn = Arc::new(move |_idx, _task, _context| {
             let a = a.clone();
             let p = p.clone();
             Box::pin(async move {

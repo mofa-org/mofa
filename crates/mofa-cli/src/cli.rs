@@ -162,6 +162,28 @@ pub enum Commands {
         #[command(subcommand)]
         action: RagCommands,
     },
+
+    /// Swarm orchestration commands
+    Swarm {
+        #[command(subcommand)]
+        action: SwarmCommands,
+    },
+}
+
+/// Swarm orchestration subcommands
+#[derive(Subcommand)]
+pub enum SwarmCommands {
+    /// Run a swarm workflow from a YAML config file
+    ///
+    /// Example: mofa swarm run examples/swarm_demo.yaml
+    Run {
+        /// Path to the swarm YAML config file
+        file: PathBuf,
+
+        /// Print a JSON summary of the run to stdout after completion
+        #[arg(long)]
+        json: bool,
+    },
 }
 
 /// Generate subcommands
@@ -747,5 +769,18 @@ mod tests {
     fn test_rag_query_parses() {
         let parsed = Cli::try_parse_from(["mofa", "rag", "query", "what is mofa", "--top-k", "3"]);
         assert!(parsed.is_ok(), "rag query command should parse");
+    }
+
+    #[test]
+    fn test_swarm_run_parses() {
+        let parsed = Cli::try_parse_from(["mofa", "swarm", "run", "examples/swarm_demo.yaml"]);
+        assert!(parsed.is_ok(), "swarm run <file> should parse");
+    }
+
+    #[test]
+    fn test_swarm_run_with_json_flag_parses() {
+        let parsed =
+            Cli::try_parse_from(["mofa", "swarm", "run", "examples/swarm_demo.yaml", "--json"]);
+        assert!(parsed.is_ok(), "swarm run --json should parse");
     }
 }
