@@ -144,8 +144,8 @@ impl AsrAdapter for DeepgramAsrAdapter {
             match response {
                 Ok(resp) if resp.status().is_success() => {
                     let body: DeepgramResponse = resp.json().await.map_err(|e| AgentError::Other(e.to_string()))?;
-                    let alt = body.results.channels.get(0)
-                        .and_then(|ch| ch.alternatives.get(0))
+                    let alt = body.results.channels.first()
+                        .and_then(|ch| ch.alternatives.first())
                         .ok_or_else(|| AgentError::Other("Deepgram response missing transcription alternatives".to_string()))?;
 
                     let segments = alt.words.as_ref().map(|words| {

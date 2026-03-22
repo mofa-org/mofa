@@ -1,6 +1,8 @@
 //! Shared application state for the control-plane server
 
+use crate::inference_bridge::InferenceBridge;
 use crate::middleware::RateLimiter;
+use mofa_foundation::inference::OrchestratorConfig;
 use mofa_runtime::agent::registry::AgentRegistry;
 use std::sync::Arc;
 
@@ -11,6 +13,8 @@ pub struct AppState {
     pub registry: Arc<AgentRegistry>,
     /// Per-client rate limiter
     pub rate_limiter: Arc<RateLimiter>,
+    /// Inference bridge - connects to InferenceOrchestrator (optional)
+    pub inference_bridge: Option<Arc<InferenceBridge>>,
 }
 
 impl AppState {
@@ -19,6 +23,21 @@ impl AppState {
         Self {
             registry,
             rate_limiter,
+            inference_bridge: None,
+        }
+    }
+
+    /// Create a new `AppState` with an inference bridge.
+    pub fn with_inference_bridge(
+        registry: Arc<AgentRegistry>,
+        rate_limiter: Arc<RateLimiter>,
+        orchestrator_config: OrchestratorConfig,
+    ) -> Self {
+        let bridge = InferenceBridge::new(orchestrator_config);
+        Self {
+            registry,
+            rate_limiter,
+            inference_bridge: Some(Arc::new(bridge)),
         }
     }
 }
