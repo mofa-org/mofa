@@ -7,7 +7,7 @@ use crate::CliError;
 use colored::Colorize;
 use mofa_foundation::swarm::{
     AgentSpec, SchedulerSummary, SubtaskDAG, SubtaskExecutorFn, SwarmConfig, SwarmScheduler,
-    SwarmSubtask, TaskExecutionContext,
+    SwarmSubtask, TaskAnalyzer, TaskExecutionContext,
 };
 use mofa_sdk::llm::{LLMAgentBuilder, OpenAIConfig, OpenAIProvider};
 use serde::Deserialize;
@@ -50,9 +50,10 @@ pub async fn run_swarm(file: &Path, json_output: bool) -> Result<(), CliError> {
 
     let config = run_file.config;
     // 2. Load DAG 
-    let mut dag = run_file.dag.ok_or_else(|| {
-        CliError::Other("Swarm YAML must include a `dag` section".to_string())
-    })?;
+    let mut dag = match run_file.dag {
+        Some(dag) => dag,
+        None => build_dag_from_task(&config).await?,
+    };
     if dag.name.is_empty() {
         dag.name = config.name.clone();
     }
@@ -93,6 +94,47 @@ pub async fn run_swarm(file: &Path, json_output: bool) -> Result<(), CliError> {
 }
 
 //  Helpers 
+
+async fn build_dag_from_task(config: &SwarmConfig) -> Result<SubtaskDAG, CliError> {
+    // Prefer the live analyzer when provider config is available.
+    let use_live_analyzer = std::env::var("OPENAI_API_KEY").is_ok();
+    let mut dag = if use_live_analyzer {
+        build_dag_with_live_analyzer(config).await?
+    } else {
+        // Keep a deterministic local fallback so the CLI path stays usable in tests.
+        TaskAnalyzer::analyze_offline(&config.task)
+    };
+
+    // Normalise the generated DAG name to the swarm config name for display.
+    dag.name = config.name.clone();
+
+    Ok(dag)
+}
+
+async fn build_dag_with_live_analyzer(config: &SwarmConfig) -> Result<SubtaskDAG, CliError> {
+    let api_key = std::env::var("OPENAI_API_KEY").map_err(|_| {
+        CliError::Other("Task analyzer requires OPENAI_API_KEY in the environment".to_string())
+    })?;
+
+    let mut provider_config = OpenAIConfig::new(api_key);
+    if let Ok(base_url) = std::env::var("OPENAI_BASE_URL") {
+        provider_config = provider_config.with_base_url(base_url);
+    }
+    if let Ok(model) = std::env::var("OPENAI_MODEL") {
+        provider_config = provider_config.with_model(model);
+    } else if let Some(model) = config.agents.iter().find_map(|agent| agent.model.as_deref()) {
+        // Reuse the first configured agent model when no global model override is present.
+        provider_config = provider_config.with_model(model);
+    }
+
+    let analyzer = TaskAnalyzer::new(Arc::new(OpenAIProvider::with_config(provider_config)));
+    let mut dag = analyzer
+        .analyze(&config.task)
+        .await
+        .map_err(|e| CliError::Other(format!("Task analysis failed: {e}")))?;
+    dag.name = config.name.clone();
+    Ok(dag)
+}
 
 /// Print a colourful banner before execution begins.
 fn print_swarm_header(config: &SwarmConfig, task_count: usize, executor: SwarmExecutorKind) {
@@ -401,17 +443,22 @@ dag:
     }
 
     #[tokio::test]
-    async fn test_run_swarm_missing_dag_returns_error() {
-        let yaml = r#"
-name: generic-swarm
-task: "Do something interesting"
-executor: llm
-"#;
-        let mut tmp = NamedTempFile::new().unwrap();
-        tmp.write_all(yaml.as_bytes()).unwrap();
+    async fn test_build_dag_from_task_generates_offline_when_dag_is_missing() {
+        let config = SwarmConfig {
+            id: "test".into(),
+            name: "generated".into(),
+            description: String::new(),
+            task: "Research the topic and write a report".into(),
+            agents: vec![],
+            pattern: Default::default(),
+            sla: Default::default(),
+            hitl: Default::default(),
+            metadata: Default::default(),
+        };
 
-        let result = run_swarm(tmp.path(), false).await;
-        assert!(result.is_err());
+        let dag = build_dag_from_task(&config).await.unwrap();
+        assert_eq!(dag.name, "generated");
+        assert!(dag.task_count() >= 1);
     }
 
     #[tokio::test]
