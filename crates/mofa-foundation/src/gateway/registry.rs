@@ -14,7 +14,7 @@
 //! This module promotes it to a public, production-grade type with:
 //! - Dynamic `enable` / `disable` without deregistration
 //! - Correct conflict detection for `(path_pattern, method, priority)` triples
-//! - 18 unit tests covering all edge cases
+//! - 17 unit tests covering all edge cases
 //!
 //! Mutations (`register`, `deregister`) require `&mut self`, enforcing
 //! exclusive access at the type level.  Production multi-node deployments can
