@@ -1,15 +1,23 @@
 //! Per-client rate limiting middleware
 
-use dashmap::DashMap;
 use std::sync::Arc;
-use std::time::{Duration, Instant};
+use std::time::Duration;
+
+use async_trait::async_trait;
+use axum::body::Body;
+use axum::http::StatusCode;
+use axum::response::Response;
+use dashmap::DashMap;
+use tokio::sync::Mutex;
+
+use super::{Middleware, Next, RequestContext, ResponseContext};
 
 /// Sliding-window token-bucket state per client
 struct ClientState {
     /// Number of requests made in the current window
     count: u64,
     /// Start of the current window
-    window_start: Instant,
+    start: std::time::Instant,
 }
 
 /// Per-client IP rate limiter
@@ -40,17 +48,18 @@ impl RateLimiter {
     /// The key is typically the client IP address, but can be any string
     /// (e.g. API key, user ID).
     pub fn check(&self, client_key: &str) -> bool {
+        use std::time::Instant;
         let now = Instant::now();
 
         let mut entry = self.clients.entry(client_key.to_string()).or_insert_with(|| ClientState {
             count: 0,
-            window_start: now,
+            start: now,
         });
 
         // Reset window if expired
-        if now.duration_since(entry.window_start) >= self.window {
+        if now.duration_since(entry.start) >= self.window {
             entry.count = 0;
-            entry.window_start = now;
+            entry.start = now;
         }
 
         if entry.count < self.max_requests {
@@ -64,11 +73,66 @@ impl RateLimiter {
     /// Remove stale entries to keep memory usage bounded.
     ///
     /// Call this periodically (e.g. every minute) from a background task.
+    #[allow(dead_code)]
     pub fn gc(&self) {
+        use std::time::Instant;
         let now = Instant::now();
         self.clients.retain(|_, state| {
-            now.duration_since(state.window_start) < self.window * 2
+            now.duration_since(state.start) < self.window * 2
         });
+    }
+}
+
+/// Gateway rate limiter wrapped as a middleware.
+#[derive(Clone)]
+pub struct GatewayRateLimiter {
+    /// The rate limiter instance.
+    limiter: Arc<RateLimiter>,
+}
+
+impl GatewayRateLimiter {
+    /// Create a new gateway rate limiter.
+    pub fn new(rpm: u32) -> Self {
+        Self {
+            limiter: Arc::new(RateLimiter::new(rpm as u64, Duration::from_secs(60))),
+        }
+    }
+
+    /// Check if a request from the given IP is allowed.
+    pub fn check(&self, ip: &str) -> bool {
+        self.limiter.check(ip)
+    }
+}
+
+#[async_trait]
+impl Middleware for GatewayRateLimiter {
+    async fn handle(&self, ctx: RequestContext, next: Next<'_>) -> ResponseContext {
+        // Extract client IP from the request context
+        let client_key = ctx
+            .client_ip
+            .map(|ip| ip.to_string())
+            .unwrap_or_else(|| "unknown".to_string());
+
+        // Check rate limit
+        if !self.check(&client_key) {
+            // Return 429 Too Many Requests
+            let body = serde_json::json!({
+                "error": {
+                    "message": "Rate limit exceeded. Please try again later.",
+                    "type": "rate_limit_error",
+                    "code": "rate_limit_exceeded"
+                }
+            });
+            let response = Response::builder()
+                .status(StatusCode::TOO_MANY_REQUESTS)
+                .header("Content-Type", "application/json")
+                .body(Body::from(body.to_string()))
+                .unwrap();
+            return ResponseContext::new(response);
+        }
+
+        // Continue to next middleware/handler
+        next.run(ctx).await
     }
 }
 

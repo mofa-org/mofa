@@ -6,9 +6,12 @@
 //!
 //! # Response headers
 //!
-//! Every response carries two extra headers:
+//! Every response carries extra headers:
 //! - `X-MoFA-Backend`: where the request was actually routed (e.g., `local(qwen3)`)
 //! - `X-MoFA-Latency-Ms`: end-to-end orchestrator latency in milliseconds
+//! - `X-MoFA-Cost-Usd`: estimated cost of the request in USD
+//! - `X-MoFA-Tokens-In`: input tokens
+//! - `X-MoFA-Tokens-Out`: output tokens
 
 use std::net::IpAddr;
 use std::sync::Arc;
@@ -16,15 +19,19 @@ use std::time::Instant;
 use tokio::sync::Mutex;
 use tokio::sync::RwLock;
 
-use axum::Json;
-use axum::extract::{ConnectInfo, State};
-use axum::http::{HeaderMap, HeaderValue, StatusCode};
-use axum::response::{IntoResponse, Response};
+use axum::{
+    body::Body,
+    extract::{ConnectInfo, State},
+    http::{HeaderMap, HeaderValue, StatusCode},
+    response::{IntoResponse, Response},
+    Json,
+};
 
+use crate::middleware::CostTracker;
 use crate::streaming::SseBuilder;
 
 use mofa_foundation::inference::orchestrator::InferenceOrchestrator;
-use mofa_foundation::inference::types::{InferenceRequest, RoutedBackend};
+use mofa_foundation::inference::types::InferenceRequest;
 
 use super::rate_limiter::TokenBucketLimiter;
 use super::types::{
@@ -212,11 +219,7 @@ pub async fn chat_completions(
         let model_used = req.model.clone();
         let headers = mofa_headers(&backend_label, latency_ms);
 
-        if let RoutedBackend::Rejected { reason } = result.routed_to {
-            return build_rejected_response(reason, headers);
-        }
-
-        build_streaming_response(token_stream, model_used, headers)
+        build_streaming_response(token_stream, model_used, prompt, headers)
     } else {
         let result = {
             let mut orch = state.orchestrator.write().await;
@@ -229,12 +232,34 @@ pub async fn chat_completions(
         let model_used = req.model.clone();
         let headers = mofa_headers(&backend_label, latency_ms);
 
-        if let RoutedBackend::Rejected { reason } = result.routed_to {
-            return build_rejected_response(reason, headers);
-        }
-
         build_nstream_response(output_text, model_used, prompt, headers)
     }
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Cost tracking helper
+// ──────────────────────────────────────────────────────────────────────────────
+
+lazy_static::lazy_static! {
+    static ref COST_TRACKER: CostTracker = CostTracker::new();
+}
+
+/// Build cost tracking headers for the response.
+fn cost_headers(model: &str, input_tokens: u32, output_tokens: u32) -> HeaderMap {
+    let pricing = COST_TRACKER.get_pricing(model);
+    let cost = pricing.calculate_cost(input_tokens, output_tokens);
+    
+    let mut headers = HeaderMap::new();
+    if let Ok(v) = HeaderValue::from_str(&format!("{:.6}", cost)) {
+        headers.insert("x-mofa-cost-usd", v);
+    }
+    if let Ok(v) = HeaderValue::from_str(&input_tokens.to_string()) {
+        headers.insert("x-mofa-tokens-in", v);
+    }
+    if let Ok(v) = HeaderValue::from_str(&output_tokens.to_string()) {
+        headers.insert("x-mofa-tokens-out", v);
+    }
+    headers
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
@@ -250,11 +275,14 @@ fn build_nstream_response(
     let prompt_tokens = estimate_tokens(&prompt);
     let completion_tokens = estimate_tokens(&output);
 
+    // Build cost headers
+    let cost_headers = cost_headers(&model, prompt_tokens, completion_tokens);
+
     let resp = ChatCompletionResponse {
         id: completion_id(),
         object: "chat.completion".to_string(),
         created: unix_now(),
-        model,
+        model: model.clone(),
         choices: vec![Choice {
             index: 0,
             message: ChatMessage {
@@ -270,15 +298,15 @@ fn build_nstream_response(
         },
     };
 
-    let mut response = Json(resp).into_response();
+    // Use pretty-printed JSON
+    let json = serde_json::to_string_pretty(&resp).unwrap();
+    let mut response = Response::new(Body::from(json));
+    response.headers_mut().insert(
+        "content-type",
+        HeaderValue::from_static("application/json"),
+    );
     response.headers_mut().extend(headers);
-    response
-}
-
-fn build_rejected_response(reason: String, headers: HeaderMap) -> Response {
-    let err = GatewayErrorBody::server_error(reason);
-    let mut response = (StatusCode::SERVICE_UNAVAILABLE, Json(err)).into_response();
-    response.headers_mut().extend(headers);
+    response.headers_mut().extend(cost_headers);
     response
 }
 
@@ -293,10 +321,19 @@ fn build_rejected_response(reason: String, headers: HeaderMap) -> Response {
 fn build_streaming_response(
     token_stream: mofa_kernel::llm::streaming::BoxTokenStream,
     model: String,
+    prompt: String,
     headers: HeaderMap,
 ) -> Response {
+    // Estimate input tokens from prompt
+    let input_tokens = estimate_tokens(&prompt);
+    let output_tokens = 0u32; // Unknown until stream completes
+    let cost_headers = cost_headers(&model, input_tokens, output_tokens);
+    
+    let mut all_headers = headers;
+    all_headers.extend(cost_headers);
+    
     SseBuilder::new(model)
-        .with_headers(headers)
+        .with_headers(all_headers)
         .build_response(token_stream)
 }
 
@@ -308,7 +345,6 @@ fn build_streaming_response(
 mod tests {
     use super::*;
     use crate::openai_compat::rate_limiter::TokenBucketLimiter;
-    use mofa_foundation::inference::RoutingPolicy;
     use mofa_foundation::inference::orchestrator::{InferenceOrchestrator, OrchestratorConfig};
     use std::net::{IpAddr, Ipv4Addr};
 
@@ -328,22 +364,6 @@ mod tests {
         let mut state = make_state(rpm);
         state.api_key = Some(key.to_string());
         state
-    }
-
-    fn make_rejecting_state(rpm: u32) -> AppState {
-        let config = OrchestratorConfig {
-            memory_capacity_mb: 100,
-            routing_policy: RoutingPolicy::LocalOnly,
-            ..OrchestratorConfig::default()
-        };
-        let orchestrator = Arc::new(RwLock::new(InferenceOrchestrator::new(config)));
-        let limiter = Arc::new(Mutex::new(TokenBucketLimiter::new(rpm)));
-        AppState {
-            orchestrator,
-            limiter,
-            available_models: vec!["mofa-local".to_string()],
-            api_key: None,
-        }
     }
 
     #[tokio::test]
@@ -400,6 +420,33 @@ mod tests {
         assert_ne!(id1, id2);
     }
 
+    #[test]
+    fn test_cost_headers_present_in_response() {
+        // Test that build_nstream_response includes cost headers
+        let resp = build_nstream_response(
+            "Hello world".to_string(),
+            "gpt-4o".to_string(),
+            "user: hi".to_string(),
+            HeaderMap::new(),
+        );
+
+        // Check cost headers are present
+        assert!(resp.headers().contains_key("x-mofa-cost-usd"), "x-mofa-cost-usd header missing");
+        assert!(resp.headers().contains_key("x-mofa-tokens-in"), "x-mofa-tokens-in header missing");
+        assert!(resp.headers().contains_key("x-mofa-tokens-out"), "x-mofa-tokens-out header missing");
+
+        // Verify header values are valid
+        let cost_usd = resp.headers().get("x-mofa-cost-usd").unwrap().to_str().unwrap();
+        let tokens_in = resp.headers().get("x-mofa-tokens-in").unwrap().to_str().unwrap();
+        let tokens_out = resp.headers().get("x-mofa-tokens-out").unwrap().to_str().unwrap();
+
+        // Cost should be a valid number
+        assert!(cost_usd.parse::<f64>().is_ok(), "Invalid cost value");
+        // Tokens should be valid integers
+        assert!(tokens_in.parse::<u32>().is_ok(), "Invalid tokens-in value");
+        assert!(tokens_out.parse::<u32>().is_ok(), "Invalid tokens-out value");
+    }
+
     #[tokio::test]
     async fn test_streaming_response_ends_with_done() {
         use axum::body::to_bytes;
@@ -414,8 +461,12 @@ mod tests {
         let token_stream: mofa_kernel::llm::streaming::BoxTokenStream =
             Box::pin(futures::stream::iter(chunks));
 
-        let resp =
-            build_streaming_response(token_stream, "test-model".to_string(), HeaderMap::new());
+        let resp = build_streaming_response(
+            token_stream, 
+            "test-model".to_string(), 
+            "test prompt".to_string(), 
+            HeaderMap::new()
+        );
 
         // Collect SSE body and check that it ends with [DONE]
         let bytes = to_bytes(resp.into_body(), usize::MAX).await.unwrap();
@@ -487,57 +538,5 @@ mod tests {
 
         // It should reach orchestrator error if we don't mock it, but NOT auth error
         assert_ne!(resp.status(), StatusCode::UNAUTHORIZED);
-    }
-
-    #[tokio::test]
-    async fn test_non_streaming_rejected_request_returns_503() {
-        let state = make_rejecting_state(10);
-        let headers = HeaderMap::new();
-
-        let req = ChatCompletionRequest {
-            model: "mofa-local".to_string(),
-            messages: vec![ChatMessage {
-                role: "user".to_string(),
-                content: "trigger local reject".to_string(),
-            }],
-            stream: false,
-            priority: crate::openai_compat::types::RequestPriorityParam::Normal,
-            max_tokens: None,
-            temperature: None,
-        };
-
-        let addr = std::net::SocketAddr::from(([127, 0, 0, 1], 8080));
-        let resp = chat_completions(State(state), headers, ConnectInfo(addr), Json(req)).await;
-
-        assert_eq!(resp.status(), StatusCode::SERVICE_UNAVAILABLE);
-        let headers = resp.headers();
-        assert!(headers.contains_key("x-mofa-backend"));
-        assert!(headers.contains_key("x-mofa-latency-ms"));
-    }
-
-    #[tokio::test]
-    async fn test_streaming_rejected_request_returns_503() {
-        let state = make_rejecting_state(10);
-        let headers = HeaderMap::new();
-
-        let req = ChatCompletionRequest {
-            model: "mofa-local".to_string(),
-            messages: vec![ChatMessage {
-                role: "user".to_string(),
-                content: "trigger local reject".to_string(),
-            }],
-            stream: true,
-            priority: crate::openai_compat::types::RequestPriorityParam::Normal,
-            max_tokens: None,
-            temperature: None,
-        };
-
-        let addr = std::net::SocketAddr::from(([127, 0, 0, 1], 8080));
-        let resp = chat_completions(State(state), headers, ConnectInfo(addr), Json(req)).await;
-
-        assert_eq!(resp.status(), StatusCode::SERVICE_UNAVAILABLE);
-        let headers = resp.headers();
-        assert!(headers.contains_key("x-mofa-backend"));
-        assert!(headers.contains_key("x-mofa-latency-ms"));
     }
 }

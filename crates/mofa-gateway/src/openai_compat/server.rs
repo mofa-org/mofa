@@ -62,13 +62,19 @@ impl GatewayServer {
             api_key: self.config.api_key.clone(),
         };
 
-        Router::new()
+        // Build the router
+        let router = Router::new()
             .route("/v1/chat/completions", post(chat_completions))
             .route("/v1/models", get(list_models))
             // WebSocket streaming endpoint: same semantics as SSE but bidirectional.
             // Clients can cancel mid-stream by closing the WebSocket connection.
             .route("/ws/v1/chat/completions", get(ws_chat_completions))
-            .with_state(state)
+            .with_state(state);
+
+        // Add middleware chain
+        router
+            .layer(axum::middleware::from_fn(logging_middleware))
+            .layer(axum::middleware::from_fn(metrics_middleware))
     }
 
     /// Bind to the configured host:port and serve requests.
@@ -95,6 +101,50 @@ impl GatewayServer {
 
         Ok(())
     }
+}
+
+// Middleware functions must be at module level, not inside impl block
+use axum::middleware::Next;
+
+/// Logging middleware for request/response tracing
+async fn logging_middleware(
+    request: axum::extract::Request,
+    next: Next,
+) -> axum::response::Response {
+    let request_id = uuid::Uuid::new_v4().to_string();
+    let method = request.method().to_string();
+    let path = request.uri().path().to_string();
+    
+    tracing::info!(
+        request_id = %request_id,
+        method = %method,
+        path = %path,
+        "Incoming request"
+    );
+
+    let response = next.run(request).await;
+
+    let status = response.status().as_u16();
+    tracing::info!(
+        request_id = %request_id,
+        status = %status,
+        "Request completed"
+    );
+
+    response
+}
+
+/// Metrics middleware for request counting
+async fn metrics_middleware(
+    request: axum::extract::Request,
+    next: Next,
+) -> axum::response::Response {
+    let method = request.method().to_string();
+    
+    // Simple counter - in production you'd use a proper metrics system
+    tracing::info!(method = %method, total = 1, "Request processed");
+
+    next.run(request).await
 }
 
 #[cfg(test)]
