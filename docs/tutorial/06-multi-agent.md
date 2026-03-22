@@ -408,7 +408,7 @@ dag.add_dependency(c, verdict)?;
 let summary = ConsensusScheduler::new().execute(&mut dag, executor).await?;
 ```
 
-Voters run in parallel. The scheduler counts exact string matches across voter outputs, then prepends `## Majority Candidate\n{candidate}` to the aggregator's description when a strict majority exists (count > 1 and count is maximal).
+Voters run in parallel. The scheduler counts exact string matches across voter outputs. A **strict majority** requires the winning candidate to have more than half of all votes with no ties (`count × 2 > total_voters`). When a strict majority exists, `## Majority Candidate\n{candidate}` is prepended to the aggregator's description; otherwise all voter outputs are still injected and the aggregator decides.
 
 ---
 
