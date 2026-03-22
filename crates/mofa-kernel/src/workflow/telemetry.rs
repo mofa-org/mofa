@@ -244,25 +244,25 @@ pub struct SessionQuery {
 impl SessionQuery {
     /// Returns true if the given session matches all active filters.
     pub fn matches(&self, session: &DebugSession) -> bool {
-        if let Some(ref wf) = self.workflow_id {
-            if session.workflow_id != *wf {
-                return false;
-            }
+        if let Some(ref wf) = self.workflow_id
+            && session.workflow_id != *wf
+        {
+            return false;
         }
-        if let Some(ref status) = self.status {
-            if session.status != *status {
-                return false;
-            }
+        if let Some(ref status) = self.status
+            && session.status != *status
+        {
+            return false;
         }
-        if let Some(from) = self.from {
-            if session.started_at < from {
-                return false;
-            }
+        if let Some(from) = self.from
+            && session.started_at < from
+        {
+            return false;
         }
-        if let Some(to) = self.to {
-            if session.started_at > to {
-                return false;
-            }
+        if let Some(to) = self.to
+            && session.started_at > to
+        {
+            return false;
         }
         if let Some(min_dur) = self.min_duration_ms {
             let duration = match session.ended_at {
