@@ -16,12 +16,14 @@ pub mod health_checker;
 pub mod load_balancer;
 pub mod rate_limiter;
 pub mod router;
+pub mod routing_policy;
 
 pub use circuit_breaker::*;
 pub use health_checker::*;
 pub use load_balancer::*;
 pub use rate_limiter::*;
 pub use router::*;
+pub use routing_policy::*;
 
 use crate::error::{GatewayError, GatewayResult};
 use crate::types::{LoadBalancingAlgorithm, NodeId, RequestMetadata, ChatCompletionResponse, Message, Role, Usage, Choice};

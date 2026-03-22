@@ -18,6 +18,8 @@ use axum::routing::{get, post};
 
 use mofa_foundation::inference::orchestrator::InferenceOrchestrator;
 
+use crate::inference_bridge::InferenceBridge;
+use crate::middleware::jwt_auth::JwtAuth;
 use super::handler::{AppState, chat_completions, list_models};
 use super::rate_limiter::TokenBucketLimiter;
 use super::types::{GatewayConfig, OpenAiGatewayError};
@@ -53,6 +55,13 @@ impl GatewayServer {
     /// Useful for integration testing.
     pub fn build_router(&self) -> Router {
         let orchestrator = InferenceOrchestrator::new(self.config.orchestrator_config.clone());
+        
+        // Create JWT auth if secret is configured
+        let jwt_auth = self.config.jwt_secret.clone().map(|s| JwtAuth::new(s));
+        
+        // Create inference bridge with routing policy
+        let inference_bridge = InferenceBridge::new("local");
+        
         let state = AppState {
             orchestrator: Arc::new(RwLock::new(orchestrator)),
             limiter: Arc::new(Mutex::new(TokenBucketLimiter::new(
@@ -60,6 +69,8 @@ impl GatewayServer {
             ))),
             available_models: self.config.available_models.clone(),
             api_key: self.config.api_key.clone(),
+            jwt_auth,
+            inference_bridge,
         };
 
         Router::new()

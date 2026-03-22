@@ -105,6 +105,5 @@ pub mod streaming;
 pub use control_plane::{ControlPlane, ControlPlaneConfig};
 pub use error::{ControlPlaneError, GatewayError, GatewayResult};
 pub use gateway::{Gateway, GatewayConfig};
-pub use inference_bridge::{ChatCompletionRequest, ChatCompletionResponse, InferenceBridge};
 pub use server::{GatewayServer, ServerConfig};
 pub use types::*;

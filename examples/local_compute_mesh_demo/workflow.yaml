@@ -1,0 +1,35 @@
+# Compute Mesh Workflow Configuration
+# This file defines the workflow for the local compute mesh demo
+
+name: compute-mesh-demo
+version: "1.0"
+
+# Workflow steps
+steps:
+  - id: generate_response
+    name: Generate LLM Response
+    description: Generate a response using the compute mesh routing
+    config:
+      # Routing policy: LocalFirstWithCloudFallback, LocalOnly, CloudOnly, LatencyOptimized, CostOptimized
+      routing_policy: LocalFirstWithCloudFallback
+      
+      # Model configuration
+      model: llama-3-7b
+      max_tokens: 2048
+      temperature: 0.7
+      
+      # Memory configuration (MB)
+      memory_capacity_mb: 16384
+      
+      # Cloud provider fallback
+      cloud_provider: openai
+
+# Metrics collection
+metrics:
+  enabled: true
+  collect:
+    - latency_ms
+    - tokens_streamed
+    - tokens_per_second
+    - time_to_first_token_ms
+    - total_time_ms
