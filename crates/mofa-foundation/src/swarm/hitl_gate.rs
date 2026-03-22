@@ -107,7 +107,7 @@ impl SwarmHITLGate {
     /// The gate is arc-cloned into each task closure so the original
     /// `Arc<SwarmHITLGate>` can be dropped by the caller after wrapping.
     pub fn wrap_executor(self: Arc<Self>, inner: SubtaskExecutorFn) -> SubtaskExecutorFn {
-        Arc::new(move |idx, task: SwarmSubtask| {
+        Arc::new(move |idx, mut task: SwarmSubtask| {
             let gate = Arc::clone(&self);
             let inner = Arc::clone(&inner);
             let task_for_gate = task.clone();
@@ -120,9 +120,31 @@ impl SwarmHITLGate {
                 );
                 async move {
                     if gate.should_intercept(&task_for_gate) {
-                        gate.request_and_wait(&task_for_gate)
-                            .instrument(info_span!("hitl.approval_gate"))
-                            .await?;
+                        let gate_span = info_span!(
+                            "hitl.approval_gate",
+                            review_id  = tracing::field::Empty,
+                            decision   = tracing::field::Empty,
+                            timed_out  = tracing::field::Empty,
+                        );
+                        let result = gate
+                            .request_and_wait(&task_for_gate, &gate_span)
+                            .instrument(gate_span.clone())
+                            .await;
+
+                        match result {
+                            Ok(Some(modified_desc)) => {
+                                task.description = modified_desc;
+                            }
+                            Ok(None) => {}
+                            Err(e) if gate.is_optional() => {
+                                tracing::warn!(
+                                    task_id = %task_for_gate.id,
+                                    "hitl timeout in Optional mode — auto-approving"
+                                );
+                                let _ = e;
+                            }
+                            Err(e) => return Err(e),
+                        }
                     }
                     inner(idx, task)
                         .instrument(info_span!("swarm.subtask.execute"))
@@ -132,6 +154,10 @@ impl SwarmHITLGate {
                 .await
             })
         })
+    }
+
+    fn is_optional(&self) -> bool {
+        matches!(self.mode, HITLMode::Optional)
     }
 
     // ── Private ───────────────────────────────────────────────────────────
@@ -151,7 +177,15 @@ impl SwarmHITLGate {
 
     /// Submit a [`ReviewRequest`] for the given task and block until a
     /// reviewer responds or the timeout expires.
-    async fn request_and_wait(&self, task: &SwarmSubtask) -> GlobalResult<()> {
+    ///
+    /// Returns `Ok(None)` when approved as-is, `Ok(Some(desc))` when the
+    /// reviewer requested changes and provided a modified description, or
+    /// `Err` when the task was rejected or an unexpected response was received.
+    async fn request_and_wait(
+        &self,
+        task: &SwarmSubtask,
+        span: &tracing::Span,
+    ) -> GlobalResult<Option<String>> {
         let now_ms = chrono::Utc::now()
             .timestamp_millis()
             .try_into()
@@ -202,36 +236,57 @@ impl SwarmHITLGate {
             .await
             .map_err(|e| GlobalError::Other(format!("HITL request_review failed: {e}")))?;
 
-        let response = self
+        span.record("review_id", review_id.as_str());
+
+        let wait_result = self
             .manager
             .wait_for_review(&review_id, self.review_timeout)
-            .await
-            .map_err(|e| {
-                GlobalError::Other(format!(
+            .await;
+
+        let response = match wait_result {
+            Ok(r) => {
+                span.record("timed_out", false);
+                r
+            }
+            Err(e) => {
+                span.record("timed_out", true);
+                span.record("decision", "timeout");
+                return Err(GlobalError::Other(format!(
                     "HITL wait_for_review failed for task '{}': {e}",
                     task.id
-                ))
-            })?;
+                )));
+            }
+        };
 
         match response {
             ReviewResponse::Approved { .. } => {
+                span.record("decision", "approved");
                 tracing::info!(task_id = %task.id, "hitl.decision" = "approved");
-                Ok(())
+                Ok(None)
             }
             ReviewResponse::Rejected { reason, .. } => {
+                span.record("decision", "rejected");
                 tracing::warn!(task_id = %task.id, "hitl.decision" = "rejected", %reason);
                 Err(GlobalError::Other(format!(
                     "Task '{}' rejected by reviewer: {reason}",
                     task.id
                 )))
             }
-            // Handles Deferred, ChangesRequested, and any future variants
-            // added to the #[non_exhaustive] ReviewResponse enum.
+            ReviewResponse::ChangesRequested { changes, .. } => {
+                span.record("decision", "changes_requested");
+                tracing::info!(task_id = %task.id, "hitl.decision" = "changes_requested");
+                let modified = format!(
+                    "## Reviewer Requested Changes\n{}\n\n{}",
+                    changes, task.description
+                );
+                Ok(Some(modified))
+            }
             _ => {
-                tracing::warn!(task_id = %task.id, "hitl.decision" = "unexpected");
+                span.record("decision", "deferred");
+                tracing::warn!(task_id = %task.id, "hitl.decision" = "deferred");
                 Err(GlobalError::Other(format!(
-                    "Task '{}' not approved (unexpected response: {:?})",
-                    task.id, response
+                    "Task '{}' deferred — not approved for execution",
+                    task.id
                 )))
             }
         }
@@ -507,7 +562,110 @@ mod tests {
         }
     }
 
-    // ── Test 6: Gate works with ParallelScheduler on a diamond DAG ─────────
+    // ── Test 6: ChangesRequested applies modified description before execution
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn test_gate_changes_requested_modifies_task_description() {
+        let manager = make_manager();
+        let gate = Arc::new(SwarmHITLGate::new(
+            Arc::clone(&manager),
+            HITLMode::Required,
+            "exec-cr",
+        ));
+
+        // Executor that captures the description it received.
+        let captured_desc = Arc::new(std::sync::Mutex::new(String::new()));
+        let captured = Arc::clone(&captured_desc);
+        let capturing_executor: SubtaskExecutorFn = Arc::new(move |_idx, task: SwarmSubtask| {
+            let captured = Arc::clone(&captured);
+            Box::pin(async move {
+                *captured.lock().unwrap() = task.description.clone();
+                Ok(format!("{}-done", task.id))
+            })
+        });
+
+        let executor = gate.wrap_executor(capturing_executor);
+
+        let mut dag = SubtaskDAG::new("changes-requested");
+        dag.add_task(
+            SwarmSubtask::new("cr-task", "Original description").with_risk_level(RiskLevel::High),
+        );
+
+        // Resolve with ChangesRequested.
+        let mgr = Arc::clone(&manager);
+        tokio::spawn(async move {
+            let deadline = tokio::time::Instant::now() + Duration::from_secs(5);
+            loop {
+                let pending = mgr.list_pending(None, None).await.unwrap();
+                if !pending.is_empty() {
+                    for r in pending {
+                        mgr.resolve_review(
+                            &r.id,
+                            ReviewResponse::ChangesRequested {
+                                changes: "Please add safety checks".to_string(),
+                                comment: None,
+                            },
+                            "reviewer".to_string(),
+                        )
+                        .await
+                        .unwrap();
+                    }
+                    break;
+                }
+                if tokio::time::Instant::now() >= deadline {
+                    break;
+                }
+                tokio::time::sleep(Duration::from_millis(10)).await;
+            }
+        });
+
+        let summary = SequentialScheduler::with_config(SwarmSchedulerConfig::default())
+            .execute(&mut dag, executor)
+            .await
+            .unwrap();
+
+        assert_eq!(summary.succeeded, 1);
+        let desc = captured_desc.lock().unwrap().clone();
+        assert!(
+            desc.contains("Please add safety checks"),
+            "modified description must include reviewer changes: {desc}"
+        );
+        assert!(
+            desc.contains("Original description"),
+            "modified description must still contain original task: {desc}"
+        );
+    }
+
+    // ── Test 7: Optional mode auto-approves when review times out ─────────
+
+    #[tokio::test]
+    async fn test_gate_optional_mode_auto_approves_on_timeout() {
+        let manager = make_manager();
+        let gate = Arc::new(
+            SwarmHITLGate::new(Arc::clone(&manager), HITLMode::Optional, "exec-timeout")
+                .with_review_timeout(Duration::from_millis(50)), // very short timeout
+        );
+        let executor = gate.wrap_executor(echo_executor());
+
+        let mut dag = SubtaskDAG::new("optional-timeout");
+        dag.add_task(
+            SwarmSubtask::new("timeout-task", "High risk but optional gate")
+                .with_risk_level(RiskLevel::High),
+        );
+
+        // Nobody approves — the gate times out. In Optional mode, should auto-approve.
+        let summary = SequentialScheduler::with_config(SwarmSchedulerConfig::default())
+            .execute(&mut dag, executor)
+            .await
+            .unwrap();
+
+        assert_eq!(
+            summary.succeeded, 1,
+            "Optional gate timeout must auto-approve, not fail the task"
+        );
+    }
+
+    // ── Test 8: Gate works with ParallelScheduler on a diamond DAG ─────────
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     async fn test_gate_works_with_parallel_scheduler() {
