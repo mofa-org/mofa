@@ -124,6 +124,7 @@ pub enum FailurePolicy {
 #[derive(Debug, Clone)]
 pub struct SwarmSchedulerConfig {
     pub task_timeout: Duration,
+    pub hitl_optional_timeout: Duration,
     pub failure_policy: FailurePolicy,
     pub concurrency_limit: Option<usize>,
 }
@@ -132,6 +133,7 @@ impl Default for SwarmSchedulerConfig {
     fn default() -> Self {
         Self {
             task_timeout: Duration::from_secs(120),
+            hitl_optional_timeout: Duration::from_secs(5),
             failure_policy: FailurePolicy::default(),
             concurrency_limit: None,
         }
@@ -216,6 +218,12 @@ impl SwarmScheduler for SequentialScheduler {
                     ));
                     continue;
                 }
+                continue;
+            }
+
+            // Skip tasks whose hard deps have failed (Continue policy: no cascade, but still blocked).
+            let is_ready_or_running = dag.ready_tasks().contains(&idx);
+            if !is_ready_or_running {
                 continue;
             }
 
@@ -441,6 +449,12 @@ impl SwarmScheduler for ParallelScheduler {
 
         for (idx, task) in dag.all_tasks() {
             if task.status == crate::swarm::SubtaskStatus::Pending {
+                // Pending + blocked by failed hard dep under Continue: not a stall, skip counting.
+                let is_blocked_by_failure = self.config.failure_policy == FailurePolicy::Continue
+                    && !dag.ready_tasks().contains(&idx);
+                if is_blocked_by_failure {
+                    continue;
+                }
                 skipped += 1;
                 results.push(TaskExecutionResult::skipped(
                     task,
@@ -571,12 +585,12 @@ mod tests {
         let summary = scheduler.execute(&mut dag, executor).await.unwrap();
 
         assert_eq!(summary.failed, 1);
-        assert_eq!(summary.skipped, 0);
-        assert_eq!(summary.succeeded, 1);
+        assert_eq!(summary.skipped, 0); // Continue policy doesn't cascade skip
+        assert_eq!(summary.succeeded, 0); // B never runs because its hard dependency failed
 
         assert_eq!(
             dag.get_task(idx_b).unwrap().status,
-            crate::swarm::SubtaskStatus::Completed
+            crate::swarm::SubtaskStatus::Pending
         );
     }
 
@@ -833,11 +847,11 @@ mod tests {
         let summary = scheduler.execute(&mut dag, executor).await.unwrap();
 
         assert_eq!(summary.failed, 1);
-        assert_eq!(summary.succeeded, 1);
+        assert_eq!(summary.succeeded, 0);
         assert_eq!(summary.skipped, 0);
         assert_eq!(
             dag.get_task(idx_b).unwrap().status,
-            crate::swarm::SubtaskStatus::Completed
+            crate::swarm::SubtaskStatus::Pending
         );
     }
 
