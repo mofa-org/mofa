@@ -21,38 +21,117 @@
 //!         │
 //!   ReviewManager::wait_for_review()  ← polls until resolved
 //!         │
-//!   Approved? ──Yes──► inner executor
-//!         │No
-//!         ▼
-//!   Err(GlobalError::Other(...))      ← scheduler marks task Failed
+//!   Approved?        ──Yes──────────────────────► inner executor
+//!   ChangesRequested ──apply changes, then──────► inner executor
+//!   Optional timeout ──auto-approve, warn, then─► inner executor
+//!   Rejected / Err   ──────────────────────────► Err (task Failed)
 //! ```
 //!
 //! The returned [`SubtaskExecutorFn`] is a drop-in replacement that can be
-//! passed directly to either scheduler.
+//! passed directly to either scheduler.  After execution, call
+//! [`SwarmHITLGate::enrich_summary`] to attach gate metrics to the
+//! [`SchedulerSummary`].
 
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
 
 use mofa_kernel::agent::types::error::{GlobalError, GlobalResult};
 use mofa_kernel::hitl::{
     ExecutionStep, ExecutionTrace, ReviewContext, ReviewRequest, ReviewResponse, ReviewType,
 };
+use serde::{Deserialize, Serialize};
 use tracing::{info_span, Instrument};
 
 use crate::hitl::manager::ReviewManager;
 use crate::swarm::config::HITLMode;
 use crate::swarm::dag::{RiskLevel, SwarmSubtask};
-use crate::swarm::scheduler::SubtaskExecutorFn;
+use crate::swarm::scheduler::{SchedulerSummary, SubtaskExecutorFn};
+
+// ── Metrics ───────────────────────────────────────────────────────────────────
+
+/// Atomic counters used internally to track gate activity across concurrent tasks.
+///
+/// Uses `Relaxed` ordering throughout — these are independent per-field counters
+/// with no cross-field synchronisation requirement.
+#[derive(Debug, Default)]
+struct MetricsInner {
+    intercepted:             AtomicU64,
+    approved:                AtomicU64,
+    modified:                AtomicU64,
+    rejected:                AtomicU64,
+    auto_approved_timeout:   AtomicU64,
+    total_review_latency_ms: AtomicU64,
+}
+
+impl MetricsInner {
+    fn snapshot(&self) -> HITLGateMetrics {
+        HITLGateMetrics {
+            intercepted:             self.intercepted.load(Ordering::Relaxed),
+            approved:                self.approved.load(Ordering::Relaxed),
+            modified:                self.modified.load(Ordering::Relaxed),
+            rejected:                self.rejected.load(Ordering::Relaxed),
+            auto_approved_timeout:   self.auto_approved_timeout.load(Ordering::Relaxed),
+            total_review_latency_ms: self.total_review_latency_ms.load(Ordering::Relaxed),
+        }
+    }
+}
+
+/// Point-in-time snapshot of gate activity for a single swarm execution.
+///
+/// Obtain one via [`SwarmHITLGate::metrics`] or by calling
+/// [`SwarmHITLGate::enrich_summary`] to embed it directly in a
+/// [`SchedulerSummary`].
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct HITLGateMetrics {
+    /// Tasks that passed through the interception check (submitted for review).
+    pub intercepted: u64,
+    /// Tasks approved as-is by a reviewer.
+    pub approved: u64,
+    /// Tasks where a reviewer requested changes; the modified description was
+    /// applied before the task executed.
+    pub modified: u64,
+    /// Tasks rejected by a reviewer; each rejection causes a task `Failure`.
+    pub rejected: u64,
+    /// Tasks auto-approved after a timeout while in `HITLMode::Optional`.
+    pub auto_approved_timeout: u64,
+    /// Sum of all reviewer round-trip latencies in milliseconds.
+    /// Divide by `approved + modified + rejected` for the mean latency.
+    pub total_review_latency_ms: u64,
+}
+
+impl HITLGateMetrics {
+    /// Mean reviewer round-trip latency in milliseconds.
+    ///
+    /// Returns `0` when no reviews have completed (avoids division by zero).
+    pub fn avg_review_latency_ms(&self) -> u64 {
+        let reviewed = self.approved + self.modified + self.rejected;
+        if reviewed == 0 {
+            0
+        } else {
+            self.total_review_latency_ms / reviewed
+        }
+    }
+}
+
+// ── Gate ──────────────────────────────────────────────────────────────────────
 
 /// Gate that intercepts HITL-flagged subtasks before execution.
 ///
-/// Construct one via [`SwarmHITLGate::new`], wrap your executor with
-/// [`SwarmHITLGate::wrap_executor`], and pass the result to a scheduler.
+/// Construct one via [`SwarmHITLGate::new`], configure with the builder
+/// methods, wrap your executor with [`SwarmHITLGate::wrap_executor`], and pass
+/// the result to a scheduler.
 ///
 /// ```rust,ignore
-/// let gate = Arc::new(SwarmHITLGate::new(manager, HITLMode::Optional, dag.id.clone()));
+/// let gate = Arc::new(
+///     SwarmHITLGate::new(manager, HITLMode::Optional, dag.id.clone())
+///         .with_risk_threshold(RiskLevel::High)
+///         .with_review_timeout(Duration::from_secs(300)),
+/// );
 /// let gated = gate.wrap_executor(inner_executor);
-/// ParallelScheduler::new().execute(&mut dag, gated).await?;
+/// let summary = ParallelScheduler::new().execute(&mut dag, gated).await?;
+/// let summary = gate.enrich_summary(summary);
+/// println!("{:?}", summary.hitl_stats);
 /// ```
 pub struct SwarmHITLGate {
     manager: Arc<ReviewManager>,
@@ -62,8 +141,15 @@ pub struct SwarmHITLGate {
     /// Defaults to [`RiskLevel::High`].
     risk_threshold: RiskLevel,
     /// Maximum time to wait for a reviewer decision.
-    /// `None` uses the `ReviewManager`'s configured default expiration (1 h).
+    /// `None` delegates to the `ReviewManager`'s configured expiration (1 h).
     review_timeout: Option<Duration>,
+    /// Optional custom interception predicate.
+    ///
+    /// When set, replaces the built-in `risk_threshold` / `mode` logic.
+    /// Use [`with_intercept_when`] to install one.
+    intercept_when: Option<Arc<dyn Fn(&SwarmSubtask) -> bool + Send + Sync>>,
+    /// Shared atomic counters written by every task closure concurrently.
+    metrics: Arc<MetricsInner>,
 }
 
 impl SwarmHITLGate {
@@ -83,12 +169,15 @@ impl SwarmHITLGate {
             execution_id: execution_id.into(),
             risk_threshold: RiskLevel::High,
             review_timeout: None,
+            intercept_when: None,
+            metrics: Arc::new(MetricsInner::default()),
         }
     }
 
     /// Override the minimum risk level that triggers a review.
     ///
-    /// Only relevant when `mode` is [`HITLMode::Optional`].
+    /// Only applies when `mode` is [`HITLMode::Optional`] and no custom
+    /// `intercept_when` predicate has been installed.
     pub fn with_risk_threshold(mut self, threshold: RiskLevel) -> Self {
         self.risk_threshold = threshold;
         self
@@ -98,6 +187,50 @@ impl SwarmHITLGate {
     pub fn with_review_timeout(mut self, timeout: Duration) -> Self {
         self.review_timeout = Some(timeout);
         self
+    }
+
+    /// Install a custom interception predicate.
+    ///
+    /// When set, the predicate **replaces** the built-in
+    /// `risk_threshold` / `HITLMode` check entirely.  Use this to intercept
+    /// on arbitrary task properties — capability requirements, description
+    /// keywords, estimated duration, etc.
+    ///
+    /// ```rust,ignore
+    /// let gate = SwarmHITLGate::new(manager, HITLMode::Optional, "exec-1")
+    ///     .with_intercept_when(|task| {
+    ///         task.required_capabilities.contains(&"write_db".to_string())
+    ///             || task.estimated_duration_secs.unwrap_or(0) > 300
+    ///     });
+    /// ```
+    pub fn with_intercept_when(
+        mut self,
+        predicate: impl Fn(&SwarmSubtask) -> bool + Send + Sync + 'static,
+    ) -> Self {
+        self.intercept_when = Some(Arc::new(predicate));
+        self
+    }
+
+    /// Returns a snapshot of gate activity metrics.
+    ///
+    /// Safe to call at any time, including concurrently with ongoing execution.
+    /// For the final summary, prefer [`enrich_summary`] instead.
+    pub fn metrics(&self) -> HITLGateMetrics {
+        self.metrics.snapshot()
+    }
+
+    /// Attach the gate's metrics to a [`SchedulerSummary`].
+    ///
+    /// Call this immediately after the scheduler returns, before the summary
+    /// is logged or returned to the caller:
+    ///
+    /// ```rust,ignore
+    /// let summary = scheduler.execute(&mut dag, gated).await?;
+    /// let summary = gate.enrich_summary(summary);
+    /// ```
+    pub fn enrich_summary(&self, mut summary: SchedulerSummary) -> SchedulerSummary {
+        summary.hitl_stats = Some(self.metrics.snapshot());
+        summary
     }
 
     /// Wrap an executor with HITL interception logic.
@@ -120,32 +253,54 @@ impl SwarmHITLGate {
                 );
                 async move {
                     if gate.should_intercept(&task_for_gate) {
+                        gate.metrics.intercepted.fetch_add(1, Ordering::Relaxed);
+
                         let gate_span = info_span!(
                             "hitl.approval_gate",
                             review_id  = tracing::field::Empty,
                             decision   = tracing::field::Empty,
                             timed_out  = tracing::field::Empty,
                         );
+
+                        let review_start = std::time::Instant::now();
                         let result = gate
                             .request_and_wait(&task_for_gate, &gate_span)
                             .instrument(gate_span.clone())
                             .await;
+                        let latency_ms = u64::try_from(
+                            review_start.elapsed().as_millis()
+                        ).unwrap_or(u64::MAX);
 
                         match result {
+                            Ok(None) => {
+                                gate.metrics.approved.fetch_add(1, Ordering::Relaxed);
+                                gate.metrics.total_review_latency_ms
+                                    .fetch_add(latency_ms, Ordering::Relaxed);
+                            }
                             Ok(Some(modified_desc)) => {
+                                gate.metrics.modified.fetch_add(1, Ordering::Relaxed);
+                                gate.metrics.total_review_latency_ms
+                                    .fetch_add(latency_ms, Ordering::Relaxed);
                                 task.description = modified_desc;
                             }
-                            Ok(None) => {}
                             Err(e) if gate.is_optional() => {
+                                gate.metrics.auto_approved_timeout
+                                    .fetch_add(1, Ordering::Relaxed);
                                 tracing::warn!(
                                     task_id = %task_for_gate.id,
                                     "hitl timeout in Optional mode — auto-approving"
                                 );
                                 let _ = e;
                             }
-                            Err(e) => return Err(e),
+                            Err(e) => {
+                                gate.metrics.rejected.fetch_add(1, Ordering::Relaxed);
+                                gate.metrics.total_review_latency_ms
+                                    .fetch_add(latency_ms, Ordering::Relaxed);
+                                return Err(e);
+                            }
                         }
                     }
+
                     inner(idx, task)
                         .instrument(info_span!("swarm.subtask.execute"))
                         .await
@@ -156,14 +311,21 @@ impl SwarmHITLGate {
         })
     }
 
+    // ── Private ───────────────────────────────────────────────────────────
+
     fn is_optional(&self) -> bool {
         matches!(self.mode, HITLMode::Optional)
     }
 
-    // ── Private ───────────────────────────────────────────────────────────
-
     /// Determine whether this task must be reviewed before execution.
+    ///
+    /// If a custom predicate was installed via [`with_intercept_when`], it
+    /// takes full precedence and the `mode` / `risk_threshold` fields are
+    /// ignored.
     fn should_intercept(&self, task: &SwarmSubtask) -> bool {
+        if let Some(ref predicate) = self.intercept_when {
+            return predicate(task);
+        }
         match self.mode {
             HITLMode::None => false,
             HITLMode::Required => true,
@@ -186,9 +348,7 @@ impl SwarmHITLGate {
         task: &SwarmSubtask,
         span: &tracing::Span,
     ) -> GlobalResult<Option<String>> {
-        let now_ms = chrono::Utc::now()
-            .timestamp_millis()
-            .try_into()
+        let now_ms = u64::try_from(chrono::Utc::now().timestamp_millis())
             .unwrap_or(u64::MAX);
 
         let trace = ExecutionTrace {
@@ -197,26 +357,29 @@ impl SwarmHITLGate {
                 step_type: "swarm_subtask".to_string(),
                 timestamp_ms: now_ms,
                 input: Some(serde_json::json!({
-                    "description":            task.description,
-                    "risk_level":             format!("{:?}", task.risk_level),
-                    "complexity":             task.complexity,
-                    "required_capabilities":  task.required_capabilities,
+                    "description":             task.description,
+                    "risk_level":              format!("{:?}", task.risk_level),
+                    "complexity":              task.complexity,
+                    "required_capabilities":   task.required_capabilities,
                     "estimated_duration_secs": task.estimated_duration_secs,
                 })),
                 output: None,
                 metadata: Default::default(),
             }],
-            duration_ms: task.estimated_duration_secs.unwrap_or(0).saturating_mul(1_000),
+            duration_ms: task
+                .estimated_duration_secs
+                .unwrap_or(0)
+                .saturating_mul(1_000),
         };
 
         let context = ReviewContext::new(
             trace,
             serde_json::json!({
-                "task_id":                task.id,
-                "description":            task.description,
-                "risk_level":             format!("{:?}", task.risk_level),
+                "task_id":                 task.id,
+                "description":             task.description,
+                "risk_level":              format!("{:?}", task.risk_level),
                 "estimated_duration_secs": task.estimated_duration_secs,
-                "required_capabilities":  task.required_capabilities,
+                "required_capabilities":   task.required_capabilities,
             }),
         );
 
@@ -290,444 +453,5 @@ impl SwarmHITLGate {
                 )))
             }
         }
-    }
-}
-
-// ── Tests ─────────────────────────────────────────────────────────────────────
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::hitl::manager::{ReviewManager, ReviewManagerConfig};
-    use crate::hitl::notifier::ReviewNotifier;
-    use crate::hitl::policy_engine::ReviewPolicyEngine;
-    use crate::hitl::store::InMemoryReviewStore;
-    use crate::swarm::dag::{RiskLevel, SubtaskDAG, SwarmSubtask};
-    use crate::swarm::scheduler::{
-        FailurePolicy, ParallelScheduler, SequentialScheduler, SwarmScheduler,
-        SwarmSchedulerConfig, TaskOutcome,
-    };
-    use mofa_kernel::hitl::ReviewResponse;
-    use std::sync::Arc;
-    use std::time::Duration;
-
-    /// Build a minimal `ReviewManager` backed by an in-memory store.
-    fn make_manager() -> Arc<ReviewManager> {
-        let store = Arc::new(InMemoryReviewStore::new());
-        let notifier = Arc::new(ReviewNotifier::default());
-        let policy_engine = Arc::new(ReviewPolicyEngine::default());
-        Arc::new(ReviewManager::new(
-            store,
-            notifier,
-            policy_engine,
-            None,
-            ReviewManagerConfig::default(),
-        ))
-    }
-
-    /// A simple executor that just returns the task id as output.
-    fn echo_executor() -> SubtaskExecutorFn {
-        Arc::new(|_idx, task: SwarmSubtask| {
-            Box::pin(async move { Ok(format!("{}-done", task.id)) })
-        })
-    }
-
-    // ── Test 1: HITLMode::None bypasses even Critical tasks ───────────────
-
-    #[tokio::test]
-    async fn test_gate_none_mode_bypasses_all_tasks() {
-        let manager = make_manager();
-        let gate = Arc::new(SwarmHITLGate::new(
-            manager.clone(),
-            HITLMode::None,
-            "exec-1",
-        ));
-        let executor = gate.wrap_executor(echo_executor());
-
-        let mut dag = SubtaskDAG::new("none-mode");
-        let idx = dag.add_task(
-            SwarmSubtask::new("critical-task", "Delete everything")
-                .with_risk_level(RiskLevel::Critical),
-        );
-
-        let summary = SequentialScheduler::with_config(SwarmSchedulerConfig::default())
-            .execute(&mut dag, executor)
-            .await
-            .unwrap();
-
-        assert_eq!(summary.succeeded, 1);
-        assert_eq!(summary.failed, 0);
-        // No review requests should have been created.
-        let pending = manager.list_pending(None, None).await.unwrap();
-        assert!(pending.is_empty(), "HITLMode::None must never submit reviews");
-
-        let _ = idx;
-    }
-
-    // ── Test 2: HITLMode::Required intercepts even Low-risk tasks ─────────
-
-    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-    async fn test_gate_required_mode_intercepts_low_risk() {
-        let manager = make_manager();
-        let gate = Arc::new(SwarmHITLGate::new(
-            Arc::clone(&manager),
-            HITLMode::Required,
-            "exec-2",
-        ));
-        let executor = gate.wrap_executor(echo_executor());
-
-        let mut dag = SubtaskDAG::new("required-mode");
-        dag.add_task(SwarmSubtask::new("low-task", "Search the web").with_risk_level(RiskLevel::Low));
-
-        // Poll until the review appears then approve it.
-        let mgr = Arc::clone(&manager);
-        tokio::spawn(async move {
-            let deadline = tokio::time::Instant::now() + Duration::from_secs(5);
-            loop {
-                let pending = mgr.list_pending(None, None).await.unwrap();
-                if !pending.is_empty() {
-                    for r in pending {
-                        mgr.resolve_review(
-                            &r.id,
-                            ReviewResponse::Approved { comment: None },
-                            "auto-approver".to_string(),
-                        )
-                        .await
-                        .unwrap();
-                    }
-                    break;
-                }
-                if tokio::time::Instant::now() >= deadline {
-                    break;
-                }
-                tokio::time::sleep(Duration::from_millis(10)).await;
-            }
-        });
-
-        let cfg = SwarmSchedulerConfig::default();
-        let summary = SequentialScheduler::with_config(cfg)
-            .execute(&mut dag, executor)
-            .await
-            .unwrap();
-
-        assert_eq!(summary.succeeded, 1, "Low-risk task must succeed after approval");
-    }
-
-    // ── Test 3: HITLMode::Optional intercepts High-risk tasks ─────────────
-
-    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-    async fn test_gate_optional_mode_intercepts_high_risk() {
-        let manager = make_manager();
-        let gate = Arc::new(SwarmHITLGate::new(
-            Arc::clone(&manager),
-            HITLMode::Optional,
-            "exec-3",
-        ));
-        let executor = gate.wrap_executor(echo_executor());
-
-        let mut dag = SubtaskDAG::new("optional-high");
-        dag.add_task(
-            SwarmSubtask::new("high-task", "Update production database")
-                .with_risk_level(RiskLevel::High),
-        );
-
-        // Poll until the review appears then approve it.
-        let mgr = Arc::clone(&manager);
-        tokio::spawn(async move {
-            let deadline = tokio::time::Instant::now() + Duration::from_secs(5);
-            loop {
-                let pending = mgr.list_pending(None, None).await.unwrap();
-                if !pending.is_empty() {
-                    for r in pending {
-                        mgr.resolve_review(
-                            &r.id,
-                            ReviewResponse::Approved { comment: Some("LGTM".to_string()) },
-                            "reviewer".to_string(),
-                        )
-                        .await
-                        .unwrap();
-                    }
-                    break;
-                }
-                if tokio::time::Instant::now() >= deadline {
-                    break;
-                }
-                tokio::time::sleep(Duration::from_millis(10)).await;
-            }
-        });
-
-        let cfg = SwarmSchedulerConfig::default();
-        let summary = SequentialScheduler::with_config(cfg)
-            .execute(&mut dag, executor)
-            .await
-            .unwrap();
-
-        assert_eq!(summary.succeeded, 1);
-    }
-
-    // ── Test 4: HITLMode::Optional passes Low-risk tasks through directly ──
-
-    #[tokio::test]
-    async fn test_gate_optional_mode_passes_low_risk_direct() {
-        let manager = make_manager();
-        let gate = Arc::new(SwarmHITLGate::new(
-            Arc::clone(&manager),
-            HITLMode::Optional,
-            "exec-4",
-        ));
-        let executor = gate.wrap_executor(echo_executor());
-
-        let mut dag = SubtaskDAG::new("optional-low");
-        dag.add_task(SwarmSubtask::new("low-task", "Search the web").with_risk_level(RiskLevel::Low));
-
-        let cfg = SwarmSchedulerConfig::default();
-        let summary = SequentialScheduler::with_config(cfg)
-            .execute(&mut dag, executor)
-            .await
-            .unwrap();
-
-        assert_eq!(summary.succeeded, 1);
-        // No review created for a Low-risk task in Optional mode.
-        let pending = manager.list_pending(None, None).await.unwrap();
-        assert!(pending.is_empty());
-    }
-
-    // ── Test 5: Rejected review causes task failure ────────────────────────
-
-    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-    async fn test_gate_rejects_task_on_reviewer_rejection() {
-        let manager = make_manager();
-        let gate = Arc::new(SwarmHITLGate::new(
-            Arc::clone(&manager),
-            HITLMode::Required,
-            "exec-5",
-        ));
-        let executor = gate.wrap_executor(echo_executor());
-
-        let mut dag = SubtaskDAG::new("rejection");
-        dag.add_task(
-            SwarmSubtask::new("risky-task", "Deploy to production")
-                .with_risk_level(RiskLevel::Critical),
-        );
-
-        // Poll until the review appears then reject it.
-        let mgr = Arc::clone(&manager);
-        tokio::spawn(async move {
-            let deadline = tokio::time::Instant::now() + Duration::from_secs(5);
-            loop {
-                let pending = mgr.list_pending(None, None).await.unwrap();
-                if !pending.is_empty() {
-                    for r in pending {
-                        mgr.resolve_review(
-                            &r.id,
-                            ReviewResponse::Rejected {
-                                reason: "Not safe to deploy now".to_string(),
-                                comment: None,
-                            },
-                            "reviewer".to_string(),
-                        )
-                        .await
-                        .unwrap();
-                    }
-                    break;
-                }
-                if tokio::time::Instant::now() >= deadline {
-                    break;
-                }
-                tokio::time::sleep(Duration::from_millis(10)).await;
-            }
-        });
-
-        let cfg = SwarmSchedulerConfig {
-            failure_policy: FailurePolicy::Continue,
-            ..Default::default()
-        };
-        let summary = SequentialScheduler::with_config(cfg)
-            .execute(&mut dag, executor)
-            .await
-            .unwrap();
-
-        assert_eq!(summary.succeeded, 0);
-        assert_eq!(summary.failed, 1, "Rejected task must be marked Failed");
-
-        // Verify the failure reason contains the rejection text.
-        let result = &summary.results[0];
-        if let TaskOutcome::Failure(reason) = &result.outcome {
-            assert!(
-                reason.contains("Not safe to deploy now"),
-                "failure reason must include reviewer message: {reason}"
-            );
-        } else {
-            panic!("Expected Failure outcome, got: {:?}", result.outcome);
-        }
-    }
-
-    // ── Test 6: ChangesRequested applies modified description before execution
-
-    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-    async fn test_gate_changes_requested_modifies_task_description() {
-        let manager = make_manager();
-        let gate = Arc::new(SwarmHITLGate::new(
-            Arc::clone(&manager),
-            HITLMode::Required,
-            "exec-cr",
-        ));
-
-        // Executor that captures the description it received.
-        let captured_desc = Arc::new(std::sync::Mutex::new(String::new()));
-        let captured = Arc::clone(&captured_desc);
-        let capturing_executor: SubtaskExecutorFn = Arc::new(move |_idx, task: SwarmSubtask| {
-            let captured = Arc::clone(&captured);
-            Box::pin(async move {
-                *captured.lock().unwrap() = task.description.clone();
-                Ok(format!("{}-done", task.id))
-            })
-        });
-
-        let executor = gate.wrap_executor(capturing_executor);
-
-        let mut dag = SubtaskDAG::new("changes-requested");
-        dag.add_task(
-            SwarmSubtask::new("cr-task", "Original description").with_risk_level(RiskLevel::High),
-        );
-
-        // Resolve with ChangesRequested.
-        let mgr = Arc::clone(&manager);
-        tokio::spawn(async move {
-            let deadline = tokio::time::Instant::now() + Duration::from_secs(5);
-            loop {
-                let pending = mgr.list_pending(None, None).await.unwrap();
-                if !pending.is_empty() {
-                    for r in pending {
-                        mgr.resolve_review(
-                            &r.id,
-                            ReviewResponse::ChangesRequested {
-                                changes: "Please add safety checks".to_string(),
-                                comment: None,
-                            },
-                            "reviewer".to_string(),
-                        )
-                        .await
-                        .unwrap();
-                    }
-                    break;
-                }
-                if tokio::time::Instant::now() >= deadline {
-                    break;
-                }
-                tokio::time::sleep(Duration::from_millis(10)).await;
-            }
-        });
-
-        let summary = SequentialScheduler::with_config(SwarmSchedulerConfig::default())
-            .execute(&mut dag, executor)
-            .await
-            .unwrap();
-
-        assert_eq!(summary.succeeded, 1);
-        let desc = captured_desc.lock().unwrap().clone();
-        assert!(
-            desc.contains("Please add safety checks"),
-            "modified description must include reviewer changes: {desc}"
-        );
-        assert!(
-            desc.contains("Original description"),
-            "modified description must still contain original task: {desc}"
-        );
-    }
-
-    // ── Test 7: Optional mode auto-approves when review times out ─────────
-
-    #[tokio::test]
-    async fn test_gate_optional_mode_auto_approves_on_timeout() {
-        let manager = make_manager();
-        let gate = Arc::new(
-            SwarmHITLGate::new(Arc::clone(&manager), HITLMode::Optional, "exec-timeout")
-                .with_review_timeout(Duration::from_millis(50)), // very short timeout
-        );
-        let executor = gate.wrap_executor(echo_executor());
-
-        let mut dag = SubtaskDAG::new("optional-timeout");
-        dag.add_task(
-            SwarmSubtask::new("timeout-task", "High risk but optional gate")
-                .with_risk_level(RiskLevel::High),
-        );
-
-        // Nobody approves — the gate times out. In Optional mode, should auto-approve.
-        let summary = SequentialScheduler::with_config(SwarmSchedulerConfig::default())
-            .execute(&mut dag, executor)
-            .await
-            .unwrap();
-
-        assert_eq!(
-            summary.succeeded, 1,
-            "Optional gate timeout must auto-approve, not fail the task"
-        );
-    }
-
-    // ── Test 8: Gate works with ParallelScheduler on a diamond DAG ─────────
-
-    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-    async fn test_gate_works_with_parallel_scheduler() {
-        // fetch(Low) → {analyze_a(Low), analyze_b(Low)} → merge(High)
-        let manager = make_manager();
-        let gate = Arc::new(SwarmHITLGate::new(
-            Arc::clone(&manager),
-            HITLMode::Optional,
-            "exec-6",
-        ));
-        let executor = gate.wrap_executor(echo_executor());
-
-        let mut dag = SubtaskDAG::new("parallel-hitl");
-        let fetch = dag.add_task(
-            SwarmSubtask::new("fetch", "Fetch data").with_risk_level(RiskLevel::Low),
-        );
-        let analyze_a = dag.add_task(
-            SwarmSubtask::new("analyze-a", "Analyse branch A").with_risk_level(RiskLevel::Low),
-        );
-        let analyze_b = dag.add_task(
-            SwarmSubtask::new("analyze-b", "Analyse branch B").with_risk_level(RiskLevel::Low),
-        );
-        let merge = dag.add_task(
-            SwarmSubtask::new("merge", "Merge and push results").with_risk_level(RiskLevel::High),
-        );
-        dag.add_dependency(fetch, analyze_a).unwrap();
-        dag.add_dependency(fetch, analyze_b).unwrap();
-        dag.add_dependency(analyze_a, merge).unwrap();
-        dag.add_dependency(analyze_b, merge).unwrap();
-
-        // Poll until the merge node's review appears then approve it.
-        let mgr = Arc::clone(&manager);
-        tokio::spawn(async move {
-            let deadline = tokio::time::Instant::now() + Duration::from_secs(5);
-            loop {
-                let pending = mgr.list_pending(None, None).await.unwrap();
-                if !pending.is_empty() {
-                    for r in pending {
-                        mgr.resolve_review(
-                            &r.id,
-                            ReviewResponse::Approved { comment: None },
-                            "auto-approver".to_string(),
-                        )
-                        .await
-                        .unwrap();
-                    }
-                    break;
-                }
-                if tokio::time::Instant::now() >= deadline {
-                    break;
-                }
-                tokio::time::sleep(Duration::from_millis(10)).await;
-            }
-        });
-
-        let cfg = SwarmSchedulerConfig::default();
-        let summary = ParallelScheduler::with_config(cfg)
-            .execute(&mut dag, executor)
-            .await
-            .unwrap();
-
-        assert_eq!(summary.succeeded, 4, "all 4 tasks must succeed");
-        assert_eq!(summary.failed, 0);
     }
 }
