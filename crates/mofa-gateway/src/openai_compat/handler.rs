@@ -27,6 +27,7 @@ use mofa_foundation::inference::orchestrator::InferenceOrchestrator;
 use mofa_foundation::inference::types::{InferenceRequest, RoutedBackend};
 
 use crate::inference_bridge::InferenceBridge;
+#[cfg(feature = "openai-compat")]
 use crate::middleware::jwt_auth::JwtAuth;
 use super::rate_limiter::TokenBucketLimiter;
 use super::types::{
@@ -53,6 +54,7 @@ pub struct AppState {
     /// Optional static API key for authentication.
     pub api_key: Option<String>,
     /// Optional JWT authentication configuration.
+    #[cfg(feature = "openai-compat")]
     pub jwt_auth: Option<JwtAuth>,
     /// Inference bridge for routing policies.
     pub inference_bridge: InferenceBridge,
@@ -367,6 +369,7 @@ mod tests {
         state
     }
 
+    #[cfg(feature = "openai-compat")]
     fn make_state_with_jwt(rpm: u32, secret: &str) -> AppState {
         let mut state = make_state(rpm);
         state.jwt_auth = Some(JwtAuth::new(secret));

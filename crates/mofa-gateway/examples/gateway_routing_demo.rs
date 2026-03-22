@@ -12,7 +12,15 @@
 //! - Failover routing
 //! - Cost-based routing
 
-use jsonwebtoken::{encode, Algorithm, EncodingKey, Header};
+#[cfg(not(feature = "openai-compat"))]
+fn main() {
+    println!("This example requires the 'openai-compat' feature.");
+    println!("Run with: cargo run -p mofa-gateway --example gateway_routing_demo --features openai-compat");
+}
+
+#[cfg(feature = "openai-compat")]
+mod demo {
+    use jsonwebtoken::{encode, Algorithm, EncodingKey, Header};
 use mofa_gateway::gateway::routing_policy::{
     RoutingPolicy, StaticPricingRegistry, ProviderCost,
 };
@@ -209,4 +217,5 @@ async fn demo_cost_routing() -> Result<(), Box<dyn std::error::Error>> {
     println!("   In this case, 'local' (free) is always selected first.");
     
     Ok(())
+}
 }
