@@ -2,7 +2,7 @@
 //!
 //! | Type | Description |
 //! |------|-------------|
-//! | [`InMemoryApiKeyStore`] | In-memory `ApiKeyStore` with UUID key generation |
+//! | [`InMemoryApiKeyStore`] | In-memory `ApiKeyStore` with UUIDv4 key generation |
 //! | [`ApiKeyAuthProvider`] | `AuthProvider` that validates via `x-api-key` header |
 //!
 //! # Usage
@@ -40,8 +40,8 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 /// In-memory [`ApiKeyStore`] backed by a plain `HashMap`.
 ///
-/// Keys are generated as random-looking hex strings derived from a monotonic
-/// counter and a timestamp prefix.  This is intentionally simple — production
+/// Keys are generated as random UUIDv4 strings.  This is intentionally simple — production
+/// deployments should replace this with a store backed by a persistent
 /// deployments should replace this with a store backed by a persistent
 /// database (Redis, PostgreSQL, etc.).
 pub struct InMemoryApiKeyStore {
@@ -84,11 +84,7 @@ impl InMemoryApiKeyStore {
 
     fn generate_key(&mut self) -> String {
         self.counter += 1;
-        let ts = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .map(|d| d.as_millis())
-            .unwrap_or(0);
-        format!("mofa_{:016x}_{:08x}", ts, self.counter)
+        format!("mofa_{}", uuid::Uuid::new_v4().simple())
     }
 }
 
@@ -168,7 +164,10 @@ impl<S: ApiKeyStore + Send + Sync> AuthProvider for ApiKeyAuthProvider<S> {
         // 3. Check expiry.
         let now_ms = SystemTime::now()
             .duration_since(UNIX_EPOCH)
-            .map(|d| d.as_millis() as u64)
+            .map(|d| {
+                let ms = d.as_millis();
+                u64::try_from(ms).unwrap_or(u64::MAX)
+            })
             .unwrap_or(0);
 
         if claims.is_expired(now_ms) {
