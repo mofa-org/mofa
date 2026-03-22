@@ -16,7 +16,7 @@ use std::path::Path;
 use std::time::SystemTime;
 use thiserror::Error;
 
-use crate::wasm_runtime::types::{PluginCapability, PluginDep, PluginManifest};
+use crate::wasm_runtime::{PluginCapability, PluginDep, PluginManifest};
 
 pub type PluginId = String;
 pub type ResolvedVersions = HashMap<PluginId, Version>;
