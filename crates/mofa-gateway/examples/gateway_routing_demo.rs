@@ -127,7 +127,7 @@ fn demo_jwt_auth() {
     println!("   curl -X POST http://localhost:8080/v1/chat/completions \\");
     println!("     -H \"Authorization: Bearer <token>\" \\");
     println!("     -H \"Content-Type: application/json\" \\");
-    println!("     -d '{{\"model\":\"test\",\"messages\":[{\"role\":\"user\",\"content\":\"hi\"}]}}'");
+    println!("     -d '{{ \"model\": \"test\", \"messages\": [{{ \"role\": \"user\", \"content\": \"hi\" }}] }}'");
 }
 
 #[cfg(feature = "openai-compat")]
