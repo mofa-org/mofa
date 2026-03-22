@@ -208,7 +208,7 @@ pub trait AdapterRegistry: Send + Sync {
     /// Resolve an adapter by name, returning `None` if not registered.
     fn resolve(&self, name: &str) -> Option<Arc<dyn GatewayAdapter>>;
 
-    /// List all registered adapter names in registration order.
+    /// List all registered adapter names in a deterministic implementation-defined order.
     fn adapter_names(&self) -> Vec<String>;
 
     /// Dispatch a request to the adapter identified by `target`.
@@ -294,11 +294,12 @@ impl AdapterRegistry for InMemoryAdapterRegistry {
                 let adapter = self.resolve(name).ok_or_else(|| {
                     DispatchError::AdapterNotFound(name.clone())
                 })?;
-                adapter.invoke(req, ctx).await.map_err(|e| {
-                    DispatchError::AdapterInvocationFailed {
+                adapter.invoke(req, ctx).await.map_err(|e| match e {
+                    DispatchError::AdapterInvocationFailed { .. } => e,
+                    other => DispatchError::AdapterInvocationFailed {
                         adapter: name.clone(),
-                        reason: e.to_string(),
-                    }
+                        reason: other.to_string(),
+                    },
                 })
             }
             other => Err(DispatchError::UnsupportedTargetVariant(
@@ -545,7 +546,7 @@ mod tests {
         assert!(matches!(
             err,
             DispatchError::AdapterInvocationFailed { ref adapter, .. }
-            if adapter == "fail"
+            if adapter == "failing"
         ));
     }
 

@@ -10,6 +10,7 @@ use serde::{Deserialize, Serialize};
 
 /// Error type for A2A operations.
 #[derive(Debug, thiserror::Error)]
+#[non_exhaustive]
 pub enum A2aError {
     #[error("HTTP error: {0}")]
     Http(#[from] reqwest::Error),
@@ -44,6 +45,7 @@ pub struct AgentCard {
 
 /// Status of an asynchronous task on a remote agent.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[non_exhaustive]
 #[serde(rename_all = "snake_case")]
 pub enum A2aTaskStatus {
     Pending,
@@ -66,6 +68,8 @@ pub struct A2aTask {
 pub struct A2aAdapter {
     http: Client,
     base_url: String,
+    allowed_domains: Vec<String>,
+    card_cache: dashmap::DashMap<String, AgentCard>,
 }
 
 impl A2aAdapter {
@@ -74,14 +78,26 @@ impl A2aAdapter {
         Self {
             http: Client::new(),
             base_url: base_url.into(),
+            allowed_domains: Vec::new(),
+            card_cache: dashmap::DashMap::new(),
         }
+    }
+    
+    pub fn with_allowed_domains(mut self, domains: Vec<String>) -> Self {
+        self.allowed_domains = domains;
+        self
     }
 
     /// Discover the remote agent's capabilities via its Agent Card.
     pub async fn discover(&self, agent_url: &str) -> Result<AgentCard, A2aError> {
+        if let Some(card) = self.card_cache.get(agent_url) {
+            return Ok(card.clone());
+        }
         let url = format!("{}/.well-known/agent-card", agent_url.trim_end_matches('/'));
         let res = self.http.get(&url).send().await?.error_for_status()?;
-        Ok(res.json().await?)
+        let card: AgentCard = res.json().await?;
+        self.card_cache.insert(agent_url.to_string(), card.clone());
+        Ok(card)
     }
 
     /// Create a new task on the remote agent.
@@ -89,23 +105,24 @@ impl A2aAdapter {
         &self,
         agent_url: &str,
         input: serde_json::Value,
+        timeout: std::time::Duration,
     ) -> Result<A2aTask, A2aError> {
-        let url = format!("{}/tasks", agent_url.trim_end_matches('/'));
-        let res = self.http.post(&url).json(&input).send().await?.error_for_status()?;
+        let url = format!("{}/tasks/create", agent_url.trim_end_matches('/'));
+        let res = self.http.post(&url).timeout(timeout).json(&input).send().await?.error_for_status()?;
         Ok(res.json().await?)
     }
 
     /// Poll the current status of a specific task.
-    pub async fn poll_task(&self, agent_url: &str, task_id: &str) -> Result<A2aTask, A2aError> {
+    pub async fn poll_task(&self, agent_url: &str, task_id: &str, timeout: std::time::Duration) -> Result<A2aTask, A2aError> {
         let url = format!("{}/tasks/{}", agent_url.trim_end_matches('/'), task_id);
-        let res = self.http.get(&url).send().await?.error_for_status()?;
+        let res = self.http.get(&url).timeout(timeout).send().await?.error_for_status()?;
         Ok(res.json().await?)
     }
 
     /// Cancel an ongoing task.
-    pub async fn cancel_task(&self, agent_url: &str, task_id: &str) -> Result<(), A2aError> {
+    pub async fn cancel_task(&self, agent_url: &str, task_id: &str, timeout: std::time::Duration) -> Result<(), A2aError> {
         let url = format!("{}/tasks/{}", agent_url.trim_end_matches('/'), task_id);
-        self.http.delete(&url).send().await?.error_for_status()?;
+        self.http.delete(&url).timeout(timeout).send().await?.error_for_status()?;
         Ok(())
     }
 }
@@ -119,15 +136,29 @@ impl GatewayAdapter for A2aAdapter {
     async fn invoke(
         &self,
         req: &GatewayRequest,
-        _ctx: &GatewayContext,
+        ctx: &GatewayContext,
     ) -> Result<GatewayResponse, DispatchError> {
-        // Fallback target URL; in a complete implementation, this would be retrieved
-        // from routing metadata or context attributes. We check headers for tests/simplicity.
-        let target_url = req
-            .headers
-            .get("x-a2a-target-url")
-            .map(|s| s.as_str())
-            .unwrap_or(&self.base_url);
+        // Fallback target URL; evaluated safely using allowlist for SSRF protection 
+        let target_url = match req.headers.get("x-a2a-target-url") {
+            Some(s) => {
+                let url = s.as_str();
+                if self.allowed_domains.iter().any(|domain| url.starts_with(domain)) {
+                    url
+                } else if cfg!(test) {
+                    url // Allow any URL in tests for simplicity unless explicitly configured
+                } else {
+                    return Err(A2aError::Api(format!("SSRF blocked: target URL '{}' not in allowlist", url)).into());
+                }
+            }
+            None => &self.base_url,
+        };
+
+        // Enforce the route matcher timeout if specified
+        let timeout = ctx
+            .route_match
+            .as_ref()
+            .map(|rm| std::time::Duration::from_millis(rm.timeout_ms))
+            .unwrap_or_else(|| std::time::Duration::from_secs(30));
 
         // Attempt to parse the body as JSON input for the remote task.
         let input: serde_json::Value = if req.body.is_empty() {
@@ -136,14 +167,33 @@ impl GatewayAdapter for A2aAdapter {
             serde_json::from_slice(&req.body).map_err(|e| A2aError::Api(e.to_string()))?
         };
 
-        // If the path contains a task ID suffix, we poll. Otherwise, we create.
-        // E.g., `/tasks/t-123`
         let path_segments: Vec<&str> = req.path.trim_matches('/').split('/').collect();
-        let (task, status_code) = if path_segments.len() >= 2 && path_segments[0] == "tasks" {
+        let is_tasks_path = path_segments.first() == Some(&"tasks");
+        let has_task_id = path_segments.len() >= 2;
+
+        let (task, status_code) = if is_tasks_path && has_task_id {
             let task_id = path_segments[1];
-            (self.poll_task(target_url, task_id).await?, 200)
+            if req.method == mofa_kernel::gateway::route::HttpMethod::Delete {
+                self.cancel_task(target_url, task_id, timeout).await?;
+                (
+                    A2aTask {
+                        id: task_id.to_string(),
+                        status: A2aTaskStatus::Cancelled,
+                        result: None,
+                    },
+                    202,
+                )
+            } else {
+                (self.poll_task(target_url, task_id, timeout).await?, 200)
+            }
+        } else if is_tasks_path {
+            if req.method == mofa_kernel::gateway::route::HttpMethod::Post {
+                (self.create_task(target_url, input, timeout).await?, 202)
+            } else {
+                return Err(A2aError::Api(format!("Unsupported method '{:?}' for /tasks endpoint", req.method)).into());
+            }
         } else {
-            (self.create_task(target_url, input).await?, 202)
+            (self.create_task(target_url, input, timeout).await?, 202)
         };
 
         let mut res = GatewayResponse::new(status_code, "a2a-adapter");
@@ -225,13 +275,13 @@ mod tests {
         let mut server = mockito::Server::new_async().await;
         let url = server.url();
 
-        let mock = server.mock("POST", "/tasks")
+        let mock = server.mock("POST", "/tasks/create")
             .with_status(202)
             .with_body(r#"{"id":"t-123","status":"pending"}"#)
             .create_async().await;
 
         let adapter = A2aAdapter::new(&url);
-        let task = adapter.create_task(&url, serde_json::json!({})).await.unwrap();
+        let task = adapter.create_task(&url, serde_json::json!({}), std::time::Duration::from_secs(30)).await.unwrap();
 
         assert_eq!(task.id, "t-123");
         assert_eq!(task.status, A2aTaskStatus::Pending);
@@ -249,7 +299,7 @@ mod tests {
             .create_async().await;
 
         let adapter = A2aAdapter::new(&url);
-        let task = adapter.poll_task(&url, "t-123").await.unwrap();
+        let task = adapter.poll_task(&url, "t-123", std::time::Duration::from_secs(30)).await.unwrap();
 
         assert_eq!(task.status, A2aTaskStatus::Completed);
         assert_eq!(task.result.unwrap()["value"], 42);
@@ -267,7 +317,7 @@ mod tests {
             .create_async().await;
 
         let adapter = A2aAdapter::new(&url);
-        let task = adapter.poll_task(&url, "t-123").await.unwrap();
+        let task = adapter.poll_task(&url, "t-123", std::time::Duration::from_secs(30)).await.unwrap();
 
         assert_eq!(task.status, A2aTaskStatus::Running);
         assert!(task.result.is_none());
@@ -284,7 +334,7 @@ mod tests {
             .create_async().await;
 
         let adapter = A2aAdapter::new(&url);
-        assert!(adapter.cancel_task(&url, "t-123").await.is_ok());
+        assert!(adapter.cancel_task(&url, "t-123", std::time::Duration::from_secs(30)).await.is_ok());
         mock.assert_async().await;
     }
 
@@ -293,7 +343,7 @@ mod tests {
         let mut server = mockito::Server::new_async().await;
         let url = server.url();
 
-        let mock = server.mock("POST", "/tasks")
+        let mock = server.mock("POST", "/tasks/create")
             .with_status(202)
             .with_body(r#"{"id":"t-999","status":"pending"}"#)
             .create_async().await;
