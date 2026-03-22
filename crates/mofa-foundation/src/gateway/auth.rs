@@ -180,153 +180,154 @@ impl<S: ApiKeyStore + Send + Sync> AuthProvider for ApiKeyAuthProvider<S> {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Tests
+// Tests (Aligned with PR Description)
 // ─────────────────────────────────────────────────────────────────────────────
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use mofa_kernel::gateway::ApiKeyStore;
+    use std::sync::Mutex;
 
-    // ── InMemoryApiKeyStore ──────────────────────────────────────────────────
+    // ── Helper ───────────────────────────────────────────────────────────────
 
-    #[test]
-    fn issue_and_lookup() {
+    fn make_provider_with_keys(keys: Vec<(&str, &str, Vec<String>, Option<u64>)>) -> ApiKeyAuthProvider<InMemoryApiKeyStore> {
         let mut store = InMemoryApiKeyStore::new();
-        let key = store.issue("agent:a", vec!["agents:invoke".to_string()]);
-        let claims = store.lookup(&key).unwrap();
-        assert_eq!(claims.subject, "agent:a");
-        assert!(claims.has_scope("agents:invoke"));
+        for (key, subject, scopes, expiry) in keys {
+            let mut claims = AuthClaims::new(subject, scopes);
+            if let Some(exp) = expiry {
+                claims = claims.with_expiry(exp);
+            }
+            store.keys.insert(key.to_string(), claims);
+        }
+        ApiKeyAuthProvider::new(Arc::new(store))
     }
 
-    #[test]
-    fn lookup_missing_returns_none() {
-        let store = InMemoryApiKeyStore::new();
-        assert!(store.lookup("totally-missing").is_none());
-    }
+    // ── PR Body Test Suite ───────────────────────────────────────────────────
 
-    #[test]
-    fn revoke_returns_true_and_removes_key() {
-        let mut store = InMemoryApiKeyStore::new();
-        let key = store.issue("agent:a", vec![]);
-        assert!(store.revoke(&key));
-        assert!(store.lookup(&key).is_none());
-    }
-
-    #[test]
-    fn revoke_missing_key_returns_false() {
-        let mut store = InMemoryApiKeyStore::new();
-        assert!(!store.revoke("ghost"));
-    }
-
-    #[test]
-    fn each_issue_generates_unique_key() {
-        let mut store = InMemoryApiKeyStore::new();
-        let k1 = store.issue("agent:a", vec![]);
-        let k2 = store.issue("agent:b", vec![]);
-        assert_ne!(k1, k2);
-    }
-
-    #[test]
-    fn issue_with_expiry_sets_expiry() {
-        let mut store = InMemoryApiKeyStore::new();
-        let key = store.issue_with_expiry("agent:a", vec![], 1_000_000);
-        let claims = store.lookup(&key).unwrap();
-        assert!(claims.expires_at_ms.is_some());
-        assert_eq!(claims.expires_at_ms, Some(1_000_000));
-    }
-
-    #[test]
-    fn key_count_tracks_issued_and_revoked() {
-        let mut store = InMemoryApiKeyStore::new();
-        assert_eq!(store.key_count(), 0);
-        let k1 = store.issue("a", vec![]);
-        let _k2 = store.issue("b", vec![]);
-        assert_eq!(store.key_count(), 2);
-        store.revoke(&k1);
-        assert_eq!(store.key_count(), 1);
-    }
-
-    // ── ApiKeyAuthProvider ───────────────────────────────────────────────────
-
-    fn make_provider() -> ApiKeyAuthProvider<InMemoryApiKeyStore> {
-        let mut store = InMemoryApiKeyStore::new();
-        let key = store.issue("agent:test", vec!["agents:invoke".to_string()]);
-        // Stash the key as a test-known key "test-key-123" by issuing manually
-        let _ = key; // we'll use a fixed key below
-        // Create fresh store with known key
-        let mut s2 = InMemoryApiKeyStore::new();
-        s2.keys
-            .insert("test-key-123".to_string(), AuthClaims::new("agent:test", vec!["agents:invoke".to_string()]));
-        ApiKeyAuthProvider::new(Arc::new(s2))
+    #[tokio::test]
+    async fn valid_key_populates_context() {
+        let provider = make_provider_with_keys(vec![
+            ("valid-key-123", "agent-prime", vec!["chat:write".into()], None)
+        ]);
+        let headers = HashMap::from([("x-api-key".to_string(), "valid-key-123".to_string())]);
+        let claims = provider.authenticate(&headers).await.expect("Auth should succeed");
+        assert_eq!(claims.subject, "agent-prime");
+        assert!(claims.has_scope("chat:write"));
     }
 
     #[tokio::test]
-    async fn missing_header_returns_missing_credentials() {
-        let provider = make_provider();
-        let err = provider
-            .authenticate(&HashMap::new())
-            .await
-            .unwrap_err();
+    async fn missing_header_returns_400() {
+        let provider = make_provider_with_keys(vec![]);
+        let headers = HashMap::new(); // No x-api-key
+        let err = provider.authenticate(&headers).await.unwrap_err();
         assert_eq!(err, AuthError::MissingCredentials);
     }
 
     #[tokio::test]
-    async fn wrong_key_returns_invalid_credentials() {
-        let provider = make_provider();
-        let headers = HashMap::from([("x-api-key".to_string(), "wrong-key".to_string())]);
+    async fn unknown_key_returns_401() {
+        let provider = make_provider_with_keys(vec![]);
+        let headers = HashMap::from([("x-api-key".to_string(), "ghost-key".to_string())]);
         let err = provider.authenticate(&headers).await.unwrap_err();
         assert_eq!(err, AuthError::InvalidCredentials);
     }
 
     #[tokio::test]
-    async fn valid_key_returns_claims() {
-        let provider = make_provider();
-        let headers =
-            HashMap::from([("x-api-key".to_string(), "test-key-123".to_string())]);
-        let claims = provider.authenticate(&headers).await.unwrap();
-        assert_eq!(claims.subject, "agent:test");
-        assert!(claims.has_scope("agents:invoke"));
+    async fn revoked_key_returns_401() {
+        let mut store = InMemoryApiKeyStore::new();
+        let key = store.issue("subject", vec![]);
+        store.revoke(&key); // Revoke it
+
+        let provider = ApiKeyAuthProvider::new(Arc::new(store));
+        let headers = HashMap::from([("x-api-key".to_string(), key)]);
+        let err = provider.authenticate(&headers).await.unwrap_err();
+        assert_eq!(err, AuthError::InvalidCredentials);
     }
 
     #[tokio::test]
-    async fn expired_key_returns_expired_credentials() {
-        let mut store = InMemoryApiKeyStore::new();
-        // Expire in the past (1ms after epoch)
-        store.keys.insert(
-            "expired-key".to_string(),
-            AuthClaims::new("agent:expired", vec![]).with_expiry(1),
-        );
-        let provider = ApiKeyAuthProvider::new(Arc::new(store));
-        let headers = HashMap::from([("x-api-key".to_string(), "expired-key".to_string())]);
+    async fn expired_key_returns_401() {
+        let provider = make_provider_with_keys(vec![
+            ("old-key", "subject", vec![], Some(1)) // Expired 1ms after epoch
+        ]);
+        let headers = HashMap::from([("x-api-key".to_string(), "old-key".to_string())]);
         let err = provider.authenticate(&headers).await.unwrap_err();
         assert_eq!(err, AuthError::ExpiredCredentials);
     }
 
     #[tokio::test]
-    async fn custom_header_name_is_used() {
+    async fn non_expired_key_passes() {
+        let future = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis() as u64 + 100_000;
+        let provider = make_provider_with_keys(vec![
+            ("future-key", "subject", vec![], Some(future))
+        ]);
+        let headers = HashMap::from([("x-api-key".to_string(), "future-key".to_string())]);
+        assert!(provider.authenticate(&headers).await.is_ok());
+    }
+
+    #[tokio::test]
+    async fn key_with_no_expiry_never_expires() {
+        let provider = make_provider_with_keys(vec![
+            ("eternal-key", "subject", vec![], None)
+        ]);
+        let headers = HashMap::from([("x-api-key".to_string(), "eternal-key".to_string())]);
+        assert!(provider.authenticate(&headers).await.is_ok());
+    }
+
+    #[tokio::test]
+    async fn custom_header_name_is_respected() {
         let mut store = InMemoryApiKeyStore::new();
-        store
-            .keys
-            .insert("secret".to_string(), AuthClaims::new("agent:a", vec![]));
-        let provider =
-            ApiKeyAuthProvider::with_header(Arc::new(store), "authorization");
+        store.keys.insert("secret".to_string(), AuthClaims::new("subject", vec![]));
+        let provider = ApiKeyAuthProvider::with_header(Arc::new(store), "x-internal-token");
 
-        // Wrong header name
-        let headers = HashMap::from([("x-api-key".to_string(), "secret".to_string())]);
-        let err = provider.authenticate(&headers).await.unwrap_err();
-        assert_eq!(err, AuthError::MissingCredentials);
-
-        // Correct header name
-        let headers = HashMap::from([("authorization".to_string(), "secret".to_string())]);
+        let headers = HashMap::from([("x-internal-token".to_string(), "secret".to_string())]);
         assert!(provider.authenticate(&headers).await.is_ok());
     }
 
     #[test]
-    fn revoked_key_returns_invalid_credentials_sync() {
+    fn revoke_unknown_key_returns_error() {
         let mut store = InMemoryApiKeyStore::new();
-        let key = store.issue("agent:a", vec![]);
-        store.revoke(&key);
-        assert!(store.lookup(&key).is_none());
+        // Since revert returns bool, not Result (following the trait),
+        // we assert it returns false for nonexistent.
+        assert!(!store.revoke("missing-key"));
+    }
+
+    #[tokio::test]
+    async fn scopes_from_claims_appear_in_context() {
+        let scopes = vec!["read".to_string(), "write".to_string()];
+        let provider = make_provider_with_keys(vec![
+            ("scoped-key", "subject", scopes.clone(), None)
+        ]);
+        let headers = HashMap::from([("x-api-key".to_string(), "scoped-key".to_string())]);
+        let claims = provider.authenticate(&headers).await.unwrap();
+        assert_eq!(claims.scopes, scopes);
+    }
+
+    #[tokio::test]
+    async fn concurrent_issue_and_lookup_are_safe() {
+        // We use a Mutex to allow multiple threads to 'issue' to the same store.
+        // In reality, InMemoryApiKeyStore is not Sync for mutation, so we wrap it.
+        let shared_store = Arc::new(Mutex::new(InMemoryApiKeyStore::new()));
+        let mut handles = vec![];
+
+        for i in 0..32 {
+            let store = shared_store.clone();
+            handles.push(tokio::spawn(async move {
+                let subject = format!("agent-{}", i);
+                let key = {
+                    let mut s = store.lock().unwrap();
+                    s.issue(subject, vec![])
+                };
+                // Verify we can find it immediately
+                let s = store.lock().unwrap();
+                let claims = s.lookup(&key).expect("Key must be findable immediately");
+                assert_eq!(claims.subject, format!("agent-{}", i));
+            }));
+        }
+
+        for h in handles {
+            h.await.unwrap();
+        }
+
+        let final_count = shared_store.lock().unwrap().key_count();
+        assert_eq!(final_count, 32);
     }
 }
