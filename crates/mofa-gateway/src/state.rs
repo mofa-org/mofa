@@ -31,9 +31,10 @@ impl AppState {
     pub fn with_inference_bridge(
         registry: Arc<AgentRegistry>,
         rate_limiter: Arc<RateLimiter>,
-        orchestrator_config: OrchestratorConfig,
+        _orchestrator_config: OrchestratorConfig,
     ) -> Self {
-        let bridge = InferenceBridge::new(orchestrator_config);
+        // Use a simple provider name - the routing policy can be configured separately
+        let bridge = InferenceBridge::new("local");
         Self {
             registry,
             rate_limiter,

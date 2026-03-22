@@ -373,6 +373,29 @@ mod tests {
         state
     }
 
+    fn make_rejecting_state(rpm: u32) -> AppState {
+        use crate::inference_bridge::InferenceBridge;
+        use crate::openai_compat::rate_limiter::TokenBucketLimiter;
+        use mofa_foundation::inference::orchestrator::InferenceOrchestrator;
+        use mofa_foundation::inference::orchestrator::OrchestratorConfig;
+        use std::sync::Arc;
+        use tokio::sync::RwLock;
+
+        // Create minimal state for testing
+        let config = OrchestratorConfig::default();
+        let orchestrator = Arc::new(RwLock::new(InferenceOrchestrator::new(config)));
+        let limiter = Arc::new(Mutex::new(TokenBucketLimiter::new(rpm)));
+        let bridge = InferenceBridge::new("local");
+        AppState {
+            orchestrator,
+            limiter,
+            available_models: vec!["mofa-local".to_string()],
+            api_key: None,
+            jwt_auth: None,
+            inference_bridge: bridge,
+        }
+    }
+
     #[tokio::test]
     async fn test_check_rate_limit_allows_within_budget() {
         let state = make_state(5);

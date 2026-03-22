@@ -84,7 +84,6 @@ pub mod server;
 pub mod state;
 pub mod state_machine;
 pub mod types;
-pub mod inference_bridge;
 
 #[cfg(feature = "openai-compat")]
 pub mod openai_compat;
@@ -106,6 +105,5 @@ pub mod streaming;
 pub use control_plane::{ControlPlane, ControlPlaneConfig};
 pub use error::{ControlPlaneError, GatewayError, GatewayResult};
 pub use gateway::{Gateway, GatewayConfig};
-pub use inference_bridge::{ChatCompletionRequest, ChatCompletionResponse, InferenceBridge};
 pub use server::{GatewayServer, ServerConfig};
 pub use types::*;

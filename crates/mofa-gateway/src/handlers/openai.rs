@@ -61,9 +61,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_chat_completions_endpoint() {
-        // Create bridge with default config
-        let config = OrchestratorConfig::default();
-        let bridge = InferenceBridge::new(config);
+        // Create bridge with default provider
+        let bridge = InferenceBridge::new("local");
 
         // Create a request
         let request = ChatCompletionRequest {
