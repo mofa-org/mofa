@@ -11,6 +11,10 @@ use serde::{Deserialize, Serialize};
 use tokio::sync::Semaphore;
 use tokio::time::timeout;
 use tracing::{error, info, instrument, warn};
+use tracing::Instrument;
+use crate::swarm::telemetry::record_scheduler_span;
+#[cfg(feature = "swarm-telemetry")]
+use crate::swarm::telemetry::record_scheduler_metrics;
 
 use mofa_kernel::agent::types::error::{GlobalError, GlobalResult};
 
@@ -98,6 +102,10 @@ pub struct SchedulerSummary {
     /// [`SwarmHITLGate::enrich_summary`] after the scheduler returns.
     #[serde(default)]
     pub hitl_stats: Option<HITLGateMetrics>,
+    /// Maximum number of tasks that executed concurrently in any single wave.
+    /// Always 1 for `SequentialScheduler`. Reflects the largest wave size for
+    /// `ParallelScheduler`.
+    pub peak_concurrency: usize,
 }
 
 impl SchedulerSummary {
@@ -117,6 +125,19 @@ impl SchedulerSummary {
             .iter()
             .filter_map(|r| r.outcome.output())
             .collect()
+    }
+
+    /// Returns the timeline of all task results in execution order.
+    pub fn timeline(&self) -> &[TaskExecutionResult] {
+        &self.results
+    }
+
+    /// Returns the peak number of tasks that executed concurrently.
+    ///
+    /// For `SequentialScheduler` this is always 1 (or 0 for an empty DAG).
+    /// For `ParallelScheduler` this reflects the size of the largest wave.
+    pub fn peak_concurrency(&self) -> usize {
+        self.peak_concurrency
     }
 }
 
@@ -186,7 +207,15 @@ impl SwarmScheduler for SequentialScheduler {
 
     #[instrument(
         skip(self, dag, executor),
-        fields(pattern = "sequential", task_count = dag.task_count())
+        fields(
+            pattern = "sequential",
+            task_count = dag.task_count(),
+            succeeded = tracing::field::Empty,
+            failed = tracing::field::Empty,
+            skipped = tracing::field::Empty,
+            wall_time_ms = tracing::field::Empty,
+            peak_concurrency = tracing::field::Empty,
+        )
     )]
     async fn execute(
         &self,
@@ -288,7 +317,7 @@ impl SwarmScheduler for SequentialScheduler {
             }
         }
 
-        Ok(SchedulerSummary {
+        let summary = SchedulerSummary {
             pattern: CoordinationPattern::Sequential,
             total_tasks: total,
             succeeded,
@@ -297,7 +326,12 @@ impl SwarmScheduler for SequentialScheduler {
             total_wall_time: wall_start.elapsed(),
             results,
             hitl_stats: None,
-        })
+            peak_concurrency: usize::from(total > 0),
+        };
+        record_scheduler_span(&summary);
+        #[cfg(feature = "swarm-telemetry")]
+        record_scheduler_metrics("sequential", &summary);
+        Ok(summary)
     }
 }
 
@@ -331,7 +365,15 @@ impl SwarmScheduler for ParallelScheduler {
 
     #[instrument(
         skip(self, dag, executor),
-        fields(pattern = "parallel", task_count = dag.task_count())
+        fields(
+            pattern = "parallel",
+            task_count = dag.task_count(),
+            succeeded = tracing::field::Empty,
+            failed = tracing::field::Empty,
+            skipped = tracing::field::Empty,
+            wall_time_ms = tracing::field::Empty,
+            peak_concurrency = tracing::field::Empty,
+        )
     )]
     async fn execute(
         &self,
@@ -350,6 +392,7 @@ impl SwarmScheduler for ParallelScheduler {
         let mut succeeded = 0usize;
         let mut failed = 0usize;
         let mut skipped = 0usize;
+        let mut peak_wave: usize = 0;
 
         info!(
             task_count = total,
@@ -366,6 +409,7 @@ impl SwarmScheduler for ParallelScheduler {
             }
 
             let wave_size = ready_indices.len();
+            peak_wave = peak_wave.max(wave_size);
             info!(wave_size, "dispatching wave");
 
             let mut wave_futures = Vec::with_capacity(wave_size);
@@ -373,6 +417,8 @@ impl SwarmScheduler for ParallelScheduler {
             for &idx in &ready_indices {
                 dag.mark_running(idx);
                 let task_snapshot = dag.get_task(idx).expect("missing idx").clone();
+                let task_id = task_snapshot.id.clone();
+                let child_span = tracing::info_span!("swarm.task", task_id = %task_id, pattern = "parallel");
 
                 let exec = executor.clone();
                 let sem = semaphore.clone();
@@ -408,7 +454,7 @@ impl SwarmScheduler for ParallelScheduler {
                     }
                 };
 
-                wave_futures.push(fut);
+                wave_futures.push(fut.instrument(child_span));
             }
 
             let wave_results = join_all(wave_futures).await;
@@ -462,7 +508,7 @@ impl SwarmScheduler for ParallelScheduler {
             }
         }
 
-        Ok(SchedulerSummary {
+        let summary = SchedulerSummary {
             pattern: CoordinationPattern::Parallel,
             total_tasks: total,
             succeeded,
@@ -471,7 +517,12 @@ impl SwarmScheduler for ParallelScheduler {
             total_wall_time: wall_start.elapsed(),
             results,
             hitl_stats: None,
-        })
+            peak_concurrency: peak_wave,
+        };
+        record_scheduler_span(&summary);
+        #[cfg(feature = "swarm-telemetry")]
+        record_scheduler_metrics("parallel", &summary);
+        Ok(summary)
     }
 }
 
@@ -881,5 +932,78 @@ mod tests {
         let summary = scheduler.execute(&mut dag, executor).await.unwrap();
         assert!(summary.is_fully_successful());
         assert_eq!(peak.load(Ordering::SeqCst), 1);
+    }
+
+    #[tokio::test]
+    async fn test_sequential_peak_concurrency_is_one_for_non_empty_dag() {
+        let mut dag = SubtaskDAG::new("test");
+        dag.add_task(SwarmSubtask::new("A", "A"));
+        dag.add_task(SwarmSubtask::new("B", "B"));
+
+        let executor: SubtaskExecutorFn =
+            Arc::new(|_idx, task| Box::pin(async move { Ok(format!("{} ok", task.id)) }));
+
+        let scheduler = SequentialScheduler::new();
+        let summary = scheduler.execute(&mut dag, executor).await.unwrap();
+
+        assert_eq!(summary.peak_concurrency(), 1);
+    }
+
+    #[tokio::test]
+    async fn test_sequential_peak_concurrency_is_zero_for_empty_dag() {
+        let mut dag = SubtaskDAG::new("empty");
+
+        let executor: SubtaskExecutorFn =
+            Arc::new(|_idx, _task| Box::pin(async move { Ok("unused".into()) }));
+
+        let scheduler = SequentialScheduler::new();
+        let summary = scheduler.execute(&mut dag, executor).await.unwrap();
+
+        assert_eq!(summary.peak_concurrency(), 0);
+    }
+
+    #[tokio::test]
+    async fn test_parallel_peak_concurrency_equals_max_wave_size() {
+        // Diamond: A -> (B, C) -> D
+        // Wave 1: [A]  size = 1
+        // Wave 2: [B, C]  size = 2
+        // Wave 3: [D]  size = 1
+        // peak_concurrency should be 2
+        let mut dag = SubtaskDAG::new("diamond");
+        let idx_a = dag.add_task(SwarmSubtask::new("A", "A"));
+        let idx_b = dag.add_task(SwarmSubtask::new("B", "B"));
+        let idx_c = dag.add_task(SwarmSubtask::new("C", "C"));
+        let idx_d = dag.add_task(SwarmSubtask::new("D", "D"));
+
+        dag.add_dependency(idx_a, idx_b).unwrap();
+        dag.add_dependency(idx_a, idx_c).unwrap();
+        dag.add_dependency(idx_b, idx_d).unwrap();
+        dag.add_dependency(idx_c, idx_d).unwrap();
+
+        let executor: SubtaskExecutorFn =
+            Arc::new(|_idx, task| Box::pin(async move { Ok(format!("{} ok", task.id)) }));
+
+        let scheduler = ParallelScheduler::new();
+        let summary = scheduler.execute(&mut dag, executor).await.unwrap();
+
+        assert!(summary.is_fully_successful());
+        assert_eq!(summary.peak_concurrency(), 2);
+    }
+
+    #[tokio::test]
+    async fn test_parallel_peak_concurrency_all_independent() {
+        // 4 independent tasks: all run in one wave of size 4
+        let mut dag = SubtaskDAG::new("flat");
+        for i in 0..4 {
+            dag.add_task(SwarmSubtask::new(format!("T{i}"), "t"));
+        }
+
+        let executor: SubtaskExecutorFn =
+            Arc::new(|_idx, _task| Box::pin(async move { Ok("ok".into()) }));
+
+        let scheduler = ParallelScheduler::new();
+        let summary = scheduler.execute(&mut dag, executor).await.unwrap();
+
+        assert_eq!(summary.peak_concurrency(), 4);
     }
 }

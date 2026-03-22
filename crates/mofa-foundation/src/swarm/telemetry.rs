@@ -15,6 +15,7 @@
 use mofa_kernel::workflow::telemetry::DebugEvent;
 
 use crate::swarm::config::{AuditEvent, AuditEventKind};
+use crate::swarm::scheduler::SchedulerSummary;
 
 /// Convert a swarm [`AuditEvent`] into a kernel [`DebugEvent`].
 pub fn audit_to_debug(event: &AuditEvent) -> DebugEvent {
@@ -165,6 +166,68 @@ pub fn audit_to_debug(event: &AuditEvent) -> DebugEvent {
 /// Convert a slice of swarm audit events into a `Vec<DebugEvent>`.
 pub fn audit_batch_to_debug(events: &[AuditEvent]) -> Vec<DebugEvent> {
     events.iter().map(audit_to_debug).collect()
+}
+
+/// Record post-execution scheduler fields into the current tracing span.
+///
+/// Call immediately before returning `Ok(summary)` in each scheduler's
+/// `execute()`. The span must declare these fields as `tracing::field::Empty`
+/// in its `#[instrument]` attribute.
+pub fn record_scheduler_span(summary: &SchedulerSummary) {
+    let span = tracing::Span::current();
+    span.record("succeeded", summary.succeeded);
+    span.record("failed", summary.failed);
+    span.record("skipped", summary.skipped);
+    span.record(
+        "wall_time_ms",
+        u64::try_from(summary.total_wall_time.as_millis()).unwrap_or(u64::MAX),
+    );
+    span.record("peak_concurrency", summary.peak_concurrency());
+}
+
+/// Emit `metrics` counters and gauges for a completed scheduler run.
+///
+/// Requires the `swarm-telemetry` feature. `pattern` must match the static
+/// literal in the scheduler's `#[instrument]` attribute (e.g. `"sequential"`).
+///
+/// Emitted metrics:
+/// - `mofa_swarm_tasks_total{pattern, outcome}` — counter, one increment per task
+/// - `mofa_swarm_wall_time_ms{pattern}` — gauge, total wall time in milliseconds
+/// - `mofa_swarm_peak_concurrency{pattern}` — gauge, peak concurrent tasks
+#[cfg(feature = "swarm-telemetry")]
+pub fn record_scheduler_metrics(pattern: &'static str, summary: &SchedulerSummary) {
+    metrics::counter!(
+        "mofa_swarm_tasks_total",
+        "pattern" => pattern,
+        "outcome" => "succeeded",
+    )
+    .increment(u64::try_from(summary.succeeded).unwrap_or(u64::MAX));
+
+    metrics::counter!(
+        "mofa_swarm_tasks_total",
+        "pattern" => pattern,
+        "outcome" => "failed",
+    )
+    .increment(u64::try_from(summary.failed).unwrap_or(u64::MAX));
+
+    metrics::counter!(
+        "mofa_swarm_tasks_total",
+        "pattern" => pattern,
+        "outcome" => "skipped",
+    )
+    .increment(u64::try_from(summary.skipped).unwrap_or(u64::MAX));
+
+    metrics::gauge!(
+        "mofa_swarm_wall_time_ms",
+        "pattern" => pattern,
+    )
+    .set(u64::try_from(summary.total_wall_time.as_millis()).unwrap_or(u64::MAX) as f64);
+
+    metrics::gauge!(
+        "mofa_swarm_peak_concurrency",
+        "pattern" => pattern,
+    )
+    .set(summary.peak_concurrency() as f64);
 }
 
 #[cfg(test)]

@@ -48,6 +48,7 @@ http-api = ["dep:axum"]
 otel-tracing = ["dep:opentelemetry", "dep:opentelemetry-semantic-conventions"]
 # Enable scheduler telemetry (Prometheus metrics)
 scheduler-telemetry = ["dep:metrics"]
+swarm-telemetry = ["dep:metrics"]
 
 
 [dependencies]
