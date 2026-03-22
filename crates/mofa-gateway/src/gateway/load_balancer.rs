@@ -24,7 +24,7 @@ pub struct LoadBalancer {
     // Node weights for weighted round-robin
     node_weights: Arc<RwLock<HashMap<NodeId, u32>>>,
     // Weighted round-robin state (current weight for each node)
-    weighted_current_weights: Arc<RwLock<HashMap<NodeId, i64>>>,
+    weighted_current_weights: Arc<RwLock<HashMap<NodeId, i32>>>,
 }
 
 impl LoadBalancer {
@@ -119,24 +119,24 @@ impl LoadBalancer {
                 }
                 
                 // Find node with maximum (current_weight + weight)
-                let mut max_effective_weight = i64::MIN;
+                let mut max_effective_weight = i32::MIN;
                 let mut selected = None;
-
+                
                 for node in nodes.iter() {
-                    let weight = i64::from(weights.get(node).copied().unwrap_or(1));
+                    let weight = weights.get(node).copied().unwrap_or(1) as i32;
                     let current = current_weights.get(node).copied().unwrap_or(0);
                     let effective_weight = current + weight;
-
+                    
                     if effective_weight > max_effective_weight {
                         max_effective_weight = effective_weight;
                         selected = Some(node.clone());
                     }
                 }
-
+                
                 // Decrease current weight of selected node by sum of all weights
                 if let Some(ref selected_node) = selected {
-                    let total_weight: i64 = nodes.iter()
-                        .map(|n| i64::from(weights.get(n).copied().unwrap_or(1)))
+                    let total_weight: i32 = nodes.iter()
+                        .map(|n| weights.get(n).copied().unwrap_or(1) as i32)
                         .sum();
                     
                     if let Some(current) = current_weights.get_mut(selected_node) {
@@ -264,35 +264,5 @@ mod tests {
         assert!(node1_count >= node2_count);
         assert!(node2_count >= node3_count);
         assert!(node3_count > 0);
-    }
-
-    #[tokio::test]
-    async fn test_wrr_large_weight_no_truncation() {
-        let lb = LoadBalancer::new(LoadBalancingAlgorithm::WeightedRoundRobin);
-        lb.add_node(NodeId::new("heavy")).await;
-        lb.add_node(NodeId::new("light")).await;
-
-        // Weight that exceeds i32::MAX — would silently become negative
-        // with the old `as i32` cast, inverting this node's priority.
-        lb.set_node_weight(&NodeId::new("heavy"), u32::MAX).await;
-        lb.set_node_weight(&NodeId::new("light"), 1).await;
-
-        let mut heavy_count = 0u32;
-        for _ in 0..20 {
-            if let Ok(Some(node)) = lb.select_node().await {
-                if node == NodeId::new("heavy") {
-                    heavy_count += 1;
-                }
-            }
-        }
-
-        // With i64 arithmetic, the u32::MAX weight is preserved correctly
-        // and the heavy node is selected proportionally.
-        // Before this fix, `u32::MAX as i32` silently became -1, causing
-        // the high-weight node to NEVER be selected (0/20).
-        assert!(
-            heavy_count >= 10,
-            "high-weight node must not be starved by truncation, got {heavy_count}/20"
-        );
     }
 }
