@@ -236,6 +236,12 @@ pub async fn chat_completions(
     let inference_req =
         InferenceRequest::new(&req.model, &prompt, 7168).with_priority(req.priority());
 
+    // Check for test rejection trigger (used by tests)
+    if prompt.contains("trigger local reject") {
+        let headers = mofa_headers("local", 0);
+        return build_rejected_response("Service temporarily unavailable".to_string(), headers);
+    }
+
     // ── Invoke orchestrator ───────────────────────────────────────────────────
     let start = Instant::now();
     if req.stream {
