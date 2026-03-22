@@ -1,0 +1,18 @@
+name: gateway-real-demo
+task: "Search for AI news and notify team"
+pattern: sequential
+dag:
+  tasks:
+    - id: search
+      description: "latest AI news"
+      capabilities: [web_search]
+      capability_policy: require_capability
+      capability_params:
+        query: "latest AI news 2025"
+    - id: notify
+      description: "Send summary to team webhook"
+      capabilities: [send_notification]
+      capability_policy: prefer_capability
+      capability_params:
+        channel: "team-updates"
+      deps: [search]

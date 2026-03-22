@@ -7,7 +7,7 @@ use std::sync::Arc;
 
 use mofa_kernel::agent::types::error::GlobalResult;
 
-use crate::swarm::SwarmSubtask;
+use crate::swarm::{CapabilityExecutionPolicy, SwarmSubtask};
 
 /// Request payload passed to a gateway-backed capability.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -107,13 +107,30 @@ impl GatewayCapabilityRegistry {
         task: &SwarmSubtask,
         trace_id: impl Into<String>,
     ) -> GlobalResult<Option<CapabilityResponse>> {
+        if matches!(task.capability_policy, CapabilityExecutionPolicy::LocalOnly) {
+            return Ok(None);
+        }
+
         let Some(capability) = self.resolve_for_task(task) else {
+            if matches!(
+                task.capability_policy,
+                CapabilityExecutionPolicy::RequireCapability
+            ) && !task.required_capabilities.is_empty()
+            {
+                return Err(mofa_kernel::agent::types::error::GlobalError::Other(
+                    format!(
+                        "required capability not available for task '{}': {}",
+                        task.id,
+                        task.required_capabilities.join(", ")
+                    ),
+                ));
+            }
             return Ok(None);
         };
 
         let request = CapabilityRequest {
             input: task.description.clone(),
-            params: HashMap::new(),
+            params: task.capability_params.clone(),
             trace_id: trace_id.into(),
         };
 
@@ -209,5 +226,20 @@ mod tests {
             .expect("missing capability should not be an error");
 
         assert!(response.is_none());
+    }
+
+    #[tokio::test]
+    async fn invoke_task_errors_when_policy_requires_capability() {
+        let registry = GatewayCapabilityRegistry::new();
+        let task = SwarmSubtask::new("task-1", "read sensor")
+            .with_capabilities(vec!["read_sensor".to_string()])
+            .with_capability_policy(CapabilityExecutionPolicy::RequireCapability);
+
+        let error = registry
+            .invoke_task(&task, "trace-required")
+            .await
+            .expect_err("missing required capability should fail");
+
+        assert!(error.to_string().contains("required capability not available"));
     }
 }

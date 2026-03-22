@@ -39,6 +39,8 @@ impl GatewayCapability for EchoCapability {
 fn build_app() -> axum::Router {
     let registry = Arc::new(AgentRegistry::new());
     let capability_registry = Arc::new(GatewayCapabilityRegistry::new());
+    // Register a deterministic in-memory capability so the HTTP layer can be
+    // tested without external network dependencies.
     capability_registry.register(Arc::new(EchoCapability));
 
     GatewayServer::new(ServerConfig::default(), registry)
@@ -55,6 +57,8 @@ async fn read_json(resp: axum::response::Response) -> Value {
 async fn list_capabilities_returns_registered_names() {
     let app = build_app();
 
+    // The list endpoint should surface the names currently registered in the
+    // shared capability registry.
     let resp = app
         .oneshot(
             Request::builder()
@@ -78,6 +82,8 @@ async fn list_capabilities_returns_registered_names() {
 async fn invoke_capability_returns_capability_response() {
     let app = build_app();
 
+    // Exercise the full request path: JSON body -> registry lookup ->
+    // capability invoke -> serialized response.
     let body = serde_json::json!({
         "capability": "web_search",
         "input": "latest AI news",
@@ -113,6 +119,8 @@ async fn invoke_capability_returns_capability_response() {
 async fn invoke_unknown_capability_returns_404() {
     let app = build_app();
 
+    // Unknown capability names should fail at lookup time rather than falling
+    // through to an empty or local execution path.
     let body = serde_json::json!({
         "capability": "missing",
         "input": "latest AI news",

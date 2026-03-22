@@ -5,6 +5,8 @@ use crate::gateway::{
     ReadSensorCapability, WebhookNotificationCapability,
 };
 
+const DEFAULT_DUCKDUCKGO_URL: &str = "https://api.duckduckgo.com/";
+
 /// Environment/config-backed settings for registering built-in capabilities.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct GatewayCapabilityRegistryConfig {
@@ -21,7 +23,7 @@ pub struct GatewayCapabilityRegistryConfig {
 impl Default for GatewayCapabilityRegistryConfig {
     fn default() -> Self {
         Self {
-            web_search_url: Some("https://api.duckduckgo.com/".to_string()),
+            web_search_url: Some(DEFAULT_DUCKDUCKGO_URL.to_string()),
             enable_http_fetch: true,
             notification_webhook_url: None,
             sensor_url: None,
@@ -35,7 +37,7 @@ impl GatewayCapabilityRegistryConfig {
         Self {
             web_search_url: std::env::var("GATEWAY_WEB_SEARCH_URL")
                 .ok()
-                .or_else(|| Some("https://api.duckduckgo.com/".to_string())),
+                .or_else(|| Some(DEFAULT_DUCKDUCKGO_URL.to_string())),
             enable_http_fetch: std::env::var("GATEWAY_HTTP_FETCH_ENABLED")
                 .ok()
                 .map(|value| !matches!(value.trim().to_ascii_lowercase().as_str(), "0" | "false" | "no"))

@@ -9,7 +9,10 @@ pub use config::{
     AgentSpec, AuditEvent, AuditEventKind, HITLMode, SLAConfig, SwarmConfig, SwarmMetrics,
     SwarmResult, SwarmStatus,
 };
-pub use dag::{DependencyEdge, DependencyKind, RiskLevel, SubtaskDAG, SubtaskStatus, SwarmSubtask};
+pub use dag::{
+    CapabilityExecutionPolicy, DependencyEdge, DependencyKind, RiskLevel, SubtaskDAG,
+    SubtaskStatus, SwarmSubtask,
+};
 pub use patterns::CoordinationPattern;
 pub mod scheduler;
 pub use scheduler::{
