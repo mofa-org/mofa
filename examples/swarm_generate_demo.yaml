@@ -1,0 +1,33 @@
+# swarm_generate_demo.yaml
+# Run with: mofa swarm run examples/swarm_generate_demo.yaml
+#
+# This example relies on automatic DAG generation from the top-level task.
+# If provider configuration is available, `TaskAnalyzer` uses the live analyzer.
+# Otherwise the CLI falls back to the deterministic offline analyzer.
+#
+# Required environment for live generation:
+#   OPENAI_API_KEY=...
+# Optional environment:
+#   OPENAI_BASE_URL=...
+#   OPENAI_MODEL=...
+executor: llm
+name: generated-research-workflow
+description: "Generate a task DAG from the top-level task and execute it as a swarm workflow"
+task: "Research recent AI orchestration trends and write a concise summary"
+pattern: sequential
+agents:
+  - id: researcher
+    capabilities: [web_search, analyze]
+    model: llama3-8b-8192
+  - id: writer
+    capabilities: [summarize, write]
+    model: llama3-8b-8192
+sla:
+  max_duration_secs: 180
+  max_cost_tokens: 12000
+  min_quality: 0.7
+hitl: optional
+metadata:
+  author: "MoFA Swarm Demo"
+  mode: "generated"
+  version: "1.0"

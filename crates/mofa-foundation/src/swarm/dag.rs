@@ -4,7 +4,7 @@ use chrono::{DateTime, Utc};
 use petgraph::Direction;
 use petgraph::graph::{DiGraph, NodeIndex};
 use petgraph::visit::EdgeRef;
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::collections::HashMap;
 use uuid::Uuid;
 
@@ -78,12 +78,19 @@ pub enum SubtaskStatus {
 pub struct SwarmSubtask {
     pub id: String,
     pub description: String,
+    #[serde(default, alias = "capabilities")]
     pub required_capabilities: Vec<String>,
+    #[serde(default)]
     pub status: SubtaskStatus,
+    #[serde(default)]
     pub assigned_agent: Option<String>,
+    #[serde(default)]
     pub output: Option<String>,
+    #[serde(default = "default_subtask_complexity")]
     pub complexity: f64,
+    #[serde(default)]
     pub started_at: Option<DateTime<Utc>>,
+    #[serde(default)]
     pub completed_at: Option<DateTime<Utc>>,
     /// Risk classification for this subtask (defaults to [`RiskLevel::Low`]).
     #[serde(default)]
@@ -100,6 +107,10 @@ pub struct SwarmSubtask {
     /// `None` means the duration is unknown.
     #[serde(default)]
     pub estimated_duration_secs: Option<u64>,
+}
+
+fn default_subtask_complexity() -> f64 {
+    0.5
 }
 
 impl SwarmSubtask {
@@ -181,13 +192,39 @@ impl Default for DependencyEdge {
 
 // SubtaskDAG
 /// Directed Acyclic Graph representing a decomposed task
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct SubtaskDAG {
     pub id: String,
     pub name: String,
     graph: DiGraph<SwarmSubtask, DependencyEdge>,
-    #[serde(skip)]
     id_to_index: HashMap<String, NodeIndex>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct SerializableSubtaskDAG {
+    #[serde(default = "default_dag_id")]
+    id: String,
+    #[serde(default)]
+    name: String,
+    tasks: Vec<SwarmSubtask>,
+    #[serde(default)]
+    dependencies: Vec<SerializableDependency>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct SerializableDependency {
+    from: String,
+    to: String,
+    #[serde(default = "default_dependency_kind")]
+    kind: DependencyKind,
+}
+
+fn default_dag_id() -> String {
+    Uuid::now_v7().to_string()
+}
+
+fn default_dependency_kind() -> DependencyKind {
+    DependencyKind::Sequential
 }
 
 impl SubtaskDAG {
@@ -415,7 +452,6 @@ impl SubtaskDAG {
             .count()
     }
 
-
     // ── Risk & HITL helpers ───────────────────────────────────────────────
 
     /// Return the IDs of all subtasks whose `hitl_required` flag is `true`.
@@ -470,9 +506,7 @@ impl SubtaskDAG {
                 .map(|e| (e.source(), *longest.get(&e.source()).unwrap_or(&0)))
                 .max_by_key(|&(_, v)| v);
 
-            let (pred, pred_val) = best_pred
-                .map(|(n, v)| (Some(n), v))
-                .unwrap_or((None, 0));
+            let (pred, pred_val) = best_pred.map(|(n, v)| (Some(n), v)).unwrap_or((None, 0));
 
             longest.insert(idx, pred_val + duration);
             predecessor.insert(idx, pred);
@@ -537,6 +571,96 @@ impl SubtaskDAG {
             self.mark_skipped(idx);
         }
         to_skip.len()
+    }
+}
+
+impl From<&SubtaskDAG> for SerializableSubtaskDAG {
+    fn from(dag: &SubtaskDAG) -> Self {
+        // Serialize tasks in topological order to keep YAML output stable and readable.
+        let tasks = dag
+            .topological_order()
+            .unwrap_or_else(|_| dag.graph.node_indices().collect())
+            .into_iter()
+            .filter_map(|idx| dag.get_task(idx).cloned())
+            .collect();
+
+        // Edges are stored separately so the YAML shape stays independent of petgraph internals.
+        let dependencies = dag
+            .graph
+            .edge_references()
+            .map(|edge| SerializableDependency {
+                from: dag.graph[edge.source()].id.clone(),
+                to: dag.graph[edge.target()].id.clone(),
+                kind: edge.weight().kind.clone(),
+            })
+            .collect();
+
+        Self {
+            id: dag.id.clone(),
+            name: dag.name.clone(),
+            tasks,
+            dependencies,
+        }
+    }
+}
+
+impl TryFrom<SerializableSubtaskDAG> for SubtaskDAG {
+    type Error = String;
+
+    fn try_from(value: SerializableSubtaskDAG) -> Result<Self, Self::Error> {
+        // Rebuild the runtime graph from the YAML-facing task/dependency representation.
+        let mut dag = Self {
+            id: if value.id.is_empty() {
+                default_dag_id()
+            } else {
+                value.id
+            },
+            name: value.name,
+            graph: DiGraph::new(),
+            id_to_index: HashMap::new(),
+        };
+
+        for task in value.tasks {
+            let task_id = task.id.clone();
+            if dag.id_to_index.contains_key(&task_id) {
+                return Err(format!("Duplicate task id in DAG: {task_id}"));
+            }
+            dag.add_task(task);
+        }
+
+        // Dependencies are validated against task IDs as the graph is reconstructed.
+        for dep in value.dependencies {
+            let from = dag
+                .find_by_id(&dep.from)
+                .ok_or_else(|| format!("Dependency references unknown task id: {}", dep.from))?;
+            let to = dag
+                .find_by_id(&dep.to)
+                .ok_or_else(|| format!("Dependency references unknown task id: {}", dep.to))?;
+            dag.add_dependency_with_kind(from, to, dep.kind)
+                .map_err(|e| e.to_string())?;
+        }
+
+        Ok(dag)
+    }
+}
+
+impl Serialize for SubtaskDAG {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        // Always serialize through the stable YAML-friendly representation.
+        SerializableSubtaskDAG::from(self).serialize(serializer)
+    }
+}
+
+impl<'de> Deserialize<'de> for SubtaskDAG {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let repr = SerializableSubtaskDAG::deserialize(deserializer)?;
+        Self::try_from(repr).map_err(serde::de::Error::custom)
     }
 }
 
@@ -745,7 +869,8 @@ mod tests {
         let d = dag.add_task(SwarmSubtask::new("d", "Independent"));
 
         dag.add_dependency(a, b).unwrap(); // Sequential (hard)
-        dag.add_dependency_with_kind(a, c, DependencyKind::Soft).unwrap();
+        dag.add_dependency_with_kind(a, c, DependencyKind::Soft)
+            .unwrap();
 
         dag.mark_failed(a, "error");
         let skipped = dag.cascade_skip(a);
@@ -793,12 +918,20 @@ mod tests {
         // a fails — b should become ready (not stuck forever)
         dag.mark_failed(a, "connection timeout");
         let ready = dag.ready_tasks();
-        assert_eq!(ready, vec![b], "b must become ready when its dependency fails");
+        assert_eq!(
+            ready,
+            vec![b],
+            "b must become ready when its dependency fails"
+        );
 
         // b also fails — c should become ready
         dag.mark_failed(b, "no input data");
         let ready = dag.ready_tasks();
-        assert_eq!(ready, vec![c], "c must become ready when its dependency fails");
+        assert_eq!(
+            ready,
+            vec![c],
+            "c must become ready when its dependency fails"
+        );
 
         dag.mark_skipped(c);
         assert!(dag.is_complete());
@@ -823,7 +956,11 @@ mod tests {
 
         // d depends on both b (Completed) and c (Failed) — should be ready
         let ready = dag.ready_tasks();
-        assert_eq!(ready, vec![d], "d must become ready when all deps are terminal");
+        assert_eq!(
+            ready,
+            vec![d],
+            "d must become ready when all deps are terminal"
+        );
     }
 
     #[test]
@@ -885,6 +1022,49 @@ mod tests {
         );
     }
 
+    #[test]
+    fn test_subtask_dag_deserializes_from_yaml_task_dependency_shape() {
+        let yaml = r#"
+name: direct-dag
+tasks:
+  - id: search
+    description: Search for sources
+    capabilities: [web_search]
+  - id: summarize
+    description: Summarize results
+    capabilities: [summarize]
+dependencies:
+  - from: search
+    to: summarize
+"#;
+
+        let dag: SubtaskDAG = serde_yaml::from_str(yaml).unwrap();
+
+        assert_eq!(dag.name, "direct-dag");
+        assert_eq!(dag.task_count(), 2);
+        let search = dag.find_by_id("search").unwrap();
+        let summarize = dag.find_by_id("summarize").unwrap();
+        assert_eq!(
+            dag.get_task(search).unwrap().required_capabilities,
+            vec!["web_search"]
+        );
+        assert_eq!(dag.dependencies_of(summarize), vec![search]);
+    }
+
+    #[test]
+    fn test_subtask_dag_rejects_duplicate_task_ids_on_deserialize() {
+        let yaml = r#"
+tasks:
+  - id: dup
+    description: First
+  - id: dup
+    description: Second
+"#;
+
+        let err = serde_yaml::from_str::<SubtaskDAG>(yaml).unwrap_err();
+        assert!(err.to_string().contains("Duplicate task id"));
+    }
+
     // ── RiskLevel tests ───────────────────────────────────────────────────
 
     #[test]
@@ -944,7 +1124,9 @@ mod tests {
         dag.add_task(SwarmSubtask::new("low", "low-risk").with_risk_level(RiskLevel::Low));
         dag.add_task(SwarmSubtask::new("med", "medium-risk").with_risk_level(RiskLevel::Medium));
         dag.add_task(SwarmSubtask::new("high", "high-risk").with_risk_level(RiskLevel::High));
-        dag.add_task(SwarmSubtask::new("crit", "critical-risk").with_risk_level(RiskLevel::Critical));
+        dag.add_task(
+            SwarmSubtask::new("crit", "critical-risk").with_risk_level(RiskLevel::Critical),
+        );
 
         let mut hitl = dag.hitl_required_tasks();
         hitl.sort();
@@ -954,15 +1136,9 @@ mod tests {
     #[test]
     fn test_critical_path_linear_chain() {
         let mut dag = SubtaskDAG::new("cp-chain");
-        let a = dag.add_task(
-            SwarmSubtask::new("a", "Fetch").with_estimated_duration(10),
-        );
-        let b = dag.add_task(
-            SwarmSubtask::new("b", "Process").with_estimated_duration(20),
-        );
-        let c = dag.add_task(
-            SwarmSubtask::new("c", "Report").with_estimated_duration(30),
-        );
+        let a = dag.add_task(SwarmSubtask::new("a", "Fetch").with_estimated_duration(10));
+        let b = dag.add_task(SwarmSubtask::new("b", "Process").with_estimated_duration(20));
+        let c = dag.add_task(SwarmSubtask::new("c", "Report").with_estimated_duration(30));
         dag.add_dependency(a, b).unwrap();
         dag.add_dependency(b, c).unwrap();
 
@@ -991,8 +1167,14 @@ mod tests {
 
         let path = dag.critical_path().unwrap();
         // Critical path: start → long → merge (total = 5 + 50 + 5 = 60)
-        assert!(path.contains(&"long".to_string()), "critical path must go through 'long': {path:?}");
-        assert!(!path.contains(&"short".to_string()), "critical path must NOT go through 'short': {path:?}");
+        assert!(
+            path.contains(&"long".to_string()),
+            "critical path must go through 'long': {path:?}"
+        );
+        assert!(
+            !path.contains(&"short".to_string()),
+            "critical path must NOT go through 'short': {path:?}"
+        );
         assert_eq!(dag.critical_path_duration_secs().unwrap(), 60);
     }
 

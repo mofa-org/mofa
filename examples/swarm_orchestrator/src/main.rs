@@ -1,7 +1,8 @@
 use futures::future::BoxFuture;
 use mofa_kernel::agent::types::error::GlobalResult;
 use mofa_foundation::swarm::{
-    FailurePolicy, ParallelScheduler, SubtaskDAG, SwarmSchedulerConfig, SwarmSubtask, SwarmScheduler
+    FailurePolicy, ParallelScheduler, SubtaskDAG, SwarmSchedulerConfig, SwarmSubtask,
+    SwarmScheduler, TaskExecutionContext,
 };
 use std::sync::Arc;
 use tokio::time::{sleep, Duration};
@@ -33,7 +34,7 @@ async fn main() -> GlobalResult<()> {
     dag.add_dependency(analyze_b_id, summarize_id).unwrap();
 
     // 2. Define the Pure Executor Function (The Agent Logic)
-    let executor_fn = Arc::new(move |_idx, task: SwarmSubtask| -> BoxFuture<'static, GlobalResult<String>> {
+    let executor_fn = Arc::new(move |_idx, task: SwarmSubtask, _context: TaskExecutionContext| -> BoxFuture<'static, GlobalResult<String>> {
         Box::pin(async move {
             info!("🚀 [Agent Execute] Starting task: {}", task.description);
             // Simulate work via async sleep

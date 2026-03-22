@@ -14,7 +14,7 @@ use mofa_kernel::agent::types::error::GlobalError;
 
 fn ok_executor() -> SubtaskExecutorFn {
     Arc::new(
-        |_idx: NodeIndex, task: SwarmSubtask| -> BoxFuture<'static, _> {
+        |_idx: NodeIndex, task: SwarmSubtask, _context| -> BoxFuture<'static, _> {
             Box::pin(async move { Ok(format!("ok:{}", task.id)) })
         },
     )
@@ -53,7 +53,7 @@ async fn parallel_scheduler_executes_via_pattern_and_respects_dependencies() {
     dag.add_dependency(idx_b, idx_d).unwrap();
     dag.add_dependency(idx_c, idx_d).unwrap();
 
-    let exec: SubtaskExecutorFn = Arc::new(|_idx: NodeIndex, task: SwarmSubtask| {
+    let exec: SubtaskExecutorFn = Arc::new(|_idx: NodeIndex, task: SwarmSubtask, _context| {
         Box::pin(async move {
             tokio::time::sleep(Duration::from_millis(10)).await;
             Ok(format!("ok:{}", task.id))
@@ -84,7 +84,7 @@ async fn parallel_fail_fast_cascades_skip() {
     dag.add_dependency(idx_a, idx_b).unwrap();
     dag.add_dependency(idx_a, idx_c).unwrap();
 
-    let exec: SubtaskExecutorFn = Arc::new(|_idx: NodeIndex, task: SwarmSubtask| {
+    let exec: SubtaskExecutorFn = Arc::new(|_idx: NodeIndex, task: SwarmSubtask, _context| {
         Box::pin(async move {
             if task.id == "A" {
                 Err(GlobalError::runtime("A failed"))
