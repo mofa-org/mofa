@@ -10,6 +10,7 @@ use mofa_kernel::agent::types::error::{GlobalError, GlobalResult};
 
 use crate::llm::provider::LLMProvider;
 use crate::swarm::dag::{DependencyKind, RiskLevel, SubtaskDAG, SwarmSubtask};
+use crate::swarm::selector::{PatternSelection, PatternSelector};
 
 // ── Keyword-based risk heuristics (compiled once, reused forever) ─────────────
 
@@ -147,7 +148,8 @@ pub struct RiskSummary {
 /// Rich output of [`TaskAnalyzer::analyze_with_risk`] and related methods.
 ///
 /// In addition to the plain [`SubtaskDAG`] it includes HITL task IDs,
-/// the computed critical path, and a per-risk-level summary.
+/// the computed critical path, a per-risk-level summary, and an automatically
+/// selected coordination pattern based on DAG topology.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RiskAwareAnalysis {
     /// The decomposed task graph with risk annotations on every node.
@@ -160,6 +162,12 @@ pub struct RiskAwareAnalysis {
     pub critical_path_duration_secs: u64,
     /// Count of subtasks at each risk level.
     pub risk_summary: RiskSummary,
+    /// Coordination pattern recommended by [`PatternSelector`] based on the
+    /// DAG's topology and task metadata. Use `.suggested_pattern.as_ref().map(|s| s.pattern)`
+    /// to retrieve the [`CoordinationPattern`] and call `.into_scheduler()` on it.
+    /// `None` only when the DAG is empty and no meaningful pattern can be selected.
+    #[serde(default)]
+    pub suggested_pattern: Option<PatternSelection>,
 }
 
 /// LLM powered task decomposer
@@ -488,6 +496,7 @@ impl TaskAnalyzer {
         let critical_path = dag.critical_path()?;
         let critical_path_duration_secs = dag.critical_path_duration_secs()?;
         let risk_summary = Self::compute_risk_summary(&dag);
+        let suggested_pattern = Some(PatternSelector::select_with_reason(&dag));
 
         Ok(RiskAwareAnalysis {
             dag,
@@ -495,6 +504,7 @@ impl TaskAnalyzer {
             critical_path,
             critical_path_duration_secs,
             risk_summary,
+            suggested_pattern,
         })
     }
 
@@ -862,6 +872,30 @@ See also: reference [1] and [2]."#;
         hitl.sort();
         // Only "step-2" (send email) should require HITL
         assert_eq!(hitl, vec!["step-2"]);
+    }
+
+    #[test]
+    fn test_suggested_pattern_supervision_for_critical_task() {
+        let analysis = TaskAnalyzer::analyze_offline_with_risk("delete the production database");
+        let sel = analysis.suggested_pattern.expect("suggested_pattern must be Some");
+        assert_eq!(
+            sel.pattern,
+            crate::swarm::CoordinationPattern::Supervision,
+            "critical-risk task should suggest Supervision"
+        );
+        assert!(sel.confidence >= 0.85);
+    }
+
+    #[test]
+    fn test_suggested_pattern_sequential_for_linear_task() {
+        let analysis =
+            TaskAnalyzer::analyze_offline_with_risk("read the file then summarise then view");
+        let sel = analysis.suggested_pattern.expect("suggested_pattern must be Some");
+        assert_eq!(
+            sel.pattern,
+            crate::swarm::CoordinationPattern::Sequential,
+            "linear pipeline with low-risk steps should suggest Sequential"
+        );
     }
 
     /// Live LLM integration test works with any OpenAI compatible provider
