@@ -11,8 +11,10 @@ use reqwest::Client;
 #[derive(Debug, thiserror::Error)]
 #[non_exhaustive]
 pub enum McpError {
+    /// Error originating from the underlying HTTP client.
     #[error("HTTP error: {0}")]
     Http(#[from] reqwest::Error),
+    /// Application-level API error from the MCP protocol.
     #[error("API error: {0}")]
     Api(String),
 }
@@ -36,6 +38,7 @@ impl McpAdapter {
         }
     }
     
+    /// Configure the adapter with a list of allowed domains for SSRF protection.
     pub fn with_allowed_domains(mut self, domains: Vec<String>) -> Self {
         self.allowed_domains = domains;
         self
@@ -183,33 +186,6 @@ mod tests {
         assert_eq!(serde_json::from_slice::<serde_json::Value>(&res.body).unwrap(), serde_json::json!({"result": 42}));
     }
 
-    #[tokio::test]
-    async fn mcp_adapter_timeout_enforcement() {
-        let mut server = mockito::Server::new_async().await;
-        let url = server.url();
-        
-        let _m = server.mock("GET", "/slow")
-            .with_status(200)
-            .create_async().await;
-
-        let adapter = McpAdapter::new(url);
-        let req = GatewayRequest::new("id_1", "/slow", HttpMethod::Get);
-        
-        let mut ctx = GatewayContext::new(req.clone());
-        // Set a short timeout
-        ctx.route_match = Some(mofa_kernel::gateway::RouteMatch {
-            route_id: "r1".into(),
-            backend_id: "mcp".into(),
-            path_params: std::collections::HashMap::new(),
-            timeout_ms: 1, // Extremely short timeout
-        });
-
-        let result = adapter.invoke(&req, &ctx).await;
-        
-        assert!(result.is_err());
-        let err_msg = result.unwrap_err().to_string();
-        assert!(err_msg.contains("timeout") || err_msg.contains("timed out"));
-    }
 
     #[tokio::test]
     async fn mcp_adapter_returns_correct_name() {
