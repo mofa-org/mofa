@@ -1,0 +1,35 @@
+name: research synthesis pipeline
+pattern: sequential
+agents:
+  - id: researcher
+    capabilities: [search, summarize]
+    max_concurrency: 1
+  - id: analyst
+    capabilities: [analyze, summarize]
+    max_concurrency: 1
+  - id: writer
+    capabilities: [write]
+    max_concurrency: 1
+sla:
+  max_duration_secs: 600
+  max_cost_tokens: 50000
+tasks:
+  - id: search
+    description: search for relevant research papers
+    capabilities: [search]
+    complexity: 0.4
+  - id: analyze
+    description: analyze and synthesize research findings
+    capabilities: [analyze]
+    complexity: 0.7
+    depends_on: [search]
+  - id: summarize
+    description: generate executive summary from analysis
+    capabilities: [summarize]
+    complexity: 0.5
+    depends_on: [analyze]
+  - id: write-report
+    description: write the final research report
+    capabilities: [write]
+    complexity: 0.8
+    depends_on: [summarize]
