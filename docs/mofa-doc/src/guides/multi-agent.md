@@ -124,7 +124,7 @@ let result = debate.debide(&topic).await?;
 
 `SwarmMetricsExporter` collects per-pattern counters and duration histograms from
 every scheduler run and renders them as valid Prometheus text-format output.
-No external dependency is required — the exposition format is produced with `std::fmt`.
+No external dependency is required. the exposition format is produced with `std::fmt`.
 
 ### Recording runs
 
@@ -156,7 +156,7 @@ let text = exporter.render();
 ```
 
 `render()` returns an empty string until at least one run is recorded.
-Patterns are emitted in sorted order so the output is deterministic.
+patterns are emitted in sorted order so the output is deterministic.
 
 ### Example
 
