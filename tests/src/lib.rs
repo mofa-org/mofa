@@ -8,6 +8,7 @@
 //! integration tests only when a behavior cannot be described cleanly as a
 //! reusable fixture.
 
+pub mod adversarial;
 pub mod assertions;
 pub mod backend;
 pub mod bus;
