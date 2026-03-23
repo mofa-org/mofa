@@ -1,4 +1,5 @@
 use mofa_testing::agent_runner::AgentTestRunner;
+use mofa_testing::assertions::assert_session_messages;
 use mofa_testing::tools::MockTool;
 use serde_json::json;
 
@@ -27,6 +28,25 @@ async fn agent_runner_executes_and_captures_output() {
     assert!(result.metadata.session_snapshot.is_some());
     let snapshot = result.metadata.session_snapshot.as_ref().unwrap();
     assert_eq!(snapshot.len(), 2);
+    assert_session_messages(snapshot, &[("user", "hello"), ("assistant", "Mocked response")]);
+
+    let expected_session_path = format!("sessions/{}.jsonl", runner.session_id());
+    assert!(
+        !result
+            .metadata
+            .workspace_snapshot_before
+            .files
+            .iter()
+            .any(|file| file.relative_path == expected_session_path)
+    );
+    assert!(
+        result
+            .metadata
+            .workspace_snapshot_after
+            .files
+            .iter()
+            .any(|file| file.relative_path == expected_session_path)
+    );
 
     runner.shutdown().await.expect("shutdown succeeds");
 }
@@ -56,6 +76,7 @@ async fn agent_runner_creates_isolated_workspaces() {
         .await
         .expect("runner B executes");
 
+    // Session files should exist in each separate workspace.
     let session_a = runner_a
         .workspace()
         .join("sessions")
@@ -93,6 +114,7 @@ async fn agent_runner_executes_tool_calls() {
         .await
         .expect("tool registered");
 
+    // First response triggers a tool call; second response is the final answer.
     runner
         .mock_llm()
         .add_tool_call_response("echo_tool", json!({ "input": "ping" }), None)
@@ -107,6 +129,7 @@ async fn agent_runner_executes_tool_calls() {
         .await
         .expect("run should succeed");
 
+    // Tool call should be captured in both tool history and run metadata.
     assert_eq!(result.output_text().as_deref(), Some("Final response"));
     assert_eq!(tool.call_count().await, 1);
     let last_call = tool.last_call().await.expect("tool call captured");
@@ -120,6 +143,7 @@ async fn agent_runner_executes_tool_calls() {
         record.output,
         Some(json!("Mock execution default"))
     );
+    assert!(record.duration_ms.is_some());
 
     runner.shutdown().await.expect("shutdown succeeds");
 }
@@ -146,6 +170,7 @@ async fn agent_runner_loads_bootstrap_files() {
         .last_request()
         .await
         .expect("request captured");
+    // Validate the system message includes the bootstrap content.
     let system_message = request
         .messages
         .first()
@@ -160,6 +185,7 @@ async fn agent_runner_loads_bootstrap_files() {
 
 #[tokio::test]
 async fn agent_runner_supports_multi_turn_runs() {
+    // Multi-turn helper should keep the same session and extend history.
     let mut runner = AgentTestRunner::new().await.expect("runner initializes");
     runner.mock_llm().add_response("First reply").await;
     runner.mock_llm().add_response("Second reply").await;
@@ -173,17 +199,28 @@ async fn agent_runner_supports_multi_turn_runs() {
     assert_eq!(results[0].output_text().as_deref(), Some("First reply"));
     assert_eq!(results[1].output_text().as_deref(), Some("Second reply"));
 
+    // Session snapshot should contain two user/assistant pairs.
     let snapshot = results
         .last()
         .and_then(|result| result.metadata.session_snapshot.as_ref())
         .expect("session snapshot captured");
     assert_eq!(snapshot.len(), 4);
+    assert_session_messages(
+        snapshot,
+        &[
+            ("user", "turn one"),
+            ("assistant", "First reply"),
+            ("user", "turn two"),
+            ("assistant", "Second reply"),
+        ],
+    );
 
     runner.shutdown().await.expect("shutdown succeeds");
 }
 
 #[tokio::test]
 async fn agent_runner_customizes_prompt_identity_and_bootstraps() {
+    // Custom identity + bootstrap list should appear in the system prompt.
     let mut runner = AgentTestRunner::new().await.expect("runner initializes");
     runner
         .write_bootstrap_file("CUSTOM.md", "Custom bootstrap content.")
@@ -210,6 +247,7 @@ async fn agent_runner_customizes_prompt_identity_and_bootstraps() {
         .last_request()
         .await
         .expect("request captured");
+    // Validate custom identity and bootstrap content.
     let system_message = request
         .messages
         .first()
@@ -226,6 +264,7 @@ async fn agent_runner_customizes_prompt_identity_and_bootstraps() {
 
 #[tokio::test]
 async fn agent_runner_captures_llm_failure() {
+    // LLM failures should surface in AgentRunResult with failed stats.
     let mut runner = AgentTestRunner::new().await.expect("runner initializes");
     runner
         .mock_llm()

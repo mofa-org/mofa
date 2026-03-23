@@ -122,12 +122,16 @@ impl SimpleTool for MockTool {
 
     async fn execute(&self, input: ToolInput) -> ToolResult {
         self.call_history.write().await.push(input.clone());
+        let start = std::time::Instant::now();
 
         // 1. Drain failure queue
         {
             let mut queue = self.failure_queue.write().await;
             if let Some(err) = queue.pop_front() {
-                let result = ToolResult::failure(err);
+                let mut result = ToolResult::failure(err);
+                result
+                    .metadata
+                    .insert("duration_ms".to_string(), start.elapsed().as_millis().to_string());
                 self.result_history.write().await.push(result.clone());
                 return result;
             }
@@ -138,7 +142,10 @@ impl SimpleTool for MockTool {
             let patterns = self.failure_patterns.read().await;
             for (pattern, err) in patterns.iter() {
                 if input.arguments == *pattern {
-                    let result = ToolResult::failure(err);
+                    let mut result = ToolResult::failure(err);
+                    result
+                        .metadata
+                        .insert("duration_ms".to_string(), start.elapsed().as_millis().to_string());
                     self.result_history.write().await.push(result.clone());
                     return result;
                 }
@@ -149,12 +156,19 @@ impl SimpleTool for MockTool {
         {
             let mut seq = self.result_sequence.write().await;
             if let Some(result) = seq.pop_front() {
+                let mut result = result;
+                result
+                    .metadata
+                    .insert("duration_ms".to_string(), start.elapsed().as_millis().to_string());
                 self.result_history.write().await.push(result.clone());
                 return result;
             }
         }
 
-        let result = self.stubbed_result.read().await.clone();
+        let mut result = self.stubbed_result.read().await.clone();
+        result
+            .metadata
+            .insert("duration_ms".to_string(), start.elapsed().as_millis().to_string());
         self.result_history.write().await.push(result.clone());
         result
     }

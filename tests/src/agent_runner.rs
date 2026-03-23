@@ -19,6 +19,8 @@ use mofa_kernel::agent::AgentCapabilities;
 use mofa_kernel::agent::AgentState;
 use mofa_runtime::runner::{AgentRunner, RunnerState, RunnerStats};
 use std::collections::VecDeque;
+use std::collections::hash_map::DefaultHasher;
+use std::hash::{Hash, Hasher};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -57,6 +59,8 @@ pub struct AgentRunMetadata {
     pub tool_calls: Vec<ToolCallRecord>,
     pub llm_last_request: Option<ChatCompletionRequest>,
     pub llm_last_response: Option<ChatCompletionResponse>,
+    pub workspace_snapshot_before: WorkspaceSnapshot,
+    pub workspace_snapshot_after: WorkspaceSnapshot,
 }
 
 /// Result of a single agent run.
@@ -76,6 +80,22 @@ pub struct ToolCallRecord {
     pub input: serde_json::Value,
     pub output: Option<serde_json::Value>,
     pub success: bool,
+    pub duration_ms: Option<u64>,
+    pub timed_out: bool,
+}
+
+/// Snapshot of files in the test workspace.
+#[derive(Debug, Clone)]
+pub struct WorkspaceSnapshot {
+    pub files: Vec<WorkspaceFileSnapshot>,
+}
+
+#[derive(Debug, Clone)]
+pub struct WorkspaceFileSnapshot {
+    pub relative_path: String,
+    pub size_bytes: u64,
+    pub modified_ms: Option<u64>,
+    pub checksum: u64,
 }
 
 impl AgentRunResult {
@@ -291,12 +311,70 @@ impl TempWorkspace {
         std::fs::write(&path, content)?;
         Ok(path)
     }
+
+    fn snapshot(&self) -> WorkspaceSnapshot {
+        let mut files = Vec::new();
+        collect_workspace_files(&self.root, &self.root, &mut files);
+        files.sort_by(|a, b| a.relative_path.cmp(&b.relative_path));
+        WorkspaceSnapshot { files }
+    }
 }
 
 impl Drop for TempWorkspace {
     fn drop(&mut self) {
         let _ = std::fs::remove_dir_all(&self.root);
     }
+}
+
+fn collect_workspace_files(root: &Path, current: &Path, files: &mut Vec<WorkspaceFileSnapshot>) {
+    let entries = match std::fs::read_dir(current) {
+        Ok(entries) => entries,
+        Err(_) => return,
+    };
+
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if path.is_dir() {
+            collect_workspace_files(root, &path, files);
+            continue;
+        }
+
+        let metadata = match entry.metadata() {
+            Ok(metadata) => metadata,
+            Err(_) => continue,
+        };
+
+        let size_bytes = metadata.len();
+        let modified_ms = metadata
+            .modified()
+            .ok()
+            .and_then(|time| time.duration_since(std::time::UNIX_EPOCH).ok())
+            .map(|duration| duration.as_millis() as u64);
+
+        let bytes = match std::fs::read(&path) {
+            Ok(bytes) => bytes,
+            Err(_) => Vec::new(),
+        };
+        let checksum = hash_bytes(&bytes);
+        let relative_path = path
+            .strip_prefix(root)
+            .unwrap_or(&path)
+            .to_string_lossy()
+            .to_string();
+
+        files.push(WorkspaceFileSnapshot {
+            relative_path,
+            size_bytes,
+            modified_ms,
+            checksum,
+        });
+    }
+}
+
+fn hash_bytes(bytes: &[u8]) -> u64 {
+    let mut hasher = DefaultHasher::new();
+    bytes.hash(&mut hasher);
+    hasher.finish()
 }
 
 /// Test harness for running real agent execution paths.
@@ -427,6 +505,7 @@ impl AgentTestRunner {
         let runner_state_before = self.runner.state().await;
         let runner_stats_before = self.runner.stats().await;
         let agent_state_before = self.runner.agent_state();
+        let workspace_snapshot_before = self.workspace.snapshot();
         let timer = Instant::now();
         let result = self.runner.execute(input).await;
         let duration = timer.elapsed();
@@ -434,6 +513,7 @@ impl AgentTestRunner {
         let runner_stats_after = self.runner.stats().await;
         let agent_state_after = self.runner.agent_state();
         let session_snapshot = self.load_session_snapshot().await;
+        let workspace_snapshot_after = self.workspace.snapshot();
         let tool_calls = self.collect_tool_calls().await;
         let llm_last_request = self.llm.last_request().await;
         let llm_last_response = self.llm.last_response().await;
@@ -460,6 +540,8 @@ impl AgentTestRunner {
             tool_calls,
             llm_last_request,
             llm_last_response,
+            workspace_snapshot_before,
+            workspace_snapshot_after,
         };
 
         Ok(AgentRunResult {
@@ -488,15 +570,33 @@ impl AgentTestRunner {
             let results = tool.results().await;
             for (idx, call) in calls.into_iter().enumerate() {
                 let result = results.get(idx).cloned();
-                let (output, success) = match result {
-                    Some(result) => (Some(result.output.clone()), result.success),
-                    None => (None, false),
+                let (output, success, duration_ms, timed_out) = match result {
+                    Some(result) => {
+                        let duration_ms = result
+                            .metadata
+                            .get("duration_ms")
+                            .and_then(|value| value.parse::<u64>().ok());
+                        let timed_out = result
+                            .error
+                            .as_ref()
+                            .map(|err| err.contains("timed out"))
+                            .unwrap_or(false);
+                        (
+                            Some(result.output.clone()),
+                            result.success,
+                            duration_ms,
+                            timed_out,
+                        )
+                    }
+                    None => (None, false, None, false),
                 };
                 records.push(ToolCallRecord {
                     tool_name: tool.name().to_string(),
                     input: call.arguments,
                     output,
                     success,
+                    duration_ms,
+                    timed_out,
                 });
             }
         }
