@@ -1,0 +1,8 @@
+[package]
+name = "behavior_diff_example"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+mofa-testing = { path = "../../tests" }
+serde_json = { workspace = true }
