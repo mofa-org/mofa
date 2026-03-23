@@ -20,7 +20,7 @@ pub use behavior_diff::{
 pub use bus::MockAgentBus;
 pub use clock::{Clock, MockClock, SystemClock};
 pub use report::{
-    JsonFormatter, ReportFormatter, TestCaseResult, TestReport, TestReportBuilder, TestStatus,
-    TextFormatter,
+    AgentRunResult, BehaviorMetadata, FallbackStatus, JsonFormatter, ReportFormatter,
+    TestCaseResult, TestReport, TestReportBuilder, TestStatus, TextFormatter,
 };
 pub use tools::MockTool;
