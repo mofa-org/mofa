@@ -120,6 +120,50 @@ let result = debate.debide(&topic).await?;
 4. **Timeouts** — Set appropriate timeouts
 5. **Logging** — Log inter-agent communication
 
+## SwarmMetricsExporter
+
+`SwarmMetricsExporter` collects per-pattern counters and duration histograms from
+every scheduler run and renders them as valid Prometheus text-format output.
+No external dependency is required — the exposition format is produced with `std::fmt`.
+
+### Recording runs
+
+```rust
+let exporter = SwarmMetricsExporter::new();
+
+// after each scheduler execution
+exporter.record_scheduler_run(&summary);
+
+// after each swarm result (for HITL and token counts)
+exporter.record_swarm_result(&metrics);
+```
+
+### Exported metrics
+
+| metric | type | labels |
+|--------|------|--------|
+| `mofa_swarm_scheduler_runs_total` | counter | `pattern` |
+| `mofa_swarm_tasks_total` | counter | `pattern`, `status` (succeeded/failed/skipped) |
+| `mofa_swarm_scheduler_duration_seconds` | histogram | `pattern`, `le` |
+| `mofa_swarm_hitl_interventions_total` | counter | none |
+| `mofa_swarm_tokens_total` | counter | none |
+
+### Rendering
+
+```rust
+// serve from a /metrics endpoint or print for debugging
+let text = exporter.render();
+```
+
+`render()` returns an empty string until at least one run is recorded.
+Patterns are emitted in sorted order so the output is deterministic.
+
+### Example
+
+`examples/swarm_metrics_exporter/` simulates four runs across three patterns and
+prints the full Prometheus exposition, including histogram buckets at
+`[0.1, 0.5, 1.0, 2.5, 5.0, 10.0, 30.0, 60.0, 120.0]` seconds.
+
 ## See Also
 
 - [Workflows](../concepts/workflows.md) — Workflow concepts
