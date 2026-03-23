@@ -84,8 +84,19 @@ impl GatewayAdapter for McpAdapter {
             mofa_kernel::gateway::route::HttpMethod::Put => self.http.put(&url),
             mofa_kernel::gateway::route::HttpMethod::Delete => self.http.delete(&url),
             mofa_kernel::gateway::route::HttpMethod::Patch => self.http.patch(&url),
-            _ => return Err(McpError::Api(format!("Unsupported method '{:?}' for MCP endpoint", req.method)).into()),
+            _ => return Err(DispatchError::AdapterInvocationFailed {
+                adapter: self.name().to_string(),
+                reason: format!("Unsupported method '{:?}' for MCP endpoint", req.method),
+            }),
         };
+
+        // Forward headers from inbound request, stripping hop-by-hop and internal ones.
+        for (k, v) in &req.headers {
+            let key = k.to_lowercase();
+            if key != "x-mcp-target-url" && key != "connection" && key != "transfer-encoding" && key != "host" {
+                request_builder = request_builder.header(k, v);
+            }
+        }
 
         request_builder = request_builder.timeout(timeout);
 
@@ -110,6 +121,14 @@ impl GatewayAdapter for McpAdapter {
 
         let mut gateway_res = GatewayResponse::new(status, self.name());
         gateway_res.body = bytes.to_vec();
+
+        // Propagate upstream response headers (normalized to lowercase).
+        for (name, value) in res.headers().iter() {
+            let key = name.as_str().to_ascii_lowercase();
+            if let Ok(val_str) = value.to_str() {
+                gateway_res.headers.insert(key, val_str.to_string());
+            }
+        }
 
         Ok(gateway_res)
     }
