@@ -211,3 +211,31 @@ fn behavior_diff_json_contains_summary_and_case_details() {
     assert_eq!(json["cases"][0]["output_change"]["before"], "old");
     assert_eq!(json["cases"][0]["output_change"]["after"], "new");
 }
+
+#[test]
+fn behavior_diff_has_change_helpers() {
+    let baseline = make_report(
+        "baseline",
+        20,
+        vec![make_result("same", TestStatus::Passed, 10, None, &[])],
+    );
+    let candidate = make_report(
+        "candidate",
+        20,
+        vec![make_result("same", TestStatus::Passed, 10, None, &[])],
+    );
+
+    let unchanged = BehaviorDiff::between(&baseline, &candidate);
+    assert!(!unchanged.has_changes());
+    assert!(unchanged.changed_cases().is_empty());
+
+    let changed_candidate = make_report(
+        "candidate",
+        30,
+        vec![make_result("same", TestStatus::Failed, 20, Some("oops"), &[])],
+    );
+    let changed = BehaviorDiff::between(&baseline, &changed_candidate);
+    assert!(changed.has_changes());
+    assert_eq!(changed.changed_cases().len(), 1);
+    assert_eq!(changed.changed_cases()[0].name, "same");
+}

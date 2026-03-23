@@ -336,6 +336,27 @@ impl BehaviorDiff {
             "cases": cases,
         })
     }
+
+    /// Returns true when the diff contains any meaningful change.
+    pub fn has_changes(&self) -> bool {
+        self.summary.added_cases > 0
+            || self.summary.removed_cases > 0
+            || self.summary.status_changes > 0
+            || self.summary.output_changes > 0
+            || self.summary.tool_call_changes > 0
+            || self.summary.retry_changes > 0
+            || self.summary.fallback_changes > 0
+            || self.summary.slower_cases > 0
+            || self.summary.faster_cases > 0
+    }
+
+    /// Returns only cases that were added, removed, or modified.
+    pub fn changed_cases(&self) -> Vec<&CaseBehaviorDiff> {
+        self.cases
+            .iter()
+            .filter(|case| case.change != CaseChangeKind::Unchanged)
+            .collect()
+    }
 }
 
 impl CaseBehaviorDiff {
@@ -447,9 +468,7 @@ fn bool_change(
 }
 
 fn metadata_alias_value<'a>(case: Option<&'a TestCaseResult>, keys: &[&str]) -> Option<&'a str> {
-    let case = case?;
-    keys.iter()
-        .find_map(|key| case.metadata.iter().find(|(k, _)| k == key).map(|(_, v)| v.as_str()))
+    case?.metadata_value_any(keys)
 }
 
 fn parse_boolish(value: &str) -> Option<bool> {

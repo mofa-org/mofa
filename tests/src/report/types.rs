@@ -31,6 +31,21 @@ pub struct TestCaseResult {
     pub metadata: Vec<(String, String)>,
 }
 
+impl TestCaseResult {
+    /// Look up a metadata value by key.
+    pub fn metadata_value(&self, key: &str) -> Option<&str> {
+        self.metadata
+            .iter()
+            .find(|(existing, _)| existing == key)
+            .map(|(_, value)| value.as_str())
+    }
+
+    /// Look up the first present metadata value across multiple key aliases.
+    pub fn metadata_value_any<'a>(&'a self, keys: &[&str]) -> Option<&'a str> {
+        keys.iter().find_map(|key| self.metadata_value(key))
+    }
+}
+
 /// Aggregated report for a test suite.
 #[derive(Debug, Clone)]
 pub struct TestReport {
