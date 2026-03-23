@@ -181,6 +181,12 @@ pub enum AuditEventKind {
     SLABreach,
     AgentReassigned,
     SwarmCompleted,
+    // admission gate outcomes
+    AdmissionChecked,
+    AdmissionDenied,
+    // scheduler lifecycle
+    SchedulerStarted,
+    SchedulerCompleted,
 }
 
 impl AuditEvent {
