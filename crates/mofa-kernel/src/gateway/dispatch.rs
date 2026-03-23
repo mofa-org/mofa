@@ -265,6 +265,7 @@ impl Default for InMemoryAdapterRegistry {
     }
 }
 
+#[async_trait]
 impl AdapterRegistry for InMemoryAdapterRegistry {
     fn register(
         &mut self,
