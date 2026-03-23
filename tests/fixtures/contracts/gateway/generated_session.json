@@ -1,0 +1,18 @@
+{
+  "case_name": "gateway-generated-session",
+  "kind": "contract",
+  "target": "gateway-chat",
+  "agent_present": true,
+  "agent_state": "Ready",
+  "request": {
+    "message": "make a session"
+  },
+  "agent_response": {
+    "text": "generated"
+  },
+  "expected": {
+    "status": 200,
+    "output_text": "generated",
+    "session_generated": true
+  }
+}

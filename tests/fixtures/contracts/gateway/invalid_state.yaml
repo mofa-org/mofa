@@ -1,0 +1,10 @@
+case_name: gateway-invalid-state
+kind: contract
+target: gateway-chat
+agent_present: true
+agent_state: Created
+request:
+  message: not ready
+expected:
+  status: 500
+  error_contains: cannot process messages

@@ -102,3 +102,69 @@ impl ReportFormatter for TextFormatter {
         buf
     }
 }
+
+/// Renders a report as a JUnit XML document for CI systems.
+pub struct JunitFormatter;
+
+impl ReportFormatter for JunitFormatter {
+    fn format(&self, report: &TestReport) -> String {
+        let mut xml = String::new();
+        xml.push_str("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n");
+        xml.push_str(&format!(
+            "<testsuite name=\"{}\" tests=\"{}\" failures=\"{}\" skipped=\"{}\" time=\"{:.3}\" timestamp=\"{}\">\n",
+            escape_xml(&report.suite_name),
+            report.total(),
+            report.failed(),
+            report.skipped(),
+            report.total_duration.as_secs_f64(),
+            report.timestamp
+        ));
+
+        for result in &report.results {
+            xml.push_str(&format!(
+                "  <testcase name=\"{}\" classname=\"{}\" time=\"{:.3}\">",
+                escape_xml(&result.name),
+                escape_xml(&report.suite_name),
+                result.duration.as_secs_f64()
+            ));
+
+            match result.status {
+                TestStatus::Passed => {}
+                TestStatus::Failed => {
+                    let message = result.error.as_deref().unwrap_or("test failed");
+                    xml.push_str(&format!(
+                        "<failure message=\"{}\">{}</failure>",
+                        escape_xml(message),
+                        escape_xml(message)
+                    ));
+                }
+                TestStatus::Skipped => {
+                    let message = result.error.as_deref().unwrap_or("test skipped");
+                    xml.push_str(&format!("<skipped message=\"{}\" />", escape_xml(message)));
+                }
+            }
+
+            if !result.metadata.is_empty() {
+                xml.push_str("<system-out>");
+                for (key, value) in &result.metadata {
+                    xml.push_str(&escape_xml(&format!("{key}={value}\n")));
+                }
+                xml.push_str("</system-out>");
+            }
+
+            xml.push_str("</testcase>\n");
+        }
+
+        xml.push_str("</testsuite>\n");
+        xml
+    }
+}
+
+fn escape_xml(input: &str) -> String {
+    input
+        .replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
+        .replace('"', "&quot;")
+        .replace('\'', "&apos;")
+}

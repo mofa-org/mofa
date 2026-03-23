@@ -6156,11 +6156,17 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "async-trait",
+ "axum",
  "chrono",
  "mofa-foundation",
+ "mofa-gateway",
  "mofa-kernel",
+ "mofa-local-llm",
+ "mofa-runtime",
  "serde",
  "serde_json",
+ "serde_yaml",
+ "tempfile",
  "tokio",
 ]
 

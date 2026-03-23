@@ -1,0 +1,13 @@
+{
+  "case_name": "gateway-missing-agent",
+  "kind": "contract",
+  "target": "gateway-chat",
+  "agent_present": false,
+  "request": {
+    "message": "where are you"
+  },
+  "expected": {
+    "status": 404,
+    "error_contains": "Agent not found"
+  }
+}

@@ -1,0 +1,14 @@
+case_name: gateway-preserved-session
+kind: contract
+target: gateway-chat
+agent_present: true
+agent_state: Running
+request:
+  message: keep session
+  session_id: session-123
+agent_response:
+  text: session-kept
+expected:
+  status: 200
+  output_text: session-kept
+  session_id: session-123

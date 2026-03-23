@@ -1,0 +1,20 @@
+{
+  "case_name": "gateway-data-precedence",
+  "kind": "contract",
+  "target": "gateway-chat",
+  "agent_present": true,
+  "agent_state": "Ready",
+  "request": {
+    "message": "ignore me",
+    "data": { "query": "json wins" }
+  },
+  "agent_response": {
+    "json": { "result": "ok" }
+  },
+  "expected": {
+    "status": 200,
+    "output_json": { "result": "ok" },
+    "expected_input_json": { "query": "json wins" },
+    "session_generated": true
+  }
+}

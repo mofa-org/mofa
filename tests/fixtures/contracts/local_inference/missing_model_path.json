@@ -1,0 +1,9 @@
+{
+  "case_name": "local-inference-missing-model",
+  "kind": "contract",
+  "target": "local-inference",
+  "model_name": "missing-model",
+  "model_path": "/definitely/missing/model.gguf",
+  "backend": "cpu",
+  "expected_error_contains": "model file not found"
+}
