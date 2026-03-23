@@ -1,0 +1,12 @@
+[package]
+name = "behavior_diff_runtime_example"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+mofa-testing = { path = "../../tests" }
+mofa-runtime = { path = "../../crates/mofa-runtime" }
+mofa-kernel = { path = "../../crates/mofa-kernel" }
+tokio = { workspace = true }
+async-trait = { workspace = true }
+serde_json = { workspace = true }

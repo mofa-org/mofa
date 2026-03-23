@@ -60,6 +60,8 @@ members = [
     "rag_retrieval_demo",
     "rag_indexing_demo",
     "adversarial_testing_demo",
+    "behavior_diff_example",
+    "behavior_diff_runtime_example",
     "llm_fallback_chain",
     "resume_from_checkpoint",
     "claw_demo",
