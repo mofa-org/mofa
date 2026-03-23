@@ -9,6 +9,7 @@ pub mod backend;
 pub mod bus;
 pub mod clock;
 pub mod report;
+pub mod swarm;
 pub mod tools;
 
 pub use backend::MockLLMBackend;
@@ -18,4 +19,5 @@ pub use report::{
     JsonFormatter, ReportFormatter, TestCaseResult, TestReport, TestReportBuilder, TestStatus,
     TextFormatter,
 };
+pub use swarm::{SwarmRunArtifact, SwarmTaskRecord};
 pub use tools::MockTool;
