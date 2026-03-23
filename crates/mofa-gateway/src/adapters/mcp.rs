@@ -148,12 +148,69 @@ mod tests {
         req = req.with_header("x-mcp-target-url", "http://malicious.external");
         
         let ctx = GatewayContext::new(req.clone());
+        let res = adapter.invoke(&req, &ctx).await.expect("SSRF block should return Ok(403)");
+        
+        assert_eq!(res.status, 403);
+        assert!(String::from_utf8_lossy(&res.body).contains("SSRF blocked"));
+    }
+
+    #[tokio::test]
+    async fn mcp_adapter_success_path_with_headers() {
+        let mut server = mockito::Server::new_async().await;
+        let url = server.url();
+        
+        let _m = server.mock("POST", "/tools/call")
+            .match_header("authorization", "Bearer test-token")
+            .match_body(mockito::Matcher::Json(serde_json::json!({"tool": "calculator"})))
+            .with_status(200)
+            .with_header("content-type", "application/json")
+            .with_header("x-upstream-id", "mcp-123")
+            .with_body(r#"{"result": 42}"#)
+            .create_async().await;
+
+        let adapter = McpAdapter::new(url);
+        let mut req = GatewayRequest::new("id_1", "/tools/call", HttpMethod::Post);
+        req = req.with_header("authorization", "Bearer test-token");
+        req.body = serde_json::to_vec(&serde_json::json!({"tool": "calculator"})).unwrap();
+        
+        let ctx = GatewayContext::new(req.clone());
+        let res = adapter.invoke(&req, &ctx).await.unwrap();
+        
+        assert_eq!(res.status, 200);
+        assert_eq!(res.backend_id, "mcp");
+        assert_eq!(res.headers.get("x-upstream-id"), Some(&"mcp-123".to_string()));
+        assert_eq!(serde_json::from_slice::<serde_json::Value>(&res.body).unwrap(), serde_json::json!({"result": 42}));
+    }
+
+    #[tokio::test]
+    async fn mcp_adapter_timeout_enforcement() {
+        let mut server = mockito::Server::new_async().await;
+        let url = server.url();
+        
+        let _m = server.mock("GET", "/slow")
+            .with_delay(std::time::Duration::from_millis(200))
+            .with_status(200)
+            .create_async().await;
+
+        let adapter = McpAdapter::new(url);
+        let req = GatewayRequest::new("id_1", "/slow", HttpMethod::Get);
+        
+        let mut ctx = GatewayContext::new(req.clone());
+        // Set a short timeout
+        ctx.route_match = Some(mofa_kernel::gateway::route::RouteMatch {
+            path: "/slow".to_string(),
+            method: HttpMethod::Get,
+            priority: 0,
+            timeout_ms: 50,
+            params: std::collections::HashMap::new(),
+            target: mofa_kernel::gateway::dispatch::InvocationTarget::Adapter("mcp".into()),
+        });
+
         let result = adapter.invoke(&req, &ctx).await;
         
-        assert!(matches!(
-            result,
-            Err(DispatchError::AdapterInvocationFailed { adapter: _, reason }) if reason.contains("SSRF blocked")
-        ));
+        assert!(result.is_err());
+        let err_msg = result.unwrap_err().to_string();
+        assert!(err_msg.contains("timeout") || err_msg.contains("timed out"));
     }
 
     #[tokio::test]
