@@ -114,13 +114,8 @@ impl GatewayAdapter for McpAdapter {
             reason: e.to_string(),
         })?;
         let status = res.status().as_u16();
-        let bytes = res.bytes().await.map_err(|e| DispatchError::AdapterInvocationFailed {
-            adapter: self.name().to_string(),
-            reason: e.to_string(),
-        })?;
 
         let mut gateway_res = GatewayResponse::new(status, self.name());
-        gateway_res.body = bytes.to_vec();
 
         // Propagate upstream response headers (normalized to lowercase).
         for (name, value) in res.headers().iter() {
@@ -129,6 +124,12 @@ impl GatewayAdapter for McpAdapter {
                 gateway_res.headers.insert(key, val_str.to_string());
             }
         }
+
+        let bytes = res.bytes().await.map_err(|e| DispatchError::AdapterInvocationFailed {
+            adapter: self.name().to_string(),
+            reason: e.to_string(),
+        })?;
+        gateway_res.body = bytes.to_vec();
 
         Ok(gateway_res)
     }
