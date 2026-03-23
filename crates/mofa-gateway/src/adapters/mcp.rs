@@ -189,7 +189,6 @@ mod tests {
         let url = server.url();
         
         let _m = server.mock("GET", "/slow")
-            .with_delay(std::time::Duration::from_millis(200))
             .with_status(200)
             .create_async().await;
 
@@ -199,12 +198,10 @@ mod tests {
         let mut ctx = GatewayContext::new(req.clone());
         // Set a short timeout
         ctx.route_match = Some(mofa_kernel::gateway::RouteMatch {
-            path: "/slow".to_string(),
-            method: HttpMethod::Get,
-            priority: 0,
-            timeout_ms: 50,
-            params: std::collections::HashMap::new(),
-            target: mofa_kernel::gateway::dispatch::InvocationTarget::Adapter("mcp".into()),
+            route_id: "r1".into(),
+            backend_id: "mcp".into(),
+            path_params: std::collections::HashMap::new(),
+            timeout_ms: 1, // Extremely short timeout
         });
 
         let result = adapter.invoke(&req, &ctx).await;
