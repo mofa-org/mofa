@@ -6149,6 +6149,19 @@ dependencies = [
 [[package]]
 name = "mofa-smith"
 version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "chrono",
+ "clap",
+ "comfy-table",
+ "futures",
+ "mofa-foundation",
+ "mofa-kernel",
+ "serde",
+ "serde_json",
+ "serde_yaml",
+ "tokio",
+]
 
 [[package]]
 name = "mofa-testing"
