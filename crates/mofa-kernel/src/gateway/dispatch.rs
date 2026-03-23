@@ -208,7 +208,7 @@ pub trait AdapterRegistry: Send + Sync {
     /// Resolve an adapter by name, returning `None` if not registered.
     fn resolve(&self, name: &str) -> Option<Arc<dyn GatewayAdapter>>;
 
-    /// List all registered adapter names in registration order.
+    /// List all registered adapter names in lexicographic (sorted) order.
     fn adapter_names(&self) -> Vec<String>;
 
     /// Dispatch a request to the adapter identified by `target`.
