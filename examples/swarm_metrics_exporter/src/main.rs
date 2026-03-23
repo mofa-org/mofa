@@ -33,13 +33,11 @@ fn make_summary(
 fn main() {
     let exporter = SwarmMetricsExporter::new();
 
-    // simulate four scheduler runs
     exporter.record_scheduler_run(&make_summary(CoordinationPattern::Sequential, 5, 5, 0, 0, 80));
     exporter.record_scheduler_run(&make_summary(CoordinationPattern::Parallel, 8, 7, 1, 0, 420));
     exporter.record_scheduler_run(&make_summary(CoordinationPattern::Parallel, 6, 5, 0, 1, 310));
     exporter.record_scheduler_run(&make_summary(CoordinationPattern::MapReduce, 12, 10, 2, 0, 3800));
 
-    // simulate two swarm results that include HITL and token data
     let mut m1 = SwarmMetrics::default();
     m1.record_hitl_intervention();
     m1.add_tokens(4200);

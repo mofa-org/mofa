@@ -18,21 +18,13 @@ struct PatternCounters {
 
 #[derive(Debug)]
 struct HistogramData {
-    /// count of observations falling in each bucket (parallel to BUCKETS)
+    /// cumulative count per bucket, parallel to BUCKETS
     buckets: Vec<u64>,
     count: u64,
     sum_secs: f64,
 }
 
 impl HistogramData {
-    fn new() -> Self {
-        Self {
-            buckets: vec![0; BUCKETS.len()],
-            count: 0,
-            sum_secs: 0.0,
-        }
-    }
-
     fn observe(&mut self, secs: f64) {
         self.count += 1;
         self.sum_secs += secs;
@@ -44,10 +36,25 @@ impl HistogramData {
     }
 }
 
+impl Default for HistogramData {
+    fn default() -> Self {
+        Self {
+            buckets: vec![0; BUCKETS.len()],
+            count: 0,
+            sum_secs: 0.0,
+        }
+    }
+}
+
+#[derive(Debug, Default)]
+struct PatternData {
+    counters: PatternCounters,
+    histogram: HistogramData,
+}
+
 #[derive(Debug, Default)]
 struct ExporterInner {
-    patterns: HashMap<String, PatternCounters>,
-    histograms: HashMap<String, HistogramData>,
+    patterns: HashMap<String, PatternData>,
     hitl_total: u64,
     tokens_total: u64,
 }
@@ -78,15 +85,12 @@ impl SwarmMetricsExporter {
         let pattern = summary.pattern.to_string();
         let secs = summary.total_wall_time.as_secs_f64();
         let mut g = self.inner.lock().expect("metrics lock poisoned");
-        let pc = g.patterns.entry(pattern.clone()).or_default();
-        pc.runs += 1;
-        pc.succeeded += u64::try_from(summary.succeeded).unwrap_or(u64::MAX);
-        pc.failed += u64::try_from(summary.failed).unwrap_or(u64::MAX);
-        pc.skipped += u64::try_from(summary.skipped).unwrap_or(u64::MAX);
-        g.histograms
-            .entry(pattern)
-            .or_insert_with(HistogramData::new)
-            .observe(secs);
+        let pd = g.patterns.entry(pattern).or_default();
+        pd.counters.runs += 1;
+        pd.counters.succeeded += u64::try_from(summary.succeeded).unwrap_or(u64::MAX);
+        pd.counters.failed += u64::try_from(summary.failed).unwrap_or(u64::MAX);
+        pd.counters.skipped += u64::try_from(summary.skipped).unwrap_or(u64::MAX);
+        pd.histogram.observe(secs);
     }
 
     /// Record token and HITL counts from a completed swarm result.
@@ -112,44 +116,43 @@ impl SwarmMetricsExporter {
         }
 
         let mut out = String::new();
-        let mut patterns: Vec<&str> = g.patterns.keys().map(|s| s.as_str()).collect();
-        patterns.sort_unstable();
+        let mut pattern_keys: Vec<&str> = g.patterns.keys().map(|s| s.as_str()).collect();
+        pattern_keys.sort_unstable();
 
         out.push_str("# HELP mofa_swarm_scheduler_runs_total total scheduler executions per pattern\n");
         out.push_str("# TYPE mofa_swarm_scheduler_runs_total counter\n");
-        for p in &patterns {
-            let pc = &g.patterns[*p];
-            let _ = writeln!(out, "mofa_swarm_scheduler_runs_total{{pattern=\"{p}\"}} {}", pc.runs);
+        for p in &pattern_keys {
+            let pd = &g.patterns[*p];
+            let _ = writeln!(out, "mofa_swarm_scheduler_runs_total{{pattern=\"{p}\"}} {}", pd.counters.runs);
         }
 
         out.push_str("# HELP mofa_swarm_tasks_total total subtasks by pattern and status\n");
         out.push_str("# TYPE mofa_swarm_tasks_total counter\n");
-        for p in &patterns {
-            let pc = &g.patterns[*p];
-            for (status, val) in [("succeeded", pc.succeeded), ("failed", pc.failed), ("skipped", pc.skipped)] {
+        for p in &pattern_keys {
+            let c = &g.patterns[*p].counters;
+            for (status, val) in [("succeeded", c.succeeded), ("failed", c.failed), ("skipped", c.skipped)] {
                 let _ = writeln!(out, "mofa_swarm_tasks_total{{pattern=\"{p}\",status=\"{status}\"}} {val}");
             }
         }
 
         out.push_str("# HELP mofa_swarm_scheduler_duration_seconds wall time per scheduler run in seconds\n");
         out.push_str("# TYPE mofa_swarm_scheduler_duration_seconds histogram\n");
-        for p in &patterns {
-            if let Some(h) = g.histograms.get(*p) {
-                for (i, &le) in BUCKETS.iter().enumerate() {
-                    let _ = writeln!(
-                        out,
-                        "mofa_swarm_scheduler_duration_seconds_bucket{{pattern=\"{p}\",le=\"{le}\"}} {}",
-                        h.buckets[i]
-                    );
-                }
+        for p in &pattern_keys {
+            let h = &g.patterns[*p].histogram;
+            for (i, &le) in BUCKETS.iter().enumerate() {
                 let _ = writeln!(
                     out,
-                    "mofa_swarm_scheduler_duration_seconds_bucket{{pattern=\"{p}\",le=\"+Inf\"}} {}",
-                    h.count
+                    "mofa_swarm_scheduler_duration_seconds_bucket{{pattern=\"{p}\",le=\"{le}\"}} {}",
+                    h.buckets[i]
                 );
-                let _ = writeln!(out, "mofa_swarm_scheduler_duration_seconds_sum{{pattern=\"{p}\"}} {:.6}", h.sum_secs);
-                let _ = writeln!(out, "mofa_swarm_scheduler_duration_seconds_count{{pattern=\"{p}\"}} {}", h.count);
             }
+            let _ = writeln!(
+                out,
+                "mofa_swarm_scheduler_duration_seconds_bucket{{pattern=\"{p}\",le=\"+Inf\"}} {}",
+                h.count
+            );
+            let _ = writeln!(out, "mofa_swarm_scheduler_duration_seconds_sum{{pattern=\"{p}\"}} {:.6}", h.sum_secs);
+            let _ = writeln!(out, "mofa_swarm_scheduler_duration_seconds_count{{pattern=\"{p}\"}} {}", h.count);
         }
 
         out.push_str("# HELP mofa_swarm_hitl_interventions_total total HITL interventions recorded\n");
