@@ -175,6 +175,30 @@ async fn builder_record_failure() {
 }
 
 #[tokio::test]
+async fn builder_record_with_metadata_attaches_behavior_fields() {
+    let report = TestReportBuilder::new("meta-suite")
+        .record_with_metadata(
+            "agent_case",
+            [
+                ("output", "final answer"),
+                ("tool_calls", "search,calculator"),
+                ("retry_count", "1"),
+                ("fallback_triggered", "false"),
+            ],
+            || async { Ok(()) },
+        )
+        .await
+        .build();
+
+    let case = &report.results[0];
+    assert_eq!(case.status, TestStatus::Passed);
+    assert_eq!(case.metadata_value("output"), Some("final answer"));
+    assert_eq!(case.metadata_value("tool_calls"), Some("search,calculator"));
+    assert_eq!(case.metadata_value("retry_count"), Some("1"));
+    assert_eq!(case.metadata_value("fallback_triggered"), Some("false"));
+}
+
+#[tokio::test]
 async fn builder_add_result_skipped() {
     let report = TestReportBuilder::new("skip-suite")
         .add_result(make_result("skipped_one", TestStatus::Skipped, 0, None))
@@ -271,6 +295,20 @@ fn json_formatter_includes_metadata() {
     let output = JsonFormatter.format(&r);
     let parsed: serde_json::Value = serde_json::from_str(&output).unwrap();
     assert_eq!(parsed["results"][0]["metadata"]["key"], "val");
+}
+
+#[test]
+fn test_case_result_with_metadata_extends_entries() {
+    let case = make_result("meta_case", TestStatus::Passed, 5, None).with_metadata([
+        ("output", "hello"),
+        ("response", "alias"),
+    ]);
+
+    assert_eq!(case.metadata_value("output"), Some("hello"));
+    assert_eq!(
+        case.metadata_value_any(&["final_response", "response"]),
+        Some("alias")
+    );
 }
 
 // ===========================================================================

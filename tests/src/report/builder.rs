@@ -62,6 +62,43 @@ impl TestReportBuilder {
         self
     }
 
+    /// Run an async test closure, record its outcome, and attach metadata.
+    pub async fn record_with_metadata<F, Fut, I, K, V>(
+        mut self,
+        name: impl Into<String>,
+        metadata: I,
+        f: F,
+    ) -> Self
+    where
+        F: FnOnce() -> Fut,
+        Fut: Future<Output = Result<(), String>>,
+        I: IntoIterator<Item = (K, V)>,
+        K: Into<String>,
+        V: Into<String>,
+    {
+        let name = name.into();
+        let start = Instant::now();
+        let outcome = f().await;
+        let duration = start.elapsed();
+
+        let (status, error) = match outcome {
+            Ok(()) => (TestStatus::Passed, None),
+            Err(msg) => (TestStatus::Failed, Some(msg)),
+        };
+
+        self.results.push(
+            TestCaseResult {
+                name,
+                status,
+                duration,
+                error,
+                metadata: Vec::new(),
+            }
+            .with_metadata(metadata),
+        );
+        self
+    }
+
     /// Manually add a pre-built result.
     pub fn add_result(mut self, result: TestCaseResult) -> Self {
         self.results.push(result);

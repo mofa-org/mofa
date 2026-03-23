@@ -32,6 +32,18 @@ pub struct TestCaseResult {
 }
 
 impl TestCaseResult {
+    /// Attach metadata entries to this result.
+    pub fn with_metadata<I, K, V>(mut self, metadata: I) -> Self
+    where
+        I: IntoIterator<Item = (K, V)>,
+        K: Into<String>,
+        V: Into<String>,
+    {
+        self.metadata
+            .extend(metadata.into_iter().map(|(key, value)| (key.into(), value.into())));
+        self
+    }
+
     /// Look up a metadata value by key.
     pub fn metadata_value(&self, key: &str) -> Option<&str> {
         self.metadata
