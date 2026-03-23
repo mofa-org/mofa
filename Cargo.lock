@@ -1280,7 +1280,7 @@ dependencies = [
  "bitflags 2.11.0",
  "cexpr",
  "clang-sys",
- "itertools 0.13.0",
+ "itertools 0.10.5",
  "proc-macro2",
  "quote",
  "regex",
@@ -5039,15 +5039,6 @@ dependencies = [
 
 [[package]]
 name = "itertools"
-version = "0.13.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "413ee7dfc52ee1a4949ceeb7dbc8a33f2d6c088194d9f922fb8318faf1f01186"
-dependencies = [
- "either",
-]
-
-[[package]]
-name = "itertools"
 version = "0.14.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2b192c782037fadd9cfa75548310488aabdbf3d2da73885b31bd0abd03351285"
@@ -5716,6 +5707,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "metrics"
+version = "0.22.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "56d05972e8cbac2671e85aa9d04d9160d193f8bebd1a5c1a2f4542c62e65d1d0"
+dependencies = [
+ "ahash",
+ "portable-atomic",
+]
+
+[[package]]
 name = "mime"
 version = "0.3.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5867,12 +5868,14 @@ dependencies = [
  "config",
  "criterion",
  "cron",
+ "dashmap 5.5.3",
  "error-stack",
  "futures",
  "hex",
  "infer",
  "jsonschema",
  "lazy_static",
+ "metrics",
  "mofa-extra",
  "mofa-kernel",
  "mofa-plugins",
@@ -5917,6 +5920,7 @@ dependencies = [
  "dashmap 5.5.3",
  "eyre",
  "futures",
+ "http-body-util",
  "hyper 1.8.1",
  "hyper-util",
  "mofa-foundation",
@@ -6130,6 +6134,7 @@ dependencies = [
  "error-stack",
  "mofa-extra",
  "mofa-foundation",
+ "mofa-integrations",
  "mofa-kernel",
  "mofa-monitoring",
  "mofa-plugins",

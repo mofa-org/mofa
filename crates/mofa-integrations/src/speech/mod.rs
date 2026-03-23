@@ -8,3 +8,5 @@ pub mod elevenlabs;
 
 #[cfg(feature = "deepgram")]
 pub mod deepgram;
+
+pub mod registry_builder;
