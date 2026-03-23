@@ -65,6 +65,17 @@ pub struct ValueChange<T> {
     pub after: T,
 }
 
+/// Converts a [`BehaviorDiff`] into a displayable string.
+pub trait BehaviorDiffFormatter: Send + Sync {
+    fn format(&self, diff: &BehaviorDiff) -> String;
+}
+
+/// Renders a diff as markdown.
+pub struct MarkdownBehaviorDiffFormatter;
+
+/// Renders a diff as pretty JSON.
+pub struct JsonBehaviorDiffFormatter;
+
 impl BehaviorDiff {
     /// Compare a baseline and candidate report by test case name.
     pub fn between(baseline: &TestReport, candidate: &TestReport) -> Self {
@@ -356,6 +367,19 @@ impl BehaviorDiff {
             .iter()
             .filter(|case| case.change != CaseChangeKind::Unchanged)
             .collect()
+    }
+}
+
+impl BehaviorDiffFormatter for MarkdownBehaviorDiffFormatter {
+    fn format(&self, diff: &BehaviorDiff) -> String {
+        diff.to_markdown()
+    }
+}
+
+impl BehaviorDiffFormatter for JsonBehaviorDiffFormatter {
+    fn format(&self, diff: &BehaviorDiff) -> String {
+        serde_json::to_string_pretty(&diff.to_json())
+            .expect("behavior diff serialisation should not fail")
     }
 }
 

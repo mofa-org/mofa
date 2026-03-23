@@ -14,7 +14,8 @@ pub mod tools;
 
 pub use backend::MockLLMBackend;
 pub use behavior_diff::{
-    BehaviorDiff, BehaviorDiffSummary, CaseBehaviorDiff, CaseChangeKind, ValueChange,
+    BehaviorDiff, BehaviorDiffFormatter, BehaviorDiffSummary, CaseBehaviorDiff, CaseChangeKind,
+    JsonBehaviorDiffFormatter, MarkdownBehaviorDiffFormatter, ValueChange,
 };
 pub use bus::MockAgentBus;
 pub use clock::{Clock, MockClock, SystemClock};

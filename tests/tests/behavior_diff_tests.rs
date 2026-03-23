@@ -1,4 +1,7 @@
-use mofa_testing::behavior_diff::{BehaviorDiff, CaseChangeKind};
+use mofa_testing::behavior_diff::{
+    BehaviorDiff, BehaviorDiffFormatter, CaseChangeKind, JsonBehaviorDiffFormatter,
+    MarkdownBehaviorDiffFormatter,
+};
 use mofa_testing::report::{TestCaseResult, TestReport, TestStatus};
 use std::time::Duration;
 
@@ -238,4 +241,29 @@ fn behavior_diff_has_change_helpers() {
     assert!(changed.has_changes());
     assert_eq!(changed.changed_cases().len(), 1);
     assert_eq!(changed.changed_cases()[0].name, "same");
+}
+
+#[test]
+fn behavior_diff_formatters_render_markdown_and_json() {
+    let baseline = make_report(
+        "baseline",
+        10,
+        vec![make_result("case", TestStatus::Passed, 5, None, &[("output", "old")])],
+    );
+    let candidate = make_report(
+        "candidate",
+        20,
+        vec![make_result("case", TestStatus::Failed, 9, Some("err"), &[("output", "new")])],
+    );
+
+    let diff = BehaviorDiff::between(&baseline, &candidate);
+
+    let markdown = MarkdownBehaviorDiffFormatter.format(&diff);
+    assert!(markdown.contains("## Behavioral Diff"));
+    assert!(markdown.contains("status passed -> failed"));
+
+    let json = JsonBehaviorDiffFormatter.format(&diff);
+    let parsed: serde_json::Value = serde_json::from_str(&json).expect("valid diff json");
+    assert_eq!(parsed["summary"]["status_changes"], 1);
+    assert_eq!(parsed["cases"][0]["status_change"]["after"], "failed");
 }
