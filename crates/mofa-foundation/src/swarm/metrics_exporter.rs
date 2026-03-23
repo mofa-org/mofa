@@ -115,7 +115,6 @@ impl SwarmMetricsExporter {
         let mut patterns: Vec<&str> = g.patterns.keys().map(|s| s.as_str()).collect();
         patterns.sort_unstable();
 
-        // mofa_swarm_scheduler_runs_total
         out.push_str("# HELP mofa_swarm_scheduler_runs_total total scheduler executions per pattern\n");
         out.push_str("# TYPE mofa_swarm_scheduler_runs_total counter\n");
         for p in &patterns {
@@ -123,7 +122,6 @@ impl SwarmMetricsExporter {
             let _ = writeln!(out, "mofa_swarm_scheduler_runs_total{{pattern=\"{p}\"}} {}", pc.runs);
         }
 
-        // mofa_swarm_tasks_total
         out.push_str("# HELP mofa_swarm_tasks_total total subtasks by pattern and status\n");
         out.push_str("# TYPE mofa_swarm_tasks_total counter\n");
         for p in &patterns {
@@ -133,12 +131,10 @@ impl SwarmMetricsExporter {
             }
         }
 
-        // mofa_swarm_scheduler_duration_seconds histogram
         out.push_str("# HELP mofa_swarm_scheduler_duration_seconds wall time per scheduler run in seconds\n");
         out.push_str("# TYPE mofa_swarm_scheduler_duration_seconds histogram\n");
         for p in &patterns {
             if let Some(h) = g.histograms.get(*p) {
-                // buckets[i] already stores cumulative count (observations <= BUCKETS[i])
                 for (i, &le) in BUCKETS.iter().enumerate() {
                     let _ = writeln!(
                         out,
@@ -156,12 +152,10 @@ impl SwarmMetricsExporter {
             }
         }
 
-        // mofa_swarm_hitl_interventions_total
         out.push_str("# HELP mofa_swarm_hitl_interventions_total total HITL interventions recorded\n");
         out.push_str("# TYPE mofa_swarm_hitl_interventions_total counter\n");
         let _ = writeln!(out, "mofa_swarm_hitl_interventions_total {}", g.hitl_total);
 
-        // mofa_swarm_tokens_total
         out.push_str("# HELP mofa_swarm_tokens_total total LLM tokens consumed across all swarm runs\n");
         out.push_str("# TYPE mofa_swarm_tokens_total counter\n");
         let _ = writeln!(out, "mofa_swarm_tokens_total {}", g.tokens_total);
