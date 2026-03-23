@@ -9,9 +9,12 @@ use mofa_foundation::agent::executor::{AgentExecutor, AgentExecutorConfig};
 use mofa_kernel::agent::context::AgentContext;
 use mofa_kernel::agent::core::MoFAAgent;
 use mofa_kernel::agent::error::{AgentError, AgentResult};
+use mofa_foundation::agent::components::tool::as_tool;
+use mofa_foundation::agent::session::{JsonlSessionStorage, Session, SessionStorage};
 use mofa_kernel::agent::types::{AgentInput, AgentOutput, ChatCompletionRequest};
 use mofa_kernel::agent::types::{ChatCompletionResponse, ToolCall};
 use mofa_kernel::agent::AgentCapabilities;
+use mofa_kernel::agent::AgentState;
 use mofa_runtime::runner::{AgentRunner, RunnerState, RunnerStats};
 use std::collections::VecDeque;
 use std::path::{Path, PathBuf};
@@ -34,19 +37,26 @@ pub enum AgentRunnerError {
 
 /// Metadata captured for each run.
 #[derive(Debug, Clone)]
+#[non_exhaustive]
 pub struct AgentRunMetadata {
     pub agent_id: String,
     pub agent_name: String,
     pub execution_id: String,
     pub session_id: Option<String>,
     pub workspace_root: PathBuf,
-    pub runner_state: RunnerState,
-    pub runner_stats: RunnerStats,
+    pub runner_state_before: RunnerState,
+    pub runner_state_after: RunnerState,
+    pub runner_stats_before: RunnerStats,
+    pub runner_stats_after: RunnerStats,
+    pub agent_state_before: AgentState,
+    pub agent_state_after: AgentState,
     pub started_at: DateTime<Utc>,
+    pub session_snapshot: Option<Session>,
 }
 
 /// Result of a single agent run.
 #[derive(Debug)]
+#[non_exhaustive]
 pub struct AgentRunResult {
     pub output: Option<AgentOutput>,
     pub error: Option<AgentError>,
@@ -68,8 +78,19 @@ impl AgentRunResult {
 #[derive(Debug)]
 pub struct MockAgentLLMProvider {
     name: String,
-    responses: RwLock<VecDeque<String>>,
+    responses: RwLock<VecDeque<MockLlmResponse>>,
     default_response: RwLock<String>,
+    last_request: RwLock<Option<ChatCompletionRequest>>,
+}
+
+#[derive(Debug, Clone)]
+enum MockLlmResponse {
+    Text(String),
+    ToolCall {
+        content: Option<String>,
+        tool_calls: Vec<ToolCall>,
+    },
+    Error(String),
 }
 
 impl MockAgentLLMProvider {
@@ -78,11 +99,39 @@ impl MockAgentLLMProvider {
             name: name.into(),
             responses: RwLock::new(VecDeque::new()),
             default_response: RwLock::new("This is a mock response.".to_string()),
+            last_request: RwLock::new(None),
         }
     }
 
     pub async fn add_response(&self, response: impl Into<String>) {
-        self.responses.write().await.push_back(response.into());
+        self.responses
+            .write()
+            .await
+            .push_back(MockLlmResponse::Text(response.into()));
+    }
+
+    pub async fn add_tool_call_response(
+        &self,
+        tool_name: &str,
+        arguments: serde_json::Value,
+        content: Option<String>,
+    ) {
+        let tool_call = ToolCall {
+            id: Uuid::now_v7().to_string(),
+            name: tool_name.to_string(),
+            arguments,
+        };
+        self.responses.write().await.push_back(MockLlmResponse::ToolCall {
+            content,
+            tool_calls: vec![tool_call],
+        });
+    }
+
+    pub async fn add_error_response(&self, message: impl Into<String>) {
+        self.responses
+            .write()
+            .await
+            .push_back(MockLlmResponse::Error(message.into()));
     }
 
     pub async fn set_default_response(&self, response: impl Into<String>) {
@@ -91,6 +140,10 @@ impl MockAgentLLMProvider {
 
     pub async fn pending_responses(&self) -> usize {
         self.responses.read().await.len()
+    }
+
+    pub async fn last_request(&self) -> Option<ChatCompletionRequest> {
+        self.last_request.read().await.clone()
     }
 }
 
@@ -102,22 +155,31 @@ impl mofa_kernel::agent::types::LLMProvider for MockAgentLLMProvider {
 
     async fn chat(
         &self,
-        _request: ChatCompletionRequest,
+        request: ChatCompletionRequest,
     ) -> AgentResult<ChatCompletionResponse> {
+        *self.last_request.write().await = Some(request);
         let response = {
             let mut responses = self.responses.write().await;
             if let Some(next) = responses.pop_front() {
                 next
             } else {
-                self.default_response.read().await.clone()
+                MockLlmResponse::Text(self.default_response.read().await.clone())
             }
         };
 
-        Ok(ChatCompletionResponse {
-            content: Some(response),
-            tool_calls: Some(Vec::<ToolCall>::new()),
-            usage: None,
-        })
+        match response {
+            MockLlmResponse::Text(content) => Ok(ChatCompletionResponse {
+                content: Some(content),
+                tool_calls: Some(Vec::<ToolCall>::new()),
+                usage: None,
+            }),
+            MockLlmResponse::ToolCall { content, tool_calls } => Ok(ChatCompletionResponse {
+                content,
+                tool_calls: Some(tool_calls),
+                usage: None,
+            }),
+            MockLlmResponse::Error(message) => Err(AgentError::ExecutionFailed(message)),
+        }
     }
 }
 
@@ -128,6 +190,13 @@ struct SessionAwareExecutor {
 impl SessionAwareExecutor {
     fn new(executor: AgentExecutor) -> Self {
         Self { executor }
+    }
+
+    async fn register_tool(
+        &self,
+        tool: Arc<dyn mofa_kernel::agent::components::tool::DynTool>,
+    ) -> AgentResult<()> {
+        self.executor.register_tool(tool).await
     }
 }
 
@@ -182,6 +251,15 @@ impl TempWorkspace {
 
     fn path(&self) -> &Path {
         &self.root
+    }
+
+    fn write_file(&self, relative_path: &Path, content: &str) -> Result<PathBuf, AgentRunnerError> {
+        let path = self.root.join(relative_path);
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent)?;
+        }
+        std::fs::write(&path, content)?;
+        Ok(path)
     }
 }
 
@@ -242,6 +320,34 @@ impl AgentTestRunner {
         Arc::clone(&self.llm)
     }
 
+    pub fn write_bootstrap_file(
+        &self,
+        filename: &str,
+        content: &str,
+    ) -> Result<PathBuf, AgentRunnerError> {
+        self.workspace.write_file(Path::new(filename), content)
+    }
+
+    pub fn write_workspace_file(
+        &self,
+        relative_path: impl AsRef<Path>,
+        content: &str,
+    ) -> Result<PathBuf, AgentRunnerError> {
+        self.workspace.write_file(relative_path.as_ref(), content)
+    }
+
+    pub async fn register_simple_tool<T>(&self, tool: T) -> Result<(), AgentRunnerError>
+    where
+        T: mofa_foundation::agent::components::tool::SimpleTool + Send + Sync + 'static,
+    {
+        let tool_ref = as_tool(tool);
+        self.runner
+            .agent()
+            .register_tool(tool_ref)
+            .await
+            .map_err(AgentRunnerError::from)
+    }
+
     pub async fn run_text(&mut self, input: &str) -> Result<AgentRunResult, AgentRunnerError> {
         self.run_input(AgentInput::text(input)).await
     }
@@ -251,9 +357,16 @@ impl AgentTestRunner {
         input: AgentInput,
     ) -> Result<AgentRunResult, AgentRunnerError> {
         let started_at = Utc::now();
+        let runner_state_before = self.runner.state().await;
+        let runner_stats_before = self.runner.stats().await;
+        let agent_state_before = self.runner.agent_state();
         let timer = Instant::now();
         let result = self.runner.execute(input).await;
         let duration = timer.elapsed();
+        let runner_state_after = self.runner.state().await;
+        let runner_stats_after = self.runner.stats().await;
+        let agent_state_after = self.runner.agent_state();
+        let session_snapshot = self.load_session_snapshot().await;
 
         let (output, error) = match result {
             Ok(output) => (Some(output), None),
@@ -266,9 +379,14 @@ impl AgentTestRunner {
             execution_id: self.runner.context().execution_id.clone(),
             session_id: self.runner.context().session_id.clone(),
             workspace_root: self.workspace.path().to_path_buf(),
-            runner_state: self.runner.state().await,
-            runner_stats: self.runner.stats().await,
+            runner_state_before,
+            runner_state_after,
+            runner_stats_before,
+            runner_stats_after,
+            agent_state_before,
+            agent_state_after,
             started_at,
+            session_snapshot,
         };
 
         Ok(AgentRunResult {
@@ -282,5 +400,11 @@ impl AgentTestRunner {
     pub async fn shutdown(self) -> Result<(), AgentRunnerError> {
         self.runner.shutdown().await?;
         Ok(())
+    }
+
+    async fn load_session_snapshot(&self) -> Option<Session> {
+        let session_id = self.runner.context().session_id.as_deref()?;
+        let storage = JsonlSessionStorage::new(self.workspace.path()).await.ok()?;
+        storage.load(session_id).await.ok()?
     }
 }
