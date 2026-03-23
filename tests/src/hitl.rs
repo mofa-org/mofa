@@ -278,6 +278,13 @@ impl HitlTestHarness {
             .map_err(FoundationHitlError::Store)
     }
 
+    pub async fn list_pending_reviews(
+        &self,
+        limit: Option<u64>,
+    ) -> Result<Vec<ReviewRequest>, FoundationHitlError> {
+        self.manager.list_pending(None, limit).await
+    }
+
     pub async fn review_status(
         &self,
         review_id: &ReviewRequestId,

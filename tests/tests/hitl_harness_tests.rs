@@ -237,3 +237,27 @@ async fn tool_output_review_preserves_output_metadata() {
         Some(&json!({"result": "ok", "release_id": "rel-42"}))
     );
 }
+
+#[tokio::test]
+async fn list_pending_reviews_returns_only_unresolved_reviews() {
+    let harness = HitlTestHarness::new();
+    harness.reviewer().push_decision(ScriptedDecision::Approve {
+        comment: Some("approved".to_string()),
+    });
+
+    let resolved = harness
+        .request_workflow_review("exec-pending", "node-resolved", sample_context())
+        .await
+        .unwrap();
+    let pending = harness
+        .request_workflow_review("exec-pending", "node-pending", sample_context())
+        .await
+        .unwrap();
+
+    harness.resolve_with_script(&resolved).await.unwrap();
+
+    let pending_reviews = harness.list_pending_reviews(None).await.unwrap();
+    assert_eq!(pending_reviews.len(), 1);
+    assert_eq!(pending_reviews[0].id, pending);
+    assert_eq!(pending_reviews[0].status, ReviewStatus::Pending);
+}
