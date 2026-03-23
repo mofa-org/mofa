@@ -1,12 +1,130 @@
 //! Core data types for test reports.
 
+use mofa_foundation::workflow::ExecutionEventEnvelope;
+use mofa_kernel::agent::types::{GlobalMessage, ToolUsage};
 use mofa_runtime::agent::execution::{ExecutionResult, ExecutionStatus};
+use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::time::Duration;
 
 pub(crate) const OUTPUT_METADATA_KEY: &str = "output";
 pub(crate) const TOOL_CALLS_METADATA_KEY: &str = "tool_calls";
 pub(crate) const RETRY_COUNT_METADATA_KEY: &str = "retry_count";
 pub(crate) const FALLBACK_TRIGGERED_METADATA_KEY: &str = "fallback_triggered";
+
+/// Canonical, test-focused agent run artifact.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[non_exhaustive]
+pub struct AgentRunResult {
+    pub execution_id: String,
+    pub agent_id: String,
+    pub status: ExecutionStatus,
+    pub final_response: Option<String>,
+    pub tool_calls: Vec<ToolUsage>,
+    pub session_messages: Vec<GlobalMessage>,
+    pub session_snapshot: Option<serde_json::Value>,
+    pub memory_snapshot: Option<serde_json::Value>,
+    pub memory_effects: Option<serde_json::Value>,
+    pub retries: usize,
+    pub fallback: FallbackStatus,
+    pub duration_ms: u64,
+    pub error: Option<String>,
+    pub trace_events: Vec<ExecutionEventEnvelope>,
+    pub trace_summary: Option<String>,
+    pub metadata: HashMap<String, serde_json::Value>,
+}
+
+impl AgentRunResult {
+    /// Build a canonical run artifact from a runtime execution result.
+    pub fn from_execution_result(result: &ExecutionResult) -> Self {
+        let (final_response, tool_calls) = match result.output.as_ref() {
+            Some(output) => (Some(output.to_text()), output.tools_used.clone()),
+            None => (None, Vec::new()),
+        };
+
+        let fallback_triggered = result
+            .metadata
+            .get("fallback")
+            .and_then(|value| value.as_bool())
+            .unwrap_or(false);
+        let fallback_reason = result
+            .metadata
+            .get("fallback_reason")
+            .and_then(|value| value.as_str())
+            .map(|value| value.to_string());
+
+        Self {
+            execution_id: result.execution_id.clone(),
+            agent_id: result.agent_id.clone(),
+            status: result.status.clone(),
+            final_response,
+            tool_calls,
+            session_messages: Vec::new(),
+            session_snapshot: None,
+            memory_snapshot: None,
+            memory_effects: None,
+            retries: result.retries,
+            fallback: FallbackStatus {
+                triggered: fallback_triggered,
+                reason: fallback_reason,
+            },
+            duration_ms: result.duration_ms,
+            error: result.error.clone(),
+            trace_events: Vec::new(),
+            trace_summary: None,
+            metadata: result.metadata.clone(),
+        }
+    }
+
+    /// Attach session messages.
+    pub fn with_session_messages(mut self, messages: Vec<GlobalMessage>) -> Self {
+        self.session_messages = messages;
+        self
+    }
+
+    /// Attach a session snapshot payload.
+    pub fn with_session_snapshot(mut self, snapshot: serde_json::Value) -> Self {
+        self.session_snapshot = Some(snapshot);
+        self
+    }
+
+    /// Attach a memory snapshot payload.
+    pub fn with_memory_snapshot(mut self, snapshot: serde_json::Value) -> Self {
+        self.memory_snapshot = Some(snapshot);
+        self
+    }
+
+    /// Attach memory effects payload.
+    pub fn with_memory_effects(mut self, effects: serde_json::Value) -> Self {
+        self.memory_effects = Some(effects);
+        self
+    }
+
+    /// Attach execution trace events.
+    pub fn with_trace_events(mut self, events: Vec<ExecutionEventEnvelope>) -> Self {
+        self.trace_events = events;
+        self
+    }
+
+    /// Attach an execution trace summary string.
+    pub fn with_trace_summary(mut self, summary: impl Into<String>) -> Self {
+        self.trace_summary = Some(summary.into());
+        self
+    }
+
+    /// Add metadata to the run artifact.
+    pub fn with_metadata(mut self, key: impl Into<String>, value: serde_json::Value) -> Self {
+        self.metadata.insert(key.into(), value);
+        self
+    }
+}
+
+/// Fallback status metadata for a run.
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq)]
+pub struct FallbackStatus {
+    pub triggered: bool,
+    pub reason: Option<String>,
+}
 
 /// Canonical behavior metadata attached to a test case result.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
@@ -76,31 +194,29 @@ impl BehaviorMetadata {
 
     /// Extract canonical behavior metadata from a runtime execution result.
     pub fn from_execution_result(result: &ExecutionResult) -> Self {
-        let output = result.output.as_ref().map(|output| output.to_text());
-        let tool_calls = result.output.as_ref().and_then(|output| {
-            if output.tools_used.is_empty() {
-                None
-            } else {
-                Some(
-                    output
-                        .tools_used
-                        .iter()
-                        .map(|tool| tool.name.as_str())
-                        .collect::<Vec<_>>()
-                        .join(","),
-                )
-            }
-        });
-        let fallback_triggered = result
-            .metadata
-            .get("fallback")
-            .and_then(|value| value.as_bool());
+        let run = AgentRunResult::from_execution_result(result);
+        Self::from_agent_run_result(&run)
+    }
+
+    /// Extract canonical behavior metadata from a run artifact.
+    pub fn from_agent_run_result(run: &AgentRunResult) -> Self {
+        let tool_calls = if run.tool_calls.is_empty() {
+            None
+        } else {
+            Some(
+                run.tool_calls
+                    .iter()
+                    .map(|tool| tool.name.as_str())
+                    .collect::<Vec<_>>()
+                    .join(","),
+            )
+        };
 
         Self {
-            output,
+            output: run.final_response.clone(),
             tool_calls,
-            retry_count: Some(result.retries),
-            fallback_triggered,
+            retry_count: Some(run.retries),
+            fallback_triggered: Some(run.fallback.triggered),
         }
     }
 }
@@ -224,7 +340,16 @@ impl TestCaseResult {
         name: impl Into<String>,
         result: &ExecutionResult,
     ) -> Self {
-        let status = match result.status {
+        let run = AgentRunResult::from_execution_result(result);
+        Self::from_agent_run_result(name, &run)
+    }
+
+    /// Convert a run artifact into a test case result.
+    pub fn from_agent_run_result(
+        name: impl Into<String>,
+        run: &AgentRunResult,
+    ) -> Self {
+        let status = match run.status {
             ExecutionStatus::Success => TestStatus::Passed,
             _ => TestStatus::Failed,
         };
@@ -232,11 +357,11 @@ impl TestCaseResult {
         TestCaseResult {
             name: name.into(),
             status,
-            duration: Duration::from_millis(result.duration_ms),
-            error: result.error.clone(),
+            duration: Duration::from_millis(run.duration_ms),
+            error: run.error.clone(),
             metadata: Vec::new(),
         }
-        .with_behavior(&BehaviorMetadata::from_execution_result(result))
+        .with_behavior(&BehaviorMetadata::from_agent_run_result(run))
     }
 }
 

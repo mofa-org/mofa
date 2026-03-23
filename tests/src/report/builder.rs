@@ -5,7 +5,9 @@ use std::sync::Arc;
 use std::time::Instant;
 
 use crate::clock::{Clock, SystemClock};
-use crate::report::types::{BehaviorMetadata, TestCaseResult, TestReport, TestStatus};
+use crate::report::types::{
+    AgentRunResult, BehaviorMetadata, TestCaseResult, TestReport, TestStatus,
+};
 use mofa_runtime::agent::execution::ExecutionResult;
 
 /// Collects [`TestCaseResult`]s and produces a [`TestReport`].
@@ -148,6 +150,17 @@ impl TestReportBuilder {
     ) -> Self {
         self.results
             .push(TestCaseResult::from_execution_result(name, execution_result));
+        self
+    }
+
+    /// Add a canonical run artifact using the canonical report mapping.
+    pub fn add_agent_run_result(
+        mut self,
+        name: impl Into<String>,
+        run_result: &AgentRunResult,
+    ) -> Self {
+        self.results
+            .push(TestCaseResult::from_agent_run_result(name, run_result));
         self
     }
 
