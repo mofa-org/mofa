@@ -1,0 +1,10 @@
+[package]
+name = "hitl_testing"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+mofa-testing = { path = "../../tests" }
+mofa-kernel = { path = "../../crates/mofa-kernel" }
+tokio = { workspace = true }
+serde_json = { workspace = true }
