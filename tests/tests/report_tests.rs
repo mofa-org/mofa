@@ -2,9 +2,11 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use mofa_testing::{
-    JsonFormatter, MockClock, ReportFormatter, TestCaseResult, TestReport, TestReportBuilder,
-    TestStatus, TextFormatter,
+    BehaviorMetadata, JsonFormatter, MockClock, ReportFormatter, TestCaseResult, TestReport,
+    TestReportBuilder, TestStatus, TextFormatter,
 };
+use mofa_kernel::agent::types::{AgentOutput, ToolUsage};
+use mofa_runtime::agent::execution::{ExecutionResult, ExecutionStatus};
 
 // ---------------------------------------------------------------------------
 // Helper
@@ -199,6 +201,26 @@ async fn builder_record_with_metadata_attaches_behavior_fields() {
 }
 
 #[tokio::test]
+async fn builder_record_with_behavior_attaches_canonical_behavior() {
+    let behavior = BehaviorMetadata::new()
+        .with_output("final answer")
+        .with_tool_calls("search,calculator")
+        .with_retry_count(1)
+        .with_fallback_triggered(false);
+
+    let report = TestReportBuilder::new("behavior-suite")
+        .record_with_behavior("agent_case", behavior, || async { Ok(()) })
+        .await
+        .build();
+
+    let case = &report.results[0];
+    assert_eq!(case.output(), Some("final answer"));
+    assert_eq!(case.tool_calls(), Some("search,calculator"));
+    assert_eq!(case.retry_count(), Some(1));
+    assert_eq!(case.fallback_triggered(), Some(false));
+}
+
+#[tokio::test]
 async fn builder_add_result_skipped() {
     let report = TestReportBuilder::new("skip-suite")
         .add_result(make_result("skipped_one", TestStatus::Skipped, 0, None))
@@ -323,6 +345,90 @@ fn test_case_result_behavior_metadata_helpers_roundtrip() {
     assert_eq!(case.tool_calls(), Some("search,calculator"));
     assert_eq!(case.retry_count(), Some(2));
     assert_eq!(case.fallback_triggered(), Some(true));
+}
+
+#[test]
+fn behavior_metadata_roundtrips_from_case() {
+    let behavior = BehaviorMetadata::new()
+        .with_output("answer")
+        .with_tool_calls("search")
+        .with_retry_count(3)
+        .with_fallback_triggered(true);
+    let case = make_result("behavior_case", TestStatus::Passed, 8, None).with_behavior(&behavior);
+
+    assert_eq!(case.behavior(), behavior);
+}
+
+#[test]
+fn behavior_metadata_extracts_runtime_execution_result() {
+    let mut output = AgentOutput::text("runtime answer");
+    output.tools_used.push(ToolUsage::success(
+        "search",
+        serde_json::json!({"query": "rust"}),
+        serde_json::json!({"result": "ok"}),
+        12,
+    ));
+
+    let mut result = ExecutionResult::success(
+        "exec-1".to_string(),
+        "agent-a".to_string(),
+        output,
+        50,
+    );
+    result.retries = 2;
+    result.metadata.insert("fallback".into(), serde_json::json!(true));
+
+    let behavior = BehaviorMetadata::from_execution_result(&result);
+    assert_eq!(behavior.output.as_deref(), Some("runtime answer"));
+    assert_eq!(behavior.tool_calls.as_deref(), Some("search"));
+    assert_eq!(behavior.retry_count, Some(2));
+    assert_eq!(behavior.fallback_triggered, Some(true));
+}
+
+#[test]
+fn test_case_result_from_execution_result_maps_runtime_fields() {
+    let output = AgentOutput::text("done");
+    let result = ExecutionResult {
+        execution_id: "exec-2".to_string(),
+        agent_id: "agent-b".to_string(),
+        status: ExecutionStatus::Timeout,
+        output: Some(output),
+        error: Some("timed out".to_string()),
+        duration_ms: 125,
+        retries: 1,
+        metadata: Default::default(),
+    };
+
+    let case = TestCaseResult::from_execution_result("real-agent-case", &result);
+    assert_eq!(case.name, "real-agent-case");
+    assert_eq!(case.status, TestStatus::Failed);
+    assert_eq!(case.duration, Duration::from_millis(125));
+    assert_eq!(case.error.as_deref(), Some("timed out"));
+    assert_eq!(case.output(), Some("done"));
+    assert_eq!(case.retry_count(), Some(1));
+}
+
+#[tokio::test]
+async fn builder_add_execution_result_uses_runtime_mapping() {
+    let output = AgentOutput::text("ok");
+    let result = ExecutionResult {
+        execution_id: "exec-3".to_string(),
+        agent_id: "agent-c".to_string(),
+        status: ExecutionStatus::Success,
+        output: Some(output),
+        error: None,
+        duration_ms: 30,
+        retries: 0,
+        metadata: Default::default(),
+    };
+
+    let report = TestReportBuilder::new("runtime-suite")
+        .add_execution_result("runtime-case", &result)
+        .build();
+
+    let case = &report.results[0];
+    assert_eq!(case.status, TestStatus::Passed);
+    assert_eq!(case.output(), Some("ok"));
 }
 
 // ===========================================================================
