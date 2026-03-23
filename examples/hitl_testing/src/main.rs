@@ -136,9 +136,53 @@ async fn run_timeout_flow() {
     println!();
 }
 
+async fn run_deferred_flow() {
+    let harness = HitlTestHarness::new();
+    // A deferred decision records reviewer intent but keeps the review pending
+    harness.reviewer().push_decision(ScriptedDecision::Defer {
+        reason: "waiting for product sign-off".to_string(),
+    });
+
+    let review_id = harness
+        .request_workflow_review(
+            "hitl-exec-defer",
+            "launch_gate",
+            sample_context("Launch feature flag to 100%"),
+        )
+        .await
+        .expect("create deferred review");
+
+    let decision = harness
+        .resolve_with_script(&review_id)
+        .await
+        .expect("apply deferred decision");
+    let wait_result = harness
+        .wait_for_review(&review_id, Duration::from_millis(50))
+        .await;
+    let pending_reviews = harness
+        .list_pending_reviews(None)
+        .await
+        .expect("list pending reviews");
+    let review = harness
+        .get_review(&review_id)
+        .await
+        .expect("load deferred review")
+        .expect("review exists");
+
+    println!("== Deferred Flow ==");
+    println!("review_id: {}", review_id);
+    println!("decision: {:?}", decision);
+    println!("wait_result: {:?}", wait_result);
+    println!("status: {:?}", review.status);
+    println!("pending_reviews: {}", pending_reviews.len());
+    println!("deferred_response: {:?}", review.response);
+    println!();
+}
+
 #[tokio::main]
 async fn main() {
     run_approved_flow().await;
     run_rejected_tool_flow().await;
     run_timeout_flow().await;
+    run_deferred_flow().await;
 }
