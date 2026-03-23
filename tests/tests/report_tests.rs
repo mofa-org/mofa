@@ -311,6 +311,20 @@ fn test_case_result_with_metadata_extends_entries() {
     );
 }
 
+#[test]
+fn test_case_result_behavior_metadata_helpers_roundtrip() {
+    let case = make_result("behavior_case", TestStatus::Passed, 8, None)
+        .with_output("final answer")
+        .with_tool_calls("search,calculator")
+        .with_retry_count(2)
+        .with_fallback_triggered(true);
+
+    assert_eq!(case.output(), Some("final answer"));
+    assert_eq!(case.tool_calls(), Some("search,calculator"));
+    assert_eq!(case.retry_count(), Some(2));
+    assert_eq!(case.fallback_triggered(), Some(true));
+}
+
 // ===========================================================================
 // TextFormatter
 // ===========================================================================

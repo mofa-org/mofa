@@ -2,6 +2,11 @@
 
 use std::time::Duration;
 
+pub(crate) const OUTPUT_METADATA_KEY: &str = "output";
+pub(crate) const TOOL_CALLS_METADATA_KEY: &str = "tool_calls";
+pub(crate) const RETRY_COUNT_METADATA_KEY: &str = "retry_count";
+pub(crate) const FALLBACK_TRIGGERED_METADATA_KEY: &str = "fallback_triggered";
+
 /// Outcome of a single test case.
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[non_exhaustive]
@@ -55,6 +60,55 @@ impl TestCaseResult {
     /// Look up the first present metadata value across multiple key aliases.
     pub fn metadata_value_any<'a>(&'a self, keys: &[&str]) -> Option<&'a str> {
         keys.iter().find_map(|key| self.metadata_value(key))
+    }
+
+    /// Attach a canonical output value used by higher-level diffing.
+    pub fn with_output(self, output: impl Into<String>) -> Self {
+        self.with_metadata([(OUTPUT_METADATA_KEY, output.into())])
+    }
+
+    /// Attach canonical tool-call trace text used by higher-level diffing.
+    pub fn with_tool_calls(self, tool_calls: impl Into<String>) -> Self {
+        self.with_metadata([(TOOL_CALLS_METADATA_KEY, tool_calls.into())])
+    }
+
+    /// Attach a canonical retry count used by higher-level diffing.
+    pub fn with_retry_count(self, retry_count: usize) -> Self {
+        self.with_metadata([(RETRY_COUNT_METADATA_KEY, retry_count.to_string())])
+    }
+
+    /// Attach canonical fallback status used by higher-level diffing.
+    pub fn with_fallback_triggered(self, fallback_triggered: bool) -> Self {
+        self.with_metadata([(
+            FALLBACK_TRIGGERED_METADATA_KEY,
+            fallback_triggered.to_string(),
+        )])
+    }
+
+    /// Read the canonical output value if present.
+    pub fn output(&self) -> Option<&str> {
+        self.metadata_value(OUTPUT_METADATA_KEY)
+    }
+
+    /// Read the canonical tool-call trace if present.
+    pub fn tool_calls(&self) -> Option<&str> {
+        self.metadata_value(TOOL_CALLS_METADATA_KEY)
+    }
+
+    /// Read the canonical retry count if present and parseable.
+    pub fn retry_count(&self) -> Option<usize> {
+        self.metadata_value(RETRY_COUNT_METADATA_KEY)
+            .and_then(|value| value.parse::<usize>().ok())
+    }
+
+    /// Read the canonical fallback status if present.
+    pub fn fallback_triggered(&self) -> Option<bool> {
+        self.metadata_value(FALLBACK_TRIGGERED_METADATA_KEY)
+            .and_then(|value| match value.trim().to_ascii_lowercase().as_str() {
+                "true" | "yes" | "1" | "triggered" | "fallback" => Some(true),
+                "false" | "no" | "0" | "not_triggered" | "none" => Some(false),
+                _ => None,
+            })
     }
 }
 
