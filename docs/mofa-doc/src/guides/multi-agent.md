@@ -120,6 +120,55 @@ let result = debate.debide(&topic).await?;
 4. **Timeouts** — Set appropriate timeouts
 5. **Logging** — Log inter-agent communication
 
+## mofa swarm run
+
+the `mofa swarm run` command executes a swarm DAG through a five-stage pipeline:
+coverage check, admission, pattern selection, scheduled execution, and results.
+
+```bash
+mofa swarm run examples/swarm_demo.yaml
+mofa swarm run examples/swarm_demo.yaml --dry-run
+mofa swarm run examples/swarm_demo.yaml --metrics
+mofa swarm run examples/swarm_demo.yaml --pattern parallel --timeout 60
+```
+
+### YAML format
+
+```yaml
+name: document review pipeline
+pattern: Sequential
+agents:
+  - id: reader-a
+    capabilities: [extract]
+  - id: analyst
+    capabilities: [review, extract]
+sla:
+  max_duration_secs: 300
+  max_cost_tokens: 10000
+tasks:
+  - id: extract
+    description: extract key facts
+    capabilities: [extract]
+    complexity: 0.3
+  - id: review
+    description: review extracted content
+    capabilities: [review]
+    complexity: 0.4
+    depends_on: [extract]
+```
+
+### pipeline stages
+
+| stage | what it does |
+|-------|-------------|
+| coverage check | verifies each task has at least one capable agent |
+| admission | validates SLA constraints before any work starts |
+| pattern selection | auto-upgrades Sequential to Parallel when all tasks are independent |
+| execute | runs via SequentialScheduler or ParallelScheduler |
+| results | prints summary table, audit trail, and optional Prometheus output |
+
+`--dry-run` stops after stage 3 with no execution. `--metrics` appends Prometheus text to stdout after the summary.
+
 ## See Also
 
 - [Workflows](../concepts/workflows.md) — Workflow concepts
