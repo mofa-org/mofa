@@ -89,7 +89,7 @@ async fn agent_runner_executes_tool_calls() {
     );
 
     runner
-        .register_simple_tool(tool.clone())
+        .register_mock_tool(tool.clone())
         .await
         .expect("tool registered");
 
@@ -111,6 +111,15 @@ async fn agent_runner_executes_tool_calls() {
     assert_eq!(tool.call_count().await, 1);
     let last_call = tool.last_call().await.expect("tool call captured");
     assert_eq!(last_call.arguments, json!({ "input": "ping" }));
+    assert_eq!(result.metadata.tool_calls.len(), 1);
+    let record = &result.metadata.tool_calls[0];
+    assert_eq!(record.tool_name, "echo_tool");
+    assert_eq!(record.input, json!({ "input": "ping" }));
+    assert!(record.success);
+    assert_eq!(
+        record.output,
+        Some(json!("Mock execution default"))
+    );
 
     runner.shutdown().await.expect("shutdown succeeds");
 }
@@ -145,6 +154,72 @@ async fn agent_runner_loads_bootstrap_files() {
 
     assert!(system_message.contains("AGENTS.md"));
     assert!(system_message.contains("Bootstrap content for agent test."));
+
+    runner.shutdown().await.expect("shutdown succeeds");
+}
+
+#[tokio::test]
+async fn agent_runner_supports_multi_turn_runs() {
+    let mut runner = AgentTestRunner::new().await.expect("runner initializes");
+    runner.mock_llm().add_response("First reply").await;
+    runner.mock_llm().add_response("Second reply").await;
+
+    let results = runner
+        .run_texts(&["turn one", "turn two"])
+        .await
+        .expect("multi-turn run succeeds");
+
+    assert_eq!(results.len(), 2);
+    assert_eq!(results[0].output_text().as_deref(), Some("First reply"));
+    assert_eq!(results[1].output_text().as_deref(), Some("Second reply"));
+
+    let snapshot = results
+        .last()
+        .and_then(|result| result.metadata.session_snapshot.as_ref())
+        .expect("session snapshot captured");
+    assert_eq!(snapshot.len(), 4);
+
+    runner.shutdown().await.expect("shutdown succeeds");
+}
+
+#[tokio::test]
+async fn agent_runner_customizes_prompt_identity_and_bootstraps() {
+    let mut runner = AgentTestRunner::new().await.expect("runner initializes");
+    runner
+        .write_bootstrap_file("CUSTOM.md", "Custom bootstrap content.")
+        .expect("bootstrap file written");
+    runner
+        .configure_prompt(
+            Some(mofa_foundation::agent::context::prompt::AgentIdentity {
+                name: "TestAgent".to_string(),
+                description: "Custom identity".to_string(),
+                icon: None,
+            }),
+            Some(vec!["CUSTOM.md".to_string()]),
+        )
+        .await;
+
+    runner.mock_llm().add_response("Custom response").await;
+    let _ = runner
+        .run_text("custom prompt")
+        .await
+        .expect("run should succeed");
+
+    let request = runner
+        .mock_llm()
+        .last_request()
+        .await
+        .expect("request captured");
+    let system_message = request
+        .messages
+        .first()
+        .and_then(|msg| msg.content.as_deref())
+        .expect("system message content");
+
+    assert!(system_message.contains("TestAgent"));
+    assert!(system_message.contains("Custom identity"));
+    assert!(system_message.contains("CUSTOM.md"));
+    assert!(system_message.contains("Custom bootstrap content."));
 
     runner.shutdown().await.expect("shutdown succeeds");
 }

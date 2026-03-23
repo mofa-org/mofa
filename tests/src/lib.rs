@@ -17,6 +17,7 @@ pub use bus::MockAgentBus;
 pub use clock::{Clock, MockClock, SystemClock};
 pub use agent_runner::{
     AgentRunMetadata, AgentRunResult, AgentRunnerError, AgentTestRunner, MockAgentLLMProvider,
+    ToolCallRecord,
 };
 pub use report::{
     JsonFormatter, ReportFormatter, TestCaseResult, TestReport, TestReportBuilder, TestStatus,

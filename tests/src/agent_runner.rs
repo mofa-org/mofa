@@ -5,12 +5,14 @@
 
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
+use mofa_foundation::agent::context::prompt::AgentIdentity;
 use mofa_foundation::agent::executor::{AgentExecutor, AgentExecutorConfig};
 use mofa_kernel::agent::context::AgentContext;
 use mofa_kernel::agent::core::MoFAAgent;
 use mofa_kernel::agent::error::{AgentError, AgentResult};
 use mofa_foundation::agent::components::tool::as_tool;
 use mofa_foundation::agent::session::{JsonlSessionStorage, Session, SessionStorage};
+use crate::tools::MockTool;
 use mofa_kernel::agent::types::{AgentInput, AgentOutput, ChatCompletionRequest};
 use mofa_kernel::agent::types::{ChatCompletionResponse, ToolCall};
 use mofa_kernel::agent::AgentCapabilities;
@@ -52,6 +54,9 @@ pub struct AgentRunMetadata {
     pub agent_state_after: AgentState,
     pub started_at: DateTime<Utc>,
     pub session_snapshot: Option<Session>,
+    pub tool_calls: Vec<ToolCallRecord>,
+    pub llm_last_request: Option<ChatCompletionRequest>,
+    pub llm_last_response: Option<ChatCompletionResponse>,
 }
 
 /// Result of a single agent run.
@@ -62,6 +67,15 @@ pub struct AgentRunResult {
     pub error: Option<AgentError>,
     pub duration: Duration,
     pub metadata: AgentRunMetadata,
+}
+
+/// Captures a tool call with its input and output.
+#[derive(Debug, Clone)]
+pub struct ToolCallRecord {
+    pub tool_name: String,
+    pub input: serde_json::Value,
+    pub output: Option<serde_json::Value>,
+    pub success: bool,
 }
 
 impl AgentRunResult {
@@ -81,6 +95,7 @@ pub struct MockAgentLLMProvider {
     responses: RwLock<VecDeque<MockLlmResponse>>,
     default_response: RwLock<String>,
     last_request: RwLock<Option<ChatCompletionRequest>>,
+    last_response: RwLock<Option<ChatCompletionResponse>>,
 }
 
 #[derive(Debug, Clone)]
@@ -100,6 +115,7 @@ impl MockAgentLLMProvider {
             responses: RwLock::new(VecDeque::new()),
             default_response: RwLock::new("This is a mock response.".to_string()),
             last_request: RwLock::new(None),
+            last_response: RwLock::new(None),
         }
     }
 
@@ -145,6 +161,10 @@ impl MockAgentLLMProvider {
     pub async fn last_request(&self) -> Option<ChatCompletionRequest> {
         self.last_request.read().await.clone()
     }
+
+    pub async fn last_response(&self) -> Option<ChatCompletionResponse> {
+        self.last_response.read().await.clone()
+    }
 }
 
 #[async_trait]
@@ -167,7 +187,7 @@ impl mofa_kernel::agent::types::LLMProvider for MockAgentLLMProvider {
             }
         };
 
-        match response {
+        let response = match response {
             MockLlmResponse::Text(content) => Ok(ChatCompletionResponse {
                 content: Some(content),
                 tool_calls: Some(Vec::<ToolCall>::new()),
@@ -179,7 +199,10 @@ impl mofa_kernel::agent::types::LLMProvider for MockAgentLLMProvider {
                 usage: None,
             }),
             MockLlmResponse::Error(message) => Err(AgentError::ExecutionFailed(message)),
-        }
+        }?;
+
+        *self.last_response.write().await = Some(response.clone());
+        Ok(response)
     }
 }
 
@@ -197,6 +220,13 @@ impl SessionAwareExecutor {
         tool: Arc<dyn mofa_kernel::agent::components::tool::DynTool>,
     ) -> AgentResult<()> {
         self.executor.register_tool(tool).await
+    }
+
+    async fn update_prompt_context<F>(&self, updater: F)
+    where
+        F: FnOnce(&mut mofa_foundation::agent::context::prompt::PromptContext),
+    {
+        self.executor.update_prompt_context(updater).await;
     }
 }
 
@@ -276,6 +306,7 @@ pub struct AgentTestRunner {
     execution_id: String,
     llm: Arc<MockAgentLLMProvider>,
     runner: AgentRunner<SessionAwareExecutor>,
+    mock_tools: Vec<MockTool>,
 }
 
 impl AgentTestRunner {
@@ -301,6 +332,7 @@ impl AgentTestRunner {
             execution_id,
             llm,
             runner,
+            mock_tools: Vec::new(),
         })
     }
 
@@ -348,8 +380,43 @@ impl AgentTestRunner {
             .map_err(AgentRunnerError::from)
     }
 
+    pub async fn register_mock_tool(&mut self, tool: MockTool) -> Result<(), AgentRunnerError> {
+        self.register_simple_tool(tool.clone()).await?;
+        self.mock_tools.push(tool);
+        Ok(())
+    }
+
+    pub async fn configure_prompt(
+        &self,
+        identity: Option<AgentIdentity>,
+        bootstrap_files: Option<Vec<String>>,
+    ) {
+        self.runner
+            .agent()
+            .update_prompt_context(|ctx| {
+                if let Some(identity) = identity {
+                    ctx.set_identity(identity);
+                }
+                if let Some(files) = bootstrap_files {
+                    ctx.set_bootstrap_files(files);
+                }
+            })
+            .await;
+    }
+
     pub async fn run_text(&mut self, input: &str) -> Result<AgentRunResult, AgentRunnerError> {
         self.run_input(AgentInput::text(input)).await
+    }
+
+    pub async fn run_texts(
+        &mut self,
+        inputs: &[&str],
+    ) -> Result<Vec<AgentRunResult>, AgentRunnerError> {
+        let mut results = Vec::with_capacity(inputs.len());
+        for input in inputs {
+            results.push(self.run_text(input).await?);
+        }
+        Ok(results)
     }
 
     pub async fn run_input(
@@ -367,6 +434,9 @@ impl AgentTestRunner {
         let runner_stats_after = self.runner.stats().await;
         let agent_state_after = self.runner.agent_state();
         let session_snapshot = self.load_session_snapshot().await;
+        let tool_calls = self.collect_tool_calls().await;
+        let llm_last_request = self.llm.last_request().await;
+        let llm_last_response = self.llm.last_response().await;
 
         let (output, error) = match result {
             Ok(output) => (Some(output), None),
@@ -387,6 +457,9 @@ impl AgentTestRunner {
             agent_state_after,
             started_at,
             session_snapshot,
+            tool_calls,
+            llm_last_request,
+            llm_last_response,
         };
 
         Ok(AgentRunResult {
@@ -406,5 +479,27 @@ impl AgentTestRunner {
         let session_id = self.runner.context().session_id.as_deref()?;
         let storage = JsonlSessionStorage::new(self.workspace.path()).await.ok()?;
         storage.load(session_id).await.ok()?
+    }
+
+    async fn collect_tool_calls(&self) -> Vec<ToolCallRecord> {
+        let mut records = Vec::new();
+        for tool in &self.mock_tools {
+            let calls = tool.history().await;
+            let results = tool.results().await;
+            for (idx, call) in calls.into_iter().enumerate() {
+                let result = results.get(idx).cloned();
+                let (output, success) = match result {
+                    Some(result) => (Some(result.output.clone()), result.success),
+                    None => (None, false),
+                };
+                records.push(ToolCallRecord {
+                    tool_name: tool.name().to_string(),
+                    input: call.arguments,
+                    output,
+                    success,
+                });
+            }
+        }
+        records
     }
 }
