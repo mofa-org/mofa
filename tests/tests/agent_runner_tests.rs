@@ -283,3 +283,29 @@ async fn agent_runner_captures_llm_failure() {
 
     runner.shutdown().await.expect("shutdown succeeds");
 }
+
+#[tokio::test]
+async fn agent_runner_allows_custom_session_keys() {
+    let mut runner = AgentTestRunner::new().await.expect("runner initializes");
+    runner
+        .mock_llm()
+        .add_response("Custom session response")
+        .await;
+
+    let result = runner
+        .run_text_with_session("custom-session", "hello session")
+        .await
+        .expect("run should succeed");
+
+    assert_eq!(
+        result.metadata.session_id.as_deref(),
+        Some("custom-session")
+    );
+    let session_path = runner
+        .workspace()
+        .join("sessions")
+        .join("custom-session.jsonl");
+    assert!(session_path.exists());
+
+    runner.shutdown().await.expect("shutdown succeeds");
+}

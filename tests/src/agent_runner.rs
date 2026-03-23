@@ -11,6 +11,7 @@ use mofa_kernel::agent::context::AgentContext;
 use mofa_kernel::agent::core::MoFAAgent;
 use mofa_kernel::agent::error::{AgentError, AgentResult};
 use mofa_foundation::agent::components::tool::as_tool;
+use mofa_foundation::agent::components::tool::SimpleTool;
 use mofa_foundation::agent::session::{JsonlSessionStorage, Session, SessionStorage};
 use crate::tools::MockTool;
 use mofa_kernel::agent::types::{AgentInput, AgentOutput, ChatCompletionRequest};
@@ -484,6 +485,19 @@ impl AgentTestRunner {
 
     pub async fn run_text(&mut self, input: &str) -> Result<AgentRunResult, AgentRunnerError> {
         self.run_input(AgentInput::text(input)).await
+    }
+
+    pub async fn run_text_with_session(
+        &mut self,
+        session_id: &str,
+        input: &str,
+    ) -> Result<AgentRunResult, AgentRunnerError> {
+        let original_session = self.runner.context().session_id.clone();
+        self.runner
+            .set_session_id(Some(session_id.to_string()));
+        let result = self.run_text(input).await;
+        self.runner.set_session_id(original_session);
+        result
     }
 
     pub async fn run_texts(

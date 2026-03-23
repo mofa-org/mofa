@@ -595,7 +595,9 @@ impl MoFAAgent for AgentExecutor {
         self.base.initialize(ctx).await?;
 
         // Additional executor-specific initialization
-        self.base.transition_to(AgentState::Ready)?;
+        if self.base.state() != AgentState::Ready {
+            self.base.transition_to(AgentState::Ready)?;
+        }
 
         Ok(())
     }
