@@ -28,20 +28,43 @@ fn bench_backend(backend: ComputeBackend, model_path: &str, prompts: &[&str]) {
     }
 
     let mut total_tokens = 0usize;
+    let mut errors = 0usize;
     let start = Instant::now();
 
     for &prompt in prompts {
-        let out = rt.block_on(provider.infer(prompt));
-        if let Ok(response) = out {
-            total_tokens += response.split_whitespace().count();
+        match rt.block_on(provider.infer(prompt)) {
+            Ok(response) => {
+                total_tokens += response.split_whitespace().count();
+            }
+            Err(e) => {
+                eprintln!("  ERROR [{backend}] prompt={prompt:?}: {e}");
+                errors += 1;
+            }
         }
     }
 
     let elapsed = start.elapsed();
+
+    // Fail fast: if every inference call errored the benchmark results are
+    // meaningless.  Surface the failure loudly instead of printing zeros.
+    assert!(
+        errors < prompts.len(),
+        "{backend}: all {errors}/{} inference calls failed — benchmark results would be invalid",
+        prompts.len(),
+    );
+
+    if errors > 0 {
+        eprintln!(
+            "  WARN [{backend}]: {errors}/{} prompts failed; results may be skewed",
+            prompts.len(),
+        );
+    }
+
     println!(
-        "{backend} | prompts={} tokens={} elapsed={:.2}ms throughput={:.1} tok/s",
+        "{backend} | prompts={} tokens={} errors={} elapsed={:.2}ms throughput={:.1} tok/s",
         prompts.len(),
         total_tokens,
+        errors,
         elapsed.as_secs_f64() * 1000.0,
         total_tokens as f64 / elapsed.as_secs_f64().max(0.001),
     );
