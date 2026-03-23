@@ -75,11 +75,14 @@ async fn swarm_artifact_captures_decomposition_and_collaboration() {
 
     let by_agent = artifact.tasks_by_agent();
     assert_eq!(by_agent["reviewer"][0].id, "approve");
+    artifact.assert_agent_has_task("reviewer", "approve").unwrap();
     assert!(artifact.tasks.iter().any(|task| task.id == "approve" && task.hitl_required));
     assert!(artifact
         .to_markdown()
         .contains("graph TD"));
     assert!(artifact.to_markdown().contains("approve"));
+    assert!(artifact.to_markdown().contains("Agent Collaboration View"));
+    assert!(artifact.to_markdown().contains("| reviewer | approve |"));
     assert!(artifact.to_json().contains("\"assigned_agent\": \"reviewer\""));
 
     let approve_task = artifact

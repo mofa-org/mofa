@@ -128,6 +128,7 @@ impl SwarmRunArtifact {
     /// Render the artifact as markdown with a Mermaid dependency graph.
     pub fn to_markdown(&self) -> String {
         let mut out = String::new();
+        let tasks_by_agent = self.tasks_by_agent();
 
         out.push_str(&format!("# Swarm Test Artifact: {}\n\n", self.name));
         out.push_str(&format!("- Pattern: `{}`\n", self.pattern_label()));
@@ -193,6 +194,31 @@ impl SwarmRunArtifact {
                     .unwrap_or_else(|| "-".to_string()),
                 record.wall_time_ms
             ));
+        }
+
+        if !tasks_by_agent.is_empty() {
+            let mut agent_names: Vec<_> = tasks_by_agent.keys().cloned().collect();
+            agent_names.sort();
+
+            out.push_str("\n## Agent Collaboration View\n\n");
+            out.push_str("| Agent | Tasks | Terminal States |\n");
+            out.push_str("| --- | --- | --- |\n");
+
+            for agent in agent_names {
+                if let Some(tasks) = tasks_by_agent.get(&agent) {
+                    let task_ids: Vec<String> = tasks.iter().map(|task| task.id.clone()).collect();
+                    let statuses: Vec<String> = tasks
+                        .iter()
+                        .map(|task| format!("{}:{}", task.id, status_label(&task.status)))
+                        .collect();
+                    out.push_str(&format!(
+                        "| {} | {} | {} |\n",
+                        agent,
+                        join_or_dash(&task_ids),
+                        join_or_dash(&statuses)
+                    ));
+                }
+            }
         }
 
         out
@@ -319,6 +345,22 @@ impl SwarmRunArtifact {
             }
         }
         by_agent
+    }
+
+    /// Assert that a given agent was assigned the expected task.
+    pub fn assert_agent_has_task(&self, agent_id: &str, task_id: &str) -> Result<(), String> {
+        let by_agent = self.tasks_by_agent();
+        let tasks = by_agent
+            .get(agent_id)
+            .ok_or_else(|| format!("agent `{agent_id}` not found in artifact"))?;
+
+        if tasks.iter().any(|task| task.id == task_id) {
+            Ok(())
+        } else {
+            Err(format!(
+                "agent `{agent_id}` was not assigned task `{task_id}`"
+            ))
+        }
     }
 
     fn task(&self, task_id: &str) -> Option<&SwarmTaskRecord> {
