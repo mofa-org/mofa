@@ -96,9 +96,9 @@ impl SwarmCapabilityRegistry {
 pub struct CoverageReport {
     /// task ids with 2 or more capable agents
     pub covered: Vec<String>,
-    /// task ids with zero capable agents — will fail at dispatch
+    /// task ids with zero capable agents, will fail at dispatch
     pub uncovered: Vec<String>,
-    /// task ids with exactly 1 capable agent — single point of failure
+    /// task ids with exactly 1 capable agent, single point of failure risk
     pub partial: Vec<String>,
     /// capability names required by tasks but not registered by any agent
     pub gaps: Vec<String>,
