@@ -82,7 +82,7 @@ opentelemetry-semantic-conventions = { workspace = true, optional = true }
 # OpenAI / compatible APIs (for openai-compat gateway)
 async-openai = { version = "0.27", optional = true }
 subtle = { version = "2", optional = true }
-reqwest = { workspace = true, features = ["json"] }
+reqwest = { workspace = true, features = ["json"], optional = true }
 
 [build-dependencies]
 tonic-build = "0.12"
@@ -110,10 +110,13 @@ monitoring = [
 ]
 
 # Full feature set (all optional features)
-full = ["rocksdb", "monitoring", "openai-compat"]
+full = ["rocksdb", "monitoring", "openai-compat", "mcp"]
 
 # OpenAI-compatible HTTP gateway components
-openai-compat = ["dep:async-openai", "dep:subtle"]
+openai-compat = ["dep:async-openai", "dep:subtle", "dep:reqwest"]
+
+# Model Context Protocol (MCP) adapter
+mcp = ["dep:reqwest"]
 
 [[example]]
 name = "gateway_inference_server"
