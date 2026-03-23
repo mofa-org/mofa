@@ -1,5 +1,3 @@
-use std::collections::HashSet;
-
 use mofa_foundation::swarm::admission_gate::{
     AdmissionDecision, AdmissionPolicy, ComplexityBudgetPolicy, MaxTaskCountPolicy,
     PolicyVerdict, RequiredCapabilityPolicy, RiskBudgetPolicy, SwarmAdmissionGate,
@@ -165,6 +163,34 @@ fn test_report_task_verdicts_populated_for_per_task_denials() {
     assert_eq!(report.task_verdicts.len(), 1);
     assert_eq!(report.task_verdicts[0].task_id, "bad");
     assert_eq!(report.task_verdicts[0].policy, "required_capability");
+}
+
+#[test]
+fn test_metrics_track_evaluation_outcomes() {
+    let gate = SwarmAdmissionGate::new()
+        .with_policy(MaxTaskCountPolicy { limit: 1 })
+        .with_policy(ComplexityBudgetPolicy { max_total: 0.1 });
+
+    // allowed
+    let dag_ok = make_dag(&[("a", RiskLevel::Low, 0.05, vec![])]);
+    gate.evaluate(&dag_ok);
+
+    // denied
+    let dag_big = make_dag(&[
+        ("a", RiskLevel::Low, 0.05, vec![]),
+        ("b", RiskLevel::Low, 0.05, vec![]),
+    ]);
+    gate.evaluate(&dag_big);
+
+    // warned (1 task, complexity over budget)
+    let dag_complex = make_dag(&[("a", RiskLevel::Low, 0.9, vec![])]);
+    gate.evaluate(&dag_complex);
+
+    let m = gate.metrics();
+    assert_eq!(m.evaluations, 3);
+    assert_eq!(m.allowed, 1);
+    assert_eq!(m.denied, 1);
+    assert_eq!(m.warned, 1);
 }
 
 #[test]
