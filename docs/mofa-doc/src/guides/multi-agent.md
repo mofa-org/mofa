@@ -124,3 +124,39 @@ let result = debate.debide(&topic).await?;
 
 - [Workflows](../concepts/workflows.md) — Workflow concepts
 - [Examples](../examples/multi-agent-coordination.md) — Examples
+
+## Capability Registry
+
+`SwarmCapabilityRegistry` maps agents to capabilities and answers two questions before execution starts:
+- which agents can handle a given task?
+- does this DAG have tasks that no registered agent can run?
+
+### basic usage
+
+```rust,ignore
+use mofa_foundation::swarm::{AgentSpec, SwarmCapabilityRegistry};
+
+let registry = SwarmCapabilityRegistry::new()
+    .register(AgentSpec { id: "summarizer".into(), capabilities: vec!["summarize".into()], .. })
+    .register(AgentSpec { id: "translator".into(), capabilities: vec!["translate".into()], .. });
+
+// find all agents that satisfy every required capability of a task
+let candidates = registry.find_for_task(&task);
+
+// find all agents advertising a single capability
+let summarizers = registry.find_by_capability("summarize");
+```
+
+### pre-execution gap analysis
+
+```rust,ignore
+let report = registry.coverage_report(&dag);
+
+if !report.is_fully_covered() {
+    // report.uncovered: tasks with zero capable agents (will fail at dispatch)
+    // report.partial:   tasks with exactly one capable agent (single point of failure)
+    // report.gaps:      capability names no agent has registered
+}
+```
+
+the `coverage_report` runs in O(tasks * agents) and should be called before handing the DAG to any scheduler. once `SwarmAdmissionGate` is merged, a `CoveragePolicy` will wrap this check as a denial policy so uncovered DAGs are rejected before a single task runs.
