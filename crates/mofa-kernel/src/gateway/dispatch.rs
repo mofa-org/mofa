@@ -194,6 +194,7 @@ pub trait GatewayAdapter: Send + Sync {
 /// Implementations must be `Send + Sync`.  The in-memory implementation
 /// ([`InMemoryAdapterRegistry`]) is provided here for convenience; production
 /// deployments may replace it with a dynamic-loading registry.
+#[async_trait]
 pub trait AdapterRegistry: Send + Sync {
     /// Register an adapter under `name`.
     ///
