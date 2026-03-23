@@ -1,0 +1,16 @@
+case_name: local-inference-success
+kind: contract
+target: local-inference
+model_name: contract-model
+backend: cpu
+create_temp_model: true
+input: hello there general
+expected_output_contains:
+  - "[cpu backend]"
+  - "model=contract-model"
+  - "input_tokens=3"
+expected_metadata_fields:
+  - backend
+  - model_id
+  - model_path
+deterministic: true

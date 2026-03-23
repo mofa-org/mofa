@@ -2,8 +2,8 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use mofa_testing::{
-    JsonFormatter, MockClock, ReportFormatter, TestCaseResult, TestReport, TestReportBuilder,
-    TestStatus, TextFormatter,
+    JsonFormatter, JunitFormatter, MockClock, ReportFormatter, TestCaseResult, TestReport,
+    TestReportBuilder, TestStatus, TextFormatter,
 };
 
 // ---------------------------------------------------------------------------
@@ -271,6 +271,24 @@ fn json_formatter_includes_metadata() {
     let output = JsonFormatter.format(&r);
     let parsed: serde_json::Value = serde_json::from_str(&output).unwrap();
     assert_eq!(parsed["results"][0]["metadata"]["key"], "val");
+}
+
+// ===========================================================================
+// JunitFormatter
+// ===========================================================================
+
+#[test]
+fn junit_formatter_emits_testsuite_and_testcases() {
+    let r = mixed_report();
+    let output = JunitFormatter.format(&r);
+    assert!(output.contains("<?xml version=\"1.0\" encoding=\"UTF-8\"?>"));
+    assert!(output.contains("<testsuite name=\"mixed\""));
+    assert!(output.contains("tests=\"5\""));
+    assert!(output.contains("failures=\"2\""));
+    assert!(output.contains("skipped=\"1\""));
+    assert!(output.contains("<testcase name=\"a\""));
+    assert!(output.contains("<failure message=\"boom\">boom</failure>"));
+    assert!(output.contains("<skipped message=\"test skipped\" />"));
 }
 
 // ===========================================================================

@@ -1,0 +1,13 @@
+case_name: gateway-message-only
+kind: contract
+target: gateway-chat
+agent_present: true
+agent_state: Ready
+request:
+  message: hello gateway
+agent_response:
+  text: gateway-ok
+expected:
+  status: 200
+  output_text: gateway-ok
+  expected_input_text: hello gateway

@@ -9,9 +9,15 @@ description = "Testing utilities for the MoFA agent framework"
 [dependencies]
 mofa-kernel = { path = "../crates/mofa-kernel" }
 mofa-foundation = { path = "../crates/mofa-foundation" }
+mofa-runtime = { path = "../crates/mofa-runtime" }
+mofa-gateway = { path = "../crates/mofa-gateway" }
+mofa-local-llm = { path = "../crates/mofa-local-llm" }
 tokio = { workspace = true }
 async-trait = { workspace = true }
 anyhow = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
+serde_yaml = { workspace = true }
 chrono = { workspace = true }
+axum = { workspace = true }
+tempfile = { workspace = true }

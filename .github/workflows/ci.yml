@@ -71,6 +71,9 @@ jobs:
       - name: Run tests
         run: cargo test --workspace --all-features
 
+      - name: Run contract and regression suites
+        run: cargo test -p mofa-testing --test contract_gateway_tests --test contract_local_inference_tests --test fixture_loader_tests
+
       - name: Build examples
         run: cargo build --examples
 

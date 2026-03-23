@@ -1,0 +1,7 @@
+case_name: local-inference-before-load
+kind: contract
+target: local-inference
+model_name: contract-model
+backend: cpu
+input: hello world
+expected_error_contains: model is not loaded
