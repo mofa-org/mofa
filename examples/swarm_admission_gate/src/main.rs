@@ -108,5 +108,7 @@ fn main() {
     }
     print_report("over complexity budget (warn only)", &gate, &dag4);
 
-    println!();
+    let m = gate.metrics();
+    println!("\ngate metrics: evaluations={} allowed={} warned={} denied={}",
+        m.evaluations, m.allowed, m.warned, m.denied);
 }

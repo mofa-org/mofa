@@ -1,4 +1,5 @@
 use std::collections::HashSet;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 
 use chrono::{DateTime, Utc};
@@ -8,7 +9,7 @@ use crate::swarm::{RiskLevel, SubtaskDAG, SwarmSubtask};
 
 // ── Verdict types ──────────────────────────────────────────────────────────────
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[non_exhaustive]
 pub enum PolicyVerdict {
     Allow,
@@ -35,7 +36,7 @@ pub struct TaskVerdict {
 
 // ── AdmissionDecision ──────────────────────────────────────────────────────────
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[non_exhaustive]
 pub enum AdmissionDecision {
     Allowed,
@@ -68,6 +69,35 @@ impl AdmissionReport {
     }
 }
 
+// ── AdmissionGateMetrics ───────────────────────────────────────────────────────
+
+struct MetricsInner {
+    evaluations: AtomicU64,
+    allowed: AtomicU64,
+    warned: AtomicU64,
+    denied: AtomicU64,
+}
+
+impl MetricsInner {
+    fn new() -> Arc<Self> {
+        Arc::new(Self {
+            evaluations: AtomicU64::new(0),
+            allowed: AtomicU64::new(0),
+            warned: AtomicU64::new(0),
+            denied: AtomicU64::new(0),
+        })
+    }
+}
+
+/// snapshot of gate evaluation counters
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct AdmissionGateMetrics {
+    pub evaluations: u64,
+    pub allowed: u64,
+    pub warned: u64,
+    pub denied: u64,
+}
+
 // ── AdmissionPolicy trait ──────────────────────────────────────────────────────
 
 pub trait AdmissionPolicy: Send + Sync {
@@ -86,9 +116,18 @@ pub trait AdmissionPolicy: Send + Sync {
 
 // ── SwarmAdmissionGate ─────────────────────────────────────────────────────────
 
-#[derive(Default)]
 pub struct SwarmAdmissionGate {
     policies: Vec<Arc<dyn AdmissionPolicy>>,
+    metrics: Arc<MetricsInner>,
+}
+
+impl Default for SwarmAdmissionGate {
+    fn default() -> Self {
+        Self {
+            policies: Vec::new(),
+            metrics: MetricsInner::new(),
+        }
+    }
 }
 
 impl SwarmAdmissionGate {
@@ -101,6 +140,7 @@ impl SwarmAdmissionGate {
         self
     }
 
+    #[must_use]
     pub fn evaluate(&self, dag: &SubtaskDAG) -> AdmissionReport {
         let tasks = dag.all_tasks();
         let mut task_verdicts: Vec<TaskVerdict> = Vec::new();
@@ -145,10 +185,34 @@ impl SwarmAdmissionGate {
             AdmissionDecision::Allowed
         };
 
+        self.metrics.evaluations.fetch_add(1, Ordering::Relaxed);
+        match &decision {
+            AdmissionDecision::Allowed => {
+                self.metrics.allowed.fetch_add(1, Ordering::Relaxed);
+            }
+            AdmissionDecision::AllowedWithWarnings(_) => {
+                self.metrics.warned.fetch_add(1, Ordering::Relaxed);
+            }
+            AdmissionDecision::Denied(_) => {
+                self.metrics.denied.fetch_add(1, Ordering::Relaxed);
+            }
+            _ => {}
+        }
+
         AdmissionReport {
             decision,
             task_verdicts,
             evaluated_at: Utc::now(),
+        }
+    }
+
+    /// returns a point-in-time snapshot of gate evaluation counters
+    pub fn metrics(&self) -> AdmissionGateMetrics {
+        AdmissionGateMetrics {
+            evaluations: self.metrics.evaluations.load(Ordering::Relaxed),
+            allowed: self.metrics.allowed.load(Ordering::Relaxed),
+            warned: self.metrics.warned.load(Ordering::Relaxed),
+            denied: self.metrics.denied.load(Ordering::Relaxed),
         }
     }
 }

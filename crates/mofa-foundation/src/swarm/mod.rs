@@ -7,9 +7,9 @@ pub mod patterns;
 pub mod telemetry;
 
 pub use admission_gate::{
-    AdmissionDecision, AdmissionPolicy, AdmissionReport, ComplexityBudgetPolicy,
-    MaxTaskCountPolicy, PolicyVerdict, RequiredCapabilityPolicy, RiskBudgetPolicy,
-    SwarmAdmissionGate, TaskVerdict,
+    AdmissionDecision, AdmissionGateMetrics, AdmissionPolicy, AdmissionReport,
+    ComplexityBudgetPolicy, MaxTaskCountPolicy, PolicyVerdict, RequiredCapabilityPolicy,
+    RiskBudgetPolicy, SwarmAdmissionGate, TaskVerdict,
 };
 pub use analyzer::{RiskAwareAnalysis, RiskSummary, TaskAnalyzer};
 pub use hitl_gate::{HITLDecision, HITLGateMetrics, HITLNotifier, SwarmHITLGate};
