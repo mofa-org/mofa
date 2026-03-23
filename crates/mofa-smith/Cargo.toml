@@ -13,7 +13,6 @@ path = "src/main.rs"
 
 [dependencies]
 mofa-foundation = { path = "../mofa-foundation", version = "0.1" }
-mofa-kernel = { path = "../mofa-kernel", version = "0.1" }
 
 tokio = { workspace = true }
 serde = { workspace = true }

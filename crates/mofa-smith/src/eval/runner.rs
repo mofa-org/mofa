@@ -9,7 +9,6 @@ use mofa_foundation::swarm::{
     CoordinationPattern, SchedulerSummary, SequentialScheduler, ParallelScheduler,
     SubtaskDAG, SubtaskExecutorFn, SwarmScheduler, SwarmSubtask,
 };
-use mofa_kernel::agent::types::error::GlobalResult;
 use serde::{Deserialize, Serialize};
 
 use crate::eval::dataset::{EvalCase, EvalDataset};

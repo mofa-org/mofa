@@ -6156,7 +6156,6 @@ dependencies = [
  "comfy-table",
  "futures",
  "mofa-foundation",
- "mofa-kernel",
  "serde",
  "serde_json",
  "serde_yaml",
