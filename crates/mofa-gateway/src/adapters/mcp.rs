@@ -198,7 +198,7 @@ mod tests {
         
         let mut ctx = GatewayContext::new(req.clone());
         // Set a short timeout
-        ctx.route_match = Some(mofa_kernel::gateway::route::RouteMatch {
+        ctx.route_match = Some(mofa_kernel::gateway::types::RouteMatch {
             path: "/slow".to_string(),
             method: HttpMethod::Get,
             priority: 0,

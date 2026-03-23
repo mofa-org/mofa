@@ -122,3 +122,6 @@ mcp = ["dep:reqwest"]
 name = "gateway_inference_server"
 path = "examples/gateway_inference_server.rs"
 required-features = ["openai-compat"]
+
+[dev-dependencies]
+mockito = "1.7.2"
