@@ -4,10 +4,9 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use chrono::{DateTime, Utc};
-use futures::future::BoxFuture;
 use mofa_foundation::swarm::{
-    CoordinationPattern, SchedulerSummary, SequentialScheduler, ParallelScheduler,
-    SubtaskDAG, SubtaskExecutorFn, SwarmScheduler, SwarmSubtask,
+    CoordinationPattern, ParallelScheduler, SchedulerSummary, SequentialScheduler, SubtaskDAG,
+    SubtaskExecutorFn, SwarmScheduler, SwarmSubtask,
 };
 use serde::{Deserialize, Serialize};
 
@@ -51,7 +50,7 @@ pub struct EvalReport {
 }
 
 impl EvalReport {
-    /// Pass rate as a percentage string (`"80.0%"`).
+    /// Pass rate as a percentage string (e.g. `"80.0%"`).
     pub fn pass_rate_pct(&self) -> String {
         if self.total_cases == 0 {
             return "n/a".into();
@@ -99,22 +98,23 @@ impl EvalRunner {
         self
     }
 
-    /// Run all cases and return the report.
+    /// Run all cases using a default per-case executor that returns the case's
+    /// input values as the output text.
     ///
-    /// Uses a default mock executor that concatenates all input values.
-    /// In production, replace with a real agent executor via
-    /// [`EvalRunner::run_with_executor`].
+    /// This simulates a pass-through agent so that keyword and exact scorers
+    /// check against the actual input documents rather than synthetic strings.
+    /// Swap in a real executor via [`EvalRunner::run_with_executor`] to test
+    /// a live agent.
     pub async fn run(self) -> EvalReport {
-        let executor: SubtaskExecutorFn = Arc::new(|_idx, task: SwarmSubtask| {
-            Box::pin(async move {
-                Ok(format!("processed: {}", task.description))
-            })
-        });
-        self.run_with_executor(executor).await
+        self.run_internal(None).await
     }
 
-    /// Run all cases with a custom executor.
+    /// Run all cases with a custom executor injected by the caller.
     pub async fn run_with_executor(self, executor: SubtaskExecutorFn) -> EvalReport {
+        self.run_internal(Some(executor)).await
+    }
+
+    async fn run_internal(self, executor: Option<SubtaskExecutorFn>) -> EvalReport {
         let ran_at = Utc::now();
         let dataset_name = self.dataset.name.clone();
         let scorer_name = self.scorer.name().to_string();
@@ -161,15 +161,24 @@ async fn run_case(
     case: &EvalCase,
     pattern: CoordinationPattern,
     timeout_secs: u64,
-    executor: SubtaskExecutorFn,
+    executor: Option<SubtaskExecutorFn>,
     scorer: &dyn Scorer,
     pass_threshold: f64,
     scorer_name: &str,
 ) -> CaseResult {
+    // When no executor is injected, build a per-case pass-through that returns
+    // the actual input document text so scorers evaluate real content.
+    let actual_executor: SubtaskExecutorFn = executor.unwrap_or_else(|| {
+        let inputs_text = case.inputs_as_text();
+        Arc::new(move |_idx, _task| {
+            let text = inputs_text.clone();
+            Box::pin(async move { Ok(text) })
+        })
+    });
+
     let mut dag = SubtaskDAG::new(format!("eval-{}", case.id));
     dag.add_task(
-        SwarmSubtask::new(case.id.clone(), case.description.clone())
-            .with_complexity(0.5),
+        SwarmSubtask::new(case.id.clone(), case.description.clone()).with_complexity(0.5),
     );
 
     let config = mofa_foundation::swarm::SwarmSchedulerConfig {
@@ -181,14 +190,14 @@ async fn run_case(
     let summary: SchedulerSummary = match pattern {
         CoordinationPattern::Parallel => {
             let scheduler = ParallelScheduler::with_config(config);
-            match scheduler.execute(&mut dag, executor).await {
+            match scheduler.execute(&mut dag, actual_executor).await {
                 Ok(s) => s,
                 Err(e) => return failed_case(case, scorer_name, e.to_string(), start.elapsed()),
             }
         }
         _ => {
             let scheduler = SequentialScheduler::with_config(config);
-            match scheduler.execute(&mut dag, executor).await {
+            match scheduler.execute(&mut dag, actual_executor).await {
                 Ok(s) => s,
                 Err(e) => return failed_case(case, scorer_name, e.to_string(), start.elapsed()),
             }
@@ -229,20 +238,59 @@ fn failed_case(
 mod tests {
     use super::*;
     use crate::eval::dataset::EvalCase;
+    use crate::eval::report::write_json_report;
     use crate::eval::scorer::KeywordScorer;
 
     #[tokio::test]
-    async fn test_runner_all_pass_with_keyword_scorer() {
+    async fn test_default_executor_returns_input_document_text() {
+        // The default run() executor must return actual input content, not the
+        // task description — otherwise keyword scoring is circular.
+        let dataset = EvalDataset::new("test-ds").with_case(
+            EvalCase::new("c1", "extract revenue figures")
+                .with_input("document", "Total revenue reached 1.2 million dollars.")
+                .with_expected("revenue"),
+        );
+
+        let report = EvalRunner::new(dataset, Box::new(KeywordScorer))
+            .run()
+            .await;
+
+        assert_eq!(report.passed, 1);
+        let output = report.results[0].actual_output.as_deref().unwrap_or("");
+        assert!(output.contains("1.2 million"), "executor must return document text, got: {output}");
+    }
+
+    #[tokio::test]
+    async fn test_default_executor_fails_when_keyword_not_in_document() {
+        // Keyword not in the input document -> genuine failure.
+        let dataset = EvalDataset::new("test-ds").with_case(
+            EvalCase::new("c1", "detect churn signal")
+                .with_input("document", "Great product, very happy with the purchase.")
+                .with_expected("churn"),
+        );
+
+        let report = EvalRunner::new(dataset, Box::new(KeywordScorer))
+            .run()
+            .await;
+
+        assert_eq!(report.failed, 1);
+        assert_eq!(report.overall_score, 0.0);
+    }
+
+    #[tokio::test]
+    async fn test_runner_all_pass_with_injected_executor() {
+        // The injected executor returns a fixed string containing the keywords.
+        // This verifies that run_with_executor correctly routes through to the
+        // scorer and that pass/fail aggregation is correct.
         let dataset = EvalDataset::new("test-ds")
             .with_case(
-                EvalCase::new("c1", "process a document about revenue")
-                    .with_expected("revenue"),
+                EvalCase::new("c1", "revenue extraction task").with_expected("revenue"),
             )
             .with_case(
-                EvalCase::new("c2", "process a document about latency")
-                    .with_expected("latency"),
+                EvalCase::new("c2", "latency analysis task").with_expected("latency"),
             );
 
+        // Executor returns the task description, which contains the keywords.
         let executor: SubtaskExecutorFn = Arc::new(|_idx, task: SwarmSubtask| {
             Box::pin(async move { Ok(task.description.clone()) })
         });
@@ -254,7 +302,6 @@ mod tests {
         assert_eq!(report.total_cases, 2);
         assert_eq!(report.passed, 2);
         assert_eq!(report.failed, 0);
-        assert!(report.overall_score > 0.0);
     }
 
     #[tokio::test]
@@ -290,16 +337,14 @@ mod tests {
     #[tokio::test]
     async fn test_pass_threshold_controls_pass_fail() {
         let dataset = EvalDataset::new("test-ds").with_case(
-            EvalCase::new("c1", "revenue report").with_expected("revenue"),
+            EvalCase::new("c1", "task")
+                .with_input("doc", "revenue report Q3")
+                .with_expected("revenue"),
         );
-
-        let executor: SubtaskExecutorFn = Arc::new(|_idx, task: SwarmSubtask| {
-            Box::pin(async move { Ok(task.description.clone()) })
-        });
 
         let report = EvalRunner::new(dataset, Box::new(KeywordScorer))
             .with_pass_threshold(0.99)
-            .run_with_executor(executor)
+            .run()
             .await;
 
         assert_eq!(report.passed, 1);
@@ -308,19 +353,43 @@ mod tests {
     #[tokio::test]
     async fn test_parallel_pattern_runs_correctly() {
         let dataset = EvalDataset::new("test-ds").with_case(
-            EvalCase::new("c1", "parallel test with revenue").with_expected("revenue"),
+            EvalCase::new("c1", "parallel task")
+                .with_input("doc", "revenue and profit both up")
+                .with_expected("revenue"),
         );
-
-        let executor: SubtaskExecutorFn = Arc::new(|_idx, task: SwarmSubtask| {
-            Box::pin(async move { Ok(task.description.clone()) })
-        });
 
         let report = EvalRunner::new(dataset, Box::new(KeywordScorer))
             .with_pattern(CoordinationPattern::Parallel)
-            .run_with_executor(executor)
+            .run()
             .await;
 
         assert_eq!(report.total_cases, 1);
         assert_eq!(report.passed, 1);
+    }
+
+    #[tokio::test]
+    async fn test_json_report_roundtrip() {
+        let dataset = EvalDataset::new("json-test").with_case(
+            EvalCase::new("c1", "task")
+                .with_input("doc", "latency spike detected in prod")
+                .with_expected("latency"),
+        );
+
+        let report = EvalRunner::new(dataset, Box::new(KeywordScorer))
+            .run()
+            .await;
+
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("report.json");
+        write_json_report(&report, &path).unwrap();
+
+        let content = std::fs::read_to_string(&path).unwrap();
+        let parsed: serde_json::Value = serde_json::from_str(&content).unwrap();
+
+        assert_eq!(parsed["dataset_name"], "json-test");
+        assert_eq!(parsed["total_cases"], 1);
+        assert_eq!(parsed["passed"], 1);
+        assert!(parsed["overall_score"].as_f64().unwrap() > 0.0);
+        assert!(parsed["results"].is_array());
     }
 }

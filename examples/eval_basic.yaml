@@ -3,21 +3,21 @@ description: Tests swarm extraction accuracy on synthetic business documents.
 
 cases:
   - id: case-001
-    description: extract revenue figure from Q3 report containing revenue data
+    description: extract revenue figure from Q3 report
     inputs:
       document: "Total revenue for Q3 2025 reached 1.2 million dollars, up 18% YoY."
     expected_output: "revenue"
     tags: [extraction, finance]
 
   - id: case-002
-    description: identify product spec containing M3 chip from laptop listing
+    description: identify chip model from laptop listing
     inputs:
       document: "MacBook Pro 16-inch with M3 chip, 32GB RAM, 1TB SSD, priced at 2499 USD."
     expected_output: "M3"
     tags: [extraction, product]
 
   - id: case-003
-    description: summarise incident report mentioning latency and timeout
+    description: summarise incident report for latency and timeout
     inputs:
       document: "P1 incident on 2025-11-14. Root cause: database latency spike caused timeout cascade."
     expected_output: "latency, timeout"
@@ -31,8 +31,8 @@ cases:
     tags: [extraction, compliance]
 
   - id: case-005
-    description: classify sentiment as positive from customer review
+    description: detect churn signal in a positive customer review
     inputs:
       document: "Excellent product quality and fast shipping. Will definitely recommend to colleagues."
-    expected_output: "recommend"
-    tags: [classification, sentiment]
+    expected_output: "churn, cancel"
+    tags: [classification, churn]
