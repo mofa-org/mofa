@@ -241,3 +241,19 @@ async fn semantic_memory_mode_keeps_session_history_and_reset_behavior() {
         .is_empty());
     assert!(harness.session_ids().is_empty());
 }
+
+#[tokio::test]
+async fn store_text_and_retrieve_text_roundtrip() {
+    let mut harness = MemoryDriftHarness::new();
+
+    harness
+        .store_text("preference", "User prefers concise Rust examples")
+        .await
+        .unwrap();
+
+    let retrieved = harness.retrieve_text("preference").await.unwrap();
+    assert_eq!(
+        retrieved.as_deref(),
+        Some("User prefers concise Rust examples")
+    );
+}

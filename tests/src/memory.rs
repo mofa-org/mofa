@@ -158,6 +158,16 @@ impl MemoryDriftHarness {
         Ok(())
     }
 
+    // Exact KV lookup helper for testing direct retrieval separately from search based recall
+    pub async fn retrieve_text(&self, key: &str) -> Result<Option<String>> {
+        let value = match &self.backend {
+            MemoryBackend::Episodic(memory) => memory.retrieve(key).await?,
+            MemoryBackend::Semantic(memory) => memory.retrieve(key).await?,
+        };
+
+        Ok(value.and_then(|value| value.as_text().map(str::to_string)))
+    }
+
     pub async fn search_texts(&self, query: &str, limit: usize) -> Result<Vec<String>> {
         let results: Vec<MemoryItem> = match &self.backend {
             MemoryBackend::Episodic(memory) => memory.search(query, limit).await?,
