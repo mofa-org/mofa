@@ -107,7 +107,7 @@ impl GatewayAdapter for McpAdapter {
         let status = res.status().as_u16();
         let bytes = res.bytes().await.map_err(McpError::Http)?;
 
-        let mut gateway_res = GatewayResponse::new(status, "mcp-adapter");
+        let mut gateway_res = GatewayResponse::new(status, self.name());
         gateway_res.body = bytes.to_vec();
 
         Ok(gateway_res)
