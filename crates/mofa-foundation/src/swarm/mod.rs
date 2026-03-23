@@ -16,4 +16,6 @@ pub use scheduler::{
     FailurePolicy, ParallelScheduler, SchedulerSummary, SequentialScheduler, SubtaskExecutorFn,
     SwarmScheduler, SwarmSchedulerConfig, TaskExecutionResult, TaskOutcome,
 };
-pub use telemetry::{audit_batch_to_debug, audit_to_debug};
+pub use telemetry::{audit_batch_to_debug, audit_to_debug, record_scheduler_span};
+#[cfg(feature = "swarm-telemetry")]
+pub use telemetry::record_scheduler_metrics;
