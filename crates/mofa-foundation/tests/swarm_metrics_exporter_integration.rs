@@ -112,10 +112,8 @@ fn histogram_sum_and_count_correct() {
     exporter.record_scheduler_run(&make_summary(CoordinationPattern::Routing, 2, 2, 0, 0, 200));
     exporter.record_scheduler_run(&make_summary(CoordinationPattern::Routing, 2, 2, 0, 0, 800));
     let out = exporter.render();
-    // count = 2
     assert!(out.contains("mofa_swarm_scheduler_duration_seconds_count{pattern=\"Routing\"} 2"), "{out}");
-    // sum ~= 1.0 s
-    assert!(out.contains("mofa_swarm_scheduler_duration_seconds_sum{pattern=\"Routing\"} 1.0"), "{out}");
+    assert!(out.contains("mofa_swarm_scheduler_duration_seconds_sum{pattern=\"Routing\"} 1.000000"), "{out}");
 }
 
 #[test]
