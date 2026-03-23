@@ -361,7 +361,7 @@ fn collect_workspace_files(root: &Path, current: &Path, files: &mut Vec<Workspac
             .strip_prefix(root)
             .unwrap_or(&path)
             .to_string_lossy()
-            .to_string();
+            .replace('\\', "/");
 
         files.push(WorkspaceFileSnapshot {
             relative_path,
