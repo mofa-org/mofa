@@ -61,7 +61,9 @@ impl GatewayAdapter for McpAdapter {
                 } else if self.allowed_domains.iter().any(|domain| url.starts_with(domain)) {
                     url
                 } else {
-                    return Err(McpError::Api(format!("SSRF blocked: target URL '{}' not in allowlist", url)).into());
+                    let mut res = GatewayResponse::new(403, self.name());
+                    res.body = format!("SSRF blocked: target URL '{}' not in allowlist", url).into_bytes();
+                    return Ok(res);
                 }
             }
             None => &self.base_url,
