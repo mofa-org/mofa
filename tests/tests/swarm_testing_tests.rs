@@ -7,10 +7,12 @@
 use std::sync::Arc;
 use std::time::Duration;
 
+use chrono::Utc;
 use futures::future::BoxFuture;
 use mofa_foundation::swarm::{
-    FailurePolicy, ParallelScheduler, RiskLevel, SubtaskDAG, SubtaskStatus, SwarmScheduler,
-    SwarmSchedulerConfig, SwarmSubtask,
+    AuditEvent, AuditEventKind, FailurePolicy, ParallelScheduler, RiskLevel, SubtaskDAG,
+    SubtaskStatus, SwarmMetrics, SwarmResult, SwarmScheduler, SwarmSchedulerConfig, SwarmStatus,
+    SwarmSubtask, CoordinationPattern,
 };
 use mofa_kernel::agent::types::error::GlobalError;
 use mofa_testing::SwarmRunArtifact;
@@ -127,7 +129,7 @@ async fn swarm_artifact_surfaces_failed_orchestration_state() {
 
     let err = artifact.assert_all_completed().unwrap_err();
     assert!(err.contains("approve"));
-    assert!(artifact.to_markdown().contains("failed (approval rejected)"));
+    assert!(artifact.to_markdown().contains("approval rejected"));
     assert!(artifact.to_json().contains("\"outcome\": \"failure\""));
     let approve = dag.find_by_id("approve").unwrap();
     let notify = dag.find_by_id("notify").unwrap();
@@ -136,4 +138,54 @@ async fn swarm_artifact_surfaces_failed_orchestration_state() {
         SubtaskStatus::Failed(_)
     ));
     assert_eq!(dag.get_task(notify).unwrap().status, SubtaskStatus::Skipped);
+}
+
+#[tokio::test]
+async fn swarm_artifact_from_swarm_result_captures_metrics_and_audit() {
+    let dag = workflow_dag();
+
+    let mut metrics = SwarmMetrics::default();
+    metrics.record_task_completed();
+    metrics.record_task_completed();
+    metrics.record_task_failed();
+    metrics.record_hitl_intervention();
+    metrics.record_reassignment();
+    metrics.record_agent_tokens("reviewer", 120);
+    metrics.record_agent_tokens("analyst", 60);
+    metrics.set_duration_ms(321);
+
+    let audit_events = vec![
+        AuditEvent::new(AuditEventKind::SwarmStarted, "Swarm started")
+            .with_data(serde_json::json!({"swarm_id":"support-escalation"})),
+        AuditEvent::new(AuditEventKind::AgentReassigned, "Reviewer took over approve")
+            .with_data(serde_json::json!({"subtask_id":"approve","new_agent":"reviewer"})),
+        AuditEvent::new(AuditEventKind::SwarmCompleted, "Swarm completed")
+            .with_data(serde_json::json!({"swarm_id":"support-escalation"})),
+    ];
+
+    let result = SwarmResult {
+        config_id: "cfg-1".into(),
+        status: SwarmStatus::Completed,
+        dag,
+        output: Some("customer notified".into()),
+        metrics,
+        audit_events,
+        started_at: Utc::now(),
+        completed_at: Some(Utc::now()),
+    };
+
+    let artifact =
+        SwarmRunArtifact::from_swarm_result(&result, CoordinationPattern::Parallel, None);
+
+    artifact.assert_metrics(1, 1).unwrap();
+    artifact
+        .assert_audit_event_kind(AuditEventKind::AgentReassigned)
+        .unwrap();
+    assert_eq!(artifact.swarm_status, Some(SwarmStatus::Completed));
+    assert_eq!(artifact.output.as_deref(), Some("customer notified"));
+    assert_eq!(artifact.metrics.as_ref().unwrap().agent_tokens["reviewer"], 120);
+    assert!(artifact.to_markdown().contains("## Metrics"));
+    assert!(artifact.to_markdown().contains("## Audit Trail"));
+    assert!(artifact.to_markdown().contains("agent_reassigned"));
+    assert!(artifact.to_json().contains("\"hitl_interventions\": 1"));
 }

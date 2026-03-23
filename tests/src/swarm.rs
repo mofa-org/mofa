@@ -3,7 +3,8 @@
 use std::collections::HashMap;
 
 use mofa_foundation::swarm::{
-    CoordinationPattern, RiskLevel, SchedulerSummary, SubtaskDAG, SubtaskStatus, TaskOutcome,
+    AuditEvent, AuditEventKind, CoordinationPattern, RiskLevel, SchedulerSummary, SubtaskDAG,
+    SubtaskStatus, SwarmMetrics, SwarmResult, SwarmStatus, TaskOutcome,
 };
 use serde::{Deserialize, Serialize};
 
@@ -27,12 +28,16 @@ pub struct SwarmTaskRecord {
 pub struct SwarmRunArtifact {
     pub name: String,
     pub pattern: CoordinationPattern,
+    pub swarm_status: Option<SwarmStatus>,
     pub total_tasks: usize,
     pub succeeded: usize,
     pub failed: usize,
     pub skipped: usize,
     pub total_wall_time_ms: u64,
     pub success_rate: f64,
+    pub output: Option<String>,
+    pub metrics: Option<SwarmMetricsRecord>,
+    pub audit_events: Vec<SwarmAuditRecord>,
     pub tasks: Vec<SwarmTaskRecord>,
     pub execution: Vec<SwarmExecutionRecord>,
 }
@@ -48,73 +53,99 @@ pub struct SwarmExecutionRecord {
     pub attempt: u32,
 }
 
+/// Normalized metrics snapshot for swarm testing artifacts.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SwarmMetricsRecord {
+    pub total_tokens: u64,
+    pub duration_ms: u64,
+    pub tasks_completed: usize,
+    pub tasks_failed: usize,
+    pub hitl_interventions: usize,
+    pub reassignments: usize,
+    pub agent_tokens: HashMap<String, u64>,
+}
+
+/// Normalized audit event for assertion and visual review.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SwarmAuditRecord {
+    pub kind: AuditEventKind,
+    pub description: String,
+    pub timestamp_ms: i64,
+    pub data: serde_json::Value,
+}
+
 impl SwarmRunArtifact {
     /// Build an artifact from a scheduler summary and the final DAG state.
     pub fn from_scheduler_run(dag: &SubtaskDAG, summary: &SchedulerSummary) -> Self {
-        let mut tasks = Vec::new();
-
-        let ordered = dag
-            .topological_order()
-            .unwrap_or_else(|_| dag.all_tasks().into_iter().map(|(idx, _)| idx).collect());
-
-        for idx in ordered {
-            if let Some(task) = dag.get_task(idx) {
-                let dependencies = dag
-                    .dependencies_of(idx)
-                    .into_iter()
-                    .filter_map(|dep| dag.get_task(dep).map(|task| task.id.clone()))
-                    .collect();
-                let dependents = dag
-                    .dependents_of(idx)
-                    .into_iter()
-                    .filter_map(|dep| dag.get_task(dep).map(|task| task.id.clone()))
-                    .collect();
-
-                tasks.push(SwarmTaskRecord {
-                    id: task.id.clone(),
-                    description: task.description.clone(),
-                    status: task.status.clone(),
-                    assigned_agent: task.assigned_agent.clone(),
-                    output: task.output.clone(),
-                    dependencies,
-                    dependents,
-                    required_capabilities: task.required_capabilities.clone(),
-                    risk_level: task.risk_level.clone(),
-                    hitl_required: task.hitl_required,
-                });
-            }
-        }
-
-        let execution = summary
-            .results
-            .iter()
-            .map(|result| {
-                let (outcome, detail) = match &result.outcome {
-                    TaskOutcome::Success(output) => ("success".to_string(), Some(output.clone())),
-                    TaskOutcome::Failure(error) => ("failure".to_string(), Some(error.clone())),
-                    TaskOutcome::Skipped(reason) => ("skipped".to_string(), Some(reason.clone())),
-                };
-
-                SwarmExecutionRecord {
-                    task_id: result.task_id.clone(),
-                    node_index: result.node_index,
-                    outcome,
-                    detail,
-                    wall_time_ms: result.wall_time.as_millis() as u64,
-                    attempt: result.attempt,
-                }
-            })
-            .collect();
+        let tasks = snapshot_tasks(dag);
+        let execution = snapshot_execution(summary);
 
         Self {
             name: dag.name.clone(),
             pattern: summary.pattern.clone(),
+            swarm_status: None,
             total_tasks: summary.total_tasks,
             succeeded: summary.succeeded,
             failed: summary.failed,
             skipped: summary.skipped,
             total_wall_time_ms: summary.total_wall_time.as_millis() as u64,
             success_rate: summary.success_rate(),
+            output: None,
+            metrics: None,
+            audit_events: Vec::new(),
+            tasks,
+            execution,
+        }
+    }
+
+    /// Build an artifact from a full swarm result, including metrics and audit events.
+    pub fn from_swarm_result(
+        result: &SwarmResult,
+        pattern: CoordinationPattern,
+        summary: Option<&SchedulerSummary>,
+    ) -> Self {
+        let tasks = snapshot_tasks(&result.dag);
+        let execution = summary.map(snapshot_execution).unwrap_or_default();
+        let total_tasks = result.dag.task_count();
+        let succeeded = summary.map(|it| it.succeeded).unwrap_or_else(|| {
+            result
+                .dag
+                .all_tasks()
+                .iter()
+                .filter(|(_, task)| task.status == SubtaskStatus::Completed)
+                .count()
+        });
+        let failed = summary.map(|it| it.failed).unwrap_or(result.metrics.tasks_failed);
+        let skipped = summary.map(|it| it.skipped).unwrap_or_else(|| {
+            result
+                .dag
+                .all_tasks()
+                .iter()
+                .filter(|(_, task)| task.status == SubtaskStatus::Skipped)
+                .count()
+        });
+        let total_wall_time_ms = summary
+            .map(|it| it.total_wall_time.as_millis() as u64)
+            .unwrap_or(result.metrics.duration_ms);
+        let success_rate = if total_tasks == 0 {
+            1.0
+        } else {
+            succeeded as f64 / total_tasks as f64
+        };
+
+        Self {
+            name: result.dag.name.clone(),
+            pattern,
+            swarm_status: Some(result.status.clone()),
+            total_tasks,
+            succeeded,
+            failed,
+            skipped,
+            total_wall_time_ms,
+            success_rate,
+            output: result.output.clone(),
+            metrics: Some(SwarmMetricsRecord::from(&result.metrics)),
+            audit_events: result.audit_events.iter().map(SwarmAuditRecord::from).collect(),
             tasks,
             execution,
         }
@@ -137,10 +168,16 @@ impl SwarmRunArtifact {
         out.push_str(&format!("- Failed: `{}`\n", self.failed));
         out.push_str(&format!("- Skipped: `{}`\n", self.skipped));
         out.push_str(&format!("- Success rate: `{:.1}%`\n", self.success_rate * 100.0));
+        if let Some(status) = &self.swarm_status {
+            out.push_str(&format!("- Swarm status: `{}`\n", swarm_status_label(status)));
+        }
         out.push_str(&format!(
             "- Total wall time: `{} ms`\n\n",
             self.total_wall_time_ms
         ));
+        if let Some(output) = &self.output {
+            out.push_str(&format!("- Final output: `{}`\n\n", compact(output)));
+        }
 
         out.push_str("## Dependency Graph\n\n```mermaid\ngraph TD\n");
         for task in &self.tasks {
@@ -218,6 +255,47 @@ impl SwarmRunArtifact {
                         join_or_dash(&statuses)
                     ));
                 }
+            }
+        }
+
+        if let Some(metrics) = &self.metrics {
+            let mut agents: Vec<_> = metrics.agent_tokens.iter().collect();
+            agents.sort_by(|a, b| a.0.cmp(b.0));
+
+            out.push_str("\n## Metrics\n\n");
+            out.push_str("| Total Tokens | Duration | Tasks Completed | Tasks Failed | HITL | Reassignments |\n");
+            out.push_str("| --- | --- | --- | --- | --- | --- |\n");
+            out.push_str(&format!(
+                "| {} | {} ms | {} | {} | {} | {} |\n",
+                metrics.total_tokens,
+                metrics.duration_ms,
+                metrics.tasks_completed,
+                metrics.tasks_failed,
+                metrics.hitl_interventions,
+                metrics.reassignments
+            ));
+
+            if !agents.is_empty() {
+                out.push_str("\n| Agent | Tokens |\n");
+                out.push_str("| --- | --- |\n");
+                for (agent, tokens) in agents {
+                    out.push_str(&format!("| {} | {} |\n", agent, tokens));
+                }
+            }
+        }
+
+        if !self.audit_events.is_empty() {
+            out.push_str("\n## Audit Trail\n\n");
+            out.push_str("| Event | Description | Data |\n");
+            out.push_str("| --- | --- | --- |\n");
+            for event in &self.audit_events {
+                // Keep event payloads compact so the markdown stays PR-comment friendly.
+                out.push_str(&format!(
+                    "| {} | {} | `{}` |\n",
+                    audit_kind_label(&event.kind),
+                    compact(&event.description),
+                    compact(&event.data.to_string())
+                ));
             }
         }
 
@@ -363,6 +441,44 @@ impl SwarmRunArtifact {
         }
     }
 
+    /// Assert swarm-level metrics match expected HITL and reassignment counts.
+    pub fn assert_metrics(
+        &self,
+        hitl_interventions: usize,
+        reassignments: usize,
+    ) -> Result<(), String> {
+        let metrics = self
+            .metrics
+            .as_ref()
+            .ok_or_else(|| "artifact has no metrics snapshot".to_string())?;
+
+        if metrics.hitl_interventions == hitl_interventions
+            && metrics.reassignments == reassignments
+        {
+            Ok(())
+        } else {
+            Err(format!(
+                "expected metrics hitl/reassignments = {}/{}, got {}/{}",
+                hitl_interventions,
+                reassignments,
+                metrics.hitl_interventions,
+                metrics.reassignments
+            ))
+        }
+    }
+
+    /// Assert at least one audit event of the given kind exists.
+    pub fn assert_audit_event_kind(&self, kind: AuditEventKind) -> Result<(), String> {
+        if self.audit_events.iter().any(|event| event.kind == kind) {
+            Ok(())
+        } else {
+            Err(format!(
+                "artifact does not contain audit event `{}`",
+                audit_kind_label(&kind)
+            ))
+        }
+    }
+
     fn task(&self, task_id: &str) -> Option<&SwarmTaskRecord> {
         self.tasks.iter().find(|task| task.id == task_id)
     }
@@ -378,6 +494,93 @@ impl SwarmRunArtifact {
             CoordinationPattern::Routing => "routing",
         }
     }
+}
+
+impl From<&SwarmMetrics> for SwarmMetricsRecord {
+    fn from(value: &SwarmMetrics) -> Self {
+        Self {
+            total_tokens: value.total_tokens,
+            duration_ms: value.duration_ms,
+            tasks_completed: value.tasks_completed,
+            tasks_failed: value.tasks_failed,
+            hitl_interventions: value.hitl_interventions,
+            reassignments: value.reassignments,
+            agent_tokens: value.agent_tokens.clone(),
+        }
+    }
+}
+
+impl From<&AuditEvent> for SwarmAuditRecord {
+    fn from(value: &AuditEvent) -> Self {
+        Self {
+            kind: value.kind.clone(),
+            description: value.description.clone(),
+            timestamp_ms: value.timestamp.timestamp_millis(),
+            data: value.data.clone(),
+        }
+    }
+}
+
+fn snapshot_tasks(dag: &SubtaskDAG) -> Vec<SwarmTaskRecord> {
+    // Prefer topological order so the rendered artifact reads like the intended
+    // orchestration plan rather than raw graph insertion order.
+    let ordered = dag
+        .topological_order()
+        .unwrap_or_else(|_| dag.all_tasks().into_iter().map(|(idx, _)| idx).collect());
+
+    let mut tasks = Vec::new();
+    for idx in ordered {
+        if let Some(task) = dag.get_task(idx) {
+            let dependencies = dag
+                .dependencies_of(idx)
+                .into_iter()
+                .filter_map(|dep| dag.get_task(dep).map(|task| task.id.clone()))
+                .collect();
+            let dependents = dag
+                .dependents_of(idx)
+                .into_iter()
+                .filter_map(|dep| dag.get_task(dep).map(|task| task.id.clone()))
+                .collect();
+
+            tasks.push(SwarmTaskRecord {
+                id: task.id.clone(),
+                description: task.description.clone(),
+                status: task.status.clone(),
+                assigned_agent: task.assigned_agent.clone(),
+                output: task.output.clone(),
+                dependencies,
+                dependents,
+                required_capabilities: task.required_capabilities.clone(),
+                risk_level: task.risk_level.clone(),
+                hitl_required: task.hitl_required,
+            });
+        }
+    }
+    tasks
+}
+
+fn snapshot_execution(summary: &SchedulerSummary) -> Vec<SwarmExecutionRecord> {
+    summary
+        .results
+        .iter()
+        .map(|result| {
+            // Normalize scheduler outcomes to stable strings
+            let (outcome, detail) = match &result.outcome {
+                TaskOutcome::Success(output) => ("success".to_string(), Some(output.clone())),
+                TaskOutcome::Failure(error) => ("failure".to_string(), Some(error.clone())),
+                TaskOutcome::Skipped(reason) => ("skipped".to_string(), Some(reason.clone())),
+            };
+
+            SwarmExecutionRecord {
+                task_id: result.task_id.clone(),
+                node_index: result.node_index,
+                outcome,
+                detail,
+                wall_time_ms: result.wall_time.as_millis() as u64,
+                attempt: result.attempt,
+            }
+        })
+        .collect()
 }
 
 fn join_or_dash(values: &[String]) -> String {
@@ -411,5 +614,35 @@ fn status_label(status: &SubtaskStatus) -> String {
         SubtaskStatus::Completed => "completed".to_string(),
         SubtaskStatus::Failed(reason) => format!("failed ({reason})"),
         SubtaskStatus::Skipped => "skipped".to_string(),
+    }
+}
+
+fn swarm_status_label(status: &SwarmStatus) -> String {
+    match status {
+        SwarmStatus::Running => "running".to_string(),
+        SwarmStatus::Completed => "completed".to_string(),
+        SwarmStatus::Failed(reason) => format!("failed ({reason})"),
+        SwarmStatus::Cancelled => "cancelled".to_string(),
+        SwarmStatus::Escalated => "escalated".to_string(),
+        _ => "unknown".to_string(),
+    }
+}
+
+fn audit_kind_label(kind: &AuditEventKind) -> &'static str {
+    match kind {
+        AuditEventKind::SwarmStarted => "swarm_started",
+        AuditEventKind::TaskDecomposed => "task_decomposed",
+        AuditEventKind::AgentAssigned => "agent_assigned",
+        AuditEventKind::PatternSelected => "pattern_selected",
+        AuditEventKind::SubtaskStarted => "subtask_started",
+        AuditEventKind::SubtaskCompleted => "subtask_completed",
+        AuditEventKind::SubtaskFailed => "subtask_failed",
+        AuditEventKind::HITLRequested => "hitl_requested",
+        AuditEventKind::HITLDecision => "hitl_decision",
+        AuditEventKind::SLAWarning => "sla_warning",
+        AuditEventKind::SLABreach => "sla_breach",
+        AuditEventKind::AgentReassigned => "agent_reassigned",
+        AuditEventKind::SwarmCompleted => "swarm_completed",
+        _ => "unknown_event",
     }
 }
