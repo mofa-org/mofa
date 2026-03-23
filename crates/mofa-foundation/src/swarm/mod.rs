@@ -1,9 +1,15 @@
+pub mod admission_gate;
 pub mod analyzer;
 pub mod config;
 pub mod dag;
 pub mod patterns;
 pub mod telemetry;
 
+pub use admission_gate::{
+    AdmissionDecision, AdmissionPolicy, AdmissionReport, ComplexityBudgetPolicy,
+    MaxTaskCountPolicy, PolicyVerdict, RequiredCapabilityPolicy, RiskBudgetPolicy,
+    SwarmAdmissionGate, TaskVerdict,
+};
 pub use analyzer::{RiskAwareAnalysis, RiskSummary, TaskAnalyzer};
 pub use config::{
     AgentSpec, AuditEvent, AuditEventKind, HITLMode, SLAConfig, SwarmConfig, SwarmMetrics,
