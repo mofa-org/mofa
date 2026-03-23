@@ -17,14 +17,7 @@ pub enum McpError {
     Api(String),
 }
 
-impl From<McpError> for DispatchError {
-    fn from(err: McpError) -> Self {
-        DispatchError::AdapterInvocationFailed {
-            adapter: "mcp".into(),
-            reason: err.to_string(),
-        }
-    }
-}
+// Construct DispatchError::AdapterInvocationFailed inside invoke manually for precise attribution.
 
 /// Adapter for invoking MCP context and tools.
 pub struct McpAdapter {
@@ -103,9 +96,15 @@ impl GatewayAdapter for McpAdapter {
             }
         }
 
-        let res = request_builder.send().await.map_err(McpError::Http)?;
+        let res = request_builder.send().await.map_err(|e| DispatchError::AdapterInvocationFailed {
+            adapter: self.name().to_string(),
+            reason: e.to_string(),
+        })?;
         let status = res.status().as_u16();
-        let bytes = res.bytes().await.map_err(McpError::Http)?;
+        let bytes = res.bytes().await.map_err(|e| DispatchError::AdapterInvocationFailed {
+            adapter: self.name().to_string(),
+            reason: e.to_string(),
+        })?;
 
         let mut gateway_res = GatewayResponse::new(status, self.name());
         gateway_res.body = bytes.to_vec();
