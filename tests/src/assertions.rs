@@ -4,6 +4,8 @@
 
 use std::time::Duration;
 
+use mofa_kernel::agent::AgentState;
+use mofa_runtime::runner::RunnerState;
 use regex::Regex;
 use serde_json::Value;
 
@@ -141,6 +143,64 @@ pub fn assert_run_failure_contains(result: &AgentRunResult, expected: &str) {
         "Expected error containing '{}', got '{}'",
         expected,
         actual
+    );
+}
+
+/// Assert that the run metadata includes a non-empty execution id.
+pub fn assert_execution_id_present(result: &AgentRunResult) {
+    assert!(
+        !result.metadata.execution_id.trim().is_empty(),
+        "Expected non-empty execution id"
+    );
+}
+
+/// Assert that the captured session id matches the expected value.
+pub fn assert_session_id_equals(result: &AgentRunResult, expected: &str) {
+    let actual = result
+        .metadata
+        .session_id
+        .as_deref()
+        .unwrap_or_else(|| panic!("Expected session id '{}', but none was captured", expected));
+    assert_eq!(
+        actual, expected,
+        "Expected session id '{}', got '{}'",
+        expected, actual
+    );
+}
+
+/// Assert that the runner state before execution matches the expected state.
+pub fn assert_runner_state_before(result: &AgentRunResult, expected: RunnerState) {
+    assert_eq!(
+        result.metadata.runner_state_before, expected,
+        "Expected runner state before {:?}, got {:?}",
+        expected, result.metadata.runner_state_before
+    );
+}
+
+/// Assert that the runner state after execution matches the expected state.
+pub fn assert_runner_state_after(result: &AgentRunResult, expected: RunnerState) {
+    assert_eq!(
+        result.metadata.runner_state_after, expected,
+        "Expected runner state after {:?}, got {:?}",
+        expected, result.metadata.runner_state_after
+    );
+}
+
+/// Assert that the agent state before execution matches the expected state.
+pub fn assert_agent_state_before(result: &AgentRunResult, expected: AgentState) {
+    assert_eq!(
+        result.metadata.agent_state_before, expected,
+        "Expected agent state before {:?}, got {:?}",
+        expected, result.metadata.agent_state_before
+    );
+}
+
+/// Assert that the agent state after execution matches the expected state.
+pub fn assert_agent_state_after(result: &AgentRunResult, expected: AgentState) {
+    assert_eq!(
+        result.metadata.agent_state_after, expected,
+        "Expected agent state after {:?}, got {:?}",
+        expected, result.metadata.agent_state_after
     );
 }
 

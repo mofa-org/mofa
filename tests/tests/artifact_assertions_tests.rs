@@ -1,12 +1,16 @@
 use std::time::Duration;
 
+use mofa_kernel::agent::AgentState;
+use mofa_runtime::runner::RunnerState;
 use mofa_testing::agent_runner::AgentTestRunner;
 use mofa_testing::assertions::{
-    assert_duration_under, assert_llm_request_contains, assert_llm_response_contains,
+    assert_agent_state_after, assert_agent_state_before, assert_duration_under,
+    assert_execution_id_present, assert_llm_request_contains, assert_llm_response_contains,
     assert_output_contains, assert_output_matches_regex, assert_run_failure_contains,
     assert_run_success, assert_run_tool_call_count, assert_run_tool_called,
     assert_run_tool_duration_recorded, assert_run_tool_input, assert_run_tool_not_called,
-    assert_run_tool_output_contains, assert_run_tool_succeeded, assert_session_contains,
+    assert_run_tool_output_contains, assert_run_tool_succeeded, assert_runner_state_after,
+    assert_runner_state_before, assert_session_contains, assert_session_id_equals,
     assert_session_len, assert_workspace_file_changed, assert_workspace_has_file,
     assert_workspace_missing_file,
 };
@@ -21,6 +25,12 @@ async fn artifact_assertions_cover_success_output_and_llm_capture() {
     let result = runner.run_text("hello").await.expect("run succeeds");
 
     assert_run_success(&result);
+    assert_execution_id_present(&result);
+    assert_session_id_equals(&result, runner.session_id());
+    assert_runner_state_before(&result, RunnerState::Created);
+    assert_runner_state_after(&result, RunnerState::Running);
+    assert_agent_state_before(&result, AgentState::Ready);
+    assert_agent_state_after(&result, AgentState::Ready);
     assert_output_contains(&result, "assertions");
     assert_output_matches_regex(&result, "Hello .* assertions");
     assert_duration_under(&result, Duration::from_secs(2));
@@ -94,6 +104,12 @@ async fn artifact_assertions_cover_failures() {
     let result = runner.run_text("trigger failure").await.expect("run returns result");
 
     assert_run_failure_contains(&result, "boom failure");
+    assert_execution_id_present(&result);
+    assert_session_id_equals(&result, runner.session_id());
+    assert_runner_state_before(&result, RunnerState::Created);
+    assert_runner_state_after(&result, RunnerState::Running);
+    assert_agent_state_before(&result, AgentState::Ready);
+    assert_agent_state_after(&result, AgentState::Ready);
 
     runner.shutdown().await.expect("shutdown succeeds");
 }
