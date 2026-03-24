@@ -384,6 +384,14 @@ impl SubtaskDAG {
             .collect()
     }
 
+    /// Return node indices for subtasks that are not yet assigned to an agent.
+    pub fn unassigned_tasks(&self) -> Vec<NodeIndex> {
+        self.graph
+            .node_indices()
+            .filter(|&idx| self.graph[idx].assigned_agent.is_none())
+            .collect()
+    }
+
     /// Get the dependencies of a specific task (incoming edges)
     pub fn dependencies_of(&self, idx: NodeIndex) -> Vec<NodeIndex> {
         self.graph
@@ -414,7 +422,6 @@ impl SubtaskDAG {
             .filter(|t| matches!(t.status, SubtaskStatus::Failed(_)))
             .count()
     }
-
 
     // ── Risk & HITL helpers ───────────────────────────────────────────────
 
@@ -745,7 +752,8 @@ mod tests {
         let d = dag.add_task(SwarmSubtask::new("d", "Independent"));
 
         dag.add_dependency(a, b).unwrap(); // Sequential (hard)
-        dag.add_dependency_with_kind(a, c, DependencyKind::Soft).unwrap();
+        dag.add_dependency_with_kind(a, c, DependencyKind::Soft)
+            .unwrap();
 
         dag.mark_failed(a, "error");
         let skipped = dag.cascade_skip(a);
@@ -793,12 +801,20 @@ mod tests {
         // a fails — b should become ready (not stuck forever)
         dag.mark_failed(a, "connection timeout");
         let ready = dag.ready_tasks();
-        assert_eq!(ready, vec![b], "b must become ready when its dependency fails");
+        assert_eq!(
+            ready,
+            vec![b],
+            "b must become ready when its dependency fails"
+        );
 
         // b also fails — c should become ready
         dag.mark_failed(b, "no input data");
         let ready = dag.ready_tasks();
-        assert_eq!(ready, vec![c], "c must become ready when its dependency fails");
+        assert_eq!(
+            ready,
+            vec![c],
+            "c must become ready when its dependency fails"
+        );
 
         dag.mark_skipped(c);
         assert!(dag.is_complete());
@@ -823,7 +839,11 @@ mod tests {
 
         // d depends on both b (Completed) and c (Failed) — should be ready
         let ready = dag.ready_tasks();
-        assert_eq!(ready, vec![d], "d must become ready when all deps are terminal");
+        assert_eq!(
+            ready,
+            vec![d],
+            "d must become ready when all deps are terminal"
+        );
     }
 
     #[test]
@@ -883,6 +903,18 @@ mod tests {
             dag.get_task(a).unwrap().assigned_agent.as_deref(),
             Some("agent-1")
         );
+    }
+
+    #[test]
+    fn test_unassigned_tasks() {
+        let mut dag = SubtaskDAG::new("unassigned");
+        let a = dag.add_task(SwarmSubtask::new("a", "A"));
+        let b = dag.add_task(SwarmSubtask::new("b", "B"));
+
+        dag.assign_agent(a, "agent-1");
+        let mut unassigned = dag.unassigned_tasks();
+        unassigned.sort();
+        assert_eq!(unassigned, vec![b]);
     }
 
     // ── RiskLevel tests ───────────────────────────────────────────────────
