@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>MoFA Swarm Artifact Viewer</title>
+    <link data-trunk rel="css" href="src/style.css" />
+    <link data-trunk rel="rust" />
+  </head>
+  <body>
+    <main id="app"></main>
+    <script type="module">
+      import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.esm.min.mjs";
+      mermaid.initialize({ startOnLoad: false, theme: "neutral" });
+      window.renderMermaid = async (id, code) => {
+        try {
+          const { svg } = await mermaid.render(id + "_svg", code);
+          const el = document.getElementById(id);
+          if (el) {
+            el.innerHTML = svg;
+          }
+        } catch (err) {
+          const el = document.getElementById(id);
+          if (el) {
+            el.textContent = "Mermaid render error: " + err;
+          }
+        }
+      };
+    </script>
+  </body>
+</html>
