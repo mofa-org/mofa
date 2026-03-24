@@ -186,6 +186,60 @@ pub fn assert_runner_state_after(result: &AgentRunResult, expected: RunnerState)
     );
 }
 
+/// Assert that total executions changed by the expected delta.
+pub fn assert_total_executions_delta(result: &AgentRunResult, expected_delta: u64) {
+    let before = result.metadata.runner_stats_before.total_executions;
+    let after = result.metadata.runner_stats_after.total_executions;
+    assert_eq!(
+        after.saturating_sub(before),
+        expected_delta,
+        "Expected total executions delta {}, got {} (before {}, after {})",
+        expected_delta,
+        after.saturating_sub(before),
+        before,
+        after
+    );
+}
+
+/// Assert that successful executions changed by the expected delta.
+pub fn assert_successful_executions_delta(result: &AgentRunResult, expected_delta: u64) {
+    let before = result.metadata.runner_stats_before.successful_executions;
+    let after = result.metadata.runner_stats_after.successful_executions;
+    assert_eq!(
+        after.saturating_sub(before),
+        expected_delta,
+        "Expected successful executions delta {}, got {} (before {}, after {})",
+        expected_delta,
+        after.saturating_sub(before),
+        before,
+        after
+    );
+}
+
+/// Assert that failed executions changed by the expected delta.
+pub fn assert_failed_executions_delta(result: &AgentRunResult, expected_delta: u64) {
+    let before = result.metadata.runner_stats_before.failed_executions;
+    let after = result.metadata.runner_stats_after.failed_executions;
+    assert_eq!(
+        after.saturating_sub(before),
+        expected_delta,
+        "Expected failed executions delta {}, got {} (before {}, after {})",
+        expected_delta,
+        after.saturating_sub(before),
+        before,
+        after
+    );
+}
+
+/// Assert that the runner recorded a last execution time.
+pub fn assert_last_execution_time_recorded(result: &AgentRunResult) {
+    assert!(
+        result.metadata.runner_stats_after.last_execution_time_ms.is_some(),
+        "Expected runner stats to record last execution time, got {:?}",
+        result.metadata.runner_stats_after
+    );
+}
+
 /// Assert that the agent state before execution matches the expected state.
 pub fn assert_agent_state_before(result: &AgentRunResult, expected: AgentState) {
     assert_eq!(
