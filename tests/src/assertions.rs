@@ -522,6 +522,16 @@ pub fn assert_workspace_has_file(snapshot: &WorkspaceSnapshot, relative_path: &s
     let _ = find_file(snapshot, relative_path);
 }
 
+/// Assert that the workspace snapshot before execution contains the given file.
+pub fn assert_workspace_file_exists_before(result: &AgentRunResult, relative_path: &str) {
+    assert_workspace_has_file(&result.metadata.workspace_snapshot_before, relative_path);
+}
+
+/// Assert that the workspace snapshot after execution contains the given file.
+pub fn assert_workspace_file_exists_after(result: &AgentRunResult, relative_path: &str) {
+    assert_workspace_has_file(&result.metadata.workspace_snapshot_after, relative_path);
+}
+
 /// Assert that the workspace snapshot does not contain the given file.
 pub fn assert_workspace_missing_file(snapshot: &WorkspaceSnapshot, relative_path: &str) {
     let found = snapshot
@@ -532,6 +542,29 @@ pub fn assert_workspace_missing_file(snapshot: &WorkspaceSnapshot, relative_path
         !found,
         "Expected workspace file '{}' to be absent, but snapshot contained it",
         relative_path
+    );
+}
+
+/// Assert that the workspace file count delta matches the expected change.
+pub fn assert_workspace_file_count_delta(result: &AgentRunResult, expected_delta: isize) {
+    let before = result.metadata.workspace_snapshot_before.files.len() as isize;
+    let after = result.metadata.workspace_snapshot_after.files.len() as isize;
+    let actual_delta = after - before;
+    assert_eq!(
+        actual_delta, expected_delta,
+        "Expected workspace file count delta {}, got {} (before {}, after {})",
+        expected_delta, actual_delta, before, after
+    );
+}
+
+/// Assert that a workspace file checksum changed across the run.
+pub fn assert_workspace_file_checksum_changed(result: &AgentRunResult, relative_path: &str) {
+    let before = find_file(&result.metadata.workspace_snapshot_before, relative_path);
+    let after = find_file(&result.metadata.workspace_snapshot_after, relative_path);
+    assert_ne!(
+        before.checksum, after.checksum,
+        "Expected workspace file '{}' checksum to change, but it stayed {}",
+        relative_path, before.checksum
     );
 }
 

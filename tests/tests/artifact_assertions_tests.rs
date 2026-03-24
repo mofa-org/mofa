@@ -14,6 +14,8 @@ use mofa_testing::assertions::{
     assert_run_tool_output_equals_json, assert_run_tool_succeeded, assert_run_tool_timed_out,
     assert_runner_state_after, assert_runner_state_before, assert_session_contains,
     assert_session_id_equals, assert_session_len, assert_workspace_file_changed,
+    assert_workspace_file_checksum_changed, assert_workspace_file_count_delta,
+    assert_workspace_file_exists_after, assert_workspace_file_exists_before,
     assert_workspace_has_file, assert_workspace_missing_file,
 };
 use mofa_testing::tools::MockTool;
@@ -86,6 +88,9 @@ async fn artifact_assertions_cover_tool_records() {
 #[tokio::test]
 async fn artifact_assertions_cover_workspace_snapshots() {
     let mut runner = AgentTestRunner::new().await.expect("runner initializes");
+    runner
+        .write_workspace_file("notes.txt", "before")
+        .expect("workspace file written");
     runner.mock_llm().add_response("workspace ok").await;
 
     let result = runner.run_text("write session").await.expect("run succeeds");
@@ -93,7 +98,28 @@ async fn artifact_assertions_cover_workspace_snapshots() {
 
     assert_workspace_missing_file(&result.metadata.workspace_snapshot_before, &session_file);
     assert_workspace_has_file(&result.metadata.workspace_snapshot_after, &session_file);
+    assert_workspace_file_exists_before(&result, "notes.txt");
+    assert_workspace_file_exists_after(&result, "notes.txt");
+    assert_workspace_file_count_delta(&result, 1);
     assert_workspace_file_changed(&result, &session_file);
+
+    runner.shutdown().await.expect("shutdown succeeds");
+}
+
+#[tokio::test]
+async fn artifact_assertions_cover_workspace_checksum_changes() {
+    let mut runner = AgentTestRunner::new().await.expect("runner initializes");
+    let session_file = format!("sessions/{}.jsonl", runner.session_id());
+    runner
+        .write_workspace_file(&session_file, "seed\n")
+        .expect("workspace file written");
+    runner.mock_llm().add_response("checksum ok").await;
+
+    let result = runner.run_text("checksum run").await.expect("run succeeds");
+
+    assert_workspace_file_exists_before(&result, &session_file);
+    assert_workspace_file_exists_after(&result, &session_file);
+    assert_workspace_file_checksum_changed(&result, &session_file);
 
     runner.shutdown().await.expect("shutdown succeeds");
 }
