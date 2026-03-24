@@ -1,0 +1,99 @@
+use std::time::Duration;
+
+use mofa_testing::agent_runner::AgentTestRunner;
+use mofa_testing::assertions::{
+    assert_duration_under, assert_llm_request_contains, assert_llm_response_contains,
+    assert_output_contains, assert_output_matches_regex, assert_run_failure_contains,
+    assert_run_success, assert_run_tool_call_count, assert_run_tool_called,
+    assert_run_tool_duration_recorded, assert_run_tool_input, assert_run_tool_not_called,
+    assert_run_tool_output_contains, assert_run_tool_succeeded, assert_session_contains,
+    assert_session_len, assert_workspace_file_changed, assert_workspace_has_file,
+    assert_workspace_missing_file,
+};
+use mofa_testing::tools::MockTool;
+use serde_json::json;
+
+#[tokio::test]
+async fn artifact_assertions_cover_success_output_and_llm_capture() {
+    let mut runner = AgentTestRunner::new().await.expect("runner initializes");
+    runner.mock_llm().add_response("Hello from assertions").await;
+
+    let result = runner.run_text("hello").await.expect("run succeeds");
+
+    assert_run_success(&result);
+    assert_output_contains(&result, "assertions");
+    assert_output_matches_regex(&result, "Hello .* assertions");
+    assert_duration_under(&result, Duration::from_secs(2));
+    assert_llm_request_contains(&result, "hello");
+    assert_llm_response_contains(&result, "Hello from assertions");
+    assert_session_len(&result, 2);
+    assert_session_contains(&result, "user", "hello");
+    assert_session_contains(&result, "assistant", "Hello from assertions");
+
+    runner.shutdown().await.expect("shutdown succeeds");
+}
+
+#[tokio::test]
+async fn artifact_assertions_cover_tool_records() {
+    let mut runner = AgentTestRunner::new().await.expect("runner initializes");
+    let tool = MockTool::new(
+        "echo_tool",
+        "Echo input",
+        json!({
+            "type": "object",
+            "properties": {
+                "input": { "type": "string" }
+            },
+            "required": ["input"]
+        }),
+    );
+    runner
+        .register_mock_tool(tool)
+        .await
+        .expect("tool registered");
+
+    runner
+        .mock_llm()
+        .add_tool_call_response("echo_tool", json!({ "input": "ping" }), None)
+        .await;
+    runner.mock_llm().add_response("tool complete").await;
+
+    let result = runner.run_text("use a tool").await.expect("run succeeds");
+
+    assert_run_tool_called(&result, "echo_tool");
+    assert_run_tool_not_called(&result, "missing_tool");
+    assert_run_tool_call_count(&result, "echo_tool", 1);
+    assert_run_tool_input(&result, "echo_tool", &json!({ "input": "ping" }));
+    assert_run_tool_succeeded(&result, "echo_tool");
+    assert_run_tool_output_contains(&result, "echo_tool", "Mock execution default");
+    assert_run_tool_duration_recorded(&result, "echo_tool");
+
+    runner.shutdown().await.expect("shutdown succeeds");
+}
+
+#[tokio::test]
+async fn artifact_assertions_cover_workspace_snapshots() {
+    let mut runner = AgentTestRunner::new().await.expect("runner initializes");
+    runner.mock_llm().add_response("workspace ok").await;
+
+    let result = runner.run_text("write session").await.expect("run succeeds");
+    let session_file = format!("sessions/{}.jsonl", runner.session_id());
+
+    assert_workspace_missing_file(&result.metadata.workspace_snapshot_before, &session_file);
+    assert_workspace_has_file(&result.metadata.workspace_snapshot_after, &session_file);
+    assert_workspace_file_changed(&result, &session_file);
+
+    runner.shutdown().await.expect("shutdown succeeds");
+}
+
+#[tokio::test]
+async fn artifact_assertions_cover_failures() {
+    let mut runner = AgentTestRunner::new().await.expect("runner initializes");
+    runner.mock_llm().add_error_response("boom failure").await;
+
+    let result = runner.run_text("trigger failure").await.expect("run returns result");
+
+    assert_run_failure_contains(&result, "boom failure");
+
+    runner.shutdown().await.expect("shutdown succeeds");
+}
