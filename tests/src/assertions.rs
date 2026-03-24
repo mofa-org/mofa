@@ -261,6 +261,42 @@ pub fn assert_llm_request_contains(result: &AgentRunResult, expected: &str) {
     );
 }
 
+/// Assert that the last captured LLM request has the expected number of messages.
+pub fn assert_llm_request_message_count(result: &AgentRunResult, expected: usize) {
+    let request = result.metadata.llm_last_request.as_ref().unwrap_or_else(|| {
+        panic!(
+            "Expected LLM request with {} messages, but none was captured",
+            expected
+        )
+    });
+    assert_eq!(
+        request.messages.len(),
+        expected,
+        "Expected LLM request to have {} messages, got {}",
+        expected,
+        request.messages.len()
+    );
+}
+
+/// Assert that the last captured LLM request includes a system message.
+pub fn assert_llm_request_has_system_message(result: &AgentRunResult) {
+    let request = result
+        .metadata
+        .llm_last_request
+        .as_ref()
+        .unwrap_or_else(|| panic!("Expected LLM request with system message, but none was captured"));
+    let has_system = request.messages.iter().any(|msg| msg.role == "system");
+    assert!(
+        has_system,
+        "Expected LLM request to include a system message, got roles {:?}",
+        request
+            .messages
+            .iter()
+            .map(|msg| msg.role.as_str())
+            .collect::<Vec<_>>()
+    );
+}
+
 /// Assert that the last captured LLM response contains the expected text.
 pub fn assert_llm_response_contains(result: &AgentRunResult, expected: &str) {
     let response = result.metadata.llm_last_response.as_ref().unwrap_or_else(|| {
@@ -275,6 +311,50 @@ pub fn assert_llm_response_contains(result: &AgentRunResult, expected: &str) {
         "Expected LLM response containing '{}', got '{}'",
         expected,
         content
+    );
+}
+
+/// Assert that the last captured LLM response content equals the expected text.
+pub fn assert_llm_response_equals(result: &AgentRunResult, expected: &str) {
+    let response = result.metadata.llm_last_response.as_ref().unwrap_or_else(|| {
+        panic!(
+            "Expected LLM response equal to '{}', but none was captured",
+            expected
+        )
+    });
+    let content = response.content.as_deref().unwrap_or("");
+    assert_eq!(
+        content, expected,
+        "Expected LLM response content '{}', got '{}'",
+        expected, content
+    );
+}
+
+/// Assert that the last captured LLM response includes at least one tool call.
+pub fn assert_llm_response_has_tool_calls(result: &AgentRunResult) {
+    let response = result
+        .metadata
+        .llm_last_response
+        .as_ref()
+        .unwrap_or_else(|| panic!("Expected LLM response with tool calls, but none was captured"));
+    let tool_calls = response.tool_calls.as_ref().map(|calls| calls.len()).unwrap_or(0);
+    assert!(
+        tool_calls > 0,
+        "Expected LLM response to include tool calls, got {:?}",
+        response.tool_calls
+    );
+}
+
+/// Assert that the last captured LLM response does not include any tool calls.
+pub fn assert_llm_response_has_no_tool_calls(result: &AgentRunResult) {
+    let response = result.metadata.llm_last_response.as_ref().unwrap_or_else(|| {
+        panic!("Expected LLM response without tool calls, but none was captured")
+    });
+    let tool_calls = response.tool_calls.as_ref().map(|calls| calls.len()).unwrap_or(0);
+    assert_eq!(
+        tool_calls, 0,
+        "Expected LLM response to have no tool calls, got {:?}",
+        response.tool_calls
     );
 }
 

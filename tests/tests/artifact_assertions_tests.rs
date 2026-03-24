@@ -6,17 +6,20 @@ use mofa_runtime::runner::RunnerState;
 use mofa_testing::agent_runner::AgentTestRunner;
 use mofa_testing::assertions::{
     assert_agent_state_after, assert_agent_state_before, assert_duration_under,
-    assert_execution_id_present, assert_llm_request_contains, assert_llm_response_contains,
+    assert_execution_id_present, assert_llm_request_contains,
+    assert_llm_request_has_system_message, assert_llm_request_message_count,
+    assert_llm_response_contains, assert_llm_response_equals,
+    assert_llm_response_has_no_tool_calls,
     assert_output_contains, assert_output_matches_regex, assert_run_failure_contains,
     assert_run_success, assert_run_tool_call_count, assert_run_tool_called,
-    assert_run_tool_duration_recorded, assert_run_tool_duration_under, assert_run_tool_failed,
-    assert_run_tool_input, assert_run_tool_not_called, assert_run_tool_output_contains,
-    assert_run_tool_output_equals_json, assert_run_tool_succeeded, assert_run_tool_timed_out,
-    assert_runner_state_after, assert_runner_state_before, assert_session_contains,
-    assert_session_id_equals, assert_session_len, assert_workspace_file_changed,
-    assert_workspace_file_checksum_changed, assert_workspace_file_count_delta,
-    assert_workspace_file_exists_after, assert_workspace_file_exists_before,
-    assert_workspace_has_file, assert_workspace_missing_file,
+    assert_run_tool_duration_recorded, assert_run_tool_duration_under,
+    assert_run_tool_failed, assert_run_tool_input, assert_run_tool_not_called,
+    assert_run_tool_output_contains, assert_run_tool_output_equals_json,
+    assert_run_tool_succeeded, assert_run_tool_timed_out, assert_runner_state_after,
+    assert_runner_state_before, assert_session_contains, assert_session_id_equals,
+    assert_session_len, assert_workspace_file_changed, assert_workspace_file_checksum_changed,
+    assert_workspace_file_count_delta, assert_workspace_file_exists_after,
+    assert_workspace_file_exists_before, assert_workspace_has_file, assert_workspace_missing_file,
 };
 use mofa_testing::tools::MockTool;
 use serde_json::json;
@@ -39,7 +42,11 @@ async fn artifact_assertions_cover_success_output_and_llm_capture() {
     assert_output_matches_regex(&result, "Hello .* assertions");
     assert_duration_under(&result, Duration::from_secs(2));
     assert_llm_request_contains(&result, "hello");
+    assert_llm_request_message_count(&result, 2);
+    assert_llm_request_has_system_message(&result);
     assert_llm_response_contains(&result, "Hello from assertions");
+    assert_llm_response_equals(&result, "Hello from assertions");
+    assert_llm_response_has_no_tool_calls(&result);
     assert_session_len(&result, 2);
     assert_session_contains(&result, "user", "hello");
     assert_session_contains(&result, "assistant", "Hello from assertions");
@@ -81,6 +88,7 @@ async fn artifact_assertions_cover_tool_records() {
     assert_run_tool_succeeded(&result, "echo_tool");
     assert_run_tool_output_contains(&result, "echo_tool", "Mock execution default");
     assert_run_tool_duration_recorded(&result, "echo_tool");
+    assert_llm_response_has_no_tool_calls(&result);
 
     runner.shutdown().await.expect("shutdown succeeds");
 }
@@ -179,6 +187,42 @@ async fn artifact_assertions_cover_failures() {
     assert_runner_state_after(&result, RunnerState::Running);
     assert_agent_state_before(&result, AgentState::Ready);
     assert_agent_state_after(&result, AgentState::Ready);
+
+    runner.shutdown().await.expect("shutdown succeeds");
+}
+
+#[tokio::test]
+async fn artifact_assertions_cover_llm_tool_call_capture() {
+    let mut runner = AgentTestRunner::new().await.expect("runner initializes");
+    let tool = MockTool::new(
+        "observe_tool",
+        "Observes input",
+        json!({
+            "type": "object",
+            "properties": {
+                "input": { "type": "string" }
+            },
+            "required": ["input"]
+        }),
+    );
+    runner
+        .register_mock_tool(tool)
+        .await
+        .expect("tool registered");
+
+    runner
+        .mock_llm()
+        .add_tool_call_response("observe_tool", json!({ "input": "inspect" }), Some("calling tool".into()))
+        .await;
+    runner.mock_llm().add_response("done").await;
+
+    let result = runner.run_text("inspect this").await.expect("run succeeds");
+
+    assert_llm_request_message_count(&result, 4);
+    assert_llm_request_has_system_message(&result);
+    assert_llm_response_equals(&result, "done");
+    assert_llm_response_has_no_tool_calls(&result);
+    assert_run_tool_called(&result, "observe_tool");
 
     runner.shutdown().await.expect("shutdown succeeds");
 }
