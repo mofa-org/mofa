@@ -1,6 +1,8 @@
 //! Swarm Configuration and Result types
 
 use chrono::{DateTime, Utc};
+use mofa_kernel::agent::capabilities::AgentCapabilities;
+use mofa_kernel::agent::manifest::AgentManifest;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use uuid::Uuid;
@@ -49,6 +51,31 @@ pub struct AgentSpec {
 
 fn default_concurrency() -> u32 {
     1
+}
+
+impl AgentSpec {
+    /// Convert this `AgentSpec` into a kernel `AgentManifest` for capability discovery.
+    pub fn to_manifest(&self) -> AgentManifest {
+        let caps = AgentCapabilities::builder()
+            .tags(self.capabilities.clone())
+            .supports_coordination(true)
+            .build();
+
+        let description = if self.capabilities.is_empty() {
+            format!("Agent {}", self.id)
+        } else {
+            format!(
+                "Agent {} with capabilities: {}",
+                self.id,
+                self.capabilities.join(", ")
+            )
+        };
+
+        AgentManifest::builder(self.id.clone(), self.id.clone())
+            .description(description)
+            .capabilities(caps)
+            .build()
+    }
 }
 
 /// SLA constraints for a swarm run
