@@ -1,0 +1,11 @@
+[package]
+name = "swarm_testing_demo"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+futures = { workspace = true }
+mofa-foundation = { path = "../../crates/mofa-foundation" }
+mofa-kernel = { path = "../../crates/mofa-kernel" }
+mofa-testing = { path = "../../tests" }
+tokio = { workspace = true }

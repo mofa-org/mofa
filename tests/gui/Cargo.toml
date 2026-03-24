@@ -1,0 +1,16 @@
+[package]
+name = "mofa-swarm-artifact-gui"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+leptos = { version = "0.6", features = ["csr"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+wasm-bindgen = "0.2"
+wasm-bindgen-futures = "0.4"
+gloo-file = "0.3"
+gloo-net = "0.5"
+web-sys = { version = "0.3", features = ["HtmlInputElement"] }
+
+[workspace]
