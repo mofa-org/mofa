@@ -24,7 +24,10 @@ impl Default for SmithConfig {
 
 impl SmithConfig {
     fn load() -> Self {
-        let path = "smith.yaml";
+        Self::load_from_path("smith.yaml")
+    }
+
+    fn load_from_path(path: &str) -> Self {
 
         match fs::read_to_string(path) {
             Ok(content) => match serde_yaml::from_str::<SmithConfig>(&content) {
@@ -99,4 +102,42 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let config = SmithConfig::load();
     let daemon = SmithDaemon::new(config);
     daemon.start().await
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::path::PathBuf;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    #[test]
+    fn test_smith_config_defaults() {
+        let unique = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("time should be after unix epoch")
+            .as_nanos();
+        let missing_path = std::env::temp_dir().join(format!("smith-missing-{unique}.yaml"));
+
+        let config = SmithConfig::load_from_path(&missing_path.to_string_lossy());
+        assert_eq!(config.dashboard_port, 8080);
+        assert_eq!(config.collection_interval_ms, 1000);
+    }
+
+    #[test]
+    fn test_smith_config_custom() {
+        let unique = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("time should be after unix epoch")
+            .as_nanos();
+        let temp_path: PathBuf = std::env::temp_dir().join(format!("smith-custom-{unique}.yaml"));
+
+        let write_result = fs::write(&temp_path, "dashboard_port: 9090\n");
+        assert!(write_result.is_ok(), "failed to create temp smith.yaml");
+
+        let config = SmithConfig::load_from_path(&temp_path.to_string_lossy());
+        assert_eq!(config.dashboard_port, 9090);
+
+        let remove_result = fs::remove_file(&temp_path);
+        assert!(remove_result.is_ok(), "failed to delete temp smith.yaml");
+    }
 }
