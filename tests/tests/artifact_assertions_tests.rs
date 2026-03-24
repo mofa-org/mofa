@@ -1,6 +1,7 @@
 use std::time::Duration;
 
 use mofa_kernel::agent::AgentState;
+use mofa_kernel::agent::components::tool::ToolResult;
 use mofa_runtime::runner::RunnerState;
 use mofa_testing::agent_runner::AgentTestRunner;
 use mofa_testing::assertions::{
@@ -8,11 +9,12 @@ use mofa_testing::assertions::{
     assert_execution_id_present, assert_llm_request_contains, assert_llm_response_contains,
     assert_output_contains, assert_output_matches_regex, assert_run_failure_contains,
     assert_run_success, assert_run_tool_call_count, assert_run_tool_called,
-    assert_run_tool_duration_recorded, assert_run_tool_input, assert_run_tool_not_called,
-    assert_run_tool_output_contains, assert_run_tool_succeeded, assert_runner_state_after,
-    assert_runner_state_before, assert_session_contains, assert_session_id_equals,
-    assert_session_len, assert_workspace_file_changed, assert_workspace_has_file,
-    assert_workspace_missing_file,
+    assert_run_tool_duration_recorded, assert_run_tool_duration_under, assert_run_tool_failed,
+    assert_run_tool_input, assert_run_tool_not_called, assert_run_tool_output_contains,
+    assert_run_tool_output_equals_json, assert_run_tool_succeeded, assert_run_tool_timed_out,
+    assert_runner_state_after, assert_runner_state_before, assert_session_contains,
+    assert_session_id_equals, assert_session_len, assert_workspace_file_changed,
+    assert_workspace_has_file, assert_workspace_missing_file,
 };
 use mofa_testing::tools::MockTool;
 use serde_json::json;
@@ -92,6 +94,47 @@ async fn artifact_assertions_cover_workspace_snapshots() {
     assert_workspace_missing_file(&result.metadata.workspace_snapshot_before, &session_file);
     assert_workspace_has_file(&result.metadata.workspace_snapshot_after, &session_file);
     assert_workspace_file_changed(&result, &session_file);
+
+    runner.shutdown().await.expect("shutdown succeeds");
+}
+
+#[tokio::test]
+async fn artifact_assertions_cover_failed_and_timed_out_tools() {
+    let mut runner = AgentTestRunner::new().await.expect("runner initializes");
+    let tool = MockTool::new(
+        "fragile_tool",
+        "Fails on purpose",
+        json!({
+            "type": "object",
+            "properties": {
+                "input": { "type": "string" }
+            },
+            "required": ["input"]
+        }),
+    );
+    tool.set_result(ToolResult::failure("tool timed out")).await;
+    runner
+        .register_mock_tool(tool)
+        .await
+        .expect("tool registered");
+
+    runner
+        .mock_llm()
+        .add_tool_call_response("fragile_tool", json!({ "input": "ping" }), None)
+        .await;
+    runner.mock_llm().add_response("tool failed handled").await;
+
+    let result = runner
+        .run_text("use fragile tool")
+        .await
+        .expect("run succeeds");
+
+    assert_run_tool_called(&result, "fragile_tool");
+    assert_run_tool_failed(&result, "fragile_tool");
+    assert_run_tool_timed_out(&result, "fragile_tool");
+    assert_run_tool_output_equals_json(&result, "fragile_tool", &json!(null));
+    assert_run_tool_duration_recorded(&result, "fragile_tool");
+    assert_run_tool_duration_under(&result, "fragile_tool", 1_000);
 
     runner.shutdown().await.expect("shutdown succeeds");
 }

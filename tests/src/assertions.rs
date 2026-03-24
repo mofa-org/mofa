@@ -405,6 +405,17 @@ pub fn assert_run_tool_succeeded(result: &AgentRunResult, tool_name: &str) {
     );
 }
 
+/// Assert that a tool call failed.
+pub fn assert_run_tool_failed(result: &AgentRunResult, tool_name: &str) {
+    let call = find_tool_call(result, tool_name);
+    assert!(
+        !call.success,
+        "Expected tool '{}' to fail, but metadata was {:?}",
+        tool_name,
+        call
+    );
+}
+
 /// Assert that a tool call output contains the expected substring.
 pub fn assert_run_tool_output_contains(
     result: &AgentRunResult,
@@ -426,12 +437,63 @@ pub fn assert_run_tool_output_contains(
     );
 }
 
+/// Assert that a tool call output matches the expected JSON value.
+pub fn assert_run_tool_output_equals_json(
+    result: &AgentRunResult,
+    tool_name: &str,
+    expected: &Value,
+) {
+    let call = find_tool_call(result, tool_name);
+    let output = call
+        .output
+        .as_ref()
+        .unwrap_or_else(|| panic!("Expected tool '{}' output, but it was None", tool_name));
+    assert_eq!(
+        output, expected,
+        "Expected tool '{}' output {:?}, got {:?}",
+        tool_name, expected, output
+    );
+}
+
 /// Assert that a tool call recorded a duration.
 pub fn assert_run_tool_duration_recorded(result: &AgentRunResult, tool_name: &str) {
     let call = find_tool_call(result, tool_name);
     assert!(
         call.duration_ms.is_some(),
         "Expected tool '{}' to record duration metadata, got {:?}",
+        tool_name,
+        call
+    );
+}
+
+/// Assert that a tool call duration is less than or equal to the threshold.
+pub fn assert_run_tool_duration_under(
+    result: &AgentRunResult,
+    tool_name: &str,
+    max_duration_ms: u64,
+) {
+    let call = find_tool_call(result, tool_name);
+    let duration_ms = call.duration_ms.unwrap_or_else(|| {
+        panic!(
+            "Expected tool '{}' to record duration metadata, got {:?}",
+            tool_name, call
+        )
+    });
+    assert!(
+        duration_ms <= max_duration_ms,
+        "Expected tool '{}' duration <= {} ms, got {} ms",
+        tool_name,
+        max_duration_ms,
+        duration_ms
+    );
+}
+
+/// Assert that a tool call was marked as timed out.
+pub fn assert_run_tool_timed_out(result: &AgentRunResult, tool_name: &str) {
+    let call = find_tool_call(result, tool_name);
+    assert!(
+        call.timed_out,
+        "Expected tool '{}' to time out, but metadata was {:?}",
         tool_name,
         call
     );
