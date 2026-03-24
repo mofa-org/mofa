@@ -375,6 +375,22 @@ pub fn assert_session_len(result: &AgentRunResult, expected: usize) {
     );
 }
 
+/// Assert that the captured session snapshot has at least the expected number of messages.
+pub fn assert_session_len_at_least(result: &AgentRunResult, minimum: usize) {
+    let session = result.metadata.session_snapshot.as_ref().unwrap_or_else(|| {
+        panic!(
+            "Expected session snapshot with at least {} messages, but none was captured",
+            minimum
+        )
+    });
+    assert!(
+        session.len() >= minimum,
+        "Expected at least {} session messages, got {}",
+        minimum,
+        session.len()
+    );
+}
+
 /// Assert that the captured session contains a message with the expected role/content.
 pub fn assert_session_contains(
     result: &AgentRunResult,
@@ -396,6 +412,43 @@ pub fn assert_session_contains(
         "Expected session to contain role '{}' with content '{}', got {:?}",
         role,
         expected_content,
+        session
+            .messages
+            .iter()
+            .map(|msg| (&msg.role, &msg.content))
+            .collect::<Vec<_>>()
+    );
+}
+
+/// Assert that the captured session contains the expected messages in order.
+pub fn assert_session_contains_in_order(
+    result: &AgentRunResult,
+    expected: &[(&str, &str)],
+) {
+    let session = result.metadata.session_snapshot.as_ref().unwrap_or_else(|| {
+        panic!(
+            "Expected session to contain {:?} in order, but no snapshot was captured",
+            expected
+        )
+    });
+
+    let mut expected_idx = 0usize;
+    for message in &session.messages {
+        if expected_idx >= expected.len() {
+            break;
+        }
+
+        let (role, content) = expected[expected_idx];
+        if message.role == role && message.content == content {
+            expected_idx += 1;
+        }
+    }
+
+    assert_eq!(
+        expected_idx,
+        expected.len(),
+        "Expected session to contain {:?} in order, got {:?}",
+        expected,
         session
             .messages
             .iter()

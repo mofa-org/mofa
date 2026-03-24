@@ -16,8 +16,9 @@ use mofa_testing::assertions::{
     assert_run_tool_failed, assert_run_tool_input, assert_run_tool_not_called,
     assert_run_tool_output_contains, assert_run_tool_output_equals_json,
     assert_run_tool_succeeded, assert_run_tool_timed_out, assert_runner_state_after,
-    assert_runner_state_before, assert_session_contains, assert_session_id_equals,
-    assert_session_len, assert_workspace_file_changed, assert_workspace_file_checksum_changed,
+    assert_runner_state_before, assert_session_contains, assert_session_contains_in_order,
+    assert_session_id_equals, assert_session_len, assert_session_len_at_least,
+    assert_workspace_file_changed, assert_workspace_file_checksum_changed,
     assert_workspace_file_count_delta, assert_workspace_file_exists_after,
     assert_workspace_file_exists_before, assert_workspace_has_file, assert_workspace_missing_file,
 };
@@ -48,8 +49,13 @@ async fn artifact_assertions_cover_success_output_and_llm_capture() {
     assert_llm_response_equals(&result, "Hello from assertions");
     assert_llm_response_has_no_tool_calls(&result);
     assert_session_len(&result, 2);
+    assert_session_len_at_least(&result, 2);
     assert_session_contains(&result, "user", "hello");
     assert_session_contains(&result, "assistant", "Hello from assertions");
+    assert_session_contains_in_order(
+        &result,
+        &[("user", "hello"), ("assistant", "Hello from assertions")],
+    );
 
     runner.shutdown().await.expect("shutdown succeeds");
 }
@@ -223,6 +229,32 @@ async fn artifact_assertions_cover_llm_tool_call_capture() {
     assert_llm_response_equals(&result, "done");
     assert_llm_response_has_no_tool_calls(&result);
     assert_run_tool_called(&result, "observe_tool");
+
+    runner.shutdown().await.expect("shutdown succeeds");
+}
+
+#[tokio::test]
+async fn artifact_assertions_cover_session_ordering() {
+    let mut runner = AgentTestRunner::new().await.expect("runner initializes");
+    runner.mock_llm().add_response("First reply").await;
+    runner.mock_llm().add_response("Second reply").await;
+
+    let results = runner
+        .run_texts(&["turn one", "turn two"])
+        .await
+        .expect("multi-turn run succeeds");
+    let result = results.last().expect("last result present");
+
+    assert_session_len_at_least(result, 4);
+    assert_session_contains_in_order(
+        result,
+        &[
+            ("user", "turn one"),
+            ("assistant", "First reply"),
+            ("user", "turn two"),
+            ("assistant", "Second reply"),
+        ],
+    );
 
     runner.shutdown().await.expect("shutdown succeeds");
 }
