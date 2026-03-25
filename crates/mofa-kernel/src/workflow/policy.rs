@@ -181,6 +181,10 @@ impl CircuitBreakerState {
         if inner.state == CircuitState::HalfOpen {
             inner.state = CircuitState::Closed;
             inner.opened_at = None;
+            tracing::info!(
+                circuit.transition = "HalfOpen -> Closed",
+                "circuit breaker recovered after successful probe"
+            );
         }
     }
 
@@ -198,8 +202,15 @@ impl CircuitBreakerState {
                 && inner.consecutive_failures >= inner.open_after);
 
         if should_open {
+            let prev = inner.state;
             inner.state = CircuitState::Open;
             inner.opened_at = Some(Instant::now());
+            tracing::warn!(
+                circuit.transition = %format!("{prev:?} -> Open"),
+                consecutive_failures = inner.consecutive_failures,
+                threshold = inner.open_after,
+                "circuit breaker opened — node requests will be short-circuited"
+            );
         }
     }
 
@@ -229,6 +240,10 @@ impl CircuitBreakerState {
             && let Some(opened_at) = inner.opened_at
                 && opened_at.elapsed() >= inner.reset_after {
                     inner.state = CircuitState::HalfOpen;
+                    tracing::info!(
+                        circuit.transition = "Open -> HalfOpen",
+                        "circuit breaker entering probe state — one request will be allowed through"
+                    );
                 }
         inner.state
     }
@@ -241,9 +256,14 @@ impl CircuitBreakerState {
     /// Force-close the circuit (useful for testing or operator override).
     pub async fn force_close(&self) {
         let mut inner = self.inner.write().await;
+        let prev = inner.state;
         inner.state = CircuitState::Closed;
         inner.consecutive_failures = 0;
         inner.opened_at = None;
+        tracing::info!(
+            circuit.transition = %format!("{prev:?} -> Closed"),
+            "circuit breaker force-closed by operator"
+        );
     }
 
     /// Returns the current consecutive failure count.
