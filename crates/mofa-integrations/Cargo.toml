@@ -59,10 +59,14 @@ s3 = [
     "dep:aws-config",
 ]
 
-# Cloud Speech Adapters (TTS/ASR)
-openai-speech = ["dep:reqwest", "dep:futures"]
-elevenlabs = ["dep:reqwest", "dep:futures"]
-deepgram = ["dep:reqwest", "dep:futures"]
+# ── Speech features ──────────────────────────────────────────────────────────
+# Base speech feature (common module for registry, traits, configs)
+speech = []
+
+# Cloud Speech Adapters (TTS/ASR) - extend base speech feature
+openai-speech = ["speech", "dep:reqwest", "dep:futures"]
+elevenlabs = ["speech", "dep:reqwest", "dep:futures"]
+deepgram = ["speech", "dep:reqwest", "dep:futures"]
 
 [lints]
 workspace = true
