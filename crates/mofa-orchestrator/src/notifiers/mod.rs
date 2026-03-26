@@ -9,8 +9,10 @@
 //! - [`SlackNotifier`]   — Slack incoming webhook
 //! - [`TelegramNotifier`] — Telegram Bot API (patterns proven in mofaclaw #54)
 //! - [`FeishuNotifier`]  — Feishu webhook (patterns proven in mofaclaw #57)
-//! - [`DingTalkNotifier`] — DingTalk group robot webhook
-//! - [`EmailNotifier`]   — HTTP mail relay (SendGrid / Mailgun compatible)
+//! - [`DingTalkNotifier`]   — DingTalk group robot webhook
+//! - [`EmailNotifier`]      — HTTP mail relay (SendGrid / Mailgun compatible)
+//! - [`WebSocketNotifier`]  — tokio broadcast channel; mofa-studio subscribes
+//!                            for live approval-queue updates (no polling required)
 
 pub mod log_notifier;
 pub mod slack;
@@ -18,6 +20,7 @@ pub mod telegram;
 pub mod feishu;
 pub mod dingtalk;
 pub mod email;
+pub mod websocket;
 
 pub use log_notifier::LogNotifier;
 pub use slack::SlackNotifier;
@@ -25,12 +28,13 @@ pub use telegram::TelegramNotifier;
 pub use feishu::FeishuNotifier;
 pub use dingtalk::DingTalkNotifier;
 pub use email::EmailNotifier;
+pub use websocket::WebSocketNotifier;
 
 use async_trait::async_trait;
 use crate::error::OrchestratorResult;
 
 /// A notification event emitted by the HITL governor when a gate fires.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize)]
 pub struct GateEvent {
     /// Unique identifier for the swarm execution run.
     pub execution_id: String,
@@ -44,7 +48,7 @@ pub struct GateEvent {
     pub kind: GateEventKind,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize)]
 #[non_exhaustive]
 pub enum GateEventKind {
     /// Gate is waiting for human approval.

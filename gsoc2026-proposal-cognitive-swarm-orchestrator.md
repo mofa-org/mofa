@@ -115,7 +115,7 @@ When the GSoC organization list came out and I found MoFA, I started contributin
 - [x] Concrete technical design (modules, interfaces, data flow)
 - [x] Executable timeline with measurable milestones
 - [x] Risks and fallback plan
-- [x] Evidence of execution before selection (27+ merged PRs across mofa-org, 20+ open groundwork PRs, production Telegram and Feishu integrations already shipped, runnable HITL demo in PR #1398, mofa-orchestrator skeleton crate live with all 6 notifiers and 17 tests)
+- [x] Evidence of execution before selection (27+ merged PRs across mofa-org, 20+ open groundwork PRs, production Telegram and Feishu integrations already shipped, runnable HITL demo in PR #1398, mofa-orchestrator skeleton crate live with all 7 notifiers and 23 tests)
 - [x] Testing and validation plan
 - [x] Realistic weekly time commitment and communication plan
 
@@ -124,6 +124,52 @@ When the GSoC organization list came out and I found MoFA, I started contributin
 ### Abstract
 
 MoFA has a powerful microkernel but no coherent layer that connects a natural-language goal to a coordinated team of agents. This proposal builds that layer: the Cognitive Swarm Orchestrator. It delivers seven integrated modules: a dynamic TaskAnalyzer that decomposes goals into mutable SubtaskDAGs and updates them mid-execution as results arrive (DynTaskMAS pattern, ICAPS 2025); a load-aware SwarmComposer that assigns agents by capability, busyness, success rate, and SLA budget across all 7 coordination patterns; a HITLGovernor wired into the existing Secretary 5-phase pattern (Receive, Clarify, Schedule, Monitor, Report) with graduated autonomy and AI-assisted decision suggestions; a GovernanceLayer with RBAC, SLA tracking, audit export, and a REST API for live swarm status; a SemanticDiscovery engine combining BM25 sparse retrieval with dense-vector RRF and MCP-compatible capability registration; a PluginMarketplace with Ed25519 signing and SemVer resolution; and a Smith Observatory integration emitting OpenTelemetry GenAI semantic convention spans. The orchestrator is the connective tissue of the full mofa-org ecosystem: mofa core, mofa-studio visualization, mofaclaw Discord interface, Gateway capability APIs, Smith observability, and SDK polyglot bindings — all in one coherent loop. The result is `mofa swarm run "goal"` producing a fully governed multi-agent execution, runnable with `docker compose up`, with no other Rust framework coming close.
+
+---
+
+### Use Case Scenarios
+
+The following diagram maps the three primary user scenarios to the modules that serve them. Every box on the right is either already merged, open as a groundwork PR, or implemented in the mofa-orchestrator skeleton branch.
+
+```
+Actor                   Goal                        Modules Engaged
+-----                   ----                        ---------------
+
+Enterprise operator     "Review these contracts      TaskAnalyzer (SubtaskDAG)
+                         for compliance issues"  --> SwarmComposer (load-aware assign)
+                                                    HITLGovernor (pause for approval)
+                                                    GovernanceLayer (RBAC + audit JSONL)
+                                                    Smith Observatory (OTel GenAI spans)
+                                                    Notifiers: Email + WebSocket -> mofa-studio
+                                                    Output: audit report + Jaeger trace
+
+DevOps engineer         "Deploy to staging and       TaskAnalyzer (parallel DAG branches)
+                         run smoke tests"        --> SwarmComposer (pattern: Parallel)
+                                                    SemanticDiscovery (BM25+RRF finds
+                                                      deployment agent, test agent)
+                                                    HITLGovernor (approve prod promotion)
+                                                    GatewayCapabilityClient (FileSystem cap)
+                                                    Notifiers: Slack + Telegram
+                                                    Output: deploy log + test results
+
+Research team lead      "Summarise 50 papers         TaskAnalyzer (MapReduce DAG)
+                         and find consensus"     --> SwarmComposer (pattern: Consensus)
+                                                    SemanticDiscovery (A2A Agent Cards
+                                                      discover remote summariser agents)
+                                                    HITLGovernor (graduated autonomy:
+                                                      trusted agents bypass gate)
+                                                    Smith Observatory (precision@3 eval)
+                                                    PluginMarketplace (Ed25519 plugin check)
+                                                    Output: consensus summary + eval report
+
+Discord community user  "mofa swarm run              mofaclaw Discord bot (command entry)
+  via mofaclaw           'research X'"          --> SwarmOrchestrator.run_goal()
+                                                    All 7 modules fire automatically
+                                                    Notifiers: DingTalk + Feishu
+                                                    Result posted back to Discord channel
+```
+
+This is what AmosLi sir described as "the broader ecosystem." The orchestrator does not stand alone — every scenario pulls in a different combination of mofa components. A researcher using the Discord interface gets the same governed, traced, evaluated execution as an enterprise operator using the REST API.
 
 ---
 
@@ -255,7 +301,7 @@ Phase 5: ReportingCompletion (SwarmAuditLog exported, summary sent)
 GSoC work extends this with:
 - **AI-assisted decisions**: before routing to a human, the LLM generates a structured decision suggestion and risk analysis so reviewers are not looking at raw agent output
 - **Graduated autonomy**: agents earn trust levels (Restricted, Supervised, Delegated, Autonomous) based on historical success rate, reducing gate frequency for proven agents over time
-- **Full notification fan-out**: `Notifier` trait with `SlackNotifier`, `TelegramNotifier`, `FeishuNotifier`, `DingTalkNotifier`, `EmailNotifier` — Telegram and Feishu patterns proven in mofaclaw production (#54, #57), DingTalk and Email both implemented and tested in the mofa-orchestrator skeleton branch
+- **Full notification fan-out**: `Notifier` trait with `SlackNotifier`, `TelegramNotifier`, `FeishuNotifier`, `DingTalkNotifier`, `EmailNotifier`, `WebSocketNotifier` — all 6 channels implemented and tested in the mofa-orchestrator skeleton branch; Telegram and Feishu patterns proven in mofaclaw production (#54, #57). The `WebSocketNotifier` uses a `tokio::sync::broadcast` channel so mofa-studio can subscribe directly for real-time approval-queue updates with no polling overhead
 
 *Module 4 — GovernanceLayer (extending mofa-orchestrator skeleton)*
 Built in the `mofa-orchestrator` skeleton (branch: `feat/mofa-orchestrator-skeleton`, 11 tests passing). GSoC extends it with:
@@ -294,7 +340,7 @@ The spec MVP requires a Gateway integration demo showing agents accessing physic
 
 **New crate: mofa-orchestrator (skeleton already live)**
 
-Branch `feat/mofa-orchestrator-skeleton` is pushed and compiling with 17 tests. Structure:
+Branch `feat/mofa-orchestrator-skeleton` is pushed and compiling with 23 tests. Structure:
 
 ```
 crates/mofa-orchestrator/
@@ -310,6 +356,7 @@ crates/mofa-orchestrator/
             feishu.rs         (patterns from mofaclaw #57)
             dingtalk.rs
             email.rs          (SendGrid / Mailgun compatible HTTP relay — 6 tests)
+            websocket.rs      (tokio broadcast channel; mofa-studio subscriber — 6 tests)
     Cargo.toml
 ```
 
@@ -470,7 +517,7 @@ This is what AmosLi sir means by broader ecosystem. The orchestrator does not re
 ### Expected Outcomes
 
 **Code contributions:**
-- New crate: `mofa-orchestrator` — `SwarmOrchestrator`, `GovernanceLayer`, 6 notifiers (Slack, Telegram, Feishu, DingTalk, Email, Log), REST API (skeleton already live with 17 tests)
+- New crate: `mofa-orchestrator` — `SwarmOrchestrator`, `GovernanceLayer`, 7 notifiers (Slack, Telegram, Feishu, DingTalk, Email, WebSocket, Log), REST API (skeleton already live with 23 tests)
 - Extended `mofa-foundation` swarm: dynamic DAG mutation, load-aware `SwarmComposer`, 7-pattern routing, `HITLGovernor` with Secretary 5-phase lifecycle and graduated autonomy
 - Extended `mofa-foundation` capability: hybrid `CapabilityRegistry` with MCP indexing, A2A Agent Card ingestion, query expansion
 - Extended `mofa-cli` plugin: Ed25519 verification, `SemVerResolver`, `TrustScorer`, OWASP Agentic Top 10 checks
@@ -550,8 +597,9 @@ MoFA is the framework I want to be using in my own work. That is not a line for 
 | Plugin security | pip install | pip install | pip install | None | Ed25519 + SemVer + OWASP Top 10 |
 | Observability | LangSmith (SaaS) | Basic logs | Basic logs | None | OTel GenAI gen_ai.agent.* spans |
 | Physical world | None | None | None | None | Gateway capability APIs |
-| Desktop UI | None | None | None | None | mofa-studio live swarm graph |
+| Desktop UI | None | None | None | None | mofa-studio live swarm graph (WebSocket push, no polling) |
 | Discord interface | None | None | None | None | mofaclaw swarm commands |
+| Notifications | None | None | None | None | Slack, Telegram, Feishu, DingTalk, Email, WebSocket |
 | Memory overhead | 60-120 MB idle | 80+ MB | 60+ MB | Unknown | Under 5 MB idle |
 
 LangGraph requires a human to hand-wire the execution topology. CrewAI ships role definitions with no budget awareness. AutoGen chains replies but cannot suspend mid-execution for human approval. swarms-rs is the closest Rust competitor but has no DAG decomposition, no HITL, no semantic discovery, and no observability. MoFA with this project leads on every dimension that matters for production enterprise deployment.
