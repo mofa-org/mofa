@@ -14,6 +14,7 @@ use tracing::{error, info, instrument, warn};
 
 use mofa_kernel::agent::types::error::{GlobalError, GlobalResult};
 
+use crate::swarm::hitl_gate::{HITLDecision, HITLGate};
 use crate::swarm::{CoordinationPattern, SubtaskDAG, SwarmSubtask};
 
 /// task executor used by schedulers
@@ -121,11 +122,25 @@ pub enum FailurePolicy {
     FailFastCascade,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct SwarmSchedulerConfig {
     pub task_timeout: Duration,
     pub failure_policy: FailurePolicy,
     pub concurrency_limit: Option<usize>,
+    /// optional HITL gate — when set, tasks with `hitl_required = true` are
+    /// intercepted and execution is blocked until a human approves or rejects
+    pub hitl_gate: Option<Arc<dyn HITLGate>>,
+}
+
+impl std::fmt::Debug for SwarmSchedulerConfig {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("SwarmSchedulerConfig")
+            .field("task_timeout", &self.task_timeout)
+            .field("failure_policy", &self.failure_policy)
+            .field("concurrency_limit", &self.concurrency_limit)
+            .field("hitl_gate", &self.hitl_gate.as_ref().map(|_| "<HITLGate>"))
+            .finish()
+    }
 }
 
 impl Default for SwarmSchedulerConfig {
@@ -134,7 +149,16 @@ impl Default for SwarmSchedulerConfig {
             task_timeout: Duration::from_secs(120),
             failure_policy: FailurePolicy::default(),
             concurrency_limit: None,
+            hitl_gate: None,
         }
+    }
+}
+
+impl SwarmSchedulerConfig {
+    /// attach a HITL gate — tasks marked `hitl_required` will pause for approval
+    pub fn with_hitl_gate(mut self, gate: Arc<dyn HITLGate>) -> Self {
+        self.hitl_gate = Some(gate);
+        self
     }
 }
 
@@ -222,6 +246,59 @@ impl SwarmScheduler for SequentialScheduler {
             dag.mark_running(idx);
             let task_snapshot = dag.get_task(idx).unwrap().clone();
             let task_id = task_snapshot.id.clone();
+
+            // HITL gate: pause and await human approval for high/critical tasks
+            if let Some(ref gate) = self.config.hitl_gate {
+                if gate.requires_review(&task_snapshot) {
+                    info!(
+                        task_id = %task_id,
+                        risk = ?task_snapshot.risk_level,
+                        "hitl gate: awaiting approval"
+                    );
+                    let decision = gate
+                        .await_decision(&task_snapshot, &task_id, self.config.task_timeout)
+                        .await;
+                    match decision {
+                        HITLDecision::Approved => {
+                            info!(task_id = %task_id, "hitl gate: approved");
+                        }
+                        HITLDecision::Rejected(reason) => {
+                            warn!(task_id = %task_id, %reason, "hitl gate: rejected");
+                            let msg = format!("hitl rejected: {reason}");
+                            dag.mark_failed(idx, msg.clone());
+                            results.push(TaskExecutionResult::failure(
+                                &task_snapshot,
+                                idx,
+                                msg,
+                                Duration::ZERO,
+                            ));
+                            failed += 1;
+                            if self.config.failure_policy == FailurePolicy::FailFastCascade {
+                                let n = dag.cascade_skip(idx);
+                                skipped += n;
+                            }
+                            continue;
+                        }
+                        HITLDecision::TimedOut => {
+                            warn!(task_id = %task_id, "hitl gate: timed out");
+                            let msg = "hitl approval timed out".to_string();
+                            dag.mark_failed(idx, msg.clone());
+                            results.push(TaskExecutionResult::failure(
+                                &task_snapshot,
+                                idx,
+                                msg,
+                                self.config.task_timeout,
+                            ));
+                            failed += 1;
+                            if self.config.failure_policy == FailurePolicy::FailFastCascade {
+                                let n = dag.cascade_skip(idx);
+                                skipped += n;
+                            }
+                            continue;
+                        }
+                    }
+                }
+            }
 
             let start = Instant::now();
             info!(task_id = %task_id, task_desc = %task_snapshot.description, "Executing node");
@@ -365,6 +442,60 @@ impl SwarmScheduler for ParallelScheduler {
             for &idx in &ready_indices {
                 dag.mark_running(idx);
                 let task_snapshot = dag.get_task(idx).expect("missing idx").clone();
+
+                // HITL pre-flight: check before spawning the concurrent future
+                if let Some(ref gate) = self.config.hitl_gate {
+                    if gate.requires_review(&task_snapshot) {
+                        let task_id = &task_snapshot.id;
+                        info!(
+                            task_id = %task_id,
+                            risk = ?task_snapshot.risk_level,
+                            "hitl gate: awaiting approval (parallel pre-flight)"
+                        );
+                        let decision = gate
+                            .await_decision(&task_snapshot, task_id, self.config.task_timeout)
+                            .await;
+                        match decision {
+                            HITLDecision::Approved => {
+                                info!(task_id = %task_id, "hitl gate: approved");
+                            }
+                            HITLDecision::Rejected(reason) => {
+                                warn!(task_id = %task_id, %reason, "hitl gate: rejected");
+                                let msg = format!("hitl rejected: {reason}");
+                                dag.mark_failed(idx, msg.clone());
+                                results.push(TaskExecutionResult::failure(
+                                    &task_snapshot,
+                                    idx,
+                                    msg,
+                                    Duration::ZERO,
+                                ));
+                                failed += 1;
+                                if self.config.failure_policy == FailurePolicy::FailFastCascade {
+                                    let n = dag.cascade_skip(idx);
+                                    skipped += n;
+                                }
+                                continue;
+                            }
+                            HITLDecision::TimedOut => {
+                                warn!(task_id = %task_id, "hitl gate: timed out");
+                                let msg = "hitl approval timed out".to_string();
+                                dag.mark_failed(idx, msg.clone());
+                                results.push(TaskExecutionResult::failure(
+                                    &task_snapshot,
+                                    idx,
+                                    msg,
+                                    self.config.task_timeout,
+                                ));
+                                failed += 1;
+                                if self.config.failure_policy == FailurePolicy::FailFastCascade {
+                                    let n = dag.cascade_skip(idx);
+                                    skipped += n;
+                                }
+                                continue;
+                            }
+                        }
+                    }
+                }
 
                 let exec = executor.clone();
                 let sem = semaphore.clone();
@@ -872,5 +1003,103 @@ mod tests {
         let summary = scheduler.execute(&mut dag, executor).await.unwrap();
         assert!(summary.is_fully_successful());
         assert_eq!(peak.load(Ordering::SeqCst), 1);
+    }
+
+    // --- HITL gate wiring tests ---
+
+    use crate::swarm::hitl_gate::{AlwaysApproveGate, AlwaysRejectGate};
+
+    #[tokio::test]
+    async fn sequential_hitl_approve_allows_execution() {
+        let mut dag = SubtaskDAG::new("hitl-test");
+        use crate::swarm::dag::RiskLevel;
+        dag.add_task(
+            SwarmSubtask::new("critical-task", "deploy to prod")
+                .with_risk_level(RiskLevel::Critical),
+        );
+
+        let executed = Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let executed_clone = executed.clone();
+        let executor: SubtaskExecutorFn = Arc::new(move |_idx, _task| {
+            executed_clone.store(true, Ordering::SeqCst);
+            Box::pin(async move { Ok("done".into()) })
+        });
+
+        let config = SwarmSchedulerConfig::default()
+            .with_hitl_gate(Arc::new(AlwaysApproveGate));
+        let scheduler = SequentialScheduler::with_config(config);
+        let summary = scheduler.execute(&mut dag, executor).await.unwrap();
+
+        assert!(summary.is_fully_successful());
+        assert!(executed.load(Ordering::SeqCst), "task should have executed after approval");
+    }
+
+    #[tokio::test]
+    async fn sequential_hitl_reject_skips_execution() {
+        let mut dag = SubtaskDAG::new("hitl-test");
+        use crate::swarm::dag::RiskLevel;
+        dag.add_task(
+            SwarmSubtask::new("critical-task", "deploy to prod")
+                .with_risk_level(RiskLevel::Critical),
+        );
+
+        let executed = Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let executed_clone = executed.clone();
+        let executor: SubtaskExecutorFn = Arc::new(move |_idx, _task| {
+            executed_clone.store(true, Ordering::SeqCst);
+            Box::pin(async move { Ok("done".into()) })
+        });
+
+        let config = SwarmSchedulerConfig::default()
+            .with_hitl_gate(Arc::new(AlwaysRejectGate));
+        let scheduler = SequentialScheduler::with_config(config);
+        let summary = scheduler.execute(&mut dag, executor).await.unwrap();
+
+        assert_eq!(summary.failed, 1);
+        assert!(!executed.load(Ordering::SeqCst), "task must not execute after rejection");
+    }
+
+    #[tokio::test]
+    async fn sequential_hitl_gate_skips_low_risk_tasks() {
+        let mut dag = SubtaskDAG::new("hitl-test");
+        // low-risk task — hitl_required = false — gate should not intercept
+        dag.add_task(SwarmSubtask::new("safe-task", "read config"));
+
+        let executed = Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let executed_clone = executed.clone();
+        let executor: SubtaskExecutorFn = Arc::new(move |_idx, _task| {
+            executed_clone.store(true, Ordering::SeqCst);
+            Box::pin(async move { Ok("done".into()) })
+        });
+
+        // reject gate — but the task is low-risk so gate should never fire
+        let config = SwarmSchedulerConfig::default()
+            .with_hitl_gate(Arc::new(AlwaysRejectGate));
+        let scheduler = SequentialScheduler::with_config(config);
+        let summary = scheduler.execute(&mut dag, executor).await.unwrap();
+
+        assert!(summary.is_fully_successful());
+        assert!(executed.load(Ordering::SeqCst), "low-risk task should bypass gate");
+    }
+
+    #[tokio::test]
+    async fn parallel_hitl_reject_marks_task_failed() {
+        let mut dag = SubtaskDAG::new("hitl-test");
+        use crate::swarm::dag::RiskLevel;
+        dag.add_task(
+            SwarmSubtask::new("critical-task", "rm -rf prod")
+                .with_risk_level(RiskLevel::Critical),
+        );
+
+        let executor: SubtaskExecutorFn =
+            Arc::new(|_idx, _task| Box::pin(async move { Ok("done".into()) }));
+
+        let config = SwarmSchedulerConfig::default()
+            .with_hitl_gate(Arc::new(AlwaysRejectGate));
+        let scheduler = ParallelScheduler::with_config(config);
+        let summary = scheduler.execute(&mut dag, executor).await.unwrap();
+
+        assert_eq!(summary.failed, 1);
+        assert_eq!(summary.succeeded, 0);
     }
 }
