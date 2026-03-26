@@ -14,11 +14,13 @@ pub mod log_notifier;
 pub mod slack;
 pub mod telegram;
 pub mod feishu;
+pub mod dingtalk;
 
 pub use log_notifier::LogNotifier;
 pub use slack::SlackNotifier;
 pub use telegram::TelegramNotifier;
 pub use feishu::FeishuNotifier;
+pub use dingtalk::DingTalkNotifier;
 
 use async_trait::async_trait;
 use crate::error::OrchestratorResult;

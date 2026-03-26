@@ -47,5 +47,5 @@ pub mod orchestrator;
 
 pub use error::{OrchestratorError, OrchestratorResult};
 pub use governance::{Action, GovernanceLayer, Role, SlaViolation};
-pub use notifiers::{FeishuNotifier, GateEvent, GateEventKind, LogNotifier, Notifier, SlackNotifier, TelegramNotifier};
+pub use notifiers::{DingTalkNotifier, FeishuNotifier, GateEvent, GateEventKind, LogNotifier, Notifier, SlackNotifier, TelegramNotifier};
 pub use orchestrator::{OrchestratorConfig, SwarmOrchestrator, SwarmResult};
