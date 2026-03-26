@@ -83,6 +83,7 @@ impl CoordinationPattern {
             Self::Sequential => Box::new(crate::swarm::SequentialScheduler::new()),
             Self::Parallel => Box::new(crate::swarm::ParallelScheduler::new()),
             Self::Debate => Box::new(crate::swarm::DebateScheduler::new()),
+            Self::Consensus => Box::new(crate::swarm::ConsensusScheduler::new()),
             other => {
                 unimplemented!("Scheduler for `{other}` pattern is not yet implemented (Phase 2)")
             }

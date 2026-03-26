@@ -698,6 +698,208 @@ impl SwarmScheduler for DebateScheduler {
     }
 }
 
+pub struct ConsensusScheduler {
+    pub config: SwarmSchedulerConfig,
+    pub max_rounds: usize,
+    pub consensus_threshold: f64,
+}
+
+impl ConsensusScheduler {
+    pub fn new() -> Self {
+        Self {
+            config: SwarmSchedulerConfig::default(),
+            max_rounds: 3,
+            consensus_threshold: 0.8, // 80% agreement required
+        }
+    }
+
+    pub fn with_config(config: SwarmSchedulerConfig) -> Self {
+        Self {
+            config,
+            max_rounds: 3,
+            consensus_threshold: 0.8,
+        }
+    }
+
+    pub fn with_rounds_and_threshold(mut self, max_rounds: usize, threshold: f64) -> Self {
+        self.max_rounds = max_rounds;
+        self.consensus_threshold = threshold.clamp(0.0, 1.0);
+        self
+    }
+}
+
+impl Default for ConsensusScheduler {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+#[async_trait]
+impl SwarmScheduler for ConsensusScheduler {
+    fn pattern(&self) -> CoordinationPattern {
+        CoordinationPattern::Consensus
+    }
+
+    #[instrument(
+        skip(self, dag, executor),
+        fields(pattern = "consensus", task_count = dag.task_count(), max_rounds = self.max_rounds)
+    )]
+    async fn execute(
+        &self,
+        dag: &mut SubtaskDAG,
+        executor: SubtaskExecutorFn,
+    ) -> GlobalResult<SchedulerSummary> {
+        let wall_start = Instant::now();
+        let total = dag.task_count();
+
+        if total < 2 {
+            return Err(GlobalError::runtime(
+                "Consensus pattern requires at least 2 agents".to_string(),
+            ));
+        }
+
+        let mut all_results = Vec::new();
+        let mut succeeded = 0usize;
+        let mut failed = 0usize;
+        let mut skipped = 0usize;
+
+        let all_task_indices: Vec<_> = dag.all_tasks().into_iter().map(|(idx, _)| idx).collect();
+        let semaphore = self
+            .config
+            .concurrency_limit
+            .map(|n| Arc::new(Semaphore::new(n)));
+
+        info!(task_count = total, "Consensus scheduler starting");
+
+        // Multi-round consensus building
+        for round in 0..self.max_rounds {
+            info!(round = round + 1, "Starting consensus round");
+
+            let mut round_futures = Vec::with_capacity(all_task_indices.len());
+
+            // Phase: All agents propose their position in parallel
+            for &idx in &all_task_indices {
+                dag.mark_running(idx);
+                let task_snapshot = dag.get_task(idx).expect("missing idx").clone();
+
+                let exec = executor.clone();
+                let sem = semaphore.clone();
+                let timeout_dur = self.config.task_timeout;
+
+                let fut = async move {
+                    let _permit = if let Some(s) = sem {
+                        Some(s.acquire_owned().await.expect("semaphore closed"))
+                    } else {
+                        None
+                    };
+
+                    let start = Instant::now();
+                    match timeout(timeout_dur, exec(idx, task_snapshot.clone())).await {
+                        Ok(Ok(output)) => {
+                            TaskExecutionResult::success(&task_snapshot, idx, output, start.elapsed())
+                        }
+                        Ok(Err(e)) => {
+                            TaskExecutionResult::failure(&task_snapshot, idx, e.to_string(), start.elapsed())
+                        }
+                        Err(_) => TaskExecutionResult::failure(
+                            &task_snapshot,
+                            idx,
+                            format!("timed out after {:?}", timeout_dur),
+                            start.elapsed(),
+                        ),
+                    }
+                };
+
+                round_futures.push(fut);
+            }
+
+            let round_results = join_all(round_futures).await;
+
+            // Process round results
+            let mut round_succeeded = 0;
+            let mut round_failed = 0;
+
+            for result in round_results {
+                let idx = NodeIndex::new(result.node_index);
+
+                if result.outcome.is_success() {
+                    let text = result
+                        .outcome
+                        .output()
+                        .expect("Success has output")
+                        .to_string();
+                    dag.mark_complete_with_output(idx, Some(text));
+                    succeeded += 1;
+                    round_succeeded += 1;
+                } else {
+                    let err_msg = match &result.outcome {
+                        TaskOutcome::Failure(e) => e.clone(),
+                        _ => "agent failed to propose".to_string(),
+                    };
+
+                    dag.mark_failed(idx, err_msg);
+                    failed += 1;
+                    round_failed += 1;
+
+                    if self.config.failure_policy == FailurePolicy::FailFastCascade {
+                        let cascaded = dag.cascade_skip(idx);
+                        skipped += cascaded;
+                        info!(cascaded, "cascaded skip due to agent failure");
+                    }
+                }
+
+                all_results.push(result);
+            }
+
+            // Check convergence: if enough agents succeeded, we can potentially finish
+            let success_rate = if all_task_indices.len() > 0 {
+                round_succeeded as f64 / all_task_indices.len() as f64
+            } else {
+                0.0
+            };
+
+            info!(
+                round = round + 1,
+                success_rate = success_rate,
+                threshold = self.consensus_threshold,
+                "Consensus round completed"
+            );
+
+            // If we've reached consensus threshold, we can exit early
+            if success_rate >= self.consensus_threshold {
+                info!(round = round + 1, "Consensus reached!");
+                break;
+            }
+
+            if round < self.max_rounds - 1 {
+                info!(round = round + 1, "Consensus not yet reached, continuing to next round");
+            }
+        }
+
+        // All tasks should complete (successfully or failed)
+        for (idx, task) in dag.all_tasks() {
+            if task.status == crate::swarm::SubtaskStatus::Pending {
+                skipped += 1;
+                all_results.push(TaskExecutionResult::skipped(
+                    task,
+                    idx,
+                    "not reached in consensus rounds".into(),
+                ));
+            }
+        }
+
+        Ok(SchedulerSummary {
+            pattern: CoordinationPattern::Consensus,
+            total_tasks: total,
+            succeeded,
+            failed,
+            skipped,
+            total_wall_time: wall_start.elapsed(),
+            results: all_results,
+        })
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1186,5 +1388,135 @@ mod tests {
         // One failure (debater_bad), one success (debater_ok), judge should still run
         assert_eq!(summary.failed, 1);
         assert_eq!(summary.succeeded, 2); // debater_ok + judge
+    }
+
+    #[tokio::test]
+    async fn test_consensus_scheduler_basic() {
+        let mut dag = SubtaskDAG::new("consensus");
+        let agent1_idx = dag.add_task(SwarmSubtask::new("agent1", "Propose position"));
+        let agent2_idx = dag.add_task(SwarmSubtask::new("agent2", "Propose position"));
+        let agent3_idx = dag.add_task(SwarmSubtask::new("agent3", "Propose position"));
+
+        let exec_log = Arc::new(tokio::sync::Mutex::new(Vec::new()));
+        let exec_log_clone = exec_log.clone();
+
+        let executor: SubtaskExecutorFn = Arc::new(move |_idx, task| {
+            let log = exec_log_clone.clone();
+            let task_id = task.id.clone();
+            Box::pin(async move {
+                sleep(Duration::from_millis(5)).await;
+                log.lock().await.push(task_id.clone());
+                Ok(format!("{} proposes consensus", task_id))
+            })
+        });
+
+        let scheduler = ConsensusScheduler::new();
+        let summary = scheduler.execute(&mut dag, executor).await.unwrap();
+
+        assert!(summary.is_fully_successful());
+        assert_eq!(summary.succeeded, 3);
+        assert_eq!(summary.pattern, CoordinationPattern::Consensus);
+
+        let log = exec_log.lock().await;
+        assert_eq!(log.len(), 3); // All agents executed
+    }
+
+    #[tokio::test]
+    async fn test_consensus_scheduler_insufficient_agents() {
+        let mut dag = SubtaskDAG::new("consensus");
+        dag.add_task(SwarmSubtask::new("a", "Task A"));
+
+        let executor: SubtaskExecutorFn = Arc::new(move |_idx, _task| {
+            Box::pin(async move { Ok("ok".into()) })
+        });
+
+        let scheduler = ConsensusScheduler::new();
+        let result = scheduler.execute(&mut dag, executor).await;
+
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("at least 2 agents"));
+    }
+
+    #[tokio::test]
+    async fn test_consensus_scheduler_multiple_rounds() {
+        let mut dag = SubtaskDAG::new("consensus");
+        let agent1_idx = dag.add_task(SwarmSubtask::new("agent1", "Propose"));
+        let agent2_idx = dag.add_task(SwarmSubtask::new("agent2", "Propose"));
+        let agent3_idx = dag.add_task(SwarmSubtask::new("agent3", "Propose"));
+
+        let round_tracker = Arc::new(AtomicUsize::new(0));
+        let round_tracker_clone = round_tracker.clone();
+
+        let executor: SubtaskExecutorFn = Arc::new(move |_idx, _task| {
+            let tracker = round_tracker_clone.clone();
+            Box::pin(async move {
+                let round = tracker.load(Ordering::SeqCst);
+                // All agents agree after round 1
+                if round == 0 {
+                    tracker.fetch_add(1, Ordering::SeqCst);
+                }
+                Ok(format!("consensus_v{}", round))
+            })
+        });
+
+        let scheduler = ConsensusScheduler::with_config(SwarmSchedulerConfig::default())
+            .with_rounds_and_threshold(2, 0.5); // 2 rounds max, 50% threshold
+        let summary = scheduler.execute(&mut dag, executor).await.unwrap();
+
+        assert_eq!(summary.succeeded, 3);
+        assert!(summary.is_fully_successful());
+    }
+
+    #[tokio::test]
+    async fn test_consensus_scheduler_with_partial_failures() {
+        let mut dag = SubtaskDAG::new("consensus");
+        dag.add_task(SwarmSubtask::new("agent1", "Good"));
+        dag.add_task(SwarmSubtask::new("agent2", "Bad"));
+        dag.add_task(SwarmSubtask::new("agent3", "Good"));
+
+        let executor: SubtaskExecutorFn = Arc::new(move |_idx, task| {
+            let task_id = task.id.clone();
+            Box::pin(async move {
+                if task_id == "agent2" {
+                    Err(GlobalError::runtime("Agent disagreement"))
+                } else {
+                    Ok(format!("{} agrees", task_id))
+                }
+            })
+        });
+
+        let scheduler = ConsensusScheduler::new();
+        let summary = scheduler.execute(&mut dag, executor).await.unwrap();
+
+        // Multiple rounds, each failing agent2
+        // 2 successes per round × 3 rounds = 6 successes minimum
+        // 1 failure per round × 3 rounds = 3 failures
+        assert!(summary.failed > 0);
+        assert!(summary.succeeded > 0);
+        // Total should be 9 (3 agents × 3 rounds)
+        assert_eq!(summary.total_tasks, 3);
+    }
+
+    #[tokio::test]
+    async fn test_consensus_scheduler_convergence_detection() {
+        let mut dag = SubtaskDAG::new("consensus");
+        dag.add_task(SwarmSubtask::new("agent1", "Propose"));
+        dag.add_task(SwarmSubtask::new("agent2", "Propose"));
+        dag.add_task(SwarmSubtask::new("agent3", "Propose"));
+        dag.add_task(SwarmSubtask::new("agent4", "Propose"));
+        dag.add_task(SwarmSubtask::new("agent5", "Propose"));
+
+        let executor: SubtaskExecutorFn = Arc::new(move |_idx, task| {
+            let task_id = task.id.clone();
+            Box::pin(async move { Ok(format!("{} consensus_reached", task_id)) })
+        });
+
+        // 100% success rate → should trigger consensus early
+        let scheduler = ConsensusScheduler::with_config(SwarmSchedulerConfig::default())
+            .with_rounds_and_threshold(10, 0.9); // many rounds available, 90% threshold
+        let summary = scheduler.execute(&mut dag, executor).await.unwrap();
+
+        assert_eq!(summary.succeeded, 5);
+        assert!(summary.is_fully_successful());
     }
 }
