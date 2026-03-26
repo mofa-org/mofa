@@ -9,18 +9,22 @@
 //! - [`SlackNotifier`]   — Slack incoming webhook
 //! - [`TelegramNotifier`] — Telegram Bot API (patterns proven in mofaclaw #54)
 //! - [`FeishuNotifier`]  — Feishu webhook (patterns proven in mofaclaw #57)
+//! - [`DingTalkNotifier`] — DingTalk group robot webhook
+//! - [`EmailNotifier`]   — HTTP mail relay (SendGrid / Mailgun compatible)
 
 pub mod log_notifier;
 pub mod slack;
 pub mod telegram;
 pub mod feishu;
 pub mod dingtalk;
+pub mod email;
 
 pub use log_notifier::LogNotifier;
 pub use slack::SlackNotifier;
 pub use telegram::TelegramNotifier;
 pub use feishu::FeishuNotifier;
 pub use dingtalk::DingTalkNotifier;
+pub use email::EmailNotifier;
 
 use async_trait::async_trait;
 use crate::error::OrchestratorResult;

@@ -115,7 +115,7 @@ When the GSoC organization list came out and I found MoFA, I started contributin
 - [x] Concrete technical design (modules, interfaces, data flow)
 - [x] Executable timeline with measurable milestones
 - [x] Risks and fallback plan
-- [x] Evidence of execution before selection (27+ merged PRs across mofa-org, 20+ open groundwork PRs, production Telegram and Feishu integrations already shipped, runnable HITL demo in PR #1398)
+- [x] Evidence of execution before selection (27+ merged PRs across mofa-org, 20+ open groundwork PRs, production Telegram and Feishu integrations already shipped, runnable HITL demo in PR #1398, mofa-orchestrator skeleton crate live with all 6 notifiers and 17 tests)
 - [x] Testing and validation plan
 - [x] Realistic weekly time commitment and communication plan
 
@@ -255,7 +255,7 @@ Phase 5: ReportingCompletion (SwarmAuditLog exported, summary sent)
 GSoC work extends this with:
 - **AI-assisted decisions**: before routing to a human, the LLM generates a structured decision suggestion and risk analysis so reviewers are not looking at raw agent output
 - **Graduated autonomy**: agents earn trust levels (Restricted, Supervised, Delegated, Autonomous) based on historical success rate, reducing gate frequency for proven agents over time
-- **Full notification fan-out**: `Notifier` trait with `SlackNotifier`, `TelegramNotifier`, `FeishuNotifier`, `DingTalkNotifier`, `EmailNotifier` — Telegram and Feishu patterns already proven in mofaclaw production (#54, #57), DingTalk added in mofa-orchestrator skeleton branch
+- **Full notification fan-out**: `Notifier` trait with `SlackNotifier`, `TelegramNotifier`, `FeishuNotifier`, `DingTalkNotifier`, `EmailNotifier` — Telegram and Feishu patterns proven in mofaclaw production (#54, #57), DingTalk and Email both implemented and tested in the mofa-orchestrator skeleton branch
 
 *Module 4 — GovernanceLayer (extending mofa-orchestrator skeleton)*
 Built in the `mofa-orchestrator` skeleton (branch: `feat/mofa-orchestrator-skeleton`, 11 tests passing). GSoC extends it with:
@@ -294,7 +294,7 @@ The spec MVP requires a Gateway integration demo showing agents accessing physic
 
 **New crate: mofa-orchestrator (skeleton already live)**
 
-Branch `feat/mofa-orchestrator-skeleton` is pushed and compiling with 11 tests. Structure:
+Branch `feat/mofa-orchestrator-skeleton` is pushed and compiling with 17 tests. Structure:
 
 ```
 crates/mofa-orchestrator/
@@ -308,7 +308,8 @@ crates/mofa-orchestrator/
             slack.rs
             telegram.rs       (patterns from mofaclaw #54)
             feishu.rs         (patterns from mofaclaw #57)
-            dingtalk.rs       (completing all 5 spec channels)
+            dingtalk.rs
+            email.rs          (SendGrid / Mailgun compatible HTTP relay — 6 tests)
     Cargo.toml
 ```
 
@@ -469,7 +470,7 @@ This is what AmosLi sir means by broader ecosystem. The orchestrator does not re
 ### Expected Outcomes
 
 **Code contributions:**
-- New crate: `mofa-orchestrator` — `SwarmOrchestrator`, `GovernanceLayer`, 5 notifiers (Slack, Telegram, Feishu, DingTalk, Log), REST API (skeleton already live with 11 tests)
+- New crate: `mofa-orchestrator` — `SwarmOrchestrator`, `GovernanceLayer`, 6 notifiers (Slack, Telegram, Feishu, DingTalk, Email, Log), REST API (skeleton already live with 17 tests)
 - Extended `mofa-foundation` swarm: dynamic DAG mutation, load-aware `SwarmComposer`, 7-pattern routing, `HITLGovernor` with Secretary 5-phase lifecycle and graduated autonomy
 - Extended `mofa-foundation` capability: hybrid `CapabilityRegistry` with MCP indexing, A2A Agent Card ingestion, query expansion
 - Extended `mofa-cli` plugin: Ed25519 verification, `SemVerResolver`, `TrustScorer`, OWASP Agentic Top 10 checks
