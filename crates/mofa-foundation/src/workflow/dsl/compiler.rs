@@ -550,7 +550,8 @@ impl DslCompiler {
         }
 
         for (from, conditions) in conditional_map {
-            graph.add_conditional_edges(&from, conditions);
+            let conditions_map: HashMap<String, String> = conditions.into_iter().collect();
+            graph.add_conditional_edges(&from, conditions_map);
         }
         Ok(())
     }
