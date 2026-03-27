@@ -599,10 +599,12 @@ impl ExecutionEngine {
             let sem = semaphore.clone();
 
             let span = tracing::info_span!("agent.parallel", agent_id = %agent_id);
+            let permit = sem.acquire_owned().await.expect("concurrency semaphore closed");
             let handle = tokio::spawn(
                 async move {
-                    let _permit = sem.acquire().await.expect("concurrency semaphore closed");
-                    engine.execute(&agent_id, input, opts).await
+                    let result = engine.execute(&agent_id, input, opts).await;
+                    drop(permit);
+                    result
                 }
                 .instrument(span),
             );
