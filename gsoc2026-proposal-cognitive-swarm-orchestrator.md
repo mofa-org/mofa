@@ -555,7 +555,31 @@ test semver_resolver::tests::test_lockfile_roundtrip_serialization     ok
 test result: ok. 16 passed; 0 failed; finished in 0.00s
 ```
 
-**Total across all Idea 5 branches: 101 tests passing, 0 failures.**
+**Branch: feat/swarm-gateway-capability-client** (PR #1499) -- GatewayCapabilityClient with TTL cache, 18 tests
+
+```
+test gateway_client::tests::all_capability_kind_variants_kind_str     ok
+test gateway_client::tests::cached_capability_is_expired_logic        ok
+test gateway_client::tests::cache_key_is_agent_scoped                 ok
+test gateway_client::tests::capability_response_round_trip            ok
+test gateway_client::tests::denied_capability_returns_error           ok
+test gateway_client::tests::audit_log_records_entries                 ok
+test gateway_client::tests::cache_hit_does_not_call_transport         ok
+test gateway_client::tests::expired_cache_entry_causes_re_fetch       ok
+test gateway_client::tests::cache_stats_tracked_correctly             ok
+test gateway_client::tests::capability_request_round_trip             ok
+test gateway_client::tests::cache_invalidation_removes_agent_entries  ok
+test gateway_client::tests::health_check_failing_transport_returns_error ok
+test gateway_client::tests::health_check_ok                           ok
+test gateway_client::tests::mock_transport_called_correct_number_of_times ok
+test gateway_client::tests::swarm_capability_registry_register_and_lookup ok
+test gateway_client::tests::register_as_virtual_agents_returns_correct_count ok
+test gateway_client::tests::multiple_agents_same_kind_cached_independently ok
+test gateway_client::tests::timeout_error_carries_timeout_ms          ok
+test result: ok. 18 passed; 0 failed; finished in 0.00s
+```
+
+**Total across all Idea 5 branches: 119 tests passing, 0 failures.**
 
 **New crate: mofa-orchestrator (skeleton already live)**
 
