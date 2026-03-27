@@ -4,13 +4,13 @@
 //! in mofa-kernel, along with utilities for document chunking.
 
 pub mod chunker;
+pub mod default_reranker;
 pub mod embedding_adapter;
 pub mod retrieval;
 pub mod indexing;
 pub mod loaders;
 pub mod pipeline_adapters;
 pub mod recursive_chunker;
-pub mod default_reranker;
 pub mod score_reranker;
 pub mod similarity;
 pub mod streaming_generator;
@@ -20,9 +20,10 @@ pub mod vector_store;
 pub mod qdrant_store;
 
 pub use chunker::{ChunkConfig, TextChunker};
+pub use default_reranker::IdentityReranker;
 pub use embedding_adapter::{
-    deterministic_chunk_id, EmbeddingAdapterError, LlmEmbeddingAdapter, RagEmbeddingConfig,
-    RagEmbeddingProvider,
+    EmbeddingAdapterError, LlmEmbeddingAdapter, RagEmbeddingConfig, RagEmbeddingProvider,
+    deterministic_chunk_id,
 };
 pub use retrieval::{
     query_documents, RagQueryConfig, RetrievalResult, RetrievedChunk,};
@@ -32,8 +33,7 @@ pub use indexing::{
 };
 pub use loaders::{DocumentLoader, LoaderError, LoaderResult, MarkdownLoader, TextLoader};
 pub use pipeline_adapters::{InMemoryRetriever, SimpleGenerator};
-pub use recursive_chunker::{RecursiveChunker, RecursiveChunkConfig};
-pub use default_reranker::IdentityReranker;
+pub use recursive_chunker::{RecursiveChunkConfig, RecursiveChunker};
 pub use score_reranker::ScoreReranker;
 pub use similarity::compute_similarity;
 pub use streaming_generator::PassthroughStreamingGenerator;

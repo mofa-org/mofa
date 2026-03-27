@@ -13,10 +13,7 @@ use crate::state::AppState;
 ///
 /// Always returns 200 OK while the process is alive.
 pub async fn health() -> impl IntoResponse {
-    (
-        StatusCode::OK,
-        Json(json!({ "status": "ok" })),
-    )
+    (StatusCode::OK, Json(json!({ "status": "ok" })))
 }
 
 /// GET /ready - readiness probe
