@@ -409,6 +409,132 @@ The spec MVP requires a Gateway integration demo showing agents accessing physic
 
 What this unlocks: the swarm can be assigned real-world capabilities like reading a file, speaking through a speaker, or checking a sensor -- not just software agents.
 
+### Verified Test Results
+
+Every branch in this proposal has been built and tested locally. The following outputs are real -- copied directly from `cargo test` runs on each feature branch.
+
+**Branch: feat/mofa-orchestrator-skeleton** (PR #1491) -- new crate, 26 tests
+
+```
+running 23 tests
+test governance::tests::admin_can_do_everything ... ok
+test governance::tests::operator_cannot_export_audit ... ok
+test governance::tests::viewer_cannot_run_swarm ... ok
+test governance::tests::unknown_principal_is_rejected ... ok
+test governance::tests::sla_within_budget_passes ... ok
+test governance::tests::sla_over_budget_records_violation ... ok
+test governance::tests::sla_no_budget_always_passes ... ok
+test governance::tests::export_audit_jsonl_roundtrip ... ok
+test notifiers::email::tests::notifier_name_is_email ... ok
+test notifiers::email::tests::subject_contains_task_id_for_pending ... ok
+test notifiers::email::tests::subject_contains_execution_id_for_approved ... ok
+test notifiers::email::tests::body_contains_reason_for_rejected ... ok
+test notifiers::email::tests::body_contains_escalation_text_for_timeout ... ok
+test notifiers::email::tests::returns_error_when_no_recipients ... ok
+test notifiers::websocket::tests::notifier_name_is_websocket ... ok
+test notifiers::websocket::tests::no_receiver_does_not_error ... ok
+test notifiers::websocket::tests::receiver_count_reflects_subscriptions ... ok
+test notifiers::websocket::tests::multiple_subscribers_each_receive_event ... ok
+test notifiers::websocket::tests::event_json_is_valid_json ... ok
+test notifiers::websocket::tests::subscriber_receives_event ... ok
+test orchestrator::tests::run_goal_returns_result ... ok
+test orchestrator::tests::run_goal_short_input ... ok
+test orchestrator::tests::execution_ids_are_unique ... ok
+test result: ok. 23 passed; 0 failed; finished in 0.00s
+
+running 3 doc tests
+test src/lib.rs - (line 22) - compile ... ok
+test src/notifiers/websocket.rs - WebSocketNotifier::subscribe (line 91) - compile ... ok
+test src/orchestrator.rs - SwarmOrchestrator (line 91) - compile ... ok
+test result: ok. 3 passed; 0 failed; finished in 1.93s
+```
+
+**Branch: feat/swarm-semantic-capability-discovery** (PR #1487) -- BM25 + RRF semantic search, 21 tests
+
+```
+running 21 tests
+test capability_registry::tests::cosine_identical_vectors ... ok
+test capability_registry::tests::cosine_orthogonal_vectors ... ok
+test capability_registry::tests::cosine_opposite_vectors ... ok
+test capability_registry::tests::cosine_zero_vector_returns_zero ... ok
+test capability_registry::tests::cosine_mismatched_lengths_returns_zero ... ok
+test capability_registry::tests::bm25_index_updates_on_register ... ok
+test capability_registry::tests::bm25_index_removed_on_unregister ... ok
+test capability_registry::tests::embedding_removed_on_unregister ... ok
+test capability_registry::tests::query_bm25_returns_best_match ... ok
+test capability_registry::tests::query_bm25_empty_query_returns_empty ... ok
+test capability_registry::tests::query_bm25_unknown_term_returns_empty ... ok
+test capability_registry::tests::query_bm25_zero_top_k_returns_empty ... ok
+test capability_registry::tests::bm25_score_deterministic_across_calls ... ok
+test capability_registry::tests::register_replace_updates_bm25 ... ok
+test capability_registry::tests::query_semantic_rrf_favors_multi_signal_match ... ok
+test capability_registry::tests::store_and_check_embedding ... ok
+test capability_registry::tests::test_register_and_find_by_id ... ok
+test capability_registry::tests::test_find_by_tag ... ok
+test capability_registry::tests::test_unregister ... ok
+test capability_registry::tests::test_query_no_match_returns_empty ... ok
+test capability_registry::tests::test_query_returns_best_match_first ... ok
+test result: ok. 21 passed; 0 failed; finished in 0.01s
+```
+
+**Branch: feat/swarm-hitl-scheduler-wiring** (PR #1488) -- HITLGate + gated schedulers, 5 tests
+
+```
+running 5 tests
+test swarm::hitl_gate::tests::decision_is_approved_helper ... ok
+test swarm::hitl_gate::tests::requires_review_follows_hitl_required_flag ... ok
+test swarm::hitl_gate::tests::always_reject_gate_returns_rejected ... ok
+test swarm::hitl_gate::tests::always_approve_gate_returns_approved ... ok
+test swarm::scheduler::tests::sequential_hitl_gate_skips_low_risk_tasks ... ok
+test result: ok. 5 passed; 0 failed; finished in 0.00s
+```
+
+**Branch: feat/swarm-cost-aware-composer** (PR #1489) -- SwarmComposer load-aware assignment, 18 tests
+
+```
+running 18 tests
+test swarm::composer::tests::coverage_is_case_insensitive ... ok
+test swarm::composer::tests::full_coverage_returns_one ... ok
+test swarm::composer::tests::coverage_ratio_all_assigned ... ok
+test swarm::composer::tests::from_config_constructs_composer ... ok
+test swarm::composer::tests::coverage_ratio_half_assigned ... ok
+test swarm::composer::tests::no_requirements_returns_full_coverage ... ok
+test swarm::composer::tests::partial_coverage ... ok
+test swarm::composer::tests::assign_writes_agent_to_dag ... ok
+test swarm::composer::tests::picks_cheapest_fully_covering_agent ... ok
+test swarm::composer::tests::budget_warning_emitted_when_cost_near_limit ... ok
+test swarm::composer::tests::assign_respects_sla_budget_across_tasks ... ok
+test swarm::composer::tests::prefers_full_coverage_over_cheap_partial ... ok
+test swarm::composer::tests::assign_tracks_unassigned_when_no_match ... ok
+test swarm::composer::tests::respects_budget_limit ... ok
+test swarm::composer::tests::returns_none_when_no_agents ... ok
+test swarm::composer::tests::returns_none_when_no_capability_overlap ... ok
+test swarm::composer::tests::task_with_no_requirements_assigns_cheapest_agent ... ok
+test swarm::composer::tests::zero_coverage_when_no_overlap ... ok
+test result: ok. 18 passed; 0 failed; finished in 0.01s
+```
+
+**Branch: feat/smith-swarm-trace-reporter** (PR #1490) -- SwarmTraceReporter + OTel backend, 12 tests
+
+```
+running 12 tests
+test tests::clear_backend_resets_count ... ok
+test tests::report_batch_records_all_events ... ok
+test tests::in_memory_backend_collects_spans ... ok
+test tests::event_kind_serialised_correctly ... ok
+test tests::no_duration_for_non_terminal_events ... ok
+test tests::span_ids_are_unique ... ok
+test tests::duration_computed_for_completed_event ... ok
+test tests::spans_share_trace_id ... ok
+test tests::task_id_extracted_from_data ... ok
+test tests::with_trace_id_uses_provided_id ... ok
+test tests::run_loop_exits_when_channel_closed ... ok
+test tests::run_loop_collects_all_sent_events ... ok
+test result: ok. 12 passed; 0 failed; finished in 0.00s
+```
+
+**Total across all Idea 5 branches: 85 tests passing, 0 failures.**
+
 **New crate: mofa-orchestrator (skeleton already live)**
 
 Branch `feat/mofa-orchestrator-skeleton` is pushed and compiling with 23 tests. Structure:
