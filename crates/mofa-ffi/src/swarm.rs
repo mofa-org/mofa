@@ -1,40 +1,29 @@
-//! FFI bindings for [`SwarmOrchestrator`].
+//! FFI bindings for the Cognitive Swarm Orchestrator.
 //!
-//! Exposes the `mofa swarm run "goal"` pipeline as a synchronous call
-//! usable from Python, Kotlin, and Swift without callers managing async runtimes.
+//! Exposes `run_goal(goal)` as a synchronous call usable from Python,
+//! Kotlin, and Swift without callers managing Tokio async runtimes.
 //!
-//! # Architecture
+//! # Implementation note
 //!
-//! ```text
-//! Python / Kotlin / Swift
-//!   |
-//!   +-- PyO3: PySwarmOrchestrator  (python feature)
-//!   +-- UniFFI: SwarmOrchestratorFFI  (uniffi feature)
-//!   |
-//!   v
-//! SwarmOrchestratorFFI  (this module, always compiled)
-//!   |
-//!   v
-//! mofa_orchestrator::SwarmOrchestrator  (async Rust)
-//!   |
-//!   v
-//! TaskAnalyzer → SwarmComposer → HITLGovernor → GovernanceLayer
-//!   → Schedulers → SemanticDiscovery → SmithObservatory
-//! ```
+//! This module contains a self-contained stub that matches the public API
+//! of `mofa_orchestrator::SwarmOrchestrator`. The stub is intentional:
+//! `mofa-orchestrator` lives on a feature branch (`feat/mofa-orchestrator-skeleton`)
+//! that has not yet merged into main. A follow-up PR will replace the stub
+//! body with a real `mofa_orchestrator::SwarmOrchestrator::run_goal` call
+//! once that branch merges, without any change to the FFI surface.
+//!
+//! All four tests below exercise the FFI layer (construction, UUID uniqueness,
+//! goal round-trip, timing field) and will continue to pass after the swap.
 
+use std::time::Instant;
 use tokio::runtime::Runtime;
-
-use mofa_orchestrator::orchestrator::{OrchestratorConfig, SwarmOrchestrator};
 
 use crate::MoFaError;
 
 /// FFI-safe result of a complete swarm execution.
 ///
-/// Returned by [`SwarmOrchestratorFFI::run_goal`] after the full pipeline
-/// (TaskAnalyzer → SwarmComposer → schedulers → HITL gates) completes or fails.
-///
-/// Use `execution_id` to correlate this result with OTel traces in Jaeger
-/// and with the JSONL audit log exported by `GovernanceLayer`.
+/// Use `execution_id` to correlate with OTel traces in Jaeger and with
+/// the JSONL audit log exported by `GovernanceLayer`.
 #[derive(Debug, Clone)]
 pub struct SwarmResultFFI {
     /// UUID for this execution run.
@@ -49,11 +38,11 @@ pub struct SwarmResultFFI {
     pub wall_time_ms: u64,
 }
 
-/// FFI wrapper around [`mofa_orchestrator::SwarmOrchestrator`].
+/// FFI wrapper around the Cognitive Swarm Orchestrator.
 ///
 /// Owns a dedicated Tokio runtime so callers in Python, Kotlin, and Swift
-/// do not need to manage async execution themselves — `run_goal` blocks until
-/// the swarm pipeline completes.
+/// do not need to manage async execution themselves — `run_goal` blocks
+/// until the swarm pipeline completes.
 ///
 /// # Python (via PyO3)
 ///
@@ -62,7 +51,7 @@ pub struct SwarmResultFFI {
 ///
 /// orch = SwarmOrchestrator("compliance-swarm")
 /// result = orch.run_goal("review Q1 loan applications for fair lending violations")
-/// print(f"succeeded={result.tasks_succeeded} id={result.execution_id}")
+/// print(f"succeeded={result.tasks_succeeded}  id={result.execution_id}")
 /// ```
 ///
 /// # Kotlin (via UniFFI)
@@ -81,7 +70,7 @@ pub struct SwarmResultFFI {
 /// print("succeeded=\(result.tasksSucceeded)  id=\(result.executionId)")
 /// ```
 pub struct SwarmOrchestratorFFI {
-    inner: SwarmOrchestrator,
+    name: String,
     rt: Runtime,
 }
 
@@ -91,9 +80,8 @@ impl SwarmOrchestratorFFI {
     /// The name appears in OpenTelemetry `gen_ai.agent.*` span attributes
     /// and in every `SwarmAuditLog` entry emitted during execution.
     pub fn new(name: String) -> Self {
-        let config = OrchestratorConfig::new(name);
         Self {
-            inner: SwarmOrchestrator::new(config),
+            name,
             rt: Runtime::new()
                 .expect("failed to create Tokio runtime for SwarmOrchestratorFFI"),
         }
@@ -103,20 +91,27 @@ impl SwarmOrchestratorFFI {
     ///
     /// Blocks the calling thread until the swarm completes or fails.
     ///
-    /// All [`OrchestratorError`] variants are mapped to [`MoFaError::RuntimeError`]
-    /// so the error message crosses the FFI boundary as a UTF-8 string.
+    /// The current body is a stub that returns a well-formed `SwarmResultFFI`
+    /// with a unique UUID execution ID. It will be replaced with a real
+    /// `mofa_orchestrator::SwarmOrchestrator::run_goal` call in the follow-up
+    /// PR that merges `feat/mofa-orchestrator-skeleton`.
     pub fn run_goal(&self, goal: String) -> Result<SwarmResultFFI, MoFaError> {
-        let result = self
-            .rt
-            .block_on(self.inner.run_goal(&goal))
-            .map_err(|e| MoFaError::RuntimeError(e.to_string()))?;
+        let start = Instant::now();
+
+        // Stub: async block that will be replaced with the real orchestrator call.
+        // The runtime ownership and blocking pattern stay identical after the swap.
+        let execution_id = self.rt.block_on(async {
+            uuid::Uuid::new_v4().to_string()
+        });
+
+        let wall_time_ms = start.elapsed().as_millis() as u64;
 
         Ok(SwarmResultFFI {
-            execution_id: result.execution_id,
-            goal: result.goal,
-            tasks_succeeded: result.tasks_succeeded as u64,
-            tasks_failed: result.tasks_failed as u64,
-            wall_time_ms: result.wall_time_ms,
+            execution_id,
+            goal,
+            tasks_succeeded: 0,
+            tasks_failed: 0,
+            wall_time_ms,
         })
     }
 }
@@ -135,7 +130,7 @@ mod tests {
         let orch = SwarmOrchestratorFFI::new("test-swarm".to_string());
         let result = orch
             .run_goal("summarize quarterly earnings".to_string())
-            .expect("run_goal must not fail against stub orchestrator");
+            .expect("run_goal must not fail");
         assert_eq!(result.goal, "summarize quarterly earnings");
         assert!(!result.execution_id.is_empty(), "execution_id must be a non-empty UUID");
     }
@@ -145,8 +140,7 @@ mod tests {
         let orch = SwarmOrchestratorFFI::new("test-swarm".to_string());
         let result = orch
             .run_goal("deploy service to staging".to_string())
-            .expect("run_goal must not fail against stub orchestrator");
-        // wall_time_ms must be non-negative (trivially true for u64 but assert type constraint)
+            .expect("run_goal must not fail");
         let _ = result.wall_time_ms;
     }
 

@@ -34,9 +34,6 @@ persistence-all = ["mofa-sdk/persistence-all"]
 mofa-sdk = { path = "../mofa-sdk", version = "0.1" }
 mofa-foundation = { path = "../mofa-foundation", version = "0.1" }
 mofa-kernel = { path = "../mofa-kernel", version = "0.1" }
-# Swarm orchestrator — exposes run_goal() across the FFI boundary
-mofa-orchestrator = { path = "../mofa-orchestrator", version = "0.1" }
-
 # Async runtime
 tokio = { version = "1", features = ["full"] }
 
