@@ -19,6 +19,7 @@ pub mod tool;
 pub mod tools;
 pub mod tts;
 pub mod wasm_runtime;
+pub mod semver_resolver;
 
 pub use asr::{ASREngine, ASRPlugin, ASRPluginConfig, MockASREngine};
 
