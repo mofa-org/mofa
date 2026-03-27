@@ -37,7 +37,7 @@
 //! use std::sync::Arc;
 //!
 //! #[tokio::main]
-//! async fn main() -> anyhow::Result<()> {
+//! async fn main() -> Result<(), Box<dyn std::error::Error>> {
 //!     let transport = Arc::new(MockGatewayTransport::new_granting());
 //!     let config = GatewayClientConfig::default();
 //!     let client = GatewayCapabilityClient::new(config, transport);
