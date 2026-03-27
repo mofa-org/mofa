@@ -41,11 +41,17 @@
 //! Full wiring is the GSoC 2026 deliverable.
 
 pub mod error;
+pub mod gateway_client;
 pub mod governance;
 pub mod notifiers;
 pub mod orchestrator;
 
 pub use error::{OrchestratorError, OrchestratorResult};
+pub use gateway_client::{
+    AuditEntry, CachedCapability, CacheStats, CapabilityKind, CapabilityRequest,
+    CapabilityResponse, GatewayCapabilityClient, GatewayClientConfig, GatewayClientError,
+    GatewayTransport, MockGatewayTransport, SwarmCapabilityRegistry,
+};
 pub use governance::{Action, GovernanceLayer, Role, SlaViolation};
 pub use notifiers::{FeishuNotifier, GateEvent, GateEventKind, LogNotifier, Notifier, SlackNotifier, TelegramNotifier};
 pub use orchestrator::{OrchestratorConfig, SwarmOrchestrator, SwarmResult};
