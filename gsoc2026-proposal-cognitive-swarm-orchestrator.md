@@ -634,6 +634,8 @@ This is what AmosLi sir means by broader ecosystem. The orchestrator does not re
 
 ### Schedule of Deliverables
 
+**Project size: Large (350 hours).** Core deliverables cover all 8 modules. Stretch goals are listed in Expected Outcomes and will be attempted if Phase 2 completes ahead of schedule.
+
 **Pre-GSoC (Before acceptance)**
 
 - [x] Build and run MoFA locally
@@ -666,6 +668,8 @@ Bonding period goals:
 - Cycle detection and retry on invalid LLM output
 - Property-based tests: cycle-free invariant, root uniqueness, critical path correctness
 - Integration test: end-to-end from raw goal string to valid `SubtaskDAG`
+- Prompt validation test suite: 30 canonical goal strings (financial compliance, code review pipeline, research summarization, deploy and test, data extraction, incident report) with expected DAG shapes -- structural + semantic regression test for all future prompt changes
+- Pre-execution DAG review: for goals decomposed into Critical-risk tasks, the operator is shown the DAG and approves it before any agent runs
 
 *Weeks 3-4: SwarmComposer and all 7 patterns*
 - Extend `SwarmComposer` to handle all 7 coordination patterns
@@ -745,6 +749,13 @@ Bonding period goals:
 - Runnable example: `examples/cognitive_swarm_demo/` — `mofa swarm run "financial compliance check"` with mock agents, HITL pause, audit log output
 - Docker Compose file for zero-setup local demo
 
+**Stretch goals (if core deliverables complete before Week 12):**
+- Python SDK bindings for `SwarmOrchestrator::run_goal()` via UniFFI so data science teams can orchestrate swarms from Python notebooks
+- Full PubGrub-style backtracking SemVer resolver replacing the greedy resolver
+- dora-rs distributed execution: run swarm subtasks across multiple nodes using MoFA's optional Dora integration
+- Benchmark suite: latency and memory comparison between MoFA swarm (Rust) and equivalent LangGraph (Python) pipeline on identical goal strings
+- Live mofa-studio swarm graph demo: Makepad UI polling the REST API with a running `mofa swarm run` visible in real time
+
 ---
 
 ### Risks and Mitigations
@@ -756,14 +767,16 @@ Bonding period goals:
 | OTLP crate version conflicts with workspace | Low | Pin `opentelemetry = "0.27"` from workspace; gate behind `otel` feature flag |
 | Slack/Telegram API changes | Low | Abstract behind `Notifier` trait; mock in all tests |
 | PR review delays push Phase 1 into Phase 2 | Medium | Submit PRs in pairs so one can be reviewed while another is in progress; weekly sync with mentors |
-| LLM DAG output produces cycles | Medium | Topological sort validation with automatic retry prompt; rule-based fallback decomposer |
+| LLM DAG output produces cycles | Medium | Topological sort validation with automatic retry prompt; rule-based fallback decomposer for 6 common goal patterns (deploy, review, analyze, summarize, search, notify) |
+| LLM produces structurally valid but semantically wrong DAG | Medium | Pre-execution DAG review gate for Critical-risk goals -- operator approves the decomposition before any agent runs; prompt validation test suite of 30 canonical goal strings with expected DAG shapes serves as regression test for prompt changes |
+| Decomposition prompt degrades across LLM model updates | Low | Decomposition prompt versioned in analyzer_prompts.rs and pinned to a tested version; model version locked in OrchestratorConfig |
 
 ---
 
 ### Additional Information
 
 **Availability:**
-- Hours per week: 40+ hours
+- Hours per week: 40-45 hours (targeting 350-hour Large project scale)
 - Timezone: IST (UTC+5:30)
 - Conflicts during GSoC period: none — no internship, no conflicting coursework
 
@@ -807,3 +820,39 @@ MoFA is the framework I want to be using in my own work. That is not a line for 
 | Memory overhead | 60-120 MB idle | 80+ MB | 60+ MB | Unknown | Under 5 MB idle |
 
 LangGraph requires a human to hand-wire the execution topology. CrewAI ships role definitions with no budget awareness. AutoGen chains replies but cannot suspend mid-execution for human approval. swarms-rs is the closest Rust competitor but has no DAG decomposition, no HITL, no semantic discovery, and no observability. MoFA with this project leads on every dimension that matters for production enterprise deployment.
+
+Three common objections and why they do not hold up in practice.
+
+LangGraph's visualization advantage disappears when you factor in that LangSmith is a paid SaaS product that requires sending execution data to external servers. mofa-studio runs locally on the operator's machine, driven by the WebSocket and REST API already built in the mofa-orchestrator skeleton. An enterprise compliance team cannot send audit data to a third-party SaaS. MoFA gives them a live swarm graph with zero data leaving their infrastructure.
+
+AutoGen's larger ecosystem of pre-built agent roles is real today but not a moat. MoFA's A2A Agent Card ingestion (Module 5) means the SwarmComposer can discover and route tasks to AutoGen agents, LangChain tools, and any A2A-compatible framework without reimplementing them. MoFA becomes the orchestrator of other ecosystems rather than a competitor to their agent libraries.
+
+CrewAI's simpler onboarding is a Python-first argument. The mofaclaw Discord bot already demonstrates that non-Rust developers never touch Rust code. A community user types "mofa swarm run research quantum computing" into Discord and gets a governed, traced, audited multi-agent execution. That is simpler onboarding than any Python import.
+
+---
+
+### References
+
+1. Yao, S. et al. "ReAct: Synergizing Reasoning and Acting in Language Models." ICLR 2023. https://arxiv.org/abs/2210.03629
+
+2. Wei, J. et al. "Chain-of-Thought Prompting Elicits Reasoning in Large Language Models." NeurIPS 2022. https://arxiv.org/abs/2201.11903
+
+3. Cormack, G., Clarke, C., and Buettcher, S. "Reciprocal Rank Fusion Outperforms Condorcet and Individual Rank Learning Methods." SIGIR 2009. https://dl.acm.org/doi/10.1145/1571941.1572114
+
+4. Robertson, S. and Zaragoza, H. "The Probabilistic Relevance Framework: BM25 and Beyond." Foundations and Trends in Information Retrieval, 2009.
+
+5. Wu, Q. et al. "AutoGen: Enabling Next-Gen LLM Applications via Multi-Agent Conversation." arXiv 2023. https://arxiv.org/abs/2308.08155
+
+6. Qian, C. et al. "Communicative Agents for Software Development (ChatDev)." ACL 2024. https://arxiv.org/abs/2307.07924
+
+7. Cloud Security Alliance. "AI Agentic Security Initiative: Agentic AI Threat Modeling Framework." CSA, 2025. https://cloudsecurityalliance.org/research/topics/artificial-intelligence
+
+8. OWASP. "OWASP Agentic AI Top 10." 2025. https://owasp.org/www-project-top-10-for-large-language-model-applications/
+
+9. Google. "Agent2Agent (A2A) Protocol Specification." 2025. https://google.github.io/A2A/
+
+10. OpenTelemetry. "Semantic Conventions for Generative AI Systems." OpenTelemetry Specification, 2024. https://opentelemetry.io/docs/specs/semconv/gen-ai/
+
+11. Anthropic. "Model Context Protocol Specification." 2024. https://modelcontextprotocol.io/specification
+
+12. DynTaskMAS authors. "Dynamic Task Allocation in Multi-Agent Systems." ICAPS 2025. (cited for mid-execution DAG mutation pattern, 21-33 percent execution time reduction)
