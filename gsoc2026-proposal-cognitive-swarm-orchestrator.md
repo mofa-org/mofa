@@ -81,6 +81,8 @@ When the GSoC organization list came out and I found MoFA, I started contributin
 | feat(swarm): add SwarmComposer with cost-aware agent assignment and SLA budget enforcement | [#1489](https://github.com/mofa-org/mofa/pull/1489) |
 | feat(smith): add SwarmTraceReporter with pluggable TraceBackend and async channel loop | [#1490](https://github.com/mofa-org/mofa/pull/1490) |
 | feat(orchestrator): add mofa-orchestrator crate -- connective tissue for the cognitive swarm | [#1491](https://github.com/mofa-org/mofa/pull/1491) |
+| feat(plugins): SemVer trust resolver with OWASP supply chain security (16 tests) | [#1498](https://github.com/mofa-org/mofa/pull/1498) |
+| feat(orchestrator): hardware-aware GatewayCapabilityClient with TTL caching (16 tests) | [#1499](https://github.com/mofa-org/mofa/pull/1499) |
 
 #### mofa-org/mofaclaw (Merged)
 
@@ -533,7 +535,27 @@ test tests::run_loop_collects_all_sent_events ... ok
 test result: ok. 12 passed; 0 failed; finished in 0.00s
 ```
 
-**Total across all Idea 5 branches: 85 tests passing, 0 failures.**
+**Branch: feat/plugin-semver-trust-resolver** (PR #1498) -- SemVer resolver with OWASP checks, 16 tests
+
+```
+test semver_resolver::tests::test_resolve_single_plugin_ok             ok
+test semver_resolver::tests::test_resolve_transitive_dependency_ok     ok
+test semver_resolver::tests::test_backtracking_lower_version_ok        ok
+test semver_resolver::tests::test_conflict_incompatible_root_requirements ok
+test semver_resolver::tests::test_not_found_unknown_plugin             ok
+test semver_resolver::tests::test_yanked_plugin_rejected_by_default    ok
+test semver_resolver::tests::test_yanked_plugin_allowed_when_flag_set  ok
+test semver_resolver::tests::test_trust_score_below_threshold          ok
+test semver_resolver::tests::test_slsa_level_insufficient              ok
+test semver_resolver::tests::test_dependency_confusion_detected        ok
+test semver_resolver::tests::test_edit_distance_correctness            ok
+test semver_resolver::tests::test_cycle_detection                      ok
+test semver_resolver::tests::test_install_order_topological            ok
+test semver_resolver::tests::test_lockfile_roundtrip_serialization     ok
+test result: ok. 16 passed; 0 failed; finished in 0.00s
+```
+
+**Total across all Idea 5 branches: 101 tests passing, 0 failures.**
 
 **New crate: mofa-orchestrator (skeleton already live)**
 
