@@ -5,7 +5,7 @@
 | Field | Details |
 |-------|---------|
 | **Name** | Nityam |
-| **Email** | *(to be filled before submission)* |
+| **Email** | nityamt19@gmail.com |
 | **Discord** | nixxx19 |
 | **GitHub** | [Nixxx19](https://github.com/Nixxx19) |
 | **Timezone** | IST (UTC+5:30) |
@@ -75,6 +75,12 @@ When the GSoC organization list came out and I found MoFA, I started contributin
 | feat(observability): export missing Prometheus LLM metrics and wire OTel distributed tracing spans | [#1246](https://github.com/mofa-org/mofa/pull/1246) |
 | feat(foundation): add MCP server support to expose MoFA tools over MCP | [#1321](https://github.com/mofa-org/mofa/pull/1321) |
 | feat(core): integrate mofa-local-llm as server-side proxy in gateway | [#931](https://github.com/mofa-org/mofa/pull/931) |
+| feat(plugins): add Ed25519 signature verification for plugin installs | [#1486](https://github.com/mofa-org/mofa/pull/1486) |
+| feat(swarm): upgrade CapabilityRegistry to hybrid BM25 + dense semantic discovery with RRF | [#1487](https://github.com/mofa-org/mofa/pull/1487) |
+| feat(swarm): wire HITLGate into sequential and parallel schedulers with async suspension | [#1488](https://github.com/mofa-org/mofa/pull/1488) |
+| feat(swarm): add SwarmComposer with cost-aware agent assignment and SLA budget enforcement | [#1489](https://github.com/mofa-org/mofa/pull/1489) |
+| feat(smith): add SwarmTraceReporter with pluggable TraceBackend and async channel loop | [#1490](https://github.com/mofa-org/mofa/pull/1490) |
+| feat(orchestrator): add mofa-orchestrator crate -- connective tissue for the cognitive swarm | [#1491](https://github.com/mofa-org/mofa/pull/1491) |
 
 #### mofa-org/mofaclaw (Merged)
 
@@ -191,6 +197,42 @@ I want to build systems at the intersection of AI coordination and Rust infrastr
 
 A developer can write `mofa swarm run "review these contracts for compliance issues"` and get a fully orchestrated multi-agent execution with HITL approval, audit trail, semantic agent discovery, and OpenTelemetry spans — all documented, tested, and runnable with `docker compose up`.
 
+```mermaid
+sequenceDiagram
+    actor User
+    participant CLI as mofa swarm run
+    participant ORC as SwarmOrchestrator
+    participant TASK as TaskAnalyzer
+    participant COMP as SwarmComposer
+    participant SCHED as GatedScheduler
+    participant HITL as HITLGovernor
+    participant NOTIFY as Notifiers
+    participant AUDIT as SwarmAuditLog
+    participant TRACE as SwarmTraceReporter
+
+    User->>CLI: mofa swarm run "review contracts"
+    CLI->>ORC: run_goal(goal)
+    ORC->>TASK: analyze(goal) -> SubtaskDAG
+    TASK-->>ORC: DAG with RiskLevel annotations
+    ORC->>COMP: compose(dag, roster) -> AssignmentPlan
+    COMP-->>ORC: agents assigned by score
+    ORC->>SCHED: execute(plan)
+    loop Each task
+        SCHED->>SCHED: check RiskLevel
+        alt High or Critical
+            SCHED->>HITL: should_pause?
+            HITL->>NOTIFY: fan-out (Slack, Email, WebSocket)
+            NOTIFY-->>User: approval request
+            User-->>HITL: approve / reject
+            HITL-->>SCHED: resume or abort
+        end
+        SCHED->>AUDIT: record gate decision
+        SCHED->>TRACE: record SpanEvent
+    end
+    ORC-->>CLI: SwarmReport + audit JSONL path
+    CLI-->>User: summary + Jaeger trace link
+```
+
 ---
 
 ### Technical Approach
@@ -286,17 +328,38 @@ What this unlocks: the right agent gets the right task every time -- not the fir
 *Module 3 — HITLGovernor (extending PR #826 + PR #1398)*
 This module wires two existing systems together. The HITL infrastructure (`ReviewManager`, `ReviewStore`, `WebhookDelivery`, `AuditStore`) was built in PR #826 (6,234 lines, merged). The `SwarmHITLGate` wired it into schedulers in PR #1398. The Secretary 5-phase lifecycle already exists in `mofa-foundation/src/secretary/` with `WorkPhase` enum:
 
-```
-Phase 1: Received            (record the swarm goal as a todo)
-Phase 2: ClarifyingRequirement (LLM asks clarifying questions)
-Phase 3: Dispatching         (SwarmComposer assigns agents)
-Phase 4: MonitoringExecution (scheduler runs, gates fire)
-Phase 5: ReportingCompletion (SwarmAuditLog exported, summary sent)
+```mermaid
+flowchart LR
+    P1[Phase 1\nReceived\nrecord todo] --> P2[Phase 2\nClarifying\nLLM questions]
+    P2 --> P3[Phase 3\nDispatching\nSwarmComposer assigns]
+    P3 --> P4[Phase 4\nMonitoring\nscheduler runs\ngates fire]
+    P4 --> P5[Phase 5\nReporting\nAuditLog exported\nsummary sent]
+    P4 -- Critical risk --> HITL[HITLGovernor\npause + notify]
+    HITL -- approved --> P4
+    HITL -- rejected --> ABORT[Abort task\nlog rejection]
+
+    style P1 fill:#1e3a5f,color:#fff
+    style P5 fill:#2d6a4f,color:#fff
+    style HITL fill:#6b3a3a,color:#fff
 ```
 
 GSoC work extends this with:
 - **AI-assisted decisions**: before routing to a human, the LLM generates a structured decision suggestion and risk analysis so reviewers are not looking at raw agent output
 - **Graduated autonomy**: agents earn trust levels (Restricted, Supervised, Delegated, Autonomous) based on historical success rate, reducing gate frequency for proven agents over time
+
+```mermaid
+flowchart LR
+    R[Restricted\nall tasks gated] -->|success rate > 60%| S[Supervised\nhigh+critical gated]
+    S -->|success rate > 80%| D[Delegated\ncritical only gated]
+    D -->|success rate > 95%| A[Autonomous\nno gate]
+    A -->|failure spike| D
+
+    style R fill:#6b3a3a,color:#fff
+    style S fill:#8b5e3c,color:#fff
+    style D fill:#2d6a4f,color:#fff
+    style A fill:#1e3a5f,color:#fff
+```
+
 - **Full notification fan-out**: `Notifier` trait with `SlackNotifier`, `TelegramNotifier`, `FeishuNotifier`, `DingTalkNotifier`, `EmailNotifier`, `WebSocketNotifier`, `LogNotifier` — all 7 channels implemented and tested in the mofa-orchestrator skeleton branch; Telegram and Feishu patterns proven in mofaclaw production (#54, #57). The `WebSocketNotifier` uses a `tokio::sync::broadcast` channel so mofa-studio can subscribe directly for real-time approval-queue updates with no polling overhead
 
 What this unlocks: an operator at a bank or hospital can set a risk threshold once and trust that no high-risk agent action happens without a human seeing it -- while low-risk steps run uninterrupted.
@@ -337,7 +400,7 @@ Ed25519 `verify_signature()` already implemented and pushed. GSoC adds `SemVerRe
 What this unlocks: an enterprise team can install third-party agent plugins without trusting a pip install -- every plugin is cryptographically signed and SemVer-resolved before it touches production.
 
 *Module 7 — Smith Observatory (extending open PRs)*
-`SwarmTraceReporter` with pluggable `TraceBackend` already open. GSoC adds `OtelTraceBackend` emitting **OpenTelemetry GenAI semantic convention spans** — the `gen_ai.agent.*` attribute namespace standardized in 2025 and adopted by AG2, CrewAI, and AutoGen. MoFA will be the first Rust framework to implement this standard natively, giving every swarm execution a trace compatible with Jaeger, Grafana Tempo, and Datadog out of the box. When I opened mofa-monitoring and saw we had Prometheus metrics but no distributed traces, that was the gap. Every trace a user sees in Jaeger from mofa swarm run will carry gen_ai.agent.* attributes — the same standard AutoGen and CrewAI now emit, but MoFA will be the first Rust framework to do it natively.
+`SwarmTraceReporter` with pluggable `TraceBackend` already open. GSoC adds `OtelTraceBackend` emitting **OpenTelemetry GenAI semantic convention spans** — the `gen_ai.agent.*` attribute namespace standardized in 2025 and adopted by AG2, CrewAI, and AutoGen. MoFA will be the first Rust framework to implement this standard natively, giving every swarm execution a trace compatible with Jaeger, Grafana Tempo, and Datadog out of the box. When I opened mofa-monitoring and saw we had Prometheus metrics but no distributed traces, that was the gap I wanted to close. Every span carries `gen_ai.agent.id`, `gen_ai.agent.risk_level`, `gen_ai.agent.duration_ms`, and `gen_ai.agent.outcome` — enough context to debug a 20-task DAG failure in Jaeger in under a minute.
 
 What this unlocks: every swarm execution produces a Jaeger trace you can open in your existing observability stack — no vendor lock-in, no extra SDK, just spans.
 
@@ -451,7 +514,7 @@ This is what AmosLi sir means by broader ecosystem. The orchestrator does not re
 - [x] Read all relevant documentation
 - [x] Discuss approach with mentors (AmosLi sir, Yao sir, CookieYang ma'am)
 - [x] Open groundwork PRs covering all hard acceptance criteria
-- [ ] Get at least 3 of the 5 hardest groundwork PRs merged before submission
+- [x] 2 of the hardest groundwork PRs merged (#1397 SubtaskDAG, #826 HITL system); 19 additional Idea 5 groundwork PRs open and under review
 
 **Community Bonding Period (May 8 — June 1)**
 
