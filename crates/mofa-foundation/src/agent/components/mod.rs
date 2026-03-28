@@ -16,8 +16,10 @@
 
 pub mod context_compressor;
 pub mod coordinator;
+pub mod episodic_memory;
 pub mod memory;
 pub mod reasoner;
+pub mod semantic_memory;
 pub mod tool;
 
 // Note: tool_registry was removed - SimpleToolRegistry and EchoTool are now in tool.rs
@@ -29,11 +31,20 @@ pub mod tool;
 
 // Context compressor - Kernel trait and types
 pub use mofa_kernel::agent::components::context_compressor::{
-    CompressionStrategy, ContextCompressor,
+    CompressionMetrics, CompressionResult, CompressionStrategy, ContextCompressor,
 };
 
 // Context compressor - Foundation implementations
-pub use context_compressor::{SlidingWindowCompressor, SummarizingCompressor, TokenCounter};
+pub use context_compressor::{
+    HierarchicalCompressor, HybridCompressor, SemanticCompressor, SlidingWindowCompressor,
+    SummarizingCompressor, TokenCounter,
+};
+
+#[cfg(feature = "tiktoken")]
+pub use context_compressor::TikTokenCounter;
+
+#[cfg(feature = "compression-cache")]
+pub use context_compressor::{CompressionCache, CacheStats};
 
 // Coordinator - Kernel trait 和类型
 // Coordinator - Kernel trait and types
@@ -69,6 +80,13 @@ pub use memory::{
     FileBasedStorage, InMemoryStorage, Memory, MemoryItem, MemoryStats, MemoryValue, Message,
     MessageRole,
 };
+
+// Episodic and Semantic memory (new long-term memory implementations)
+pub use episodic_memory::{Episode, EpisodicMemory};
+pub use semantic_memory::{HashEmbedder, SemanticMemory};
+
+// Embedder trait from kernel (re-exported for convenience)
+pub use mofa_kernel::agent::components::memory::Embedder;
 
 // Reasoner 实现
 // Reasoner implementations

@@ -298,3 +298,208 @@ impl ToolCall {
 
 // Note: Concrete Reasoner implementations (like DirectReasoner) are provided
 // in the foundation layer (mofa-foundation::agent::components::reasoner)
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // ── ReasoningResult::respond ──────────────────────────────────────────
+
+    #[test]
+    fn reasoning_result_respond() {
+        let r = ReasoningResult::respond("hello world");
+        assert!(r.thoughts.is_empty());
+        assert!((r.confidence - 1.0).abs() < f32::EPSILON);
+        match &r.decision {
+            Decision::Respond { content } => assert_eq!(content, "hello world"),
+            _ => panic!("expected Decision::Respond"),
+        }
+    }
+
+    // ── ReasoningResult::call_tool ────────────────────────────────────────
+
+    #[test]
+    fn reasoning_result_call_tool() {
+        let args = serde_json::json!({"query": "weather"});
+        let r = ReasoningResult::call_tool("search", args.clone());
+        assert!(r.thoughts.is_empty());
+        assert!((r.confidence - 1.0).abs() < f32::EPSILON);
+        match &r.decision {
+            Decision::CallTool {
+                tool_name,
+                arguments,
+            } => {
+                assert_eq!(tool_name, "search");
+                assert_eq!(arguments, &args);
+            }
+            _ => panic!("expected Decision::CallTool"),
+        }
+    }
+
+    // ── ReasoningResult::with_confidence clamping ─────────────────────────
+
+    #[test]
+    fn confidence_clamps_above_one() {
+        let r = ReasoningResult::respond("x").with_confidence(5.0);
+        assert!((r.confidence - 1.0).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn confidence_clamps_below_zero() {
+        let r = ReasoningResult::respond("x").with_confidence(-2.0);
+        assert!((r.confidence - 0.0).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn confidence_normal_value() {
+        let r = ReasoningResult::respond("x").with_confidence(0.42);
+        assert!((r.confidence - 0.42).abs() < f32::EPSILON);
+    }
+
+    // ── ReasoningResult::with_thought ─────────────────────────────────────
+
+    #[test]
+    fn with_thought_appends() {
+        let r = ReasoningResult::respond("answer")
+            .with_thought(ThoughtStep::thought("first idea", 1))
+            .with_thought(ThoughtStep::analysis("deeper look", 2));
+        assert_eq!(r.thoughts.len(), 2);
+        assert_eq!(r.thoughts[0].step_number, 1);
+        assert_eq!(r.thoughts[0].step_type, ThoughtStepType::Thought);
+        assert_eq!(r.thoughts[1].step_type, ThoughtStepType::Analysis);
+    }
+
+    // ── ThoughtStep factory methods ───────────────────────────────────────
+
+    #[test]
+    fn thought_step_thought() {
+        let s = ThoughtStep::thought("thinking...", 1);
+        assert_eq!(s.step_type, ThoughtStepType::Thought);
+        assert_eq!(s.content, "thinking...");
+        assert_eq!(s.step_number, 1);
+        assert!(s.timestamp_ms > 0);
+    }
+
+    #[test]
+    fn thought_step_analysis() {
+        let s = ThoughtStep::analysis("analyzing...", 2);
+        assert_eq!(s.step_type, ThoughtStepType::Analysis);
+        assert_eq!(s.step_number, 2);
+    }
+
+    #[test]
+    fn thought_step_planning() {
+        let s = ThoughtStep::planning("planning...", 3);
+        assert_eq!(s.step_type, ThoughtStepType::Planning);
+        assert_eq!(s.step_number, 3);
+    }
+
+    #[test]
+    fn thought_step_reflection() {
+        let s = ThoughtStep::reflection("reflecting...", 4);
+        assert_eq!(s.step_type, ThoughtStepType::Reflection);
+        assert_eq!(s.step_number, 4);
+    }
+
+    #[test]
+    fn thought_step_custom_type() {
+        let s = ThoughtStep::new(ThoughtStepType::Custom("brainstorm".into()), "ideas", 5);
+        assert_eq!(s.step_type, ThoughtStepType::Custom("brainstorm".into()));
+        assert_eq!(s.content, "ideas");
+    }
+
+    // ── ToolCall ──────────────────────────────────────────────────────────
+
+    #[test]
+    fn tool_call_new() {
+        let tc = ToolCall::new("calculator", serde_json::json!({"expr": "2+2"}));
+        assert_eq!(tc.tool_name, "calculator");
+        assert_eq!(tc.arguments["expr"], "2+2");
+    }
+
+    // ── Decision variants ─────────────────────────────────────────────────
+
+    #[test]
+    fn decision_delegate() {
+        let d = Decision::Delegate {
+            agent_id: "agent-2".into(),
+            task: "summarize".into(),
+        };
+        match d {
+            Decision::Delegate { agent_id, task } => {
+                assert_eq!(agent_id, "agent-2");
+                assert_eq!(task, "summarize");
+            }
+            _ => panic!("expected Delegate"),
+        }
+    }
+
+    #[test]
+    fn decision_need_more_info() {
+        let d = Decision::NeedMoreInfo {
+            questions: vec!["what format?".into(), "how long?".into()],
+        };
+        match d {
+            Decision::NeedMoreInfo { questions } => assert_eq!(questions.len(), 2),
+            _ => panic!("expected NeedMoreInfo"),
+        }
+    }
+
+    #[test]
+    fn decision_cannot_handle() {
+        let d = Decision::CannotHandle {
+            reason: "out of scope".into(),
+        };
+        match d {
+            Decision::CannotHandle { reason } => assert_eq!(reason, "out of scope"),
+            _ => panic!("expected CannotHandle"),
+        }
+    }
+
+    #[test]
+    fn decision_call_multiple_tools() {
+        let d = Decision::CallMultipleTools {
+            tool_calls: vec![
+                ToolCall::new("tool_a", serde_json::json!({})),
+                ToolCall::new("tool_b", serde_json::json!({"k": "v"})),
+            ],
+        };
+        match d {
+            Decision::CallMultipleTools { tool_calls } => {
+                assert_eq!(tool_calls.len(), 2);
+                assert_eq!(tool_calls[0].tool_name, "tool_a");
+                assert_eq!(tool_calls[1].tool_name, "tool_b");
+            }
+            _ => panic!("expected CallMultipleTools"),
+        }
+    }
+
+    // ── Serialization ─────────────────────────────────────────────────────
+
+    #[test]
+    fn reasoning_result_serde_roundtrip() {
+        let r = ReasoningResult::respond("test answer")
+            .with_confidence(0.9)
+            .with_thought(ThoughtStep::thought("step 1", 1));
+        let json = serde_json::to_string(&r).unwrap();
+        let recovered: ReasoningResult = serde_json::from_str(&json).unwrap();
+        assert_eq!(recovered.thoughts.len(), 1);
+        assert!((recovered.confidence - 0.9).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn thought_step_type_serde_roundtrip() {
+        for step_type in [
+            ThoughtStepType::Thought,
+            ThoughtStepType::Analysis,
+            ThoughtStepType::Planning,
+            ThoughtStepType::Reflection,
+            ThoughtStepType::Evaluation,
+            ThoughtStepType::Custom("test".into()),
+        ] {
+            let json = serde_json::to_string(&step_type).unwrap();
+            let recovered: ThoughtStepType = serde_json::from_str(&json).unwrap();
+            assert_eq!(recovered, step_type);
+        }
+    }
+}

@@ -1,0 +1,16 @@
+[package]
+name = "agent_memory"
+version.workspace = true
+edition.workspace = true
+
+[[bin]]
+name = "agent_memory"
+path = "src/main.rs"
+
+[dependencies]
+mofa-foundation = { path = "../../crates/mofa-foundation" }
+mofa-kernel = { path = "../../crates/mofa-kernel" }
+tokio = { workspace = true }
+anyhow = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }

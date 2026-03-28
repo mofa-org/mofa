@@ -10,6 +10,7 @@
 // Model cache and download modules
 pub mod cache;
 pub mod model_downloader;
+pub mod openai;
 
 // Kokoro TTS wrapper (available with kokoro feature)
 #[cfg(feature = "kokoro")]
@@ -299,13 +300,19 @@ pub fn play_audio(audio_data: Vec<u8>) -> PluginResult<()> {
     info!("Playing {} bytes of audio using rodio", audio_data.len());
 
     let cursor = Cursor::new(audio_data);
-    let (_stream, stream_handle) = OutputStream::try_default()
-        .map_err(|e| mofa_kernel::plugin::PluginError::ExecutionFailed(format!("Failed to get audio output: {}", e)))?;
-    let sink = Sink::try_new(&stream_handle)
-        .map_err(|e| mofa_kernel::plugin::PluginError::ExecutionFailed(format!("Failed to create sink: {}", e)))?;
+    let (_stream, stream_handle) = OutputStream::try_default().map_err(|e| {
+        mofa_kernel::plugin::PluginError::ExecutionFailed(format!(
+            "Failed to get audio output: {}",
+            e
+        ))
+    })?;
+    let sink = Sink::try_new(&stream_handle).map_err(|e| {
+        mofa_kernel::plugin::PluginError::ExecutionFailed(format!("Failed to create sink: {}", e))
+    })?;
 
-    let source =
-        Decoder::new(cursor).map_err(|e| mofa_kernel::plugin::PluginError::ExecutionFailed(format!("Failed to decode audio: {}", e)))?;
+    let source = Decoder::new(cursor).map_err(|e| {
+        mofa_kernel::plugin::PluginError::ExecutionFailed(format!("Failed to decode audio: {}", e))
+    })?;
     sink.append(source);
     sink.sleep_until_end();
 
@@ -339,7 +346,12 @@ pub fn play_audio(audio_data: Vec<u8>) -> PluginResult<()> {
 pub async fn play_audio_async(audio_data: Vec<u8>) -> PluginResult<()> {
     tokio::task::spawn_blocking(move || play_audio(audio_data))
         .await
-        .map_err(|e| mofa_kernel::plugin::PluginError::ExecutionFailed(format!("Playback task failed: {}", e)))?
+        .map_err(|e| {
+            mofa_kernel::plugin::PluginError::ExecutionFailed(format!(
+                "Playback task failed: {}",
+                e
+            ))
+        })?
 }
 
 // ============================================================================
@@ -441,10 +453,11 @@ impl TTSPlugin {
 
     /// Synthesize text to audio and play it
     pub async fn synthesize_and_play(&mut self, text: &str) -> PluginResult<()> {
-        let engine = self
-            .engine
-            .as_ref()
-            .ok_or_else(|| mofa_kernel::plugin::PluginError::ExecutionFailed("TTS engine not initialized".to_string()))?;
+        let engine = self.engine.as_ref().ok_or_else(|| {
+            mofa_kernel::plugin::PluginError::ExecutionFailed(
+                "TTS engine not initialized".to_string(),
+            )
+        })?;
 
         self.synthesis_count += 1;
         self.total_chars_synthesized += text.len() as u64;
@@ -457,10 +470,11 @@ impl TTSPlugin {
 
     /// Synthesize text to audio data (no playback)
     pub async fn synthesize_to_audio(&mut self, text: &str) -> PluginResult<Vec<u8>> {
-        let engine = self
-            .engine
-            .as_ref()
-            .ok_or_else(|| mofa_kernel::plugin::PluginError::ExecutionFailed("TTS engine not initialized".to_string()))?;
+        let engine = self.engine.as_ref().ok_or_else(|| {
+            mofa_kernel::plugin::PluginError::ExecutionFailed(
+                "TTS engine not initialized".to_string(),
+            )
+        })?;
 
         self.synthesis_count += 1;
         self.total_chars_synthesized += text.len() as u64;
@@ -475,10 +489,11 @@ impl TTSPlugin {
         text: &str,
         callback: Box<dyn Fn(Vec<u8>) + Send + Sync>,
     ) -> PluginResult<()> {
-        let engine = self
-            .engine
-            .as_ref()
-            .ok_or_else(|| mofa_kernel::plugin::PluginError::ExecutionFailed("TTS engine not initialized".to_string()))?;
+        let engine = self.engine.as_ref().ok_or_else(|| {
+            mofa_kernel::plugin::PluginError::ExecutionFailed(
+                "TTS engine not initialized".to_string(),
+            )
+        })?;
 
         self.synthesis_count += 1;
         self.total_chars_synthesized += text.len() as u64;
@@ -508,10 +523,11 @@ impl TTSPlugin {
         text: &str,
         callback: Box<dyn Fn(Vec<f32>) + Send + Sync>,
     ) -> PluginResult<()> {
-        let engine = self
-            .engine
-            .as_ref()
-            .ok_or_else(|| mofa_kernel::plugin::PluginError::ExecutionFailed("TTS engine not initialized".to_string()))?;
+        let engine = self.engine.as_ref().ok_or_else(|| {
+            mofa_kernel::plugin::PluginError::ExecutionFailed(
+                "TTS engine not initialized".to_string(),
+            )
+        })?;
 
         self.synthesis_count += 1;
         self.total_chars_synthesized += text.len() as u64;
@@ -525,7 +541,12 @@ impl TTSPlugin {
                 return kokoro
                     .synthesize_stream_f32(text, voice, callback)
                     .await
-                    .map_err(|e| mofa_kernel::plugin::PluginError::ExecutionFailed(format!("F32 streaming failed: {}", e)));
+                    .map_err(|e| {
+                        mofa_kernel::plugin::PluginError::ExecutionFailed(format!(
+                            "F32 streaming failed: {}",
+                            e
+                        ))
+                    });
             }
         }
 
@@ -549,10 +570,11 @@ impl TTSPlugin {
 
     /// List available voices
     pub async fn list_voices(&self) -> PluginResult<Vec<VoiceInfo>> {
-        let engine = self
-            .engine
-            .as_ref()
-            .ok_or_else(|| mofa_kernel::plugin::PluginError::ExecutionFailed("TTS engine not initialized".to_string()))?;
+        let engine = self.engine.as_ref().ok_or_else(|| {
+            mofa_kernel::plugin::PluginError::ExecutionFailed(
+                "TTS engine not initialized".to_string(),
+            )
+        })?;
         engine.list_voices().await
     }
 
@@ -642,10 +664,12 @@ impl AgentPlugin for TTSPlugin {
 
         // Initialize model cache
         let cache_dir = self.config.cache_dir.as_ref().map(std::path::PathBuf::from);
-        self.model_cache = Some(
-            cache::ModelCache::new(cache_dir)
-                .map_err(|e| mofa_kernel::plugin::PluginError::ExecutionFailed(format!("Failed to initialize model cache: {}", e)))?,
-        );
+        self.model_cache = Some(cache::ModelCache::new(cache_dir).map_err(|e| {
+            mofa_kernel::plugin::PluginError::ExecutionFailed(format!(
+                "Failed to initialize model cache: {}",
+                e
+            ))
+        })?);
 
         // Initialize Hugging Face client
         self.hf_client = Some(model_downloader::HFHubClient::new());
@@ -658,15 +682,17 @@ impl AgentPlugin for TTSPlugin {
         info!("Initializing TTS plugin: {}", self.metadata.id);
 
         // Check if we need to download the model
-        let cache = self
-            .model_cache
-            .as_ref()
-            .ok_or_else(|| mofa_kernel::plugin::PluginError::ExecutionFailed("Model cache not initialized".to_string()))?;
+        let cache = self.model_cache.as_ref().ok_or_else(|| {
+            mofa_kernel::plugin::PluginError::ExecutionFailed(
+                "Model cache not initialized".to_string(),
+            )
+        })?;
 
-        let hf_client = self
-            .hf_client
-            .as_ref()
-            .ok_or_else(|| mofa_kernel::plugin::PluginError::ExecutionFailed("HF client not initialized".to_string()))?;
+        let hf_client = self.hf_client.as_ref().ok_or_else(|| {
+            mofa_kernel::plugin::PluginError::ExecutionFailed(
+                "HF client not initialized".to_string(),
+            )
+        })?;
 
         // Check if model exists in cache
         let model_exists = cache.exists(&self.config.model_url).await;
@@ -696,7 +722,12 @@ impl AgentPlugin for TTSPlugin {
             hf_client
                 .download_model(download_config, cache)
                 .await
-                .map_err(|e| mofa_kernel::plugin::PluginError::ExecutionFailed(format!("Failed to download model: {}", e)))?;
+                .map_err(|e| {
+                    mofa_kernel::plugin::PluginError::ExecutionFailed(format!(
+                        "Failed to download model: {}",
+                        e
+                    ))
+                })?;
         } else if !model_exists {
             // Auto-download disabled, fail with clear error
             return Err(mofa_kernel::plugin::PluginError::ExecutionFailed(format!(
@@ -712,11 +743,17 @@ impl AgentPlugin for TTSPlugin {
             && !cache
                 .validate(&self.config.model_url, Some(expected_checksum))
                 .await
-                .map_err(|e| mofa_kernel::plugin::PluginError::ExecutionFailed(format!("Failed to validate model: {}", e)))?
+                .map_err(|e| {
+                    mofa_kernel::plugin::PluginError::ExecutionFailed(format!(
+                        "Failed to validate model: {}",
+                        e
+                    ))
+                })?
         {
             return Err(mofa_kernel::plugin::PluginError::ExecutionFailed(
                 "Model validation failed. The cached model may be corrupted. \
-                    Try deleting the cache and re-downloading.".into(),
+                    Try deleting the cache and re-downloading."
+                    .into(),
             ));
         }
 
@@ -732,9 +769,11 @@ impl AgentPlugin for TTSPlugin {
                     .unwrap_or_else(|| std::path::PathBuf::from("voices-v1.1-zh.bin"));
                 let voice_path = voice_path_buf.to_str().unwrap_or("voices-v1.1-zh.bin");
 
-                let model_path_str = model_path
-                    .to_str()
-                    .ok_or_else(|| mofa_kernel::plugin::PluginError::ExecutionFailed("Invalid model path".to_string()))?;
+                let model_path_str = model_path.to_str().ok_or_else(|| {
+                    mofa_kernel::plugin::PluginError::ExecutionFailed(
+                        "Invalid model path".to_string(),
+                    )
+                })?;
 
                 info!(
                     "Initializing Kokoro TTS engine with model: {}, voices: {}",
@@ -749,9 +788,7 @@ impl AgentPlugin for TTSPlugin {
                     Err(e) => {
                         return Err(mofa_kernel::plugin::PluginError::ExecutionFailed(format!(
                             "Failed to initialize Kokoro engine (model: {}, voices: {}): {}",
-                            model_path_str,
-                            voice_path,
-                            e
+                            model_path_str, voice_path, e
                         )));
                     }
                 }
@@ -790,14 +827,20 @@ impl AgentPlugin for TTSPlugin {
 
     async fn execute(&mut self, input: String) -> PluginResult<String> {
         // Parse input as JSON command
-        let command: TTSCommand = serde_json::from_str(&input)
-            .map_err(|e| mofa_kernel::plugin::PluginError::ExecutionFailed(format!("Invalid TTS command format: {}", e)))?;
+        let command: TTSCommand = serde_json::from_str(&input).map_err(|e| {
+            mofa_kernel::plugin::PluginError::ExecutionFailed(format!(
+                "Invalid TTS command format: {}",
+                e
+            ))
+        })?;
 
         match command.action.as_str() {
             "speak" | "synthesize" => {
-                let text = command
-                    .text
-                    .ok_or_else(|| mofa_kernel::plugin::PluginError::ExecutionFailed("Missing 'text' parameter".to_string()))?;
+                let text = command.text.ok_or_else(|| {
+                    mofa_kernel::plugin::PluginError::ExecutionFailed(
+                        "Missing 'text' parameter".to_string(),
+                    )
+                })?;
 
                 if command.play.unwrap_or(true) {
                     self.synthesize_and_play(&text).await?;
@@ -811,24 +854,31 @@ impl AgentPlugin for TTSPlugin {
             }
             "list_voices" => {
                 let voices = self.list_voices().await?;
-                let json = serde_json::to_string(&voices)
-                    .map_err(|e| mofa_kernel::plugin::PluginError::ExecutionFailed(e.to_string()))?;
+                let json = serde_json::to_string(&voices).map_err(|e| {
+                    mofa_kernel::plugin::PluginError::ExecutionFailed(e.to_string())
+                })?;
                 Ok(json)
             }
             "set_voice" => {
-                let voice = command
-                    .voice
-                    .ok_or_else(|| mofa_kernel::plugin::PluginError::ExecutionFailed("Missing 'voice' parameter".to_string()))?;
+                let voice = command.voice.ok_or_else(|| {
+                    mofa_kernel::plugin::PluginError::ExecutionFailed(
+                        "Missing 'voice' parameter".to_string(),
+                    )
+                })?;
                 self.set_default_voice(&voice);
                 Ok(format!("Default voice set to: {}", voice))
             }
             "stats" => {
                 let stats = self.stats();
-                let json = serde_json::to_string(&stats)
-                    .map_err(|e| mofa_kernel::plugin::PluginError::ExecutionFailed(e.to_string()))?;
+                let json = serde_json::to_string(&stats).map_err(|e| {
+                    mofa_kernel::plugin::PluginError::ExecutionFailed(e.to_string())
+                })?;
                 Ok(json)
             }
-            _ => Err(mofa_kernel::plugin::PluginError::ExecutionFailed(format!("Unknown action: {}", command.action))),
+            _ => Err(mofa_kernel::plugin::PluginError::ExecutionFailed(format!(
+                "Unknown action: {}",
+                command.action
+            ))),
         }
     }
 
@@ -922,7 +972,11 @@ impl ToolExecutor for TextToSpeechTool {
         let text = arguments
             .get("text")
             .and_then(|v| v.as_str())
-            .ok_or_else(|| mofa_kernel::plugin::PluginError::ExecutionFailed("Missing 'text' parameter".to_string()))?;
+            .ok_or_else(|| {
+                mofa_kernel::plugin::PluginError::ExecutionFailed(
+                    "Missing 'text' parameter".to_string(),
+                )
+            })?;
 
         let voice = arguments.get("voice").and_then(|v| v.as_str());
         let play = arguments
@@ -957,10 +1011,14 @@ impl ToolExecutor for TextToSpeechTool {
 
     fn validate(&self, arguments: &serde_json::Value) -> PluginResult<()> {
         if !arguments.is_object() {
-            return Err(mofa_kernel::plugin::PluginError::ExecutionFailed("Arguments must be an object".to_string()));
+            return Err(mofa_kernel::plugin::PluginError::ExecutionFailed(
+                "Arguments must be an object".to_string(),
+            ));
         }
         if arguments.get("text").and_then(|v| v.as_str()).is_none() {
-            return Err(mofa_kernel::plugin::PluginError::ExecutionFailed("Missing required parameter: text".to_string()));
+            return Err(mofa_kernel::plugin::PluginError::ExecutionFailed(
+                "Missing required parameter: text".to_string(),
+            ));
         }
         Ok(())
     }

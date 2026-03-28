@@ -168,16 +168,17 @@ impl MessageStore for InMemoryStore {
         offset: i64,
         limit: i64,
     ) -> PersistenceResult<Vec<LLMMessage>> {
+        // Negative offset or limit cannot produce a valid page — return empty.
+        if offset < 0 || limit <= 0 {
+            return Ok(Vec::new());
+        }
+
         let all_messages = self.get_session_messages(session_id).await?;
 
         let start = offset as usize;
-        let end = (offset + limit) as usize;
+        let take = limit as usize;
 
-        Ok(all_messages
-            .into_iter()
-            .skip(start)
-            .take(end - start)
-            .collect())
+        Ok(all_messages.into_iter().skip(start).take(take).collect())
     }
 
     async fn delete_message(&self, id: Uuid) -> PersistenceResult<bool> {
@@ -875,5 +876,231 @@ impl PersistenceStore for BoundedInMemoryStore {
 
     async fn close(&self) -> PersistenceResult<()> {
         self.inner.close().await
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn ids() -> (Uuid, Uuid, Uuid, Uuid) {
+        (
+            Uuid::now_v7(),
+            Uuid::now_v7(),
+            Uuid::now_v7(),
+            Uuid::now_v7(),
+        )
+    }
+
+    #[tokio::test]
+    async fn in_memory_store_saves_and_sorts_session_messages() {
+        let store = InMemoryStore::new();
+        let (session_id, agent_id, user_id, tenant_id) = ids();
+
+        let mut msg_newer = LLMMessage::new(
+            session_id,
+            agent_id,
+            user_id,
+            tenant_id,
+            MessageRole::User,
+            MessageContent::text("newer"),
+        );
+        let mut msg_older = LLMMessage::new(
+            session_id,
+            agent_id,
+            user_id,
+            tenant_id,
+            MessageRole::Assistant,
+            MessageContent::text("older"),
+        );
+        msg_older.create_time = msg_newer.create_time - chrono::Duration::seconds(1);
+
+        MessageStore::save_message(&store, &msg_newer)
+            .await
+            .expect("save newer should work");
+        MessageStore::save_message(&store, &msg_older)
+            .await
+            .expect("save older should work");
+
+        let messages = MessageStore::get_session_messages(&store, session_id)
+            .await
+            .expect("query should work");
+        assert_eq!(messages.len(), 2);
+        assert_eq!(messages[0].content.text.as_deref(), Some("older"));
+        assert_eq!(messages[1].content.text.as_deref(), Some("newer"));
+    }
+
+    #[tokio::test]
+    async fn in_memory_store_session_crud_and_delete_messages() {
+        let store = InMemoryStore::new();
+        let (session_id, agent_id, user_id, _tenant_id) = ids();
+        let session = ChatSession::new(user_id, agent_id).with_id(session_id);
+
+        SessionStore::create_session(&store, &session)
+            .await
+            .expect("create session should work");
+        let loaded = SessionStore::get_session(&store, session_id)
+            .await
+            .expect("get session should work");
+        assert!(loaded.is_some());
+
+        let deleted = SessionStore::delete_session(&store, session_id)
+            .await
+            .expect("delete session should work");
+        assert!(deleted);
+
+        let removed = MessageStore::delete_session_messages(&store, session_id)
+            .await
+            .expect("delete session messages should work");
+        assert_eq!(removed, 0);
+    }
+
+    #[tokio::test]
+    async fn bounded_store_enforces_message_capacity() {
+        let store = BoundedInMemoryStore::new(2, 10);
+        let (session_id, agent_id, user_id, tenant_id) = ids();
+
+        for idx in 0..3 {
+            let msg = LLMMessage::new(
+                session_id,
+                agent_id,
+                user_id,
+                tenant_id,
+                MessageRole::User,
+                MessageContent::text(format!("m{}", idx)),
+            );
+            MessageStore::save_message(&store, &msg)
+                .await
+                .expect("save should work");
+        }
+
+        let messages = MessageStore::get_session_messages(&store, session_id)
+            .await
+            .expect("query should work");
+        assert_eq!(messages.len(), 2);
+    }
+
+    // ---- Pagination tests --------------------------------------------------------
+
+    /// Helper: insert `n` messages into a store for a given session, returning
+    /// the (session_id, store) pair.  Messages are created with sequential
+    /// timestamps so ordering is deterministic.
+    async fn store_with_messages(n: usize) -> (Uuid, InMemoryStore) {
+        let store = InMemoryStore::new();
+        let (session_id, agent_id, user_id, tenant_id) = ids();
+
+        let base_time = chrono::Utc::now();
+        for i in 0..n {
+            let mut msg = LLMMessage::new(
+                session_id,
+                agent_id,
+                user_id,
+                tenant_id,
+                MessageRole::User,
+                MessageContent::text(format!("msg-{}", i)),
+            );
+            msg.create_time = base_time + chrono::Duration::seconds(i as i64);
+            MessageStore::save_message(&store, &msg)
+                .await
+                .expect("save should work");
+        }
+
+        (session_id, store)
+    }
+
+    #[tokio::test]
+    async fn paginated_basic_page() {
+        let (sid, store) = store_with_messages(5).await;
+
+        let page = MessageStore::get_session_messages_paginated(&store, sid, 0, 3)
+            .await
+            .unwrap();
+        assert_eq!(page.len(), 3);
+        assert_eq!(page[0].content.text.as_deref(), Some("msg-0"));
+        assert_eq!(page[2].content.text.as_deref(), Some("msg-2"));
+    }
+
+    #[tokio::test]
+    async fn paginated_second_page() {
+        let (sid, store) = store_with_messages(5).await;
+
+        let page = MessageStore::get_session_messages_paginated(&store, sid, 3, 3)
+            .await
+            .unwrap();
+        assert_eq!(page.len(), 2); // only 2 remaining
+        assert_eq!(page[0].content.text.as_deref(), Some("msg-3"));
+        assert_eq!(page[1].content.text.as_deref(), Some("msg-4"));
+    }
+
+    #[tokio::test]
+    async fn paginated_offset_beyond_length() {
+        let (sid, store) = store_with_messages(3).await;
+
+        let page = MessageStore::get_session_messages_paginated(&store, sid, 100, 10)
+            .await
+            .unwrap();
+        assert!(page.is_empty());
+    }
+
+    #[tokio::test]
+    async fn paginated_negative_offset_returns_empty() {
+        let (sid, store) = store_with_messages(3).await;
+
+        let page = MessageStore::get_session_messages_paginated(&store, sid, -1, 10)
+            .await
+            .unwrap();
+        assert!(page.is_empty());
+    }
+
+    #[tokio::test]
+    async fn paginated_negative_limit_returns_empty() {
+        let (sid, store) = store_with_messages(3).await;
+
+        let page = MessageStore::get_session_messages_paginated(&store, sid, 0, -5)
+            .await
+            .unwrap();
+        assert!(page.is_empty());
+    }
+
+    #[tokio::test]
+    async fn paginated_zero_limit_returns_empty() {
+        let (sid, store) = store_with_messages(3).await;
+
+        let page = MessageStore::get_session_messages_paginated(&store, sid, 0, 0)
+            .await
+            .unwrap();
+        assert!(page.is_empty());
+    }
+
+    #[tokio::test]
+    async fn paginated_large_offset_and_limit_no_panic() {
+        // This was the original panic scenario: offset + limit overflowing i64
+        let (sid, store) = store_with_messages(3).await;
+
+        let page = MessageStore::get_session_messages_paginated(&store, sid, i64::MAX, 1)
+            .await
+            .unwrap();
+        assert!(page.is_empty());
+    }
+
+    #[tokio::test]
+    async fn paginated_limit_larger_than_total() {
+        let (sid, store) = store_with_messages(2).await;
+
+        let page = MessageStore::get_session_messages_paginated(&store, sid, 0, 100)
+            .await
+            .unwrap();
+        assert_eq!(page.len(), 2);
+    }
+
+    #[tokio::test]
+    async fn paginated_empty_session() {
+        let store = InMemoryStore::new();
+        let session_id = Uuid::now_v7();
+
+        let page = MessageStore::get_session_messages_paginated(&store, session_id, 0, 10)
+            .await
+            .unwrap();
+        assert!(page.is_empty());
     }
 }

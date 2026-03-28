@@ -6,7 +6,7 @@
 use std::collections::HashMap;
 
 use super::config::{HardwareProfile, ModelConfig};
-use super::descriptor::{AdapterDescriptor, ModelFormat, Modality};
+use super::descriptor::{AdapterDescriptor, Modality, ModelFormat};
 use super::error::{AdapterError, RejectionReason, ResolutionError};
 
 /// Result of adapter resolution containing the selected adapter and any rejection reasons
@@ -149,17 +149,17 @@ impl AdapterRegistry {
             }
 
             // Step 3: Check quantization support (hard constraint, if specified)
-            if let Some(ref required_quant) = config.required_quantization {
-                if !adapter.supports_quantization(required_quant) {
-                    rejections.push(RejectionReason::QuantizationMismatch {
-                        required: required_quant.clone(),
-                        supported: adapter
-                            .supported_quantizations
-                            .iter()
-                            .map(|q| q.name.clone())
-                            .collect(),
-                    });
-                }
+            if let Some(ref required_quant) = config.required_quantization
+                && !adapter.supports_quantization(required_quant)
+            {
+                rejections.push(RejectionReason::QuantizationMismatch {
+                    required: required_quant.clone(),
+                    supported: adapter
+                        .supported_quantizations
+                        .iter()
+                        .map(|q| q.name.clone())
+                        .collect(),
+                });
             }
 
             // Step 4: Check hardware compatibility (hard constraint)
@@ -171,13 +171,13 @@ impl AdapterRegistry {
             }
 
             // Step 5: Check priority threshold (soft constraint)
-            if let Some(min_priority) = config.min_priority {
-                if adapter.priority < min_priority {
-                    rejections.push(RejectionReason::PriorityTooLow {
-                        required_min_priority: min_priority,
-                        adapter_priority: adapter.priority,
-                    });
-                }
+            if let Some(min_priority) = config.min_priority
+                && adapter.priority < min_priority
+            {
+                rejections.push(RejectionReason::PriorityTooLow {
+                    required_min_priority: min_priority,
+                    adapter_priority: adapter.priority,
+                });
             }
 
             // Step 6: Check experimental flag
@@ -245,7 +245,10 @@ impl AdapterRegistry {
     }
 
     /// Find all adapters that support a given modality
-    pub fn find_by_modality(&self, modality: &Modality) -> impl Iterator<Item = &AdapterDescriptor> {
+    pub fn find_by_modality(
+        &self,
+        modality: &Modality,
+    ) -> impl Iterator<Item = &AdapterDescriptor> {
         self.adapters
             .values()
             .filter(|a| a.supports_modality(modality))
@@ -253,13 +256,14 @@ impl AdapterRegistry {
 
     /// Find all adapters that support a given format
     pub fn find_by_format(&self, format: &ModelFormat) -> impl Iterator<Item = &AdapterDescriptor> {
-        self.adapters
-            .values()
-            .filter(|a| a.supports_format(format))
+        self.adapters.values().filter(|a| a.supports_format(format))
     }
 
     /// Find all adapters compatible with the given hardware profile
-    pub fn find_compatible(&self, hardware: &HardwareProfile) -> impl Iterator<Item = &AdapterDescriptor> {
+    pub fn find_compatible(
+        &self,
+        hardware: &HardwareProfile,
+    ) -> impl Iterator<Item = &AdapterDescriptor> {
         self.adapters
             .values()
             .filter(|a| a.supports_hardware(hardware))

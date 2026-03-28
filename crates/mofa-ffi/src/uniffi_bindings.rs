@@ -12,7 +12,13 @@ use tokio::sync::RwLock;
 // Error Types
 // =============================================================================
 
-/// MoFA error type for UniFFI
+/// MoFA error type for UniFFI.
+///
+/// Intentionally NOT `#[non_exhaustive]` — UniFFI generates exhaustive matches
+/// across the FFI boundary and requires all variants to be known at compile time.
+///
+/// At the FFI boundary every `error_stack::Report<*>` from internal code is
+/// downcast to the closest `MoFaError` category via [`From`] impls below.
 #[derive(Debug, thiserror::Error)]
 pub enum MoFaError {
     #[error("Configuration error: {0}")]
@@ -29,6 +35,41 @@ pub enum MoFaError {
     ToolError(String),
     #[error("Session error: {0}")]
     SessionError(String),
+}
+
+/// Convenience result alias for UniFFI-exposed functions.
+///
+/// Always `Result<T, MoFaError>` — `error_stack::Report` cannot cross the FFI
+/// boundary. Use the [`From`] impls below to convert internal reports here.
+pub type MoFaResult<T> = Result<T, MoFaError>;
+
+// ── FFI boundary conversions: Report<*> → MoFaError ───────────────────────────
+//
+// The full causal chain is preserved in the Display output of the Report,
+// which is forwarded as the error string. No information is silently discarded.
+
+impl From<error_stack::Report<mofa_kernel::error::KernelError>> for MoFaError {
+    fn from(r: error_stack::Report<mofa_kernel::error::KernelError>) -> Self {
+        MoFaError::RuntimeError(r.to_string())
+    }
+}
+
+impl From<error_stack::Report<mofa_kernel::agent::AgentError>> for MoFaError {
+    fn from(r: error_stack::Report<mofa_kernel::agent::AgentError>) -> Self {
+        MoFaError::RuntimeError(r.to_string())
+    }
+}
+
+impl From<error_stack::Report<mofa_kernel::agent::types::GlobalError>> for MoFaError {
+    fn from(r: error_stack::Report<mofa_kernel::agent::types::GlobalError>) -> Self {
+        MoFaError::RuntimeError(r.to_string())
+    }
+}
+
+impl From<error_stack::Report<mofa_foundation::llm::LLMError>> for MoFaError {
+    fn from(r: error_stack::Report<mofa_foundation::llm::LLMError>) -> Self {
+        MoFaError::LLMError(r.to_string())
+    }
 }
 
 // =============================================================================
@@ -239,17 +280,17 @@ pub trait FfiToolCallback: Send + Sync {
 // =============================================================================
 
 /// Get MoFA version
-pub fn get_version() -> String {
+pub(crate) fn get_version() -> String {
     env!("CARGO_PKG_VERSION").to_string()
 }
 
 /// Check if Dora runtime support is available
-pub fn is_dora_available() -> bool {
+pub(crate) fn is_dora_available() -> bool {
     cfg!(feature = "dora")
 }
 
 /// Create a new LLM Agent Builder
-pub fn new_llm_agent_builder() -> Result<std::sync::Arc<LLMAgentBuilder>, MoFaError> {
+pub(crate) fn new_llm_agent_builder() -> Result<std::sync::Arc<LLMAgentBuilder>, MoFaError> {
     LLMAgentBuilder::create()
 }
 
@@ -549,7 +590,7 @@ pub struct LLMAgentBuilder {
 
 impl LLMAgentBuilder {
     /// Create a new builder
-    pub fn create() -> Result<Arc<Self>, MoFaError> {
+    pub(crate) fn create() -> Result<Arc<Self>, MoFaError> {
         let runtime =
             tokio::runtime::Runtime::new().map_err(|e| MoFaError::RuntimeError(e.to_string()))?;
         Ok(Arc::new(Self {
@@ -920,30 +961,32 @@ impl SessionManager {
 /// Adapter that wraps a foreign FfiToolCallback into the kernel Tool trait
 struct CallbackToolAdapter {
     callback: Box<dyn FfiToolCallback>,
+    /// Cached name to avoid `Box::leak` on every `name()` call
+    cached_name: String,
+    /// Cached description to avoid `Box::leak` on every `description()` call
+    cached_description: String,
 }
 
 impl CallbackToolAdapter {
     fn new(callback: Box<dyn FfiToolCallback>) -> Self {
-        Self { callback }
+        let cached_name = callback.name();
+        let cached_description = callback.description();
+        Self {
+            callback,
+            cached_name,
+            cached_description,
+        }
     }
 }
 
 #[async_trait::async_trait]
 impl mofa_kernel::agent::components::tool::Tool for CallbackToolAdapter {
     fn name(&self) -> &str {
-        // We store the name in a leaked string to return a &str.
-        // This is acceptable for long-lived tool registrations.
-        // Use a thread-local cache to avoid repeated leaking.
-        // For simplicity, we just leak once per name.
-        let name = self.callback.name();
-        // SAFETY: We need a &str with 'static lifetime for the trait.
-        // Tools are long-lived so this small leak is acceptable.
-        Box::leak(name.into_boxed_str())
+        &self.cached_name
     }
 
     fn description(&self) -> &str {
-        let desc = self.callback.description();
-        Box::leak(desc.into_boxed_str())
+        &self.cached_description
     }
 
     fn parameters_schema(&self) -> serde_json::Value {
@@ -1119,5 +1162,24 @@ mod tests {
         let msg = err.to_string();
         assert!(msg.contains("Runtime error:"));
         assert!(msg.contains("get_last_output is not yet supported"));
+    }
+
+    #[test]
+    fn udl_contract_includes_required_ffi_surface() {
+        // Contract guard: CI should fail when critical UDL entries drift from
+        // the implemented UniFFI
+        let udl = include_str!("mofa.udl");
+
+        for required in [
+            "dictionary LLMConfig",
+            "[Throws=MoFaError, Name=from_config_file]",
+            "[Throws=MoFaError, Name=from_config]",
+            "LLMAgentBuilder set_openai_provider(",
+        ] {
+            assert!(
+                udl.contains(required),
+                "missing required UDL contract marker: {required}"
+            );
+        }
     }
 }

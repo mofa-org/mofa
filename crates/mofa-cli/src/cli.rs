@@ -1,5 +1,6 @@
 //! CLI command definitions using clap
 
+use crate::commands::doctor::DoctorScenario;
 use crate::output::OutputFormat;
 use clap::{Parser, Subcommand, ValueEnum};
 use std::path::PathBuf;
@@ -100,6 +101,28 @@ pub enum Commands {
     /// Show information about MoFA
     Info,
 
+    /// Diagnose environment and project readiness for practical workflows
+    Doctor {
+        /// Project directory to inspect
+        #[arg(short, long, default_value = ".")]
+        path: PathBuf,
+
+        /// Validation scenario profile
+        #[arg(long, value_enum, default_value_t = DoctorScenario::LocalDev)]
+        scenario: DoctorScenario,
+
+        /// Emit machine-readable JSON report
+        #[arg(long)]
+        json: bool,
+
+        /// Auto-create missing runtime directories
+        #[arg(long)]
+        fix: bool,
+
+        /// Return non-zero when any failing check exists
+        #[arg(long)]
+        strict: bool,
+    },
     /// Database management commands
     Db {
         #[command(subcommand)]
@@ -132,6 +155,12 @@ pub enum Commands {
     Tool {
         #[command(subcommand)]
         action: ToolCommands,
+    },
+
+    /// RAG indexing and retrieval
+    Rag {
+        #[command(subcommand)]
+        action: RagCommands,
     },
 }
 
@@ -341,6 +370,12 @@ pub enum ConfigValueCommands {
 /// Plugin management subcommands
 #[derive(Subcommand)]
 pub enum PluginCommands {
+    /// Create a new plugin project interactively
+    New {
+        /// Optional name of the plugin (will prompt if not provided)
+        name: Option<String>,
+    },
+
     /// List plugins
     List {
         /// Show installed plugins only
@@ -518,6 +553,91 @@ pub enum ToolCommands {
     },
 }
 
+/// RAG management subcommands
+#[derive(Subcommand)]
+pub enum RagCommands {
+    /// Index one or more documents into a RAG backend.
+    Index {
+        /// Input text files to index.
+        #[arg(short = 'i', long = "input", required = true)]
+        input: Vec<PathBuf>,
+
+        /// Backend to use: `in-memory` or `qdrant`.
+        #[arg(long, default_value = "in-memory", value_parser = ["in-memory", "qdrant"])]
+        backend: String,
+
+        /// Local index file path for `in-memory` backend.
+        #[arg(long, default_value = ".mofa/rag-index.json")]
+        index_file: PathBuf,
+
+        /// Embedding vector dimensions.
+        #[arg(long, default_value_t = 64)]
+        dimensions: usize,
+
+        /// Chunk size in characters.
+        #[arg(long, default_value_t = 512)]
+        chunk_size: usize,
+
+        /// Chunk overlap in characters.
+        #[arg(long, default_value_t = 64)]
+        chunk_overlap: usize,
+
+        /// Use sentence-based chunking instead of character windows.
+        #[arg(long)]
+        sentence_chunks: bool,
+
+        /// Qdrant URL (required for `qdrant` backend).
+        #[arg(long)]
+        qdrant_url: Option<String>,
+
+        /// Qdrant API key.
+        #[arg(long)]
+        qdrant_api_key: Option<String>,
+
+        /// Qdrant collection name.
+        #[arg(long, default_value = "mofa_documents")]
+        qdrant_collection: String,
+    },
+
+    /// Query indexed documents from a RAG backend.
+    Query {
+        /// Query text.
+        query: String,
+
+        /// Backend to use: `in-memory` or `qdrant`.
+        #[arg(long, default_value = "in-memory", value_parser = ["in-memory", "qdrant"])]
+        backend: String,
+
+        /// Local index file path for `in-memory` backend.
+        #[arg(long, default_value = ".mofa/rag-index.json")]
+        index_file: PathBuf,
+
+        /// Embedding vector dimensions (used for qdrant query embedding).
+        #[arg(long, default_value_t = 64)]
+        dimensions: usize,
+
+        /// Number of results to return.
+        #[arg(long, default_value_t = 5)]
+        top_k: usize,
+
+        /// Optional score threshold.
+        #[arg(long)]
+        threshold: Option<f32>,
+
+        /// Qdrant URL (required for `qdrant` backend).
+        #[arg(long)]
+        qdrant_url: Option<String>,
+
+        /// Qdrant API key.
+        #[arg(long)]
+        qdrant_api_key: Option<String>,
+
+        /// Qdrant collection name.
+        #[arg(long, default_value = "mofa_documents")]
+        qdrant_collection: String,
+    },
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -582,5 +702,50 @@ mod tests {
             "json",
         ]);
         assert!(parsed.is_ok(), "session export -o ... should still parse");
+    }
+
+    #[test]
+    fn test_doctor_parses_defaults() {
+        let parsed = Cli::try_parse_from(["mofa", "doctor"]);
+        assert!(parsed.is_ok(), "doctor should parse with defaults");
+    }
+
+    #[test]
+    fn test_doctor_parses_ci_strict_json() {
+        let parsed = Cli::try_parse_from([
+            "mofa",
+            "doctor",
+            "--scenario",
+            "ci",
+            "--strict",
+            "--json",
+            "--path",
+            ".",
+        ]);
+        assert!(parsed.is_ok(), "doctor ci strict json should parse");
+    }
+
+    #[test]
+    fn test_rag_index_parses() {
+        let parsed = Cli::try_parse_from([
+            "mofa",
+            "rag",
+            "index",
+            "--input",
+            "doc1.txt",
+            "--input",
+            "doc2.txt",
+            "--backend",
+            "in-memory",
+            "--index-file",
+            ".mofa/rag.json",
+        ]);
+        assert!(parsed.is_ok(), "rag index command should parse");
+    }
+
+    #[test]
+    fn test_rag_query_parses() {
+        let parsed = Cli::try_parse_from(["mofa", "rag", "query", "what is mofa", "--top-k", "3"]);
+        assert!(parsed.is_ok(), "rag query command should parse");
     }
 }

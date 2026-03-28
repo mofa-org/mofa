@@ -16,6 +16,7 @@
 //! QDRANT_URL=http://localhost:6334 cargo run -p rag_pipeline -- qdrant
 //! ```
 
+use anyhow::Result;
 use futures::StreamExt;
 use mofa_foundation::rag::{
     ChunkConfig, Document, DocumentChunk, IdentityReranker, InMemoryVectorStore, PassthroughStreamingGenerator,
@@ -320,6 +321,7 @@ async fn streaming_rag_pipeline() -> Result<(), Box<dyn std::error::Error>> {
                     }
                 }
                 mofa_kernel::rag::pipeline::GeneratorChunk::Done => break,
+                _ => {}
             }
         }
 
@@ -416,6 +418,7 @@ async fn streaming_edge_cases_test() -> Result<(), Box<dyn std::error::Error>> {
                                 total_chars += text.len();
                             }
                             mofa_kernel::rag::pipeline::GeneratorChunk::Done => break,
+                            _ => {}
                         },
                         Err(e) => {
                             println!("  ✗ Stream error: {}", e);
@@ -529,6 +532,7 @@ async fn streaming_memory_test() -> Result<(), Box<dyn std::error::Error>> {
                         tokio::time::sleep(std::time::Duration::from_millis(5)).await;
                     }
                     mofa_kernel::rag::pipeline::GeneratorChunk::Done => break,
+                    _ => {}
                 }
             }
 
@@ -658,6 +662,7 @@ async fn streaming_performance_benchmark() -> Result<(), Box<dyn std::error::Err
                         tokio::time::sleep(std::time::Duration::from_millis(1)).await;
                     }
                     mofa_kernel::rag::pipeline::GeneratorChunk::Done => break,
+                    _ => {}
                 }
             }
 
@@ -735,6 +740,98 @@ async fn document_ingestion_demo() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     println!();
+    Ok(())
+}
+
+/// Real-world use-case: customer support assistant retrieval.
+async fn customer_support_use_case() -> Result<()> {
+    println!("--- Real-World Use Case: Customer Support ---\n");
+
+    let mut store = InMemoryVectorStore::cosine();
+    let dimensions = 64;
+
+    let entries = vec![
+        (
+            "refund-policy",
+            "Refunds are available within 30 days for annual subscriptions.",
+            "billing",
+        ),
+        (
+            "mfa-reset",
+            "Users can reset MFA using backup codes from security settings.",
+            "security",
+        ),
+        (
+            "api-quotas",
+            "API quota increases require paid plan and approval within one business day.",
+            "platform",
+        ),
+    ];
+
+    for (id, text, team) in entries {
+        let embedding = simple_embedding(text, dimensions);
+        store
+            .upsert(
+                DocumentChunk::new(id, text, embedding)
+                    .with_metadata("team", team)
+                    .with_metadata("use_case", "support"),
+            )
+            .await?;
+    }
+
+    let question = "How can a user reset MFA if locked out?";
+    let query_embedding = simple_embedding(question, dimensions);
+    let results = store.search(&query_embedding, 2, None).await?;
+
+    println!("Question: {question}");
+    for (i, result) in results.iter().enumerate() {
+        println!(
+            "  {}. [{}] {:.4} {}",
+            i + 1,
+            result.id,
+            result.score,
+            truncate_text(&result.text, 90)
+        );
+    }
+    println!();
+
+    Ok(())
+}
+
+/// Practical validation suite with deterministic assertions for local verification.
+async fn practical_validation_suite() -> Result<()> {
+    println!("--- Practical Validation Suite ---\n");
+
+    let mut store = InMemoryVectorStore::cosine();
+
+    store
+        .upsert(DocumentChunk::new(
+            "policy-billing",
+            "Billing retries occur when payment card validation fails.",
+            vec![1.0, 0.0, 0.0],
+        ))
+        .await?;
+
+    store
+        .upsert(DocumentChunk::new(
+            "policy-auth",
+            "MFA reset requires backup codes from account security settings.",
+            vec![0.0, 1.0, 0.0],
+        ))
+        .await?;
+
+    let results = store.search(&[0.0, 1.0, 0.0], 1, None).await?;
+    if results.first().map(|r| r.id.as_str()) != Some("policy-auth") {
+        anyhow::bail!("validation failed: expected top hit policy-auth");
+    }
+
+    let dimension_error = store.search(&[0.0, 1.0], 1, None).await;
+    if dimension_error.is_ok() {
+        anyhow::bail!("validation failed: expected dimension mismatch error");
+    }
+
+    println!("✅ deterministic ranking check passed");
+    println!("✅ embedding-dimension validation check passed\n");
     Ok(())
 }
 
@@ -826,9 +923,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     println!("=== MoFA RAG Pipeline Example ===\n");
 
-    // Always run in-memory demos
+    // When in validate mode, run only the deterministic validation suite and exit early
+    // to keep it fast and non-flaky (skips benchmarks, sleeps, and spawned tasks).
+    if mode == "validate" {
+        practical_validation_suite().await?;
+        println!("=== Done ===");
+        return Ok(());
+    }
+
+    // Run in-memory demos
     basic_rag_pipeline().await?;
     document_ingestion_demo().await?;
+    customer_support_use_case().await?;
     streaming_rag_pipeline().await?;
     streaming_performance_benchmark().await?;
     streaming_memory_test().await?;
@@ -842,6 +948,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         println!("--- Qdrant Demo Skipped ---");
         println!("To run with Qdrant, start a Qdrant instance and run:");
         println!("  QDRANT_URL=http://localhost:6334 cargo run -p rag_pipeline -- qdrant\n");
+        println!("To run deterministic practical validation checks:");
+        println!("  cargo run -p rag_pipeline -- validate\n");
     }
 
     println!("=== Done ===");

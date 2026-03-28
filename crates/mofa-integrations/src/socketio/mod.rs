@@ -26,8 +26,6 @@ pub struct SocketIoConfig {
     pub auth_token: Option<String>,
     /// Socket.IO namespace for agent events (default: `/agents`).
     pub namespace: String,
-    /// Internal broadcast channel buffer size.
-    pub channel_buffer: usize,
 }
 
 impl Default for SocketIoConfig {
@@ -41,7 +39,6 @@ impl SocketIoConfig {
         Self {
             auth_token: None,
             namespace: "/agents".to_string(),
-            channel_buffer: 256,
         }
     }
 
@@ -54,12 +51,6 @@ impl SocketIoConfig {
     /// Override the namespace (default: `/agents`).
     pub fn with_namespace(mut self, ns: impl Into<String>) -> Self {
         self.namespace = ns.into();
-        self
-    }
-
-    /// Override the broadcast channel buffer size.
-    pub fn with_buffer(mut self, size: usize) -> Self {
-        self.channel_buffer = size;
         self
     }
 }
@@ -112,7 +103,13 @@ impl SocketIoBridge {
                     Ok(raw) => {
                         let payload = match bincode::deserialize::<AgentMessage>(&raw) {
                             Ok(msg) => agent_message_to_json(&msg),
-                            Err(_) => json!({ "raw": hex::encode(&raw) }),
+                            Err(e) => {
+                                warn!("failed to decode AgentMessage for socket emit: {}", e);
+                                json!({
+                                    "type": "decode_error",
+                                    "message": "agent_message decode failed"
+                                })
+                            }
                         };
                         if let Some(ns) = io_fwd.of(&ns_fwd) {
                             let _ = ns.emit("agent_message", &payload);
@@ -133,12 +130,12 @@ impl SocketIoBridge {
         io.ns(
             namespace,
             move |socket: SocketRef, Data(auth): Data<AuthPayload>| {
-                if let Some(required) = &auth_token {
-                    if auth.token != *required {
-                        warn!(socket_id = %socket.id, "Socket.IO rejected: bad token");
-                        let _ = socket.disconnect();
-                        return;
-                    }
+                if let Some(required) = &auth_token
+                    && auth.token != *required
+                {
+                    warn!(socket_id = %socket.id, "Socket.IO rejected: bad token");
+                    let _ = socket.disconnect();
+                    return;
                 }
 
                 info!(socket_id = %socket.id, "Socket.IO client connected");
@@ -167,6 +164,5 @@ impl SocketIoBridge {
 }
 
 fn agent_message_to_json(msg: &AgentMessage) -> Value {
-    serde_json::to_value(msg)
-        .unwrap_or_else(|_| json!({ "error": "serialization failed" }))
+    serde_json::to_value(msg).unwrap_or_else(|_| json!({ "error": "serialization failed" }))
 }

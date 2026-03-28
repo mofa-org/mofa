@@ -1,27 +1,20 @@
-//! Trace Context 传播器
 //! Trace Context Propagator
 //!
-//! 实现 W3C Trace Context 和 B3 传播格式
 //! Implements W3C Trace Context and B3 propagation formats
 
 use super::context::{SpanContext, SpanId, TraceFlags, TraceId, TraceState};
 use std::collections::HashMap;
 
-/// Header 载体 - 用于传播追踪上下文
 /// Header Carrier - Used for propagating trace context
 pub trait HeaderCarrier {
-    /// 获取 header 值
     /// Get header value
     fn get(&self, key: &str) -> Option<&str>;
-    /// 设置 header 值
     /// Set header value
     fn set(&mut self, key: &str, value: String);
-    /// 获取所有 keys
     /// Get all keys
     fn keys(&self) -> Vec<&str>;
 }
 
-/// HashMap 实现 HeaderCarrier
 /// HashMap implementation of HeaderCarrier
 impl HeaderCarrier for HashMap<String, String> {
     fn get(&self, key: &str) -> Option<&str> {
@@ -37,41 +30,30 @@ impl HeaderCarrier for HashMap<String, String> {
     }
 }
 
-/// Trace 传播器 trait
 /// Trace Propagator trait
 pub trait TracePropagator: Send + Sync {
-    /// 从载体中提取 SpanContext
     /// Extract SpanContext from the carrier
     fn extract(&self, carrier: &dyn HeaderCarrier) -> Option<SpanContext>;
 
-    /// 将 SpanContext 注入到载体中
     /// Inject SpanContext into the carrier
     fn inject(&self, span_context: &SpanContext, carrier: &mut dyn HeaderCarrier);
 
-    /// 获取传播器使用的 header 名称
     /// Get header names used by the propagator
     fn fields(&self) -> &[&str];
 }
 
-/// W3C Trace Context 传播器
 /// W3C Trace Context Propagator
 ///
-/// 实现 W3C Trace Context 规范
 /// Implements W3C Trace Context specification
-/// - traceparent: 包含 trace-id, span-id, trace-flags
 /// - traceparent: contains trace-id, span-id, trace-flags
-/// - tracestate: 供应商特定的追踪数据
 /// - tracestate: vendor-specific tracing data
 pub struct W3CTraceContextPropagator;
 
 impl W3CTraceContextPropagator {
-    /// traceparent header 名称
     /// traceparent header name
     pub const TRACEPARENT: &'static str = "traceparent";
-    /// tracestate header 名称
     /// tracestate header name
     pub const TRACESTATE: &'static str = "tracestate";
-    /// 版本号
     /// Version number
     pub const VERSION: &'static str = "00";
 
@@ -79,7 +61,6 @@ impl W3CTraceContextPropagator {
         Self
     }
 
-    /// 解析 traceparent header
     /// Parse traceparent header
     fn parse_traceparent(value: &str) -> Option<(TraceId, SpanId, TraceFlags)> {
         let parts: Vec<&str> = value.split('-').collect();
@@ -87,10 +68,8 @@ impl W3CTraceContextPropagator {
             return None;
         }
 
-        // 检查版本
         // Check version
         if parts[0] != Self::VERSION {
-            // 允许更高版本，但只解析已知字段
             // Allow higher versions, but only parse known fields
         }
 
@@ -101,7 +80,6 @@ impl W3CTraceContextPropagator {
         Some((trace_id, span_id, TraceFlags::new(flags)))
     }
 
-    /// 格式化 traceparent header
     /// Format traceparent header
     fn format_traceparent(trace_id: &TraceId, span_id: &SpanId, flags: &TraceFlags) -> String {
         format!(
@@ -159,19 +137,15 @@ impl TracePropagator for W3CTraceContextPropagator {
     }
 }
 
-/// B3 传播器
 /// B3 Propagator
 ///
-/// 支持 Zipkin B3 格式（单 header 和多 header）
 /// Supports Zipkin B3 format (single and multi header)
 pub struct B3Propagator {
-    /// 是否使用单 header 格式
     /// Whether to use single header format
     single_header: bool,
 }
 
 impl B3Propagator {
-    /// B3 单 header 名称
     /// B3 single header name
     pub const B3: &'static str = "b3";
     /// X-B3-TraceId header
@@ -190,7 +164,6 @@ impl B3Propagator {
     /// X-B3-Flags header
     pub const X_B3_FLAGS: &'static str = "x-b3-flags";
 
-    /// 创建多 header 格式的传播器
     /// Create propagator with multi-header format
     pub fn new() -> Self {
         Self {
@@ -198,7 +171,6 @@ impl B3Propagator {
         }
     }
 
-    /// 创建单 header 格式的传播器
     /// Create propagator with single-header format
     pub fn single_header() -> Self {
         Self {
@@ -206,20 +178,13 @@ impl B3Propagator {
         }
     }
 
-    /// 解析单 header 格式
     /// Parse single header format
     fn parse_single_header(value: &str) -> Option<(TraceId, SpanId, TraceFlags)> {
-        // 格式: {TraceId}-{SpanId}-{SamplingState}-{ParentSpanId}
         // Format: {TraceId}-{SpanId}-{SamplingState}-{ParentSpanId}
-        // 或: {TraceId}-{SpanId}-{SamplingState}
         // or: {TraceId}-{SpanId}-{SamplingState}
-        // 或: {TraceId}-{SpanId}
         // or: {TraceId}-{SpanId}
-        // 或: 0 (deny)
         // or: 0 (deny)
-        // 或: 1 (accept)
         // or: 1 (accept)
-        // 或: d (debug)
         // or: d (debug)
 
         if value == "0" {
@@ -246,7 +211,6 @@ impl B3Propagator {
         Some((trace_id, span_id, flags))
     }
 
-    /// 格式化单 header
     /// Format single header
     fn format_single_header(trace_id: &TraceId, span_id: &SpanId, flags: &TraceFlags) -> String {
         let sampled = if flags.is_sampled() { "1" } else { "0" };
@@ -262,7 +226,6 @@ impl Default for B3Propagator {
 
 impl TracePropagator for B3Propagator {
     fn extract(&self, carrier: &dyn HeaderCarrier) -> Option<SpanContext> {
-        // 首先尝试单 header 格式
         // First try single header format
         if let Some(b3) = carrier.get(Self::B3)
             && let Some((trace_id, span_id, flags)) = Self::parse_single_header(b3)
@@ -272,7 +235,6 @@ impl TracePropagator for B3Propagator {
             return Some(SpanContext::new(trace_id, span_id, flags, true));
         }
 
-        // 尝试多 header 格式
         // Try multi-header format
         let trace_id = carrier
             .get(Self::X_B3_TRACE_ID)
@@ -286,7 +248,6 @@ impl TracePropagator for B3Propagator {
             return None;
         }
 
-        // 检查 flags 或 sampled
         // Check flags or sampled
         let flags = if carrier.get(Self::X_B3_FLAGS) == Some("1") {
             TraceFlags::SAMPLED
@@ -294,8 +255,7 @@ impl TracePropagator for B3Propagator {
             match carrier.get(Self::X_B3_SAMPLED) {
                 Some("1") | Some("true") => TraceFlags::SAMPLED,
                 Some("0") | Some("false") => TraceFlags::NONE,
-                _ => TraceFlags::SAMPLED, // 默认采样
-                                          // Default sampled
+                _ => TraceFlags::SAMPLED, // Default sampled
             }
         };
 
@@ -343,7 +303,6 @@ impl TracePropagator for B3Propagator {
     }
 }
 
-/// 复合传播器 - 支持多种格式
 /// Composite Propagator - Supports multiple formats
 pub struct CompositePropagator {
     propagators: Vec<Box<dyn TracePropagator>>,
@@ -354,7 +313,6 @@ impl CompositePropagator {
         Self { propagators }
     }
 
-    /// 创建默认的复合传播器（W3C + B3）
     /// Create default composite propagator (W3C + B3)
     pub fn default_propagators() -> Self {
         Self::new(vec![
@@ -381,9 +339,7 @@ impl TracePropagator for CompositePropagator {
     }
 
     fn fields(&self) -> &[&str] {
-        // 返回所有传播器的字段
         // Return fields for all propagators
-        // 注意：这里简化处理，返回空切片
         // Note: Simplified here, returning an empty slice
         &[]
     }
@@ -482,7 +438,6 @@ mod tests {
     fn test_composite_propagator() {
         let propagator = CompositePropagator::default_propagators();
 
-        // W3C 格式
         // W3C format
         let mut carrier = HashMap::new();
         carrier.insert(
@@ -493,7 +448,6 @@ mod tests {
         let context = propagator.extract(&carrier).unwrap();
         assert!(context.is_valid());
 
-        // B3 格式
         // B3 format
         let mut carrier = HashMap::new();
         carrier.insert(

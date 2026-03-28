@@ -12,21 +12,46 @@ jobs:
     if: ${{ github.event.issue.pull_request == null }} # only issues, not PRs
     runs-on: ubuntu-latest
     steps:
-      - name: Handle /assign command
+      - name: Handle /assign and /unassign commands
         uses: actions/github-script@v7
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
             const commentBody = context.payload.comment.body.trim();
-            if (commentBody !== '/assign') {
-              core.info('Not a /assign command, skipping.');
-              return;
-            }
-
             const issue = context.payload.issue;
             const issueNumber = issue.number;
             const repo = context.repo;
             const username = context.payload.comment.user.login;
+
+            if (commentBody === '/unassign') {
+              const alreadyAssigned = (issue.assignees || []).some(a => a.login === username);
+              if (!alreadyAssigned) {
+                core.info(`${username} is not assigned to issue #${issueNumber}, skipping.`);
+                return;
+              }
+
+              await github.rest.issues.removeAssignees({
+                owner: repo.owner,
+                repo: repo.repo,
+                issue_number: issueNumber,
+                assignees: [username]
+              });
+
+              await github.rest.issues.createComment({
+                owner: repo.owner,
+                repo: repo.repo,
+                issue_number: issueNumber,
+                body: `👋 @${username}, you have been unassigned from this issue. It is now open for others to pick up. Check out our [open issues](https://github.com/${repo.owner}/${repo.repo}/issues?q=is%3Aopen+is%3Aissue+no%3Aassignee) if you want to work on something else.`
+              });
+
+              core.info(`Unassigned ${username} from issue #${issueNumber}.`);
+              return;
+            }
+
+            if (commentBody !== '/assign') {
+              core.info('Not a /assign or /unassign command, skipping.');
+              return;
+            }
 
             // If already assigned, do nothing
             const alreadyAssigned = (issue.assignees || []).some(a => a.login === username);
