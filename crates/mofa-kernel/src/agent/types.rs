@@ -17,7 +17,9 @@ pub mod event;
 pub mod global;
 pub mod recovery;
 
-pub use error::{ErrorCategory, ErrorContext, GlobalError, GlobalReport, GlobalResult, IntoGlobalReport};
+pub use error::{
+    ErrorCategory, ErrorContext, GlobalError, GlobalReport, GlobalResult, IntoGlobalReport,
+};
 pub use event::{EventBuilder, GlobalEvent};
 pub use event::{execution, lifecycle, message, plugin, state};
 // 重新导出常用类型

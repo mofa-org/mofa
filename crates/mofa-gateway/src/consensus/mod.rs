@@ -21,10 +21,10 @@
 //!
 //! **Complete** - Raft consensus engine fully implemented and tested
 
-pub mod state;
-pub mod transport;
-pub mod storage;
 pub mod engine;
+pub mod state;
+pub mod storage;
+pub mod transport;
 
 #[cfg(test)]
 mod engine_tests;
@@ -33,8 +33,8 @@ mod engine_tests;
 // This allows test files to import it
 pub mod transport_impl;
 
-pub use state::*;
-pub use transport::*;
-pub use storage::*;
 pub use engine::*;
+pub use state::*;
+pub use storage::*;
+pub use transport::*;
 pub use transport_impl::*;

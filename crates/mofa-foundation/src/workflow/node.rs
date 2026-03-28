@@ -977,8 +977,7 @@ mod tests {
         for &count in &[55u32, 63, 64, 65, 100, 1000, u32::MAX] {
             let delay = policy.get_delay(count);
             assert_eq!(
-                delay,
-                30_000,
+                delay, 30_000,
                 "get_delay({count}) returned {delay}, expected max_delay_ms 30000"
             );
         }

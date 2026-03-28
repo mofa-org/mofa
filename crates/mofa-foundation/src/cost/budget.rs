@@ -1,9 +1,9 @@
 //! Budget enforcer — concrete async per-agent budget enforcement.
 
+use mofa_kernel::budget::{BudgetConfig, BudgetError, BudgetStatus};
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use mofa_kernel::budget::{BudgetConfig, BudgetError, BudgetStatus};
 
 /// Usage tracked per day (cost, tokens, day_key)
 pub type AgentDailyUsage = (f64, u64, String);
@@ -47,40 +47,45 @@ impl BudgetEnforcer {
         let session = self.session_usage.read().await;
         if let Some(&(cost, tokens)) = session.get(agent_id) {
             if let Some(max) = config.max_cost_per_session
-                && cost >= max {
-                    return Err(BudgetError::SessionCostExceeded {
-                        spent: cost,
-                        limit: max,
-                    });
-                }
+                && cost >= max
+            {
+                return Err(BudgetError::SessionCostExceeded {
+                    spent: cost,
+                    limit: max,
+                });
+            }
             if let Some(max) = config.max_tokens_per_session
-                && tokens >= max {
-                    return Err(BudgetError::SessionTokensExceeded {
-                        used: tokens,
-                        limit: max,
-                    });
-                }
+                && tokens >= max
+            {
+                return Err(BudgetError::SessionTokensExceeded {
+                    used: tokens,
+                    limit: max,
+                });
+            }
         }
 
         let today = today_key();
         let daily = self.daily_usage.read().await;
         if let Some(&(cost, tokens, ref date)) = daily.get(agent_id)
-            && date == &today {
-                if let Some(max) = config.max_cost_per_day
-                    && cost >= max {
-                        return Err(BudgetError::DailyCostExceeded {
-                            spent: cost,
-                            limit: max,
-                        });
-                    }
-                if let Some(max) = config.max_tokens_per_day
-                    && tokens >= max {
-                        return Err(BudgetError::DailyTokensExceeded {
-                            used: tokens,
-                            limit: max,
-                        });
-                    }
+            && date == &today
+        {
+            if let Some(max) = config.max_cost_per_day
+                && cost >= max
+            {
+                return Err(BudgetError::DailyCostExceeded {
+                    spent: cost,
+                    limit: max,
+                });
             }
+            if let Some(max) = config.max_tokens_per_day
+                && tokens >= max
+            {
+                return Err(BudgetError::DailyTokensExceeded {
+                    used: tokens,
+                    limit: max,
+                });
+            }
+        }
 
         Ok(())
     }
@@ -137,7 +142,7 @@ impl BudgetEnforcer {
             daily_cost,
             session_tokens,
             daily_tokens,
-            config
+            config,
         )
     }
 
@@ -183,7 +188,9 @@ mod tests {
         enforcer
             .set_budget(
                 "agent-1",
-                BudgetConfig::default().with_max_cost_per_session(10.0).unwrap(),
+                BudgetConfig::default()
+                    .with_max_cost_per_session(10.0)
+                    .unwrap(),
             )
             .await;
         enforcer.record_usage("agent-1", 5.0, 1000).await;
@@ -196,7 +203,9 @@ mod tests {
         enforcer
             .set_budget(
                 "agent-1",
-                BudgetConfig::default().with_max_cost_per_session(10.0).unwrap(),
+                BudgetConfig::default()
+                    .with_max_cost_per_session(10.0)
+                    .unwrap(),
             )
             .await;
         enforcer.record_usage("agent-1", 11.0, 5000).await;
@@ -217,7 +226,9 @@ mod tests {
         enforcer
             .set_budget(
                 "agent-1",
-                BudgetConfig::default().with_max_tokens_per_session(1000).unwrap(),
+                BudgetConfig::default()
+                    .with_max_tokens_per_session(1000)
+                    .unwrap(),
             )
             .await;
         enforcer.record_usage("agent-1", 0.0, 1500).await;
@@ -230,7 +241,9 @@ mod tests {
         enforcer
             .set_budget(
                 "agent-1",
-                BudgetConfig::default().with_max_cost_per_session(10.0).unwrap(),
+                BudgetConfig::default()
+                    .with_max_cost_per_session(10.0)
+                    .unwrap(),
             )
             .await;
         enforcer.record_usage("agent-1", 11.0, 5000).await;

@@ -53,7 +53,12 @@ impl RegexPiiRedactor {
     }
 
     /// Redact a single PII value
-    fn redact_value(&self, value: &str, category: &SensitiveDataCategory, strategy: &RedactionStrategy) -> String {
+    fn redact_value(
+        &self,
+        value: &str,
+        category: &SensitiveDataCategory,
+        strategy: &RedactionStrategy,
+    ) -> String {
         match strategy {
             RedactionStrategy::Mask => "[REDACTED]".to_string(),
             RedactionStrategy::Hash => {
@@ -77,7 +82,11 @@ impl Default for RegexPiiRedactor {
 
 #[async_trait]
 impl PiiRedactor for RegexPiiRedactor {
-    async fn redact(&self, text: &str, strategy: &RedactionStrategy) -> SecurityResult<RedactionResult> {
+    async fn redact(
+        &self,
+        text: &str,
+        strategy: &RedactionStrategy,
+    ) -> SecurityResult<RedactionResult> {
         // Detect all PII
         let mut matches = self.detector.detect(text).await?;
 
@@ -95,12 +104,17 @@ impl PiiRedactor for RegexPiiRedactor {
         // Process matches in reverse order to maintain correct indices
         for match_item in matches.iter_mut().rev() {
             // Get the strategy for this category (or use provided strategy)
-            let effective_strategy = self.category_strategies
+            let effective_strategy = self
+                .category_strategies
                 .get(&match_item.category)
                 .unwrap_or(strategy);
-            
-            let replacement = self.redact_value(&match_item.original, &match_item.category, effective_strategy);
-            
+
+            let replacement = self.redact_value(
+                &match_item.original,
+                &match_item.category,
+                effective_strategy,
+            );
+
             // Update the match with the replacement
             match_item.replacement = replacement.clone();
 
@@ -127,7 +141,10 @@ mod tests {
     async fn test_redact_mask() {
         let redactor = RegexPiiRedactor::new();
         let text = "Email: user@example.com";
-        let result = redactor.redact(text, &RedactionStrategy::Mask).await.unwrap();
+        let result = redactor
+            .redact(text, &RedactionStrategy::Mask)
+            .await
+            .unwrap();
 
         assert_eq!(result.matches.len(), 1);
         assert!(result.redacted_text.contains("[REDACTED]"));
@@ -138,7 +155,10 @@ mod tests {
     async fn test_redact_hash() {
         let redactor = RegexPiiRedactor::new();
         let text = "Email: user@example.com";
-        let result = redactor.redact(text, &RedactionStrategy::Hash).await.unwrap();
+        let result = redactor
+            .redact(text, &RedactionStrategy::Hash)
+            .await
+            .unwrap();
 
         assert_eq!(result.matches.len(), 1);
         assert!(result.redacted_text.contains("[HASH:"));
@@ -149,7 +169,10 @@ mod tests {
     async fn test_redact_remove() {
         let redactor = RegexPiiRedactor::new();
         let text = "Email: user@example.com";
-        let result = redactor.redact(text, &RedactionStrategy::Remove).await.unwrap();
+        let result = redactor
+            .redact(text, &RedactionStrategy::Remove)
+            .await
+            .unwrap();
 
         assert_eq!(result.matches.len(), 1);
         assert!(!result.redacted_text.contains("user@example.com"));
@@ -159,7 +182,10 @@ mod tests {
     async fn test_redact_multiple() {
         let redactor = RegexPiiRedactor::new();
         let text = "Email: user@example.com, Phone: (555) 123-4567";
-        let result = redactor.redact(text, &RedactionStrategy::Mask).await.unwrap();
+        let result = redactor
+            .redact(text, &RedactionStrategy::Mask)
+            .await
+            .unwrap();
 
         assert_eq!(result.matches.len(), 2);
     }
@@ -168,7 +194,10 @@ mod tests {
     async fn test_redact_no_pii() {
         let redactor = RegexPiiRedactor::new();
         let text = "No sensitive data here";
-        let result = redactor.redact(text, &RedactionStrategy::Mask).await.unwrap();
+        let result = redactor
+            .redact(text, &RedactionStrategy::Mask)
+            .await
+            .unwrap();
 
         assert_eq!(result.matches.len(), 0);
         assert_eq!(result.redacted_text, text);

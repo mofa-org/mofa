@@ -415,7 +415,6 @@ impl SubtaskDAG {
             .count()
     }
 
-
     // ── Risk & HITL helpers ───────────────────────────────────────────────
 
     /// Return the IDs of all subtasks whose `hitl_required` flag is `true`.
@@ -470,9 +469,7 @@ impl SubtaskDAG {
                 .map(|e| (e.source(), *longest.get(&e.source()).unwrap_or(&0)))
                 .max_by_key(|&(_, v)| v);
 
-            let (pred, pred_val) = best_pred
-                .map(|(n, v)| (Some(n), v))
-                .unwrap_or((None, 0));
+            let (pred, pred_val) = best_pred.map(|(n, v)| (Some(n), v)).unwrap_or((None, 0));
 
             longest.insert(idx, pred_val + duration);
             predecessor.insert(idx, pred);
@@ -745,7 +742,8 @@ mod tests {
         let d = dag.add_task(SwarmSubtask::new("d", "Independent"));
 
         dag.add_dependency(a, b).unwrap(); // Sequential (hard)
-        dag.add_dependency_with_kind(a, c, DependencyKind::Soft).unwrap();
+        dag.add_dependency_with_kind(a, c, DependencyKind::Soft)
+            .unwrap();
 
         dag.mark_failed(a, "error");
         let skipped = dag.cascade_skip(a);
@@ -793,12 +791,20 @@ mod tests {
         // a fails — b should become ready (not stuck forever)
         dag.mark_failed(a, "connection timeout");
         let ready = dag.ready_tasks();
-        assert_eq!(ready, vec![b], "b must become ready when its dependency fails");
+        assert_eq!(
+            ready,
+            vec![b],
+            "b must become ready when its dependency fails"
+        );
 
         // b also fails — c should become ready
         dag.mark_failed(b, "no input data");
         let ready = dag.ready_tasks();
-        assert_eq!(ready, vec![c], "c must become ready when its dependency fails");
+        assert_eq!(
+            ready,
+            vec![c],
+            "c must become ready when its dependency fails"
+        );
 
         dag.mark_skipped(c);
         assert!(dag.is_complete());
@@ -823,7 +829,11 @@ mod tests {
 
         // d depends on both b (Completed) and c (Failed) — should be ready
         let ready = dag.ready_tasks();
-        assert_eq!(ready, vec![d], "d must become ready when all deps are terminal");
+        assert_eq!(
+            ready,
+            vec![d],
+            "d must become ready when all deps are terminal"
+        );
     }
 
     #[test]
@@ -944,7 +954,9 @@ mod tests {
         dag.add_task(SwarmSubtask::new("low", "low-risk").with_risk_level(RiskLevel::Low));
         dag.add_task(SwarmSubtask::new("med", "medium-risk").with_risk_level(RiskLevel::Medium));
         dag.add_task(SwarmSubtask::new("high", "high-risk").with_risk_level(RiskLevel::High));
-        dag.add_task(SwarmSubtask::new("crit", "critical-risk").with_risk_level(RiskLevel::Critical));
+        dag.add_task(
+            SwarmSubtask::new("crit", "critical-risk").with_risk_level(RiskLevel::Critical),
+        );
 
         let mut hitl = dag.hitl_required_tasks();
         hitl.sort();
@@ -954,15 +966,9 @@ mod tests {
     #[test]
     fn test_critical_path_linear_chain() {
         let mut dag = SubtaskDAG::new("cp-chain");
-        let a = dag.add_task(
-            SwarmSubtask::new("a", "Fetch").with_estimated_duration(10),
-        );
-        let b = dag.add_task(
-            SwarmSubtask::new("b", "Process").with_estimated_duration(20),
-        );
-        let c = dag.add_task(
-            SwarmSubtask::new("c", "Report").with_estimated_duration(30),
-        );
+        let a = dag.add_task(SwarmSubtask::new("a", "Fetch").with_estimated_duration(10));
+        let b = dag.add_task(SwarmSubtask::new("b", "Process").with_estimated_duration(20));
+        let c = dag.add_task(SwarmSubtask::new("c", "Report").with_estimated_duration(30));
         dag.add_dependency(a, b).unwrap();
         dag.add_dependency(b, c).unwrap();
 
@@ -991,8 +997,14 @@ mod tests {
 
         let path = dag.critical_path().unwrap();
         // Critical path: start → long → merge (total = 5 + 50 + 5 = 60)
-        assert!(path.contains(&"long".to_string()), "critical path must go through 'long': {path:?}");
-        assert!(!path.contains(&"short".to_string()), "critical path must NOT go through 'short': {path:?}");
+        assert!(
+            path.contains(&"long".to_string()),
+            "critical path must go through 'long': {path:?}"
+        );
+        assert!(
+            !path.contains(&"short".to_string()),
+            "critical path must NOT go through 'short': {path:?}"
+        );
         assert_eq!(dag.critical_path_duration_secs().unwrap(), 60);
     }
 

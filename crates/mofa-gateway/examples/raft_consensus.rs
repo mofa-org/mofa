@@ -47,7 +47,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     };
 
     let transport_dyn: Arc<dyn mofa_gateway::consensus::RaftTransport> = transport.clone();
-    
+
     let engine1 = Arc::new(ConsensusEngine::new(
         node1_id.clone(),
         config.clone(),
