@@ -810,14 +810,14 @@ impl DslCompiler {
         graph.set_entry_point(&start_id);
         graph.set_finish_point(&end_id);
 
-        // Group conditional edges by source: from → [(condition, to)]
-        let mut conditional_map: HashMap<String, Vec<(String, String)>> = HashMap::new();
+        // Group conditional edges by source: from → { condition: to }
+        let mut conditional_map: HashMap<String, HashMap<String, String>> = HashMap::new();
         for edge in &def.edges {
             if let Some(ref condition) = edge.condition {
                 conditional_map
                     .entry(edge.from.clone())
                     .or_default()
-                    .push((condition.clone(), edge.to.clone()));
+                    .insert(condition.clone(), edge.to.clone());
             } else {
                 graph.add_edge(&edge.from, &edge.to);
             }
