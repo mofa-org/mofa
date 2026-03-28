@@ -248,12 +248,22 @@ impl AgentScheduler for CronScheduler {
         let (cancel_tx, cancel_rx) = oneshot::channel();
         let schedule_id = def.schedule_id.clone();
 
+        let cron_schedule = if let Some(cron_expr) = &def.cron_expression {
+            Some(cron_expr.parse::<Schedule>().map_err(|e| {
+                SchedulerError::InvalidCron(cron_expr.clone(), e.to_string())
+            })?)
+        } else {
+            None
+        };
+
         let task_handle = self.spawn_schedule_task(
             def.clone(),
+            cron_schedule,
             cancel_rx,
             Arc::clone(&per_schedule_semaphore),
             Arc::clone(&last_run_ms),
         );
+
 
         let entry = ScheduleEntry::new(def, task_handle, per_schedule_semaphore, last_run_ms);
         {
@@ -380,6 +390,7 @@ impl CronScheduler {
     fn spawn_schedule_task(
         &self,
         def: ScheduleDefinition,
+        cron_schedule: Option<Schedule>,
         mut cancel_rx: oneshot::Receiver<()>,
         per_schedule_semaphore: Arc<Semaphore>,
         last_run_ms: Arc<AtomicU64>,
@@ -389,17 +400,17 @@ impl CronScheduler {
         let schedule_id = def.schedule_id.clone();
         let agent_id = def.agent_id.clone();
         let input_template = def.input_template.clone();
-        let cron_expression = def.cron_expression.clone();
         let interval_ms = def.interval_ms;
 
         tokio::spawn(async move {
-            let mut timing = if let Some(cron_expr) = &cron_expression {
-                ScheduleTiming::Cron(Box::new(cron_expr.parse().unwrap()))
+            let mut timing = if let Some(sched) = cron_schedule {
+                ScheduleTiming::Cron(Box::new(sched))
             } else if let Some(ms) = interval_ms {
                 ScheduleTiming::Interval(interval(Duration::from_millis(ms)))
             } else {
                 return; // prevented by ScheduleDefinition constructors
             };
+
 
             loop {
                 tokio::select! {
