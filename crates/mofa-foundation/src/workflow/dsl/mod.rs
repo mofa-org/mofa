@@ -40,7 +40,7 @@ mod env;
 mod parser;
 mod schema;
 
-pub use compiler::DslCompiler;
+pub use compiler::{DslCompiler, DslCompilerRuntime, DslTaskExecutor};
 pub use parser::*;
 pub use schema::*;
 

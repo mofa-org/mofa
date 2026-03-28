@@ -20,13 +20,65 @@ use super::{DslError, DslResult};
 use crate::llm::LLMAgent;
 use crate::workflow::state_graph::{CompiledGraphImpl, StateGraphImpl};
 use async_trait::async_trait;
-use mofa_kernel::agent::error::AgentResult;
+use mofa_kernel::agent::error::{AgentError, AgentResult};
 use mofa_kernel::workflow::{
-    Command, END, GraphState, JsonState, NodeFunc, RuntimeContext, START, StateGraph,
+    Command, CompiledGraph, GraphState, JsonState, NodeFunc, RuntimeContext, StateGraph, END, START,
 };
 use serde_json::Value;
 use std::collections::HashMap;
 use std::sync::Arc;
+
+/// Runtime services required by the DSL compiler for executable task/sub-workflow nodes.
+#[derive(Clone, Default)]
+pub struct DslCompilerRuntime {
+    task_executor: Option<Arc<dyn DslTaskExecutor>>,
+    sub_workflows: HashMap<String, Arc<CompiledGraphImpl<JsonState>>>,
+}
+
+impl DslCompilerRuntime {
+    /// Create an empty runtime with no registered executors or sub-workflows.
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Register a task executor used by `task` and `loop` nodes.
+    pub fn with_task_executor(mut self, task_executor: Arc<dyn DslTaskExecutor>) -> Self {
+        self.task_executor = Some(task_executor);
+        self
+    }
+
+    /// Register a compiled sub-workflow by workflow ID.
+    pub fn with_sub_workflow(
+        mut self,
+        workflow_id: impl Into<String>,
+        workflow: Arc<CompiledGraphImpl<JsonState>>,
+    ) -> Self {
+        self.sub_workflows.insert(workflow_id.into(), workflow);
+        self
+    }
+
+    fn task_executor(&self) -> Option<Arc<dyn DslTaskExecutor>> {
+        self.task_executor.clone()
+    }
+
+    fn sub_workflow(&self, workflow_id: &str) -> Option<Arc<CompiledGraphImpl<JsonState>>> {
+        self.sub_workflows.get(workflow_id).cloned()
+    }
+}
+
+/// Runtime adapter for executing DSL task bodies.
+#[async_trait]
+pub trait DslTaskExecutor: Send + Sync {
+    /// Execute the given task definition against the current input/state snapshot.
+    async fn execute(
+        &self,
+        node_id: &str,
+        executor: &TaskExecutorDef,
+        state: &JsonState,
+        input: Value,
+        ctx: &RuntimeContext<Value>,
+    ) -> AgentResult<Value>;
+}
 
 // Node Adapters — DSL NodeDefinition → Box<dyn NodeFunc<JsonState>>
 /// A pass-through node that forwards state unchanged.
@@ -61,20 +113,26 @@ impl NodeFunc<JsonState, Value> for PassthroughNode {
     }
 }
 
-/// A task node that executes a no-op (placeholder for future executor support).
+/// A task node that executes DSL task definitions via the registered runtime executor.
 ///
-/// Currently only supports `TaskExecutorDef::None`. Other executor types
-/// (Function, Http, Script) can be added in future PRs.
+/// `TaskExecutorDef::None` remains a no-op. All other executor kinds delegate to
+/// the `DslTaskExecutor` supplied through `DslCompilerRuntime`.
 struct DslTaskNode {
     node_name: String,
     executor: TaskExecutorDef,
+    task_executor: Option<Arc<dyn DslTaskExecutor>>,
 }
 
 impl DslTaskNode {
-    fn new(name: impl Into<String>, executor: TaskExecutorDef) -> Self {
+    fn new(
+        name: impl Into<String>,
+        executor: TaskExecutorDef,
+        task_executor: Option<Arc<dyn DslTaskExecutor>>,
+    ) -> Self {
         Self {
             node_name: name.into(),
             executor,
+            task_executor,
         }
     }
 }
@@ -83,42 +141,34 @@ impl DslTaskNode {
 impl NodeFunc<JsonState, Value> for DslTaskNode {
     async fn call(
         &self,
-        _state: &mut JsonState,
-        _ctx: &RuntimeContext<Value>,
+        state: &mut JsonState,
+        ctx: &RuntimeContext<Value>,
     ) -> AgentResult<Command<Value>> {
         match &self.executor {
             TaskExecutorDef::None => Ok(Command::new().continue_()),
-            TaskExecutorDef::Function { function } => Ok(Command::new()
-                .update(
-                    &self.node_name,
-                    serde_json::json!({
-                        "type": "function",
-                        "function": function,
-                        "status": "placeholder"
-                    }),
-                )
-                .continue_()),
-            TaskExecutorDef::Http { url, method } => Ok(Command::new()
-                .update(
-                    &self.node_name,
-                    serde_json::json!({
-                        "type": "http",
-                        "url": url,
-                        "method": method.as_deref().unwrap_or("GET"),
-                        "status": "placeholder"
-                    }),
-                )
-                .continue_()),
-            TaskExecutorDef::Script { script } => Ok(Command::new()
-                .update(
-                    &self.node_name,
-                    serde_json::json!({
-                        "type": "script",
-                        "script_length": script.len(),
-                        "status": "placeholder"
-                    }),
-                )
-                .continue_()),
+            TaskExecutorDef::Function { .. }
+            | TaskExecutorDef::Http { .. }
+            | TaskExecutorDef::Script { .. } => {
+                let output = self
+                    .task_executor
+                    .as_ref()
+                    .ok_or_else(|| {
+                        AgentError::ExecutionFailed(format!(
+                            "Task node '{}' has no registered DSL task executor",
+                            self.node_name
+                        ))
+                    })?
+                    .execute(
+                        &self.node_name,
+                        &self.executor,
+                        state,
+                        state_input_or_json(state)?,
+                        ctx,
+                    )
+                    .await?;
+
+                Ok(Command::new().update(&self.node_name, output).continue_())
+            }
         }
     }
     fn name(&self) -> &str {
@@ -126,6 +176,136 @@ impl NodeFunc<JsonState, Value> for DslTaskNode {
     }
     fn description(&self) -> Option<&str> {
         Some("DSL task node")
+    }
+}
+
+/// A loop node that executes a task body in-process for count-based loops.
+struct DslLoopNode {
+    node_name: String,
+    body: TaskExecutorDef,
+    max_iterations: u32,
+    task_executor: Option<Arc<dyn DslTaskExecutor>>,
+}
+
+impl DslLoopNode {
+    fn new(
+        name: impl Into<String>,
+        body: TaskExecutorDef,
+        max_iterations: u32,
+        task_executor: Option<Arc<dyn DslTaskExecutor>>,
+    ) -> Self {
+        Self {
+            node_name: name.into(),
+            body,
+            max_iterations,
+            task_executor,
+        }
+    }
+}
+
+#[async_trait]
+impl NodeFunc<JsonState, Value> for DslLoopNode {
+    async fn call(
+        &self,
+        state: &mut JsonState,
+        ctx: &RuntimeContext<Value>,
+    ) -> AgentResult<Command<Value>> {
+        let mut current = state_input_or_json(state)?;
+
+        for _ in 0..self.max_iterations {
+            current = match &self.body {
+                TaskExecutorDef::None => current,
+                TaskExecutorDef::Function { .. }
+                | TaskExecutorDef::Http { .. }
+                | TaskExecutorDef::Script { .. } => {
+                    self.task_executor
+                        .as_ref()
+                        .ok_or_else(|| {
+                            AgentError::ExecutionFailed(format!(
+                                "Loop node '{}' has no registered DSL task executor",
+                                self.node_name
+                            ))
+                        })?
+                        .execute(&self.node_name, &self.body, state, current, ctx)
+                        .await?
+                }
+            };
+        }
+
+        Ok(Command::new().update(&self.node_name, current).continue_())
+    }
+
+    fn name(&self) -> &str {
+        &self.node_name
+    }
+
+    fn description(&self) -> Option<&str> {
+        Some("DSL count loop node")
+    }
+}
+
+/// A sub-workflow node that invokes a previously compiled workflow graph.
+struct DslSubWorkflowNode {
+    node_name: String,
+    workflow_id: String,
+    sub_workflow: Arc<CompiledGraphImpl<JsonState>>,
+}
+
+impl DslSubWorkflowNode {
+    fn new(
+        name: impl Into<String>,
+        workflow_id: impl Into<String>,
+        sub_workflow: Arc<CompiledGraphImpl<JsonState>>,
+    ) -> Self {
+        Self {
+            node_name: name.into(),
+            workflow_id: workflow_id.into(),
+            sub_workflow,
+        }
+    }
+}
+
+#[async_trait]
+impl NodeFunc<JsonState, Value> for DslSubWorkflowNode {
+    async fn call(
+        &self,
+        state: &mut JsonState,
+        ctx: &RuntimeContext<Value>,
+    ) -> AgentResult<Command<Value>> {
+        let mut sub_ctx = RuntimeContext::for_sub_workflow(
+            self.workflow_id.clone(),
+            ctx.execution_id.clone(),
+            ctx.config.clone(),
+        );
+        sub_ctx.metadata = ctx.metadata.clone();
+        sub_ctx.tags = ctx.tags.clone();
+
+        let final_state = self
+            .sub_workflow
+            .invoke(JsonState::from_json(state.to_json()?)?, Some(sub_ctx))
+            .await?;
+        let final_json = final_state.to_json()?;
+
+        let mut command = Command::new()
+            .update(&self.node_name, final_json.clone())
+            .continue_();
+        if let Value::Object(map) = final_json {
+            for (key, value) in map {
+                if key != self.node_name {
+                    command = command.update(&key, value);
+                }
+            }
+        }
+
+        Ok(command)
+    }
+
+    fn name(&self) -> &str {
+        &self.node_name
+    }
+
+    fn description(&self) -> Option<&str> {
+        Some("DSL sub-workflow node")
     }
 }
 
@@ -380,6 +560,41 @@ fn compare_values(a: &Value, b: &Value) -> Option<std::cmp::Ordering> {
     }
 }
 
+fn state_input_or_json(state: &JsonState) -> AgentResult<Value> {
+    Ok(match state.get_value::<Value>("input") {
+        Some(input) => input,
+        None => state.to_json()?,
+    })
+}
+
+fn task_executor_kind(executor: &TaskExecutorDef) -> &'static str {
+    match executor {
+        TaskExecutorDef::Function { .. } => "function",
+        TaskExecutorDef::Http { .. } => "http",
+        TaskExecutorDef::Script { .. } => "script",
+        TaskExecutorDef::None => "none",
+    }
+}
+
+fn ensure_runtime_task_executor(
+    node_id: &str,
+    executor: &TaskExecutorDef,
+    runtime: &DslCompilerRuntime,
+) -> DslResult<Option<Arc<dyn DslTaskExecutor>>> {
+    match executor {
+        TaskExecutorDef::None => Ok(runtime.task_executor()),
+        TaskExecutorDef::Function { .. }
+        | TaskExecutorDef::Http { .. }
+        | TaskExecutorDef::Script { .. } => runtime.task_executor().map(Some).ok_or_else(|| {
+            DslError::Build(format!(
+                "Task node '{}' uses '{}' executor but no DSL task executor was registered.",
+                node_id,
+                task_executor_kind(executor)
+            ))
+        }),
+    }
+}
+
 // DSL Compiler
 
 /// Compiles a parsed `WorkflowDefinition` into an executable `CompiledGraphImpl<JsonState>`.
@@ -394,17 +609,17 @@ fn compare_values(a: &Value, b: &Value) -> Option<std::cmp::Ordering> {
 /// |----------------|--------------------|-----------------------------------|
 /// | `Start`        | `PassthroughNode`  | No-op entry point                 |
 /// | `End`          | `PassthroughNode`  | No-op exit point                  |
-/// | `Task`         | `DslTaskNode`      | Executor placeholder              |
+/// | `Task`         | `DslTaskNode`      | Runtime-backed task executor      |
 /// | `Condition`    | `DslConditionNode` | Evaluates condition, sets route   |
 /// | `Parallel`     | `PassthroughNode`  | Marker (parallelism via edges)    |
 /// | `Join`         | `DslJoinNode`      | Records join metadata             |
+/// | `Loop`         | `DslLoopNode`      | Count-based runtime loop          |
+/// | `SubWorkflow`  | `DslSubWorkflowNode` | Invokes registered sub-workflow |
 /// | `Transform`    | `DslTransformNode` | Records transform definition      |
 ///
 /// # Unsupported Node Types (Future PRs)
 ///
-/// - `LlmAgent` — requires LLM provider registry
-/// - `Loop` — requires runtime loop state machine
-/// - `SubWorkflow` — requires recursive workflow loading
+/// - `LlmAgent` inline configs — requires inline agent construction support
 /// - `Wait` — requires external event system
 pub struct DslCompiler;
 
@@ -418,7 +633,8 @@ impl DslCompiler {
     ///
     /// Returns `DslError` if:
     /// - The definition is invalid (no start/end node, dangling edges)
-    /// - An `LlmAgent`, `Loop`, `SubWorkflow`, or `Wait` node type is used
+    /// - An unsupported node mode is used (for example inline agents, wait nodes,
+    ///   or non-count loops)
     /// - Graph compilation fails (unreachable nodes, etc.)
     pub fn compile(def: WorkflowDefinition) -> DslResult<CompiledGraphImpl<JsonState>> {
         Self::compile_with_agents(def, &HashMap::new())
@@ -436,11 +652,20 @@ impl DslCompiler {
         def: WorkflowDefinition,
         agent_registry: &HashMap<String, Arc<LLMAgent>>,
     ) -> DslResult<CompiledGraphImpl<JsonState>> {
+        Self::compile_with_runtime(def, agent_registry, &DslCompilerRuntime::default())
+    }
+
+    /// Compile a workflow definition with agent and runtime registries.
+    pub fn compile_with_runtime(
+        def: WorkflowDefinition,
+        agent_registry: &HashMap<String, Arc<LLMAgent>>,
+        runtime: &DslCompilerRuntime,
+    ) -> DslResult<CompiledGraphImpl<JsonState>> {
         Self::validate(&def)?;
         let mut graph = StateGraphImpl::<JsonState>::build(&def.metadata.id);
 
         for node_def in &def.nodes {
-            let node_func = Self::compile_node(node_def, agent_registry)?;
+            let node_func = Self::compile_node(node_def, agent_registry, runtime)?;
             let node_id = node_def.id();
             graph.add_node(node_id, node_func);
         }
@@ -453,6 +678,7 @@ impl DslCompiler {
     fn compile_node(
         def: &NodeDefinition,
         agent_registry: &HashMap<String, Arc<LLMAgent>>,
+        runtime: &DslCompilerRuntime,
     ) -> DslResult<Box<dyn NodeFunc<JsonState, Value>>> {
         match def {
             NodeDefinition::Start { id, .. } => {
@@ -462,8 +688,11 @@ impl DslCompiler {
                 Ok(Box::new(PassthroughNode::new(id)) as Box<dyn NodeFunc<JsonState, Value>>)
             }
             NodeDefinition::Task { id, executor, .. } => {
-                Ok(Box::new(DslTaskNode::new(id, executor.clone()))
-                    as Box<dyn NodeFunc<JsonState, Value>>)
+                let task_executor = ensure_runtime_task_executor(id, executor, runtime)?;
+                Ok(
+                    Box::new(DslTaskNode::new(id, executor.clone(), task_executor))
+                        as Box<dyn NodeFunc<JsonState, Value>>,
+                )
             }
             NodeDefinition::Condition { id, condition, .. } => {
                 Ok(Box::new(DslConditionNode::new(id, condition.clone()))
@@ -499,14 +728,59 @@ impl DslCompiler {
                     })
                 }
             }
-            NodeDefinition::Loop { id, .. } => Err(DslError::InvalidNodeType(format!(
-                "Loop node '{}' is not yet supported by the DSL compiler.",
-                id
-            ))),
-            NodeDefinition::SubWorkflow { id, .. } => Err(DslError::InvalidNodeType(format!(
-                "SubWorkflow node '{}' is not yet supported by the DSL compiler.",
-                id
-            ))),
+            NodeDefinition::Loop {
+                id,
+                body,
+                condition,
+                max_iterations,
+                ..
+            } => {
+                let count = match condition {
+                    LoopConditionDef::Count { max } => *max,
+                    LoopConditionDef::While { .. } => {
+                        return Err(DslError::Build(format!(
+                            "Loop node '{}' uses a while-condition, but the DSL compiler currently only supports count-based loops.",
+                            id
+                        )));
+                    }
+                    LoopConditionDef::Until { .. } => {
+                        return Err(DslError::Build(format!(
+                            "Loop node '{}' uses an until-condition, but the DSL compiler currently only supports count-based loops.",
+                            id
+                        )));
+                    }
+                };
+
+                let bounded_max = if *max_iterations > 0 {
+                    count.min(*max_iterations)
+                } else {
+                    count
+                };
+                let task_executor = ensure_runtime_task_executor(id, body, runtime)?;
+
+                Ok(Box::new(DslLoopNode::new(
+                    id,
+                    body.clone(),
+                    bounded_max,
+                    task_executor,
+                )) as Box<dyn NodeFunc<JsonState, Value>>)
+            }
+            NodeDefinition::SubWorkflow {
+                id, workflow_id, ..
+            } => {
+                let sub_workflow = runtime.sub_workflow(workflow_id).ok_or_else(|| {
+                    DslError::Build(format!(
+                        "SubWorkflow node '{}' references workflow '{}' but no compiled sub-workflow was registered.",
+                        id, workflow_id
+                    ))
+                })?;
+
+                Ok(Box::new(DslSubWorkflowNode::new(
+                    id,
+                    workflow_id.clone(),
+                    sub_workflow,
+                )) as Box<dyn NodeFunc<JsonState, Value>>)
+            }
             NodeDefinition::Wait { id, .. } => Err(DslError::InvalidNodeType(format!(
                 "Wait node '{}' is not yet supported by the DSL compiler.",
                 id
@@ -550,8 +824,7 @@ impl DslCompiler {
         }
 
         for (from, conditions) in conditional_map {
-            let conditions_map: HashMap<String, String> = conditions.into_iter().collect();
-            graph.add_conditional_edges(&from, conditions_map);
+            graph.add_conditional_edges(&from, conditions);
         }
         Ok(())
     }
@@ -611,6 +884,81 @@ mod tests {
     use crate::llm::{LLMAgentBuilder, MockLLMProvider};
     use mofa_kernel::workflow::CompiledGraph;
     use mofa_kernel::workflow::GraphState;
+    use serde_json::json;
+    use tokio::sync::Mutex;
+
+    struct RecordingTaskExecutor {
+        calls: Mutex<Vec<(String, Value)>>,
+    }
+
+    impl RecordingTaskExecutor {
+        fn new() -> Self {
+            Self {
+                calls: Mutex::new(Vec::new()),
+            }
+        }
+    }
+
+    #[async_trait]
+    impl DslTaskExecutor for RecordingTaskExecutor {
+        async fn execute(
+            &self,
+            node_id: &str,
+            executor: &TaskExecutorDef,
+            _state: &JsonState,
+            input: Value,
+            _ctx: &RuntimeContext<Value>,
+        ) -> AgentResult<Value> {
+            self.calls
+                .lock()
+                .await
+                .push((node_id.to_string(), input.clone()));
+
+            match executor {
+                TaskExecutorDef::Function { function } => match function.as_str() {
+                    "uppercase" => Ok(json!(input.as_str().unwrap_or_default().to_uppercase())),
+                    "increment" => Ok(json!(input.as_i64().unwrap_or_default() + 1)),
+                    other => Err(AgentError::ExecutionFailed(format!(
+                        "Unknown test function '{}'",
+                        other
+                    ))),
+                },
+                TaskExecutorDef::Http { url, method } => Ok(json!({
+                    "url": url,
+                    "method": method.as_deref().unwrap_or("GET"),
+                    "input": input,
+                })),
+                TaskExecutorDef::Script { script } => Ok(json!({
+                    "script": script,
+                    "input": input,
+                })),
+                TaskExecutorDef::None => Ok(input),
+            }
+        }
+    }
+
+    struct StaticUpdateNode {
+        name: String,
+        key: String,
+        value: Value,
+    }
+
+    #[async_trait]
+    impl NodeFunc<JsonState, Value> for StaticUpdateNode {
+        async fn call(
+            &self,
+            _state: &mut JsonState,
+            _ctx: &RuntimeContext<Value>,
+        ) -> AgentResult<Command<Value>> {
+            Ok(Command::new()
+                .update(&self.key, self.value.clone())
+                .continue_())
+        }
+
+        fn name(&self) -> &str {
+            &self.name
+        }
+    }
 
     /// Helper: parse YAML into WorkflowDefinition
     fn parse_yaml(yaml: &str) -> WorkflowDefinition {
@@ -704,6 +1052,233 @@ edges:
         let compiled = DslCompiler::compile(def).expect("Should compile");
         let result = compiled.invoke(JsonState::new(), None).await;
         assert!(result.is_ok(), "Invoke should succeed: {:?}", result.err());
+    }
+
+    #[tokio::test]
+    async fn test_compile_task_node_uses_registered_executor() {
+        let yaml = r#"
+metadata:
+  id: task_runtime
+  name: Task Runtime
+nodes:
+  - type: start
+    id: start
+  - type: task
+    id: process
+    name: Process
+    executor_type: function
+    function: uppercase
+  - type: end
+    id: end
+edges:
+  - from: start
+    to: process
+  - from: process
+    to: end
+"#;
+        let def = parse_yaml(yaml);
+        let task_executor = Arc::new(RecordingTaskExecutor::new());
+        let runtime = DslCompilerRuntime::new().with_task_executor(task_executor.clone());
+        let compiled =
+            DslCompiler::compile_with_runtime(def, &HashMap::new(), &runtime).expect("compile");
+
+        let mut state = JsonState::new();
+        state.apply_update("input", json!("hello")).await.unwrap();
+        let final_state = compiled.invoke(state, None).await.expect("invoke");
+
+        assert_eq!(final_state.get_value("process"), Some(json!("HELLO")));
+
+        let calls = task_executor.calls.lock().await.clone();
+        assert_eq!(calls.len(), 1);
+        assert_eq!(calls[0].0, "process");
+        assert_eq!(calls[0].1, json!("hello"));
+    }
+
+    #[test]
+    fn test_compile_task_node_without_runtime_executor_fails() {
+        let yaml = r#"
+metadata:
+  id: task_missing_runtime
+  name: Task Missing Runtime
+nodes:
+  - type: start
+    id: start
+  - type: task
+    id: process
+    name: Process
+    executor_type: function
+    function: uppercase
+  - type: end
+    id: end
+edges:
+  - from: start
+    to: process
+  - from: process
+    to: end
+"#;
+        let def = parse_yaml(yaml);
+        let err = DslCompiler::compile(def).expect_err("compile should fail");
+
+        assert!(matches!(err, DslError::Build(_)));
+        assert!(err
+            .to_string()
+            .contains("no DSL task executor was registered"));
+    }
+
+    #[tokio::test]
+    async fn test_compile_count_loop_executes_task_body() {
+        let yaml = r#"
+metadata:
+  id: loop_runtime
+  name: Loop Runtime
+nodes:
+  - type: start
+    id: start
+  - type: loop
+    id: repeat
+    name: Repeat
+    executor_type: function
+    function: increment
+    condition:
+      condition_type: count
+      max: 3
+  - type: end
+    id: end
+edges:
+  - from: start
+    to: repeat
+  - from: repeat
+    to: end
+"#;
+        let def = parse_yaml(yaml);
+        let task_executor = Arc::new(RecordingTaskExecutor::new());
+        let runtime = DslCompilerRuntime::new().with_task_executor(task_executor.clone());
+        let compiled =
+            DslCompiler::compile_with_runtime(def, &HashMap::new(), &runtime).expect("compile");
+
+        let mut state = JsonState::new();
+        state.apply_update("input", json!(0)).await.unwrap();
+        let final_state = compiled.invoke(state, None).await.expect("invoke");
+
+        assert_eq!(final_state.get_value("repeat"), Some(json!(3)));
+        assert_eq!(task_executor.calls.lock().await.len(), 3);
+    }
+
+    #[test]
+    fn test_compile_non_count_loop_is_rejected() {
+        let yaml = r#"
+metadata:
+  id: loop_while
+  name: Loop While
+nodes:
+  - type: start
+    id: start
+  - type: loop
+    id: repeat
+    name: Repeat
+    executor_type: none
+    condition:
+      condition_type: while
+      expr: "input < 5"
+  - type: end
+    id: end
+edges:
+  - from: start
+    to: repeat
+  - from: repeat
+    to: end
+"#;
+        let def = parse_yaml(yaml);
+        let err = DslCompiler::compile(def).expect_err("compile should fail");
+
+        assert!(matches!(err, DslError::Build(_)));
+        assert!(err
+            .to_string()
+            .contains("currently only supports count-based loops"));
+    }
+
+    #[tokio::test]
+    async fn test_compile_sub_workflow_invokes_registered_graph() {
+        let yaml = r#"
+metadata:
+  id: parent_runtime
+  name: Parent Runtime
+nodes:
+  - type: start
+    id: start
+  - type: sub_workflow
+    id: run_child
+    name: Run Child
+    workflow_id: child_workflow
+  - type: end
+    id: end
+edges:
+  - from: start
+    to: run_child
+  - from: run_child
+    to: end
+"#;
+        let def = parse_yaml(yaml);
+
+        let mut child = StateGraphImpl::<JsonState>::new("child_workflow");
+        child
+            .add_node(
+                "child_step",
+                Box::new(StaticUpdateNode {
+                    name: "child_step".to_string(),
+                    key: "sub_result".to_string(),
+                    value: json!("done"),
+                }),
+            )
+            .add_edge(START, "child_step")
+            .add_edge("child_step", END);
+        let child = Arc::new(child.compile().expect("child compile"));
+
+        let runtime = DslCompilerRuntime::new().with_sub_workflow("child_workflow", child);
+        let compiled =
+            DslCompiler::compile_with_runtime(def, &HashMap::new(), &runtime).expect("compile");
+
+        let mut state = JsonState::new();
+        state.apply_update("input", json!("hello")).await.unwrap();
+        let final_state = compiled.invoke(state, None).await.expect("invoke");
+
+        assert_eq!(final_state.get_value("sub_result"), Some(json!("done")));
+
+        let snapshot: Value = final_state
+            .get_value("run_child")
+            .expect("sub-workflow snapshot should be stored");
+        assert_eq!(snapshot["sub_result"], json!("done"));
+        assert_eq!(snapshot["input"], json!("hello"));
+    }
+
+    #[test]
+    fn test_compile_sub_workflow_without_runtime_registration_fails() {
+        let yaml = r#"
+metadata:
+  id: parent_runtime_missing_child
+  name: Parent Runtime Missing Child
+nodes:
+  - type: start
+    id: start
+  - type: sub_workflow
+    id: run_child
+    name: Run Child
+    workflow_id: child_workflow
+  - type: end
+    id: end
+edges:
+  - from: start
+    to: run_child
+  - from: run_child
+    to: end
+"#;
+        let def = parse_yaml(yaml);
+        let err = DslCompiler::compile(def).expect_err("compile should fail");
+
+        assert!(matches!(err, DslError::Build(_)));
+        assert!(err
+            .to_string()
+            .contains("no compiled sub-workflow was registered"));
     }
 
     #[test]
@@ -1131,16 +1706,18 @@ edges:
 
     #[tokio::test]
     async fn test_task_node_function_executor() {
+        let runtime_executor = Arc::new(RecordingTaskExecutor::new());
         let node = DslTaskNode::new(
             "task1",
             TaskExecutorDef::Function {
                 function: "my_function".into(),
             },
+            Some(runtime_executor),
         );
         let mut state = JsonState::new();
+        state.apply_update("input", json!("hello")).await.unwrap();
         let ctx = RuntimeContext::new("test");
-        let cmd = node.call(&mut state, &ctx).await.unwrap();
-        assert!(!cmd.updates.is_empty());
-        assert_eq!(cmd.updates[0].key, "task1");
+        let err = node.call(&mut state, &ctx).await.unwrap_err();
+        assert!(err.to_string().contains("Unknown test function"));
     }
 }
