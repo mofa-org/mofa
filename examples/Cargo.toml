@@ -61,6 +61,7 @@ members = [
     "rag_indexing_demo",
     "adversarial_testing_demo",
     "llm_fallback_chain",
+    "audio_config_probe",
     "resume_from_checkpoint",
     "claw_demo",
     "swarm_orchestrator",
