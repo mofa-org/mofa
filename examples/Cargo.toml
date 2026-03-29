@@ -1,6 +1,7 @@
 [workspace]
 resolver = "3"
 members = [
+    "local_compute_mesh_demo",
     "cli_production_smoke",
     "cli_agent_logs_demo",
     "cli_plugin_lifecycle",
@@ -60,10 +61,7 @@ members = [
     "rag_retrieval_demo",
     "rag_indexing_demo",
     "adversarial_testing_demo",
-    "llm_fallback_chain",
-    "resume_from_checkpoint",
-    "claw_demo",
-    "swarm_orchestrator",
+    "local_compute_mesh_demo",
 ]
 
 [workspace.package]
