@@ -6159,6 +6159,7 @@ dependencies = [
  "chrono",
  "mofa-foundation",
  "mofa-kernel",
+ "regex",
  "serde",
  "serde_json",
  "tokio",
