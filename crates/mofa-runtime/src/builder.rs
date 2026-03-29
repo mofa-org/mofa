@@ -714,8 +714,6 @@ impl SimpleMessageBus {
         }
     }
 
-    
-
     /// 发送点对点消息
     /// Send point-to-point message
     pub async fn send_to(&self, target_id: &str, event: AgentEvent) -> GlobalResult<()> {

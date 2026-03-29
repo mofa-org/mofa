@@ -228,7 +228,12 @@ mod tests {
         );
         let debug = audit_to_debug(&event);
         assert!(matches!(debug, DebugEvent::NodeStart { .. }));
-        if let DebugEvent::NodeStart { node_id, state_snapshot, .. } = debug {
+        if let DebugEvent::NodeStart {
+            node_id,
+            state_snapshot,
+            ..
+        } = debug
+        {
             assert_eq!(node_id, "task-1");
             assert_eq!(state_snapshot["agent_id"], json!("agent-3"));
         }
@@ -298,7 +303,13 @@ mod tests {
         );
         let debug = audit_to_debug(&event);
         assert!(matches!(debug, DebugEvent::StateChange { .. }));
-        if let DebugEvent::StateChange { key, old_value, new_value, .. } = debug {
+        if let DebugEvent::StateChange {
+            key,
+            old_value,
+            new_value,
+            ..
+        } = debug
+        {
             assert_eq!(key, "assigned_agent");
             assert_eq!(old_value, Some(json!("a1")));
             assert_eq!(new_value, json!("a2"));
@@ -325,9 +336,21 @@ mod tests {
     #[test]
     fn test_audit_batch_to_debug_preserves_order() {
         let events = vec![
-            make_event(AuditEventKind::SwarmStarted, "start", json!({ "swarm_id": "s1" })),
-            make_event(AuditEventKind::SubtaskStarted, "t1", json!({ "subtask_id": "t1" })),
-            make_event(AuditEventKind::SwarmCompleted, "done", json!({ "swarm_id": "s1" })),
+            make_event(
+                AuditEventKind::SwarmStarted,
+                "start",
+                json!({ "swarm_id": "s1" }),
+            ),
+            make_event(
+                AuditEventKind::SubtaskStarted,
+                "t1",
+                json!({ "subtask_id": "t1" }),
+            ),
+            make_event(
+                AuditEventKind::SwarmCompleted,
+                "done",
+                json!({ "swarm_id": "s1" }),
+            ),
         ];
         let debug_events = audit_batch_to_debug(&events);
         assert_eq!(debug_events.len(), 3);

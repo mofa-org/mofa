@@ -6,9 +6,8 @@ use once_cell::sync::Lazy;
 use regex::Regex;
 
 /// Email address pattern
-pub static EMAIL_PATTERN: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(r#"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b"#).unwrap()
-});
+pub static EMAIL_PATTERN: Lazy<Regex> =
+    Lazy::new(|| Regex::new(r#"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b"#).unwrap());
 
 /// Phone number pattern (US format: (XXX) XXX-XXXX or XXX-XXX-XXXX)
 pub static PHONE_PATTERN: Lazy<Regex> = Lazy::new(|| {
@@ -22,26 +21,19 @@ pub static CREDIT_CARD_PATTERN: Lazy<Regex> = Lazy::new(|| {
 });
 
 /// SSN pattern (US Social Security Number: XXX-XX-XXXX)
-pub static SSN_PATTERN: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(r#"\b\d{3}-\d{2}-\d{4}\b"#).unwrap()
-});
+pub static SSN_PATTERN: Lazy<Regex> = Lazy::new(|| Regex::new(r#"\b\d{3}-\d{2}-\d{4}\b"#).unwrap());
 
 /// IP address pattern (IPv4)
-pub static IP_ADDRESS_PATTERN: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(r#"\b(?:\d{1,3}\.){3}\d{1,3}\b"#).unwrap()
-});
+pub static IP_ADDRESS_PATTERN: Lazy<Regex> =
+    Lazy::new(|| Regex::new(r#"\b(?:\d{1,3}\.){3}\d{1,3}\b"#).unwrap());
 
 /// API key pattern (common formats: sk-..., api_key=..., etc.)
-pub static API_KEY_PATTERN: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(r#"\b(?:sk|api[_-]?key|token)[_-]?[a-zA-Z0-9]{20,}\b"#).unwrap()
-});
+pub static API_KEY_PATTERN: Lazy<Regex> =
+    Lazy::new(|| Regex::new(r#"\b(?:sk|api[_-]?key|token)[_-]?[a-zA-Z0-9]{20,}\b"#).unwrap());
 
 /// Validate credit card number using Luhn algorithm
 pub fn validate_luhn(card_number: &str) -> bool {
-    let digits: Vec<u32> = card_number
-        .chars()
-        .filter_map(|c| c.to_digit(10))
-        .collect();
+    let digits: Vec<u32> = card_number.chars().filter_map(|c| c.to_digit(10)).collect();
 
     if digits.len() < 13 || digits.len() > 19 {
         return false;
@@ -54,11 +46,7 @@ pub fn validate_luhn(card_number: &str) -> bool {
         .map(|(i, &digit)| {
             if i % 2 == 1 {
                 let doubled = digit * 2;
-                if doubled > 9 {
-                    doubled - 9
-                } else {
-                    doubled
-                }
+                if doubled > 9 { doubled - 9 } else { doubled }
             } else {
                 digit
             }

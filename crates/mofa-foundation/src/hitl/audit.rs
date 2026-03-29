@@ -133,44 +133,51 @@ impl AuditStore for InMemoryAuditStore {
             .filter(|event| {
                 // Filter by review ID
                 if let Some(ref review_id) = query.review_id
-                    && event.review_id != *review_id {
-                        return false;
-                    }
+                    && event.review_id != *review_id
+                {
+                    return false;
+                }
 
                 // Filter by execution ID
                 if let Some(ref execution_id) = query.execution_id
-                    && event.execution_id.as_ref() != Some(execution_id) {
-                        return false;
-                    }
+                    && event.execution_id.as_ref() != Some(execution_id)
+                {
+                    return false;
+                }
 
                 // Filter by tenant ID
                 if let Some(tenant_id) = query.tenant_id
-                    && event.tenant_id != Some(tenant_id) {
-                        return false;
-                    }
+                    && event.tenant_id != Some(tenant_id)
+                {
+                    return false;
+                }
 
                 // Filter by event type
                 if let Some(ref event_type) = query.event_type
-                    && &event.event_type != event_type {
-                        return false;
-                    }
+                    && &event.event_type != event_type
+                {
+                    return false;
+                }
 
                 // Filter by actor
                 if let Some(ref actor) = query.actor
-                    && event.actor.as_ref() != Some(actor) {
-                        return false;
-                    }
+                    && event.actor.as_ref() != Some(actor)
+                {
+                    return false;
+                }
 
                 // Filter by time range
                 if let Some(start_time) = query.start_time_ms
-                    && event.timestamp_ms < start_time {
-                        return false;
-                    }
+                    && event.timestamp_ms < start_time
+                {
+                    return false;
+                }
 
                 if let Some(end_time) = query.end_time_ms
-                    && event.timestamp_ms >= end_time {
-                        return false;
-                    }
+                    && event.timestamp_ms >= end_time
+                {
+                    return false;
+                }
 
                 true
             })

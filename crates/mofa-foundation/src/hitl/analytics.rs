@@ -114,16 +114,17 @@ impl ReviewAnalytics {
 
                     // Extract status from event data
                     if let Some(status_val) = event.data.get("status")
-                        && let Some(status_str) = status_val.as_str() {
-                            let status = status_str.to_string();
-                            *reviews_by_status.entry(status.clone()).or_insert(0) += 1;
+                        && let Some(status_str) = status_val.as_str()
+                    {
+                        let status = status_str.to_string();
+                        *reviews_by_status.entry(status.clone()).or_insert(0) += 1;
 
-                            if status.contains("Approved") {
-                                approved_reviews += 1;
-                            } else if status.contains("Rejected") {
-                                rejected_reviews += 1;
-                            }
+                        if status.contains("Approved") {
+                            approved_reviews += 1;
+                        } else if status.contains("Rejected") {
+                            rejected_reviews += 1;
                         }
+                    }
                 }
                 ReviewAuditEventType::Expired => {
                     expired_reviews += 1;
@@ -243,18 +244,21 @@ impl ReviewAnalytics {
 
                 // Check status
                 if let Some(status_val) = event.data.get("status")
-                    && let Some(status_str) = status_val.as_str() {
-                        if status_str.contains("Approved") {
-                            stats.approved += 1;
-                        } else if status_str.contains("Rejected") {
-                            stats.rejected += 1;
-                        }
+                    && let Some(status_str) = status_val.as_str()
+                {
+                    if status_str.contains("Approved") {
+                        stats.approved += 1;
+                    } else if status_str.contains("Rejected") {
+                        stats.rejected += 1;
                     }
+                }
             }
         }
 
         // Convert to ReviewerMetrics
-        let mut metrics: Vec<ReviewerMetrics> = reviewer_stats.into_values().map(|stats| {
+        let mut metrics: Vec<ReviewerMetrics> = reviewer_stats
+            .into_values()
+            .map(|stats| {
                 let average_review_time_ms = if !stats.review_times.is_empty() {
                     let sum: u64 = stats.review_times.iter().sum();
                     Some(sum / stats.review_times.len() as u64)

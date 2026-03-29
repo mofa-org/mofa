@@ -91,9 +91,7 @@ pub enum ExecutionEvent {
     },
 
     /// Checkpoint created during workflow execution
-    CheckpointCreated {
-        label: String,
-    },
+    CheckpointCreated { label: String },
 
     /// Retry attempt for a node
     NodeRetrying {
@@ -245,7 +243,7 @@ mod tests {
 
         let envelope = ExecutionEventEnvelope::new(event);
         let serialized = serde_json::to_string_pretty(&envelope).unwrap();
-        
+
         assert!(serialized.contains("WorkflowCompleted"));
         assert!(serialized.contains("schema_version"));
     }

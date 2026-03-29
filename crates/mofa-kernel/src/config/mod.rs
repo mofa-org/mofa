@@ -10,8 +10,8 @@
 //! - Configuration merging from multiple sources
 //! - Support for all major configuration formats
 
-use config::{Config as Cfg, Environment, File};
 pub use config::FileFormat;
+use config::{Config as Cfg, Environment, File};
 use regex::Regex;
 use serde::de::DeserializeOwned;
 use std::path::Path;
@@ -298,12 +298,12 @@ where
 ///
 /// ```rust,no_run
 /// use mofa_kernel::config::load_with_env;
-/// 
+///
 /// #[derive(serde::Deserialize)]
 /// struct MyConfig {
 ///     database: Database,
 /// }
-/// 
+///
 /// #[derive(serde::Deserialize)]
 /// struct Database {
 ///     url: String,
@@ -548,11 +548,7 @@ default.name = "Test Agent"
 
         let temp_dir = tempfile::TempDir::new().unwrap();
         let config_path = temp_dir.path().join("app.toml");
-        std::fs::write(
-            &config_path,
-            "[database]\nurl='file-url'\npool_size=5\n",
-        )
-        .unwrap();
+        std::fs::write(&config_path, "[database]\nurl='file-url'\npool_size=5\n").unwrap();
 
         unsafe {
             std::env::set_var("APP_DATABASE__URL", "env-url");

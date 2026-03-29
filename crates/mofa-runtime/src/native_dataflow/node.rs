@@ -139,7 +139,10 @@ impl NativeNode {
             tx.send(data)
                 .await
                 .map_err(|e| DataflowError::ChannelError(e.to_string()))?;
-            debug!("NativeNode {} sent data on output '{}'", self.config.node_id, output_id);
+            debug!(
+                "NativeNode {} sent data on output '{}'",
+                self.config.node_id, output_id
+            );
         } else {
             debug!(
                 "NativeNode {}: output '{}' has no registered receiver; dropping",
