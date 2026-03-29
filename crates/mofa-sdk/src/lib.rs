@@ -971,6 +971,46 @@ pub mod messaging {
 }
 
 // =============================================================================
+// Voice Pipeline - ASR / LLM / TTS Integration
+// =============================================================================
+
+/// End-to-end voice pipeline and speech adapter types
+///
+/// Provides the `VoicePipeline` that chains ASR → LLM → TTS in a single call,
+/// cloud adapter traits (`TtsAdapter`, `AsrAdapter`), and a runtime registry for
+/// swapping adapters without recompiling.
+///
+/// # Quick Start
+///
+/// ```rust,ignore
+/// use mofa_sdk::voice::{VoicePipeline, VoicePipelineConfig};
+/// use std::sync::Arc;
+///
+/// let pipeline = VoicePipeline::new(asr, llm, tts,
+///     VoicePipelineConfig::new()
+///         .with_voice("Rachel")
+///         .with_system_prompt("You are a concise voice assistant."));
+///
+/// let result = pipeline.process(&wav_bytes).await?;
+/// println!("You:   {}", result.transcription.text);
+/// println!("Agent: {}", result.llm_reply);
+/// // play result.audio_output.data (MP3 bytes) via rodio / platform audio
+/// ```
+pub mod voice {
+    // Pipeline orchestration (mofa-foundation)
+    pub use mofa_foundation::voice_pipeline::{VoicePipeline, VoicePipelineConfig, VoicePipelineResult};
+
+    // Runtime adapter registry (mofa-foundation)
+    pub use mofa_foundation::speech_registry::SpeechAdapterRegistry;
+
+    // Core traits and data types (mofa-kernel)
+    pub use mofa_kernel::speech::{
+        AsrAdapter, AsrConfig, AudioFormat, AudioOutput, TranscriptionResult, TranscriptionSegment,
+        TtsAdapter, TtsConfig, VoiceDescriptor,
+    };
+}
+
+// =============================================================================
 // Dora-rs runtime support (enabled with `dora` feature)
 // =============================================================================
 
