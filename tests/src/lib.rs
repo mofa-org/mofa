@@ -15,7 +15,7 @@ pub mod tools;
 pub use backend::MockLLMBackend;
 pub use bus::MockAgentBus;
 pub use clock::{Clock, MockClock, SystemClock};
-pub use mock_llm_server::MockLlmServer;
+pub use mock_llm_server::{MockLlmServer, MockLlmServerBuilder, ToolCallSpec};
 pub use report::{
     JsonFormatter, ReportFormatter, TestCaseResult, TestReport, TestReportBuilder, TestStatus,
     TextFormatter,

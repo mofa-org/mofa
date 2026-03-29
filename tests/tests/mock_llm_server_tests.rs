@@ -1,4 +1,4 @@
-use mofa_testing::MockLlmServer;
+use mofa_testing::{MockLlmServer, MockLlmServerBuilder, ToolCallSpec};
 use serde_json::json;
 
 async fn post_chat(base_url: &str, body: serde_json::Value) -> (u16, serde_json::Value) {
@@ -244,6 +244,71 @@ async fn mock_llm_server_applies_delay() {
     let elapsed_ms = start.elapsed().as_millis();
 
     assert!(elapsed_ms >= 50, "expected delay, got {elapsed_ms}ms");
+
+    server.shutdown().await;
+}
+
+#[tokio::test]
+async fn mock_llm_server_builder_configures_rules() {
+    let server = MockLlmServerBuilder::new()
+        .default_response("fallback")
+        .response_rule("hello", "world")
+        .error_rule("deny", 403, "forbidden")
+        .tool_call_sequence(
+            "tool-seq",
+            vec![
+                ToolCallSpec {
+                    name: "first".to_string(),
+                    arguments: json!({ "step": 1 }),
+                    id: None,
+                },
+                ToolCallSpec {
+                    name: "second".to_string(),
+                    arguments: json!({ "step": 2 }),
+                    id: None,
+                },
+            ],
+            Some("tool content"),
+        )
+        .start()
+        .await
+        .expect("server starts");
+
+    let (status, body) = post_chat(
+        server.base_url(),
+        json!({
+            "model": "test-model",
+            "messages": [{"role": "user", "content": "hello there"}]
+        }),
+    )
+    .await;
+    assert_eq!(status, 200);
+    assert_eq!(
+        body["choices"][0]["message"]["content"],
+        "world"
+    );
+
+    let (status, body) = post_chat(
+        server.base_url(),
+        json!({
+            "model": "test-model",
+            "messages": [{"role": "user", "content": "deny request"}]
+        }),
+    )
+    .await;
+    assert_eq!(status, 403);
+    assert_eq!(body["error"]["message"], "forbidden");
+
+    let (status, body) = post_chat(
+        server.base_url(),
+        json!({
+            "model": "test-model",
+            "messages": [{"role": "user", "content": "tool-seq"}]
+        }),
+    )
+    .await;
+    assert_eq!(status, 200);
+    assert_eq!(body["choices"][0]["finish_reason"], "tool_calls");
 
     server.shutdown().await;
 }

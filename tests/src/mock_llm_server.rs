@@ -59,6 +59,15 @@ pub struct ToolCallSpec {
     pub id: Option<String>,
 }
 
+/// Builder for configuring mock LLM server rules in tests.
+#[derive(Debug, Default)]
+pub struct MockLlmServerBuilder {
+    rules: Vec<Rule>,
+    sequences: Vec<(String, VecDeque<RuleResponse>)>,
+    default_response: Option<String>,
+    default_delay_ms: Option<u64>,
+}
+
 #[derive(Debug, Clone, Serialize)]
 pub struct RequestRecord {
     pub received_at: DateTime<Utc>,
@@ -146,13 +155,17 @@ struct ModelInfo {
 impl MockLlmServer {
     /// Start a mock LLM server on a random local port.
     pub async fn start() -> anyhow::Result<Self> {
-        let state = Arc::new(RwLock::new(ServerState {
-            rules: Vec::new(),
-            sequences: Vec::new(),
-            default_response: "Mock fallback response.".to_string(),
-            history: Vec::new(),
-            default_delay_ms: None,
-        }));
+        MockLlmServerBuilder::default().start().await
+    }
+
+    /// Start a mock LLM server using a builder configuration.
+    pub async fn start_with_builder(builder: MockLlmServerBuilder) -> anyhow::Result<Self> {
+        builder.start().await
+    }
+
+    /// Start a mock LLM server using the provided internal state.
+    async fn start_with_state(state: ServerState) -> anyhow::Result<Self> {
+        let state = Arc::new(RwLock::new(state));
 
         let app = Router::new()
             .route("/v1/chat/completions", post(handle_chat))
@@ -306,6 +319,125 @@ impl MockLlmServer {
         if let Some(tx) = self.shutdown_tx.take() {
             let _ = tx.send(());
         }
+    }
+}
+
+impl MockLlmServerBuilder {
+    /// Create a new builder with default values.
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Set the default response when no rule matches.
+    pub fn default_response(mut self, response: &str) -> Self {
+        self.default_response = Some(response.to_string());
+        self
+    }
+
+    /// Set a default delay for all responses.
+    pub fn default_delay_ms(mut self, delay_ms: u64) -> Self {
+        self.default_delay_ms = Some(delay_ms);
+        self
+    }
+
+    /// Add a static response rule.
+    pub fn response_rule(mut self, prompt_substring: &str, response: &str) -> Self {
+        self.rules.push(Rule {
+            prompt_substring: prompt_substring.to_string(),
+            response: RuleResponse::Text(response.to_string()),
+            delay_ms: None,
+        });
+        self
+    }
+
+    /// Add a static response rule with a delay.
+    pub fn response_rule_with_delay(
+        mut self,
+        prompt_substring: &str,
+        response: &str,
+        delay_ms: u64,
+    ) -> Self {
+        self.rules.push(Rule {
+            prompt_substring: prompt_substring.to_string(),
+            response: RuleResponse::Text(response.to_string()),
+            delay_ms: Some(delay_ms),
+        });
+        self
+    }
+
+    /// Add an error rule.
+    pub fn error_rule(mut self, prompt_substring: &str, status: u16, message: &str) -> Self {
+        self.rules.push(Rule {
+            prompt_substring: prompt_substring.to_string(),
+            response: RuleResponse::Error {
+                status,
+                message: message.to_string(),
+            },
+            delay_ms: None,
+        });
+        self
+    }
+
+    /// Add a tool-call rule.
+    pub fn tool_call_rule(
+        mut self,
+        prompt_substring: &str,
+        tool_name: &str,
+        arguments: serde_json::Value,
+        content: Option<&str>,
+    ) -> Self {
+        self.rules.push(Rule {
+            prompt_substring: prompt_substring.to_string(),
+            response: RuleResponse::ToolCall {
+                content: content.map(|s| s.to_string()),
+                tool_calls: vec![ToolCallSpec {
+                    name: tool_name.to_string(),
+                    arguments,
+                    id: None,
+                }],
+            },
+            delay_ms: None,
+        });
+        self
+    }
+
+    /// Add a sequence of text responses.
+    pub fn response_sequence(mut self, prompt_substring: &str, responses: Vec<&str>) -> Self {
+        let deque = responses.into_iter().map(|s| RuleResponse::Text(s.to_string())).collect();
+        self.sequences.push((prompt_substring.to_string(), deque));
+        self
+    }
+
+    /// Add a sequence of tool-call responses.
+    pub fn tool_call_sequence(
+        mut self,
+        prompt_substring: &str,
+        tool_calls: Vec<ToolCallSpec>,
+        content: Option<&str>,
+    ) -> Self {
+        let mut deque = VecDeque::new();
+        for call in tool_calls {
+            deque.push_back(RuleResponse::ToolCall {
+                content: content.map(|s| s.to_string()),
+                tool_calls: vec![call],
+            });
+        }
+        self.sequences.push((prompt_substring.to_string(), deque));
+        self
+    }
+
+    /// Start the server with the configured rules.
+    pub async fn start(self) -> anyhow::Result<MockLlmServer> {
+        let state = ServerState {
+            rules: self.rules,
+            sequences: self.sequences,
+            default_response: self
+                .default_response
+                .unwrap_or_else(|| "Mock fallback response.".to_string()),
+            history: Vec::new(),
+            default_delay_ms: self.default_delay_ms,
+        };
+        MockLlmServer::start_with_state(state).await
     }
 }
 
