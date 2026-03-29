@@ -7,6 +7,7 @@ use std::fs;
 use std::marker::PhantomData;
 use std::path::{Path, PathBuf};
 
+#[derive(Clone)]
 pub struct PersistedStore<T> {
     dir: PathBuf,
     _phantom: PhantomData<T>,
