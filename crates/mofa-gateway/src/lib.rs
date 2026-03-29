@@ -77,6 +77,7 @@ pub mod control_plane;
 pub mod error;
 pub mod gateway;
 pub mod handlers;
+pub mod adapters;
 pub mod inference_bridge;
 pub mod middleware;
 pub mod observability;
