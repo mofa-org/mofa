@@ -18,3 +18,4 @@ chrono = { workspace = true }
 axum = { workspace = true }
 reqwest = { workspace = true }
 uuid = { workspace = true }
+regex = { workspace = true }
