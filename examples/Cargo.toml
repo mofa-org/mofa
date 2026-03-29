@@ -1,6 +1,7 @@
 [workspace]
 resolver = "3"
 members = [
+    "mock_llm_server_sequences_demo",
     "mock_llm_server_demo",
     "cli_production_smoke",
     "cli_agent_logs_demo",
