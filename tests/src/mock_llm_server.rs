@@ -43,7 +43,18 @@ struct Rule {
 #[derive(Debug, Clone)]
 enum RuleResponse {
     Text(String),
+    ToolCall {
+        content: Option<String>,
+        tool_calls: Vec<ToolCallSpec>,
+    },
     Error { status: u16, message: String },
+}
+
+#[derive(Debug, Clone)]
+pub struct ToolCallSpec {
+    pub name: String,
+    pub arguments: serde_json::Value,
+    pub id: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -88,6 +99,21 @@ struct ChatChoice {
 struct ChatMessageOut {
     role: String,
     content: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    tool_calls: Option<Vec<ToolCallOut>>,
+}
+
+#[derive(Debug, Serialize)]
+struct ToolCallOut {
+    id: String,
+    r#type: String,
+    function: ToolFunctionOut,
+}
+
+#[derive(Debug, Serialize)]
+struct ToolFunctionOut {
+    name: String,
+    arguments: String,
 }
 
 #[derive(Debug, Serialize)]
@@ -181,11 +207,52 @@ impl MockLlmServer {
         });
     }
 
+    /// Add a tool-call response rule matched by prompt substring.
+    pub async fn add_tool_call_rule(
+        &self,
+        prompt_substring: &str,
+        tool_name: &str,
+        arguments: serde_json::Value,
+        content: Option<&str>,
+    ) {
+        let mut state = self.state.write().await;
+        state.rules.push(Rule {
+            prompt_substring: prompt_substring.to_string(),
+            response: RuleResponse::ToolCall {
+                content: content.map(|s| s.to_string()),
+                tool_calls: vec![ToolCallSpec {
+                    name: tool_name.to_string(),
+                    arguments,
+                    id: None,
+                }],
+            },
+        });
+    }
+
     /// Add a sequence of responses for a prompt substring.
     /// Each matching call consumes the next response; the last repeats.
     pub async fn add_response_sequence(&self, prompt_substring: &str, responses: Vec<&str>) {
         let mut state = self.state.write().await;
         let deque = responses.into_iter().map(|s| RuleResponse::Text(s.to_string())).collect();
+        state.sequences.push((prompt_substring.to_string(), deque));
+    }
+
+    /// Add a sequence of tool-call responses for a prompt substring.
+    /// Each matching call consumes the next response; the last repeats.
+    pub async fn add_tool_call_sequence(
+        &self,
+        prompt_substring: &str,
+        tool_calls: Vec<ToolCallSpec>,
+        content: Option<&str>,
+    ) {
+        let mut state = self.state.write().await;
+        let mut deque = VecDeque::new();
+        for call in tool_calls {
+            deque.push_back(RuleResponse::ToolCall {
+                content: content.map(|s| s.to_string()),
+                tool_calls: vec![call],
+            });
+        }
         state.sequences.push((prompt_substring.to_string(), deque));
     }
 
@@ -259,8 +326,40 @@ async fn handle_chat(
                 message: ChatMessageOut {
                     role: "assistant".to_string(),
                     content: text,
+                    tool_calls: None,
                 },
                 finish_reason: "stop".to_string(),
+            }],
+        })),
+        RuleResponse::ToolCall { content, tool_calls } => Ok(Json(ChatCompletionResponse {
+            id: format!("mock-{}", uuid::Uuid::now_v7()),
+            object: "chat.completion".to_string(),
+            created: Utc::now().timestamp() as u64,
+            model: payload
+                .model
+                .clone()
+                .unwrap_or_else(|| "mock-model".to_string()),
+            choices: vec![ChatChoice {
+                index: 0,
+                message: ChatMessageOut {
+                    role: "assistant".to_string(),
+                    content: content.unwrap_or_default(),
+                    tool_calls: Some(
+                        tool_calls
+                            .into_iter()
+                            .map(|spec| ToolCallOut {
+                                id: spec.id.unwrap_or_else(|| uuid::Uuid::now_v7().to_string()),
+                                r#type: "function".to_string(),
+                                function: ToolFunctionOut {
+                                    name: spec.name,
+                                    arguments: serde_json::to_string(&spec.arguments)
+                                        .unwrap_or_else(|_| "{}".to_string()),
+                                },
+                            })
+                            .collect(),
+                    ),
+                },
+                finish_reason: "tool_calls".to_string(),
             }],
         })),
         RuleResponse::Error { status, message } => Err((

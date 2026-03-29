@@ -190,3 +190,37 @@ async fn mock_llm_server_exposes_models() {
 
     server.shutdown().await;
 }
+
+#[tokio::test]
+async fn mock_llm_server_returns_tool_calls() {
+    let server = MockLlmServer::start().await.expect("server starts");
+    server
+        .add_tool_call_rule(
+            "use tool",
+            "echo_tool",
+            json!({ "input": "ping" }),
+            Some("Calling tool"),
+        )
+        .await;
+
+    let (status, body) = post_chat(
+        server.base_url(),
+        json!({
+            "model": "test-model",
+            "messages": [{"role": "user", "content": "please use tool"}]
+        }),
+    )
+    .await;
+
+    assert_eq!(status, 200);
+    assert_eq!(body["choices"][0]["finish_reason"], "tool_calls");
+    let tool_call = &body["choices"][0]["message"]["tool_calls"][0];
+    assert_eq!(tool_call["type"], "function");
+    assert_eq!(tool_call["function"]["name"], "echo_tool");
+    assert!(tool_call["function"]["arguments"]
+        .as_str()
+        .unwrap()
+        .contains("\"input\""));
+
+    server.shutdown().await;
+}
