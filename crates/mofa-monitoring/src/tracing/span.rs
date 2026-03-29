@@ -13,7 +13,7 @@ use tokio::sync::RwLock;
 
 /// Span 类型
 /// Span types
-/// 
+///
 /// 表示 Span 在分布式追踪系统中的角色。根据 OpenTelemetry 标准定义。
 /// Represents the role of a Span in a distributed tracing system. Defined according to OpenTelemetry standards.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
@@ -50,7 +50,7 @@ impl std::fmt::Display for SpanKind {
 
 /// Span 状态
 /// Span status
-/// 
+///
 /// 表示 Span 完成时的结果状态（成功、错误或未设置）。
 /// Represents the resulting status of a Span upon completion (Success, Error, or Unset).
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -69,7 +69,7 @@ pub enum SpanStatus {
 
 /// Span 属性值
 /// Span attribute value
-/// 
+///
 /// 这是一个枚举，涵盖了可以附加到 Span 的各种数据类型，包括基本类型及其数组。
 /// An enum covering various data types that can be attached to a Span, including primitives and their arrays.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -469,14 +469,16 @@ impl Clone for Span {
 /// Span 构建器
 /// Span 构建器
 /// Span builder
-/// 
+///
 /// 提供流式接口来配置和创建 Span。支持设置类型、父上下文、属性、链接和开始时间。
 /// Provides a fluent interface to configure and create Spans. Supports setting kind, parent context, attributes, links, and start time.
-/// 
+///
 /// # Example
-/// 
-/// ```rust
-/// let span = tracer.span_builder("my-operation")
+///
+/// ```rust,no_run
+/// use mofa_monitoring::tracing::{SpanBuilder, SpanKind};
+///
+/// let span = SpanBuilder::new("my-operation", "example-service")
 ///     .with_kind(SpanKind::Server)
 ///     .with_attribute("http.method", "GET")
 ///     .with_attribute("http.url", "https://example.com")
