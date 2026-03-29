@@ -21,6 +21,7 @@ use mofa_kernel::agent::plugins::PluginRegistry;
 use mofa_runtime::agent::AgentFactory;
 use mofa_runtime::agent::plugins::{HttpPlugin, SimplePluginRegistry};
 use mofa_runtime::agent::registry::AgentRegistry;
+use mofa_kernel::hitl::ReviewRequest;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::path::{Path, PathBuf};
@@ -89,12 +90,16 @@ pub struct CliContext {
     pub plugin_repo_store: PersistedStore<PluginRepoEntry>,
     /// Persistent agent state storage
     pub persistent_agents: Arc<PersistentAgentRegistry>,
+    /// Persistent review storage
+    pub review_store: PersistedStore<ReviewRequest>,
     /// Agent process manager for spawning/managing processes
     pub process_manager: AgentProcessManager,
     /// In-memory plugin registry
     pub plugin_registry: Arc<SimplePluginRegistry>,
     /// In-memory tool registry
     pub tool_registry: ToolRegistry,
+    /// Persistent workflow execution records
+    pub workflow_store: PersistedStore<mofa_foundation::workflow::state::ExecutionRecord>,
     /// Platform-specific data directory (~/.local/share/mofa or equivalent)
     pub data_dir: PathBuf,
     /// Platform-specific config directory (~/.config/mofa or equivalent)
@@ -136,6 +141,8 @@ impl CliContext {
         )?);
 
         let process_manager = AgentProcessManager::new(config_dir.clone());
+        let review_store = PersistedStore::new(data_dir.join("reviews"))?;
+        let workflow_store = PersistedStore::new(data_dir.join("workflows"))?;
 
         Ok(Self {
             session_manager,
@@ -145,9 +152,11 @@ impl CliContext {
             tool_store,
             plugin_repo_store,
             persistent_agents,
+            review_store,
             process_manager,
             plugin_registry,
             tool_registry,
+            workflow_store,
             data_dir,
             config_dir,
         })
@@ -200,6 +209,7 @@ impl CliContext {
             tool_store,
             plugin_repo_store,
             persistent_agents,
+            review_store,
             process_manager,
             plugin_registry,
             tool_registry,

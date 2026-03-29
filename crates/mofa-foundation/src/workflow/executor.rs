@@ -414,47 +414,40 @@ impl WorkflowExecutor {
         );
 
         // Check if this was a unified HITL review (check for review_id in variables)
-        if let Some(review_id_value) = ctx.get_variable("review_id").await
-            && let WorkflowValue::String(ref review_id_str) = review_id_value
-                && let Some(ref review_handler) = self.review_handler {
+        if let Some(review_id_value) = ctx.get_variable("review_id").await {
+            if let WorkflowValue::String(ref review_id_str) = review_id_value {
+                if let Some(ref review_handler) = self.review_handler {
                     use mofa_kernel::hitl::ReviewRequestId;
                     let review_id = ReviewRequestId::new(review_id_str.clone());
 
-                    // Check if review is approved
-                    match review_handler.is_approved(&review_id).await {
-                        Ok(true) => {
-                            info!(
-                                "Review {} approved, proceeding with workflow",
-                                review_id_str
-                            );
-                        }
-                        Ok(false) => {
-                            // Check if rejected
-                            if let Ok(Some(response)) =
-                                review_handler.get_review_response(&review_id).await
-                            {
-                                match response {
-                                    mofa_kernel::hitl::ReviewResponse::Rejected {
-                                        reason, ..
-                                    } => {
-                                        return Err(format!("Review rejected: {}", reason));
-                                    }
-                                    _ => {
-                                        return Err(format!(
-                                            "Review {} not approved",
-                                            review_id_str
-                                        ));
-                                    }
-                                }
-                            } else {
+                    // Check if rejected, retry, or approved
+                    if let Ok(Some(response)) = review_handler.get_review_response(&review_id).await {
+                        match response {
+                            mofa_kernel::hitl::ReviewResponse::Rejected { reason, .. } => {
+                                return Err(format!("Review rejected: {}", reason));
+                            }
+                            mofa_kernel::hitl::ReviewResponse::Retry { .. } => {
+                                info!("Review retry requested for node {}", waiting_node_id);
+                                ctx.set_node_status(waiting_node_id, NodeStatus::Pending).await;
+                                // Clear approval flag
+                                let approved_var = format!("approved_{}", waiting_node_id);
+                                ctx.delete_variable(&approved_var).await;
+                            }
+                            mofa_kernel::hitl::ReviewResponse::Approved { .. } => {
+                                info!("Review approved for node {}", waiting_node_id);
+                                let approved_var = format!("approved_{}", waiting_node_id);
+                                ctx.set_variable(&approved_var, WorkflowValue::Bool(true)).await;
+                            }
+                            _ => {
                                 return Err(format!("Review {} not yet resolved", review_id_str));
                             }
                         }
-                        Err(e) => {
-                            warn!("Failed to check review status: {}, proceeding anyway", e);
-                        }
+                    } else if let Ok(false) = review_handler.is_approved(&review_id).await {
+                        return Err(format!("Review {} not yet approved", review_id_str));
                     }
                 }
+            }
+        }
 
         // Calculate wait time
         if let Some(paused_at) = *ctx.paused_at.read().await {
@@ -463,9 +456,15 @@ impl WorkflowExecutor {
             *ctx.total_wait_time_ms.write().await += wait_duration_ms; // ← accumulate
         }
 
-        ctx.set_node_output(waiting_node_id, human_input).await;
-        ctx.set_node_status(waiting_node_id, NodeStatus::Completed)
-            .await;
+        // Only complete the node if it wasn't a retry
+        let is_retrying = ctx.get_node_status(waiting_node_id).await == Some(NodeStatus::Pending);
+
+        if !is_retrying {
+            ctx.set_node_output(waiting_node_id, human_input).await;
+            ctx.set_node_status(waiting_node_id, NodeStatus::Completed)
+                .await;
+        }
+
         *ctx.paused_at.write().await = None;
         *ctx.last_waiting_node.write().await = None;
 
@@ -735,22 +734,50 @@ impl WorkflowExecutor {
                 .get_node(&current_node_id)
                 .ok_or_else(|| format!("Node {} not found", current_node_id))?;
 
-            // 1. Try to skip completed node
-            if let Some((next_opt, output)) = self
-                .try_skip_completed_node(graph, ctx, &current_node_id)
-                .await
-            {
-                if let Some(next_id) = next_opt {
-                    current_node_id = next_id;
-                    current_input = output;
-                    continue;
-                } else {
-                    info!("Workflow completed at node {}", current_node_id);
-                    return Ok(output);
+            // 2. Check for manual approval requirement
+            if node.config.require_approval {
+                let approved_var = format!("approved_{}", current_node_id);
+                if ctx.get_variable(&approved_var).await.is_none() {
+                    if let Some(ref review_handler) = self.review_handler {
+                        info!(
+                            "Node {} requires manual approval - pausing workflow",
+                            current_node_id
+                        );
+
+                        let review_context = self
+                            .create_review_context(ctx, &current_node_id, &current_input)
+                            .await;
+
+                        match review_handler
+                            .request_node_review(&record.execution_id, &current_node_id, review_context)
+                            .await
+                        {
+                            Ok(review_id) => {
+                                info!("Review requested: {} - workflow paused", review_id.as_str());
+                                *ctx.paused_at.write().await = Some(chrono::Utc::now());
+                                *ctx.last_waiting_node.write().await = Some(current_node_id.clone());
+                                ctx.set_node_status(&current_node_id, NodeStatus::Waiting)
+                                    .await;
+                                record.context_snapshot = Some(ctx.snapshot().await);
+                                record.status = WorkflowStatus::Paused;
+
+                                ctx.set_variable(
+                                    "review_id",
+                                    WorkflowValue::String(review_id.as_str().to_string()),
+                                )
+                                .await;
+
+                                return Ok(WorkflowValue::Null);
+                            }
+                            Err(e) => {
+                                warn!("Failed to request approval: {}, skipping review", e);
+                            }
+                        }
+                    }
                 }
             }
 
-            // 2. Check for HITL review node (unified system or legacy Wait)
+            // 3. Check for HITL review node (unified system or legacy Wait)
             if node.config.node_type == NodeType::Wait {
                 // Use unified HITL system if review handler is available
                 if let Some(ref review_handler) = self.review_handler {
@@ -775,6 +802,7 @@ impl WorkflowExecutor {
                             *ctx.last_waiting_node.write().await = Some(current_node_id.clone());
                             ctx.set_node_status(&current_node_id, NodeStatus::Waiting)
                                 .await;
+                            record.context_snapshot = Some(ctx.snapshot().await);
                             record.status = WorkflowStatus::Paused;
 
                             // Store review ID in context variables for later retrieval
@@ -806,6 +834,7 @@ impl WorkflowExecutor {
 
                 ctx.set_node_status(&current_node_id, NodeStatus::Waiting)
                     .await;
+                record.context_snapshot = Some(ctx.snapshot().await);
                 record.status = WorkflowStatus::Paused;
                 return Ok(WorkflowValue::Null);
             }

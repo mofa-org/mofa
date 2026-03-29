@@ -84,6 +84,8 @@ async fn run_command(cli: Cli) -> CliResult<()> {
                 | Commands::Plugin { .. }
                 | Commands::Session { .. }
                 | Commands::Tool { .. }
+                | Commands::Review(_)
+                | Commands::Workflow { .. }
         )
     );
 
@@ -246,6 +248,53 @@ async fn run_command(cli: Cli) -> CliResult<()> {
             }
         },
 
+        Some(Commands::Review(review_cmd)) => {
+            let ctx = ctx.as_ref().unwrap();
+            match review_cmd {
+                cli::ReviewCommands::List {
+                    execution_id,
+                    all,
+                } => {
+                    commands::review::list(ctx, execution_id.as_deref(), all).await?;
+                }
+                cli::ReviewCommands::Approve { id, comment } => {
+                    commands::review::respond(
+                        ctx,
+                        &id,
+                        mofa_kernel::hitl::ReviewResponse::Approved { comment },
+                        mofa_kernel::hitl::ReviewStatus::Approved,
+                    )
+                    .await?;
+                }
+                cli::ReviewCommands::Reject { id, reason, comment } => {
+                    commands::review::respond(
+                        ctx,
+                        &id,
+                        mofa_kernel::hitl::ReviewResponse::Rejected { reason, comment },
+                        mofa_kernel::hitl::ReviewStatus::Rejected,
+                    )
+                    .await?;
+                }
+                cli::ReviewCommands::Retry { id, comment } => {
+                    commands::review::respond(
+                        ctx,
+                        &id,
+                        mofa_kernel::hitl::ReviewResponse::Retry { comment },
+                        mofa_kernel::hitl::ReviewStatus::Retrying,
+                    )
+                    .await?;
+                }
+            }
+        }
+        Some(Commands::Workflow { action }) => {
+            let ctx = ctx.as_ref().unwrap();
+            match action {
+                cli::WorkflowCommands::Resume { id, file, input } => {
+                    commands::workflow::resume(ctx, &id, file.as_deref(), input).await?;
+                }
+            }
+        }
+
         Some(Commands::Plugin { action }) => {
             let ctx = ctx.as_ref().unwrap();
             match action {
@@ -288,6 +337,12 @@ async fn run_command(cli: Cli) -> CliResult<()> {
                     } => {
                         commands::plugin::repository::add(ctx, &id, &url, description.as_deref())
                             .await?;
+                    }
+                    cli::PluginRepositoryCommands::Remove { id } => {
+                        commands::plugin::repository::remove(ctx, &id).await?;
+                    }
+                    cli::PluginRepositoryCommands::Sync { id } => {
+                        commands::plugin::repository::sync(ctx, id.as_deref()).await?;
                     }
                 },
             }
