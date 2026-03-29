@@ -1,6 +1,7 @@
 pub mod analyzer;
 pub mod config;
 pub mod dag;
+pub mod metrics_exporter;
 pub mod patterns;
 pub mod telemetry;
 
@@ -16,4 +17,5 @@ pub use scheduler::{
     FailurePolicy, ParallelScheduler, SchedulerSummary, SequentialScheduler, SubtaskExecutorFn,
     SwarmScheduler, SwarmSchedulerConfig, TaskExecutionResult, TaskOutcome,
 };
+pub use metrics_exporter::SwarmMetricsExporter;
 pub use telemetry::{audit_batch_to_debug, audit_to_debug};
