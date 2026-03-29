@@ -101,10 +101,7 @@ impl MessageEnvelope {
     }
 
     /// Serialize an [`AgentMessage`] into an envelope.
-    pub fn from_agent_message(
-        sender_id: &str,
-        message: &AgentMessage,
-    ) -> DataflowResult<Self> {
+    pub fn from_agent_message(sender_id: &str, message: &AgentMessage) -> DataflowResult<Self> {
         let payload = bincode::serialize(message)?;
         Ok(Self::new(sender_id, payload))
     }
@@ -158,7 +155,10 @@ impl NativeChannel {
             receivers.insert(agent_id.to_string(), Arc::new(Mutex::new(rx)));
         }
 
-        info!("Agent '{}' registered to channel '{}'", agent_id, self.config.channel_id);
+        info!(
+            "Agent '{}' registered to channel '{}'",
+            agent_id, self.config.channel_id
+        );
         Ok(())
     }
 
@@ -223,10 +223,9 @@ impl NativeChannel {
 
     /// Send a point-to-point message to the receiver specified in the envelope.
     pub async fn send_p2p(&self, envelope: MessageEnvelope) -> DataflowResult<()> {
-        let receiver_id = envelope
-            .receiver_id
-            .clone()
-            .ok_or_else(|| DataflowError::ChannelError("No receiver specified for P2P".to_string()))?;
+        let receiver_id = envelope.receiver_id.clone().ok_or_else(|| {
+            DataflowError::ChannelError("No receiver specified for P2P".to_string())
+        })?;
 
         let senders = self.p2p_senders.read().await;
         let tx = senders.get(&receiver_id).ok_or_else(|| {
@@ -252,10 +251,9 @@ impl NativeChannel {
 
     /// Publish a message to all subscribers of the topic set in the envelope.
     pub async fn publish(&self, envelope: MessageEnvelope) -> DataflowResult<()> {
-        let topic = envelope
-            .topic
-            .clone()
-            .ok_or_else(|| DataflowError::ChannelError("No topic specified for publish".to_string()))?;
+        let topic = envelope.topic.clone().ok_or_else(|| {
+            DataflowError::ChannelError("No topic specified for publish".to_string())
+        })?;
 
         let topic_channels = self.topic_channels.read().await;
         let tx = topic_channels
@@ -273,10 +271,7 @@ impl NativeChannel {
     ///
     /// Returns `Err(DataflowError::Timeout)` if no message arrives within the
     /// channel's configured timeout.
-    pub async fn receive_p2p(
-        &self,
-        agent_id: &str,
-    ) -> DataflowResult<Option<MessageEnvelope>> {
+    pub async fn receive_p2p(&self, agent_id: &str) -> DataflowResult<Option<MessageEnvelope>> {
         let rx = {
             let receivers = self.receivers.read().await;
             receivers.get(agent_id).cloned().ok_or_else(|| {
@@ -293,10 +288,7 @@ impl NativeChannel {
     }
 
     /// Non-blocking poll on the P2P queue of `agent_id`.
-    pub async fn try_receive_p2p(
-        &self,
-        agent_id: &str,
-    ) -> DataflowResult<Option<MessageEnvelope>> {
+    pub async fn try_receive_p2p(&self, agent_id: &str) -> DataflowResult<Option<MessageEnvelope>> {
         let rx = {
             let receivers = self.receivers.read().await;
             receivers.get(agent_id).cloned().ok_or_else(|| {
@@ -308,9 +300,9 @@ impl NativeChannel {
         match guard.try_recv() {
             Ok(env) => Ok(Some(env)),
             Err(mpsc::error::TryRecvError::Empty) => Ok(None),
-            Err(mpsc::error::TryRecvError::Disconnected) => {
-                Err(DataflowError::ChannelError("Channel disconnected".to_string()))
-            }
+            Err(mpsc::error::TryRecvError::Disconnected) => Err(DataflowError::ChannelError(
+                "Channel disconnected".to_string(),
+            )),
         }
     }
 

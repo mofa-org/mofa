@@ -21,14 +21,26 @@ pub struct StreamChunk {
 impl StreamChunk {
     /// Text only chunk
     pub fn text(delta: impl Into<String>) -> Self {
-        Self { delta: delta.into(), finish_reason: None, usage: None, tool_calls: None }
+        Self {
+            delta: delta.into(),
+            finish_reason: None,
+            usage: None,
+            tool_calls: None,
+        }
     }
 
     pub fn done(finish_reason: FinishReason) -> Self {
-        Self { delta: String::new(), finish_reason: Some(finish_reason), usage: None, tool_calls: None }
+        Self {
+            delta: String::new(),
+            finish_reason: Some(finish_reason),
+            usage: None,
+            tool_calls: None,
+        }
     }
 
-    pub fn is_done(&self) -> bool { self.finish_reason.is_some() }
+    pub fn is_done(&self) -> bool {
+        self.finish_reason.is_some()
+    }
 }
 
 /// Incremental token-usage counters
@@ -57,7 +69,10 @@ pub enum StreamError {
 
 impl StreamError {
     pub fn provider(provider: impl Into<String>, message: impl Into<String>) -> Self {
-        Self::Provider { provider: provider.into(), message: message.into() }
+        Self::Provider {
+            provider: provider.into(),
+            message: message.into(),
+        }
     }
 }
 
@@ -86,9 +101,15 @@ mod tests {
 
     #[test]
     fn stream_error_display() {
-        assert_eq!(StreamError::Connection("reset".into()).to_string(), "Connection error: reset");
+        assert_eq!(
+            StreamError::Connection("reset".into()).to_string(),
+            "Connection error: reset"
+        );
         assert_eq!(StreamError::Cancelled.to_string(), "Stream cancelled");
-        assert_eq!(StreamError::provider("x", "y").to_string(), "Provider 'x' error: y");
+        assert_eq!(
+            StreamError::provider("x", "y").to_string(),
+            "Provider 'x' error: y"
+        );
     }
 
     #[tokio::test]

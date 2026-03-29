@@ -9,9 +9,9 @@
 //! cargo run --example control_plane_cluster --package mofa-gateway
 //! ```
 
-use mofa_gateway::control_plane::{ControlPlane, ControlPlaneConfig};
 use mofa_gateway::consensus::storage::RaftStorage;
 use mofa_gateway::consensus::transport_impl::InMemoryTransport;
+use mofa_gateway::control_plane::{ControlPlane, ControlPlaneConfig};
 use mofa_gateway::types::{NodeAddress, NodeId};
 use std::collections::HashMap;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
@@ -66,7 +66,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     };
 
     let transport_dyn: Arc<dyn mofa_gateway::consensus::RaftTransport> = transport.clone();
-    
+
     let cp1 = ControlPlane::new(config1, storage1, transport_dyn.clone()).await?;
     let cp2 = ControlPlane::new(config2, storage2, transport_dyn.clone()).await?;
     let cp3 = ControlPlane::new(config3, storage3, transport_dyn).await?;
@@ -99,7 +99,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         &cp3
     };
 
-    if let Ok(_) = leader.register_agent("agent-1".to_string(), HashMap::new()).await {
+    if let Ok(_) = leader
+        .register_agent("agent-1".to_string(), HashMap::new())
+        .await
+    {
         tracing::info!("Successfully registered agent via leader");
     }
 

@@ -119,21 +119,27 @@ mod tests {
     #[test]
     fn test_sensitive_data_category_name() {
         assert_eq!(SensitiveDataCategory::Email.name(), "email");
-        assert_eq!(SensitiveDataCategory::Custom("custom".to_string()).name(), "custom");
+        assert_eq!(
+            SensitiveDataCategory::Custom("custom".to_string()).name(),
+            "custom"
+        );
     }
 
     #[test]
     fn test_moderation_verdict() {
         assert!(ModerationVerdict::Allow.is_allowed());
         assert!(!ModerationVerdict::Allow.is_blocked());
-        
+
         assert!(ModerationVerdict::Flag("test".to_string()).is_allowed());
         assert!(!ModerationVerdict::Flag("test".to_string()).is_blocked());
-        
+
         assert!(!ModerationVerdict::Block("test".to_string()).is_allowed());
         assert!(ModerationVerdict::Block("test".to_string()).is_blocked());
-        
+
         assert_eq!(ModerationVerdict::Allow.reason(), None);
-        assert_eq!(ModerationVerdict::Flag("reason".to_string()).reason(), Some("reason"));
+        assert_eq!(
+            ModerationVerdict::Flag("reason".to_string()).reason(),
+            Some("reason")
+        );
     }
 }

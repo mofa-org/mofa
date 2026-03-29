@@ -39,7 +39,10 @@ pub use audit::SecurityAuditLogger;
 pub use config::SecurityConfig;
 pub use error::{SecurityError, SecurityResult};
 pub use events::SecurityEvent;
-pub use traits::{Authorizer, AuthorizationResult, ContentModerator, ModerationResult, PiiDetector, PiiRedactor, PromptGuard, RedactionResult};
+pub use traits::{
+    AuthorizationResult, Authorizer, ContentModerator, ModerationResult, PiiDetector, PiiRedactor,
+    PromptGuard, RedactionResult,
+};
 pub use types::{ModerationVerdict, RedactionStrategy, SensitiveDataCategory};
 
 use std::sync::Arc;
@@ -114,7 +117,8 @@ impl SecurityService {
 
     /// Check if PII redaction is enabled and configured
     pub fn is_pii_enabled(&self) -> bool {
-        self.config.pii_redaction_enabled && (self.pii_detector.is_some() || self.pii_redactor.is_some())
+        self.config.pii_redaction_enabled
+            && (self.pii_detector.is_some() || self.pii_redactor.is_some())
     }
 
     /// Check if content moderation is enabled and configured

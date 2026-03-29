@@ -35,9 +35,7 @@ impl RetryPolicy {
                     .checked_add(1)
                     .and_then(|v| u64::try_from(v).ok())
                     .unwrap_or(u64::MAX);
-                base_ms
-                    .saturating_mul(factor)
-                    .min(MAX_LINEAR_BACKOFF_MS)
+                base_ms.saturating_mul(factor).min(MAX_LINEAR_BACKOFF_MS)
             }
             RetryPolicy::ExponentialBackoff {
                 base_ms,
@@ -260,7 +258,11 @@ mod tests {
         let max_ms = 5_000;
 
         // Without jitter
-        let p = RetryPolicy::ExponentialBackoff { base_ms, max_ms, jitter: false };
+        let p = RetryPolicy::ExponentialBackoff {
+            base_ms,
+            max_ms,
+            jitter: false,
+        };
         for attempt in 0..20 {
             let delay = p.delay_for(attempt).as_millis() as u64;
             assert!(
@@ -270,7 +272,11 @@ mod tests {
         }
 
         // With jitter
-        let p = RetryPolicy::ExponentialBackoff { base_ms, max_ms, jitter: true };
+        let p = RetryPolicy::ExponentialBackoff {
+            base_ms,
+            max_ms,
+            jitter: true,
+        };
         for attempt in 0..20 {
             let delay = p.delay_for(attempt).as_millis() as u64;
             assert!(
@@ -284,7 +290,11 @@ mod tests {
     fn test_jitter_stays_within_bounds() {
         let base_ms = 200;
         let max_ms = 10_000;
-        let p = RetryPolicy::ExponentialBackoff { base_ms, max_ms, jitter: true };
+        let p = RetryPolicy::ExponentialBackoff {
+            base_ms,
+            max_ms,
+            jitter: true,
+        };
 
         for attempt in 0..20 {
             let delay = p.delay_for(attempt).as_millis() as u64;
@@ -313,7 +323,11 @@ mod tests {
     fn test_monotonic_growth_before_saturation_no_jitter() {
         let base_ms = 50;
         let max_ms = 3_200;
-        let p = RetryPolicy::ExponentialBackoff { base_ms, max_ms, jitter: false };
+        let p = RetryPolicy::ExponentialBackoff {
+            base_ms,
+            max_ms,
+            jitter: false,
+        };
 
         let mut prev_delay = 0u64;
         for attempt in 0..20 {

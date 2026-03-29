@@ -798,8 +798,9 @@ impl LLMAgent {
         } else {
             None
         };
-        let budget_registered =
-            Arc::new(std::sync::atomic::AtomicBool::new(budget_enforcer.is_some()));
+        let budget_registered = Arc::new(std::sync::atomic::AtomicBool::new(
+            budget_enforcer.is_some(),
+        ));
 
         let session_id = session.session_id().to_string();
         let session_arc = Arc::new(RwLock::new(session));
@@ -1756,11 +1757,16 @@ impl LLMAgent {
         // ---- Budget enforcement (lazy registration for the sync constructor path) ----
         if let Some(ref enforcer) = self.budget_enforcer {
             // Register budget on first call if it hasn't been done yet
-            if !self.budget_registered.load(std::sync::atomic::Ordering::Acquire) {
+            if !self
+                .budget_registered
+                .load(std::sync::atomic::Ordering::Acquire)
+            {
                 if let Some(ref tbc) = self.config.token_budget_config
                     && let Some(ref bc) = tbc.budget
                 {
-                    enforcer.set_budget(self.config.agent_id.clone(), bc.clone()).await;
+                    enforcer
+                        .set_budget(self.config.agent_id.clone(), bc.clone())
+                        .await;
                 }
                 self.budget_registered
                     .store(true, std::sync::atomic::Ordering::Release);
@@ -1780,9 +1786,7 @@ impl LLMAgent {
                         let status = enforcer.get_status(&self.config.agent_id).await;
                         return Err(LLMError::Other(format!(
                             "Budget exceeded: {}. Session tokens used: {}, Daily tokens used: {}",
-                            budget_err,
-                            status.session_tokens,
-                            status.daily_tokens,
+                            budget_err, status.session_tokens, status.daily_tokens,
                         )));
                     } else {
                         tracing::warn!(
@@ -2138,11 +2142,16 @@ impl LLMAgent {
 
         // ---- Budget enforcement (lazy registration + pre-call check) ----
         if let Some(ref enforcer) = self.budget_enforcer {
-            if !self.budget_registered.load(std::sync::atomic::Ordering::Acquire) {
+            if !self
+                .budget_registered
+                .load(std::sync::atomic::Ordering::Acquire)
+            {
                 if let Some(ref tbc) = self.config.token_budget_config
                     && let Some(ref bc) = tbc.budget
                 {
-                    enforcer.set_budget(self.config.agent_id.clone(), bc.clone()).await;
+                    enforcer
+                        .set_budget(self.config.agent_id.clone(), bc.clone())
+                        .await;
                 }
                 self.budget_registered
                     .store(true, std::sync::atomic::Ordering::Release);
@@ -2338,11 +2347,16 @@ impl LLMAgent {
 
         // ---- Budget enforcement (lazy registration + pre-call check) ----
         if let Some(ref enforcer) = self.budget_enforcer {
-            if !self.budget_registered.load(std::sync::atomic::Ordering::Acquire) {
+            if !self
+                .budget_registered
+                .load(std::sync::atomic::Ordering::Acquire)
+            {
                 if let Some(ref tbc) = self.config.token_budget_config
                     && let Some(ref bc) = tbc.budget
                 {
-                    enforcer.set_budget(self.config.agent_id.clone(), bc.clone()).await;
+                    enforcer
+                        .set_budget(self.config.agent_id.clone(), bc.clone())
+                        .await;
                 }
                 self.budget_registered
                     .store(true, std::sync::atomic::Ordering::Release);
@@ -4011,10 +4025,7 @@ mod tests {
             "mock-model"
         }
 
-        async fn chat(
-            &self,
-            _request: ChatCompletionRequest,
-        ) -> LLMResult<ChatCompletionResponse> {
+        async fn chat(&self, _request: ChatCompletionRequest) -> LLMResult<ChatCompletionResponse> {
             Ok(ChatCompletionResponse {
                 id: "resp-1".to_string(),
                 object: "chat.completion".to_string(),
@@ -4102,7 +4113,11 @@ mod tests {
             .expect("valid config")
             .build();
         let resp = agent.chat("hello").await;
-        assert!(resp.is_ok(), "chat should succeed with token budget config: {:?}", resp);
+        assert!(
+            resp.is_ok(),
+            "chat should succeed with token budget config: {:?}",
+            resp
+        );
         assert_eq!(resp.unwrap(), "ok");
     }
 
@@ -4137,8 +4152,12 @@ mod tests {
 
         #[async_trait]
         impl LLMProvider for FailOnceMockProvider {
-            fn name(&self) -> &str { "fail-once" }
-            fn default_model(&self) -> &str { "model" }
+            fn name(&self) -> &str {
+                "fail-once"
+            }
+            fn default_model(&self) -> &str {
+                "model"
+            }
 
             async fn chat(&self, _req: ChatCompletionRequest) -> LLMResult<ChatCompletionResponse> {
                 let n = self.call_count.fetch_add(1, Ordering::SeqCst);
@@ -4166,7 +4185,9 @@ mod tests {
         }
 
         let call_count = Arc::new(AtomicUsize::new(0));
-        let provider = Arc::new(FailOnceMockProvider { call_count: call_count.clone() });
+        let provider = Arc::new(FailOnceMockProvider {
+            call_count: call_count.clone(),
+        });
 
         let tbc = crate::llm::token_budget::TokenBudgetConfig::sliding_window_only(4096);
         let agent = LLMAgentBuilder::new()
@@ -4179,7 +4200,11 @@ mod tests {
         let result = agent.chat("hello").await;
         assert!(result.is_ok(), "should succeed on retry: {:?}", result);
         assert_eq!(result.unwrap(), "retry ok");
-        assert_eq!(call_count.load(Ordering::SeqCst), 2, "provider should be called twice");
+        assert_eq!(
+            call_count.load(Ordering::SeqCst),
+            2,
+            "provider should be called twice"
+        );
     }
 
     #[tokio::test]
@@ -4196,10 +4221,7 @@ mod tests {
                 "model"
             }
 
-            async fn chat(
-                &self,
-                _req: ChatCompletionRequest,
-            ) -> LLMResult<ChatCompletionResponse> {
+            async fn chat(&self, _req: ChatCompletionRequest) -> LLMResult<ChatCompletionResponse> {
                 Err(LLMError::ContextLengthExceeded(
                     "context length exceeded in test".to_string(),
                 ))
@@ -4215,7 +4237,10 @@ mod tests {
             .build();
 
         let result = agent.chat("hello").await;
-        assert!(result.is_err(), "should propagate error when retry also fails");
+        assert!(
+            result.is_err(),
+            "should propagate error when retry also fails"
+        );
         assert!(
             matches!(result.unwrap_err(), LLMError::ContextLengthExceeded(_)),
             "error should be ContextLengthExceeded"
@@ -4278,7 +4303,10 @@ mod tests {
         // Verify record_usage was invoked — the status must be accessible and not exceeded
         if let Some(ref enforcer) = agent.budget_enforcer {
             let status = enforcer.get_status("agent-usage").await;
-            assert!(!status.is_exceeded(), "single call should not exceed a 50k token budget");
+            assert!(
+                !status.is_exceeded(),
+                "single call should not exceed a 50k token budget"
+            );
         }
     }
 }

@@ -113,9 +113,16 @@ impl Default for KeywordModerator {
 
 #[async_trait]
 impl ContentModerator for KeywordModerator {
-    async fn moderate(&self, content: &str, policy: &ContentPolicy) -> SecurityResult<ModerationVerdict> {
+    async fn moderate(
+        &self,
+        content: &str,
+        policy: &ContentPolicy,
+    ) -> SecurityResult<ModerationVerdict> {
         // Check if moderation is enabled for this policy
-        if !policy.enabled_categories.contains(&ModerationCategory::Toxic) {
+        if !policy
+            .enabled_categories
+            .contains(&ModerationCategory::Toxic)
+        {
             return Ok(ModerationVerdict::Allow);
         }
 
@@ -151,39 +158,48 @@ mod tests {
             .add_blocked("scam");
 
         let policy = ContentPolicy::default();
-        let result = moderator.moderate("This is spam content", &policy).await.unwrap();
+        let result = moderator
+            .moderate("This is spam content", &policy)
+            .await
+            .unwrap();
         assert!(result.is_blocked());
     }
 
     #[tokio::test]
     async fn test_flagged_keyword() {
-        let moderator = KeywordModerator::new()
-            .add_flagged("warning");
+        let moderator = KeywordModerator::new().add_flagged("warning");
 
         let policy = ContentPolicy::default();
-        let result = moderator.moderate("This has a warning", &policy).await.unwrap();
+        let result = moderator
+            .moderate("This has a warning", &policy)
+            .await
+            .unwrap();
         assert!(!result.is_blocked());
         assert!(matches!(result, ModerationVerdict::Flag { .. }));
     }
 
     #[tokio::test]
     async fn test_allowed_content() {
-        let moderator = KeywordModerator::new()
-            .add_blocked("spam");
+        let moderator = KeywordModerator::new().add_blocked("spam");
 
         let policy = ContentPolicy::default();
-        let result = moderator.moderate("This is clean content", &policy).await.unwrap();
+        let result = moderator
+            .moderate("This is clean content", &policy)
+            .await
+            .unwrap();
         assert!(result.is_allowed());
         assert!(matches!(result, ModerationVerdict::Allow));
     }
 
     #[tokio::test]
     async fn test_case_insensitive() {
-        let moderator = KeywordModerator::new()
-            .add_blocked("SPAM");
+        let moderator = KeywordModerator::new().add_blocked("SPAM");
 
         let policy = ContentPolicy::default();
-        let result = moderator.moderate("This is spam content", &policy).await.unwrap();
+        let result = moderator
+            .moderate("This is spam content", &policy)
+            .await
+            .unwrap();
         assert!(result.is_blocked());
     }
 }
