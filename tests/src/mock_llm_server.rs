@@ -32,12 +32,14 @@ struct ServerState {
     sequences: Vec<(String, VecDeque<RuleResponse>)>,
     default_response: String,
     history: Vec<RequestRecord>,
+    default_delay_ms: Option<u64>,
 }
 
 #[derive(Debug, Clone)]
 struct Rule {
     prompt_substring: String,
     response: RuleResponse,
+    delay_ms: Option<u64>,
 }
 
 #[derive(Debug, Clone)]
@@ -149,6 +151,7 @@ impl MockLlmServer {
             sequences: Vec::new(),
             default_response: "Mock fallback response.".to_string(),
             history: Vec::new(),
+            default_delay_ms: None,
         }));
 
         let app = Router::new()
@@ -192,6 +195,7 @@ impl MockLlmServer {
         state.rules.push(Rule {
             prompt_substring: prompt_substring.to_string(),
             response: RuleResponse::Text(response.to_string()),
+            delay_ms: None,
         });
     }
 
@@ -204,6 +208,7 @@ impl MockLlmServer {
                 status,
                 message: message.to_string(),
             },
+            delay_ms: None,
         });
     }
 
@@ -226,6 +231,7 @@ impl MockLlmServer {
                     id: None,
                 }],
             },
+            delay_ms: None,
         });
     }
 
@@ -254,6 +260,27 @@ impl MockLlmServer {
             });
         }
         state.sequences.push((prompt_substring.to_string(), deque));
+    }
+
+    /// Add a response rule with a fixed delay.
+    pub async fn add_response_rule_with_delay(
+        &self,
+        prompt_substring: &str,
+        response: &str,
+        delay_ms: u64,
+    ) {
+        let mut state = self.state.write().await;
+        state.rules.push(Rule {
+            prompt_substring: prompt_substring.to_string(),
+            response: RuleResponse::Text(response.to_string()),
+            delay_ms: Some(delay_ms),
+        });
+    }
+
+    /// Set a default delay for all responses (unless a rule overrides it).
+    pub async fn set_default_delay(&self, delay_ms: Option<u64>) {
+        let mut state = self.state.write().await;
+        state.default_delay_ms = delay_ms;
     }
 
     /// Set the default response when no rule matches.
@@ -298,10 +325,40 @@ async fn handle_chat(
         ));
     }
 
+    // Basic request validation to keep tests deterministic.
+    if payload.messages.is_empty() {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            Json(ErrorResponse {
+                error: ErrorBody {
+                    message: "messages must be non-empty".to_string(),
+                    r#type: "invalid_request_error".to_string(),
+                },
+            }),
+        ));
+    }
+
+    // Require at least one non-empty message content.
+    if payload
+        .messages
+        .iter()
+        .all(|msg| msg.content.as_deref().unwrap_or("").is_empty())
+    {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            Json(ErrorResponse {
+                error: ErrorBody {
+                    message: "messages must include content".to_string(),
+                    r#type: "invalid_request_error".to_string(),
+                },
+            }),
+        ));
+    }
+
     let prompt = build_prompt(&payload.messages);
     let raw = serde_json::to_value(&payload).unwrap_or(serde_json::Value::Null);
 
-    let response = {
+    let (response, delay_ms) = {
         let mut guard = state.write().await;
         guard.history.push(RequestRecord {
             received_at: Utc::now(),
@@ -311,6 +368,10 @@ async fn handle_chat(
         });
         resolve_response(&mut guard, &prompt)
     };
+
+    if let Some(delay) = delay_ms {
+        tokio::time::sleep(std::time::Duration::from_millis(delay)).await;
+    }
 
     match response {
         RuleResponse::Text(text) => Ok(Json(ChatCompletionResponse {
@@ -374,6 +435,7 @@ async fn handle_chat(
     }
 }
 
+/// Handle OpenAI-compatible model listing requests.
 async fn handle_models(
     State(state): State<Arc<RwLock<ServerState>>>,
 ) -> Json<ModelsResponse> {
@@ -397,27 +459,31 @@ async fn handle_models(
     })
 }
 
-fn resolve_response(state: &mut ServerState, prompt: &str) -> RuleResponse {
+fn resolve_response(state: &mut ServerState, prompt: &str) -> (RuleResponse, Option<u64>) {
     for (key, deque) in state.sequences.iter_mut() {
         if prompt.contains(key.as_str()) {
             if deque.len() > 1 {
-                return deque.pop_front().unwrap_or_else(|| {
+                let response = deque.pop_front().unwrap_or_else(|| {
                     RuleResponse::Text(state.default_response.clone())
                 });
+                return (response, state.default_delay_ms);
             }
             if let Some(last) = deque.front() {
-                return last.clone();
+                return (last.clone(), state.default_delay_ms);
             }
         }
     }
 
     for rule in state.rules.iter() {
         if prompt.contains(&rule.prompt_substring) {
-            return rule.response.clone();
+            return (rule.response.clone(), rule.delay_ms.or(state.default_delay_ms));
         }
     }
 
-    RuleResponse::Text(state.default_response.clone())
+    (
+        RuleResponse::Text(state.default_response.clone()),
+        state.default_delay_ms,
+    )
 }
 
 fn build_prompt(messages: &[ChatMessage]) -> String {

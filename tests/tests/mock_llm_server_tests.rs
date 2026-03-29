@@ -224,3 +224,64 @@ async fn mock_llm_server_returns_tool_calls() {
 
     server.shutdown().await;
 }
+
+#[tokio::test]
+async fn mock_llm_server_applies_delay() {
+    let server = MockLlmServer::start().await.expect("server starts");
+    server
+        .add_response_rule_with_delay("slow", "done", 60)
+        .await;
+
+    let start = std::time::Instant::now();
+    let _ = post_chat(
+        server.base_url(),
+        json!({
+            "model": "test-model",
+            "messages": [{"role": "user", "content": "slow please"}]
+        }),
+    )
+    .await;
+    let elapsed_ms = start.elapsed().as_millis();
+
+    assert!(elapsed_ms >= 50, "expected delay, got {elapsed_ms}ms");
+
+    server.shutdown().await;
+}
+
+#[tokio::test]
+async fn mock_llm_server_rejects_empty_messages() {
+    let server = MockLlmServer::start().await.expect("server starts");
+
+    let (status, body) = post_chat(
+        server.base_url(),
+        json!({
+            "model": "test-model",
+            "messages": []
+        }),
+    )
+    .await;
+
+    assert_eq!(status, 400);
+    assert_eq!(body["error"]["message"], "messages must be non-empty");
+
+    server.shutdown().await;
+}
+
+#[tokio::test]
+async fn mock_llm_server_rejects_empty_content() {
+    let server = MockLlmServer::start().await.expect("server starts");
+
+    let (status, body) = post_chat(
+        server.base_url(),
+        json!({
+            "model": "test-model",
+            "messages": [{"role": "user", "content": ""}]
+        }),
+    )
+    .await;
+
+    assert_eq!(status, 400);
+    assert_eq!(body["error"]["message"], "messages must include content");
+
+    server.shutdown().await;
+}
