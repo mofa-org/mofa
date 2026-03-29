@@ -32,7 +32,7 @@ pub async fn run(ctx: &CliContext, installed_only: bool, available: bool) -> Res
 }
 
 fn print_available(ctx: &CliContext) -> Result<(), CliError> {
-    let entries = catalog_entries();
+    let entries = crate::plugin_catalog::catalog_entries(&ctx.data_dir);
     if entries.is_empty() {
         println!("  No catalog entries available.");
         return Ok(());

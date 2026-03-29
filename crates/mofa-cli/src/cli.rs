@@ -145,6 +145,10 @@ pub enum Commands {
         action: PluginCommands,
     },
 
+    /// Manual review management
+    #[command(subcommand)]
+    Review(ReviewCommands),
+
     /// Session management
     Session {
         #[command(subcommand)]
@@ -161,6 +165,12 @@ pub enum Commands {
     Rag {
         #[command(subcommand)]
         action: RagCommands,
+    },
+
+    /// Workflow execution and management
+    Workflow {
+        #[command(subcommand)]
+        action: WorkflowCommands,
     },
 }
 
@@ -441,6 +451,82 @@ pub enum PluginRepositoryCommands {
         /// Optional description for the repository
         #[arg(short, long)]
         description: Option<String>,
+    },
+
+    /// Remove a plugin repository
+    Remove {
+        /// Repository identifier
+        id: String,
+    },
+
+    /// Synchronize plugin catalogs from remote repositories
+    Sync {
+        /// Optional repository identifier to sync only one
+        id: Option<String>,
+    },
+}
+
+/// Manual review management subcommands
+#[derive(Subcommand)]
+pub enum ReviewCommands {
+    /// List pending manual review requests
+    List {
+        /// Filter by execution ID
+        #[arg(short, long)]
+        execution_id: Option<String>,
+
+        /// Show all reviews (including resolved)
+        #[arg(short, long)]
+        all: bool,
+    },
+
+    /// Approve a review request
+    Approve {
+        /// Review ID
+        id: String,
+
+        /// Optional comment
+        #[arg(short, long)]
+        comment: Option<String>,
+    },
+
+    /// Reject a review request
+    Reject {
+        /// Review ID
+        id: String,
+
+        /// Reason for rejection
+        reason: String,
+
+        /// Optional comment
+        #[arg(short, long)]
+        comment: Option<String>,
+    },
+
+    /// Retry the current node
+    Retry {
+        /// Review ID
+        id: String,
+
+        /// Optional comment
+        #[arg(short, long)]
+        comment: Option<String>,
+    },
+}
+
+/// Workflow management subcommands
+#[derive(Subcommand)]
+pub enum WorkflowCommands {
+    /// Resume a paused workflow
+    Resume {
+        /// Session ID to resume
+        id: String,
+        /// Path to the workflow file (optional)
+        #[arg(short, long)]
+        file: Option<std::path::PathBuf>,
+        /// Human input/answer for the waiting node
+        #[arg(short, long)]
+        input: Option<String>,
     },
 }
 

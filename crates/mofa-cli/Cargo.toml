@@ -31,6 +31,7 @@ thiserror = { workspace = true }
 error-stack = { workspace = true }
 async-trait = { workspace = true }
 chrono = { workspace = true }
+uuid = { workspace = true }
 
 # CLI
 clap = { version = "4", features = ["derive", "env"] }

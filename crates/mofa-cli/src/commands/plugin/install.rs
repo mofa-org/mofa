@@ -33,7 +33,7 @@ pub async fn run(
 
     if let PluginSource::Registry(_) = plugin_source {
         let (repo_id, plugin_id) = parse_plugin_reference(normalized)?;
-        let entry = find_catalog_entry(&repo_id, &plugin_id).ok_or_else(|| {
+        let entry = find_catalog_entry(&repo_id, &plugin_id, ctx.data_dir()).ok_or_else(|| {
             CliError::PluginError(format!(
                 "Plugin '{}' not found in repository '{}'",
                 plugin_id, repo_id
