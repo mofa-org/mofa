@@ -31,9 +31,10 @@ impl AuthProvider for NoopAuthProvider {
     }
 
     async fn validate(&self, _token: &str) -> Result<AuthInfo, String> {
+        tracing::warn!("NoopAuthProvider is active: connection granted with restricted permissions (read:metrics).");
         Ok(AuthInfo {
             client_id: "anonymous".to_string(),
-            permissions: vec!["*".to_string()],
+            permissions: vec!["read:metrics".to_string()],
         })
     }
 }
@@ -126,7 +127,9 @@ mod tests {
 
         let result = provider.validate("anything").await;
         assert!(result.is_ok());
-        assert_eq!(result.unwrap().client_id, "anonymous");
+        let info = result.unwrap();
+        assert_eq!(info.client_id, "anonymous");
+        assert_eq!(info.permissions, vec!["read:metrics".to_string()]);
     }
 
     #[tokio::test]

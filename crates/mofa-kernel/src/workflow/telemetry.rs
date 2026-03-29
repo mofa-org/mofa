@@ -125,6 +125,16 @@ pub enum DebugEvent {
         /// Error description
         error: String,
     },
+
+    /// Execution is paused awaiting manual approval
+    AwaitingApproval {
+        /// Node identifier requiring approval
+        node_id: String,
+        /// Timestamp in milliseconds since epoch
+        timestamp_ms: u64,
+        /// Optional ReviewRequestId if already created
+        review_id: Option<String>,
+    },
 }
 
 impl DebugEvent {
@@ -137,6 +147,7 @@ impl DebugEvent {
             Self::NodeEnd { timestamp_ms, .. } => *timestamp_ms,
             Self::WorkflowEnd { timestamp_ms, .. } => *timestamp_ms,
             Self::Error { timestamp_ms, .. } => *timestamp_ms,
+            Self::AwaitingApproval { timestamp_ms, .. } => *timestamp_ms,
         }
     }
 
@@ -149,6 +160,7 @@ impl DebugEvent {
             Self::NodeEnd { node_id, .. } => Some(node_id),
             Self::WorkflowEnd { .. } => None,
             Self::Error { node_id, .. } => node_id.as_deref(),
+            Self::AwaitingApproval { node_id, .. } => Some(node_id),
         }
     }
 
@@ -166,6 +178,7 @@ impl DebugEvent {
             Self::NodeEnd { .. } => "node_end",
             Self::WorkflowEnd { .. } => "workflow_end",
             Self::Error { .. } => "error",
+            Self::AwaitingApproval { .. } => "awaiting_approval",
         }
     }
 }

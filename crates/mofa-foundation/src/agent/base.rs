@@ -206,3 +206,39 @@ impl MoFAAgent for BaseAgent {
         self.state.clone()
     }
 }
+
+#[derive(Debug, serde::Serialize, serde::Deserialize)]
+pub struct BaseAgentSnapshot {
+    pub id: String,
+    pub name: String,
+    pub description: Option<String>,
+    pub version: Option<String>,
+    pub state: AgentState,
+    pub stats: AgentStats,
+}
+
+#[async_trait]
+impl mofa_kernel::agent::core::AgentPersistence for BaseAgent {
+    async fn checkpoint(&self) -> AgentResult<serde_json::Value> {
+        let snapshot = BaseAgentSnapshot {
+            id: self.id.clone(),
+            name: self.name.clone(),
+            description: self.description.clone(),
+            version: self.version.clone(),
+            state: self.state.clone(),
+            stats: self.stats.clone(),
+        };
+        Ok(serde_json::to_value(snapshot)?)
+    }
+
+    async fn restore(&mut self, state: serde_json::Value) -> AgentResult<()> {
+        let snapshot: BaseAgentSnapshot = serde_json::from_value(state)?;
+        self.id = snapshot.id;
+        self.name = snapshot.name;
+        self.description = snapshot.description;
+        self.version = snapshot.version;
+        self.state = snapshot.state;
+        self.stats = snapshot.stats;
+        Ok(())
+    }
+}

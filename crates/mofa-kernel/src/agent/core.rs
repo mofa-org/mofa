@@ -353,6 +353,57 @@ pub trait AgentLifecycle: MoFAAgent {
 }
 
 // ============================================================================
+// AgentPersistence - Persistence Extension
+// AgentPersistence - Persistence Extension
+// ============================================================================
+
+/// Agent Persistence Extension
+/// Agent Persistence Extension
+///
+/// Provides state checkpointing and restoration capabilities for Agents.
+/// This allows Agent state to be saved to a persistent store and recovered later,
+/// essential for long-running tasks or system restarts.
+///
+/// # Provided Methods
+///
+/// - `checkpoint()` - Save current agent state
+/// - `restore()` - Restore agent state from a snapshot
+///
+/// # Example
+///
+/// ```rust,ignore
+/// use mofa_kernel::agent::core::AgentPersistence;
+///
+/// #[async_trait]
+/// impl AgentPersistence for MyAgent {
+///     async fn checkpoint(&self) -> AgentResult<serde_json::Value> {
+///         Ok(serde_json::to_value(&self.internal_state)?)
+///     }
+///
+///     async fn restore(&mut self, state: serde_json::Value) -> AgentResult<()> {
+///         self.internal_state = serde_json::from_value(state)?;
+///         Ok(())
+///     }
+/// }
+/// ```
+#[async_trait]
+pub trait AgentPersistence: MoFAAgent {
+    /// Save current agent state to a serializable value
+    ///
+    /// # Returns
+    ///
+    /// A JSON value representing the internal state of the agent.
+    async fn checkpoint(&self) -> AgentResult<serde_json::Value>;
+
+    /// Restore agent state from a serializable value
+    ///
+    /// # Parameters
+    ///
+    /// - `state`: The JSON value containing the state snapshot.
+    async fn restore(&mut self, state: serde_json::Value) -> AgentResult<()>;
+}
+
+// ============================================================================
 // AgentMessaging - 消息处理扩展
 // AgentMessaging - Messaging Extension
 // ============================================================================

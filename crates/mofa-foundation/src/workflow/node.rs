@@ -190,6 +190,10 @@ pub struct NodeConfig {
     /// 自定义元数据
     /// Custom metadata
     pub metadata: HashMap<String, String>,
+    /// 是否需要审核
+    /// Whether this node requires manual review/approval
+    #[serde(default)]
+    pub require_approval: bool,
 }
 
 impl NodeConfig {
@@ -202,6 +206,7 @@ impl NodeConfig {
             retry_policy: RetryPolicy::default(),
             timeout: TimeoutConfig::default(),
             metadata: HashMap::new(),
+            require_approval: false,
         }
     }
 
@@ -629,6 +634,13 @@ impl WorkflowNode {
     /// Set timeout
     pub fn with_timeout(mut self, timeout_ms: u64) -> Self {
         self.config.timeout.execution_timeout_ms = timeout_ms;
+        self
+    }
+
+    /// 设置是否需要审核
+    /// Set whether this node requires manual review/approval
+    pub fn with_approval(mut self, require_approval: bool) -> Self {
+        self.config.require_approval = require_approval;
         self
     }
 

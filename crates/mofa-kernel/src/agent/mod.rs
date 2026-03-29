@@ -179,6 +179,7 @@ pub use core::{
     // MoFAAgent - 统一的 Agent 接口
     // MoFAAgent - Unified Agent interface
     AgentLifecycle,
+    AgentPersistence,
     AgentMessage,
     AgentMessaging,
     AgentPluginSupport,
@@ -261,6 +262,7 @@ pub mod prelude {
         // MoFAAgent - 统一的 Agent 接口
         // MoFAAgent - Unified Agent interface
         AgentLifecycle,
+        AgentPersistence,
         AgentMessage,
         AgentMessaging,
         AgentPluginSupport,

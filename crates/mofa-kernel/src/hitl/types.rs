@@ -66,6 +66,8 @@ pub enum ReviewStatus {
     Expired,
     /// Cancelled
     Cancelled,
+    /// Being retried
+    Retrying,
 }
 
 /// Review response
@@ -84,6 +86,8 @@ pub enum ReviewResponse {
         changes: String,
         comment: Option<String>,
     },
+    /// Retry current step
+    Retry { comment: Option<String> },
     /// Deferred to later
     Deferred { reason: String },
 }

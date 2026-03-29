@@ -340,6 +340,11 @@ pub enum StreamEvent<S: GraphState, V = serde_json::Value> {
         /// The node whose circuit is now closed
         node_id: String,
     },
+    /// Execution is paused awaiting manual approval
+    AwaitingApproval {
+        /// Node identifier requiring approval
+        node_id: String,
+    },
 }
 
 /// Result of a single step execution
