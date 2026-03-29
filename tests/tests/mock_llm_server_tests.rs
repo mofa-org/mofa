@@ -10,6 +10,15 @@ async fn post_chat(base_url: &str, body: serde_json::Value) -> (u16, serde_json:
     (status, json)
 }
 
+async fn get_models(base_url: &str) -> (u16, serde_json::Value) {
+    let client = reqwest::Client::new();
+    let url = format!("{}/v1/models", base_url);
+    let resp = client.get(url).send().await.unwrap();
+    let status = resp.status().as_u16();
+    let json = resp.json::<serde_json::Value>().await.unwrap();
+    (status, json)
+}
+
 #[tokio::test]
 async fn mock_llm_server_returns_default_response() {
     let server = MockLlmServer::start().await.expect("server starts");
@@ -154,6 +163,30 @@ async fn mock_llm_server_rejects_streaming() {
         .as_str()
         .unwrap()
         .contains("streaming"));
+
+    server.shutdown().await;
+}
+
+#[tokio::test]
+async fn mock_llm_server_exposes_models() {
+    let server = MockLlmServer::start().await.expect("server starts");
+
+    let (status, body) = get_models(server.base_url()).await;
+    assert_eq!(status, 200);
+    assert_eq!(body["object"], "list");
+    assert_eq!(body["data"][0]["object"], "model");
+
+    let _ = post_chat(
+        server.base_url(),
+        json!({
+            "model": "demo-model",
+            "messages": [{"role": "user", "content": "hello"}]
+        }),
+    )
+    .await;
+
+    let (_, body) = get_models(server.base_url()).await;
+    assert_eq!(body["data"][0]["id"], "demo-model");
 
     server.shutdown().await;
 }

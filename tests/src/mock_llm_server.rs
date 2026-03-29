@@ -6,6 +6,7 @@
 use axum::{
     extract::State,
     http::StatusCode,
+    routing::get,
     routing::post,
     Json, Router,
 };
@@ -17,7 +18,7 @@ use std::sync::Arc;
 use tokio::net::TcpListener;
 use tokio::sync::{oneshot, RwLock};
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct MockLlmServer {
     base_url: String,
     addr: SocketAddr,
@@ -100,6 +101,20 @@ struct ErrorBody {
     r#type: String,
 }
 
+#[derive(Debug, Serialize)]
+struct ModelsResponse {
+    object: String,
+    data: Vec<ModelInfo>,
+}
+
+#[derive(Debug, Serialize)]
+struct ModelInfo {
+    id: String,
+    object: String,
+    created: u64,
+    owned_by: String,
+}
+
 impl MockLlmServer {
     /// Start a mock LLM server on a random local port.
     pub async fn start() -> anyhow::Result<Self> {
@@ -112,6 +127,7 @@ impl MockLlmServer {
 
         let app = Router::new()
             .route("/v1/chat/completions", post(handle_chat))
+            .route("/v1/models", get(handle_models))
             .with_state(state.clone());
 
         let listener = TcpListener::bind("127.0.0.1:0").await?;
@@ -122,7 +138,9 @@ impl MockLlmServer {
         let server = axum::serve(listener, app).with_graceful_shutdown(async move {
             let _ = shutdown_rx.await;
         });
-        tokio::spawn(server);
+        tokio::spawn(async move {
+            let _ = server.await;
+        });
 
         Ok(Self {
             base_url,
@@ -257,9 +275,32 @@ async fn handle_chat(
     }
 }
 
+async fn handle_models(
+    State(state): State<Arc<RwLock<ServerState>>>,
+) -> Json<ModelsResponse> {
+    let model_id = {
+        let guard = state.read().await;
+        guard
+            .history
+            .last()
+            .and_then(|record| record.model.clone())
+            .unwrap_or_else(|| "mock-model".to_string())
+    };
+
+    Json(ModelsResponse {
+        object: "list".to_string(),
+        data: vec![ModelInfo {
+            id: model_id,
+            object: "model".to_string(),
+            created: Utc::now().timestamp() as u64,
+            owned_by: "mock-llm-server".to_string(),
+        }],
+    })
+}
+
 fn resolve_response(state: &mut ServerState, prompt: &str) -> RuleResponse {
     for (key, deque) in state.sequences.iter_mut() {
-        if prompt.contains(key) {
+        if prompt.contains(key.as_str()) {
             if deque.len() > 1 {
                 return deque.pop_front().unwrap_or_else(|| {
                     RuleResponse::Text(state.default_response.clone())
