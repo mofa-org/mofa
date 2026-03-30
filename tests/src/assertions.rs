@@ -84,3 +84,31 @@ macro_rules! assert_bus_message_sent {
         );
     }};
 }
+
+/// Assert a session's messages match the expected (role, content) pairs.
+pub fn assert_session_messages(
+    session: &mofa_foundation::agent::session::Session,
+    expected: &[(&str, &str)],
+) {
+    assert_eq!(
+        session.messages.len(),
+        expected.len(),
+        "Expected {} session messages, got {}",
+        expected.len(),
+        session.messages.len()
+    );
+
+    for (idx, (role, content)) in expected.iter().enumerate() {
+        let msg = &session.messages[idx];
+        assert_eq!(
+            msg.role, *role,
+            "Expected role '{}' at index {}, got '{}'",
+            role, idx, msg.role
+        );
+        assert_eq!(
+            msg.content, *content,
+            "Expected content '{}' at index {}, got '{}'",
+            content, idx, msg.content
+        );
+    }
+}
