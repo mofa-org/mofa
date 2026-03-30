@@ -84,17 +84,36 @@ impl ContextCompressor for SlidingWindowCompressor {
         }
 
         // Split system messages from the rest.
-        let (system_msgs, mut conversation): (Vec<_>, Vec<_>) =
+        let (system_msgs, conversation): (Vec<_>, Vec<_>) =
             messages.into_iter().partition(|m| m.role == "system");
 
-        // Keep only the most-recent window_size messages.
-        if conversation.len() > self.window_size {
-            let keep_from = conversation.len() - self.window_size;
-            conversation = conversation.split_off(keep_from);
+        // First apply window size limit to non-system messages
+        let mut limited_conversation = conversation;
+        if limited_conversation.len() > self.window_size {
+            let keep_from = limited_conversation.len() - self.window_size;
+            limited_conversation = limited_conversation.split_off(keep_from);
         }
 
+        // Further refine to fit into max_tokens budget (always keep system messages)
+        let system_tokens = self.count_tokens(&system_msgs);
+        let mut budget = max_tokens.saturating_sub(system_tokens);
+        
+        let mut final_conversation = Vec::new();
+        // Work backwards to keep the most recent messages first
+        for msg in limited_conversation.into_iter().rev() {
+            let tokens = self.count_tokens(std::slice::from_ref(&msg));
+            if tokens <= budget {
+                budget = budget.saturating_sub(tokens);
+                final_conversation.push(msg);
+            } else {
+                // If this message doesn't fit, we stop keeping older ones
+                break;
+            }
+        }
+        final_conversation.reverse();
+
         let mut result = system_msgs;
-        result.extend(conversation);
+        result.extend(final_conversation);
         Ok(result)
     }
 

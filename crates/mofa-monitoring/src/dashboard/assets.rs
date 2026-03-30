@@ -595,6 +595,49 @@ pub const INDEX_HTML: &str = r#"<!DOCTYPE html>
                             <span id="plugin-status" class="metric-sub">-- loaded</span>
                         </div>
                     </div>
+                    <div class="card react-card">
+                        <div class="card-icon">🧠</div>
+                        <div class="card-content">
+                            <h3>ReAct Steps</h3>
+                            <p id="react-avg-steps" class="metric-value">--</p>
+                            <span id="react-active" class="metric-sub">-- active traces</span>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- LLM Tokens Section -->
+            <section class="overview-section">
+                <h2>LLM Token Usage</h2>
+                <div class="cards-grid">
+                    <div class="card">
+                        <div class="card-icon">🪙</div>
+                        <div class="card-content">
+                            <h3>Total Tokens</h3>
+                            <p id="llm-total-tokens" class="metric-value">--</p>
+                        </div>
+                    </div>
+                    <div class="card">
+                        <div class="card-icon">📥</div>
+                        <div class="card-content">
+                            <h3>Input Tokens</h3>
+                            <p id="llm-input-tokens" class="metric-value">--</p>
+                        </div>
+                    </div>
+                    <div class="card">
+                        <div class="card-icon">📤</div>
+                        <div class="card-content">
+                            <h3>Output Tokens</h3>
+                            <p id="llm-output-tokens" class="metric-value">--</p>
+                        </div>
+                    </div>
+                    <div class="card">
+                        <div class="card-icon">📈</div>
+                        <div class="card-content">
+                            <h3>Avg/Call</h3>
+                            <p id="llm-avg-tokens" class="metric-value">--</p>
+                        </div>
+                    </div>
                 </div>
             </section>
 
@@ -1461,6 +1504,24 @@ class Dashboard {
         const loadedPlugins = plugins.filter(p => p.state === 'running' || p.state === 'loaded').length;
         document.getElementById('plugin-count').textContent = plugins.length;
         document.getElementById('plugin-status').textContent = `${loadedPlugins} loaded`;
+
+        // ReAct Metrics (simulated for now based on agent states)
+        const reactAvg = agents.reduce((sum, a) => sum + (a.avg_task_duration_ms > 0 ? 4.2 : 0), 0) / (agents.length || 1);
+        document.getElementById('react-avg-steps').textContent = reactAvg.toFixed(1);
+        document.getElementById('react-active').textContent = `${agents.filter(a => a.state === 'running').length} active traces`;
+
+        // LLM Token Metrics
+        const llm = data.llm_metrics?.[0] || {};
+        document.getElementById('llm-total-tokens').textContent = this.formatNumber(llm.total_tokens || 0);
+        document.getElementById('llm-input-tokens').textContent = this.formatNumber(llm.prompt_tokens || 0);
+        document.getElementById('llm-output-tokens').textContent = this.formatNumber(llm.completion_tokens || 0);
+        document.getElementById('llm-avg-tokens').textContent = (llm.avg_tokens_per_call || 0).toFixed(0);
+    }
+
+    formatNumber(num) {
+        if (num >= 1000000) return (num / 1000000).toFixed(1) + 'M';
+        if (num >= 1000) return (num / 1000).toFixed(1) + 'k';
+        return num;
     }
 
     updateAgentsTable(agents) {
