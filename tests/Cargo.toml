@@ -18,3 +18,4 @@ serde_json = { workspace = true }
 chrono = { workspace = true }
 thiserror = { workspace = true }
 uuid = { workspace = true }
+regex = { workspace = true }
