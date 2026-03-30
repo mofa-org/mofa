@@ -299,6 +299,38 @@ pub struct PluginMetrics {
     pub reload_count: u32,
 }
 
+/// Metric representation for generic collection
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Metric {
+    pub name: String,
+    pub value: f64,
+    pub kind: MetricType,
+}
+
+impl Metric {
+    pub fn gauge(name: &str, value: f64) -> Self {
+        Self {
+            name: name.to_string(),
+            value,
+            kind: MetricType::Gauge,
+        }
+    }
+
+    pub fn counter(name: &str, value: f64) -> Self {
+        Self {
+            name: name.to_string(),
+            value,
+            kind: MetricType::Counter,
+        }
+    }
+}
+
+/// Trait for providing metrics to the monitoring collector
+pub trait MetricsCollectorTrait: Send + Sync {
+    /// Collect current metrics from the source
+    fn collect(&self) -> Vec<Metric>;
+}
+
 /// LLM Metrics - specialized metrics for LLM inference
 ///
 /// Separate from PluginMetrics because LLM-specific metrics (tokens/s, TTFT, etc.)
@@ -322,12 +354,14 @@ pub struct LLMMetrics {
     pub failed_requests: u64,
     /// Total tokens processed
     pub total_tokens: u64,
-    /// Prompt tokens
+    /// Prompt tokens (Input)
     pub prompt_tokens: u64,
-    /// Completion/generation tokens
+    /// Completion/generation tokens (Output)
     pub completion_tokens: u64,
     /// Average latency in milliseconds
     pub avg_latency_ms: f64,
+    /// Average tokens per call
+    pub avg_tokens_per_call: f64,
     /// Tokens per second (generation speed)
     pub tokens_per_second: Option<f64>,
     /// Time to first token in ms (for streaming)
@@ -338,6 +372,19 @@ pub struct LLMMetrics {
     pub error_rate: f64,
     /// Last request timestamp
     pub last_request_timestamp: u64,
+}
+
+impl MetricsCollectorTrait for LLMMetrics {
+    fn collect(&self) -> Vec<Metric> {
+        vec![
+            Metric::gauge("llm.total_tokens", self.total_tokens as f64),
+            Metric::gauge("llm.input_tokens", self.prompt_tokens as f64),
+            Metric::gauge("llm.output_tokens", self.completion_tokens as f64),
+            Metric::gauge("llm.avg_tokens_per_call", self.avg_tokens_per_call),
+            Metric::gauge("llm.error_rate", self.error_rate),
+            Metric::gauge("llm.requests_per_minute", self.requests_per_minute),
+        ]
+    }
 }
 
 /// Metrics snapshot
