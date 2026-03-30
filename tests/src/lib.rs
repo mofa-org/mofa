@@ -9,12 +9,14 @@ pub mod assertions;
 pub mod backend;
 pub mod bus;
 pub mod clock;
+pub mod dsl;
 pub mod report;
 pub mod tools;
 
 pub use backend::MockLLMBackend;
 pub use bus::MockAgentBus;
 pub use clock::{Clock, MockClock, SystemClock};
+pub use dsl::{run_test_case, AssertDsl, DslError, LlmDsl, TestCaseDsl};
 pub use agent_runner::{
     AgentRunMetadata, AgentRunResult, AgentRunnerError, AgentTestRunner, MockAgentLLMProvider,
     ToolCallRecord, WorkspaceFileSnapshot, WorkspaceSnapshot,

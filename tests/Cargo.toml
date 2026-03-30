@@ -19,3 +19,4 @@ chrono = { workspace = true }
 thiserror = { workspace = true }
 uuid = { workspace = true }
 regex = { workspace = true }
+toml = { workspace = true }
