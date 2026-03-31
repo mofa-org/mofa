@@ -122,8 +122,12 @@ async fn run_command(cli: Cli) -> CliResult<()> {
             commands::run::run(&config, dora)?;
         }
 
-        Some(Commands::TestDsl { file }) => {
-            commands::test_dsl::run(&file, output_format)
+        Some(Commands::TestDsl {
+            file,
+            report_out,
+            report_format,
+        }) => {
+            commands::test_dsl::run(&file, output_format, report_out.as_deref(), report_format)
                 .await
                 .into_report()
                 .attach_with(|| format!("running DSL test case from {}", file.display()))?;
