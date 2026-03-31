@@ -81,6 +81,12 @@ pub enum Commands {
         dora: bool,
     },
 
+    /// Run a testing DSL case file
+    TestDsl {
+        /// TOML DSL file to execute
+        file: PathBuf,
+    },
+
     /// Run a dora dataflow
     #[cfg(feature = "dora")]
     Dataflow {
@@ -723,6 +729,12 @@ mod tests {
             ".",
         ]);
         assert!(parsed.is_ok(), "doctor ci strict json should parse");
+    }
+
+    #[test]
+    fn test_test_dsl_parses() {
+        let parsed = Cli::try_parse_from(["mofa", "test-dsl", "tests/examples/simple_agent.toml"]);
+        assert!(parsed.is_ok(), "test-dsl command should parse");
     }
 
     #[test]

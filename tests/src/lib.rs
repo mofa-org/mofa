@@ -16,7 +16,10 @@ pub mod tools;
 pub use backend::MockLLMBackend;
 pub use bus::MockAgentBus;
 pub use clock::{Clock, MockClock, SystemClock};
-pub use dsl::{run_test_case, AssertDsl, DslError, LlmDsl, TestCaseDsl};
+pub use dsl::{
+    configure_runner_from_test_case, run_test_case, AgentDsl, AssertDsl, BootstrapFileDsl,
+    DslError, LlmDsl, LlmStepDsl, LlmStepKind, TestCaseDsl, ToolDsl,
+};
 pub use agent_runner::{
     AgentRunMetadata, AgentRunResult, AgentRunnerError, AgentTestRunner, MockAgentLLMProvider,
     ToolCallRecord, WorkspaceFileSnapshot, WorkspaceSnapshot,
