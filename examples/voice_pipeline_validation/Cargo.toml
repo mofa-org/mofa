@@ -1,0 +1,17 @@
+[package]
+name = "voice_pipeline_validation"
+version.workspace = true
+edition.workspace = true
+publish = false
+
+[dependencies]
+anyhow.workspace = true
+async-trait.workspace = true
+futures.workspace = true
+mofa-kernel = { path = "../../crates/mofa-kernel" }
+tokio.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+
+[lints]
+workspace = true
