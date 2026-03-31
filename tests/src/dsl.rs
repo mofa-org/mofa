@@ -7,7 +7,7 @@ use crate::agent_runner::{AgentRunResult, AgentRunnerError, AgentTestRunner};
 use crate::tools::MockTool;
 use mofa_foundation::agent::context::prompt::AgentIdentity;
 use mofa_kernel::agent::components::tool::ToolResult;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::path::Path;
 use thiserror::Error;
@@ -102,6 +102,14 @@ pub struct AssertDsl {
     pub tool_called: Option<String>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AssertionOutcome {
+    pub kind: String,
+    pub expected: Value,
+    pub actual: Value,
+    pub passed: bool,
+}
+
 impl TestCaseDsl {
     pub fn from_toml_str(input: &str) -> Result<Self, DslError> {
         Ok(toml::from_str(input)?)
@@ -121,35 +129,18 @@ impl TestCaseDsl {
 }
 
 pub async fn run_test_case(case: &TestCaseDsl) -> Result<AgentRunResult, DslError> {
+    let result = execute_test_case(case).await?;
+    let assertions = collect_assertion_outcomes(case, &result);
+    if let Some(error) = assertion_error_from_outcomes(&assertions) {
+        return Err(error);
+    }
+    Ok(result)
+}
+
+pub async fn execute_test_case(case: &TestCaseDsl) -> Result<AgentRunResult, DslError> {
     let mut runner = AgentTestRunner::new().await?;
     configure_runner_from_test_case(case, &mut runner).await?;
     let result = runner.run_text(case.execution_input()?).await?;
-
-    if let Some(expected) = expected_contains(case) {
-        let actual = result.output_text().ok_or(DslError::MissingOutput)?;
-        if !actual.contains(expected) {
-            return Err(DslError::ExpectedContains {
-                expected: expected.to_string(),
-                actual,
-            });
-        }
-    }
-
-    if let Some(expected_tool) = expected_tool_call(case) {
-        let actual = result
-            .metadata
-            .tool_calls
-            .iter()
-            .map(|record| record.tool_name.clone())
-            .collect::<Vec<_>>();
-        if !actual.iter().any(|tool| tool == expected_tool) {
-            return Err(DslError::ExpectedToolCall {
-                tool: expected_tool.to_string(),
-                actual,
-            });
-        }
-    }
-
     runner.shutdown().await?;
     Ok(result)
 }
@@ -239,4 +230,80 @@ fn expected_tool_call(case: &TestCaseDsl) -> Option<&str> {
     case.assertions
         .as_ref()
         .and_then(|assertions| assertions.tool_called.as_deref())
+}
+
+pub fn collect_assertion_outcomes(case: &TestCaseDsl, result: &AgentRunResult) -> Vec<AssertionOutcome> {
+    let mut outcomes = Vec::new();
+
+    if let Some(expected) = expected_contains(case) {
+        let actual = result.output_text();
+        outcomes.push(AssertionOutcome {
+            kind: "contains".to_string(),
+            expected: Value::String(expected.to_string()),
+            actual: actual
+                .clone()
+                .map(Value::String)
+                .unwrap_or(Value::Null),
+            passed: actual
+                .as_ref()
+                .map(|value| value.contains(expected))
+                .unwrap_or(false),
+        });
+    }
+
+    if let Some(expected_tool) = expected_tool_call(case) {
+        let actual = result
+            .metadata
+            .tool_calls
+            .iter()
+            .map(|record| Value::String(record.tool_name.clone()))
+            .collect::<Vec<_>>();
+        outcomes.push(AssertionOutcome {
+            kind: "tool_called".to_string(),
+            expected: Value::String(expected_tool.to_string()),
+            actual: Value::Array(actual.clone()),
+            passed: actual
+                .iter()
+                .any(|tool| tool.as_str() == Some(expected_tool)),
+        });
+    }
+
+    outcomes
+}
+
+pub fn assertion_error_from_outcomes(outcomes: &[AssertionOutcome]) -> Option<DslError> {
+    for outcome in outcomes {
+        if outcome.passed {
+            continue;
+        }
+
+        match outcome.kind.as_str() {
+            "contains" => {
+                return if outcome.actual.is_null() {
+                    Some(DslError::MissingOutput)
+                } else {
+                    Some(DslError::ExpectedContains {
+                        expected: outcome.expected.as_str().unwrap_or_default().to_string(),
+                        actual: outcome.actual.as_str().unwrap_or_default().to_string(),
+                    })
+                };
+            }
+            "tool_called" => {
+                let actual = outcome
+                    .actual
+                    .as_array()
+                    .into_iter()
+                    .flatten()
+                    .filter_map(|value| value.as_str().map(ToString::to_string))
+                    .collect::<Vec<_>>();
+                return Some(DslError::ExpectedToolCall {
+                    tool: outcome.expected.as_str().unwrap_or_default().to_string(),
+                    actual,
+                });
+            }
+            _ => continue,
+        }
+    }
+
+    None
 }

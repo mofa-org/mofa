@@ -86,6 +86,10 @@ pub enum Commands {
         /// TOML DSL file to execute
         file: PathBuf,
 
+        /// Optional canonical artifact file path
+        #[arg(long)]
+        artifact_out: Option<PathBuf>,
+
         /// Optional report file path
         #[arg(long)]
         report_out: Option<PathBuf>,
@@ -763,6 +767,18 @@ mod tests {
             "json",
         ]);
         assert!(parsed.is_ok(), "test-dsl report flags should parse");
+    }
+
+    #[test]
+    fn test_test_dsl_artifact_flag_parses() {
+        let parsed = Cli::try_parse_from([
+            "mofa",
+            "test-dsl",
+            "tests/examples/simple_agent.toml",
+            "--artifact-out",
+            "/tmp/artifact.json",
+        ]);
+        assert!(parsed.is_ok(), "test-dsl artifact flag should parse");
     }
 
     #[test]

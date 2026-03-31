@@ -92,3 +92,30 @@ fn test_dsl_command_writes_text_report_file() {
     assert!(report.contains("tool_agent_run"));
     assert!(report.contains("[+]"));
 }
+
+#[test]
+fn test_dsl_command_writes_canonical_artifact_file() {
+    let case_path = concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../tests/examples/tool_agent.toml"
+    );
+    let temp = tempdir().expect("temp dir");
+    let artifact_path = temp.path().join("dsl-artifact.json");
+
+    Command::cargo_bin("mofa")
+        .expect("mofa bin")
+        .args([
+            "test-dsl",
+            case_path,
+            "--artifact-out",
+            artifact_path.to_str().expect("utf8 artifact path"),
+        ])
+        .assert()
+        .success();
+
+    let artifact = std::fs::read_to_string(&artifact_path).expect("artifact file exists");
+    assert!(artifact.contains("\"case_name\": \"tool_agent_run\""));
+    assert!(artifact.contains("\"status\": \"passed\""));
+    assert!(artifact.contains("\"assertions\""));
+    assert!(artifact.contains("\"tool_calls\""));
+}
