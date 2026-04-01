@@ -151,7 +151,6 @@ pub struct HardwareConstraint {
     pub gpu_required: bool,
 }
 
-
 impl HardwareConstraint {
     /// Create a new hardware constraint builder
     pub fn builder() -> HardwareConstraintBuilder {

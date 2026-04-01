@@ -70,7 +70,10 @@ impl ClusterMembershipManager {
     /// Update the current term.
     pub fn update_term(&mut self, term: crate::types::Term) {
         if term > self.membership.current_term {
-            debug!("Updating term from {} to {}", self.membership.current_term.0, term.0);
+            debug!(
+                "Updating term from {} to {}",
+                self.membership.current_term.0, term.0
+            );
             self.membership.current_term = term;
         }
     }

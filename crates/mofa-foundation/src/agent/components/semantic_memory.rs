@@ -315,7 +315,10 @@ mod tests {
         let embedder = HashEmbedder::with_128_dims();
         let vec = embedder.embed("some test text").await.unwrap();
         let norm: f32 = vec.iter().map(|x| x * x).sum::<f32>().sqrt();
-        assert!((norm - 1.0).abs() < 1e-5, "embedding should be unit-length, got norm={norm}");
+        assert!(
+            (norm - 1.0).abs() < 1e-5,
+            "embedding should be unit-length, got norm={norm}"
+        );
     }
 
     #[tokio::test]
@@ -323,7 +326,10 @@ mod tests {
         let embedder = HashEmbedder::with_128_dims();
         let a = embedder.embed("rust programming language").await.unwrap();
         let b = embedder.embed("rust language systems").await.unwrap();
-        let c = embedder.embed("python data science machine learning").await.unwrap();
+        let c = embedder
+            .embed("python data science machine learning")
+            .await
+            .unwrap();
 
         let sim_ab: f32 = a.iter().zip(b.iter()).map(|(x, y)| x * y).sum();
         let sim_ac: f32 = a.iter().zip(c.iter()).map(|(x, y)| x * y).sum();
@@ -357,7 +363,9 @@ mod tests {
     #[tokio::test]
     async fn test_semantic_memory_store_and_retrieve() {
         let mut mem = SemanticMemory::with_hash_embedder();
-        mem.store("k1", MemoryValue::text("hello world")).await.unwrap();
+        mem.store("k1", MemoryValue::text("hello world"))
+            .await
+            .unwrap();
         let val = mem.retrieve("k1").await.unwrap();
         assert!(val.is_some());
         assert_eq!(val.unwrap().as_text(), Some("hello world"));
@@ -366,9 +374,21 @@ mod tests {
     #[tokio::test]
     async fn test_semantic_memory_search_returns_relevant() {
         let mut mem = SemanticMemory::with_hash_embedder();
-        mem.store("rust", MemoryValue::text("Rust is a systems programming language")).await.unwrap();
-        mem.store("python", MemoryValue::text("Python is used in data science")).await.unwrap();
-        mem.store("cooking", MemoryValue::text("How to bake a chocolate cake")).await.unwrap();
+        mem.store(
+            "rust",
+            MemoryValue::text("Rust is a systems programming language"),
+        )
+        .await
+        .unwrap();
+        mem.store(
+            "python",
+            MemoryValue::text("Python is used in data science"),
+        )
+        .await
+        .unwrap();
+        mem.store("cooking", MemoryValue::text("How to bake a chocolate cake"))
+            .await
+            .unwrap();
 
         let results = mem.search("systems language programming", 2).await.unwrap();
         assert!(!results.is_empty());
@@ -389,8 +409,12 @@ mod tests {
     #[tokio::test]
     async fn test_semantic_memory_history() {
         let mut mem = SemanticMemory::with_hash_embedder();
-        mem.add_to_history("session-1", Message::user("question")).await.unwrap();
-        mem.add_to_history("session-1", Message::assistant("answer")).await.unwrap();
+        mem.add_to_history("session-1", Message::user("question"))
+            .await
+            .unwrap();
+        mem.add_to_history("session-1", Message::assistant("answer"))
+            .await
+            .unwrap();
 
         let history = mem.get_history("session-1").await.unwrap();
         assert_eq!(history.len(), 2);
@@ -400,9 +424,15 @@ mod tests {
     #[tokio::test]
     async fn test_semantic_memory_stats() {
         let mut mem = SemanticMemory::with_hash_embedder();
-        mem.store("k1", MemoryValue::text("entry one")).await.unwrap();
-        mem.store("k2", MemoryValue::text("entry two")).await.unwrap();
-        mem.add_to_history("s1", Message::user("msg")).await.unwrap();
+        mem.store("k1", MemoryValue::text("entry one"))
+            .await
+            .unwrap();
+        mem.store("k2", MemoryValue::text("entry two"))
+            .await
+            .unwrap();
+        mem.add_to_history("s1", Message::user("msg"))
+            .await
+            .unwrap();
 
         let stats = mem.stats().await.unwrap();
         assert_eq!(stats.total_items, 2);
@@ -414,7 +444,9 @@ mod tests {
     async fn test_semantic_memory_clear() {
         let mut mem = SemanticMemory::with_hash_embedder();
         mem.store("k1", MemoryValue::text("data")).await.unwrap();
-        mem.add_to_history("s1", Message::user("msg")).await.unwrap();
+        mem.add_to_history("s1", Message::user("msg"))
+            .await
+            .unwrap();
 
         mem.clear().await.unwrap();
 

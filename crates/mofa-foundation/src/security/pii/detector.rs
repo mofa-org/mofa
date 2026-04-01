@@ -7,9 +7,7 @@ use crate::security::pii::patterns::{
     SSN_PATTERN, validate_luhn,
 };
 use async_trait::async_trait;
-use mofa_kernel::security::{
-    PiiDetector, RedactionMatch, SecurityResult, SensitiveDataCategory,
-};
+use mofa_kernel::security::{PiiDetector, RedactionMatch, SecurityResult, SensitiveDataCategory};
 
 /// Regex-based PII detector
 pub struct RegexPiiDetector {
@@ -79,7 +77,8 @@ impl RegexPiiDetector {
             .filter(|m| {
                 if self.validate_credit_cards {
                     // Remove spaces and dashes for validation
-                    let cleaned: String = m.as_str().chars().filter(|c| c.is_ascii_digit()).collect();
+                    let cleaned: String =
+                        m.as_str().chars().filter(|c| c.is_ascii_digit()).collect();
                     validate_luhn(&cleaned)
                 } else {
                     true
@@ -125,9 +124,7 @@ impl RegexPiiDetector {
                 if parts.len() != 4 {
                     return false;
                 }
-                parts.iter().all(|part| {
-                    part.parse::<u8>().is_ok()
-                })
+                parts.iter().all(|part| part.parse::<u8>().is_ok())
             })
             .map(|m| {
                 let original = m.as_str().to_string();

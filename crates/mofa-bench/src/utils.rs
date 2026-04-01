@@ -4,8 +4,7 @@
 //! for use in benchmark harnesses.
 
 use mofa_kernel::agent::types::{
-    AgentInput, AgentOutput, ReasoningStep, ReasoningStepType, TokenUsage,
-    ToolUsage,
+    AgentInput, AgentOutput, ReasoningStep, ReasoningStepType, TokenUsage, ToolUsage,
 };
 use mofa_kernel::agent::{AgentCapabilities, AgentMetadata, AgentState};
 use mofa_kernel::message::{AgentMessage, TaskPriority, TaskRequest, TaskStatus};
@@ -60,7 +59,10 @@ pub fn map_input() -> AgentInput {
         "context".to_string(),
         json!("Previous conversation about Rust programming"),
     );
-    map.insert("constraints".to_string(), json!(["be concise", "use examples", "cite sources"]));
+    map.insert(
+        "constraints".to_string(),
+        json!(["be concise", "use examples", "cite sources"]),
+    );
     AgentInput::map(map)
 }
 

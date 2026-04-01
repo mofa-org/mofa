@@ -17,8 +17,8 @@ pub use memory::clock;
 
 // Re-export the public API so callers keep the same `mofa_foundation::scheduler::*` paths.
 pub use cron::CronScheduler;
-pub use persistence::SchedulePersistence;
 pub use memory::{
     AdmissionDecision, AdmissionOutcome, DeferredQueue, DeferredRequest, MemoryBudget,
     MemoryPolicy, MemoryScheduler, StabilityControl, SystemClock,
 };
+pub use persistence::SchedulePersistence;

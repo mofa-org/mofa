@@ -28,8 +28,7 @@ fn bench_channel_registration(c: &mut Criterion) {
                     let bus = AgentBus::new();
                     rt.block_on(async {
                         for i in 0..count {
-                            let meta =
-                                utils::sample_agent_metadata(&format!("agent-{i}"));
+                            let meta = utils::sample_agent_metadata(&format!("agent-{i}"));
                             let _ = bus
                                 .register_channel(
                                     &meta,
@@ -53,8 +52,7 @@ fn bench_channel_registration(c: &mut Criterion) {
                     let bus = AgentBus::new();
                     rt.block_on(async {
                         for i in 0..count {
-                            let meta =
-                                utils::sample_agent_metadata(&format!("agent-{i}"));
+                            let meta = utils::sample_agent_metadata(&format!("agent-{i}"));
                             let _ = bus
                                 .register_channel(&meta, CommunicationMode::Broadcast)
                                 .await;
@@ -82,7 +80,11 @@ fn bench_broadcast_send(c: &mut Criterion) {
             rt.block_on(async {
                 // Broadcast doesn't require channel registration
                 let _ = bus
-                    .send_message("sender-1", CommunicationMode::Broadcast, black_box(&message))
+                    .send_message(
+                        "sender-1",
+                        CommunicationMode::Broadcast,
+                        black_box(&message),
+                    )
                     .await;
             });
         });

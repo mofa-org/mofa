@@ -382,7 +382,11 @@ fn gemini_chunk_to_completion(
         choices: vec![ChunkChoice {
             index: 0,
             delta: ChunkDelta {
-                role: if is_first { Some(Role::Assistant) } else { None },
+                role: if is_first {
+                    Some(Role::Assistant)
+                } else {
+                    None
+                },
                 content,
                 tool_calls: None,
             },
@@ -421,16 +425,10 @@ fn parse_gemini_sse(resp: reqwest::Response, model: String) -> ChatStream {
                                 let completion =
                                     gemini_chunk_to_completion(&chunk, &model, is_first);
                                 is_first = false;
-                                return Some((
-                                    Ok(completion),
-                                    (resp, buf, model, is_first),
-                                ));
+                                return Some((Ok(completion), (resp, buf, model, is_first)));
                             }
                             Err(e) => {
-                                tracing::warn!(
-                                    "Skipping unparseable Gemini SSE chunk: {}",
-                                    e
-                                );
+                                tracing::warn!("Skipping unparseable Gemini SSE chunk: {}", e);
                                 continue;
                             }
                         }
@@ -447,21 +445,17 @@ fn parse_gemini_sse(resp: reqwest::Response, model: String) -> ChatStream {
                     }
                     Ok(None) => {
                         // End of stream. If there is leftover data, try to parse it.
-                        if !buf.trim().is_empty() {
-                            if let Some(json_str) = buf.trim().strip_prefix("data: ") {
-                                if json_str.trim() != "[DONE]" {
-                                    if let Ok(chunk) =
-                                        serde_json::from_str::<GeminiStreamChunk>(json_str)
-                                    {
-                                        let completion =
-                                            gemini_chunk_to_completion(&chunk, &model, is_first);
-                                        return Some((
-                                            Ok(completion),
-                                            (resp, String::new(), model, false),
-                                        ));
-                                    }
-                                }
-                            }
+                        if let Some(json_str) = buf.trim().strip_prefix("data: ")
+                            && json_str.trim() != "[DONE]"
+                            && let Ok(chunk) =
+                                serde_json::from_str::<GeminiStreamChunk>(json_str)
+                        {
+                            let completion =
+                                gemini_chunk_to_completion(&chunk, &model, is_first);
+                            return Some((
+                                Ok(completion),
+                                (resp, String::new(), model, false),
+                            ));
                         }
                         return None;
                     }
@@ -721,10 +715,7 @@ mod tests {
     #[test]
     fn test_config_defaults() {
         let config = GeminiConfig::default();
-        assert_eq!(
-            config.base_url,
-            "https://generativelanguage.googleapis.com"
-        );
+        assert_eq!(config.base_url, "https://generativelanguage.googleapis.com");
         assert_eq!(config.default_model, "gemini-1.5-pro-latest");
         assert_eq!(config.default_max_tokens, 2048);
         assert!((config.default_temperature - 0.7).abs() < f32::EPSILON);
@@ -771,14 +762,8 @@ data: [DONE]"#;
         assert_eq!(chunks.len(), 3);
 
         // First chunk: has role, content "Hello", and usage
-        assert_eq!(
-            chunks[0].choices[0].delta.role,
-            Some(Role::Assistant)
-        );
-        assert_eq!(
-            chunks[0].choices[0].delta.content.as_deref(),
-            Some("Hello")
-        );
+        assert_eq!(chunks[0].choices[0].delta.role, Some(Role::Assistant));
+        assert_eq!(chunks[0].choices[0].delta.content.as_deref(), Some("Hello"));
         assert!(chunks[0].usage.is_some());
         let usage = chunks[0].usage.as_ref().unwrap();
         assert_eq!(usage.prompt_tokens, 10);
@@ -794,14 +779,8 @@ data: [DONE]"#;
         assert!(chunks[1].usage.is_none());
 
         // Third chunk: content "!", finish_reason STOP, usage
-        assert_eq!(
-            chunks[2].choices[0].delta.content.as_deref(),
-            Some("!")
-        );
-        assert_eq!(
-            chunks[2].choices[0].finish_reason,
-            Some(FinishReason::Stop)
-        );
+        assert_eq!(chunks[2].choices[0].delta.content.as_deref(), Some("!"));
+        assert_eq!(chunks[2].choices[0].finish_reason, Some(FinishReason::Stop));
         assert!(chunks[2].usage.is_some());
     }
 

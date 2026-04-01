@@ -39,7 +39,7 @@ impl RbacPolicy {
     pub fn assign_role(&mut self, subject: impl Into<String>, role: impl Into<String>) {
         self.subject_roles
             .entry(subject.into())
-            .or_insert_with(Vec::new)
+            .or_default()
             .push(role.into());
     }
 
@@ -57,19 +57,19 @@ impl RbacPolicy {
 
     /// Get roles for a subject
     pub fn get_subject_roles(&self, subject: &str) -> Vec<String> {
-        self.subject_roles
-            .get(subject)
-            .cloned()
-            .unwrap_or_else(|| {
-                // Use default role if available
-                self.default_role.clone().map(|r| vec![r]).unwrap_or_default()
-            })
+        self.subject_roles.get(subject).cloned().unwrap_or_else(|| {
+            // Use default role if available
+            self.default_role
+                .clone()
+                .map(|r| vec![r])
+                .unwrap_or_default()
+        })
     }
 
     /// Check if a subject has a specific permission
     pub fn check_permission(&self, subject: &str, permission: &str) -> bool {
         let roles = self.get_subject_roles(subject);
-        
+
         if roles.is_empty() {
             return !self.deny_by_default;
         }
@@ -110,22 +110,21 @@ mod tests {
     #[test]
     fn test_rbac_policy() {
         let mut policy = RbacPolicy::new();
-        
+
         // Define roles
         let admin = Role::new("admin")
             .with_permission("tool:delete")
             .with_permission("tool:create");
-        
-        let user = Role::new("user")
-            .with_permission("tool:read");
-        
+
+        let user = Role::new("user").with_permission("tool:read");
+
         policy.add_role(admin);
         policy.add_role(user);
-        
+
         // Assign roles
         policy.assign_role("agent-1", "admin");
         policy.assign_role("agent-2", "user");
-        
+
         // Check permissions
         assert!(policy.check_permission("agent-1", "tool:delete"));
         assert!(policy.check_permission("agent-2", "tool:read"));
@@ -134,14 +133,12 @@ mod tests {
 
     #[test]
     fn test_default_role() {
-        let mut policy = RbacPolicy::new()
-            .with_default_role("guest");
-        
-        let guest = Role::new("guest")
-            .with_permission("tool:read");
-        
+        let mut policy = RbacPolicy::new().with_default_role("guest");
+
+        let guest = Role::new("guest").with_permission("tool:read");
+
         policy.add_role(guest);
-        
+
         // Subject without explicit role should get default role
         assert!(policy.check_permission("unknown-agent", "tool:read"));
         assert!(!policy.check_permission("unknown-agent", "tool:delete"));

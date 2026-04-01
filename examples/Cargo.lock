@@ -4919,7 +4919,7 @@ name = "pii_only"
 version = "0.1.0"
 dependencies = [
  "mofa-foundation",
- "mofa-runtime",
+ "mofa-kernel",
  "tokio",
 ]
 
@@ -5577,7 +5577,7 @@ name = "rbac_only"
 version = "0.1.0"
 dependencies = [
  "mofa-foundation",
- "mofa-runtime",
+ "mofa-kernel",
  "tokio",
 ]
 
@@ -6211,7 +6211,7 @@ name = "secure_agent"
 version = "0.1.0"
 dependencies = [
  "mofa-foundation",
- "mofa-runtime",
+ "mofa-kernel",
  "tokio",
 ]
 
@@ -7090,6 +7090,21 @@ name = "target-lexicon"
 version = "0.13.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "adb6935a6f5c20170eeceb1a3835a49e12e19d792f6dd344ccc76a985ca5a6ca"
+
+[[package]]
+name = "task_analyzer"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "mofa-foundation",
+ "mofa-kernel",
+ "mofa-sdk",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tracing",
+ "tracing-subscriber 0.3.22",
+]
 
 [[package]]
 name = "tempfile"

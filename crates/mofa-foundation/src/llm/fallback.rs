@@ -90,17 +90,17 @@ pub enum FallbackCondition {
 impl FallbackCondition {
     /// Returns `true` when `error` matches this condition.
     pub fn matches(&self, error: &LLMError) -> bool {
-        match (self, error) {
-            (Self::RateLimited, LLMError::RateLimited(_)) => true,
-            (Self::QuotaExceeded, LLMError::QuotaExceeded(_)) => true,
-            (Self::NetworkError, LLMError::NetworkError(_)) => true,
-            (Self::Timeout, LLMError::Timeout(_)) => true,
-            (Self::AuthError, LLMError::AuthError(_)) => true,
-            (Self::ProviderUnavailable, LLMError::ProviderNotSupported(_)) => true,
-            (Self::ContextLengthExceeded, LLMError::ContextLengthExceeded(_)) => true,
-            (Self::ModelNotFound, LLMError::ModelNotFound(_)) => true,
-            _ => false,
-        }
+        matches!(
+            (self, error),
+            (Self::RateLimited, LLMError::RateLimited(_))
+                | (Self::QuotaExceeded, LLMError::QuotaExceeded(_))
+                | (Self::NetworkError, LLMError::NetworkError(_))
+                | (Self::Timeout, LLMError::Timeout(_))
+                | (Self::AuthError, LLMError::AuthError(_))
+                | (Self::ProviderUnavailable, LLMError::ProviderNotSupported(_))
+                | (Self::ContextLengthExceeded, LLMError::ContextLengthExceeded(_))
+                | (Self::ModelNotFound, LLMError::ModelNotFound(_))
+        )
     }
 
     /// Default set of conditions used when none are specified.
@@ -383,10 +383,7 @@ impl FallbackChain {
     }
 
     /// Try providers in order for a non-streaming chat request.
-    async fn try_chat(
-        &self,
-        request: ChatCompletionRequest,
-    ) -> LLMResult<ChatCompletionResponse> {
+    async fn try_chat(&self, request: ChatCompletionRequest) -> LLMResult<ChatCompletionResponse> {
         self.metrics.requests_total.fetch_add(1, Ordering::Relaxed);
         let mut last_error: Option<LLMError> = None;
 
@@ -703,7 +700,7 @@ impl FallbackChainBuilder {
     ///
     /// Triggers fallback on: `RateLimited`, `QuotaExceeded`, `NetworkError`,
     /// `Timeout`, `AuthError`.
-    pub fn add(self, provider: impl LLMProvider + 'static) -> Self {
+    pub fn add_provider(self, provider: impl LLMProvider + 'static) -> Self {
         self.add_arc(Arc::new(provider), FallbackTrigger::default_conditions())
     }
 
@@ -961,10 +958,7 @@ mod tests {
             &self.name
         }
 
-        async fn chat(
-            &self,
-            _request: ChatCompletionRequest,
-        ) -> LLMResult<ChatCompletionResponse> {
+        async fn chat(&self, _request: ChatCompletionRequest) -> LLMResult<ChatCompletionResponse> {
             let idx = self.call_count.fetch_add(1, Ordering::SeqCst);
             self.responses
                 .get(idx)
@@ -1004,10 +998,14 @@ mod tests {
         assert!(FallbackCondition::Timeout.matches(&LLMError::Timeout("x".into())));
         assert!(FallbackCondition::AuthError.matches(&LLMError::AuthError("x".into())));
         assert!(FallbackCondition::ModelNotFound.matches(&LLMError::ModelNotFound("x".into())));
-        assert!(FallbackCondition::ContextLengthExceeded
-            .matches(&LLMError::ContextLengthExceeded("x".into())));
-        assert!(FallbackCondition::ProviderUnavailable
-            .matches(&LLMError::ProviderNotSupported("x".into())));
+        assert!(
+            FallbackCondition::ContextLengthExceeded
+                .matches(&LLMError::ContextLengthExceeded("x".into()))
+        );
+        assert!(
+            FallbackCondition::ProviderUnavailable
+                .matches(&LLMError::ProviderNotSupported("x".into()))
+        );
     }
 
     #[test]
@@ -1065,7 +1063,7 @@ mod tests {
         let p1 = MockProvider::new("p1", vec![Err(LLMError::RateLimited("429".into()))]);
         let p2 = MockProvider::new("p2", vec![ok_response("from-p2")]);
 
-        let chain = FallbackChain::builder().add(p1).add_last(p2).build();
+        let chain = FallbackChain::builder().add_provider(p1).add_last(p2).build();
 
         let result = chain.chat(request()).await.unwrap();
         assert_eq!(result.content().unwrap(), "from-p2");
@@ -1077,7 +1075,11 @@ mod tests {
         let p2 = MockProvider::new("p2", vec![Err(LLMError::QuotaExceeded("quota".into()))]);
         let p3 = MockProvider::new("p3", vec![ok_response("p3-ok")]);
 
-        let chain = FallbackChain::builder().add(p1).add(p2).add_last(p3).build();
+        let chain = FallbackChain::builder()
+            .add_provider(p1)
+            .add_provider(p2)
+            .add_last(p3)
+            .build();
 
         let result = chain.chat(request()).await.unwrap();
         assert_eq!(result.content().unwrap(), "p3-ok");
@@ -1092,7 +1094,7 @@ mod tests {
         );
         let p2 = MockProvider::new("p2", vec![ok_response("should not reach")]);
 
-        let chain = FallbackChain::builder().add(p1).add_last(p2).build();
+        let chain = FallbackChain::builder().add_provider(p1).add_last(p2).build();
 
         let err = chain.chat(request()).await.unwrap_err();
         assert!(matches!(err, LLMError::SerializationError(_)));
@@ -1103,7 +1105,7 @@ mod tests {
         let p1 = MockProvider::new("p1", vec![Err(LLMError::RateLimited("rl1".into()))]);
         let p2 = MockProvider::new("p2", vec![Err(LLMError::RateLimited("rl2".into()))]);
 
-        let chain = FallbackChain::builder().add(p1).add_last(p2).build();
+        let chain = FallbackChain::builder().add_provider(p1).add_last(p2).build();
 
         let err = chain.chat(request()).await.unwrap_err();
         assert!(matches!(err, LLMError::RateLimited(_)));
@@ -1119,10 +1121,7 @@ mod tests {
             fn name(&self) -> &str {
                 "healthy"
             }
-            async fn chat(
-                &self,
-                _r: ChatCompletionRequest,
-            ) -> LLMResult<ChatCompletionResponse> {
+            async fn chat(&self, _r: ChatCompletionRequest) -> LLMResult<ChatCompletionResponse> {
                 unimplemented!()
             }
             async fn health_check(&self) -> LLMResult<bool> {
@@ -1135,10 +1134,7 @@ mod tests {
             fn name(&self) -> &str {
                 "unhealthy"
             }
-            async fn chat(
-                &self,
-                _r: ChatCompletionRequest,
-            ) -> LLMResult<ChatCompletionResponse> {
+            async fn chat(&self, _r: ChatCompletionRequest) -> LLMResult<ChatCompletionResponse> {
                 unimplemented!()
             }
             async fn health_check(&self) -> LLMResult<bool> {
@@ -1147,7 +1143,7 @@ mod tests {
         }
 
         let chain = FallbackChain::builder()
-            .add(AlwaysUnhealthy)
+            .add_provider(AlwaysUnhealthy)
             .add_last(AlwaysHealthy)
             .build();
 
@@ -1163,10 +1159,7 @@ mod tests {
             fn name(&self) -> &str {
                 "unhealthy"
             }
-            async fn chat(
-                &self,
-                _r: ChatCompletionRequest,
-            ) -> LLMResult<ChatCompletionResponse> {
+            async fn chat(&self, _r: ChatCompletionRequest) -> LLMResult<ChatCompletionResponse> {
                 unimplemented!()
             }
             async fn health_check(&self) -> LLMResult<bool> {
@@ -1175,7 +1168,7 @@ mod tests {
         }
 
         let chain = FallbackChain::builder()
-            .add(AlwaysUnhealthy)
+            .add_provider(AlwaysUnhealthy)
             .add_last(AlwaysUnhealthy)
             .build();
 
@@ -1191,7 +1184,7 @@ mod tests {
     #[test]
     fn chain_len_and_is_empty() {
         let chain = FallbackChain::builder()
-            .add(MockProvider::new("p", vec![]))
+            .add_provider(MockProvider::new("p", vec![]))
             .build();
         assert_eq!(chain.len(), 1);
         assert!(!chain.is_empty());
@@ -1271,14 +1264,11 @@ mod tests {
     async fn metrics_count_requests_and_fallbacks() {
         let p1 = MockProvider::new(
             "p1",
-            vec![
-                Err(LLMError::RateLimited("rl".into())),
-                ok_response("ok"),
-            ],
+            vec![Err(LLMError::RateLimited("rl".into())), ok_response("ok")],
         );
         let p2 = MockProvider::new("p2", vec![ok_response("fallback-ok")]);
 
-        let chain = FallbackChain::builder().add(p1).add_last(p2).build();
+        let chain = FallbackChain::builder().add_provider(p1).add_last(p2).build();
 
         // Request 1: p1 fails → fallback to p2
         chain.chat(request()).await.unwrap();

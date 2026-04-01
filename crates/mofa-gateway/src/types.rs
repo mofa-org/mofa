@@ -287,12 +287,13 @@ mod tests {
 // ─────────────────────────────────────────────────────────────────────────────
 
 /// Role of a message sender
-#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Role {
     /// System message
     System,
     /// User message
+    #[default]
     User,
     /// Assistant message
     Assistant,
@@ -300,11 +301,7 @@ pub enum Role {
     Tool,
 }
 
-impl Default for Role {
-    fn default() -> Self {
-        Role::User
-    }
-}
+
 
 /// A single message in the conversation
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]

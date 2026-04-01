@@ -19,8 +19,8 @@ impl SchemaValidator {
     /// Creates a new `SchemaValidator` from a JSON Schema string.
     pub fn new(schema_str: &str) -> Result<Self, SchemaError> {
         let schema: Value = serde_json::from_str(schema_str)?;
-        let compiled = JSONSchema::compile(&schema)
-            .map_err(|e| SchemaError::InvalidSchema(e.to_string()))?;
+        let compiled =
+            JSONSchema::compile(&schema).map_err(|e| SchemaError::InvalidSchema(e.to_string()))?;
         Ok(SchemaValidator { compiled })
     }
 

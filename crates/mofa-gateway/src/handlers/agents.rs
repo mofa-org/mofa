@@ -19,6 +19,7 @@ use std::sync::Arc;
 use mofa_kernel::agent::config::AgentConfig;
 use mofa_kernel::agent::types::AgentState;
 use mofa_runtime::agent::registry::AgentRegistry;
+use mofa_runtime::agent::core::MoFAAgent;
 
 use crate::error::{GatewayError, GatewayResult};
 use crate::state::AppState;
@@ -112,7 +113,9 @@ pub async fn create_agent(
     }
 
     if req.id.is_empty() {
-        return Err(GatewayError::InvalidRequest("agent id must not be empty".into()));
+        return Err(GatewayError::InvalidRequest(
+            "agent id must not be empty".into(),
+        ));
     }
 
     if state.registry.contains(&req.id).await {
@@ -128,9 +131,8 @@ pub async fn create_agent(
         "type": req.agent_type,
         "custom": req.config,
     });
-    let agent_config: AgentConfig = serde_json::from_value(raw).map_err(|e| {
-        GatewayError::InvalidRequest(format!("invalid config: {}", e))
-    })?;
+    let agent_config: AgentConfig = serde_json::from_value(raw)
+        .map_err(|e| GatewayError::InvalidRequest(format!("invalid config: {}", e)))?;
 
     state
         .registry

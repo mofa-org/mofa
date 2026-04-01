@@ -201,36 +201,32 @@ fn validate_config_file(path: &PathBuf) -> Result<(), CliError> {
 
     // Try to parse based on file extension
     let result = match path.extension().and_then(|e| e.to_str()) {
-        Some(ext) => {
-            match ext.to_lowercase().as_str() {
-                "yaml" | "yml" => serde_yaml::from_str::<Value>(&substituted)
-                    .map_err(|e| CliError::ConfigError(format!("YAML parsing error: {}", e))),
-                "toml" => toml::from_str::<Value>(&substituted)
-                    .map_err(|e| CliError::ConfigError(format!("TOML parsing error: {}", e))),
-                "json" => serde_json::from_str::<Value>(&substituted)
-                    .map_err(|e| CliError::ConfigError(format!("JSON parsing error: {}", e))),
-                "json5" => {
-                    json5::from_str::<Value>(&substituted)
-                        .map_err(|e| CliError::ConfigError(format!("JSON5 parsing error: {}", e)))
-                }
-                "ini" => {
-                    return Err(CliError::ConfigError(
+        Some(ext) => match ext.to_lowercase().as_str() {
+            "yaml" | "yml" => serde_yaml::from_str::<Value>(&substituted)
+                .map_err(|e| CliError::ConfigError(format!("YAML parsing error: {}", e))),
+            "toml" => toml::from_str::<Value>(&substituted)
+                .map_err(|e| CliError::ConfigError(format!("TOML parsing error: {}", e))),
+            "json" => serde_json::from_str::<Value>(&substituted)
+                .map_err(|e| CliError::ConfigError(format!("JSON parsing error: {}", e))),
+            "json5" => json5::from_str::<Value>(&substituted)
+                .map_err(|e| CliError::ConfigError(format!("JSON5 parsing error: {}", e))),
+            "ini" => {
+                return Err(CliError::ConfigError(
                         "INI format validation is not yet supported. Please use YAML, TOML, or JSON format for validated configuration.".into()
                     ));
-                }
-                "ron" => {
-                    return Err(CliError::ConfigError(
+            }
+            "ron" => {
+                return Err(CliError::ConfigError(
                         "RON format validation is not yet supported. Please use YAML, TOML, or JSON format for validated configuration.".into()
                     ));
-                }
-                _ => {
-                    return Err(CliError::ConfigError(format!(
-                        "Unsupported config format: {}",
-                        ext
-                    )));
-                }
             }
-        }
+            _ => {
+                return Err(CliError::ConfigError(format!(
+                    "Unsupported config format: {}",
+                    ext
+                )));
+            }
+        },
         None => {
             return Err(CliError::ConfigError("Cannot determine file format".into()));
         }
@@ -267,22 +263,22 @@ fn validate_config_file(path: &PathBuf) -> Result<(), CliError> {
 
 #[cfg(test)]
 mod tests {
-        use super::validate_config_file;
-        use crate::CliError;
-        use std::fs;
-        use std::path::PathBuf;
-        use tempfile::TempDir;
+    use super::validate_config_file;
+    use crate::CliError;
+    use std::fs;
+    use std::path::PathBuf;
+    use tempfile::TempDir;
 
-        fn write_temp_json5(content: &str) -> (TempDir, PathBuf) {
-                let dir = TempDir::new().expect("create temp dir");
-                let path = dir.path().join("agent.json5");
-                fs::write(&path, content).expect("write json5 file");
-                (dir, path)
-        }
+    fn write_temp_json5(content: &str) -> (TempDir, PathBuf) {
+        let dir = TempDir::new().expect("create temp dir");
+        let path = dir.path().join("agent.json5");
+        fs::write(&path, content).expect("write json5 file");
+        (dir, path)
+    }
 
-        #[test]
-        fn accepts_json5_comments() {
-                let json5 = r#"
+    #[test]
+    fn accepts_json5_comments() {
+        let json5 = r#"
                 {
                     // comment
                     agent: {
@@ -292,15 +288,15 @@ mod tests {
                 }
                 "#;
 
-                let (_dir, path) = write_temp_json5(json5);
-                let result = validate_config_file(&path);
+        let (_dir, path) = write_temp_json5(json5);
+        let result = validate_config_file(&path);
 
-                assert!(result.is_ok(), "expected JSON5 with comments to be valid");
-        }
+        assert!(result.is_ok(), "expected JSON5 with comments to be valid");
+    }
 
-        #[test]
-        fn accepts_json5_trailing_commas() {
-                let json5 = r#"
+    #[test]
+    fn accepts_json5_trailing_commas() {
+        let json5 = r#"
                 {
                     agent: {
                         id: "agent-1",
@@ -309,15 +305,18 @@ mod tests {
                 }
                 "#;
 
-                let (_dir, path) = write_temp_json5(json5);
-                let result = validate_config_file(&path);
+        let (_dir, path) = write_temp_json5(json5);
+        let result = validate_config_file(&path);
 
-                assert!(result.is_ok(), "expected JSON5 with trailing commas to be valid");
-        }
+        assert!(
+            result.is_ok(),
+            "expected JSON5 with trailing commas to be valid"
+        );
+    }
 
-        #[test]
-        fn accepts_json5_unquoted_keys() {
-                let json5 = r#"
+    #[test]
+    fn accepts_json5_unquoted_keys() {
+        let json5 = r#"
                 {
                     agent: {
                         id: "agent-1",
@@ -326,15 +325,18 @@ mod tests {
                 }
                 "#;
 
-                let (_dir, path) = write_temp_json5(json5);
-                let result = validate_config_file(&path);
+        let (_dir, path) = write_temp_json5(json5);
+        let result = validate_config_file(&path);
 
-                assert!(result.is_ok(), "expected JSON5 with unquoted keys to be valid");
-        }
+        assert!(
+            result.is_ok(),
+            "expected JSON5 with unquoted keys to be valid"
+        );
+    }
 
-        #[test]
-        fn rejects_invalid_json5() {
-                let invalid = r#"
+    #[test]
+    fn rejects_invalid_json5() {
+        let invalid = r#"
                 {
                     agent: {
                         id: "agent-1",
@@ -343,12 +345,12 @@ mod tests {
                 }
                 "#;
 
-                let (_dir, path) = write_temp_json5(invalid);
-                let result = validate_config_file(&path);
+        let (_dir, path) = write_temp_json5(invalid);
+        let result = validate_config_file(&path);
 
-                match result {
-                        Err(CliError::ConfigError(_)) => {}
-                        other => panic!("expected ConfigError, got: {:?}", other),
-                }
+        match result {
+            Err(CliError::ConfigError(_)) => {}
+            other => panic!("expected ConfigError, got: {:?}", other),
         }
+    }
 }
