@@ -27,9 +27,10 @@ pub use agent_runner::{
     ToolCallRecord, WorkspaceFileSnapshot, WorkspaceSnapshot,
 };
 pub use artifact::{
-    AgentArtifact, AgentRunArtifact, LlmMessageArtifact, LlmRequestArtifact, LlmResponseArtifact,
-    LlmToolCallArtifact, SessionArtifact, SessionMessageArtifact, TokenUsageArtifact,
-    ToolCallArtifact, WorkspaceFileArtifact, WorkspaceSnapshotArtifact,
+    AgentArtifact, AgentRunArtifact, AgentRunArtifactDiff, ArtifactDifference,
+    LlmMessageArtifact, LlmRequestArtifact, LlmResponseArtifact, LlmToolCallArtifact,
+    SessionArtifact, SessionMessageArtifact, TokenUsageArtifact, ToolCallArtifact,
+    WorkspaceFileArtifact, WorkspaceSnapshotArtifact,
 };
 pub use report::{
     JsonFormatter, ReportFormatter, TestCaseResult, TestReport, TestReportBuilder, TestStatus,

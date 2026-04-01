@@ -119,3 +119,75 @@ fn test_dsl_command_writes_canonical_artifact_file() {
     assert!(artifact.contains("\"assertions\""));
     assert!(artifact.contains("\"tool_calls\""));
 }
+
+#[test]
+fn test_dsl_command_writes_baseline_file() {
+    let case_path = concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../tests/examples/simple_agent.toml"
+    );
+    let temp = tempdir().expect("temp dir");
+    let baseline_path = temp.path().join("dsl-baseline.json");
+
+    Command::cargo_bin("mofa")
+        .expect("mofa bin")
+        .args([
+            "test-dsl",
+            case_path,
+            "--baseline-out",
+            baseline_path.to_str().expect("utf8 baseline path"),
+        ])
+        .assert()
+        .success();
+
+    let baseline = std::fs::read_to_string(&baseline_path).expect("baseline file exists");
+    assert!(baseline.contains("\"case_name\": \"simple_agent_run\""));
+    assert!(baseline.contains("\"status\": \"passed\""));
+}
+
+#[test]
+fn test_dsl_command_reports_baseline_mismatch() {
+    let case_path = concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../tests/examples/tool_agent.toml"
+    );
+    let temp = tempdir().expect("temp dir");
+    let baseline_path = temp.path().join("dsl-baseline.json");
+
+    std::fs::write(
+        &baseline_path,
+        r#"{
+  "case_name": "tool_agent_run",
+  "status": "passed",
+  "output_text": "Baseline output",
+  "runner_error": null,
+  "duration_ms": 0,
+  "started_at_ms": 0,
+  "execution_id": "baseline-exec",
+  "session_id": "baseline-session",
+  "workspace_root": "/tmp/baseline",
+  "agent": { "id": "baseline-agent", "name": "baseline" },
+  "assertions": [{ "kind": "contains", "expected": "Baseline output", "actual": "Baseline output", "passed": true }],
+  "tool_calls": [],
+  "llm_request": null,
+  "llm_response": null,
+  "session_snapshot": null,
+  "workspace_before": { "files": [] },
+  "workspace_after": { "files": [] }
+}"#,
+    )
+    .expect("baseline fixture written");
+
+    Command::cargo_bin("mofa")
+        .expect("mofa bin")
+        .args([
+            "test-dsl",
+            case_path,
+            "--baseline-in",
+            baseline_path.to_str().expect("utf8 baseline path"),
+        ])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("baseline: mismatch"))
+        .stdout(predicate::str::contains("difference: output_text"));
+}

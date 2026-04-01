@@ -94,6 +94,14 @@ pub enum Commands {
         #[arg(long)]
         report_out: Option<PathBuf>,
 
+        /// Compare the current artifact against a saved baseline artifact
+        #[arg(long)]
+        baseline_in: Option<PathBuf>,
+
+        /// Write the current artifact to a baseline file
+        #[arg(long)]
+        baseline_out: Option<PathBuf>,
+
         /// Report file format
         #[arg(long, value_enum, default_value_t = TestDslReportFormat::Json)]
         report_format: TestDslReportFormat,
@@ -779,6 +787,20 @@ mod tests {
             "/tmp/artifact.json",
         ]);
         assert!(parsed.is_ok(), "test-dsl artifact flag should parse");
+    }
+
+    #[test]
+    fn test_test_dsl_baseline_flags_parse() {
+        let parsed = Cli::try_parse_from([
+            "mofa",
+            "test-dsl",
+            "tests/examples/simple_agent.toml",
+            "--baseline-in",
+            "/tmp/baseline.json",
+            "--baseline-out",
+            "/tmp/new-baseline.json",
+        ]);
+        assert!(parsed.is_ok(), "test-dsl baseline flags should parse");
     }
 
     #[test]

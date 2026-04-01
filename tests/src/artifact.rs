@@ -7,6 +7,7 @@ use crate::agent_runner::{AgentRunResult, ToolCallRecord, WorkspaceFileSnapshot,
 use crate::dsl::{AssertionOutcome, TestCaseDsl};
 use mofa_foundation::agent::session::Session;
 use serde::{Deserialize, Serialize};
+use serde_json::json;
 
 // Top-level artifact emitted for a single DSL-backed case execution.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -111,6 +112,19 @@ pub struct WorkspaceFileArtifact {
     pub checksum: u64,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AgentRunArtifactDiff {
+    pub matches: bool,
+    pub differences: Vec<ArtifactDifference>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ArtifactDifference {
+    pub field: String,
+    pub expected: serde_json::Value,
+    pub actual: serde_json::Value,
+}
+
 impl AgentRunArtifact {
     // Build the canonical artifact from the current runner result plus DSL assertion outcomes.
     pub fn from_run_result(
@@ -203,6 +217,75 @@ impl AgentRunArtifact {
             workspace_after: workspace_snapshot_artifact(&result.metadata.workspace_snapshot_after),
         }
     }
+
+    // Compare the MVP baseline fields while keeping deeper metadata out of scope for now.
+    pub fn compare_to(&self, baseline: &Self) -> AgentRunArtifactDiff {
+        let mut differences = Vec::new();
+
+        if self.status != baseline.status {
+            differences.push(ArtifactDifference {
+                field: "status".to_string(),
+                expected: json!(baseline.status),
+                actual: json!(self.status),
+            });
+        }
+
+        if self.output_text != baseline.output_text {
+            differences.push(ArtifactDifference {
+                field: "output_text".to_string(),
+                expected: json!(baseline.output_text),
+                actual: json!(self.output_text),
+            });
+        }
+
+        let baseline_assertions = baseline
+            .assertions
+            .iter()
+            .map(assertion_signature)
+            .collect::<Vec<_>>();
+        let actual_assertions = self
+            .assertions
+            .iter()
+            .map(assertion_signature)
+            .collect::<Vec<_>>();
+        if actual_assertions != baseline_assertions {
+            differences.push(ArtifactDifference {
+                field: "assertions".to_string(),
+                expected: json!(baseline_assertions),
+                actual: json!(actual_assertions),
+            });
+        }
+
+        let baseline_tools = baseline
+            .tool_calls
+            .iter()
+            .map(|call| call.tool_name.clone())
+            .collect::<Vec<_>>();
+        let actual_tools = self
+            .tool_calls
+            .iter()
+            .map(|call| call.tool_name.clone())
+            .collect::<Vec<_>>();
+        if actual_tools != baseline_tools {
+            differences.push(ArtifactDifference {
+                field: "tool_calls".to_string(),
+                expected: json!(baseline_tools),
+                actual: json!(actual_tools),
+            });
+        }
+
+        AgentRunArtifactDiff {
+            matches: differences.is_empty(),
+            differences,
+        }
+    }
+}
+
+fn assertion_signature(outcome: &AssertionOutcome) -> serde_json::Value {
+    json!({
+        "kind": outcome.kind,
+        "passed": outcome.passed,
+    })
 }
 
 fn tool_call_artifact(record: &ToolCallRecord) -> ToolCallArtifact {

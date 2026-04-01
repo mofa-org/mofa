@@ -4,9 +4,9 @@ use crate::CliError;
 use crate::cli::TestDslReportFormat;
 use crate::output::OutputFormat;
 use mofa_testing::{
-    AgentRunArtifact, DslError, JsonFormatter, ReportFormatter, TestCaseResult, TestReport,
-    TestStatus, TextFormatter, TestCaseDsl, assertion_error_from_outcomes,
-    collect_assertion_outcomes, execute_test_case,
+    AgentRunArtifact, AgentRunArtifactDiff, DslError, JsonFormatter, ReportFormatter,
+    TestCaseResult, TestReport, TestStatus, TextFormatter, TestCaseDsl,
+    assertion_error_from_outcomes, collect_assertion_outcomes, execute_test_case,
 };
 use serde::Serialize;
 use serde_json::json;
@@ -20,6 +20,7 @@ struct TestDslSummary {
     duration_ms: u128,
     tool_calls: Vec<String>,
     workspace_root: String,
+    baseline_matches: Option<bool>,
 }
 
 /// Execute one TOML DSL test case through the testing runner.
@@ -28,6 +29,8 @@ pub async fn run(
     format: OutputFormat,
     artifact_out: Option<&Path>,
     report_out: Option<&Path>,
+    baseline_in: Option<&Path>,
+    baseline_out: Option<&Path>,
     report_format: TestDslReportFormat,
 ) -> Result<(), CliError> {
     let case = TestCaseDsl::from_toml_file(path).map_err(map_dsl_error)?;
@@ -35,9 +38,19 @@ pub async fn run(
     let assertions = collect_assertion_outcomes(&case, &result);
     let artifact = AgentRunArtifact::from_run_result(&case, &result, assertions.clone());
     let report = build_report(&artifact);
+    let baseline_diff = if let Some(baseline_in) = baseline_in {
+        let baseline = read_artifact(baseline_in)?;
+        Some(artifact.compare_to(&baseline))
+    } else {
+        None
+    };
 
     if let Some(artifact_out) = artifact_out {
         write_artifact(artifact_out, &artifact)?;
+    }
+
+    if let Some(baseline_out) = baseline_out {
+        write_artifact(baseline_out, &artifact)?;
     }
 
     if let Some(report_out) = report_out {
@@ -56,6 +69,7 @@ pub async fn run(
             .map(|record| record.tool_name.clone())
             .collect(),
         workspace_root: result.metadata.workspace_root.display().to_string(),
+        baseline_matches: baseline_diff.as_ref().map(|diff| diff.matches),
     };
 
     match format {
@@ -63,6 +77,7 @@ pub async fn run(
             let output = json!({
                 "success": true,
                 "case": summary,
+                "baseline": baseline_diff,
             });
             println!("{}", serde_json::to_string_pretty(&output)?);
         }
@@ -76,6 +91,12 @@ pub async fn run(
                 println!("tool_calls: {}", summary.tool_calls.join(", "));
             }
             println!("duration_ms: {}", summary.duration_ms);
+            if let Some(diff) = &baseline_diff {
+                println!("baseline: {}", if diff.matches { "matched" } else { "mismatch" });
+                for difference in &diff.differences {
+                    println!("difference: {}", difference.field);
+                }
+            }
         }
     }
 
@@ -135,6 +156,11 @@ fn write_artifact(path: &Path, artifact: &AgentRunArtifact) -> Result<(), CliErr
     let body = serde_json::to_string_pretty(artifact)?;
     std::fs::write(path, body)?;
     Ok(())
+}
+
+fn read_artifact(path: &Path) -> Result<AgentRunArtifact, CliError> {
+    let body = std::fs::read_to_string(path)?;
+    Ok(serde_json::from_str(&body)?)
 }
 
 fn write_report(path: &Path, format: TestDslReportFormat, report: &TestReport) -> Result<(), CliError> {
