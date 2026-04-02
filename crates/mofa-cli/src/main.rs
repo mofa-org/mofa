@@ -129,6 +129,7 @@ async fn run_command(cli: Cli) -> CliResult<()> {
             baseline_in,
             baseline_out,
             comparison_out,
+            fail_on_diff,
             report_format,
         }) => {
             commands::test_dsl::run(
@@ -139,6 +140,7 @@ async fn run_command(cli: Cli) -> CliResult<()> {
                 baseline_in.as_deref(),
                 baseline_out.as_deref(),
                 comparison_out.as_deref(),
+                fail_on_diff,
                 report_format,
             )
                 .await

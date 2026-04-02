@@ -106,6 +106,10 @@ pub enum Commands {
         #[arg(long)]
         comparison_out: Option<PathBuf>,
 
+        /// Exit non-zero when baseline comparison mismatches
+        #[arg(long)]
+        fail_on_diff: bool,
+
         /// Report file format
         #[arg(long, value_enum, default_value_t = TestDslReportFormat::Json)]
         report_format: TestDslReportFormat,
@@ -819,6 +823,17 @@ mod tests {
             "/tmp/comparison.json",
         ]);
         assert!(parsed.is_ok(), "test-dsl comparison flag should parse");
+    }
+
+    #[test]
+    fn test_test_dsl_fail_on_diff_flag_parse() {
+        let parsed = Cli::try_parse_from([
+            "mofa",
+            "test-dsl",
+            "tests/examples/simple_agent.toml",
+            "--fail-on-diff",
+        ]);
+        assert!(parsed.is_ok(), "test-dsl fail-on-diff flag should parse");
     }
 
     #[test]

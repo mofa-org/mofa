@@ -33,6 +33,7 @@ pub async fn run(
     baseline_in: Option<&Path>,
     baseline_out: Option<&Path>,
     comparison_out: Option<&Path>,
+    fail_on_diff: bool,
     report_format: TestDslReportFormat,
 ) -> Result<(), CliError> {
     let case = TestCaseDsl::from_toml_file(path).map_err(map_dsl_error)?;
@@ -113,6 +114,14 @@ pub async fn run(
                 for difference in &diff.differences {
                     println!("difference: {}", difference.field);
                 }
+            }
+        }
+    }
+
+    if fail_on_diff {
+        if let Some(diff) = &baseline_diff {
+            if !diff.matches {
+                return Err(CliError::Other("baseline comparison mismatch".to_string()));
             }
         }
     }

@@ -230,3 +230,49 @@ fn test_dsl_command_writes_comparison_file() {
     assert!(comparison.contains("\"case_name\": \"simple_agent_run\""));
     assert!(comparison.contains("\"matches\": true"));
 }
+
+#[test]
+fn test_dsl_command_fails_on_baseline_mismatch_when_flag_set() {
+    let case_path = concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../tests/examples/tool_agent.toml"
+    );
+    let temp = tempdir().expect("temp dir");
+    let baseline_path = temp.path().join("dsl-baseline.json");
+
+    std::fs::write(
+        &baseline_path,
+        r#"{
+  "case_name": "tool_agent_run",
+  "status": "passed",
+  "output_text": "Baseline output",
+  "runner_error": null,
+  "duration_ms": 0,
+  "started_at_ms": 0,
+  "execution_id": "baseline-exec",
+  "session_id": "baseline-session",
+  "workspace_root": "/tmp/baseline",
+  "agent": { "id": "baseline-agent", "name": "baseline" },
+  "assertions": [{ "kind": "contains", "expected": "Baseline output", "actual": "Baseline output", "passed": true }],
+  "tool_calls": [],
+  "llm_request": null,
+  "llm_response": null,
+  "session_snapshot": null,
+  "workspace_before": { "files": [] },
+  "workspace_after": { "files": [] }
+}"#,
+    )
+    .expect("baseline fixture written");
+
+    Command::cargo_bin("mofa")
+        .expect("mofa bin")
+        .args([
+            "test-dsl",
+            case_path,
+            "--baseline-in",
+            baseline_path.to_str().expect("utf8 baseline path"),
+            "--fail-on-diff",
+        ])
+        .assert()
+        .failure();
+}
