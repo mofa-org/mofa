@@ -102,6 +102,10 @@ pub enum Commands {
         #[arg(long)]
         baseline_out: Option<PathBuf>,
 
+        /// Write machine-readable comparison output (requires --baseline-in)
+        #[arg(long)]
+        comparison_out: Option<PathBuf>,
+
         /// Report file format
         #[arg(long, value_enum, default_value_t = TestDslReportFormat::Json)]
         report_format: TestDslReportFormat,
@@ -801,6 +805,20 @@ mod tests {
             "/tmp/new-baseline.json",
         ]);
         assert!(parsed.is_ok(), "test-dsl baseline flags should parse");
+    }
+
+    #[test]
+    fn test_test_dsl_comparison_flag_parse() {
+        let parsed = Cli::try_parse_from([
+            "mofa",
+            "test-dsl",
+            "tests/examples/simple_agent.toml",
+            "--baseline-in",
+            "/tmp/baseline.json",
+            "--comparison-out",
+            "/tmp/comparison.json",
+        ]);
+        assert!(parsed.is_ok(), "test-dsl comparison flag should parse");
     }
 
     #[test]

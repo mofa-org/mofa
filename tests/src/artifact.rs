@@ -119,6 +119,16 @@ pub struct AgentRunArtifactDiff {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AgentRunArtifactComparison {
+    // Stable comparison payload for CI and tooling.
+    pub case_name: String,
+    pub matches: bool,
+    pub differences: Vec<ArtifactDifference>,
+    pub baseline_execution_id: String,
+    pub candidate_execution_id: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ArtifactDifference {
     pub field: String,
     pub expected: serde_json::Value,
@@ -277,6 +287,22 @@ impl AgentRunArtifact {
         AgentRunArtifactDiff {
             matches: differences.is_empty(),
             differences,
+        }
+    }
+}
+
+impl AgentRunArtifactComparison {
+    pub fn from_artifacts(
+        candidate: &AgentRunArtifact,
+        baseline: &AgentRunArtifact,
+        diff: AgentRunArtifactDiff,
+    ) -> Self {
+        Self {
+            case_name: candidate.case_name.clone(),
+            matches: diff.matches,
+            differences: diff.differences,
+            baseline_execution_id: baseline.execution_id.clone(),
+            candidate_execution_id: candidate.execution_id.clone(),
         }
     }
 }

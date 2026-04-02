@@ -27,7 +27,8 @@ pub use agent_runner::{
     ToolCallRecord, WorkspaceFileSnapshot, WorkspaceSnapshot,
 };
 pub use artifact::{
-    AgentArtifact, AgentRunArtifact, AgentRunArtifactDiff, ArtifactDifference,
+    AgentArtifact, AgentRunArtifact, AgentRunArtifactComparison, AgentRunArtifactDiff,
+    ArtifactDifference,
     LlmMessageArtifact, LlmRequestArtifact, LlmResponseArtifact, LlmToolCallArtifact,
     SessionArtifact, SessionMessageArtifact, TokenUsageArtifact, ToolCallArtifact,
     WorkspaceFileArtifact, WorkspaceSnapshotArtifact,

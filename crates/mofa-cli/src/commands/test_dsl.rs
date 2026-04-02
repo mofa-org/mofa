@@ -4,7 +4,8 @@ use crate::CliError;
 use crate::cli::TestDslReportFormat;
 use crate::output::OutputFormat;
 use mofa_testing::{
-    AgentRunArtifact, AgentRunArtifactDiff, DslError, JsonFormatter, ReportFormatter,
+    AgentRunArtifact, AgentRunArtifactComparison, DslError, JsonFormatter,
+    ReportFormatter,
     TestCaseResult, TestReport, TestStatus, TextFormatter, TestCaseDsl,
     assertion_error_from_outcomes, collect_assertion_outcomes, execute_test_case,
 };
@@ -31,6 +32,7 @@ pub async fn run(
     report_out: Option<&Path>,
     baseline_in: Option<&Path>,
     baseline_out: Option<&Path>,
+    comparison_out: Option<&Path>,
     report_format: TestDslReportFormat,
 ) -> Result<(), CliError> {
     let case = TestCaseDsl::from_toml_file(path).map_err(map_dsl_error)?;
@@ -38,12 +40,12 @@ pub async fn run(
     let assertions = collect_assertion_outcomes(&case, &result);
     let artifact = AgentRunArtifact::from_run_result(&case, &result, assertions.clone());
     let report = build_report(&artifact);
-    let baseline_diff = if let Some(baseline_in) = baseline_in {
-        let baseline = read_artifact(baseline_in)?;
-        Some(artifact.compare_to(&baseline))
+    let baseline = if let Some(baseline_in) = baseline_in {
+        Some(read_artifact(baseline_in)?)
     } else {
         None
     };
+    let baseline_diff = baseline.as_ref().map(|baseline| artifact.compare_to(baseline));
 
     if let Some(artifact_out) = artifact_out {
         write_artifact(artifact_out, &artifact)?;
@@ -51,6 +53,21 @@ pub async fn run(
 
     if let Some(baseline_out) = baseline_out {
         write_artifact(baseline_out, &artifact)?;
+    }
+
+    if let Some(comparison_out) = comparison_out {
+        let baseline = baseline.as_ref().ok_or_else(|| {
+            CliError::Other("comparison output requires --baseline-in".to_string())
+        })?;
+        let diff = baseline_diff.as_ref().ok_or_else(|| {
+            CliError::Other("comparison output requires --baseline-in".to_string())
+        })?;
+        let comparison = AgentRunArtifactComparison::from_artifacts(
+            &artifact,
+            baseline,
+            diff.clone(),
+        );
+        write_comparison(comparison_out, &comparison)?;
     }
 
     if let Some(report_out) = report_out {
@@ -154,6 +171,16 @@ fn build_report(artifact: &AgentRunArtifact) -> TestReport {
 
 fn write_artifact(path: &Path, artifact: &AgentRunArtifact) -> Result<(), CliError> {
     let body = serde_json::to_string_pretty(artifact)?;
+    std::fs::write(path, body)?;
+    Ok(())
+}
+
+fn write_comparison(
+    path: &Path,
+    comparison: &AgentRunArtifactComparison,
+) -> Result<(), CliError> {
+    // Emit machine readable baseline comparison output.
+    let body = serde_json::to_string_pretty(comparison)?;
     std::fs::write(path, body)?;
     Ok(())
 }
