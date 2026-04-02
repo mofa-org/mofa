@@ -191,3 +191,42 @@ fn test_dsl_command_reports_baseline_mismatch() {
         .stdout(predicate::str::contains("baseline: mismatch"))
         .stdout(predicate::str::contains("difference: output_text"));
 }
+
+#[test]
+fn test_dsl_command_writes_comparison_file() {
+    let case_path = concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../tests/examples/simple_agent.toml"
+    );
+    let temp = tempdir().expect("temp dir");
+    let baseline_path = temp.path().join("dsl-baseline.json");
+    let comparison_path = temp.path().join("dsl-comparison.json");
+
+    Command::cargo_bin("mofa")
+        .expect("mofa bin")
+        .args([
+            "test-dsl",
+            case_path,
+            "--baseline-out",
+            baseline_path.to_str().expect("utf8 baseline path"),
+        ])
+        .assert()
+        .success();
+
+    Command::cargo_bin("mofa")
+        .expect("mofa bin")
+        .args([
+            "test-dsl",
+            case_path,
+            "--baseline-in",
+            baseline_path.to_str().expect("utf8 baseline path"),
+            "--comparison-out",
+            comparison_path.to_str().expect("utf8 comparison path"),
+        ])
+        .assert()
+        .success();
+
+    let comparison = std::fs::read_to_string(&comparison_path).expect("comparison file exists");
+    assert!(comparison.contains("\"case_name\": \"simple_agent_run\""));
+    assert!(comparison.contains("\"matches\": true"));
+}
