@@ -15,6 +15,11 @@
 //! docker run -p 6333:6333 -p 6334:6334 qdrant/qdrant
 //! QDRANT_URL=http://localhost:6334 cargo run -p rag_pipeline -- qdrant
 //! ```
+//!
+//! PDF mode (requires --features pdf):
+//! ```bash
+//! cargo run -p rag_pipeline --features pdf
+//! ```
 
 use anyhow::Result;
 use futures::StreamExt;
@@ -23,6 +28,7 @@ use mofa_foundation::rag::{
     QdrantConfig, QdrantVectorStore, RagPipeline, ScoredDocument, SimilarityMetric,
     TextChunker, VectorStore,
 };
+use mofa_foundation::rag::{DocumentLoader, PdfLoader};
 use mofa_kernel::rag::pipeline::{Generator, Retriever};
 use mofa_kernel::rag::types::GenerateInput;
 use std::sync::Arc;
@@ -903,6 +909,51 @@ async fn qdrant_rag_pipeline(qdrant_url: &str) -> Result<(), Box<dyn std::error:
     Ok(())
 }
 
+/// Demonstrates loading and processing PDF documents for RAG.
+#[cfg(feature = "pdf")]
+async fn pdf_document_loading() -> Result<(), Box<dyn std::error::Error>> {
+    println!("--- PDF Document Loading Example ---\n");
+
+    // Note: This example assumes you have a PDF file at the specified path
+    // In a real application, you would handle file paths more robustly
+    let pdf_path = "example.pdf";
+
+    if !std::path::Path::new(pdf_path).exists() {
+        println!("PDF file '{}' not found. Skipping PDF loading example.", pdf_path);
+        println!("To test PDF loading, place a PDF file at {} and run with --pdf flag\n", pdf_path);
+        return Ok(());
+    }
+
+    let loader = PdfLoader::new();
+    let documents = loader.load(std::path::Path::new(pdf_path))?;
+
+    println!("Loaded {} document(s) from PDF:", documents.len());
+    for (i, doc) in documents.iter().enumerate() {
+        println!("  Document {}: {} characters", i + 1, doc.text.len());
+        println!("    Source: {}", doc.metadata.get("source").unwrap_or(&"unknown".to_string()));
+        println!("    Format: {}", doc.metadata.get("format").unwrap_or(&"unknown".to_string()));
+
+        // Show first 200 characters as preview
+        let preview: String = doc.text.chars().take(200).collect();
+        println!("    Preview: {}...\n", preview);
+    }
+
+    // Demonstrate chunking the PDF content
+    let chunker = TextChunker::new(ChunkConfig::new(512, 64));
+    let chunks = chunker.chunk_by_chars(&documents[0].text);
+
+    println!("PDF content chunked into {} chunks:", chunks.len());
+    for (i, chunk) in chunks.iter().enumerate().take(3) { // Show first 3 chunks
+        println!("  Chunk {}: {} characters", i + 1, chunk.len());
+    }
+    if chunks.len() > 3 {
+        println!("  ... and {} more chunks", chunks.len() - 3);
+    }
+    println!();
+
+    Ok(())
+}
+
 /// Truncate text to a maximum length with ellipsis.
 fn truncate_text(text: &str, max_len: usize) -> String {
     if text.len() <= max_len {
@@ -940,6 +991,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     streaming_memory_test().await?;
     streaming_edge_cases_test().await?;
 
+    // Run PDF demo if feature is enabled
+    #[cfg(feature = "pdf")]
+    pdf_document_loading().await?;
+
     // Run Qdrant demo if requested
     if mode == "qdrant" {
         let url = std::env::var("QDRANT_URL").unwrap_or_else(|_| "http://localhost:6334".into());
@@ -948,6 +1003,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         println!("--- Qdrant Demo Skipped ---");
         println!("To run with Qdrant, start a Qdrant instance and run:");
         println!("  QDRANT_URL=http://localhost:6334 cargo run -p rag_pipeline -- qdrant\n");
+        println!("To run only PDF demo (requires --features pdf):");
         println!("To run deterministic practical validation checks:");
         println!("  cargo run -p rag_pipeline -- validate\n");
     }

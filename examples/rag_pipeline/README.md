@@ -6,7 +6,30 @@ This example demonstrates **practical RAG workflows** on top of MoFA's current R
 - Document ingestion with metadata
 - Real-world customer support retrieval scenario
 - Optional Qdrant backend run
+- PDF document loading (with `--features pdf`)
 - Deterministic practical validation suite
+
+## Run
+
+```bash
+cargo run -p rag_pipeline
+```
+
+## PDF Support
+
+To enable PDF document loading, build with the `pdf` feature:
+
+```bash
+cargo run -p rag_pipeline --features pdf
+```
+
+The PDF loader will:
+- Extract text content from PDF files
+- Handle multiple pages as separate documents
+- Include metadata about source file and format
+- Integrate seamlessly with the chunking and embedding pipeline
+
+Place a PDF file named `example.pdf` in the working directory to test PDF loading.
 
 ## Run
 

@@ -31,6 +31,8 @@ pub use indexing::{
     RagOrchestrationError,
 };
 pub use loaders::{DocumentLoader, LoaderError, LoaderResult, MarkdownLoader, TextLoader};
+#[cfg(feature = "pdf")]
+pub use loaders::PdfLoader;
 pub use pipeline_adapters::{InMemoryRetriever, SimpleGenerator};
 pub use recursive_chunker::{RecursiveChunker, RecursiveChunkConfig};
 pub use default_reranker::IdentityReranker;
